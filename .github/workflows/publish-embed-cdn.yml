@@ -1,0 +1,78 @@
+name: S3 Deploy Workflow
+
+on:
+  pull_request:
+    branches:
+      - production
+    types: [closed]
+    paths:
+      - libs/embed/**
+jobs:
+  run:
+    runs-on: [medium]
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      JFROG_TOKEN: ${{ secrets.JFROG_TOKEN }}
+      NX_CLOUD_AUTH_TOKEN: ${{ secrets.NX_CLOUD_AUTH_TOKEN }}
+      NX_BRANCH: ${{ github.event.number }}
+      NX_RUN_GROUP: ${{ github.run_id }}
+      NX_COMMIT_REF: ${{ github.event.pull_request.head.ref }}
+      NX_COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+      FONT_AWESOME_TOKEN: ${{secrets.FONT_AWESOME_TOKEN}}
+    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
+    strategy:
+      matrix:
+        # Latest nodes only
+        node-version: [ 16.14.2 ]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - uses: actions/cache@v2
+        id: yarn-cache # use this to check for `cache-hit` (`steps.yarn-cache.outputs.cache-hit != 'true'`)
+        with:
+          path: |
+            ${{ github.workspace }}/node_modules
+            !${{ github.workspace }}/node_modules/.cache
+          key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Setup npmrc
+        run: |
+          ./.github/scripts/setup-npmrc.sh
+
+      - name: Install project dependencies
+        if: steps.yarn-cache.outputs.cache-hit != 'true'
+        run: yarn
+
+      - name: Build
+        run: yarn build embed
+      - name: Create library dir
+        run: mkdir embed && mkdir embed/library
+      - name: Move Build
+        run: mv dist/libs/embed/embed.umd.js embed/library/embed.umd.js
+      - name: Deploy
+        uses: reggionick/s3-deploy@v3
+        with:
+          folder: embed
+          bucket: ${{ secrets.AWS_BUCKET_NAME }}
+          bucket-region: ${{ secrets.AWS_REGION }}
+          dist-id: ${{ secrets.CLOUDFRONT_DISTRO }}
+          invalidation: /
+          delete-removed: true
+          no-cache: true
+          private: true

@@ -1,0 +1,71 @@
+{
+  "name": "dispatch-serializer-json",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/dispatch/dispatch-serializer-json/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": [
+    "layer:data",
+    "platform:node"
+  ],
+  "targets": {
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/dispatch/dispatch-serializer-json"
+      ],
+      "options": {
+        "configFile": "packages/dispatch/dispatch-serializer-json/vite.config.ts"
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
+      "options": {
+        "command": "tsc -p packages/dispatch/dispatch-serializer-json/tsconfig.lib.json --noEmit"
+      }
+    },
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "packages/dispatch/dispatch-serializer-json/dist",
+        "main": "packages/dispatch/dispatch-serializer-json/src/index.ts",
+        "tsConfig": "packages/dispatch/dispatch-serializer-json/tsconfig.lib.json",
+        "assets": [
+          "packages/dispatch/dispatch-serializer-json/*.md"
+        ]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      },
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
+      ]
+    }
+  }
+}

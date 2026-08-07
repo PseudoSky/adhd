@@ -1,0 +1,37 @@
+{
+  "normalised-stop-reason": {
+    "anchor": "contexts/_shared.md#ref:normalised-stop-reason",
+    "rule": "Provider finish_reason/stop_reason must be mapped to exactly one of: 'stop' | 'length' | 'tool_calls' | 'unknown'. Any unrecognised value maps to 'unknown'. The mapping must be defined in a lookup table or switch (not inline conditionals).",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:normalised-stop-reason]",
+    "audit_check": "[audit-foundation.ref-provider-usage-extraction]"
+  },
+  "drizzle-upsert-increment": {
+    "anchor": "packages/ai/agent-mcp/src/plugins/usage-plugin.ts",
+    "rule": "Accumulator columns (inputTokens, outputTokens, toolCallCount, modelCalls) must use sql`${col} + ${n}` in onConflictDoUpdate SET. New columns that are NOT accumulators (stopReason, max_tokens) must not use the increment pattern.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:drizzle-upsert-increment]",
+    "audit_check": "[audit-foundation.ref-drizzle-upsert-increment]"
+  },
+  "tool-error-throw": {
+    "anchor": "packages/ai/agent-mcp/src/validation/errors.ts",
+    "rule": "All operational errors thrown by the orchestrator must use: throw new ToolError(CODE, message) where CODE is a member of AgentMcpErrorCode. Direct Error throws are forbidden inside the orchestrator loop.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:tool-error-throw]",
+    "audit_check": "[audit-final.ref-tool-error-throw]"
+  },
+  "provider-error-dispatch": {
+    "anchor": "contexts/_shared.md#inv:provider-error-dispatch",
+    "rule": "Provider catch blocks must dispatch to the correct error code in priority order: (1) AbortError/TimeoutError or signal.aborted → PROVIDER_TIMEOUT; (2) HTTP 401 / AuthenticationError → PROVIDER_AUTH_ERROR; (3) HTTP 429 after retries → PROVIDER_RATE_LIMITED; (4) context_length_exceeded → CONTEXT_WINDOW_EXCEEDED; (5) anything else → PROVIDER_ERROR. The order is mandatory — timeout must be detected before auth.",
+    "discovered_via": "manual",
+    "shared_ref": "[inv:provider-error-dispatch]",
+    "audit_check": "[provider-error-codes.4]"
+  },
+  "claudecli-auth-recovery": {
+    "anchor": "contexts/_shared.md#inv:claudecli-auth-recovery",
+    "rule": "When keychain extraction fails in ClaudeCliProvider or AnthropicProvider (OAuth path), the thrown PROVIDER_AUTH_ERROR message must include the recovery instruction: 'Set ANTHROPIC_AUTH_TOKEN (run `claude setup-token` to obtain an OAuth access token) or use authTokenEnv in the provider config'. The keychain error message must be included in the thrown message, not swallowed.",
+    "discovered_via": "manual",
+    "shared_ref": "[inv:claudecli-auth-recovery]",
+    "audit_check": "[claudecli-auth-fix.4]"
+  }
+}

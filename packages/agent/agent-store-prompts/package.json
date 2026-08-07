@@ -1,0 +1,49 @@
+{
+  "name": "@adhd/agent-store-prompts",
+  "version": "2.2.0",
+  "description": "Prompt component registry for agent composition: stores prompt types, components, agent compositions, and context rules",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "nx build agent-registry",
+    "typecheck": "tsc -p tsconfig.lib.json --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
+  },
+  "dependencies": {
+    "@adhd/agent-core-env": "^0.1.0",
+    "drizzle-orm": "0.45.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@vitest/coverage-v8": "^1.0.4",
+    "drizzle-kit": "^0.31.10",
+    "tslib": "^2.6.0",
+    "typescript": "^5.5.0",
+    "vite": "~5.0.13",
+    "vite-plugin-dts": "~3.8.3",
+    "vitest": "^1.6.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/agent/agent-store-prompts"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/agent/agent-store-prompts#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
+}

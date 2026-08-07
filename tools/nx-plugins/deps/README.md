@@ -1,0 +1,25 @@
+# @adhd/nx-deps
+
+`sync-deps` (fix) / `sync-deps-check` (read-only) — guarded `@nx/dependency-checks`, both backed by [`eslint-check.mjs`](eslint-check.mjs) (see its header for the full yarn.lock/node_modules landmine writeup — BUG-REPO-PRECOMMIT-DEPCHECK-STRIPS-USED-DEPS-001).
+
+## `lint` now `dependsOn: ["sync-deps"]` (BUILD-TOOLING-VERSION-SYNC-DEPS-001)
+
+Every project's `lint` target depends on `sync-deps`, wired globally via `nx.json` `targetDefaults.lint.dependsOn: ["sync-deps"]` (not this plugin's `createNodes` — see rationale below). Since `build` already `dependsOn: ["^build", "lint"]` and `version` `dependsOn: ["build", "^version"]` (see `tools/nx-plugins/build/README.md`), the effective chain is `version → build → lint → sync-deps`: dependency-range drift is fixed on disk *before* `@nx/dependency-checks` ever inspects the file.
+
+**Why `nx.json` `targetDefaults` and not this plugin's `createNodes`:** `lint` itself is created by a *different* plugin (`tools/nx-plugins/lint/plugin.js`, matching `**/.eslintrc.json`) than the one that creates `sync-deps` (this plugin, matching `**/package.json`). Two plugins' `createNodes` both returning a config for the same target name on the same project have an unspecified/version-sensitive merge order; `targetDefaults` is Nx's own supported mechanism for "every project's target X depends on Y" and merges deterministically into both explicit and plugin-inferred targets (the same mechanism already used for `build`'s `dependsOn: ["^build", "lint"]` in this same file) — so that's what we used.
+
+**A project with no `sync-deps` target (no `package.json`+`project.json`, or no `build` target — see this plugin's `createNodes` gate) simply has that `dependsOn` entry skipped by Nx** (`processTasksForSingleProject` in `nx/src/tasks-runner/create-task-graph.js` only wires a same-project `dependsOn` target if the project actually has it) — it is never an error.
+
+### ⚠️ Gate-semantics change, accepted knowingly
+
+Before this change, a stale/undeclared internal `@adhd/*` dependency range in a project's `package.json` was a **hard `lint` failure** (`@nx/dependency-checks`, severity `"error"`). Now, `sync-deps` runs first and fixes that exact class of drift on disk before the check runs — so `lint` **self-heals instead of hard-failing** for fixable dependency-range drift. This is a deliberate tradeoff, not an accident: the maintainer weighed "some real fixable drift silently gets fixed rather than blocking a commit" against "the previous manual `sync-deps` toil" and chose self-healing. `@nx/dependency-checks` still catches (and still hard-fails on) anything it *can't* fix (e.g. a genuinely missing external dependency that `--fix` can't resolve).
+
+### `node_modules`-absent guard — MUST no-op, not crash
+
+Because `sync-deps` is now a prerequisite of `lint` (and `lint` is a prerequisite of `build`), a hard failure inside `sync-deps` in a bare/fresh worktree (`node_modules` never really installed — git does not copy it) would now fail **every** `lint` and therefore **every** `build`, even for projects with zero actual dependency drift. `eslint-check.mjs`'s `assertNodeModulesInstalled`-era hard `process.exit(2)` was changed to **warn + no-op (exit 0)** for exactly this reason (see its header for the full before/after rationale). The safety guarantee is unchanged — it still refuses to let `@nx/dependency-checks` run (and possibly `--fix`-strip real deps) against a broken project graph; it just reports that refusal non-fatally now. Proven in `eslint-check.spec.mjs`: a bare directory with no real install causes `main()` to warn and return `0`, and leaves the target `package.json` byte-for-byte unchanged.
+
+The pre-commit hook (`.githooks/pre-commit`) keeps its own, separate, **hard-fail** node_modules check that runs *before* it ever invokes `nx affected -t lint` at all — that remains the real commit-blocking enforcement point. This plugin's guard is the defense-in-depth backstop for every *other* caller (a bare `nx run <project>:sync-deps`, or `nx affected -t lint` run standalone outside the hook).
+
+### Pre-commit hook interaction — mutation, never auto-staged
+
+`lint`'s new `sync-deps` dependency can mutate a project's `package.json` in the **working tree** as a side effect of the pre-commit hook's `nx affected -t lint` call. The hook was extensively hardened against exactly this shape of problem before (see its header, `BUG-REPO-PRECOMMIT-PARTIAL-STAGE-001` / `BUG-REPO-PRECOMMIT-DEPCHECK-STRIPS-USED-DEPS-001`) — it **never** stages anything itself. Instead, Gate 2 snapshots every `package.json`'s working-tree status immediately before and after running lint; if `sync-deps` touched any of them, the commit is **failed** (even if `lint` itself reports clean) so the developer must review the auto-fix diff, `git add -- <path>/package.json` it themselves, and commit again — this is deliberate: without it, an already-staged (now stale) `package.json` would otherwise silently ship despite a "lint passed" banner, because the dependency check validated the just-fixed disk copy, not the index.

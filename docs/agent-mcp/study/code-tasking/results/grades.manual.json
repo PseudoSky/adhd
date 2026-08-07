@@ -1,0 +1,589 @@
+{
+ "models": {
+  "gemma_4_e4b": {
+   "display": "gemma-4-e4b",
+   "source": "results/runs.gemma-4-e4b.jsonl"
+  },
+  "qwen2.5_14b": {
+   "display": "qwen2.5-14b",
+   "source": "(original study tests/test-*/mcp.jsonl)"
+  },
+  "qwen3.5_9b_claude_distill": {
+   "display": "qwen3.5-9b",
+   "source": "results/runs.qwen35-9b-hiq.jsonl (temp=0, greedy)"
+  },
+  "qwen3_coder_30b": {
+   "display": "qwen3-coder-30b",
+   "source": "results/runs.qwen3-coder-30b.jsonl (temp=0, greedy)"
+  },
+  "claude_haiku_4_5": {
+   "display": "haiku-4.5",
+   "source": "results/runs.anthropic-haiku45.jsonl (temp=0, greedy)"
+  },
+  "claude_sonnet_4_6": {
+   "display": "sonnet-4.6",
+   "source": "results/runs.anthropic-sonnet46.jsonl (temp=0, greedy)"
+  }
+ },
+ "grades_legend": "PASS = correct cause + working fix \u00b7 NEAR/PARTIAL = correct/working fix with a wrong or muddled stated cause \u00b7 FAIL = wrong cause and non-working fix \u00b7 ERROR = orchestration plumbing failure (not a coding verdict)",
+ "tests": [
+  {
+   "test": 1,
+   "scenario": "sse-eaddrinuse",
+   "requires": "DIAGNOSE",
+   "posing": "SSE well-scoped",
+   "system_prompt": "code-fixer",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "'server.listen() throws synchronously' \u2014 wrong; it's the async 'error' event"
+   },
+   "qwen2.5_14b": {
+    "grade": "PARTIAL",
+    "note": "handler \u2713 but cause wrong + breaks sync caller"
+   },
+   "qwen3.5_9b_claude_distill": {
+    "grade": "FAIL",
+    "note": "'server.listen() throws an unhandled exception, no try-catch' \u2014 wrong (async 'error' event)"
+   },
+   "qwen3_coder_30b": {
+    "grade": "NEAR",
+    "note": "added server.on('error') but mis-frames the mechanism as 'throws an unhandled exception'"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "names the 'error' event + adds server.on('error'); flags hardcoded port"
+   },
+   "claude_sonnet_4_6": {
+    "grade": "PASS",
+    "note": ""
+   }
+  },
+  {
+   "test": 2,
+   "scenario": "fk-cascade-migration",
+   "requires": "DIAGNOSE",
+   "posing": "FK underspecified",
+   "system_prompt": "code-fixer",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "FK confab; never reaches the transaction-no-op"
+   },
+   "qwen2.5_14b": {
+    "grade": "FAIL",
+    "note": "invalid MySQL dialect, weakens cascade"
+   },
+   "qwen3.5_9b_claude_distill": {
+    "grade": "FAIL",
+    "note": "naive in-SQL FK disable the txn no-op defeats (underspecified)"
+   },
+   "qwen3_coder_30b": {
+    "grade": "FAIL",
+    "note": "cascade-on-rebuild noted; no connection-level fix (underspecified)"
+   },
+   "claude_haiku_4_5": {
+    "grade": "FAIL",
+    "note": "confused 'FK constraints disabled by default'; no connection-level fix"
+   },
+   "claude_sonnet_4_6": {
+    "grade": "PASS",
+    "note": "FK-cascade-on-rebuild; unprompted surfaced the migrator-transaction subtlety"
+   }
+  },
+  {
+   "test": 3,
+   "scenario": "fk-cascade-migration",
+   "requires": "DIAGNOSE",
+   "posing": "FK context-rich",
+   "system_prompt": "code-fixer",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "'CREATE TABLE sets up constraints before INSERT' \u2014 DDL-ordering confab"
+   },
+   "qwen2.5_14b": {
+    "grade": "FAIL",
+    "note": "BEGIN/COMMIT in the SQL \u2014 still a no-op"
+   },
+   "qwen3.5_9b_claude_distill": {
+    "grade": "FAIL",
+    "note": "muddled 'PRAGMA OFF only affects the new table'; no connection fix"
+   },
+   "qwen3_coder_30b": {
+    "grade": "FAIL",
+    "note": "muddled 'FK check happens at the statement level'; mis-describes the rename; no connection fix"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "correct: PRAGMA is connection-scoped, the client's ON persists across the in-SQL OFF; connection-level fix"
+   },
+   "claude_sonnet_4_6": {
+    "grade": "PASS",
+    "note": ""
+   }
+  },
+  {
+   "test": 4,
+   "scenario": "audit-ref-policy-comment",
+   "requires": "APPLY",
+   "posing": "audit + pointer hint",
+   "system_prompt": "code-fixer",
+   "gemma_4_e4b": {
+    "grade": "PASS",
+    "note": "comment-skip fix (hinted)"
+   },
+   "qwen2.5_14b": {
+    "grade": "PASS",
+    "note": "comment-skip fix (pointer did the work)"
+   },
+   "qwen3.5_9b_claude_distill": {
+    "grade": "PASS",
+    "note": "comment-skip fix (hinted)"
+   },
+   "qwen3_coder_30b": {
+    "grade": "PASS",
+    "note": "comment-skip fix (hinted)"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "comment-skip fix (hinted)"
+   },
+   "claude_sonnet_4_6": {
+    "grade": "PASS",
+    "note": ""
+   }
+  },
+  {
+   "test": 5,
+   "scenario": "fk-cascade-migration",
+   "requires": "APPLY",
+   "posing": "FK fix+API handed over",
+   "system_prompt": "code-fixer",
+   "gemma_4_e4b": {
+    "grade": "NEAR",
+    "note": "applied the handed-over connection-level OFF\u2192migrate\u2192try; spurious await on sync calls; restore unconfirmed"
+   },
+   "qwen2.5_14b": {
+    "grade": "NEAR",
+    "note": "right approach; restore used READ form \u2192 FK never re-enabled"
+   },
+   "qwen3.5_9b_claude_distill": {
+    "grade": "PASS",
+    "note": "correct: 'pragmas ignored inside the migrator transaction'; connection-level fix (handed)"
+   },
+   "qwen3_coder_30b": {
+    "grade": "PASS",
+    "note": "correct: 'PRAGMA ignored inside transactions'; connection-level OFF\u2192migrate\u2192restore"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "applied the handed-over connection-level fix"
+   },
+   "claude_sonnet_4_6": {
+    "grade": "PASS",
+    "note": ""
+   }
+  },
+  {
+   "test": 6,
+   "scenario": "fk-cascade-migration",
+   "requires": "DIAGNOSE",
+   "posing": "FK full-context",
+   "system_prompt": "code-fixer",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "FK confab"
+   },
+   "qwen2.5_14b": {
+    "grade": "FAIL",
+    "note": "cause inverted; irrelevant fix"
+   },
+   "qwen3.5_9b_claude_distill": {
+    "grade": "FAIL",
+    "note": "confab 'FK checks disabled during rebuild'"
+   },
+   "qwen3_coder_30b": {
+    "grade": "FAIL",
+    "note": "cascade-on-rebuild noted but never reaches the in-SQL-PRAGMA-is-a-no-op crux / connection fix"
+   },
+   "claude_haiku_4_5": {
+    "grade": "NEAR",
+    "note": "wrong cause ('better-sqlite3 runs the migration as a single prepared statement') but a connection-level fix"
+   },
+   "claude_sonnet_4_6": {
+    "grade": "PASS",
+    "note": "exact PRAGMA-no-op-in-transaction; conn-level fkWasOn + try/finally; cleaner than the shipped fix"
+   }
+  },
+  {
+   "test": 7,
+   "scenario": "sse-eaddrinuse",
+   "requires": "DIAGNOSE",
+   "posing": "SSE full-context",
+   "system_prompt": "code-fixer",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "'error callback provided by listen()' \u2014 muddled; no clear 'error' handler/cause"
+   },
+   "qwen2.5_14b": {
+    "grade": "FAIL",
+    "note": "try/catch around async listen \u2014 can't catch 'error'"
+   },
+   "qwen3.5_9b_claude_distill": {
+    "grade": "FAIL",
+    "note": "'listen throws EADDRINUSE synchronously' \u2014 wrong; no real handler"
+   },
+   "qwen3_coder_30b": {
+    "grade": "NEAR",
+    "note": "added server.on('error') but frames it as 'uncaught exception bubbles up'"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "names the async 'error' event + handler + injectable port"
+   },
+   "claude_sonnet_4_6": {
+    "grade": "PASS",
+    "note": ""
+   }
+  },
+  {
+   "test": 8,
+   "scenario": "audit-ref-policy-comment",
+   "requires": "DIAGNOSE",
+   "posing": "audit neutral",
+   "system_prompt": "code-fixer",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "'finds an earlier instance' \u2014 circles it but never identifies the comment-on-306"
+   },
+   "qwen2.5_14b": {
+    "grade": "FAIL",
+    "note": "missed the comment; still matches it"
+   },
+   "qwen3.5_9b_claude_distill": {
+    "grade": "FAIL",
+    "note": "'>= operator / 388 vs 410' \u2014 misses the Promise.all-in-comment-306"
+   },
+   "qwen3_coder_30b": {
+    "grade": "PASS",
+    "note": "fix skips comment lines (`not line.strip().startswith('//')`) \u2014 addresses the comment false-match; first local model to"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "caught the comment-on-306 false match"
+   },
+   "claude_sonnet_4_6": {
+    "grade": "PASS",
+    "note": ""
+   }
+  },
+  {
+   "test": 9,
+   "scenario": "fk-cascade-migration",
+   "requires": "DIAGNOSE",
+   "posing": "FK role-primed (ts-pro)",
+   "system_prompt": "ts-pro",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "FK ts-pro \u2014 confab, no txn-no-op"
+   },
+   "qwen2.5_14b": {
+    "grade": "FAIL",
+    "note": "raised 'transaction scope' but fix = BEGIN/COMMIT in SQL"
+   },
+   "qwen3.5_9b_claude_distill": {
+    "grade": "FAIL",
+    "note": "denies cascade; 're-enable foreign_keys=ON' theory"
+   },
+   "qwen3_coder_30b": {
+    "grade": "FAIL",
+    "note": "wrong: claims 'PRAGMA OFF disables checking, not the cascade behavior itself'"
+   },
+   "claude_haiku_4_5": {
+    "grade": "NEAR",
+    "note": "speculates the migrator 'skips PRAGMA statements' (wrong) but lands a connection-level fix"
+   },
+   "claude_sonnet_4_6": {
+    "grade": "PASS",
+    "note": ""
+   }
+  },
+  {
+   "test": 10,
+   "scenario": "fk-cascade-migration",
+   "requires": "APPLY",
+   "posing": "FK facts-in-prompt (select)",
+   "system_prompt": "ts-pro",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "selected the 'ignored inside transaction' fact but applied the PRAGMA IN-transaction (the no-op) \u2014 wrong fix layer"
+   },
+   "qwen2.5_14b": {
+    "grade": "FAIL",
+    "note": "selected facts, hallucinated migrate API"
+   },
+   "qwen3.5_9b_claude_distill": {
+    "grade": "PASS",
+    "note": "SELECTED the right facts from the distractor list (migrator txn \u2192 in-SQL PRAGMA ignored \u2192 cascade) + sqlite-level fix"
+   },
+   "qwen3_coder_30b": {
+    "grade": "NEAR",
+    "note": "acknowledges the in-SQL PRAGMA is insufficient but the fix layer stays vague ('manage FK during migration'), not the connection-level toggle  [PASS on the default-temp draw \u2014 sampling-sensitive cell]"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "'in-SQL PRAGMA OFF is ineffective inside a transaction' + connection-level fix"
+   },
+   "claude_sonnet_4_6": {
+    "grade": "PASS",
+    "note": "selected the right facts AND synthesized the connection-level fix"
+   }
+  },
+  {
+   "test": 11,
+   "scenario": "sse-eaddrinuse",
+   "requires": "APPLY",
+   "posing": "SSE fact-in-role",
+   "system_prompt": "ts-pro",
+   "gemma_4_e4b": {
+    "grade": "NEAR",
+    "note": "role supplied the fact; added server.on('error') (load-bearing fix) but cause muddled / port unconfirmed"
+   },
+   "qwen2.5_14b": {
+    "grade": "FAIL",
+    "note": "ignored the fact; uncompilable; High-confidence wrong"
+   },
+   "qwen3.5_9b_claude_distill": {
+    "grade": "FAIL",
+    "note": "SSE fact-in-role ignored; no handler"
+   },
+   "qwen3_coder_30b": {
+    "grade": "PASS",
+    "note": "applied the role's fact: server.on('error'), no try/catch trap"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "applied the role's fact: server.on('error'), no try/catch trap"
+   },
+   "claude_sonnet_4_6": {
+    "grade": "PASS",
+    "note": ""
+   }
+  },
+  {
+   "test": 12,
+   "scenario": "fk-cascade-migration",
+   "requires": "DIAGNOSE",
+   "posing": "FK multi-turn synth\u2192code",
+   "system_prompt": "synth-coder (anti-fab)",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "FK multi-turn \u2014 confab"
+   },
+   "qwen2.5_14b": {
+    "grade": "FAIL",
+    "note": "anti-fab capped one hallucination, relocated to invalid SQL"
+   },
+   "qwen3.5_9b_claude_distill": {
+    "grade": "FAIL",
+    "note": "correctly notes sqlite is module-private but falls back to 'verify FK with queries before/after' \u2014 does not disable FK, non-working  [PASS on the default-temp draw, which found (db as any).session.client \u2014 sampling-sensitive]"
+   },
+   "qwen3_coder_30b": {
+    "grade": "FAIL",
+    "note": "defeatist \u2014 'the fix must be in Drizzle ORM's migration implementation'"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "correct: 'connection-level foreign_keys=ON overrides the migration SQL's PRAGMA'; layer-correct toggle helpers  [NEAR on the default-temp draw \u2014 sampling-sensitive cell]"
+   },
+   "claude_sonnet_4_6": {
+    "grade": "PASS",
+    "note": ""
+   }
+  },
+  {
+   "test": 13,
+   "scenario": "fk-cascade-migration",
+   "requires": "DIAGNOSE",
+   "posing": "FK adversarial architect",
+   "system_prompt": "architect (adversarial)",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "architect: inverted cause ('PRAGMA OFF causes the deletion')"
+   },
+   "qwen2.5_14b": {
+    "grade": "FAIL",
+    "note": "rejected wrong cause but inverted the fix"
+   },
+   "qwen3.5_9b_claude_distill": {
+    "grade": "FAIL",
+    "note": "rejects the planted dx but lands another wrong cause ('task ID recreation breaks referential integrity')"
+   },
+   "qwen3_coder_30b": {
+    "grade": "PASS",
+    "note": "correct: 'Drizzle's transaction wrapper does not respect the in-script PRAGMA OFF'; fix = set FK OFF before migrate in db/migrate.ts; rejected the planted wrong dx  [NEAR on the default-temp draw \u2014 sampling-sensitive cell]"
+   },
+   "claude_haiku_4_5": {
+    "grade": "FAIL",
+    "note": "wrong 'FK pragma state leaks across the transaction boundary; re-validates at commit' theory"
+   },
+   "claude_sonnet_4_6": {
+    "grade": "PASS",
+    "note": "rejected the planted wrong diagnosis; correct cause + grounded spec"
+   }
+  },
+  {
+   "test": 14,
+   "scenario": "fk-cascade-migration",
+   "requires": "ORCH",
+   "posing": "FK orchestrate lead\u2192synth\u2192coder",
+   "system_prompt": "lead (orchestrator)",
+   "gemma_4_e4b": {
+    "grade": "ERROR",
+    "note": "lead PROVIDER_ERROR \u2014 orchestration failed (4B lead could not drive the delegation)"
+   },
+   "qwen2.5_14b": {
+    "grade": "FAIL",
+    "note": "coordinated (synth\u2192coder) but fix wrong + fabricated imports"
+   },
+   "qwen3.5_9b_claude_distill": {
+    "grade": "FAIL",
+    "note": "orchestrated correctly (synth\u2192coder, composed) but the fix was wrong  [ERROR/empty on the default-temp draw \u2014 sampling-sensitive]"
+   },
+   "qwen3_coder_30b": {
+    "grade": "FAIL",
+    "note": "orchestrated correctly (synth\u2192coder, composed) but the fix was vague/wrong"
+   },
+   "claude_haiku_4_5": {
+    "grade": "ERROR",
+    "note": "lead called bare `agent` (no server prefix) \u2192 task failed \u2014 the DEBT-004 trip; hit at temp=0, whereas it coordinated cleanly on the default-temp draw [sampling-sensitive]"
+   },
+   "claude_sonnet_4_6": {
+    "grade": "ERROR",
+    "note": "lead called bare `agent` (no server prefix) \u2192 orchestrator rejected \u2192 task failed (DEBT-004); same at default temp AND greedy \u2014 sonnet is stable here; orphaned a sub-agent session (BUG-002 repro)"
+   }
+  },
+  {
+   "test": 15,
+   "scenario": "tasklist-ephemeral-filter",
+   "requires": "ADDITIVE",
+   "posing": "floor: list filter",
+   "system_prompt": "code-impl",
+   "gemma_4_e4b": {
+    "grade": "PASS",
+    "note": "optional is_ephemeral filter"
+   },
+   "qwen2.5_14b": {
+    "grade": "PASS",
+    "note": "number enum (different API, consistent)"
+   },
+   "qwen3.5_9b_claude_distill": {
+    "grade": "PASS",
+    "note": "z.boolean().optional() + eq"
+   },
+   "qwen3_coder_30b": {
+    "grade": "PASS",
+    "note": "optional is_ephemeral filter"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "optional is_ephemeral filter"
+   },
+   "claude_sonnet_4_6": {
+    "grade": "PASS",
+    "note": ""
+   }
+  },
+  {
+   "test": 16,
+   "scenario": "sse-port-param",
+   "requires": "ADDITIVE",
+   "posing": "floor: optional port param",
+   "system_prompt": "code-impl",
+   "gemma_4_e4b": {
+    "grade": "PASS",
+    "note": "optional port/host defaulted"
+   },
+   "qwen2.5_14b": {
+    "grade": "PASS",
+    "note": "optional port/host defaulted"
+   },
+   "qwen3.5_9b_claude_distill": {
+    "grade": "PASS",
+    "note": "optional port?/host?, port ?? SSE_PORT"
+   },
+   "qwen3_coder_30b": {
+    "grade": "PASS",
+    "note": "optional port/host defaulted"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "optional port/host defaulted"
+   },
+   "claude_sonnet_4_6": {
+    "grade": "PASS",
+    "note": ""
+   }
+  },
+  {
+   "test": 17,
+   "scenario": "task-status-enum-extend",
+   "requires": "ADDITIVE",
+   "posing": "floor: extend enum",
+   "system_prompt": "code-impl",
+   "gemma_4_e4b": {
+    "grade": "PASS",
+    "note": "both enums extended"
+   },
+   "qwen2.5_14b": {
+    "grade": "PASS",
+    "note": "both enums updated; flagged other refs"
+   },
+   "qwen3.5_9b_claude_distill": {
+    "grade": "PASS",
+    "note": "both enums; values kept"
+   },
+   "qwen3_coder_30b": {
+    "grade": "PASS",
+    "note": "both enums extended"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "both enums extended"
+   },
+   "claude_sonnet_4_6": {
+    "grade": "PASS",
+    "note": ""
+   }
+  },
+  {
+   "test": 18,
+   "scenario": "export-sqlite-type-annotation",
+   "requires": "GOTCHA",
+   "posing": "floor+TS4023 gotcha",
+   "system_prompt": "code-impl",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "exported db; sqlite line unchanged \u2014 no Database.Database annotation (still TS4023)"
+   },
+   "qwen2.5_14b": {
+    "grade": "FAIL",
+    "note": "renamed var \u2014 still TS4023; no annotation"
+   },
+   "qwen3.5_9b_claude_distill": {
+    "grade": "FAIL",
+    "note": "exports db; no Database.Database annotation"
+   },
+   "qwen3_coder_30b": {
+    "grade": "FAIL",
+    "note": "exported db; sqlite line unchanged \u2014 no Database.Database annotation"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "explicit `import type { Database as DatabaseType }` annotation"
+   },
+   "claude_sonnet_4_6": {
+    "grade": "PASS",
+    "note": "explicit type annotation + .d.ts-nameability note"
+   }
+  }
+ ]
+}

@@ -1,0 +1,260 @@
+{
+  "schema_version": 2,
+  "title": "adhd-environment v0.0.5",
+  "plan_kind": "greenfield",
+  "phases": [
+    "scaffold",
+    "contract",
+    "builder",
+    "runtime",
+    "refactor",
+    "audit",
+    "docs"
+  ],
+  "terminal": "done",
+  "nodes": {
+    "contract-base-spec": {
+      "kind": "work",
+      "phase": "contract",
+      "depends_on": [
+        "scaffold-workspace"
+      ],
+      "guard": "npx --yes nx build environment-base-spec",
+      "artifacts": [
+        "packages/environment/environment-base-spec/spec/adhd-environment.schema.json",
+        "packages/environment/environment-base-spec/spec/cross-language-test-vectors.json",
+        "packages/environment/environment-base-spec/spec/SPEC.md",
+        "packages/environment/environment-base-spec/src/index.ts"
+      ],
+      "model": "sonnet",
+      "effort": "medium",
+      "context": "contexts/contract-base-spec.md",
+      "notes": ""
+    },
+    "builder-engine": {
+      "kind": "work",
+      "phase": "builder",
+      "depends_on": [
+        "contract-base-spec"
+      ],
+      "guard": "npx --yes nx build environment-builder",
+      "artifacts": [
+        "packages/environment/environment-builder/src/yaml-parser.ts",
+        "packages/environment/environment-builder/src/field-merge.ts",
+        "packages/environment/environment-builder/src/config-resolver.ts",
+        "packages/environment/environment-builder/src/json-schema-gen.ts",
+        "packages/environment/environment-builder/src/provenance.ts",
+        "packages/environment/environment-builder/src/validation.ts",
+        "packages/environment/environment-builder/src/snapshot-writer.ts"
+      ],
+      "model": "sonnet",
+      "effort": "medium",
+      "context": "contexts/builder-engine.md",
+      "notes": ""
+    },
+    "builder-snapshot-api": {
+      "kind": "work",
+      "phase": "builder",
+      "depends_on": [
+        "builder-engine"
+      ],
+      "guard": "test -f packages/environment/environment-builder/src/environment-snapshot.ts && npx --yes nx build environment-builder && node -e 'const{build}=require(\"./dist/packages/environment/environment-builder\"); const s=build({project:{name:\"t\",envPrefix:\"T\"}}); process.exit([\"get\",\"set\",\"configPath\",\"write\"].every(m=>typeof s[m]===\"function\")?0:1)'",
+      "artifacts": [
+        "packages/environment/environment-builder/src/environment-snapshot.ts",
+        "packages/environment/environment-builder/src/index.ts",
+        "packages/environment/environment-builder/src/__tests__/environment-snapshot.test.ts"
+      ],
+      "model": "sonnet",
+      "effort": "medium",
+      "context": "contexts/builder-snapshot-api.md",
+      "notes": ""
+    },
+    "audit-builder": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "builder-snapshot-api"
+      ],
+      "guard": "python3 docs/plan/adhd-environment/scripts/guard_audit_builder.py",
+      "artifacts": [
+        "scripts/audit_audit-builder.py"
+      ],
+      "model": "opus",
+      "effort": "hard",
+      "context": "contexts/audit-builder.md",
+      "notes": ""
+    },
+    "runtime-core-node": {
+      "kind": "work",
+      "phase": "runtime",
+      "depends_on": [
+        "builder-snapshot-api"
+      ],
+      "guard": "test -f packages/environment/environment-core-node/src/environment.ts && npx --yes nx build environment-core-node && node -e 'new (require(\"@adhd/environment\").Environment)({project:\"test\",namespace:\"default\"})'",
+      "artifacts": [
+        "packages/environment/environment-core-node/src/index.ts",
+        "packages/environment/environment-core-node/src/environment.ts"
+      ],
+      "model": "sonnet",
+      "effort": "medium",
+      "context": "contexts/runtime-core-node.md",
+      "notes": ""
+    },
+    "runtime-cli": {
+      "kind": "work",
+      "phase": "runtime",
+      "depends_on": [
+        "builder-snapshot-api",
+        "runtime-core-node"
+      ],
+      "guard": "test -f entrypoint/environment-cli/src/api.ts && F=entrypoint/environment-cli/src/api.ts && grep -q 'function init' $F && grep -q 'function build' $F && grep -q 'function set' $F && grep -q 'function status' $F && grep -q 'function verify' $F && grep -q 'function doctor' $F && grep -q 'function configGet' $F && grep -q 'function exportSnapshot' $F && grep -q 'function diff' $F && npx --yes nx build environment-cli",
+      "artifacts": [
+        "entrypoint/environment-cli/src/api.ts",
+        "entrypoint/environment-cli/src/commands/set.ts",
+        "entrypoint/environment-cli/src/core.ts"
+      ],
+      "model": "sonnet",
+      "effort": "medium",
+      "context": "contexts/runtime-cli.md",
+      "notes": ""
+    },
+    "runtime-py": {
+      "kind": "work",
+      "phase": "runtime",
+      "depends_on": [
+        "contract-base-spec"
+      ],
+      "guard": "python3 docs/plan/adhd-environment/scripts/guard_runtime_py.py",
+      "artifacts": [
+        "packages/environment/environment-core-py/src/adhd_environment/__init__.py",
+        "packages/environment/environment-core-py/src/adhd_environment/environment.py"
+      ],
+      "model": "sonnet",
+      "effort": "medium",
+      "context": "contexts/runtime-py.md",
+      "notes": ""
+    },
+    "runtime-rs": {
+      "kind": "work",
+      "phase": "runtime",
+      "depends_on": [
+        "contract-base-spec"
+      ],
+      "guard": "python3 docs/plan/adhd-environment/scripts/guard_runtime_rs.py",
+      "artifacts": [
+        "packages/environment/environment-core-rs/src/lib.rs"
+      ],
+      "model": "sonnet",
+      "effort": "medium",
+      "context": "contexts/runtime-rs.md",
+      "notes": ""
+    },
+    "audit-runtime": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "runtime-core-node",
+        "runtime-cli",
+        "runtime-py",
+        "runtime-rs"
+      ],
+      "guard": "python3 docs/plan/adhd-environment/scripts/guard_audit_runtime.py",
+      "artifacts": [
+        "scripts/audit_audit-runtime.py"
+      ],
+      "model": "opus",
+      "effort": "hard",
+      "context": "contexts/audit-runtime.md",
+      "notes": ""
+    },
+    "refactor-agent-mcp": {
+      "kind": "work",
+      "phase": "refactor",
+      "depends_on": [
+        "runtime-core-node",
+        "runtime-cli",
+        "audit-builder"
+      ],
+      "guard": "test ! -f entrypoint/agent-mcp/src/config.ts && npx --yes nx test agent-mcp",
+      "artifacts": [
+        "entrypoint/agent-mcp/adhd.environment.yaml",
+        "entrypoint/agent-mcp/src/environment.ts",
+        "entrypoint/agent-mcp/src/config.ts",
+        "entrypoint/agent-mcp/src/index.ts",
+        "entrypoint/agent-mcp/src/server.ts",
+        "entrypoint/agent-mcp/src/logger.ts",
+        "entrypoint/agent-mcp/src/streaming/sse-server.ts",
+        "entrypoint/agent-mcp/src/db/client.ts"
+      ],
+      "model": "opus",
+      "effort": "hard",
+      "context": "contexts/refactor-agent-mcp.md",
+      "notes": ""
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "refactor-agent-mcp",
+        "audit-runtime"
+      ],
+      "guard": "python3 docs/plan/adhd-environment/scripts/guard_audit_final.py",
+      "artifacts": [
+        "scripts/audit_audit-final.py"
+      ],
+      "model": "opus",
+      "effort": "hard",
+      "context": "contexts/audit-final.md",
+      "notes": ""
+    },
+    "docs-steward": {
+      "kind": "work",
+      "phase": "docs",
+      "depends_on": [
+        "audit-final"
+      ],
+      "guard": "python3 docs/plan/adhd-environment/scripts/guard_docs_steward.py",
+      "artifacts": [
+        "docs/plan/adhd-environment/demo/DEMO.md",
+        "docs/plan/adhd-environment/USE_CASES.md"
+      ],
+      "model": "sonnet",
+      "effort": "medium",
+      "context": "contexts/docs-steward.md",
+      "notes": ""
+    },
+    "scaffold-workspace": {
+      "kind": "work",
+      "phase": "scaffold",
+      "depends_on": [],
+      "guard": "python3 docs/plan/adhd-environment/scripts/guard_scaffold_workspace.py",
+      "artifacts": [
+        "packages/environment/environment-base-spec/package.json",
+        "packages/environment/environment-base-spec/project.json",
+        "packages/environment/environment-base-spec/tsconfig.json",
+        "packages/environment/environment-builder/package.json",
+        "packages/environment/environment-builder/project.json",
+        "packages/environment/environment-builder/tsconfig.json",
+        "packages/environment/environment-core-node/package.json",
+        "packages/environment/environment-core-node/project.json",
+        "packages/environment/environment-core-node/tsconfig.json",
+        "entrypoint/environment-cli/package.json",
+        "entrypoint/environment-cli/project.json",
+        "entrypoint/environment-cli/tsconfig.json",
+        "packages/environment/environment-core-py/pyproject.toml",
+        "packages/environment/environment-core-rs/Cargo.toml",
+        "packages/environment/environment-core-rs/Cargo.lock",
+        "tsconfig.base.json"
+      ],
+      "model": "sonnet",
+      "effort": "medium",
+      "context": "contexts/scaffold-workspace.md",
+      "notes": ""
+    }
+  },
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.25",
+    "hash": "961c3053dfab"
+  }
+}

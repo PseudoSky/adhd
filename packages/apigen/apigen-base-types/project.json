@@ -1,0 +1,86 @@
+{
+  "name": "apigen-base-types",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/apigen/apigen-base-types/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": [
+    "domain:apigen",
+    "pkg-kind:types",
+    "pkg-class:types",
+    "layer:shared",
+    "platform:shared",
+    "access:public",
+    "publish:npm"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
+      "options": {
+        "command": "tsc -p packages/apigen/apigen-base-types/tsconfig.lib.json --noEmit"
+      }
+    },
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "packages/apigen/apigen-base-types/dist",
+        "main": "packages/apigen/apigen-base-types/src/index.ts",
+        "tsConfig": "packages/apigen/apigen-base-types/tsconfig.lib.json",
+        "assets": [
+          "packages/apigen/apigen-base-types/*.md"
+        ]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      },
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
+      ]
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest"
+          ]
+        }
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/apigen-base-types"
+      ],
+      "options": {
+        "vitestConfig": "packages/apigen/apigen-base-types/vite.config.ts"
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+# <%= packageScope %>/<%= projectName %>
+
+> <%= description %>
+
+An [apigen](https://www.npmjs.com/package/@adhd/apigen-cli) **v2 output plugin**. apigen takes an
+unmodified TypeScript source file and exposes its exports as an API surface (MCP server, HTTP API, CLI,
+…); this package provides the **`<%= pluginName %>`** target.
+
+## Install
+
+```bash
+npm install <%= packageScope %>/<%= projectName %>
+```
+
+## Usage
+
+Via the apigen CLI:
+
+```bash
+# project a source file through this plugin's target
+npx @adhd/apigen-cli run --source ./api.ts --type <%= pluginName %>
+
+# or activate it as a layer/mount plugin on another target
+npx @adhd/apigen-cli run --source ./api.ts --type mcp --use <%= packageScope %>/<%= projectName %>
+```
+
+Programmatically:
+
+```ts
+import { <%= propertyName %>Plugin, type <%= className %>Options } from '<%= packageScope %>/<%= projectName %>'
+```
+
+The plugin implements the v2 `Plugin` interface (SPEC §7.1) and is the package's default export.
+
+## Part of the apigen toolchain
+
+See [`@adhd/apigen-cli`](https://www.npmjs.com/package/@adhd/apigen-cli) for the full
+TypeScript-to-API system and the list of available plugins.

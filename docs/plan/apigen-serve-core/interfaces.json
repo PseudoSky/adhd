@@ -1,0 +1,38 @@
+{
+  "op-plan": {
+    "interface": "OpPlan",
+    "shape": "interface OpPlan { op: Operation; transport: Transport; http:{verb:HttpVerb;route:string}; mcp:{name:string}; cli:{path:string[]}; grpc:{package:string;service:string;method:string}; params?: ParamInfo[]; envelope: Array<{field:string;pluginId:string;httpHeader:string;mcpMetaKey:string;cliFlag:string;envVar:string}>; cliFlags: Map<string,{camelKey:string;kind:'domain'|'envelope';valueKind:'boolean'|'json'|'string';envVar?:string}>; streaming:boolean; isMount:boolean; mountHandler?:(call:Call)=>Promise<LayerResult> }  // F3: `transport` is stamped per-package so dispatchForPlan's mount branch tags core-client Call.transport correctly (never a hardcoded 'http'). F2: cliFlags carries envVar (cli-output FlagSpec, run.ts:53-59) so parseArgs's flag->env-var fallback (run.ts:300-306) is not silently regressed. computed once per op (proposal §3a).",
+    "provenance": "vendored-source",
+    "confidence": "vendored",
+    "resolved_version": "git:fb491d52",
+    "source": "packages/apigen/apigen-engine-naming/src/lib/naming.ts:94-177 (TransportProjection/project/Transport); apigen-engine-runtime/src/lib/describe-params.ts (ParamInfo); apigen-core-client/src/lib/plugin.ts:87-117,359-375 (Call/MountedOperation); apigen-plugin-cli-output/src/lib/run.ts:53-59,300-306 (FlagSpec/env-var fallback — F2)",
+    "audit_check": "serve-core-primitives.3"
+  },
+  "transport-adapter": {
+    "interface": "TransportAdapter",
+    "shape": "interface TransportAdapter<Raw=unknown> { registerRoute(plan:OpPlan, dispatch:(call:Omit<Call,'operation'|'ctx'>)=>Promise<LayerResult>):void; readCall(raw:Raw, plan:OpPlan):Omit<Call,'operation'|'ctx'>|Promise<Omit<Call,'operation'|'ctx'>>; writeResult(raw:Raw, result:LayerResult, plan:OpPlan):void|Promise<void>; writeError(raw:Raw, err:unknown, plan:OpPlan):void|Promise<void> }  // F1: dispatch returns Promise<LayerResult> and writeResult takes the resolved LayerResult (invoke.ts:94-102,152-156) — invoke() ALWAYS returns a Promise; only the resolved value is the unknown|AsyncIterable union. Raw stays a generic escape hatch (SSE needs reply.hijack). read/write are genuinely transport-specific (proposal §3c).",
+    "provenance": "vendored-source",
+    "confidence": "vendored",
+    "resolved_version": "git:fb491d52",
+    "source": "packages/apigen/apigen-engine-runtime/src/lib/invoke.ts:68-82 (Call),94-102 (LayerResult),152-156 (InvokeFn); apigen-plugin-api-fastify/src/lib/run.ts (current per-plugin read/write to abstract)",
+    "audit_check": "serve-core-primitives.4"
+  },
+  "create-package-invoker": {
+    "interface": "createPackageInvoker",
+    "shape": "function createPackageInvoker(schemas: ComposedSchemas, usePlugins: UsePlugin[]): InvokeFn  // PROMOTED into apigen-engine-runtime: absorbs the byte-identical buildInvokerForPackage/readUsePlugins/readUseOptions/adaptCoreLayer block (~120 lines, proposal §4) that fastify+express duplicate today, and those symbols are DELETED from the plugin files. Returns the existing InvokeFn; built once per package, not per request.",
+    "provenance": "vendored-source",
+    "confidence": "vendored",
+    "resolved_version": "git:fb491d52",
+    "source": "packages/apigen/apigen-engine-runtime/src/lib/invoke.ts:133-209 (InvokeFn/createInvoker/InvokeOptions); apigen-plugin-api-fastify/src/lib/run.ts:91-166 (duplicated block promoted+deleted); apigen-plugin-api-express/src/lib/run.ts:84-159 (identical copy that then collapses onto this)",
+    "audit_check": "serve-core-primitives.1"
+  },
+  "dispatch-for-plan": {
+    "interface": "dispatchForPlan",
+    "shape": "function dispatchForPlan(plan: OpPlan, invoke: InvokeFn, call: Omit<Call,'operation'|'ctx'>, opts: InvokeOptions): Promise<LayerResult>  // F1: returns Promise<LayerResult> (invoke.ts:152-156) — NOT the bare `Promise<unknown> | AsyncIterable<unknown>` sketch, which does not type-check. Branches isMount?mountHandler(call):dispatch(fns,...) (mount now flows through the composed invoker per [fix:mount-through-layers]) and streaming-vs-scalar via isApiStream. F3: the mount branch adapts runtime Call (domainArgs/ctx:LayerContext) -> core-client Call (data/ctx:Extensions/transport/raw) and stamps Call.transport from plan.transport, never a hardcoded 'http'.",
+    "provenance": "vendored-source",
+    "confidence": "vendored",
+    "resolved_version": "git:fb491d52",
+    "source": "packages/apigen/apigen-engine-runtime/src/lib/invoke.ts:94-102 (LayerResult),152-156 (InvokeFn); apigen-engine-runtime/src/lib/stream.ts (isApiStream); apigen-core-client/src/lib/plugin.ts:87-117 (core-client Call shape — F3)",
+    "audit_check": "serve-core-primitives.2"
+  }
+}

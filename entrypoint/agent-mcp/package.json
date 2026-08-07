@@ -1,0 +1,54 @@
+{
+  "name": "@adhd/agent-mcp",
+  "version": "2.2.1",
+  "type": "module",
+  "bin": {
+    "agent-mcp": "./dist/src/index.js",
+    "agent-mcp-tail": "./dist/src/scripts/agent-mcp-tail.js"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md",
+    "llms.txt",
+    "AGENTS.md",
+    "docs"
+  ],
+  "dependencies": {
+    "@adhd/agent-store-runtime": "^2.2.0",
+    "@adhd/agent-store-prompts": "^2.2.0",
+    "@adhd/agent-engine-orchestrator": "^2.2.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "pino": "^10.3.1",
+    "drizzle-orm": "^0.45.2",
+    "better-sqlite3": "^12.10.0",
+    "zod": "^4.4.3",
+    "@adhd/environment": "^0.1.0",
+    "@adhd/environment-base-spec": "^0.1.0",
+    "@adhd/agent-base-types": "^2.2.0",
+    "@adhd/agent-engine-compiler": "^2.2.1",
+    "@adhd/agent-core-provider": "^2.2.0",
+    "@adhd/agent-store-tools": "^2.2.0",
+    "@adhd/agent-core-policy": "^2.2.0",
+    "@adhd/agent-plugin-budget": "^0.1.0",
+    "@adhd/agent-core-env": "^0.1.0",
+    "dotenv": "17.4.2",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@adhd/agent-base-types": "^2.2.0"
+  },
+  "main": "./dist/src/index.js",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "entrypoint/agent-mcp"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/entrypoint/agent-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

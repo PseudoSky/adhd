@@ -1,0 +1,271 @@
+{
+  "schema_version": 2,
+  "title": "agent-mcp 0.0.6",
+  "spec_sources": [
+    "packages/ai/agent-mcp/GAPS.md",
+    "packages/ai/agent-mcp/ROADMAP.md"
+  ],
+  "executor": "sox-active:typescript-pro",
+  "phases": ["foundation", "correctness", "context", "convergence"],
+  "terminal": "done",
+  "nodes": {
+    "stop-reason-types": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": [],
+      "guard": "grep -q 'stopReason' packages/ai/agent-mcp-types/src/domain.ts && grep -q 'maxTokens' packages/ai/agent-mcp-types/src/domain.ts && grep -q 'CONTEXT_WINDOW_EXCEEDED' packages/ai/agent-mcp-types/src/errors.ts && npx nx build agent-mcp-types 2>&1 | grep -q 'Successfully ran'",
+      "artifacts": [
+        "packages/ai/agent-mcp-types/src/domain.ts",
+        "packages/ai/agent-mcp-types/src/errors.ts",
+        "packages/ai/agent-mcp-types/src/index.ts"
+      ],
+      "context": "contexts/stop-reason-types.md",
+      "notes": "Source of truth for TokenUsage fields (stopReason, maxTokens, cacheReadTokens, cacheCreationTokens) AND all new error codes (CONTEXT_WINDOW_EXCEEDED, PROVIDER_TIMEOUT, PROVIDER_AUTH_ERROR, PROVIDER_RATE_LIMITED). Build agent-mcp-types before editing agent-mcp sources — downstream states depend on the compiled output.",
+      "changes": {
+        "deletes": [],
+        "resigns": ["TokenUsage", "AgentMcpErrorCode"],
+        "renames": []
+      }
+    },
+    "provider-stop-reason": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": ["stop-reason-types"],
+      "guard": "grep -q 'finish_reason' packages/ai/agent-mcp/src/providers/openai.ts && grep -q 'stopReason' packages/ai/agent-mcp/src/providers/openai.ts && grep -qE '\\.stop_reason|stop_reason' packages/ai/agent-mcp/src/providers/anthropic.ts && grep -q 'stopReason' packages/ai/agent-mcp/src/providers/anthropic.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/providers/openai.ts",
+        "packages/ai/agent-mcp/src/providers/anthropic.ts"
+      ],
+      "context": "contexts/provider-stop-reason.md",
+      "notes": "Map finish_reason (OpenAI) and stop_reason (Anthropic) to the normalised four-value enum. LMStudioProvider extends OpenAIProvider — it inherits the change automatically. claudecli has no stop_reason — usage stays undefined.",
+      "changes": {
+        "deletes": [],
+        "resigns": [],
+        "renames": []
+      }
+    },
+    "schema-migration": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": ["provider-stop-reason"],
+      "guard": "grep -q 'stop_reason' packages/ai/agent-mcp/src/db/schema.ts && grep -q 'max_tokens' packages/ai/agent-mcp/src/db/schema.ts && python3 -c \"import os; sql=[f for f in os.listdir('packages/ai/agent-mcp/drizzle') if f.endswith('.sql')]; assert len(sql)>=3, f'expected >=3 migrations, got {len(sql)}'\"",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/drizzle/"
+      ],
+      "context": "contexts/schema-migration.md",
+      "notes": "Add stop_reason TEXT nullable, max_tokens INTEGER nullable, cache_read_input_tokens INTEGER nullable, and cache_creation_input_tokens INTEGER nullable columns to taskUsageTable. Run: cd packages/ai/agent-mcp && npx drizzle-kit generate. Current migrations: 0000_nifty_sasquatch.sql and 0001_task_usage.sql — new one will be 0002_*.sql.",
+      "changes": {
+        "deletes": [],
+        "resigns": ["taskUsageTable"],
+        "renames": []
+      }
+    },
+    "usage-plugin-stop": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": ["schema-migration"],
+      "guard": "grep -qE 'stopReason|stop_reason' packages/ai/agent-mcp/src/plugins/usage-plugin.ts && grep -qE 'maxTokens|max_tokens' packages/ai/agent-mcp/src/plugins/usage-plugin.ts && grep -qE 'SEVERITY|severity|mostSevere|most_severe' packages/ai/agent-mcp/src/plugins/usage-plugin.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/plugins/usage-plugin.ts"
+      ],
+      "context": "contexts/usage-plugin-stop.md",
+      "notes": "Accumulator gains mostSevereStopReason (starts 'unknown', updated per model response) and maxTokens (set once at task:start from provider config). onConflictDoUpdate must include stopReason but NOT maxTokens — it is a constant per task.",
+      "changes": {
+        "deletes": [],
+        "resigns": [],
+        "renames": []
+      }
+    },
+    "usage-report-stop": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": ["usage-plugin-stop"],
+      "guard": "grep -q 'stopReason' packages/ai/agent-mcp/src/validation/usage.ts && grep -q 'stopReason' packages/ai/agent-mcp/src/tools/usage.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/validation/usage.ts",
+        "packages/ai/agent-mcp/src/tools/usage.ts"
+      ],
+      "context": "contexts/usage-report-stop.md",
+      "notes": "usageSummarySchema gains stopReason?: z.string(). summarise() folds stop_reason using severity-wins logic across rows (see [inv:stop-reason-severity] in _shared.md). buildTaskUsageReport propagates it automatically via summarise().",
+      "changes": {
+        "deletes": [],
+        "resigns": ["UsageSummary", "TaskUsageReport", "buildTaskUsageReport"],
+        "renames": []
+      }
+    },
+    "env-var-fixes": {
+      "kind": "work",
+      "phase": "correctness",
+      "depends_on": ["usage-report-stop"],
+      "guard": "grep -q 'AGENT_MCP_MAX_DEPTH' packages/ai/agent-mcp/src/index.ts && grep -q 'AGENT_MCP_MAX_TOOL_LOOPS' packages/ai/agent-mcp/src/index.ts && grep -q 'AGENT_MCP_DEFAULT_MAX_TOKENS' packages/ai/agent-mcp/src/index.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/index.ts"
+      ],
+      "context": "contexts/env-var-fixes.md",
+      "notes": "index.ts currently reads bare MAX_DEPTH and MAX_TOOL_LOOPS (missing AGENT_MCP_ prefix — these are bugs). Reconcile MAX_TOOL_LOOPS default to 50 (code=10, docs=50 — mismatch). Add AGENT_MCP_DEFAULT_MAX_TOKENS env var (default 8192) parsed in index.ts and injected into PolicyEngine or used by providers.",
+      "changes": {
+        "deletes": [],
+        "resigns": ["PolicyEngine"],
+        "renames": []
+      }
+    },
+    "cache-tokens": {
+      "kind": "work",
+      "phase": "correctness",
+      "depends_on": ["env-var-fixes"],
+      "guard": "grep -q 'cacheReadTokens' packages/ai/agent-mcp-types/src/domain.ts && grep -q 'cache_read_input_tokens' packages/ai/agent-mcp/src/providers/anthropic.ts && grep -q 'cache_read_input_tokens' packages/ai/agent-mcp/src/db/schema.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp-types/src/domain.ts",
+        "packages/ai/agent-mcp/src/providers/anthropic.ts",
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/drizzle/"
+      ],
+      "context": "contexts/cache-tokens.md",
+      "notes": "Anthropic SDK returns cache_read_input_tokens and cache_creation_input_tokens on usage. These are currently ignored. Add cacheReadTokens?/cacheCreationTokens? to TokenUsage; forward from anthropic.ts; add nullable integer columns to schema and generate a migration (or extend the existing 0002 migration if schema-migration state is amended to include them).",
+      "changes": {
+        "deletes": [],
+        "resigns": ["TokenUsage", "taskUsageTable"],
+        "renames": []
+      }
+    },
+    "provider-error-codes": {
+      "kind": "work",
+      "phase": "correctness",
+      "depends_on": ["cache-tokens"],
+      "guard": "grep -q 'PROVIDER_TIMEOUT' packages/ai/agent-mcp/src/validation/errors.ts && grep -q 'PROVIDER_AUTH_ERROR' packages/ai/agent-mcp/src/validation/errors.ts && grep -q 'PROVIDER_RATE_LIMITED' packages/ai/agent-mcp/src/validation/errors.ts && grep -q 'PROVIDER_TIMEOUT' packages/ai/agent-mcp/src/engine/orchestrator.ts && grep -q 'PROVIDER_AUTH_ERROR' packages/ai/agent-mcp/src/providers/anthropic.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp-types/src/errors.ts",
+        "packages/ai/agent-mcp/src/validation/errors.ts",
+        "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+        "packages/ai/agent-mcp/src/providers/anthropic.ts",
+        "packages/ai/agent-mcp/src/providers/openai.ts"
+      ],
+      "context": "contexts/provider-error-codes.md",
+      "notes": "Add PROVIDER_TIMEOUT, PROVIDER_AUTH_ERROR, PROVIDER_RATE_LIMITED to both AgentMcpErrorCode (agent-mcp-types) and errorCodeSchema (agent-mcp). Fix orchestrator: throw PROVIDER_TIMEOUT on timeout (not PROVIDER_ERROR). Add 429/rate-limit detection after retry exhaustion. Add 401 auth detection in providers.",
+      "changes": {
+        "deletes": [],
+        "resigns": ["AgentMcpErrorCode", "errorCodeSchema"],
+        "renames": []
+      }
+    },
+    "context-error-code": {
+      "kind": "work",
+      "phase": "context",
+      "depends_on": ["provider-error-codes"],
+      "guard": "grep -q 'CONTEXT_WINDOW_EXCEEDED' packages/ai/agent-mcp/src/validation/errors.ts && grep -q 'CONTEXT_WINDOW_EXCEEDED' packages/ai/agent-mcp/src/engine/orchestrator.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/validation/errors.ts",
+        "packages/ai/agent-mcp/src/engine/orchestrator.ts"
+      ],
+      "context": "contexts/context-error-code.md",
+      "notes": "Two changes: (1) add CONTEXT_WINDOW_EXCEEDED to errorCodeSchema z.enum in validation/errors.ts. (2) In orchestrator.ts catch block, detect context-length errors and re-throw as CONTEXT_WINDOW_EXCEEDED — MUST come before the generic PROVIDER_ERROR re-throw. OpenAI uses err.code or err.message; Anthropic uses err.message.",
+      "changes": {
+        "deletes": [],
+        "resigns": ["errorCodeSchema"],
+        "renames": []
+      }
+    },
+    "sliding-window": {
+      "kind": "work",
+      "phase": "context",
+      "depends_on": ["context-error-code"],
+      "guard": "grep -q 'AGENT_MCP_CONTEXT_LIMIT' packages/ai/agent-mcp/src/engine/orchestrator.ts && grep -qE 'windowMessages|estimateTokens' packages/ai/agent-mcp/src/store/session-store.ts && grep -q 'AGENT_MCP_CONTEXT_LIMIT' packages/ai/agent-mcp/CLAUDE.md",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/store/session-store.ts",
+        "packages/ai/agent-mcp/src/engine/orchestrator.ts"
+      ],
+      "context": "contexts/sliding-window.md",
+      "notes": "Add exported windowMessages(messages, tokenLimit) pure function to session-store.ts (no DB access). In orchestrator run(), parse AGENT_MCP_CONTEXT_LIMIT at the top (0 = disabled). Before each provider.chat() call, if limit > 0: pass windowMessages(currentMessages, limit) instead of currentMessages. Never mutate currentMessages itself.",
+      "changes": {
+        "deletes": [],
+        "resigns": [],
+        "renames": []
+      }
+    },
+    "claudecli-auth-fix": {
+      "kind": "work",
+      "phase": "context",
+      "depends_on": ["sliding-window"],
+      "guard": "grep -qE 'warn|logger' packages/ai/agent-mcp/src/providers/claudecli.ts && grep -q 'PROVIDER_AUTH_ERROR' packages/ai/agent-mcp/src/providers/claudecli.ts && grep -q 'keychainError\\|keystoneError\\|keychain' packages/ai/agent-mcp/src/providers/claudecli.ts || (grep -q 'keychainError' packages/ai/agent-mcp/src/providers/claudecli.ts && grep -q 'PROVIDER_AUTH_ERROR' packages/ai/agent-mcp/src/providers/anthropic.ts)",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/providers/claudecli.ts",
+        "packages/ai/agent-mcp/src/providers/anthropic.ts"
+      ],
+      "context": "contexts/claudecli-auth-fix.md",
+      "notes": "Fix: buildSubprocessEnv catch {} silently swallows keychain errors. Fix: AnthropicProvider with useClaudeOauth must degrade gracefully to env vars. Fix: recovery instruction must appear in PROVIDER_AUTH_ERROR message. See [inv:claudecli-auth-recovery] and [def:ProviderAuthError] in _shared.md.",
+      "changes": {
+        "deletes": [],
+        "resigns": [],
+        "renames": []
+      }
+    },
+    "robustness-fixes": {
+      "kind": "work",
+      "phase": "context",
+      "depends_on": ["claudecli-auth-fix"],
+      "guard": "grep -qE 'toolCalls.*length|length.*toolCalls' packages/ai/agent-mcp/src/engine/orchestrator.ts && ! grep -q 'error.message.includes.*cancelled' packages/ai/agent-mcp/src/engine/orchestrator.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/engine/orchestrator.ts"
+      ],
+      "context": "contexts/robustness-fixes.md",
+      "notes": "Two fixes in orchestrator.ts: (1) Empty tool-call guard — when stopReason is 'tool_calls' but toolCalls array is empty, break the loop instead of spinning. (2) Cancellation detection — replace error.message string-matching ('cancelled') with error code comparison (error.code === 'PROVIDER_ERROR' check is insufficient; use TASK_CANCELLED or check signal.aborted).",
+      "changes": {
+        "deletes": [],
+        "resigns": [],
+        "renames": []
+      }
+    },
+    "audit-foundation": {
+      "kind": "audit",
+      "phase": "convergence",
+      "depends_on": ["robustness-fixes"],
+      "guard": "python3 docs/plan/0.0.6/scripts/audit_006.py --phase foundation",
+      "artifacts": [
+        "docs/plan/0.0.6/scripts/audit_006.py"
+      ],
+      "context": "contexts/audit-foundation.md",
+      "notes": "The audit script covers all foundation + correctness checks. Run it; fix failures in source files (never weaken the script). Most likely failure: stop-reason-types.2 (maxTokens disambiguation), cache-tokens checks, env-var-fixes checks."
+    },
+    "code-review": {
+      "kind": "review",
+      "phase": "convergence",
+      "depends_on": ["audit-foundation"],
+      "guard": "test -f docs/plan/0.0.6/.code-review-complete",
+      "artifacts": ["docs/plan/0.0.6/.code-review-complete"],
+      "context": "contexts/code-review.md",
+      "notes": "Human hold point. The executor must pause here and wait for the reviewer to inspect the diff and create the sentinel file. See contexts/code-review.md for the review checklist."
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "convergence",
+      "depends_on": ["code-review"],
+      "guard": "python3 docs/plan/0.0.6/scripts/audit_006.py --phase final",
+      "artifacts": [
+        "docs/plan/0.0.6/scripts/audit_006.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": "Runs all checks including the test suite (npx nx test agent-mcp) and build verification. Most likely failures: test expectations not updated for new optional fields, or PROVIDER_TIMEOUT/PROVIDER_AUTH_ERROR detection not matching the correct error class/property from the provider SDK."
+    },
+    "docs-and-publish": {
+      "kind": "work",
+      "phase": "convergence",
+      "depends_on": ["audit-final"],
+      "guard": "node -e \"const p=require('./packages/ai/agent-mcp/package.json');process.exit(p.version==='0.0.6'?0:1)\" && npm info @adhd/agent-mcp version 2>/dev/null | grep -q '0.0.6'",
+      "artifacts": [
+        "packages/ai/agent-mcp/package.json",
+        "packages/ai/agent-mcp-types/package.json",
+        "packages/ai/agent-mcp/CLAUDE.md",
+        "packages/ai/agent-mcp/README.md",
+        "packages/ai/agent-mcp/GAPS.md"
+      ],
+      "context": "contexts/docs-and-publish.md",
+      "notes": "Follow PUBLISHING.md exactly. Bump agent-mcp-types first (0.0.2 → 0.0.6), then agent-mcp (0.0.5 → 0.0.6). Add all new env vars and error codes to CLAUDE.md and README. Mark Gaps #6 and #7 resolved in GAPS.md.",
+      "changes": {
+        "deletes": [],
+        "resigns": [],
+        "renames": []
+      }
+    }
+  }
+}

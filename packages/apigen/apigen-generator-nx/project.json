@@ -1,0 +1,82 @@
+{
+  "name": "apigen-generator-nx",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/apigen/apigen-generator-nx/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": [
+    "layer:logic",
+    "platform:node"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "packages/apigen/apigen-generator-nx/dist",
+        "main": "packages/apigen/apigen-generator-nx/src/index.ts",
+        "tsConfig": "packages/apigen/apigen-generator-nx/tsconfig.lib.json",
+        "assets": [
+          "packages/apigen/apigen-generator-nx/*.md",
+          "packages/apigen/apigen-generator-nx/generators.json",
+          "packages/apigen/apigen-generator-nx/executors.json",
+          {
+            "input": "packages/apigen/apigen-generator-nx/src/generators",
+            "glob": "**/__files__/**",
+            "output": "./src/generators"
+          },
+          {
+            "input": "packages/apigen/apigen-generator-nx/src/generators",
+            "glob": "**/schema.json",
+            "output": "./src/generators"
+          },
+          {
+            "input": "packages/apigen/apigen-generator-nx/src/executors",
+            "glob": "**/schema.json",
+            "output": "./src/executors"
+          }
+        ]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      },
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
+      ]
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest"
+          ]
+        }
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/apigen-generator-nx"
+      ],
+      "options": {
+        "vitestConfig": "packages/apigen/apigen-generator-nx/vite.config.ts"
+      }
+    }
+  }
+}

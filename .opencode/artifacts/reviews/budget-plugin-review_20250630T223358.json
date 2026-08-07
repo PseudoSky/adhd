@@ -1,0 +1,104 @@
+{
+  "$schema": "review-report-v1",
+  "reviewer": "adhd-reviewer-flash",
+  "task_id": "budget-plugin-refactor",
+  "label": "agent-mcp-budget plugin review — full codebase audit",
+  "reviewed_at": "2025-06-30T22:33:58.000Z",
+  "files_reviewed": [
+    "packages/ai/agent-mcp-budget/src/index.ts",
+    "packages/ai/agent-mcp-budget/src/__tests__/budget-plugin.test.ts",
+    "packages/ai/agent-mcp/src/runtime/usage-client.ts",
+    "packages/ai/agent-mcp/src/db/schema.ts",
+    "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+    "packages/ai/agent-mcp-types/src/hooks.ts",
+    "packages/ai/agent-mcp-types/src/registry.ts",
+    "packages/ai/agent-mcp/src/validation/errors.ts",
+    "packages/ai/agent-mcp-budget/project.json"
+  ],
+  "verification": {
+    "build": "passed",
+    "test": { "passed": 23, "failed": 0 },
+    "platform_isolation": "passed"
+  },
+  "findings": [
+    {
+      "severity": "high",
+      "category": "correctness",
+      "file": "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+      "line": 430,
+      "description": "pre:tool_call enforcement catch block does NOT convert IEnforcementError to ToolError — when a tool enforcement handler throws IEnforcementError (block mode), the orchestrator re-throws the plain object as-is. The outer catch block (line 685) checks `error instanceof Error` which is FALSE for plain IEnforcementError objects, so it calls String(error) → '[object Object]'. The task fails with an opaque error message instead of a meaningful BUDGET_EXCEEDED description.",
+      "fix_sketch": "Add an isEnforcementError check analogous to lines 197-203 in the pre:tool_call catch block. Currently the catch at lines 430-440 only checks for IToolWarning. Add: `if (isEnforcementError(err)) { throw new ToolError('BUDGET_EXCEEDED', err.message); }` before the re-throw."
+    },
+    {
+      "severity": "high",
+      "category": "correctness",
+      "file": "packages/ai/agent-mcp-budget/src/index.ts",
+      "line": 597,
+      "description": "enforcePreTool passes hard-coded `undefined` for sessionId to buildSnapshot. If any cap in the tool enforcement path has scope: 'session', the scope queries silently fall through to return only in-memory task-level values instead of actual session totals. This affects: (1) queryScopeTotals for scope='session' with sessionId=undefined → skips the if-branch, returns inMem only; (2) queryWindowTokens for scope='session' with scopeId='' → queries WHERE session_id = '' which matches no real sessions, returns 0. Session-scoped caps in tool enforcement are effectively non-functional.",
+      "fix_sketch": "Thread executionContext.sessionId through to enforcePreTool. Add optional sessionId prop: pass `executionContext.sessionId ?? undefined` as the 4th argument to buildSnapshot instead of `undefined`."
+    },
+    {
+      "severity": "medium",
+      "category": "correctness",
+      "file": "packages/ai/agent-mcp-budget/src/index.ts",
+      "line": 278,
+      "description": "Top-level `scope` field on DimensionConfig is merged by mergeDim() but never read. resolveCaps() (lines 302, 315) returns only `{ caps, mode }` — merged.scope is dropped. Users who set `scope: 'agent'` at the dimension level (e.g. `defaults: { scope: 'agent', caps: [...] }`) expecting all caps to inherit agent scope will be surprised: caps without explicit scope default to 'task'. The scope field is validated, merged with last-wins semantics, then silently discarded.",
+      "fix_sketch": "Either: (a) remove the top-level `scope` from dimensionSchema entirely (breaking change), or (b) make mergeDim propagate scope down to each cap that doesn't already have one: `if (merged.scope && !cap.scope) cap.scope = merged.scope` — then thread the result so caps get the inherited scope. Option (b) is backward-compatible."
+    },
+    {
+      "severity": "low",
+      "category": "correctness",
+      "file": "packages/ai/agent-mcp-budget/src/index.ts",
+      "line": 558,
+      "description": "evaluateCap() has a `cap.field === 'toolCalls'` branch (line 559) that is dead code — it is only called from enforcePreModel (line 582), which filters out toolCalls caps (line 576: `caps.filter(c => c.field !== 'toolCalls')`). The function is never invoked with a toolCalls cap in practice. The toolCalls enforcement logic is duplicated inline in enforcePreTool (lines 599-613).",
+      "fix_sketch": "Remove the toolCalls branch from evaluateCap since it is unreachable, or consolidate enforcement logic so enforcePreTool also calls evaluateCap (requires mode-aware error handling)."
+    },
+    {
+      "severity": "low",
+      "category": "maintainability",
+      "file": "packages/ai/agent-mcp/src/runtime/usage-client.ts",
+      "line": 1,
+      "description": "The UsageClient class in agent-mcp duplicates the accumulator pattern, scope-aware queries, and window queries that are also implemented inline in the budget plugin (queryScopeTotals, queryWindowTokens, accumulator lifecycle, toolCall tracking, etc.). The budget plugin cannot import UsageClient directly (would create circular Nx dep agent-mcp → agent-mcp-budget → agent-mcp via types). This is a code duplication risk — any bug fix in the DB query logic must be applied in both places.",
+      "fix_sketch": "Extract the common accumulator + query logic to a shared package (e.g. agent-mcp-usage-core in layer:logic, platform:node) consumed by both agent-mcp and agent-mcp-budget. Alternatively, move UsageClient to agent-mcp-types."
+    },
+    {
+      "severity": "low",
+      "category": "test-coverage",
+      "file": "packages/ai/agent-mcp-budget/src/__tests__/budget-plugin.test.ts",
+      "line": 1,
+      "description": "No integration-level tests: all 23 tests use mock DBs or null DB. No test exercises the full orchestrator hook flow with real DB queries for session/agent/global scope or windows with excludeTaskId. The window query tests use a mock DB that always returns {total: 150_000} without verifying the excludeTaskId param is passed in the SQL.",
+      "fix_sketch": "Add an integration test using an in-memory SQLite DB (better-sqlite3 :memory:) with seeded task_usage data. Test every scope (session, agent, global) with and without window, verifying that excludeTaskId is correctly applied and the query joins are correct."
+    },
+    {
+      "severity": "medium",
+      "category": "test-coverage",
+      "file": "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+      "line": 430,
+      "description": "No test covers the orchestrator's handling of IEnforcementError from pre:tool_call enforcement. The enforcement test suite in enforcement.test.ts covers pre:model_request enforcement errors but not pre:tool_call block mode → BUDGET_EXCEEDED path.",
+      "fix_sketch": "Add a test that registers a pre:tool_call enforcement handler that throws IEnforcementError and verifies the task fails with a meaningful error (not '[object Object]')."
+    },
+    {
+      "severity": "info",
+      "category": "design-decision",
+      "file": "packages/ai/agent-mcp-budget/src/index.ts",
+      "line": 100,
+      "description": "flatFieldsToDimension does NOT detect `window` or `scope` at the flat key level. Users cannot specify per-cap window or scope in flat format (e.g. no `maxTokensScope` or `maxTokensWindow` flat keys). To set per-cap window/scope, users must use the structured format. This is by design but undocumented.",
+      "fix_sketch": "Document that flat format only supports simple scalar caps without window/scope. Users who need window or per-cap scope should use the structured `caps[]` format."
+    },
+    {
+      "severity": "info",
+      "category": "style",
+      "file": "packages/ai/agent-mcp-budget/src/index.ts",
+      "line": 88,
+      "description": "FIELD_MAP maxTokensPer24h: { field: 'tokens', window: 'PT24H' } creates a flat-format shorthand for a 24-hour window on total tokens. This is the only windowed preset. There is no equivalent for per-input-token or per-output-token 24h windows (e.g. maxInputTokensPer24h).",
+      "fix_sketch": "Add mappings if needed: maxInputTokensPer24h → { field: 'inputTokens', window: 'PT24H' }, maxOutputTokensPer24h → { field: 'outputTokens', window: 'PT24H' }."
+    }
+  ],
+  "summary": {
+    "high": 2,
+    "medium": 2,
+    "low": 3,
+    "info": 2
+  },
+  "backlog_entries": []
+}

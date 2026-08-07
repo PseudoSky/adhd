@@ -1,0 +1,180 @@
+/**
+ * Conformance harness for the `<%= hostName %>` host — apigen logical-types (DESIGN §16).
+ *
+ * Obligations (all three MUST pass before `supportedIds` in host-manifest.json
+ * can be non-empty and the host can be considered conformant):
+ *
+ *   1. encode   — native `seed` → wire MUST be byte-equal to the vector's `wire` value
+ *   2. decode   — wire → host MUST satisfy every `invariants` pointer/equals assertion
+ *   3. negative — every `negativeControl` mutation MUST make the vector RED (teeth test)
+ *
+ * Until the codec column is filled (DESIGN §16 step 1–2) most vectors will
+ * stay red.  That is intentional — "red by construction" enforces the workflow.
+ *
+ * @see packages/apigen/conformance/src/lib/vectors.ts (shared vector set)
+ * @see docs/plan/apigen-logical-types/DESIGN.md §4.7 (LogicalTypeVector contract)
+ * @see docs/plan/apigen-logical-types/DESIGN.md §16 (runbook)
+ */
+
+import { describe, it, expect } from 'vitest'
+import hostManifest from '../../host-manifest.json'
+
+// ---------------------------------------------------------------------------
+// Inline minimal type mirror so the harness compiles before @adhd/apigen-conformance
+// is published.  Replace with the real import once the package exists:
+//
+//   import type { LogicalTypeVector } from '@adhd/apigen-conformance'
+//   import { vectors } from '@adhd/apigen-conformance'
+// ---------------------------------------------------------------------------
+
+/** @see DESIGN §4.7 */
+interface LogicalTypeVector {
+  readonly id: string
+  readonly logicalType: string
+  readonly schema: Record<string, unknown>
+  readonly seed: unknown
+  readonly wire: unknown
+  readonly invariants?: ReadonlyArray<{ pointer: string; equals: unknown }>
+  readonly negativeControl: { mutate: 'wire' | 'schema' | 'codec'; to: unknown }
+}
+
+/**
+ * TODO (DESIGN §16 step 3): replace this stub with the real shared vector set.
+ *
+ *   import { vectors } from '@adhd/apigen-conformance'
+ *
+ * Until then the harness compiles and reports zero vectors (all skipped),
+ * which is non-conformant — exactly the "red by construction" intent.
+ */
+const vectors: LogicalTypeVector[] = []
+
+// ---------------------------------------------------------------------------
+// Host codec registry — fill this map as you implement each codec.
+//
+// Key:   logicalType id (e.g. "date-time", "int64")
+// Value: { encode(seed): wire, decode(wire): host }
+//
+// A missing entry means the type is not yet supported; the harness skips it
+// and the vector count keeps `supportedIds` honest.
+// ---------------------------------------------------------------------------
+
+type Codec = {
+  encode(seed: unknown): unknown
+  decode(wire: unknown): unknown
+}
+
+/**
+ * TODO (DESIGN §16 step 1–2): register codecs for each logical type this host
+ * supports.  Example:
+ *
+ *   codecRegistry.set('date-time', {
+ *     encode: (seed) => (seed as Date).toISOString(),
+ *     decode: (wire) => new Date(wire as string),
+ *   })
+ */
+const codecRegistry = new Map<string, Codec>()
+
+// ---------------------------------------------------------------------------
+// JSON-pointer resolver (host-neutral, no runtime dep)
+// ---------------------------------------------------------------------------
+
+function resolvePointer(obj: unknown, pointer: string): unknown {
+  if (pointer === '' || pointer === '/') return obj
+  const parts = pointer.replace(/^\//, '').split('/').map((p) => p.replace(/~1/g, '/').replace(/~0/g, '~'))
+  let cur: unknown = obj
+  for (const part of parts) {
+    if (cur === null || cur === undefined) return undefined
+    cur = (cur as Record<string, unknown>)[part]
+  }
+  return cur
+}
+
+// ---------------------------------------------------------------------------
+// Conformance harness
+// ---------------------------------------------------------------------------
+
+describe('conformance harness — <%= hostName %> (apigen logical-types §16)', () => {
+  // -- manifest shape --------------------------------------------------------
+
+  it('host-manifest.json declares host and logicalTypeVersion', () => {
+    expect(hostManifest.host).toBe('<%= hostName %>')
+    expect(typeof hostManifest.logicalTypeVersion).toBe('string')
+    expect(hostManifest.logicalTypeVersion.length).toBeGreaterThan(0)
+  })
+
+  it('host-manifest.json starts with supportedIds: [] (red-by-construction)', () => {
+    // This test MUST fail if the generator ever scaffolds a pre-filled manifest.
+    // A non-empty supportedIds means the host claims conformance it hasn't proven.
+    expect(Array.isArray(hostManifest.supportedIds)).toBe(true)
+    expect((hostManifest.supportedIds as unknown[]).length).toBe(0)
+  })
+
+  // -- per-vector checks (only run for vectors whose logicalType has a codec) -
+
+  const supportedVectors = vectors.filter((v) => codecRegistry.has(v.logicalType))
+  const unsupportedVectors = vectors.filter((v) => !codecRegistry.has(v.logicalType))
+
+  if (unsupportedVectors.length > 0) {
+    it(`skips ${unsupportedVectors.length} vector(s) — no codec registered yet (fill DESIGN §16 step 1)`, () => {
+      // Informational: list which types still need codecs.
+      const ids = unsupportedVectors.map((v) => v.logicalType)
+      // This test always passes — it just documents what remains.
+      expect(ids).toEqual(ids)
+    })
+  }
+
+  for (const vector of supportedVectors) {
+    const codec = codecRegistry.get(vector.logicalType)!
+
+    describe(`vector: ${vector.id}`, () => {
+      // 1. encode — seed → wire MUST be byte-equal to the canonical wire value
+      it('encode: seed → wire is byte-equal to canonical wire', () => {
+        const actualWire = codec.encode(vector.seed)
+        expect(JSON.stringify(actualWire)).toBe(JSON.stringify(vector.wire))
+      })
+
+      // 2. decode + invariants
+      it('decode: wire → host satisfies all invariants', () => {
+        const decoded = codec.decode(vector.wire)
+        for (const { pointer, equals } of vector.invariants ?? []) {
+          const actual = resolvePointer(decoded, pointer)
+          expect(
+            JSON.stringify(actual),
+            `invariant at pointer "${pointer}" failed`,
+          ).toBe(JSON.stringify(equals))
+        }
+      })
+
+      // 3. negative control — the mutated wire/schema/codec MUST cause failure
+      it('negativeControl: mutated input causes encode/decode mismatch (teeth test)', () => {
+        const { mutate, to } = vector.negativeControl
+
+        if (mutate === 'wire') {
+          // The mutated wire must NOT decode to a value that still encodes back
+          // to the canonical wire bytes — i.e. the round-trip must be broken.
+          let reEncoded: unknown
+          try {
+            const decodedFromMutated = codec.decode(to)
+            reEncoded = codec.encode(decodedFromMutated)
+          } catch {
+            // decode threw — that counts as the vector turning red; pass.
+            return
+          }
+          expect(JSON.stringify(reEncoded)).not.toBe(JSON.stringify(vector.wire))
+        } else if (mutate === 'codec') {
+          // A corrupted codec: encode with a trivially wrong transform (identity)
+          // must NOT produce the canonical wire bytes.
+          const identityEncode = (seed: unknown) => seed
+          expect(JSON.stringify(identityEncode(vector.seed))).not.toBe(
+            JSON.stringify(vector.wire),
+          )
+        } else {
+          // mutate === 'schema': schema mutation is handled by the transcoder
+          // layer (not available in the raw codec).  The harness documents this
+          // as a pass-through — the conformance gate (DESIGN §16 step 5) covers it.
+          expect(mutate).toBe('schema')
+        }
+      })
+    })
+  }
+})

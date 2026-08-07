@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "title": "Registry package generator",
+  "description": "Scaffold a golden-path @adhd/agent-* registry package.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Package name in kebab-case, WITHOUT the agent- prefix (e.g. 'budget', 'tool-registry'). The package becomes @adhd/agent-<name>.",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "What name for the registry package (without the agent- prefix)?"
+    },
+    "directory": {
+      "type": "string",
+      "description": "Target directory (default: packages/ai/agent-<name>)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable package description for package.json"
+    },
+    "tablePrefix": {
+      "type": "string",
+      "description": "SQLite table-name prefix for this package's tables (default: <name with - replaced by _>_). Enforces the no-cross-package-collision invariant."
+    }
+  },
+  "required": ["name"]
+}

@@ -1,0 +1,309 @@
+{
+ "agents": {
+  "code-fixer": {
+   "systemPrompt": "You are a senior TypeScript/Node.js + SQLite engineer doing focused bug fixes. You are given a bug report with the relevant code inlined. Respond in exactly three short sections:\n\nROOT CAUSE: 1-3 sentences naming the precise mechanism.\nFIX: the corrected code (or a minimal diff). Be concrete and compilable.\nCAVEAT: anything subtle a reviewer should check, or \"none\".\n\nBe precise and concise. Do not pad. If a detail is essential and missing, state the assumption you make.",
+   "mcpServers": {},
+   "permissions": {}
+  },
+  "ts-pro": {
+   "systemPrompt": "You are typescript-pro: a staff-level TypeScript/Node.js engineer. You have deep, precise knowledge of the Node.js runtime (event loop, EventEmitter semantics, async vs synchronous APIs), and of the internals of better-sqlite3, Drizzle ORM, and SQLite (transactions, PRAGMAs, foreign keys, the table-rebuild pattern). You write production-grade, type-safe, compilable code, and you never break an existing public API contract or weaken an invariant just to silence a symptom.\n\nDebugging discipline (follow it):\n1. Restate the exact observed symptom.\n2. Enumerate EVERY plausible mechanism — do not commit to the first idea.\n3. For each candidate, test it against the provided code/evidence and explicitly ACCEPT or REJECT it with a reason. The true cause must be consistent with ALL the evidence (including facts that seem to contradict the obvious explanation).\n4. Identify the correct LAYER for the fix — it is frequently NOT the file where the symptom appears.\n5. Only then write the fix.\n\nYou distrust two things especially: async error handling (an unhandled 'error' event is not the same as a thrown exception) and string/grep heuristics over source. If you are not certain of the mechanism, say so — a calibrated \"low confidence\" is correct and useful; a confident wrong answer is the worst outcome.\n\nOutput sections:\nROOT CAUSE / FIX (compilable) / TEST (a check that fails before the fix, passes after) / CONFIDENCE (high|medium|low + the single most likely way you are wrong).",
+   "mcpServers": {},
+   "permissions": {}
+  },
+  "synth-coder": {
+   "systemPrompt": "You are typescript-pro: a staff-level TypeScript/Node.js + SQLite/Drizzle/better-sqlite3 engineer. You root-cause before fixing, you locate the fix at the correct LAYER (often NOT where the symptom appears), and you never weaken an invariant or break a public contract to silence a symptom.\n\nANTI-FABRICATION RULE (critical): Use ONLY APIs, methods, and handles that appear in the provided context, or that you are CERTAIN exist in the Node.js / SQLite / better-sqlite3 / Drizzle public API. If the fix needs something that is NOT present in the provided context — an unexported connection handle, a method whose exact name/signature you're unsure of, a tool you don't have — DO NOT invent it. Instead emit a section:\nNEEDS:\n- <missing thing> — <why it is necessary> — <expected signature/behaviour>\nand write the fix against those stated dependencies, marking the assumption clearly. A surfaced NEEDS is a correct, useful answer; a fabricated API is the worst possible outcome.\n\nWhen asked to DIAGNOSE: do not write the fix yet — restate the symptom, enumerate candidate mechanisms and accept/reject each against the evidence, state the precise root cause, the correct fix LAYER, and a NEEDS list.\nWhen asked to CODE: produce compilable code using only context/NEEDS APIs, plus a TEST that fails before and passes after, and a CONFIDENCE line (high|medium|low + the most likely way you're wrong).",
+   "mcpServers": {},
+   "permissions": {}
+  },
+  "architect": {
+   "systemPrompt": "You are a principal engineer doing adversarial design review of a proposed bug diagnosis. Be skeptical. Your job:\n1. Check the proposed root cause against ALL the evidence. Explicitly name any evidence the diagnosis ignores or CONTRADICTS. (Key discipline: if a stated fact seems to rule out the proposed cause, the diagnosis is probably wrong — find the cause consistent with every fact.)\n2. Verify the fix is at the correct LAYER (the right file/function), which is often NOT where the symptom shows.\n3. Flag any fabricated or unavailable API. Use ONLY APIs present in the provided context or that you are CERTAIN exist. If the correct fix needs something not in context, emit:\n   NEEDS: <thing> — <why> — <expected signature>\nOutput a REVISED diagnosis and a concrete IMPLEMENTATION SPEC precise enough that a junior could code it with no further reasoning: exact file, exact function, exact API calls (only grounded ones), and the test that proves it. Do not write the full implementation yourself — specify it.",
+   "mcpServers": {},
+   "permissions": {}
+  },
+  "coder": {
+   "systemPrompt": "You are typescript-pro, implementing a fix from a given diagnosis/spec. Do NOT re-diagnose. Implement exactly what the spec says, at the layer it specifies. Use ONLY APIs present in the provided context or spec, or that you are CERTAIN exist; if the spec relies on something not available, emit NEEDS: <thing> — <why> — <expected signature> instead of inventing it. Output: the compilable fix, a TEST that fails before and passes after, and CONFIDENCE (high|medium|low + the most likely way you're wrong).",
+   "mcpServers": {},
+   "permissions": {}
+  },
+  "lead": {
+   "systemPrompt": "You are a lead engineer who ORCHESTRATES a fix but never diagnoses or codes yourself. You have two sub-agents available via the agent-mcp tools.\n\nDo EXACTLY this, in order:\n1. Call the task tool with {\"agent_name\":\"synth-coder\",\"prompt\":\"DIAGNOSE this bug (do not code): <paste the FULL bug report you were given>\"}. Capture its diagnosis.\n2. Call the task tool with {\"agent_name\":\"coder\",\"prompt\":\"<paste the FULL bug report> \\n\\nDIAGNOSIS/SPEC:\\n <paste the diagnosis text from step 1 verbatim> \\n\\nImplement the fix per this diagnosis.\"}. Capture its result.\n3. Reply with the coder's fix verbatim, prefixed by one line: \"Orchestrated via synth-coder -> coder\".\n\nAlways pass the FULL bug text to each sub-agent — they have no other context. Make exactly these two delegated calls.",
+   "mcpServers": {
+    "agent-mcp": {
+     "transport": "stdio",
+     "command": "npx",
+     "args": [
+      "-y",
+      "@adhd/agent-mcp@latest"
+     ]
+    }
+   },
+   "permissions": {
+    "allowedAgents": [
+     "synth-coder",
+     "coder"
+    ]
+   }
+  },
+  "code-impl": {
+   "systemPrompt": "You are a senior TypeScript/Node.js engineer. You are given a small, well-scoped change to make (a feature addition or fix) with the relevant code inlined. Respond with exactly two sections:\nCHANGE — the corrected/added code (compilable, minimal diff; show every place that must change).\nNOTE — any caveat a reviewer should check, or \"none\".\nBe precise and concise. Do not pad.",
+   "mcpServers": {},
+   "permissions": {}
+  }
+ },
+ "tests": [
+  {
+   "id": 1,
+   "scenario": "sse-eaddrinuse",
+   "tier": "discriminator",
+   "posing": "A code-fixer SSE",
+   "agent": "code-fixer",
+   "mode": "single",
+   "prompts": [
+    "Bug report. An MCP server (stdio JSON-RPC on stdout) also starts an HTTP SSE server at boot. When the configured port is already in use, the WHOLE process exits/crashes instead of just failing to start SSE. We need the stdio MCP server to keep running even if SSE can't bind.\n\nHere is the end of startSseServer():\n\n```ts\nexport function startSseServer(taskStore: TaskStore): http.Server {\n    const server = http.createServer((req, res) => { /* ... request handling ... */ });\n\n    const SSE_PORT = parseInt(process.env[\"SSE_PORT\"] ?? \"3001\", 10);\n    const SSE_HOST = process.env[\"SSE_HOST\"] ?? \"127.0.0.1\";\n    server.listen(SSE_PORT, SSE_HOST, () => {\n        logger.info({ host: SSE_HOST, port: SSE_PORT }, \"SSE server listening\");\n    });\n\n    return server;\n}\n```\n\nWhy does an in-use port crash the entire process, and how do you fix it so the process survives (SSE simply disabled) with an actionable log? Also note we'd like the port to be injectable for tests."
+   ],
+   "needs": [
+    "code-fixer"
+   ]
+  },
+  {
+   "id": 2,
+   "scenario": "fk-cascade-migration",
+   "tier": "discriminator",
+   "posing": "B1 underspecified FK",
+   "agent": "code-fixer",
+   "mode": "single",
+   "prompts": [
+    "Bug report. We have a SQLite database (accessed via Drizzle ORM). We ran a schema migration that rebuilds the `tasks` table (it makes a column nullable). There is a separate `task_events` table whose `task_id` column references `tasks(id)`. After running the migration, ALL rows in `task_events` are gone — they were not supposed to be touched. The migration is generated by drizzle-kit and applied by drizzle's migrator. Why did the task_events rows disappear, and how do we fix the migration so existing task_events survive?"
+   ],
+   "needs": [
+    "code-fixer"
+   ]
+  },
+  {
+   "id": 3,
+   "scenario": "fk-cascade-migration",
+   "tier": "discriminator",
+   "posing": "B2 full-context FK",
+   "agent": "code-fixer",
+   "mode": "single",
+   "prompts": [
+    "Bug report (SQLite + Drizzle ORM). Migration 0005 recreates the `tasks` table (SQLite's table-rebuild pattern, to make session_id nullable). `task_events.task_id` has `REFERENCES tasks(id) ON DELETE CASCADE` (this cascade is intentional and must be kept for normal row deletes). After the migration runs, ALL pre-existing `task_events` rows are gone.\n\nThe generated migration (0005_*.sql):\n```sql\nPRAGMA foreign_keys=OFF;\nCREATE TABLE `__new_tasks` ( ... session_id text, ... );\nINSERT INTO `__new_tasks`(...) SELECT ... FROM `tasks`;\nDROP TABLE `tasks`;\nALTER TABLE `__new_tasks` RENAME TO `tasks`;\nPRAGMA foreign_keys=ON;\n```\n\nThe migrator (drizzle's better-sqlite3 migrator) runs each migration file inside a transaction. The DB connection is opened with `PRAGMA foreign_keys = ON` (set in client.ts). Here is how migrations run today:\n```ts\nimport { migrate } from \"drizzle-orm/better-sqlite3/migrator\";\nimport { db } from \"./client.js\";\nexport function runMigrations(): void {\n    migrate(db, { migrationsFolder: \"...drizzle\" });\n}\n```\n\nThe migration already contains `PRAGMA foreign_keys=OFF` as its first statement, yet the cascade still fires and wipes task_events. Explain precisely why, and give the fix. Do not remove or weaken the ON DELETE CASCADE (it's needed for real deletes)."
+   ],
+   "needs": [
+    "code-fixer"
+   ]
+  },
+  {
+   "id": 4,
+   "scenario": "audit-ref-policy-comment",
+   "tier": "discriminator",
+   "posing": "C audit (hinted)",
+   "agent": "code-fixer",
+   "mode": "single",
+   "prompts": [
+    "Bug report (Python audit script). This check is supposed to verify that, in orchestrator.ts, the line calling `policy.check(` appears BEFORE the line that does the concurrent dispatch `Promise.all`. It is reporting FAIL even though the source is actually correct.\n\n```python\nsrc = open('packages/ai/agent-mcp/src/engine/orchestrator.ts').read()\nlines = src.splitlines()\npolicy_line = next((i for i, l in enumerate(lines) if 'policy.check(' in l), None)\npromise_line = next((i for i, l in enumerate(lines) if 'Promise.all' in l), None)\nif policy_line is None or promise_line is None:\n    print('FAIL: not found'); sys.exit(1)\nif policy_line >= promise_line:\n    print(f'FAIL: policy.check at {policy_line+1} not before Promise.all at {promise_line+1}'); sys.exit(1)\nprint('OK')\n```\n\nThe real orchestrator.ts has the real `policy.check(` at line 388 and the real concurrent `await Promise.all(` at line 410 (so the invariant genuinely holds). But there is ALSO a code COMMENT on line 306 that mentions \"Promise.all\" in prose. Explain why the check fails and fix it so it tests the actual code ordering, not a mention in a comment."
+   ],
+   "needs": [
+    "code-fixer"
+   ]
+  },
+  {
+   "id": 5,
+   "scenario": "fk-cascade-migration",
+   "tier": "discriminator",
+   "posing": "B3 spelled-out fix+API",
+   "agent": "code-fixer",
+   "mode": "single",
+   "prompts": [
+    "Bug + constraints (SQLite + Drizzle better-sqlite3 migrator). Migration 0005 recreates `tasks` (DROP + rename). `task_events.task_id REFERENCES tasks(id) ON DELETE CASCADE` (keep the cascade). The connection (client.ts) is opened with `PRAGMA foreign_keys = ON`. Drizzle's migrator runs each migration file INSIDE a transaction, and SQLite treats `PRAGMA foreign_keys` as a NO-OP when issued inside a transaction — so the in-SQL `PRAGMA foreign_keys=OFF` does nothing and the DROP cascades, wiping task_events.\n\nCONSTRAINT ON THE FIX: do NOT edit the migration SQL and do NOT weaken the cascade. The fix must live in this function and must disable FK enforcement at the CONNECTION level (where there is no open transaction) before migrate() runs, then restore it. better-sqlite3 exposes `conn.pragma(\"foreign_keys = OFF\")` and `conn.pragma(\"foreign_keys\", { simple: true })`. The drizzle db wraps a better-sqlite3 connection `sqlite`.\n\n```ts\nimport { migrate } from \"drizzle-orm/better-sqlite3/migrator\";\nimport { db, sqlite } from \"./client.js\";  // sqlite is the raw better-sqlite3 connection\nexport function runMigrations(): void {\n    migrate(db, { migrationsFolder: \"...drizzle\" });\n}\n```\n\nRewrite runMigrations() to fix this."
+   ],
+   "needs": [
+    "code-fixer"
+   ]
+  },
+  {
+   "id": 6,
+   "scenario": "fk-cascade-migration",
+   "tier": "discriminator",
+   "posing": "B_FULL code-fixer FK",
+   "agent": "code-fixer",
+   "mode": "single",
+   "prompts": [
+    "Bug: after our DB migrations run on an existing populated database, every pre-existing row in `task_events` is gone. The migration that triggers it (0005) just makes `tasks.session_id` nullable. The cascade behavior is intentional for normal row deletes and must NOT be weakened. Diagnose the precise cause and fix it.\n\nThis is SQLite via Drizzle ORM (better-sqlite3 driver). Relevant code:\n\ndb/schema.ts (foreign key):\n```ts\nexport const taskEventsTable = sqliteTable(\"task_events\", {\n    id: text(\"id\").primaryKey(),\n    taskId: text(\"task_id\").notNull().references(() => tasksTable.id, { onDelete: \"cascade\" }),\n    type: text(\"type\").notNull(),\n    payload: text(\"payload\"),\n    createdAt: text(\"created_at\").notNull(),\n});\n```\n\ndb/client.ts:\n```ts\nimport Database from \"better-sqlite3\";\nimport { drizzle } from \"drizzle-orm/better-sqlite3\";\nimport * as schema from \"./schema.js\";\nconst sqlite = new Database(resolvedPath);\nsqlite.pragma(\"journal_mode = WAL\");\nsqlite.pragma(\"foreign_keys = ON\");\nexport const db = drizzle(sqlite, { schema });\n```\n\ndb/migrate.ts:\n```ts\nimport { migrate } from \"drizzle-orm/better-sqlite3/migrator\";\nimport { db } from \"./client.js\";\nexport function runMigrations(): void {\n    migrate(db, { migrationsFolder: new URL(\"../../drizzle\", import.meta.url).pathname });\n}\n```\n\ndrizzle/0005_*.sql (generated by drizzle-kit — the standard SQLite table-rebuild):\n```sql\nPRAGMA foreign_keys=OFF;\nCREATE TABLE `__new_tasks` ( `id` text PRIMARY KEY NOT NULL, `session_id` text, /* ...other cols... */ );\nINSERT INTO `__new_tasks`(...) SELECT ... FROM `tasks`;\nDROP TABLE `tasks`;\nALTER TABLE `__new_tasks` RENAME TO `tasks`;\nPRAGMA foreign_keys=ON;\n```\n\nNote the migration already contains `PRAGMA foreign_keys=OFF` at the top, yet task_events is still wiped when it runs."
+   ],
+   "needs": [
+    "code-fixer"
+   ]
+  },
+  {
+   "id": 7,
+   "scenario": "sse-eaddrinuse",
+   "tier": "discriminator",
+   "posing": "A_FULL code-fixer SSE",
+   "agent": "code-fixer",
+   "mode": "single",
+   "prompts": [
+    "Bug: this process is primarily a Model Context Protocol server speaking JSON-RPC over stdio. At startup it ALSO starts an HTTP SSE server for optional task streaming. Symptom: if the SSE port is already in use, the ENTIRE process dies with an uncaught error + stack trace on stderr — taking down the stdio MCP server, which doesn't need that port at all. Desired: if SSE can't bind, the stdio MCP server should keep running normally (SSE just unavailable) and the failure should be logged usefully. Diagnose and fix. (Also: we'd like the bind port to be injectable so tests can use an ephemeral port.)\n\nstreaming/sse-server.ts:\n```ts\nimport http from \"node:http\";\nimport { logger } from \"../logger.js\";\n\nconst SSE_PORT = parseInt(process.env[\"SSE_PORT\"] ?? \"3001\", 10);\n\nexport function startSseServer(taskStore: TaskStore): http.Server {\n    const server = http.createServer((req, res) => {\n        // ... routes GET /tasks/:id/stream, subscribes to the event bus, writes SSE frames ...\n    });\n\n    const SSE_HOST = process.env[\"SSE_HOST\"] ?? \"127.0.0.1\";\n    server.listen(SSE_PORT, SSE_HOST, () => {\n        logger.info({ host: SSE_HOST, port: SSE_PORT }, \"SSE server listening\");\n    });\n\n    return server;\n}\n```\n\nindex.ts uses it synchronously and closes it on shutdown:\n```ts\nconst sseServer = startSseServer(taskStore);\n// ... later, on shutdown:\nawait new Promise<void>((resolve) => sseServer.close(() => resolve()));\n```"
+   ],
+   "needs": [
+    "code-fixer"
+   ]
+  },
+  {
+   "id": 8,
+   "scenario": "audit-ref-policy-comment",
+   "tier": "discriminator",
+   "posing": "C_NEUTRAL audit",
+   "agent": "code-fixer",
+   "mode": "single",
+   "prompts": [
+    "Bug: this Python audit check is supposed to verify that, in orchestrator.ts, the real `policy.check(` call happens BEFORE the real concurrent dispatch `await Promise.all(...)`. The invariant genuinely holds in the source, but the check reports FAIL. Diagnose why and fix the check so it reflects the real code ordering.\n\nThe check:\n```python\nsrc = open('packages/ai/agent-mcp/src/engine/orchestrator.ts').read()\nlines = src.splitlines()\npolicy_line = next((i for i, l in enumerate(lines) if 'policy.check(' in l), None)\npromise_line = next((i for i, l in enumerate(lines) if 'Promise.all' in l), None)\nif policy_line is None or promise_line is None:\n    print('FAIL: not found'); sys.exit(1)\nif policy_line >= promise_line:\n    print(f'FAIL: policy.check at {policy_line+1} not before Promise.all at {promise_line+1}'); sys.exit(1)\nprint('OK')\n```\n\nThe relevant slices of orchestrator.ts:\n```ts\n// line 306:\n                // that has been replaced by Phase 2 (Promise.all concurrent execution below).\n...\n// line 388:\n                    policy.check({\n                        recursionDepth: executionContext.recursionDepth,\n                        ...\n                    });\n...\n// line 410:\n                const toolResults = await Promise.all(\n                    nonHitlToolCalls.map(async (toolCall) => {\n                        ...\n```"
+   ],
+   "needs": [
+    "code-fixer"
+   ]
+  },
+  {
+   "id": 9,
+   "scenario": "fk-cascade-migration",
+   "tier": "discriminator",
+   "posing": "V1 ts-pro FK",
+   "agent": "ts-pro",
+   "mode": "single",
+   "prompts": [
+    "Bug: after our DB migrations run on an existing populated database, every pre-existing row in `task_events` is gone. The migration that triggers it (0005) just makes `tasks.session_id` nullable. The cascade behavior is intentional for normal row deletes and must NOT be weakened. Diagnose the precise cause and fix it.\n\nSQLite via Drizzle ORM (better-sqlite3 driver). Relevant code:\n\ndb/schema.ts:\n```ts\nexport const taskEventsTable = sqliteTable(\"task_events\", {\n    id: text(\"id\").primaryKey(),\n    taskId: text(\"task_id\").notNull().references(() => tasksTable.id, { onDelete: \"cascade\" }),\n    type: text(\"type\").notNull(),\n    payload: text(\"payload\"),\n    createdAt: text(\"created_at\").notNull(),\n});\n```\n\ndb/client.ts:\n```ts\nconst sqlite = new Database(resolvedPath);\nsqlite.pragma(\"journal_mode = WAL\");\nsqlite.pragma(\"foreign_keys = ON\");\nexport const db = drizzle(sqlite, { schema });\n```\n\ndb/migrate.ts:\n```ts\nimport { migrate } from \"drizzle-orm/better-sqlite3/migrator\";\nimport { db } from \"./client.js\";\nexport function runMigrations(): void {\n    migrate(db, { migrationsFolder: new URL(\"../../drizzle\", import.meta.url).pathname });\n}\n```\n\ndrizzle/0005_*.sql (generated by drizzle-kit — the standard SQLite table-rebuild):\n```sql\nPRAGMA foreign_keys=OFF;\nCREATE TABLE `__new_tasks` ( `id` text PRIMARY KEY NOT NULL, `session_id` text, /* ...other cols... */ );\nINSERT INTO `__new_tasks`(...) SELECT ... FROM `tasks`;\nDROP TABLE `tasks`;\nALTER TABLE `__new_tasks` RENAME TO `tasks`;\nPRAGMA foreign_keys=ON;\n```\n\nThe migration already contains `PRAGMA foreign_keys=OFF` at the top, yet task_events is still wiped when it runs."
+   ],
+   "needs": [
+    "ts-pro"
+   ]
+  },
+  {
+   "id": 10,
+   "scenario": "fk-cascade-migration",
+   "tier": "discriminator",
+   "posing": "V3 ts-pro FK + distractor facts",
+   "agent": "ts-pro",
+   "mode": "single",
+   "prompts": [
+    "Bug: after our DB migrations run on an existing populated database, every pre-existing row in `task_events` is gone. Migration 0005 only makes `tasks.session_id` nullable. The cascade is intentional for normal deletes and must NOT be weakened. Diagnose the precise cause and fix it.\n\nSQLite via Drizzle (better-sqlite3). Code:\n\ndb/schema.ts:\n```ts\ntaskId: text(\"task_id\").notNull().references(() => tasksTable.id, { onDelete: \"cascade\" }),\n```\ndb/client.ts:\n```ts\nconst sqlite = new Database(resolvedPath);\nsqlite.pragma(\"foreign_keys = ON\");\nexport const db = drizzle(sqlite, { schema });\n```\ndb/migrate.ts:\n```ts\nimport { migrate } from \"drizzle-orm/better-sqlite3/migrator\";\nimport { db } from \"./client.js\";\nexport function runMigrations(): void {\n    migrate(db, { migrationsFolder: \"...drizzle\" });\n}\n```\ndrizzle/0005_*.sql:\n```sql\nPRAGMA foreign_keys=OFF;\nCREATE TABLE `__new_tasks` ( `id` text PRIMARY KEY NOT NULL, `session_id` text /*...*/ );\nINSERT INTO `__new_tasks`(...) SELECT ... FROM `tasks`;\nDROP TABLE `tasks`;\nALTER TABLE `__new_tasks` RENAME TO `tasks`;\nPRAGMA foreign_keys=ON;\n```\nThe migration already has `PRAGMA foreign_keys=OFF` at the top, yet task_events is still wiped.\n\nReference — known pitfalls in this stack (consider which, if any, apply; rule each in or out against the evidence):\n- An EventEmitter 'error' event with no listener crashes the process; try/catch around the emitting call does not catch it.\n- `PRAGMA foreign_keys` is silently ignored (a no-op) when issued inside an open transaction.\n- Drizzle's better-sqlite3 migrator executes each migration file inside a single transaction.\n- A WAL checkpoint on close throws if the DB file was already unlinked.\n- better-sqlite3 is fully synchronous; await/Promises do not apply to its calls.\n- Native addons under worker_threads can segfault at process teardown.\n- Grep/string-match audits over source also match occurrences inside comments and string literals."
+   ],
+   "needs": [
+    "ts-pro"
+   ]
+  },
+  {
+   "id": 11,
+   "scenario": "sse-eaddrinuse",
+   "tier": "discriminator",
+   "posing": "ts-pro SSE",
+   "agent": "ts-pro",
+   "mode": "single",
+   "prompts": [
+    "Bug: this process is primarily an MCP server speaking JSON-RPC over stdio. At startup it ALSO starts an HTTP SSE server. Symptom: if the SSE port is already in use, the ENTIRE process dies with an uncaught error + stack trace — taking down the stdio MCP server, which doesn't need that port. Desired: if SSE can't bind, the stdio MCP server keeps running (SSE just unavailable), logged usefully. Also make the bind port injectable for tests. Diagnose and fix.\n\nstreaming/sse-server.ts:\n```ts\nconst SSE_PORT = parseInt(process.env[\"SSE_PORT\"] ?? \"3001\", 10);\nexport function startSseServer(taskStore: TaskStore): http.Server {\n    const server = http.createServer((req, res) => { /* ...SSE routing... */ });\n    const SSE_HOST = process.env[\"SSE_HOST\"] ?? \"127.0.0.1\";\n    server.listen(SSE_PORT, SSE_HOST, () => {\n        logger.info({ host: SSE_HOST, port: SSE_PORT }, \"SSE server listening\");\n    });\n    return server;\n}\n```\nindex.ts uses it synchronously and closes it on shutdown:\n```ts\nconst sseServer = startSseServer(taskStore);\n// on shutdown:\nawait new Promise<void>((resolve) => sseServer.close(() => resolve()));\n```"
+   ],
+   "needs": [
+    "ts-pro"
+   ]
+  },
+  {
+   "id": 12,
+   "scenario": "fk-cascade-migration",
+   "tier": "discriminator",
+   "posing": "M1 multi-turn synth→code",
+   "agent": "synth-coder",
+   "mode": "multiturn",
+   "prompts": [
+    "DIAGNOSE this bug (do not write the fix yet).\n\nSQLite via Drizzle (better-sqlite3). After runMigrations() applies migration 0005 (which only makes tasks.session_id nullable) on a populated DB, ALL pre-existing task_events rows are gone. The ON DELETE CASCADE is intentional for normal deletes and must NOT be weakened.\n\ndb/schema.ts: task_events.task_id .references(() => tasksTable.id, { onDelete: \"cascade\" })\n\ndb/client.ts:\n```ts\nconst sqlite = new Database(resolvedPath);   // module-private; NOT exported\nsqlite.pragma(\"journal_mode = WAL\");\nsqlite.pragma(\"foreign_keys = ON\");\nexport const db = drizzle(sqlite, { schema });   // only `db` is exported\n```\n\ndb/migrate.ts:\n```ts\nimport { migrate } from \"drizzle-orm/better-sqlite3/migrator\";\nimport { db } from \"./client.js\";\nexport function runMigrations(): void {\n    migrate(db, { migrationsFolder: \"...drizzle\" });\n}\n```\n\ndrizzle/0005_*.sql (drizzle-kit's standard SQLite table-rebuild):\n```sql\nPRAGMA foreign_keys=OFF;\nCREATE TABLE `__new_tasks` (...session_id text...);\nINSERT INTO `__new_tasks`(...) SELECT ... FROM `tasks`;\nDROP TABLE `tasks`;\nALTER TABLE `__new_tasks` RENAME TO `tasks`;\nPRAGMA foreign_keys=ON;\n```\nThe migration already contains `PRAGMA foreign_keys=OFF` at the top, yet task_events is still wiped.",
+    "Now CODE the fix based on your diagnosis. Remember: only `db` is exported from client.ts (the raw `sqlite` connection is module-private). Use only APIs present in the context or that you list under NEEDS. Produce the fix + a TEST + CONFIDENCE."
+   ],
+   "needs": [
+    "synth-coder"
+   ]
+  },
+  {
+   "id": 13,
+   "scenario": "fk-cascade-migration",
+   "tier": "discriminator",
+   "posing": "M2 adversarial architect",
+   "agent": "architect",
+   "mode": "single",
+   "prompts": [
+    "Adversarially review this diagnosis and produce a corrected implementation spec.\n\n== BUG ==\nSQLite via Drizzle (better-sqlite3). After runMigrations() applies migration 0005 (only makes tasks.session_id nullable) on a populated DB, ALL pre-existing task_events rows vanish. The ON DELETE CASCADE is intentional and must NOT be weakened.\n- db/schema.ts: task_events.task_id references tasks.id { onDelete: \"cascade\" }\n- db/client.ts: `const sqlite = new Database(path)` (module-private, NOT exported); `sqlite.pragma(\"foreign_keys = ON\")`; `export const db = drizzle(sqlite, {schema})` (only `db` exported)\n- db/migrate.ts: `migrate(db, { migrationsFolder })` (drizzle's better-sqlite3 migrator)\n- 0005_*.sql: `PRAGMA foreign_keys=OFF;` then CREATE __new_tasks / INSERT-SELECT / DROP tasks / RENAME / `PRAGMA foreign_keys=ON;`\n- KEY EVIDENCE: the migration ALREADY begins with `PRAGMA foreign_keys=OFF`, yet task_events is still wiped.\n- KNOWN: drizzle's better-sqlite3 migrator runs each migration file inside a transaction.\n\n== PROPOSED DIAGNOSIS (review this critically) ==\n\"Disabling foreign_keys with PRAGMA foreign_keys=OFF could allow related rows to be deleted inadvertently when DROP TABLE tasks runs. The fix should be at the migration-script level, restructuring operations to re-establish referential integrity.\"\n\nCritique it against ALL the evidence (especially the PRAGMA OFF already being present + the migrator's transaction), give the corrected root cause, and a concrete implementation spec (exact file, function, API calls — only grounded ones; NEEDS if something isn't available)."
+   ],
+   "needs": [
+    "architect"
+   ]
+  },
+  {
+   "id": 14,
+   "scenario": "fk-cascade-migration",
+   "tier": "discriminator",
+   "posing": "M3 orchestrate lead→synth→coder",
+   "agent": "lead",
+   "mode": "orchestrate",
+   "prompts": [
+    "Bug report to fix (orchestrate it): SQLite via Drizzle (better-sqlite3). After runMigrations() applies migration 0005 (only makes tasks.session_id nullable) on a populated DB, ALL pre-existing task_events rows vanish. The ON DELETE CASCADE (task_events.task_id -> tasks.id) is intentional and must NOT be weakened. client.ts has a module-private `const sqlite = new Database(path)` with `sqlite.pragma(\"foreign_keys = ON\")` and exports only `db = drizzle(sqlite)`. migrate.ts calls `migrate(db, {migrationsFolder})` (drizzle's better-sqlite3 migrator, which runs each migration file in a transaction). The 0005 SQL already starts with `PRAGMA foreign_keys=OFF` then does CREATE __new_tasks / INSERT-SELECT / DROP tasks / RENAME / `PRAGMA foreign_keys=ON`, yet task_events is still wiped."
+   ],
+   "needs": [
+    "coder",
+    "lead"
+   ]
+  },
+  {
+   "id": 15,
+   "scenario": "tasklist-ephemeral-filter",
+   "tier": "floor",
+   "posing": "floor: is_ephemeral filter",
+   "agent": "code-impl",
+   "mode": "single",
+   "prompts": [
+    "Small feature. Add an optional `is_ephemeral` filter to a task-list query (SQLite via Drizzle ORM). The DB column is `is_ephemeral INTEGER NOT NULL DEFAULT 0` (0 or 1). Extend the Zod input schema and the store query so a caller can list only ephemeral, or only non-ephemeral, tasks.\n\n```ts\n// validation/task.ts\nexport const taskListInputSchema = z.object({\n    session_id: z.string().uuid().optional(),\n    status: taskStatusSchema.optional(),\n});\n```\n```ts\n// store/task-store.ts — list(filter)\nconst conditions = [];\nif (filter.session_id) conditions.push(eq(tasksTable.sessionId, filter.session_id));\nif (filter.status)     conditions.push(eq(tasksTable.status, filter.status));\n// …applied via and(...) over `conditions`…\n```\nAdd the `is_ephemeral` filter."
+   ],
+   "needs": [
+    "code-impl"
+   ]
+  },
+  {
+   "id": 16,
+   "scenario": "sse-port-param",
+   "tier": "floor",
+   "posing": "floor: sse port param",
+   "agent": "code-impl",
+   "mode": "single",
+   "prompts": [
+    "Small feature. `startSseServer(taskStore)` always binds the port from `SSE_PORT` (env). Add an optional `port` parameter (and `host`), defaulting to the current env-derived values, so tests can pass an ephemeral port (`0`). Existing callers (which call it with just `taskStore`) MUST be unaffected. Do not change anything else.\n\n```ts\nconst SSE_PORT = parseInt(process.env[\"SSE_PORT\"] ?? \"3001\", 10);\nexport function startSseServer(taskStore: TaskStore): http.Server {\n    const server = http.createServer((req, res) => { /* …unchanged… */ });\n    const SSE_HOST = process.env[\"SSE_HOST\"] ?? \"127.0.0.1\";\n    server.listen(SSE_PORT, SSE_HOST, () => {\n        logger.info({ host: SSE_HOST, port: SSE_PORT }, \"SSE server listening\");\n    });\n    return server;\n}\n```"
+   ],
+   "needs": [
+    "code-impl"
+   ]
+  },
+  {
+   "id": 17,
+   "scenario": "task-status-enum-extend",
+   "tier": "floor",
+   "posing": "floor: status enum extend",
+   "agent": "code-impl",
+   "mode": "single",
+   "prompts": [
+    "Small change. Add two new task statuses, `waiting` and `awaiting_input`, to the status enum. It is declared in TWO places that must stay in sync — add to BOTH, keep the existing values.\n\n```ts\n// db/schema.ts — Drizzle column\nstatus: text(\"status\", {\n    enum: [\"pending\", \"running\", \"completed\", \"failed\", \"cancelled\"],\n}).notNull().default(\"pending\"),\n```\n```ts\n// validation/task.ts — Zod\nexport const taskStatusSchema = z.enum([\n    \"pending\", \"running\", \"completed\", \"failed\", \"cancelled\",\n]);\n```"
+   ],
+   "needs": [
+    "code-impl"
+   ]
+  },
+  {
+   "id": 18,
+   "scenario": "export-sqlite-type-annotation",
+   "tier": "floor",
+   "posing": "floor: TS4023 export",
+   "agent": "code-impl",
+   "mode": "single",
+   "prompts": [
+    "Small change. `client.ts` keeps the raw connection module-private. Export `sqlite` so another module can import it. The naive `export const sqlite = new Database(resolvedPath)` fails the build with:\n\n`error TS4023: Exported variable 'sqlite' has or is using name 'BetterSqlite3.Database' from external module \".../@types/better-sqlite3/index\" but cannot be named.`\n\nMake it export cleanly (the build MUST pass).\n\n```ts\nimport Database from \"better-sqlite3\";\nimport { drizzle } from \"drizzle-orm/better-sqlite3\";\nimport * as schema from \"./schema.js\";\n\nconst sqlite = new Database(resolvedPath);\nsqlite.pragma(\"journal_mode = WAL\");\nsqlite.pragma(\"foreign_keys = ON\");\nexport const db = drizzle(sqlite, { schema });\n```"
+   ],
+   "needs": [
+    "code-impl"
+   ]
+  }
+ ]
+}

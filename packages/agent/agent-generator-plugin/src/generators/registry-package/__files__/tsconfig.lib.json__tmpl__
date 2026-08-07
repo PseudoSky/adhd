@@ -1,0 +1,33 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "<%= offsetFromRoot %>dist/<%= projectDir %>",
+    "rootDir": "./src",
+    "baseUrl": "<%= offsetFromRoot %>",
+    "ignoreDeprecations": "6.0",
+
+    "module": "ESNext",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+
+    "moduleResolution": "Bundler",
+
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+
+    "strict": true,
+
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+
+    "skipLibCheck": true,
+
+    "types": ["node"],
+
+    "noEmit": false
+  },
+  "files": [],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts", "src/**/*.test.ts"]
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@adhd/dispatch-orchestrator",
+  "version": "0.1.0",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@adhd/dispatch-base-spec": "^0.1.0",
+    "@adhd/dispatch-core-client": "^0.1.0"
+  },
+  "devDependencies": {
+    "@adhd/dispatch-core-optimizer": "^0.1.0",
+    "@adhd/dispatch-serializer-json": "^0.1.0"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "typings": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
+}

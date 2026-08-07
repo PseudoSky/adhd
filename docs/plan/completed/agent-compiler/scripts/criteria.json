@@ -1,0 +1,275 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "compiler-design.1",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "exists",
+      "path": "docs/plan/agent-compiler/decisions.md"
+    },
+    {
+      "id": "compiler-design.2",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "context.condition|precedence|last wins|all included",
+      "paths": [
+        "docs/plan/agent-compiler/decisions.md"
+      ]
+    },
+    {
+      "id": "compiler-design.3",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "yaml_frontmatter|json_object|header builder",
+      "paths": [
+        "docs/plan/agent-compiler/decisions.md"
+      ]
+    },
+    {
+      "id": "compiler-design.4",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "table-name prefix|registry_|tool_|provider_|policy_|single SQLite|one DB",
+      "paths": [
+        "docs/plan/agent-compiler/decisions.md"
+      ]
+    },
+    {
+      "id": "scaffold-package.1",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "exists",
+      "path": "packages/ai/agent-compiler/project.json"
+    },
+    {
+      "id": "scaffold-package.2",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "present",
+      "pattern": "@adhd/agent-compiler",
+      "paths": [
+        "tsconfig.base.json"
+      ]
+    },
+    {
+      "id": "scaffold-package.3",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "present",
+      "pattern": "platform:node",
+      "paths": [
+        "packages/ai/agent-compiler/project.json"
+      ]
+    },
+    {
+      "id": "scaffold-package.4",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx build agent-compiler",
+      "expect": "exit0"
+    },
+    {
+      "id": "scaffold-package.5",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "absent",
+      "pattern": "from \"react\"|document\\.|window\\.",
+      "paths": [
+        "packages/ai/agent-compiler/src"
+      ]
+    },
+    {
+      "id": "scaffold-package.6",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "present",
+      "pattern": "@adhd/agent-registry|@adhd/agent-tool-registry|@adhd/agent-provider|@adhd/agent-policy",
+      "paths": [
+        "packages/ai/agent-compiler/package.json"
+      ]
+    },
+    {
+      "id": "composition-resolve.1",
+      "phase": "resolve",
+      "tier": null,
+      "kind": "present",
+      "pattern": "resolveComposition|junction order|position",
+      "paths": [
+        "packages/ai/agent-compiler/src/resolve/composition.ts"
+      ]
+    },
+    {
+      "id": "composition-resolve.2",
+      "phase": "resolve",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/composition-resolve.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "tool-header-emit.1",
+      "phase": "resolve",
+      "tier": null,
+      "kind": "present",
+      "pattern": "tool_platform_bindings|toolPlatformBindings|resolve.*alias",
+      "paths": [
+        "packages/ai/agent-compiler/src/resolve/tools.ts"
+      ]
+    },
+    {
+      "id": "tool-header-emit.2",
+      "phase": "resolve",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/tool-header.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "model-and-policy-emit.1",
+      "phase": "resolve",
+      "tier": null,
+      "kind": "present",
+      "pattern": "model_platform_bindings|modelPlatformBindings|resolveModelId",
+      "paths": [
+        "packages/ai/agent-compiler/src/resolve/model.ts"
+      ]
+    },
+    {
+      "id": "model-and-policy-emit.2",
+      "phase": "resolve",
+      "tier": null,
+      "kind": "present",
+      "pattern": "agent_policy|agentPolicy|constraint|permission",
+      "paths": [
+        "packages/ai/agent-compiler/src/resolve/policy.ts"
+      ]
+    },
+    {
+      "id": "model-and-policy-emit.3",
+      "phase": "resolve",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/model-policy.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "platform-markdown-emit.1",
+      "phase": "emit",
+      "tier": null,
+      "kind": "present",
+      "pattern": "compileAgent",
+      "paths": [
+        "packages/ai/agent-compiler/src/compile.ts"
+      ]
+    },
+    {
+      "id": "platform-markdown-emit.2",
+      "phase": "emit",
+      "tier": null,
+      "kind": "present",
+      "pattern": "frontmatter|---",
+      "paths": [
+        "packages/ai/agent-compiler/src/emit/markdown.ts"
+      ]
+    },
+    {
+      "id": "platform-markdown-emit.3",
+      "phase": "emit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-agent.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "compile-cli.1",
+      "phase": "cli",
+      "tier": null,
+      "kind": "present",
+      "pattern": "platform|context|out-dir|all",
+      "paths": [
+        "packages/ai/agent-compiler/src/cli/compile.ts"
+      ]
+    },
+    {
+      "id": "compile-cli.2",
+      "phase": "cli",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-cli.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "composed-prompt-caching.1",
+      "phase": "cache",
+      "tier": null,
+      "kind": "present",
+      "pattern": "composed_prompts|composedPrompts|context_hash|contextHash",
+      "paths": [
+        "packages/ai/agent-compiler/src/cache/composed-prompt-cache.ts"
+      ]
+    },
+    {
+      "id": "composed-prompt-caching.2",
+      "phase": "cache",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-cache.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "audit-engine.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-compiler/scripts/audit_compiler.py --phase schema",
+      "expect": "exit0"
+    },
+    {
+      "id": "compile-fixtures-e2e.1",
+      "phase": "e2e",
+      "tier": null,
+      "kind": "present",
+      "pattern": "api-design-reviewer|fixtures|seed",
+      "paths": [
+        "packages/ai/agent-compiler/src/seed/fixtures.ts"
+      ]
+    },
+    {
+      "id": "compile-fixtures-e2e.2",
+      "phase": "e2e",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-e2e.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "audit-final.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-compiler/scripts/audit_compiler.py --phase final",
+      "expect": "exit0"
+    },
+    {
+      "id": "code-review.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-compiler/scripts/review_gate.py",
+      "expect": "exit0"
+    },
+    {
+      "id": "code-review-engine.1",
+      "phase": "resolve",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-compiler/scripts/review_gate_engine.py",
+      "expect": "exit0"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "@adhd/apigen-base-errors",
+  "version": "0.2.0",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "typings": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
+}

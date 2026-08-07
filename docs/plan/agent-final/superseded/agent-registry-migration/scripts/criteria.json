@@ -1,0 +1,340 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "migration-design.1",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "exists",
+      "path": "docs/plan/agent-registry-migration/decisions.md"
+    },
+    {
+      "id": "migration-design.2",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "byte-equivalent|behaviorally.equivalent|normaliz",
+      "paths": [
+        "docs/plan/agent-registry-migration/decisions.md"
+      ]
+    },
+    {
+      "id": "migration-design.3",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "zero.data.loss|round-trip|claude-agents|cross-repo",
+      "paths": [
+        "docs/plan/agent-registry-migration/decisions.md"
+      ]
+    },
+    {
+      "id": "migration-design.4",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "exists",
+      "path": "packages/ai/agent-registry-migration/src/__fixtures__/code-reviewer.md"
+    },
+    {
+      "id": "migration-design.5",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "exists",
+      "path": "packages/ai/agent-registry-migration/src/__fixtures__/ticket-creation.SKILL.md"
+    },
+    {
+      "id": "scaffold-package.1",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "exists",
+      "path": "packages/ai/agent-registry-migration/project.json"
+    },
+    {
+      "id": "scaffold-package.2",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "present",
+      "pattern": "platform:node",
+      "paths": [
+        "packages/ai/agent-registry-migration/project.json"
+      ]
+    },
+    {
+      "id": "scaffold-package.3",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "present",
+      "pattern": "@adhd/agent-registry-migration",
+      "paths": [
+        "tsconfig.base.json"
+      ]
+    },
+    {
+      "id": "scaffold-package.4",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "present",
+      "pattern": "@adhd/agent-registry|@adhd/agent-compiler",
+      "paths": [
+        "packages/ai/agent-registry-migration/package.json"
+      ]
+    },
+    {
+      "id": "scaffold-package.5",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx build agent-registry-migration",
+      "expect": "exit0"
+    },
+    {
+      "id": "roundtrip-equivalence-gate.1",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/roundtrip-equivalence.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "roundtrip-equivalence-gate.2",
+      "phase": "verify",
+      "tier": null,
+      "kind": "present",
+      "pattern": "compile|claude_code",
+      "paths": [
+        "packages/ai/agent-registry-migration/src/verify/equivalence-gate.ts"
+      ]
+    },
+    {
+      "id": "roundtrip-equivalence-gate.3",
+      "phase": "verify",
+      "tier": null,
+      "kind": "present",
+      "pattern": "PASS|FAIL|allPass|report",
+      "paths": [
+        "packages/ai/agent-registry-migration/src/verify/equivalence-gate.ts"
+      ]
+    },
+    {
+      "id": "roundtrip-equivalence-gate.4",
+      "phase": "verify",
+      "tier": null,
+      "kind": "negative-control",
+      "positive": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/roundtrip-equivalence.test.ts",
+      "mutate": "node docs/plan/agent-registry-migration/scripts/nc_mutate.mjs",
+      "restore": "node docs/plan/agent-registry-migration/scripts/nc_restore.mjs"
+    },
+    {
+      "id": "removal-runbook.1",
+      "phase": "removal",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/removal-runbook.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "removal-runbook.2",
+      "phase": "removal",
+      "tier": null,
+      "kind": "present",
+      "pattern": "allPass|all.PASS|report|refuse|abort",
+      "paths": [
+        "packages/ai/agent-registry-migration/src/removal/retire.ts"
+      ]
+    },
+    {
+      "id": "removal-runbook.3",
+      "phase": "removal",
+      "tier": null,
+      "kind": "present",
+      "pattern": "claude-agents|cross-repo|gated",
+      "paths": [
+        "docs/plan/agent-registry-migration/RUNBOOK.md"
+      ]
+    },
+    {
+      "id": "audit-migration.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "true",
+      "expect": "exit0"
+    },
+    {
+      "id": "audit-final.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "true",
+      "expect": "exit0"
+    },
+    {
+      "id": "code-review.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-registry-migration/scripts/review_gate.py",
+      "expect": "exit0"
+    },
+    {
+      "id": "import-script.4",
+      "phase": "import",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/import-script.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "seed-provider-registry.1",
+      "phase": "superseded-scope",
+      "tier": null,
+      "kind": "present",
+      "pattern": "seedProviders|seedModels|seedBindings|onConflictDoNothing|INSERT OR IGNORE",
+      "paths": [
+        "packages/agent/agent-core-provider/src/seed/index.ts"
+      ]
+    },
+    {
+      "id": "seed-provider-registry.2",
+      "phase": "superseded-scope",
+      "tier": null,
+      "kind": "command",
+      "cmd": "test -f packages/agent/agent-core-provider/src/__tests__/roundtrip.test.ts && npx --yes nx test agent-core-provider --testFile=packages/agent/agent-core-provider/src/__tests__/roundtrip.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "seed-provider-registry.3",
+      "phase": "superseded-scope",
+      "tier": null,
+      "kind": "present",
+      "pattern": "SEEDED_PROVIDER_IDS|SEEDED_MODEL_IDS|MODEL_ROWS|BINDING_ROWS",
+      "paths": [
+        "packages/agent/agent-core-provider/src/seed/index.ts"
+      ]
+    },
+    {
+      "id": "artifact-cleanup.1",
+      "phase": "superseded-scope",
+      "tier": null,
+      "kind": "exists",
+      "path": "docs/plan/agent-registry/CLOSEOUT.md"
+    },
+    {
+      "id": "artifact-cleanup.2",
+      "phase": "superseded-scope",
+      "tier": null,
+      "kind": "exists",
+      "path": "docs/plan/agent-registry/COVERAGE.md"
+    },
+    {
+      "id": "artifact-cleanup.3",
+      "phase": "superseded-scope",
+      "tier": null,
+      "kind": "command",
+      "cmd": "git ls-files --error-unmatch docs/plan/agent-registry/CLOSEOUT.md docs/plan/agent-registry/COVERAGE.md docs/plan/agent-registry/DEMO.md",
+      "expect": "exit0"
+    },
+    {
+      "id": "corpus-parser.1",
+      "phase": "parse",
+      "tier": null,
+      "kind": "command",
+      "cmd": "test -f packages/ai/agent-registry-migration/src/__tests__/corpus-parser.test.ts && npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/corpus-parser.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "corpus-parser.2",
+      "phase": "parse",
+      "tier": null,
+      "kind": "present",
+      "pattern": "prompt_type|eighteen|18|TOOL_PLATFORM_BINDING|heading",
+      "paths": [
+        "packages/ai/agent-registry-migration/src/parse/component-mapping.ts"
+      ]
+    },
+    {
+      "id": "corpus-parser.3",
+      "phase": "parse",
+      "tier": null,
+      "kind": "present",
+      "pattern": "18|eighteen|unmapped|silent|coverage",
+      "paths": [
+        "packages/ai/agent-registry-migration/src/__tests__/corpus-parser.test.ts"
+      ]
+    },
+    {
+      "id": "haiku-usecase-batch.1",
+      "phase": "ingest",
+      "tier": null,
+      "kind": "command",
+      "cmd": "test -f packages/ai/agent-registry-migration/src/__tests__/haiku-usecase-batch.test.ts && npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/haiku-usecase-batch.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "haiku-usecase-batch.2",
+      "phase": "ingest",
+      "tier": null,
+      "kind": "present",
+      "pattern": "AGENT_REGISTRY_INGEST_LIVE|skip|replay",
+      "paths": [
+        "packages/ai/agent-registry-migration/src/ingest/haiku-batch.ts"
+      ]
+    },
+    {
+      "id": "sonnet-consolidation.1",
+      "phase": "ingest",
+      "tier": null,
+      "kind": "command",
+      "cmd": "test -f packages/ai/agent-registry-migration/src/__tests__/sonnet-consolidation.test.ts && npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/sonnet-consolidation.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "sonnet-consolidation.2",
+      "phase": "ingest",
+      "tier": null,
+      "kind": "present",
+      "pattern": "AGENT_REGISTRY_INGEST_LIVE|skip|replay",
+      "paths": [
+        "packages/ai/agent-registry-migration/src/ingest/sonnet-consolidate.ts"
+      ]
+    },
+    {
+      "id": "sonnet-consolidation.3",
+      "phase": "ingest",
+      "tier": null,
+      "kind": "present",
+      "pattern": "anchor|vocabulary|enrich|Plan 8",
+      "paths": [
+        "packages/ai/agent-registry-migration/src/ingest/usecase-vocabulary.ts"
+      ]
+    },
+    {
+      "id": "dataset-build.1",
+      "phase": "ingest",
+      "tier": null,
+      "kind": "command",
+      "cmd": "test -f packages/ai/agent-registry-migration/src/__tests__/dataset-build.test.ts && npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/dataset-build.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "dataset-build.2",
+      "phase": "ingest",
+      "tier": null,
+      "kind": "present",
+      "pattern": "usecase-anchors|anchor|enrich",
+      "paths": [
+        "packages/ai/agent-registry-migration/src/ingest/dataset-build.ts"
+      ]
+    },
+    {
+      "id": "dataset-build.3",
+      "phase": "ingest",
+      "tier": null,
+      "kind": "present",
+      "pattern": "ComponentStore|UseCaseStore|AgentStore|linkComponent|weight",
+      "paths": [
+        "packages/ai/agent-registry-migration/src/ingest/dataset-build.ts"
+      ]
+    }
+  ]
+}

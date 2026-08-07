@@ -1,0 +1,52 @@
+import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+
+/**
+ * Folder holding the drizzle-kit generated migrations (../../drizzle relative
+ * to this compiled module). Kept here — with no `client.js` import — so test
+ * harnesses can reuse the FK-safe runner without dragging in the production
+ * singleton connection (which opens a DB file at import time).
+ */
+export const MIGRATIONS_FOLDER = new URL(
+    "../../drizzle",
+    import.meta.url
+).pathname;
+
+/**
+ * Minimal structural type for the bits of a better-sqlite3 connection we need.
+ * Avoids importing the better-sqlite3 type just to call `pragma`.
+ */
+interface PragmaConn {
+    pragma(source: string, options?: { simple: boolean }): unknown;
+}
+
+/**
+ * Run Drizzle migrations against an explicit connection with foreign-key
+ * enforcement disabled for the duration of the run.
+ *
+ * WHY: SQLite ignores `PRAGMA foreign_keys` inside a transaction, and drizzle's
+ * migrator wraps each migration file in one. Table-recreate migrations (ALTER
+ * TABLE via CREATE-INSERT-DROP-RENAME) fire ON DELETE CASCADE when FK enforcement
+ * is ON, wiping child rows. Disabling on the connection *before* migrate() —
+ * while no transaction is open — is the only way to make it hold for the whole
+ * run; we restore the prior setting afterwards.
+ */
+export function runMigrationsOn(
+    conn: PragmaConn,
+    drizzleDb: Parameters<typeof migrate>[0],
+    migrationsFolder: string = MIGRATIONS_FOLDER
+): void {
+    const fkWasOn =
+        conn.pragma("foreign_keys", { simple: true }) === 1;
+
+    if (fkWasOn) {
+        conn.pragma("foreign_keys = OFF");
+    }
+
+    try {
+        migrate(drizzleDb, { migrationsFolder });
+    } finally {
+        if (fkWasOn) {
+            conn.pragma("foreign_keys = ON");
+        }
+    }
+}

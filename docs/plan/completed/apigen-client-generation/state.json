@@ -1,0 +1,957 @@
+{
+  "schema_version": 2,
+  "title": "apigen-client-generation",
+  "dag": "dag.json",
+  "dod_provenance": {
+    "confirmed_at": "2026-06-23T00:57:38.536Z",
+    "by": "pseudosky",
+    "note": "Caller confirmed the v2 DoD: dod.1/2/5 repointed to the F26 built bin + §9.1 metadata carrier; dod.14 streaming, dod.15 safe/verb-override, dod.16 collision-hard-error, dod.17 gateway partial-availability, dod.18 classes static+instance, dod.19 real-consumer capstone (built bin + unmodified @adhd/transform + real client + APIGEN_LIVE model).",
+    "dod_ids": [
+      "dod.1",
+      "dod.2",
+      "dod.3",
+      "dod.4",
+      "dod.5",
+      "dod.cli",
+      "dod.6",
+      "dod.7",
+      "dod.8",
+      "dod.9",
+      "dod.10",
+      "dod.11",
+      "dod.12",
+      "dod.13",
+      "dod.14",
+      "dod.15",
+      "dod.16",
+      "dod.17",
+      "dod.18",
+      "dod.19"
+    ]
+  },
+  "current_state": "done",
+  "states": {
+    "scaffold-packages": {
+      "status": "complete",
+      "started_at": "2026-06-21T07:45:00.771Z",
+      "done_at": "2026-06-21T07:50:26.412Z",
+      "start_ref": "fb684ced0dcac5fa3e1fe8d919b546e676905f4a",
+      "end_ref": "693fe3b6bbbb4faef68dea395bfe23007e25bb5e"
+    },
+    "core-types": {
+      "status": "complete",
+      "started_at": "2026-06-21T07:54:23.784Z",
+      "done_at": "2026-06-21T07:56:05.455Z",
+      "start_ref": "bf6b37b116328db6c80f623d7ea669cf4039c7fa",
+      "end_ref": "c88cfcd4a4e5e811a6e578dde04b6b3e32dbb224"
+    },
+    "schema-extraction": {
+      "status": "complete",
+      "started_at": "2026-06-21T08:05:11.755Z",
+      "done_at": "2026-06-21T08:15:38.223Z",
+      "start_ref": "6a3742261b39586f0af4ceac0fcf64321189413e",
+      "end_ref": "1719847fac3788e0b978568325c550f3a02068fb"
+    },
+    "schema-composition": {
+      "status": "complete",
+      "started_at": "2026-06-21T08:21:22.717Z",
+      "done_at": "2026-06-21T08:23:45.581Z",
+      "start_ref": "e78ea0f6f785011d60e9e28df909eed4c50f4c3f",
+      "end_ref": "1c8fc5a28fba6e954f0eb6e7c9281f5e10c5e73e"
+    },
+    "audit-core": {
+      "status": "complete",
+      "started_at": "2026-06-21T15:15:09.989Z",
+      "done_at": "2026-06-21T15:15:57.389Z",
+      "start_ref": "f12c9df6d44e9ebe43124589cad3f02478fbbe30",
+      "end_ref": "ba1bf593859accc8a1b3783615f6ee3024587db0"
+    },
+    "runtime-middleware": {
+      "status": "complete",
+      "started_at": "2026-06-21T15:18:33.053Z",
+      "done_at": "2026-06-21T15:21:56.072Z",
+      "start_ref": "8687b2b42108100c118d375c0250b5b459ff23d9",
+      "end_ref": "143d54edd9d035b3ef12384e167a1e03b872b837"
+    },
+    "runtime-dispatch": {
+      "status": "complete",
+      "started_at": "2026-06-21T15:23:29.653Z",
+      "done_at": "2026-06-21T15:25:34.276Z",
+      "start_ref": "e264bc4606ed908857e6461532ede6aa4ee0f902",
+      "end_ref": "a87e5f7587b459f04d2b3bb6ee285fd87b65f1bc"
+    },
+    "audit-runtime": {
+      "status": "complete",
+      "started_at": "2026-06-21T15:26:33.586Z",
+      "done_at": "2026-06-21T15:26:37.482Z",
+      "start_ref": "db53d613b4ba169dc1ccffa663848726b61757fb",
+      "end_ref": "986faaae90d209aeb6ac4c003547524b54e42b0b"
+    },
+    "scaffold-plugins": {
+      "status": "complete",
+      "started_at": "2026-06-21T15:27:36.929Z",
+      "done_at": "2026-06-21T15:36:57.227Z",
+      "start_ref": "90b72645a07e2208c95a0a42356f87a6456999a4",
+      "end_ref": "98dbc224dedbf760251abc2d487ffb3d373e8c60"
+    },
+    "plugin-api-fastify": {
+      "status": "complete",
+      "started_at": "2026-06-21T15:39:58.829Z",
+      "done_at": "2026-06-21T16:14:51.572Z",
+      "start_ref": "23433af1e123e0e3d3e463a048145bb9ba53d292",
+      "end_ref": "0f586a4c2ef92d57b628a7c84a6fa881148f07ed"
+    },
+    "plugin-fastify-checkpoint": {
+      "status": "complete",
+      "started_at": "2026-06-21T21:11:20.974Z",
+      "done_at": "2026-06-21T21:12:44.442Z",
+      "start_ref": "21cee438f7668a4237191d51adc7558f4050e7d6",
+      "end_ref": "9766b5c44b707fb5b323130c9b8da091f9105451"
+    },
+    "plugin-jsonschema": {
+      "status": "complete",
+      "started_at": "2026-06-21T21:25:01.536Z",
+      "done_at": "2026-06-21T21:26:16.793Z",
+      "start_ref": "d4b43399b81ee4f8508b9c8fb767f02300454437",
+      "end_ref": "85f0f8f8d9693889c54a9d1c5342ba03115b669f"
+    },
+    "plugin-mcp": {
+      "status": "complete",
+      "started_at": "2026-06-21T21:35:37.486Z",
+      "done_at": "2026-06-21T21:48:12.028Z",
+      "start_ref": "e74a0fe580832b16cd1d75af6a924d1bd3109378",
+      "end_ref": "daca7b554ed1241e0b6f2bd8d58bf626746bccb6"
+    },
+    "plugin-api-express": {
+      "status": "complete",
+      "started_at": "2026-06-21T21:49:32.691Z",
+      "done_at": "2026-06-21T21:52:47.618Z",
+      "start_ref": "42b7b8b4795edf06769ad6d951ec9c07f44ce8bb",
+      "end_ref": "f0e700282feea90ff2e79f8f9528c92ab34247f1"
+    },
+    "plugin-cli-output": {
+      "status": "complete",
+      "started_at": "2026-06-21T21:25:10.899Z",
+      "done_at": "2026-06-21T21:34:22.848Z",
+      "start_ref": "7fb4c9556e2e549fdc2a1944766fec92bae9ea9c",
+      "end_ref": "06c5fe5e4deb50b329b0f9e71a5a1ff2996f704f"
+    },
+    "audit-plugins": {
+      "status": "complete",
+      "started_at": "2026-06-21T21:59:33.517Z",
+      "done_at": "2026-06-21T21:59:42.907Z",
+      "start_ref": "9c2fc4aae197148cb6f1fc5255e40893d74f5e04",
+      "end_ref": "4e2225efca62ec815fa8b8163a72e6e49ee72554"
+    },
+    "cli-generate-cmd": {
+      "status": "complete",
+      "started_at": "2026-06-21T23:17:04.119Z",
+      "done_at": "2026-06-21T23:24:41.562Z",
+      "start_ref": "14452a2adbc6b0c38cacc3d955b6ccd1c00df109",
+      "end_ref": "81b4e2c4c0f9e4cb42fdf4537eb52af1016cbb2f"
+    },
+    "cli-run-cmd": {
+      "status": "complete",
+      "started_at": "2026-06-21T23:28:22.622Z",
+      "done_at": "2026-06-21T23:33:51.335Z",
+      "start_ref": "3644ab5232f00c5a762cea1325f3c8844c4eb2e5",
+      "end_ref": "6571b981b0b7371cb715be68da2cbef35fd259ec"
+    },
+    "nx-generator": {
+      "status": "complete",
+      "started_at": "2026-06-21T07:59:06.023Z",
+      "done_at": "2026-06-21T08:03:44.510Z",
+      "start_ref": "6d76a800e9e5d3b4429e3d3026173bbe170c747a",
+      "end_ref": "8ab11fa82044d9cb86b475ee47cd65d18b2fe883"
+    },
+    "done": {
+      "status": "complete",
+      "started_at": "2026-06-23T18:23:58.110Z",
+      "done_at": "2026-06-23T18:23:58.480Z",
+      "start_ref": "27ab496b799aca5d5fa4683d5257fdf1416513b4",
+      "end_ref": "d25e58ebd489889f9a19d181710d3c643dea5f22"
+    },
+    "audit-final-v2": {
+      "status": "complete",
+      "started_at": "2026-06-23T18:15:17.668Z",
+      "done_at": "2026-06-23T18:22:59.251Z",
+      "start_ref": "7290e29e22ed8fd6daf23991ba4918ec75e5f337",
+      "end_ref": "5be29466be87b002e27617c1a1f13abd8b24f9ac"
+    },
+    "integration-tests-v2": {
+      "status": "complete",
+      "started_at": "2026-06-23T05:45:24.255Z",
+      "done_at": "2026-06-23T06:14:17.870Z",
+      "start_ref": "9419c2faf13c543cda7f9bfd5028e6c9efe2e5b2",
+      "end_ref": "df9e6163839c4516089c69be45dd0690bb88bfa1"
+    },
+    "canonical-descriptor": {
+      "status": "complete",
+      "started_at": "2026-06-23T02:13:29.493Z",
+      "done_at": "2026-06-23T02:17:41.283Z",
+      "start_ref": "3702fcc078b26a35923669e49d98ab0d14d904e8",
+      "end_ref": "b479bc7fa9c59d3cf224f83eb79723477608508a"
+    },
+    "naming-helpers": {
+      "status": "complete",
+      "started_at": "2026-06-23T02:23:22.094Z",
+      "done_at": "2026-06-23T02:28:52.261Z",
+      "start_ref": "377387f9859884060c0383eff648e74d1f32373b",
+      "end_ref": "7f5b511b4370a6ccc68217915c8dcec0b53f3be2"
+    },
+    "ts-extractor-by-symbol": {
+      "status": "complete",
+      "started_at": "2026-06-23T02:33:16.649Z",
+      "done_at": "2026-06-23T03:05:46.573Z",
+      "start_ref": "4d5ea9d697133d3985f2d795f17f207486da9422",
+      "end_ref": "52bc464ed784c32a84fa3356a6dd2639a51e5968"
+    },
+    "audit-v2-core": {
+      "status": "complete",
+      "started_at": "2026-06-23T04:18:00.384Z",
+      "done_at": "2026-06-23T04:29:30.726Z",
+      "start_ref": "a97f4f1ca3786c71daadeea515eb948f289a2067",
+      "end_ref": "6b2b9912956ee2646f2e6a5fbd07de8bc0fe3ace"
+    },
+    "layer-harness": {
+      "status": "complete",
+      "started_at": "2026-06-23T02:23:36.382Z",
+      "done_at": "2026-06-23T02:26:41.244Z",
+      "start_ref": "5acd750907300a337746bd70e6d99d81e1a8568b",
+      "end_ref": "665a475a8a7c8435e3ed50f79aaa00e86cbc5355"
+    },
+    "central-validation": {
+      "status": "complete",
+      "started_at": "2026-06-23T02:33:31.334Z",
+      "done_at": "2026-06-23T02:37:05.604Z",
+      "start_ref": "13879377ddd408ed2b6b74703a308dbd9d6b7db2",
+      "end_ref": "4df1c5d763c7360e8f01d1f8015cca3d655ad43f"
+    },
+    "error-taxonomy": {
+      "status": "complete",
+      "started_at": "2026-06-23T02:23:47.732Z",
+      "done_at": "2026-06-23T02:30:25.119Z",
+      "start_ref": "389f0156b1fe0545d3ee73a3031aab53730a398d",
+      "end_ref": "ebd30baef8707c350c1fee229432fe81e12a0fef"
+    },
+    "audit-v2-harness": {
+      "status": "complete",
+      "started_at": "2026-06-23T03:09:28.149Z",
+      "done_at": "2026-06-23T03:09:39.476Z",
+      "start_ref": "66aa0ae935ed61e5208810ced4cd60f4dd231383",
+      "end_ref": "7d418112db187e1de34d631c07a8110bee9607fc"
+    },
+    "plugin-interface": {
+      "status": "complete",
+      "started_at": "2026-06-23T02:24:01.168Z",
+      "done_at": "2026-06-23T02:30:55.763Z",
+      "start_ref": "db5378a7d6ba71d51de8fa9a0e3996e7b549270c",
+      "end_ref": "e82163ea123700357116d0b54f15997539d3a1da"
+    },
+    "projection-transports": {
+      "status": "complete",
+      "started_at": "2026-06-23T02:33:50.766Z",
+      "done_at": "2026-06-23T03:06:40.775Z",
+      "start_ref": "4d214457ff5a339374d4494b16f26ffa5b8daa19",
+      "end_ref": "82dbf8e0c72d30a85c45f3aeb679df2c10fff2d5"
+    },
+    "logger-layer-plugin": {
+      "status": "complete",
+      "started_at": "2026-06-23T04:52:22.634Z",
+      "done_at": "2026-06-23T04:57:40.496Z",
+      "start_ref": "ed5230536c1e676336c7c724dc36e44a4c609612",
+      "end_ref": "794ea267123968e7c28030bcf25c2c63f2ad887d"
+    },
+    "mount-plugins": {
+      "status": "complete",
+      "started_at": "2026-06-23T04:52:22.764Z",
+      "done_at": "2026-06-23T05:01:13.436Z",
+      "start_ref": "ee2879629dcfe198a43ecdec0f0edbd8d8b80eae",
+      "end_ref": "a198d872f56bd5aafab6bbb6a72688315dcaceb2"
+    },
+    "audit-v2-projection": {
+      "status": "complete",
+      "started_at": "2026-06-23T05:04:52.825Z",
+      "done_at": "2026-06-23T05:04:59.521Z",
+      "start_ref": "425c92303ae5150408f32500499d9601158c9bf4",
+      "end_ref": "1c21100e1c1adae1cd8a32a014c91e720c871a71"
+    },
+    "package-restructure": {
+      "status": "complete",
+      "started_at": "2026-06-23T05:06:11.089Z",
+      "done_at": "2026-06-23T05:06:12.905Z",
+      "start_ref": "ecf819321ff8b2b6cbdc2712040c08e82257f4aa",
+      "end_ref": "2fe5cb80209acfad334be8ad6d1fbc4dbb0c658c"
+    },
+    "unified-cli": {
+      "status": "complete",
+      "started_at": "2026-06-23T05:06:34.499Z",
+      "done_at": "2026-06-23T05:14:49.188Z",
+      "start_ref": "36994c1e1b4080c7abef2b866c530739e0448f61",
+      "end_ref": "6cacca0ab73498953e4a58681a9d4e63d6dc6d36"
+    },
+    "gateway": {
+      "status": "complete",
+      "started_at": "2026-06-23T05:15:07.086Z",
+      "done_at": "2026-06-23T05:24:54.516Z",
+      "start_ref": "f92b1b2dc297c0ee1a0332e28b03d39997b640e6",
+      "end_ref": "566d415db77efc1a17e27d382638ccd1b08bbc48"
+    },
+    "conformance-vectors": {
+      "status": "complete",
+      "started_at": "2026-06-23T03:10:59.657Z",
+      "done_at": "2026-06-23T03:20:40.781Z",
+      "start_ref": "ffdc83cc5f27dfaf75cfa63416eb88d795170caa",
+      "end_ref": "3ba1ccc7dd73894ef5c4889a1e99d1b96b46cbae"
+    },
+    "scaffold-v2-common": {
+      "status": "complete",
+      "started_at": "2026-06-23T00:37:41.953Z",
+      "done_at": "2026-06-23T02:19:49.492Z",
+      "start_ref": "784d4aba464d4cd60df8ff9ea791a650b72ba0d0",
+      "end_ref": "e73f3ec346e354135790a4d856e1d6831b50a1bb"
+    },
+    "scaffold-v2-ts-plugins": {
+      "status": "complete",
+      "started_at": "2026-06-23T04:45:58.862Z",
+      "done_at": "2026-06-23T04:51:28.961Z",
+      "start_ref": "9299621c835ee61082c11dcb4c58e6a5bb6ab65a",
+      "end_ref": "4cb3e81258336c174fbb54458ffa09e118979f67"
+    },
+    "class-exports": {
+      "status": "complete",
+      "started_at": "2026-06-23T03:10:59.844Z",
+      "done_at": "2026-06-23T03:52:39.303Z",
+      "start_ref": "5a88e205d37e6459878d4f82fdb64ce9f4875cca",
+      "end_ref": "7c51fcc09a79aaefbdbebfa365f5feab7ff4a177"
+    },
+    "streaming-projection": {
+      "status": "complete",
+      "started_at": "2026-06-23T04:52:22.892Z",
+      "done_at": "2026-06-23T05:00:15.739Z",
+      "start_ref": "f04717c2f8a0fea1b91a32150b6fecb5efa76804",
+      "end_ref": "7d23d7b68dfd01a8084ea0edc289adb7b7fee736"
+    },
+    "python-host": {
+      "status": "complete",
+      "started_at": "2026-06-23T05:26:14.230Z",
+      "done_at": "2026-06-23T05:35:56.870Z",
+      "start_ref": "b71b334b434f8dd9081adac5d7eb27590864ee28",
+      "end_ref": "34ed69a0c9cdf65daeb31b51654583b56ea09d79"
+    },
+    "audit-v2-host": {
+      "status": "complete",
+      "started_at": "2026-06-23T05:39:31.680Z",
+      "done_at": "2026-06-23T05:39:32.786Z",
+      "start_ref": "8d1346c1f9535f65b7fbd5fefb5d3d0d8cd08c57",
+      "end_ref": "529bf7a10d45f497718c53f112578d2355203027"
+    },
+    "nx-generator-v2": {
+      "status": "complete",
+      "started_at": "2026-06-23T03:31:21.833Z",
+      "done_at": "2026-06-23T04:43:54.561Z",
+      "start_ref": "4593ce914f51d23a92010bfa907d285d5a78ad1a",
+      "end_ref": "586bb7ef618bcdf5264820859b8166e8b492132e"
+    }
+  },
+  "transition_log": [
+    {
+      "ts": "2026-06-21T07:50:26.412Z",
+      "from": "scaffold-packages",
+      "to": "scaffold-packages",
+      "start_ref": "fb684ced0dcac5fa3e1fe8d919b546e676905f4a",
+      "end_ref": "693fe3b6bbbb4faef68dea395bfe23007e25bb5e",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Scaffolded 4 packages via nx g @nx/js:library with --projectNameAndRootFormat as-provided (required for Nx 18 to place projects at exact paths). Applied emptyOutDir:true to all 4 vite.config.ts files and dependsOn:[\"build\",\"test\"] to all 4 project.json nx-release-publish targets. Added all 4 @adhd/apigen-* paths to tsconfig.base.json with ./ prefix. Audit guard exit 0: 4/4 checks passed. All 5 acceptance criteria verified: [scaffold-packages.1] correct tags, [scaffold-packages.2] all 4 in nx show projects, [scaffold-packages.3] tsconfig paths present, [scaffold-packages.4] emptyOutDir in vite configs, [scaffold-packages.5] dependsOn in project.json. Commit SHA: 693fe3b."
+    },
+    {
+      "ts": "2026-06-21T07:56:05.455Z",
+      "from": "core-types",
+      "to": "core-types",
+      "start_ref": "bf6b37b116328db6c80f623d7ea669cf4039c7fa",
+      "end_ref": "c88cfcd4a4e5e811a6e578dde04b6b3e32dbb224",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Wrote packages/apigen/core/src/lib/types.ts (GeneratedSchemas, ComposedSchemas, ExportMode, GenerateSchemasOptions, PluginInput, PluginOutput, RunInput, OutputPlugin) and replaced index.ts with type-only re-exports plus generateSchemas/composeSchemas stubs. Guard: npx nx build apigen-core exited 0 (313ms). AC verified: [core-types.1] build exit 0; [core-types.2] typeof generateSchemas === function in CJS output; [core-types.3] stub throws \"not implemented — see schema-extraction state\"; [core-types.4] grep for @adhd/apigen-runtime|@adhd/apigen-plugin produced no output. Commit: c88cfcd."
+    },
+    {
+      "ts": "2026-06-21T08:03:44.510Z",
+      "from": "nx-generator",
+      "to": "nx-generator",
+      "start_ref": "6d76a800e9e5d3b4429e3d3026173bbe170c747a",
+      "end_ref": "8ab11fa82044d9cb86b475ee47cd65d18b2fe883",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Implemented pluginGenerator (generators/plugin/generator.ts + schema.json + 4 EJS __files__ templates) and generateExecutor (executors/generate/executor.ts + schema.json). Added generators.json, executors.json, updated package.json deps and vite.config.ts externals, rewrote src/index.ts. Templates use propertyName (camelCase) for JS identifiers, fileName (kebab) for string id/description fields. 13 tests pass (7 generator + 5 executor + 1 legacy). Guard npx nx build apigen-nx exits 0. Commit: 8ab11fa."
+    },
+    {
+      "ts": "2026-06-21T08:15:38.223Z",
+      "from": "schema-extraction",
+      "to": "schema-extraction",
+      "start_ref": "6a3742261b39586f0af4ceac0fcf64321189413e",
+      "end_ref": "1719847fac3788e0b978568325c550f3a02068fb",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Implemented generateSchemas() with ts-morph (param-name extraction) + ts-json-schema-generator (JSON Schema). Created orchestrator generate-schemas.ts, three extractors (named/default/named-object), two schema builders (ts-json-schema + morph-fallback). Added ts-morph@23 + ts-json-schema-generator@2.3 to root package.json (yarn hoisted monorepo) and installed via yarn. Fixed hasQuestionToken detection for optional params on arrow-function call signatures. Added explicit @nx/vite:test target to project.json so --testFile alias resolves. All 8 acceptance criteria pass. Guard exit 0. Commits b0c6eac + 1719847."
+    },
+    {
+      "ts": "2026-06-21T08:23:45.581Z",
+      "from": "schema-composition",
+      "to": "schema-composition",
+      "start_ref": "e78ea0f6f785011d60e9e28df909eed4c50f4c3f",
+      "end_ref": "1c8fc5a28fba6e954f0eb6e7c9281f5e10c5e73e",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Implemented composeSchemas() in packages/apigen/core/src/lib/compose-schemas.ts: pure function with SlimMiddleware interface, data-wrapper always present, false-only suppression via fnOverrides[mw.id] === false. 6 spec tests covering no-middleware, session middleware, false-override suppression, zero-param function, multiple middlewares, and null-does-not-suppress. index.ts stub replaced with export { composeSchemas } from ./lib/compose-schemas — throwing stub removed. Guard: nx test apigen-core exited 0, 6/6 passed. Commit: 1c8fc5a."
+    },
+    {
+      "ts": "2026-06-21T15:15:57.389Z",
+      "from": "audit-core",
+      "to": "audit-core",
+      "start_ref": "f12c9df6d44e9ebe43124589cad3f02478fbbe30",
+      "end_ref": "ba1bf593859accc8a1b3783615f6ee3024587db0",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Foundation phase audit: 19/19 checks pass (rc=0, verified by orchestrator independently). Guard F14 fix applied (vitest positional). nx-generator product verified: nx test apigen-nx 13/13."
+    },
+    {
+      "ts": "2026-06-21T15:21:56.072Z",
+      "from": "runtime-middleware",
+      "to": "runtime-middleware",
+      "start_ref": "8687b2b42108100c118d375c0250b5b459ff23d9",
+      "end_ref": "143d54edd9d035b3ef12384e167a1e03b872b837",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Implemented 5 lib files (types, define-middleware, event-bus, build-context, api-package) + 2 test files + updated index.ts. Added @nx/vite:test target to project.json. Guard: npx nx test apigen-runtime --testFile=packages/apigen/runtime/src/test/api-package.spec.ts → 8/8 passed (exit 0). All 6 acceptance criteria verified: session schema has session+data fields, assertNoSelfSubscription throws ConfigurationError, observer middleware receives start+complete events, strict=true throws on unknown override key, buildContext accumulates sequentially, no Node-only/plugin imports in src/."
+    },
+    {
+      "ts": "2026-06-21T15:25:34.276Z",
+      "from": "runtime-dispatch",
+      "to": "runtime-dispatch",
+      "start_ref": "e264bc4606ed908857e6461532ede6aa4ee0f902",
+      "end_ref": "a87e5f7587b459f04d2b3bb6ee285fd87b65f1bc",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Implemented needsEnvelopeField, dataParamNames, dispatch in packages/apigen/runtime/src/lib/dispatch.ts. All 8 tests pass (guard exit 0). Added additive export to index.ts: export { needsEnvelopeField, dataParamNames, dispatch } from ./lib/dispatch. Commit a87e5f7."
+    },
+    {
+      "ts": "2026-06-21T15:26:37.482Z",
+      "from": "audit-runtime",
+      "to": "audit-runtime",
+      "start_ref": "db53d613b4ba169dc1ccffa663848726b61757fb",
+      "end_ref": "986faaae90d209aeb6ac4c003547524b54e42b0b",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Runtime phase audit: 13/13 pass (rc=0, orchestrator-verified independently). dispatch single-path + no-plugin-import + no-node-builtins invariants green."
+    },
+    {
+      "ts": "2026-06-21T15:36:57.227Z",
+      "from": "scaffold-plugins",
+      "to": "scaffold-plugins",
+      "start_ref": "90b72645a07e2208c95a0a42356f87a6456999a4",
+      "end_ref": "98dbc224dedbf760251abc2d487ffb3d373e8c60",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Generated 5 plugins via nx g @adhd/apigen-nx:plugin (jsonschema, mcp, api-fastify, api-express, cli). Added vite.config.ts+tsconfig files (generator template gap). Patched project.json test targets with outputs+configFile. Fixed broken index.ts__tmpl__ default re-export. Also patched generated index.ts files. All 5 stubs build. Guard 5/5 passed (exit 0). Commit 98dbc22."
+    },
+    {
+      "ts": "2026-06-21T16:14:51.572Z",
+      "from": "plugin-api-fastify",
+      "to": "plugin-api-fastify",
+      "start_ref": "23433af1e123e0e3d3e463a048145bb9ba53d292",
+      "end_ref": "0f586a4c2ef92d57b628a7c84a6fa881148f07ed",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Implemented generate() (emits routes.ts with POST /<id>/<fn>, imports dispatch from @adhd/apigen-runtime, no schema:{body} attachment) and run() (real Fastify in-process, abort-signal teardown). 9 vitest tests pass against real Fastify server: POST /test-pkg/getUser returns {id,name} matching direct function call. Added fastify@^4 to package.json; added resolutions:{estree-walker:2.0.2} to fix Nx vite-plugin-dts CJS compat broken by estree-walker@3 ESM-only hoisting. Guard (npx nx test apigen-plugin-api-fastify) exit 0."
+    },
+    {
+      "ts": "2026-06-21T21:12:44.442Z",
+      "from": "plugin-fastify-checkpoint",
+      "to": "plugin-fastify-checkpoint",
+      "start_ref": "21cee438f7668a4237191d51adc7558f4050e7d6",
+      "end_ref": "9766b5c44b707fb5b323130c9b8da091f9105451",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Human checkpoint cleared: plan owner approved the plugin-api-fastify reference (9/9 unit tests, dispatch not inlined, no AJV body schema, OutputPlugin conformant) via RESUME directive; checkpoints/fastify-approved.md created."
+    },
+    {
+      "ts": "2026-06-21T21:26:16.793Z",
+      "from": "plugin-cli-output",
+      "to": "plugin-jsonschema",
+      "start_ref": "d4b43399b81ee4f8508b9c8fb767f02300454437",
+      "end_ref": "85f0f8f8d9693889c54a9d1c5342ba03115b669f",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Implemented generate() with path.join(pkg.id, fnName+.json) per function, pretty-print defaulting true, no run() method. 7/7 tests pass (emits correct paths, valid JSON, compact mode, interface shape, multi-fn, multi-pkg, pretty-print default). Guard: npx nx test apigen-plugin-jsonschema exit 0."
+    },
+    {
+      "ts": "2026-06-21T21:34:22.848Z",
+      "from": "plugin-mcp",
+      "to": "plugin-cli-output",
+      "start_ref": "7fb4c9556e2e549fdc2a1944766fec92bae9ea9c",
+      "end_ref": "06c5fe5e4deb50b329b0f9e71a5a1ff2996f704f",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Renamed project apigen-plugin-cli→apigen-plugin-cli-output to match guard/slug/convention (scaffold mis-named it); 14 tests pass, build clean."
+    },
+    {
+      "ts": "2026-06-21T21:48:12.028Z",
+      "from": "plugin-mcp",
+      "to": "plugin-mcp",
+      "start_ref": "e74a0fe580832b16cd1d75af6a924d1bd3109378",
+      "end_ref": "daca7b554ed1241e0b6f2bd8d58bf626746bccb6",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Implemented full MCP plugin: plugin.ts (delegates generate/run, optionsSchema with all 3 transport enums), generate.ts (emits index.ts + server.ts per transport), run.ts (in-process server; streaming-http creates transport per request to avoid single-use limitation), templates/server-stdio.tpl.ts + server-http.tpl.ts. Guard: npx nx test apigen-plugin-mcp — 21/21 tests pass (3 spec files). tools/list verified via real StreamableHTTPServerTransport HTTP call returning SSE with correct tool names; callTool(getUser) verified against ground-truth direct call; callTool(listUsers) verified; abort signal closes server. All 3 transport values in optionsSchema enum. dispatch imported from @adhd/apigen-runtime, not inlined. No dep added (SDK already present at 1.29.0). Commit: daca7b5."
+    },
+    {
+      "ts": "2026-06-21T21:52:47.618Z",
+      "from": "plugin-api-express",
+      "to": "plugin-api-express",
+      "start_ref": "42b7b8b4795edf06769ad6d951ec9c07f44ce8bb",
+      "end_ref": "f0e700282feea90ff2e79f8f9528c92ab34247f1",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Implemented generate.ts (Router + res.json route emission), run.ts (real Express app, abort via server.close), plugin.ts (wired generate/run, full optionsSchema). Added express + @types/express + supertest via yarn (no package-lock.json). 10 tests pass: generate emits Router+dispatch import, routes use router.post+res.json not return, run() serves real HTTP POST via fetch integration tests. dispatch imported from @adhd/apigen-runtime — never inlined. Commit f0e7002."
+    },
+    {
+      "ts": "2026-06-21T21:59:42.907Z",
+      "from": "audit-plugins",
+      "to": "audit-plugins",
+      "start_ref": "9c2fc4aae197148cb6f1fc5255e40893d74f5e04",
+      "end_ref": "4e2225efca62ec815fa8b8163a72e6e49ee72554",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Plugins phase audit 19/19 (rc=0, orchestrator-verified). Fixed 2 real mcp build bugs the nx-test guard missed: TS2769 abort-listener (run.ts), and vite browser-externalization of node:crypto (externalized node builtins + mcp-sdk). All 5 plugins build+test."
+    },
+    {
+      "ts": "2026-06-21T23:24:41.562Z",
+      "from": "cli-generate-cmd",
+      "to": "cli-generate-cmd",
+      "start_ref": "14452a2adbc6b0c38cacc3d955b6ccd1c00df109",
+      "end_ref": "81b4e2c4c0f9e4cb42fdf4537eb52af1016cbb2f",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "test=0 lint=0 build=0. Implemented pipeline.ts (generateSchemas+composeSchemas wrapper), registry.ts (discoverPackages filesystem walk), commands/generate.ts (--source/--type/--out-dir/--export/--opt), commands/generate-registry.ts (--packages-dir/--tag/--exclude-tag). Updated src/index.ts wiring all 5 plugins. Added test fixtures api.ts + registry/pkg-a + pkg-b with __samples__. 10 tests pass covering all 5 AC. vite.config.ts externalized node builtins + plugin deps for platform:node build. .eslintrc.json fixture override added. package.json: commander ^14.0.3, dropped unused apigen-runtime dep. Explicit @nx/vite:test target added to project.json. Commit SHA: 81b4e2c."
+    },
+    {
+      "ts": "2026-06-21T23:33:51.335Z",
+      "from": "cli-run-cmd",
+      "to": "cli-run-cmd",
+      "start_ref": "3644ab5232f00c5a762cea1325f3c8844c4eb2e5",
+      "end_ref": "6571b981b0b7371cb715be68da2cbef35fd259ec",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Implemented run.ts + run-registry.ts commands. run: dynamic import() of source module, filters non-function exports (excl __samples__), wires AbortController to SIGINT/SIGTERM, calls plugin.run(). run-registry: discoverPackages() multi-pkg, imports live fns per pkg, single plugin.run() call with full packages array. index.ts updated to register both. Test: 5/5 pass (rc=0) — covers no-run-method error, live fns import, __samples__ exclusion, abort resolution, --output flag absent, multi-pkg registry dispatch, live streaming-http MCP server round-trip via process.emit(SIGINT). Lint: rc=0. Build: rc=0. Commit: 6571b98."
+    },
+    {
+      "ts": "2026-06-23T02:17:41.283Z",
+      "from": "canonical-descriptor",
+      "to": "canonical-descriptor",
+      "start_ref": "3702fcc078b26a35923669e49d98ab0d14d904e8",
+      "end_ref": "b479bc7fa9c59d3cf224f83eb79723477608508a",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Operation descriptor (id/host/namespace/path/kind/async/streaming/safe/input/output/envelope/typeText) + Segment{raw,words} + TypeText + JSONSchema (2020-12/$defs/$ref IR, big-int string-encode convention, x-apigen-* hints + fidelity flag); deterministic-not-refactor-stable id, safe defaults-from-kind documented; descriptor.schema.json authored as valid JSON Schema 2020-12; 6 types exported from core/src/index.ts; nx build apigen-core exit 0"
+    },
+    {
+      "ts": "2026-06-23T02:19:49.492Z",
+      "from": "layer-harness",
+      "to": "scaffold-v2-common",
+      "start_ref": "784d4aba464d4cd60df8ff9ea791a650b72ba0d0",
+      "end_ref": "e73f3ec346e354135790a4d856e1d6831b50a1bb",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "6 common v2 pkgs scaffolded in final §12 homes (naming/errors/schema/conformance/gateway/codegen-openapi) with full nx wiring; tsconfig.base paths added; all 6 build green (guard exit 0, orchestrator-verified). Executor went idle pre-complete; orchestrator completed after state-side guard verification. Token telemetry unavailable → byte proxy."
+    },
+    {
+      "ts": "2026-06-23T02:26:41.245Z",
+      "from": "plugin-interface",
+      "to": "layer-harness",
+      "start_ref": "5acd750907300a337746bd70e6d99d81e1a8568b",
+      "end_ref": "665a475a8a7c8435e3ed50f79aaa00e86cbc5355",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "createInvoker(layers)->invoke(op,call) implemented; LayerContext (typed-extension ctx); 12 tests prove §8.1 rules 1-3; all 32 runtime tests green"
+    },
+    {
+      "ts": "2026-06-23T02:28:52.261Z",
+      "from": "central-validation",
+      "to": "naming-helpers",
+      "start_ref": "377387f9859884060c0383eff648e74d1f32373b",
+      "end_ref": "7f5b511b4370a6ccc68217915c8dcec0b53f3be2",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Implemented @adhd/apigen-naming: toKebab/toCamel/toPascal/toSnake projectors, normalizeFileName, project() (verb-from-safe + ProjectionConfig override), checkCollisions (CollisionDetectedError hard error), §9.1 envelope helpers. 40 tests green."
+    },
+    {
+      "ts": "2026-06-23T02:30:25.119Z",
+      "from": "ts-extractor-by-symbol",
+      "to": "error-taxonomy",
+      "start_ref": "389f0156b1fe0545d3ee73a3031aab53730a398d",
+      "end_ref": "ebd30baef8707c350c1fee229432fe81e12a0fef",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "apigen-errors: ERROR_CODES + HTTP_STATUS/GRPC_CODE/CLI_EXIT_CODE/MCP_ERROR_KIND maps + ApiError + StreamingErrorCarrier (before/after-first-chunk) per §9.1/§11; nx test apigen-errors exit 0 (orch-verified). Executor idle pre-complete; orchestrator drove completion. Token telemetry → byte proxy."
+    },
+    {
+      "ts": "2026-06-23T02:30:55.763Z",
+      "from": "ts-extractor-by-symbol",
+      "to": "plugin-interface",
+      "start_ref": "db5378a7d6ba71d51de8fa9a0e3996e7b549270c",
+      "end_ref": "e82163ea123700357116d0b54f15997539d3a1da",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "apigen-core plugin.ts: §7 capability interface {target,layer,mount,envelope} + Call/Next/Chunk/Result/Harness/Extensions, exported from core index; nx build apigen-core exit 0 (orch-verified content, not stub). Executor idle pre-complete; orchestrator drove completion. Token telemetry → byte proxy."
+    },
+    {
+      "ts": "2026-06-23T02:37:05.604Z",
+      "from": "projection-transports",
+      "to": "central-validation",
+      "start_ref": "13879377ddd408ed2b6b74703a308dbd9d6b7db2",
+      "end_ref": "4df1c5d763c7360e8f01d1f8015cca3d655ad43f",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "makeValidateLayer + validateLayer + ValidateSchemasToken implemented; 9 tests prove pass/short-circuit-with-latch/necessary-not-sufficient; all 41 runtime tests green"
+    },
+    {
+      "ts": "2026-06-23T02:50:17.938Z",
+      "from": "audit-v2-harness",
+      "to": "projection-transports",
+      "start_ref": "4d214457ff5a339374d4494b16f26ffa5b8daa19",
+      "end_ref": "2e5d6f8de015f4802e74218dbcabaeece744a503",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Upgraded all 4 transport plugins to v2 projection: verb-from-safe (x-apigen-safe hint → GET/POST), envelope-from-headers/meta/flags per §9.1 (x-apigen-envelope field→pluginId map), error maps from @adhd/apigen-errors, projection override support. Tests prove safe→GET, unsafe→POST, override flips verb, envelope bound to correct carrier per transport (negative: wrong carrier rejected)."
+    },
+    {
+      "ts": "2026-06-23T03:05:46.573Z",
+      "from": "audit-v2-harness",
+      "to": "ts-extractor-by-symbol",
+      "start_ref": "4d5ea9d697133d3985f2d795f17f207486da9422",
+      "end_ref": "52bc464ed784c32a84fa3356a6dd2639a51e5968",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "all 6 shapes pass; 36 new tests + 14 existing = 50 green"
+    },
+    {
+      "ts": "2026-06-23T03:06:40.775Z",
+      "from": "audit-v2-harness",
+      "to": "projection-transports",
+      "start_ref": "4d214457ff5a339374d4494b16f26ffa5b8daa19",
+      "end_ref": "82dbf8e0c72d30a85c45f3aeb679df2c10fff2d5",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "§9.1 envelope binding + §5 verb-from-safe across 4 transports (fastify/express/mcp/cli). All 4 plugin test suites green (orch-verified, incl. apigen-plugin-cli-output run under correct name per F39). Re-completed after F40 lost-update reverted it. Byte-proxy telemetry."
+    },
+    {
+      "ts": "2026-06-23T03:09:39.476Z",
+      "from": "audit-v2-harness",
+      "to": "audit-v2-harness",
+      "start_ref": "66aa0ae935ed61e5208810ced4cd60f4dd231383",
+      "end_ref": "7d418112db187e1de34d631c07a8110bee9607fc",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "v2-harness audit gate: 3/3 checks passed (v2-harness.invoke §8.1 layer semantics; v2-harness.validation invalid_argument short-circuit; v2-harness.errors per-transport status maps). audit_apigen.py --phase v2-harness exit 0, orchestrator-verified."
+    },
+    {
+      "ts": "2026-06-23T03:20:40.781Z",
+      "from": "class-exports",
+      "to": "conformance-vectors",
+      "start_ref": "ffdc83cc5f27dfaf75cfa63416eb88d795170caa",
+      "end_ref": "3ba1ccc7dd73894ef5c4889a1e99d1b96b46cbae",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "apigen-conformance vectors.ts: cross-language vectors A(round-trip)/B(naming+collision)/C(envelope binding)/D(error mapping)/E(necessary-not-sufficient) per §4/§5/§6/§9.1. nx test apigen-conformance exit 0 (orch-verified). These are the contract the Python host re-runs. Byte-proxy telemetry."
+    },
+    {
+      "ts": "2026-06-23T03:52:39.303Z",
+      "from": "nx-generator-v2",
+      "to": "class-exports",
+      "start_ref": "5a88e205d37e6459878d4f82fdb64ce9f4875cca",
+      "end_ref": "7c51fcc09a79aaefbdbebfa365f5feab7ff4a177",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "extract-classes.ts (static→action ops always; instances opt-in via includeInstances → constructor + instance-method ops, §10/H2) + instance-registry.ts (TTL sweeper, dispose/disposeAll). Guards verified: nx test apigen-core exit 0 + nx build apigen-runtime green (F41). Orchestrator-driven (F40). Byte-proxy telemetry."
+    },
+    {
+      "ts": "2026-06-23T04:29:30.726Z",
+      "from": "audit-v2-core",
+      "to": "audit-v2-core",
+      "start_ref": "a97f4f1ca3786c71daadeea515eb948f289a2067",
+      "end_ref": "6b2b9912956ee2646f2e6a5fbd07de8bc0fe3ace",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "v2-core audit gate 4/4: descriptor (safe+det-id+JSON-Schema/$defs), export-shape (Fix-A: nx test apigen-core extract — full shape matrix incl anonymous-default+CJS), naming-collision, classes. Live-server tests gated behind APIGEN_LIVE=1 (Fix-B) → deterministic. orchestrator-verified."
+    },
+    {
+      "ts": "2026-06-23T04:43:54.561Z",
+      "from": "streaming-projection",
+      "to": "nx-generator-v2",
+      "start_ref": "4593ce914f51d23a92010bfa907d285d5a78ad1a",
+      "end_ref": "586bb7ef618bcdf5264820859b8166e8b492132e",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Re-complete after F40 flap (redundant class-exports --complete clobbered it). apigen-nx v2-shape generator; nx test apigen-nx green (now cached)."
+    },
+    {
+      "ts": "2026-06-23T04:51:28.961Z",
+      "from": "scaffold-v2-ts-plugins",
+      "to": "scaffold-v2-ts-plugins",
+      "start_ref": "9299621c835ee61082c11dcb4c58e6a5bb6ab65a",
+      "end_ref": "4cb3e81258336c174fbb54458ffa09e118979f67",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Dogfooded upgraded apigen-nx:plugin generator: scaffolded apigen-plugin-{logger,openapi,health} at packages/apigen/plugins/<name> with v2-shape stubs (import @adhd/apigen-core, capabilities {target,layer} §7.1). Guard nx run-many build 3 plugins exit 0. Deprecation hygiene: no ts/ dir, no apigen-ts-plugin-*. F38 fully closed. Orchestrator-driven (F40)."
+    },
+    {
+      "ts": "2026-06-23T04:57:40.496Z",
+      "from": "streaming-projection",
+      "to": "logger-layer-plugin",
+      "start_ref": "ed5230536c1e676336c7c724dc36e44a4c609612",
+      "end_ref": "794ea267123968e7c28030bcf25c2c63f2ad887d",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "logger plugin as v2 Layer (typed-ctx pino Logger §8.1 rule 3; wraps op, delegates via next, error propagates outward, stream-aware). nx test apigen-plugin-logger exit 0 (orch-verified). Filled into generated v2 stub. Orchestrator-driven (F40)."
+    },
+    {
+      "ts": "2026-06-23T05:00:15.739Z",
+      "from": "logger-layer-plugin",
+      "to": "streaming-projection",
+      "start_ref": "f04717c2f8a0fea1b91a32150b6fecb5efa76804",
+      "end_ref": "7d23d7b68dfd01a8084ea0edc289adb7b7fee736",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "§11 full streaming: runtime/stream.ts (per-chunk async gen, consumer-pull backpressure, AbortSignal cancel, error-after-first-chunk via @adhd/apigen-errors carriers) + mcp/stream.ts + api-fastify/stream.ts (SSE event:error after data, mid-stream cancel). nx run-many test mcp/fastify/runtime exit 0 (orch-verified). Orchestrator-driven (F40)."
+    },
+    {
+      "ts": "2026-06-23T05:01:13.436Z",
+      "from": "streaming-projection",
+      "to": "mount-plugins",
+      "start_ref": "ee2879629dcfe198a43ecdec0f0edbd8d8b80eae",
+      "end_ref": "a198d872f56bd5aafab6bbb6a72688315dcaceb2",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "to-openapi.ts (pure Descriptor→OpenAPI 3.1, verb-from-safe §5, JSON-Schema passthrough) + openapi mount plugin + health mount plugin (_meta/health readiness feeds gateway routing §13.1). nx run-many test codegen-openapi/plugin-openapi/plugin-health exit 0 (orch-verified). Filled v2 generator stubs. Orchestrator-driven (F40)."
+    },
+    {
+      "ts": "2026-06-23T05:04:59.521Z",
+      "from": "audit-v2-projection",
+      "to": "audit-v2-projection",
+      "start_ref": "425c92303ae5150408f32500499d9601158c9bf4",
+      "end_ref": "1c21100e1c1adae1cd8a32a014c91e720c871a71",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "v2-projection gate 6/6 real teeth: envelope (mcp generated §9.1 binding), verb (fastify safe→GET/unsafe→POST routes), streaming (runtime+mcp+fastify deterministic), plugins (logger/openapi/health), generator-v2-shape (apigen-nx), deprecation-hygiene (no ts/, no apigen-ts-plugin). Vacuous cli-canonical checks repointed to deterministic tests (F43/F42a); cli e2e deferred to audit-final-v2 dod.14/15."
+    },
+    {
+      "ts": "2026-06-23T05:06:12.905Z",
+      "from": "package-restructure",
+      "to": "package-restructure",
+      "start_ref": "ecf819321ff8b2b6cbdc2712040c08e82257f4aa",
+      "end_ref": "2fe5cb80209acfad334be8ad6d1fbc4dbb0c658c",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "R6 verify gate: all 6 common pkgs + 3 generated plugins already in final §12 homes (scaffold-v2-common + generator placed them correctly from the start — no move needed). Guard nx run-many build core/naming/errors/schema/conformance/gateway exit 0. Deprecation invariant: no packages/apigen/ts, 18 project.json all final homes, no orphans/dups. Verify-only — no domain code. Orchestrator-driven (F40)."
+    },
+    {
+      "ts": "2026-06-23T05:14:49.188Z",
+      "from": "unified-cli",
+      "to": "unified-cli",
+      "start_ref": "36994c1e1b4080c7abef2b866c530739e0448f61",
+      "end_ref": "6cacca0ab73498953e4a58681a9d4e63d6dc6d36",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "§13 unified orchestrator.ts: detect→extract(v2)→merge→collision-check(§5)→gen/run; Tenet-1 projection overrides (--opt http.verb.<id>=, apigen.config) applied at gen/run time, never to source; commands/run.ts+generate.ts wired (v1 preserved). nx test apigen-cli exit 0 (orch-verified). Documented limits: --use stored-not-dispatched, extension-heuristic lang detect (real cross-lang via python-host). Orchestrator-driven (F40)."
+    },
+    {
+      "ts": "2026-06-23T05:24:54.516Z",
+      "from": "gateway",
+      "to": "gateway",
+      "start_ref": "f92b1b2dc297c0ee1a0332e28b03d39997b640e6",
+      "end_ref": "566d415db77efc1a17e27d382638ccd1b08bbc48",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "§13.1 sidecar gateway (opus): partial availability (down host → unavailable/503, others serve), readiness gating (+neg control), supervision/restart w/ backoff, deadlines→deadline_exceeded, cost-based topology (zero-hop vs IPC). HostAdapter seam defined for python-host. Tests deterministic (latches + injected timer, no wall clock, negative controls — CLAUDE.md §6). nx test apigen-gateway exit 0 (orch-verified). Orchestrator-driven (F40)."
+    },
+    {
+      "ts": "2026-06-23T05:35:56.870Z",
+      "from": "python-host",
+      "to": "python-host",
+      "start_ref": "b71b334b434f8dd9081adac5d7eb27590864ee28",
+      "end_ref": "34ed69a0c9cdf65daeb31b51654583b56ea09d79",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "REAL Python host (H1/§14): extractor/runtime/plugin_echo/gateway_adapter + pyproject + run_tests.py. Conformance vectors consumed from canonical @adhd/apigen-conformance via generated conformance_vectors.json (no drift, never hand-authored). run_tests.py exit 0, 45/45 passed incl negative control + echo roundtrip. Implements HostAdapter/IPC seam for gateway-mixed-host. Orchestrator-driven (F40)."
+    },
+    {
+      "ts": "2026-06-23T05:39:32.786Z",
+      "from": "audit-v2-host",
+      "to": "audit-v2-host",
+      "start_ref": "8d1346c1f9535f65b7fbd5fefb5d3d0d8cd08c57",
+      "end_ref": "529bf7a10d45f497718c53f112578d2355203027",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "v2-host gate 2/2 real teeth: conformance (python3 run_tests.py 45/45) + gateway-contract (nx test apigen-gateway deterministic §13.1). pytest→run_tests.py fix; vacuous cli forward-refs deferred to audit-final-v2/dod.12+dod.17."
+    },
+    {
+      "ts": "2026-06-23T06:14:17.870Z",
+      "from": "integration-tests-v2",
+      "to": "integration-tests-v2",
+      "start_ref": "9419c2faf13c543cda7f9bfd5028e6c9efe2e5b2",
+      "end_ref": "df9e6163839c4516089c69be45dd0690bb88bfa1",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "CAPSTONE: 7 real-component artifacts. nx test apigen-cli exit 0 (49 passed/3 skipped=APIGEN_LIVE-gated). real-consumer.spec.ts (dod.19): built bin dist/packages/apigen/cli/index.js on UNMODIFIED @adhd/transform → tools/list==exports + callTool deep-equals in-process + live-model variant. gateway-mixed-host.spec.ts (dod.12/17): REAL python3 -m apigen_python.gateway_adapter sidecar, host:ts/host:python routing, kill→only-its-ops unavailable; deterministic (bounded latch, always-kill teardown). export-shape matrix (anon+cjs), canonical envelope/verb, streaming error-after-first-chunk+cancel. No mocks (CLAUDE.md §6). Orchestrator-driven (F40)."
+    },
+    {
+      "ts": "2026-06-23T18:22:59.251Z",
+      "from": "audit-final-v2",
+      "to": "audit-final-v2",
+      "start_ref": "7290e29e22ed8fd6daf23991ba4918ec75e5f337",
+      "end_ref": "5be29466be87b002e27617c1a1f13abd8b24f9ac",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "FINAL DoD gate 117/117 all green. dod.1-19+dod.cli proven against REAL consumers: built bin, real MCP/HTTP clients, real Python sidecar (mixed-host + partial-availability), unmodified @adhd/transform capstone (dod.19). 3 real bugs caught+fixed (BUG-001 ctx-dispatch, BUG-002 generate-portability Option-A publishable package.json, BUG-003 MCP SSE). gap-check PASSED 0-warn, env-pin 46/46."
+    },
+    {
+      "ts": "2026-06-23T18:23:58.480Z",
+      "from": "done",
+      "to": "done",
+      "start_ref": "27ab496b799aca5d5fa4683d5257fdf1416513b4",
+      "end_ref": "d25e58ebd489889f9a19d181710d3c643dea5f22",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "apigen v2 plan COMPLETE. All 46 states done; final DoD gate 117/117; dod.1-19+dod.cli proven against real consumers. 18 nx packages (TS core/runtime/naming/errors/schema/conformance/gateway/codegen-openapi + 5 transport plugins + logger/openapi/health mount plugins + nx generator + cli + real Python host). 3 real bugs caught by the DoD and fixed."
+    }
+  ],
+  "amendment_log": [
+    {
+      "ts": "2026-06-22T15:36:10.126Z",
+      "state": "audit-cli",
+      "class": "planner",
+      "type": "replan",
+      "reason": "Supersede v1 TS-only verification tail with the v2 canonical standard (docs/apigen/SPEC.md): code-first descriptor, name-by-exported-symbol extractor (fixes F28/F29), Layer harness + central validation, metadata envelope, plugin capabilities (target/layer/mount/envelope), package restructure (common vs per-language), unified adhd-apigen CLI + sidecar gateway, re-authored integration/DoD against the canonical contract.",
+      "files_synced": [],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-06-23T00:30:59.000Z",
+      "state": "canonical-descriptor",
+      "class": "planner",
+      "type": "replan",
+      "reason": "Remediation folding both architect reviews: plan-structure R1-R13 (scaffold 9 missing pkgs in final homes, real v2 audit phases, per-state criteria, DoD vs metadata-envelope, DAG edges) + design Tenet 1 + D1-D11 (safe flag, live query, JSON-Schema+$defs IR, §8.1 Layer semantics, §9.1 envelope binding, full streaming, §13.1 gateway failure model). Adds Python host (H1), classes static+instance-opt-in (H2); defers neutral codegen (H3).",
+      "files_synced": [],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-06-23T03:26:44.165Z",
+      "state": "scaffold-v2-ts-plugins",
+      "class": "planner",
+      "type": "fix-guard",
+      "reason": "User-directed: upgrade apigen-nx:plugin generator to emit v2 capabilities/Layer plugin shape; dogfood it to scaffold logger/openapi/health at packages/apigen/plugins/<name> (apigen-plugin-*); close F38 (ts/plugins+apigen-ts-plugin outliers); enforce deprecation hygiene (no orphan projects).",
+      "files_synced": [],
+      "by": "pseudosky"
+    }
+  ],
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.21",
+    "hash": "1e4130a84aed"
+  }
+}

@@ -1,0 +1,163 @@
+# See http://help.github.com/ignore-files/ for more about ignoring files.
+
+# compiled output
+dist
+tmp
+/out-tsc
+.yarn
+# dependencies
+node_modules
+
+# IDEs and editors
+/.idea
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# misc
+/.sass-cache
+/connect.lock
+/coverage
+/libpeerconnection.log
+npm-debug.log
+yarn-error.log
+testem.log
+/typings
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Python compiled artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Runtime / ephemeral test artifacts — NEVER tracked, always regenerable.
+# Canonical ephemeral-artifacts root is tmp/ (already ignored above): all
+# generated output, scratch DBs, and test fixtures write under tmp/<package>/
+# and are removable with `nx reset` / a `clean` target. Stray runtime stores
+# (SQLite DBs, the repo-root data/ that agent-mcp's ./data default creates,
+# scratch MCP servers) are caught here so they can never clutter a commit.
+/data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+calc-server.*
+
+.nx/cache
+.nx/workspace-data
+
+# Claude Code local state. Only the genuinely local/huge/personal pieces are
+# ignored here -- .claude/settings.json (team-wide hooks/permissions),
+# .claude/hooks/, .claude/agents/, .claude/skills/ are real, shareable project
+# configuration and ARE tracked (moved out of a blanket .claude/ ignore
+# 2026-07-31 specifically so a committed PreToolUse hook actually propagates
+# to other clones instead of silently staying local-only).
+.claude/settings.local.json
+.claude/.DS_Store
+# All git worktrees (agent or human) live under <project>/.worktrees/ per
+# CLAUDE.md §Bash -- full repo copies; if nx scans them it sees every project
+# name twice and fails the project graph with ProjectsWithConflictingNamesError.
+# Must never be tracked or nx-scanned. (.claude/worktrees/ was a stray second
+# worktree location that existed before this convention was fully enforced --
+# all worktrees found there were moved to .worktrees/ via `git worktree move`
+# on 2026-07-31; that path should not be recreated.)
+.worktrees/
+
+# agent-mcp secret store — ADHD_AGENT_* secrets live in ~/.adhd/.env (outside
+# the repo) but a project-local .adhd/.env is also supported for convenience.
+# Never track it.
+# Track workspace.json — it's the canonical config for the generator.
+.adhd/*
+!.adhd/workspace.json
+.adhd/.env
+
+# Local env files — may hold secrets; never commit. `.env.example` templates ARE tracked.
+.env
+.env.local
+.env.*.local
+
+# Next.js
+.next
+out
+
+
+storybook-static
+
+# agent-mcp live-dag test fixture log (redirected to tmp via CALC_LOG; this is a safety net)
+packages/ai/agent-mcp/src/__tests__/integration/fixtures/calc-server.log
+
+# Python packaging byproducts (pip building packages/apigen/python in-tree)
+*.egg-info/
+packages/apigen/python/build/
+
+# Cross-language runtime clients under packages/environment/*.
+# Build output + local toolchain envs are ephemeral and regenerable — never
+# tracked. (dist/ is already ignored above; these cover Rust/Python outputs.)
+.venv/
+.pytest_cache/
+packages/environment/environment-core-rs/target/
+
+# apigen Java host (packages/apigen/java, FEAT-APIGEN-001) — Maven build
+# output (compiled classes, shaded/fat jar, surefire reports). Ephemeral,
+# regenerable via `nx run apigen-java:build`/`:package`/`:test`.
+packages/apigen/java/target/
+# maven-shade-plugin's reduced-pom byproduct, written to the module root
+# (not target/) during `mvn package` — also ephemeral/regenerable.
+packages/apigen/java/dependency-reduced-pom.xml
+
+# @adhd/environment resolved snapshots — contain PLAINTEXT values for fields
+# declared `secret: true` (no redaction exists in that package family; see
+# BACKLOG ENV-CORE-009). The `.tmp` sibling is left behind by `atomicWrite` if
+# the process dies mid-write (ENV-CORE-011). Never commit either.
+# Defense in depth: .githooks/check-no-credentials.js also blocks them by path,
+# so a `git add -f` cannot slip one through.
+adhd-environment.json
+adhd-environment.json.tmp
+
+# Agent scratch/artifacts — same class as .claude/ (already ignored). 61MB of
+# reports, reviews, and transcripts; never belongs in history.
+.opencode/
+
+# Root-level workspace/ is NOT part of this monorepo — it was an orphaned external
+# tool catalog committed by mistake (removed in 42fce475). Anchored with a leading
+# slash so it only matches the repo root, never the real packages/workspace project.
+/workspace/
+
+# Stray compiled output inside packages/agent/*/src/ — build artifacts belong in
+# dist/. A tsc run against the (mis-scoped) base tsconfig once littered 330 of
+# these into src trees, breaking repo-wide lint (2026-07-17). Root cause is the
+# agent-package tsconfig template defect tracked in BACKLOG (module/base-config
+# mismatch family); this keeps the litter out of git until that lands.
+packages/agent/*/src/**/*.js
+packages/agent/*/src/**/*.js.map
+packages/agent/*/src/**/*.d.ts
+packages/agent/*/src/**/*.d.ts.map
+packages/agent/*/tsconfig.tsbuildinfo
+
+# Vite's own transient config-loader output — written next to vite.config.ts
+# when Vite pre-bundles the config file itself, normally cleaned up on process
+# exit but left behind by an interrupted/parallel run. Regenerable, never
+# meaningful to track.
+**/vite.config.ts.timestamp-*.mjs
+
+# tools/nx-plugins/lib/metrics.js's local perf log (BUILD-TOOLING-METRICS-001)
+# — a per-developer profiling artifact, NOT the published-reference cache
+# (published-state.json, which IS committed as source of truth). Regenerable
+# by just re-running any instrumented nx target; never meaningful to track.
+/metrics.json

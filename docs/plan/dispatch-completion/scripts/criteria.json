@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "triage.1",
+      "phase": "triage",
+      "tier": null,
+      "kind": "command",
+      "cmd": "bash -c '! grep -rq \"is not wired into\" packages/dispatch/dispatch-orchestrator/src/lib/orchestrator.ts'",
+      "expect": "exit0"
+    },
+    {
+      "id": "triage.2",
+      "phase": "triage",
+      "tier": null,
+      "kind": "command",
+      "cmd": "bash -c '! grep -q \"\\\"@adhd/dispatch-spec\\\"\" tsconfig.base.json'",
+      "expect": "exit0"
+    },
+    {
+      "id": "spec-foundations.1",
+      "phase": "spec",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-base-spec",
+      "expect": "exit0"
+    },
+    {
+      "id": "spec-foundations.2",
+      "phase": "spec",
+      "tier": null,
+      "kind": "present",
+      "pattern": "export type ExecutionMode",
+      "paths": [
+        "packages/dispatch/dispatch-base-spec/src/lib/types.ts"
+      ]
+    },
+    {
+      "id": "spec-foundations.3",
+      "phase": "spec",
+      "tier": null,
+      "kind": "present",
+      "pattern": "ICalibrationStore",
+      "paths": [
+        "packages/dispatch/dispatch-base-spec/src/lib/types.ts"
+      ]
+    },
+    {
+      "id": "optimizer-client.1",
+      "phase": "optimizer-client",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-core-optimizer,dispatch-core-client",
+      "expect": "exit0"
+    },
+    {
+      "id": "optimizer-client.2",
+      "phase": "optimizer-client",
+      "tier": null,
+      "kind": "present",
+      "pattern": "execution_mode",
+      "paths": [
+        "packages/dispatch/dispatch-core-optimizer/src/lib/optimize.ts"
+      ]
+    },
+    {
+      "id": "orchestrator-harden.1",
+      "phase": "orchestrator",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-orchestrator",
+      "expect": "exit0"
+    },
+    {
+      "id": "orchestrator-harden.2",
+      "phase": "orchestrator",
+      "tier": null,
+      "kind": "absent",
+      "pattern": "ICalibrationPlaceholder",
+      "paths": [
+        "packages/dispatch/dispatch-orchestrator/src/lib/orchestrator.ts"
+      ]
+    },
+    {
+      "id": "causal-replan.1",
+      "phase": "orchestrator",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-orchestrator",
+      "expect": "exit0"
+    },
+    {
+      "id": "plugin-io.1",
+      "phase": "plugins",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-plugin-io",
+      "expect": "exit0"
+    },
+    {
+      "id": "plugin-io.2",
+      "phase": "plugins",
+      "tier": null,
+      "kind": "exists",
+      "path": "packages/dispatch/dispatch-plugin-io/src/index.ts"
+    },
+    {
+      "id": "plugin-gitnexus.1",
+      "phase": "plugins",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-plugin-gitnexus",
+      "expect": "exit0"
+    },
+    {
+      "id": "plugin-gitnexus.2",
+      "phase": "plugins",
+      "tier": null,
+      "kind": "exists",
+      "path": "packages/dispatch/dispatch-plugin-gitnexus/src/index.ts"
+    },
+    {
+      "id": "serializer-sqlite.1",
+      "phase": "storage",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-serializer-sqlite",
+      "expect": "exit0"
+    },
+    {
+      "id": "serializer-sqlite.2",
+      "phase": "storage",
+      "tier": null,
+      "kind": "exists",
+      "path": "packages/dispatch/dispatch-serializer-sqlite/src/index.ts"
+    },
+    {
+      "id": "dispatch-tools.1",
+      "phase": "tools",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-tools",
+      "expect": "exit0"
+    },
+    {
+      "id": "cli-complete.1",
+      "phase": "cli",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-cli",
+      "expect": "exit0"
+    },
+    {
+      "id": "cli-complete.2",
+      "phase": "cli",
+      "tier": null,
+      "kind": "present",
+      "pattern": "\"bin\"",
+      "paths": [
+        "entrypoint/dispatch-cli/package.json"
+      ]
+    },
+    {
+      "id": "cli-complete.3",
+      "phase": "cli",
+      "tier": null,
+      "kind": "command",
+      "cmd": "bash -c '! test -d packages/dispatch/dispatch-base-types'",
+      "expect": "exit0"
+    },
+    {
+      "id": "optimizer-algorithms.1",
+      "phase": "algorithms",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-core-optimizer",
+      "expect": "exit0"
+    },
+    {
+      "id": "tests-hardening.1",
+      "phase": "tests",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-core-optimizer",
+      "expect": "exit0"
+    },
+    {
+      "id": "release-ready.1",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-base-spec,dispatch-core-client,dispatch-serializer-json,dispatch-serializer-sqlite,dispatch-core-optimizer,dispatch-orchestrator,dispatch-plugin-io,dispatch-plugin-gitnexus,dispatch-tools,dispatch-cli",
+      "expect": "exit0"
+    },
+    {
+      "id": "live-e2e.1",
+      "phase": "tests",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test dispatch-cli",
+      "expect": "exit0"
+    },
+    {
+      "id": "live-e2e.2",
+      "phase": "tests",
+      "tier": null,
+      "kind": "command",
+      "cmd": "bash -c 'if [ \"$AGENT_MCP_LIVE\" = \"1\" ]; then AGENT_MCP_LIVE=1 npx --yes nx test dispatch-cli; else echo \"[live-e2e.2] WARNING: paid deepseek live assertion SKIPPED (set AGENT_MCP_LIVE=1 to run it)\"; fi'",
+      "expect": "exit0"
+    }
+  ]
+}

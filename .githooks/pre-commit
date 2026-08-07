@@ -1,0 +1,133 @@
+#!/usr/bin/env sh
+#
+# Pre-commit hook. Three gates, in order:
+#   1. secret-scan — `@adhd/nx-secret-scan:scan` (wraps check-no-credentials.js)
+#      blocks credentials from entering the repo (gitleaks + built-in rules).
+#   2. affected lint (self-healing dependency ranges, otherwise VERIFY ONLY) —
+#      runs `nx affected -t lint` on the projects touched by staged changes
+#      and BLOCKS on any error. `lint` `dependsOn: ["sync-deps"]`, so it can
+#      MUTATE a project's package.json as a side effect (see "GATE 2
+#      SELF-HEALING" below). This hook NEVER auto-stages that mutation.
+#   3. affected test (DEBT-PROCESS-AFFECTED-TEST-001 Option 2) — runs
+#      `nx affected -t test` on the projects touched by staged changes and
+#      BLOCKS on any failure. `test`'s own `targetDefaults` in `nx.json`
+#      already declare `dependsOn: ["lint", "^build"]`, so this reuses Gate
+#      2's just-verified lint result (Nx cache-hits it) and additionally
+#      forces every DEPENDENCY of a changed project to build first — it does
+#      NOT force the changed project's own `build` target (`test` has no
+#      "build" in its own dependsOn, only "^build" for the closure — verified
+#      against nx.json before adding this gate); that's fine, since
+#      vitest/node:test run straight against source, not dist. A project with
+#      zero dependents (a true leaf) skips this gate almost instantly via
+#      Nx's cache — see `.githooks/README.md`/the Phase 3 measurement in
+#      `tmp/release-pipeline-audit.md` for real, measured commit-latency
+#      numbers before/after this gate was added.
+#
+# Secrets are checked FIRST and are cheap: a leaked credential is unrecoverable
+# once pushed (rotation, not reversion, is the fix), whereas a lint/test error
+# is not. Never reorder these.
+#
+# Activated repo-wide via `core.hooksPath=.githooks` (set by the root `prepare`
+# script on `npm install`, or manually: `git config core.hooksPath .githooks`).
+#
+# Bypass for an emergency commit: `git commit --no-verify`  (use sparingly).
+#
+# Full incident history (why Gate 2 never runs --fix, why this hook never
+# stages anything) lives in `.githooks/README.md` — read it before touching
+# either gate.
+
+# Staged files (Added/Copied/Modified/Renamed), NUL-safe join into a comma list.
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+if [ -z "$staged" ]; then
+  exit 0
+fi
+
+files=$(printf '%s' "$staged" | paste -sd, -)
+hook_dir=$(dirname "$0")
+repo_root=$(cd "$hook_dir/.." && pwd)
+out=$(mktemp)
+trap 'rm -f "$out"' EXIT
+
+# ── Gate 1: credentials ──────────────────────────────────────────────────────
+# CI=true: a git hook is never an interactive terminal (BUG-REPO-PRECOMMIT-NX-NONINTERACTIVE-001).
+if ! CI=true npx nx run @adhd/source:secret-scan --mode=staged --output-style=stream-without-prefixes >"$out" 2>&1; then
+  cat "$out"
+  echo "✖ pre-commit: secret-scan blocked this commit — see above."
+  exit 1
+fi
+
+# ── Gate 2: lint (VERIFY ONLY — never --fix, never re-stages) ───────────────
+# If this workspace root's node_modules was never really installed (e.g. a
+# fresh git worktree — git does not copy node_modules), @nx/dependency-checks
+# will misreport nearly every dependency as unused (BUG-REPO-PRECOMMIT-
+# DEPCHECK-STRIPS-USED-DEPS-001). Fail with the RIGHT message instead of
+# letting confusing false-positive lint errors surface here.
+if [ ! -f "$repo_root/node_modules/.modules.yaml" ] || [ ! -f "$repo_root/node_modules/nx/package.json" ]; then
+  echo "✖ pre-commit: node_modules in this workspace root is not a real"
+  echo "  package-manager install (missing node_modules/.modules.yaml"
+  echo "  and/or node_modules/nx). Lint would misreport dependencies."
+  echo "  Fix: run 'pnpm install' in this workspace root, then commit again."
+  exit 1
+fi
+
+# Snapshot every package.json's working-tree status BEFORE lint runs, so we
+# can tell exactly what sync-deps (lint's dependency) mutated (see README —
+# GATE 2 SELF-HEALING) — regardless of any other, unrelated dirty
+# package.json already sitting in the tree.
+pkg_status_before=$(git status --porcelain | grep -E 'package\.json$' || true)
+
+CI=true npx nx affected --target=lint --files="$files" --output-style=stream-without-prefixes >"$out" 2>&1
+status=$?
+
+pkg_status_after=$(git status --porcelain | grep -E 'package\.json$' || true)
+
+if [ "$pkg_status_before" != "$pkg_status_after" ]; then
+  cat "$out"
+  echo ""
+  echo "✖ pre-commit: 'lint' ran 'sync-deps' first, which mutated package.json"
+  echo "  in the WORKING TREE (not the index — this hook never auto-stages)."
+  echo "  Changed since Gate 2 started:"
+  before_tmp=$(mktemp) && after_tmp=$(mktemp)
+  printf '%s\n' "$pkg_status_before" >"$before_tmp"
+  printf '%s\n' "$pkg_status_after" >"$after_tmp"
+  diff "$before_tmp" "$after_tmp" 2>/dev/null | grep '^>' | sed 's/^> */    · /'
+  rm -f "$before_tmp" "$after_tmp"
+  echo "  Review the diff, 'git add -- <path>/package.json' it, and commit again."
+  echo "  (bypass in an emergency with: git commit --no-verify)"
+  exit 1
+fi
+
+if [ "$status" -ne 0 ]; then
+  cat "$out"
+  echo ""
+  echo "✖ pre-commit: affected lint failed — fix and re-commit."
+  echo "  Dependency drift self-heals via sync-deps; a remaining error is real."
+  echo "  Inspect: npx nx affected -t lint --fix --files=\"$files\", review the"
+  echo "  diff, stage it yourself, then commit. See .githooks/README.md for detail."
+  echo "  (bypass in an emergency with: git commit --no-verify)"
+  exit 1
+fi
+
+# ── Gate 3: test (DEBT-PROCESS-AFFECTED-TEST-001 Option 2) ──────────────────
+# Runs AFTER lint so it inherits Gate 2's already-verified lint pass (test's
+# own dependsOn re-requests "lint", but Nx cache-hits it — same inputs, same
+# run). This is a VERIFY-only gate too: `nx affected -t test` runs the real
+# suites for every project touched by staged changes AND every affected
+# consumer in this worktree's visible branch history (closing the
+# `nx test <project>`-only blind spot documented in
+# DEBT-PROCESS-AFFECTED-TEST-001 — it does NOT close the separate
+# cross-worktree blind spot also described there; that remains open).
+CI=true npx nx affected --target=test --files="$files" --output-style=stream-without-prefixes >"$out" 2>&1
+status=$?
+
+if [ "$status" -ne 0 ]; then
+  cat "$out"
+  echo ""
+  echo "✖ pre-commit: affected test failed — fix and re-commit."
+  echo "  Inspect: npx nx affected -t test --files=\"$files\", fix the failure, then commit again."
+  echo "  (bypass in an emergency with: git commit --no-verify)"
+  exit 1
+fi
+
+echo "✓ pre-commit: secret-scan clean, affected lint clean, affected test clean."
+exit 0

@@ -1,0 +1,79 @@
+{
+  "_doc": "Fixture for [dod.4] \u2014 a Dog|Cat discriminated union. The probe builds the REAL union + nominal codecs from this fixture, decodes `wire`, and asserts the decoded value is the variant the discriminator MAPPING points at (derived at runtime \u2014 never hard-coded). The expected variant is mapping[wire[propertyName]] -> branch.title.",
+  "id": "cli.Pet",
+  "unionNode": {
+    "oneOf": [
+      {
+        "$ref": "#/$defs/Dog"
+      },
+      {
+        "$ref": "#/$defs/Cat"
+      }
+    ],
+    "discriminator": {
+      "propertyName": "kind",
+      "mapping": {
+        "dog": "#/$defs/Dog",
+        "cat": "#/$defs/Cat"
+      }
+    },
+    "x-apigen-logical": "union"
+  },
+  "branches": {
+    "#/$defs/Dog": {
+      "title": "Dog",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "dog"
+        },
+        "name": {
+          "type": "string"
+        },
+        "breed": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "breed"
+      ],
+      "x-apigen-logical": "nominal",
+      "x-apigen-codec": "cli.Dog",
+      "x-apigen-ctor": "fromJSON",
+      "x-apigen-tojson": "toJSON"
+    },
+    "#/$defs/Cat": {
+      "title": "Cat",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "cat"
+        },
+        "name": {
+          "type": "string"
+        },
+        "indoor": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "indoor"
+      ],
+      "x-apigen-logical": "nominal",
+      "x-apigen-codec": "cli.Cat",
+      "x-apigen-ctor": "fromJSON",
+      "x-apigen-tojson": "toJSON"
+    }
+  },
+  "wire": {
+    "kind": "cat",
+    "name": "Mittens",
+    "indoor": true
+  }
+}

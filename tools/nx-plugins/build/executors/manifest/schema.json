@@ -1,0 +1,9 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "version": 2,
+  "title": "dist-manifest",
+  "description": "Generate the resolved, dist-root publishable package.json at build time.",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
+}

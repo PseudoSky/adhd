@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "scaffold-package.1",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "exists",
+      "path": "packages/ai/agent-registry/project.json"
+    },
+    {
+      "id": "scaffold-package.2",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "present",
+      "pattern": "@adhd/agent-registry",
+      "paths": [
+        "tsconfig.base.json"
+      ]
+    },
+    {
+      "id": "scaffold-package.3",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "present",
+      "pattern": "platform:node",
+      "paths": [
+        "packages/ai/agent-registry/project.json"
+      ]
+    },
+    {
+      "id": "scaffold-package.4",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx build agent-registry",
+      "expect": "exit0"
+    },
+    {
+      "id": "scaffold-package.5",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "absent",
+      "pattern": "from \\\"react\\\"|document\\\\.|window\\\\.",
+      "paths": [
+        "packages/ai/agent-registry/src"
+      ]
+    },
+    {
+      "id": "lookup-and-component-schema.1",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "prompt_types|promptTypes",
+      "paths": [
+        "packages/ai/agent-registry/src/db/schema.ts"
+      ]
+    },
+    {
+      "id": "lookup-and-component-schema.2",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "registry_component_versions|componentVersionsTable",
+      "paths": [
+        "packages/ai/agent-registry/src/db/schema.ts"
+      ]
+    },
+    {
+      "id": "lookup-and-component-schema.3",
+      "phase": "schema",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/component-store.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "agent-and-taxonomy-schema.1",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "agents|agentsTable",
+      "paths": [
+        "packages/ai/agent-registry/src/db/schema.ts"
+      ]
+    },
+    {
+      "id": "agent-and-taxonomy-schema.2",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "taxonomy",
+      "paths": [
+        "packages/ai/agent-registry/src/db/schema.ts"
+      ]
+    },
+    {
+      "id": "agent-and-taxonomy-schema.3",
+      "phase": "schema",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/agent-store.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "composition-junction.1",
+      "phase": "composition",
+      "tier": null,
+      "kind": "present",
+      "pattern": "agent_components|agentComponents",
+      "paths": [
+        "packages/ai/agent-registry/src/db/schema.ts"
+      ]
+    },
+    {
+      "id": "composition-junction.2",
+      "phase": "composition",
+      "tier": null,
+      "kind": "present",
+      "pattern": "resolveComposition|position",
+      "paths": [
+        "packages/ai/agent-registry/src/store/composition-store.ts"
+      ]
+    },
+    {
+      "id": "composition-junction.3",
+      "phase": "composition",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/composition-store.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "usecase-and-context-rules.1",
+      "phase": "composition",
+      "tier": null,
+      "kind": "present",
+      "pattern": "use_cases|context_rules|component_usage",
+      "paths": [
+        "packages/ai/agent-registry/src/db/schema.ts"
+      ]
+    },
+    {
+      "id": "usecase-and-context-rules.2",
+      "phase": "composition",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/usecase-store.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "composed-prompt-cache.1",
+      "phase": "composition",
+      "tier": null,
+      "kind": "present",
+      "pattern": "composed_prompts|composedPrompts",
+      "paths": [
+        "packages/ai/agent-registry/src/db/schema.ts"
+      ]
+    },
+    {
+      "id": "composed-prompt-cache.2",
+      "phase": "composition",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/composed-prompt-store.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "seed-and-roundtrip.1",
+      "phase": "seed",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/roundtrip.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "seed-and-roundtrip.2",
+      "phase": "seed",
+      "tier": null,
+      "kind": "present",
+      "pattern": "success_criteria|escalation|convergence",
+      "paths": [
+        "packages/ai/agent-registry/src/seed/prompt-types.ts"
+      ]
+    },
+    {
+      "id": "seed-and-roundtrip.3",
+      "phase": "seed",
+      "tier": null,
+      "kind": "negative-control",
+      "positive": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/roundtrip.test.ts",
+      "mutate": "node docs/plan/agent-registry-schema/scripts/nc_mutate.mjs",
+      "restore": "node docs/plan/agent-registry-schema/scripts/nc_restore.mjs"
+    },
+    {
+      "id": "audit-schema.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-registry-schema/scripts/audit_registry_schema.py --phase schema",
+      "expect": "exit0"
+    },
+    {
+      "id": "audit-final.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-registry-schema/scripts/audit_registry_schema.py --phase final",
+      "expect": "exit0"
+    },
+    {
+      "id": "design-and-architecture.1",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "exists",
+      "path": "docs/plan/agent-registry-schema/decisions.md"
+    },
+    {
+      "id": "design-and-architecture.2",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "DB topology|ATTACH DATABASE|table-name prefix",
+      "paths": [
+        "docs/plan/agent-registry-schema/decisions.md"
+      ]
+    },
+    {
+      "id": "design-and-architecture.3",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "context.condition|precedence|last wins|all included",
+      "paths": [
+        "docs/plan/agent-registry-schema/decisions.md"
+      ]
+    }
+  ]
+}

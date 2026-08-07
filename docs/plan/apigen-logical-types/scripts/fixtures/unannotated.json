@@ -1,0 +1,15 @@
+{
+  "_doc": "Fixture for [dod.8] — an unannotated source class. The `$def` schema carries ONLY `type/properties/required` — NO x-apigen-* keywords and NO host ctor. Tenet 1 / [inv:hints-advisory]: the nominal codec must still round-trip the value by pure schema projection. The probe derives the expected bag from `seed` at runtime (it IS the projected value) — never hard-coded.",
+  "id": "cli.Point",
+  "node": {
+    "type": "object",
+    "properties": {
+      "x": { "type": "number" },
+      "y": { "type": "number" },
+      "label": { "type": "string" },
+      "at": { "type": "string", "format": "date-time" }
+    },
+    "required": ["x", "y"]
+  },
+  "seed": { "x": 3, "y": 4, "label": "origin-ish", "at": "2026-03-04T05:06:07.890Z" }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "@adhd/workspace-base-tools",
+  "version": "0.1.0",
+  "dependencies": {
+    "@nx/devkit": "18.3.4",
+    "tslib": "^2.3.0"
+  },
+  "main": "./dist/src/index.js",
+  "typings": "./dist/src/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
+}

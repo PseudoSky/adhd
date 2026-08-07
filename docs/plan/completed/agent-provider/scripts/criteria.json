@@ -1,0 +1,313 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "scaffold-package.1",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "exists",
+      "path": "../../../packages/ai/agent-provider/project.json"
+    },
+    {
+      "id": "scaffold-package.2",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "present",
+      "pattern": "@adhd/agent-provider",
+      "paths": [
+        "../../../tsconfig.base.json"
+      ]
+    },
+    {
+      "id": "scaffold-package.3",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "present",
+      "pattern": "platform:node",
+      "paths": [
+        "../../../packages/ai/agent-provider/project.json"
+      ]
+    },
+    {
+      "id": "scaffold-package.4",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "command",
+      "cmd": "cd ../../.. && npx --yes nx build agent-provider",
+      "expect": "exit0"
+    },
+    {
+      "id": "scaffold-package.5",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "absent",
+      "pattern": "from \"react\"|document\\.|window\\.",
+      "paths": [
+        "../../../packages/ai/agent-provider/src"
+      ]
+    },
+    {
+      "id": "provider-and-model-schema.1",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "providers|providersTable",
+      "paths": [
+        "../../../packages/ai/agent-provider/src/db/schema.ts"
+      ]
+    },
+    {
+      "id": "provider-and-model-schema.2",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "models|modelsTable",
+      "paths": [
+        "../../../packages/ai/agent-provider/src/db/schema.ts"
+      ]
+    },
+    {
+      "id": "provider-and-model-schema.3",
+      "phase": "schema",
+      "tier": null,
+      "kind": "command",
+      "cmd": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/model-store.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "model-platform-bindings.1",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "model_platform_bindings|modelPlatformBindings",
+      "paths": [
+        "../../../packages/ai/agent-provider/src/db/schema.ts"
+      ]
+    },
+    {
+      "id": "model-platform-bindings.2",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "resolveModelId|platform_model_id|platformModelId",
+      "paths": [
+        "../../../packages/ai/agent-provider/src/store/model-store.ts"
+      ]
+    },
+    {
+      "id": "model-platform-bindings.3",
+      "phase": "schema",
+      "tier": null,
+      "kind": "command",
+      "cmd": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/binding-store.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "model-platform-bindings.4",
+      "phase": "schema",
+      "tier": null,
+      "kind": "negative-control",
+      "positive": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/binding-store.test.ts --skip-nx-cache",
+      "mutate": "node scripts/nc_break_binding.mjs",
+      "restore": "node scripts/nc_restore_binding.mjs"
+    },
+    {
+      "id": "provider-tool-formats.1",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "provider_tool_formats|providerToolFormats",
+      "paths": [
+        "../../../packages/ai/agent-provider/src/db/schema.ts"
+      ]
+    },
+    {
+      "id": "provider-tool-formats.2",
+      "phase": "schema",
+      "tier": null,
+      "kind": "command",
+      "cmd": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/tool-format-store.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "audit-schema.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "true",
+      "expect": "exit0"
+    },
+    {
+      "id": "provider-adapter-contract.1",
+      "phase": "adapter",
+      "tier": null,
+      "kind": "present",
+      "pattern": "ProviderAdapter",
+      "paths": [
+        "../../../packages/ai/agent-mcp-types/src/domain.ts"
+      ]
+    },
+    {
+      "id": "provider-adapter-contract.2",
+      "phase": "adapter",
+      "tier": null,
+      "kind": "absent",
+      "pattern": "interface ProviderAdapter",
+      "paths": [
+        "../../../packages/ai/agent-provider/src"
+      ]
+    },
+    {
+      "id": "provider-adapter-contract.3",
+      "phase": "adapter",
+      "tier": null,
+      "kind": "command",
+      "cmd": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/adapter-resolve.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "runtime-tool-forwarding.1",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "present",
+      "pattern": "web_search|type-tagged|serverSide|server_side",
+      "paths": [
+        "../../../packages/ai/agent-provider/src/runtime/emit-tools.ts"
+      ]
+    },
+    {
+      "id": "runtime-tool-forwarding.2",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "present",
+      "pattern": "throw|UnsupportedNativeToolError|UNSUPPORTED_NATIVE_TOOL",
+      "paths": [
+        "../../../packages/ai/agent-provider/src/runtime/emit-tools.ts"
+      ]
+    },
+    {
+      "id": "runtime-tool-forwarding.3",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "command",
+      "cmd": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/emit-tools.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "runtime-tool-forwarding.4",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "negative-control",
+      "positive": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/emit-tools.test.ts --skip-nx-cache",
+      "mutate": "node scripts/nc_break_emitter.mjs",
+      "restore": "node scripts/nc_restore_emitter.mjs"
+    },
+    {
+      "id": "seed-and-roundtrip.1",
+      "phase": "seed",
+      "tier": null,
+      "kind": "command",
+      "cmd": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "seed-and-roundtrip.2",
+      "phase": "seed",
+      "tier": null,
+      "kind": "present",
+      "pattern": "claude_opus_4_8|claude_sonnet_4_6",
+      "paths": [
+        "../../../packages/ai/agent-provider/src/seed/models.ts"
+      ]
+    },
+    {
+      "id": "seed-and-roundtrip.3",
+      "phase": "seed",
+      "tier": null,
+      "kind": "present",
+      "pattern": "anthropic|bedrock|lmstudio",
+      "paths": [
+        "../../../packages/ai/agent-provider/src/seed/providers.ts"
+      ]
+    },
+    {
+      "id": "seed-and-roundtrip.4",
+      "phase": "seed",
+      "tier": null,
+      "kind": "negative-control",
+      "positive": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/roundtrip.test.ts --skip-nx-cache",
+      "mutate": "node scripts/nc_break_seed.mjs",
+      "restore": "node scripts/nc_restore_seed.mjs"
+    },
+    {
+      "id": "audit-final.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "true",
+      "expect": "exit0"
+    },
+    {
+      "id": "code-review.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 scripts/review_gate.py",
+      "expect": "exit0"
+    },
+    {
+      "id": "dod.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/binding-store.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "dod.2",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/emit-tools.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "dod.3",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "dod.4",
+      "phase": "audit",
+      "tier": null,
+      "kind": "present",
+      "pattern": "platform:node",
+      "paths": [
+        "../../../packages/ai/agent-provider/project.json"
+      ]
+    },
+    {
+      "id": "dod.5",
+      "phase": "audit",
+      "tier": null,
+      "kind": "present",
+      "pattern": "provider_tool_formats|providerToolFormats",
+      "paths": [
+        "../../../packages/ai/agent-provider/src/db/schema.ts"
+      ]
+    },
+    {
+      "id": "dod.6",
+      "phase": "audit",
+      "tier": null,
+      "kind": "present",
+      "pattern": "ProviderAdapter",
+      "paths": [
+        "../../../packages/ai/agent-mcp-types/src/domain.ts"
+      ]
+    }
+  ]
+}

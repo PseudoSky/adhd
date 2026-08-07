@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "title": "Host generator",
+  "type": "object",
+  "properties": {
+    "host": {
+      "type": "string",
+      "description": "Host language identifier in kebab-case (e.g. 'typescript', 'python', 'rust', 'go', 'java')",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "What is the host language identifier?"
+    },
+    "directory": {
+      "type": "string",
+      "description": "Target directory for the new host package (default: packages/apigen/hosts/<host>)"
+    },
+    "logicalTypeVersion": {
+      "type": "string",
+      "description": "Logical-type contract version this host targets (default: '1.0.0')",
+      "default": "1.0.0"
+    }
+  },
+  "required": ["host"]
+}

@@ -1,0 +1,52 @@
+{
+  "name": "apigen-plugin-java-javalin",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "packages/apigen/apigen-plugin-java-javalin"
+      }
+    }
+  },
+  "tags": [
+    "domain:apigen",
+    "pkg-kind:plugin",
+    "layer:logic",
+    "platform:node"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "packages/apigen/apigen-plugin-java-javalin/dist",
+        "emptyOutDir": true
+      }
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-java-javalin"
+      ],
+      "options": {
+        "configFile": "packages/apigen/apigen-plugin-java-javalin/vite.config.ts"
+      }
+    },
+    "nx-release-publish": {
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
+      ],
+      "executor": "@nx/js:release-publish",
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      }
+    }
+  }
+}

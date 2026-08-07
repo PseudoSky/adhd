@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "$id": "publish",
+  "type": "object",
+  "properties": {
+    "dryRun": {
+      "type": "boolean",
+      "description": "Pack and report only; publish nothing.",
+      "default": false
+    },
+    "otp": {
+      "type": "string",
+      "description": "npm one-time password (2FA)."
+    },
+    "tag": {
+      "type": "string",
+      "description": "npm dist-tag to publish under (default: latest)."
+    },
+    "access": {
+      "type": "string",
+      "description": "npm access level.",
+      "default": "public"
+    }
+  },
+  "required": [],
+  "additionalProperties": true
+}

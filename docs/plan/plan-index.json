@@ -1,0 +1,3922 @@
+{
+  "schema_version": 1,
+  "plans_root": "docs/plan",
+  "plans": [
+    {
+      "plan": "0.0.6",
+      "dir": "agent-final/superseded/0.0.6",
+      "status": "complete",
+      "mutate_set": [
+        "docs/plan/0.0.6/.code-review-complete",
+        "docs/plan/0.0.6/scripts/audit_006.py",
+        "packages/ai/agent-mcp-types/package.json",
+        "packages/ai/agent-mcp-types/src/domain.ts",
+        "packages/ai/agent-mcp-types/src/errors.ts",
+        "packages/ai/agent-mcp-types/src/index.ts",
+        "packages/ai/agent-mcp/CLAUDE.md",
+        "packages/ai/agent-mcp/GAPS.md",
+        "packages/ai/agent-mcp/README.md",
+        "packages/ai/agent-mcp/drizzle/",
+        "packages/ai/agent-mcp/package.json",
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+        "packages/ai/agent-mcp/src/index.ts",
+        "packages/ai/agent-mcp/src/plugins/usage-plugin.ts",
+        "packages/ai/agent-mcp/src/providers/anthropic.ts",
+        "packages/ai/agent-mcp/src/providers/claudecli.ts",
+        "packages/ai/agent-mcp/src/providers/openai.ts",
+        "packages/ai/agent-mcp/src/store/session-store.ts",
+        "packages/ai/agent-mcp/src/tools/usage.ts",
+        "packages/ai/agent-mcp/src/validation/errors.ts",
+        "packages/ai/agent-mcp/src/validation/usage.ts"
+      ],
+      "read_only_set": [],
+      "reservations": {},
+      "references": [],
+      "interfaces": [],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.940Z"
+    },
+    {
+      "plan": "adhd-environment",
+      "dir": "adhd-environment",
+      "status": "in-progress",
+      "mutate_set": [
+        "docs/plan/adhd-environment/USE_CASES.md",
+        "docs/plan/adhd-environment/demo/DEMO.md",
+        "entrypoint/agent-mcp/adhd.environment.yaml",
+        "entrypoint/agent-mcp/src/config.ts",
+        "entrypoint/agent-mcp/src/db/client.ts",
+        "entrypoint/agent-mcp/src/environment.ts",
+        "entrypoint/agent-mcp/src/index.ts",
+        "entrypoint/agent-mcp/src/logger.ts",
+        "entrypoint/agent-mcp/src/server.ts",
+        "entrypoint/agent-mcp/src/streaming/sse-server.ts",
+        "entrypoint/environment-cli/package.json",
+        "entrypoint/environment-cli/project.json",
+        "entrypoint/environment-cli/src/api.ts",
+        "entrypoint/environment-cli/src/commands/set.ts",
+        "entrypoint/environment-cli/src/core.ts",
+        "entrypoint/environment-cli/tsconfig.json",
+        "packages/environment/environment-base-spec/package.json",
+        "packages/environment/environment-base-spec/project.json",
+        "packages/environment/environment-base-spec/spec/SPEC.md",
+        "packages/environment/environment-base-spec/spec/adhd-environment.schema.json",
+        "packages/environment/environment-base-spec/spec/cross-language-test-vectors.json",
+        "packages/environment/environment-base-spec/src/index.ts",
+        "packages/environment/environment-base-spec/tsconfig.json",
+        "packages/environment/environment-builder/package.json",
+        "packages/environment/environment-builder/project.json",
+        "packages/environment/environment-builder/src/__tests__/environment-snapshot.test.ts",
+        "packages/environment/environment-builder/src/config-resolver.ts",
+        "packages/environment/environment-builder/src/environment-snapshot.ts",
+        "packages/environment/environment-builder/src/field-merge.ts",
+        "packages/environment/environment-builder/src/index.ts",
+        "packages/environment/environment-builder/src/json-schema-gen.ts",
+        "packages/environment/environment-builder/src/provenance.ts",
+        "packages/environment/environment-builder/src/snapshot-writer.ts",
+        "packages/environment/environment-builder/src/validation.ts",
+        "packages/environment/environment-builder/src/yaml-parser.ts",
+        "packages/environment/environment-builder/tsconfig.json",
+        "packages/environment/environment-core-node/package.json",
+        "packages/environment/environment-core-node/project.json",
+        "packages/environment/environment-core-node/src/environment.ts",
+        "packages/environment/environment-core-node/src/index.ts",
+        "packages/environment/environment-core-node/tsconfig.json",
+        "packages/environment/environment-core-py/pyproject.toml",
+        "packages/environment/environment-core-py/src/adhd_environment/__init__.py",
+        "packages/environment/environment-core-py/src/adhd_environment/environment.py",
+        "packages/environment/environment-core-rs/Cargo.lock",
+        "packages/environment/environment-core-rs/Cargo.toml",
+        "packages/environment/environment-core-rs/src/lib.rs",
+        "scripts/audit_audit-builder.py",
+        "scripts/audit_audit-final.py",
+        "scripts/audit_audit-runtime.py",
+        "tsconfig.base.json"
+      ],
+      "read_only_set": [],
+      "reservations": {
+        "contract-base-spec": {
+          "mutates": [
+            "packages/environment/environment-base-spec/spec/SPEC.md",
+            "packages/environment/environment-base-spec/spec/adhd-environment.schema.json",
+            "packages/environment/environment-base-spec/spec/cross-language-test-vectors.json",
+            "packages/environment/environment-base-spec/src/index.ts"
+          ],
+          "read_only": []
+        },
+        "builder-engine": {
+          "mutates": [
+            "packages/environment/environment-builder/src/config-resolver.ts",
+            "packages/environment/environment-builder/src/field-merge.ts",
+            "packages/environment/environment-builder/src/json-schema-gen.ts",
+            "packages/environment/environment-builder/src/provenance.ts",
+            "packages/environment/environment-builder/src/snapshot-writer.ts",
+            "packages/environment/environment-builder/src/validation.ts",
+            "packages/environment/environment-builder/src/yaml-parser.ts"
+          ],
+          "read_only": []
+        },
+        "builder-snapshot-api": {
+          "mutates": [
+            "packages/environment/environment-builder/src/__tests__/environment-snapshot.test.ts",
+            "packages/environment/environment-builder/src/environment-snapshot.ts",
+            "packages/environment/environment-builder/src/index.ts"
+          ],
+          "read_only": []
+        },
+        "audit-builder": {
+          "mutates": [
+            "scripts/audit_audit-builder.py"
+          ],
+          "read_only": []
+        },
+        "runtime-core-node": {
+          "mutates": [
+            "packages/environment/environment-core-node/src/environment.ts",
+            "packages/environment/environment-core-node/src/index.ts"
+          ],
+          "read_only": []
+        },
+        "runtime-cli": {
+          "mutates": [
+            "entrypoint/environment-cli/src/api.ts",
+            "entrypoint/environment-cli/src/commands/set.ts",
+            "entrypoint/environment-cli/src/core.ts"
+          ],
+          "read_only": []
+        },
+        "runtime-py": {
+          "mutates": [
+            "packages/environment/environment-core-py/src/adhd_environment/__init__.py",
+            "packages/environment/environment-core-py/src/adhd_environment/environment.py"
+          ],
+          "read_only": []
+        },
+        "runtime-rs": {
+          "mutates": [
+            "packages/environment/environment-core-rs/src/lib.rs"
+          ],
+          "read_only": []
+        },
+        "audit-runtime": {
+          "mutates": [
+            "scripts/audit_audit-runtime.py"
+          ],
+          "read_only": []
+        },
+        "refactor-agent-mcp": {
+          "mutates": [
+            "entrypoint/agent-mcp/adhd.environment.yaml",
+            "entrypoint/agent-mcp/src/config.ts",
+            "entrypoint/agent-mcp/src/db/client.ts",
+            "entrypoint/agent-mcp/src/environment.ts",
+            "entrypoint/agent-mcp/src/index.ts",
+            "entrypoint/agent-mcp/src/logger.ts",
+            "entrypoint/agent-mcp/src/server.ts",
+            "entrypoint/agent-mcp/src/streaming/sse-server.ts"
+          ],
+          "read_only": []
+        },
+        "audit-final": {
+          "mutates": [
+            "scripts/audit_audit-final.py"
+          ],
+          "read_only": []
+        },
+        "docs-steward": {
+          "mutates": [
+            "docs/plan/adhd-environment/USE_CASES.md",
+            "docs/plan/adhd-environment/demo/DEMO.md"
+          ],
+          "read_only": []
+        },
+        "scaffold-workspace": {
+          "mutates": [
+            "entrypoint/environment-cli/package.json",
+            "entrypoint/environment-cli/project.json",
+            "entrypoint/environment-cli/tsconfig.json",
+            "packages/environment/environment-base-spec/package.json",
+            "packages/environment/environment-base-spec/project.json",
+            "packages/environment/environment-base-spec/tsconfig.json",
+            "packages/environment/environment-builder/package.json",
+            "packages/environment/environment-builder/project.json",
+            "packages/environment/environment-builder/tsconfig.json",
+            "packages/environment/environment-core-node/package.json",
+            "packages/environment/environment-core-node/project.json",
+            "packages/environment/environment-core-node/tsconfig.json",
+            "packages/environment/environment-core-py/pyproject.toml",
+            "packages/environment/environment-core-rs/Cargo.lock",
+            "packages/environment/environment-core-rs/Cargo.toml",
+            "tsconfig.base.json"
+          ],
+          "read_only": []
+        }
+      },
+      "references": [],
+      "interfaces": [],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": true,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.936Z"
+    },
+    {
+      "plan": "agent-compiler",
+      "dir": "agent-final/superseded/agent-compiler",
+      "status": "complete",
+      "mutate_set": [
+        "docs/plan/agent-compiler/contexts/compiler-design.md",
+        "docs/plan/agent-compiler/decisions.md",
+        "docs/plan/agent-compiler/review-engine.md",
+        "docs/plan/agent-compiler/review.md",
+        "docs/plan/agent-compiler/scripts/audit_compiler.py",
+        "docs/plan/agent-compiler/scripts/review_gate.py",
+        "docs/plan/agent-compiler/scripts/review_gate_engine.py",
+        "packages/ai/agent-compiler/package.json",
+        "packages/ai/agent-compiler/project.json",
+        "packages/ai/agent-compiler/src/__tests__/compile-agent.test.ts",
+        "packages/ai/agent-compiler/src/__tests__/compile-cache.test.ts",
+        "packages/ai/agent-compiler/src/__tests__/compile-cli.test.ts",
+        "packages/ai/agent-compiler/src/__tests__/compile-e2e.test.ts",
+        "packages/ai/agent-compiler/src/__tests__/composition-resolve.test.ts",
+        "packages/ai/agent-compiler/src/__tests__/model-policy.test.ts",
+        "packages/ai/agent-compiler/src/__tests__/tool-header.test.ts",
+        "packages/ai/agent-compiler/src/cache/composed-prompt-cache.ts",
+        "packages/ai/agent-compiler/src/cli/compile.ts",
+        "packages/ai/agent-compiler/src/compile.ts",
+        "packages/ai/agent-compiler/src/db/client.ts",
+        "packages/ai/agent-compiler/src/emit/json.ts",
+        "packages/ai/agent-compiler/src/emit/markdown.ts",
+        "packages/ai/agent-compiler/src/index.ts",
+        "packages/ai/agent-compiler/src/resolve/composition.ts",
+        "packages/ai/agent-compiler/src/resolve/model.ts",
+        "packages/ai/agent-compiler/src/resolve/policy.ts",
+        "packages/ai/agent-compiler/src/resolve/tools.ts",
+        "packages/ai/agent-compiler/src/seed/fixtures.ts",
+        "tsconfig.base.json"
+      ],
+      "read_only_set": [
+        "docs/plan/agent-compiler/decisions.md",
+        "packages/ai/agent-compiler/src",
+        "packages/ai/agent-compiler/src/cli/compile.ts",
+        "packages/ai/agent-compiler/src/compile.ts",
+        "packages/ai/agent-compiler/src/db/client.ts",
+        "packages/ai/agent-compiler/src/emit/markdown.ts",
+        "packages/ai/agent-compiler/src/resolve/composition.ts",
+        "packages/ai/agent-compiler/src/resolve/model.ts",
+        "packages/ai/agent-compiler/src/resolve/policy.ts",
+        "packages/ai/agent-compiler/src/resolve/tools.ts"
+      ],
+      "reservations": {
+        "compiler-design": {
+          "mutates": [
+            "docs/plan/agent-compiler/contexts/compiler-design.md",
+            "docs/plan/agent-compiler/decisions.md"
+          ],
+          "read_only": []
+        },
+        "scaffold-package": {
+          "mutates": [
+            "packages/ai/agent-compiler/package.json",
+            "packages/ai/agent-compiler/project.json",
+            "packages/ai/agent-compiler/src/db/client.ts",
+            "packages/ai/agent-compiler/src/index.ts",
+            "tsconfig.base.json"
+          ],
+          "read_only": [
+            "docs/plan/agent-compiler/decisions.md"
+          ]
+        },
+        "composition-resolve": {
+          "mutates": [
+            "packages/ai/agent-compiler/src/__tests__/composition-resolve.test.ts",
+            "packages/ai/agent-compiler/src/index.ts",
+            "packages/ai/agent-compiler/src/resolve/composition.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-compiler/src/db/client.ts"
+          ]
+        },
+        "tool-header-emit": {
+          "mutates": [
+            "packages/ai/agent-compiler/src/__tests__/tool-header.test.ts",
+            "packages/ai/agent-compiler/src/index.ts",
+            "packages/ai/agent-compiler/src/resolve/tools.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-compiler/src/resolve/composition.ts"
+          ]
+        },
+        "model-and-policy-emit": {
+          "mutates": [
+            "packages/ai/agent-compiler/src/__tests__/model-policy.test.ts",
+            "packages/ai/agent-compiler/src/index.ts",
+            "packages/ai/agent-compiler/src/resolve/model.ts",
+            "packages/ai/agent-compiler/src/resolve/policy.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-compiler/src/resolve/tools.ts"
+          ]
+        },
+        "platform-markdown-emit": {
+          "mutates": [
+            "packages/ai/agent-compiler/src/__tests__/compile-agent.test.ts",
+            "packages/ai/agent-compiler/src/compile.ts",
+            "packages/ai/agent-compiler/src/emit/json.ts",
+            "packages/ai/agent-compiler/src/emit/markdown.ts",
+            "packages/ai/agent-compiler/src/index.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-compiler/src/resolve/composition.ts",
+            "packages/ai/agent-compiler/src/resolve/model.ts",
+            "packages/ai/agent-compiler/src/resolve/policy.ts",
+            "packages/ai/agent-compiler/src/resolve/tools.ts"
+          ]
+        },
+        "compile-cli": {
+          "mutates": [
+            "packages/ai/agent-compiler/src/__tests__/compile-cli.test.ts",
+            "packages/ai/agent-compiler/src/cli/compile.ts",
+            "packages/ai/agent-compiler/src/index.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-compiler/src/compile.ts"
+          ]
+        },
+        "composed-prompt-caching": {
+          "mutates": [
+            "packages/ai/agent-compiler/src/__tests__/compile-cache.test.ts",
+            "packages/ai/agent-compiler/src/cache/composed-prompt-cache.ts",
+            "packages/ai/agent-compiler/src/compile.ts",
+            "packages/ai/agent-compiler/src/index.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-compiler/src/emit/markdown.ts"
+          ]
+        },
+        "audit-engine": {
+          "mutates": [
+            "docs/plan/agent-compiler/scripts/audit_compiler.py"
+          ],
+          "read_only": []
+        },
+        "compile-fixtures-e2e": {
+          "mutates": [
+            "packages/ai/agent-compiler/src/__tests__/compile-e2e.test.ts",
+            "packages/ai/agent-compiler/src/index.ts",
+            "packages/ai/agent-compiler/src/seed/fixtures.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-compiler/src/cli/compile.ts",
+            "packages/ai/agent-compiler/src/compile.ts"
+          ]
+        },
+        "audit-final": {
+          "mutates": [
+            "docs/plan/agent-compiler/scripts/audit_compiler.py"
+          ],
+          "read_only": []
+        },
+        "code-review": {
+          "mutates": [
+            "docs/plan/agent-compiler/review.md",
+            "docs/plan/agent-compiler/scripts/review_gate.py"
+          ],
+          "read_only": [
+            "packages/ai/agent-compiler/src"
+          ]
+        },
+        "code-review-engine": {
+          "mutates": [
+            "docs/plan/agent-compiler/review-engine.md",
+            "docs/plan/agent-compiler/scripts/review_gate_engine.py"
+          ],
+          "read_only": [
+            "packages/ai/agent-compiler/src"
+          ]
+        }
+      },
+      "references": [],
+      "interfaces": [
+        {
+          "slug": "agent-compiler-public-api",
+          "interface": "@adhd/agent-compiler exports: { compileAgent } and a `bin` CLI (agent-registry compile <slug>)",
+          "confidence": "documented",
+          "provenance": "docs",
+          "resolved_version": "1.0.0"
+        },
+        {
+          "slug": "agent-mcp-types-shared-additions",
+          "interface": "ADD to @adhd/agent-mcp-types (per REFERENCES.md:197-211): ComposedPrompt, PromptComponent, AgentPolicyAssignment",
+          "confidence": "documented",
+          "provenance": "docs",
+          "resolved_version": "see packages/ai/agent-mcp-types/package.json"
+        },
+        {
+          "slug": "better-sqlite3",
+          "interface": "new Database(sharedPath); db.pragma('journal_mode = WAL'); db.pragma('foreign_keys = ON'); db.close()",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "12.10.0"
+        },
+        {
+          "slug": "policy-consumed",
+          "interface": "import { AgentPolicyStore, PolicyTemplateStore } from '@adhd/agent-policy'",
+          "confidence": "documented",
+          "provenance": "docs",
+          "resolved_version": "1.0.0 (see docs/plan/agent-policy/interfaces.json :: agent-policy-public-api)"
+        },
+        {
+          "slug": "provider-consumed",
+          "interface": "import { ModelStore, ToolFormatStore } from '@adhd/agent-provider'",
+          "confidence": "documented",
+          "provenance": "docs",
+          "resolved_version": "1.0.0 (see docs/plan/agent-provider/interfaces.json :: agent-provider-public-api)"
+        },
+        {
+          "slug": "registry-consumed",
+          "interface": "import { CompositionStore, ComposedPromptStore, contextHash } from '@adhd/agent-registry'",
+          "confidence": "verified",
+          "provenance": "vendored-source",
+          "resolved_version": "0.0.1"
+        },
+        {
+          "slug": "tool-registry-consumed",
+          "interface": "import { AgentToolStore, ToolBindingStore } from '@adhd/agent-tool-registry'",
+          "confidence": "documented",
+          "provenance": "docs",
+          "resolved_version": "1.0.0 (see docs/plan/agent-tool-registry/interfaces.json :: agent-tool-registry-public-api)"
+        }
+      ],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.950Z"
+    },
+    {
+      "plan": "agent-mcp-authoring",
+      "dir": "agent-final/superseded/agent-mcp-authoring",
+      "status": "published",
+      "mutate_set": [
+        "docs/plan/agent-mcp-authoring/contexts/authoring-design.md",
+        "docs/plan/agent-mcp-authoring/decisions.md",
+        "docs/plan/agent-mcp-authoring/review.md",
+        "docs/plan/agent-mcp-authoring/scripts/audit_authoring.py",
+        "docs/plan/agent-mcp-authoring/scripts/review_gate.py",
+        "docs/plan/agent-registry/demo/compose-via-mcp.mjs",
+        "entrypoint/agent-mcp/CHANGELOG.md",
+        "entrypoint/agent-mcp/package.json",
+        "entrypoint/agent-mcp/src/__tests__/agent-define.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/authoring-live-e2e.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/component-define.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/component-search-ndcg.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/composition-journey-e2e.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/discovery-bounded-output.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/discovery-tools.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/fixtures/component-search-golden.json",
+        "entrypoint/agent-mcp/src/__tests__/name-slug-seam.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/systemprompt-compat.test.ts",
+        "entrypoint/agent-mcp/src/registry/composition-writer.ts",
+        "entrypoint/agent-mcp/src/registry/name-slug.ts",
+        "entrypoint/agent-mcp/src/registry/registry-bridge.ts",
+        "entrypoint/agent-mcp/src/server.ts",
+        "entrypoint/agent-mcp/src/tools/agent-crud.ts",
+        "entrypoint/agent-mcp/src/tools/authoring.ts",
+        "entrypoint/agent-mcp/src/tools/discovery.ts",
+        "entrypoint/agent-mcp/src/tools/guide.ts",
+        "entrypoint/agent-mcp/src/validation/agent.ts",
+        "packages/agent/agent-store-prompts/package.json",
+        "packages/agent/agent-store-prompts/src/__tests__/embedding-substrate.test.ts",
+        "packages/agent/agent-store-prompts/src/__tests__/enrichment-pipeline.test.ts",
+        "packages/agent/agent-store-prompts/src/enrich/cosine.ts",
+        "packages/agent/agent-store-prompts/src/enrich/embedding.ts",
+        "packages/agent/agent-store-prompts/src/enrich/enrich-component.ts",
+        "packages/agent/agent-store-prompts/src/enrich/summarize.ts",
+        "packages/agent/agent-store-prompts/src/enrich/usecase-anchors.ts",
+        "packages/agent/agent-store-prompts/src/index.ts",
+        "packages/agent/agent-store-prompts/src/store/usecase-store.ts"
+      ],
+      "read_only_set": [],
+      "reservations": {
+        "authoring-design": {
+          "mutates": [
+            "docs/plan/agent-mcp-authoring/contexts/authoring-design.md",
+            "docs/plan/agent-mcp-authoring/decisions.md"
+          ],
+          "read_only": []
+        },
+        "embedding-substrate": {
+          "mutates": [
+            "packages/agent/agent-store-prompts/package.json",
+            "packages/agent/agent-store-prompts/src/__tests__/embedding-substrate.test.ts",
+            "packages/agent/agent-store-prompts/src/enrich/cosine.ts",
+            "packages/agent/agent-store-prompts/src/enrich/embedding.ts",
+            "packages/agent/agent-store-prompts/src/enrich/usecase-anchors.ts",
+            "packages/agent/agent-store-prompts/src/index.ts"
+          ],
+          "read_only": []
+        },
+        "enrichment-pipeline": {
+          "mutates": [
+            "packages/agent/agent-store-prompts/package.json",
+            "packages/agent/agent-store-prompts/src/__tests__/enrichment-pipeline.test.ts",
+            "packages/agent/agent-store-prompts/src/enrich/enrich-component.ts",
+            "packages/agent/agent-store-prompts/src/enrich/summarize.ts",
+            "packages/agent/agent-store-prompts/src/index.ts",
+            "packages/agent/agent-store-prompts/src/store/usecase-store.ts"
+          ],
+          "read_only": []
+        },
+        "name-slug-seam": {
+          "mutates": [
+            "entrypoint/agent-mcp/src/__tests__/name-slug-seam.test.ts",
+            "entrypoint/agent-mcp/src/registry/name-slug.ts",
+            "entrypoint/agent-mcp/src/registry/registry-bridge.ts"
+          ],
+          "read_only": []
+        },
+        "discovery-tools": {
+          "mutates": [
+            "entrypoint/agent-mcp/src/__tests__/component-search-ndcg.test.ts",
+            "entrypoint/agent-mcp/src/__tests__/discovery-bounded-output.test.ts",
+            "entrypoint/agent-mcp/src/__tests__/discovery-tools.test.ts",
+            "entrypoint/agent-mcp/src/__tests__/fixtures/component-search-golden.json",
+            "entrypoint/agent-mcp/src/server.ts",
+            "entrypoint/agent-mcp/src/tools/discovery.ts"
+          ],
+          "read_only": []
+        },
+        "component-define": {
+          "mutates": [
+            "entrypoint/agent-mcp/src/__tests__/component-define.test.ts",
+            "entrypoint/agent-mcp/src/server.ts",
+            "entrypoint/agent-mcp/src/tools/authoring.ts"
+          ],
+          "read_only": []
+        },
+        "agent-define": {
+          "mutates": [
+            "entrypoint/agent-mcp/src/__tests__/agent-define.test.ts",
+            "entrypoint/agent-mcp/src/registry/composition-writer.ts",
+            "entrypoint/agent-mcp/src/server.ts",
+            "entrypoint/agent-mcp/src/tools/authoring.ts"
+          ],
+          "read_only": []
+        },
+        "compat-shim": {
+          "mutates": [
+            "entrypoint/agent-mcp/src/__tests__/systemprompt-compat.test.ts",
+            "entrypoint/agent-mcp/src/tools/agent-crud.ts",
+            "entrypoint/agent-mcp/src/tools/guide.ts",
+            "entrypoint/agent-mcp/src/validation/agent.ts"
+          ],
+          "read_only": []
+        },
+        "versioning": {
+          "mutates": [
+            "entrypoint/agent-mcp/CHANGELOG.md",
+            "entrypoint/agent-mcp/package.json"
+          ],
+          "read_only": []
+        },
+        "composition-journey-e2e": {
+          "mutates": [
+            "docs/plan/agent-registry/demo/compose-via-mcp.mjs",
+            "entrypoint/agent-mcp/src/__tests__/composition-journey-e2e.test.ts"
+          ],
+          "read_only": []
+        },
+        "live-model-e2e": {
+          "mutates": [
+            "entrypoint/agent-mcp/src/__tests__/authoring-live-e2e.test.ts"
+          ],
+          "read_only": []
+        },
+        "code-review": {
+          "mutates": [
+            "docs/plan/agent-mcp-authoring/review.md",
+            "docs/plan/agent-mcp-authoring/scripts/review_gate.py"
+          ],
+          "read_only": []
+        },
+        "audit-final": {
+          "mutates": [
+            "docs/plan/agent-mcp-authoring/scripts/audit_authoring.py"
+          ],
+          "read_only": []
+        }
+      },
+      "references": [],
+      "interfaces": [],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.953Z"
+    },
+    {
+      "plan": "agent-mcp-refactor",
+      "dir": "agent-final/superseded/agent-mcp-refactor",
+      "status": "complete",
+      "mutate_set": [
+        "docs/plan/agent-mcp-refactor/contexts/refactor-design.md",
+        "docs/plan/agent-mcp-refactor/decisions.md",
+        "docs/plan/agent-mcp-refactor/review-integration.md",
+        "docs/plan/agent-mcp-refactor/review.md",
+        "docs/plan/agent-mcp-refactor/scripts/audit_mcp_refactor.py",
+        "docs/plan/agent-mcp-refactor/scripts/review_gate.py",
+        "docs/plan/agent-mcp-refactor/scripts/review_gate_integration.py",
+        "packages/ai/agent-mcp-types/src/domain.ts",
+        "packages/ai/agent-mcp-types/src/errors.ts",
+        "packages/ai/agent-mcp/drizzle",
+        "packages/ai/agent-mcp/package.json",
+        "packages/ai/agent-mcp/project.json",
+        "packages/ai/agent-mcp/src/__tests__/agent-cache-store.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/cache-reuse.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/compiler-resolve.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/composed-prompt-schema.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/policy-tool-reconcile.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/session-compiler-e2e.test.ts",
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/src/engine/policy.ts",
+        "packages/ai/agent-mcp/src/engine/prompt-resolver.ts",
+        "packages/ai/agent-mcp/src/index.ts",
+        "packages/ai/agent-mcp/src/providers/claudecli.ts",
+        "packages/ai/agent-mcp/src/store/agent-store.ts",
+        "packages/ai/agent-mcp/src/store/composed-prompt-store.ts",
+        "packages/ai/agent-mcp/src/store/index.ts",
+        "packages/ai/agent-mcp/src/store/session-store.ts",
+        "packages/ai/agent-mcp/src/tools/agent-crud.ts",
+        "packages/ai/agent-mcp/src/tools/session.ts",
+        "packages/ai/agent-mcp/src/validation/agent.ts",
+        "packages/ai/agent-mcp/src/validation/errors.ts",
+        "tsconfig.base.json"
+      ],
+      "read_only_set": [
+        "packages/ai/agent-mcp-types/src/domain.ts",
+        "packages/ai/agent-mcp/src",
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/src/engine/prompt-resolver.ts",
+        "packages/ai/agent-mcp/src/providers/claudecli.ts",
+        "packages/ai/agent-mcp/src/store/agent-store.ts",
+        "packages/ai/agent-mcp/src/store/composed-prompt-store.ts",
+        "packages/ai/agent-mcp/src/store/session-store.ts",
+        "packages/ai/agent-mcp/src/tools/session.ts",
+        "packages/ai/agent-mcp/src/tools/task.ts"
+      ],
+      "reservations": {
+        "refactor-design": {
+          "mutates": [
+            "docs/plan/agent-mcp-refactor/contexts/refactor-design.md",
+            "docs/plan/agent-mcp-refactor/decisions.md"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp-types/src/domain.ts",
+            "packages/ai/agent-mcp/src/db/schema.ts",
+            "packages/ai/agent-mcp/src/providers/claudecli.ts",
+            "packages/ai/agent-mcp/src/store/agent-store.ts",
+            "packages/ai/agent-mcp/src/store/session-store.ts",
+            "packages/ai/agent-mcp/src/tools/task.ts"
+          ]
+        },
+        "runtime-sink-schema": {
+          "mutates": [
+            "packages/ai/agent-mcp-types/src/domain.ts",
+            "packages/ai/agent-mcp-types/src/errors.ts",
+            "packages/ai/agent-mcp/drizzle",
+            "packages/ai/agent-mcp/project.json",
+            "packages/ai/agent-mcp/src/__tests__/composed-prompt-schema.test.ts",
+            "packages/ai/agent-mcp/src/db/schema.ts",
+            "packages/ai/agent-mcp/src/index.ts",
+            "packages/ai/agent-mcp/src/store/composed-prompt-store.ts",
+            "packages/ai/agent-mcp/src/store/index.ts",
+            "packages/ai/agent-mcp/src/validation/errors.ts"
+          ],
+          "read_only": []
+        },
+        "compiler-integration": {
+          "mutates": [
+            "packages/ai/agent-mcp/package.json",
+            "packages/ai/agent-mcp/src/__tests__/compiler-resolve.test.ts",
+            "packages/ai/agent-mcp/src/engine/prompt-resolver.ts",
+            "packages/ai/agent-mcp/src/index.ts",
+            "packages/ai/agent-mcp/src/store/session-store.ts",
+            "packages/ai/agent-mcp/src/tools/session.ts",
+            "tsconfig.base.json"
+          ],
+          "read_only": []
+        },
+        "agent-store-retire": {
+          "mutates": [
+            "packages/ai/agent-mcp-types/src/domain.ts",
+            "packages/ai/agent-mcp/src/__tests__/agent-cache-store.test.ts",
+            "packages/ai/agent-mcp/src/store/agent-store.ts",
+            "packages/ai/agent-mcp/src/store/index.ts",
+            "packages/ai/agent-mcp/src/tools/agent-crud.ts",
+            "packages/ai/agent-mcp/src/validation/agent.ts"
+          ],
+          "read_only": []
+        },
+        "policy-engine-bridge": {
+          "mutates": [
+            "packages/ai/agent-mcp/package.json",
+            "packages/ai/agent-mcp/src/__tests__/policy-tool-reconcile.test.ts",
+            "packages/ai/agent-mcp/src/engine/policy.ts",
+            "packages/ai/agent-mcp/src/providers/claudecli.ts",
+            "packages/ai/agent-mcp/src/validation/agent.ts",
+            "tsconfig.base.json"
+          ],
+          "read_only": []
+        },
+        "audit-integration": {
+          "mutates": [
+            "docs/plan/agent-mcp-refactor/scripts/audit_mcp_refactor.py"
+          ],
+          "read_only": []
+        },
+        "session-e2e": {
+          "mutates": [
+            "packages/ai/agent-mcp/src/__tests__/cache-reuse.test.ts",
+            "packages/ai/agent-mcp/src/__tests__/session-compiler-e2e.test.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp/src/db/schema.ts",
+            "packages/ai/agent-mcp/src/engine/prompt-resolver.ts",
+            "packages/ai/agent-mcp/src/store/composed-prompt-store.ts",
+            "packages/ai/agent-mcp/src/store/session-store.ts",
+            "packages/ai/agent-mcp/src/tools/session.ts"
+          ]
+        },
+        "audit-final": {
+          "mutates": [
+            "docs/plan/agent-mcp-refactor/scripts/audit_mcp_refactor.py"
+          ],
+          "read_only": []
+        },
+        "code-review": {
+          "mutates": [
+            "docs/plan/agent-mcp-refactor/review.md",
+            "docs/plan/agent-mcp-refactor/scripts/review_gate.py"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp/src"
+          ]
+        },
+        "code-review-integration": {
+          "mutates": [
+            "docs/plan/agent-mcp-refactor/review-integration.md",
+            "docs/plan/agent-mcp-refactor/scripts/review_gate_integration.py"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp/src"
+          ]
+        }
+      },
+      "references": [],
+      "interfaces": [
+        {
+          "slug": "agent-mcp-types-consumed",
+          "interface": "AgentDefinition.systemPrompt: required string -> optional/computed compat shim; (consumes ComposedPrompt, ProviderAdapter, StreamChunk added by upstream plans)",
+          "confidence": "documented",
+          "provenance": "docs",
+          "resolved_version": "see packages/ai/agent-mcp-types/package.json"
+        },
+        {
+          "slug": "better-sqlite3",
+          "interface": "new Database(path); db.pragma('journal_mode = WAL'); db.close()",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "see packages/ai/agent-mcp/package.json"
+        },
+        {
+          "slug": "compiler-consumed",
+          "interface": "import { compileAgent } from '@adhd/agent-compiler'",
+          "confidence": "documented",
+          "provenance": "docs",
+          "resolved_version": "1.0.0 (see docs/plan/agent-compiler/interfaces.json :: agent-compiler-public-api)"
+        },
+        {
+          "slug": "policy-consumed",
+          "interface": "import { PolicyTemplateStore, createPlugin as policyPlugin } from '@adhd/agent-policy'",
+          "confidence": "documented",
+          "provenance": "docs",
+          "resolved_version": "1.0.0 (see docs/plan/agent-policy/interfaces.json :: agent-policy-public-api)"
+        },
+        {
+          "slug": "provider-consumed",
+          "interface": "import { ProviderAdapterImpl } from '@adhd/agent-provider'; import type { ProviderAdapter } from '@adhd/agent-mcp-types'",
+          "confidence": "documented",
+          "provenance": "docs",
+          "resolved_version": "1.0.0 (see docs/plan/agent-provider/interfaces.json :: agent-provider-public-api)"
+        }
+      ],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.955Z"
+    },
+    {
+      "plan": "agent-policy",
+      "dir": "agent-final/superseded/agent-policy",
+      "status": "complete",
+      "mutate_set": [
+        "docs/plan/agent-policy/contexts/policy-design.md",
+        "docs/plan/agent-policy/decisions.md",
+        "docs/plan/agent-policy/review.md",
+        "docs/plan/agent-policy/scripts/audit_policy.py",
+        "docs/plan/agent-policy/scripts/review_gate.py",
+        "packages/ai/agent-policy/drizzle",
+        "packages/ai/agent-policy/package.json",
+        "packages/ai/agent-policy/project.json",
+        "packages/ai/agent-policy/src/__tests__/agent-policy-store.test.ts",
+        "packages/ai/agent-policy/src/__tests__/enforcement-plugin.test.ts",
+        "packages/ai/agent-policy/src/__tests__/inheritance.test.ts",
+        "packages/ai/agent-policy/src/__tests__/policy-template-store.test.ts",
+        "packages/ai/agent-policy/src/__tests__/roundtrip.test.ts",
+        "packages/ai/agent-policy/src/db/client.ts",
+        "packages/ai/agent-policy/src/db/schema.ts",
+        "packages/ai/agent-policy/src/index.ts",
+        "packages/ai/agent-policy/src/plugin/index.ts",
+        "packages/ai/agent-policy/src/plugin/rate-policy.ts",
+        "packages/ai/agent-policy/src/seed/index.ts",
+        "packages/ai/agent-policy/src/seed/policy-templates.ts",
+        "packages/ai/agent-policy/src/seed/policy-types.ts",
+        "packages/ai/agent-policy/src/store/agent-policy-store.ts",
+        "packages/ai/agent-policy/src/store/policy-template-store.ts",
+        "tsconfig.base.json"
+      ],
+      "read_only_set": [
+        "packages/ai/agent-policy/src",
+        "packages/ai/agent-policy/src/db/schema.ts",
+        "packages/ai/agent-policy/src/store/agent-policy-store.ts",
+        "packages/ai/agent-policy/src/store/policy-template-store.ts"
+      ],
+      "reservations": {
+        "policy-design": {
+          "mutates": [
+            "docs/plan/agent-policy/contexts/policy-design.md",
+            "docs/plan/agent-policy/decisions.md"
+          ],
+          "read_only": []
+        },
+        "scaffold-package": {
+          "mutates": [
+            "packages/ai/agent-policy/package.json",
+            "packages/ai/agent-policy/project.json",
+            "packages/ai/agent-policy/src/db/client.ts",
+            "packages/ai/agent-policy/src/db/schema.ts",
+            "packages/ai/agent-policy/src/index.ts",
+            "tsconfig.base.json"
+          ],
+          "read_only": []
+        },
+        "policy-type-and-template-schema": {
+          "mutates": [
+            "packages/ai/agent-policy/drizzle",
+            "packages/ai/agent-policy/src/__tests__/policy-template-store.test.ts",
+            "packages/ai/agent-policy/src/db/schema.ts",
+            "packages/ai/agent-policy/src/index.ts",
+            "packages/ai/agent-policy/src/store/policy-template-store.ts"
+          ],
+          "read_only": []
+        },
+        "agent-policy-junction": {
+          "mutates": [
+            "packages/ai/agent-policy/drizzle",
+            "packages/ai/agent-policy/src/__tests__/agent-policy-store.test.ts",
+            "packages/ai/agent-policy/src/db/schema.ts",
+            "packages/ai/agent-policy/src/index.ts",
+            "packages/ai/agent-policy/src/store/agent-policy-store.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-policy/src/store/policy-template-store.ts"
+          ]
+        },
+        "policy-inheritance": {
+          "mutates": [
+            "packages/ai/agent-policy/drizzle",
+            "packages/ai/agent-policy/src/__tests__/inheritance.test.ts",
+            "packages/ai/agent-policy/src/db/schema.ts",
+            "packages/ai/agent-policy/src/index.ts",
+            "packages/ai/agent-policy/src/store/agent-policy-store.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-policy/src/store/policy-template-store.ts"
+          ]
+        },
+        "enforcement-plugin": {
+          "mutates": [
+            "packages/ai/agent-policy/src/__tests__/enforcement-plugin.test.ts",
+            "packages/ai/agent-policy/src/index.ts",
+            "packages/ai/agent-policy/src/plugin/index.ts",
+            "packages/ai/agent-policy/src/plugin/rate-policy.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-policy/src/store/agent-policy-store.ts",
+            "packages/ai/agent-policy/src/store/policy-template-store.ts"
+          ]
+        },
+        "audit-schema": {
+          "mutates": [
+            "docs/plan/agent-policy/scripts/audit_policy.py"
+          ],
+          "read_only": []
+        },
+        "seed-and-roundtrip": {
+          "mutates": [
+            "packages/ai/agent-policy/src/__tests__/roundtrip.test.ts",
+            "packages/ai/agent-policy/src/index.ts",
+            "packages/ai/agent-policy/src/seed/index.ts",
+            "packages/ai/agent-policy/src/seed/policy-templates.ts",
+            "packages/ai/agent-policy/src/seed/policy-types.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-policy/src/db/schema.ts",
+            "packages/ai/agent-policy/src/store/policy-template-store.ts"
+          ]
+        },
+        "audit-final": {
+          "mutates": [
+            "docs/plan/agent-policy/scripts/audit_policy.py"
+          ],
+          "read_only": []
+        },
+        "code-review": {
+          "mutates": [
+            "docs/plan/agent-policy/review.md",
+            "docs/plan/agent-policy/scripts/review_gate.py"
+          ],
+          "read_only": [
+            "packages/ai/agent-policy/src"
+          ]
+        }
+      },
+      "references": [],
+      "interfaces": [
+        {
+          "slug": "agent-mcp-budget-reference",
+          "interface": "the canonical plugin pattern: export const configSchema = z.object({...}); class Plugin { install(hooks) { hooks.register(...); hooks.registerEnforcement('pre:model_request', p => this.enforce(p)) } }; const createPlugin: PluginFactory = ({db, config}) => new Plugin(...); export default createPlugin; export { createPlugin }",
+          "confidence": "documented",
+          "provenance": "docs",
+          "resolved_version": "see packages/ai/agent-mcp-budget/package.json"
+        },
+        {
+          "slug": "agent-mcp-types-hooks-consumed",
+          "interface": "import { HookRegistry } from '@adhd/agent-mcp-types'; import type { IHookRegistry, IEnforcementError, Plugin, PluginContext, PluginFactory, PreModelRequestPayload, PostModelResponsePayload, TaskStartPayload } from '@adhd/agent-mcp-types'",
+          "confidence": "documented",
+          "provenance": "docs",
+          "resolved_version": "see packages/ai/agent-mcp-types/package.json"
+        },
+        {
+          "slug": "agent-policy-public-api",
+          "interface": "@adhd/agent-policy exports: { openPolicyDb, schema, PolicyTemplateStore, AgentPolicyStore, configSchema, createPlugin (default + named), seed }",
+          "confidence": "documented",
+          "provenance": "docs",
+          "resolved_version": "1.0.0"
+        },
+        {
+          "slug": "better-sqlite3",
+          "interface": "new Database(path); db.pragma('journal_mode = WAL'); db.close()",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "see packages/ai/agent-mcp/package.json (match version)"
+        },
+        {
+          "slug": "drizzle-orm",
+          "interface": "sqliteTable('policy_templates', { slug: text().primaryKey(), enforcement: text({mode:'json'}), rules: text({mode:'json'}) })",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "see packages/ai/agent-mcp/package.json (match version)"
+        },
+        {
+          "slug": "zod",
+          "interface": "z.object({ maxModelCalls: z.number().int().positive().optional() }) -> configSchema; z.infer<typeof configSchema>",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "see packages/ai/agent-mcp-budget/package.json (match version)"
+        }
+      ],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.957Z"
+    },
+    {
+      "plan": "agent-provider",
+      "dir": "agent-final/superseded/agent-provider",
+      "status": "complete",
+      "mutate_set": [
+        "docs/plan/agent-provider/review.md",
+        "docs/plan/agent-provider/scripts/audit_provider.py",
+        "docs/plan/agent-provider/scripts/review_gate.py",
+        "packages/ai/agent-mcp-types/src/domain.ts",
+        "packages/ai/agent-mcp-types/src/index.ts",
+        "packages/ai/agent-provider/drizzle",
+        "packages/ai/agent-provider/package.json",
+        "packages/ai/agent-provider/project.json",
+        "packages/ai/agent-provider/src/__tests__/adapter-resolve.test.ts",
+        "packages/ai/agent-provider/src/__tests__/binding-store.test.ts",
+        "packages/ai/agent-provider/src/__tests__/emit-tools.test.ts",
+        "packages/ai/agent-provider/src/__tests__/model-store.test.ts",
+        "packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
+        "packages/ai/agent-provider/src/__tests__/tool-format-store.test.ts",
+        "packages/ai/agent-provider/src/adapter/provider-adapter.ts",
+        "packages/ai/agent-provider/src/db/client.ts",
+        "packages/ai/agent-provider/src/db/schema.ts",
+        "packages/ai/agent-provider/src/index.ts",
+        "packages/ai/agent-provider/src/runtime/emit-tools.ts",
+        "packages/ai/agent-provider/src/seed/bindings.ts",
+        "packages/ai/agent-provider/src/seed/index.ts",
+        "packages/ai/agent-provider/src/seed/models.ts",
+        "packages/ai/agent-provider/src/seed/providers.ts",
+        "packages/ai/agent-provider/src/store/model-store.ts",
+        "packages/ai/agent-provider/src/store/provider-store.ts",
+        "packages/ai/agent-provider/src/store/tool-format-store.ts",
+        "tsconfig.base.json"
+      ],
+      "read_only_set": [
+        "packages/ai/agent-mcp-types/src/domain.ts",
+        "packages/ai/agent-provider/src",
+        "packages/ai/agent-provider/src/db/client.ts",
+        "packages/ai/agent-provider/src/store/model-store.ts",
+        "packages/ai/agent-provider/src/store/provider-store.ts",
+        "packages/ai/agent-provider/src/store/tool-format-store.ts"
+      ],
+      "reservations": {
+        "scaffold-package": {
+          "mutates": [
+            "packages/ai/agent-provider/package.json",
+            "packages/ai/agent-provider/project.json",
+            "packages/ai/agent-provider/src/db/client.ts",
+            "packages/ai/agent-provider/src/db/schema.ts",
+            "packages/ai/agent-provider/src/index.ts",
+            "tsconfig.base.json"
+          ],
+          "read_only": []
+        },
+        "provider-and-model-schema": {
+          "mutates": [
+            "packages/ai/agent-provider/drizzle",
+            "packages/ai/agent-provider/src/__tests__/model-store.test.ts",
+            "packages/ai/agent-provider/src/db/schema.ts",
+            "packages/ai/agent-provider/src/index.ts",
+            "packages/ai/agent-provider/src/store/model-store.ts",
+            "packages/ai/agent-provider/src/store/provider-store.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-provider/src/db/client.ts"
+          ]
+        },
+        "model-platform-bindings": {
+          "mutates": [
+            "packages/ai/agent-provider/drizzle",
+            "packages/ai/agent-provider/src/__tests__/binding-store.test.ts",
+            "packages/ai/agent-provider/src/db/schema.ts",
+            "packages/ai/agent-provider/src/index.ts",
+            "packages/ai/agent-provider/src/store/model-store.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-provider/src/store/provider-store.ts"
+          ]
+        },
+        "provider-tool-formats": {
+          "mutates": [
+            "packages/ai/agent-provider/drizzle",
+            "packages/ai/agent-provider/src/__tests__/tool-format-store.test.ts",
+            "packages/ai/agent-provider/src/db/schema.ts",
+            "packages/ai/agent-provider/src/index.ts",
+            "packages/ai/agent-provider/src/store/tool-format-store.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-provider/src/store/model-store.ts",
+            "packages/ai/agent-provider/src/store/provider-store.ts"
+          ]
+        },
+        "audit-schema": {
+          "mutates": [
+            "docs/plan/agent-provider/scripts/audit_provider.py"
+          ],
+          "read_only": []
+        },
+        "provider-adapter-contract": {
+          "mutates": [
+            "packages/ai/agent-mcp-types/src/domain.ts",
+            "packages/ai/agent-mcp-types/src/index.ts",
+            "packages/ai/agent-provider/src/__tests__/adapter-resolve.test.ts",
+            "packages/ai/agent-provider/src/adapter/provider-adapter.ts",
+            "packages/ai/agent-provider/src/index.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-provider/src/store/model-store.ts"
+          ]
+        },
+        "runtime-tool-forwarding": {
+          "mutates": [
+            "packages/ai/agent-provider/src/__tests__/emit-tools.test.ts",
+            "packages/ai/agent-provider/src/index.ts",
+            "packages/ai/agent-provider/src/runtime/emit-tools.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp-types/src/domain.ts",
+            "packages/ai/agent-provider/src/store/tool-format-store.ts"
+          ]
+        },
+        "seed-and-roundtrip": {
+          "mutates": [
+            "packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
+            "packages/ai/agent-provider/src/index.ts",
+            "packages/ai/agent-provider/src/seed/bindings.ts",
+            "packages/ai/agent-provider/src/seed/index.ts",
+            "packages/ai/agent-provider/src/seed/models.ts",
+            "packages/ai/agent-provider/src/seed/providers.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-provider/src/store/model-store.ts",
+            "packages/ai/agent-provider/src/store/provider-store.ts",
+            "packages/ai/agent-provider/src/store/tool-format-store.ts"
+          ]
+        },
+        "audit-final": {
+          "mutates": [
+            "docs/plan/agent-provider/scripts/audit_provider.py"
+          ],
+          "read_only": []
+        },
+        "code-review": {
+          "mutates": [
+            "docs/plan/agent-provider/review.md",
+            "docs/plan/agent-provider/scripts/review_gate.py"
+          ],
+          "read_only": [
+            "packages/ai/agent-provider/src"
+          ]
+        }
+      },
+      "references": [],
+      "interfaces": [
+        {
+          "slug": "agent-mcp-types-shared-additions",
+          "interface": "ADD to @adhd/agent-mcp-types: interface ProviderAdapter { stream(messages: Message[], tools: ToolDefinition[] | undefined, model: string): AsyncIterable<StreamChunk> } and type StreamChunk",
+          "confidence": "documented",
+          "provenance": "docs",
+          "resolved_version": "see packages/ai/agent-mcp-types/package.json"
+        },
+        {
+          "slug": "agent-provider-public-api",
+          "interface": "@adhd/agent-provider exports: { openProviderDb, schema, ProviderStore, ModelStore, ToolFormatStore, ProviderAdapterImpl, emitToolsForProvider, UnsupportedNativeToolError, seed }",
+          "confidence": "documented",
+          "provenance": "docs",
+          "resolved_version": "1.0.0"
+        },
+        {
+          "slug": "better-sqlite3",
+          "interface": "new Database(path); db.pragma('journal_mode = WAL'); db.close()",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "see packages/ai/agent-mcp/package.json (match version)"
+        },
+        {
+          "slug": "drizzle-orm",
+          "interface": "sqliteTable('provider_models', { id: text().primaryKey(), context_window: integer(), vision: integer({mode:'boolean'}) }); composite PK via primaryKey({columns:[...]})",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "see packages/ai/agent-mcp/package.json (match version)"
+        }
+      ],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.959Z"
+    },
+    {
+      "plan": "agent-provider-credentialing",
+      "dir": "agent-final/superseded/agent-provider-credentialing",
+      "status": "published",
+      "mutate_set": [
+        ".gitignore",
+        "docs/plan/agent-provider-credentialing/scripts/audit_credentialing.py",
+        "docs/plan/agent-provider-credentialing/scripts/check-no-secrets.sh",
+        "packages/ai/agent-mcp-types/src/domain.ts",
+        "packages/ai/agent-mcp/.env.example",
+        "packages/ai/agent-mcp/BACKLOG.md",
+        "packages/ai/agent-mcp/CHANGELOG.md",
+        "packages/ai/agent-mcp/PLAN-MEMORY.md",
+        "packages/ai/agent-mcp/SPEC.md",
+        "packages/ai/agent-mcp/src/__tests__/backcompat-normalize.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/credential-inference.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/debt-005-sdk-timeout.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/dotenv-load.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/integration/live-budget.e2e.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/integration/live-dag.e2e.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/integration/live-oauth.e2e.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/integration/openai-compat-roundtrip.e2e.test.ts",
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+        "packages/ai/agent-mcp/src/index.ts",
+        "packages/ai/agent-mcp/src/providers/anthropic.ts",
+        "packages/ai/agent-mcp/src/providers/claudecli.ts",
+        "packages/ai/agent-mcp/src/providers/factory.ts",
+        "packages/ai/agent-mcp/src/providers/index.ts",
+        "packages/ai/agent-mcp/src/providers/lmstudio.ts",
+        "packages/ai/agent-mcp/src/providers/openai.ts",
+        "packages/ai/agent-mcp/src/providers/types.ts",
+        "packages/ai/agent-mcp/src/server.ts",
+        "packages/ai/agent-mcp/src/utils/load-env.ts",
+        "packages/ai/agent-mcp/src/validation/agent.ts",
+        "packages/ai/agent-provider/src/__tests__/model-store.test.ts",
+        "packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
+        "packages/ai/agent-provider/src/db/schema.ts",
+        "packages/ai/agent-provider/src/seed/providers.ts"
+      ],
+      "read_only_set": [
+        "packages/ai/agent-mcp-types/src/domain.ts",
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/src/index.ts",
+        "packages/ai/agent-mcp/src/providers",
+        "packages/ai/agent-mcp/src/providers/types.ts",
+        "packages/ai/agent-mcp/src/validation/agent.ts"
+      ],
+      "reservations": {
+        "unified-credential-contract": {
+          "mutates": [
+            "docs/plan/agent-provider-credentialing/scripts/audit_credentialing.py",
+            "packages/ai/agent-mcp-types/src/domain.ts",
+            "packages/ai/agent-provider/src/__tests__/model-store.test.ts",
+            "packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
+            "packages/ai/agent-provider/src/db/schema.ts",
+            "packages/ai/agent-provider/src/seed/providers.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp/src/validation/agent.ts"
+          ]
+        },
+        "provider-credential-runtime": {
+          "mutates": [
+            "packages/ai/agent-mcp/src/__tests__/credential-inference.test.ts",
+            "packages/ai/agent-mcp/src/__tests__/integration/openai-compat-roundtrip.e2e.test.ts",
+            "packages/ai/agent-mcp/src/providers/anthropic.ts",
+            "packages/ai/agent-mcp/src/providers/claudecli.ts",
+            "packages/ai/agent-mcp/src/providers/openai.ts",
+            "packages/ai/agent-mcp/src/validation/agent.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp-types/src/domain.ts",
+            "packages/ai/agent-mcp/src/providers/types.ts"
+          ]
+        },
+        "lmstudio-removal": {
+          "mutates": [
+            "packages/ai/agent-mcp-types/src/domain.ts",
+            "packages/ai/agent-mcp/BACKLOG.md",
+            "packages/ai/agent-mcp/CHANGELOG.md",
+            "packages/ai/agent-mcp/PLAN-MEMORY.md",
+            "packages/ai/agent-mcp/SPEC.md",
+            "packages/ai/agent-mcp/src/__tests__/debt-005-sdk-timeout.test.ts",
+            "packages/ai/agent-mcp/src/__tests__/integration/live-budget.e2e.test.ts",
+            "packages/ai/agent-mcp/src/__tests__/integration/live-dag.e2e.test.ts",
+            "packages/ai/agent-mcp/src/__tests__/integration/live-oauth.e2e.test.ts",
+            "packages/ai/agent-mcp/src/db/schema.ts",
+            "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+            "packages/ai/agent-mcp/src/providers/factory.ts",
+            "packages/ai/agent-mcp/src/providers/index.ts",
+            "packages/ai/agent-mcp/src/providers/lmstudio.ts",
+            "packages/ai/agent-mcp/src/providers/openai.ts",
+            "packages/ai/agent-mcp/src/providers/types.ts",
+            "packages/ai/agent-mcp/src/server.ts",
+            "packages/ai/agent-mcp/src/validation/agent.ts"
+          ],
+          "read_only": []
+        },
+        "dotenv-dual-load": {
+          "mutates": [
+            ".gitignore",
+            "packages/ai/agent-mcp/.env.example",
+            "packages/ai/agent-mcp/src/__tests__/dotenv-load.test.ts",
+            "packages/ai/agent-mcp/src/index.ts",
+            "packages/ai/agent-mcp/src/utils/load-env.ts"
+          ],
+          "read_only": []
+        },
+        "backcompat-normalizer": {
+          "mutates": [
+            "packages/ai/agent-mcp/src/__tests__/backcompat-normalize.test.ts",
+            "packages/ai/agent-mcp/src/validation/agent.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp/src/db/schema.ts"
+          ]
+        },
+        "audit-credentialing": {
+          "mutates": [
+            "docs/plan/agent-provider-credentialing/scripts/audit_credentialing.py",
+            "docs/plan/agent-provider-credentialing/scripts/check-no-secrets.sh"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp-types/src/domain.ts",
+            "packages/ai/agent-mcp/src/index.ts",
+            "packages/ai/agent-mcp/src/providers",
+            "packages/ai/agent-mcp/src/validation/agent.ts"
+          ]
+        }
+      },
+      "references": [],
+      "interfaces": [],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.960Z"
+    },
+    {
+      "plan": "agent-registry-migration",
+      "dir": "agent-final/superseded/agent-registry-migration",
+      "status": "published",
+      "mutate_set": [
+        "docs/plan/agent-registry-migration/RUNBOOK.md",
+        "docs/plan/agent-registry-migration/decisions.md",
+        "docs/plan/agent-registry-migration/review.md",
+        "docs/plan/agent-registry-migration/scripts/audit_migration.py",
+        "docs/plan/agent-registry-migration/scripts/review_gate.py",
+        "docs/plan/agent-registry/CLOSEOUT.md",
+        "docs/plan/agent-registry/COVERAGE.md",
+        "docs/plan/agent-registry/DEMO.md",
+        "docs/plan/agent-registry/demo/",
+        "packages/agent/agent-core-provider/src/seed/bindings.ts",
+        "packages/agent/agent-core-provider/src/seed/index.ts",
+        "packages/agent/agent-core-provider/src/seed/models.ts",
+        "packages/agent/agent-core-provider/src/seed/providers.ts",
+        "packages/agent/agent-core-provider/src/store/model-store.ts",
+        "packages/agent/agent-core-provider/src/store/provider-store.ts",
+        "packages/agent/agent-core-provider/src/store/tool-format-store.ts",
+        "packages/ai/agent-registry-migration/package.json",
+        "packages/ai/agent-registry-migration/project.json",
+        "packages/ai/agent-registry-migration/src/__fixtures__/code-reviewer.md",
+        "packages/ai/agent-registry-migration/src/__fixtures__/ticket-creation.SKILL.md",
+        "packages/ai/agent-registry-migration/src/__tests__/corpus-parser.test.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/dataset-build.test.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/haiku-usecase-batch.test.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/import-script.test.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/removal-runbook.test.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/roundtrip-equivalence.test.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/sonnet-consolidation.test.ts",
+        "packages/ai/agent-registry-migration/src/import/import-corpus.ts",
+        "packages/ai/agent-registry-migration/src/import/import-skill.ts",
+        "packages/ai/agent-registry-migration/src/index.ts",
+        "packages/ai/agent-registry-migration/src/ingest/dataset-build.ts",
+        "packages/ai/agent-registry-migration/src/ingest/haiku-batch.ts",
+        "packages/ai/agent-registry-migration/src/ingest/sonnet-consolidate.ts",
+        "packages/ai/agent-registry-migration/src/ingest/usecase-candidate.ts",
+        "packages/ai/agent-registry-migration/src/ingest/usecase-vocabulary.ts",
+        "packages/ai/agent-registry-migration/src/parse/agent-parser.ts",
+        "packages/ai/agent-registry-migration/src/parse/component-mapping.ts",
+        "packages/ai/agent-registry-migration/src/removal/retire.ts",
+        "packages/ai/agent-registry-migration/src/verify/equivalence-gate.ts",
+        "packages/ai/agent-registry-migration/src/verify/normalize.ts",
+        "tsconfig.base.json"
+      ],
+      "read_only_set": [
+        "packages/ai/agent-registry-migration/src",
+        "packages/ai/agent-registry-migration/src/__fixtures__/code-reviewer.md",
+        "packages/ai/agent-registry-migration/src/import/import-agent.ts",
+        "packages/ai/agent-registry-migration/src/verify/equivalence-gate.ts"
+      ],
+      "reservations": {
+        "seed-provider-registry": {
+          "mutates": [
+            "packages/agent/agent-core-provider/src/seed/bindings.ts",
+            "packages/agent/agent-core-provider/src/seed/index.ts",
+            "packages/agent/agent-core-provider/src/seed/models.ts",
+            "packages/agent/agent-core-provider/src/seed/providers.ts",
+            "packages/agent/agent-core-provider/src/store/model-store.ts",
+            "packages/agent/agent-core-provider/src/store/provider-store.ts",
+            "packages/agent/agent-core-provider/src/store/tool-format-store.ts"
+          ],
+          "read_only": []
+        },
+        "artifact-cleanup": {
+          "mutates": [
+            "docs/plan/agent-registry/CLOSEOUT.md",
+            "docs/plan/agent-registry/COVERAGE.md",
+            "docs/plan/agent-registry/DEMO.md",
+            "docs/plan/agent-registry/demo/"
+          ],
+          "read_only": []
+        },
+        "migration-design": {
+          "mutates": [
+            "docs/plan/agent-registry-migration/decisions.md",
+            "packages/ai/agent-registry-migration/src/__fixtures__/code-reviewer.md",
+            "packages/ai/agent-registry-migration/src/__fixtures__/ticket-creation.SKILL.md"
+          ],
+          "read_only": []
+        },
+        "scaffold-package": {
+          "mutates": [
+            "packages/ai/agent-registry-migration/package.json",
+            "packages/ai/agent-registry-migration/project.json",
+            "packages/ai/agent-registry-migration/src/index.ts",
+            "tsconfig.base.json"
+          ],
+          "read_only": []
+        },
+        "roundtrip-equivalence-gate": {
+          "mutates": [
+            "packages/ai/agent-registry-migration/src/__tests__/roundtrip-equivalence.test.ts",
+            "packages/ai/agent-registry-migration/src/index.ts",
+            "packages/ai/agent-registry-migration/src/verify/equivalence-gate.ts",
+            "packages/ai/agent-registry-migration/src/verify/normalize.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-registry-migration/src/__fixtures__/code-reviewer.md",
+            "packages/ai/agent-registry-migration/src/import/import-agent.ts"
+          ]
+        },
+        "audit-migration": {
+          "mutates": [
+            "docs/plan/agent-registry-migration/scripts/audit_migration.py"
+          ],
+          "read_only": []
+        },
+        "removal-runbook": {
+          "mutates": [
+            "docs/plan/agent-registry-migration/RUNBOOK.md",
+            "packages/ai/agent-registry-migration/src/__tests__/removal-runbook.test.ts",
+            "packages/ai/agent-registry-migration/src/index.ts",
+            "packages/ai/agent-registry-migration/src/removal/retire.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-registry-migration/src/import/import-agent.ts",
+            "packages/ai/agent-registry-migration/src/verify/equivalence-gate.ts"
+          ]
+        },
+        "audit-final": {
+          "mutates": [
+            "docs/plan/agent-registry-migration/scripts/audit_migration.py"
+          ],
+          "read_only": []
+        },
+        "code-review": {
+          "mutates": [
+            "docs/plan/agent-registry-migration/review.md",
+            "docs/plan/agent-registry-migration/scripts/review_gate.py"
+          ],
+          "read_only": [
+            "packages/ai/agent-registry-migration/src"
+          ]
+        },
+        "corpus-parser": {
+          "mutates": [
+            "packages/ai/agent-registry-migration/src/__tests__/corpus-parser.test.ts",
+            "packages/ai/agent-registry-migration/src/index.ts",
+            "packages/ai/agent-registry-migration/src/parse/agent-parser.ts",
+            "packages/ai/agent-registry-migration/src/parse/component-mapping.ts"
+          ],
+          "read_only": []
+        },
+        "haiku-usecase-batch": {
+          "mutates": [
+            "packages/ai/agent-registry-migration/src/__tests__/haiku-usecase-batch.test.ts",
+            "packages/ai/agent-registry-migration/src/index.ts",
+            "packages/ai/agent-registry-migration/src/ingest/haiku-batch.ts",
+            "packages/ai/agent-registry-migration/src/ingest/usecase-candidate.ts"
+          ],
+          "read_only": []
+        },
+        "sonnet-consolidation": {
+          "mutates": [
+            "packages/ai/agent-registry-migration/src/__tests__/sonnet-consolidation.test.ts",
+            "packages/ai/agent-registry-migration/src/index.ts",
+            "packages/ai/agent-registry-migration/src/ingest/sonnet-consolidate.ts",
+            "packages/ai/agent-registry-migration/src/ingest/usecase-vocabulary.ts"
+          ],
+          "read_only": []
+        },
+        "dataset-build": {
+          "mutates": [
+            "packages/ai/agent-registry-migration/src/__tests__/dataset-build.test.ts",
+            "packages/ai/agent-registry-migration/src/index.ts",
+            "packages/ai/agent-registry-migration/src/ingest/dataset-build.ts"
+          ],
+          "read_only": []
+        },
+        "import-script": {
+          "mutates": [
+            "packages/ai/agent-registry-migration/src/__tests__/import-script.test.ts",
+            "packages/ai/agent-registry-migration/src/import/import-corpus.ts",
+            "packages/ai/agent-registry-migration/src/import/import-skill.ts",
+            "packages/ai/agent-registry-migration/src/index.ts"
+          ],
+          "read_only": []
+        }
+      },
+      "references": [],
+      "interfaces": [
+        {
+          "slug": "better-sqlite3",
+          "interface": "new Database(path); db.pragma('journal_mode = WAL'); db.pragma('foreign_keys = ON'); db.close()",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "12.10.0"
+        },
+        {
+          "slug": "compiler-consumed",
+          "interface": "the REAL `agent-compiler compile <slug> --platform claude_code` CLI (bin name `agent-compiler`, package @adhd/agent-engine-compiler) / compileAgent({agentSlug, platform, context?, db}): CompiledAgent",
+          "confidence": "verified",
+          "provenance": "vendored-source",
+          "resolved_version": "2.1.0"
+        },
+        {
+          "slug": "policy-consumed",
+          "interface": "import { AgentPolicyStore } from '@adhd/agent-core-policy'",
+          "confidence": "verified",
+          "provenance": "vendored-source",
+          "resolved_version": "2.1.0"
+        },
+        {
+          "slug": "provider-consumed",
+          "interface": "import { ModelStore } from '@adhd/agent-core-provider'",
+          "confidence": "verified",
+          "provenance": "vendored-source",
+          "resolved_version": "2.1.0"
+        },
+        {
+          "slug": "registry-consumed",
+          "interface": "import { AgentStore, ComponentStore, CompositionStore } from '@adhd/agent-store-prompts'",
+          "confidence": "verified",
+          "provenance": "vendored-source",
+          "resolved_version": "2.1.0"
+        },
+        {
+          "slug": "tool-registry-consumed",
+          "interface": "import { BindingStore, AgentToolStore } from '@adhd/agent-store-tools'",
+          "confidence": "verified",
+          "provenance": "vendored-source",
+          "resolved_version": "2.1.0"
+        },
+        {
+          "slug": "yaml",
+          "interface": "import { parse } from 'yaml'; parse(frontmatterBlock) -> object",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "1.10.2 (installed, per node_modules/yaml/package.json) — but NOT a direct dependency of any packages/agent/* package or of the repo root today"
+        }
+      ],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.963Z"
+    },
+    {
+      "plan": "agent-registry-release",
+      "dir": "agent-final/superseded/agent-registry-release",
+      "status": "published",
+      "mutate_set": [
+        ".gitignore",
+        "docs/plan/agent-registry-release/MERGE_RUNBOOK.md",
+        "docs/plan/agent-registry-release/POST_PUBLISH.md",
+        "docs/plan/agent-registry-release/PUBLISH_RUNBOOK.md",
+        "docs/plan/agent-registry-release/contexts/closeout-design.md",
+        "docs/plan/agent-registry-release/decisions.md",
+        "docs/plan/agent-registry-release/scripts/audit_release.py",
+        "docs/plan/agent-registry-release/scripts/check_agent_mcp_baseline.py",
+        "docs/plan/agent-registry-release/scripts/smoke_test.sh",
+        "docs/plan/agent-registry/CLOSEOUT.md",
+        "docs/plan/agent-registry/demo/README.md",
+        "docs/plan/plan-index.json"
+      ],
+      "read_only_set": [],
+      "reservations": {
+        "closeout-design": {
+          "mutates": [
+            "docs/plan/agent-registry-release/contexts/closeout-design.md",
+            "docs/plan/agent-registry-release/decisions.md"
+          ],
+          "read_only": []
+        },
+        "worktree-clarity": {
+          "mutates": [
+            "docs/plan/agent-registry/CLOSEOUT.md"
+          ],
+          "read_only": []
+        },
+        "artifact-cleanup": {
+          "mutates": [
+            ".gitignore",
+            "docs/plan/agent-registry/demo/README.md",
+            "docs/plan/plan-index.json"
+          ],
+          "read_only": []
+        },
+        "agent-mcp-backout-gate": {
+          "mutates": [
+            "docs/plan/agent-registry-release/scripts/check_agent_mcp_baseline.py"
+          ],
+          "read_only": []
+        },
+        "merge-to-main": {
+          "mutates": [
+            "docs/plan/agent-registry-release/MERGE_RUNBOOK.md"
+          ],
+          "read_only": []
+        },
+        "publish-packages": {
+          "mutates": [
+            "docs/plan/agent-registry-release/PUBLISH_RUNBOOK.md"
+          ],
+          "read_only": []
+        },
+        "post-publish-smoke": {
+          "mutates": [
+            "docs/plan/agent-registry-release/POST_PUBLISH.md",
+            "docs/plan/agent-registry-release/scripts/smoke_test.sh"
+          ],
+          "read_only": []
+        },
+        "audit-final": {
+          "mutates": [
+            "docs/plan/agent-registry-release/scripts/audit_release.py"
+          ],
+          "read_only": []
+        }
+      },
+      "references": [],
+      "interfaces": [],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.964Z"
+    },
+    {
+      "plan": "agent-registry-schema",
+      "dir": "agent-final/superseded/agent-registry-schema",
+      "status": "complete",
+      "mutate_set": [
+        "docs/plan/agent-registry-schema/contexts/design-and-architecture.md",
+        "docs/plan/agent-registry-schema/decisions.md",
+        "docs/plan/agent-registry-schema/scripts/audit_registry_schema.py",
+        "packages/ai/agent-registry/drizzle",
+        "packages/ai/agent-registry/package.json",
+        "packages/ai/agent-registry/project.json",
+        "packages/ai/agent-registry/src/__tests__/agent-store.test.ts",
+        "packages/ai/agent-registry/src/__tests__/component-store.test.ts",
+        "packages/ai/agent-registry/src/__tests__/composed-prompt-store.test.ts",
+        "packages/ai/agent-registry/src/__tests__/composition-store.test.ts",
+        "packages/ai/agent-registry/src/__tests__/roundtrip.test.ts",
+        "packages/ai/agent-registry/src/__tests__/usecase-store.test.ts",
+        "packages/ai/agent-registry/src/db/client.ts",
+        "packages/ai/agent-registry/src/db/schema.ts",
+        "packages/ai/agent-registry/src/index.ts",
+        "packages/ai/agent-registry/src/seed/components.ts",
+        "packages/ai/agent-registry/src/seed/index.ts",
+        "packages/ai/agent-registry/src/seed/prompt-types.ts",
+        "packages/ai/agent-registry/src/store/agent-store.ts",
+        "packages/ai/agent-registry/src/store/component-store.ts",
+        "packages/ai/agent-registry/src/store/composed-prompt-store.ts",
+        "packages/ai/agent-registry/src/store/composition-store.ts",
+        "packages/ai/agent-registry/src/store/usecase-store.ts",
+        "tsconfig.base.json"
+      ],
+      "read_only_set": [
+        "packages/ai/agent-registry/src/db/client.ts",
+        "packages/ai/agent-registry/src/db/schema.ts",
+        "packages/ai/agent-registry/src/store/agent-store.ts",
+        "packages/ai/agent-registry/src/store/component-store.ts",
+        "packages/ai/agent-registry/src/store/composition-store.ts"
+      ],
+      "reservations": {
+        "scaffold-package": {
+          "mutates": [
+            "packages/ai/agent-registry/package.json",
+            "packages/ai/agent-registry/project.json",
+            "packages/ai/agent-registry/src/db/client.ts",
+            "packages/ai/agent-registry/src/db/schema.ts",
+            "packages/ai/agent-registry/src/index.ts",
+            "tsconfig.base.json"
+          ],
+          "read_only": []
+        },
+        "lookup-and-component-schema": {
+          "mutates": [
+            "packages/ai/agent-registry/drizzle",
+            "packages/ai/agent-registry/src/__tests__/component-store.test.ts",
+            "packages/ai/agent-registry/src/db/schema.ts",
+            "packages/ai/agent-registry/src/index.ts",
+            "packages/ai/agent-registry/src/store/component-store.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-registry/src/db/client.ts"
+          ]
+        },
+        "agent-and-taxonomy-schema": {
+          "mutates": [
+            "packages/ai/agent-registry/drizzle",
+            "packages/ai/agent-registry/src/__tests__/agent-store.test.ts",
+            "packages/ai/agent-registry/src/db/schema.ts",
+            "packages/ai/agent-registry/src/index.ts",
+            "packages/ai/agent-registry/src/store/agent-store.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-registry/src/store/component-store.ts"
+          ]
+        },
+        "composition-junction": {
+          "mutates": [
+            "packages/ai/agent-registry/drizzle",
+            "packages/ai/agent-registry/src/__tests__/composition-store.test.ts",
+            "packages/ai/agent-registry/src/db/schema.ts",
+            "packages/ai/agent-registry/src/index.ts",
+            "packages/ai/agent-registry/src/store/composition-store.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-registry/src/store/agent-store.ts",
+            "packages/ai/agent-registry/src/store/component-store.ts"
+          ]
+        },
+        "usecase-and-context-rules": {
+          "mutates": [
+            "packages/ai/agent-registry/drizzle",
+            "packages/ai/agent-registry/src/__tests__/usecase-store.test.ts",
+            "packages/ai/agent-registry/src/db/schema.ts",
+            "packages/ai/agent-registry/src/index.ts",
+            "packages/ai/agent-registry/src/store/usecase-store.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-registry/src/store/composition-store.ts"
+          ]
+        },
+        "composed-prompt-cache": {
+          "mutates": [
+            "packages/ai/agent-registry/drizzle",
+            "packages/ai/agent-registry/src/__tests__/composed-prompt-store.test.ts",
+            "packages/ai/agent-registry/src/db/schema.ts",
+            "packages/ai/agent-registry/src/index.ts",
+            "packages/ai/agent-registry/src/store/composed-prompt-store.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-registry/src/store/composition-store.ts"
+          ]
+        },
+        "audit-schema": {
+          "mutates": [
+            "docs/plan/agent-registry-schema/scripts/audit_registry_schema.py"
+          ],
+          "read_only": []
+        },
+        "seed-and-roundtrip": {
+          "mutates": [
+            "packages/ai/agent-registry/src/__tests__/roundtrip.test.ts",
+            "packages/ai/agent-registry/src/index.ts",
+            "packages/ai/agent-registry/src/seed/components.ts",
+            "packages/ai/agent-registry/src/seed/index.ts",
+            "packages/ai/agent-registry/src/seed/prompt-types.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-registry/src/db/schema.ts",
+            "packages/ai/agent-registry/src/store/component-store.ts"
+          ]
+        },
+        "audit-final": {
+          "mutates": [
+            "docs/plan/agent-registry-schema/scripts/audit_registry_schema.py"
+          ],
+          "read_only": []
+        },
+        "design-and-architecture": {
+          "mutates": [
+            "docs/plan/agent-registry-schema/contexts/design-and-architecture.md",
+            "docs/plan/agent-registry-schema/decisions.md"
+          ],
+          "read_only": []
+        }
+      },
+      "references": [],
+      "interfaces": [
+        {
+          "slug": "agent-mcp-types-consumed",
+          "interface": "type ComposedPrompt — the cross-package shape of a composed prompt row; lives in @adhd/agent-mcp-types per the shared-type rule (REFERENCES.md:197-211)",
+          "confidence": "documented",
+          "provenance": "docs",
+          "resolved_version": "see packages/ai/agent-mcp-types/package.json"
+        },
+        {
+          "slug": "agent-registry-public-api",
+          "interface": "@adhd/agent-registry exports: { sqlite, db, runMigrations, runMigrationsOn, MIGRATIONS_FOLDER, schema tables, AgentStore, TaxonomyStore, ComponentStore, CompositionStore, evaluateCondition, UseCaseStore, ComposedPromptStore, contextHash, seed, PROMPT_TYPES, SEED_COMPONENTS } plus their public types",
+          "confidence": "verified",
+          "provenance": "vendored-source",
+          "resolved_version": "0.0.1"
+        },
+        {
+          "slug": "better-sqlite3",
+          "interface": "new Database(path, opts?); db.pragma('journal_mode = WAL'); db.pragma('foreign_keys = ON'); db.close()",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "12.10.0"
+        },
+        {
+          "slug": "drizzle-orm",
+          "interface": "sqliteTable(name, { col: text()|integer()|integer({mode:'boolean'})|text({mode:'json'}) }, t => ({ pk: primaryKey({columns:[...]}) })); drizzle(new Database(path), { schema }) -> BetterSQLite3Database",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "0.45.2"
+        }
+      ],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.966Z"
+    },
+    {
+      "plan": "agent-tool-registry",
+      "dir": "agent-final/superseded/agent-tool-registry",
+      "status": "complete",
+      "mutate_set": [
+        "docs/plan/agent-tool-registry/review.md",
+        "docs/plan/agent-tool-registry/scripts/audit_tool_registry.py",
+        "docs/plan/agent-tool-registry/scripts/review_gate.py",
+        "packages/ai/agent-tool-registry/drizzle",
+        "packages/ai/agent-tool-registry/package.json",
+        "packages/ai/agent-tool-registry/project.json",
+        "packages/ai/agent-tool-registry/src/__tests__/agent-tool-store.test.ts",
+        "packages/ai/agent-tool-registry/src/__tests__/binding-store.test.ts",
+        "packages/ai/agent-tool-registry/src/__tests__/mcp-server-store.test.ts",
+        "packages/ai/agent-tool-registry/src/__tests__/roundtrip.test.ts",
+        "packages/ai/agent-tool-registry/src/__tests__/tool-store.test.ts",
+        "packages/ai/agent-tool-registry/src/db/client.ts",
+        "packages/ai/agent-tool-registry/src/db/migrate.ts",
+        "packages/ai/agent-tool-registry/src/db/schema.ts",
+        "packages/ai/agent-tool-registry/src/index.ts",
+        "packages/ai/agent-tool-registry/src/seed/bindings.ts",
+        "packages/ai/agent-tool-registry/src/seed/index.ts",
+        "packages/ai/agent-tool-registry/src/seed/platforms.ts",
+        "packages/ai/agent-tool-registry/src/seed/tool-types.ts",
+        "packages/ai/agent-tool-registry/src/seed/tools.ts",
+        "packages/ai/agent-tool-registry/src/store/agent-tool-store.ts",
+        "packages/ai/agent-tool-registry/src/store/binding-store.ts",
+        "packages/ai/agent-tool-registry/src/store/mcp-server-store.ts",
+        "packages/ai/agent-tool-registry/src/store/tool-store.ts",
+        "tsconfig.base.json"
+      ],
+      "read_only_set": [
+        "packages/ai/agent-tool-registry/src",
+        "packages/ai/agent-tool-registry/src/db/client.ts",
+        "packages/ai/agent-tool-registry/src/db/schema.ts",
+        "packages/ai/agent-tool-registry/src/store/binding-store.ts",
+        "packages/ai/agent-tool-registry/src/store/tool-store.ts"
+      ],
+      "reservations": {
+        "scaffold-package": {
+          "mutates": [
+            "packages/ai/agent-tool-registry/package.json",
+            "packages/ai/agent-tool-registry/project.json",
+            "packages/ai/agent-tool-registry/src/db/client.ts",
+            "packages/ai/agent-tool-registry/src/db/migrate.ts",
+            "packages/ai/agent-tool-registry/src/db/schema.ts",
+            "packages/ai/agent-tool-registry/src/index.ts",
+            "tsconfig.base.json"
+          ],
+          "read_only": []
+        },
+        "tool-and-type-schema": {
+          "mutates": [
+            "packages/ai/agent-tool-registry/drizzle",
+            "packages/ai/agent-tool-registry/src/__tests__/tool-store.test.ts",
+            "packages/ai/agent-tool-registry/src/db/schema.ts",
+            "packages/ai/agent-tool-registry/src/index.ts",
+            "packages/ai/agent-tool-registry/src/store/tool-store.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-tool-registry/src/db/client.ts"
+          ]
+        },
+        "platform-and-binding-schema": {
+          "mutates": [
+            "packages/ai/agent-tool-registry/drizzle",
+            "packages/ai/agent-tool-registry/src/__tests__/binding-store.test.ts",
+            "packages/ai/agent-tool-registry/src/db/schema.ts",
+            "packages/ai/agent-tool-registry/src/index.ts",
+            "packages/ai/agent-tool-registry/src/store/binding-store.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-tool-registry/src/store/tool-store.ts"
+          ]
+        },
+        "mcp-server-schema": {
+          "mutates": [
+            "packages/ai/agent-tool-registry/drizzle",
+            "packages/ai/agent-tool-registry/src/__tests__/mcp-server-store.test.ts",
+            "packages/ai/agent-tool-registry/src/db/schema.ts",
+            "packages/ai/agent-tool-registry/src/index.ts",
+            "packages/ai/agent-tool-registry/src/store/mcp-server-store.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-tool-registry/src/store/tool-store.ts"
+          ]
+        },
+        "agent-tool-junction": {
+          "mutates": [
+            "packages/ai/agent-tool-registry/drizzle",
+            "packages/ai/agent-tool-registry/src/__tests__/agent-tool-store.test.ts",
+            "packages/ai/agent-tool-registry/src/db/schema.ts",
+            "packages/ai/agent-tool-registry/src/index.ts",
+            "packages/ai/agent-tool-registry/src/store/agent-tool-store.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-tool-registry/src/store/tool-store.ts"
+          ]
+        },
+        "audit-schema": {
+          "mutates": [
+            "docs/plan/agent-tool-registry/scripts/audit_tool_registry.py"
+          ],
+          "read_only": []
+        },
+        "seed-and-roundtrip": {
+          "mutates": [
+            "packages/ai/agent-tool-registry/src/__tests__/roundtrip.test.ts",
+            "packages/ai/agent-tool-registry/src/index.ts",
+            "packages/ai/agent-tool-registry/src/seed/bindings.ts",
+            "packages/ai/agent-tool-registry/src/seed/index.ts",
+            "packages/ai/agent-tool-registry/src/seed/platforms.ts",
+            "packages/ai/agent-tool-registry/src/seed/tool-types.ts",
+            "packages/ai/agent-tool-registry/src/seed/tools.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-tool-registry/src/db/schema.ts",
+            "packages/ai/agent-tool-registry/src/store/binding-store.ts",
+            "packages/ai/agent-tool-registry/src/store/tool-store.ts"
+          ]
+        },
+        "audit-final": {
+          "mutates": [
+            "docs/plan/agent-tool-registry/scripts/audit_tool_registry.py"
+          ],
+          "read_only": []
+        },
+        "code-review": {
+          "mutates": [
+            "docs/plan/agent-tool-registry/review.md",
+            "docs/plan/agent-tool-registry/scripts/review_gate.py"
+          ],
+          "read_only": [
+            "packages/ai/agent-tool-registry/src"
+          ]
+        }
+      },
+      "references": [],
+      "interfaces": [
+        {
+          "slug": "agent-tool-registry-public-api",
+          "interface": "@adhd/agent-tool-registry exports: { openToolRegistryDb, schema, ToolStore, PlatformStore, ToolBindingStore, McpServerStore, AgentToolStore }",
+          "confidence": "documented",
+          "provenance": "docs",
+          "resolved_version": "1.0.0"
+        },
+        {
+          "slug": "better-sqlite3",
+          "interface": "new Database(path); db.pragma('journal_mode = WAL'); db.close()",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "see packages/ai/agent-mcp/package.json (match version)"
+        },
+        {
+          "slug": "drizzle-orm",
+          "interface": "sqliteTable(name, cols, t => ({ pk })); within-package .references(() => tools.name) FK; cross-package FK is FORBIDDEN (logical text key only)",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "see packages/ai/agent-mcp/package.json (match version)"
+        }
+      ],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.968Z"
+    },
+    {
+      "plan": "apigen-client-generation",
+      "dir": "apigen-client-generation",
+      "status": "complete",
+      "mutate_set": [
+        "docs/plan/apigen-client-generation/checkpoints/fastify-approved.md",
+        "docs/plan/apigen-client-generation/scripts/audit_apigen.py",
+        "docs/plan/apigen-client-generation/state.json",
+        "package.json",
+        "packages/apigen/cli/package.json",
+        "packages/apigen/cli/project.json",
+        "packages/apigen/cli/src/index.ts",
+        "packages/apigen/cli/src/lib/commands/generate-registry.ts",
+        "packages/apigen/cli/src/lib/commands/generate.ts",
+        "packages/apigen/cli/src/lib/commands/run-registry.ts",
+        "packages/apigen/cli/src/lib/commands/run.ts",
+        "packages/apigen/cli/src/lib/orchestrator.ts",
+        "packages/apigen/cli/src/lib/pipeline.ts",
+        "packages/apigen/cli/src/lib/registry.ts",
+        "packages/apigen/cli/src/test/e2e/real-consumer.spec.ts",
+        "packages/apigen/cli/src/test/fixtures/api.ts",
+        "packages/apigen/cli/src/test/fixtures/real-api.ts",
+        "packages/apigen/cli/src/test/fixtures/registry/pkg-a/index.ts",
+        "packages/apigen/cli/src/test/fixtures/registry/pkg-a/package.json",
+        "packages/apigen/cli/src/test/fixtures/registry/pkg-b/index.ts",
+        "packages/apigen/cli/src/test/fixtures/registry/pkg-b/package.json",
+        "packages/apigen/cli/src/test/fixtures/shapes/anonymous-default.ts",
+        "packages/apigen/cli/src/test/fixtures/shapes/cjs-source.cts",
+        "packages/apigen/cli/src/test/fixtures/shapes/default-fn.ts",
+        "packages/apigen/cli/src/test/fixtures/shapes/default-object.ts",
+        "packages/apigen/cli/src/test/fixtures/shapes/named.ts",
+        "packages/apigen/cli/src/test/fixtures/shapes/renamed.ts",
+        "packages/apigen/cli/src/test/generate.spec.ts",
+        "packages/apigen/cli/src/test/integration/canonical.spec.ts",
+        "packages/apigen/cli/src/test/integration/export-shape-matrix.spec.ts",
+        "packages/apigen/cli/src/test/integration/gateway-mixed-host.spec.ts",
+        "packages/apigen/cli/src/test/integration/streaming.spec.ts",
+        "packages/apigen/cli/src/test/run.spec.ts",
+        "packages/apigen/codegen/openapi/project.json",
+        "packages/apigen/codegen/openapi/src/lib/to-openapi.ts",
+        "packages/apigen/conformance/project.json",
+        "packages/apigen/conformance/src/lib/vectors.ts",
+        "packages/apigen/core/package.json",
+        "packages/apigen/core/project.json",
+        "packages/apigen/core/src/index.ts",
+        "packages/apigen/core/src/lib/compose-schemas.ts",
+        "packages/apigen/core/src/lib/descriptor.schema.json",
+        "packages/apigen/core/src/lib/descriptor.ts",
+        "packages/apigen/core/src/lib/extract-classes.ts",
+        "packages/apigen/core/src/lib/extract.ts",
+        "packages/apigen/core/src/lib/extractors/default-export.ts",
+        "packages/apigen/core/src/lib/extractors/named-object.ts",
+        "packages/apigen/core/src/lib/extractors/named.ts",
+        "packages/apigen/core/src/lib/generate-schemas.ts",
+        "packages/apigen/core/src/lib/plugin.ts",
+        "packages/apigen/core/src/lib/schema-builders/morph-fallback.ts",
+        "packages/apigen/core/src/lib/schema-builders/ts-json-schema.ts",
+        "packages/apigen/core/src/lib/types.ts",
+        "packages/apigen/core/src/test/compose-schemas.spec.ts",
+        "packages/apigen/core/src/test/fixtures/ctx-param.ts",
+        "packages/apigen/core/src/test/fixtures/default-export.ts",
+        "packages/apigen/core/src/test/fixtures/named-exports.ts",
+        "packages/apigen/core/src/test/fixtures/named-object.ts",
+        "packages/apigen/core/src/test/generate-schemas.spec.ts",
+        "packages/apigen/core/vite.config.ts",
+        "packages/apigen/errors/project.json",
+        "packages/apigen/errors/src/lib/errors.ts",
+        "packages/apigen/gateway/project.json",
+        "packages/apigen/gateway/src/lib/gateway.ts",
+        "packages/apigen/naming/project.json",
+        "packages/apigen/naming/src/lib/naming.ts",
+        "packages/apigen/nx/executors.json",
+        "packages/apigen/nx/generators.json",
+        "packages/apigen/nx/package.json",
+        "packages/apigen/nx/project.json",
+        "packages/apigen/nx/src/executors/generate/executor.ts",
+        "packages/apigen/nx/src/executors/generate/schema.json",
+        "packages/apigen/nx/src/generators/plugin/__files__/package.json__tmpl__",
+        "packages/apigen/nx/src/generators/plugin/__files__/src/index.ts__tmpl__",
+        "packages/apigen/nx/src/generators/plugin/__files__/src/lib/plugin.ts__tmpl__",
+        "packages/apigen/nx/src/generators/plugin/__files__/src/test/plugin.spec.ts__tmpl__",
+        "packages/apigen/nx/src/generators/plugin/generator.ts",
+        "packages/apigen/nx/src/generators/plugin/schema.json",
+        "packages/apigen/nx/src/index.ts",
+        "packages/apigen/nx/src/test/executor.spec.ts",
+        "packages/apigen/nx/src/test/generator.spec.ts",
+        "packages/apigen/plugins/api-express/package.json",
+        "packages/apigen/plugins/api-express/project.json",
+        "packages/apigen/plugins/api-express/src/index.ts",
+        "packages/apigen/plugins/api-express/src/lib/generate.ts",
+        "packages/apigen/plugins/api-express/src/lib/plugin.ts",
+        "packages/apigen/plugins/api-express/src/lib/run.ts",
+        "packages/apigen/plugins/api-express/src/test/plugin.spec.ts",
+        "packages/apigen/plugins/api-fastify/package.json",
+        "packages/apigen/plugins/api-fastify/project.json",
+        "packages/apigen/plugins/api-fastify/src/index.ts",
+        "packages/apigen/plugins/api-fastify/src/lib/generate.ts",
+        "packages/apigen/plugins/api-fastify/src/lib/plugin.ts",
+        "packages/apigen/plugins/api-fastify/src/lib/run.ts",
+        "packages/apigen/plugins/api-fastify/src/lib/stream.ts",
+        "packages/apigen/plugins/api-fastify/src/test/plugin.spec.ts",
+        "packages/apigen/plugins/cli/package.json",
+        "packages/apigen/plugins/cli/project.json",
+        "packages/apigen/plugins/cli/src/index.ts",
+        "packages/apigen/plugins/cli/src/lib/generate.ts",
+        "packages/apigen/plugins/cli/src/lib/plugin.ts",
+        "packages/apigen/plugins/cli/src/test/plugin.spec.ts",
+        "packages/apigen/plugins/health/project.json",
+        "packages/apigen/plugins/health/src/lib/plugin.ts",
+        "packages/apigen/plugins/jsonschema/package.json",
+        "packages/apigen/plugins/jsonschema/project.json",
+        "packages/apigen/plugins/jsonschema/src/index.ts",
+        "packages/apigen/plugins/jsonschema/src/lib/plugin.ts",
+        "packages/apigen/plugins/jsonschema/src/test/plugin.spec.ts",
+        "packages/apigen/plugins/logger/project.json",
+        "packages/apigen/plugins/logger/src/lib/plugin.ts",
+        "packages/apigen/plugins/mcp/package.json",
+        "packages/apigen/plugins/mcp/project.json",
+        "packages/apigen/plugins/mcp/src/index.ts",
+        "packages/apigen/plugins/mcp/src/lib/generate.ts",
+        "packages/apigen/plugins/mcp/src/lib/plugin.ts",
+        "packages/apigen/plugins/mcp/src/lib/run.ts",
+        "packages/apigen/plugins/mcp/src/lib/stream.ts",
+        "packages/apigen/plugins/mcp/src/lib/templates/server-http.tpl.ts",
+        "packages/apigen/plugins/mcp/src/lib/templates/server-stdio.tpl.ts",
+        "packages/apigen/plugins/mcp/src/test/generate.spec.ts",
+        "packages/apigen/plugins/mcp/src/test/run.spec.ts",
+        "packages/apigen/plugins/openapi/project.json",
+        "packages/apigen/plugins/openapi/src/lib/plugin.ts",
+        "packages/apigen/python/apigen_python/extractor.py",
+        "packages/apigen/python/apigen_python/gateway_adapter.py",
+        "packages/apigen/python/apigen_python/plugin_echo.py",
+        "packages/apigen/python/apigen_python/runtime.py",
+        "packages/apigen/python/pyproject.toml",
+        "packages/apigen/python/run_tests.py",
+        "packages/apigen/runtime/package.json",
+        "packages/apigen/runtime/project.json",
+        "packages/apigen/runtime/src/index.ts",
+        "packages/apigen/runtime/src/lib/api-package.ts",
+        "packages/apigen/runtime/src/lib/build-context.ts",
+        "packages/apigen/runtime/src/lib/define-middleware.ts",
+        "packages/apigen/runtime/src/lib/dispatch.ts",
+        "packages/apigen/runtime/src/lib/event-bus.ts",
+        "packages/apigen/runtime/src/lib/instance-registry.ts",
+        "packages/apigen/runtime/src/lib/invoke.ts",
+        "packages/apigen/runtime/src/lib/stream.ts",
+        "packages/apigen/runtime/src/lib/types.ts",
+        "packages/apigen/runtime/src/lib/validate-layer.ts",
+        "packages/apigen/runtime/src/test/api-package.spec.ts",
+        "packages/apigen/runtime/src/test/build-context.spec.ts",
+        "packages/apigen/runtime/src/test/dispatch.spec.ts",
+        "packages/apigen/runtime/vite.config.ts",
+        "packages/apigen/schema/project.json",
+        "tsconfig.base.json"
+      ],
+      "read_only_set": [
+        "nx.json",
+        "package.json",
+        "packages/ai/agent-mcp/project.json",
+        "packages/apigen/",
+        "packages/apigen/cli/src/lib/pipeline.ts",
+        "packages/apigen/core/src/",
+        "packages/apigen/core/src/lib/types.ts",
+        "packages/apigen/nx/",
+        "packages/apigen/plugins/*/",
+        "packages/apigen/plugins/api-fastify/",
+        "packages/apigen/runtime/src/",
+        "packages/apigen/runtime/src/lib/types.ts",
+        "registry.ts"
+      ],
+      "reservations": {
+        "scaffold-packages": {
+          "mutates": [
+            "packages/apigen/cli/package.json",
+            "packages/apigen/cli/project.json",
+            "packages/apigen/core/package.json",
+            "packages/apigen/core/project.json",
+            "packages/apigen/core/vite.config.ts",
+            "packages/apigen/nx/package.json",
+            "packages/apigen/nx/project.json",
+            "packages/apigen/runtime/package.json",
+            "packages/apigen/runtime/project.json",
+            "packages/apigen/runtime/vite.config.ts",
+            "tsconfig.base.json"
+          ],
+          "read_only": [
+            "nx.json",
+            "package.json",
+            "packages/ai/agent-mcp/project.json"
+          ]
+        },
+        "core-types": {
+          "mutates": [
+            "packages/apigen/core/src/index.ts",
+            "packages/apigen/core/src/lib/types.ts"
+          ],
+          "read_only": [
+            "packages/apigen/"
+          ]
+        },
+        "schema-extraction": {
+          "mutates": [
+            "package.json",
+            "packages/apigen/core/src/lib/extractors/default-export.ts",
+            "packages/apigen/core/src/lib/extractors/named-object.ts",
+            "packages/apigen/core/src/lib/extractors/named.ts",
+            "packages/apigen/core/src/lib/generate-schemas.ts",
+            "packages/apigen/core/src/lib/schema-builders/morph-fallback.ts",
+            "packages/apigen/core/src/lib/schema-builders/ts-json-schema.ts",
+            "packages/apigen/core/src/test/fixtures/ctx-param.ts",
+            "packages/apigen/core/src/test/fixtures/default-export.ts",
+            "packages/apigen/core/src/test/fixtures/named-exports.ts",
+            "packages/apigen/core/src/test/fixtures/named-object.ts",
+            "packages/apigen/core/src/test/generate-schemas.spec.ts"
+          ],
+          "read_only": [
+            "packages/apigen/core/src/lib/types.ts"
+          ]
+        },
+        "schema-composition": {
+          "mutates": [
+            "packages/apigen/core/src/lib/compose-schemas.ts",
+            "packages/apigen/core/src/test/compose-schemas.spec.ts"
+          ],
+          "read_only": [
+            "packages/apigen/core/src/lib/types.ts"
+          ]
+        },
+        "audit-core": {
+          "mutates": [
+            "docs/plan/apigen-client-generation/scripts/audit_apigen.py"
+          ],
+          "read_only": [
+            "packages/apigen/"
+          ]
+        },
+        "runtime-middleware": {
+          "mutates": [
+            "packages/apigen/runtime/src/index.ts",
+            "packages/apigen/runtime/src/lib/api-package.ts",
+            "packages/apigen/runtime/src/lib/build-context.ts",
+            "packages/apigen/runtime/src/lib/define-middleware.ts",
+            "packages/apigen/runtime/src/lib/event-bus.ts",
+            "packages/apigen/runtime/src/lib/types.ts",
+            "packages/apigen/runtime/src/test/api-package.spec.ts",
+            "packages/apigen/runtime/src/test/build-context.spec.ts"
+          ],
+          "read_only": [
+            "packages/apigen/core/src/"
+          ]
+        },
+        "runtime-dispatch": {
+          "mutates": [
+            "packages/apigen/runtime/src/lib/dispatch.ts",
+            "packages/apigen/runtime/src/test/dispatch.spec.ts"
+          ],
+          "read_only": [
+            "packages/apigen/runtime/src/lib/types.ts"
+          ]
+        },
+        "audit-runtime": {
+          "mutates": [
+            "docs/plan/apigen-client-generation/scripts/audit_apigen.py"
+          ],
+          "read_only": [
+            "packages/apigen/"
+          ]
+        },
+        "scaffold-plugins": {
+          "mutates": [
+            "packages/apigen/plugins/api-express/package.json",
+            "packages/apigen/plugins/api-express/project.json",
+            "packages/apigen/plugins/api-express/src/index.ts",
+            "packages/apigen/plugins/api-express/src/lib/plugin.ts",
+            "packages/apigen/plugins/api-fastify/package.json",
+            "packages/apigen/plugins/api-fastify/project.json",
+            "packages/apigen/plugins/api-fastify/src/index.ts",
+            "packages/apigen/plugins/api-fastify/src/lib/plugin.ts",
+            "packages/apigen/plugins/cli/package.json",
+            "packages/apigen/plugins/cli/project.json",
+            "packages/apigen/plugins/cli/src/index.ts",
+            "packages/apigen/plugins/cli/src/lib/plugin.ts",
+            "packages/apigen/plugins/jsonschema/package.json",
+            "packages/apigen/plugins/jsonschema/project.json",
+            "packages/apigen/plugins/jsonschema/src/index.ts",
+            "packages/apigen/plugins/jsonschema/src/lib/plugin.ts",
+            "packages/apigen/plugins/mcp/package.json",
+            "packages/apigen/plugins/mcp/project.json",
+            "packages/apigen/plugins/mcp/src/index.ts",
+            "packages/apigen/plugins/mcp/src/lib/plugin.ts",
+            "tsconfig.base.json"
+          ],
+          "read_only": [
+            "packages/apigen/nx/"
+          ]
+        },
+        "plugin-fastify-checkpoint": {
+          "mutates": [
+            "docs/plan/apigen-client-generation/checkpoints/fastify-approved.md"
+          ],
+          "read_only": [
+            "packages/apigen/plugins/api-fastify/"
+          ]
+        },
+        "plugin-jsonschema": {
+          "mutates": [
+            "packages/apigen/plugins/jsonschema/src/index.ts",
+            "packages/apigen/plugins/jsonschema/src/lib/plugin.ts",
+            "packages/apigen/plugins/jsonschema/src/test/plugin.spec.ts"
+          ],
+          "read_only": []
+        },
+        "plugin-mcp": {
+          "mutates": [
+            "package.json",
+            "packages/apigen/plugins/mcp/src/index.ts",
+            "packages/apigen/plugins/mcp/src/lib/generate.ts",
+            "packages/apigen/plugins/mcp/src/lib/plugin.ts",
+            "packages/apigen/plugins/mcp/src/lib/run.ts",
+            "packages/apigen/plugins/mcp/src/lib/templates/server-http.tpl.ts",
+            "packages/apigen/plugins/mcp/src/lib/templates/server-stdio.tpl.ts",
+            "packages/apigen/plugins/mcp/src/test/generate.spec.ts",
+            "packages/apigen/plugins/mcp/src/test/run.spec.ts"
+          ],
+          "read_only": [
+            "packages/apigen/core/src/",
+            "packages/apigen/runtime/src/"
+          ]
+        },
+        "plugin-api-fastify": {
+          "mutates": [
+            "package.json",
+            "packages/apigen/plugins/api-fastify/src/index.ts",
+            "packages/apigen/plugins/api-fastify/src/lib/generate.ts",
+            "packages/apigen/plugins/api-fastify/src/lib/plugin.ts",
+            "packages/apigen/plugins/api-fastify/src/lib/run.ts",
+            "packages/apigen/plugins/api-fastify/src/test/plugin.spec.ts"
+          ],
+          "read_only": []
+        },
+        "plugin-api-express": {
+          "mutates": [
+            "package.json",
+            "packages/apigen/plugins/api-express/src/index.ts",
+            "packages/apigen/plugins/api-express/src/lib/generate.ts",
+            "packages/apigen/plugins/api-express/src/lib/plugin.ts",
+            "packages/apigen/plugins/api-express/src/lib/run.ts",
+            "packages/apigen/plugins/api-express/src/test/plugin.spec.ts"
+          ],
+          "read_only": []
+        },
+        "plugin-cli-output": {
+          "mutates": [
+            "packages/apigen/plugins/cli/src/index.ts",
+            "packages/apigen/plugins/cli/src/lib/generate.ts",
+            "packages/apigen/plugins/cli/src/lib/plugin.ts",
+            "packages/apigen/plugins/cli/src/test/plugin.spec.ts"
+          ],
+          "read_only": []
+        },
+        "audit-plugins": {
+          "mutates": [
+            "docs/plan/apigen-client-generation/scripts/audit_apigen.py"
+          ],
+          "read_only": [
+            "packages/apigen/"
+          ]
+        },
+        "cli-generate-cmd": {
+          "mutates": [
+            "packages/apigen/cli/src/index.ts",
+            "packages/apigen/cli/src/lib/commands/generate-registry.ts",
+            "packages/apigen/cli/src/lib/commands/generate.ts",
+            "packages/apigen/cli/src/lib/pipeline.ts",
+            "packages/apigen/cli/src/lib/registry.ts",
+            "packages/apigen/cli/src/test/fixtures/api.ts",
+            "packages/apigen/cli/src/test/fixtures/registry/pkg-a/index.ts",
+            "packages/apigen/cli/src/test/fixtures/registry/pkg-a/package.json",
+            "packages/apigen/cli/src/test/fixtures/registry/pkg-b/index.ts",
+            "packages/apigen/cli/src/test/fixtures/registry/pkg-b/package.json",
+            "packages/apigen/cli/src/test/generate.spec.ts"
+          ],
+          "read_only": [
+            "packages/apigen/plugins/*/"
+          ]
+        },
+        "cli-run-cmd": {
+          "mutates": [
+            "packages/apigen/cli/src/lib/commands/run-registry.ts",
+            "packages/apigen/cli/src/lib/commands/run.ts",
+            "packages/apigen/cli/src/test/run.spec.ts"
+          ],
+          "read_only": [
+            "packages/apigen/cli/src/lib/pipeline.ts",
+            "registry.ts"
+          ]
+        },
+        "nx-generator": {
+          "mutates": [
+            "packages/apigen/nx/executors.json",
+            "packages/apigen/nx/generators.json",
+            "packages/apigen/nx/src/executors/generate/executor.ts",
+            "packages/apigen/nx/src/executors/generate/schema.json",
+            "packages/apigen/nx/src/generators/plugin/__files__/package.json__tmpl__",
+            "packages/apigen/nx/src/generators/plugin/__files__/src/index.ts__tmpl__",
+            "packages/apigen/nx/src/generators/plugin/__files__/src/lib/plugin.ts__tmpl__",
+            "packages/apigen/nx/src/generators/plugin/__files__/src/test/plugin.spec.ts__tmpl__",
+            "packages/apigen/nx/src/generators/plugin/generator.ts",
+            "packages/apigen/nx/src/generators/plugin/schema.json",
+            "packages/apigen/nx/src/index.ts",
+            "packages/apigen/nx/src/test/executor.spec.ts",
+            "packages/apigen/nx/src/test/generator.spec.ts"
+          ],
+          "read_only": [
+            "packages/apigen/core/src/lib/types.ts"
+          ]
+        },
+        "done": {
+          "mutates": [
+            "docs/plan/apigen-client-generation/state.json"
+          ],
+          "read_only": []
+        },
+        "audit-final-v2": {
+          "mutates": [
+            "docs/plan/apigen-client-generation/scripts/audit_apigen.py"
+          ],
+          "read_only": []
+        },
+        "integration-tests-v2": {
+          "mutates": [
+            "packages/apigen/cli/src/test/e2e/real-consumer.spec.ts",
+            "packages/apigen/cli/src/test/fixtures/real-api.ts",
+            "packages/apigen/cli/src/test/fixtures/shapes/anonymous-default.ts",
+            "packages/apigen/cli/src/test/fixtures/shapes/cjs-source.cts",
+            "packages/apigen/cli/src/test/fixtures/shapes/default-fn.ts",
+            "packages/apigen/cli/src/test/fixtures/shapes/default-object.ts",
+            "packages/apigen/cli/src/test/fixtures/shapes/named.ts",
+            "packages/apigen/cli/src/test/fixtures/shapes/renamed.ts",
+            "packages/apigen/cli/src/test/integration/canonical.spec.ts",
+            "packages/apigen/cli/src/test/integration/export-shape-matrix.spec.ts",
+            "packages/apigen/cli/src/test/integration/gateway-mixed-host.spec.ts",
+            "packages/apigen/cli/src/test/integration/streaming.spec.ts"
+          ],
+          "read_only": []
+        },
+        "canonical-descriptor": {
+          "mutates": [
+            "packages/apigen/core/src/lib/descriptor.schema.json",
+            "packages/apigen/core/src/lib/descriptor.ts"
+          ],
+          "read_only": []
+        },
+        "naming-helpers": {
+          "mutates": [
+            "packages/apigen/naming/project.json",
+            "packages/apigen/naming/src/lib/naming.ts"
+          ],
+          "read_only": []
+        },
+        "ts-extractor-by-symbol": {
+          "mutates": [
+            "packages/apigen/core/src/lib/extract.ts"
+          ],
+          "read_only": []
+        },
+        "audit-v2-core": {
+          "mutates": [
+            "docs/plan/apigen-client-generation/scripts/audit_apigen.py"
+          ],
+          "read_only": []
+        },
+        "layer-harness": {
+          "mutates": [
+            "packages/apigen/runtime/src/lib/invoke.ts"
+          ],
+          "read_only": []
+        },
+        "central-validation": {
+          "mutates": [
+            "packages/apigen/runtime/src/lib/validate-layer.ts"
+          ],
+          "read_only": []
+        },
+        "error-taxonomy": {
+          "mutates": [
+            "packages/apigen/errors/project.json",
+            "packages/apigen/errors/src/lib/errors.ts"
+          ],
+          "read_only": []
+        },
+        "audit-v2-harness": {
+          "mutates": [
+            "docs/plan/apigen-client-generation/scripts/audit_apigen.py"
+          ],
+          "read_only": []
+        },
+        "plugin-interface": {
+          "mutates": [
+            "packages/apigen/core/src/lib/plugin.ts"
+          ],
+          "read_only": []
+        },
+        "projection-transports": {
+          "mutates": [
+            "packages/apigen/plugins/api-express/src/lib/generate.ts",
+            "packages/apigen/plugins/api-express/src/lib/run.ts",
+            "packages/apigen/plugins/api-fastify/src/lib/generate.ts",
+            "packages/apigen/plugins/api-fastify/src/lib/run.ts",
+            "packages/apigen/plugins/cli/src/lib/generate.ts",
+            "packages/apigen/plugins/mcp/src/lib/generate.ts",
+            "packages/apigen/plugins/mcp/src/lib/run.ts"
+          ],
+          "read_only": []
+        },
+        "logger-layer-plugin": {
+          "mutates": [
+            "packages/apigen/plugins/logger/project.json",
+            "packages/apigen/plugins/logger/src/lib/plugin.ts"
+          ],
+          "read_only": []
+        },
+        "mount-plugins": {
+          "mutates": [
+            "packages/apigen/codegen/openapi/src/lib/to-openapi.ts",
+            "packages/apigen/plugins/health/src/lib/plugin.ts",
+            "packages/apigen/plugins/openapi/src/lib/plugin.ts"
+          ],
+          "read_only": []
+        },
+        "audit-v2-projection": {
+          "mutates": [
+            "docs/plan/apigen-client-generation/scripts/audit_apigen.py"
+          ],
+          "read_only": []
+        },
+        "package-restructure": {
+          "mutates": [
+            "packages/apigen/conformance/project.json",
+            "packages/apigen/core/project.json",
+            "packages/apigen/errors/project.json",
+            "packages/apigen/gateway/project.json",
+            "packages/apigen/naming/project.json",
+            "packages/apigen/schema/project.json"
+          ],
+          "read_only": []
+        },
+        "unified-cli": {
+          "mutates": [
+            "packages/apigen/cli/src/lib/commands/generate.ts",
+            "packages/apigen/cli/src/lib/commands/run.ts",
+            "packages/apigen/cli/src/lib/orchestrator.ts"
+          ],
+          "read_only": []
+        },
+        "gateway": {
+          "mutates": [
+            "packages/apigen/gateway/src/lib/gateway.ts"
+          ],
+          "read_only": []
+        },
+        "conformance-vectors": {
+          "mutates": [
+            "packages/apigen/conformance/project.json",
+            "packages/apigen/conformance/src/lib/vectors.ts"
+          ],
+          "read_only": []
+        },
+        "scaffold-v2-common": {
+          "mutates": [
+            "packages/apigen/codegen/openapi/project.json",
+            "packages/apigen/conformance/project.json",
+            "packages/apigen/errors/project.json",
+            "packages/apigen/gateway/project.json",
+            "packages/apigen/naming/project.json",
+            "packages/apigen/schema/project.json"
+          ],
+          "read_only": []
+        },
+        "scaffold-v2-ts-plugins": {
+          "mutates": [
+            "packages/apigen/plugins/health/project.json",
+            "packages/apigen/plugins/logger/project.json",
+            "packages/apigen/plugins/openapi/project.json"
+          ],
+          "read_only": []
+        },
+        "class-exports": {
+          "mutates": [
+            "packages/apigen/core/src/lib/extract-classes.ts",
+            "packages/apigen/runtime/src/lib/instance-registry.ts"
+          ],
+          "read_only": []
+        },
+        "streaming-projection": {
+          "mutates": [
+            "packages/apigen/plugins/api-fastify/src/lib/stream.ts",
+            "packages/apigen/plugins/mcp/src/lib/stream.ts",
+            "packages/apigen/runtime/src/lib/stream.ts"
+          ],
+          "read_only": []
+        },
+        "python-host": {
+          "mutates": [
+            "packages/apigen/python/apigen_python/extractor.py",
+            "packages/apigen/python/apigen_python/gateway_adapter.py",
+            "packages/apigen/python/apigen_python/plugin_echo.py",
+            "packages/apigen/python/apigen_python/runtime.py",
+            "packages/apigen/python/pyproject.toml",
+            "packages/apigen/python/run_tests.py"
+          ],
+          "read_only": []
+        },
+        "audit-v2-host": {
+          "mutates": [
+            "docs/plan/apigen-client-generation/scripts/audit_apigen.py"
+          ],
+          "read_only": []
+        },
+        "nx-generator-v2": {
+          "mutates": [
+            "packages/apigen/nx/src/generators/plugin/__files__/src/index.ts__tmpl__",
+            "packages/apigen/nx/src/generators/plugin/__files__/src/lib/plugin.ts__tmpl__",
+            "packages/apigen/nx/src/generators/plugin/__files__/src/test/plugin.spec.ts__tmpl__",
+            "packages/apigen/nx/src/generators/plugin/generator.ts",
+            "packages/apigen/nx/src/generators/plugin/schema.json"
+          ],
+          "read_only": []
+        }
+      },
+      "references": [],
+      "interfaces": [
+        {
+          "slug": "commander",
+          "interface": "new Command().name(s).version(s).command(name).requiredOption('--flag <v>',desc).option('--opt <kv>',desc,accFn,[]).action(async opts => {...}); await program.parseAsync()",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "^12.0.0"
+        },
+        {
+          "slug": "express",
+          "interface": "const app = express(); app.use(express.json()); const r = Router(); r.post(path, async (req,res) => res.json(result)); const server = app.listen(port); server.close()",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "^4.18.0"
+        },
+        {
+          "slug": "fastify",
+          "interface": "const app = Fastify(); app.post<{Body:T}>(path, async (req,reply) => value); await app.listen({port,host?}); await app.close()",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "^4.0.0"
+        },
+        {
+          "slug": "mcp-sdk",
+          "interface": "new Server({name,version},{capabilities:{tools:{}}}); server.setRequestHandler(ListToolsRequestSchema|CallToolRequestSchema, handler); await server.connect(new StdioServerTransport() | new SSEServerTransport(path,res) | new StreamableHTTPServerTransport({sessionIdGenerator?}))",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "see packages/apigen/plugins/mcp/package.json (@modelcontextprotocol/sdk)"
+        },
+        {
+          "slug": "nx-devkit",
+          "interface": "addProjectConfiguration(tree, name, config); generateFiles(tree, templateDir, targetDir, subs); updateJson(tree, path, fn); await formatFiles(tree); names(raw): {name,className,propertyName,constantName,fileName}",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "see packages/apigen/nx/package.json (@nx/devkit)"
+        },
+        {
+          "slug": "ts-json-schema-generator",
+          "interface": "createGenerator({ path, type, tsconfig? }).createSchema(typeName?: string): JSONSchema",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "see packages/apigen/core/package.json"
+        },
+        {
+          "slug": "ts-morph",
+          "interface": "new Project(opts).addSourceFileAtPath(path).getFunctions()[i].getParameters()[j].getName(): string",
+          "confidence": "vendored",
+          "provenance": "vendored-source",
+          "resolved_version": "see packages/apigen/core/package.json"
+        }
+      ],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.988Z"
+    },
+    {
+      "plan": "apigen-logical-types",
+      "dir": "apigen-logical-types",
+      "status": "complete",
+      "mutate_set": [
+        "packages/apigen/cli/src/lib/commands/generate.ts",
+        "packages/apigen/cli/src/lib/commands/run.ts",
+        "packages/apigen/conformance/src/lib/gate.ts",
+        "packages/apigen/conformance/src/lib/vectors.ts",
+        "packages/apigen/core/src/lib/schema-builders/nominal.ts",
+        "packages/apigen/core/src/lib/schema-builders/ts-json-schema.ts",
+        "packages/apigen/core/src/lib/schema-builders/union.ts",
+        "packages/apigen/logical/project.json",
+        "packages/apigen/logical/src/lib/codecs",
+        "packages/apigen/logical/src/lib/contracts.ts",
+        "packages/apigen/logical/src/lib/emit.ts",
+        "packages/apigen/logical/src/lib/hints.ts",
+        "packages/apigen/logical/src/lib/registry.ts",
+        "packages/apigen/logical/src/lib/runmode.ts",
+        "packages/apigen/nx/src/generators/host",
+        "packages/apigen/python/apigen_logical.py",
+        "packages/apigen/runtime/src/lib/dispatch.ts",
+        "packages/apigen/runtime/src/lib/logical/host-ts.ts",
+        "packages/apigen/runtime/src/lib/logical/nominal-codec.ts",
+        "packages/apigen/runtime/src/lib/logical/union-codec.ts",
+        "packages/apigen/runtime/src/lib/validate-layer.ts",
+        "scripts/audit_lt-architect-review.py",
+        "scripts/audit_lt-code-review.py",
+        "scripts/audit_lt-conformance-crosshost.py",
+        "scripts/audit_lt-final-audit.py"
+      ],
+      "read_only_set": [],
+      "reservations": {
+        "lt-package": {
+          "mutates": [
+            "packages/apigen/logical/project.json"
+          ],
+          "read_only": []
+        },
+        "lt-contracts": {
+          "mutates": [
+            "packages/apigen/logical/src/lib/contracts.ts"
+          ],
+          "read_only": []
+        },
+        "lt-wire-spec": {
+          "mutates": [
+            "packages/apigen/conformance/src/lib/vectors.ts"
+          ],
+          "read_only": []
+        },
+        "lt-registry": {
+          "mutates": [
+            "packages/apigen/logical/src/lib/registry.ts"
+          ],
+          "read_only": []
+        },
+        "lt-generator-emit": {
+          "mutates": [
+            "packages/apigen/logical/src/lib/emit.ts"
+          ],
+          "read_only": []
+        },
+        "lt-runmode-closures": {
+          "mutates": [
+            "packages/apigen/logical/src/lib/runmode.ts"
+          ],
+          "read_only": []
+        },
+        "lt-scalars": {
+          "mutates": [
+            "packages/apigen/logical/src/lib/codecs"
+          ],
+          "read_only": []
+        },
+        "lt-extract-scalars": {
+          "mutates": [
+            "packages/apigen/core/src/lib/schema-builders/ts-json-schema.ts"
+          ],
+          "read_only": []
+        },
+        "lt-extract-nominal": {
+          "mutates": [
+            "packages/apigen/core/src/lib/schema-builders/nominal.ts"
+          ],
+          "read_only": []
+        },
+        "lt-extract-union": {
+          "mutates": [
+            "packages/apigen/core/src/lib/schema-builders/union.ts"
+          ],
+          "read_only": []
+        },
+        "lt-nominal-codec": {
+          "mutates": [
+            "packages/apigen/runtime/src/lib/logical/nominal-codec.ts"
+          ],
+          "read_only": []
+        },
+        "lt-union-codec": {
+          "mutates": [
+            "packages/apigen/runtime/src/lib/logical/union-codec.ts"
+          ],
+          "read_only": []
+        },
+        "lt-host-ts": {
+          "mutates": [
+            "packages/apigen/runtime/src/lib/logical/host-ts.ts"
+          ],
+          "read_only": []
+        },
+        "lt-host-python": {
+          "mutates": [
+            "packages/apigen/python/apigen_logical.py"
+          ],
+          "read_only": []
+        },
+        "lt-dispatch-integration": {
+          "mutates": [
+            "packages/apigen/runtime/src/lib/dispatch.ts"
+          ],
+          "read_only": []
+        },
+        "lt-dep-manifest": {
+          "mutates": [
+            "packages/apigen/cli/src/lib/commands/generate.ts"
+          ],
+          "read_only": []
+        },
+        "lt-fail-fast": {
+          "mutates": [
+            "packages/apigen/cli/src/lib/commands/run.ts"
+          ],
+          "read_only": []
+        },
+        "lt-validate-formats": {
+          "mutates": [
+            "packages/apigen/runtime/src/lib/validate-layer.ts"
+          ],
+          "read_only": []
+        },
+        "lt-codegen-hints": {
+          "mutates": [
+            "packages/apigen/logical/src/lib/hints.ts"
+          ],
+          "read_only": []
+        },
+        "lt-host-generator": {
+          "mutates": [
+            "packages/apigen/nx/src/generators/host"
+          ],
+          "read_only": []
+        },
+        "lt-conformance-gate": {
+          "mutates": [
+            "packages/apigen/conformance/src/lib/gate.ts"
+          ],
+          "read_only": []
+        },
+        "lt-conformance-crosshost": {
+          "mutates": [
+            "scripts/audit_lt-conformance-crosshost.py"
+          ],
+          "read_only": []
+        },
+        "lt-architect-review": {
+          "mutates": [
+            "scripts/audit_lt-architect-review.py"
+          ],
+          "read_only": []
+        },
+        "lt-code-review": {
+          "mutates": [
+            "scripts/audit_lt-code-review.py"
+          ],
+          "read_only": []
+        },
+        "lt-final-audit": {
+          "mutates": [
+            "scripts/audit_lt-final-audit.py"
+          ],
+          "read_only": []
+        }
+      },
+      "references": [],
+      "interfaces": [],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.992Z"
+    },
+    {
+      "plan": "apigen-serve-core",
+      "dir": "apigen-serve-core",
+      "status": "published",
+      "mutate_set": [
+        "docs/apigen/proposals/py-extract-serve-split-findings.md",
+        "docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py",
+        "packages/apigen/apigen-engine-runtime/src/index.ts",
+        "packages/apigen/apigen-engine-runtime/src/lib/dispatch-for-plan.ts",
+        "packages/apigen/apigen-engine-runtime/src/lib/op-plan.spec.ts",
+        "packages/apigen/apigen-engine-runtime/src/lib/op-plan.ts",
+        "packages/apigen/apigen-engine-runtime/src/lib/package-invoker.ts",
+        "packages/apigen/apigen-engine-runtime/src/lib/transport-adapter.ts",
+        "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.spec.ts",
+        "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.ts",
+        "packages/apigen/apigen-plugin-api-express/src/lib/generate.ts",
+        "packages/apigen/apigen-plugin-api-express/src/lib/route.ts",
+        "packages/apigen/apigen-plugin-api-express/src/lib/run.ts",
+        "packages/apigen/apigen-plugin-api-express/src/test/golden/express.snapshot.json",
+        "packages/apigen/apigen-plugin-api-express/src/test/route-parity.spec.ts",
+        "packages/apigen/apigen-plugin-api-fastify/src/lib/generate.ts",
+        "packages/apigen/apigen-plugin-api-fastify/src/lib/route-projection.ts",
+        "packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts",
+        "packages/apigen/apigen-plugin-api-fastify/src/lib/stream.ts",
+        "packages/apigen/apigen-plugin-api-fastify/src/test/golden/fastify.snapshot.json",
+        "packages/apigen/apigen-plugin-api-fastify/src/test/plugin.spec.ts",
+        "packages/apigen/apigen-plugin-cli-output/src/lib/generate.ts",
+        "packages/apigen/apigen-plugin-cli-output/src/lib/run.ts",
+        "packages/apigen/apigen-plugin-cli-output/src/lib/schema-introspect.ts",
+        "packages/apigen/apigen-plugin-cli-output/src/test/golden/cli.snapshot.json",
+        "packages/apigen/apigen-plugin-cli-output/src/test/run-cli-integration.spec.ts",
+        "packages/apigen/apigen-plugin-mcp/src/lib/generate.ts",
+        "packages/apigen/apigen-plugin-mcp/src/lib/run.ts",
+        "packages/apigen/apigen-plugin-mcp/src/lib/stream.ts",
+        "packages/apigen/apigen-plugin-mcp/src/lib/tool-naming.ts",
+        "packages/apigen/apigen-plugin-mcp/src/test/golden/mcp.snapshot.json",
+        "packages/apigen/apigen-plugin-mcp/src/test/run.spec.ts",
+        "packages/apigen/apigen-plugin-py-flask/src/lib/plugin.ts",
+        "packages/apigen/apigen-plugin-py-flask/src/test/golden/py-flask.snapshot.json",
+        "packages/apigen/apigen-plugin-py-flask/src/test/plugin.spec.ts",
+        "packages/apigen/apigen-plugin-py-grpc/src/lib/plugin.ts",
+        "packages/apigen/apigen-plugin-py-grpc/src/test/golden/py-grpc.snapshot.json",
+        "packages/apigen/apigen-plugin-py-grpc/src/test/plugin.spec.ts",
+        "packages/apigen/python/apigen_python/extractor.py",
+        "packages/apigen/python/apigen_python/flask_server.py",
+        "packages/apigen/python/apigen_python/grpc_server.py"
+      ],
+      "read_only_set": [],
+      "reservations": {
+        "serve-core-primitives": {
+          "mutates": [
+            "packages/apigen/apigen-engine-runtime/src/index.ts",
+            "packages/apigen/apigen-engine-runtime/src/lib/dispatch-for-plan.ts",
+            "packages/apigen/apigen-engine-runtime/src/lib/op-plan.spec.ts",
+            "packages/apigen/apigen-engine-runtime/src/lib/op-plan.ts",
+            "packages/apigen/apigen-engine-runtime/src/lib/package-invoker.ts",
+            "packages/apigen/apigen-engine-runtime/src/lib/transport-adapter.ts"
+          ],
+          "read_only": []
+        },
+        "parity-harness": {
+          "mutates": [
+            "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.spec.ts",
+            "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.ts"
+          ],
+          "read_only": []
+        },
+        "fastify-adapter": {
+          "mutates": [
+            "packages/apigen/apigen-plugin-api-fastify/src/lib/generate.ts",
+            "packages/apigen/apigen-plugin-api-fastify/src/lib/route-projection.ts",
+            "packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts",
+            "packages/apigen/apigen-plugin-api-fastify/src/lib/stream.ts",
+            "packages/apigen/apigen-plugin-api-fastify/src/test/golden/fastify.snapshot.json",
+            "packages/apigen/apigen-plugin-api-fastify/src/test/plugin.spec.ts"
+          ],
+          "read_only": []
+        },
+        "audit-foundation": {
+          "mutates": [
+            "docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py"
+          ],
+          "read_only": []
+        },
+        "express-adapter": {
+          "mutates": [
+            "packages/apigen/apigen-plugin-api-express/src/lib/generate.ts",
+            "packages/apigen/apigen-plugin-api-express/src/lib/route.ts",
+            "packages/apigen/apigen-plugin-api-express/src/lib/run.ts",
+            "packages/apigen/apigen-plugin-api-express/src/test/golden/express.snapshot.json",
+            "packages/apigen/apigen-plugin-api-express/src/test/route-parity.spec.ts"
+          ],
+          "read_only": []
+        },
+        "mcp-adapter": {
+          "mutates": [
+            "packages/apigen/apigen-plugin-mcp/src/lib/generate.ts",
+            "packages/apigen/apigen-plugin-mcp/src/lib/run.ts",
+            "packages/apigen/apigen-plugin-mcp/src/lib/stream.ts",
+            "packages/apigen/apigen-plugin-mcp/src/lib/tool-naming.ts",
+            "packages/apigen/apigen-plugin-mcp/src/test/golden/mcp.snapshot.json",
+            "packages/apigen/apigen-plugin-mcp/src/test/run.spec.ts"
+          ],
+          "read_only": []
+        },
+        "cli-adapter": {
+          "mutates": [
+            "packages/apigen/apigen-plugin-cli-output/src/lib/generate.ts",
+            "packages/apigen/apigen-plugin-cli-output/src/lib/run.ts",
+            "packages/apigen/apigen-plugin-cli-output/src/lib/schema-introspect.ts",
+            "packages/apigen/apigen-plugin-cli-output/src/test/golden/cli.snapshot.json",
+            "packages/apigen/apigen-plugin-cli-output/src/test/run-cli-integration.spec.ts"
+          ],
+          "read_only": []
+        },
+        "audit-transports": {
+          "mutates": [
+            "docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py"
+          ],
+          "read_only": []
+        },
+        "py-extract-preflight": {
+          "mutates": [
+            "docs/apigen/proposals/py-extract-serve-split-findings.md"
+          ],
+          "read_only": []
+        },
+        "py-flask-serve-split": {
+          "mutates": [
+            "packages/apigen/apigen-plugin-py-flask/src/lib/plugin.ts",
+            "packages/apigen/apigen-plugin-py-flask/src/test/golden/py-flask.snapshot.json",
+            "packages/apigen/apigen-plugin-py-flask/src/test/plugin.spec.ts",
+            "packages/apigen/python/apigen_python/extractor.py",
+            "packages/apigen/python/apigen_python/flask_server.py"
+          ],
+          "read_only": []
+        },
+        "py-grpc-serve-split": {
+          "mutates": [
+            "packages/apigen/apigen-plugin-py-grpc/src/lib/plugin.ts",
+            "packages/apigen/apigen-plugin-py-grpc/src/test/golden/py-grpc.snapshot.json",
+            "packages/apigen/apigen-plugin-py-grpc/src/test/plugin.spec.ts",
+            "packages/apigen/python/apigen_python/grpc_server.py"
+          ],
+          "read_only": []
+        },
+        "audit-python": {
+          "mutates": [
+            "docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py"
+          ],
+          "read_only": []
+        },
+        "audit-final": {
+          "mutates": [
+            "docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py"
+          ],
+          "read_only": []
+        }
+      },
+      "references": [],
+      "interfaces": [],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-24T02:36:46.065Z"
+    },
+    {
+      "plan": "dispatch-completion",
+      "dir": "agent-final/superseded/dispatch-completion",
+      "status": "published",
+      "mutate_set": [
+        "entrypoint/dispatch-cli/package.json",
+        "entrypoint/dispatch-cli/project.json",
+        "entrypoint/dispatch-cli/src/lib/core.ts",
+        "entrypoint/dispatch-cli/src/test/integration/real-e2e.ts",
+        "package.json",
+        "packages/dispatch/dispatch-base-spec/src/lib/types.ts",
+        "packages/dispatch/dispatch-base-spec/src/lib/validate.ts",
+        "packages/dispatch/dispatch-core-client/src/lib/client.ts",
+        "packages/dispatch/dispatch-core-optimizer/src/lib/algorithms/index.ts",
+        "packages/dispatch/dispatch-core-optimizer/src/lib/optimize.ts",
+        "packages/dispatch/dispatch-core-optimizer/src/lib/snapshot.ts",
+        "packages/dispatch/dispatch-core-optimizer/src/test/golden.spec.ts",
+        "packages/dispatch/dispatch-orchestrator/src/lib/orchestrator.ts",
+        "packages/dispatch/dispatch-plugin-gitnexus/src/index.ts",
+        "packages/dispatch/dispatch-plugin-io/src/index.ts",
+        "packages/dispatch/dispatch-serializer-sqlite/src/index.ts",
+        "packages/dispatch/dispatch-tools/src/index.ts",
+        "scripts/audit_algo-audit.py",
+        "scripts/audit_audit-final.py",
+        "scripts/audit_cli-audit.py",
+        "scripts/audit_opt-audit.py",
+        "scripts/audit_orch-audit.py",
+        "scripts/audit_plugin-audit.py",
+        "scripts/audit_spec-audit.py",
+        "scripts/audit_storage-audit.py",
+        "scripts/audit_test-audit.py",
+        "scripts/audit_tools-audit.py",
+        "scripts/audit_triage.py"
+      ],
+      "read_only_set": [],
+      "reservations": {
+        "triage": {
+          "mutates": [
+            "scripts/audit_triage.py"
+          ],
+          "read_only": []
+        },
+        "spec-foundations": {
+          "mutates": [
+            "packages/dispatch/dispatch-base-spec/src/lib/types.ts",
+            "packages/dispatch/dispatch-base-spec/src/lib/validate.ts"
+          ],
+          "read_only": []
+        },
+        "spec-audit": {
+          "mutates": [
+            "scripts/audit_spec-audit.py"
+          ],
+          "read_only": []
+        },
+        "optimizer-client": {
+          "mutates": [
+            "packages/dispatch/dispatch-core-client/src/lib/client.ts",
+            "packages/dispatch/dispatch-core-optimizer/src/lib/optimize.ts",
+            "packages/dispatch/dispatch-core-optimizer/src/lib/snapshot.ts"
+          ],
+          "read_only": []
+        },
+        "opt-audit": {
+          "mutates": [
+            "scripts/audit_opt-audit.py"
+          ],
+          "read_only": []
+        },
+        "orchestrator-harden": {
+          "mutates": [
+            "packages/dispatch/dispatch-orchestrator/src/lib/orchestrator.ts"
+          ],
+          "read_only": []
+        },
+        "causal-replan": {
+          "mutates": [
+            "packages/dispatch/dispatch-orchestrator/src/lib/orchestrator.ts"
+          ],
+          "read_only": []
+        },
+        "orch-audit": {
+          "mutates": [
+            "scripts/audit_orch-audit.py"
+          ],
+          "read_only": []
+        },
+        "plugin-io": {
+          "mutates": [
+            "packages/dispatch/dispatch-plugin-io/src/index.ts"
+          ],
+          "read_only": []
+        },
+        "plugin-gitnexus": {
+          "mutates": [
+            "packages/dispatch/dispatch-plugin-gitnexus/src/index.ts"
+          ],
+          "read_only": []
+        },
+        "plugin-audit": {
+          "mutates": [
+            "scripts/audit_plugin-audit.py"
+          ],
+          "read_only": []
+        },
+        "serializer-sqlite": {
+          "mutates": [
+            "packages/dispatch/dispatch-serializer-sqlite/src/index.ts"
+          ],
+          "read_only": []
+        },
+        "storage-audit": {
+          "mutates": [
+            "scripts/audit_storage-audit.py"
+          ],
+          "read_only": []
+        },
+        "dispatch-tools": {
+          "mutates": [
+            "packages/dispatch/dispatch-tools/src/index.ts"
+          ],
+          "read_only": []
+        },
+        "tools-audit": {
+          "mutates": [
+            "scripts/audit_tools-audit.py"
+          ],
+          "read_only": []
+        },
+        "cli-complete": {
+          "mutates": [
+            "entrypoint/dispatch-cli/package.json",
+            "entrypoint/dispatch-cli/project.json",
+            "entrypoint/dispatch-cli/src/lib/core.ts"
+          ],
+          "read_only": []
+        },
+        "cli-audit": {
+          "mutates": [
+            "scripts/audit_cli-audit.py"
+          ],
+          "read_only": []
+        },
+        "optimizer-algorithms": {
+          "mutates": [
+            "packages/dispatch/dispatch-core-optimizer/src/lib/algorithms/index.ts"
+          ],
+          "read_only": []
+        },
+        "algo-audit": {
+          "mutates": [
+            "scripts/audit_algo-audit.py"
+          ],
+          "read_only": []
+        },
+        "tests-hardening": {
+          "mutates": [
+            "packages/dispatch/dispatch-core-optimizer/src/test/golden.spec.ts"
+          ],
+          "read_only": []
+        },
+        "test-audit": {
+          "mutates": [
+            "scripts/audit_test-audit.py"
+          ],
+          "read_only": []
+        },
+        "release-ready": {
+          "mutates": [
+            "package.json"
+          ],
+          "read_only": []
+        },
+        "audit-final": {
+          "mutates": [
+            "scripts/audit_audit-final.py"
+          ],
+          "read_only": []
+        },
+        "live-e2e": {
+          "mutates": [
+            "entrypoint/dispatch-cli/src/test/integration/real-e2e.ts"
+          ],
+          "read_only": []
+        }
+      },
+      "references": [],
+      "interfaces": [],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": true,
+        "validate": null,
+        "package_artifact": "entrypoint/dispatch-cli/src/test/cli-smoke.spec.ts"
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.970Z"
+    },
+    {
+      "plan": "hitl-interrupts",
+      "dir": "agent-final/superseded/hitl-interrupts",
+      "status": "complete",
+      "mutate_set": [
+        "ROADMAP.md",
+        "docs/plan/hitl-interrupts/.code-review-complete",
+        "docs/plan/hitl-interrupts/scripts/audit_hitl.py",
+        "packages/ai/agent-mcp/package.json",
+        "packages/ai/agent-mcp/src/__tests__/hitl-orchestrator.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/hitl-resume.test.ts",
+        "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+        "packages/ai/agent-mcp/src/server.ts",
+        "packages/ai/agent-mcp/src/tools/task.ts"
+      ],
+      "read_only_set": [
+        "*",
+        "PUBLISHING.md",
+        "ROADMAP.md",
+        "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+        "packages/ai/agent-mcp/src/store/task-store.ts",
+        "packages/ai/agent-mcp/src/tools/task.ts",
+        "packages/ai/agent-mcp/src/validation/errors.ts",
+        "packages/ai/agent-mcp/src/validation/task.ts"
+      ],
+      "reservations": {
+        "hitl-orchestrator": {
+          "mutates": [
+            "packages/ai/agent-mcp/src/__tests__/hitl-orchestrator.test.ts",
+            "packages/ai/agent-mcp/src/engine/orchestrator.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp/src/store/task-store.ts",
+            "packages/ai/agent-mcp/src/tools/task.ts",
+            "packages/ai/agent-mcp/src/validation/task.ts"
+          ]
+        },
+        "hitl-resume-tool": {
+          "mutates": [
+            "packages/ai/agent-mcp/src/__tests__/hitl-resume.test.ts",
+            "packages/ai/agent-mcp/src/server.ts",
+            "packages/ai/agent-mcp/src/tools/task.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+            "packages/ai/agent-mcp/src/store/task-store.ts",
+            "packages/ai/agent-mcp/src/validation/errors.ts"
+          ]
+        },
+        "audit-foundation": {
+          "mutates": [
+            "docs/plan/hitl-interrupts/scripts/audit_hitl.py"
+          ],
+          "read_only": [
+            "*"
+          ]
+        },
+        "code-review": {
+          "mutates": [
+            "docs/plan/hitl-interrupts/.code-review-complete"
+          ],
+          "read_only": [
+            "*"
+          ]
+        },
+        "audit-final": {
+          "mutates": [
+            "docs/plan/hitl-interrupts/scripts/audit_hitl.py"
+          ],
+          "read_only": [
+            "*"
+          ]
+        },
+        "docs-and-publish": {
+          "mutates": [
+            "ROADMAP.md",
+            "packages/ai/agent-mcp/package.json"
+          ],
+          "read_only": [
+            "PUBLISHING.md",
+            "ROADMAP.md"
+          ]
+        }
+      },
+      "references": [],
+      "interfaces": [],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.972Z"
+    },
+    {
+      "plan": "parallel-tool-execution",
+      "dir": "agent-final/superseded/parallel-tool-execution",
+      "status": "complete",
+      "mutate_set": [
+        "docs/plan/parallel-tool-execution/.code-review-complete",
+        "docs/plan/parallel-tool-execution/scripts/audit_parallel.py",
+        "packages/ai/agent-mcp/CLAUDE.md",
+        "packages/ai/agent-mcp/README.md",
+        "packages/ai/agent-mcp/package.json",
+        "packages/ai/agent-mcp/src/__tests__/orchestrator.test.ts",
+        "packages/ai/agent-mcp/src/engine/orchestrator.ts"
+      ],
+      "read_only_set": [
+        "packages/ai/agent-mcp/src/",
+        "packages/ai/agent-mcp/src/clients/registry.ts",
+        "packages/ai/agent-mcp/src/engine/policy.ts",
+        "packages/ai/agent-mcp/src/store/session-store.ts",
+        "packages/ai/agent-mcp/src/store/task-store.ts"
+      ],
+      "reservations": {
+        "parallel-dispatch": {
+          "mutates": [
+            "packages/ai/agent-mcp/src/__tests__/orchestrator.test.ts",
+            "packages/ai/agent-mcp/src/engine/orchestrator.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp/src/clients/registry.ts",
+            "packages/ai/agent-mcp/src/engine/policy.ts",
+            "packages/ai/agent-mcp/src/store/session-store.ts",
+            "packages/ai/agent-mcp/src/store/task-store.ts"
+          ]
+        },
+        "audit-foundation": {
+          "mutates": [
+            "docs/plan/parallel-tool-execution/scripts/audit_parallel.py"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp/src/"
+          ]
+        },
+        "code-review": {
+          "mutates": [
+            "docs/plan/parallel-tool-execution/.code-review-complete"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp/src/"
+          ]
+        },
+        "audit-final": {
+          "mutates": [
+            "docs/plan/parallel-tool-execution/scripts/audit_parallel.py"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp/src/"
+          ]
+        },
+        "docs-and-publish": {
+          "mutates": [
+            "packages/ai/agent-mcp/CLAUDE.md",
+            "packages/ai/agent-mcp/README.md",
+            "packages/ai/agent-mcp/package.json"
+          ],
+          "read_only": []
+        }
+      },
+      "references": [],
+      "interfaces": [],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.974Z"
+    },
+    {
+      "plan": "task-dependency-dag",
+      "dir": "agent-final/superseded/task-dependency-dag",
+      "status": "complete",
+      "mutate_set": [
+        "ROADMAP.md",
+        "docs/plan/task-dependency-dag/.code-review-complete",
+        "docs/plan/task-dependency-dag/scripts/audit_dag.py",
+        "packages/ai/agent-mcp/package.json",
+        "packages/ai/agent-mcp/src/__tests__/dag-engine.test.ts",
+        "packages/ai/agent-mcp/src/engine/dag-engine.ts",
+        "packages/ai/agent-mcp/src/index.ts",
+        "packages/ai/agent-mcp/src/tools/task.ts",
+        "packages/ai/agent-mcp/src/validation/execution.ts"
+      ],
+      "read_only_set": [
+        "*",
+        "PUBLISHING.md",
+        "ROADMAP.md",
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/src/engine/queue.ts",
+        "packages/ai/agent-mcp/src/store/task-store.ts",
+        "packages/ai/agent-mcp/src/validation/task.ts"
+      ],
+      "reservations": {
+        "dag-engine": {
+          "mutates": [
+            "packages/ai/agent-mcp/src/__tests__/dag-engine.test.ts",
+            "packages/ai/agent-mcp/src/engine/dag-engine.ts",
+            "packages/ai/agent-mcp/src/index.ts",
+            "packages/ai/agent-mcp/src/tools/task.ts",
+            "packages/ai/agent-mcp/src/validation/execution.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp/src/db/schema.ts",
+            "packages/ai/agent-mcp/src/engine/queue.ts",
+            "packages/ai/agent-mcp/src/store/task-store.ts",
+            "packages/ai/agent-mcp/src/validation/task.ts"
+          ]
+        },
+        "audit-foundation": {
+          "mutates": [
+            "docs/plan/task-dependency-dag/scripts/audit_dag.py"
+          ],
+          "read_only": [
+            "*"
+          ]
+        },
+        "code-review": {
+          "mutates": [
+            "docs/plan/task-dependency-dag/.code-review-complete"
+          ],
+          "read_only": [
+            "*"
+          ]
+        },
+        "audit-final": {
+          "mutates": [
+            "docs/plan/task-dependency-dag/scripts/audit_dag.py"
+          ],
+          "read_only": [
+            "*"
+          ]
+        },
+        "docs-and-publish": {
+          "mutates": [
+            "ROADMAP.md",
+            "packages/ai/agent-mcp/package.json"
+          ],
+          "read_only": [
+            "PUBLISHING.md",
+            "ROADMAP.md"
+          ]
+        }
+      },
+      "references": [],
+      "interfaces": [],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.976Z"
+    },
+    {
+      "plan": "task-schema-foundation",
+      "dir": "agent-final/superseded/task-schema-foundation",
+      "status": "complete",
+      "mutate_set": [
+        "ROADMAP.md",
+        "docs/plan/task-schema-foundation/.code-review-complete",
+        "docs/plan/task-schema-foundation/scripts/audit_schema_foundation.py",
+        "packages/ai/agent-mcp-types/package.json",
+        "packages/ai/agent-mcp-types/src/index.ts",
+        "packages/ai/agent-mcp/drizzle/",
+        "packages/ai/agent-mcp/package.json",
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/src/store/task-store.ts",
+        "packages/ai/agent-mcp/src/validation/task.ts"
+      ],
+      "read_only_set": [
+        "packages/ai/agent-mcp-types/src/index.ts",
+        "packages/ai/agent-mcp/drizzle/",
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/src/store/task-store.ts",
+        "packages/ai/agent-mcp/src/validation/task.ts"
+      ],
+      "reservations": {
+        "schema-columns": {
+          "mutates": [
+            "packages/ai/agent-mcp/drizzle/",
+            "packages/ai/agent-mcp/src/db/schema.ts"
+          ],
+          "read_only": []
+        },
+        "task-types": {
+          "mutates": [
+            "packages/ai/agent-mcp-types/src/index.ts",
+            "packages/ai/agent-mcp/src/store/task-store.ts",
+            "packages/ai/agent-mcp/src/validation/task.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp/drizzle/",
+            "packages/ai/agent-mcp/src/db/schema.ts"
+          ]
+        },
+        "audit-foundation": {
+          "mutates": [
+            "docs/plan/task-schema-foundation/scripts/audit_schema_foundation.py"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp-types/src/index.ts",
+            "packages/ai/agent-mcp/src/db/schema.ts",
+            "packages/ai/agent-mcp/src/store/task-store.ts",
+            "packages/ai/agent-mcp/src/validation/task.ts"
+          ]
+        },
+        "code-review": {
+          "mutates": [
+            "docs/plan/task-schema-foundation/.code-review-complete"
+          ],
+          "read_only": []
+        },
+        "audit-final": {
+          "mutates": [
+            "docs/plan/task-schema-foundation/scripts/audit_schema_foundation.py"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp-types/src/index.ts",
+            "packages/ai/agent-mcp/drizzle/",
+            "packages/ai/agent-mcp/src/db/schema.ts",
+            "packages/ai/agent-mcp/src/store/task-store.ts",
+            "packages/ai/agent-mcp/src/validation/task.ts"
+          ]
+        },
+        "docs-and-publish": {
+          "mutates": [
+            "ROADMAP.md",
+            "packages/ai/agent-mcp-types/package.json",
+            "packages/ai/agent-mcp/package.json"
+          ],
+          "read_only": []
+        }
+      },
+      "references": [],
+      "interfaces": [],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.977Z"
+    },
+    {
+      "plan": "task-streaming-sse",
+      "dir": "agent-final/superseded/task-streaming-sse",
+      "status": "complete",
+      "mutate_set": [
+        "ROADMAP.md",
+        "docs/plan/task-streaming-sse/.code-review-complete",
+        "docs/plan/task-streaming-sse/scripts/audit_sse.py",
+        "packages/ai/agent-mcp/package.json",
+        "packages/ai/agent-mcp/src/__tests__/stream-orchestrator.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/stream-task-tool.test.ts",
+        "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+        "packages/ai/agent-mcp/src/index.ts",
+        "packages/ai/agent-mcp/src/streaming/event-bus.ts",
+        "packages/ai/agent-mcp/src/streaming/sse-server.ts",
+        "packages/ai/agent-mcp/src/tools/task.ts",
+        "packages/ai/agent-mcp/src/validation/task.ts"
+      ],
+      "read_only_set": [
+        "*",
+        "PUBLISHING.md",
+        "ROADMAP.md",
+        "packages/ai/agent-mcp/src/store/task-store.ts",
+        "packages/ai/agent-mcp/src/streaming/event-bus.ts",
+        "packages/ai/agent-mcp/src/streaming/sse-server.ts"
+      ],
+      "reservations": {
+        "stream-event-bus": {
+          "mutates": [
+            "packages/ai/agent-mcp/src/streaming/event-bus.ts"
+          ],
+          "read_only": []
+        },
+        "stream-http-server": {
+          "mutates": [
+            "packages/ai/agent-mcp/src/index.ts",
+            "packages/ai/agent-mcp/src/streaming/sse-server.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp/src/streaming/event-bus.ts"
+          ]
+        },
+        "stream-orchestrator": {
+          "mutates": [
+            "packages/ai/agent-mcp/src/__tests__/stream-orchestrator.test.ts",
+            "packages/ai/agent-mcp/src/engine/orchestrator.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp/src/store/task-store.ts",
+            "packages/ai/agent-mcp/src/streaming/event-bus.ts",
+            "packages/ai/agent-mcp/src/streaming/sse-server.ts"
+          ]
+        },
+        "stream-task-tool": {
+          "mutates": [
+            "packages/ai/agent-mcp/src/__tests__/stream-task-tool.test.ts",
+            "packages/ai/agent-mcp/src/tools/task.ts",
+            "packages/ai/agent-mcp/src/validation/task.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp/src/store/task-store.ts",
+            "packages/ai/agent-mcp/src/streaming/event-bus.ts",
+            "packages/ai/agent-mcp/src/streaming/sse-server.ts"
+          ]
+        },
+        "audit-foundation": {
+          "mutates": [
+            "docs/plan/task-streaming-sse/scripts/audit_sse.py"
+          ],
+          "read_only": [
+            "*"
+          ]
+        },
+        "code-review": {
+          "mutates": [
+            "docs/plan/task-streaming-sse/.code-review-complete"
+          ],
+          "read_only": [
+            "*"
+          ]
+        },
+        "audit-final": {
+          "mutates": [
+            "docs/plan/task-streaming-sse/scripts/audit_sse.py"
+          ],
+          "read_only": [
+            "*"
+          ]
+        },
+        "docs-and-publish": {
+          "mutates": [
+            "ROADMAP.md",
+            "packages/ai/agent-mcp/package.json"
+          ],
+          "read_only": [
+            "PUBLISHING.md",
+            "ROADMAP.md"
+          ]
+        }
+      },
+      "references": [],
+      "interfaces": [],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.978Z"
+    },
+    {
+      "plan": "usage-tracking",
+      "dir": "agent-final/superseded/usage-tracking",
+      "status": "complete",
+      "mutate_set": [
+        "docs/plan/usage-tracking/acceptance-evidence.md",
+        "docs/plan/usage-tracking/code-review-evidence.md",
+        "docs/plan/usage-tracking/scripts/audit_usage_tracking.py",
+        "packages/ai/agent-mcp-types/src/domain.ts",
+        "packages/ai/agent-mcp-types/src/hooks.ts",
+        "packages/ai/agent-mcp/GAPS.md",
+        "packages/ai/agent-mcp/INSTALL.md",
+        "packages/ai/agent-mcp/README.md",
+        "packages/ai/agent-mcp/ROADMAP.md",
+        "packages/ai/agent-mcp/drizzle/",
+        "packages/ai/agent-mcp/package.json",
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+        "packages/ai/agent-mcp/src/index.ts",
+        "packages/ai/agent-mcp/src/plugins/index.ts",
+        "packages/ai/agent-mcp/src/plugins/usage-plugin.ts",
+        "packages/ai/agent-mcp/src/providers/anthropic.ts",
+        "packages/ai/agent-mcp/src/providers/openai.ts",
+        "packages/ai/agent-mcp/src/providers/types.ts",
+        "packages/ai/agent-mcp/src/server.ts",
+        "packages/ai/agent-mcp/src/tools/task.ts",
+        "packages/ai/agent-mcp/src/tools/usage.ts",
+        "packages/ai/agent-mcp/src/validation/index.ts",
+        "packages/ai/agent-mcp/src/validation/task.ts",
+        "packages/ai/agent-mcp/src/validation/usage.ts"
+      ],
+      "read_only_set": [
+        "packages/ai/agent-mcp-types/src/hooks.ts",
+        "packages/ai/agent-mcp-types/src/index.ts",
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+        "packages/ai/agent-mcp/src/providers/claudecli.ts",
+        "packages/ai/agent-mcp/src/providers/index.ts",
+        "packages/ai/agent-mcp/src/providers/lmstudio.ts",
+        "packages/ai/agent-mcp/src/providers/types.ts"
+      ],
+      "reservations": {
+        "provider-token-signal": {
+          "mutates": [
+            "packages/ai/agent-mcp-types/src/domain.ts",
+            "packages/ai/agent-mcp/src/providers/anthropic.ts",
+            "packages/ai/agent-mcp/src/providers/openai.ts",
+            "packages/ai/agent-mcp/src/providers/types.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp-types/src/hooks.ts",
+            "packages/ai/agent-mcp-types/src/index.ts",
+            "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+            "packages/ai/agent-mcp/src/providers/claudecli.ts",
+            "packages/ai/agent-mcp/src/providers/index.ts",
+            "packages/ai/agent-mcp/src/providers/lmstudio.ts"
+          ]
+        },
+        "hook-token-payload": {
+          "mutates": [
+            "packages/ai/agent-mcp-types/src/domain.ts",
+            "packages/ai/agent-mcp-types/src/hooks.ts",
+            "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+            "packages/ai/agent-mcp/src/tools/task.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp/src/providers/types.ts"
+          ]
+        },
+        "audit-foundation": {
+          "mutates": [
+            "docs/plan/usage-tracking/scripts/audit_usage_tracking.py"
+          ],
+          "read_only": []
+        },
+        "usage-schema": {
+          "mutates": [
+            "packages/ai/agent-mcp/drizzle/",
+            "packages/ai/agent-mcp/src/db/schema.ts"
+          ],
+          "read_only": []
+        },
+        "usage-plugin": {
+          "mutates": [
+            "packages/ai/agent-mcp/src/index.ts",
+            "packages/ai/agent-mcp/src/plugins/index.ts",
+            "packages/ai/agent-mcp/src/plugins/usage-plugin.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp/src/db/schema.ts",
+            "packages/ai/agent-mcp/src/engine/orchestrator.ts"
+          ]
+        },
+        "usage-query-tool": {
+          "mutates": [
+            "packages/ai/agent-mcp/INSTALL.md",
+            "packages/ai/agent-mcp/README.md",
+            "packages/ai/agent-mcp/src/server.ts",
+            "packages/ai/agent-mcp/src/tools/task.ts",
+            "packages/ai/agent-mcp/src/tools/usage.ts",
+            "packages/ai/agent-mcp/src/validation/index.ts",
+            "packages/ai/agent-mcp/src/validation/task.ts",
+            "packages/ai/agent-mcp/src/validation/usage.ts"
+          ],
+          "read_only": [
+            "packages/ai/agent-mcp/src/db/schema.ts"
+          ]
+        },
+        "audit-final": {
+          "mutates": [
+            "docs/plan/usage-tracking/scripts/audit_usage_tracking.py"
+          ],
+          "read_only": []
+        },
+        "docs-and-publish": {
+          "mutates": [
+            "packages/ai/agent-mcp/GAPS.md",
+            "packages/ai/agent-mcp/INSTALL.md",
+            "packages/ai/agent-mcp/README.md",
+            "packages/ai/agent-mcp/ROADMAP.md",
+            "packages/ai/agent-mcp/package.json"
+          ],
+          "read_only": []
+        },
+        "acceptance-test": {
+          "mutates": [
+            "docs/plan/usage-tracking/acceptance-evidence.md"
+          ],
+          "read_only": []
+        }
+      },
+      "references": [],
+      "interfaces": [],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-17T23:56:00.980Z"
+    }
+  ],
+  "updated_at": "2026-07-24T02:36:46.074Z",
+  "verified_at": null
+}
