@@ -33,6 +33,13 @@
 //     `layer` runs in is decided solely by which array the host composes it into.
 
 import type { Operation } from './descriptor';
+// `Plugin` is imported type-only from './plugin', which itself imports
+// `ExtractMiddleware` (below) type-only from this file — a same-package,
+// type-level-only sibling cycle. `import type` on both sides means neither
+// import survives to a runtime `require`/`import` (erased by the TS
+// compiler), so there is no actual module-load cycle for the bundler to
+// choke on — see design doc R2-2's note on this exact tradeoff.
+import type { Plugin } from './plugin';
 
 /**
  * One source unit to extract. Deliberately host-neutral — describes WHAT is
@@ -123,4 +130,47 @@ export function createExtractInvoker(
   runExtractor: (call: ExtractCall) => Promise<ExtractResult>
 ): (call: ExtractCall) => Promise<ExtractResult> {
   return composeOnion(middlewares, runExtractor);
+}
+
+/**
+ * Mirrors `createPackageInvoker`'s (`apigen-engine-runtime`'s
+ * `package-invoker.ts:124`) role for the extract stage (design doc Revision 2,
+ * R2.6 item 2 / implementation spec R2-2): pulls every loaded plugin's
+ * `extractLayer` capability — in declaration order, outermost-first, the
+ * identical composition rule `--use` layer ordering already follows on the
+ * dispatch side — and wraps `runExtractor` with them via {@link createExtractInvoker}.
+ *
+ * A plugin with no `extractLayer` capability (the common case today — nothing
+ * ships one yet) is filtered out silently; passing an empty `plugins` array
+ * (or a list where none declare `extractLayer`) degrades to `runExtractor`
+ * itself, unwrapped — a pure pass-through with zero behavioural change from
+ * calling `runExtractor` directly (R2-3's "byte-identical on MISS" guarantee).
+ *
+ * @param plugins      - The loaded `--use` plugin objects (or an explicit host-
+ *                       constructed list, e.g. backlog's `extractStagePlugins()`).
+ * @param runExtractor - The terminal extraction step (today: an in-process
+ *                       ts-morph `extract()` call; SPEC §12: potentially a
+ *                       spawned per-language subprocess later).
+ * @param opts         - This invocation's flat `--opt key=value` bag (the
+ *                       SAME bag already passed to `TargetCapability.generate`
+ *                       — apigen-cli has one flat bag per invocation, not a
+ *                       per-plugin-id namespaced one). Passed to each
+ *                       plugin's `extractLayer.createLayer(opts)` when
+ *                       present (`plugin.ts`'s `ExtractLayerCapability` doc);
+ *                       a plugin with only a static `.layer` ignores it.
+ *                       Defaults to `{}` — every existing call site (and
+ *                       every plugin with no opts-dependent behaviour)
+ *                       behaves identically whether this is passed or not.
+ */
+export function createExtractInvokerFromPlugins(
+  plugins: readonly Plugin[],
+  runExtractor: (call: ExtractCall) => Promise<ExtractResult>,
+  opts: Record<string, unknown> = {}
+): (call: ExtractCall) => Promise<ExtractResult> {
+  const middlewares = plugins
+    .map((p) => p.capabilities.extractLayer)
+    .filter((cap): cap is NonNullable<Plugin['capabilities']['extractLayer']> => Boolean(cap))
+    .map((cap) => (cap.createLayer ? cap.createLayer(opts) : cap.layer))
+    .filter((mw): mw is ExtractMiddleware => Boolean(mw));
+  return createExtractInvoker(middlewares, runExtractor);
 }
