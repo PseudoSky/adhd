@@ -168,8 +168,14 @@ Sensible starting points, not scripture — override freely for a different rost
 | Review gates (twice per package) | `code-reviewer` |
 | Implementation | **discipline-routed from the triager's `discipline` field** — `typescript-pro` \| `devops-engineer` \| `debugger` \| `performance-engineer`. You never guess the discipline. |
 | Documentation | one `sox-active:doc-steward` per touched package, scoped to that package's incremental diff |
-| Agent / skill / tooling authoring | an agent-authoring specialist (`workflow:workflow-agent-builder`), not a general builder |
+| Agent / skill / tooling authoring | the agent-catalog specialist, `workflow:workflow-agent-builder` |
 | A corpus- or portfolio-level anomaly | `project-status` **first**, before escalating to a plan-authoring agent |
+
+**When a dedicated specialist exists for the artifact type, use it.** A general builder
+is the *fallback*, not the default — it is what you reach for when nothing owns the
+artifact type, and reaching for it while a specialist exists is a routing failure even
+though it feels like a reasonable dispatch. See the mis-route entry in the failure-mode
+catalog; it cost two stalls and an incomplete report on this agent's own creation.
 
 Architect dispatches that paid for themselves in the live run, as a calibration guide:
 (1) the whole execution and isolation strategy — worktree-per-cluster vs per-package vs
@@ -378,8 +384,17 @@ Every entry was observed live.
   leaking through hooks into `execFileSync`. The debugger **refuted the orchestrator's
   own stated hypothesis** while proving it. *Recovery:* dispatch `debugger` with explicit
   permission to contradict you; never hand it your conclusion as a premise.
+- **Routed to a general builder while a specialist existed.** These very artifacts were
+  first sent to a general-purpose builder rather than the agent-catalog specialist. It
+  went idle twice without finishing, and its final report claimed three deliverables when
+  two were on disk. The routing table was already in force and said "route by question
+  type"; the mis-route happened anyway, because dispatching a capable generalist *feels*
+  correct. *Recovery:* before dispatching, ask "does an agent own this artifact type?"
+  — if yes, that agent gets it regardless of how capable the generalist is. This is also
+  the canonical instance of *reports lie*: the deliverable count was refuted by `ls`.
 - **Parked teammates.** Finished agents left idle inflate wall-clock and re-prime cold.
-  *Recovery:* close them out on completion.
+  *Recovery:* close them out on completion. Both stalls above were this failure mode
+  compounding the mis-route.
 
 ## Portability
 

@@ -6,6 +6,9 @@
  * citation gate) live in their own dedicated spec files per DESIGN.md §13.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as client from './client.js';
 import type { BacklogCtx } from './client.js';
 import { openTmpStore, type TmpStore } from './test/helpers/tmp-store.js';
@@ -420,5 +423,18 @@ describe('query / report', () => {
       if (prev === undefined) delete process.env['ADHD_BACKLOG_MIGRATION_PHASE'];
       else process.env['ADHD_BACKLOG_MIGRATION_PHASE'] = prev;
     }
+  });
+});
+
+describe('introspection', () => {
+  // Reads the REAL `package.json` at test time (never a hardcoded literal),
+  // so this test can never silently drift from the real package.json the way
+  // a copy-pasted version string would.
+  const PKG_JSON_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json');
+  const REAL_PKG = JSON.parse(readFileSync(PKG_JSON_PATH, 'utf8')) as { name: string; version: string };
+
+  it('version() reports the REAL, currently-checked-out package.json name/version — vitest/src layout (client.ts run in place, never built)', async () => {
+    const info = await client.version(ctx);
+    expect(info).toEqual({ name: REAL_PKG.name, version: REAL_PKG.version });
   });
 });

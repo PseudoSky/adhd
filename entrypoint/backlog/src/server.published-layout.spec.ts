@@ -34,8 +34,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdtempSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { cpSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -97,5 +96,37 @@ describe('backlog published (rebased-to-root) layout — real npm-install-shape 
     expect(result.status).toBe(0);
     expect(result.stdout).toMatch(/backlog create-item/);
     expect(result.stdout).toMatch(/backlog get-item/);
+  }, 30_000);
+
+  // Task B (`client.ts`'s `version()` export) — the "published npm layout"
+  // half of that task's verification requirement, using the SAME real
+  // rebased-to-root reproduction this file already builds for the mount-path
+  // bug above (never a fresh scheme). `resolveOwnPackageJsonPath()`'s
+  // sibling-first probe (`client.ts`) resolves `package.json` as a sibling of
+  // `index.js` in exactly this layout — the identical shape a REAL `npm
+  // install @adhd/backlog` produces.
+  it('"version" reports the real, currently-built package.json name/version in the published (rebased-to-root) layout too', () => {
+    mkdirSync(TMP_ROOT, { recursive: true });
+    publishedRoot = mkdtempSync(join(TMP_ROOT, 'published-layout-version-'));
+    for (const entry of readdirSync(DIST_DIR)) {
+      cpSync(join(DIST_DIR, entry), join(publishedRoot, entry), { recursive: true });
+    }
+
+    const indexJs = join(publishedRoot, 'index.js');
+    const result = spawnSync(process.execPath, [indexJs, 'version'], {
+      cwd: publishedRoot,
+      env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project' },
+      encoding: 'utf8',
+      timeout: 30_000,
+    });
+
+    if (result.error) {
+      throw new Error(`spawn failed for ${indexJs} version: ${String(result.error)}`);
+    }
+    expect(result.status, `stderr:\n${result.stderr}\nstdout:\n${result.stdout}`).toBe(0);
+
+    const realPkg = JSON.parse(readFileSync(join(publishedRoot, 'package.json'), 'utf8')) as { name: string; version: string };
+    const parsed = JSON.parse(result.stdout.trim()) as { name: string; version: string };
+    expect(parsed).toEqual({ name: realPkg.name, version: realPkg.version });
   }, 30_000);
 });

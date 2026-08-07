@@ -230,13 +230,7 @@
       },
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-17T23:56:00.936Z",
-      "abandoned": true,
-      "superseded_by": {
-        "architecture_doc": "packages/environment/ARCHITECTURE.md",
-        "commits": ["59b07ec6", "8b462c14", "c015f83e", "b38369f3"],
-        "note": "Design reworked (zero-config, code-first, Node-only) and landed directly on main via b38369f3 (content-commit of the feat/environment-zero-config branch), bypassing this plan's own dag.json/criteria.json/state-transition gates entirely. See docs/plan/adhd-environment/SUPERSEDED.md."
-      }
+      "updated_at": "2026-07-17T23:56:00.936Z"
     },
     {
       "plan": "agent-compiler",

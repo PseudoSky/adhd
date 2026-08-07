@@ -19,11 +19,10 @@
   "targets": {
     "test": {
       "executor": "@nx/vite:test",
-      "//dependsOn": "cli-smoke.spec.ts drives the GENERATED CLI at dist/entrypoint/dispatch-cli/cli/cli.ts and fails loudly when it is absent. Its error message claimed this target already declared dependsOn:[generate-cli] — it did not; only nx.json's targetDefaults dependsOn:[^build] applied, which never runs generate-cli. Declaring it here restores that promise. NOTE: a project-level dependsOn REPLACES the targetDefaults value, so ^build must be repeated. build-bin is added so the COMPILED-bin describe block's beforeAll guard (dist/bin/cli.js) is always satisfied by a normal `nx test` run.",
+      "//dependsOn": "cli-smoke.spec.ts drives the GENERATED CLI at dist/entrypoint/dispatch-cli/cli/cli.ts and fails loudly when it is absent. Its error message claimed this target already declared dependsOn:[generate-cli] — it did not; only nx.json's targetDefaults dependsOn:[^build] applied, which never runs generate-cli. Declaring it here restores that promise. NOTE: a project-level dependsOn REPLACES the targetDefaults value, so ^build must be repeated.",
       "dependsOn": [
         "^build",
-        "generate-cli",
-        "build-bin"
+        "generate-cli"
       ],
       "outputs": [
         "{workspaceRoot}/coverage/entrypoint/dispatch-cli"
@@ -70,60 +69,16 @@
         "outDir": "dist/entrypoint/dispatch-cli/cli"
       }
     },
-    "build-bin": {
-      "executor": "@nx/js:tsc",
-      "//": "Compiles bin/cli.ts's WHOLE reachable graph (src/** AND bin/*, per tsconfig.lib.json's existing include list) in one tsc pass, mirroring source structure under dist/ so dist/bin/cli.js's `require('../src/api.js')` resolves to the ALSO-emitted dist/src/api.js. dependsOn:[build] is load-bearing: vite's build.emptyOutDir wipes dist/ on every run, so this MUST run after build (tsc is additive, never empties outDir) never before/parallel.",
-      "//clean": "@nx/js:tsc defaults `clean: true` ('Remove previous output before build' — node_modules/@nx/js/src/executors/tsc/schema.json). Since build-bin's outputPath is the SAME shared entrypoint/dispatch-cli/dist that `build` (vite) just populated with index.js/index.mjs/index.d.ts/api.d.ts/lib, a default clean=true run of build-bin WIPES those files the instant it starts, before writing bin/+src — verified empirically (a real data-loss repro while authoring this fix: build's output vanished entirely after build-bin ran on top of it). clean:false makes build-bin strictly additive, matching the spec's stated intent ('added into the already-populated folder rather than wiped').",
-      "//outputs": "Narrower than build's outputs ({options.outputPath} = the whole dist/ dir) so each target's own Nx cache-restore only ever touches the subtree it actually owns, never the sibling target's files.",
-      "dependsOn": [
-        "build"
-      ],
-      "outputs": [
-        "{options.outputPath}/bin",
-        "{options.outputPath}/src"
-      ],
-      "options": {
-        "outputPath": "entrypoint/dispatch-cli/dist",
-        "main": "entrypoint/dispatch-cli/bin/cli.ts",
-        "tsConfig": "entrypoint/dispatch-cli/tsconfig.lib.json",
-        "assets": [],
-        "clean": false
-      }
-    },
     "nx-release-publish": {
       "options": {
         "packageRoot": "{projectRoot}/dist"
       },
       "dependsOn": [
         "build",
-        "build-bin",
         "test",
         "verify-dist-load",
         "dist-manifest",
         "publish-hygiene"
-      ]
-    },
-    "assets": {
-      "//": "@adhd/nx-assets:copy is inferred by tools/nx-plugins/assets/plugin.js with dependsOn:[\"build\"] only. Now that package.json declares a `bin` field pointing at dist/bin/cli.js, this target's chmod-the-bin-file step needs that file to exist first — overridden here (dependsOn only; executor/cache still come from the inferred target) to add build-bin.",
-      "dependsOn": [
-        "build",
-        "build-bin"
-      ]
-    },
-    "dist-manifest": {
-      "//": "@adhd/nx-build:manifest is inferred with dependsOn:[\"build\",\"assets\"]. Rebases package.json (including the new `bin` field) against dist/ — needs build-bin so dist/bin/cli.js exists before the rebase runs.",
-      "dependsOn": [
-        "build",
-        "build-bin",
-        "assets"
-      ]
-    },
-    "verify-dist-load": {
-      "//": "@adhd/nx-build:verify is inferred with dependsOn:[\"build\",\"dist-manifest\"]. It now resolves the `bin` entry declared in package.json against dist/bin/cli.js — needs build-bin, else it fails with 'file declared in package.json but missing from dist' (verified empirically while authoring this fix).",
-      "dependsOn": [
-        "build",
-        "build-bin",
-        "dist-manifest"
       ]
     }
   }

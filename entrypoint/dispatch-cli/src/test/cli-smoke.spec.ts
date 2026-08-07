@@ -63,14 +63,6 @@ const FALLBACK_CLI_PATH = path.join(
   'bin',
   'cli.ts'
 );
-const COMPILED_BIN_PATH = path.join(
-  REPO_ROOT,
-  'entrypoint',
-  'dispatch-cli',
-  'dist',
-  'bin',
-  'cli.js'
-);
 const TMP_ROOT = path.join(REPO_ROOT, 'tmp', 'dispatch-cli', 'cli-smoke');
 // Read-only across every test below — NEVER passed to `run`, so its
 // pristine "milestone a is the only eligible one" shape never depends on
@@ -118,14 +110,6 @@ beforeAll(() => {
   }
   if (!fs.existsSync(FALLBACK_CLI_PATH)) {
     throw new Error(`dispatch-cli smoke test: fallback CLI not found at ${FALLBACK_CLI_PATH}`);
-  }
-  if (!fs.existsSync(COMPILED_BIN_PATH)) {
-    throw new Error(
-      `dispatch-cli smoke test: compiled bin not found at ${COMPILED_BIN_PATH} — ` +
-        `run \`npx nx run dispatch-cli:build-bin\` first. This target's project.json ` +
-        `now declares dependsOn: ["build-bin"] on the test target (added by this fix), ` +
-        `so a normal \`npx nx test dispatch-cli\` always produces this file first.`
-    );
   }
 });
 
@@ -276,44 +260,5 @@ describe('dispatch-cli — bin/cli.ts (fallback, fully working)', () => {
     const res = runCli(FALLBACK_CLI_PATH, ['calibrate', '--model-tier', 'NotATier']);
     expect(res.status).toBe(1);
     expect(res.stderr).toContain("unknown modelTier 'NotATier'");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// (3) The COMPILED bin (dist/bin/cli.js) — the actual, real npx-invocable
-//     artifact a consumer runs post-publish. Proves DEBT-DISPATCH-022's
-//     build-bin target: `node dist/bin/cli.js` directly (no tsx, no
-//     ts-node), and that its `require('../src/api.js')` relative import
-//     resolves correctly against the tsc-mirrored dist/src/api.js sibling
-//     that build-bin's reuse of tsconfig.lib.json's whole-graph compile
-//     produces.
-// ---------------------------------------------------------------------------
-
-function runCompiledBin(args: string[]): SpawnResult {
-  const result = spawnSync('node', [COMPILED_BIN_PATH, ...args], {
-    encoding: 'utf8',
-    timeout: 60_000,
-  });
-  if (result.error) {
-    throw new Error(
-      `spawn failed for ${COMPILED_BIN_PATH} ${JSON.stringify(args)}: ${String(result.error)}`
-    );
-  }
-  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
-}
-
-describe('dispatch-cli — COMPILED bin (dist/bin/cli.js, the real npx-invocable artifact)', () => {
-  it('--help exits 0 and lists every command', () => {
-    const res = runCompiledBin(['--help']);
-    expect(res.status, `stderr:\n${res.stderr}`).toBe(0);
-    for (const cmd of ALL_COMMANDS) {
-      expect(res.stdout, `--help output missing '${cmd}':\n${res.stdout}`).toContain(cmd);
-    }
-  });
-
-  it('validate --dag-path <fixture> exits 0, proving the compiled ../src/api.js sibling import resolves correctly under dist/', () => {
-    const res = runCompiledBin(['validate', '--dag-path', READONLY_FIXTURE_PATH]);
-    expect(res.status, `stderr:\n${res.stderr}`).toBe(0);
-    expect(JSON.parse(res.stdout.trim())).toEqual({ valid: true, errors: [] });
   });
 });

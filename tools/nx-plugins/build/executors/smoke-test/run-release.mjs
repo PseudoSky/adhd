@@ -67,20 +67,6 @@
  *      underlying `nx show projects --affected` call fails), it THROWS, and
  *      this script exits non-zero immediately, before GATE 1, `version`, or
  *      `publish` ever run. There is no unscoped code path left in this file.
- *   0.5. `nx run-many -t build --projects=<computed-list>` (NEW,
- *      DEBT-BUILD-COMPOSITE-TSC-PARALLEL-001) runs EXPLICITLY, scoped to the
- *      same computed project list, BEFORE the `version` phase. Previously
- *      this real (non-dry) release path had NO build step of its own and
- *      relied entirely on nx's implicit per-project `dependsOn: build` graph
- *      edges firing on-demand inside the publish task graph — exactly the
- *      code path where a transient composite-tsc project-reference race was
- *      once observed under a parallel publish-phase build (see that item for
- *      the full incident). `release:dry` in package.json already runs
- *      `pnpm run build` before anything else; this makes the same guarantee
- *      structural on the real release path too, so there is no release code
- *      path left that reaches version/publish against a cold, unbuilt cache.
- *      A hard gate: if build itself fails, nothing downstream (version,
- *      GATE 1, publish) can be trusted either.
  *   1. `version`/`^version` runs EXPLICITLY, scoped to the computed project
  *      list, BEFORE GATE 1 (DEBT-RELEASE-GATE1-STALE-DISK-VERSION-001, audit
  *      §6.2). Previously GATE 1 (`check-release-ranges.mjs`) ran first and
@@ -120,10 +106,10 @@
  * If the computed project list is EMPTY (nothing changed since `baseRef` and
  * every publishable project's on-disk version already matches
  * `published-state.json`), this script prints that and exits 0 without
- * running the build phase, `version`, GATE 1, or `publish` at all — there is
- * nothing to release, and Nx's own `--projects=` flag rejects an empty list
- * rather than meaning "everyone," so an empty computed list must be handled
- * explicitly here rather than passed through.
+ * running `version`, GATE 1, or `publish` at all — there is nothing to
+ * release, and Nx's own `--projects=` flag rejects an empty list rather than
+ * meaning "everyone," so an empty computed list must be handled explicitly
+ * here rather than passed through.
  *
  * `RELEASE_BASE_REF` env var overrides the git ref the changed-set is diffed
  * against (default: `HEAD~1` — see `changed-set.js`'s `resolveBaseRef` for
@@ -134,9 +120,9 @@
  *
  * Exit code: 0 only if publish succeeded fully AND clean-room-smoke passed
  * (or there was nothing to publish). Non-zero otherwise. A failure computing
- * the changed-set scope, the structural build-first phase, the explicit
- * `version` phase, or GATE 1 (check-release-ranges) all exit non-zero before
- * either publish or smoke runs.
+ * the changed-set scope, the explicit `version` phase, or GATE 1
+ * (check-release-ranges) all exit non-zero before either publish or smoke
+ * runs.
  */
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
@@ -201,34 +187,6 @@ function main() {
   }
 
   const projectsArg = `--projects=${projectNames.join(',')}`;
-
-  // Step -1 (NEW) — explicit build-first phase, scoped to the SAME computed
-  // project list as version/publish (DEBT-BUILD-COMPOSITE-TSC-PARALLEL-001):
-  // this real (non-dry) release path previously had NO build step of its own
-  // and relied entirely on nx's implicit per-project `dependsOn: build` graph
-  // edges firing on-demand inside the publish task graph — exactly the code
-  // path where a transient composite-tsc project-reference race was once
-  // observed under `nx release --dry-run`'s parallel publish-phase build.
-  // `release:dry` in package.json already runs `pnpm run build` before
-  // anything else; this makes the same guarantee structural here too, so
-  // there is no release code path left that reaches version/publish against
-  // a cold, unbuilt cache. A hard gate: if build itself fails, nothing
-  // downstream (version, GATE 1, publish) can be trusted either.
-  const buildExit = run('build (structural build-first guarantee)', 'pnpm', [
-    'nx',
-    'run-many',
-    '-t',
-    'build',
-    projectsArg,
-  ]);
-  if (buildExit !== 0) {
-    console.error(
-      '\nrun-release: build phase FAILED — refusing to run version/publish against ' +
-        'an unbuilt or partially-built cache. Release skipped entirely.'
-    );
-    process.exit(buildExit);
-    return;
-  }
 
   // Step 1 — explicit prior `version` phase, SCOPED to the computed project
   // list, BEFORE GATE 1 (fixes DEBT-RELEASE-GATE1-STALE-DISK-VERSION-001,
