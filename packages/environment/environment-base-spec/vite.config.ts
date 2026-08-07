@@ -3,12 +3,12 @@ import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import { projectCacheDir, projectCoverage } from '../../workspace/workspace-base-vite-paths/src/index';
 
 import { vitestPoolOptions } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
 export default defineConfig({
   root: __dirname,
-  cacheDir:
-    '../../../node_modules/.vite/packages/environment/environment-base-spec',
+  cacheDir: projectCacheDir(__dirname),
 
   plugins: [
     nxViteTsPaths(),
@@ -58,8 +58,7 @@ export default defineConfig({
 
     reporters: ['default'],
     coverage: {
-      reportsDirectory:
-        '../../../coverage/packages/environment/environment-base-spec',
+      reportsDirectory: projectCoverage(__dirname),
       provider: 'v8',
     },
   },

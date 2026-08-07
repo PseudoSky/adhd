@@ -28,15 +28,23 @@ When run, @adhd/agent-mcp:
 
 ## Configuration
 
-Required env vars:
-- `ADHD_AGENT_PROVIDER` — one of: anthropic, openai, deepseek, gemini
+Configuration is zero-config by design (via `@adhd/environment` cascade). Sensible defaults for all fields; override with env vars or config files as needed.
+
+Required (if overriding defaults):
+- `ADHD_AGENT_PROVIDER` — one of: `anthropic`, `openai`, `claudecli` (note: no separate deepseek/gemini types; use `openai` with custom `ADHD_AGENT_OPENAI_BASE_URL` for DeepSeek)
 - `ADHD_AGENT_MODEL` — model identifier for provider
-- Corresponding API key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.)
+
+Provider credentials:
+- `ADHD_AGENT_ANTHROPIC_SECRET` — Anthropic API key (if using anthropic provider)
+- `ADHD_AGENT_OPENAI_SECRET` — OpenAI API key (if using openai provider; also for DeepSeek with custom base_url)
+- (Note: SDK-style names like `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` are NOT supported; use only `ADHD_AGENT_*` names)
 
 Optional:
 - `ADHD_AGENT_CONTEXT_LIMIT` — token limit; 0 (default) = disabled
 - `ADHD_AGENT_MAX_DEPTH` — max delegation depth (default: 3)
 - `ADHD_AGENT_MAX_TOOL_LOOPS` — max tool-call rounds (default: 50)
+- `ADHD_AGENT_LOG_LEVEL` — logging level (default: info)
+- `ADHD_AGENT_DATABASE_PATH` — custom SQLite DB path (default: `~/.adhd/agent-mcp/production/data/agents.db`)
 
 ## 2.0.2 Highlights
 

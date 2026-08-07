@@ -28,7 +28,9 @@
       "{workspaceRoot}/tools/vite-plugins/copy-readme.mjs",
       "{workspaceRoot}/tools/nx-plugins/build/**/*",
       "{workspaceRoot}/tools/nx-plugins/lint/**/*",
-      "{workspaceRoot}/.eslintignore"
+      "{workspaceRoot}/.eslintignore",
+      "{workspaceRoot}/tsconfig.base.json",
+      "{workspaceRoot}/.eslintrc.base.json"
     ]
   },
   "plugins": [

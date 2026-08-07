@@ -114,11 +114,35 @@ export async function scaffoldGenerator(tree: Tree, schema: ScaffoldGeneratorSch
   }
 
   // Post-generation patches (same as generate-lib.sh v4/v5)
+  // NOTE: patchInSourceDist MUST run before patchViteConfig — patchViteConfig's
+  // copy-readme snippet captures whatever `outDir` value is on disk at the
+  // moment it runs and bakes it into a plugin closure; if the stale
+  // workspace-root outDir were still present when that capture happens, the
+  // copy-readme plugin would target the wrong (pre-migration) directory.
+  patchInSourceDist(tree, projectRoot);
   patchViteConfig(tree, projectRoot, platform);
   patchReleasePublish(tree, projectRoot);
   ensureReadme(tree, projectRoot, projectName);
   patchEslintrc(tree, projectRoot);
   patchTsconfigLib(tree, projectRoot);
+  // DEBT-WORKSPACE-VITE-PATHS-001: deliberately NOT declaring the
+  // vite-paths package (workspace-base-vite-paths) as a package.json
+  // dependency here. It is consumed by a RELATIVE import into
+  // vite.config.ts (see patchViteConfig below), exactly like the pre-existing
+  // "../../../tools/vite-plugins/externalize.mjs" / "vitest-pool-defaults.mjs"
+  // imports already in this same file — and NEITHER of those is declared as
+  // a package.json dependency anywhere in the repo either, because
+  // vite.config.ts is listed in every project's own `.eslintrc.json` under
+  // `@nx/dependency-checks`'s `ignoredFiles`. Declaring it WAS tried and
+  // proven actively wrong: `sync-deps --fix` (which every `lint` run
+  // triggers via `dependsOn: ["sync-deps"]") sees a declared dependency with
+  // zero usage in any file `@nx/dependency-checks` actually scans, correctly
+  // classifies it "obsolete", and strips it straight back out — reproduced
+  // directly via `npx nx run <pkg>:sync-deps` on a package that had the
+  // dependency added. It is not needed for the import to resolve (Node/vite
+  // module resolution for a plain relative path doesn't consult
+  // package.json) and would just get silently deleted again on the next
+  // lint/sync-deps run either way.
 
   await formatFiles(tree);
 }
@@ -160,11 +184,63 @@ function patchViteConfig(tree: Tree, dir: string, platform: 'node' | 'browser' |
     if (!content.includes('externalizeRealDeps')) {
       content = content.replace(
         /(import \{ nxViteTsPaths \} from '@nx\/vite\/plugins\/nx-tsconfig-paths\.plugin';\n)/,
-        `$1import { externalizeRealDeps } from '../../../tools/vite-external-deps.mjs';\n`
+        `$1import { externalizeRealDeps } from '../../../tools/vite-plugins/externalize.mjs';\n`
       );
     }
     content = content.replace(/external:\s*\[\]/, 'external: externalizeRealDeps(__dirname)');
   }
+
+  // DEBT-WORKSPACE-VITE-PATHS-001: `cacheDir` / `coverage.reportsDirectory`
+  // are generated as literal strings (or `path.join(repoRoot, '...')`) baked
+  // to the package's CURRENT directory. Moving a package afterwards
+  // (`git mv` to a new domain/tier) silently strands the old, now-wrong
+  // path — vite keeps writing its cache/coverage output to a directory that
+  // no longer matches the package, or a stale sibling directory shadows the
+  // real one. Route both through the vite-paths package's `projectCacheDir`/
+  // `projectCoverage` (package name spelled out two paragraphs down), which
+  // derive the path from `__dirname` at vite-config-eval time, so a moved
+  // package resolves correctly with zero vite.config.ts edits.
+  //
+  // IMPORTANT: import it by a RELATIVE path to its `src/index.ts`, NOT its
+  // `@adhd/`-scoped package-name specifier. A `vite.config.ts`'s own
+  // top-level imports are resolved by plain esbuild/Node module resolution
+  // when Vite loads the config file itself — the `nxViteTsPaths()` plugin
+  // only rewrites `@adhd/*` imports found inside the LIBRARY SOURCE that
+  // plugin subsequently builds, not the config file that declares it. This
+  // repo also has no `workspaces` linking (BUG-WORKSPACE-NO-LINKING-001, see
+  // `tools/vite-plugins/externalize.mjs`), so there is no matching
+  // `node_modules/@adhd/<name>` entry to fall back to either — a bare
+  // package-name import here throws `Cannot find module` while Nx
+  // tries to infer this project's targets from the config, breaking the
+  // ENTIRE repo's project graph. Every other cross-file import already
+  // living in this template (`externalizeRealDeps`, `vitestPoolOptions`)
+  // is relative for exactly this reason; this one follows the same rule.
+  // Every non-entrypoint package lives at `packages/<group>/<name>/`, so
+  // `../../workspace/workspace-base-vite-paths/src/index` is constant
+  // regardless of `<group>` — including when `<group>/<name>` IS
+  // `workspace/workspace-base-vite-paths` itself, where the path resolves
+  // straight back to its own `src/index.ts`.
+  //
+  // NOTE: check the full import specifier, not the bare substring
+  // "workspace-base-vite-paths" — when scaffolding the vite-paths package
+  // itself, its auto-generated `lib.name: 'workspace-workspace-base-vite-
+  // paths'` already contains that bare substring, which made a substring
+  // check a false-positive "already patched" and silently skipped the
+  // import insertion for the vite-paths package's own vite.config.ts.
+  if (!content.includes('workspace-base-vite-paths/src/index')) {
+    content = content.replace(
+      /(import \{ nxViteTsPaths \} from '@nx\/vite\/plugins\/nx-tsconfig-paths\.plugin';\n)/,
+      `$1import { projectCacheDir, projectCoverage } from '../../workspace/workspace-base-vite-paths/src/index';\n`
+    );
+  }
+  content = content.replace(
+    /cacheDir:\s*(?:'[^']*'|"[^"]*"|(?:path|p)\.join\([\s\S]*?\))\s*,/,
+    'cacheDir: projectCacheDir(__dirname),'
+  );
+  content = content.replace(
+    /reportsDirectory:\s*(?:'[^']*'|"[^"]*"|(?:path|p)\.join\([\s\S]*?\))\s*,/,
+    'reportsDirectory: projectCoverage(__dirname),'
+  );
 
   tree.write(vitePath, content);
 }
@@ -175,8 +251,61 @@ function patchReleasePublish(tree: Tree, dir: string) {
   const projectJson = readJson(tree, projectPath);
   const pub = projectJson?.targets?.['nx-release-publish'];
   if (pub && !pub.dependsOn) {
-    pub.dependsOn = ['build', 'test'];
+    pub.dependsOn = ['build', 'test', 'verify-dist-load', 'dist-manifest', 'publish-hygiene'];
     writeJson(tree, projectPath, projectJson);
+  }
+}
+
+/**
+ * DEBT-WORKSPACE-VITE-PATHS-001 (found while implementing it, not its
+ * original scope): `@nx/js:library`'s default `bundler: 'vite'` output
+ * still emits the PRE-migration workspace-root-relative dist layout
+ * (`dist/{projectRoot}` / `outDir: '../../../dist/{projectRoot}'`) — this
+ * generator was never updated for the later pnpm + in-source-dist migration
+ * (see CHANGELOG "pnpm + in-source-dist migration") that moved every real
+ * package's build output to `{projectRoot}/dist`. This wasn't cosmetic: EVERY
+ * `@adhd/nx-build:*` executor (`assets`, `verify-dist-load`, `version`,
+ * `dist-manifest`, `publish-hygiene`, ...) HARDCODES
+ * `join(project.root, 'dist')` when locating a project's built output —
+ * see `tools/nx-plugins/assets/executors/copy/impl.js`,
+ * `tools/nx-plugins/build/executors/verify/impl.js`,
+ * `tools/nx-plugins/build/executors/version/impl.js`. A freshly-scaffolded
+ * package whose build actually writes to the workspace-root path therefore
+ * fails `verify-dist-load` outright ("no dist for <project> (build first)")
+ * even immediately after a successful `build` — the executors are looking
+ * in the wrong place, not because the build failed.
+ */
+function patchInSourceDist(tree: Tree, dir: string) {
+  const projectJsonPath = joinPathFragments(dir, 'project.json');
+  if (tree.exists(projectJsonPath)) {
+    const projectJson = readJson(tree, projectJsonPath);
+    const buildOpts = projectJson?.targets?.build?.options;
+    if (buildOpts?.outputPath === `dist/${dir}`) {
+      buildOpts.outputPath = `${dir}/dist`;
+    }
+    const versionOpts = projectJson?.release?.version?.generatorOptions;
+    if (versionOpts?.packageRoot === 'dist/{projectRoot}') {
+      versionOpts.packageRoot = '{projectRoot}';
+    }
+    const publishOpts = projectJson?.targets?.['nx-release-publish']?.options;
+    if (publishOpts?.packageRoot === 'dist/{projectRoot}') {
+      publishOpts.packageRoot = '{projectRoot}/dist';
+    }
+    writeJson(tree, projectJsonPath, projectJson);
+  }
+
+  const vitePath = joinPathFragments(dir, 'vite.config.ts');
+  if (tree.exists(vitePath)) {
+    let content = tree.read(vitePath, 'utf-8');
+    if (content) {
+      // root: __dirname already anchors relative build paths to the
+      // package's own directory, so `outDir: 'dist'` IS `{projectRoot}/dist`.
+      content = content.replace(
+        /outDir:\s*(?:'\.\.\/(?:\.\.\/)*dist\/[^']+'|"\.\.\/(?:\.\.\/)*dist\/[^"]+")/,
+        "outDir: 'dist'"
+      );
+      tree.write(vitePath, content);
+    }
   }
 }
 

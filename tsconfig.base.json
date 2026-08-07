@@ -187,8 +187,14 @@
       "@adhd/ui-react-base-storybook": [
         "./packages/ui-react/ui-react-base-storybook/src/index.ts"
       ],
+      "@adhd/workspace-base-standard": [
+        "./packages/workspace/workspace-base-standard/src/index.ts"
+      ],
       "@adhd/workspace-base-tools": [
         "./packages/workspace/workspace-base-tools/src/index.ts"
+      ],
+      "@adhd/workspace-base-vite-paths": [
+        "./packages/workspace/workspace-base-vite-paths/src/index.ts"
       ],
       "@adhd/workspace-codegen-nx": [
         "./packages/workspace/workspace-codegen-nx/src/index.ts"

@@ -1,5 +1,6 @@
 /// <reference types='vitest' />
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import { projectCacheDir, projectCoverage } from '../../workspace/workspace-base-vite-paths/src/index';
 import react from '@vitejs/plugin-react';
 import * as path from 'path';
 import { defineConfig, type UserConfig } from 'vite';
@@ -8,7 +9,7 @@ import dts from 'vite-plugin-dts';
 import { vitestPoolOptions } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../../node_modules/.vite/packages/react-hooks',
+  cacheDir: projectCacheDir(__dirname),
   plugins: [
     react(),
     nxViteTsPaths(),
@@ -57,7 +58,7 @@ export default defineConfig({
     setupFiles: ['./src/test-setup.ts'],
     reporters: ['default'],
     coverage: {
-      reportsDirectory: '../../../coverage/packages/react-hooks',
+      reportsDirectory: projectCoverage(__dirname),
       provider: 'v8',
     },
   },
