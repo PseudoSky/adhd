@@ -68,6 +68,12 @@ Consequences for releasing:
 
 ---
 
+## Approval & Authorization
+
+**Pushing and publishing normally require human approval** — see `AGENTS.md` Rules. However, **if the human grants explicit blanket permission at the start of a session** (e.g., "continuous publish" / "you can publish without asking"), that per-session authorization is sufficient for the rest of that session without per-release re-approval. The grant is **per-session only**; silence or a prior session's grant does **not** carry over to a new session.
+
+---
+
 ## Prerequisites
 
 - `npm login` — confirm with `npm whoami`
