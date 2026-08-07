@@ -101,6 +101,24 @@ export function usageToTurns(
   ];
 }
 
+/**
+ * One row of agent-mcp's `usage_query` tool response at `grain: 'turn'`
+ * (DEBT-DISPATCH-026), narrowed to exactly the fields `reconcileTurns()`
+ * needs in `orchestrator.ts`. Mirrors `UsageRow`
+ * (`packages/agent/agent-engine-orchestrator/src/validation/usage.ts`) — the
+ * REAL base-unit truth `usageQueryByGrain` computes from real `task_events`
+ * rows, one row per `MODEL_RESPONSE` event, `call_index` 1-based in call
+ * order. Distinct from `DispatchUsageReport` above, which is the aggregate
+ * (`direct`/`subtree`) shape `poll()` surfaces — `RealUsageTurn` is the
+ * per-call breakdown that shape collapses away.
+ */
+export interface RealUsageTurn {
+  call_index: number;
+  input_tokens: number;
+  output_tokens: number;
+  created_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // ── IDispatchAgentRunner ─────────────────────────────────────────────────────
 //
@@ -123,6 +141,13 @@ export interface IDispatchAgentRunner {
   ): Promise<{ status: DispatchTaskStatus; usage: DispatchUsageReport | undefined }>;
   /** Cancels a pending/running/awaiting_input task. */
   cancel(taskId: string): Promise<void>;
+  /**
+   * Real per-turn usage query (DEBT-DISPATCH-026): agent-mcp's `usage_query`
+   * tool with `grain: 'turn'`, filtered to this task, in call order. Distinct
+   * from `poll()`'s aggregate `DispatchUsageReport` — this is the base-unit
+   * truth `usageQueryByGrain` computes from real `task_events` rows.
+   */
+  queryTurns(taskId: string): Promise<RealUsageTurn[]>;
 }
 
 // ---------------------------------------------------------------------------
@@ -397,6 +422,25 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
 
   async cancel(taskId: string): Promise<void> {
     await this.callTool('task_cancel', { task_id: taskId });
+  }
+
+  async queryTurns(taskId: string): Promise<RealUsageTurn[]> {
+    const result = await this.callTool<{
+      rows: Array<{
+        call_index: number | null;
+        input_tokens: number;
+        output_tokens: number;
+        created_at: string;
+      }>;
+    }>('usage_query', { task_id: taskId, grain: 'turn' });
+    return result.rows
+      .filter((r): r is typeof r & { call_index: number } => r.call_index != null)
+      .map((r) => ({
+        call_index: r.call_index,
+        input_tokens: r.input_tokens,
+        output_tokens: r.output_tokens,
+        created_at: r.created_at,
+      }));
   }
 
   /**

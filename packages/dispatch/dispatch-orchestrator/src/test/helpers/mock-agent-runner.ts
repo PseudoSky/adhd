@@ -5,12 +5,20 @@ import type {
   DispatchTaskStatus,
   DispatchUsageReport,
   IDispatchAgentRunner,
+  RealUsageTurn,
 } from '../../lib/agent-runner.js';
 
 /** Canned outcome `poll()` returns for a task fired against a given agent. */
 export interface MockTaskResult {
   status: DispatchTaskStatus;
   usage?: DispatchUsageReport;
+  /**
+   * Canned `queryTurns()` result (DEBT-DISPATCH-026). Optional — every
+   * pre-existing fixture that only ever set `usage` gets a backward-compatible
+   * single-row default synthesized from `usage.direct` (see `queryTurns()`
+   * below); set this explicitly to script real multi-turn behavior.
+   */
+  turns?: RealUsageTurn[];
 }
 
 export interface MockAgentRunnerOptions {
@@ -152,6 +160,30 @@ export class MockAgentRunner implements IDispatchAgentRunner {
       throw new Error(`MockAgentRunner.cancel: unknown taskId '${taskId}' (never fired)`);
     }
     task.cancelled = true;
+  }
+
+  async queryTurns(taskId: string): Promise<RealUsageTurn[]> {
+    const task = this.tasks.get(taskId);
+    if (!task) {
+      throw new Error(`MockAgentRunner.queryTurns: unknown taskId '${taskId}' (never fired)`);
+    }
+    if (task.result.turns) return task.result.turns;
+    // Backward-compatible default for every EXISTING test/fixture that only
+    // ever set `usage` (DispatchUsageReport), not `turns`: synthesize exactly
+    // ONE deterministic row from `usage.direct`, matching what the OLD
+    // `usageToTurns(polled.usage)` path used to produce, so no pre-existing
+    // test needs to change. NEW tests that need real multi-turn behavior
+    // should set `turns` explicitly on their `MockTaskResult`.
+    const direct = task.result.usage?.direct;
+    if (!direct) return [];
+    return [
+      {
+        call_index: 1,
+        input_tokens: direct.inputTokens,
+        output_tokens: direct.outputTokens,
+        created_at: '2026-01-01T00:00:00.000Z',
+      },
+    ];
   }
 
   /**

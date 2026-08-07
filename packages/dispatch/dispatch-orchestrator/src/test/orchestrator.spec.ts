@@ -30,7 +30,11 @@ import { createJsonFileSerializer } from '@adhd/dispatch-serializer-json';
 import { snapshot, optimize } from '@adhd/dispatch-core-optimizer';
 
 import { MockAgentRunner } from './helpers/mock-agent-runner.js';
-import type { DispatchTaskStatus, IDispatchAgentRunner } from '../lib/agent-runner.js';
+import type {
+  DispatchTaskStatus,
+  IDispatchAgentRunner,
+  RealUsageTurn,
+} from '../lib/agent-runner.js';
 import {
   orchestrate,
   orchestrateCycle,
@@ -863,6 +867,12 @@ describe('orchestrateCycle — bounded poll deadline', () => {
     }
     async cancel(): Promise<void> {
       /* no-op */
+    }
+    // DEBT-DISPATCH-026: dispatchUnit() calls queryTurns() unconditionally
+    // (before the polled.timedOut check below), so even a runner whose
+    // scenario always times out must return validly here.
+    async queryTurns(): Promise<RealUsageTurn[]> {
+      return [];
     }
   }
 
