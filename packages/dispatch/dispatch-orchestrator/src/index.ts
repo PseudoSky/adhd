@@ -7,6 +7,7 @@ export type {
   IMcpToolClient,
   McpCallToolResult,
   McpContentBlock,
+  RealUsageTurn,
   SynthesizedTurn,
 } from './lib/agent-runner.js';
 export { AgentMcpRunner, AgentMcpToolError, usageToTurns } from './lib/agent-runner.js';
@@ -37,6 +38,7 @@ export type {
 export {
   orchestrateCycle,
   orchestrate,
+  reconcileTurns,
   DEFAULT_B_PER_TIER,
   DEFAULT_CONTEXT_WINDOW_PER_TIER,
   DEFAULT_POLL,
