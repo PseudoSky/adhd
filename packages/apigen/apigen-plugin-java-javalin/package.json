@@ -13,7 +13,7 @@
     "javalin"
   ],
   "dependencies": {
-    "@adhd/apigen-core-client": "^0.2.2",
+    "@adhd/apigen-core-client": "0.3.0",
     "@adhd/apigen-engine-naming": "^0.2.1",
     "@adhd/apigen-base-logical": "^0.1.0"
   },
