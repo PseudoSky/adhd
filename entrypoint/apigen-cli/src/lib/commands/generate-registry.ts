@@ -7,6 +7,10 @@ import { orchestrateGenerate } from '../orchestrator';
 import type { SourceEntry } from '../orchestrator';
 import type { OutputPlugin } from '@adhd/apigen-core-client';
 import { describeTypeOption, unknownTypeError } from '../plugin-registry';
+// BUG-APIGEN-CLI-GENERATE-USE-UNRESOLVED-001: `generate-registry` never
+// exposed `--use` at all, so no extractLayer plugin (e.g. `ir-cache`) could
+// ever be composed for registry-driven extraction. Reuse run.ts's resolver.
+import { loadUsePlugins } from './run';
 
 /** Parse --opt key=value pairs into an options record. */
 function parseOptPairs(pairs: string[]): Record<string, unknown> {
@@ -52,6 +56,12 @@ export function registerGenerateRegistryCommand(
       (val: string, prev: string[]) => [...prev, val],
       [] as string[]
     )
+    .option(
+      '--use <plugin>',
+      'Layer/mount/envelope plugin to activate (repeatable; accepts package specifier or local path)',
+      (val: string, prev: string[]) => [...prev, val],
+      [] as string[]
+    )
     .action(
       async (opts: {
         packagesDir: string;
@@ -61,6 +71,7 @@ export function registerGenerateRegistryCommand(
         excludeTag: string[];
         tsconfig?: string;
         opt: string[];
+        use: string[];
       }) => {
         const plugin = plugins[opts.type];
         if (!plugin) {
@@ -106,8 +117,14 @@ export function registerGenerateRegistryCommand(
           return;
         }
 
+        // BUG-APIGEN-CLI-GENERATE-USE-UNRESOLVED-001: resolve `--use`
+        // specifiers to loaded Plugin objects and thread as
+        // `usePluginObjects` so an `extractLayer` capability (e.g.
+        // `apigen-plugin-ir-cache`) is composed into extraction here too.
+        const usePlugins = await loadUsePlugins(opts.use);
+
         const { pluginOutput } = await orchestrateGenerate(
-          { sources, logger },
+          { sources, usePlugins: opts.use, usePluginObjects: usePlugins, logger },
           plugin,
           outputDir,
           options

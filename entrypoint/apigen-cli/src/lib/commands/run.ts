@@ -32,6 +32,10 @@ import batchPlugin from '@adhd/apigen-plugin-batch';
 import healthPlugin from '@adhd/apigen-plugin-health';
 import loggerPlugin from '@adhd/apigen-plugin-logger';
 import openapiPlugin from '@adhd/apigen-plugin-openapi';
+// Extract-stage IR cache (FEAT-002 Revision 2, design doc
+// extract-stage-onion-and-ir-cache.md R2-3): `--use ir-cache` selects its
+// `extractLayer` capability (RUNTIME CACHE mode, `--opt cache=<file-path>`).
+import { irCachePlugin } from '@adhd/apigen-plugin-ir-cache';
 
 
 /** Parse --opt key=value pairs into an options record. */
@@ -164,6 +168,7 @@ const BUILTIN_USE_PLUGINS: Record<string, Plugin> = {
   health: healthPlugin as Plugin,
   logger: loggerPlugin as Plugin,
   openapi: openapiPlugin as Plugin,
+  'ir-cache': irCachePlugin as unknown as Plugin,
 };
 
 /**
