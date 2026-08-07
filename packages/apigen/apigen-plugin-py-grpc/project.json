@@ -26,6 +26,16 @@
     },
     "test": {
       "executor": "@nx/vite:test",
+      "inputs": [
+        "default",
+        "^production",
+        "{workspaceRoot}/packages/apigen/python/**/*",
+        "!{workspaceRoot}/packages/apigen/python/**/__pycache__/**",
+        "!{workspaceRoot}/packages/apigen/python/**/*.pyc",
+        "!{workspaceRoot}/packages/apigen/python/.pytest_cache/**",
+        "!{workspaceRoot}/packages/apigen/python/build/**",
+        "!{workspaceRoot}/packages/apigen/python/*.egg-info/**"
+      ],
       "outputs": [
         "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-py-grpc"
       ],
