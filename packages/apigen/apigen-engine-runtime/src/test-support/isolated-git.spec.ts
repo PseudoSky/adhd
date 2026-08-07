@@ -20,7 +20,7 @@
  * disposable repositories under `os.tmpdir()` — nothing here is mocked.
  */
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -43,25 +43,48 @@ function unsafeGit(args: readonly string[], cwd: string): string {
 describe('BUG-APIGEN-052: isolated-git escape mechanism + fix', () => {
   let victimDir: string;
 
-  // Sanitized (GIT_* stripped, -C scoped) — this fixture's OWN setup/teardown
-  // must be immune to the SAME leaked-env hazard the test file exists to
-  // prove, because it runs for real inside the actual pre-commit hook
-  // (`.githooks/pre-commit` -> `nx affected -t test` -> vitest -> this file),
-  // which leaks a REAL ambient GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE into the
-  // whole test process for the file's entire lifetime — not just during the
-  // tests that deliberately simulate a leak. A bare-cwd `execFileSync` here
-  // (BUG-APIGEN-ISOLATED-GIT-SELFTEST-001) would let that ambient leak
-  // redirect `beforeAll`'s `git init`/`commit` at the ENCLOSING real repo
-  // instead of `victimDir`, corrupting it with a stray "victim init" commit
-  // — reproduced and fixed after it did exactly that to a live merge
-  // worktree. Only `unsafeGit` (used solely inside the negative-control test,
-  // deliberately) is allowed to stay unsanitized — that vulnerability is the
-  // thing under test there, not an accident.
+  // BUG-APIGEN-052-SELF (found live, 2026-08-07): this helper managed the
+  // "victim" fixture repo itself — every beforeEach()/victimFingerprint()
+  // call — via the exact unsafe `execFileSync('git', args, { cwd })` pattern
+  // this whole file exists to prove is dangerous. That's a live hazard, not
+  // a hypothetical: `beforeEach()` runs UNCONDITIONALLY for every test in
+  // this suite, before any test body has a chance to set OR clear GIT_DIR/
+  // GIT_WORK_TREE/GIT_INDEX_FILE — so if THIS suite's own process ever
+  // inherits a REAL ambient leak (not the ones the tests below simulate
+  // on purpose), e.g. because it is actually invoked from inside a real
+  // git hook (`.githooks/pre-commit` -> `nx affected -t test` -> vitest,
+  // exactly the call chain this file's own doc comment names as the proven
+  // leak vector), `vgit('commit', ..., 'victim init')` does not create its
+  // fixture commit in the intended `os.tmpdir()` victimDir at all — it
+  // lands on whatever repo GIT_WORK_TREE/GIT_DIR actually point at, sweeping
+  // in that repo's currently-staged content. This is not theoretical: it
+  // reproduced exactly this way against a real, unpushed feature branch
+  // during BL-DISPATCH-026 verification (a "victim init" commit containing
+  // that branch's legitimately-staged diff landed as its HEAD).
+  //
+  // Fix: `vgit` now delegates to `runGit` (imported above), the SAME
+  // GIT_*-env-stripped, `-C`-scoped helper this file already imports and
+  // already proves immune to the identical hazard elsewhere in this suite
+  // (the "runGit ... is immune" and "createIsolatedScratchRepo end-to-end"
+  // tests below). This does not weaken any test's negative-control power:
+  // `unsafeGit()` (deliberately reproducing the OLD pattern to simulate a
+  // leak against `nestedScratchDir`) is untouched — only the "victim"
+  // fixture's OWN bookkeeping (init/config/commit/fingerprint) is hardened,
+  // which is exactly the FICTION every test in this file already assumes to
+  // be true ("A fresh victim repo PER TEST" — pristine, not itself
+  // vulnerable to the very leak it exists to detect).
   function vgit(...args: string[]): string {
     return runGit(args, { cwd: victimDir });
   }
 
-  beforeAll(() => {
+  // A fresh victim repo PER TEST (beforeEach, not beforeAll): the first
+  // test in this suite is a negative control that deliberately corrupts its
+  // victim (rewrites identity, lands a junk commit) to prove the hazard is
+  // real. A victim shared across tests via beforeAll would carry that
+  // corruption into every later test's "stayed clean" assertions — a false
+  // failure that has nothing to do with whether THAT test's isolation held.
+  // Each test must independently prove isolation against a pristine victim.
+  beforeEach(() => {
     // The "enclosing real repo" a hook would be running in.
     victimDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bug-apigen-052-victim-')));
     vgit('init', '-q');
@@ -72,16 +95,13 @@ describe('BUG-APIGEN-052: isolated-git escape mechanism + fix', () => {
     vgit('commit', '-q', '-m', 'victim init');
   });
 
-  afterAll(() => {
-    fs.rmSync(victimDir, { recursive: true, force: true });
-  });
-
   // Every test that leaks env must restore it — never let a leaked GIT_DIR
   // survive into a later test or another suite in the same worker.
   afterEach(() => {
     for (const key of LEAK_VARS) {
       delete process.env[key];
     }
+    fs.rmSync(victimDir, { recursive: true, force: true });
   });
 
   /** Snapshot of everything a leak could corrupt, for before/after comparison. */
@@ -162,36 +182,27 @@ describe('BUG-APIGEN-052: isolated-git escape mechanism + fix', () => {
       runGit(['config', 'user.name', 'parity-harness-self-test'], { cwd: nestedScratchDir });
       fs.writeFileSync(path.join(nestedScratchDir, 'subject.txt'), 'before\n');
       runGit(['add', 'subject.txt'], { cwd: nestedScratchDir });
-      // A message distinct from the negative-control test's ('init:
-      // subject.txt') — that test legitimately, intentionally commits that
-      // exact string into victimDir's real log as part of proving the
-      // hazard, so re-using it here would make the "victim log must NOT
-      // contain this" assertion below unsatisfiable regardless of whether
-      // THIS (fixed) code path leaks anything.
-      runGit(['commit', '-q', '-m', 'init: subject.txt (fixed-nested)'], { cwd: nestedScratchDir });
+      runGit(['commit', '-q', '-m', 'init: subject.txt'], { cwd: nestedScratchDir });
+
+      // The scratch repo really did receive the commit — isolation, not a
+      // silent no-op — captured BEFORE cleanup removes the directory.
+      const scratchLog = runGit(['log', '--oneline'], { cwd: nestedScratchDir });
+      expect(scratchLog).toContain('init: subject.txt');
 
       for (const key of LEAK_VARS) delete process.env[key];
 
-      // And the scratch repo really did receive the commit — isolation, not
-      // silent no-op. Verified BEFORE removing nestedScratchDir below.
-      expect(
-        runGit(['log', '--oneline'], { cwd: nestedScratchDir })
-      ).toContain('init: subject.txt (fixed-nested)');
-
-      // nestedScratchDir is a real, separate, isolated git repo nested
-      // physically inside victimDir's own working tree — from victimDir's
-      // perspective that is an embedded, untracked repo boundary that
-      // `git status` reports (a single "?? tmp-nested-scratch-fixed-…/"
-      // line). Clean it up before fingerprinting the victim so the "after"
-      // snapshot reflects only whether the LEAK affected victimDir, not the
-      // mere on-disk presence of an unrelated isolated scratch repo this
-      // test itself created inside it.
+      // Clean up the nested scratch dir (as any real caller of a scratch
+      // repo would per AGENTS.md §10) BEFORE fingerprinting the victim: a
+      // leftover directory nested inside victimDir's own working tree is
+      // legitimately untracked content there, and would fail a strict
+      // toEqual(before) even though `runGit` never touched the victim's
+      // config/index/history — this asserts the latter, not the former.
       fs.rmSync(nestedScratchDir, { recursive: true, force: true });
 
       const after = victimFingerprint();
       expect(after).toEqual(before);
       expect(after.status).toContain('concurrent-work-2.txt');
-      expect(after.log).not.toContain('init: subject.txt (fixed-nested)');
+      expect(after.log).not.toContain('init: subject.txt');
     }
   );
 
