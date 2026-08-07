@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import * as path from 'node:path';
 import * as net from 'node:net';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import { Command } from 'commander';
 import {
   registerRunCommand,
@@ -352,6 +354,102 @@ describe('[cli-run-cmd.4] run-registry command — passes multiple packages at o
       expect(pkg.fns?.['__samples__']).toBeUndefined();
     }
   });
+
+  // BUG-APIGEN-CLI-GENERATE-USE-UNRESOLVED-001 regression guard.
+  //
+  // `run-registry` never even exposed a `--use` flag, so no `extractLayer`-
+  // capable plugin (e.g. `apigen-plugin-ir-cache`) could ever be composed for
+  // registry-driven extraction. Drives the REAL `run-registry` command
+  // action end to end with a real dynamically-`import()`ed `--use` plugin.
+  it(
+    'a --use plugin declaring extractLayer actually intercepts extraction for the real `run-registry` command',
+    { timeout: 30000 },
+    async () => {
+      const tmpDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'apigen-cli-run-registry-use-')
+      );
+      const pluginFile = path.join(tmpDir, 'short-circuit-plugin.mjs');
+      fs.writeFileSync(
+        pluginFile,
+        `
+export default {
+  id: 'test-short-circuit',
+  capabilities: {
+    extractLayer: {
+      layer: async () => [],
+    },
+  },
+};
+`.trim()
+      );
+
+      try {
+        let capturedInput: RunInput | undefined;
+        const capturingPlugin: OutputPlugin = {
+          id: 'capturing',
+          description: 'captures RunInput',
+          generate() {
+            return { files: [] };
+          },
+          async run(input: RunInput): Promise<void> {
+            capturedInput = input;
+          },
+        };
+
+        // Negative control FIRST: without --use, pkg-a/pkg-b's real schemas
+        // (1 operation each) reach the plugin.
+        const controlProgram = makeProgram();
+        registerRunRegistryCommand(controlProgram, {
+          capturing: capturingPlugin,
+        });
+        await controlProgram.parseAsync([
+          'node',
+          'apigen-cli',
+          'run-registry',
+          '--packages-dir',
+          registryDir,
+          '--type',
+          'capturing',
+          '--tag',
+          'api',
+        ]);
+        const totalSchemasWithoutUse = (capturedInput?.packages ?? []).reduce(
+          (n, p) => n + Object.keys(p.schemas ?? {}).length,
+          0
+        );
+        expect(totalSchemasWithoutUse).toBe(2);
+
+        // Real assertion: with --use pointing at the short-circuiting
+        // plugin, the real extractor's operations must never reach it.
+        capturedInput = undefined;
+        const program = makeProgram();
+        registerRunRegistryCommand(program, { capturing: capturingPlugin });
+        await program.parseAsync([
+          'node',
+          'apigen-cli',
+          'run-registry',
+          '--packages-dir',
+          registryDir,
+          '--type',
+          'capturing',
+          '--tag',
+          'api',
+          '--use',
+          pluginFile,
+        ]);
+        const totalSchemasWithUse = (capturedInput?.packages ?? []).reduce(
+          (n, p) => n + Object.keys(p.schemas ?? {}).length,
+          0
+        );
+        expect(
+          totalSchemasWithUse,
+          'the extractLayer short-circuit plugin must have intercepted extraction (0 total operations), proving run-registry resolves --use and threads it as usePluginObjects'
+        ).toBe(0);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    }
+  );
 });
 
 // ───────────────────────────────────────────────────────────────────────────
