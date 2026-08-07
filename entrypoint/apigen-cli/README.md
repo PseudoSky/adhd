@@ -251,7 +251,7 @@ apigen serve --source <path> [--source ...] --port <port> [--mount <ns>=<plugin>
 
 | Flag | Description |
 |------|-------------|
-| `--source <path>` | Source to mount (repeatable; `.ts` → api-fastify, `.py` → py-flask) |
+| `--source <path>` | Source to mount (repeatable; `.ts` → api-fastify, `.py` → py-flask, `.java` → java-javalin) |
 | `--port <port>` | Front TCP port (HTTP + gRPC multiplexed) |
 | `--mount <ns>=<plugin>` | Pin namespace to specific plugin (repeatable; e.g. `ledger=py-grpc`) |
 
@@ -310,8 +310,9 @@ apigen generate-registry --packages-dir <path> --type <plugin-id> --out-dir <pat
 | `cli` / `cli-output` | TS | ✓ | ✓ | `cliPlugin` from `@adhd/apigen-plugin-cli-output` | **Interactive CLI tool** — your functions become command-line commands |
 | `py-flask` | Py | ✓ | ✓ | (Python subprocess) | **Python Flask server** — Python HTTP via the Flask framework |
 | `py-grpc` | Py | ✓ | ✓ | (Python subprocess) | **Python gRPC server** — HTTP/2 gRPC with protobuf wire format |
+| `java-javalin` | Java | ✓ | ✓ | (Java/Maven subprocess) | **Java Javalin server** — JavaParser-extracted `public static` methods, codegen-woven dispatcher, real HTTP via Javalin |
 
-Non-TS plugins (`py-flask`, `py-grpc`) bypass TypeScript compilation — they spawn a Python subprocess. All plugins use the same canonical wire format, so a `Decimal` is the same JSON string from Fastify, Flask, or gRPC.
+Non-TS plugins (`py-flask`, `py-grpc`, `java-javalin`) bypass TypeScript compilation — they spawn a Python or Java (Maven) subprocess. All plugins use the same canonical wire format, so a `Decimal` is the same JSON string from Fastify, Flask, gRPC, or Javalin.
 
 ---
 

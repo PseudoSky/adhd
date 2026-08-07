@@ -3,7 +3,19 @@
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
     "declaration": true,
-    "types": ["node", "vite/client"]
+    "types": ["node", "vite/client"],
+    // BUG-APIGEN-CLI-VERIFY-DIST-LOAD-ARGV-001's bin entry-point guard uses
+    // `import.meta.url` (see src/index.ts); TS only permits that syntax
+    // under an ESNext-family `module` target, even though the actual
+    // runtime output stays CommonJS-compatible (Rollup bundles both
+    // `dist/index.mjs` and `dist/index.js`/cjs per vite.config.ts's
+    // `formats: ['es', 'cjs']`, and Rollup's cjs output shims
+    // `import.meta.url` as `pathToFileURL(__filename).href` regardless of
+    // this tsc setting — it only governs the typecheck step, not bundling).
+    // Same override already proven at entrypoint/backlog/tsconfig.lib.json
+    // for the identical guard pattern.
+    "module": "esnext",
+    "moduleResolution": "bundler"
   },
   "include": ["src/**/*.ts"],
   "exclude": [

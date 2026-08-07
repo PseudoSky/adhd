@@ -299,10 +299,49 @@ export const DEFAULT_MAX_CYCLES = 500;
 const GUARD_OUTPUT_CAP_BYTES = 8 * 1024;
 const GUARD_EXEC_AGENT_LABEL = 'dispatch-orchestrator:guard-exec';
 
+/**
+ * The largest prefix length (<= `cap`) that ends on a whole UTF-8 character
+ * boundary — never inside a multi-byte sequence (DEBT-DISPATCH-017). A bare
+ * `buf.toString('utf8', 0, cap)` silently corrupts output when `cap` lands
+ * mid-sequence: Node's UTF-8 decoder replaces the truncated trailing bytes
+ * with U+FFFD ("�") rather than erroring, so the cap byte count alone
+ * is not a safe slice point for anything but ASCII.
+ *
+ * Walks back from `cap` at most 3 bytes (the longest UTF-8 continuation run)
+ * looking for a lead byte (top two bits not `10`). If that lead byte's
+ * declared sequence length would extend past `cap`, the whole (incomplete)
+ * character is excluded by truncating before it instead of after it.
+ */
+function utf8SafeTruncateLength(buf: Buffer, cap: number): number {
+  if (cap >= buf.byteLength) return buf.byteLength;
+  const end = cap;
+  for (let back = 1; back <= 4 && end - back >= 0; back++) {
+    const leadPos = end - back;
+    const byte = buf[leadPos];
+    if ((byte & 0xc0) !== 0x80) {
+      // Found a lead byte (or ASCII byte). Determine its declared sequence
+      // length and check whether it fits entirely within `cap`.
+      let seqLen: number;
+      if ((byte & 0x80) === 0x00) seqLen = 1; // ASCII
+      else if ((byte & 0xe0) === 0xc0) seqLen = 2;
+      else if ((byte & 0xf0) === 0xe0) seqLen = 3;
+      else if ((byte & 0xf8) === 0xf0) seqLen = 4;
+      else seqLen = 1; // invalid lead byte — treat as a single stray byte
+      return leadPos + seqLen <= cap ? cap : leadPos;
+    }
+  }
+  // More than 3 consecutive continuation bytes immediately before `cap`
+  // without finding a lead byte means malformed input this deep back —
+  // fall back to the original (unsafe but bounded) cap rather than looping
+  // further; `toString` will still produce a bounded, if imperfect, result.
+  return cap;
+}
+
 function capOutput(s: string): string {
   const buf = Buffer.from(s, 'utf8');
   if (buf.byteLength <= GUARD_OUTPUT_CAP_BYTES) return s;
-  return `${buf.toString('utf8', 0, GUARD_OUTPUT_CAP_BYTES)}\n...[truncated at ${GUARD_OUTPUT_CAP_BYTES} bytes]`;
+  const safeEnd = utf8SafeTruncateLength(buf, GUARD_OUTPUT_CAP_BYTES);
+  return `${buf.toString('utf8', 0, safeEnd)}\n...[truncated at ${GUARD_OUTPUT_CAP_BYTES} bytes]`;
 }
 
 function defaultClock(): string {

@@ -43,8 +43,22 @@ function unsafeGit(args: readonly string[], cwd: string): string {
 describe('BUG-APIGEN-052: isolated-git escape mechanism + fix', () => {
   let victimDir: string;
 
+  // Sanitized (GIT_* stripped, -C scoped) — this fixture's OWN setup/teardown
+  // must be immune to the SAME leaked-env hazard the test file exists to
+  // prove, because it runs for real inside the actual pre-commit hook
+  // (`.githooks/pre-commit` -> `nx affected -t test` -> vitest -> this file),
+  // which leaks a REAL ambient GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE into the
+  // whole test process for the file's entire lifetime — not just during the
+  // tests that deliberately simulate a leak. A bare-cwd `execFileSync` here
+  // (BUG-APIGEN-ISOLATED-GIT-SELFTEST-001) would let that ambient leak
+  // redirect `beforeAll`'s `git init`/`commit` at the ENCLOSING real repo
+  // instead of `victimDir`, corrupting it with a stray "victim init" commit
+  // — reproduced and fixed after it did exactly that to a live merge
+  // worktree. Only `unsafeGit` (used solely inside the negative-control test,
+  // deliberately) is allowed to stay unsanitized — that vulnerability is the
+  // thing under test there, not an accident.
   function vgit(...args: string[]): string {
-    return execFileSync('git', args, { cwd: victimDir, stdio: 'pipe' }).toString();
+    return runGit(args, { cwd: victimDir });
   }
 
   beforeAll(() => {
@@ -148,20 +162,36 @@ describe('BUG-APIGEN-052: isolated-git escape mechanism + fix', () => {
       runGit(['config', 'user.name', 'parity-harness-self-test'], { cwd: nestedScratchDir });
       fs.writeFileSync(path.join(nestedScratchDir, 'subject.txt'), 'before\n');
       runGit(['add', 'subject.txt'], { cwd: nestedScratchDir });
-      runGit(['commit', '-q', '-m', 'init: subject.txt'], { cwd: nestedScratchDir });
+      // A message distinct from the negative-control test's ('init:
+      // subject.txt') — that test legitimately, intentionally commits that
+      // exact string into victimDir's real log as part of proving the
+      // hazard, so re-using it here would make the "victim log must NOT
+      // contain this" assertion below unsatisfiable regardless of whether
+      // THIS (fixed) code path leaks anything.
+      runGit(['commit', '-q', '-m', 'init: subject.txt (fixed-nested)'], { cwd: nestedScratchDir });
 
       for (const key of LEAK_VARS) delete process.env[key];
+
+      // And the scratch repo really did receive the commit — isolation, not
+      // silent no-op. Verified BEFORE removing nestedScratchDir below.
+      expect(
+        runGit(['log', '--oneline'], { cwd: nestedScratchDir })
+      ).toContain('init: subject.txt (fixed-nested)');
+
+      // nestedScratchDir is a real, separate, isolated git repo nested
+      // physically inside victimDir's own working tree — from victimDir's
+      // perspective that is an embedded, untracked repo boundary that
+      // `git status` reports (a single "?? tmp-nested-scratch-fixed-…/"
+      // line). Clean it up before fingerprinting the victim so the "after"
+      // snapshot reflects only whether the LEAK affected victimDir, not the
+      // mere on-disk presence of an unrelated isolated scratch repo this
+      // test itself created inside it.
+      fs.rmSync(nestedScratchDir, { recursive: true, force: true });
 
       const after = victimFingerprint();
       expect(after).toEqual(before);
       expect(after.status).toContain('concurrent-work-2.txt');
-      expect(after.log).not.toContain('init: subject.txt');
-
-      // And the scratch repo really did receive the commit — isolation, not
-      // silent no-op.
-      expect(
-        runGit(['log', '--oneline'], { cwd: nestedScratchDir })
-      ).toContain('init: subject.txt');
+      expect(after.log).not.toContain('init: subject.txt (fixed-nested)');
     }
   );
 
