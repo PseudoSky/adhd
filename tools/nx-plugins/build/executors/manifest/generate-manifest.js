@@ -227,6 +227,42 @@ function assertResolvedInternalDeps(manifest, versionMap) {
   }
 }
 
+/**
+ * BUG-020 tripwire, extracted as its own pure, directly-testable check (mirrors
+ * `assertResolvedInternalDeps` above — a hard gate lives here, not inside
+ * `generateDistManifest`, so the pure function stays permissive and this stays
+ * independently unit-testable without needing `generateDistManifest` itself to
+ * regress in order to exercise the throw path).
+ *
+ * `generateDistManifest` preserves `sourcePkg.type` verbatim today (a shallow
+ * clone, never one of the rebased/resolved/stripped fields — see its own doc
+ * comment). This asserts that invariant holds for whatever manifest is about
+ * to be written to disk: if `manifest.type` ever disagrees with the SOURCE
+ * package.json's `type`, Node will load the dist entry under the wrong module
+ * system and throw a `SyntaxError` three layers removed from this write — the
+ * exact failure BUG-020 diagnosed (`entrypoint/agent-mcp/dist/package.json`
+ * said `"type":"commonjs"` while `dist/src/index.js` contained real ESM
+ * `import` syntax, breaking `main-entry-symlink.test.ts` with "Cannot use
+ * import statement outside a module").
+ *
+ * @param {Record<string, any>} manifest the RESOLVED dist manifest (generateDistManifest's output)
+ * @param {Record<string, any>} sourcePkg the parsed source package.json
+ * @throws {Error} naming the package + both values, if they disagree.
+ */
+function assertMatchingModuleType(manifest, sourcePkg) {
+  const sourceType = sourcePkg.type ?? 'commonjs';
+  const manifestType = manifest.type ?? 'commonjs';
+  if (manifestType !== sourceType) {
+    throw new Error(
+      `writeDistManifest: BUG-020 tripwire — resolved manifest.type ("${manifestType}") for ` +
+      `"${manifest.name || sourcePkg.name || '(unknown package)'}" diverges from source package.json's type ` +
+      `("${sourceType}"). Refusing to write a dist/package.json whose module system disagrees with the ` +
+      `actual emitted syntax — this would make Node load ${sourceType === 'module' ? 'ESM' : 'CommonJS'} code ` +
+      `as ${manifestType === 'module' ? 'ESM' : 'CommonJS'} and throw at import/require time.`
+    );
+  }
+}
+
 const { existsSync: _existsSync, readFileSync: _readFileSync, writeFileSync: _writeFileSync, copyFileSync: _copyFileSync } = require('node:fs');
 const { join: _join } = require('node:path');
 
@@ -320,6 +356,8 @@ async function writeDistManifest(context, pkgRoot, distDir) {
   // see assertResolvedInternalDeps's own doc comment for why this lives here
   // rather than inside the pure generateDistManifest.
   assertResolvedInternalDeps(manifest, versionMap);
+  // BUG-020 tripwire — see assertMatchingModuleType's own doc comment.
+  assertMatchingModuleType(manifest, sourcePkg);
   _writeFileSync(_join(distDir, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
   const srcChangelog = _join(pkgRoot, 'CHANGELOG.md');
   if (_existsSync(srcChangelog)) _copyFileSync(srcChangelog, _join(distDir, 'CHANGELOG.md'));
@@ -333,6 +371,7 @@ module.exports = {
   rebaseBin,
   resolveInternalDeps,
   assertResolvedInternalDeps,
+  assertMatchingModuleType,
   buildVersionMapFromDisk,
   writeDistManifest,
 };

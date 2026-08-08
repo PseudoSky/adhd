@@ -48,6 +48,10 @@
     },
     "test": {
       "executor": "@nx/vite:test",
+      "dependsOn": [
+        "build",
+        "dist-manifest"
+      ],
       "cache": true,
       "inputs": [
         "default",
