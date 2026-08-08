@@ -2,7 +2,7 @@
   "name": "@adhd/dispatch-core-client",
   "version": "0.1.0",
   "dependencies": {
-    "@adhd/dispatch-base-spec": "^0.1.1"
+    "@adhd/dispatch-base-spec": "^0.1.2"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

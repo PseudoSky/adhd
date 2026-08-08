@@ -1,3 +1,15 @@
+## 0.2.4 (2026-08-08)
+
+
+### 🩹 Fixes
+
+- **apigen-python-env:** probe monorepo-live python source before co-located dist copy (DEBT-APIGEN-010)
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.2.3 (2026-08-07)
 
 

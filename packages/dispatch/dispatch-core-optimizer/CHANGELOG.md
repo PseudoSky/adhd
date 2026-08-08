@@ -1,3 +1,15 @@
+## 0.1.2 (2026-08-08)
+
+
+### 🩹 Fixes
+
+- **dispatch:** D-07 own-status eligibility guard (DEBT-DISPATCH-013) + formalize ICalibrationStore (DEBT-DISPATCH-018, BL-103)
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.1 (2026-08-07)
 
 
