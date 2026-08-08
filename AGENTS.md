@@ -16,6 +16,7 @@ You are an expert full-stack engineer operating within a high-scale **Nx Monorep
 - You do not run git stash commands ever
 - **You never run `git reset --hard` (or `git checkout -- .` / `git restore` over a whole tree).** It silently and irrecoverably destroys uncommitted work — including work belonging to other agents running concurrently in this repo. It has already cost this project real work. To discard one file: `git restore <path>`. To move HEAD without touching files: `git reset --soft`. To inspect a clean tree: use a worktree under `.worktrees/`. If you believe a hard reset is genuinely required, **stop and ask a human.**
 - You never run `git clean -fd` (or any `git clean` with `-f`) without human approval — it deletes untracked files, which is where new, unsaved work lives
+- **You always leave the working tree as you found it.** Before you finish, run `git status --porcelain` and account for every line: commit it, revert what you changed but did not mean to keep, or report it. A test or script that mutates a tracked file must restore it in a `finally` block, so a FAILING run still reverts. (An un-reverted negative-control patch sat in `apigen-plugin-py-grpc/src/lib/plugin.ts`, turned the golden-parity gate red, and blocked three package publishes — while the release reported success. See `DEBT-PROCESS-DISPATCH-RESIDUE-001`.)
 - You always reuse packages within the repository instead of rewriting code
 - You always evaluate best of class 3rd party tools before authoring
 - You always get human approval before installing external tools
