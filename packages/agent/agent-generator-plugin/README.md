@@ -11,12 +11,12 @@ db wiring).
 ## Usage
 
 ```bash
-# Scaffold packages/ai/agent-budget (@adhd/agent-budget).
+# Scaffold packages/agent/agent-budget (@adhd/agent-budget).
 nx g @adhd/agent-generator-plugin:registry-package budget
 
 # Custom directory / description / table prefix.
 nx g @adhd/agent-generator-plugin:registry-package billing \
-  --directory=packages/ai/agent-billing \
+  --directory=packages/agent/agent-billing \
   --description="Billing ledger registry" \
   --tablePrefix=billing_
 ```
@@ -29,13 +29,13 @@ Pass the name **without** the `agent-` prefix — `budget` produces the project
 | Option        | Required | Default                           | Notes                                                            |
 | ------------- | -------- | --------------------------------- | ---------------------------------------------------------------- |
 | `name`        | yes      | —                                 | kebab-case, no `agent-` prefix (e.g. `budget`, `tool-registry`). |
-| `directory`   | no       | `packages/ai/agent-<name>`        | Target directory.                                                |
+| `directory`   | no       | `packages/agent/agent-<name>`     | Target directory.                                                |
 | `description` | no       | derived                           | `package.json` description.                                      |
 | `tablePrefix` | no       | `<name>_` (hyphens → underscores) | SQLite table-name prefix; the cross-package collision guard.     |
 
 ## What it generates
 
-Under `packages/ai/agent-<name>/`:
+Under `packages/agent/agent-<name>/`:
 
 - `project.json` — tags `["layer:ai","platform:node"]`; `build` (`@nx/js:tsc`,
   drizzle asset glob), `test` (`@nx/vite:test`), `typecheck`, `clean`,
@@ -54,7 +54,7 @@ Under `packages/ai/agent-<name>/`:
 - `README.md` and a `CLAUDE.md` stub linking
   [`REGISTRY-PACKAGE-RULES.md`](./REGISTRY-PACKAGE-RULES.md).
 
-It also adds `"@adhd/agent-<name>": ["./packages/ai/agent-<name>/src/index.ts"]`
+It also adds `"@adhd/agent-<name>": ["./packages/agent/agent-<name>/src/index.ts"]`
 to `tsconfig.base.json` (additive).
 
 ## The rules it enforces

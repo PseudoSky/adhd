@@ -12,7 +12,7 @@
     },
     "directory": {
       "type": "string",
-      "description": "Target directory (default: packages/ai/agent-<name>)"
+      "description": "Target directory (default: packages/agent/agent-<name>)"
     },
     "description": {
       "type": "string",
