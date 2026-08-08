@@ -769,11 +769,11 @@ log(`acceptance-criteria: ${specPacketsAll.length} packets -> ${acGroups.length}
 const [acWriteOut, debugNoteOut] = await parallel([
   () => pipeline(acGroups, (g) => agent(acWritePrompt(g.groupId, g.packets), {
     label: `ac:${g.groupId}`, phase: 'Acceptance Criteria', schema: AC_WRITE_SCHEMA,
-    agentType: 'product-manager', effort: 'medium', model: 'haiku',
+    agentType: 'product-manager', effort: 'medium', model: 'sonnet',
   })),
   () => pipeline(debugNoteGroups, (g) => agent(debugNoteWritePrompt(g.groupId, g.verdicts), {
     label: `debugnote:${g.groupId}`, phase: 'Acceptance Criteria', schema: DEBUG_NOTE_WRITE_SCHEMA,
-    agentType: 'product-manager', effort: 'medium', model: 'haiku',
+    agentType: 'product-manager', effort: 'medium', model: 'sonnet',
   })),
 ])
 const acWrites = (acWriteOut || []).filter(Boolean).flatMap((r) => r.writes || [])
@@ -890,7 +890,7 @@ const reportPayload = {
 
 const reportOut = await agent(reportPrompt(reportPayload), {
   label: 'report', phase: 'Report', schema: REPORT_SCHEMA,
-  agentType: 'product-manager', effort: 'medium', model: 'haiku',
+  agentType: 'product-manager', effort: 'medium', model: 'sonnet',
 })
 
 if (!reportOut || !reportOut.confirmed) {
