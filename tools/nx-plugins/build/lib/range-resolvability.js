@@ -76,7 +76,12 @@ const { hasBuildTarget, isPublishable } = require('../detect-target');
 
 const INTERNAL_SCOPE = '@adhd/';
 const DEP_FIELDS = ['dependencies', 'peerDependencies', 'optionalDependencies'];
-const SKIP_DIR_NAMES = new Set(['node_modules', 'dist', 'tmp']);
+// 'tmp' kept for defense-in-depth (a stray untracked dir by that literal name
+// under packages/ or entrypoint/ would still be skipped); the repo's real
+// scratch root is '.adhd/tmp' (see ../lib/scratch-root.js) — '.adhd' is
+// skipped here too, though this walk starts at packages/ and entrypoint/ and
+// so never actually descends into the repo-root .adhd/ directory in practice.
+const SKIP_DIR_NAMES = new Set(['node_modules', 'dist', 'tmp', '.adhd']);
 
 // ---------------------------------------------------------------------------
 // Minimal, dependency-free semver (plain MAJOR.MINOR.PATCH only — matches

@@ -21,9 +21,10 @@
  * `checkPublishAllowed` before it will run a real `npm publish` — refusing
  * unless the invoking project is listed in a FRESH manifest.
  *
- * MANIFEST LOCATION: `<workspaceRoot>/tmp/release-manifest.json` — ephemeral,
- * gitignored, per this repo's "ephemeral artifacts live under tmp/, always
- * cleaned, never tracked" convention (AGENTS.md/CLAUDE.md §10). This is NOT
+ * MANIFEST LOCATION: `<workspaceRoot>/.adhd/tmp/release-manifest.json` —
+ * ephemeral, gitignored, per this repo's "ephemeral artifacts live under the
+ * scratch root, always cleaned, never tracked" convention (AGENTS.md §10;
+ * scratch root itself defined once in `./scratch-root.js`). This is NOT
  * the committed `published-state.json` cache (that answers "is this exact
  * version already on the registry"; this answers "did THIS release run
  * decide this project is in scope").
@@ -46,26 +47,27 @@
  * any transition into a terminal-dismissed status with no reason
  * (`entrypoint/backlog/src/store/lifecycle.ts:34-36`) and persists the reason
  * as an auditable note (`lifecycle.ts:41`, `writeAuditEvent` at `:54`). Here,
- * every override use is appended to `tmp/release-manifest-overrides.log`
+ * every override use is appended to `.adhd/tmp/release-manifest-overrides.log`
  * (`logOverride`) — never silent.
  *
  * @module release-manifest
  */
 const { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync } = require('node:fs');
-const { join, dirname } = require('node:path');
+const { dirname } = require('node:path');
+const { SCRATCH_ROOT_SEGMENTS, scratchRootPath } = require('../../lib/scratch-root');
 
-const MANIFEST_RELATIVE_PATH = join('tmp', 'release-manifest.json');
-const OVERRIDE_LOG_RELATIVE_PATH = join('tmp', 'release-manifest-overrides.log');
+const MANIFEST_RELATIVE_PATH = [...SCRATCH_ROOT_SEGMENTS, 'release-manifest.json'].join('/');
+const OVERRIDE_LOG_RELATIVE_PATH = [...SCRATCH_ROOT_SEGMENTS, 'release-manifest-overrides.log'].join('/');
 
 /** See the module header's "FRESHNESS WINDOW" section for the rationale. */
 const MANIFEST_MAX_AGE_MS = 10 * 60 * 1000;
 
 function manifestPath(workspaceRoot) {
-  return join(workspaceRoot, MANIFEST_RELATIVE_PATH);
+  return scratchRootPath(workspaceRoot, 'release-manifest.json');
 }
 
 function overrideLogPath(workspaceRoot) {
-  return join(workspaceRoot, OVERRIDE_LOG_RELATIVE_PATH);
+  return scratchRootPath(workspaceRoot, 'release-manifest-overrides.log');
 }
 
 /**

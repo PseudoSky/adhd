@@ -89,7 +89,10 @@ function incVersion(version, level) {
 // ---- discover workspace package.json files (via git; respects .gitignore) --
 const tracked = execSync('git ls-files packages entrypoint "*/package.json" package.json', { cwd: ROOT, encoding: 'utf8' })
   .split('\n')
-  .filter((p) => p.endsWith('package.json') && !p.includes('/node_modules/') && !p.includes('/dist/') && !p.startsWith('tmp/'));
+  // `git ls-files` only returns TRACKED files, and the scratch root ('.adhd/tmp',
+  // see tools/nx-plugins/lib/scratch-root.js) is gitignored, so these two checks
+  // are defense-in-depth rather than load-bearing today.
+  .filter((p) => p.endsWith('package.json') && !p.includes('/node_modules/') && !p.includes('/dist/') && !p.startsWith('tmp/') && !p.startsWith('.adhd/'));
 const pkgPaths = [...new Set(tracked)];
 
 const internalNames = new Set();

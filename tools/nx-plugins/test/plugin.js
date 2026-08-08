@@ -3,7 +3,8 @@
 const { existsSync } = require('node:fs');
 const { dirname, join } = require('node:path');
 const { hasBuildTarget } = require('../build/detect-target');
-function skip(p) { return p === '.' || p.startsWith('node_modules/') || p.includes('/node_modules/') || p.startsWith('dist/') || p.includes('/dist/') || p.startsWith('tmp/') || p.includes('/tmp/'); }
+const { isScratchPath } = require('../lib/scratch-root');
+function skip(p) { return p === '.' || p.startsWith('node_modules/') || p.includes('/node_modules/') || p.startsWith('dist/') || p.includes('/dist/') || isScratchPath(p); }
 exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) => {
   const projectRoot = dirname(pkgPath);
   if (skip(projectRoot)) return {};
