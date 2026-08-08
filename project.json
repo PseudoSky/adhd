@@ -13,14 +13,17 @@
     "check-publish-hygiene": {
       "executor": "nx:run-commands",
       "dependsOn": [
-        "agent-mcp:build",
-        "agent-base-types:build",
-        "agent-generator-plugin:build",
-        "agent-plugin-budget:build",
-        "agent-plugin-sanitize:build"
+        "agent-mcp:dist-manifest",
+        "agent-base-types:dist-manifest",
+        "agent-generator-plugin:dist-manifest",
+        "agent-plugin-budget:dist-manifest",
+        "agent-plugin-sanitize:dist-manifest"
       ],
       "options": {
         "command": "node tools/nx-plugins/build/executors/hygiene/check-publish-hygiene.mjs"
+      },
+      "metadata": {
+        "description": "BUG-RELEASE-001: dependsOn was `<pkg>:build` only, never `<pkg>:dist-manifest`. `build` (@nx/js:tsc / @nx/vite:build) unconditionally (re)writes its OWN minimal, un-rebased dist/package.json as a build output (see generate-manifest.js's writeDistManifest doc comment, BUG-BUILD-PUBLISH-DISTMANIFEST-CLOBBERED-001) — so invoking this gate via `build` alone actively CLOBBERS a previously-correct rebased manifest back to the broken source-relative shape and then reports it as failing. `dist-manifest` transitively depends on `build`+`assets` (tools/nx-plugins/build/plugin.js) and is the one function (writeDistManifest) that both `dist-manifest` and the real `nx-release-publish`/`publish` targets call to materialize a correct dist/package.json — depending on it here (not `build`) makes this diagnostic re-stamp the manifest the same way a real publish does, instead of undoing that stamp."
       }
     },
     "check-release-ranges": {
