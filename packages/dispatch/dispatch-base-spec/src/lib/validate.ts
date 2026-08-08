@@ -439,6 +439,16 @@ export function validateSnapshot(snapshot: unknown): ValidationResult {
         !VALID_MILESTONE_STATUSES.has(status as MilestoneStatus)
       )
         errors.push(err(`milestones.${slug}.status`, 'invalid status', status));
+      // DEBT-DISPATCH-013: a complete milestone must never read eligible=true —
+      // completion is a terminal state, not "still needs work". Promotes the
+      // client-side-only BUG-DISPATCH-008 workaround into the spec invariant.
+      if (eligible === true && status === 'complete')
+        errors.push(
+          err(
+            `milestones.${slug}`,
+            'D-07 violation: eligible=true but status is complete'
+          )
+        );
       const wave = m['wave'];
       if (typeof wave !== 'number' || !Number.isInteger(wave) || wave < 0)
         errors.push(

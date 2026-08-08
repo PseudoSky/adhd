@@ -812,6 +812,13 @@ export function snapshot(dag: DagJson, deps: IOptimizerDeps): DagSnapshot {
     const status = milestoneStatuses.get(slug) ?? 'pending';
 
     // D-07: eligible = pending==null AND all deps complete AND no dep failed
+    // AND this milestone itself isn't already complete (DEBT-DISPATCH-013).
+    // Without the own-status guard, a `status: 'complete'` milestone reads
+    // eligible: true forever — the same root cause as BUG-DISPATCH-008, which
+    // was previously worked around client-side only (see dispatch-core-client's
+    // `getEligibleMilestones()`). Promoting the guard into the spec's own
+    // `eligible` definition means every consumer inherits it instead of each
+    // reimplementing it.
     const depStatuses = dagM.depends_on.map(
       (dep) => milestoneStatuses.get(dep) ?? 'pending'
     );
@@ -819,7 +826,11 @@ export function snapshot(dag: DagJson, deps: IOptimizerDeps): DagSnapshot {
       dagM.depends_on.length === 0 ||
       depStatuses.every((s) => s === 'complete');
     const noDepFailed = depStatuses.every((s) => s !== 'failed');
-    const eligible = dagM.pending === null && allDepsComplete && noDepFailed;
+    const eligible =
+      dagM.pending === null &&
+      allDepsComplete &&
+      noDepFailed &&
+      status !== 'complete';
 
     // started_at: min started_at across all dispatch log entries for this milestone
     const relatedDispatches = dispatchesForMilestone(dispatchLog, [

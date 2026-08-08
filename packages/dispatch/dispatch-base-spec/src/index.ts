@@ -15,6 +15,7 @@ export type {
   DispatchUnitStatus,
   EffortTier,
   GuardResult,
+  ICalibrationStore,
   IOptimizerDeps,
   KindFamily,
   KiSource,
