@@ -1,6 +1,6 @@
 {
   "name": "@adhd/apigen-cli",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "bin": {
     "apigen": "./dist/index.js"
   },
@@ -20,13 +20,13 @@
     "@adhd/apigen-plugin-api-fastify": "^0.2.3",
     "@adhd/apigen-plugin-api-express": "^0.2.3",
     "@adhd/apigen-plugin-cli-output": "^0.2.3",
-    "@adhd/apigen-plugin-py-flask": "^0.2.3",
-    "@adhd/apigen-plugin-py-grpc": "^0.2.3",
+    "@adhd/apigen-plugin-py-flask": "^0.2.4",
+    "@adhd/apigen-plugin-py-grpc": "^0.2.4",
     "@adhd/apigen-plugin-java-javalin": "^0.0.1",
     "@adhd/apigen-plugin-health": "^0.2.2",
     "@adhd/apigen-plugin-batch": "^0.2.2",
     "@adhd/apigen-plugin-logger": "^0.2.0",
-    "@adhd/apigen-python-env": "^0.2.3",
+    "@adhd/apigen-python-env": "^0.2.4",
     "@adhd/apigen-base-logical": "^0.1.1",
     "@adhd/apigen-engine-runtime": "^0.2.3",
     "@adhd/apigen-core-client": "^0.3.0",
