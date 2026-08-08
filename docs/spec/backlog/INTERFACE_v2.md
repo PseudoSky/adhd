@@ -145,6 +145,7 @@ and the only store-side cap is the grep path's `searchNodes(..., { limit: filter
 | `summary` | **NEW (FEAT-010):** aggregate/export of transition history — per-status counts, per-item timelines, transition deltas over a date range; the "stats are uncomputable" gap closed. **Requires a window parameter, not just a filter:** `window?: { since, until, bucket: "day"|"week"|"month" }` emitting transition counts bucketed by period plus **median/p90 time-to-resolution and time-in-status** (FEAT-010's explicit metrics: cycle time, throughput over a window, reopen rate, aging distribution). **Constraint:** audit events only exist for activity since the audit-log fix landed — pre-existing items have no transition/claim history (DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001, owned here) | unbuilt → new |
 | `grouped` | **NEW (FEAT-007):** `groupBy`-keyed buckets with counts and per-bucket item lists — "all HIGH items per family", "open bugs touching file X". Query-time bucketing only; persistent grouping is the rollup primitive (§5a) | unbuilt → new |
 | `similar` | **NEW (FEAT-011):** top-k semantically similar items + score + overlap reason (shared files, shared citations). V1 can be FTS-overlap; the endpoint contract stays when the matcher becomes embeddings | unbuilt → new |
+| `plan` | **NEW (FEAT-015):** the native resume surface. One call answers "pick up where I left off": plan card + two-axis rollup, ready set, blocked set (with which dep), **delta since `<since>`** (audit events after a timestamp — the session-boundary primitive), needs-human set (awaiting-input/open-questions). Pure read composition over rollup + ready + topo + audit-window + status filter — no new storage. This is the tool-native answer to the session-resume problem; without it, every long-running planning effort hand-rolls resumability (memory episodes, ledgers) outside the tool | unbuilt → new |
 
 ### 2.3 Sort + ranking
 
@@ -302,6 +303,15 @@ file-collision check → `update {claim}` + work + `update {status, addCitation}
 close parent with its own citation → `query view:"summary"` for the retrospective.
 Waves/turn-budgets stay in the orchestrator (refused by design, §5a.4); the plan
 structure is durable in the graph, the dispatch is ephemeral.
+
+**Resume is a tool surface, not a memory exercise.** The session-resume use case
+(canonical example: a product agent's planning session that must survive death) is
+answered natively by `backlog_query({ view: "plan", filter: { plan }, since })`
+(FEAT-015) — one call returns the rollup, the ready set, the blocked set, the
+audit-delta since the last session's timestamp, and the needs-human set. An agent
+resuming a plan should need exactly one call and no hand-written ledger. If a plan
+cannot be resumed from a single tool call, that is an interface defect, not a
+workflow gap.
 
 ---
 
