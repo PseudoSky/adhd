@@ -18,6 +18,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { ensurePythonEnv } from '@adhd/apigen-python-env';
 
@@ -1036,7 +1037,7 @@ export function runConformanceMatrix(
  *   1 = one or more failures
  */
 /** Walk up from `start` to the first ancestor containing nx.json (workspace root). */
-function findWorkspaceRoot(start: string): string {
+export function findWorkspaceRoot(start: string): string {
   let dir = start;
   for (let i = 0; i < 20; i++) {
     if (fs.existsSync(path.join(dir, 'nx.json'))) return dir;
@@ -1047,11 +1048,38 @@ function findWorkspaceRoot(start: string): string {
   return start;
 }
 
+// BUG-APIGEN-CONFORMANCE-GATE-DIRNAME-LEAK-001: this used to compute `start`
+// as `typeof __dirname !== 'undefined' ? __dirname : process.cwd()`. Under a
+// real ESM loader (this is exactly how Vitest/Vite SSR runs this file — and
+// how a consumer's own ESM build would import it) `__dirname` is undefined,
+// so the walk-up search started from `process.cwd()` instead of this file's
+// own directory. That's wrong for the same reason a search-root ever is:
+// `findWorkspaceRoot` is answering "where is *this package* installed",
+// which cwd cannot answer — it only happens to equal the workspace root when
+// invoked from there (exactly what the nx `conformance` target's
+// `cwd: {workspaceRoot}` does, which is why this stayed hidden). Invoked
+// from any other cwd (a consumer's install, a subdirectory, a test runner
+// with a different working directory) it silently resolves the wrong root.
+//
+// Fixed the same way `apigen-plugin-ir-cache/src/lib/version.ts` fixed the
+// identical class of bug (BUG-APIGEN-IR-CACHE-VERSION-DIRNAME-LEAK-001):
+// use `import.meta.url` unconditionally — no CJS/ESM branch to get wrong.
+// Rollup/esbuild shim `import.meta.url` to
+// `pathToFileURL(__filename).href`-equivalent code automatically for the
+// CJS build, so there is nothing to hand-write for that side. The TS1343
+// obstacle (`import.meta` needs an ESNext-family `module` target, and this
+// package type-checks under `module: commonjs`) is resolved the same way:
+// `module: esnext` + `moduleResolution: bundler` scoped to this package's
+// `tsconfig.lib.json` type-check step only (see that file).
+/** The directory containing this module. Exported for tests. */
+export function resolveModuleDir(): string {
+  return path.dirname(fileURLToPath(import.meta.url));
+}
+
 export function main(workspaceRootOverride?: string): void {
-  // Resolve workspace root: walk up from this file (CJS) or cwd (ESM) to the
-  // first ancestor containing nx.json. `import.meta` cannot be used here — the
-  // package type-checks under module=commonjs, where TS rejects it (TS1343).
-  const start = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
+  // Resolve workspace root: walk up from this file's own directory to the
+  // first ancestor containing nx.json.
+  const start = resolveModuleDir();
   const workspaceRoot = workspaceRootOverride ?? findWorkspaceRoot(start);
 
   console.log(`\n${'─'.repeat(60)}`);
