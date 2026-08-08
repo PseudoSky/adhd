@@ -20,9 +20,10 @@ import { createRequire } from 'node:module';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const require = createRequire(import.meta.url);
-const { computeChangedProjectSet, resolveBaseRef } = require('./changed-set.js');
+const { computeChangedProjectSet, resolveBaseRef, resolveBaseRefFromPublishedState } = require('./changed-set.js');
 const { readReleaseManifest } = require('./release-manifest.js');
 
 /** Build a throwaway publishable-project fixture (project.json + build target + non-private package.json). */
@@ -237,5 +238,91 @@ test('RED-equivalent: a resolver that ignores its inputs and always returns ever
   assert.ok(
     alwaysEveryone.includes('fixture-core-c'),
     'sanity check: the pre-fix "everyone" shape does NOT exclude the unchanged project — that is exactly the bug'
+  );
+});
+
+// ---------------------------------------------------------------------------
+// publishedFromRef -> automatic base-ref resolution.
+//
+// These have teeth by construction: each asserts the SPECIFIC ref chosen, not
+// merely that "a ref came back". Before `publishedFromRef` existed, every one
+// of these fell through to `HEAD~1` — the bug that made a 21-commit release
+// compute an empty changed-set and publish nothing.
+// ---------------------------------------------------------------------------
+
+test('resolveBaseRefFromPublishedState: picks the OLDEST resolvable ref, not the newest', () => {
+  // Two real commits in this repo; older must win so no package's window is
+  // clipped. Newest-wins would silently hide changes for anything published
+  // at the earlier commit.
+  const older = execFileSync('git', ['rev-list', '--max-count=1', '--skip=3', 'HEAD'], {
+    cwd: process.cwd(), encoding: 'utf8',
+  }).trim();
+  const newer = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: process.cwd(), encoding: 'utf8',
+  }).trim();
+  assert.notStrictEqual(older, newer, 'fixture precondition: need two distinct commits');
+
+  const chosen = resolveBaseRefFromPublishedState({
+    workspaceRoot: process.cwd(),
+    publishedState: {
+      '@adhd/a': { version: '1.0.0', publishedFromRef: newer },
+      '@adhd/b': { version: '1.0.0', publishedFromRef: older },
+    },
+  });
+  assert.strictEqual(chosen, older, 'must choose the oldest ref, never the newest');
+});
+
+test('resolveBaseRefFromPublishedState: skips refs that no longer resolve (rebase/squash guard)', () => {
+  const real = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: process.cwd(), encoding: 'utf8',
+  }).trim();
+  // Well-formed 40-hex SHA that is not a commit in this repo — exactly what a
+  // rebased-away ref looks like. It must be skipped, not thrown on, and must
+  // not win despite sorting arbitrarily.
+  const dangling = 'd'.repeat(40);
+
+  const chosen = resolveBaseRefFromPublishedState({
+    workspaceRoot: process.cwd(),
+    publishedState: {
+      '@adhd/gone': { version: '1.0.0', publishedFromRef: dangling },
+      '@adhd/real': { version: '1.0.0', publishedFromRef: real },
+    },
+  });
+  assert.strictEqual(chosen, real, 'a dangling ref must be skipped in favour of a resolvable one');
+});
+
+test('resolveBaseRefFromPublishedState: returns null when NO usable ref exists, so callers fall through', () => {
+  assert.strictEqual(
+    resolveBaseRefFromPublishedState({ workspaceRoot: process.cwd(), publishedState: {} }),
+    null,
+    'empty state must fall through, not invent a ref'
+  );
+  assert.strictEqual(
+    resolveBaseRefFromPublishedState({
+      workspaceRoot: process.cwd(),
+      // Legacy entries written before publishedFromRef existed, plus a
+      // malformed value. Neither may be treated as usable.
+      publishedState: {
+        '@adhd/legacy': { version: '1.0.0', normalizedHash: 'sha256:x' },
+        '@adhd/bad': { version: '1.0.0', publishedFromRef: 'not-a-sha' },
+      },
+    }),
+    null,
+    'legacy and malformed refs must fall through, never be used as a base'
+  );
+});
+
+test('resolveBaseRef: RELEASE_BASE_REF still outranks publishedFromRef', () => {
+  const real = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: process.cwd(), encoding: 'utf8',
+  }).trim();
+  assert.strictEqual(
+    resolveBaseRef({
+      workspaceRoot: process.cwd(),
+      env: { RELEASE_BASE_REF: 'explicit-wins' },
+      publishedState: { '@adhd/a': { version: '1.0.0', publishedFromRef: real } },
+    }),
+    'explicit-wins',
+    'an explicit caller override must never be overridden by the cache'
   );
 });
