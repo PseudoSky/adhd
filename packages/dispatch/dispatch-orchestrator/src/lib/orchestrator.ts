@@ -41,6 +41,7 @@ import type {
   DispatchResult,
   DispatchUnit,
   GuardResult,
+  ICalibrationStore,
   IOptimizerDeps,
   MilestoneDag,
   OperationDag,
@@ -147,19 +148,12 @@ export interface IOrchestratorIoPlugin {
 export type IOrchestratorGitnexusPlugin = Record<string, unknown>;
 
 /**
- * Placeholder for the future B-calibration store (SCOPE.md §C4 / §Open
- * Decisions #2 — `~/.adhd/dispatch-calibration.json`). No `ICalibrationStore`
- * export exists in `@adhd/dispatch-base-spec` today (verified absent). Deliberately
- * minimal per orchestrator-core's brief ("do NOT invent a rich interface"):
- * read-only access to whatever calibrated per-tier B values a future
- * calibration utility has persisted. Unused by the fast path —
- * `OrchestratorDeps.bPerTier` (cold-start defaults) is what actually feeds
- * `IOptimizerDeps.bPerTier` today. Flagged in the completion report for
- * dispatch-spec to formalize.
+ * @deprecated DEBT-DISPATCH-018: superseded by `@adhd/dispatch-base-spec`'s
+ * `ICalibrationStore`, which this now aliases verbatim for source
+ * compatibility with any existing `ICalibrationPlaceholder`-typed consumer.
+ * Import `ICalibrationStore` from `@adhd/dispatch-base-spec` directly instead.
  */
-export interface ICalibrationPlaceholder {
-  read(): Promise<Record<string, number>> | Record<string, number>;
-}
+export type ICalibrationPlaceholder = ICalibrationStore;
 
 // ---------------------------------------------------------------------------
 // ── OrchestratorDeps ─────────────────────────────────────────────────────────
@@ -190,9 +184,17 @@ export interface OrchestratorDeps {
     io?: IOrchestratorIoPlugin;
     gitnexus?: IOrchestratorGitnexusPlugin;
   };
-  /** OPTIONAL. See `ICalibrationPlaceholder`. Not consumed by the fast path. */
-  calibration?: ICalibrationPlaceholder;
-  /** Cold-start B per tier, fed into `IOptimizerDeps.bPerTier`. Default: `DEFAULT_B_PER_TIER`. */
+  /**
+   * OPTIONAL (DEBT-DISPATCH-018). Read-only calibrated per-tier B values,
+   * persisted by a calibration utility (SCOPE.md §C4 / §Open Decisions #2 —
+   * `~/.adhd/dispatch-calibration.json`). When present, `resolveDeps()` reads
+   * it once per cycle and merges its values over `bPerTier`/`DEFAULT_B_PER_TIER`
+   * (calibrated values win per-tier; tiers absent from the store keep their
+   * cold-start default) before feeding `IOptimizerDeps.bPerTier` — so
+   * calibration data actually reaches the optimizer instead of sitting unread.
+   */
+  calibration?: ICalibrationStore;
+  /** Cold-start B per tier, fed into `IOptimizerDeps.bPerTier`. Default: `DEFAULT_B_PER_TIER`. Overridden per-tier by `calibration.read()` when `calibration` is supplied. */
   bPerTier?: Record<string, number>;
   /** Cold-start context window per tier, fed into `IOptimizerDeps.contextWindowPerTier`. Default: `DEFAULT_CONTEXT_WINDOW_PER_TIER`. */
   contextWindowPerTier?: Record<string, number>;
@@ -579,14 +581,25 @@ async function defaultToolCallExec(
   }
 }
 
-function resolveDeps(deps: OrchestratorDeps): ResolvedDeps {
+async function resolveDeps(deps: OrchestratorDeps): Promise<ResolvedDeps> {
   const toolsRoot = deps.toolsRoot ?? process.cwd();
+  const coldStartBPerTier = deps.bPerTier ?? DEFAULT_B_PER_TIER;
+  // DEBT-DISPATCH-018: when a calibration store is supplied, its persisted
+  // per-tier B values win over the cold-start defaults (merged, not
+  // replaced — a tier absent from the calibration data keeps its cold-start
+  // value rather than disappearing). This is what actually wires
+  // `ICalibrationStore` into the fast path; previously `calibration` was
+  // accepted but never read.
+  const calibrated = deps.calibration ? await deps.calibration.read() : null;
+  const bPerTier = calibrated
+    ? { ...coldStartBPerTier, ...calibrated }
+    : coldStartBPerTier;
   return {
     client: deps.client,
     optimizer: deps.optimizer,
     runner: deps.runner,
     plugins: deps.plugins ?? {},
-    bPerTier: deps.bPerTier ?? DEFAULT_B_PER_TIER,
+    bPerTier,
     contextWindowPerTier: deps.contextWindowPerTier ?? DEFAULT_CONTEXT_WINDOW_PER_TIER,
     clock: deps.clock ?? defaultClock,
     idFactory: deps.idFactory ?? defaultIdFactory,
@@ -1215,7 +1228,7 @@ async function dispatchUnit(
  * requires `status === 'pending'`).
  */
 export async function orchestrateCycle(deps: OrchestratorDeps): Promise<CycleResult> {
-  const resolved = resolveDeps(deps);
+  const resolved = await resolveDeps(deps);
   const dag = await resolved.client.load();
 
   const optimizerDeps: IOptimizerDeps = {
