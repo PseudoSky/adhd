@@ -52,19 +52,33 @@
  * bumps, `reconcileOwnInternalRanges` below reconciles THIS package's
  * declared internal `@adhd/*` dependency ranges to the workspace's current
  * versions. Because of the `^version` topological ordering, those versions
- * are already settled by the time this runs. This REUSES the `deps` plugin's
- * `sync-deps` (fix) / `sync-deps-check` (read-only, dryRun) executors
- * directly — see tools/nx-plugins/deps/executors/{sync,check}/impl.js — no
- * reconciliation logic is duplicated here. It writes ONLY this project's own
- * package.json (both reused executors scope to `context.projectName`'s
- * root), never a sibling's. It never causes a spurious bump of its own:
- * compare-published.js's `normalizeManifest` strips internal `@adhd/*`
- * ranges before diffing (see compare-published.spec.mjs), so a range-only
- * edit here is invisible to the NEXT run's change-detector — no cascade.
- * This step is ALSO already zero-network — `sync-deps`/`sync-deps-check`
- * (tools/nx-plugins/deps/eslint-check.mjs) reconcile against Nx's own
- * project graph (every sibling's on-disk source package.json), never the
- * registry.
+ * are already settled by the time this runs.
+ *
+ * DEBT-BUILD-VERSION-SYNCDEPS-REDUNDANT-001 (b): this step used to ALSO
+ * invoke the `deps` plugin's `sync-deps` (fix) / `sync-deps-check` (dryRun)
+ * executors in-process, on top of `reconcileInternalRangesFromDisk` below —
+ * running the FULL `@nx/dependency-checks` ESLint rule (missing/obsolete/
+ * external-version-mismatch, not just internal-range drift) a SECOND time
+ * for the same project, every single `version` run. That was provably
+ * redundant: `version`'s own `dependsOn:["build","assets","^version"]`
+ * (tools/nx-plugins/build/plugin.js) means `build` — whose own
+ * `dependsOn:["^build","lint"]`, whose own `dependsOn:["sync-deps"]`
+ * (nx.json targetDefaults) — has ALREADY run the real `sync-deps` for this
+ * exact project earlier in the SAME task-graph invocation, unconditionally,
+ * for every caller (`nx run-many -t version`, `nx run <p>:version`, `pnpm
+ * release`/`release:dry`). Had that upstream `sync-deps` failed, `lint`/
+ * `build` would already have failed the whole graph and `version` would
+ * never execute. So this step now delegates SOLELY to
+ * `reconcileInternalRangesFromDisk` — the one thing that CAN genuinely drift
+ * mid-run (a sibling's own `version` task bumping its package.json between
+ * `lint`'s cached-graph `sync-deps` run and now; see that function's own doc
+ * comment). It writes ONLY this project's own package.json, never a
+ * sibling's, and never causes a spurious bump of its own: compare-
+ * published.js's `normalizeManifest` strips internal `@adhd/*` ranges before
+ * diffing (see compare-published.spec.mjs), so a range-only edit here is
+ * invisible to the NEXT run's change-detector — no cascade. This step is
+ * already zero-network — it reads every sibling's on-disk source
+ * package.json directly, never the registry.
  *
  * CHANGELOG GENERATION (real bump only, before range reconciliation): once
  * the own-version write lands, `writeChangelogEntry` shells out to the REAL
@@ -90,9 +104,6 @@ const { writeDistManifest } = require('../manifest/generate-manifest');
 const { readState, updatePublishedState } = require('../../lib/published-state');
 const { reconcilePackage, describeNetworkCalls } = require('../reconcile/reconcile-core');
 const { withMetrics } = require('../../../lib/metrics');
-// Reuse — never duplicate — the `deps` plugin's own reconciliation logic.
-const syncInternalDeps = require('../../../deps/executors/sync/impl');
-const checkInternalDeps = require('../../../deps/executors/check/impl');
 
 /**
  * Absolute path to the workspace's own locally-installed `nx` CLI entry.
@@ -187,28 +198,33 @@ function writeChangelogEntry(context, projectRoot, version, dryRun, rec) {
 
 /**
  * STALE-GRAPH FIX (correctness — see the `dependsOn: [..., "^version"]` note
- * above): `syncInternalDeps`/`checkInternalDeps` (the `deps` plugin's
- * sync-deps executors) delegate to the REAL `@nx/dependency-checks` ESLint
- * rule, which resolves each internal `@adhd/*` dependency's "correct"
- * version through NX'S OWN PROJECT GRAPH. That graph is computed ONCE, up
- * front, for the whole `nx run-many -t version` invocation and is never
- * refreshed mid-run — so if a dependency's OWN `version` task already
- * bumped its `package.json` earlier in THIS SAME run (guaranteed by the
- * `^version` topological ordering above), the graph the ESLint rule
- * consults can still report that dependency's PRE-bump version, producing
- * a false `versionMismatch` against a dependent that's actually already
- * correct — or silently leaving a genuinely stale range unfixed.
+ * above): the `deps` plugin's `sync-deps`/`sync-deps-check` executors
+ * delegate to the REAL `@nx/dependency-checks` ESLint rule, which resolves
+ * each internal `@adhd/*` dependency's "correct" version through NX'S OWN
+ * PROJECT GRAPH. That graph is computed ONCE, up front, for the whole `nx
+ * run-many -t version` invocation and is never refreshed mid-run — so if a
+ * dependency's OWN `version` task already bumped its `package.json` earlier
+ * in THIS SAME run (guaranteed by the `^version` topological ordering
+ * above), the graph the ESLint rule consults can still report that
+ * dependency's PRE-bump version, producing a false `versionMismatch` against
+ * a dependent that's actually already correct — or silently leaving a
+ * genuinely stale range unfixed.
  *
  * The filesystem, unlike the in-memory graph snapshot, is always current by
  * the time this runs (that's exactly what `^version` guarantees). This
  * function re-reconciles every declared internal `@adhd/*` range directly
  * against each dependency's ON-DISK `package.json`, bypassing the cached
- * graph entirely, as a correctness pass layered ON TOP of
- * `syncInternalDeps`/`checkInternalDeps` — never replacing them. Those
- * still own missing/obsolete-dependency detection and external
- * (non-`@adhd/*`) version-mismatch checks, neither of which has a
- * mid-run-staleness problem (an external package never gets bumped by this
- * same `run-many`), so they're deliberately left on `@nx/dependency-checks`.
+ * graph entirely. Per DEBT-BUILD-VERSION-SYNCDEPS-REDUNDANT-001 (b), this is
+ * now the ONLY internal-range reconciliation `version` performs — the
+ * redundant in-process `sync-deps`/`sync-deps-check` call this used to layer
+ * on top of has been removed, since `version`'s `dependsOn` chain already
+ * guarantees the real `sync-deps` ran against this exact project earlier in
+ * the same task-graph invocation (via `build` -> `lint` -> `sync-deps`).
+ * Missing/obsolete-dependency detection and external (non-`@adhd/*`)
+ * version-mismatch checks remain owned by that upstream `sync-deps` pass —
+ * neither has a mid-run-staleness problem (an external package never gets
+ * bumped by this same `run-many`), so there is nothing left for `version`
+ * itself to re-check there.
  *
  * @param {import('@nx/devkit').ExecutorContext} context
  * @param {boolean} dryRun never writes; only logs what would change
@@ -317,15 +333,25 @@ function reconcileInternalRangesFromDisk(context, dryRun) {
 
 /**
  * Reconcile THIS package's own declared internal `@adhd/*` dependency ranges
- * to the current workspace versions of those dependencies, by delegating to
- * the `deps` plugin's sync (fix) / check (read-only) executors, THEN
- * re-reconciling internal ranges directly from disk (see
- * `reconcileInternalRangesFromDisk` above) to correct for the ESLint rule's
- * cached-project-graph staleness during a multi-project `version` run.
+ * to the current workspace versions of those dependencies, by re-reconciling
+ * internal ranges directly from disk (see `reconcileInternalRangesFromDisk`
+ * above).
+ *
+ * DEBT-BUILD-VERSION-SYNCDEPS-REDUNDANT-001 (b): this used to ALSO delegate
+ * to the `deps` plugin's `sync-deps` (fix) / `sync-deps-check` (dryRun)
+ * executors first, running the full `@nx/dependency-checks` ESLint rule a
+ * second time for this project on every `version` run — provably redundant
+ * because `version`'s `dependsOn` chain (`build` -> `lint` -> `sync-deps`,
+ * see `nx.json` targetDefaults) already ran the real `sync-deps` against
+ * this exact project earlier in the SAME task-graph invocation. That call
+ * has been removed; `reconcileInternalRangesFromDisk` alone now owns
+ * internal-range reconciliation for `version` (see its own doc comment for
+ * why the on-disk read, not the ESLint rule, is what's actually needed
+ * here).
  *
  * `dryRun`: reconciliation writes a file, so a dry run must never apply it —
- * delegate to the read-only check instead, purely for visibility, and never
- * let its (possibly non-zero) result fail the overall dry-run report.
+ * `reconcileInternalRangesFromDisk` itself never writes when `dryRun` is
+ * true; it only logs what would change.
  *
  * @param {import('@nx/devkit').ExecutorContext} context
  * @param {boolean} dryRun
@@ -333,14 +359,10 @@ function reconcileInternalRangesFromDisk(context, dryRun) {
  */
 async function reconcileOwnInternalRanges(context, dryRun) {
   if (dryRun) {
-    console.error('version: [dry-run] checking internal @adhd/* range drift (sync-deps-check, not applying)…');
-    await checkInternalDeps({}, context);
-    const disk = reconcileInternalRangesFromDisk(context, true);
-    return { success: disk.success };
+    console.error('version: [dry-run] checking internal @adhd/* range drift (on-disk, not applying)…');
   }
-  const synced = await syncInternalDeps({}, context);
-  const disk = reconcileInternalRangesFromDisk(context, false);
-  return { success: synced.success && disk.success };
+  const disk = reconcileInternalRangesFromDisk(context, dryRun);
+  return { success: disk.success };
 }
 
 function sh(cmd, args, opts = {}) {
@@ -542,9 +564,5 @@ async function runVersion(options, context, rec) {
 module.exports = run;
 module.exports.default = run;
 // Test-only introspection seam (mirrors compare-published.js exporting its
-// pure helpers) — lets tests assert THIS module's `syncInternalDeps` /
-// `checkInternalDeps` are literally === the `deps` plugin's own executors
-// (same require-cache entry, same absolute file), proving reuse rather than
-// a duplicated reimplementation. Not used by Nx (which only calls the
-// default export).
-module.exports.__internals = { reconcileOwnInternalRanges, reconcileInternalRangesFromDisk, syncInternalDeps, checkInternalDeps, lastChangelogCommit, writeChangelogEntry };
+// pure helpers). Not used by Nx (which only calls the default export).
+module.exports.__internals = { reconcileOwnInternalRanges, reconcileInternalRangesFromDisk, lastChangelogCommit, writeChangelogEntry };
