@@ -19,11 +19,11 @@ describe('registry-package generator', () => {
     expect(config.tags).toEqual(['layer:ai', 'platform:node']);
   });
 
-  it('names the project agent-<name> and roots it under packages/ai', async () => {
+  it('names the project agent-<name> and roots it under packages/agent', async () => {
     const tree = seed(createTreeWithEmptyWorkspace());
     await registryPackageGenerator(tree, { name: 'tool-registry' });
     const config = readProjectConfiguration(tree, 'agent-tool-registry');
-    expect(config.root).toBe('packages/ai/agent-tool-registry');
+    expect(config.root).toBe('packages/agent/agent-tool-registry');
   });
 
   it('uses @nx/js:tsc for build with the drizzle asset glob', async () => {
@@ -33,7 +33,7 @@ describe('registry-package generator', () => {
     expect(config.targets?.['build']?.executor).toBe('@nx/js:tsc');
     const assets = config.targets?.['build']?.options?.['assets'];
     expect(assets).toEqual([
-      { input: 'packages/ai/agent-budget', glob: 'drizzle/**/*', output: '.' },
+      { input: 'packages/agent/agent-budget', glob: 'drizzle/**/*', output: '.' },
     ]);
   });
 
@@ -65,7 +65,7 @@ describe('registry-package generator', () => {
   it('writes the full golden-path skeleton', async () => {
     const tree = seed(createTreeWithEmptyWorkspace());
     await registryPackageGenerator(tree, { name: 'budget' });
-    const base = 'packages/ai/agent-budget';
+    const base = 'packages/agent/agent-budget';
     for (const f of [
       'package.json',
       'project.json',
@@ -90,7 +90,7 @@ describe('registry-package generator', () => {
   it('package.json declares @adhd/agent-core-env + drizzle-orm + better-sqlite3 runtime deps (no unused zod)', async () => {
     const tree = seed(createTreeWithEmptyWorkspace());
     await registryPackageGenerator(tree, { name: 'budget' });
-    const pkg = readJson(tree, 'packages/ai/agent-budget/package.json');
+    const pkg = readJson(tree, 'packages/agent/agent-budget/package.json');
     expect(Object.keys(pkg.dependencies).sort()).toEqual([
       '@adhd/agent-core-env',
       'better-sqlite3',
@@ -103,7 +103,7 @@ describe('registry-package generator', () => {
   it('does NOT scaffold a module-scope db/client.ts or db/migrate.ts singleton (ENV-ADOPT-CLUSTERS(1) — every DB connection is opened via @adhd/agent-core-env, never at import time)', async () => {
     const tree = seed(createTreeWithEmptyWorkspace());
     await registryPackageGenerator(tree, { name: 'budget' });
-    const base = 'packages/ai/agent-budget';
+    const base = 'packages/agent/agent-budget';
     expect(tree.exists(`${base}/src/db/client.ts`)).toBe(false);
     expect(tree.exists(`${base}/src/db/migrate.ts`)).toBe(false);
     const barrel = tree.read(`${base}/src/index.ts`, 'utf-8');
@@ -116,7 +116,7 @@ describe('registry-package generator', () => {
   it('eslintrc extends the workspace base so a lint target is inferred', async () => {
     const tree = seed(createTreeWithEmptyWorkspace());
     await registryPackageGenerator(tree, { name: 'budget' });
-    const eslint = readJson(tree, 'packages/ai/agent-budget/.eslintrc.json');
+    const eslint = readJson(tree, 'packages/agent/agent-budget/.eslintrc.json');
     expect(eslint.extends).toEqual(['../../../.eslintrc.base.json']);
   });
 
@@ -124,7 +124,7 @@ describe('registry-package generator', () => {
     const tree = seed(createTreeWithEmptyWorkspace());
     await registryPackageGenerator(tree, { name: 'tool-registry' });
     const schema = tree.read(
-      'packages/ai/agent-tool-registry/src/db/schema.ts',
+      'packages/agent/agent-tool-registry/src/db/schema.ts',
       'utf-8'
     );
     expect(schema).not.toBeNull();
@@ -138,7 +138,7 @@ describe('registry-package generator', () => {
       tablePrefix: 'billing_',
     });
     const schema = tree.read(
-      'packages/ai/agent-billing/src/db/schema.ts',
+      'packages/agent/agent-billing/src/db/schema.ts',
       'utf-8'
     );
     expect(schema).not.toBeNull();
@@ -149,7 +149,7 @@ describe('registry-package generator', () => {
     const tree = seed(createTreeWithEmptyWorkspace());
     await registryPackageGenerator(tree, { name: 'budget' });
     const spec = tree.read(
-      'packages/ai/agent-budget/src/__tests__/skeleton.test.ts',
+      'packages/agent/agent-budget/src/__tests__/skeleton.test.ts',
       'utf-8'
     );
     expect(spec).not.toBeNull();
@@ -163,14 +163,14 @@ describe('registry-package generator', () => {
     await registryPackageGenerator(tree, { name: 'budget' });
     const tsconfig = readJson(tree, 'tsconfig.base.json');
     expect(tsconfig.compilerOptions.paths['@adhd/agent-budget']).toEqual([
-      './packages/ai/agent-budget/src/index.ts',
+      './packages/agent/agent-budget/src/index.ts',
     ]);
   });
 
   it('CLAUDE.md links the rules doc', async () => {
     const tree = seed(createTreeWithEmptyWorkspace());
     await registryPackageGenerator(tree, { name: 'budget' });
-    const claude = tree.read('packages/ai/agent-budget/CLAUDE.md', 'utf-8');
+    const claude = tree.read('packages/agent/agent-budget/CLAUDE.md', 'utf-8');
     expect(claude).not.toBeNull();
     expect(claude).toContain('REGISTRY-PACKAGE-RULES.md');
   });
