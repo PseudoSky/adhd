@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
-const { generateDistManifest, rebaseDistPath, rebaseExports, assertResolvedInternalDeps } = require('./generate-manifest.js');
+const { generateDistManifest, rebaseDistPath, rebaseExports, assertResolvedInternalDeps, assertMatchingModuleType } = require('./generate-manifest.js');
 
 const MAP = {
   '@adhd/apigen-plugin-py-flask': '0.2.0',
@@ -200,6 +200,43 @@ test('assertResolvedInternalDeps: never flags external (non-@adhd/*) deps, howev
 test('assertResolvedInternalDeps: checks optionalDependencies too', () => {
   const manifest = { name: '@adhd/x', version: '1.0.0', optionalDependencies: { '@adhd/ghost': '*' } };
   assert.throws(() => assertResolvedInternalDeps(manifest, MAP), /@adhd\/ghost/);
+});
+
+// BUG-020: dist/package.json's `type` must never disagree with the source
+// package.json's `type` — a real incident had `entrypoint/agent-mcp`'s dist
+// manifest say "type":"commonjs" while dist/src/index.js contained real ESM
+// `import` syntax, breaking main-entry-symlink.test.ts with a SyntaxError.
+test('assertMatchingModuleType: throws when manifest.type diverges from source type (esm source, cjs-labeled manifest — the exact BUG-020 shape)', () => {
+  const sourcePkg = { name: '@adhd/agent-mcp', type: 'module' };
+  const manifest = { name: '@adhd/agent-mcp', type: 'commonjs' };
+  assert.throws(
+    () => assertMatchingModuleType(manifest, sourcePkg),
+    /BUG-020 tripwire.*"commonjs".*"@adhd\/agent-mcp".*"module"/s
+  );
+});
+
+test('assertMatchingModuleType: throws when manifest.type diverges the other direction (cjs source, module-labeled manifest)', () => {
+  const sourcePkg = { name: '@adhd/pkg-cjs', type: 'commonjs' };
+  const manifest = { name: '@adhd/pkg-cjs', type: 'module' };
+  assert.throws(() => assertMatchingModuleType(manifest, sourcePkg), /BUG-020 tripwire/);
+});
+
+test('assertMatchingModuleType: does not throw when types match ("module")', () => {
+  assert.doesNotThrow(() =>
+    assertMatchingModuleType({ name: '@adhd/x', type: 'module' }, { name: '@adhd/x', type: 'module' })
+  );
+});
+
+test('assertMatchingModuleType: does not throw when types match ("commonzs" absent on both — implicit commonjs default)', () => {
+  assert.doesNotThrow(() =>
+    assertMatchingModuleType({ name: '@adhd/x' }, { name: '@adhd/x' })
+  );
+});
+
+test('assertMatchingModuleType: an absent `type` field is treated as the Node default "commonjs" on both sides (no false positive)', () => {
+  assert.doesNotThrow(() =>
+    assertMatchingModuleType({ name: '@adhd/x', type: 'commonjs' }, { name: '@adhd/x' })
+  );
 });
 
 test('writeDistManifest integration: refuses to write a manifest with a surviving "workspace:*" internal range (real fs, real generateDistManifest)', async () => {
