@@ -588,6 +588,95 @@ function looksLikeCrashOnLoad(stderr) {
 }
 
 /**
+ * BUG-022: decide which of the two mutually-exclusive, OPPOSITE-severity
+ * causes actually produced a "stale" `npm install @latest` resolution,
+ * instead of reporting both and picking neither.
+ *
+ * `--prefer-online` + the retry loop in `cleanRoomInstall` already rule out
+ * "npm trusted a stale LOCAL packument cache" (that's exactly what
+ * `--prefer-online` forces past). Once retries are exhausted there are only
+ * two possible remaining explanations, and they are decisive because CDN/dist-
+ * tag propagation lag can serve a stale `latest` pointer but it CANNOT hide a
+ * version that has genuinely been published — a published version is
+ * permanently present in the packument's `versions[]` the instant `npm
+ * publish` succeeds, regardless of `dist-tags.latest` propagation:
+ *
+ *   - the on-disk version DOES exist in `versions[]` on the registry -> this
+ *     really is propagation lag (`dist-tags.latest` hasn't caught up yet).
+ *     Genuinely transient, genuinely non-fatal-in-tone (will resolve itself).
+ *   - the on-disk version is ABSENT from `versions[]` -> `npm publish` never
+ *     actually happened for this version (e.g. the publish task graph bailed
+ *     on red tests upstream). This is a FAILED PUBLISH being misreported as
+ *     "will resolve in a few minutes" — confirmed live: `@adhd/agent-mcp@2.2.2`
+ *     and `@adhd/apigen-cli@0.2.3` were both reported as transient CDN lag
+ *     when they had never been published at all.
+ *
+ * One extra `npm view` call per stale-resolving package (rare — only fires
+ * once retries in `cleanRoomInstall` are already exhausted) removes an entire
+ * class of false-success reporting.
+ *
+ * @param {string} name npm package name
+ * @param {string} version exact version to check membership for
+ * @param {{ registryUrl?: string }} [opts]
+ * @returns {Promise<boolean>} true if `version` is present in the registry's `versions[]` for `name`
+ */
+export async function probeVersionExistsOnRegistry(name, version, opts = {}) {
+  const args = ['view', name, 'versions', '--json'];
+  if (opts.registryUrl) args.push('--registry', opts.registryUrl);
+  const res = await run('npm', args, { timeoutMs: INSTALL_TIMEOUT_MS, cwd: workspaceRoot });
+  if (res.code !== 0) {
+    // `npm view` itself failed (network blip, unknown package, etc). We can't
+    // prove existence either way here — treat as "not provably published" so
+    // the caller falls through to the loud NOT-PUBLISHED branch rather than
+    // silently reporting a possibly-fake "propagation lag".
+    return false;
+  }
+  let versions;
+  try {
+    versions = JSON.parse(res.stdout);
+  } catch {
+    return false;
+  }
+  if (typeof versions === 'string') return versions === version;
+  if (Array.isArray(versions)) return versions.includes(version);
+  return false;
+}
+
+/**
+ * Build the unambiguous BUG-022 reason string for a still-stale install,
+ * after resolving which of the two possible causes actually applies via
+ * `probeVersionExistsOnRegistry`. Shared by `smokeOneLibrary` and
+ * `smokeOneEntrypoint` so both report identically.
+ *
+ * @param {string} name npm package name
+ * @param {{ attemptsMade: number, resolvedVersion: string, onDiskVersion: string }} staleness
+ * @param {{ registryUrl?: string }} [opts]
+ * @returns {Promise<string>}
+ */
+export async function describeStaleVersionReason(name, staleness, opts = {}) {
+  const exists = await probeVersionExistsOnRegistry(name, staleness.onDiskVersion, opts);
+  if (exists) {
+    // Genuine propagation lag — version IS on the registry, `dist-tags.latest`
+    // just hasn't caught up. Current wording, current (non-fatal-in-tone) severity.
+    return (
+      `npm install @latest resolved a STALE version after ${staleness.attemptsMade} attempt(s): resolved ` +
+      `"${staleness.resolvedVersion}" but this workspace's on-disk source version is "${staleness.onDiskVersion}" — ` +
+      `real registry/CDN propagation lag (verified: "${staleness.onDiskVersion}" IS present in the registry's ` +
+      `versions[] for ${name}, so dist-tags.latest just hasn't propagated yet); see cleanRoomInstall's ` +
+      `"STALE PACKUMENT CACHE" note`
+    );
+  }
+  // Decisive: the exact on-disk version does not exist on the registry at
+  // all. This can never be CDN lag — it is a failed publish.
+  return (
+    `NOT PUBLISHED: ${name}@${staleness.onDiskVersion} does not exist on the registry (checked versions[]). ` +
+    `This is a FAILED PUBLISH, not propagation lag — npm install @latest resolved "${staleness.resolvedVersion}" ` +
+    `after ${staleness.attemptsMade} attempt(s) because the on-disk version was never actually published ` +
+    `(e.g. the publish task graph bailed on red tests upstream). Do NOT report this as "will resolve on its own".`
+  );
+}
+
+/**
  * Stderr signatures that indicate a bin exited non-zero on `--help` for a
  * genuinely BENIGN reason: it loaded fully, ran ITS OWN argument-parsing
  * code, and made an ordinary "I don't recognize this flag" decision — never
@@ -879,10 +968,7 @@ export async function smokeOneLibrary(target, opts = {}) {
         kind: 'library',
         ok: false,
         stage: 'install',
-        reason:
-          `npm install @latest resolved a STALE version after ${install.staleness.attemptsMade} attempt(s): resolved ` +
-          `"${install.staleness.resolvedVersion}" but this workspace's on-disk source version is "${install.staleness.onDiskVersion}" — ` +
-          `real registry/CDN propagation lag (or a genuinely un-published bump); see cleanRoomInstall's "STALE PACKUMENT CACHE" note`,
+        reason: await describeStaleVersionReason(target.name, install.staleness, opts),
         elapsedMs: Date.now() - t0,
       };
     }
@@ -939,10 +1025,7 @@ export async function smokeOneEntrypoint(entrypoint, opts = {}) {
         kind: 'bin',
         ok: false,
         stage: 'install',
-        reason:
-          `npm install @latest resolved a STALE version after ${install.staleness.attemptsMade} attempt(s): resolved ` +
-          `"${install.staleness.resolvedVersion}" but this workspace's on-disk source version is "${install.staleness.onDiskVersion}" — ` +
-          `real registry/CDN propagation lag (or a genuinely un-published bump); see cleanRoomInstall's "STALE PACKUMENT CACHE" note`,
+        reason: await describeStaleVersionReason(entrypoint.name, install.staleness, opts),
         elapsedMs: Date.now() - t0,
       };
     }
