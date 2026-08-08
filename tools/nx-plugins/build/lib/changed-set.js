@@ -74,19 +74,89 @@ const { readState } = require('./published-state');
 const { writeReleaseManifest } = require('./release-manifest');
 
 /**
+ * Derive a base ref from the `publishedFromRef` breadcrumbs that
+ * `executors/publish/impl.js` writes AFTER each confirmed publish.
+ *
+ * Picks the OLDEST recorded ref, not the newest. Packages publish at different
+ * commits, so the newest ref would sit ahead of some packages' last publish and
+ * silently hide their changes. The oldest is the only choice that guarantees no
+ * package's work falls outside the window. Over-wide is safe here and
+ * under-wide is not: everything scoped in still passes through `version`'s
+ * `normalizedHash` comparison, which no-ops any package whose built content
+ * matches the registry (see executors/version/impl.js). Breadth costs cached
+ * build time; narrowness silently withholds a package.
+ *
+ * Every candidate is verified to still EXIST before use. A rebase, squash, or
+ * dropped branch can strand a recorded SHA, and diffing against a dangling ref
+ * would throw — so unresolvable refs are skipped, and if none survive we fall
+ * through to the ordinary defaults. That degradation path is why
+ * `publishedFromRef` is advisory and `normalizedHash` stays authoritative.
+ *
+ * @returns {string|null} a usable ref, or null to fall through
+ */
+function resolveBaseRefFromPublishedState({ workspaceRoot, publishedState }) {
+  let state = publishedState;
+  if (!state) {
+    try {
+      state = readState(workspaceRoot);
+    } catch {
+      return null;
+    }
+  }
+  const refs = [
+    ...new Set(
+      Object.values(state || {})
+        .map((e) => e && e.publishedFromRef)
+        .filter((r) => typeof r === 'string' && /^[0-9a-f]{40}$/i.test(r))
+    ),
+  ];
+  if (!refs.length) return null;
+
+  let oldest = null;
+  let oldestTime = Infinity;
+  for (const ref of refs) {
+    // `<sha>^{commit}` fails for a SHA that no longer resolves to a commit —
+    // this is the rebase/squash guard, not a formality.
+    const res = spawnSync('git', ['log', '-1', '--format=%ct', `${ref}^{commit}`], {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+    });
+    if (res.status !== 0) continue;
+    const t = Number.parseInt(String(res.stdout).trim(), 10);
+    if (!Number.isFinite(t)) continue;
+    if (t < oldestTime) {
+      oldestTime = t;
+      oldest = ref;
+    }
+  }
+  return oldest;
+}
+
+/**
  * Resolve the git ref this release's changed-set should be diffed against.
  *
  * Precedence:
  *   1. `env.RELEASE_BASE_REF`, if set and non-blank — explicit caller override.
+ *   1.5. The OLDEST still-resolvable `publishedFromRef` in
+ *      `published-state.json` — "the earliest commit any package was last
+ *      published from", i.e. the true start of the unreleased window. See
+ *      `resolveBaseRefFromPublishedState` above. This is what makes a correct
+ *      base automatic; before it existed, a 21-commit release fell through to
+ *      `HEAD~1`, computed an EMPTY changed-set, and published nothing while 10
+ *      packages had genuinely changed.
  *   2. `HEAD~1` — "the previous commit," i.e. everything committed on top of
- *      it PLUS the current uncommitted working tree counts as changed. This
- *      is a deliberately simple default: `published-state.json` itself has no
- *      commit/ref field to anchor a "last known fully-published" commit (read
- *      the whole file — every entry is `{version, normalizedHash,
- *      publishedIntegrity}`, no ref), so there is no better anchor available
- *      without adding one. Widening the ref is the caller's job via
- *      `RELEASE_BASE_REF` (e.g. pointing at the actual last-release commit
- *      once that's tracked).
+ *      it PLUS the current uncommitted working tree counts as changed. This is
+ *      now only a LAST-RESORT default, reached when no usable
+ *      `publishedFromRef` exists: a cache written before that field was added,
+ *      a package never published from this repo, or refs that no longer
+ *      resolve after a rebase.
+ *
+ *      Treat reaching this case as a warning sign, not a normal path. `HEAD~1`
+ *      is correct ONLY when the release is exactly one commit ahead of the last
+ *      publish; for anything longer it silently under-scopes. That is not
+ *      hypothetical — it is precisely how a 21-commit release computed an empty
+ *      set and shipped nothing. If you land here and the release spans multiple
+ *      commits, pass `RELEASE_BASE_REF` explicitly rather than trusting it.
  *   3. The git empty-tree sentinel (`git hash-object -t tree /dev/null`'s
  *      well-known constant hash) — only reached on a repo with a single
  *      commit (no `HEAD~1` to diff against), so that everything committed so
@@ -95,10 +165,12 @@ const { writeReleaseManifest } = require('./release-manifest');
  * @param {{ workspaceRoot: string, env?: NodeJS.ProcessEnv }} opts
  * @returns {string}
  */
-function resolveBaseRef({ workspaceRoot, env = process.env }) {
+function resolveBaseRef({ workspaceRoot, env = process.env, publishedState }) {
   if (env.RELEASE_BASE_REF && env.RELEASE_BASE_REF.trim()) {
     return env.RELEASE_BASE_REF.trim();
   }
+  const fromCache = resolveBaseRefFromPublishedState({ workspaceRoot, publishedState });
+  if (fromCache) return fromCache;
   const hasParent = spawnSync('git', ['rev-parse', '--verify', '--quiet', 'HEAD~1'], {
     cwd: workspaceRoot,
   });
@@ -228,11 +300,19 @@ function computeChangedProjectSet(opts) {
   }
   const { workspaceRoot } = opts;
   const env = opts.env || process.env;
-  const baseRef = opts.baseRef || resolveBaseRef({ workspaceRoot, env });
+  // NOTE: publishedState is resolved BEFORE baseRef, because resolveBaseRef now
+  // derives its default from the cache's `publishedFromRef` breadcrumbs. Reading
+  // it first both avoids a second disk read and — more importantly — keeps an
+  // INJECTED `opts.publishedState` authoritative for base-ref resolution too;
+  // otherwise a test supplying a fixture state would silently have its base ref
+  // computed from the real on-disk file.
+  const publishedStateResolved = opts.publishedState || readState(workspaceRoot);
+  const baseRef =
+    opts.baseRef || resolveBaseRef({ workspaceRoot, env, publishedState: publishedStateResolved });
   const discover = opts.discoverReleaseSet || discoverReleaseSet;
   const getAffected = opts.getAffectedProjectNames || getAffectedProjectNames;
   const nameOf = opts.readProjectName || readProjectName;
-  const publishedState = opts.publishedState || readState(workspaceRoot);
+  const publishedState = publishedStateResolved;
 
   const releaseSet = discover(workspaceRoot);
   const affectedNames = new Set(getAffected({ workspaceRoot, baseRef }));
@@ -272,6 +352,7 @@ function computeChangedProjectSet(opts) {
 
 module.exports = {
   resolveBaseRef,
+  resolveBaseRefFromPublishedState,
   getAffectedProjectNames,
   readProjectName,
   computeChangedProjectSet,

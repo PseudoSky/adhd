@@ -282,6 +282,115 @@ npm publish <projectRoot> --access public   # e.g. packages/agent/agent-base-typ
 
 ---
 
+## How "only what changed" is determined (CURRENT — `pnpm release`)
+
+Scope is decided in **two stages**, and understanding the split is the difference
+between a release that works and one that exits 0 having published nothing.
+
+### Stage 1 — candidate scope (broad, cheap, pre-build)
+
+`tools/nx-plugins/build/lib/changed-set.js` unions two signals:
+
+1. **git-diff affected** — `nx show projects --affected --base=<ref>`, plus everything
+   transitively downstream in the Nx graph.
+2. **published-state staleness** — on-disk `version` ≠ the version
+   `published-state.json` records as published (catches a prior partial run that
+   already bumped something).
+
+This stage is **deliberately over-broad**. Nx treats a root-file change
+(`pnpm-lock.yaml`, root `project.json`, `nx.json`) as affecting the *entire*
+workspace, so a lockfile regeneration alone can put ~69 projects in scope. **That
+is fine — do not try to "fix" it here.** Stage 2 is what makes it precise, and it
+runs at the only point where the data to be precise actually exists.
+
+### Stage 2 — content filter (exact, post-build)
+
+`executors/version/impl.js` hashes each project's freshly-built `dist/`
+(`normalizedHash`) and compares it to the hash recorded in `published-state.json`:
+
+```
+version: @adhd/foo@1.2.3 unchanged vs published (cache hit, zero network) — no bump.
+```
+
+Identical content ⇒ **no bump, no publish**, zero network calls. `normalizeManifest`
+strips `version` and every `@adhd/*` dependency range before hashing, so the
+comparison is stable across version bumps and internal-range churn — otherwise it
+would be circular.
+
+**Net effect:** ~69 projects scoped in → cached builds → only the handful whose
+shipped bytes actually changed get bumped and published. A recent real run: 69
+candidates, 96 no-bump messages, 11 packages published.
+
+### The base ref — the one thing that has actually broken a release
+
+Precedence in `resolveBaseRef`:
+
+| # | Source | When it applies |
+|---|---|---|
+| 1 | `RELEASE_BASE_REF` env var | explicit override, always wins |
+| 2 | oldest still-resolvable `publishedFromRef` in `published-state.json` | **normal path** |
+| 3 | `HEAD~1` | last resort — no usable ref recorded |
+| 4 | git empty-tree sentinel | single-commit repo only |
+
+`publishedFromRef` is written by `executors/publish/impl.js` **only after npm
+confirms a publish** (exit 0, or a failure the registry itself contradicts), and
+never under `--dry-run`. The **oldest** ref is chosen deliberately: packages
+publish at different commits, and the newest ref would sit ahead of some
+packages' last publish and silently hide their changes. Refs that no longer
+resolve (rebase, squash) are skipped, and if none survive it falls through.
+
+It is **advisory metadata only** — `normalizedHash` remains the sole authority for
+"is this already published". That is why the cache survives rebases, worktrees,
+and publishes from other machines, and why a missing ref is ordinary rather than
+an error.
+
+> **⚠️ The failure this prevents.** Before `publishedFromRef` existed, the default
+> was `HEAD~1` — correct only when a release is exactly one commit ahead of the
+> last publish. A 21-commit release diffed against its previous commit (which
+> touched no publishable project), computed an **empty** changed-set, printed
+> `nothing to release`, and **exited 0 having published nothing** while 10
+> packages had genuinely changed. Nothing was broken; the question was just asked
+> against the wrong point in history.
+
+### Diagnosing a release that "succeeded" but shipped nothing
+
+**Read this line first** — it is the one that tells you whether the run was ever
+going to publish anything:
+
+```
+run-release: computed changed-set (base=<ref>): N publishable project(s) in scope.
+```
+
+- **N is 0 and you expected changes** → base-ref problem. Check whether `<ref>` is
+  `HEAD~1` on a multi-commit release. Re-run with an explicit base:
+  ```bash
+  RELEASE_BASE_REF=<last-release-commit> pnpm release
+  ```
+- **N is large (~all projects)** → normal after a lockfile/root-config change. Let
+  it run; stage 2 filters it.
+
+**Never trust exit 0 as proof anything shipped.** `run-release` legitimately exits 0
+when there is genuinely nothing to release, and the two states look identical from
+the exit code. Verify against the registry:
+
+```bash
+npm view @adhd/<pkg> version      # must match the on-disk package.json
+```
+
+A release once reported success while three packages were silently withheld —
+their publish tasks never ran because the task graph bailed upstream. The registry
+is the only source of truth for what is published.
+
+### Do not use `pnpm release:dry` as a safety check
+
+It runs `nx run-many -t version/publish --dryRun` **unscoped** — the full workspace
+task graph (486–541 tasks on a real changeset), the exact resource-contention shape
+that caused three distinct failures. It also hides that `run-many` inside
+`package.json`, so the `check-nx-scope` pre-tool hook does not catch it. Use
+`pnpm release`, which scopes via `changed-set.js`.
+
+---
+
 ## How "only what changed" is determined (retired — historical, applied to `nx release`)
 
 **Git tags are the source of truth.** When you run `nx release version`, it:

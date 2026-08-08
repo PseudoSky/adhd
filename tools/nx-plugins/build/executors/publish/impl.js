@@ -84,10 +84,52 @@ function isAlreadyPublishedError(npmStderrOrStdout) {
 }
 
 /**
+ * The commit this publish is shipping FROM, or null if it cannot be
+ * determined. ADVISORY METADATA ONLY — see `publishedFromRef` in
+ * `writeThroughCache` below for why it must never become authoritative.
+ *
+ * Returns null rather than throwing on any failure (not a git repo, git
+ * missing, detached weirdness): a publish must never fail because we could
+ * not record a nice-to-have breadcrumb.
+ */
+function currentGitRef(root) {
+  try {
+    const res = sh('git', ['rev-parse', 'HEAD'], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] });
+    if (res.status !== 0) return null;
+    const sha = String(res.stdout || '').trim();
+    return /^[0-9a-f]{40}$/i.test(sha) ? sha : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Write-through: compute this package's `{version, normalizedHash,
- * publishedIntegrity}` from the dist that was JUST packed/published — an
- * OFFLINE local pack + hash, never a re-fetch from the registry (immune to
- * npm read-after-write lag by construction: we know exactly what we shipped).
+ * publishedIntegrity, publishedFromRef}` from the dist that was JUST
+ * packed/published — an OFFLINE local pack + hash, never a re-fetch from the
+ * registry (immune to npm read-after-write lag by construction: we know
+ * exactly what we shipped).
+ *
+ * `publishedFromRef` — the commit this version shipped from. It exists for ONE
+ * purpose: to let `lib/changed-set.js` resolve a correct release base ref
+ * automatically. Its default is `HEAD~1`, which silently under-scopes any
+ * release spanning more than one commit — a real 21-commit release computed an
+ * EMPTY changed-set and published nothing, because the only commit it diffed
+ * against touched no publishable project.
+ *
+ * IT IS DELIBERATELY NOT PART OF IDENTITY. `normalizedHash` remains the sole
+ * authority for "is this already published", and that is not a stylistic
+ * choice: content-addressing is what makes this cache survive rebases,
+ * squashes, cherry-picks, worktrees, and publishes from other machines. A SHA
+ * has none of those properties — rewrite history and the ref dangles, while
+ * the hash stays true. Consumers must therefore treat a missing, unparsable,
+ * or no-longer-existing `publishedFromRef` as ordinary and degrade gracefully,
+ * never as an error.
+ *
+ * It is written ONLY here, and this function is called ONLY after npm has
+ * confirmed the publish (exit 0, or a failure the registry itself contradicts
+ * via `isPublishedLive`), and never under `--dry-run`. So a recorded ref always
+ * means "this content is really on the registry, and it came from this commit."
  *
  * @param {string} root workspace root
  * @param {string} name
@@ -98,7 +140,12 @@ function isAlreadyPublishedError(npmStderrOrStdout) {
 async function writeThroughCache(root, name, version, distDir, workDir, rec) {
   const tgz = rec ? rec.time('npm pack <distDir> (offline, local)', () => packLocalDir(distDir, workDir)) : packLocalDir(distDir, workDir);
   const publishedIntegrity = tgz ? tarballIntegrity(tgz) : null;
+  const publishedFromRef = currentGitRef(root);
   const entry = { version, normalizedHash: normalizedHash(distDir), publishedIntegrity };
+  // Only record the ref when we actually have one — never write `null`, so an
+  // undeterminable ref is indistinguishable from an old entry predating this
+  // field, and both degrade down the same path in changed-set.js.
+  if (publishedFromRef) entry.publishedFromRef = publishedFromRef;
   let written = entry;
   await updatePublishedState(root, (state) => {
     const existing = state[name];
