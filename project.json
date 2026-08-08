@@ -20,7 +20,7 @@
         "agent-plugin-sanitize:build"
       ],
       "options": {
-        "command": "node scripts/check-publish-hygiene.mjs"
+        "command": "node tools/nx-plugins/build/executors/hygiene/check-publish-hygiene.mjs"
       }
     },
     "check-release-ranges": {
