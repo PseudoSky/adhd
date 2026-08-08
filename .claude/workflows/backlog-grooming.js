@@ -560,7 +560,7 @@ log(`backlog-grooming starting: repos=${REPOS.join(',')} dryRun=${DRY_RUN} scope
 
 const invRaw = await parallel(REPOS.map((repo) => () => agent(inventoryPrompt(repo), {
   label: `inventory:${repo}`, phase: 'Inventory', schema: INVENTORY_SCHEMA,
-  agentType: 'qa-expert', effort: 'medium',
+  agentType: 'qa-expert', effort: 'medium', model: 'haiku',
 })))
 // Re-tag each inventory with the repo WE dispatched it for, by index, rather than
 // trusting the `repo` string the subagent echoed back. parallel() preserves input
@@ -628,7 +628,7 @@ log(`triage: ${scopedItems.length} items -> ${triageClusters.length} clusters (o
 
 const triageRaw = await pipeline(triageClusters, (cluster) => agent(triagePrompt(cluster.clusterLabel, cluster.items), {
   label: `triage:${cluster.clusterLabel}`, phase: 'Triage & Flag', schema: TRIAGE_CLUSTER_SCHEMA,
-  agentType: 'product-manager', effort: 'medium',
+  agentType: 'product-manager', effort: 'medium', model: 'sonnet',
 }))
 const triageResults = triageRaw.filter(Boolean)
 if (triageResults.length !== triageClusters.length) {
@@ -666,15 +666,15 @@ const plannedPacketCallsMain = debuggerClusters.length + architectClusters.lengt
 const [debugOutMain, architectOutMain, devopsOutMain] = await parallel([
   () => pipeline(debuggerClusters, (cluster) => agent(debugLanePrompt(cluster.clusterLabel, cluster.items), {
     label: `debug:${cluster.clusterLabel}`, phase: 'Lanes', schema: LANE_DEBUG_SCHEMA,
-    agentType: 'debugger', effort: 'high',
+    agentType: 'debugger', effort: 'high', model: 'sonnet',
   })),
   () => pipeline(architectClusters, (cluster) => agent(specLanePrompt('architect', cluster.clusterLabel, cluster.items), {
     label: `arch:${cluster.clusterLabel}`, phase: 'Lanes', schema: LANE_SPEC_SCHEMA,
-    agentType: 'architect-reviewer', effort: 'high',
+    agentType: 'architect-reviewer', effort: 'high', model: 'sonnet',
   })),
   () => pipeline(devopsClusters, (cluster) => agent(specLanePrompt('devops', cluster.clusterLabel, cluster.items), {
     label: `devops:${cluster.clusterLabel}`, phase: 'Lanes', schema: LANE_SPEC_SCHEMA,
-    agentType: 'devops-engineer', effort: 'high',
+    agentType: 'devops-engineer', effort: 'high', model: 'sonnet',
   })),
 ])
 
@@ -721,12 +721,12 @@ if (rawHandbacks.length) {
     if (job.route === 'debugger') {
       return agent(debugLanePrompt(job.clusterLabel, job.items), {
         label: `reroute-debug:${job.clusterLabel}`, phase: 'Reroute', schema: LANE_DEBUG_SCHEMA,
-        agentType: 'debugger', effort: 'high',
+        agentType: 'debugger', effort: 'high', model: 'sonnet',
       })
     }
     return agent(specLanePrompt(job.route, job.clusterLabel, job.items), {
       label: `reroute-${job.route}:${job.clusterLabel}`, phase: 'Reroute', schema: LANE_SPEC_SCHEMA,
-      agentType: job.route === 'devops' ? 'devops-engineer' : 'architect-reviewer', effort: 'high',
+      agentType: job.route === 'devops' ? 'devops-engineer' : 'architect-reviewer', effort: 'high', model: 'sonnet',
     })
   })
   const correctionResults = (correctionOut || []).filter(Boolean)
@@ -769,11 +769,11 @@ log(`acceptance-criteria: ${specPacketsAll.length} packets -> ${acGroups.length}
 const [acWriteOut, debugNoteOut] = await parallel([
   () => pipeline(acGroups, (g) => agent(acWritePrompt(g.groupId, g.packets), {
     label: `ac:${g.groupId}`, phase: 'Acceptance Criteria', schema: AC_WRITE_SCHEMA,
-    agentType: 'product-manager', effort: 'medium',
+    agentType: 'product-manager', effort: 'medium', model: 'haiku',
   })),
   () => pipeline(debugNoteGroups, (g) => agent(debugNoteWritePrompt(g.groupId, g.verdicts), {
     label: `debugnote:${g.groupId}`, phase: 'Acceptance Criteria', schema: DEBUG_NOTE_WRITE_SCHEMA,
-    agentType: 'product-manager', effort: 'medium',
+    agentType: 'product-manager', effort: 'medium', model: 'haiku',
   })),
 ])
 const acWrites = (acWriteOut || []).filter(Boolean).flatMap((r) => r.writes || [])
@@ -890,7 +890,7 @@ const reportPayload = {
 
 const reportOut = await agent(reportPrompt(reportPayload), {
   label: 'report', phase: 'Report', schema: REPORT_SCHEMA,
-  agentType: 'product-manager', effort: 'medium',
+  agentType: 'product-manager', effort: 'medium', model: 'haiku',
 })
 
 if (!reportOut || !reportOut.confirmed) {
