@@ -1,3 +1,19 @@
+## 2.2.3 (2026-08-08)
+
+
+### 🩹 Fixes
+
+- **agent-mcp:** assert a DELTA on REPO_ROOT/data, not an absolute — unblocks 2.2.2 publish
+
+- **build:** route ESM packages' test target through dist-manifest + fail loud on type divergence (BUG-020)
+
+- **agent-mcp:** pin operational data dir scope to global (DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001)
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 2.2.2 (2026-08-07)
 
 

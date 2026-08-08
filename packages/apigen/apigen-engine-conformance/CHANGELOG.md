@@ -1,3 +1,28 @@
+## 0.2.2 (2026-08-08)
+
+
+### 🚀 Features
+
+- **apigen-engine-conformance:** wire live Java host into the conformance gate (FEAT-APIGEN-001 1/3)
+
+
+### 🩹 Fixes
+
+- **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
+
+- **apigen-engine-conformance:** resolve gate.ts workspace root via import.meta.url, not __dirname/cwd
+
+
+### 🔥 Performance
+
+- **test:** bound vitest thread pools to curb CPU oversubscription (DEBT-TEST-CPU-OVERSUBSCRIBED-001)
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+
 ## 0.1.4 (2026-07-24)
 
 
