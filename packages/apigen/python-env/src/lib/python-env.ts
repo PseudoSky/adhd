@@ -61,17 +61,27 @@ export interface IEnsurePythonEnvOptions {
  * Locate the directory containing the `apigen_python` package sources.
  *
  * Probed in order:
- *   1. Co-located (SHIPPED) copy: `<this file's dir>/python`. This package's
- *      build copies `packages/apigen/python/apigen_python/**` into its own
- *      `dist/python/apigen_python/`, so for a consumer installed from npm
- *      OUTSIDE the monorepo (where __dirname is `node_modules/@adhd/
- *      apigen-python-env/dist`), the sources are bundled right next to the
- *      compiled code. This MUST be probed first so published consumers never
- *      fall through to a monorepo-only path that doesn't exist for them.
- *   2. Monorepo source (dev-time fallback): `<this file>/../../../python`
- *      (source layout: packages/apigen/python-env/src/lib → packages/apigen/
- *      python). Keeps vitest/ts-node runs resolving the LIVE source instead
- *      of the copied snapshot.
+ *   1. Monorepo source (LIVE, preferred when present): `<this file>/../../
+ *      ../python` (source layout: packages/apigen/python-env/src/lib →
+ *      packages/apigen/python; from a build, `dist/lib` → `packages/apigen/
+ *      python` by the same three-levels-up relationship). When both this
+ *      AND the co-located dist copy below exist — i.e. running inside the
+ *      monorepo, built or not — this MUST win. `dist/python` is a
+ *      point-in-time copy made by this package's build (vite.config.ts
+ *      `copyPythonPackagePlugin`); it goes stale the moment someone edits
+ *      `packages/apigen/python` without rebuilding, and code run outside
+ *      Nx's task graph (`npx vitest run` directly, bypassing the `test`
+ *      target's `dependsOn: ["build"]`) has no mechanism to refresh it. Prior
+ *      ordering probed the dist copy FIRST, so any monorepo dev/test
+ *      invocation that happened to have a `dist/python` lying around from a
+ *      previous build silently exercised stale Python source with no
+ *      indication the live edit was never observed — see
+ *      DEBT-APIGEN-010. Source must win whenever it's reachable.
+ *   2. Co-located (SHIPPED) copy: `<this file's dir>/python`. For a
+ *      consumer installed from npm OUTSIDE the monorepo (where __dirname is
+ *      `node_modules/@adhd/apigen-python-env/dist`), step 1's monorepo-
+ *      relative path doesn't exist, so this bundled-alongside-the-compiled-
+ *      code copy is the only candidate and is used.
  *   3. Walk up from __dirname looking for `packages/apigen/python` (covers
  *      the vite-bundled CLI, where __dirname is the bundle output dir).
  * (Shared by py-grpc / py-flask — previously duplicated in each plugin.)
@@ -79,11 +89,11 @@ export interface IEnsurePythonEnvOptions {
 export function resolvePythonPkgDir(fromDir?: string): string {
   const base = fromDir ?? __dirname
 
-  const coLocated = path.join(base, 'python')
-  if (fs.existsSync(path.join(coLocated, 'apigen_python'))) return coLocated
-
   const primary = path.resolve(base, '..', '..', '..', 'python')
   if (fs.existsSync(path.join(primary, 'apigen_python'))) return primary
+
+  const coLocated = path.join(base, 'python')
+  if (fs.existsSync(path.join(coLocated, 'apigen_python'))) return coLocated
 
   let dir = base
   for (let i = 0; i < 20; i++) {
