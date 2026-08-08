@@ -78,7 +78,30 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
   envPrefixOverride: "ADHD_AGENT",
   namespaces: ["production"],
   dirs: {
-    data: { kind: "data" },
+    // `scope` is PINNED to `'global'` (not left to auto-detect project vs.
+    // global from the invoking cwd's `.git`/`.adhd` marker) —
+    // DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001. This repo's own `.mcp.json`
+    // sets `ADHD_ENV_SCOPE=project` for the project-local `agent-mcp`
+    // server entry (so `plugins.configPath`/`server.registryDbPath`'s
+    // explicit-override defaults stay project-relative when wanted), and
+    // this worktree root itself carries a `.git`/`.adhd` marker — so
+    // WITHOUT this pin, `resolveScope()` (environment-builder/src/scope.ts)
+    // resolves `'project'`, and the zero-config `db.path` default
+    // (`env.files.db` below) roots the operational SQLite store under
+    // `<repoRoot>/.adhd/agent-mcp/production/data/agents.db` — inside the
+    // repo tree, violating AGENTS.md §10 ("persistent app stores belong in
+    // the user home … never in the tree"). agent-mcp's OWN operational
+    // store (agents/tasks/messages/sessions) is not project-shareable data
+    // like a registry catalog might be, and MUST be one canonical location
+    // regardless of which repo/cwd a given agent-mcp instance happens to be
+    // invoked from — exactly the same reasoning `@adhd/agent-core-env`'s
+    // `agentRegistryEnvironmentSpec` already applies to `registry.db` (see
+    // `packages/agent/agent-core-env/src/spec.ts`). Mirrors that precedent.
+    // An explicit `ADHD_AGENT_DATABASE_PATH` (as the global `agent-mcp`
+    // server config already pins) or a future explicit `scope` override
+    // still wins over this default — this only changes what the ZERO-CONFIG
+    // fallback resolves to when nothing else is set.
+    data: { kind: "data", scope: "global" },
   },
   files: {
     // Zero-config default DB location — `env.files.db` — under the resolved
