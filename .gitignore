@@ -161,3 +161,10 @@ packages/agent/*/tsconfig.tsbuildinfo
 # (published-state.json, which IS committed as source of truth). Regenerable
 # by just re-running any instrumented nx target; never meaningful to track.
 /metrics.json
+
+# Stray repo-root scratch artifact repeatedly swept into commits during agent
+# dispatch (DEBT-PROCESS-001 part b) — belt-and-braces guard. Anchored to the
+# repo root only: legitimate `subject.txt` fixtures created by tests live
+# under nested scratch git repos (e.g. apigen-engine-runtime's isolated-git
+# test-support), never at the real repo root, so this must not shadow those.
+/subject.txt
