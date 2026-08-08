@@ -27,13 +27,14 @@
  */
 const { existsSync } = require('node:fs');
 const { basename, dirname, join } = require('node:path');
+const { isScratchPath } = require('../lib/scratch-root');
 
 function skip(p) {
   return (
     p === '.' ||
     p.startsWith('node_modules/') || p.includes('/node_modules/') ||
     p.startsWith('dist/') || p.includes('/dist/') ||
-    p.startsWith('tmp/') || p.includes('/tmp/') ||
+    isScratchPath(p) ||
     p.startsWith('coverage/') || p.includes('/coverage/')
   );
 }
