@@ -12,7 +12,7 @@ import * as path from 'node:path';
 export interface RegistryPackageGeneratorSchema {
   /** kebab-case name WITHOUT the `agent-` prefix, e.g. `budget`, `tool-registry`. */
   name: string;
-  /** Override target directory (default `packages/ai/agent-<name>`). */
+  /** Override target directory (default `packages/agent/agent-<name>`). */
   directory?: string;
   /** Human-readable description for package.json. */
   description?: string;
@@ -27,7 +27,7 @@ export async function registryPackageGenerator(
   const baseName = names(options.name).fileName; // "tool-registry"
   const projectName = `agent-${baseName}`; // "agent-tool-registry"
   const packageName = `@adhd/${projectName}`; // "@adhd/agent-tool-registry"
-  const projectDir = options.directory ?? `packages/ai/${projectName}`;
+  const projectDir = options.directory ?? `packages/agent/${projectName}`;
   // Table prefix: hyphens → underscores, trailing underscore. The cross-package
   // collision guard ([inv:table-prefix] in REGISTRY-PACKAGE-RULES.md).
   const tablePrefix = options.tablePrefix ?? `${baseName.replace(/-/g, '_')}_`;
