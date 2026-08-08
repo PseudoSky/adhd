@@ -3,7 +3,8 @@
 const { existsSync } = require('node:fs');
 const { dirname, join } = require('node:path');
 const { hasBuildTarget } = require('../build/detect-target');
-function skip(p) { return p === '.' || p.startsWith('node_modules/') || p.includes('/node_modules/') || p.startsWith('dist/') || p.includes('/dist/') || p.startsWith('tmp/') || p.includes('/tmp/'); }
+const { isScratchPath } = require('../lib/scratch-root');
+function skip(p) { return p === '.' || p.startsWith('node_modules/') || p.includes('/node_modules/') || p.startsWith('dist/') || p.includes('/dist/') || isScratchPath(p); }
 // Shared cache inputs for both targets (BUILD-TOOLING-METRICS-001 profiling
 // found sync-deps/sync-deps-check UNCACHED — 1566 calls, 66% of all
 // build-tooling-plugin wall-time, almost all of them no-op re-runs against

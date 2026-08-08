@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 
 const require = createRequire(import.meta.url);
 const {
@@ -57,7 +57,7 @@ test('readReleaseManifest returns null (never throws) for a missing manifest', (
 test('readReleaseManifest returns null (never throws) for a corrupt manifest file', () => {
   withTmpDir((dir) => {
     const { mkdirSync, writeFileSync } = require('node:fs');
-    mkdirSync(join(dir, 'tmp'), { recursive: true });
+    mkdirSync(dirname(join(dir, MANIFEST_RELATIVE_PATH)), { recursive: true });
     writeFileSync(join(dir, MANIFEST_RELATIVE_PATH), 'not json {{{');
     assert.equal(readReleaseManifest(dir), null);
   });

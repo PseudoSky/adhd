@@ -53,7 +53,7 @@
  *
  * MANIFEST BACKSTOP (Phase 3, `tmp/release-pipeline-audit.md`): every
  * successful call to `computeChangedProjectSet` also writes its result to
- * `<workspaceRoot>/tmp/release-manifest.json` via `./release-manifest.js`'s
+ * `<workspaceRoot>/.adhd/tmp/release-manifest.json` via `./release-manifest.js`'s
  * `writeReleaseManifest` (unless the caller explicitly opts out with
  * `{ writeManifest: false }`, used by this module's own unit tests to avoid
  * incidental fixture-directory writes). `executors/publish/impl.js` reads

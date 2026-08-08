@@ -31,6 +31,7 @@
 const { existsSync } = require('node:fs');
 const { dirname, join } = require('node:path');
 const { hasBuildTarget } = require('../shared/detect-build-target');
+const { isScratchPath } = require('../lib/scratch-root');
 
 const TARGET_NAME = 'verify-dist-load';
 
@@ -48,8 +49,7 @@ exports.createNodes = [
       projectRoot.includes('/node_modules/') ||
       projectRoot.startsWith('dist/') ||
       projectRoot.includes('/dist/') ||
-      projectRoot.startsWith('tmp/') ||
-      projectRoot.includes('/tmp/')
+      isScratchPath(projectRoot)
     ) {
       return {};
     }
