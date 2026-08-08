@@ -430,31 +430,31 @@ importers:
   entrypoint/apigen-cli:
     dependencies:
       '@adhd/apigen-base-logical':
-        specifier: ^0.1.0
+        specifier: ^0.1.1
         version: link:../../packages/apigen/apigen-base-logical
       '@adhd/apigen-core-client':
         specifier: ^0.3.0
         version: link:../../packages/apigen/apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.1
+        specifier: ^0.2.2
         version: link:../../packages/apigen/apigen-engine-naming
       '@adhd/apigen-engine-runtime':
         specifier: ^0.2.3
         version: link:../../packages/apigen/apigen-engine-runtime
       '@adhd/apigen-plugin-api-express':
-        specifier: ^0.2.2
+        specifier: ^0.2.3
         version: link:../../packages/apigen/apigen-plugin-api-express
       '@adhd/apigen-plugin-api-fastify':
-        specifier: ^0.2.2
+        specifier: ^0.2.3
         version: link:../../packages/apigen/apigen-plugin-api-fastify
       '@adhd/apigen-plugin-batch':
-        specifier: ^0.2.1
+        specifier: ^0.2.2
         version: link:../../packages/apigen/apigen-plugin-batch
       '@adhd/apigen-plugin-cli-output':
         specifier: ^0.2.3
         version: link:../../packages/apigen/apigen-plugin-cli-output
       '@adhd/apigen-plugin-health':
-        specifier: ^0.2.1
+        specifier: ^0.2.2
         version: link:../../packages/apigen/apigen-plugin-health
       '@adhd/apigen-plugin-ir-cache':
         specifier: ^0.1.0
@@ -469,10 +469,10 @@ importers:
         specifier: ^0.2.0
         version: link:../../packages/apigen/apigen-plugin-logger
       '@adhd/apigen-plugin-mcp':
-        specifier: ^0.2.2
+        specifier: ^0.2.3
         version: link:../../packages/apigen/apigen-plugin-mcp
       '@adhd/apigen-plugin-openapi':
-        specifier: ^0.2.1
+        specifier: ^0.2.2
         version: link:../../packages/apigen/apigen-plugin-openapi
       '@adhd/apigen-plugin-py-flask':
         specifier: ^0.2.3
@@ -524,13 +524,13 @@ importers:
         specifier: ^0.3.0
         version: link:../../packages/apigen/apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.1
+        specifier: ^0.2.2
         version: link:../../packages/apigen/apigen-engine-naming
       '@adhd/apigen-plugin-api-fastify':
-        specifier: ^0.2.2
+        specifier: ^0.2.3
         version: link:../../packages/apigen/apigen-plugin-api-fastify
       '@adhd/apigen-plugin-batch':
-        specifier: ^0.2.1
+        specifier: ^0.2.2
         version: link:../../packages/apigen/apigen-plugin-batch
       '@adhd/apigen-plugin-cli-output':
         specifier: ^0.2.3
@@ -539,10 +539,10 @@ importers:
         specifier: ^0.1.0
         version: link:../../packages/apigen/apigen-plugin-ir-cache
       '@adhd/apigen-plugin-mcp':
-        specifier: ^0.2.2
+        specifier: ^0.2.3
         version: link:../../packages/apigen/apigen-plugin-mcp
       '@adhd/apigen-plugin-openapi':
-        specifier: ^0.2.1
+        specifier: ^0.2.2
         version: link:../../packages/apigen/apigen-plugin-openapi
       '@adhd/environment':
         specifier: ^0.1.0
@@ -639,16 +639,16 @@ importers:
   entrypoint/dispatch-cli:
     dependencies:
       '@adhd/dispatch-base-spec':
-        specifier: ^0.1.0
+        specifier: ^0.1.1
         version: link:../../packages/dispatch/dispatch-base-spec
       '@adhd/dispatch-core-client':
         specifier: ^0.1.0
         version: link:../../packages/dispatch/dispatch-core-client
       '@adhd/dispatch-core-optimizer':
-        specifier: ^0.1.0
+        specifier: ^0.1.1
         version: link:../../packages/dispatch/dispatch-core-optimizer
       '@adhd/dispatch-orchestrator':
-        specifier: ^0.1.0
+        specifier: ^0.1.1
         version: link:../../packages/dispatch/dispatch-orchestrator
       '@adhd/dispatch-serializer-json':
         specifier: ^0.1.0
@@ -1042,7 +1042,7 @@ importers:
   packages/apigen/apigen-core-client:
     dependencies:
       '@adhd/apigen-base-logical':
-        specifier: ^0.1.0
+        specifier: ^0.1.1
         version: link:../apigen-base-logical
       pino:
         specifier: 10.3.1
@@ -1076,16 +1076,16 @@ importers:
         specifier: ^0.2.0
         version: link:../apigen-base-errors
       '@adhd/apigen-base-logical':
-        specifier: ^0.1.0
+        specifier: ^0.1.1
         version: link:../apigen-base-logical
       '@adhd/apigen-core-client':
-        specifier: 0.3.0
+        specifier: ^0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.1
+        specifier: ^0.2.2
         version: link:../apigen-engine-naming
       '@adhd/apigen-python-env':
-        specifier: ^0.2.2
+        specifier: ^0.2.3
         version: link:../python-env
 
   packages/apigen/apigen-engine-gateway:
@@ -1094,13 +1094,13 @@ importers:
         specifier: ^0.2.0
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: 0.3.0
+        specifier: ^0.3.0
         version: link:../apigen-core-client
 
   packages/apigen/apigen-engine-naming:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: 0.3.0
+        specifier: ^0.3.0
         version: link:../apigen-core-client
 
   packages/apigen/apigen-engine-runtime:
@@ -1109,13 +1109,13 @@ importers:
         specifier: ^0.2.0
         version: link:../apigen-base-errors
       '@adhd/apigen-base-logical':
-        specifier: 0.1.0
+        specifier: ^0.1.1
         version: link:../apigen-base-logical
       '@adhd/apigen-core-client':
         specifier: ^0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: 0.2.1
+        specifier: ^0.2.2
         version: link:../apigen-engine-naming
       ajv:
         specifier: ^8.20.0
@@ -1145,13 +1145,13 @@ importers:
         specifier: ^0.2.0
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: 0.3.0
+        specifier: ^0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.1
+        specifier: ^0.2.2
         version: link:../apigen-engine-naming
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.2.2
+        specifier: ^0.2.3
         version: link:../apigen-engine-runtime
       express:
         specifier: ^5.2.1
@@ -1166,13 +1166,13 @@ importers:
         specifier: ^0.2.0
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: 0.3.0
+        specifier: ^0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.1
+        specifier: ^0.2.2
         version: link:../apigen-engine-naming
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.2.2
+        specifier: ^0.2.3
         version: link:../apigen-engine-runtime
       fastify:
         specifier: ^4.0.0
@@ -1184,10 +1184,10 @@ importers:
         specifier: ^0.2.0
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: 0.3.0
+        specifier: ^0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.2.2
+        specifier: ^0.2.3
         version: link:../apigen-engine-runtime
 
   packages/apigen/apigen-plugin-cli-output:
@@ -1199,7 +1199,7 @@ importers:
         specifier: ^0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: 0.2.1
+        specifier: ^0.2.2
         version: link:../apigen-engine-naming
       '@adhd/apigen-engine-runtime':
         specifier: ^0.2.3
@@ -1208,37 +1208,37 @@ importers:
   packages/apigen/apigen-plugin-health:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: 0.3.0
+        specifier: ^0.3.0
         version: link:../apigen-core-client
 
   packages/apigen/apigen-plugin-ir-cache:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: 0.3.0
+        specifier: ^0.3.0
         version: link:../apigen-core-client
 
   packages/apigen/apigen-plugin-java-javalin:
     dependencies:
       '@adhd/apigen-base-logical':
-        specifier: ^0.1.0
+        specifier: ^0.1.1
         version: link:../apigen-base-logical
       '@adhd/apigen-core-client':
-        specifier: 0.3.0
+        specifier: ^0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.1
+        specifier: ^0.2.2
         version: link:../apigen-engine-naming
 
   packages/apigen/apigen-plugin-jsonschema:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: 0.3.0
+        specifier: ^0.3.0
         version: link:../apigen-core-client
 
   packages/apigen/apigen-plugin-logger:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: 0.3.0
+        specifier: ^0.3.0
         version: link:../apigen-core-client
       pino:
         specifier: 10.3.1
@@ -1250,13 +1250,13 @@ importers:
         specifier: ^0.2.0
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: 0.3.0
+        specifier: ^0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.1
+        specifier: ^0.2.2
         version: link:../apigen-engine-naming
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.2.2
+        specifier: ^0.2.3
         version: link:../apigen-engine-runtime
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
@@ -1265,10 +1265,10 @@ importers:
   packages/apigen/apigen-plugin-openapi:
     dependencies:
       '@adhd/apigen-codegen-openapi':
-        specifier: ^0.2.1
+        specifier: ^0.2.2
         version: link:../codegen/openapi
       '@adhd/apigen-core-client':
-        specifier: 0.3.0
+        specifier: ^0.3.0
         version: link:../apigen-core-client
 
   packages/apigen/apigen-plugin-py-flask:
@@ -1277,7 +1277,7 @@ importers:
         specifier: ^0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: 0.2.1
+        specifier: ^0.2.2
         version: link:../apigen-engine-naming
       '@adhd/apigen-engine-runtime':
         specifier: ^0.2.3
@@ -1292,7 +1292,7 @@ importers:
         specifier: ^0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: 0.2.1
+        specifier: ^0.2.2
         version: link:../apigen-engine-naming
       '@adhd/apigen-python-env':
         specifier: ^0.2.3
@@ -1301,10 +1301,10 @@ importers:
   packages/apigen/codegen/openapi:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: 0.3.0
+        specifier: ^0.3.0
         version: link:../../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.1
+        specifier: ^0.2.2
         version: link:../../apigen-engine-naming
 
   packages/apigen/python-env:
@@ -1346,7 +1346,7 @@ importers:
   packages/dispatch/dispatch-orchestrator:
     dependencies:
       '@adhd/dispatch-base-spec':
-        specifier: ^0.1.0
+        specifier: ^0.1.1
         version: link:../dispatch-base-spec
       '@adhd/dispatch-core-client':
         specifier: ^0.1.0
@@ -1365,7 +1365,7 @@ importers:
         specifier: ^2.2.0
         version: link:../../agent/agent-store-runtime
       '@adhd/dispatch-core-optimizer':
-        specifier: ^0.1.0
+        specifier: ^0.1.1
         version: link:../dispatch-core-optimizer
       '@adhd/dispatch-serializer-json':
         specifier: ^0.1.0
