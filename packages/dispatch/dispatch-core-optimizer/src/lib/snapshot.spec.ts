@@ -90,7 +90,11 @@ describe('snapshot() eligibility (diamond fixture)', () => {
     const snap = snapshot(diamondDag([passingGuardEntry('a')]), defaultDeps());
 
     expect(snap.milestones['a']?.status).toBe('complete');
-    expect(snap.milestones['a']?.eligible).toBe(true); // D-07 doesn't check own status
+    // DEBT-DISPATCH-013: a complete milestone must never read eligible: true
+    // — it has nothing left to dispatch. Previously D-07 only checked
+    // pending/deps and never its own status, so a completed milestone read
+    // eligible: true forever (same root cause as BUG-DISPATCH-008).
+    expect(snap.milestones['a']?.eligible).toBe(false);
 
     expect(snap.milestones['b']?.eligible).toBe(true);
     expect(snap.milestones['b']?.status).toBe('pending');

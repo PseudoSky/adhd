@@ -21,6 +21,8 @@ import * as path from 'node:path';
 import type {
   DagJson,
   DispatchLogEntry,
+  ICalibrationStore,
+  IOptimizerDeps,
   MilestoneDag,
   OperationDag,
   ProviderConfig,
@@ -36,9 +38,11 @@ import type {
   RealUsageTurn,
 } from '../lib/agent-runner.js';
 import {
+  DEFAULT_B_PER_TIER,
   orchestrate,
   orchestrateCycle,
   type CycleResult,
+  type IOptimizerLike,
   type OrchestratorDeps,
 } from '../lib/orchestrator.js';
 
@@ -989,4 +993,76 @@ describe('orchestrateCycle — uncaught dispatch failure persistence (DEBT-DISPA
       expect(entry.results.some((r) => r.status === 'failed')).toBe(true);
     }
   );
+});
+
+// ---------------------------------------------------------------------------
+// (DEBT-DISPATCH-018) ICalibrationStore wiring
+// ---------------------------------------------------------------------------
+
+describe('orchestrateCycle — ICalibrationStore wiring (DEBT-DISPATCH-018)', () => {
+  it(
+    "a supplied calibration store's persisted per-tier B values are merged " +
+      'over DEFAULT_B_PER_TIER and reach the REAL optimizer.snapshot()/optimize() ' +
+      "call -- not just accepted and ignored, per this item's original complaint",
+    async () => {
+      const dag = makeDag({ milestones: { a: makeMilestone({ model: 'Sonnet' }) } });
+      const { deps } = await setupScenario('calibration-wiring', dag);
+
+      // Deliberately far from DEFAULT_B_PER_TIER.Sonnet so a passthrough bug
+      // (cold-start default reaching the optimizer unchanged) cannot pass by
+      // coincidence.
+      const calibration: ICalibrationStore = {
+        read: () => ({ Sonnet: 99999 }),
+      };
+
+      // Instrumented pass-through: still calls the REAL snapshot()/optimize()
+      // from @adhd/dispatch-core-optimizer (this is the exact IOptimizerLike
+      // seam OrchestratorDeps documents as swappable for tests) -- it only
+      // additionally captures the IOptimizerDeps orchestrateCycle actually
+      // constructed and passed through resolveDeps(), which is the thing
+      // under test.
+      let capturedBPerTier: IOptimizerDeps['bPerTier'] | null = null;
+      const instrumentedOptimizer: IOptimizerLike = {
+        snapshot: (dagArg, optDeps) => {
+          capturedBPerTier = optDeps.bPerTier;
+          return snapshot(dagArg, optDeps);
+        },
+        optimize,
+      };
+
+      const result = await orchestrateCycle({
+        ...deps,
+        optimizer: instrumentedOptimizer,
+        calibration,
+      });
+
+      expect(result.terminal).toBe(false);
+      expect(capturedBPerTier).not.toBeNull();
+      // Calibrated tier wins over the cold-start default.
+      expect(capturedBPerTier?.['Sonnet']).toBe(99999);
+      // A tier absent from the calibration store keeps its cold-start default
+      // (merge, not replace).
+      expect(capturedBPerTier?.['Haiku']).toBe(DEFAULT_B_PER_TIER['Haiku']);
+    }
+  );
+
+  it('with no calibration store supplied, DEFAULT_B_PER_TIER reaches the optimizer unchanged', async () => {
+    const dag = makeDag({ milestones: { a: makeMilestone({ model: 'Sonnet' }) } });
+    const { deps } = await setupScenario('calibration-wiring-absent', dag);
+
+    let capturedBPerTier: IOptimizerDeps['bPerTier'] | null = null;
+    const instrumentedOptimizer: IOptimizerLike = {
+      snapshot: (dagArg, optDeps) => {
+        capturedBPerTier = optDeps.bPerTier;
+        return snapshot(dagArg, optDeps);
+      },
+      optimize,
+    };
+
+    await orchestrateCycle({ ...deps, optimizer: instrumentedOptimizer });
+
+    expect(capturedBPerTier).not.toBeNull();
+    expect(capturedBPerTier?.['Sonnet']).toBe(DEFAULT_B_PER_TIER['Sonnet']);
+    expect(capturedBPerTier?.['Haiku']).toBe(DEFAULT_B_PER_TIER['Haiku']);
+  });
 });

@@ -675,3 +675,16 @@ export interface IOptimizerDeps {
   readFiles?: (paths: string[]) => Map<string, string>;
   dispatchLog?: DispatchLogEntry[];
 }
+
+/**
+ * B-calibration store contract (SCOPE.md §C4 / §Open Decisions #2 —
+ * `~/.adhd/dispatch-calibration.json`). Formalizes what was previously a
+ * dispatch-orchestrator-local `ICalibrationPlaceholder` (DEBT-DISPATCH-018):
+ * read-only access to whatever calibrated per-tier B values a calibration
+ * utility has persisted. Deliberately minimal — a single `read()` accessor —
+ * so any storage backend (JSON file, DB, in-memory fixture) can implement it
+ * without dispatch-orchestrator depending on the storage mechanism.
+ */
+export interface ICalibrationStore {
+  read(): Promise<Record<string, number>> | Record<string, number>;
+}
