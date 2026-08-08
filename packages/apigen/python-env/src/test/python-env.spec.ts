@@ -24,6 +24,48 @@ describe('resolvePythonPkgDir', () => {
   })
 })
 
+// DEBT-APIGEN-010 regression: when BOTH the monorepo-relative primary source
+// and a co-located `dist/python` copy exist (i.e. running inside the
+// monorepo, built once and then edited without rebuilding — exactly what
+// `npx vitest run` does since it bypasses the `test` target's
+// `dependsOn: ["build"]`), the LIVE monorepo source must win, never the
+// point-in-time dist copy. Entirely synthetic fixtures under os.tmpdir() —
+// no dependency on the real repo tree's current build state — so this
+// exercises the real resolution logic (no mocks) while staying deterministic.
+describe('resolvePythonPkgDir — live source vs. stale dist copy (DEBT-APIGEN-010)', () => {
+  let tmpRoot: string
+  let base: string // the synthetic "from dir", analogous to dist/lib
+  let primaryDir: string // base/../../../python — live monorepo source
+  let coLocatedDir: string // base/python — stale dist copy
+
+  beforeAll(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'apigen-python-env-debt010-'))
+    base = path.join(tmpRoot, 'pkgdir', 'dist', 'lib')
+    fs.mkdirSync(base, { recursive: true })
+
+    primaryDir = path.resolve(base, '..', '..', '..', 'python')
+    fs.mkdirSync(path.join(primaryDir, 'apigen_python'), { recursive: true })
+    fs.writeFileSync(path.join(primaryDir, 'apigen_python', '__init__.py'), '# LIVE SOURCE\n')
+    fs.writeFileSync(path.join(primaryDir, 'MARKER.txt'), 'live')
+
+    coLocatedDir = path.join(base, 'python')
+    fs.mkdirSync(path.join(coLocatedDir, 'apigen_python'), { recursive: true })
+    fs.writeFileSync(path.join(coLocatedDir, 'apigen_python', '__init__.py'), '# STALE DIST COPY\n')
+    fs.writeFileSync(path.join(coLocatedDir, 'MARKER.txt'), 'stale-dist')
+  })
+
+  afterAll(() => {
+    fs.rmSync(tmpRoot, { recursive: true, force: true })
+  })
+
+  it('resolves the live monorepo source, not the stale co-located dist copy, when both exist', () => {
+    const resolved = resolvePythonPkgDir(base)
+    expect(resolved).toBe(primaryDir)
+    expect(resolved).not.toBe(coLocatedDir)
+    expect(fs.readFileSync(path.join(resolved, 'MARKER.txt'), 'utf8')).toBe('live')
+  })
+})
+
 // Regression: resolvePythonPkgDir() must resolve the SHIPPED, co-located
 // `apigen_python` copy for a consumer installed from npm OUTSIDE this
 // monorepo — where __dirname is `node_modules/@adhd/apigen-python-env/dist`
