@@ -307,6 +307,72 @@ describe("agent-mcp real env singleton (config.ts) — end-to-end through the re
     }
   });
 
+  it("(test 5) DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001: even with ADHD_ENV_SCOPE=project (this repo's own .mcp.json setting, and this worktree has real .git/.adhd markers), the operational DB never resolves inside the repo tree — dirs.data's pinned scope:'global' wins", async () => {
+    const tmpHome = mkTmpHome();
+    process.env.HOME = tmpHome;
+    // This is the exact override `.mcp.json`'s `agent-mcp` entry sets. cwd
+    // during a vitest run IS this repo root, which has both `.git` and
+    // `.adhd` markers, so `resolveScope()` would otherwise honor `'project'`
+    // literally and root `dirs.data` under `<REPO_ROOT>/.adhd/agent-mcp/
+    // production/data/` — reproducing the bug this test guards against.
+    process.env.ADHD_ENV_SCOPE = "project";
+    delete process.env.ADHD_AGENT_REGISTRY_DB_PATH;
+    delete process.env.ADHD_AGENT_DATABASE_PATH;
+    vi.resetModules();
+
+    const repoDataDirBefore = snapshotRepoDataDir();
+    // This exact path is the bug's historical target: a real, resident
+    // `.adhd/agent-mcp/production/data/agents.db` may already exist in this
+    // developer's checkout from before this fix (or from an older resident
+    // agent-mcp process independent of this test run) — see
+    // DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001's backlog note. So — same
+    // reasoning as `snapshotRepoDataDir()`'s delta check below — this can
+    // only be proven as a DELTA (this test adds nothing new there), never
+    // an absolute `existsSync(...) === false`.
+    const projectScopedDbPath = join(REPO_ROOT, ".adhd", "agent-mcp", "production", "data", "agents.db");
+    const projectScopedDbExistedBefore = existsSync(projectScopedDbPath);
+    const projectScopedDbMtimeBefore = projectScopedDbExistedBefore ? statSync(projectScopedDbPath).mtimeMs : null;
+
+    const { env } = await import("../../config.js");
+
+    // The active scope IS 'project' (the override is honored) — this test
+    // is not about disabling project scope, only about `dirs.data` not
+    // inheriting it.
+    expect(env.scope).toBe("project");
+
+    const dbPath = env.files.db;
+    expect(dbPath.startsWith(tmpHome)).toBe(true);
+    expect(dbPath).not.toBe("./data/agents.db");
+    expect(dbPath.endsWith(join("data", "agents.db"))).toBe(true);
+    // The bug this test proves fixed: under explicit ADHD_ENV_SCOPE=project
+    // in a real project-marker'd worktree, the DB must still NOT land under
+    // the repo's `.adhd/` project-scope root.
+    expect(dbPath.startsWith(join(REPO_ROOT, ".adhd"))).toBe(false);
+    expect(dbPath.startsWith(join(REPO_ROOT, "data"))).toBe(false);
+
+    env.ensureDirs();
+    expect(existsSync(env.paths.data)).toBe(true);
+    expect(env.paths.data.startsWith(tmpHome)).toBe(true);
+
+    const repoDataDirAfter = snapshotRepoDataDir();
+    if (repoDataDirBefore === null) {
+      expect(existsSync(join(REPO_ROOT, "data"))).toBe(false);
+    } else {
+      expect(repoDataDirAfter).toEqual(repoDataDirBefore);
+    }
+    // Also prove nothing NEW was written under this repo's real
+    // `.adhd/agent-mcp/` project-scope subtree either — the specific path
+    // the bug used to write to. Delta check (see comment above): if the
+    // file pre-existed, its mtime must be unchanged; if it didn't, it must
+    // still not exist.
+    if (projectScopedDbExistedBefore) {
+      expect(existsSync(projectScopedDbPath)).toBe(true);
+      expect(statSync(projectScopedDbPath).mtimeMs).toBe(projectScopedDbMtimeBefore);
+    } else {
+      expect(existsSync(projectScopedDbPath)).toBe(false);
+    }
+  });
+
   it("(test 4) documents the REAL isEnvNameAllowed prefix-only allowlist behavior (ADHD_AGENT_* only — the G1 gap is real and unfixed here, out of scope)", async () => {
     const tmpHome = mkTmpHome();
     process.env.HOME = tmpHome;
