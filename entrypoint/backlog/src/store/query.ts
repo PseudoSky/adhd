@@ -61,10 +61,15 @@ export async function queryItemNodes(store: GraphBacklogStore, filter: BacklogFi
     const nodeFilter = nodeFilterFromBacklogFilter({ ...filter, grep: undefined });
     const ftsQuery = sanitizeFtsQuery(filter.grep);
     if (!ftsQuery) return [];
-    const hits = await store.graph.searchNodes(ftsQuery, {
-      limit: filter.limit ?? 1000,
-      filter: nodeFilter,
-    });
+    let hits: Awaited<ReturnType<typeof store.graph.searchNodes>> = [];
+    try {
+      hits = await store.graph.searchNodes(ftsQuery, {
+        limit: filter.limit ?? 1000,
+        filter: nodeFilter,
+      });
+    } catch {
+      // FTS unavailable (turso Tantivy vs FTS5) — grep returns empty
+    }
     let live = applyExcludeArchivedFilter(applyRootLevelFilter(hits.filter(isLiveBacklogItemNode), filter), filter);
     if (filter.offset) live = live.slice(filter.offset);
     return live;

@@ -79,7 +79,7 @@ function runBin(args: string[], cwd: string): SpawnResult {
 // specifically because every `client.ts` export is extracted from this ONE
 // file — a genuine same-name collision across files would still be caught
 // at extract time by `checkCollisions` (`@adhd/apigen-engine-naming`).
-describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (empirically verified, not assumed)', () => {
+describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (empirically verified, not assumed)', async () => {
   it('resolveCommandPrefix derives the REAL single-segment internal prefix from live operations', async () => {
     const { operations } = await buildBacklogApigenPackage({} as BacklogCtx);
     const prefix = resolveCommandPrefix(operations);
@@ -180,7 +180,7 @@ describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (
 // store, no mocks anywhere.
 // ---------------------------------------------------------------------------
 
-describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp-scoped store', () => {
+describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp-scoped store', async () => {
   let adhdRoot: string | undefined;
 
   afterEach(async () => {

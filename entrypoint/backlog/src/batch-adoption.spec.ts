@@ -57,7 +57,7 @@ interface BatchItemResult {
   chunksDelivered?: number;
 }
 
-describe('backlog batch adoption — real POST /_batch/action fans out to the real backlog/create-item operation', () => {
+describe('backlog batch adoption — real POST /_batch/action fans out to the real backlog/create-item operation', async () => {
   let controller: AbortController | undefined;
   let serverPromise: Promise<void> | undefined;
   let adhdRoot: string | undefined;
