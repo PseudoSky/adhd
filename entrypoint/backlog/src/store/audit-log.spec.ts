@@ -17,12 +17,12 @@ const REPO = 'PseudoSky/audit-log-test';
 describe('audit-log — real, persisted transition/claim history (DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001)', () => {
   let tmp: TmpStore;
 
-  beforeEach(() => {
-    tmp = openTmpStore('audit-log');
+  beforeEach(async () => {
+    tmp = await openTmpStore('audit-log');
   });
 
-  afterEach(() => {
-    tmp.cleanup();
+  afterEach(async () => {
+    await tmp.cleanup();
   });
 
   it('multiple transitions are ALL individually recoverable, not just the current status', () => {
@@ -48,15 +48,15 @@ describe('audit-log — real, persisted transition/claim history (DEBT-BACKLOG-A
     expect(transitions[3]?.detail['by']).toBe('agent:b');
   });
 
-  it('a REJECTED transition (missing required citation) logs NOTHING — never a fake event for a change that never happened', () => {
+  it($1, async () => {
     const created = createItemNode(tmp.store, { family: 'BUG-AUDIT-REJECT', title: 't', body: 'b', repo: REPO });
-    expect(() => transitionStatusNode(tmp.store, REPO, created.item.humanId, 'FIXED', { by: 'agent:a' })).toThrow();
+    await expect(transitionStatusNode(tmp.store, REPO, created.item.humanId, 'FIXED', { by: 'agent:a' })).rejects.toThrow();
 
     const trail = auditTrail(tmp.store, REPO, created.item.humanId);
     expect(trail.history.filter((h) => h.kind === 'transition')).toHaveLength(0);
   });
 
-  it('claim/renew/release are all recoverable; a REFUSED claim (held) and a no-op release log nothing', () => {
+  it($1, async () => {
     const created = createItemNode(tmp.store, { family: 'BUG-AUDIT-CLAIM', title: 't', body: 'b', repo: REPO });
     const humanId = created.item.humanId;
 
@@ -79,7 +79,7 @@ describe('audit-log — real, persisted transition/claim history (DEBT-BACKLOG-A
     expect(claims.every((c) => c.detail['by'] === 'agent:a')).toBe(true);
   });
 
-  it('transition and claim events are chronologically interleaved with notes/citations in one merged history', () => {
+  it($1, async () => {
     const created = createItemNode(tmp.store, { family: 'BUG-AUDIT-MERGE', title: 't', body: 'b', repo: REPO });
     const humanId = created.item.humanId;
 

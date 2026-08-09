@@ -43,36 +43,36 @@ const REPO = 'PseudoSky/required-field-validation-test';
 describe('CreateItemInput.title/body/repo — non-empty guard (mirrors the existing family guard)', () => {
   let tmp: TmpStore;
 
-  beforeEach(() => {
-    tmp = openTmpStore('required-field-validation-spec-create');
+  beforeEach(async () => {
+    tmp = await openTmpStore('required-field-validation-spec-create');
   });
 
-  afterEach(() => {
-    tmp.cleanup();
+  afterEach(async () => {
+    await tmp.cleanup();
   });
 
-  it('rejects an empty-string title', () => {
-    expect(() => createItemNode(tmp.store, { family: 'BUG-RFV', title: '', body: 'b', repo: REPO })).toThrow(InvalidArgumentError);
+  it($1, async () => {
+    await expect(createItemNode(tmp.store, { family: 'BUG-RFV', title: '', body: 'b', repo: REPO })).rejects.toThrow(InvalidArgumentError);
   });
 
-  it('rejects a whitespace-only title', () => {
-    expect(() => createItemNode(tmp.store, { family: 'BUG-RFV', title: '   ', body: 'b', repo: REPO })).toThrow(InvalidArgumentError);
+  it($1, async () => {
+    await expect(createItemNode(tmp.store, { family: 'BUG-RFV', title: '   ', body: 'b', repo: REPO })).rejects.toThrow(InvalidArgumentError);
   });
 
-  it('rejects an empty-string body', () => {
-    expect(() => createItemNode(tmp.store, { family: 'BUG-RFV', title: 't', body: '', repo: REPO })).toThrow(InvalidArgumentError);
+  it($1, async () => {
+    await expect(createItemNode(tmp.store, { family: 'BUG-RFV', title: 't', body: '', repo: REPO })).rejects.toThrow(InvalidArgumentError);
   });
 
-  it('rejects a whitespace-only body', () => {
-    expect(() => createItemNode(tmp.store, { family: 'BUG-RFV', title: 't', body: '  \n  ', repo: REPO })).toThrow(InvalidArgumentError);
+  it($1, async () => {
+    await expect(createItemNode(tmp.store, { family: 'BUG-RFV', title: 't', body: '  \n  ', repo: REPO })).rejects.toThrow(InvalidArgumentError);
   });
 
-  it('rejects an empty-string repo', () => {
-    expect(() => createItemNode(tmp.store, { family: 'BUG-RFV', title: 't', body: 'b', repo: '' })).toThrow(InvalidArgumentError);
+  it($1, async () => {
+    await expect(createItemNode(tmp.store, { family: 'BUG-RFV', title: 't', body: 'b', repo: '' })).rejects.toThrow(InvalidArgumentError);
   });
 
-  it('rejects a whitespace-only repo', () => {
-    expect(() => createItemNode(tmp.store, { family: 'BUG-RFV', title: 't', body: 'b', repo: '   ' })).toThrow(InvalidArgumentError);
+  it($1, async () => {
+    await expect(createItemNode(tmp.store, { family: 'BUG-RFV', title: 't', body: 'b', repo: '   ' })).rejects.toThrow(InvalidArgumentError);
   });
 
   it('a normal, valid title/body/repo still creates successfully — unaffected by the guard', () => {
@@ -87,32 +87,32 @@ describe('CreateItemInput.title/body/repo — non-empty guard (mirrors the exist
 describe('Citation.file — non-empty guard on every citation write path', () => {
   let tmp: TmpStore;
 
-  beforeEach(() => {
-    tmp = openTmpStore('required-field-validation-spec-citation');
+  beforeEach(async () => {
+    tmp = await openTmpStore('required-field-validation-spec-citation');
   });
 
-  afterEach(() => {
-    tmp.cleanup();
+  afterEach(async () => {
+    await tmp.cleanup();
   });
 
-  it('addCitation rejects a citation with an empty-string file', () => {
+  it($1, async () => {
     const created = createItemNode(tmp.store, { family: 'BUG-RFV', title: 't', body: 'b', repo: REPO });
-    expect(() => addCitationNode(tmp.store, REPO, created.item.humanId, { file: '' })).toThrow(InvalidArgumentError);
+    await expect(addCitationNode(tmp.store, REPO, created.item.humanId, { file: '' })).rejects.toThrow(InvalidArgumentError);
   });
 
-  it('addCitation rejects a citation with a whitespace-only file', () => {
+  it($1, async () => {
     const created = createItemNode(tmp.store, { family: 'BUG-RFV', title: 't', body: 'b', repo: REPO });
-    expect(() => addCitationNode(tmp.store, REPO, created.item.humanId, { file: '   ' })).toThrow(InvalidArgumentError);
+    await expect(addCitationNode(tmp.store, REPO, created.item.humanId, { file: '   ' })).rejects.toThrow(InvalidArgumentError);
   });
 
-  it('addCitation with an empty file never persists a partial write', () => {
+  it($1, async () => {
     const created = createItemNode(tmp.store, { family: 'BUG-RFV', title: 't', body: 'b', repo: REPO });
-    expect(() => addCitationNode(tmp.store, REPO, created.item.humanId, { file: '' })).toThrow();
+    await expect(addCitationNode(tmp.store, REPO, created.item.humanId, { file: '' })).rejects.toThrow();
     const node = tmp.store.graph.getNode(created.item.nodeId);
     expect((node?.metadata as { citations?: unknown[] } | undefined)?.citations).toHaveLength(0);
   });
 
-  it('transitionStatus rejects an inline terminal-status citation with an empty file', () => {
+  it($1, async () => {
     const created = createItemNode(tmp.store, { family: 'BUG-RFV', title: 't', body: 'b', repo: REPO });
     expect(() =>
       transitionStatusNode(tmp.store, REPO, created.item.humanId, 'FIXED', {
@@ -136,22 +136,22 @@ describe('Citation.file — non-empty guard on every citation write path', () =>
 describe('terminal-status citations gate — an explicit empty array is NOT satisfied', () => {
   let tmp: TmpStore;
 
-  beforeEach(() => {
-    tmp = openTmpStore('required-field-validation-spec-empty-citations');
+  beforeEach(async () => {
+    tmp = await openTmpStore('required-field-validation-spec-empty-citations');
   });
 
-  afterEach(() => {
-    tmp.cleanup();
+  afterEach(async () => {
+    await tmp.cleanup();
   });
 
-  it('rejects a transition into FIXED with an explicit empty citations array (not just an absent one)', () => {
+  it($1, async () => {
     const created = createItemNode(tmp.store, { family: 'BUG-RFV', title: 't', body: 'b', repo: REPO });
     expect(() =>
       transitionStatusNode(tmp.store, REPO, created.item.humanId, 'FIXED', { by: 'implementer:x', citations: [] })
     ).toThrow(CitationRequiredError);
   });
 
-  it('rejects a transition into MITIGATED with an explicit empty citations array', () => {
+  it($1, async () => {
     const created = createItemNode(tmp.store, { family: 'BUG-RFV', title: 't', body: 'b', repo: REPO });
     expect(() =>
       transitionStatusNode(tmp.store, REPO, created.item.humanId, 'MITIGATED', { by: 'implementer:x', citations: [] })
@@ -162,15 +162,15 @@ describe('terminal-status citations gate — an explicit empty array is NOT sati
 describe('TransitionOpts.reason (terminal-dismissed) — rejects whitespace-only, not just absent', () => {
   let tmp: TmpStore;
 
-  beforeEach(() => {
-    tmp = openTmpStore('required-field-validation-spec-reason');
+  beforeEach(async () => {
+    tmp = await openTmpStore('required-field-validation-spec-reason');
   });
 
-  afterEach(() => {
-    tmp.cleanup();
+  afterEach(async () => {
+    await tmp.cleanup();
   });
 
-  it('rejects a transition into WONTFIX with a whitespace-only reason', () => {
+  it($1, async () => {
     const created = createItemNode(tmp.store, { family: 'BUG-RFV', title: 't', body: 'b', repo: REPO });
     expect(() =>
       transitionStatusNode(tmp.store, REPO, created.item.humanId, 'WONTFIX', { by: 'implementer:x', reason: '   ' })
@@ -190,22 +190,22 @@ describe('TransitionOpts.reason (terminal-dismissed) — rejects whitespace-only
 describe('softDeleteItem/supersedeItem/mergeItems — reason non-empty guard', () => {
   let tmp: TmpStore;
 
-  beforeEach(() => {
-    tmp = openTmpStore('required-field-validation-spec-plain-reason');
+  beforeEach(async () => {
+    tmp = await openTmpStore('required-field-validation-spec-plain-reason');
   });
 
-  afterEach(() => {
-    tmp.cleanup();
+  afterEach(async () => {
+    await tmp.cleanup();
   });
 
-  it('softDeleteItem rejects an empty-string reason', () => {
+  it($1, async () => {
     const created = createItemNode(tmp.store, { family: 'BUG-RFV', title: 't', body: 'b', repo: REPO });
-    expect(() => softDeleteItemNode(tmp.store, REPO, created.item.humanId, '')).toThrow(InvalidArgumentError);
+    await expect(softDeleteItemNode(tmp.store, REPO, created.item.humanId, '')).rejects.toThrow(InvalidArgumentError);
   });
 
-  it('softDeleteItem rejects a whitespace-only reason', () => {
+  it($1, async () => {
     const created = createItemNode(tmp.store, { family: 'BUG-RFV', title: 't', body: 'b', repo: REPO });
-    expect(() => softDeleteItemNode(tmp.store, REPO, created.item.humanId, '   ')).toThrow(InvalidArgumentError);
+    await expect(softDeleteItemNode(tmp.store, REPO, created.item.humanId, '   ')).rejects.toThrow(InvalidArgumentError);
   });
 
   it('softDeleteItem accepts a real reason, as before', () => {
@@ -213,14 +213,14 @@ describe('softDeleteItem/supersedeItem/mergeItems — reason non-empty guard', (
     expect(() => softDeleteItemNode(tmp.store, REPO, created.item.humanId, 'no longer relevant')).not.toThrow();
   });
 
-  it('supersedeItem rejects an empty-string reason', () => {
+  it($1, async () => {
     const created = createItemNode(tmp.store, { family: 'BUG-RFV', title: 'old', body: 'b', repo: REPO });
     expect(() =>
       supersedeItemNode(tmp.store, REPO, created.item.humanId, { family: 'BUG-RFV', title: 'new', body: 'b2', repo: REPO }, '')
     ).toThrow(InvalidArgumentError);
   });
 
-  it('supersedeItem rejects a whitespace-only reason', () => {
+  it($1, async () => {
     const created = createItemNode(tmp.store, { family: 'BUG-RFV', title: 'old', body: 'b', repo: REPO });
     expect(() =>
       supersedeItemNode(tmp.store, REPO, created.item.humanId, { family: 'BUG-RFV', title: 'new', body: 'b2', repo: REPO }, '  ')
@@ -239,16 +239,16 @@ describe('softDeleteItem/supersedeItem/mergeItems — reason non-empty guard', (
     expect(replacement.title).toBe('new');
   });
 
-  it('mergeItems rejects an empty-string reason', () => {
+  it($1, async () => {
     const keep = createItemNode(tmp.store, { family: 'BUG-RFV', title: 'keep', body: 'b', repo: REPO });
     const drop = createItemNode(tmp.store, { family: 'BUG-RFV', title: 'drop', body: 'b', repo: REPO });
-    expect(() => mergeItemsNode(tmp.store, REPO, keep.item.humanId, drop.item.humanId, '')).toThrow(InvalidArgumentError);
+    await expect(mergeItemsNode(tmp.store, REPO, keep.item.humanId, drop.item.humanId, '')).rejects.toThrow(InvalidArgumentError);
   });
 
-  it('mergeItems rejects a whitespace-only reason', () => {
+  it($1, async () => {
     const keep = createItemNode(tmp.store, { family: 'BUG-RFV', title: 'keep', body: 'b', repo: REPO });
     const drop = createItemNode(tmp.store, { family: 'BUG-RFV', title: 'drop', body: 'b', repo: REPO });
-    expect(() => mergeItemsNode(tmp.store, REPO, keep.item.humanId, drop.item.humanId, '   ')).toThrow(InvalidArgumentError);
+    await expect(mergeItemsNode(tmp.store, REPO, keep.item.humanId, drop.item.humanId, '   ')).rejects.toThrow(InvalidArgumentError);
   });
 
   it('mergeItems accepts a real reason, as before', () => {

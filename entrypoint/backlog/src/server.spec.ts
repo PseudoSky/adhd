@@ -68,7 +68,7 @@ describe('startBacklogServer — live HTTP mount, real fetch, no mocked fns', ()
     // GraphBacklogStore of its own) can open it exclusively.
     const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
     seedEnv.ensureDirs();
-    const seedStore = openGraphBacklogStore(seedEnv.files.db);
+    const seedStore = await openGraphBacklogStore(seedEnv.files.db);
     const seeded = await createItem({ store: seedStore, env: seedEnv }, { family: 'BUG-HTTP', title: 'via http', body: 'x', repo });
     closeGraphBacklogStore(seedStore);
 

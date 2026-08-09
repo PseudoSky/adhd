@@ -32,12 +32,12 @@ let tmp: TmpStore;
 let ctx: BacklogCtx;
 
 beforeEach(() => {
-  tmp = openTmpStore('repo-lookup-ux-spec');
+  tmp = await openTmpStore('repo-lookup-ux-spec');
   ctx = { store: tmp.store, env: buildBacklogEnv({ scope: 'project', adhdRoot: tmp.dir }) };
 });
 
 afterEach(() => {
-  tmp.cleanup();
+  await tmp.cleanup();
 });
 
 describe('read-time: helpful hint on a repo/humanId mismatch', () => {
