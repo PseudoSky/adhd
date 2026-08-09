@@ -15,11 +15,11 @@ import { install, runInstallCommand, upsertTomlTable, BACKLOG_MCP_NPX_ARGS, INST
 describe('install --mcp-only (BUG-013)', () => {
   let tmp: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tmp = mkdtempSync(join(tmpdir(), 'backlog-install-mcp-'));
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 

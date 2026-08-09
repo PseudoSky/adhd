@@ -18,12 +18,12 @@ let tmp: TmpStore;
 let ctx: BacklogCtx;
 
 beforeEach(() => {
-  tmp = openTmpStore('client-spec');
+  tmp = await openTmpStore('client-spec');
   ctx = { store: tmp.store, env: buildBacklogEnv({ scope: 'project', adhdRoot: tmp.dir }) };
 });
 
 afterEach(() => {
-  tmp.cleanup();
+  await tmp.cleanup();
 });
 
 const REPO = 'PseudoSky/backlog-test';

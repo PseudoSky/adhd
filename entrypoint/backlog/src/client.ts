@@ -70,9 +70,9 @@ export interface BacklogCtx {
   adhdRoot?: string;
 }
 
-function requireItem(ctx: BacklogCtx, repo: string, humanId: string): BacklogItem {
-  const item = getItemNode(ctx.store, repo, humanId);
-  if (!item) throw buildNotFoundError(ctx.store, repo, humanId);
+async function requireItem(ctx: BacklogCtx, repo: string, humanId: string): Promise<BacklogItem> {
+  const item = await getItemNode(ctx.store, repo, humanId);
+  if (!item) throw await buildNotFoundError(ctx.store, repo, humanId);
   return item;
 }
 
@@ -86,7 +86,7 @@ function requireItem(ctx: BacklogCtx, repo: string, humanId: string): BacklogIte
  * idOverride is given.
  */
 export async function createItem(ctx: BacklogCtx, input: CreateItemInput): Promise<CreateItemResult> {
-  return createItemNode(ctx.store, input);
+  return await createItemNode(ctx.store, input);
 }
 
 /**
@@ -107,24 +107,24 @@ export async function createItem(ctx: BacklogCtx, input: CreateItemInput): Promi
  * mutating lookups already throw, instead of masquerading as "not found".
  */
 export async function getItem(ctx: BacklogCtx, repo: string, humanId: string): Promise<BacklogItem | null> {
-  const item = getItemNode(ctx.store, repo, humanId);
+  const item = await getItemNode(ctx.store, repo, humanId);
   if (item) return item;
-  const notFound = buildNotFoundError(ctx.store, repo, humanId);
+  const notFound = await buildNotFoundError(ctx.store, repo, humanId);
   if (notFound.foundInRepos.length > 0) throw notFound;
   return null;
 }
 
 export async function updateItem(ctx: BacklogCtx, repo: string, humanId: string, patch: UpdateItemInput): Promise<BacklogItem> {
-  return updateItemNode(ctx.store, repo, humanId, patch);
+  return await updateItemNode(ctx.store, repo, humanId, patch);
 }
 
 export async function listItems(ctx: BacklogCtx, filter?: BacklogFilter): Promise<BacklogItem[]> {
-  return listItemsNode(ctx.store, filter ?? {});
+  return await listItemsNode(ctx.store, filter ?? {});
 }
 
 /** Invalidates the node (bi-temporal — never a hard delete). */
 export async function softDeleteItem(ctx: BacklogCtx, repo: string, humanId: string, reason: string): Promise<void> {
-  softDeleteItemNode(ctx.store, repo, humanId, reason);
+  await softDeleteItemNode(ctx.store, repo, humanId, reason);
 }
 
 // ============================================================================
@@ -132,7 +132,7 @@ export async function softDeleteItem(ctx: BacklogCtx, repo: string, humanId: str
 // ============================================================================
 
 export async function stats(ctx: BacklogCtx, scope?: StatsScope): Promise<BacklogStats> {
-  return computeStats(ctx.store, scope ?? {});
+  return await computeStats(ctx.store, scope ?? {});
 }
 
 /** Open + prioritized, most-severe first. */
@@ -168,19 +168,19 @@ export async function staleClaims(ctx: BacklogCtx, maxAgeMin: number, scope?: St
 // ============================================================================
 
 export async function claimItem(ctx: BacklogCtx, repo: string, humanId: string, by: string, opts?: ClaimOpts): Promise<ClaimResult> {
-  const node = requireItem(ctx, repo, humanId);
-  return claimItemNode(ctx.store, node.nodeId, by, opts ?? {});
+  const node = await requireItem(ctx, repo, humanId);
+  return await claimItemNode(ctx.store, node.nodeId, by, opts ?? {});
 }
 
 /** Same-claimant renewal — always succeeds (bumps claimedAt), no contention check. */
 export async function renewClaim(ctx: BacklogCtx, repo: string, humanId: string, by: string): Promise<ClaimResult> {
-  const node = requireItem(ctx, repo, humanId);
-  return renewClaimNode(ctx.store, node.nodeId, by);
+  const node = await requireItem(ctx, repo, humanId);
+  return await renewClaimNode(ctx.store, node.nodeId, by);
 }
 
 export async function releaseClaim(ctx: BacklogCtx, repo: string, humanId: string, by: string, opts?: { force?: boolean }): Promise<ReleaseResult> {
-  const node = requireItem(ctx, repo, humanId);
-  return releaseClaimNode(ctx.store, node.nodeId, by, opts ?? {});
+  const node = await requireItem(ctx, repo, humanId);
+  return await releaseClaimNode(ctx.store, node.nodeId, by, opts ?? {});
 }
 
 /** Durable ownership (planner decision) — distinct from the ephemeral claim lease. */
@@ -220,7 +220,7 @@ export async function resolveItem(ctx: BacklogCtx, repo: string, humanId: string
  * excludes them — the graph node itself is NEVER deleted.
  */
 export async function archiveResolved(ctx: BacklogCtx, scope: StatsScope, opts?: ArchiveOpts): Promise<ArchiveResult> {
-  const archived = archiveTerminalItems(ctx.store, scope, opts ?? {});
+  const archived = await archiveTerminalItems(ctx.store, scope, opts ?? {});
   const changelogMarkdown = archived.length > 0 ? buildChangelogSection(archived, new Date().toISOString().slice(0, 10)) : '';
   return { archivedCount: archived.length, changelogMarkdown };
 }
@@ -281,7 +281,7 @@ export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownI
   // BUG-BACKLOG-REPO-LOOKUP-UX-001 (write-time half): same soft, non-blocking
   // check `createItemNode` runs per item — computed ONCE here since the whole
   // import shares one `input.repo`, not per item.
-  const known = knownRepos(ctx.store);
+  const known = await knownRepos(ctx.store);
   const repoWarning =
     known.size > 0 && !known.has(input.repo)
       ? `repo '${input.repo}' is new to this store — existing repo value(s) here: ${[...known].sort().join(', ')}. If this is meant to be the same project, use the existing repo value instead.`
@@ -292,7 +292,7 @@ export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownI
 
   for (const item of items) {
     try {
-      const created = createItemNode(ctx.store, {
+      const created = await createItemNode(ctx.store, {
         family: item.humanId.replace(/-\d+$/, ''),
         idOverride: item.humanId,
         title: item.title,
@@ -309,7 +309,7 @@ export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownI
         // (createItemNode's `plan` above only stamps the `metadata.plan`
         // field) — both are needed for `renderToMarkdown({plan})`'s
         // filtered-projection scope model (MIGRATION.md §2.2).
-        attachToPlanNode(ctx.store, input.repo, item.humanId, input.plan);
+        await attachToPlanNode(ctx.store, input.repo, item.humanId, input.plan);
       }
       if (created.created && item.status !== 'OPEN') {
         // createItem always starts OPEN (SPEC.md §4.2 rule 1) — apply the
@@ -318,7 +318,7 @@ export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownI
         // evidence the status-vocabulary gate actually requires (SPEC.md
         // §4.2 rule 3) — an imported OPEN/IN_PROGRESS/BLOCKED/... item needs
         // neither.
-        transitionStatusNode(ctx.store, input.repo, item.humanId, item.status, {
+        await transitionStatusNode(ctx.store, input.repo, item.humanId, item.status, {
           by: 'system:importFromMarkdown',
           ...(requiresCitation(item.status) ? { citations: [{ file: input.path }] } : {}),
           ...(requiresReason(item.status) ? { reason: `imported from markdown at status ${item.status}` } : {}),
@@ -389,17 +389,17 @@ export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownI
           patch.projectPath = input.projectPath;
         }
         if (Object.keys(patch).length > 0) {
-          updateItemNode(ctx.store, input.repo, item.humanId, patch);
+          await updateItemNode(ctx.store, input.repo, item.humanId, patch);
           changed = true;
         }
 
         if (item.priority !== undefined && existing.priority !== item.priority) {
-          setPriorityNode(ctx.store, input.repo, item.humanId, item.priority);
+          await setPriorityNode(ctx.store, input.repo, item.humanId, item.priority);
           changed = true;
         }
 
         if (existing.status !== item.status) {
-          transitionStatusNode(ctx.store, input.repo, item.humanId, item.status, {
+          await transitionStatusNode(ctx.store, input.repo, item.humanId, item.status, {
             by: 'system:importFromMarkdown',
             ...(requiresCitation(item.status) ? { citations: [{ file: input.path }] } : {}),
             ...(requiresReason(item.status) ? { reason: `re-imported from markdown at status ${item.status}` } : {}),
@@ -417,7 +417,7 @@ export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownI
       // permanently missed just because it was first imported before
       // `input.plan` was set.
       if (input.plan !== undefined && existing.plan !== input.plan) {
-        attachToPlanNode(ctx.store, input.repo, item.humanId, input.plan);
+        await attachToPlanNode(ctx.store, input.repo, item.humanId, input.plan);
         changed = true;
       }
 
@@ -440,7 +440,7 @@ export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownI
  * see BUG-BACKLOG-RENDER-VERIFY-ARCHIVED-MISMATCH-001.
  */
 export async function renderToMarkdown(ctx: BacklogCtx, filter?: BacklogFilter): Promise<string> {
-  const nodes = queryItemNodes(ctx.store, { ...filter, excludeArchived: true });
+  const nodes = await queryItemNodes(ctx.store, { ...filter, excludeArchived: true });
   let items = nodes.map(toBacklogItem);
   if (filter?.status === 'open') items = items.filter((it) => !isTerminalStatus(it.status));
   else if (filter?.status === 'closed') items = items.filter((it) => isTerminalStatus(it.status));
@@ -448,12 +448,12 @@ export async function renderToMarkdown(ctx: BacklogCtx, filter?: BacklogFilter):
 }
 
 export async function exportJson(ctx: BacklogCtx, filter?: BacklogFilter): Promise<BacklogItem[]> {
-  return listItemsNode(ctx.store, filter ?? {});
+  return await listItemsNode(ctx.store, filter ?? {});
 }
 
 /** Bi-temporal history + supersession chain. */
 export async function auditTrail(ctx: BacklogCtx, repo: string, humanId: string): Promise<AuditTrailResult> {
-  return auditTrailNode(ctx.store, repo, humanId);
+  return await auditTrailNode(ctx.store, repo, humanId);
 }
 
 const MIGRATION_PHASE_DESCRIPTIONS: Record<MigrationPhase, string> = {

@@ -28,11 +28,11 @@ const REAL_SKILL_MD = readFileSync(join(dirname(fileURLToPath(import.meta.url)),
 describe('installSkill (MIGRATION.md §4.2)', () => {
   let tmp: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tmp = mkdtempSync(join(tmpdir(), 'backlog-install-skill-'));
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 

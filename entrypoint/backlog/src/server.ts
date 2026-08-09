@@ -389,7 +389,7 @@ async function extractClientOperations(): Promise<Operation[]> {
  * and never touch `ctx` at all, so a lazy caller can defer opening the real
  * backing store until a command that actually needs it is dispatched.
  */
-export async function buildBacklogApigenPackage(ctx: BacklogCtx | (() => BacklogCtx)): Promise<{
+export async function buildBacklogApigenPackage(ctx: BacklogCtx | (() => BacklogCtx | Promise<BacklogCtx>)): Promise<{
   pkg: {
     id: string;
     schemas: ReturnType<typeof composeSchemas>;
@@ -399,7 +399,7 @@ export async function buildBacklogApigenPackage(ctx: BacklogCtx | (() => Backlog
   };
   operations: Operation[];
 }> {
-  const getCtx: () => BacklogCtx = typeof ctx === 'function' ? ctx : () => ctx;
+  const getCtx: () => Promise<BacklogCtx> = typeof ctx === 'function' ? async () => await ctx() : async () => ctx;
   const operations = await extractClientOperations();
   const generated = {
     metadata: { namespace: 'backlog', phase: '' },
@@ -434,7 +434,7 @@ export async function buildBacklogApigenPackage(ctx: BacklogCtx | (() => Backlog
       schemas,
       importPath: join(backlogDistDir(), 'client.js'),
       fns: clientMod as unknown as Record<string, (...args: unknown[]) => unknown>,
-      createClient: async () => getCtx(),
+      createClient: async () => await getCtx(),
     },
     operations,
   };
@@ -448,7 +448,7 @@ export async function buildBacklogApigenPackage(ctx: BacklogCtx | (() => Backlog
 export async function startBacklogServer(opts: StartOpts): Promise<void> {
   const env = buildBacklogEnv({ scope: opts.scope, adhdRoot: opts.adhdRoot, cwd: opts.cwd });
   env.ensureDirs();
-  const store = openGraphBacklogStore(env.files.db, env.config.db.busyTimeoutMs);
+  const store = await openGraphBacklogStore(env.files.db, env.config.db.busyTimeoutMs);
   const ctx: BacklogCtx = { store, env };
 
   const { pkg, operations } = await buildBacklogApigenPackage(ctx);
@@ -483,6 +483,6 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
   try {
     await Promise.all(runs);
   } finally {
-    closeGraphBacklogStore(store);
+    await closeGraphBacklogStore(store);
   }
 }

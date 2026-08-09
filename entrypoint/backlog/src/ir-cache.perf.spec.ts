@@ -41,7 +41,7 @@ describe('FEAT-002 — real measured runtime, cache disabled vs. warm HIT', () =
   let cwd: string;
   let cacheFile: string;
 
-  afterEach(() => {
+  afterEach(async () => {
     rmSync(cwd, { recursive: true, force: true });
   });
 
