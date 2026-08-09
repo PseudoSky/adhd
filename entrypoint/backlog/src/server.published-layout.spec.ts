@@ -50,7 +50,7 @@ const TMP_ROOT = join(PKG_ROOT, 'tmp', 'backlog');
 describe('backlog published (rebased-to-root) layout — real npm-install-shape mount', () => {
   let publishedRoot: string | undefined;
 
-  afterEach(() => {
+  afterEach(async () => {
     if (publishedRoot) rmSync(publishedRoot, { recursive: true, force: true });
     publishedRoot = undefined;
   });

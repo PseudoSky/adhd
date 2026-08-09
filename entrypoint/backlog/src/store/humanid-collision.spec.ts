@@ -32,30 +32,30 @@ const REPO = 'PseudoSky/adhd';
 
 let tmp: TmpStore;
 
-beforeEach(() => {
-  tmp = openTmpStore('humanid-collision-spec');
+beforeEach(async () => {
+  tmp = await openTmpStore('humanid-collision-spec');
 });
 
-afterEach(() => {
-  tmp.cleanup();
+afterEach(async () => {
+  await tmp.cleanup();
 });
 
 describe('fix #1: createItemNode rejects a missing/empty family unless idOverride is given', () => {
-  it('throws InvalidArgumentError when family is undefined', () => {
+  it($1, async () => {
     expect(() =>
       createItemNode(tmp.store, { family: undefined as unknown as string, title: 't', body: 'b', repo: REPO })
     ).toThrow(InvalidArgumentError);
   });
 
-  it('throws InvalidArgumentError when family is an empty string', () => {
-    expect(() => createItemNode(tmp.store, { family: '', title: 't', body: 'b', repo: REPO })).toThrow(InvalidArgumentError);
+  it($1, async () => {
+    await expect(createItemNode(tmp.store, { family: '', title: 't', body: 'b', repo: REPO })).rejects.toThrow(InvalidArgumentError);
   });
 
-  it('throws InvalidArgumentError when family is whitespace-only', () => {
-    expect(() => createItemNode(tmp.store, { family: '   ', title: 't', body: 'b', repo: REPO })).toThrow(InvalidArgumentError);
+  it($1, async () => {
+    await expect(createItemNode(tmp.store, { family: '   ', title: 't', body: 'b', repo: REPO })).rejects.toThrow(InvalidArgumentError);
   });
 
-  it('never mints a humanId of "undefined-001" — the rejected create never reaches allocation at all', () => {
+  it($1, async () => {
     try {
       createItemNode(tmp.store, { family: undefined as unknown as string, title: 't', body: 'b', repo: REPO });
     } catch {
@@ -71,7 +71,7 @@ describe('fix #1: createItemNode rejects a missing/empty family unless idOverrid
     expect(result.item.humanId).toBe('BUG-VALID-001');
   });
 
-  it('the legitimate idOverride-only path (no family) still works — must not break', () => {
+  it($1, async () => {
     const result = createItemNode(tmp.store, {
       family: undefined as unknown as string,
       idOverride: 'BUG-IMPORTED-042',
@@ -109,7 +109,7 @@ describe('fix #2: ambiguous (repo, humanId) lookups throw instead of silently pi
     });
   }
 
-  it('findItemNode throws AmbiguousHumanIdError listing both colliding nodeIds', () => {
+  it($1, async () => {
     const first = createItemNode(tmp.store, { family: 'undefined', title: 'first colliding item', body: 'b1', repo: REPO });
     // createItemNode above legitimately mints "undefined-001" (a VALID family
     // literally named "undefined" is allowed — the guard only rejects
@@ -127,14 +127,14 @@ describe('fix #2: ambiguous (repo, humanId) lookups throw instead of silently pi
     expect(err.nodeIds.sort((a, b) => a - b)).toEqual([first.item.nodeId, secondNodeId].sort((a, b) => a - b));
   });
 
-  it('a genuinely unambiguous lookup is completely unaffected — no throw', () => {
+  it($1, async () => {
     const created = createItemNode(tmp.store, { family: 'BUG-UNAMBIG', title: 't', body: 'b', repo: REPO });
     const found = findItemNode(tmp.store, REPO, created.item.humanId);
     expect(found).not.toBeNull();
     expect(found?.id).toBe(created.item.nodeId);
   });
 
-  it('a lookup for a DIFFERENT repo sharing the same humanId string is unaffected (namespace-scoped)', () => {
+  it($1, async () => {
     const created = createItemNode(tmp.store, { family: 'BUG-SCOPE', title: 't', body: 'b', repo: REPO });
     forceCollidingNode('some/other-repo', created.item.humanId, 'unrelated', 'unrelated body');
     const found = findItemNode(tmp.store, REPO, created.item.humanId);
@@ -157,7 +157,7 @@ describe('renameHumanIdNode repair primitive', () => {
     expect(old).toBeNull();
   });
 
-  it('is nodeId-scoped: works even while another node shares the OLD colliding key', () => {
+  it($1, async () => {
     const first = createItemNode(tmp.store, { family: 'undefined', title: 'item A', body: 'bA', repo: REPO });
     const secondNodeId = tmp.store.graph.writeNode(buildNodeContent(REPO, first.item.humanId, 'item B', 'bB') + '\n<!-- dup -->', {
       kind: 'generic',
@@ -195,16 +195,16 @@ describe('renameHumanIdNode repair primitive', () => {
     expect(findItemNode(tmp.store, REPO, 'DEBT-REPAIR-B-001')?.id).toBe(secondNodeId);
   });
 
-  it('refuses to rename INTO an already-claimed humanId', () => {
+  it($1, async () => {
     const existing = createItemNode(tmp.store, { family: 'BUG-TAKEN', title: 't', body: 'b', repo: REPO });
     const toRename = createItemNode(tmp.store, { family: 'undefined', title: 'needs repair', body: 'b', repo: REPO });
-    expect(() => renameHumanIdNode(tmp.store, REPO, toRename.item.nodeId, toRename.item.humanId, existing.item.humanId)).toThrow(
+    await expect(renameHumanIdNode(tmp.store, REPO, toRename.item.nodeId, toRename.item.humanId, existing.item.humanId)).rejects.toThrow(
       InvalidArgumentError
     );
   });
 
-  it('refuses when the given nodeId does not currently carry oldHumanId (wrong-node guard)', () => {
+  it($1, async () => {
     const created = createItemNode(tmp.store, { family: 'BUG-REALID', title: 't', body: 'b', repo: REPO });
-    expect(() => renameHumanIdNode(tmp.store, REPO, created.item.nodeId, 'BUG-WRONG-999', 'BUG-NEW-001')).toThrow(InvalidArgumentError);
+    await expect(renameHumanIdNode(tmp.store, REPO, created.item.nodeId, 'BUG-WRONG-999', 'BUG-NEW-001')).rejects.toThrow(InvalidArgumentError);
   });
 });

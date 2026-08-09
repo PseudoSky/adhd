@@ -32,22 +32,22 @@ describe('scope isolation — real Environment instances, real temp filesystem r
   let globalHomeDir: string;
   let stores: GraphBacklogStore[];
 
-  beforeEach(() => {
+  beforeEach(async () => {
     projectDirA = makeProjectDir('backlog-env-project-a');
     projectDirB = makeProjectDir('backlog-env-project-b');
     globalHomeDir = mkdtempSync(join(tmpdir(), 'backlog-env-global-'));
     stores = [];
   });
 
-  afterEach(() => {
-    for (const store of stores) closeGraphBacklogStore(store);
+  afterEach(async () => {
+    for (const store of stores) await closeGraphBacklogStore(store);
     for (const dir of [projectDirA, projectDirB, globalHomeDir]) rmSync(dir, { recursive: true, force: true });
   });
 
   function openProjectCtx(projectDir: string): BacklogCtx {
     const env = buildBacklogEnv({ scope: 'project', cwd: projectDir, adhdRoot: projectDir });
     env.ensureDirs();
-    const store = openGraphBacklogStore(env.files.db);
+    const store = await openGraphBacklogStore(env.files.db);
     stores.push(store);
     return buildCtx(store, env);
   }
@@ -55,7 +55,7 @@ describe('scope isolation — real Environment instances, real temp filesystem r
   function openGlobalCtx(adhdRoot: string): BacklogCtx {
     const env = buildBacklogEnv({ scope: 'global', adhdRoot });
     env.ensureDirs();
-    const store = openGraphBacklogStore(env.files.db);
+    const store = await openGraphBacklogStore(env.files.db);
     stores.push(store);
     return buildCtx(store, env);
   }

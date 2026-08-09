@@ -74,7 +74,7 @@ describe('FEAT-002 — extract-stage IR cache on the REAL backlog hot path', () 
   let cacheFile: string;
   let cwd: string;
 
-  afterEach(() => {
+  afterEach(async () => {
     rmSync(dirname(cacheFile), { recursive: true, force: true });
     rmSync(cwd, { recursive: true, force: true });
   });

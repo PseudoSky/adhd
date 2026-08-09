@@ -15,7 +15,7 @@ import { openTmpStore, freshTmpDir, type TmpStore } from './test/helpers/tmp-sto
 describe('migration-admin — durable, cross-process migration.phase (MIGRATION.md §4.4)', () => {
   let adhdRoot: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     adhdRoot = freshTmpDir('migration-admin');
   });
 
@@ -70,13 +70,13 @@ describe('migration-admin — durable, cross-process migration.phase (MIGRATION.
     let tmp: TmpStore;
     let ctx: BacklogCtx;
 
-    beforeEach(() => {
-      tmp = openTmpStore('migration-admin-client');
+    beforeEach(async () => {
+      tmp = await openTmpStore('migration-admin-client');
       ctx = { store: tmp.store, env: buildBacklogEnv({ scope: 'global', adhdRoot: tmp.dir }), adhdRoot: tmp.dir };
     });
 
-    afterEach(() => {
-      tmp.cleanup();
+    afterEach(async () => {
+      await tmp.cleanup();
     });
 
     // NEGATIVE CONTROL, discovered for real (not hypothetical): the first

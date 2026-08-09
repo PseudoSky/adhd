@@ -90,12 +90,12 @@ function p99(values: number[]): number {
 describe(`concurrency-scale — ${N} real worker_threads (MIGRATION.md §3.3)`, () => {
   let tmp: TmpStore;
 
-  beforeEach(() => {
-    tmp = openTmpStore('concurrency-scale');
+  beforeEach(async () => {
+    tmp = await openTmpStore('concurrency-scale');
   });
 
-  afterEach(() => {
-    tmp.cleanup();
+  afterEach(async () => {
+    await tmp.cleanup();
   });
 
   it('contention case: exactly ONE of N truly concurrent claimItem calls on the SAME item wins; the rest see held', async () => {
