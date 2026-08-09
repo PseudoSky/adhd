@@ -73,7 +73,7 @@ function runInstallSkill(publishedRoot: string, extraArgv: string[]): SpawnResul
 describe('BUG-013 — install-skill on a published (rebased-to-root) layout', () => {
   let publishedRoot: string | undefined;
 
-  afterEach(async () => {
+  afterEach(() => {
     if (publishedRoot) rmSync(publishedRoot, { recursive: true, force: true });
     publishedRoot = undefined;
   });

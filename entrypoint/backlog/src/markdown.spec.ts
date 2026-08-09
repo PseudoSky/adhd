@@ -42,19 +42,19 @@ function runLegacyTool(mdFile: string): LegacyJsonItem[] {
 
 const REPO = 'PseudoSky/adhd';
 
-describe('markdown round-trip — real BACKLOG.md, real legacy tool subprocess', async () => {
+describe('markdown round-trip — real BACKLOG.md, real legacy tool subprocess', () => {
   let tmp: TmpStore;
   let ctx: BacklogCtx;
   let workDir: string;
 
-  beforeEach(async () => {
-    tmp = await openTmpStore('markdown-spec');
+  beforeEach(() => {
+    tmp = openTmpStore('markdown-spec');
     ctx = { store: tmp.store, env: buildBacklogEnv({ scope: 'project', adhdRoot: tmp.dir }) };
     workDir = mkdtempSync(join(tmpdir(), 'backlog-markdown-'));
   });
 
-  afterEach(async () => {
-    await tmp.cleanup();
+  afterEach(() => {
+    tmp.cleanup();
     rmSync(workDir, { recursive: true, force: true });
   });
 
@@ -212,20 +212,20 @@ describe('parseBacklogMarkdownWithDiagnostics — malformed id headers (DEBT-BAC
   });
 });
 
-describe('importFromMarkdown — diagnostics + provenance (real store)', async () => {
+describe('importFromMarkdown — diagnostics + provenance (real store)', () => {
   let tmp: TmpStore;
   let ctx: BacklogCtx;
   let workDir: string;
   const REPO_PROV = 'PseudoSky/backlog-provenance-test';
 
-  beforeEach(async () => {
-    tmp = await openTmpStore('markdown-provenance-spec');
+  beforeEach(() => {
+    tmp = openTmpStore('markdown-provenance-spec');
     ctx = { store: tmp.store, env: buildBacklogEnv({ scope: 'project', adhdRoot: tmp.dir }) };
     workDir = mkdtempSync(join(tmpdir(), 'backlog-provenance-'));
   });
 
-  afterEach(async () => {
-    await tmp.cleanup();
+  afterEach(() => {
+    tmp.cleanup();
     rmSync(workDir, { recursive: true, force: true });
   });
 
@@ -265,7 +265,7 @@ describe('importFromMarkdown — diagnostics + provenance (real store)', async (
     // Plan attribution must also be queryable via the filtered-projection
     // scope model (MIGRATION.md §2.2), not just stamped on metadata — this is
     // what makes the previous `attachToPlan`-per-id workaround unnecessary.
-    const filtered = await await listItems(ctx, { repo: REPO_PROV, plan: 'my-plan-slug' });
+    const filtered = await listItems(ctx, { repo: REPO_PROV, plan: 'my-plan-slug' });
     expect(filtered.map((i) => i.humanId)).toContain('BUG-PROV-001');
   });
 
@@ -284,7 +284,7 @@ describe('importFromMarkdown — diagnostics + provenance (real store)', async (
   // since the first import, so a status/body edit made directly in a
   // `BACKLOG.md` file could never converge into the graph short of a full
   // re-seed. These three tests pin the corrected upsert semantics.
-  describe('importFromMarkdown — upsert-on-reimport (BUG-BACKLOG-IMPORT-INSERT-ONLY-NO-UPDATE-001)', async () => {
+  describe('importFromMarkdown — upsert-on-reimport (BUG-BACKLOG-IMPORT-INSERT-ONLY-NO-UPDATE-001)', () => {
     it('re-importing an UNCHANGED item is a true no-op (created:0, updated:0)', async () => {
       const fixturePath = join(workDir, 'noop-fixture.md');
       writeFileSync(fixturePath, ['### BUG-NOOP-001 — noop fixture', '', '**Status:** OPEN', '', 'original body, never touched.', ''].join('\n'), 'utf8');
@@ -340,7 +340,7 @@ describe('importFromMarkdown — diagnostics + provenance (real store)', async (
       expect(item?.body).toContain('updated body reflecting the actual fix.');
       expect(item?.body).not.toContain('original body.');
 
-      const listed = await await listItems(ctx, { repo: REPO_PROV });
+      const listed = await listItems(ctx, { repo: REPO_PROV });
       const listedItem = listed.find((i) => i.humanId === 'BUG-UPDATE-001');
       expect(listedItem?.status).toBe('FIXED');
       expect(listedItem?.priority).toBe('HIGH');
@@ -362,7 +362,7 @@ describe('importFromMarkdown — diagnostics + provenance (real store)', async (
     });
   });
 
-  describe('importFromMarkdown — cross-file scope ownership (DEBT-BACKLOG-IMPORT-SCOPE-CROSSFILE-001)', async () => {
+  describe('importFromMarkdown — cross-file scope ownership (DEBT-BACKLOG-IMPORT-SCOPE-CROSSFILE-001)', () => {
     it('the OWNING file (matching importedFrom) re-importing refreshes title/body/status/projectPath', async () => {
       const ownerPath = join(workDir, 'owner-v1.md');
       writeFileSync(
@@ -453,7 +453,7 @@ describe('importFromMarkdown — diagnostics + provenance (real store)', async (
       // ownership-independent — this is the whole point of a cross-reference).
       expect(item?.plan).toBe('some-plan-slug');
 
-      const filtered = await await listItems(ctx, { repo: REPO_PROV, plan: 'some-plan-slug' });
+      const filtered = await listItems(ctx, { repo: REPO_PROV, plan: 'some-plan-slug' });
       expect(filtered.find((i) => i.humanId === 'BUG-CROSSREF-001')).toBeDefined();
     });
 
@@ -486,10 +486,10 @@ describe('importFromMarkdown — diagnostics + provenance (real store)', async (
     });
   });
 
-  describe('archiveResolved exclusion — renderToMarkdown vs await listItems({excludeArchived}) (BUG-BACKLOG-RENDER-VERIFY-ARCHIVED-MISMATCH-001)', async () => {
+  describe('archiveResolved exclusion — renderToMarkdown vs listItems({excludeArchived}) (BUG-BACKLOG-RENDER-VERIFY-ARCHIVED-MISMATCH-001)', () => {
     const REPO_ARCHIVE = 'PseudoSky/adhd-archive-test';
 
-    it('a resolved+archived item is absent from renderToMarkdown AND from await listItems({excludeArchived:true}) — the render-projections/parity-check verify comparison this bug fixed', async () => {
+    it('a resolved+archived item is absent from renderToMarkdown AND from listItems({excludeArchived:true}) — the render-projections/parity-check verify comparison this bug fixed', async () => {
       const open = await createItem(ctx, { family: 'BUG-ARCHIVETEST', title: 'stays open', body: 'body', repo: REPO_ARCHIVE });
       const resolved = await createItem(ctx, { family: 'BUG-ARCHIVETEST', title: 'gets resolved', body: 'body', repo: REPO_ARCHIVE });
       expect(open.created).toBe(true);
@@ -502,7 +502,7 @@ describe('importFromMarkdown — diagnostics + provenance (real store)', async (
 
       // Before archival: both plain `listItems` and `renderToMarkdown` still
       // see both items (RESOLVED is terminal but not yet archived).
-      const beforeArchive = await await listItems(ctx, { repo: REPO_ARCHIVE, excludeArchived: true });
+      const beforeArchive = await listItems(ctx, { repo: REPO_ARCHIVE, excludeArchived: true });
       expect(beforeArchive.map((it) => it.humanId).sort()).toEqual(
         [open.item.humanId, resolved.item.humanId].sort()
       );
@@ -520,14 +520,14 @@ describe('importFromMarkdown — diagnostics + provenance (real store)', async (
       // item — proving the divergence this bug's fix closes: a naive
       // `list-items --filter {repo}` graph-side comparison would report a
       // false `extra-in-render` against the render output above.
-      const rawList = await await listItems(ctx, { repo: REPO_ARCHIVE });
+      const rawList = await listItems(ctx, { repo: REPO_ARCHIVE });
       expect(rawList.map((it) => it.humanId)).toContain(resolved.item.humanId);
 
-      // `await listItems({excludeArchived: true})` is the fix: it now reproduces
+      // `listItems({excludeArchived: true})` is the fix: it now reproduces
       // renderToMarkdown's exact item set, which is exactly what
       // render-projections.mjs/parity-check.mjs's graph-side `list-items`
       // call passes today.
-      const excludingArchived = await await listItems(ctx, { repo: REPO_ARCHIVE, excludeArchived: true });
+      const excludingArchived = await listItems(ctx, { repo: REPO_ARCHIVE, excludeArchived: true });
       expect(excludingArchived.map((it) => it.humanId)).toEqual([open.item.humanId]);
     });
   });

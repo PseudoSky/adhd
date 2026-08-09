@@ -16,11 +16,11 @@ import { writeAuditEvent } from './audit-log.js';
  *  two identifying fields straight back off the node's own (already
  *  freshly-written) metadata rather than widening every signature here just
  *  for audit logging (DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001). */
-async function logClaimEvent(store: GraphBacklogStore, nodeId: number, detail: Record<string, unknown>): Promise<void> {
-  const node = await store.graph.getNode(nodeId);
+function logClaimEvent(store: GraphBacklogStore, nodeId: number, detail: Record<string, unknown>): void {
+  const node = store.graph.getNode(nodeId);
   const meta = node?.metadata as Partial<BacklogNodeMeta> | undefined;
   if (meta?.repo && meta?.humanId) {
-    await writeAuditEvent(store, nodeId, meta.repo, meta.humanId, 'claim', detail);
+    writeAuditEvent(store, nodeId, meta.repo, meta.humanId, 'claim', detail);
   }
 }
 
@@ -37,10 +37,18 @@ export class ClaimContentionError extends Error {
   }
 }
 
-export async function claimItemNode(store: GraphBacklogStore, nodeId: number, by: string, opts: ClaimOpts = {}): Promise<ClaimResult> {
+/**
+ * DESIGN.md §4.2 — the exact branch table:
+ *   unclaimed                              -> claimed
+ *   by === claimedBy                       -> renewed (no contention check, ever)
+ *   by !== claimedBy, age <= staleAfterMin -> held (refuse, no write)
+ *   by !== claimedBy, age >  staleAfterMin -> reclaimed-stale
+ *   by !== claimedBy, opts.force           -> proceeds anyway (reclaimed-stale-shaped)
+ */
+export function claimItemNode(store: GraphBacklogStore, nodeId: number, by: string, opts: ClaimOpts = {}): ClaimResult {
   const staleAfterMs = (opts.staleAfterMin ?? DEFAULT_STALE_AFTER_MIN) * 60_000;
   let result!: ClaimResult;
-  await mutateMetadata<BacklogNodeMeta>(store, nodeId, (meta) => {
+  mutateMetadata<BacklogNodeMeta>(store, nodeId, (meta) => {
     const now = Date.now();
     const nowIso = new Date(now).toISOString();
 
@@ -58,32 +66,40 @@ export async function claimItemNode(store: GraphBacklogStore, nodeId: number, by
         heldBy: meta.claimedBy,
         ...(meta.claimedAt !== undefined ? { heldSince: meta.claimedAt } : {}),
       };
+      // Unchanged metadata — still routed through the same code path so
+      // there is ONE transaction shape, never a TOCTOU-prone early return
+      // (DESIGN.md §4.3).
       return meta;
     }
 
     result = { status: 'reclaimed-stale', claimedBy: by, claimedAt: nowIso, previousClaimant: meta.claimedBy };
     return { ...meta, claimedBy: by, claimedAt: nowIso, updatedAt: nowIso };
   });
+  // `held` is a REFUSAL — nothing changed, so nothing is logged
+  // (DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001: an event log must reflect real
+  // state changes, never a no-op branch of the same code path).
   if (result.status !== 'held') {
-    await logClaimEvent(store, nodeId, { status: result.status, by });
+    logClaimEvent(store, nodeId, { status: result.status, by });
   }
   return result;
 }
 
-export async function renewClaimNode(store: GraphBacklogStore, nodeId: number, by: string): Promise<ClaimResult> {
+/** SPEC.md §5.3 — "always succeeds (bumps claimedAt), no contention check, ever." */
+export function renewClaimNode(store: GraphBacklogStore, nodeId: number, by: string): ClaimResult {
   let result!: ClaimResult;
-  await mutateMetadata<BacklogNodeMeta>(store, nodeId, (meta) => {
+  mutateMetadata<BacklogNodeMeta>(store, nodeId, (meta) => {
     const nowIso = new Date().toISOString();
     result = { status: meta.claimedBy ? 'renewed' : 'claimed', claimedBy: by, claimedAt: nowIso };
     return { ...meta, claimedBy: by, claimedAt: nowIso, updatedAt: nowIso };
   });
-  await logClaimEvent(store, nodeId, { status: result.status, by });
+  logClaimEvent(store, nodeId, { status: result.status, by });
   return result;
 }
 
-export async function releaseClaimNode(store: GraphBacklogStore, nodeId: number, by: string, opts: { force?: boolean } = {}): Promise<ReleaseResult> {
+/** DESIGN.md §4.2 — releasing an already-unclaimed item is a no-op, never an error. */
+export function releaseClaimNode(store: GraphBacklogStore, nodeId: number, by: string, opts: { force?: boolean } = {}): ReleaseResult {
   let result!: ReleaseResult;
-  await mutateMetadata<BacklogNodeMeta>(store, nodeId, (meta) => {
+  mutateMetadata<BacklogNodeMeta>(store, nodeId, (meta) => {
     if (!meta.claimedBy) {
       result = { status: 'release-noop' };
       return meta;
@@ -99,8 +115,9 @@ export async function releaseClaimNode(store: GraphBacklogStore, nodeId: number,
     delete next.claimedAt;
     return next;
   });
+  // `release-noop` changed nothing — not logged, same reasoning as `held` above.
   if (result.status !== 'release-noop') {
-    await logClaimEvent(store, nodeId, { status: result.status, by, wasClaimedBy: (result as { wasClaimedBy?: string }).wasClaimedBy });
+    logClaimEvent(store, nodeId, { status: result.status, by, wasClaimedBy: (result as { wasClaimedBy?: string }).wasClaimedBy });
   }
   return result;
 }

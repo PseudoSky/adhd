@@ -21,7 +21,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
 
-describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, real spawned bin', async () => {
+describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, real spawned bin', () => {
   let client: Client | undefined;
   let transport: StdioClientTransport | undefined;
   let adhdRoot: string | undefined;

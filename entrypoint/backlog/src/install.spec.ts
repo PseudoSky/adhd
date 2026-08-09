@@ -12,14 +12,14 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { install, runInstallCommand, upsertTomlTable, BACKLOG_MCP_NPX_ARGS, INSTALL_HELP_TEXT } from './install.js';
 
-describe('install --mcp-only (BUG-013)', async () => {
+describe('install --mcp-only (BUG-013)', () => {
   let tmp: string;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     tmp = mkdtempSync(join(tmpdir(), 'backlog-install-mcp-'));
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     rmSync(tmp, { recursive: true, force: true });
   });
 

@@ -1,6 +1,6 @@
 /**
  * tmp-store.ts — real-DB test fixture helper. Every test opens a real
- * SQLite file under `tmp/backlog/<test-name>/` (AGENTS.md §10 — the
+ * `better-sqlite3` file under `tmp/backlog/<test-name>/` (AGENTS.md §10 — the
  * one canonical ephemeral-artifact root), never `:memory:` (a CAS/multi-
  * connection test needs a REAL shared file two connections can both open),
  * and removes it on teardown.
@@ -16,19 +16,26 @@ export interface TmpStore {
   store: GraphBacklogStore;
   dbPath: string;
   dir: string;
-  cleanup: () => Promise<void>;
+  cleanup: () => void;
 }
 
-export async function openTmpStore(name: string, busyTimeoutMs?: number): Promise<TmpStore> {
+/**
+ * Opens a real backlog store at a fresh temp path under `tmp/backlog/`.
+ * `name` is a human-readable prefix (usually the test file's name) — the
+ * actual directory is made unique via `mkdtempSync`. `busyTimeoutMs` defaults
+ * to `openGraphBacklogStore`'s own default (5000); tests exercising
+ * DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001 pass a short override.
+ */
+export function openTmpStore(name: string, busyTimeoutMs?: number): TmpStore {
   const dir = mkdtempSync(join(ensureTmpRoot(), `${name}-`));
   const dbPath = join(dir, 'backlog.db');
-  const store = busyTimeoutMs === undefined ? await openGraphBacklogStore(dbPath) : await openGraphBacklogStore(dbPath, busyTimeoutMs);
+  const store = busyTimeoutMs === undefined ? openGraphBacklogStore(dbPath) : openGraphBacklogStore(dbPath, busyTimeoutMs);
   return {
     store,
     dbPath,
     dir,
-    cleanup: async () => {
-      await closeGraphBacklogStore(store);
+    cleanup: () => {
+      closeGraphBacklogStore(store);
       rmSync(dir, { recursive: true, force: true });
     },
   };

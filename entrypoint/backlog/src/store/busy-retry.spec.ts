@@ -86,7 +86,7 @@ function waitForOutcome(worker: Worker): Promise<WorkerOutcome> {
   });
 }
 
-describe('withImmediateRetry — real SQLITE_BUSY contention, real worker_threads (DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001)', async () => {
+describe('withImmediateRetry — real SQLITE_BUSY contention, real worker_threads (DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001)', () => {
   let tmp: TmpStore;
 
   beforeEach(() => {

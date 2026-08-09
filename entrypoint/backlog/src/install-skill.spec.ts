@@ -25,14 +25,14 @@ import { installSkill } from './install-skill.js';
 // regardless of the caller's cwd.
 const REAL_SKILL_MD = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'skill', 'SKILL.md'), 'utf8');
 
-describe('installSkill (MIGRATION.md §4.2)', async () => {
+describe('installSkill (MIGRATION.md §4.2)', () => {
   let tmp: string;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     tmp = mkdtempSync(join(tmpdir(), 'backlog-install-skill-'));
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
