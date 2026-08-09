@@ -17,18 +17,18 @@ import { buildBacklogEnv } from './env.js';
 let tmp: TmpStore;
 let ctx: BacklogCtx;
 
-beforeEach(() => {
+beforeEach(async () => {
   tmp = await openTmpStore('client-spec');
   ctx = { store: tmp.store, env: buildBacklogEnv({ scope: 'project', adhdRoot: tmp.dir }) };
 });
 
-afterEach(() => {
+afterEach(async () => {
   await tmp.cleanup();
 });
 
 const REPO = 'PseudoSky/backlog-test';
 
-describe('createItem / getItem / listItems', () => {
+describe('createItem / getItem / listItems', async () => {
   it('creates an item starting OPEN, allocates a humanId, and round-trips through getItem', async () => {
     const result = await client.createItem(ctx, {
       family: 'BUG-TEST',
@@ -168,7 +168,7 @@ describe('createItem / getItem / listItems', () => {
     }
   });
 
-  it('listItems({grep}) never crashes on a grep term containing FTS5-syntax-significant characters (BUG-BACKLOG-DEDUPE-FTS-SYNTAX-CRASH-001)', async () => {
+  it('await listItems({grep}) never crashes on a grep term containing FTS5-syntax-significant characters (BUG-BACKLOG-DEDUPE-FTS-SYNTAX-CRASH-001)', async () => {
     await client.createItem(ctx, { family: 'BUG-GREP-SYNTAX', title: 'fix off-by-one error', body: 'x', repo: REPO });
     const results = await client.listItems(ctx, { repo: REPO, grep: 'off-by-one' });
     expect(results.length).toBeGreaterThan(0);
@@ -214,7 +214,7 @@ describe('createItem / getItem / listItems', () => {
     expect(updated.projectPath).toBe('packages/foo');
   });
 
-  it('updateItem re-indexes FTS content on a body edit — listItems({grep}) finds the NEW term (DEBT-BACKLOG-CONTENT-IMMUTABLE-001)', async () => {
+  it('updateItem re-indexes FTS content on a body edit — await listItems({grep}) finds the NEW term (DEBT-BACKLOG-CONTENT-IMMUTABLE-001)', async () => {
     // Regression guard: `updateItemNode` used to patch ONLY `metadata.body`,
     // leaving the FTS-indexed `node.content` (set once at createItem time)
     // stale — a grep for a term introduced by a post-create body edit would
@@ -244,7 +244,7 @@ describe('createItem / getItem / listItems', () => {
   });
 });
 
-describe('claim / lifecycle', () => {
+describe('claim / lifecycle', async () => {
   it('startWork claims + transitions to IN_PROGRESS; resolveItem requires a citation to reach FIXED', async () => {
     const created = await client.createItem(ctx, { family: 'BUG-WORK', title: 't', body: 'b', repo: REPO });
     const started = await client.startWork(ctx, REPO, created.item.humanId, 'implementer:a');
@@ -298,7 +298,7 @@ describe('claim / lifecycle', () => {
   });
 });
 
-describe('structure', () => {
+describe('structure', async () => {
   it('addDependency / removeDependency / blockers / readyItems', async () => {
     const blocker = await client.createItem(ctx, { family: 'BUG-DEP', title: 'blocker', body: 'b', repo: REPO });
     const blocked = await client.createItem(ctx, { family: 'BUG-DEP', title: 'blocked', body: 'b', repo: REPO });
@@ -379,7 +379,7 @@ describe('structure', () => {
   });
 });
 
-describe('query / report', () => {
+describe('query / report', async () => {
   it('stats / spotlight report real counts', async () => {
     await client.createItem(ctx, { family: 'BUG-STATS', title: 'memory leak in the render loop', body: 'grows unbounded over time', repo: REPO, priority: 'CRITICAL' });
     await client.createItem(ctx, { family: 'BUG-STATS', title: 'typo in the changelog footer', body: 'cosmetic only', repo: REPO, priority: 'LOW' });
@@ -426,7 +426,7 @@ describe('query / report', () => {
   });
 });
 
-describe('introspection', () => {
+describe('introspection', async () => {
   // Reads the REAL `package.json` at test time (never a hardcoded literal),
   // so this test can never silently drift from the real package.json the way
   // a copy-pasted version string would.

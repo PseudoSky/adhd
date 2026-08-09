@@ -45,7 +45,7 @@ async function waitForHttpReady(port: number, path: string): Promise<void> {
   throw new Error(`server never became ready on port ${port}: ${String(lastErr)}`);
 }
 
-describe('startBacklogServer — live HTTP mount, real fetch, no mocked fns', () => {
+describe('startBacklogServer — live HTTP mount, real fetch, no mocked fns', async () => {
   let controller: AbortController | undefined;
   let serverPromise: Promise<void> | undefined;
   let adhdRoot: string | undefined;

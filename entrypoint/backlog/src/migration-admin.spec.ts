@@ -12,7 +12,7 @@ import { globalConfigPath, writeMigrationPhase } from './migration-admin.js';
 import { setMigrationPhase, migrationStatus, type BacklogCtx } from './client.js';
 import { openTmpStore, freshTmpDir, type TmpStore } from './test/helpers/tmp-store.js';
 
-describe('migration-admin — durable, cross-process migration.phase (MIGRATION.md §4.4)', () => {
+describe('migration-admin — durable, cross-process migration.phase (MIGRATION.md §4.4)', async () => {
   let adhdRoot: string;
 
   beforeEach(async () => {
@@ -66,7 +66,7 @@ describe('migration-admin — durable, cross-process migration.phase (MIGRATION.
     expect(raw['migration']).toEqual({ phase: 'phase-2' });
   });
 
-  describe('client.ts setMigrationPhase / migrationStatus integration', () => {
+  describe('client.ts setMigrationPhase / migrationStatus integration', async () => {
     let tmp: TmpStore;
     let ctx: BacklogCtx;
 

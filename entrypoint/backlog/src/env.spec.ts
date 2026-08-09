@@ -26,7 +26,7 @@ function buildCtx(store: GraphBacklogStore, env: ReturnType<typeof buildBacklogE
   return { store, env };
 }
 
-describe('scope isolation — real Environment instances, real temp filesystem roots', () => {
+describe('scope isolation — real Environment instances, real temp filesystem roots', async () => {
   let projectDirA: string;
   let projectDirB: string;
   let globalHomeDir: string;

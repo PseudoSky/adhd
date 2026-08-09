@@ -24,8 +24,8 @@ async function main() {
   const backlog = require(workerData.distIndexPath);
   const store =
     workerData.busyTimeoutMs === undefined
-      ? backlog.openGraphBacklogStore(workerData.dbPath)
-      : backlog.openGraphBacklogStore(workerData.dbPath, workerData.busyTimeoutMs);
+      ? await backlog.openGraphBacklogStore(workerData.dbPath)
+      : await backlog.openGraphBacklogStore(workerData.dbPath, workerData.busyTimeoutMs);
   const env = backlog.buildBacklogEnv({ scope: 'project', adhdRoot: workerData.adhdRoot });
   const ctx = { store, env };
 
@@ -55,7 +55,7 @@ async function main() {
       elapsedMs: Date.now() - startedAt,
     });
   } finally {
-    backlog.closeGraphBacklogStore(store);
+    await backlog.closeGraphBacklogStore(store);
   }
 }
 

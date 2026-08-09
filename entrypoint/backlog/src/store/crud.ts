@@ -57,14 +57,18 @@ async function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateI
   const ftsQuery = sanitizeFtsQuery(input.title);
   if (ftsQuery) {
     const newTitleTokens = meaningfulTitleTokens(input.title);
-    for (const hit of await store.graph.searchNodes(ftsQuery, {
-      limit: 10,
-      filter: { tags: [BACKLOG_ITEM_TAG], namespace: repo },
-    })) {
-      if (!isLiveBacklogItemNode(hit)) continue;
-      const candidateTitle = (hit.metadata as { title?: string } | null)?.title ?? hit.summary ?? '';
-      if (!titleMeaningfullyOverlaps(newTitleTokens, candidateTitle)) continue;
-      candidates.set(hit.id, hit);
+    try {
+      for (const hit of await store.graph.searchNodes(ftsQuery, {
+        limit: 10,
+        filter: { tags: [BACKLOG_ITEM_TAG], namespace: repo },
+      })) {
+        if (!isLiveBacklogItemNode(hit)) continue;
+        const candidateTitle = (hit.metadata as { title?: string } | null)?.title ?? hit.summary ?? '';
+        if (!titleMeaningfullyOverlaps(newTitleTokens, candidateTitle)) continue;
+        candidates.set(hit.id, hit);
+      }
+    } catch {
+      // FTS unavailable (turso Tantivy vs FTS5 mismatch) — degrade gracefully
     }
   }
 

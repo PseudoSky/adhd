@@ -6,7 +6,7 @@ import { topoOrder } from './query.js';
 
 const REPO = 'PseudoSky/query-spec';
 
-describe('topoOrder — real dependency-cycle detection', () => {
+describe('topoOrder — real dependency-cycle detection', async () => {
   let tmp: TmpStore;
 
   beforeEach(async () => {
@@ -57,7 +57,7 @@ describe('topoOrder — real dependency-cycle detection', () => {
     await addDependencyNode(tmp.store, REPO, b.item.humanId, a.item.humanId);
     void solo;
 
-    await expect(topoOrder(tmp.store, { repo: REPO })).resolves.toBeDefined();
+    await expect(await topoOrder(tmp.store, { repo: REPO })).resolves.toBeDefined();
     const result = await topoOrder(tmp.store, { repo: REPO });
     expect(result.ok).toBe(false);
   });

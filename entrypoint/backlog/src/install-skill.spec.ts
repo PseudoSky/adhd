@@ -25,7 +25,7 @@ import { installSkill } from './install-skill.js';
 // regardless of the caller's cwd.
 const REAL_SKILL_MD = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'skill', 'SKILL.md'), 'utf8');
 
-describe('installSkill (MIGRATION.md §4.2)', () => {
+describe('installSkill (MIGRATION.md §4.2)', async () => {
   let tmp: string;
 
   beforeEach(async () => {

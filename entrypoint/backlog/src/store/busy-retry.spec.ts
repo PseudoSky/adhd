@@ -86,15 +86,15 @@ function waitForOutcome(worker: Worker): Promise<WorkerOutcome> {
   });
 }
 
-describe('withImmediateRetry — real SQLITE_BUSY contention, real worker_threads (DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001)', () => {
+describe('withImmediateRetry — real SQLITE_BUSY contention, real worker_threads (DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001)', async () => {
   let tmp: TmpStore;
 
-  beforeEach(async () => {
-    tmp = await openTmpStore('busy-retry');
+  beforeEach(() => {
+    tmp = openTmpStore('busy-retry');
   });
 
-  afterEach(async () => {
-    await tmp.cleanup();
+  afterEach(() => {
+    tmp.cleanup();
   });
 
   it('sanity: the retry budget is arithmetically larger than the fixed hold duration', () => {
