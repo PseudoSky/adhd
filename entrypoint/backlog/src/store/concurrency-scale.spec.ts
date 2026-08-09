@@ -87,7 +87,7 @@ function p99(values: number[]): number {
   return sorted[idx];
 }
 
-describe(`concurrency-scale — ${N} real worker_threads (MIGRATION.md §3.3)`, async () => {
+describe(`concurrency-scale — ${N} real worker_threads (MIGRATION.md §3.3)`, () => {
   let tmp: TmpStore;
 
   beforeEach(() => {

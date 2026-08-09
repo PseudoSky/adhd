@@ -42,6 +42,14 @@ function applyOpenClosedFilter(items: BacklogItem[], filter: BacklogFilter): Bac
   return items;
 }
 
+/**
+ * MIGRATION.md §2.2 root projection: keep only repo-level nodes — those with
+ * neither a `projectPath` nor a `plan`. Applied at the NodeRecord layer so BOTH
+ * `listItems` and `renderToMarkdown` (which map nodes independently) inherit it.
+ * A metadata scan, not an indexed column filter, because it is an ABSENCE test
+ * (two fields simultaneously unset) that `NodeFilter`'s AND-of-equals cannot
+ * express. See `BacklogFilter.rootLevel`.
+ */
 function applyRootLevelFilter(nodes: NodeRecord[], filter: BacklogFilter): NodeRecord[] {
   if (!filter.rootLevel) return nodes;
   return nodes.filter((n) => {
@@ -50,26 +58,31 @@ function applyRootLevelFilter(nodes: NodeRecord[], filter: BacklogFilter): NodeR
   });
 }
 
+/**
+ * See `BacklogFilter.excludeArchived`'s doc comment — applied at the
+ * NodeRecord layer (same as `applyRootLevelFilter`) so both `listItems` and
+ * `renderToMarkdown` (which independently map nodes) share one
+ * archived-exclusion implementation instead of `renderToMarkdown`
+ * re-implementing its own `!metadata.archivedAt` scan.
+ */
 function applyExcludeArchivedFilter(nodes: NodeRecord[], filter: BacklogFilter): NodeRecord[] {
   if (!filter.excludeArchived) return nodes;
   return nodes.filter((n) => !(n.metadata as Partial<BacklogNodeMeta> | undefined)?.archivedAt);
 }
 
 /** Raw NodeRecord query — used internally where the full node (not just the mapped BacklogItem) is needed. */
-export async function queryItemNodes(store: GraphBacklogStore, filter: BacklogFilter = {}): Promise<NodeRecord[]> {
+export function queryItemNodes(store: GraphBacklogStore, filter: BacklogFilter = {}): NodeRecord[] {
   if (filter.grep) {
     const nodeFilter = nodeFilterFromBacklogFilter({ ...filter, grep: undefined });
+    // Sanitized — same FTS5-syntax-crash guard as crud.ts's dedupeScan
+    // (BUG-BACKLOG-DEDUPE-FTS-SYNTAX-CRASH-001): an unsanitized `grep` term
+    // containing `-`/`:`/`(`/`)`/`"` crashes `searchNodes` outright.
     const ftsQuery = sanitizeFtsQuery(filter.grep);
     if (!ftsQuery) return [];
-    let hits: Awaited<ReturnType<typeof store.graph.searchNodes>> = [];
-    try {
-      hits = await store.graph.searchNodes(ftsQuery, {
-        limit: filter.limit ?? 1000,
-        filter: nodeFilter,
-      });
-    } catch {
-      // FTS unavailable (turso Tantivy vs FTS5) — grep returns empty
-    }
+    const hits = store.graph.searchNodes(ftsQuery, {
+      limit: filter.limit ?? 1000,
+      filter: nodeFilter,
+    });
     let live = applyExcludeArchivedFilter(applyRootLevelFilter(hits.filter(isLiveBacklogItemNode), filter), filter);
     if (filter.offset) live = live.slice(filter.offset);
     return live;
@@ -77,19 +90,33 @@ export async function queryItemNodes(store: GraphBacklogStore, filter: BacklogFi
   const nodeFilter = nodeFilterFromBacklogFilter(filter);
   if (filter.limit !== undefined) nodeFilter.limit = filter.limit;
   if (filter.offset !== undefined) nodeFilter.offset = filter.offset;
-  const nodes = await store.graph.queryNodes(nodeFilter);
+  const nodes = store.graph.queryNodes(nodeFilter);
   return applyExcludeArchivedFilter(applyRootLevelFilter(nodes.filter(isLiveBacklogItemNode), filter), filter);
 }
 
-export async function listItems(store: GraphBacklogStore, filter: BacklogFilter = {}): Promise<BacklogItem[]> {
-  const nodes = await queryItemNodes(store, filter);
+export function listItems(store: GraphBacklogStore, filter: BacklogFilter = {}): BacklogItem[] {
+  const nodes = queryItemNodes(store, filter);
   const items = nodes.map(toBacklogItem);
   return applyOpenClosedFilter(items, filter);
 }
 
-export async function findItemNode(store: GraphBacklogStore, repo: string, humanId: string): Promise<NodeRecord | null> {
+/**
+ * BUG-BACKLOG-HUMANID-COLLISION-001 fix #2: this is THE shared `(repo,
+ * humanId) -> NodeRecord` lookup every store module funnels through
+ * (`crud.ts`/`lifecycle.ts`/`structure.ts`/`client.ts`'s `requireItem*`
+ * helpers all call this, directly or via `buildNotFoundError`'s sibling
+ * miss path). It used to silently resolve to "whichever live node happens
+ * to match `name`, else whichever is first" when more than one live node
+ * shared the same `(repo, humanId)` key — the exact shape of the
+ * pre-existing `"undefined-001"` collisions, and the root cause of a real
+ * mis-transition (see the backlog item body: a `resolveItem` call intended
+ * for one node silently landed on a different, unrelated one). Any lookup
+ * that finds >1 live match now throws `AmbiguousHumanIdError` instead of
+ * guessing.
+ */
+export function findItemNode(store: GraphBacklogStore, repo: string, humanId: string): NodeRecord | null {
   const name = buildNodeName(repo, humanId);
-  const nodes = await store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG], namespace: repo, metadata: { humanId } });
+  const nodes = store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG], namespace: repo, metadata: { humanId } });
   const live = nodes.filter(isLiveBacklogItemNode);
   if (live.length > 1) {
     throw new AmbiguousHumanIdError(repo, humanId, live.map((n) => n.id));
@@ -97,17 +124,33 @@ export async function findItemNode(store: GraphBacklogStore, repo: string, human
   return live.find((n) => n.name === name) ?? live[0] ?? null;
 }
 
+/** `metadata.repo` is the source-of-truth field written at create time; `namespace` (== the `repo` a node was written under) is the fallback for the rare row predating that field. Mirrors `toBacklogItem`'s own `meta.repo ?? node.namespace` fallback. */
 function nodeRepo(node: NodeRecord): string {
   return (node.metadata as { repo?: string } | undefined)?.repo ?? node.namespace ?? '';
 }
 
-export async function findHumanIdInAnyRepo(store: GraphBacklogStore, humanId: string): Promise<NodeRecord[]> {
-  const nodes = await store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG], metadata: { humanId } });
+/**
+ * Finds every LIVE node carrying this `humanId`, across ALL repos (no
+ * `namespace` filter) — BUG-BACKLOG-REPO-LOOKUP-UX-001's "did you mean repo
+ * X?" hint needs this to distinguish "this humanId truly doesn't exist" from
+ * "it exists, just filed under a different repo string than the caller
+ * passed." Used only on the miss path (`buildNotFoundError`) — never on the
+ * hot successful-lookup path, so it costs nothing when a lookup is correct.
+ */
+export function findHumanIdInAnyRepo(store: GraphBacklogStore, humanId: string): NodeRecord[] {
+  const nodes = store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG], metadata: { humanId } });
   return nodes.filter(isLiveBacklogItemNode);
 }
 
-export async function knownRepos(store: GraphBacklogStore): Promise<Set<string>> {
-  const nodes = await store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG] });
+/**
+ * Every distinct repo value any LIVE backlog item is currently filed under.
+ * Used by `createItemNode`'s soft repo-drift warning (write-time half of
+ * BUG-BACKLOG-REPO-LOOKUP-UX-001) — an empty store (no items yet) has no
+ * "known" repos, so the very first item filed under any repo string never
+ * triggers a false-positive warning.
+ */
+export function knownRepos(store: GraphBacklogStore): Set<string> {
+  const nodes = store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG] });
   const repos = new Set<string>();
   for (const node of nodes) {
     if (!isLiveBacklogItemNode(node)) continue;
@@ -117,8 +160,16 @@ export async function knownRepos(store: GraphBacklogStore): Promise<Set<string>>
   return repos;
 }
 
-export async function buildNotFoundError(store: GraphBacklogStore, repo: string, humanId: string): Promise<BacklogItemNotFoundError> {
-  const elsewhere = (await findHumanIdInAnyRepo(store, humanId)).filter((n) => nodeRepo(n) !== repo);
+/**
+ * Builds the `BacklogItemNotFoundError` every miss site throws — the single
+ * place that decides whether a "did you mean repo X?" hint is warranted
+ * (BUG-BACKLOG-REPO-LOOKUP-UX-001, read-time half). Callers pass the SAME
+ * `(repo, humanId)` they just failed to find via `findItemNode` — this
+ * re-queries WITHOUT the `namespace` restriction to see if the humanId lives
+ * under a different repo string instead.
+ */
+export function buildNotFoundError(store: GraphBacklogStore, repo: string, humanId: string): BacklogItemNotFoundError {
+  const elsewhere = findHumanIdInAnyRepo(store, humanId).filter((n) => nodeRepo(n) !== repo);
   const foundInRepos = [...new Set(elsewhere.map(nodeRepo).filter((r) => r.length > 0))];
   return new BacklogItemNotFoundError(repo, humanId, foundInRepos);
 }
@@ -133,8 +184,8 @@ function countByKey(items: BacklogItem[], keyFn: (item: BacklogItem) => string |
   return out;
 }
 
-export async function computeStats(store: GraphBacklogStore, scope: StatsScope = {}): Promise<import('../model.js').BacklogStats> {
-  const items = await listItems(store, { repo: scope.repo, projectPath: scope.projectPath });
+export function computeStats(store: GraphBacklogStore, scope: StatsScope = {}): import('../model.js').BacklogStats {
+  const items = listItems(store, { repo: scope.repo, projectPath: scope.projectPath });
   const open = items.filter((it) => !isTerminalStatus(it.status));
   const closed = items.filter((it) => isTerminalStatus(it.status));
   return {
@@ -149,8 +200,8 @@ export async function computeStats(store: GraphBacklogStore, scope: StatsScope =
   };
 }
 
-export async function spotlight(store: GraphBacklogStore, scope: StatsScope = {}, limit = 20): Promise<BacklogItem[]> {
-  const items = await listItems(store, { repo: scope.repo, projectPath: scope.projectPath, status: 'open' });
+export function spotlight(store: GraphBacklogStore, scope: StatsScope = {}, limit = 20): BacklogItem[] {
+  const items = listItems(store, { repo: scope.repo, projectPath: scope.projectPath, status: 'open' });
   const prioritized = items.filter((it) => it.priority !== undefined);
   prioritized.sort((a, b) => {
     const rankA = PRIORITY_RANK[a.priority ?? ''] ?? 4;
@@ -160,50 +211,46 @@ export async function spotlight(store: GraphBacklogStore, scope: StatsScope = {}
   return prioritized.slice(0, limit);
 }
 
-async function dependsOnTargets(store: GraphBacklogStore, nodeId: number): Promise<NodeRecord[]> {
-  const edges = await store.graph.getEdges({ src: nodeId, rel: 'DEPENDS_ON' });
+function dependsOnTargets(store: GraphBacklogStore, nodeId: number): NodeRecord[] {
+  const edges = store.graph.getEdges({ src: nodeId, rel: 'DEPENDS_ON' });
   const targets: NodeRecord[] = [];
   for (const edge of edges) {
-    const node = await store.graph.getNode(edge.dst);
+    const node = store.graph.getNode(edge.dst);
     if (node) targets.push(node);
   }
   return targets;
 }
 
-export async function blockers(store: GraphBacklogStore, repo: string, humanId: string): Promise<BacklogItem[]> {
-  const node = await findItemNode(store, repo, humanId);
+export function blockers(store: GraphBacklogStore, repo: string, humanId: string): BacklogItem[] {
+  const node = findItemNode(store, repo, humanId);
   if (!node) return [];
-  return (await dependsOnTargets(store, node.id))
+  return dependsOnTargets(store, node.id)
     .filter((n) => !n.tInvalid)
     .map(toBacklogItem)
     .filter((it) => !isTerminalStatus(it.status));
 }
 
-export async function readyItems(store: GraphBacklogStore, scope: StatsScope = {}): Promise<BacklogItem[]> {
-  const openItems = await listItems(store, { repo: scope.repo, projectPath: scope.projectPath, status: 'open' });
-  const result: BacklogItem[] = [];
-  for (const item of openItems) {
-    if (item.claimedBy) continue;
-    const node = await findItemNode(store, item.repo, item.humanId);
-    if (!node) continue;
-    const targets = (await dependsOnTargets(store, node.id)).filter((n) => !n.tInvalid);
-    if (targets.every((t) => isTerminalStatus(toBacklogItem(t).status))) {
-      result.push(item);
-    }
-  }
-  return result;
+export function readyItems(store: GraphBacklogStore, scope: StatsScope = {}): BacklogItem[] {
+  const openItems = listItems(store, { repo: scope.repo, projectPath: scope.projectPath, status: 'open' });
+  return openItems.filter((item) => {
+    if (item.claimedBy) return false;
+    const node = findItemNode(store, item.repo, item.humanId);
+    if (!node) return false;
+    const targets = dependsOnTargets(store, node.id).filter((n) => !n.tInvalid);
+    return targets.every((t) => isTerminalStatus(toBacklogItem(t).status));
+  });
 }
 
-export async function dependencyGraph(store: GraphBacklogStore, scope: StatsScope = {}): Promise<DependencyGraph> {
-  const items = await listItems(store, { repo: scope.repo, projectPath: scope.projectPath });
+export function dependencyGraph(store: GraphBacklogStore, scope: StatsScope = {}): DependencyGraph {
+  const items = listItems(store, { repo: scope.repo, projectPath: scope.projectPath });
   const nodes = items.map((it) => ({ humanId: it.humanId, title: it.title, status: it.status }));
   const edges: DependencyGraph['edges'] = [];
   for (const item of items) {
-    const node = await findItemNode(store, item.repo, item.humanId);
+    const node = findItemNode(store, item.repo, item.humanId);
     if (!node) continue;
     for (const rel of ['DEPENDS_ON', 'RELATES_TO', 'PART_OF'] as const) {
-      for (const edge of await store.graph.getEdges({ src: node.id, rel })) {
-        const dst = await store.graph.getNode(edge.dst);
+      for (const edge of store.graph.getEdges({ src: node.id, rel })) {
+        const dst = store.graph.getNode(edge.dst);
         if (!dst || dst.tInvalid) continue;
         const dstMeta = dst.metadata as { humanId?: string } | undefined;
         if (!dstMeta?.humanId) continue;
@@ -214,14 +261,17 @@ export async function dependencyGraph(store: GraphBacklogStore, scope: StatsScop
   return { nodes, edges };
 }
 
-export async function topoOrder(store: GraphBacklogStore, scope: StatsScope = {}): Promise<TopoOrderResult> {
-  const graph = await dependencyGraph(store, scope);
+export function topoOrder(store: GraphBacklogStore, scope: StatsScope = {}): TopoOrderResult {
+  const graph = dependencyGraph(store, scope);
   const dependsOnEdges = graph.edges.filter((e) => e.rel === 'DEPENDS_ON');
 
+  // adjacency: humanId -> set of humanIds it depends on (must complete first)
   const dependsOn = new Map<string, Set<string>>();
   for (const n of graph.nodes) dependsOn.set(n.humanId, new Set());
   for (const e of dependsOnEdges) dependsOn.get(e.from)?.add(e.to);
 
+  // Kahn's algorithm over the "depends-on" relation: an item is emittable once
+  // every item it depends on has already been emitted.
   const remaining = new Set(graph.nodes.map((n) => n.humanId));
   const order: string[] = [];
   let progressed = true;
@@ -239,6 +289,7 @@ export async function topoOrder(store: GraphBacklogStore, scope: StatsScope = {}
   }
 
   if (remaining.size > 0) {
+    // Extract one real cycle among the un-orderable remainder via DFS.
     const cycle = findCycle([...remaining], dependsOn);
     return { ok: false, cycle };
   }
@@ -271,22 +322,46 @@ function findCycle(nodeIds: string[], dependsOn: Map<string, Set<string>>): stri
     const found = visit(id);
     if (found) return found;
   }
+  // Every remaining node fails Kahn's progress test, so a cycle MUST exist
+  // among them; this is unreachable in practice but keeps the function total.
   return nodeIds;
 }
 
-export async function staleClaims(store: GraphBacklogStore, maxAgeMin: number, scope: StatsScope = {}): Promise<BacklogItem[]> {
-  const items = await listItems(store, { repo: scope.repo, projectPath: scope.projectPath });
+export function staleClaims(store: GraphBacklogStore, maxAgeMin: number, scope: StatsScope = {}): BacklogItem[] {
+  const items = listItems(store, { repo: scope.repo, projectPath: scope.projectPath });
   const cutoffMs = maxAgeMin * 60_000;
   const now = Date.now();
   return items.filter((it) => {
     if (!it.claimedBy || !it.claimedAt) return false;
+    // `>=`, not `>` (BUG-BACKLOG-STALE-CLAIMS-BOUNDARY-RACE-001, fixed here):
+    // `maxAgeMin=0` means "stale as of right now" — age is NEVER negative, so
+    // `>= 0` is the only comparison that's unconditionally true at the
+    // boundary. A strict `>` made this flaky: `claimItem`'s write and this
+    // read both resolve via `Date.now()` (millisecond resolution), and on a
+    // fast/quiescent run they can land in the SAME millisecond, making
+    // `now - claimedAtMs === 0` — `0 > 0` is false (item wrongly reported
+    // fresh), `0 >= 0` is true (correct). Reproduced via `client.spec.ts`'s
+    // "staleClaims surfaces claims older than maxAgeMin" test, which failed
+    // intermittently only when run as part of the FULL `nx test backlog`
+    // suite (never in isolation) — the exact signature of a sub-millisecond
+    // race, not a logic bug tied to any one input.
     return now - Date.parse(it.claimedAt) >= cutoffMs;
   });
 }
 
-export async function auditTrail(store: GraphBacklogStore, repo: string, humanId: string): Promise<AuditTrailResult> {
-  const node = await findItemNode(store, repo, humanId);
-  if (!node) throw await buildNotFoundError(store, repo, humanId);
+/**
+ * Bi-temporal history + supersession chain (SPEC.md §5.6, DESIGN.md §2.3).
+ * DEVIATION: the store does not persist a full mutation event log (no
+ * separate transitions/claims-over-time table) — `history` is therefore
+ * honestly derived from the durable fields we DO keep (a synthetic
+ * `created` entry, every real `note`, every real `citation`), not a
+ * fabricated replay of every status/claim change. Citation entries reuse
+ * `item.updatedAt` as their timestamp since `Citation` carries no `at` field
+ * of its own. Filed as DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001.
+ */
+export function auditTrail(store: GraphBacklogStore, repo: string, humanId: string): AuditTrailResult {
+  const node = findItemNode(store, repo, humanId);
+  if (!node) throw buildNotFoundError(store, repo, humanId);
   const item = toBacklogItem(node);
 
   const history: AuditTrailEntry[] = [
@@ -298,10 +373,17 @@ export async function auditTrail(store: GraphBacklogStore, repo: string, humanId
   for (const note of item.notes) {
     history.push({ at: note.at, kind: 'note', detail: { by: note.by, text: note.text } });
   }
-  history.push(...(await queryAuditEvents(store, node.id)));
+  // DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001: real, persisted transition/claim
+  // events (audit-log.ts) — previously the ONLY entries `auditTrail` could
+  // ever produce were synthesized from durable fields (created/citations/
+  // notes), so every past status/claim change beyond the LATEST one was
+  // unrecoverable. Items created/transitioned before this fix landed simply
+  // have no events here yet (nothing to backfill from) — new activity from
+  // this point on is fully covered.
+  history.push(...queryAuditEvents(store, node.id));
   history.sort((a, b) => a.at.localeCompare(b.at));
 
-  const chain = await store.graph.getSupersessionChain(node.id);
+  const chain = store.graph.getSupersessionChain(node.id);
   let supersessionChain: AuditTrailResult['supersessionChain'];
   if (chain.length > 1) {
     const index = chain.findIndex((n) => n.id === node.id);

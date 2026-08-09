@@ -14,25 +14,25 @@ import { auditTrail } from './query.js';
 
 const REPO = 'PseudoSky/audit-log-test';
 
-describe('audit-log — real, persisted transition/claim history (DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001)', async () => {
+describe('audit-log — real, persisted transition/claim history (DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001)', () => {
   let tmp: TmpStore;
 
-  beforeEach(async () => {
-    tmp = await openTmpStore('audit-log');
+  beforeEach(() => {
+    tmp = openTmpStore('audit-log');
   });
 
-  afterEach(async () => {
-    await tmp.cleanup();
+  afterEach(() => {
+    tmp.cleanup();
   });
 
-  it('multiple transitions are ALL individually recoverable, not just the current status', async () => {
+  it('multiple transitions are ALL individually recoverable, not just the current status', () => {
     const created = createItemNode(tmp.store, { family: 'BUG-AUDIT', title: 't', body: 'b', repo: REPO });
     const humanId = created.item.humanId;
 
-    await transitionStatusNode(tmp.store, REPO, humanId, 'IN_PROGRESS', { by: 'agent:a' });
-    await transitionStatusNode(tmp.store, REPO, humanId, 'BLOCKED', { by: 'agent:a' });
-    await transitionStatusNode(tmp.store, REPO, humanId, 'IN_PROGRESS', { by: 'agent:b' });
-    await transitionStatusNode(tmp.store, REPO, humanId, 'FIXED', {
+    transitionStatusNode(tmp.store, REPO, humanId, 'IN_PROGRESS', { by: 'agent:a' });
+    transitionStatusNode(tmp.store, REPO, humanId, 'BLOCKED', { by: 'agent:a' });
+    transitionStatusNode(tmp.store, REPO, humanId, 'IN_PROGRESS', { by: 'agent:b' });
+    transitionStatusNode(tmp.store, REPO, humanId, 'FIXED', {
       by: 'agent:b',
       citations: [{ file: 'src/x.ts', lines: '1-2' }],
     });
@@ -48,20 +48,20 @@ describe('audit-log — real, persisted transition/claim history (DEBT-BACKLOG-A
     expect(transitions[3]?.detail['by']).toBe('agent:b');
   });
 
-  it('a REJECTED transition (missing required citation) logs NOTHING — never a fake event for a change that never happened', async () => {
+  it('a REJECTED transition (missing required citation) logs NOTHING — never a fake event for a change that never happened', () => {
     const created = createItemNode(tmp.store, { family: 'BUG-AUDIT-REJECT', title: 't', body: 'b', repo: REPO });
-    await expect(transitionStatusNode(tmp.store, REPO, created.item.humanId, 'FIXED', { by: 'agent:a' })).rejects.toThrow();
+    expect(() => transitionStatusNode(tmp.store, REPO, created.item.humanId, 'FIXED', { by: 'agent:a' })).toThrow();
 
     const trail = auditTrail(tmp.store, REPO, created.item.humanId);
     expect(trail.history.filter((h) => h.kind === 'transition')).toHaveLength(0);
   });
 
-  it('claim/renew/release are all recoverable; a REFUSED claim (held) and a no-op release log nothing', async () => {
+  it('claim/renew/release are all recoverable; a REFUSED claim (held) and a no-op release log nothing', () => {
     const created = createItemNode(tmp.store, { family: 'BUG-AUDIT-CLAIM', title: 't', body: 'b', repo: REPO });
     const humanId = created.item.humanId;
 
     // no-op release on a never-claimed item — must log nothing.
-    await releaseClaimNode(tmp.store, created.item.nodeId, 'agent:a');
+    releaseClaimNode(tmp.store, created.item.nodeId, 'agent:a');
 
     const claimed = claimItemNode(tmp.store, created.item.nodeId, 'agent:a');
     expect(claimed.status).toBe('claimed');
@@ -70,8 +70,8 @@ describe('audit-log — real, persisted transition/claim history (DEBT-BACKLOG-A
     const held = claimItemNode(tmp.store, created.item.nodeId, 'agent:b');
     expect(held.status).toBe('held');
 
-    await renewClaimNode(tmp.store, created.item.nodeId, 'agent:a');
-    await releaseClaimNode(tmp.store, created.item.nodeId, 'agent:a');
+    renewClaimNode(tmp.store, created.item.nodeId, 'agent:a');
+    releaseClaimNode(tmp.store, created.item.nodeId, 'agent:a');
 
     const trail = auditTrail(tmp.store, REPO, humanId);
     const claims = trail.history.filter((h) => h.kind === 'claim');
@@ -79,13 +79,13 @@ describe('audit-log — real, persisted transition/claim history (DEBT-BACKLOG-A
     expect(claims.every((c) => c.detail['by'] === 'agent:a')).toBe(true);
   });
 
-  it('transition and claim events are chronologically interleaved with notes/citations in one merged history', async () => {
+  it('transition and claim events are chronologically interleaved with notes/citations in one merged history', () => {
     const created = createItemNode(tmp.store, { family: 'BUG-AUDIT-MERGE', title: 't', body: 'b', repo: REPO });
     const humanId = created.item.humanId;
 
-    await claimItemNode(tmp.store, created.item.nodeId, 'agent:a');
-    await transitionStatusNode(tmp.store, REPO, humanId, 'IN_PROGRESS', { by: 'agent:a', note: 'starting work' });
-    await releaseClaimNode(tmp.store, created.item.nodeId, 'agent:a');
+    claimItemNode(tmp.store, created.item.nodeId, 'agent:a');
+    transitionStatusNode(tmp.store, REPO, humanId, 'IN_PROGRESS', { by: 'agent:a', note: 'starting work' });
+    releaseClaimNode(tmp.store, created.item.nodeId, 'agent:a');
 
     const trail = auditTrail(tmp.store, REPO, humanId);
     const kinds = trail.history.map((h) => h.kind);

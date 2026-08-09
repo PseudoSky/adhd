@@ -20,20 +20,20 @@ import { CitationRequiredError, ReasonRequiredError } from '../model.js';
 
 const REPO = 'PseudoSky/lifecycle-test';
 
-describe('transitionStatusNode — status-vocabulary teeth gate', async () => {
+describe('transitionStatusNode — status-vocabulary teeth gate', () => {
   let tmp: TmpStore;
 
-  beforeEach(async () => {
-    tmp = await openTmpStore('lifecycle-spec');
+  beforeEach(() => {
+    tmp = openTmpStore('lifecycle-spec');
   });
 
-  afterEach(async () => {
-    await tmp.cleanup();
+  afterEach(() => {
+    tmp.cleanup();
   });
 
-  it('rejects a transition into FIXED with zero citations', async () => {
+  it('rejects a transition into FIXED with zero citations', () => {
     const created = createItemNode(tmp.store, { family: 'BUG-GATE', title: 't', body: 'b', repo: REPO });
-    await expect(transitionStatusNode(tmp.store, REPO, created.item.humanId, 'FIXED', { by: 'implementer:x', note: 'done' })).rejects.toThrow(
+    expect(() => transitionStatusNode(tmp.store, REPO, created.item.humanId, 'FIXED', { by: 'implementer:x', note: 'done' })).toThrow(
       CitationRequiredError
     );
     // The item must remain unchanged — a rejected transition is not a partial write.
@@ -41,16 +41,16 @@ describe('transitionStatusNode — status-vocabulary teeth gate', async () => {
     expect((stillOpen?.metadata as { status?: string } | undefined)?.status).toBe('OPEN');
   });
 
-  it('rejects a transition into MITIGATED with zero citations', async () => {
+  it('rejects a transition into MITIGATED with zero citations', () => {
     const created = createItemNode(tmp.store, { family: 'BUG-GATE', title: 't', body: 'b', repo: REPO });
-    await expect(transitionStatusNode(tmp.store, REPO, created.item.humanId, 'MITIGATED', { by: 'implementer:x' })).rejects.toThrow(
+    expect(() => transitionStatusNode(tmp.store, REPO, created.item.humanId, 'MITIGATED', { by: 'implementer:x' })).toThrow(
       CitationRequiredError
     );
   });
 
-  it('rejects a transition into WONTFIX with no reason', async () => {
+  it('rejects a transition into WONTFIX with no reason', () => {
     const created = createItemNode(tmp.store, { family: 'BUG-GATE', title: 't', body: 'b', repo: REPO });
-    await expect(transitionStatusNode(tmp.store, REPO, created.item.humanId, 'WONTFIX', { by: 'implementer:x' })).rejects.toThrow(ReasonRequiredError);
+    expect(() => transitionStatusNode(tmp.store, REPO, created.item.humanId, 'WONTFIX', { by: 'implementer:x' })).toThrow(ReasonRequiredError);
   });
 
   it('accepts a transition into FIXED WITH a citation, and clears any prior claim', () => {
@@ -63,9 +63,9 @@ describe('transitionStatusNode — status-vocabulary teeth gate', async () => {
     expect(result.citations).toHaveLength(1);
   });
 
-  it('a citation already attached via addCitation satisfies the gate without an inline one', async () => {
+  it('a citation already attached via addCitation satisfies the gate without an inline one', () => {
     const created = createItemNode(tmp.store, { family: 'BUG-GATE', title: 't', body: 'b', repo: REPO });
-    await addCitationNode(tmp.store, REPO, created.item.humanId, { file: 'src/x.ts' });
+    addCitationNode(tmp.store, REPO, created.item.humanId, { file: 'src/x.ts' });
     // No `citations` passed inline this time — the gate must see the one already attached.
     const result = transitionStatusNode(tmp.store, REPO, created.item.humanId, 'FIXED', { by: 'implementer:x' });
     expect(result.status).toBe('FIXED');

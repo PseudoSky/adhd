@@ -22,7 +22,7 @@ import { openGraphBacklogStore, closeGraphBacklogStore } from './store/graph-bac
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ENTRY_SCRIPT = join(HERE, 'test', 'fixtures', 'mcp-stdio-entry.js');
 
-describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotocol/sdk client', async () => {
+describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotocol/sdk client', () => {
   let client: Client | undefined;
   let transport: StdioClientTransport | undefined;
   let adhdRoot: string | undefined;
@@ -44,7 +44,7 @@ describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotoco
     // its own exclusive connection to the same file).
     const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
     seedEnv.ensureDirs();
-    const seedStore = await openGraphBacklogStore(seedEnv.files.db);
+    const seedStore = openGraphBacklogStore(seedEnv.files.db);
     const seeded = await createItem({ store: seedStore, env: seedEnv }, { family: 'BUG-MCP', title: 'via mcp', body: 'x', repo });
     closeGraphBacklogStore(seedStore);
 

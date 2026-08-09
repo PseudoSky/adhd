@@ -269,11 +269,11 @@ export async function runBacklogCli(argv?: string[], opts: RunBacklogCliOpts = {
   // no-args, an unknown command, or a bad-flag rejection, all of which `run()`
   // resolves entirely from the static `operations`/`schemas` below.
   let opened: { store: GraphBacklogStore; ctx: BacklogCtx } | undefined;
-  const getCtx = async (): Promise<BacklogCtx> => {
+  const getCtx = (): BacklogCtx => {
     if (!opened) {
       const env = buildBacklogEnv({ scope: opts.scope, adhdRoot: opts.adhdRoot, cwd: opts.cwd });
       env.ensureDirs();
-      const store = await openGraphBacklogStore(env.files.db, env.config.db.busyTimeoutMs);
+      const store = openGraphBacklogStore(env.files.db, env.config.db.busyTimeoutMs);
       opened = { store, ctx: { store, env } };
     }
     return opened.ctx;
@@ -304,6 +304,6 @@ export async function runBacklogCli(argv?: string[], opts: RunBacklogCliOpts = {
       logger: testSilentLogger(),
     });
   } finally {
-    if (opened) await closeGraphBacklogStore(opened.store);
+    if (opened) closeGraphBacklogStore(opened.store);
   }
 }

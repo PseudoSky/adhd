@@ -12,10 +12,10 @@ import { globalConfigPath, writeMigrationPhase } from './migration-admin.js';
 import { setMigrationPhase, migrationStatus, type BacklogCtx } from './client.js';
 import { openTmpStore, freshTmpDir, type TmpStore } from './test/helpers/tmp-store.js';
 
-describe('migration-admin — durable, cross-process migration.phase (MIGRATION.md §4.4)', async () => {
+describe('migration-admin — durable, cross-process migration.phase (MIGRATION.md §4.4)', () => {
   let adhdRoot: string;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     adhdRoot = freshTmpDir('migration-admin');
   });
 
@@ -66,17 +66,17 @@ describe('migration-admin — durable, cross-process migration.phase (MIGRATION.
     expect(raw['migration']).toEqual({ phase: 'phase-2' });
   });
 
-  describe('client.ts setMigrationPhase / migrationStatus integration', async () => {
+  describe('client.ts setMigrationPhase / migrationStatus integration', () => {
     let tmp: TmpStore;
     let ctx: BacklogCtx;
 
-    beforeEach(async () => {
-      tmp = await openTmpStore('migration-admin-client');
+    beforeEach(() => {
+      tmp = openTmpStore('migration-admin-client');
       ctx = { store: tmp.store, env: buildBacklogEnv({ scope: 'global', adhdRoot: tmp.dir }), adhdRoot: tmp.dir };
     });
 
-    afterEach(async () => {
-      await tmp.cleanup();
+    afterEach(() => {
+      tmp.cleanup();
     });
 
     // NEGATIVE CONTROL, discovered for real (not hypothetical): the first
