@@ -475,13 +475,13 @@ importers:
         specifier: ^0.2.2
         version: link:../../packages/apigen/apigen-plugin-openapi
       '@adhd/apigen-plugin-py-flask':
-        specifier: ^0.2.3
+        specifier: ^0.2.4
         version: link:../../packages/apigen/apigen-plugin-py-flask
       '@adhd/apigen-plugin-py-grpc':
-        specifier: ^0.2.3
+        specifier: ^0.2.4
         version: link:../../packages/apigen/apigen-plugin-py-grpc
       '@adhd/apigen-python-env':
-        specifier: ^0.2.3
+        specifier: ^0.2.4
         version: link:../../packages/apigen/python-env
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
@@ -639,16 +639,16 @@ importers:
   entrypoint/dispatch-cli:
     dependencies:
       '@adhd/dispatch-base-spec':
-        specifier: ^0.1.1
+        specifier: ^0.1.2
         version: link:../../packages/dispatch/dispatch-base-spec
       '@adhd/dispatch-core-client':
         specifier: ^0.1.0
         version: link:../../packages/dispatch/dispatch-core-client
       '@adhd/dispatch-core-optimizer':
-        specifier: ^0.1.1
+        specifier: ^0.1.2
         version: link:../../packages/dispatch/dispatch-core-optimizer
       '@adhd/dispatch-orchestrator':
-        specifier: ^0.1.1
+        specifier: ^0.1.2
         version: link:../../packages/dispatch/dispatch-orchestrator
       '@adhd/dispatch-serializer-json':
         specifier: ^0.1.0
@@ -1085,7 +1085,7 @@ importers:
         specifier: ^0.2.2
         version: link:../apigen-engine-naming
       '@adhd/apigen-python-env':
-        specifier: ^0.2.3
+        specifier: ^0.2.4
         version: link:../python-env
 
   packages/apigen/apigen-engine-gateway:
@@ -1283,7 +1283,7 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-engine-runtime
       '@adhd/apigen-python-env':
-        specifier: ^0.2.3
+        specifier: ^0.2.4
         version: link:../python-env
 
   packages/apigen/apigen-plugin-py-grpc:
@@ -1295,7 +1295,7 @@ importers:
         specifier: ^0.2.2
         version: link:../apigen-engine-naming
       '@adhd/apigen-python-env':
-        specifier: ^0.2.3
+        specifier: ^0.2.4
         version: link:../python-env
 
   packages/apigen/codegen/openapi:
@@ -1334,19 +1334,19 @@ importers:
   packages/dispatch/dispatch-core-client:
     dependencies:
       '@adhd/dispatch-base-spec':
-        specifier: ^0.1.1
+        specifier: ^0.1.2
         version: link:../dispatch-base-spec
 
   packages/dispatch/dispatch-core-optimizer:
     dependencies:
       '@adhd/dispatch-base-spec':
-        specifier: ^0.1.1
+        specifier: ^0.1.2
         version: link:../dispatch-base-spec
 
   packages/dispatch/dispatch-orchestrator:
     dependencies:
       '@adhd/dispatch-base-spec':
-        specifier: ^0.1.1
+        specifier: ^0.1.2
         version: link:../dispatch-base-spec
       '@adhd/dispatch-core-client':
         specifier: ^0.1.0
@@ -1365,7 +1365,7 @@ importers:
         specifier: ^2.2.0
         version: link:../../agent/agent-store-runtime
       '@adhd/dispatch-core-optimizer':
-        specifier: ^0.1.1
+        specifier: ^0.1.2
         version: link:../dispatch-core-optimizer
       '@adhd/dispatch-serializer-json':
         specifier: ^0.1.0
@@ -1380,7 +1380,7 @@ importers:
   packages/dispatch/dispatch-serializer-json:
     dependencies:
       '@adhd/dispatch-base-spec':
-        specifier: ^0.1.1
+        specifier: ^0.1.2
         version: link:../dispatch-base-spec
       '@adhd/dispatch-core-client':
         specifier: ^0.1.0
