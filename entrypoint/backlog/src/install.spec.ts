@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { install, runInstallCommand, upsertTomlTable, BACKLOG_MCP_NPX_ARGS, INSTALL_HELP_TEXT } from './install.js';
 
-describe('install --mcp-only (BUG-013)', () => {
+describe('install --mcp-only (BUG-013)', async () => {
   let tmp: string;
 
   beforeEach(async () => {

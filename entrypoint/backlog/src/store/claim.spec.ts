@@ -70,15 +70,15 @@ function runClaimWorker(opts: { dbPath: string; adhdRoot: string; humanId: strin
   return { worker, ready, outcome };
 }
 
-describe('claimItem — CAS claim race (real worker_threads, real second SQLite connection)', () => {
+describe('claimItem — CAS claim race (real worker_threads, real second SQLite connection)', async () => {
   let tmp: TmpStore;
 
-  beforeEach(async () => {
-    tmp = await openTmpStore('claim-race');
+  beforeEach(() => {
+    tmp = openTmpStore('claim-race');
   });
 
-  afterEach(async () => {
-    await tmp.cleanup();
+  afterEach(() => {
+    tmp.cleanup();
   });
 
   it('exactly one of two truly concurrent claimants wins; the other sees held', async () => {

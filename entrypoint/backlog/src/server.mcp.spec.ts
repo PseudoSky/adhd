@@ -22,7 +22,7 @@ import { openGraphBacklogStore, closeGraphBacklogStore } from './store/graph-bac
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ENTRY_SCRIPT = join(HERE, 'test', 'fixtures', 'mcp-stdio-entry.js');
 
-describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotocol/sdk client', () => {
+describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotocol/sdk client', async () => {
   let client: Client | undefined;
   let transport: StdioClientTransport | undefined;
   let adhdRoot: string | undefined;

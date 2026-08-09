@@ -87,15 +87,15 @@ function p99(values: number[]): number {
   return sorted[idx];
 }
 
-describe(`concurrency-scale — ${N} real worker_threads (MIGRATION.md §3.3)`, () => {
+describe(`concurrency-scale — ${N} real worker_threads (MIGRATION.md §3.3)`, async () => {
   let tmp: TmpStore;
 
-  beforeEach(async () => {
-    tmp = await openTmpStore('concurrency-scale');
+  beforeEach(() => {
+    tmp = openTmpStore('concurrency-scale');
   });
 
-  afterEach(async () => {
-    await tmp.cleanup();
+  afterEach(() => {
+    tmp.cleanup();
   });
 
   it('contention case: exactly ONE of N truly concurrent claimItem calls on the SAME item wins; the rest see held', async () => {
