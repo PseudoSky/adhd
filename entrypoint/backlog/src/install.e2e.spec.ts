@@ -26,7 +26,7 @@ import { install, BACKLOG_MCP_NPX_ARGS } from './install.js';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
 
-describe('BUG-013 — install-written MCP config actually launches a working real server (claude + opencode)', async () => {
+describe('BUG-013 — install-written MCP config actually launches a working real server (claude + opencode)', () => {
   let tmp: string | undefined;
   let adhdRoot: string | undefined;
   let client: Client | undefined;

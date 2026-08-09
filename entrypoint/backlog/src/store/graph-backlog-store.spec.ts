@@ -3,54 +3,37 @@
  * `openGraphBacklogStore(dbPath, busyTimeoutMs)`'s `busyTimeoutMs` must
  * actually take effect on the real connection, not just look like it does.
  *
- * Uses temp files (not :memory:) because the turso adapter enables
- * multiprocess_wal by default, which is not supported for in-memory databases.
+ * Discovered while writing busy-retry.spec.ts (DEBT-BACKLOG-CONCURRENCY-
+ * BUSY-RETRY-001): `@adhd/sox-graph-store`'s `createGraphBackend(db)`
+ * constructor unconditionally calls `applySchema()`, which re-runs the
+ * library's OWN `PRAGMAS` array — including a hardcoded `busy_timeout =
+ * 5000` — silently clobbering any `busy_timeout` set BEFORE constructing the
+ * graph backend. A prior version of `openGraphBacklogStore` set it before,
+ * so every caller's custom `busyTimeoutMs` (including `db.config.
+ * busyTimeoutMs` from `buildBacklogEnv`) was silently discarded and the
+ * store always ran at the hardcoded 5000ms regardless of what was passed in
+ * — no error, no warning, `busy_timeout` pragma just quietly wrong.
  */
-import { mkdtempSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
 import { closeGraphBacklogStore, openGraphBacklogStore, type GraphBacklogStore } from './graph-backlog-store.js';
 
 describe('openGraphBacklogStore — busy_timeout actually takes effect (BUG-BACKLOG-BUSY-TIMEOUT-CLOBBERED-001)', () => {
   let store: GraphBacklogStore | undefined;
-  let tmpDir: string | undefined;
 
-  afterEach(async () => {
-    if (store) await closeGraphBacklogStore(store);
+  afterEach(() => {
+    if (store) closeGraphBacklogStore(store);
     store = undefined;
-    if (tmpDir) { rmSync(tmpDir, { recursive: true, force: true }); tmpDir = undefined; }
   });
 
-  function tmpDbPath(): string {
-    tmpDir = mkdtempSync(join(tmpdir(), 'backlog-busy-timeout-'));
-    return join(tmpDir, 'backlog.db');
-  }
-
-  /**
-   * The turso adapter returns PRAGMA values as arrays like
-   * `[{ busy_timeout: 250 }]`. Normalise to the scalar value.
-   */
-  async function getBusyTimeout(store: GraphBacklogStore): Promise<number> {
-    const raw = await store.adapter.pragmaGet<Array<{ busy_timeout: number }> | number>('busy_timeout');
-    if (typeof raw === 'number') return raw;
-    if (Array.isArray(raw) && raw.length > 0) return raw[0]?.busy_timeout ?? 0;
-    if (typeof raw === 'object' && raw !== null) {
-      const obj = raw as { busy_timeout?: number };
-      return obj.busy_timeout ?? 0;
-    }
-    return 0;
-  }
-
-  it('a custom busyTimeoutMs is reflected by a real PRAGMA busy_timeout read-back, not silently reset to the library default', async () => {
-    store = await openGraphBacklogStore(tmpDbPath(), 250);
-    const timeout = await getBusyTimeout(store);
-    expect(timeout).toBe(250);
+  it('a custom busyTimeoutMs is reflected by a real PRAGMA busy_timeout read-back, not silently reset to the library default', () => {
+    store = openGraphBacklogStore(':memory:', 250);
+    const row = store.db.pragma('busy_timeout') as Array<{ timeout: number }>;
+    expect(row[0]?.timeout).toBe(250);
   });
 
-  it('the default (no busyTimeoutMs argument) is 5000', async () => {
-    store = await openGraphBacklogStore(tmpDbPath());
-    const timeout = await getBusyTimeout(store);
-    expect(timeout).toBe(5000);
+  it('the default (no busyTimeoutMs argument) is 5000', () => {
+    store = openGraphBacklogStore(':memory:');
+    const row = store.db.pragma('busy_timeout') as Array<{ timeout: number }>;
+    expect(row[0]?.timeout).toBe(5000);
   });
 });

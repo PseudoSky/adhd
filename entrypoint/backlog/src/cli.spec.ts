@@ -79,7 +79,7 @@ function runBin(args: string[], cwd: string): SpawnResult {
 // specifically because every `client.ts` export is extracted from this ONE
 // file — a genuine same-name collision across files would still be caught
 // at extract time by `checkCollisions` (`@adhd/apigen-engine-naming`).
-describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (empirically verified, not assumed)', async () => {
+describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (empirically verified, not assumed)', () => {
   it('resolveCommandPrefix derives the REAL single-segment internal prefix from live operations', async () => {
     const { operations } = await buildBacklogApigenPackage({} as BacklogCtx);
     const prefix = resolveCommandPrefix(operations);
@@ -180,10 +180,10 @@ describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (
 // store, no mocks anywhere.
 // ---------------------------------------------------------------------------
 
-describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp-scoped store', async () => {
+describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp-scoped store', () => {
   let adhdRoot: string | undefined;
 
-  afterEach(async () => {
+  afterEach(() => {
     if (adhdRoot) rmSync(adhdRoot, { recursive: true, force: true });
     adhdRoot = undefined;
   });
@@ -258,7 +258,7 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     // server.mcp.spec.ts's seeding).
     const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
     seedEnv.ensureDirs();
-    const seedStore = await openGraphBacklogStore(seedEnv.files.db);
+    const seedStore = openGraphBacklogStore(seedEnv.files.db);
     const seeded = await createItem(
       { store: seedStore, env: seedEnv },
       { family: 'BUG-CLI', title: 'via cli', body: 'x', repo }
@@ -282,7 +282,7 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
 
     const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
     seedEnv.ensureDirs();
-    const seedStore = await openGraphBacklogStore(seedEnv.files.db);
+    const seedStore = openGraphBacklogStore(seedEnv.files.db);
     const seeded = await createItem(
       { store: seedStore, env: seedEnv },
       { family: 'BUG-CLIPFX', title: 'via cli prefixed', body: 'x', repo }
@@ -319,7 +319,7 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
 
     const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
     seedEnv.ensureDirs();
-    const seedStore = await openGraphBacklogStore(seedEnv.files.db);
+    const seedStore = openGraphBacklogStore(seedEnv.files.db);
     const seeded = await createItem(
       { store: seedStore, env: seedEnv },
       { family: 'BUG-CLILIST', title: 'listed via cli', body: 'x', repo }

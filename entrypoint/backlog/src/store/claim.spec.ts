@@ -70,7 +70,7 @@ function runClaimWorker(opts: { dbPath: string; adhdRoot: string; humanId: strin
   return { worker, ready, outcome };
 }
 
-describe('claimItem — CAS claim race (real worker_threads, real second SQLite connection)', async () => {
+describe('claimItem — CAS claim race (real worker_threads, real second SQLite connection)', () => {
   let tmp: TmpStore;
 
   beforeEach(() => {

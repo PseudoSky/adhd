@@ -45,7 +45,7 @@ async function waitForHttpReady(port: number, path: string): Promise<void> {
   throw new Error(`server never became ready on port ${port}: ${String(lastErr)}`);
 }
 
-describe('startBacklogServer — live HTTP mount, real fetch, no mocked fns', async () => {
+describe('startBacklogServer — live HTTP mount, real fetch, no mocked fns', () => {
   let controller: AbortController | undefined;
   let serverPromise: Promise<void> | undefined;
   let adhdRoot: string | undefined;
@@ -68,7 +68,7 @@ describe('startBacklogServer — live HTTP mount, real fetch, no mocked fns', as
     // GraphBacklogStore of its own) can open it exclusively.
     const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
     seedEnv.ensureDirs();
-    const seedStore = await openGraphBacklogStore(seedEnv.files.db);
+    const seedStore = openGraphBacklogStore(seedEnv.files.db);
     const seeded = await createItem({ store: seedStore, env: seedEnv }, { family: 'BUG-HTTP', title: 'via http', body: 'x', repo });
     closeGraphBacklogStore(seedStore);
 

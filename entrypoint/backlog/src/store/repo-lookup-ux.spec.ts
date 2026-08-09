@@ -31,16 +31,16 @@ const REPO_UNRELATED = 'some/other-project';
 let tmp: TmpStore;
 let ctx: BacklogCtx;
 
-beforeEach(async () => {
-  tmp = await openTmpStore('repo-lookup-ux-spec');
+beforeEach(() => {
+  tmp = openTmpStore('repo-lookup-ux-spec');
   ctx = { store: tmp.store, env: buildBacklogEnv({ scope: 'project', adhdRoot: tmp.dir }) };
 });
 
-afterEach(async () => {
-  await tmp.cleanup();
+afterEach(() => {
+  tmp.cleanup();
 });
 
-describe('read-time: helpful hint on a repo/humanId mismatch', async () => {
+describe('read-time: helpful hint on a repo/humanId mismatch', () => {
   it('findHumanIdInAnyRepo finds a live node under a DIFFERENT repo string', () => {
     const created = createItemNode(tmp.store, { family: 'BUG-X', title: 't', body: 'b', repo: REPO_A });
     const hits = findHumanIdInAnyRepo(tmp.store, created.item.humanId);
@@ -101,9 +101,9 @@ describe('read-time: helpful hint on a repo/humanId mismatch', async () => {
   });
 });
 
-describe('write-time: soft repo-drift warning on createItem', async () => {
+describe('write-time: soft repo-drift warning on createItem', () => {
   it('knownRepos is empty for a fresh store — the very FIRST item under any repo string never warns', async () => {
-    expect(await knownRepos(tmp.store).size).toBe(0);
+    expect(knownRepos(tmp.store).size).toBe(0);
     const result = await client.createItem(ctx, { family: 'BUG-FIRST', title: 't', body: 'b', repo: REPO_A });
     expect(result.created).toBe(true);
     expect(result.repoWarning).toBeUndefined();
@@ -134,7 +134,7 @@ describe('write-time: soft repo-drift warning on createItem', async () => {
   });
 });
 
-describe('write-time: importFromMarkdown carries the same repoWarning, once per import (not per item)', async () => {
+describe('write-time: importFromMarkdown carries the same repoWarning, once per import (not per item)', () => {
   it('warns once when importing under a repo value not already known to the store', async () => {
     await client.createItem(ctx, { family: 'BUG-PREEXIST', title: 't', body: 'b', repo: REPO_A });
 
