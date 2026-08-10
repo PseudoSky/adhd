@@ -1405,3 +1405,131 @@ describe('cache-token double-count (BUG-ORCH-010)', () => {
     expect(windowSql).toMatch(/input_tokens \+ output_tokens/);
   });
 });
+
+// ── Cache-weighted cost (BUG-AGENTMCP-008) ───────────────────────────────────
+//
+// BudgetAccumulator used to track only the aggregate `inputTokens` and bill cost at a
+// single flat rate: cost = inputTokens × costPerInputToken. On cache-warm runs most
+// input is cache-READ, which deepseek-v4-flash bills at $0.0028/M vs $0.14/M uncached —
+// a 50x gap. The flat formula counted every cache-read token at full weight, tripping
+// maxCostUSD at ~$0.126 for a run whose REAL cost was ~$0.0025. The fix: accumulate the
+// per-class split the providers already emit (uncachedInputTokens / cacheReadTokens /
+// cacheCreationTokens — normaliseAnthropicUsage / normaliseOpenAIUsage) and weight each
+// class at its own rate (costPerCacheReadToken / costPerCacheWriteToken, defaulting to
+// costPerInputToken so a config that never heard of cache rates behaves byte-for-byte as
+// the old flat formula).
+describe('cache-weighted cost (BUG-AGENTMCP-008)', () => {
+  let hooks: HookRegistry;
+
+  beforeEach(() => {
+    hooks = new HookRegistry();
+  });
+
+  // DeepSeek cache-warm shape: 1000 uncached + 900_000 cache-read + 0 cache-write.
+  // inputTokens (901_000) is the provider-neutral class sum — real providers always
+  // emit it alongside the split. Real cost = 1000×$0.14/M + 900_000×$0.0028/M = $0.00266,
+  // under the $0.01 cap. The FLAT formula (the bug) bills 901_000×$0.14/M = $0.12614 >=
+  // $0.01 and throws BUDGET_EXCEEDED — this test fails red on that code.
+  it('does NOT trip the cost cap on 900K cache-read tokens weighted at the cache-read rate', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: configSchema.parse({
+        maxCostUSD: 0.01,
+        costPerInputToken: 0.00000014, // $0.14/M (deepseek-v4-flash uncached input)
+        costPerCacheReadToken: 0.0000000028, // $0.0028/M (deepseek-v4-flash cache-read)
+        costPerCacheWriteToken: 0.0000000028, // deepseek charges no cache write; use read rate
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    await enforcePreModel(hooks, ctx);
+
+    await hooks.emit('post:model_response', {
+      executionContext: ctx,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: {
+        inputTokens: 901_000,
+        outputTokens: 0,
+        uncachedInputTokens: 1_000,
+        cacheReadTokens: 900_000,
+        cacheCreationTokens: 0,
+      },
+    });
+
+    await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
+  });
+
+  it('control: the cost cap STILL trips once genuine (cache-weighted) spend reaches it', async () => {
+    // Proves the fix is not "cost cap disabled" — it still trips, but at the cache rate.
+    const plugin = createPlugin({
+      db: null,
+      config: configSchema.parse({
+        maxCostUSD: 0.01,
+        costPerInputToken: 0.00000014,
+        costPerCacheReadToken: 0.0000000028,
+        costPerCacheWriteToken: 0.0000000028,
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    await enforcePreModel(hooks, ctx);
+
+    // 4_000_000 cache-read × $0.0028/M = $0.0112 (+ $0.00014 uncached) >= $0.01 → block.
+    await hooks.emit('post:model_response', {
+      executionContext: ctx,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: {
+        inputTokens: 4_001_000,
+        outputTokens: 0,
+        uncachedInputTokens: 1_000,
+        cacheReadTokens: 4_000_000,
+        cacheCreationTokens: 0,
+      },
+    });
+
+    await expect(enforcePreModel(hooks, ctx)).rejects.toMatchObject({
+      message: expect.stringContaining('cost'),
+    });
+  });
+
+  it('backward compat: without costPerCacheReadToken the same usage behaves exactly as before (flat, trips)', async () => {
+    // A config that never heard of cache rates must behave byte-for-byte as the old flat
+    // formula: 901_000 × $0.14/M = $0.12614 >= $0.01 → BUDGET_EXCEEDED.
+    const plugin = createPlugin({
+      db: null,
+      config: configSchema.parse({
+        maxCostUSD: 0.01,
+        costPerInputToken: 0.00000014,
+        costPerOutputToken: 0.00000028, // $0.28/M — mirrors deepseek-v4-flash output
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    await enforcePreModel(hooks, ctx);
+
+    await hooks.emit('post:model_response', {
+      executionContext: ctx,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: {
+        inputTokens: 901_000,
+        outputTokens: 0,
+        uncachedInputTokens: 1_000,
+        cacheReadTokens: 900_000,
+        cacheCreationTokens: 0,
+      },
+    });
+
+    await expect(enforcePreModel(hooks, ctx)).rejects.toMatchObject({
+      message: expect.stringContaining('cost'),
+    });
+  });
+});
