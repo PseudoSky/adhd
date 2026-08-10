@@ -112,7 +112,8 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
     "db.path": {
       type: "string",
       env: "ADHD_AGENT_DATABASE_PATH",
-      description: "SQLite DB path. Unset by default — falls back to the zero-config env.files.db location (db/client.ts).",
+      description:
+        "SQLite DB path. Unset by default — falls back to the zero-config env.files.db location (db/client.ts), resolved from the scope-forced operationalEnv instance (DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001) so ADHD_ENV_SCOPE=project can never relocate the operational store.",
     },
     "logging.level": {
       type: "string",
@@ -315,6 +316,40 @@ export const env = Object.assign(
   new Environment<AgentMcpConfig>("agent-mcp", agentMcpEnvironmentSpec, { namespace: "production" }),
   { getProviderConfig, subprocessEnv },
 );
+
+// ============================================================================
+// operationalEnv — scope-forced instance for the OPERATIONAL store ONLY
+// ============================================================================
+
+/**
+ * DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001 (design decision 2): a
+ * scope-FORCED (`scope: 'global'`) `Environment` instance used EXCLUSIVELY to
+ * resolve the operational SQLite store path (`db/client.ts`).
+ *
+ * Why it exists on top of the `dirs.data.scope:'global'` pin (which already
+ * wins over `ADHD_ENV_SCOPE` for `env.files.db` — see the `data` dir comment
+ * above): the environment CONFIG-FILE layers follow the ACTIVE scope, so with
+ * `ADHD_ENV_SCOPE=project` a project-scope `config.yaml` (at
+ * `<projectRoot>/.adhd/agent-mcp/production/config.yaml`) can set the
+ * declared `db.path` config field — and `db/client.ts` previously opened
+ * `env.config.db.path ?? env.files['db']`, i.e. the project layer would
+ * relocate the operational agents.db into the repo tree (probe-verified red
+ * before this fix). Forcing `scope:'global'` here means `roots.project` is
+ * never populated, so the project/local layers never load and `db.path` can
+ * only ever come from the env var layer (`ADHD_AGENT_DATABASE_PATH`) or a
+ * system/global `config.yaml` — both user-level, both legitimate. This is
+ * what the `dirs.data` pin alone cannot guarantee.
+ *
+ * `ADHD_ENV_SCOPE=project` (as this repo's `.mcp.json` sets) therefore
+ * relocates ONLY config-file layers (`plugins.configPath`,
+ * `server.registryDbPath` — already explicit project-relative overrides in
+ * `.mcp.json`), never agents.db. Only an explicit `ADHD_AGENT_DATABASE_PATH`
+ * still wins over the resolved default.
+ */
+export const operationalEnv = new Environment<AgentMcpConfig>("agent-mcp", agentMcpEnvironmentSpec, {
+  namespace: "production",
+  scope: "global",
+});
 
 // ============================================================================
 // SSE port selection (BUG-AGENTMCP-SSE-PORT-CONTENTION-001)
