@@ -4,7 +4,8 @@
   "type": "module",
   "bin": {
     "agent-mcp": "./dist/src/index.js",
-    "agent-mcp-tail": "./dist/src/scripts/agent-mcp-tail.js"
+    "agent-mcp-tail": "./dist/src/scripts/agent-mcp-tail.js",
+    "agent-mcp-install": "./dist/src/scripts/agent-mcp-install.js"
   },
   "files": [
     "dist",
