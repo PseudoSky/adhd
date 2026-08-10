@@ -6,8 +6,9 @@
  * both funnel through this wrapper — retrying ONLY busy-shaped errors, using
  * store-adapter's portable `isBusyError`/`isConcurrentConflict` duck-type
  * checks (the same helpers the adapter's own retry loop uses) so BOTH
- * substrates are covered: better-sqlite3's `SQLITE_BUSY`/`SQLITE_BUSY_SNAPSHOT`
- * codes and the turso driver's `GenericFailure` with a
+ * adapter error shapes are covered: the legacy SQLite adapter's
+ * `SQLITE_BUSY`/`SQLITE_BUSY_SNAPSHOT` codes and the turso driver's
+ * `GenericFailure` with a
  * "database is locked"/"database is busy" message. Any other thrown error
  * (including `NotFoundError`, `ClaimContentionError`) propagates immediately,
  * unretried — and the semantic `'held'` claim-contention RESULT (claim.ts) is
@@ -36,7 +37,7 @@ function isSqliteBusyError(err: unknown): boolean {
  * the retry wrapper waits via a real `setTimeout` promise — the event loop
  * stays free for the adapter's own async connection/query machinery (turso
  * in particular needs it: its driver is async I/O, unlike the old
- * synchronous better-sqlite3 handle, which is why the pre-adapter version of
+ * synchronous SQLite handle, which is why the pre-adapter version of
  * this file used a blocking `Atomics.wait`).
  */
 function sleepAsync(ms: number): Promise<void> {

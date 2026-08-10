@@ -90,8 +90,9 @@ export default defineConfig({
     rollupOptions: {
       // Bundle only @adhd/* workspace source (no workspace node_modules
       // symlinks in this repo — see externalize.mjs's doc comment);
-      // externalize every real npm dependency (better-sqlite3 — a native
-      // module that must never be bundled — plus fastify, the MCP SDK,
+      // externalize every real npm dependency (@tursodatabase/database —
+      // the turso store substrate's native module, which must never be
+      // bundled — plus fastify, the MCP SDK,
       // ts-morph/typescript transitively via apigen-core-client, and
       // `@adhd/sox-graph-store`, the first externally-published npm package
       // in this monorepo to also carry the `@adhd/` scope) + every Node
