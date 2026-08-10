@@ -32,7 +32,7 @@
  *     so it never equals the realpath-resolved `import.meta.url` of the
  *     dist file it points at. `isMainModule` is `false`, `main()` never
  *     runs, and the HTTP port never opens — this test times out and FAILS.
- *   - Post-fix (`realpathSync(argv[1]) === fileURLToPath(import.meta.url)`):
+ *  - Post-fix (`realpathSync(argv[1]) === fileURLToPath(import.meta.url)`):
  *     the symlink resolves to the same realpath as the loaded module,
  *     `isMainModule` is `true`, `main()` runs, and the port becomes
  *     reachable well inside the deadline — this test PASSES.
@@ -40,10 +40,37 @@
  *   `src/index.ts` to the pre-fix comparison and re-running this file alone
  *   (`npx vitest run src/__tests__/main-entry-symlink.test.ts`): it fails on
  *   a deadline timeout with the pre-fix guard, and passes with the fix.
+ *
+ * BUG-011 residual divergence (product re-verified 2026-08-08 on the
+ * published @adhd/agent-mcp@2.2.3): the first fix trusted Node to have
+ * already realpath-resolved `import.meta.url`, but some launch environments
+ * (e.g. `--preserve-symlinks-main`, set by certain launchers) keep the
+ * ENTRY module's `import.meta.url` at the invoked symlink path while
+ * `realpathSync(argv[1])` fully resolves it — the guard went false again
+ * and the server silently no-oped (exit 0, 0 bytes) exactly as before. The
+ * guard is therefore hardened to realpath BOTH sides:
+ * `realpathSync(argv[1]) === realpathSync(fileURLToPath(import.meta.url))`,
+ * which holds no matter which side Node failed to resolve.
+ *
+ * The absolute-symlink launch above does not exercise that residual
+ * divergence, and it also does not reproduce npm's real launch shape — the
+ * published package's `bin` is `./src/index.js` (dist-root-rebased), npm
+ * creates `node_modules/.bin/agent-mcp` as a RELATIVE symlink
+ * (`../@adhd/agent-mcp/src/index.js`), and the real install copies (never
+ * symlinks) the package content. So this file adds a second test that
+ * builds a scratch package tree under `os.tmpdir()` (on macOS that is
+ * `/private/var/...`, exercising the `/var` -> `/private/var` symlinked
+ * ancestor), copies the built dist in as the package content, links the
+ * runtime deps, creates the RELATIVE `.bin` symlink, and spawns
+ * `node node_modules/.bin/agent-mcp --help` with `cwd` = the package root —
+ * the product's case (2) verbatim. It asserts the process does NOT exit 0
+ * silently: the real HTTP transport port becomes reachable, the child stays
+ * alive, and some boot output is produced.
  */
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import http from "node:http";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -54,6 +81,7 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 // entrypoint/agent-mcp/src/__tests__/ -> entrypoint/agent-mcp/
 const PACKAGE_ROOT = resolve(__dirname, "..", "..");
 const DIST_ENTRY = join(PACKAGE_ROOT, "dist", "src", "index.js");
+const DIST_ROOT = join(PACKAGE_ROOT, "dist");
 
 // entrypoint/agent-mcp/src/__tests__/ -> repo root (4 levels up), per
 // CLAUDE.md §10: all ephemeral test artifacts live under the single
@@ -112,6 +140,47 @@ async function waitForPortReachable(port: number, deadlineMs: number): Promise<v
     throw new Error(
         `port ${port} never became reachable within ${deadlineMs}ms (last error: ${String(lastErr)})`
     );
+}
+
+/**
+ * Links every runtime dependency of the built package into a scratch package
+ * tree's `node_modules`, mirroring what a real `npm install <tarball>` does
+ * (offline: symlinks to the repo's own installed packages — `@adhd/*`
+ * workspace packages under the project's isolated `node_modules`, everything
+ * else from the repo root's hoisted `node_modules`). Resolution inside the
+ * child process walks through each symlink to the real package, whose own
+ * transitive deps resolve from its per-package pnpm `node_modules`.
+ */
+function linkScratchPackageDeps(
+    pkgNodeModules: string,
+    dependencies: Record<string, string> | undefined,
+    packageRoot: string,
+    repoRoot: string
+): void {
+    const projectNodeModules = join(packageRoot, "node_modules");
+    const rootNodeModules = join(repoRoot, "node_modules");
+    for (const dep of Object.keys(dependencies ?? {})) {
+        const scoped = dep.startsWith("@");
+        const [scope, name] = scoped ? [dep.split("/")[0], dep.split("/")[1]] : ["", dep];
+        const fromDir = scoped ? join(projectNodeModules, scope) : projectNodeModules;
+        const fromPath = join(fromDir, name);
+        const fallbackPath = scoped ? join(rootNodeModules, scope, name) : join(rootNodeModules, name);
+        let source: string | undefined;
+        if (existsSync(fromPath)) {
+            source = fromPath;
+        } else if (existsSync(fallbackPath)) {
+            source = fallbackPath;
+        }
+        if (source === undefined) {
+            throw new Error(
+                `BUG-011 test: cannot find runtime dependency "${dep}" to link into the scratch ` +
+                    `package tree (looked in ${fromPath} and ${fallbackPath})`
+            );
+        }
+        const destDir = scoped ? join(pkgNodeModules, scope) : pkgNodeModules;
+        mkdirSync(destDir, { recursive: true });
+        symlinkSync(source, join(destDir, name));
+    }
 }
 
 const cleanupDirs: string[] = [];
@@ -194,6 +263,101 @@ describe("BUG-011: isMainModule guard must survive a symlinked launch", () => {
             // The child must still be alive and NOT have exited 0 silently —
             // that silent-exit-0 IS the pre-fix bug behavior this guards against.
             expect(exitedEarly).toBeUndefined();
+        }
+    );
+
+    it(
+        "starts the real MCP server when launched EXACTLY like npm/npx: `node node_modules/.bin/agent-mcp` from a scratch package tree under os.tmpdir(), with a RELATIVE .bin symlink and a copied (not symlinked) package content",
+        { timeout: 60_000 },
+        async () => {
+            expect(
+                existsSync(DIST_ENTRY),
+                `expected built entry at ${DIST_ENTRY} — run "npx nx build agent-mcp" first ` +
+                    `(the "test" target now dependsOn: ["build"], so a plain "npx nx test ` +
+                    `agent-mcp" always produces this)`
+            ).toBe(true);
+
+            // os.tmpdir() — NOT the repo's tmp/ — so the scratch tree lives under
+            // /private/var on macOS, exercising the /var -> /private/var symlinked
+            // ancestor that separates the two realpaths in the residual BUG-011
+            // divergence.
+            const tmpRoot = mkdtempSync(join(tmpdir(), "adhd-agent-mcp-bug011-"));
+            cleanupDirs.push(tmpRoot);
+
+            const pkg = join(tmpRoot, "pkg");
+            const pkgNodeModules = join(pkg, "node_modules");
+            const pkgScope = join(pkgNodeModules, "@adhd");
+            const pkgAgentMcp = join(pkgScope, "agent-mcp");
+
+            // 1. Package content = a COPY of the built dist — exactly what `npm
+            //    install` unpacks from the published tarball (a real file tree,
+            //    never a symlink back into the repo). The dist root IS the package
+            //    root once published (dist-manifest rebases bin -> ./src/index.js).
+            cpSync(DIST_ROOT, pkgAgentMcp, { recursive: true });
+
+            // 2. Runtime deps from the rebased manifest, linked offline from the
+            //    repo's own installed packages (mirrors npm resolving the tarball's
+            //    dependencies into the consumer's node_modules).
+            const distManifest = JSON.parse(
+                readFileSync(join(DIST_ROOT, "package.json"), "utf8")
+            ) as { dependencies?: Record<string, string> };
+            linkScratchPackageDeps(pkgNodeModules, distManifest.dependencies, PACKAGE_ROOT, REPO_ROOT);
+
+            // 3. npm's .bin entry: a RELATIVE symlink, exactly as npm creates it —
+            //    `node_modules/.bin/agent-mcp -> ../@adhd/agent-mcp/src/index.js`.
+            const binDir = join(pkgNodeModules, ".bin");
+            mkdirSync(binDir, { recursive: true });
+            symlinkSync("../@adhd/agent-mcp/src/index.js", join(binDir, "agent-mcp"));
+
+            // A fake $HOME so this test never touches the real machine's
+            // ~/.adhd/agent-mcp/* files (same isolation as the absolute-symlink
+            // test above).
+            const fakeHome = join(tmpRoot, "home");
+            mkdirSync(fakeHome, { recursive: true });
+
+            const port = await reserveFreePort();
+
+            // 4. The product's launch shape verbatim: RELATIVE .bin path, cwd =
+            //    the package root, --help as the arg (which the server ignores).
+            child = spawn(process.execPath, ["node_modules/.bin/agent-mcp", "--help"], {
+                cwd: pkg,
+                env: {
+                    ...process.env,
+                    HOME: fakeHome,
+                    ADHD_AGENT_TRANSPORT: "http",
+                    ADHD_AGENT_PORT: String(port),
+                    ADHD_AGENT_SSE_ENABLED: "false",
+                },
+                stdio: ["ignore", "pipe", "pipe"],
+            });
+
+            let stdout = "";
+            child.stdout.on("data", (chunk: Buffer) => {
+                stdout += chunk.toString();
+            });
+            let stderr = "";
+            child.stderr.on("data", (chunk: Buffer) => {
+                stderr += chunk.toString();
+            });
+            let exitedEarly: { code: number | null; signal: string | null } | undefined;
+            child.on("exit", (code, signal) => {
+                exitedEarly = { code, signal };
+            });
+
+            try {
+                await waitForPortReachable(port, 25_000);
+            } catch (err) {
+                throw new Error(
+                    `${String(err)}\n\n` +
+                        `child ${exitedEarly ? `exited early (code=${exitedEarly.code}, signal=${exitedEarly.signal})` : "still running"}\n` +
+                        `stdout:\n${stdout}\nstderr:\n${stderr}`
+                );
+            }
+
+            // The hardened guard's contract: the process runs main() and stays
+            // alive — never the silent exit-0 (0 bytes) no-op.
+            expect(exitedEarly).toBeUndefined();
+            expect(stdout.length + stderr.length).toBeGreaterThan(0);
         }
     );
 });
