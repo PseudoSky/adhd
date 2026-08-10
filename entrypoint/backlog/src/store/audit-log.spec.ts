@@ -17,27 +17,27 @@ const REPO = 'PseudoSky/audit-log-test';
 describe('audit-log — real, persisted transition/claim history (DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001)', () => {
   let tmp: TmpStore;
 
-  beforeEach(() => {
-    tmp = openTmpStore('audit-log');
+  beforeEach(async () => {
+    tmp = await openTmpStore('audit-log');
   });
 
   afterEach(() => {
     tmp.cleanup();
   });
 
-  it('multiple transitions are ALL individually recoverable, not just the current status', () => {
-    const created = createItemNode(tmp.store, { family: 'BUG-AUDIT', title: 't', body: 'b', repo: REPO });
+  it('multiple transitions are ALL individually recoverable, not just the current status', async () => {
+    const created = await createItemNode(tmp.store, { family: 'BUG-AUDIT', title: 't', body: 'b', repo: REPO });
     const humanId = created.item.humanId;
 
-    transitionStatusNode(tmp.store, REPO, humanId, 'IN_PROGRESS', { by: 'agent:a' });
-    transitionStatusNode(tmp.store, REPO, humanId, 'BLOCKED', { by: 'agent:a' });
-    transitionStatusNode(tmp.store, REPO, humanId, 'IN_PROGRESS', { by: 'agent:b' });
-    transitionStatusNode(tmp.store, REPO, humanId, 'FIXED', {
+    await transitionStatusNode(tmp.store, REPO, humanId, 'IN_PROGRESS', { by: 'agent:a' });
+    await transitionStatusNode(tmp.store, REPO, humanId, 'BLOCKED', { by: 'agent:a' });
+    await transitionStatusNode(tmp.store, REPO, humanId, 'IN_PROGRESS', { by: 'agent:b' });
+    await transitionStatusNode(tmp.store, REPO, humanId, 'FIXED', {
       by: 'agent:b',
       citations: [{ file: 'src/x.ts', lines: '1-2' }],
     });
 
-    const trail = auditTrail(tmp.store, REPO, humanId);
+    const trail = await auditTrail(tmp.store, REPO, humanId);
     const transitions = trail.history.filter((h) => h.kind === 'transition');
     // Before this fix, NONE of the intermediate transitions (OPEN->IN_PROGRESS,
     // IN_PROGRESS->BLOCKED, BLOCKED->IN_PROGRESS) would be recoverable at
@@ -48,46 +48,46 @@ describe('audit-log — real, persisted transition/claim history (DEBT-BACKLOG-A
     expect(transitions[3]?.detail['by']).toBe('agent:b');
   });
 
-  it('a REJECTED transition (missing required citation) logs NOTHING — never a fake event for a change that never happened', () => {
-    const created = createItemNode(tmp.store, { family: 'BUG-AUDIT-REJECT', title: 't', body: 'b', repo: REPO });
-    expect(() => transitionStatusNode(tmp.store, REPO, created.item.humanId, 'FIXED', { by: 'agent:a' })).toThrow();
+  it('a REJECTED transition (missing required citation) logs NOTHING — never a fake event for a change that never happened', async () => {
+    const created = await createItemNode(tmp.store, { family: 'BUG-AUDIT-REJECT', title: 't', body: 'b', repo: REPO });
+    await expect(transitionStatusNode(tmp.store, REPO, created.item.humanId, 'FIXED', { by: 'agent:a' })).rejects.toThrow();
 
-    const trail = auditTrail(tmp.store, REPO, created.item.humanId);
+    const trail = await auditTrail(tmp.store, REPO, created.item.humanId);
     expect(trail.history.filter((h) => h.kind === 'transition')).toHaveLength(0);
   });
 
-  it('claim/renew/release are all recoverable; a REFUSED claim (held) and a no-op release log nothing', () => {
-    const created = createItemNode(tmp.store, { family: 'BUG-AUDIT-CLAIM', title: 't', body: 'b', repo: REPO });
+  it('claim/renew/release are all recoverable; a REFUSED claim (held) and a no-op release log nothing', async () => {
+    const created = await createItemNode(tmp.store, { family: 'BUG-AUDIT-CLAIM', title: 't', body: 'b', repo: REPO });
     const humanId = created.item.humanId;
 
     // no-op release on a never-claimed item — must log nothing.
-    releaseClaimNode(tmp.store, created.item.nodeId, 'agent:a');
+    await releaseClaimNode(tmp.store, created.item.nodeId, 'agent:a');
 
-    const claimed = claimItemNode(tmp.store, created.item.nodeId, 'agent:a');
+    const claimed = await claimItemNode(tmp.store, created.item.nodeId, 'agent:a');
     expect(claimed.status).toBe('claimed');
 
     // Contended claim from a different claimant, within the stale window — refused, logs nothing.
-    const held = claimItemNode(tmp.store, created.item.nodeId, 'agent:b');
+    const held = await claimItemNode(tmp.store, created.item.nodeId, 'agent:b');
     expect(held.status).toBe('held');
 
-    renewClaimNode(tmp.store, created.item.nodeId, 'agent:a');
-    releaseClaimNode(tmp.store, created.item.nodeId, 'agent:a');
+    await renewClaimNode(tmp.store, created.item.nodeId, 'agent:a');
+    await releaseClaimNode(tmp.store, created.item.nodeId, 'agent:a');
 
-    const trail = auditTrail(tmp.store, REPO, humanId);
+    const trail = await auditTrail(tmp.store, REPO, humanId);
     const claims = trail.history.filter((h) => h.kind === 'claim');
     expect(claims.map((c) => c.detail['status'])).toEqual(['claimed', 'renewed', 'released']);
     expect(claims.every((c) => c.detail['by'] === 'agent:a')).toBe(true);
   });
 
-  it('transition and claim events are chronologically interleaved with notes/citations in one merged history', () => {
-    const created = createItemNode(tmp.store, { family: 'BUG-AUDIT-MERGE', title: 't', body: 'b', repo: REPO });
+  it('transition and claim events are chronologically interleaved with notes/citations in one merged history', async () => {
+    const created = await createItemNode(tmp.store, { family: 'BUG-AUDIT-MERGE', title: 't', body: 'b', repo: REPO });
     const humanId = created.item.humanId;
 
-    claimItemNode(tmp.store, created.item.nodeId, 'agent:a');
-    transitionStatusNode(tmp.store, REPO, humanId, 'IN_PROGRESS', { by: 'agent:a', note: 'starting work' });
-    releaseClaimNode(tmp.store, created.item.nodeId, 'agent:a');
+    await claimItemNode(tmp.store, created.item.nodeId, 'agent:a');
+    await transitionStatusNode(tmp.store, REPO, humanId, 'IN_PROGRESS', { by: 'agent:a', note: 'starting work' });
+    await releaseClaimNode(tmp.store, created.item.nodeId, 'agent:a');
 
-    const trail = auditTrail(tmp.store, REPO, humanId);
+    const trail = await auditTrail(tmp.store, REPO, humanId);
     const kinds = trail.history.map((h) => h.kind);
     // created + 2 claim events (claimed, released) + 1 transition + 1 note
     // (from the transition's own opts.note) — 5 entries total, every kind
