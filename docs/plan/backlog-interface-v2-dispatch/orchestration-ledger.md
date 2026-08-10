@@ -154,3 +154,32 @@ At the END of the plan (post-W5), the plan **includes** a dispatch to **`doc-ste
 ## Open bugs / deferrals
 
 - BUG-MEMORY-013 (memory-server empty results in subagent sessions) — filed HIGH elsewhere; mitigation: one attempt per lookup, then proceed from specs.
+
+---
+
+## W0 — F-01+F-02 SUBSTRATE EPIC LANDED (2026-08-08)
+
+**Dispatch:** `typescript` (ses_012b13d5affeOl0YdrmS3wB3ky) · worktree `.worktrees/f01-redo` · branch `f01-redo` · commit **`f3a80929`** · 36 files (+928/−691) · tier deepseek (plan F-01/F-02 annotation; flash model — divergence noted, mechanical-but-broad churn executed cleanly)
+
+**Operator directive satisfied:** relock adhd → `@adhd/sox-store-adapter@^0.5.1` + `@adhd/sox-graph-store@^0.8.1`; rebuild backlog CLI dist; recursive-CTE fallback makes supersession chains work on Turso.
+
+**Verified from state (not prose):**
+- `nx build backlog` exit 0 · `nx test backlog` exit 0 (200/200, 27 files) · `nx lint backlog` 0 · `nx run backlog:verify-dist-load` 0 (3 entries loaded)
+- grep guard over `entrypoint/backlog/src` → **0 code hits** (3 comment-only) — no custom SQL above store-adapter (operator 0h)
+- better-sqlite3 OUT of runtime deps (devDeps only, worker lock-hold fixtures — sanctioned)
+- Real CLI round-trip through dist: `create-item` → `get-item --human-id PROOF-001` persisted on turso
+
+**API surface used (0.8.1):** `createStoreAdapter({dbPath}, {migrateOnAdapterChange: dbPath!==':memory:' && existsSync(dbPath)})` → `adapter.transaction(fn,{mode:'immediate'})` CAS → `createGraphBackend(adapter)` + `await graph.applySchema()` → `adapter.close()` async. `busy_timeout` via `adapter.pragmaSet/pragmaGet` (AdapterConfig has NO busy_timeout field; graph-store PRAGMAS omit it — BUG-SOXGRAPH-002).
+
+**Behavioral deviations (intentional, documented in code):**
+1. `supersedeItemNode`: id-allocation and `supersede()` no longer share ONE transaction (adapter nesting unsupported on turso `_txMutexChain`) — residual TOCTOU window for concurrent same-(repo,family) supersedes. **Finding for W3/parity review.**
+2. Dedupe gate hardened to AND-semantics at app layer (substrate OR-normalizes multi-token FTS per BL-367 — restores FTS5-AND recall).
+3. Concurrency specs (claim/busy-retry/concurrency-scale) pin `STORE_ADAPTER=sqlite`: their raw better-sqlite3 hold fixtures exercise fcntl lock protocol; turso `.tshm` doesn't participate. Test-only env, sanctioned.
+4. `:memory:` → `tmp/backlog/` files in specs (turso multiprocess WAL can't open `:memory:`).
+
+**Findings for future:**
+- **FIND-0j:** `.mjs` ESM output fails yaml named-export interop (`migration-admin.ts` import, pre-existing, untouched by this work; CJS path loads fine). verify-dist-load presence-checks so gate passes. Consider backlog item if ESM artifact matters.
+- **FIND-0k:** infra flake — one verify-dist-load run tripped workspace CPU-metric guard (316% > 300%) on parallel assets-copy. Not a code failure.
+- **FIND-0l:** Negative control verified: `store.db` → TS2339, sync `writeNode` → TS2322 — old shape is a hard type error.
+
+**Next:** F-04 (adapter-aware store specs + verify-dist-load) in same worktree → then merge `f01-redo` → main → W0 D-01 parity → W1.
