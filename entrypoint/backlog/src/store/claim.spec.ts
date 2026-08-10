@@ -2,18 +2,18 @@
  * claim.spec.ts — SPEC.md §7 DoD clause 1: a real-DB CAS claim race.
  *
  * Two genuinely concurrent `claimItem` calls (via real `worker_threads`, each
- * with its OWN `better-sqlite3` connection to the SAME on-disk file) race for
- * the same item. Exactly one must win (`status: 'claimed'`); the other must
- * see `status: 'held'`. The barrier (a `SharedArrayBuffer` + `Atomics.wait`/
- * `notify`) guarantees both calls are in-flight before either is released —
- * never a `sleep` (AGENTS.md §7 rule 3).
+ * with its OWN turso store-adapter connection to the SAME on-disk file) race
+ * for the same item. Exactly one must win (`status: 'claimed'`); the other
+ * must see `status: 'held'`. The barrier (a `SharedArrayBuffer` +
+ * `Atomics.wait`/`notify`) guarantees both calls are in-flight before either
+ * is released — never a `sleep` (AGENTS.md §7 rule 3).
  *
  * NEGATIVE CONTROL (performed manually during implementation, per SPEC.md §7
  * clause 1 — not part of the automated suite, since permanently breaking our
  * own CAS guard would be nonsensical to ship): reverting
  * `store/mutate-metadata.ts`'s `.immediate()` to a plain (deferred)
  * `store.db.transaction(fn)()` call and re-running this test reproduces
- * either two `'claimed'` results or a `SQLITE_BUSY` crash — confirming the
+ * either two `'claimed'` results or a busy/locked crash — confirming the
  * assertion actually has teeth. Restored immediately after confirming red;
  * see the session report for the exact before/after observation.
  */
@@ -24,16 +24,12 @@ import { join, dirname } from 'node:path';
 import { openTmpStore, type TmpStore } from '../test/helpers/tmp-store.js';
 import { createItemNode } from './crud.js';
 
-// F-01/F-02 (turso substrate): this spec's contention MECHANISM is
-// SQLite-specific — its worker fixtures open raw better-sqlite3 connections
-// that hold `BEGIN IMMEDIATE` via fcntl locks. The turso adapter's
-// multiprocess WAL coordinates via .tshm shared memory and does NOT
-// participate in better-sqlite3's lock protocol, so a raw better-sqlite3
-// hold neither blocks a turso writer nor is blocked by one (verified
-// empirically: mixing them corrupts the file with SQLITE_CORRUPT). The
-// operator sanctioned `STORE_ADAPTER` (env) for tests only; pinning it here
-// keeps this proof on the adapter whose locking semantics it exercises.
-process.env['STORE_ADAPTER'] = 'sqlite';
+// The store substrate is TURSO — `createStoreAdapter({ dbPath })` defaults to
+// it, and both workers below open REAL turso store-adapter connections to the
+// same file (through the BUILT `dist/index.js`), so this CAS race exercises
+// TURSO's own locking semantics (multiprocess WAL coordination) end to end.
+// No `STORE_ADAPTER` pin is needed — or wanted: the adapter defaults to turso
+// and this spec must stay on it.
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', '..', 'dist', 'index.js');
@@ -81,7 +77,7 @@ function runClaimWorker(opts: { dbPath: string; adhdRoot: string; humanId: strin
   return { worker, ready, outcome };
 }
 
-describe('claimItem — CAS claim race (real worker_threads, real second SQLite connection)', () => {
+describe('claimItem — CAS claim race (real worker_threads, real second store connection)', () => {
   let tmp: TmpStore;
 
   beforeEach(async () => {
@@ -98,7 +94,7 @@ describe('claimItem — CAS claim race (real worker_threads, real second SQLite 
     // — WAL mode allows it to stay open alongside the two workers' own
     // connections without affecting the race, which is strictly between
     // those two (DESIGN.md §4's "two separate processes/threads, two
-    // separate better-sqlite3 handles" scenario).
+    // separate store connections" scenario).
 
     const gate = new SharedArrayBuffer(4);
     const gateArr = new Int32Array(gate);

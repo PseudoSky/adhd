@@ -3,8 +3,8 @@
  * race (`claim.spec.ts`) and the 2-writer busy-retry proof
  * (`busy-retry.spec.ts`) to a REAL 20-writer scale, per the plan's own six
  * numbered cases. Every writer is a genuine `worker_threads` instance with
- * its OWN `better-sqlite3` connection to the SAME on-disk file, driving the
- * real public `claimItem`/`createItem` exports through the BUILT
+ * its OWN turso store-adapter connection to the SAME on-disk file, driving
+ * the real public `claimItem`/`createItem` exports through the BUILT
  * `dist/index.js` — never simulated/mocked. Synchronization is a real
  * `SharedArrayBuffer` + `Atomics.wait`/`notify` start-gate, released only
  * once every worker has confirmed it is parked and ready — never a `sleep`
@@ -18,16 +18,13 @@ import { openTmpStore, type TmpStore } from '../test/helpers/tmp-store.js';
 import { createItemNode } from './crud.js';
 import { listItems } from './query.js';
 
-// F-01/F-02 (turso substrate): this spec's contention MECHANISM is
-// SQLite-specific — its worker fixtures open raw better-sqlite3 connections
-// that hold `BEGIN IMMEDIATE` via fcntl locks. The turso adapter's
-// multiprocess WAL coordinates via .tshm shared memory and does NOT
-// participate in better-sqlite3's lock protocol, so a raw better-sqlite3
-// hold neither blocks a turso writer nor is blocked by one (verified
-// empirically: mixing them corrupts the file with SQLITE_CORRUPT). The
-// operator sanctioned `STORE_ADAPTER` (env) for tests only; pinning it here
-// keeps this proof on the adapter whose locking semantics it exercises.
-process.env['STORE_ADAPTER'] = 'sqlite';
+// The store substrate is TURSO — `createStoreAdapter({ dbPath })` defaults to
+// it, and every worker fixture below opens REAL turso store-adapter
+// connections to the same file (through the BUILT `dist/index.js`), so this
+// scale proof exercises TURSO's OWN locking semantics (multiprocess WAL
+// coordination, `GenericFailure`/"database is locked" busy errors) end to
+// end. No `STORE_ADAPTER` pin is needed — or wanted: the adapter defaults to
+// turso and this spec must stay on it.
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', '..', 'dist', 'index.js');
@@ -180,7 +177,7 @@ describe(`concurrency-scale — ${N} real worker_threads (MIGRATION.md §3.3)`, 
     expect(p99(elapsed)).toBeLessThan(BUSY_TIMEOUT_MS);
   }, 60000);
 
-  it('NEGATIVE CONTROL: with busy_timeout forced to ~0ms, a write against a genuinely held lock throws SQLITE_BUSY immediately — proving busy_timeout is load-bearing at the pragma level, not a no-op', async () => {
+  it('NEGATIVE CONTROL: with busy_timeout forced to ~0ms, a write against a genuinely held lock throws a busy/locked error immediately — proving busy_timeout is load-bearing at the pragma level, not a no-op', async () => {
     // Deliberately does NOT go through `claimItem` here: `claimItem` is
     // ALWAYS wrapped in `withImmediateRetry` (store/immediate-retry.ts),
     // whose own inter-attempt backoff (20/40/80/160ms) gives contention time
@@ -190,20 +187,31 @@ describe(`concurrency-scale — ${N} real worker_threads (MIGRATION.md §3.3)`, 
     // "RETRY-RECOVERS", already covers). To isolate and prove busy_timeout's
     // OWN effect — independent of the retry wrapper layered on top of it —
     // this reuses `busy-retry.spec.ts`'s own real-held-lock fixture
-    // (`busy-hold-worker.js`) and attempts a RAW, un-retried `.immediate()`
-    // transaction against it with `busy_timeout=0`.
+    // (`busy-hold-worker.js`, which holds BEGIN IMMEDIATE via a turso
+    // store-adapter transaction) and attempts a write transaction against it
+    // from a SECOND real turso store-adapter connection with `busy_timeout=0`.
     const HOLD_MS = 300;
     const startGate = new SharedArrayBuffer(4);
     const startGateArr = new Int32Array(startGate);
     Atomics.store(startGateArr, 0, 0);
 
+    // A scratch table so the probe callback below is a REAL write — it never
+    // gets to run it while the lock is held (BEGIN IMMEDIATE is refused
+    // first), but if BEGIN ever succeeded the INSERT would prove it. Created
+    // HERE, through the already-open main store adapter and BEFORE the
+    // hold-worker exists: DDL is itself a write, so creating it from the
+    // probe connection after the lock is held would be refused too (which
+    // would only re-prove the same thing, obscurely).
+    await tmp.store.adapter.exec('CREATE TABLE IF NOT EXISTS _busy_probe (id INTEGER PRIMARY KEY)');
+
     const holdWorker = new Worker(join(HERE, '..', 'test', 'fixtures', 'busy-hold-worker.js'), {
       workerData: { dbPath: tmp.dbPath, holdMs: HOLD_MS, startGate },
     });
-    const holding = new Promise<void>((resolve) => {
+    const holding = new Promise<void>((resolve, reject) => {
       holdWorker.on('message', (msg: { type: string }) => {
         if (msg.type === 'holding') resolve();
       });
+      holdWorker.on('error', reject);
     });
     // The hold-worker's `BEGIN IMMEDIATE` has already run by the time it
     // posts 'holding' — the lock is held from THIS instant, and stays held
@@ -212,18 +220,28 @@ describe(`concurrency-scale — ${N} real worker_threads (MIGRATION.md §3.3)`, 
     // attempt below is guaranteed to observe the lock still held.
     await holding;
 
-    const { default: Database } = await import('better-sqlite3');
-    const raw = new Database(tmp.dbPath);
-    raw.pragma('journal_mode = WAL');
-    raw.pragma('busy_timeout = 0');
+    // The "foreign writer" probe is a REAL turso store-adapter connection —
+    // the same substrate the store itself uses — NOT a raw third-party
+    // SQLite handle. With `busy_timeout=0` the driver refuses the contended
+    // BEGIN IMMEDIATE instantly; the adapter's own internal BEGIN retry loop
+    // (turso-adapter.js:614-650, ~10/20/40ms backoff) cannot mask it, since
+    // every retry fails immediately while the lock is held and the final
+    // throw is the busy/lock error itself.
+    const { createTursoAdapter, isConcurrentConflict } = await import('@adhd/sox-store-adapter');
+    const probe = await createTursoAdapter({ dbPath: tmp.dbPath });
+    await probe.pragmaSet('busy_timeout', 0);
     let threw: unknown;
     try {
-      raw.prepare('BEGIN IMMEDIATE').run();
-      raw.prepare('COMMIT').run();
+      await probe.transaction(
+        async (tx) => {
+          await tx.executeRun('INSERT INTO _busy_probe (id) VALUES (1)');
+        },
+        { mode: 'immediate' },
+      );
     } catch (err) {
       threw = err;
     } finally {
-      raw.close();
+      await probe.close();
     }
 
     // Release the hold-worker so it can commit/close and the test can tear
@@ -231,11 +249,19 @@ describe(`concurrency-scale — ${N} real worker_threads (MIGRATION.md §3.3)`, 
     // assertion already ran.
     Atomics.store(startGateArr, 0, 1);
     Atomics.notify(startGateArr, 0);
-    await new Promise<void>((resolve) => holdWorker.on('message', (msg: { type: string }) => msg.type === 'released' && resolve()));
+    await new Promise<void>((resolve, reject) => {
+      holdWorker.on('message', (msg: { type: string }) => msg.type === 'released' && resolve());
+      holdWorker.on('error', reject);
+    });
     await holdWorker.terminate();
 
-    expect(threw, 'expected a raw BEGIN IMMEDIATE against a held lock with busy_timeout=0 to throw SQLITE_BUSY').toBeDefined();
-    expect(String((threw as { code?: string })?.code ?? threw)).toMatch(/BUSY/i);
+    expect(threw, 'expected a turso BEGIN IMMEDIATE against a held lock with busy_timeout=0 to throw a busy/lock error').toBeDefined();
+    // The portable conflict check covers BOTH adapter error shapes: the
+    // legacy SQLite adapter's `SQLITE_BUSY` code AND turso's `GenericFailure`
+    // with a "database is locked"/"database is busy" message marker (verified
+    // live against the turso driver: code `GenericFailure`, message
+    // "database is locked").
+    expect(isConcurrentConflict(threw), `expected busy/lock error, got: ${threw instanceof Error ? threw.message : String(threw)}`).toBe(true);
   }, 20000);
 
   it('RETRY-RECOVERS: with a deliberately tiny busy_timeout, the retry/backoff wrapper still converges on exactly ONE claimed result with ZERO unhandled errors across all N writers', async () => {
@@ -245,14 +271,14 @@ describe(`concurrency-scale — ${N} real worker_threads (MIGRATION.md §3.3)`, 
     // bounded 5-attempt/jittered-backoff schedule (store/immediate-retry.ts)
     // must still let every one of the 20 losers eventually observe the
     // winner's committed claim and return a clean 'held' — never an
-    // unhandled SQLITE_BUSY thrown to the caller.
+    // unhandled busy/locked error thrown to the caller.
     // 50ms was the original value here and is knowingly at the edge of
     // viable: with 20 real threads racing one row lock, the fixed 5-attempt/
     // jittered-backoff schedule in `immediate-retry.ts` (worst case ~850ms
     // total across all attempts) occasionally loses the coupon-collector
     // race at 50ms per attempt — a loser's LAST retry can still land inside
     // another loser's still-open window and get bounced again, exhausting
-    // its budget and throwing a real (uncaught-by-the-test) SQLITE_BUSY.
+    // its budget and throwing a real (uncaught-by-the-test) busy/locked error.
     // That's a flake in this test's OWN timing margin, not a correctness
     // bug (`claimedCount === 1` below never flakes) — 150ms gives every
     // loser's `busy_timeout` window enough headroom to observe the winner's

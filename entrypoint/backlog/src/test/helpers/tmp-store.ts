@@ -1,9 +1,10 @@
 /**
  * tmp-store.ts — real-DB test fixture helper. Every test opens a real store
- * via `openGraphBacklogStore` (turso substrate by default; `STORE_ADAPTER=sqlite`
- * is a test-only override) under `tmp/backlog/<test-name>/` (AGENTS.md §10 —
- * the one canonical ephemeral-artifact root), never `:memory:` (the turso
- * adapter's multiprocess WAL cannot open an in-memory path, and a CAS/multi-
+ * via `openGraphBacklogStore` (turso substrate by default —
+ * `createStoreAdapter({ dbPath })` defaults to turso) under
+ * `tmp/backlog/<test-name>/` (AGENTS.md §10 — the one canonical
+ * ephemeral-artifact root), never `:memory:` (the turso adapter's
+ * multiprocess WAL cannot open an in-memory path, and a CAS/multi-
  * connection test needs a REAL shared file two connections can both open),
  * and removes it on teardown.
  */

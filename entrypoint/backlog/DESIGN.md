@@ -27,7 +27,7 @@ entrypoint/backlog/
 │   ├── env.ts            # @adhd/environment spec + scope resolution (§6 below)
 │   ├── markdown.ts        # parse()/render() — ported from tools/util/backlog.mjs (§8)
 │   └── store/
-│       ├── graph-backlog-store.ts   # opens better-sqlite3 db + createGraphBackend()
+│       ├── graph-backlog-store.ts   # opens turso store via store-adapter + createGraphBackend()
 │       ├── mapping.ts                 # BacklogItem <-> graph node/edge (§2 below)
 │       ├── mutate-metadata.ts         # THE single atomic read-modify-write primitive (§4.3)
 │       ├── claim.ts                   # claimItem/renewClaim/releaseClaim (§4)
@@ -170,48 +170,48 @@ async function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateI
 }
 ```
 
-## 3. Store adapter — owning the raw `better-sqlite3` handle
+## 3. Store adapter — owning the raw turso handle
 
 The single most important design decision in this document: **the backlog store opens
-its OWN `better-sqlite3` connection and hands it to `createGraphBackend(db)`, and keeps
-the raw `db` handle for itself.** `@adhd/sox-graph-store`'s documented surface
+its OWN store-adapter connection (`@adhd/sox-store-adapter`, turso substrate by
+default) and hands it to `createGraphBackend(adapter)`, and keeps the adapter handle
+for itself.** `@adhd/sox-graph-store`'s documented surface
 (`writeNode`/`touch`/`queryNodes`/...) has no read-modify-write transaction primitive of
 its own — every mutation described in the contract summary is a single atomic call, not
 a compose-then-commit unit. Claims and id allocation both need "read current state,
 decide, write" as ONE atomic unit across processes. Rather than asking
 `@adhd/sox-graph-store` to grow a transaction API it doesn't have, the backlog package
-constructs the `Database` itself and wraps `db.transaction(fn).immediate()` around the
-graph calls it needs atomically — `createGraphBackend` still gets the exact same `db`
-object, so every other (non-CAS) operation behaves identically to using the library
-standalone.
+constructs the adapter itself and wraps `adapter.transaction(fn, { mode: 'immediate' })`
+around the graph calls it needs atomically — `createGraphBackend` still gets the exact
+same adapter, so every other (non-CAS) operation behaves identically to using the
+library standalone.
 
 ```ts
 // store/graph-backlog-store.ts (design sketch)
-import Database from 'better-sqlite3';
+import { createStoreAdapter } from '@adhd/sox-store-adapter';
 import { createGraphBackend, type GraphBackend } from '@adhd/sox-graph-store';
 
 export interface GraphBacklogStore {
-  readonly db: Database.Database;  // raw handle — ONLY for the CAS transaction wrapper
-  readonly graph: GraphBackend;     // all non-CAS reads/writes go through this
+  readonly adapter: StoreAdapter;  // adapter handle — ONLY for the CAS transaction wrapper
+  readonly graph: GraphBackend;    // all non-CAS reads/writes go through this
 }
 
-export function openGraphBacklogStore(dbPath: string): GraphBacklogStore {
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');      // required for safe concurrent readers+writer
-  db.pragma('busy_timeout = 5000');     // a blocked .immediate() waits, doesn't throw immediately
-  const graph = createGraphBackend(db);
-  graph.applySchema();                  // idempotent — safe on every process start
-  return { db, graph };
+export async function openGraphBacklogStore(dbPath: string): Promise<GraphBacklogStore> {
+  const adapter = await createStoreAdapter({ dbPath }); // turso substrate
+  await adapter.pragmaSet('busy_timeout', 5000); // a blocked .immediate() waits, doesn't throw immediately
+  const graph = createGraphBackend(adapter);
+  await graph.applySchema();      // idempotent — safe on every process start
+  return { adapter, graph };
 }
 ```
 
-`.immediate()` (not the default deferred `BEGIN`) is load-bearing: a deferred
-transaction only acquires SQLite's write lock at the moment its FIRST write statement
-executes, which leaves a window where two processes can both pass a read-check under
-their own deferred transaction before either escalates to a write lock — exactly the
-race a CAS protocol must not have. `BEGIN IMMEDIATE` acquires the RESERVED lock at
-transaction start, so a second process's own `.immediate()` call blocks (up to
-`busy_timeout`) rather than interleaving.
+`.transaction(fn, { mode: 'immediate' })` (not the default deferred `BEGIN`) is
+load-bearing: a deferred transaction only acquires SQLite's write lock at the moment
+its FIRST write statement executes, which leaves a window where two processes can both
+pass a read-check under their own deferred transaction before either escalates to a
+write lock — exactly the race a CAS protocol must not have. `BEGIN IMMEDIATE` acquires
+the RESERVED lock at transaction start, so a second process's own immediate transaction
+blocks (up to `busy_timeout`) rather than interleaving.
 
 ## 4. Claim protocol
 
@@ -644,7 +644,7 @@ reference (already an nx entrypoint library with a full target set):
   dispatch-cli's *target structure*, not its *tags*.
 - [ ] Add `vite.config.ts` (mirror `entrypoint/dispatch-cli/vite.config.ts:1-64` — note
   its `rollupOptions.external` excludes `@modelcontextprotocol/sdk`; backlog's build
-  should externalize `better-sqlite3` the same way, since it is a native module that
+  should externalize `@tursodatabase/database` the same way, since it is a native module that
   must not be bundled).
 - [ ] Add `tsconfig.lib.json` / `tsconfig.spec.json` (mirror
   `entrypoint/dispatch-cli/tsconfig.lib.json:1-10` /
@@ -659,39 +659,38 @@ reference (already an nx entrypoint library with a full target set):
 ```json
 {
   "dependencies": {
-    "@adhd/sox-graph-store": "^0.3.0",
-    "better-sqlite3": "^12.10.0",
+    "@adhd/sox-graph-store": "^0.8.1",
+    "@adhd/sox-store-adapter": "^0.5.1",
     "@adhd/environment": "0.0.1",
     "@adhd/environment-base-spec": "0.0.2",
     "@adhd/apigen-core-client": "^0.1.1",
     "@adhd/apigen-plugin-api-fastify": "^0.1.2",
     "@adhd/apigen-plugin-openapi": "^0.1.3",
     "@adhd/apigen-plugin-mcp": "^0.1.2"
-  },
-  "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13"
   }
 }
 ```
 
-Version pins taken directly from sibling packages already in the tree:
-`better-sqlite3@12.10.0` and `@types/better-sqlite3@^7.6.13` (every `packages/agent/*`
-family package, e.g. `packages/agent/agent-core-env/package.json:25,29`),
-`@adhd/environment@0.0.1` + `@adhd/environment-base-spec@0.0.2`
-(`entrypoint/agent-mcp/package.json:25-26`), apigen plugin versions from their own
-`package.json`s (`packages/apigen/apigen-core-client/package.json:3` → `0.1.1`,
+`@adhd/sox-store-adapter` is the store substrate — `createStoreAdapter({ dbPath })`
+defaults to the turso adapter (its own `@tursodatabase/database` native driver);
+no SQLite driver is a backlog dependency of any kind (runtime or dev). The
+`@adhd/sox-graph-store`/`@adhd/environment`/apigen-plugin pins follow the tree's
+sibling packages (`entrypoint/agent-mcp/package.json:25-26`,
+`packages/apigen/apigen-core-client/package.json:3` → `0.1.1`,
 `apigen-plugin-api-fastify/package.json:3` → `0.1.2`,
 `apigen-plugin-mcp/package.json:3` → `0.1.2`, `apigen-plugin-openapi/package.json:3` →
-`0.1.3`). `@adhd/sox-graph-store@^0.3.0` per the task brief (external, not yet a repo
-dependency anywhere — this will be the first consumer in this monorepo).
+`0.1.3`). `@adhd/sox-graph-store@^0.8.1`/`@adhd/sox-store-adapter@^0.5.1` per the
+F-01/F-02 turso-substrate conversion (the store now opens exclusively through the
+store-adapter).
 
 ## 12. Concurrency & native-module gotchas
 
 - **Node ≥ 22** — `.github/workflows/ci.yml` and `pull-request.yml`'s `test` job both pin
   Node 22 (`DEBT-BACKLOG-CI-NODE22-001`, resolved).
-- **`better-sqlite3` is a native module** — a fresh `git worktree`/CI runner needs it
-  rebuilt for the current Node ABI (standard monorepo gotcha, already true for every
-  `packages/agent/*` package that depends on it).
+- **`@tursodatabase/database` is a native module** (turso's Rust driver, pulled in via
+  `@adhd/sox-store-adapter`) — a fresh `git worktree`/CI runner installs it like any
+  other npm dep (prebuilt binaries, no per-ABI rebuild); it must stay external in the
+  vite build (see §10).
 - **WAL mode + `busy_timeout`** (§3) is required, not optional — the global-scope store
   is, by construction, opened by many concurrent processes/agents/repos. Without WAL, a
   writer blocks all readers; without `busy_timeout`, a blocked `.immediate()` throws
@@ -730,7 +729,7 @@ dependency anywhere — this will be the first consumer in this monorepo).
 
 | DoD clause | Test location | Real components exercised |
 |---|---|---|
-| CAS claim race | `src/store/claim.spec.ts` | Two real `better-sqlite3` connections to one temp file; a barrier (e.g. a second process's readiness pipe, or two `Worker` threads) ensures both `claimItem` calls are in-flight before either commits — never a `sleep`. |
+| CAS claim race | `src/store/claim.spec.ts` | Two real turso store-adapter connections to one temp file; a barrier (e.g. a second process's readiness pipe, or two `Worker` threads) ensures both `claimItem` calls are in-flight before either commits — never a `sleep`. |
 | Markdown round-trip | `src/markdown.spec.ts` | Real `BACKLOG.md`-fixture file → `importFromMarkdown` → `renderToMarkdown` → the OLD `tools/util/backlog.mjs` invoked as a real subprocess (`execFileSync('node', ['tools/util/backlog.mjs', 'json', '--file', renderedTmpPath])`) — proves compatibility against the actual legacy tool, not a copy of its logic. |
 | Live HTTP mount | `src/server.spec.ts` | `startBacklogServer({transport:'http', signal})` against a real temp SQLite file, then a real `fetch()` HTTP call — per `AGENTS.md`'s "Live testing is mandatory," this test is unflagged/default-running (no paid third party is involved, so no env-gate qualifies). |
 | Live MCP mount | `src/server.mcp.spec.ts` | `startBacklogServer({transport:'mcp', signal})`, driven by a real `@modelcontextprotocol/sdk` client over stdio — per `AGENTS.md`'s "drive the real tools, never a bypass." |

@@ -1,11 +1,14 @@
 /**
  * busy-retry.spec.ts — DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001: a real
- * `SQLITE_BUSY` contention proof, not a mock.
+ * busy/lock contention proof, not a mock.
  *
- * Two real `worker_threads`, each with its OWN `better-sqlite3` connection to
- * the SAME on-disk file:
- *  - `busy-hold-worker.js` opens a raw `BEGIN IMMEDIATE`, then PARKS (no
- *    timeout) until told the other worker is also ready.
+ * Two real `worker_threads`, each with its OWN turso store-adapter
+ * connection (the `@adhd/sox-store-adapter` substrate the store itself
+ * uses) to the SAME on-disk file:
+ *  - `busy-hold-worker.js` holds `BEGIN IMMEDIATE` via
+ *    `adapter.transaction(fn, { mode: 'immediate' })` and PARKS inside the
+ *    transaction callback (no timeout) until told the other worker is also
+ *    ready.
  *  - `busy-retry-worker.js` calls the REAL public `claimItem` (through the
  *    BUILT `dist/index.js`) against a store opened with a SHORT
  *    `RETRY_TIMEOUT_MS` `busy_timeout`, and ALSO parks until released.
@@ -33,8 +36,9 @@
  * NEGATIVE CONTROL (performed manually during implementation, per AGENTS.md
  * §7): reverting `store/mutate-metadata.ts`'s `withImmediateRetry(...)` wrap
  * back to a bare `.immediate()` call and re-running this test reproduces a
- * `SQLITE_BUSY` crash (the retry-worker's outcome becomes `{type:'error',
- * code:'SQLITE_BUSY'}` instead of `{type:'result', status:'claimed'}`) —
+ * busy/locked crash (the retry-worker's outcome becomes `{type:'error'}` with
+ * a `GenericFailure`/"database is locked" — or `SQLITE_BUSY` on the legacy
+ * sqlite adapter — instead of `{type:'result', status:'claimed'}`) —
  * confirming the assertion has teeth. Restored immediately after confirming
  * red.
  */
@@ -45,16 +49,12 @@ import { join, dirname } from 'node:path';
 import { openTmpStore, type TmpStore } from '../test/helpers/tmp-store.js';
 import { createItemNode } from './crud.js';
 
-// F-01/F-02 (turso substrate): this spec's contention MECHANISM is
-// SQLite-specific — its worker fixtures open raw better-sqlite3 connections
-// that hold `BEGIN IMMEDIATE` via fcntl locks. The turso adapter's
-// multiprocess WAL coordinates via .tshm shared memory and does NOT
-// participate in better-sqlite3's lock protocol, so a raw better-sqlite3
-// hold neither blocks a turso writer nor is blocked by one (verified
-// empirically: mixing them corrupts the file with SQLITE_CORRUPT). The
-// operator sanctioned `STORE_ADAPTER` (env) for tests only; pinning it here
-// keeps this proof on the adapter whose locking semantics it exercises.
-process.env['STORE_ADAPTER'] = 'sqlite';
+// The store substrate is TURSO — `createStoreAdapter({ dbPath })` defaults to
+// it, and both fixtures below (hold + retry) open REAL turso store-adapter
+// connections to the same file, so this proof exercises TURSO's own locking
+// semantics (multiprocess WAL coordination, `GenericFailure`/"database is
+// locked" busy errors) end to end. No `STORE_ADAPTER` pin is needed — or
+// wanted: the adapter defaults to turso and these specs must stay on it.
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', '..', 'dist', 'index.js');
@@ -97,7 +97,7 @@ function waitForOutcome(worker: Worker): Promise<WorkerOutcome> {
   });
 }
 
-describe('withImmediateRetry — real SQLITE_BUSY contention, real worker_threads (DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001)', () => {
+describe('withImmediateRetry — real busy/lock contention, real worker_threads (DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001)', () => {
   let tmp: TmpStore;
 
   beforeEach(async () => {
@@ -114,7 +114,7 @@ describe('withImmediateRetry — real SQLITE_BUSY contention, real worker_thread
     expect(MIN_GUARANTEED_RETRY_BUDGET_MS).toBeGreaterThan(HOLD_MS * 2);
   });
 
-  it('a write blocked by a real held lock survives past one busy_timeout window instead of throwing SQLITE_BUSY', async () => {
+  it('a write blocked by a real held lock survives past one busy_timeout window instead of throwing a busy/locked error', async () => {
     const created = await createItemNode(tmp.store, { family: 'BUG-BUSY', title: 'busy-retry fixture', body: 'x', repo: REPO });
 
     // One shared start-gate: both workers park on their OWN Int32Array view
@@ -128,7 +128,7 @@ describe('withImmediateRetry — real SQLITE_BUSY contention, real worker_thread
     // uncontended DB, and wait for it to park. `openGraphBacklogStore`
     // re-applies the (idempotent, `CREATE TABLE IF NOT EXISTS`) schema on
     // every open — if the hold-worker's lock already existed while THAT ran,
-    // it would throw its own unguarded `SQLITE_BUSY` outside this test's
+    // it would throw its own unguarded busy/locked error outside this test's
     // barrier entirely, unrelated to the retry wrapper under test. Opening
     // the retry-worker's store before the hold-worker even exists rules
     // that out by construction.
