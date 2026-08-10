@@ -1,39 +1,64 @@
 /**
- * graph-backlog-store.spec.ts — BUG-BACKLOG-BUSY-TIMEOUT-CLOBBERED-001:
- * `openGraphBacklogStore(dbPath, busyTimeoutMs)`'s `busyTimeoutMs` must
- * actually take effect on the real connection, not just look like it does.
+ * graph-backlog-store.spec.ts — `openGraphBacklogStore(dbPath, busyTimeoutMs)`
+ * must actually apply the caller's busy_timeout on the real store, not just
+ * look like it does.
  *
- * Discovered while writing busy-retry.spec.ts (DEBT-BACKLOG-CONCURRENCY-
- * BUSY-RETRY-001): `@adhd/sox-graph-store`'s `createGraphBackend(db)`
- * constructor unconditionally calls `applySchema()`, which re-runs the
- * library's OWN `PRAGMAS` array — including a hardcoded `busy_timeout =
- * 5000` — silently clobbering any `busy_timeout` set BEFORE constructing the
- * graph backend. A prior version of `openGraphBacklogStore` set it before,
- * so every caller's custom `busyTimeoutMs` (including `db.config.
- * busyTimeoutMs` from `buildBacklogEnv`) was silently discarded and the
- * store always ran at the hardcoded 5000ms regardless of what was passed in
- * — no error, no warning, `busy_timeout` pragma just quietly wrong.
+ * BUG-SOXGRAPH-002 (upstream): busy_timeout ownership moved OUT of graph-store
+ * into the store-adapters — graph-store's `applySchema()` PRAGMAS no longer
+ * include `busy_timeout`, and `AdapterConfig` exposes no busy_timeout field
+ * (types.ts), so `openGraphBacklogStore` routes the caller's value through
+ * the adapter's own `pragmaSet('busy_timeout', N)` surface. The read-back
+ * assertion below verifies THAT path: the adapter must report the value the
+ * caller asked for (verified against both substrates — turso returns
+ * `[{ busy_timeout: N }]`, sqlite returns the bare number).
+ *
+ * `:memory:` is NOT supported by the turso adapter (its multiprocess WAL
+ * cannot open an in-memory path), so these tests open real files under
+ * `tmp/backlog/` (the canonical ephemeral-artifact root) instead.
  */
-import { afterEach, describe, expect, it } from 'vitest';
-import { closeGraphBacklogStore, openGraphBacklogStore, type GraphBacklogStore } from './graph-backlog-store.js';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { openGraphBacklogStore, closeGraphBacklogStore, type GraphBacklogStore } from './graph-backlog-store.js';
+import { TMP_ROOT } from '../test/helpers/tmp-store.js';
 
-describe('openGraphBacklogStore — busy_timeout actually takes effect (BUG-BACKLOG-BUSY-TIMEOUT-CLOBBERED-001)', () => {
+/** Normalizes `pragmaGet('busy_timeout')`'s adapter-dependent shape to a bare number. */
+function busyTimeoutValue(raw: unknown): number | undefined {
+  if (typeof raw === 'number') return raw;
+  if (Array.isArray(raw)) {
+    const row = raw[0] as { busy_timeout?: unknown } | undefined;
+    return typeof row?.busy_timeout === 'number' ? row.busy_timeout : undefined;
+  }
+  return undefined;
+}
+
+describe('openGraphBacklogStore — busy_timeout actually takes effect (BUG-SOXGRAPH-002 adapter-owned)', () => {
   let store: GraphBacklogStore | undefined;
+  let dir: string;
 
-  afterEach(() => {
-    if (store) closeGraphBacklogStore(store);
+  beforeEach(async () => {
+    dir = mkdtempSync(join(TMP_ROOT, 'graph-backlog-store-'));
+    // `dbPath` is derived inside each test from `dir`; opening the store in
+    // beforeEach would create a second connection before the test body runs,
+    // so the store opens per-test (with the specific busyTimeoutMs under
+    // test) and `dir` is guaranteed set in the body (no non-null assertion).
+  });
+
+  afterEach(async () => {
+    if (store) await closeGraphBacklogStore(store);
     store = undefined;
+    if (dir) rmSync(dir, { recursive: true, force: true });
   });
 
-  it('a custom busyTimeoutMs is reflected by a real PRAGMA busy_timeout read-back, not silently reset to the library default', () => {
-    store = openGraphBacklogStore(':memory:', 250);
-    const row = store.db.pragma('busy_timeout') as Array<{ timeout: number }>;
-    expect(row[0]?.timeout).toBe(250);
+  it('a custom busyTimeoutMs is reflected by the adapter pragma read-back, not silently reset', async () => {
+    store = await openGraphBacklogStore(join(dir, 'backlog.db'), 250);
+    const readBack = busyTimeoutValue(await store.adapter.pragmaGet('busy_timeout'));
+    expect(readBack).toBe(250);
   });
 
-  it('the default (no busyTimeoutMs argument) is 5000', () => {
-    store = openGraphBacklogStore(':memory:');
-    const row = store.db.pragma('busy_timeout') as Array<{ timeout: number }>;
-    expect(row[0]?.timeout).toBe(5000);
+  it('the default (no busyTimeoutMs argument) is 5000', async () => {
+    store = await openGraphBacklogStore(join(dir, 'backlog.db'));
+    const readBack = busyTimeoutValue(await store.adapter.pragmaGet('busy_timeout'));
+    expect(readBack).toBe(5000);
   });
 });

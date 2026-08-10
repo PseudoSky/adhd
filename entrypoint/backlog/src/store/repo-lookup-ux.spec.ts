@@ -31,8 +31,8 @@ const REPO_UNRELATED = 'some/other-project';
 let tmp: TmpStore;
 let ctx: BacklogCtx;
 
-beforeEach(() => {
-  tmp = openTmpStore('repo-lookup-ux-spec');
+beforeEach(async () => {
+  tmp = await openTmpStore('repo-lookup-ux-spec');
   ctx = { store: tmp.store, env: buildBacklogEnv({ scope: 'project', adhdRoot: tmp.dir }) };
 });
 
@@ -41,23 +41,23 @@ afterEach(() => {
 });
 
 describe('read-time: helpful hint on a repo/humanId mismatch', () => {
-  it('findHumanIdInAnyRepo finds a live node under a DIFFERENT repo string', () => {
-    const created = createItemNode(tmp.store, { family: 'BUG-X', title: 't', body: 'b', repo: REPO_A });
-    const hits = findHumanIdInAnyRepo(tmp.store, created.item.humanId);
+  it('findHumanIdInAnyRepo finds a live node under a DIFFERENT repo string', async () => {
+    const created = await createItemNode(tmp.store, { family: 'BUG-X', title: 't', body: 'b', repo: REPO_A });
+    const hits = await findHumanIdInAnyRepo(tmp.store, created.item.humanId);
     expect(hits).toHaveLength(1);
     expect(hits[0]?.namespace).toBe(REPO_A);
   });
 
-  it('buildNotFoundError names the actual repo the humanId lives under', () => {
-    const created = createItemNode(tmp.store, { family: 'BUG-X', title: 't', body: 'b', repo: REPO_A });
-    const err = buildNotFoundError(tmp.store, REPO_B, created.item.humanId);
+  it('buildNotFoundError names the actual repo the humanId lives under', async () => {
+    const created = await createItemNode(tmp.store, { family: 'BUG-X', title: 't', body: 'b', repo: REPO_A });
+    const err = await buildNotFoundError(tmp.store, REPO_B, created.item.humanId);
     expect(err).toBeInstanceOf(BacklogItemNotFoundError);
     expect(err.foundInRepos).toEqual([REPO_A]);
     expect(err.message).toContain(`did you mean repo '${REPO_A}'`);
   });
 
-  it('buildNotFoundError names NOTHING for a genuinely nonexistent humanId (no false hint)', () => {
-    const err = buildNotFoundError(tmp.store, REPO_A, 'BUG-NOPE-999');
+  it('buildNotFoundError names NOTHING for a genuinely nonexistent humanId (no false hint)', async () => {
+    const err = await buildNotFoundError(tmp.store, REPO_A, 'BUG-NOPE-999');
     expect(err.foundInRepos).toEqual([]);
     expect(err.message).not.toContain('did you mean');
     expect(err.message).toBe(`backlog item not found: ${REPO_A}::BUG-NOPE-999`);
@@ -77,7 +77,7 @@ describe('read-time: helpful hint on a repo/humanId mismatch', () => {
   it('appendNote with the CORRECT repo is completely unaffected — succeeds exactly as before', async () => {
     const created = await client.createItem(ctx, { family: 'BUG-CORRECT', title: 't', body: 'b', repo: REPO_A });
     const updated = await client.appendNote(ctx, REPO_A, created.item.humanId, 'agent-x', 'a real note');
-    expect(updated.notes.at(-1)?.text).toBe('a real note');
+    expect(updated.notes[updated.notes.length - 1]?.text).toBe('a real note');
   });
 
   it('getItem: a genuine miss (humanId does not exist under ANY repo) still returns null — unchanged', async () => {
@@ -103,7 +103,7 @@ describe('read-time: helpful hint on a repo/humanId mismatch', () => {
 
 describe('write-time: soft repo-drift warning on createItem', () => {
   it('knownRepos is empty for a fresh store — the very FIRST item under any repo string never warns', async () => {
-    expect(knownRepos(tmp.store).size).toBe(0);
+    expect((await knownRepos(tmp.store)).size).toBe(0);
     const result = await client.createItem(ctx, { family: 'BUG-FIRST', title: 't', body: 'b', repo: REPO_A });
     expect(result.created).toBe(true);
     expect(result.repoWarning).toBeUndefined();

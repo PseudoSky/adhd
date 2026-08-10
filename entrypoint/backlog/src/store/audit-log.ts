@@ -43,31 +43,31 @@ interface AuditEventMeta {
  * byte-identical events (e.g. two items independently transitioning
  * `OPEN`→`IN_PROGRESS` with no `by`/`reason` at all) into ONE node.
  */
-export function writeAuditEvent(
+export async function writeAuditEvent(
   store: GraphBacklogStore,
   itemNodeId: number,
   repo: string,
   humanId: string,
   kind: AuditTrailEntry['kind'],
   detail: Record<string, unknown>,
-): void {
+): Promise<void> {
   const at = new Date().toISOString();
   const meta: AuditEventMeta = { itemNodeId, kind, at, detail };
   const content = `audit-event::${repo}::${humanId}::${kind}::${at}::${Math.random().toString(36).slice(2)}`;
-  const eventNodeId = store.graph.writeNode(content, {
+  const eventNodeId = await store.graph.writeNode(content, {
     kind: 'generic',
     name: `audit-event::${repo}::${humanId}::${at}`,
     tags: [BACKLOG_AUDIT_EVENT_TAG],
     namespace: repo,
     metadata: meta as unknown as Record<string, unknown>,
   });
-  store.graph.writeEdge(eventNodeId, itemNodeId, 'DERIVED_FROM');
+  await store.graph.writeEdge(eventNodeId, itemNodeId, 'DERIVED_FROM');
 }
 
 /** Every persisted event for `itemNodeId`, oldest first — ready to merge
  *  straight into `auditTrail()`'s `history` array. */
-export function queryAuditEvents(store: GraphBacklogStore, itemNodeId: number): AuditTrailEntry[] {
-  const nodes = store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_AUDIT_EVENT_TAG], metadata: { itemNodeId } });
+export async function queryAuditEvents(store: GraphBacklogStore, itemNodeId: number): Promise<AuditTrailEntry[]> {
+  const nodes = await store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_AUDIT_EVENT_TAG], metadata: { itemNodeId } });
   return nodes
     .map((n) => n.metadata as unknown as AuditEventMeta | undefined)
     .filter((m): m is AuditEventMeta => m !== undefined && m.itemNodeId === itemNodeId)

@@ -39,30 +39,30 @@ describe('scope isolation — real Environment instances, real temp filesystem r
     stores = [];
   });
 
-  afterEach(() => {
-    for (const store of stores) closeGraphBacklogStore(store);
+  afterEach(async () => {
+    for (const store of stores) await closeGraphBacklogStore(store);
     for (const dir of [projectDirA, projectDirB, globalHomeDir]) rmSync(dir, { recursive: true, force: true });
   });
 
-  function openProjectCtx(projectDir: string): BacklogCtx {
+  async function openProjectCtx(projectDir: string): Promise<BacklogCtx> {
     const env = buildBacklogEnv({ scope: 'project', cwd: projectDir, adhdRoot: projectDir });
     env.ensureDirs();
-    const store = openGraphBacklogStore(env.files.db);
+    const store = await openGraphBacklogStore(env.files.db);
     stores.push(store);
     return buildCtx(store, env);
   }
 
-  function openGlobalCtx(adhdRoot: string): BacklogCtx {
+  async function openGlobalCtx(adhdRoot: string): Promise<BacklogCtx> {
     const env = buildBacklogEnv({ scope: 'global', adhdRoot });
     env.ensureDirs();
-    const store = openGraphBacklogStore(env.files.db);
+    const store = await openGraphBacklogStore(env.files.db);
     stores.push(store);
     return buildCtx(store, env);
   }
 
   it('two project-scoped stores rooted at different directories never see each other\'s items', async () => {
-    const ctxA = openProjectCtx(projectDirA);
-    const ctxB = openProjectCtx(projectDirB);
+    const ctxA = await openProjectCtx(projectDirA);
+    const ctxB = await openProjectCtx(projectDirB);
     expect(ctxA.env.files.db).not.toBe(ctxB.env.files.db);
 
     const created = await createItem(ctxA, { family: 'BUG-ISOLATE', title: 'only in A', body: 'x', repo: 'test/repo' });
@@ -74,9 +74,9 @@ describe('scope isolation — real Environment instances, real temp filesystem r
   });
 
   it('a global-scoped store cannot see items created via either project-scoped instance', async () => {
-    const ctxA = openProjectCtx(projectDirA);
-    const ctxB = openProjectCtx(projectDirB);
-    const ctxGlobal = openGlobalCtx(globalHomeDir);
+    const ctxA = await openProjectCtx(projectDirA);
+    const ctxB = await openProjectCtx(projectDirB);
+    const ctxGlobal = await openGlobalCtx(globalHomeDir);
 
     expect(ctxGlobal.env.files.db).not.toBe(ctxA.env.files.db);
     expect(ctxGlobal.env.files.db).not.toBe(ctxB.env.files.db);

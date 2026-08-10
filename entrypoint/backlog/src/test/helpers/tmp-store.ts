@@ -1,7 +1,9 @@
 /**
- * tmp-store.ts — real-DB test fixture helper. Every test opens a real
- * `better-sqlite3` file under `tmp/backlog/<test-name>/` (AGENTS.md §10 — the
- * one canonical ephemeral-artifact root), never `:memory:` (a CAS/multi-
+ * tmp-store.ts — real-DB test fixture helper. Every test opens a real store
+ * via `openGraphBacklogStore` (turso substrate by default; `STORE_ADAPTER=sqlite`
+ * is a test-only override) under `tmp/backlog/<test-name>/` (AGENTS.md §10 —
+ * the one canonical ephemeral-artifact root), never `:memory:` (the turso
+ * adapter's multiprocess WAL cannot open an in-memory path, and a CAS/multi-
  * connection test needs a REAL shared file two connections can both open),
  * and removes it on teardown.
  */
@@ -16,7 +18,7 @@ export interface TmpStore {
   store: GraphBacklogStore;
   dbPath: string;
   dir: string;
-  cleanup: () => void;
+  cleanup: () => Promise<void>;
 }
 
 /**
@@ -25,17 +27,18 @@ export interface TmpStore {
  * actual directory is made unique via `mkdtempSync`. `busyTimeoutMs` defaults
  * to `openGraphBacklogStore`'s own default (5000); tests exercising
  * DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001 pass a short override.
+ * Async — `openGraphBacklogStore` is async (createStoreAdapter + applySchema).
  */
-export function openTmpStore(name: string, busyTimeoutMs?: number): TmpStore {
+export async function openTmpStore(name: string, busyTimeoutMs?: number): Promise<TmpStore> {
   const dir = mkdtempSync(join(ensureTmpRoot(), `${name}-`));
   const dbPath = join(dir, 'backlog.db');
-  const store = busyTimeoutMs === undefined ? openGraphBacklogStore(dbPath) : openGraphBacklogStore(dbPath, busyTimeoutMs);
+  const store = busyTimeoutMs === undefined ? await openGraphBacklogStore(dbPath) : await openGraphBacklogStore(dbPath, busyTimeoutMs);
   return {
     store,
     dbPath,
     dir,
-    cleanup: () => {
-      closeGraphBacklogStore(store);
+    cleanup: async () => {
+      await closeGraphBacklogStore(store);
       rmSync(dir, { recursive: true, force: true });
     },
   };
