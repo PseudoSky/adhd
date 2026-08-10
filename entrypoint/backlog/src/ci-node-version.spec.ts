@@ -1,8 +1,8 @@
 /**
  * ci-node-version.spec.ts — DEBT-BACKLOG-CI-NODE22-001 regression guard.
  *
- * `@adhd/backlog` requires Node >=22 (its `@adhd/sox-graph-store`/
- * `better-sqlite3@^12` native-module toolchain — DESIGN.md §12). `nx affected`
+ * `@adhd/backlog` requires Node >=22 (its turso store-adapter native-module
+ * toolchain — `@tursodatabase/database`, DESIGN.md §12). `nx affected`
  * runs every affected project's targets (including this one's `test`/`build`/
  * `verify-dist-load`) inside ONE job on ONE `actions/setup-node` version, so
  * the workflow-level `node-version` is the real floor this package's CI

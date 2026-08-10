@@ -4,7 +4,7 @@
 // Deliberately PLAIN CommonJS (no TypeScript) so `new Worker(path)` can load
 // it directly with zero transform step — the worker requires the BUILT
 // `dist/index.js` (a real consumer path, not a bypass) and drives the real
-// public `claimItem` export through a real second `better-sqlite3`
+// public `claimItem` export through a real second turso store-adapter
 // connection to the SAME on-disk file the main thread's connection uses.
 //
 // Barrier protocol (never a `sleep`): the main thread passes a

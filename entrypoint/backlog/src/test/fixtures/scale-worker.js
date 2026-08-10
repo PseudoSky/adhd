@@ -4,7 +4,7 @@
 // claim-race-worker.js/busy-retry-worker.js: plain CommonJS (loaded directly
 // by `new Worker(path)`, no transform step), drives the REAL public
 // `claimItem`/`createItem` exports through the BUILT `dist/index.js` against
-// its OWN genuine `better-sqlite3` connection to the SAME on-disk file, and
+// its OWN genuine turso store-adapter connection to the SAME on-disk file, and
 // synchronizes via a shared `Atomics` start-gate — never a `sleep`.
 //
 // `workerData.mode` selects which op this worker performs:

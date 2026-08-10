@@ -538,8 +538,8 @@ entrypoint and observable, not a proxy:
 
 1. **Real-DB CAS claim race.** A test spawns ≥2 concurrent `claimItem` calls (via a
    latch/barrier, not `sleep` — per `AGENTS.md` §7 rule 3) against the **same real
-   SQLite file** (two separate `better-sqlite3` connections, not one shared in-process
-   object) for the same `humanId`. Assertion: exactly one call returns
+   SQLite file** (two separate turso store-adapter connections, not one shared
+   in-process object) for the same `humanId`. Assertion: exactly one call returns
    `status:'claimed'`; the other returns `status:'held'`. Revert the `.immediate()`
    transaction wrapper (`DESIGN.md` §4.3) as the negative control and confirm the test
    goes red (both calls succeed, or a `SQLITE_BUSY` crash).
