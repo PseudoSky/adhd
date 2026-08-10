@@ -26,35 +26,37 @@ import {
   type BacklogNodeMeta,
 } from './mapping.js';
 
-function requireItemNode(store: GraphBacklogStore, repo: string, humanId: string) {
-  const node = findItemNode(store, repo, humanId);
-  if (!node) throw buildNotFoundError(store, repo, humanId);
+async function requireItemNode(store: GraphBacklogStore, repo: string, humanId: string) {
+  const node = await findItemNode(store, repo, humanId);
+  if (!node) throw await buildNotFoundError(store, repo, humanId);
   return node;
 }
 
-export function addDependencyNode(store: GraphBacklogStore, repo: string, humanId: string, dependsOnHumanId: string): void {
-  const from = requireItemNode(store, repo, humanId);
-  const to = requireItemNode(store, repo, dependsOnHumanId);
-  store.graph.writeEdge(from.id, to.id, 'DEPENDS_ON');
+export async function addDependencyNode(store: GraphBacklogStore, repo: string, humanId: string, dependsOnHumanId: string): Promise<void> {
+  const from = await requireItemNode(store, repo, humanId);
+  const to = await requireItemNode(store, repo, dependsOnHumanId);
+  await store.graph.writeEdge(from.id, to.id, 'DEPENDS_ON');
 }
 
 /**
  * `@adhd/sox-graph-store` exposes no edge-delete primitive (only
  * `invalidate()` for nodes, bi-temporal) — DESIGN.md §14 explicitly sanctions
- * a raw `DELETE` on the store-owned `db` handle as the one place the adapter
+ * a raw `DELETE` on the store-owned handle as the one place the adapter
  * reaches past the `GraphBackend` API, confirmed against the real `edge`
- * table column names (`src`/`dst`/`rel`).
+ * table column names (`src`/`dst`/`rel`). F-01/F-02: routed through the
+ * store-adapter's `executeRun` query surface (the raw `store.db` handle is
+ * gone) — same SQL, same semantics.
  */
-export function removeDependencyNode(store: GraphBacklogStore, repo: string, humanId: string, dependsOnHumanId: string): void {
-  const from = requireItemNode(store, repo, humanId);
-  const to = requireItemNode(store, repo, dependsOnHumanId);
-  store.db.prepare(`DELETE FROM edge WHERE src = ? AND dst = ? AND rel = 'DEPENDS_ON'`).run(from.id, to.id);
+export async function removeDependencyNode(store: GraphBacklogStore, repo: string, humanId: string, dependsOnHumanId: string): Promise<void> {
+  const from = await requireItemNode(store, repo, humanId);
+  const to = await requireItemNode(store, repo, dependsOnHumanId);
+  await store.adapter.executeRun(`DELETE FROM edge WHERE src = ? AND dst = ? AND rel = 'DEPENDS_ON'`, [from.id, to.id]);
 }
 
-export function linkRelatedNode(store: GraphBacklogStore, repo: string, humanIdA: string, humanIdB: string): void {
-  const a = requireItemNode(store, repo, humanIdA);
-  const b = requireItemNode(store, repo, humanIdB);
-  store.graph.writeEdge(a.id, b.id, 'RELATES_TO');
+export async function linkRelatedNode(store: GraphBacklogStore, repo: string, humanIdA: string, humanIdB: string): Promise<void> {
+  const a = await requireItemNode(store, repo, humanIdA);
+  const b = await requireItemNode(store, repo, humanIdB);
+  await store.graph.writeEdge(a.id, b.id, 'RELATES_TO');
 }
 
 /**
@@ -67,27 +69,40 @@ export function linkRelatedNode(store: GraphBacklogStore, repo: string, humanIdA
  * invalidation — `touch()`/`mutateMetadata` throw once `t_invalid` is set)
  * and a final `invalidate(oldId, reason)`.
  */
-export function supersedeItemNode(store: GraphBacklogStore, repo: string, oldHumanId: string, newInput: CreateItemInput, reason: string): BacklogItem {
+export async function supersedeItemNode(store: GraphBacklogStore, repo: string, oldHumanId: string, newInput: CreateItemInput, reason: string): Promise<BacklogItem> {
   if (typeof reason !== 'string' || reason.trim().length === 0) {
     throw new InvalidArgumentError(
       'reason',
       `backlog: supersedeItem requires a non-empty "reason" — received reason=${JSON.stringify(reason)}.`
     );
   }
-  const old = requireItemNode(store, repo, oldHumanId);
+  const old = await requireItemNode(store, repo, oldHumanId);
 
   // The new item's humanId must be allocated BEFORE minting (it is baked
   // into content/meta up front) and `graph.supersede()` is the SOLE minting
   // path (DESIGN.md §14 — never hand-roll the SUPERSEDES edge), so this does
   // not go through `createItemNode` at all (that would mint a second,
-  // throwaway node). Allocation + the actual `supersede()` mint run in ONE
-  // `.immediate()` transaction (`allocateHumanIdAndInsert`) — same
-  // BUG-BACKLOG-CONCURRENT-ID-ALLOCATION-RACE-001 fix `createItemNode`
-  // applies, closing the identical TOCTOU window here.
+  // throwaway node).
+  //
+  // DEVIATION from the pre-adapter code (which wrapped BOTH the id
+  // resolution AND the `supersede()` mint in ONE `.immediate()` transaction):
+  // `graph.supersede()` itself opens its own `adapter.transaction()` (the
+  // store-adapter's async transaction surface does NOT support nesting —
+  // turso's `_txMutexChain` deadlocks on self-nesting, sqlite throws
+  // "cannot start a transaction within a transaction"). So the humanId is
+  // resolved atomically FIRST via `allocateHumanIdAndInsert` (which keeps
+  // its own `.immediate()` transaction and the
+  // BUG-BACKLOG-CONCURRENT-ID-ALLOCATION-RACE-001 counter atomicity), then
+  // `supersede()` mints in its own transaction. The residual window — a
+  // concurrent same-(repo,family) `createItem`/`supersedeItem` landing
+  // between the id-resolution commit and the mint — is the same
+  // allocate-then-insert shape `allocateHumanId`'s @deprecated doc warns
+  // about; it is bounded and documented (supersedeItem is a rare admin op),
+  // and closing it fully would require a graph-store primitive that accepts
+  // an external transaction handle.
   const nowIso = new Date().toISOString();
-  let humanId = '';
-  const newId = allocateHumanIdAndInsert(store, repo, newInput.family, newInput.idOverride, (resolvedHumanId) => {
-    humanId = resolvedHumanId;
+  const humanId = await allocateHumanIdAndInsert(store, repo, newInput.family, newInput.idOverride, (resolvedHumanId) => resolvedHumanId);
+  {
     const kind = humanIdKind(humanId);
     const family = humanIdFamily(humanId);
     const newMeta: BacklogNodeMeta = {
@@ -107,7 +122,7 @@ export function supersedeItemNode(store: GraphBacklogStore, repo: string, oldHum
     if (newInput.projectPath !== undefined) newMeta.projectPath = newInput.projectPath;
     if (newInput.plan !== undefined) newMeta.plan = newInput.plan;
 
-    return store.graph.supersede(old.id, buildNodeContent(repo, humanId, newInput.title, newInput.body), {
+    const newId = await store.graph.supersede(old.id, buildNodeContent(repo, humanId, newInput.title, newInput.body), {
       kind: 'generic',
       name: buildNodeName(repo, humanId),
       summary: newInput.title,
@@ -118,29 +133,29 @@ export function supersedeItemNode(store: GraphBacklogStore, repo: string, oldHum
       ...(newInput.projectPath !== undefined ? { projectPath: newInput.projectPath } : {}),
       metadata: newMeta as unknown as Record<string, unknown>,
     });
-  });
 
-  mutateMetadata<BacklogNodeMeta>(store, old.id, (meta) => {
-    const notes = [...meta.notes, { by: 'system', at: nowIso, text: `[superseded by ${humanId}] ${reason}` }];
-    const next: BacklogNodeMeta = { ...meta, status: 'SUPERSEDED', notes, updatedAt: nowIso };
-    delete next.claimedBy;
-    delete next.claimedAt;
-    return next;
-  });
-  store.graph.invalidate(old.id, reason);
+    await mutateMetadata<BacklogNodeMeta>(store, old.id, (meta) => {
+      const notes = [...meta.notes, { by: 'system', at: nowIso, text: `[superseded by ${humanId}] ${reason}` }];
+      const next: BacklogNodeMeta = { ...meta, status: 'SUPERSEDED', notes, updatedAt: nowIso };
+      delete next.claimedBy;
+      delete next.claimedAt;
+      return next;
+    });
+    await store.graph.invalidate(old.id, reason);
 
-  const newNode = store.graph.getNode(newId);
-  if (!newNode) throw new Error(`backlog: supersede() returned an id that does not resolve: ${newId}`);
-  return toBacklogItem(newNode);
+    const newNode = await store.graph.getNode(newId);
+    if (!newNode) throw new Error(`backlog: supersede() returned an id that does not resolve: ${newId}`);
+    return toBacklogItem(newNode);
+  }
 }
 
 /** Creates N children, each linked child PART_OF parent. Parent is left open. */
-export function splitItemNode(store: GraphBacklogStore, repo: string, parentHumanId: string, children: CreateItemInput[]): BacklogItem[] {
-  const parent = requireItemNode(store, repo, parentHumanId);
+export async function splitItemNode(store: GraphBacklogStore, repo: string, parentHumanId: string, children: CreateItemInput[]): Promise<BacklogItem[]> {
+  const parent = await requireItemNode(store, repo, parentHumanId);
   const created: BacklogItem[] = [];
   for (const childInput of children) {
-    const result = createItemNode(store, { ...childInput, repo });
-    store.graph.writeEdge(result.item.nodeId, parent.id, 'PART_OF');
+    const result = await createItemNode(store, { ...childInput, repo });
+    await store.graph.writeEdge(result.item.nodeId, parent.id, 'PART_OF');
     created.push(result.item);
   }
   return created;
@@ -151,17 +166,17 @@ export function splitItemNode(store: GraphBacklogStore, repo: string, parentHuma
  * matching the `supersede()` convention), then `invalidate(drop, reason)`.
  * Returns the KEPT item.
  */
-export function mergeItemsNode(store: GraphBacklogStore, repo: string, keepHumanId: string, dropHumanId: string, reason: string): BacklogItem {
+export async function mergeItemsNode(store: GraphBacklogStore, repo: string, keepHumanId: string, dropHumanId: string, reason: string): Promise<BacklogItem> {
   if (typeof reason !== 'string' || reason.trim().length === 0) {
     throw new InvalidArgumentError(
       'reason',
       `backlog: mergeItems requires a non-empty "reason" — received reason=${JSON.stringify(reason)}.`
     );
   }
-  const keep = requireItemNode(store, repo, keepHumanId);
-  const drop = requireItemNode(store, repo, dropHumanId);
+  const keep = await requireItemNode(store, repo, keepHumanId);
+  const drop = await requireItemNode(store, repo, dropHumanId);
 
-  mutateMetadata<BacklogNodeMeta>(store, drop.id, (meta) => {
+  await mutateMetadata<BacklogNodeMeta>(store, drop.id, (meta) => {
     const nowIso = new Date().toISOString();
     const next: BacklogNodeMeta = {
       ...meta,
@@ -174,26 +189,26 @@ export function mergeItemsNode(store: GraphBacklogStore, repo: string, keepHuman
     return next;
   });
 
-  store.graph.writeEdge(drop.id, keep.id, 'SAME_AS');
-  store.graph.invalidate(drop.id, reason);
+  await store.graph.writeEdge(drop.id, keep.id, 'SAME_AS');
+  await store.graph.invalidate(drop.id, reason);
 
-  const keepNode = store.graph.getNode(keep.id);
-  if (!keepNode) throw buildNotFoundError(store, repo, keepHumanId);
+  const keepNode = await store.graph.getNode(keep.id);
+  if (!keepNode) throw await buildNotFoundError(store, repo, keepHumanId);
   return toBacklogItem(keepNode);
 }
 
-export function setPriorityNode(store: GraphBacklogStore, repo: string, humanId: string, priority: Priority): BacklogItem {
-  const node = requireItemNode(store, repo, humanId);
-  mutateMetadata<BacklogNodeMeta>(store, node.id, (meta) => ({ ...meta, priority, updatedAt: new Date().toISOString() }));
-  store.graph.touch(node.id, { importance: importanceForPriority(priority) });
-  const updated = store.graph.getNode(node.id);
-  if (!updated) throw buildNotFoundError(store, repo, humanId);
+export async function setPriorityNode(store: GraphBacklogStore, repo: string, humanId: string, priority: Priority): Promise<BacklogItem> {
+  const node = await requireItemNode(store, repo, humanId);
+  await mutateMetadata<BacklogNodeMeta>(store, node.id, (meta) => ({ ...meta, priority, updatedAt: new Date().toISOString() }));
+  await store.graph.touch(node.id, { importance: importanceForPriority(priority) });
+  const updated = await store.graph.getNode(node.id);
+  if (!updated) throw await buildNotFoundError(store, repo, humanId);
   return toBacklogItem(updated);
 }
 
-function findOrCreatePlanNode(store: GraphBacklogStore, repo: string, planSlug: string): number {
+async function findOrCreatePlanNode(store: GraphBacklogStore, repo: string, planSlug: string): Promise<number> {
   const name = `${repo}::plan:${planSlug}`;
-  const existing = store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_PLAN_TAG], namespace: repo, metadata: { planSlug } });
+  const existing = await store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_PLAN_TAG], namespace: repo, metadata: { planSlug } });
   const found = existing.find((n) => n.name === name && !n.isSuperseded);
   if (found) return found.id;
   return store.graph.writeNode(`plan:${planSlug}`, {
@@ -206,15 +221,15 @@ function findOrCreatePlanNode(store: GraphBacklogStore, repo: string, planSlug: 
   });
 }
 
-export function attachToPlanNode(store: GraphBacklogStore, repo: string, humanId: string, planSlug: string): void {
-  const item = requireItemNode(store, repo, humanId);
-  const planId = findOrCreatePlanNode(store, repo, planSlug);
-  mutateMetadata<BacklogNodeMeta>(store, item.id, (meta) => ({ ...meta, plan: planSlug, updatedAt: new Date().toISOString() }));
-  store.graph.writeEdge(item.id, planId, 'MEMBER_OF');
+export async function attachToPlanNode(store: GraphBacklogStore, repo: string, humanId: string, planSlug: string): Promise<void> {
+  const item = await requireItemNode(store, repo, humanId);
+  const planId = await findOrCreatePlanNode(store, repo, planSlug);
+  await mutateMetadata<BacklogNodeMeta>(store, item.id, (meta) => ({ ...meta, plan: planSlug, updatedAt: new Date().toISOString() }));
+  await store.graph.writeEdge(item.id, planId, 'MEMBER_OF');
 }
 
-function findOrCreateAssigneeNode(store: GraphBacklogStore, to: string): number {
-  const existing = store.graph.queryNodes({ kind: 'entity', tags: [BACKLOG_ASSIGNEE_TAG], metadata: { identity: to } });
+async function findOrCreateAssigneeNode(store: GraphBacklogStore, to: string): Promise<number> {
+  const existing = await store.graph.queryNodes({ kind: 'entity', tags: [BACKLOG_ASSIGNEE_TAG], metadata: { identity: to } });
   const found = existing.find((n) => n.name === to && !n.isSuperseded);
   if (found) return found.id;
   return store.graph.writeNode(`assignee:${to}`, {
@@ -226,16 +241,16 @@ function findOrCreateAssigneeNode(store: GraphBacklogStore, to: string): number 
   });
 }
 
-export function assignItemNode(store: GraphBacklogStore, repo: string, humanId: string, to: string, by: string): BacklogItem {
-  const item = requireItemNode(store, repo, humanId);
-  const assigneeId = findOrCreateAssigneeNode(store, to);
-  mutateMetadata<BacklogNodeMeta>(store, item.id, (meta) => {
+export async function assignItemNode(store: GraphBacklogStore, repo: string, humanId: string, to: string, by: string): Promise<BacklogItem> {
+  const item = await requireItemNode(store, repo, humanId);
+  const assigneeId = await findOrCreateAssigneeNode(store, to);
+  await mutateMetadata<BacklogNodeMeta>(store, item.id, (meta) => {
     const nowIso = new Date().toISOString();
     return { ...meta, assignee: to, notes: [...meta.notes, { by, at: nowIso, text: `assigned to ${to}` }], updatedAt: nowIso };
   });
-  store.graph.writeEdge(item.id, assigneeId, 'ASSIGNED_TO');
-  const updated = store.graph.getNode(item.id);
-  if (!updated) throw buildNotFoundError(store, repo, humanId);
+  await store.graph.writeEdge(item.id, assigneeId, 'ASSIGNED_TO');
+  const updated = await store.graph.getNode(item.id);
+  if (!updated) throw await buildNotFoundError(store, repo, humanId);
   return toBacklogItem(updated);
 }
 
@@ -267,14 +282,14 @@ export function assignItemNode(store: GraphBacklogStore, repo: string, humanId: 
  *    `buildNodeContent`) so the renamed node is indistinguishable from one
  *    that was always minted under `newHumanId`.
  */
-export function renameHumanIdNode(store: GraphBacklogStore, repo: string, nodeId: number, oldHumanId: string, newHumanId: string): BacklogItem {
+export async function renameHumanIdNode(store: GraphBacklogStore, repo: string, nodeId: number, oldHumanId: string, newHumanId: string): Promise<BacklogItem> {
   if (typeof newHumanId !== 'string' || newHumanId.trim().length === 0) {
     throw new InvalidArgumentError('newHumanId', `backlog: renameHumanId requires a non-empty newHumanId, received ${JSON.stringify(newHumanId)}`);
   }
 
-  const node = store.graph.getNode(nodeId);
+  const node = await store.graph.getNode(nodeId);
   if (!node || node.tInvalid || !isLiveBacklogItemNode(node)) {
-    throw buildNotFoundError(store, repo, oldHumanId);
+    throw await buildNotFoundError(store, repo, oldHumanId);
   }
   const currentMeta = node.metadata as Partial<BacklogNodeMeta> | undefined;
   const currentHumanId = currentMeta?.humanId;
@@ -291,9 +306,9 @@ export function renameHumanIdNode(store: GraphBacklogStore, repo: string, nodeId
   // itself be a fresh, avoidable collision — refuse. (A live node that is
   // THIS SAME nodeId, i.e. renaming to the id it already has, is a no-op
   // and allowed through.)
-  const clashing = store.graph
-    .queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG], namespace: repo, metadata: { humanId: newHumanId } })
-    .filter((n) => isLiveBacklogItemNode(n) && n.id !== nodeId);
+  const clashing = (await store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG], namespace: repo, metadata: { humanId: newHumanId } })).filter(
+    (n) => isLiveBacklogItemNode(n) && n.id !== nodeId
+  );
   if (clashing.length > 0) {
     throw new InvalidArgumentError(
       'newHumanId',
@@ -309,7 +324,7 @@ export function renameHumanIdNode(store: GraphBacklogStore, repo: string, nodeId
 
   let finalTitle = '';
   let finalBody = '';
-  mutateMetadata<BacklogNodeMeta>(store, nodeId, (meta) => {
+  await mutateMetadata<BacklogNodeMeta>(store, nodeId, (meta) => {
     finalTitle = meta.title;
     finalBody = meta.body;
     const nowIso = new Date().toISOString();
@@ -323,17 +338,19 @@ export function renameHumanIdNode(store: GraphBacklogStore, repo: string, nodeId
     };
   });
 
-  store.graph.touch(nodeId, {
+  await store.graph.touch(nodeId, {
     name: buildNodeName(repo, newHumanId),
     tags: buildTags(newKind, newFamily, userTags),
   });
 
   const newContent = buildNodeContent(repo, newHumanId, finalTitle, finalBody);
-  store.db
-    .prepare(`UPDATE node SET content = ?, content_hash = ? WHERE rowid = ? AND t_invalid IS NULL`)
-    .run(newContent, computeContentHash(newContent), nodeId);
+  await store.adapter.executeRun(`UPDATE node SET content = ?, content_hash = ? WHERE rowid = ? AND t_invalid IS NULL`, [
+    newContent,
+    computeContentHash(newContent),
+    nodeId,
+  ]);
 
-  const updated = store.graph.getNode(nodeId);
-  if (!updated) throw buildNotFoundError(store, repo, newHumanId);
+  const updated = await store.graph.getNode(nodeId);
+  if (!updated) throw await buildNotFoundError(store, repo, newHumanId);
   return toBacklogItem(updated);
 }

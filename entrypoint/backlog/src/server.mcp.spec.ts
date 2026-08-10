@@ -44,9 +44,9 @@ describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotoco
     // its own exclusive connection to the same file).
     const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
     seedEnv.ensureDirs();
-    const seedStore = openGraphBacklogStore(seedEnv.files.db);
+    const seedStore = await openGraphBacklogStore(seedEnv.files.db);
     const seeded = await createItem({ store: seedStore, env: seedEnv }, { family: 'BUG-MCP', title: 'via mcp', body: 'x', repo });
-    closeGraphBacklogStore(seedStore);
+    await closeGraphBacklogStore(seedStore);
 
     transport = new StdioClientTransport({ command: 'node', args: [ENTRY_SCRIPT, adhdRoot], cwd: adhdRoot });
     client = new Client({ name: 'backlog-mcp-test-client', version: '1.0.0' }, { capabilities: {} });

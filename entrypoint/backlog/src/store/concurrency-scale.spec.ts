@@ -18,6 +18,17 @@ import { openTmpStore, type TmpStore } from '../test/helpers/tmp-store.js';
 import { createItemNode } from './crud.js';
 import { listItems } from './query.js';
 
+// F-01/F-02 (turso substrate): this spec's contention MECHANISM is
+// SQLite-specific — its worker fixtures open raw better-sqlite3 connections
+// that hold `BEGIN IMMEDIATE` via fcntl locks. The turso adapter's
+// multiprocess WAL coordinates via .tshm shared memory and does NOT
+// participate in better-sqlite3's lock protocol, so a raw better-sqlite3
+// hold neither blocks a turso writer nor is blocked by one (verified
+// empirically: mixing them corrupts the file with SQLITE_CORRUPT). The
+// operator sanctioned `STORE_ADAPTER` (env) for tests only; pinning it here
+// keeps this proof on the adapter whose locking semantics it exercises.
+process.env['STORE_ADAPTER'] = 'sqlite';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', '..', 'dist', 'index.js');
 const WORKER_SCRIPT = join(HERE, '..', 'test', 'fixtures', 'scale-worker.js');
@@ -90,8 +101,8 @@ function p99(values: number[]): number {
 describe(`concurrency-scale — ${N} real worker_threads (MIGRATION.md §3.3)`, () => {
   let tmp: TmpStore;
 
-  beforeEach(() => {
-    tmp = openTmpStore('concurrency-scale');
+  beforeEach(async () => {
+    tmp = await openTmpStore('concurrency-scale');
   });
 
   afterEach(() => {
@@ -99,7 +110,7 @@ describe(`concurrency-scale — ${N} real worker_threads (MIGRATION.md §3.3)`, 
   });
 
   it('contention case: exactly ONE of N truly concurrent claimItem calls on the SAME item wins; the rest see held', async () => {
-    const created = createItemNode(tmp.store, { family: 'BUG-SCALE', title: 'raced item', body: 'x', repo: REPO });
+    const created = await createItemNode(tmp.store, { family: 'BUG-SCALE', title: 'raced item', body: 'x', repo: REPO });
 
     const outcomes = await runBarrieredBatch(N, (i, gate) => ({
       dbPath: tmp.dbPath,
@@ -113,7 +124,7 @@ describe(`concurrency-scale — ${N} real worker_threads (MIGRATION.md §3.3)`, 
     // Reopen the store fresh (not any writer's own handle) to read the
     // final, settled state — proving the winner really persisted, not just
     // that one worker's own in-process view says so.
-    const finalItem = listItems(tmp.store, { repo: REPO, family: 'BUG-SCALE' })[0];
+    const finalItem = (await listItems(tmp.store, { repo: REPO, family: 'BUG-SCALE' }))[0];
 
     expect(outcomes.every((o) => o.type === 'result')).toBe(true);
     const statuses = outcomes.map((o) => o.result?.status);
@@ -142,13 +153,13 @@ describe(`concurrency-scale — ${N} real worker_threads (MIGRATION.md §3.3)`, 
     expect(ids.every((id): id is string => typeof id === 'string')).toBe(true);
     expect(new Set(ids).size).toBe(N); // zero duplicate ids
 
-    const stored = listItems(tmp.store, { repo: REPO, family: 'BUG-SCALE-CREATE' });
+    const stored = await listItems(tmp.store, { repo: REPO, family: 'BUG-SCALE-CREATE' });
     expect(stored).toHaveLength(N); // zero dropped writes
   }, 60000);
 
   it('bounded latency: p99 of the contention case stays under the configured busy_timeout, proving contention is absorbed, not silently truncated/starved', async () => {
     const BUSY_TIMEOUT_MS = 5000; // openGraphBacklogStore's own default
-    const created = createItemNode(tmp.store, { family: 'BUG-SCALE-LAT', title: 'latency item', body: 'x', repo: REPO });
+    const created = await createItemNode(tmp.store, { family: 'BUG-SCALE-LAT', title: 'latency item', body: 'x', repo: REPO });
 
     const outcomes = await runBarrieredBatch(N, (i, gate) => ({
       dbPath: tmp.dbPath,
@@ -247,7 +258,7 @@ describe(`concurrency-scale — ${N} real worker_threads (MIGRATION.md §3.3)`, 
     // loser's `busy_timeout` window enough headroom to observe the winner's
     // commit well within the retry budget, deterministically.
     const TINY_BUSY_TIMEOUT_MS = 150;
-    const created = createItemNode(tmp.store, { family: 'BUG-SCALE-RETRY', title: 'retry-recovers item', body: 'x', repo: REPO });
+    const created = await createItemNode(tmp.store, { family: 'BUG-SCALE-RETRY', title: 'retry-recovers item', body: 'x', repo: REPO });
 
     const outcomes = await runBarrieredBatch(N, (i, gate) => ({
       dbPath: tmp.dbPath,

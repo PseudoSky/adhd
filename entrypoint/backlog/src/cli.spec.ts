@@ -258,12 +258,12 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     // server.mcp.spec.ts's seeding).
     const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
     seedEnv.ensureDirs();
-    const seedStore = openGraphBacklogStore(seedEnv.files.db);
+    const seedStore = await openGraphBacklogStore(seedEnv.files.db);
     const seeded = await createItem(
       { store: seedStore, env: seedEnv },
       { family: 'BUG-CLI', title: 'via cli', body: 'x', repo }
     );
-    closeGraphBacklogStore(seedStore);
+    await closeGraphBacklogStore(seedStore);
 
     // Deliberately BARE — no `backlog` prefix typed by the "user" here,
     // exactly like a real `backlog get-item …` invocation arrives at this
@@ -282,12 +282,12 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
 
     const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
     seedEnv.ensureDirs();
-    const seedStore = openGraphBacklogStore(seedEnv.files.db);
+    const seedStore = await openGraphBacklogStore(seedEnv.files.db);
     const seeded = await createItem(
       { store: seedStore, env: seedEnv },
       { family: 'BUG-CLIPFX', title: 'via cli prefixed', body: 'x', repo }
     );
-    closeGraphBacklogStore(seedStore);
+    await closeGraphBacklogStore(seedStore);
 
     const res = runBin(['backlog', 'get-item', '--repo', repo, '--human-id', seeded.item.humanId], adhdRoot);
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
@@ -319,12 +319,12 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
 
     const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
     seedEnv.ensureDirs();
-    const seedStore = openGraphBacklogStore(seedEnv.files.db);
+    const seedStore = await openGraphBacklogStore(seedEnv.files.db);
     const seeded = await createItem(
       { store: seedStore, env: seedEnv },
       { family: 'BUG-CLILIST', title: 'listed via cli', body: 'x', repo }
     );
-    closeGraphBacklogStore(seedStore);
+    await closeGraphBacklogStore(seedStore);
 
     const res = runBin(['list-items', '--filter', JSON.stringify({ repo })], adhdRoot);
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);

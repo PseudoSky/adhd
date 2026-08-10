@@ -93,23 +93,41 @@ function meaningfulTitleTokens(title: string): string[] {
 }
 
 /**
- * True iff `candidateTitle` shares at least `TITLE_OVERLAP_MIN_FRACTION` of
- * `newTitleTokens` (BUG-BACKLOG-DEDUPE-FTS-WEAK-MATCH-001's second-pass
- * filter — see `TITLE_OVERLAP_MIN_FRACTION`'s doc comment for why this runs
- * instead of / in addition to the FTS hit's own score). If the new title has
- * NO meaningful tokens at all (e.g. it is entirely stopwords/punctuation —
- * an edge case with no positive signal to check), this falls back to
- * `true` (preserve the prior FTS-only behavior) rather than silently
- * disabling dedupe for every all-stopword title.
+ * True iff `candidateTitle` contains EVERY meaningful token of the new title
+ * (the dedupe's title gate — BUG-BACKLOG-DEDUPE-FTS-WEAK-MATCH-001's
+ * second-pass filter; see `TITLE_OVERLAP_MIN_FRACTION`'s doc comment for the
+ * original 0.5-fraction rationale). If the new title has NO meaningful
+ * tokens at all (e.g. it is entirely stopwords/punctuation — an edge case
+ * with no positive signal to check), this falls back to `true` (preserve
+ * the prior FTS-only behavior) rather than silently disabling dedupe for
+ * every all-stopword title.
+ *
+ * F-01/F-02 (adapter substrate) — WHY "every token" instead of the old
+ * 0.5 fraction: the store-adapter's FTS search normalizes every multi-token
+ * query to `"tok1" OR "tok2"` (BL-367 — required so SQLite FTS5 and turso
+ * Tantivy return identical recall). Under OR semantics a hit exists if ANY
+ * single token matches, so the fraction gate now sees candidates the old
+ * FTS5-AND hit set (where a hit contained ALL query tokens) never produced:
+ * `closed one` vs `open one` shares 1/2 = 0.5 (exactly the old threshold),
+ * and numbered template titles `scale create number 1` vs `... number 2`
+ * share 3/4 = 0.75. Both are false positives the old recall excluded by
+ * construction. Requiring the candidate to contain EVERY meaningful
+ * meaningful token of the new title reproduces the FTS5-AND hit condition at
+ * the application layer, independent of the adapter's OR normalization —
+ * the genuine-duplicate cases ("database connection pool leaks under load"
+ * vs "The database connection pool leaks under load"; a shorter re-phrase
+ * whose words all recur in the longer original) still pass, while the
+ * OR-only shapes no longer do. `TITLE_OVERLAP_MIN_FRACTION` stays exported
+ * for callers/tests that tune the heuristic, but the gate is now the
+ * stronger AND form.
  */
 function titleMeaningfullyOverlaps(newTitleTokens: readonly string[], candidateTitle: string): boolean {
   if (newTitleTokens.length === 0) return true;
   const candidateTokens = new Set(meaningfulTitleTokens(candidateTitle));
-  const shared = newTitleTokens.filter((tok) => candidateTokens.has(tok)).length;
-  return shared / newTitleTokens.length >= TITLE_OVERLAP_MIN_FRACTION;
+  return newTitleTokens.every((tok) => candidateTokens.has(tok));
 }
 
-function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateItemInput): BacklogItem[] {
+async function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateItemInput): Promise<BacklogItem[]> {
   const candidates = new Map<number, NodeRecord>();
 
   // 1. FTS over title + body — catches "same bug, different words". Sanitized
@@ -127,7 +145,7 @@ function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateItemInp
   const ftsQuery = sanitizeFtsQuery(input.title);
   if (ftsQuery) {
     const newTitleTokens = meaningfulTitleTokens(input.title);
-    for (const hit of store.graph.searchNodes(ftsQuery, {
+    for (const hit of await store.graph.searchNodes(ftsQuery, {
       limit: 10,
       filter: { tags: [BACKLOG_ITEM_TAG], namespace: repo },
     })) {
@@ -141,7 +159,7 @@ function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateItemInp
   // 2. Exact metadata match on symbol/path/errorText.
   const scan = input.dedupeScan;
   if (scan?.symbol) {
-    for (const hit of store.graph.queryNodes({
+    for (const hit of await store.graph.queryNodes({
       kind: 'generic',
       tags: [BACKLOG_ITEM_TAG],
       namespace: repo,
@@ -151,7 +169,7 @@ function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateItemInp
     }
   }
   if (scan?.path) {
-    for (const hit of store.graph.queryNodes({
+    for (const hit of await store.graph.queryNodes({
       kind: 'generic',
       tags: [BACKLOG_ITEM_TAG],
       namespace: repo,
@@ -161,7 +179,7 @@ function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateItemInp
     }
   }
   if (scan?.errorText) {
-    for (const hit of store.graph.queryNodes({
+    for (const hit of await store.graph.queryNodes({
       kind: 'generic',
       tags: [BACKLOG_ITEM_TAG],
       namespace: repo,
@@ -174,7 +192,7 @@ function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateItemInp
   return [...candidates.values()].map(toBacklogItem);
 }
 
-export function createItemNode(store: GraphBacklogStore, input: CreateItemInput): CreateItemResult {
+export async function createItemNode(store: GraphBacklogStore, input: CreateItemInput): Promise<CreateItemResult> {
   // BUG-BACKLOG-HUMANID-COLLISION-001 fix #1: `family` is REQUIRED unless
   // `idOverride` is given (SPEC.md §5.1, model.ts `CreateItemInput.family`
   // doc comment). Validated HERE, before any allocation runs, so a missing/
@@ -240,14 +258,14 @@ export function createItemNode(store: GraphBacklogStore, input: CreateItemInput)
   // `.immediate()` transaction below, which is the one actually safe under
   // concurrency (BUG-BACKLOG-CONCURRENT-ID-ALLOCATION-RACE-001).
   if (input.idOverride) {
-    const existing = findItemNode(store, input.repo, input.idOverride);
+    const existing = await findItemNode(store, input.repo, input.idOverride);
     if (existing) {
       const existingItem = toBacklogItem(existing);
       return { item: existingItem, created: false, duplicateCandidates: [existingItem] };
     }
   }
 
-  const duplicateCandidates = input.force ? [] : dedupeScan(store, input.repo, input);
+  const duplicateCandidates = input.force ? [] : await dedupeScan(store, input.repo, input);
   if (duplicateCandidates.length > 0 && !input.force) {
     return { item: duplicateCandidates[0], created: false, duplicateCandidates };
   }
@@ -259,13 +277,13 @@ export function createItemNode(store: GraphBacklogStore, input: CreateItemInput)
   // this store has NEVER seen before, filed alongside others it HAS seen.
   // Soft warning only — never blocks the write (per the backlog item's fix
   // direction and this repo's CLAUDE.md "never hard-fail on new repo" rule).
-  const known = knownRepos(store);
+  const known = await knownRepos(store);
   const repoWarning =
     known.size > 0 && !known.has(input.repo)
       ? `repo '${input.repo}' is new to this store — existing repo value(s) here: ${[...known].sort().join(', ')}. If this is meant to be the same project, use the existing repo value instead.`
       : undefined;
 
-  return allocateHumanIdAndInsert(store, input.repo, input.family, input.idOverride, (humanId, existingAtCommit) => {
+  return allocateHumanIdAndInsert(store, input.repo, input.family, input.idOverride, async (humanId, existingAtCommit) => {
     if (existingAtCommit) {
       const existingItem = toBacklogItem(existingAtCommit);
       return { item: existingItem, created: false, duplicateCandidates: [existingItem] };
@@ -296,7 +314,7 @@ export function createItemNode(store: GraphBacklogStore, input: CreateItemInput)
     if (input.dedupeScan?.path !== undefined) meta.dedupePath = input.dedupeScan.path;
     if (input.dedupeScan?.errorText !== undefined) meta.dedupeErrorText = input.dedupeScan.errorText;
 
-    const nodeId = store.graph.writeNode(buildNodeContent(input.repo, humanId, input.title, input.body), {
+    const nodeId = await store.graph.writeNode(buildNodeContent(input.repo, humanId, input.title, input.body), {
       kind: 'generic',
       name: buildNodeName(input.repo, humanId),
       summary: input.title,
@@ -308,20 +326,20 @@ export function createItemNode(store: GraphBacklogStore, input: CreateItemInput)
       metadata: meta as unknown as Record<string, unknown>,
     });
 
-    const node = store.graph.getNode(nodeId);
+    const node = await store.graph.getNode(nodeId);
     if (!node) throw new Error(`backlog: writeNode returned an id that does not resolve: ${nodeId}`);
     return { item: toBacklogItem(node), created: true, duplicateCandidates: [], ...(repoWarning !== undefined ? { repoWarning } : {}) };
   });
 }
 
-export function getItemNode(store: GraphBacklogStore, repo: string, humanId: string): BacklogItem | null {
-  const node = findItemNode(store, repo, humanId);
+export async function getItemNode(store: GraphBacklogStore, repo: string, humanId: string): Promise<BacklogItem | null> {
+  const node = await findItemNode(store, repo, humanId);
   return node ? toBacklogItem(node) : null;
 }
 
-function requireItemNode(store: GraphBacklogStore, repo: string, humanId: string): NodeRecord {
-  const node = findItemNode(store, repo, humanId);
-  if (!node) throw buildNotFoundError(store, repo, humanId);
+async function requireItemNode(store: GraphBacklogStore, repo: string, humanId: string): Promise<NodeRecord> {
+  const node = await findItemNode(store, repo, humanId);
+  if (!node) throw await buildNotFoundError(store, repo, humanId);
   return node;
 }
 
@@ -334,20 +352,22 @@ function requireItemNode(store: GraphBacklogStore, repo: string, humanId: string
  * column (source of truth for the API) AND `metadata.title`; `body` updates
  * `metadata.body` (source of truth for the API). Below, a title/body change
  * ALSO re-synchronizes the FTS-indexed `content`/`content_hash` columns
- * directly via raw SQL on the store-owned `db` handle — the same DESIGN.md
- * §14-sanctioned escape hatch `structure.ts`'s `removeDependencyNode` already
- * uses for the one other gap (`edge` deletion) the `GraphBackend` API lacks.
+ * directly via `adapter.executeRun` on the store-owned `adapter` handle —
+ * the same DESIGN.md §14-sanctioned escape hatch `structure.ts`'s
+ * `removeDependencyNode` already uses for the one other gap (`edge`
+ * deletion) the `GraphBackend` API lacks, now routed through the store-
+ * adapter's query surface (F-01/F-02: the raw `store.db` handle is gone).
  * This is safe specifically because `fts_node_au` (the real schema's `AFTER
  * UPDATE ON node` trigger — `~/dev/ai/sox-ecosystem/libs/data/graph/graph-store/
  * src/index.ts`'s `FTS_TRIGGERS`) re-indexes `fts_node` automatically on
  * ANY write to `node.content`/`name`/`summary`, so no separate FTS statement
  * is needed here.
  */
-export function updateItemNode(store: GraphBacklogStore, repo: string, humanId: string, patch: UpdateItemInput): BacklogItem {
-  const node = requireItemNode(store, repo, humanId);
+export async function updateItemNode(store: GraphBacklogStore, repo: string, humanId: string, patch: UpdateItemInput): Promise<BacklogItem> {
+  const node = await requireItemNode(store, repo, humanId);
   let finalTitle = '';
   let finalBody = '';
-  mutateMetadata<BacklogNodeMeta>(store, node.id, (meta) => {
+  await mutateMetadata<BacklogNodeMeta>(store, node.id, (meta) => {
     const next: BacklogNodeMeta = { ...meta, updatedAt: new Date().toISOString() };
     if (patch.title !== undefined) next.title = patch.title;
     if (patch.body !== undefined) next.body = patch.body;
@@ -366,28 +386,29 @@ export function updateItemNode(store: GraphBacklogStore, repo: string, humanId: 
       touchPatch['tags'] = buildTags(kind, family, patch.tags);
     }
     if (patch.projectPath !== undefined) touchPatch['projectPath'] = patch.projectPath;
-    store.graph.touch(node.id, touchPatch);
+    await store.graph.touch(node.id, touchPatch);
   }
   if (patch.title !== undefined || patch.body !== undefined) {
     const newContent = buildNodeContent(repo, humanId, finalTitle, finalBody);
-    store.db
-      .prepare(`UPDATE node SET content = ?, content_hash = ? WHERE rowid = ? AND t_invalid IS NULL`)
-      .run(newContent, computeContentHash(newContent), node.id);
+    await store.adapter.executeRun(
+      `UPDATE node SET content = ?, content_hash = ? WHERE rowid = ? AND t_invalid IS NULL`,
+      [newContent, computeContentHash(newContent), node.id]
+    );
   }
-  const updated = store.graph.getNode(node.id);
-  if (!updated) throw buildNotFoundError(store, repo, humanId);
+  const updated = await store.graph.getNode(node.id);
+  if (!updated) throw await buildNotFoundError(store, repo, humanId);
   return toBacklogItem(updated);
 }
 
-export function softDeleteItemNode(store: GraphBacklogStore, repo: string, humanId: string, reason: string): void {
+export async function softDeleteItemNode(store: GraphBacklogStore, repo: string, humanId: string, reason: string): Promise<void> {
   if (typeof reason !== 'string' || reason.trim().length === 0) {
     throw new InvalidArgumentError(
       'reason',
       `backlog: softDeleteItem requires a non-empty "reason" — received reason=${JSON.stringify(reason)}.`
     );
   }
-  const node = requireItemNode(store, repo, humanId);
-  store.graph.invalidate(node.id, reason);
+  const node = await requireItemNode(store, repo, humanId);
+  await store.graph.invalidate(node.id, reason);
 }
 
 export { dedupeScan };
