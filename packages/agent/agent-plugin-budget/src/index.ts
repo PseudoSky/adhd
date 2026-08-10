@@ -65,6 +65,11 @@ const dimensionSchema = z.object({
   mode: z.enum(['warning', 'block']).optional(),
   costPerInputToken: z.number().min(0).optional(),
   costPerOutputToken: z.number().min(0).optional(),
+  // Cache-weighted cost rates (BUG-AGENTMCP-008). Default = costPerInputToken when
+  // unset, so a config without them bills every input token at the flat input rate —
+  // byte-for-byte identical to the pre-fix behavior.
+  costPerCacheReadToken: z.number().min(0).optional(),
+  costPerCacheWriteToken: z.number().min(0).optional(),
   scope: z.enum(['task', 'session', 'agent', 'global']).optional(),
 });
 
@@ -136,6 +141,8 @@ function flatFieldsToDimension(raw: Record<string, unknown>): DimensionConfig {
       key === 'mode' ||
       key === 'costPerInputToken' ||
       key === 'costPerOutputToken' ||
+      key === 'costPerCacheReadToken' ||
+      key === 'costPerCacheWriteToken' ||
       key === 'message'
     ) {
       result[key] = value;
@@ -204,11 +211,17 @@ interface BudgetAccumulator {
   agentName: string;
   providerType: string;
   startedAtMs: number;
-  // `inputTokens` is already the provider-neutral TOTAL (uncached + cache-read +
-  // cache-creation summed at the provider boundary — see BUG-ORCH-010's
-  // normaliseAnthropicUsage/normaliseOpenAIUsage). There is deliberately no separate
-  // cacheTokens accumulator here: adding cache totals on top of inputTokens would
-  // double-count the cached portion (the bug this comment replaces).
+  // Per-class input accounting (BUG-AGENTMCP-008). Providers already split input into
+  // uncached / cache-read / cache-creation at their boundary (normaliseAnthropicUsage /
+  // normaliseOpenAIUsage — see BUG-ORCH-010/BUG-ORCH-009), so the classes are accumulated
+  // separately to let cost weight each at its own rate. `inputTokens` is the DERIVED
+  // total — the exact provider-neutral total the inputTokens/tokens caps always keyed
+  // off (uncached + cacheRead + cacheCreation) — never a double-count of the cached
+  // portion. The three classes always partition `inputTokens` exactly (a provider that
+  // emits no split bills its entire total as uncached input).
+  uncachedInputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
   inputTokens: number;
   outputTokens: number;
   modelCalls: number;
@@ -234,7 +247,9 @@ class BudgetPlugin implements Plugin {
     private readonly db: unknown,
     private readonly cfg: PluginConfig,
     private readonly costPerInput = 0,
-    private readonly costPerOutput = 0
+    private readonly costPerOutput = 0,
+    private readonly costPerCacheRead = 0,
+    private readonly costPerCacheWrite = 0
   ) {}
 
   install(hooks: IHookRegistry): void {
@@ -307,6 +322,9 @@ class BudgetPlugin implements Plugin {
       agentName,
       providerType,
       startedAtMs: Date.now(),
+      uncachedInputTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
       inputTokens: 0,
       outputTokens: 0,
       modelCalls: 0,
@@ -325,9 +343,36 @@ class BudgetPlugin implements Plugin {
     if (!acc) return;
     const usage = p.tokenUsage;
     if (usage) {
-      // usage.inputTokens is already the true total (BUG-ORCH-010) — do not also add
-      // usage.cacheReadTokens/cacheCreationTokens, they are a subset of it, not additive.
-      acc.inputTokens += usage.inputTokens ?? 0;
+      // Per-class accumulation (BUG-AGENTMCP-008): providers already split input into
+      // uncached / cache-read / cache-creation and emit `inputTokens` as their sum
+      // (normaliseAnthropicUsage / normaliseOpenAIUsage). Each class is accumulated
+      // separately so cost can weight it at its own rate. The classes always partition
+      // the total exactly:
+      //   - split present, total present  → uncached gets the residual (total − read −
+      //     creation), which equals the emitted uncached count on consistent providers;
+      //   - split present, total absent   → uncached is the emitted count, total derived
+      //     as the class sum (guaranteed identical when the provider is consistent);
+      //   - no split (legacy/3rd-party)   → the whole total bills as uncached input.
+      // So with cache rates unset (default = input rate) cost is byte-for-byte identical
+      // to the old flat formula, and inputTokens/tokens caps see exactly the same total
+      // they always did.
+      const total = usage.inputTokens ?? 0;
+      const read = usage.cacheReadTokens ?? 0;
+      const creation = usage.cacheCreationTokens ?? 0;
+      const hasSplit =
+        usage.uncachedInputTokens !== undefined ||
+        usage.cacheReadTokens !== undefined ||
+        usage.cacheCreationTokens !== undefined;
+      const uncached = hasSplit
+        ? (usage.uncachedInputTokens ?? Math.max(0, total - read - creation))
+        : total;
+
+      acc.uncachedInputTokens += uncached;
+      acc.cacheReadTokens += read;
+      acc.cacheCreationTokens += creation;
+      // Derived total — never add the cache classes ON TOP of inputTokens (that was the
+      // BUG-ORCH-010 double-count); inputTokens IS the sum of the three classes.
+      acc.inputTokens += uncached + read + creation;
       acc.outputTokens += usage.outputTokens ?? 0;
     }
     acc.modelCalls += 1;
@@ -352,6 +397,10 @@ class BudgetPlugin implements Plugin {
         mode: d.mode ?? merged.mode,
         costPerInputToken: d.costPerInputToken ?? merged.costPerInputToken,
         costPerOutputToken: d.costPerOutputToken ?? merged.costPerOutputToken,
+        costPerCacheReadToken:
+          d.costPerCacheReadToken ?? merged.costPerCacheReadToken,
+        costPerCacheWriteToken:
+          d.costPerCacheWriteToken ?? merged.costPerCacheWriteToken,
         scope: d.scope ?? merged.scope,
       };
     }
@@ -565,8 +614,14 @@ class BudgetPlugin implements Plugin {
     snap['calls'] = acc.modelCalls;
     snap['wallClock'] = Date.now() - acc.startedAtMs;
     snap['modelMs'] = acc.totalModelMs;
+    // Cache-weighted cost (BUG-AGENTMCP-008): each input class bills at its own rate.
+    // With costPerCacheReadToken/costPerCacheWriteToken unset (default = costPerInput),
+    // this collapses to inputTokens × costPerInput + outputTokens × costPerOutput —
+    // the exact flat formula that shipped before, byte-for-byte.
     snap['cost'] =
-      acc.inputTokens * this.costPerInput +
+      acc.uncachedInputTokens * this.costPerInput +
+      acc.cacheReadTokens * this.costPerCacheRead +
+      acc.cacheCreationTokens * this.costPerCacheWrite +
       acc.outputTokens * this.costPerOutput;
 
     const uniqueScopes = new Set<string>();
@@ -837,7 +892,11 @@ const createPlugin: PluginFactory = ({ db, config }: PluginContext): Plugin => {
   const pluginCfg = normalizeConfig(config);
   const costIn = pluginCfg.defaults?.costPerInputToken ?? 0;
   const costOut = pluginCfg.defaults?.costPerOutputToken ?? 0;
-  return new BudgetPlugin(db, pluginCfg, costIn, costOut);
+  // Cache rates default to the flat input rate (BUG-AGENTMCP-008): a config that never
+  // sets them bills every input token at costPerInputToken — exactly as before the fix.
+  const costRead = pluginCfg.defaults?.costPerCacheReadToken ?? costIn;
+  const costWrite = pluginCfg.defaults?.costPerCacheWriteToken ?? costIn;
+  return new BudgetPlugin(db, pluginCfg, costIn, costOut, costRead, costWrite);
 };
 
 export default createPlugin;
