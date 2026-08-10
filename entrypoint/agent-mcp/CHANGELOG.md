@@ -1,3 +1,10 @@
+## Unreleased
+
+
+### 🚀 Features
+
+- **agent-mcp:** new `agent-mcp-install` bin registers the MCP server into claude/opencode/codex host configs at user or project scope — `npx -y --package @adhd/agent-mcp@latest agent-mcp-install --host opencode --scope user` (BUG-AGENTMCP-006)
+
 ## 2.2.3 (2026-08-08)
 
 
