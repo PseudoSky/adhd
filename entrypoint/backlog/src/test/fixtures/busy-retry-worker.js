@@ -13,7 +13,7 @@ const { parentPort, workerData } = require('node:worker_threads');
 
 async function main() {
   const backlog = require(workerData.distIndexPath);
-  const store = backlog.openGraphBacklogStore(workerData.dbPath, workerData.busyTimeoutMs);
+  const store = await backlog.openGraphBacklogStore(workerData.dbPath, workerData.busyTimeoutMs);
   const env = backlog.buildBacklogEnv({ scope: 'project', adhdRoot: workerData.adhdRoot });
   const ctx = { store, env };
 
@@ -27,7 +27,7 @@ async function main() {
   } catch (err) {
     parentPort.postMessage({ type: 'error', message: err instanceof Error ? err.message : String(err), code: err && err.code });
   } finally {
-    backlog.closeGraphBacklogStore(store);
+    await backlog.closeGraphBacklogStore(store);
   }
 }
 

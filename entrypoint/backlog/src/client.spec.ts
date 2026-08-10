@@ -17,8 +17,8 @@ import { buildBacklogEnv } from './env.js';
 let tmp: TmpStore;
 let ctx: BacklogCtx;
 
-beforeEach(() => {
-  tmp = openTmpStore('client-spec');
+beforeEach(async () => {
+  tmp = await openTmpStore('client-spec');
   ctx = { store: tmp.store, env: buildBacklogEnv({ scope: 'project', adhdRoot: tmp.dir }) };
 });
 
@@ -141,7 +141,7 @@ describe('createItem / getItem / listItems', () => {
 
   it('createItem never crashes on a title containing FTS5-syntax-significant characters (BUG-BACKLOG-DEDUPE-FTS-SYNTAX-CRASH-001)', async () => {
     // Regression guard: `dedupeScan` used to pass `input.title` RAW to
-    // `store.graph.searchNodes()`, which binds it directly as an FTS5 MATCH
+    // `await store.graph.searchNodes()`, which binds it directly as an FTS5 MATCH
     // query — real, unremarkable English titles ("off-by-one", "fix: the
     // thing") crashed `createItem` outright with a raw SqliteError instead
     // of running the dedupe scan.

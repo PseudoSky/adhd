@@ -22,7 +22,7 @@ import { AmbiguousHumanIdError, InvalidArgumentError } from '../model.js';
 import { BACKLOG_ITEM_TAG, isLiveBacklogItemNode, type BacklogNodeMeta } from './mapping.js';
 import { withImmediateRetry } from './immediate-retry.js';
 
-function computeNextHumanId(store: GraphBacklogStore, repo: string, family: string): string {
+async function computeNextHumanId(store: GraphBacklogStore, repo: string, family: string): Promise<string> {
   // BUG-BACKLOG-HUMANID-COLLISION-001 fix #1 (authoritative, in-transaction
   // guard): mirrors `createItemNode`'s early check, but here — inside the
   // SAME `.immediate()` transaction that actually mints the humanId — so
@@ -39,7 +39,7 @@ function computeNextHumanId(store: GraphBacklogStore, repo: string, family: stri
         `non-empty string, received ${JSON.stringify(family)}. See BUG-BACKLOG-HUMANID-COLLISION-001.`
     );
   }
-  const existing = store.graph.queryNodes({
+  const existing = await store.graph.queryNodes({
     kind: 'generic',
     tags: [BACKLOG_ITEM_TAG],
     namespace: repo,
@@ -54,7 +54,7 @@ function computeNextHumanId(store: GraphBacklogStore, repo: string, family: stri
   return `${family}-${String(max + 1).padStart(3, '0')}`;
 }
 
-function findLiveByHumanId(store: GraphBacklogStore, repo: string, humanId: string): NodeRecord | null {
+async function findLiveByHumanId(store: GraphBacklogStore, repo: string, humanId: string): Promise<NodeRecord | null> {
   // BUG-BACKLOG-IMPORT-TOMBSTONE-BLOCKS-RECREATE-001: this is the authoritative
   // in-transaction existence check `createItemNode` relies on to decide
   // create-vs-idempotent-noop. It MUST agree with `findItemNode`
@@ -66,7 +66,7 @@ function findLiveByHumanId(store: GraphBacklogStore, repo: string, humanId: stri
   // nodes — leaving a real markdown item (e.g. a distinct bug reusing an id a
   // prior supersede/merge tombstoned) permanently unimportable. A soft-deleted
   // id must read as ABSENT here so re-import resurrects it as a fresh live node.
-  const nodes = store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG], namespace: repo, metadata: { humanId } });
+  const nodes = await store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG], namespace: repo, metadata: { humanId } });
   const live = nodes.filter(
     (n) => isLiveBacklogItemNode(n) && (n.metadata as Partial<BacklogNodeMeta> | undefined)?.humanId === humanId,
   );
@@ -93,24 +93,25 @@ function findLiveByHumanId(store: GraphBacklogStore, repo: string, humanId: stri
  * short-circuit on a non-null `existing` exactly like `createItemNode`'s
  * documented idempotent-reimport behavior, but now race-free.
  */
-export function allocateHumanIdAndInsert<T>(
+export async function allocateHumanIdAndInsert<T>(
   store: GraphBacklogStore,
   repo: string,
   family: string,
   idOverride: string | undefined,
   insert: (humanId: string, existing: NodeRecord | null) => T,
-): T {
+): Promise<T> {
   return withImmediateRetry(() =>
-    store.db
-      .transaction(() => {
+    store.adapter.transaction(
+      async () => {
         if (idOverride) {
-          const existing = findLiveByHumanId(store, repo, idOverride);
+          const existing = await findLiveByHumanId(store, repo, idOverride);
           return insert(idOverride, existing);
         }
-        const humanId = computeNextHumanId(store, repo, family);
+        const humanId = await computeNextHumanId(store, repo, family);
         return insert(humanId, null);
-      })
-      .immediate(),
+      },
+      { mode: 'immediate' }
+    )
   );
 }
 
@@ -122,6 +123,8 @@ export function allocateHumanIdAndInsert<T>(
  * concurrency). Still correct in isolation — just NOT TOCTOU-safe when the
  * caller's own insert happens in a separate, later transaction.
  */
-export function allocateHumanId(store: GraphBacklogStore, repo: string, family: string): string {
-  return withImmediateRetry(() => store.db.transaction(() => computeNextHumanId(store, repo, family)).immediate());
+export async function allocateHumanId(store: GraphBacklogStore, repo: string, family: string): Promise<string> {
+  return withImmediateRetry(() =>
+    store.adapter.transaction(() => computeNextHumanId(store, repo, family), { mode: 'immediate' })
+  );
 }

@@ -47,8 +47,8 @@ describe('markdown round-trip — real BACKLOG.md, real legacy tool subprocess',
   let ctx: BacklogCtx;
   let workDir: string;
 
-  beforeEach(() => {
-    tmp = openTmpStore('markdown-spec');
+  beforeEach(async () => {
+    tmp = await openTmpStore('markdown-spec');
     ctx = { store: tmp.store, env: buildBacklogEnv({ scope: 'project', adhdRoot: tmp.dir }) };
     workDir = mkdtempSync(join(tmpdir(), 'backlog-markdown-'));
   });
@@ -218,8 +218,8 @@ describe('importFromMarkdown — diagnostics + provenance (real store)', () => {
   let workDir: string;
   const REPO_PROV = 'PseudoSky/backlog-provenance-test';
 
-  beforeEach(() => {
-    tmp = openTmpStore('markdown-provenance-spec');
+  beforeEach(async () => {
+    tmp = await openTmpStore('markdown-provenance-spec');
     ctx = { store: tmp.store, env: buildBacklogEnv({ scope: 'project', adhdRoot: tmp.dir }) };
     workDir = mkdtempSync(join(tmpdir(), 'backlog-provenance-'));
   });
