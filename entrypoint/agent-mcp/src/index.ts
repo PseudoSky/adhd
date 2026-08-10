@@ -400,23 +400,32 @@ async function main() {
 // for its one exported function silently ran a full production server).
 //
 // BUG-011 (CRITICAL): `path.resolve(argv[1])` only normalizes a path — it
-// does NOT resolve symlinks — while Node always resolves `import.meta.url`
-// to the module's REALPATH. Any symlinked launch (npm/npx's
+// does NOT resolve symlinks — while Node resolves `import.meta.url` to the
+// module's REALPATH. Any symlinked launch (npm/npx's
 // `node_modules/.bin/agent-mcp`, pnpm's symlinked store, an MCP host's
 // `type:local` launcher, or macOS's `/tmp` -> `/private/tmp`) therefore had
 // argv[1] (symlink path) != import.meta.url (realpath), so `isMainModule`
 // was always false under those launch paths and `main()` never ran: the
 // process loaded env, then exited 0 silently — no server, no port, no DB.
-// Fix: resolve argv[1] through its realpath before comparing, since
-// import.meta.url is already realpath-resolved. Fall back to the old
-// normalize-only comparison if argv[1] can't be realpath'd (e.g. it no
-// longer exists on disk) so this never throws instead of just returning
-// false.
+//
+// The first fix resolved argv[1] through realpathSync while trusting Node to
+// have already realpath-resolved `import.meta.url`. That premise does not
+// hold in every environment: launched with `--preserve-symlinks-main` (a
+// flag some launchers/npm exec paths set), Node keeps the ENTRY module's
+// `import.meta.url` at the invoked symlink path (`node_modules/.bin/agent-
+// mcp`) while `realpathSync(argv[1])` fully resolves it — the two diverge
+// again and the server silently no-ops (product re-verified 2026-08-08
+// against the published 2.2.3 tarball: realpaths of both files equal, yet
+// `isMainModule` still false, exit 0, zero bytes). Hardening: realpath BOTH
+// sides of the comparison so it holds no matter which side Node failed to
+// resolve. Fall back to the old normalize-only comparison if argv[1] can't
+// be realpath'd (e.g. it no longer exists on disk) so this never throws
+// instead of just returning false.
 export function computeIsMainModule(): boolean {
     if (process.argv[1] === undefined) return false;
     const self = fileURLToPath(import.meta.url);
     try {
-        return realpathSync(process.argv[1]) === self;
+        return realpathSync(process.argv[1]) === realpathSync(self);
     } catch {
         return path.resolve(process.argv[1]) === self;
     }
