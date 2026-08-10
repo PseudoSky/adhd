@@ -165,12 +165,16 @@ For the `cost` field, set token prices on the defaults dimension:
   "defaults": {
     "costPerInputToken": 0.000003,
     "costPerOutputToken": 0.000015,
+    "costPerCacheReadToken": 0.0000003,
+    "costPerCacheWriteToken": 0.00000375,
     "caps": [{ "field": "cost", "maximum": 0.1 }]
   }
 }
 ```
 
-Cost = `inputTokens × costPerInputToken + outputTokens × costPerOutputToken`.
+Cost = `uncachedInputTokens × costPerInputToken + cacheReadTokens × costPerCacheReadToken + cacheCreationTokens × costPerCacheWriteToken + outputTokens × costPerOutputToken`.
+
+`costPerCacheReadToken` and `costPerCacheWriteToken` default to `costPerInputToken` when unset, so a config that only sets the two flat rates bills every input token at the flat input rate — identical to the pre-cache-aware behavior. To match a model's real rate card (e.g. DeepSeek: input `$0.14/M`, cache-read `$0.0028/M`), copy the per-class rates from the provider rate card; on cache-warm runs most input is cache-read, and billing it at the flat input rate over-counts spend by up to ~50x.
 
 ## Backward compat (flat format)
 
