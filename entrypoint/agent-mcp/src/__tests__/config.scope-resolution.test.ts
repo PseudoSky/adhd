@@ -56,6 +56,17 @@
  * var + cwd moved to an empty tmpdir (so the module-scope loader finds no
  * `.env`) + `vi.resetModules()`. Tests that intend to set the var (test 3)
  * set it explicitly after the clear.
+ *
+ * SECOND CONTAMINATION (2026-08-10, post-merge): test 4's "never in the repo
+ * tree" negative assertion originally targeted the REAL repo root
+ * (`<repoRoot>/.adhd/agent-mcp/production/data/agents.db`). On a main checkout
+ * that path carries a pre-existing residue — the historical project-scoped
+ * agent-mcp server created it 2026-07-25, weeks before this test existed — so
+ * `existsSync(...) === false` passed or failed on ambient repo state the test
+ * does not control. The negative assertion is now FIXTURE-OWNED: db/client.ts
+ * is imported with cwd = a `mkCwdFixture(true)` project root (`.adhd` marker)
+ * the test creates and deletes, and the assertion targets that fixture. Green
+ * regardless of what residue exists in the real repo tree.
  */
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
@@ -134,10 +145,16 @@ afterEach(() => {
  * no `.adhd/.env` for the loader to find) for the duration of the import, then
  * restores the original cwd. `~/.adhd/.env` is still consulted by the loader,
  * but it must not set the var for this to hold (verified: it does not).
+ *
+ * `cwd` (optional): an OWNED fixture directory the caller wants the import to
+ * run under (e.g. a `mkCwdFixture(true)` project root with a `.adhd` marker,
+ * so the scope tests exercise db/client.ts against a cwd that IS a project
+ * root). The caller owns its lifecycle (`cleanupDirs`); this helper neither
+ * creates nor removes it.
  */
-async function importUnderCleanEnv<T>(specifier: string): Promise<T> {
+async function importUnderCleanEnv<T>(specifier: string, cwd?: string): Promise<T> {
   const originalCwd = process.cwd();
-  const cleanCwd = mkdtempSync(join(tmpdir(), 'adhd-agent-mcp-clean-env-'));
+  const cleanCwd = cwd ?? mkdtempSync(join(tmpdir(), 'adhd-agent-mcp-clean-env-'));
   try {
     delete process.env.ADHD_AGENT_DATABASE_PATH;
     process.chdir(cleanCwd);
@@ -145,7 +162,7 @@ async function importUnderCleanEnv<T>(specifier: string): Promise<T> {
     return (await import(specifier)) as T;
   } finally {
     process.chdir(originalCwd);
-    rmSync(cleanCwd, { recursive: true, force: true });
+    if (!cwd) rmSync(cleanCwd, { recursive: true, force: true });
   }
 }
 
@@ -265,33 +282,48 @@ describe('DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001 — operational agents.db sco
     }
   });
 
-  it('(test 4) the operational DB file is really created under the isolated HOME root by db/client.ts even with ADHD_ENV_SCOPE=project — never in the repo tree', async () => {
+  it('(test 4) the operational DB file is really created under the isolated HOME root by db/client.ts even with ADHD_ENV_SCOPE=project — never under the project cwd (fixture-owned project root)', async () => {
+    // Isolated HOME the test fully owns (fresh temp dir, deleted in afterEach).
+    const fakeHome = mkAdhdRoot();
+    // A FAKE project root the test fully owns — a temp dir carrying the `.adhd`
+    // PROJECT_MARKER — used as the cwd db/client.ts runs under, so
+    // `ADHD_ENV_SCOPE=project` has a real project root to (wrongly) relocate
+    // the operational store into if the scope-forced resolution were not in
+    // place. Deleted in afterEach.
+    //
+    // Deliberately NOT the real repo root: on a main checkout a pre-existing
+    // `.adhd/agent-mcp/production/data/agents.db` (created 2026-07-25 by the
+    // historical project-scoped server, weeks before this test existed) makes
+    // ANY `existsSync(...) === false` assertion against the real repo root
+    // environment-dependent — it passes or fails on ambient repo state the
+    // test does not control, not on the code under test. This fixture is
+    // created fresh by the test, so the negative assertion below is
+    // deterministic regardless of checkout history.
+    const cwdFixture = mkCwdFixture(true);
     const restoreScope = withEnvVar('ADHD_ENV_SCOPE', 'project');
-    const restoreHome = withEnvVar('HOME', mkAdhdRoot());
+    const restoreHome = withEnvVar('HOME', fakeHome);
     const restoreDbPath = withEnvVar('ADHD_AGENT_DATABASE_PATH', undefined);
-    // The REAL repo root, captured before `importUnderCleanEnv` chdirs away —
-    // the "never in the repo tree" assertion below must check THIS directory,
-    // not the helper's throwaway clean cwd.
-    const repoRoot = process.cwd();
     try {
-      // Isolated HOME + fresh module registry under a CLEAN cwd: the
-      // module-scope `env`/`operationalEnv` singletons and db/client.ts all
-      // resolve against it. A repo-root `.env` injected by the runner or by
-      // `config.ts`'s module-scope loader can no longer leak in (see
-      // `importUnderCleanEnv`).
-      await importUnderCleanEnv('../db/client.js');
+      // Isolated HOME + fresh module registry, imported with cwd = the fixture
+      // project root: the module-scope `env`/`operationalEnv` singletons and
+      // db/client.ts all resolve against BOTH the isolated HOME and a
+      // project-marker cwd — the exact historical bug scenario (project-scoped
+      // server, cwd in a repo carrying `.git`/`.adhd` markers). A repo-root
+      // `.env` injected by the runner or by `config.ts`'s module-scope loader
+      // can no longer leak in either (see `importUnderCleanEnv`).
+      await importUnderCleanEnv('../db/client.js', cwdFixture);
 
-      const expected = join(process.env['HOME'] as string, '.adhd', 'agent-mcp', 'production', 'data', 'agents.db');
+      // The operational DB MUST land under the isolated HOME's namespaced root.
+      const expected = join(fakeHome, '.adhd', 'agent-mcp', 'production', 'data', 'agents.db');
       expect(existsSync(expected)).toBe(true);
 
-      // Never relocated into the repo tree by the project scope: the exact
-      // path the bug's project-scoped server used to open is
-      // `<cwd>/.adhd/agent-mcp/production/data/agents.db` — this worktree has
-      // real `.git`/`.adhd` markers, so `findProjectRoot(cwd)` would resolve
-      // it if the scope-forced resolution were not in place. (Verified absent
-      // in this worktree before the run; the isolated-HOME path above is the
-      // one db/client.ts actually created.)
-      expect(existsSync(join(repoRoot, '.adhd', 'agent-mcp', 'production', 'data', 'agents.db'))).toBe(false);
+      // The teeth: project scope must NOT relocate the operational store into
+      // the project root — even though `cwd` IS a project root (`.adhd`
+      // marker present), the exact path the bug's project-scoped server used
+      // to open, `<cwd>/.adhd/agent-mcp/production/data/agents.db`, must NOT
+      // exist. Fixture-owned: green with or without the historical repo-tree
+      // residue.
+      expect(existsSync(join(cwdFixture, '.adhd', 'agent-mcp', 'production', 'data', 'agents.db'))).toBe(false);
     } finally {
       restoreDbPath();
       restoreHome();
