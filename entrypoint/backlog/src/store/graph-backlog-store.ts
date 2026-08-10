@@ -9,7 +9,7 @@
  * Auto-migration on adapter-type change is owned by the factory:
  * `createStoreAdapter({ dbPath }, { migrateOnAdapterChange: true })` copies a
  * store stamped with a DIFFERENT adapter type (e.g. the pre-migration
- * better-sqlite3-backed `~/.adhd/.../backlog.db`) into a fresh turso store
+ * SQLite-backed `~/.adhd/.../backlog.db`) into a fresh turso store
  * via an atomic temp-file swap. The gate below (`dbPath !== ':memory:'` and
  * the file already exists) matches the factory's own constraint: it requires
  * a local file db, and a fresh test file has no prior adapter stamp to
