@@ -40,18 +40,45 @@
  * `operationalEnv` export does not exist (the red run fails the module
  * import), and `db/client.ts`'s old expression honored a project layer that
  * these tests prove is ignored. See the task report for both runs.
+ *
+ * TEST-ISOLATION (2026-08-10, post-merge fix): the adhd repo root carries a
+ * gitignored `.env` (present in main-checkout dev trees, absent in fresh
+ * worktrees and CI) setting `ADHD_AGENT_DATABASE_PATH=data/agent-mcp/
+ * agents-dev.db`. `config.ts` runs `loadEnvHierarchy()` at MODULE SCOPE, which
+ * loads `<cwd>/.env` into `process.env` with `override:true` — so an ambient
+ * var can contaminate (a) every `Environment` constructed below (env layer is
+ * highest precedence) and (b) the module-scope `env`/`operationalEnv`
+ * singletons, which capture `process.env` at import time. The suite is
+ * therefore made immune to ANY ambient `ADHD_AGENT_DATABASE_PATH` regardless
+ * of runner env injection: a `beforeEach` clears the var before EVERY test,
+ * and the tests that exercise the module-scope singletons (`operationalEnv`,
+ * `db/client.ts`) re-import them through `importUnderCleanEnv()` — cleared
+ * var + cwd moved to an empty tmpdir (so the module-scope loader finds no
+ * `.env`) + `vi.resetModules()`. Tests that intend to set the var (test 3)
+ * set it explicitly after the clear.
  */
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Environment } from '@adhd/environment';
 
-import { agentMcpEnvironmentSpec, operationalEnv, type AgentMcpConfig } from '../config.js';
+import { agentMcpEnvironmentSpec, type AgentMcpConfig } from '../config.js';
 
 const cleanupDirs: string[] = [];
+
+beforeEach(() => {
+  // Post-merge test-isolation fix (2026-08-10): a gitignored repo-root `.env`
+  // (main-checkout dev trees only — not in fresh worktrees or CI) sets
+  // `ADHD_AGENT_DATABASE_PATH=data/agent-mcp/agents-dev.db`. `config.ts`'s
+  // module-scope `loadEnvHierarchy()` loads it into `process.env`, and every
+  // `Environment` below reads the env-var layer at construction — so clear the
+  // contaminant before EVERY test, regardless of what the runner injected.
+  // Tests that intend to set the var (test 3) set it explicitly after this.
+  delete process.env.ADHD_AGENT_DATABASE_PATH;
+});
 
 /** Isolated `adhdRoot` (test-isolation escape hatch, ARCHITECTURE.md §3.1). */
 function mkAdhdRoot(): string {
@@ -93,6 +120,35 @@ afterEach(() => {
   }
 });
 
+/**
+ * Deterministic dynamic import for tests that exercise the module-scope
+ * singletons (`env`/`operationalEnv` in `config.ts`, and `db/client.ts`'s
+ * module-scope DB creation). Returns the imported module namespace.
+ *
+ * WHY clearing the var alone is NOT enough (2026-08-10): `config.ts` calls
+ * `loadEnvHierarchy()` at module scope, which loads `<cwd>/.env` into
+ * `process.env` with `override:true`. Any re-import of `config.js` (e.g. after
+ * `vi.resetModules()`) therefore RE-INJECTS the ambient
+ * `ADHD_AGENT_DATABASE_PATH` even if the test deleted it first. So this helper
+ * additionally chdirs into a freshly-created EMPTY tmpdir (no `.env`,
+ * no `.adhd/.env` for the loader to find) for the duration of the import, then
+ * restores the original cwd. `~/.adhd/.env` is still consulted by the loader,
+ * but it must not set the var for this to hold (verified: it does not).
+ */
+async function importUnderCleanEnv<T>(specifier: string): Promise<T> {
+  const originalCwd = process.cwd();
+  const cleanCwd = mkdtempSync(join(tmpdir(), 'adhd-agent-mcp-clean-env-'));
+  try {
+    delete process.env.ADHD_AGENT_DATABASE_PATH;
+    process.chdir(cleanCwd);
+    vi.resetModules();
+    return (await import(specifier)) as T;
+  } finally {
+    process.chdir(originalCwd);
+    rmSync(cleanCwd, { recursive: true, force: true });
+  }
+}
+
 /** The REAL singleton's construction shape: no `scope` override at all
  *  (`config.ts` constructs `env` as `new Environment('agent-mcp',
  *  agentMcpEnvironmentSpec, { namespace: 'production' })`), plus the
@@ -117,7 +173,13 @@ function makeOperationalEnv(adhdRoot: string, cwd: string) {
 }
 
 describe('DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001 — operational agents.db scope resolution', () => {
-  it('(acceptance surface) operationalEnv is exported, scope-forced to global, and resolves the DB under the user-global namespaced root', () => {
+  it('(acceptance surface) operationalEnv is exported, scope-forced to global, and resolves the DB under the user-global namespaced root', async () => {
+    // The singleton captures `process.env` at MODULE-import time, so import it
+    // deterministically: cleared var + clean cwd + fresh module registry (see
+    // `importUnderCleanEnv`). The static `agentMcpEnvironmentSpec` import above
+    // already forced `config.js` to evaluate once under the ambient env, so the
+    // module-scope singleton MUST be re-imported to be trustworthy here.
+    const { operationalEnv } = await importUnderCleanEnv<typeof import('../config.js')>('../config.js');
     // Deterministic regardless of ambient process env: `scope: 'global'` in
     // the constructor options is resolveScope() step 1 — ADHD_ENV_SCOPE
     // (step 2) can never override it.
@@ -207,12 +269,17 @@ describe('DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001 — operational agents.db sco
     const restoreScope = withEnvVar('ADHD_ENV_SCOPE', 'project');
     const restoreHome = withEnvVar('HOME', mkAdhdRoot());
     const restoreDbPath = withEnvVar('ADHD_AGENT_DATABASE_PATH', undefined);
+    // The REAL repo root, captured before `importUnderCleanEnv` chdirs away —
+    // the "never in the repo tree" assertion below must check THIS directory,
+    // not the helper's throwaway clean cwd.
+    const repoRoot = process.cwd();
     try {
-      // Isolated HOME: the module-scope `env`/`operationalEnv` singletons and
-      // db/client.ts all resolve against it.
-      const { vi } = await import('vitest');
-      vi.resetModules();
-      await import('../db/client.js');
+      // Isolated HOME + fresh module registry under a CLEAN cwd: the
+      // module-scope `env`/`operationalEnv` singletons and db/client.ts all
+      // resolve against it. A repo-root `.env` injected by the runner or by
+      // `config.ts`'s module-scope loader can no longer leak in (see
+      // `importUnderCleanEnv`).
+      await importUnderCleanEnv('../db/client.js');
 
       const expected = join(process.env['HOME'] as string, '.adhd', 'agent-mcp', 'production', 'data', 'agents.db');
       expect(existsSync(expected)).toBe(true);
@@ -224,7 +291,7 @@ describe('DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001 — operational agents.db sco
       // it if the scope-forced resolution were not in place. (Verified absent
       // in this worktree before the run; the isolated-HOME path above is the
       // one db/client.ts actually created.)
-      expect(existsSync(join(process.cwd(), '.adhd', 'agent-mcp', 'production', 'data', 'agents.db'))).toBe(false);
+      expect(existsSync(join(repoRoot, '.adhd', 'agent-mcp', 'production', 'data', 'agents.db'))).toBe(false);
     } finally {
       restoreDbPath();
       restoreHome();
