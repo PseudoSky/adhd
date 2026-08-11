@@ -139,6 +139,26 @@ const capSchema = z
           });
         }
       }
+      // F2 (Packet C review fold-in): a windowed cap that resolves to 'task'
+      // scope is a SILENT no-op — queryWindowTokens has no task branch (there is
+      // no per-task created_at window query), so the window contributes 0 and the
+      // cap degrades to a task-cumulative cap, never the 24h burn guard it was
+      // configured as (owner ruling 3: windowed caps answer "across all sessions
+      // we never burn through resources"). That must be impossible: reject at
+      // schema time, directing the operator to an explicit non-task scope.
+      if (
+        cap.window !== undefined &&
+        (cap.scope === undefined || cap.scope === 'task')
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['scope'],
+          message:
+            `cap field '${cap.field}' carries 'window' but resolves to 'task' scope, ` +
+            `where windowed caps are a silent no-op (no task-level window query); ` +
+            `set an explicit 'scope': 'session' | 'agent' | 'global'`,
+        });
+      }
       if (cap.contextWindowFraction !== undefined) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -285,6 +305,30 @@ function flatFieldsToDimension(raw: Record<string, unknown>): DimensionConfig {
   }
 
   if (caps.length > 0) result['caps'] = caps;
+
+  // F2 (Packet C review fold-in): capSchema now rejects windowed caps that
+  // would resolve to 'task' scope (a silent no-op — queryWindowTokens has no
+  // task branch, so the window contributes 0). The flat migration must carry
+  // an explicit non-task scope on every windowed cap: stamp the flat `scope`
+  // key onto each; with no flat scope, the maxTokensPer24h-class 24h burn
+  // guard (owner ruling 3) defaults to 'global' — its natural home ("across
+  // all sessions we never burn through resources"). An explicit flat
+  // `scope: 'task'` on a windowed cap is left as-is and fails validation with
+  // the F2 message, exactly as it should.
+  const flatScope = result['scope'];
+  const stampedScope =
+    flatScope === 'task' ||
+    flatScope === 'session' ||
+    flatScope === 'agent' ||
+    flatScope === 'global'
+      ? flatScope
+      : undefined;
+  for (const cap of caps) {
+    if (cap.window !== undefined && cap.scope === undefined) {
+      cap.scope = stampedScope ?? 'global';
+    }
+  }
+
   return dimensionSchema.parse(result);
 }
 
