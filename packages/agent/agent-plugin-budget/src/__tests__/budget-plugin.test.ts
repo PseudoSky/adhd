@@ -7,6 +7,8 @@ import type {
   ExecutionContext,
   PostToolCallPayload,
   PreToolCallPayload,
+  BudgetWarningPayload,
+  BudgetBlockPayload,
 } from '@adhd/agent-base-types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -99,7 +101,7 @@ describe('BudgetPlugin — task scope', () => {
   it('throws when maxTotalTokens is reached', async () => {
     const plugin = createPlugin({
       db: null,
-      config: configSchema.parse({ maxTotalTokens: 100 }),
+      config: configSchema.parse({ maxTotalTokens: 100, mode: 'block' }),
     });
     await plugin.install(hooks);
     const ctx = makeCtx();
@@ -142,7 +144,7 @@ describe('BudgetPlugin — task scope', () => {
   it('throws when maxInputTokens is reached', async () => {
     const plugin = createPlugin({
       db: null,
-      config: configSchema.parse({ maxInputTokens: 50 }),
+      config: configSchema.parse({ maxInputTokens: 50, mode: 'block' }),
     });
     await plugin.install(hooks);
     const ctx = makeCtx();
@@ -185,7 +187,7 @@ describe('BudgetPlugin — task scope', () => {
   it('throws when maxOutputTokens is reached', async () => {
     const plugin = createPlugin({
       db: null,
-      config: configSchema.parse({ maxOutputTokens: 50 }),
+      config: configSchema.parse({ maxOutputTokens: 50, mode: 'block' }),
     });
     await plugin.install(hooks);
     const ctx = makeCtx();
@@ -227,7 +229,7 @@ describe('BudgetPlugin — task scope', () => {
   it('throws when maxModelCalls is reached', async () => {
     const plugin = createPlugin({
       db: null,
-      config: configSchema.parse({ maxModelCalls: 2 }),
+      config: configSchema.parse({ maxModelCalls: 2, mode: 'block' }),
     });
     await plugin.install(hooks);
     const ctx = makeCtx();
@@ -257,7 +259,7 @@ describe('BudgetPlugin — task scope', () => {
   it('throws when maxWallClockMs is exceeded', async () => {
     const plugin = createPlugin({
       db: null,
-      config: configSchema.parse({ maxWallClockMs: 1 }),
+      config: configSchema.parse({ maxWallClockMs: 1, mode: 'block' }),
     });
     await plugin.install(hooks);
     const ctx = makeCtx();
@@ -285,7 +287,7 @@ describe('BudgetPlugin — task scope', () => {
   it('throws when maxModelMs is exceeded', async () => {
     const plugin = createPlugin({
       db: null,
-      config: configSchema.parse({ maxModelMs: 1 }),
+      config: configSchema.parse({ maxModelMs: 1, mode: 'block' }),
     });
     await plugin.install(hooks);
     const ctx = makeCtx();
@@ -331,6 +333,7 @@ describe('BudgetPlugin — task scope', () => {
       db: null,
       config: configSchema.parse({
         maxCostUSD: 0.001,
+        mode: 'block',
         costPerInputToken: 0.000003, // $3/M
         costPerOutputToken: 0.000015, // $15/M
       }),
@@ -551,7 +554,7 @@ describe('BudgetPlugin — task scope', () => {
   it('enforcement error has correct IEnforcementError shape', async () => {
     const plugin = createPlugin({
       db: null,
-      config: configSchema.parse({ maxModelCalls: 1 }),
+      config: configSchema.parse({ maxModelCalls: 1, mode: 'block' }),
     });
     await plugin.install(hooks);
     const ctx = makeCtx();
@@ -587,7 +590,7 @@ describe('BudgetPlugin — teeth tests', () => {
     const hooks = new HookRegistry();
     const plugin = createPlugin({
       db: null,
-      config: configSchema.parse({ maxModelCalls: 1 }),
+      config: configSchema.parse({ maxModelCalls: 1, mode: 'block' }),
     });
     await plugin.install(hooks);
     const ctx = makeCtx();
@@ -639,7 +642,7 @@ describe('per-agent overrides', () => {
   });
 
   const capsCalls = (n: number) => ({
-    caps: [{ field: 'calls' as const, maximum: n }],
+    caps: [{ field: 'calls' as const, maximum: n, mode: 'block' }],
   });
 
   it('applies agent override when agent name matches', async () => {
@@ -684,7 +687,7 @@ describe('per-agent overrides', () => {
   it('flat config still works (backward compat)', async () => {
     const plugin = createPlugin({
       db: null,
-      config: { maxModelCalls: 2 },
+      config: { maxModelCalls: 2, mode: 'block' },
     });
     await plugin.install(hooks);
     const ctx = makeCtx();
@@ -711,10 +714,12 @@ describe('per-provider overrides', () => {
     const plugin = createPlugin({
       db: null,
       config: pluginConfigSchema.parse({
-        defaults: { caps: [{ field: 'calls', maximum: 10 }] },
+        defaults: { caps: [{ field: 'calls', maximum: 10, mode: 'block' }] },
         provider: {
           default: {},
-          overrides: { openai: { caps: [{ field: 'calls', maximum: 1 }] } },
+          overrides: {
+            openai: { caps: [{ field: 'calls', maximum: 1, mode: 'block' }] },
+          },
         },
       }),
     });
@@ -1068,6 +1073,7 @@ describe('maxTokensPer24h — mock DB', () => {
               maximum: 200_000,
               window: 'PT24H',
               scope: 'agent',
+              mode: 'block',
             },
           ],
         },
@@ -1134,6 +1140,7 @@ describe('maxTokensPer24h — mock DB', () => {
               maximum: 200_000,
               window: 'PT24H',
               scope: 'agent',
+              mode: 'block',
             },
           ],
         },
@@ -1285,7 +1292,7 @@ describe('cache-token double-count (BUG-ORCH-010)', () => {
   it('does not double-count cache tokens in the tokens cap field (task scope, in-memory)', async () => {
     const plugin = createPlugin({
       db: null,
-      config: configSchema.parse({ maxTotalTokens: 150 }),
+      config: configSchema.parse({ maxTotalTokens: 150, mode: 'block' }),
     });
     await plugin.install(hooks);
     const ctx = makeCtx();
@@ -1317,7 +1324,7 @@ describe('cache-token double-count (BUG-ORCH-010)', () => {
     // Proves the fix isn't "never block" — a cap still fires on real usage growth.
     const plugin = createPlugin({
       db: null,
-      config: configSchema.parse({ maxTotalTokens: 150 }),
+      config: configSchema.parse({ maxTotalTokens: 150, mode: 'block' }),
     });
     await plugin.install(hooks);
     const ctx = makeCtx();
@@ -1468,6 +1475,7 @@ describe('cache-weighted cost (BUG-AGENTMCP-008)', () => {
       db: null,
       config: configSchema.parse({
         maxCostUSD: 0.01,
+        mode: 'block',
         costPerInputToken: 0.00000014,
         costPerCacheReadToken: 0.0000000028,
         costPerCacheWriteToken: 0.0000000028,
@@ -1505,6 +1513,7 @@ describe('cache-weighted cost (BUG-AGENTMCP-008)', () => {
       db: null,
       config: configSchema.parse({
         maxCostUSD: 0.01,
+        mode: 'block',
         costPerInputToken: 0.00000014,
         costPerOutputToken: 0.00000028, // $0.28/M — mirrors deepseek-v4-flash output
       }),
@@ -1530,6 +1539,227 @@ describe('cache-weighted cost (BUG-AGENTMCP-008)', () => {
 
     await expect(enforcePreModel(hooks, ctx)).rejects.toMatchObject({
       message: expect.stringContaining('cost'),
+    });
+  });
+});
+
+// ── Packet A — cap.mode on the model path (budget:warning / budget:block) ────
+//
+// PLAN-run-control-v2 §3 Packet A + owner ruling 5 (2026-08-11): `enforcePreModel`
+// must honor `cap.mode` — warning-mode caps emit `budget:warning` and continue,
+// block-mode caps emit `budget:block` then throw `IEnforcementError`, and the
+// DEFAULT for mode-less caps is `warning` (was: unconditional block). The events
+// are pure notification: no handler registered = no-op; the orchestrator's
+// existing `IEnforcementError` → `ToolError('BUDGET_EXCEEDED')` conversion stays
+// the block action.
+describe('Packet A — cap.mode on the model path (budget:warning / budget:block)', () => {
+  let hooks: HookRegistry;
+
+  beforeEach(() => {
+    hooks = new HookRegistry();
+  });
+
+  it('warning-mode calls cap exceeded → enforce resolves + handler called with BudgetWarningPayload', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: { caps: [{ field: 'calls', maximum: 1, mode: 'warning' }] },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+    const warnings: BudgetWarningPayload[] = [];
+    hooks.register('budget:warning', (p) => {
+      warnings.push(p);
+    });
+
+    await runTaskTurns(hooks, ctx, [{ inputTokens: 10, outputTokens: 10 }]);
+    // Second model request — current (1) >= maximum (1) → warning, NOT a throw
+    await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({
+      field: 'calls',
+      maximum: 1,
+      current: 1,
+      message: expect.stringContaining('calls'),
+    });
+    expect(warnings[0].executionContext.taskId).toBe('task-1');
+  });
+
+  it('block-mode calls cap exceeded → enforce rejects BUDGET_EXCEEDED + block handler called BEFORE the rejection', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: { caps: [{ field: 'calls', maximum: 1, mode: 'block' }] },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+    const order: string[] = [];
+    const blocks: BudgetBlockPayload[] = [];
+    hooks.register('budget:block', (p) => {
+      order.push('block-event');
+      blocks.push(p);
+    });
+
+    await runTaskTurns(hooks, ctx, [{ inputTokens: 10, outputTokens: 10 }]);
+
+    await expect(enforcePreModel(hooks, ctx)).rejects.toMatchObject({
+      isEnforcementError: true,
+      code: 'BUDGET_EXCEEDED',
+    });
+    // Emitted before the throw propagated — not after, not never.
+    expect(order).toEqual(['block-event']);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toMatchObject({
+      field: 'calls',
+      maximum: 1,
+      current: 1,
+    });
+    expect(blocks[0].executionContext.taskId).toBe('task-1');
+  });
+
+  it('mode-less calls cap exceeded → warns (new default; was: rejection)', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: { caps: [{ field: 'calls', maximum: 1 }] }, // no mode
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+    const warnings: BudgetWarningPayload[] = [];
+    hooks.register('budget:warning', (p) => {
+      warnings.push(p);
+    });
+
+    await runTaskTurns(hooks, ctx, [{ inputTokens: 10, outputTokens: 10 }]);
+
+    await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({ field: 'calls', maximum: 1, current: 1 });
+  });
+
+  it('run continues after a warning — later enforcements still resolve (execution proceeds)', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: { caps: [{ field: 'calls', maximum: 1, mode: 'warning' }] },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+    let warningCount = 0;
+    hooks.register('budget:warning', () => {
+      warningCount += 1;
+    });
+
+    // Turn 1: under cap (current 0 < 1). Turn 2: warns (current 1 >= 1) and
+    // resolves, so the run proceeds. Third request: warns again, still resolves.
+    await runTaskTurns(hooks, ctx, [
+      { inputTokens: 10, outputTokens: 10 },
+      { inputTokens: 10, outputTokens: 10 },
+    ]);
+    await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
+    expect(warningCount).toBe(2);
+  });
+
+  it('no handler registered → warning mode still resolves, block mode still rejects (event emission is a no-op)', async () => {
+    // Warning — no budget:warning handler
+    const warnPlugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: { caps: [{ field: 'calls', maximum: 1, mode: 'warning' }] },
+      }),
+    });
+    await warnPlugin.install(hooks);
+    const warnCtx = makeCtx();
+    await runTaskTurns(hooks, warnCtx, [{ inputTokens: 10, outputTokens: 10 }]);
+    await expect(enforcePreModel(hooks, warnCtx)).resolves.toBeUndefined();
+
+    // Block — no budget:block handler
+    const blockHooks = new HookRegistry();
+    const blockPlugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: { caps: [{ field: 'calls', maximum: 1, mode: 'block' }] },
+      }),
+    });
+    await blockPlugin.install(blockHooks);
+    const blockCtx = makeCtx();
+    await runTaskTurns(blockHooks, blockCtx, [
+      { inputTokens: 10, outputTokens: 10 },
+    ]);
+    await expect(enforcePreModel(blockHooks, blockCtx)).rejects.toMatchObject({
+      code: 'BUDGET_EXCEEDED',
+    });
+  });
+
+  it('warning-mode cap NOT exceeded → no event emitted, resolves', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: { caps: [{ field: 'calls', maximum: 3, mode: 'warning' }] },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+    const warnings: BudgetWarningPayload[] = [];
+    hooks.register('budget:warning', (p) => {
+      warnings.push(p);
+    });
+
+    await runTaskTurns(hooks, ctx, [{ inputTokens: 10, outputTokens: 10 }]);
+    await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
+
+    expect(warnings).toHaveLength(0);
+  });
+
+  it('tool path: warning-mode tool cap emits budget:warning (symmetry) and still soft-blocks via IToolWarning', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: {},
+        tool: {
+          default: {},
+          overrides: {
+            expensive_search: {
+              caps: [{ field: 'toolCalls', maximum: 1 }],
+              mode: 'warning',
+            },
+          },
+        },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+    const warnings: BudgetWarningPayload[] = [];
+    hooks.register('budget:warning', (p) => {
+      warnings.push(p);
+    });
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    await enforcePreTool(hooks, ctx, 'expensive_search', 'call-1');
+
+    let caught: unknown;
+    try {
+      await enforcePreTool(hooks, ctx, 'expensive_search', 'call-2');
+    } catch (e) {
+      caught = e;
+    }
+    // Enforcement semantics unchanged: still an IToolWarning (soft-block).
+    expect(caught).toMatchObject({
+      isToolWarning: true,
+      toolName: 'expensive_search',
+      callId: 'call-2',
+    });
+    // ...with the notification event for symmetry.
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({
+      field: 'toolCalls',
+      maximum: 1,
+      current: 1,
     });
   });
 });
