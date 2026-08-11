@@ -67,6 +67,32 @@ export interface AgentMutatedPayload {
   operation: 'update' | 'delete';
 }
 
+/**
+ * Notification payload shared by the budget events. Emitted by budget plugins
+ * when a cap is exceeded on the model path:
+ *  - `budget:warning` — cap mode "warning" (the default): enforcement resolves
+ *    and the run continues; the event is purely a notification layer.
+ *  - `budget:block`   — cap mode "block": emitted immediately BEFORE the
+ *    `IEnforcementError` throw, so hosts can observe the block before the
+ *    orchestrator converts it into `ToolError('BUDGET_EXCEEDED')`.
+ * No handler registered = no-op (see HookRegistry.emit).
+ */
+export interface BudgetWarningPayload {
+  executionContext: ExecutionContext;
+  field: string;
+  maximum: number;
+  current: number;
+  message: string;
+}
+/** Same shape as `BudgetWarningPayload`; see its docs for the event contract. */
+export interface BudgetBlockPayload {
+  executionContext: ExecutionContext;
+  field: string;
+  maximum: number;
+  current: number;
+  message: string;
+}
+
 export interface HookEventMap {
   'task:start': TaskStartPayload;
   'pre:model_request': PreModelRequestPayload;
@@ -82,6 +108,19 @@ export interface HookEventMap {
    * appended to the conversation history.
    */
   'transform:tool_result': PostToolCallPayload;
+  /**
+   * Emitted by budget plugins when a cap whose mode is "warning" (the default)
+   * is exceeded on the model path. Enforcement resolves — the run continues.
+   * Hosts opt in via handler; no handler registered = no-op.
+   */
+  'budget:warning': BudgetWarningPayload;
+  /**
+   * Emitted by budget plugins when a cap whose mode is "block" is exceeded on
+   * the model path, immediately BEFORE the `IEnforcementError` throw. The
+   * orchestrator's existing conversion to `ToolError('BUDGET_EXCEEDED')`
+   * remains the action; the event is the notification layer.
+   */
+  'budget:block': BudgetBlockPayload;
   'message:appended': MessageAppendedPayload;
   'task:completed': TaskCompletedPayload;
   'task:failed': TaskFailedPayload;
