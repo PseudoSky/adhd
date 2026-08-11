@@ -540,16 +540,43 @@ export class Orchestrator {
             } catch (err) {
               // Status write failed → the suspension never became observable;
               // unregister the resolver + abort listener so nothing dangles.
+              // DEBT-AGENTMCP-HITL-TEST-CLEANUP-001: if the AbortSignal fired
+              // DURING the write, abortHandler already deleted the resolver and
+              // rejected userInputPromise — that rejection is never awaited on
+              // this path, so mark it handled to avoid an unhandledRejection
+              // (process-level crash risk in Node 15+) while rethrowing the
+              // write error.
               hitlResolvers.delete(taskId);
               if (abortHandler)
                 signal.removeEventListener('abort', abortHandler);
+              void userInputPromise.catch(() => {});
               throw err;
             }
-            emit({
-              type: 'status_change',
-              taskId,
-              status: 'awaiting_input',
-            });
+            try {
+              emit({
+                type: 'status_change',
+                taskId,
+                status: 'awaiting_input',
+              });
+            } catch (err) {
+              // DEBT-AGENTMCP-HITL-TEST-CLEANUP-001: the awaiting_input status
+              // write above is the source of truth (taskResume reads the store
+              // for status + resumeToken); this emit is only a push
+              // notification. A failed broadcast must NOT tear down a genuine
+              // suspension — rethrowing here would kill run() while the task
+              // sits in 'awaiting_input' holding a live resolver nobody awaits
+              // (leak + unhandledRejection on a later abort). Log and continue
+              // awaiting; the resolver stays registered by design so
+              // taskResume can still complete the suspension.
+              logger.warn(
+                {
+                  taskId,
+                  err,
+                  status: 'awaiting_input',
+                },
+                'Failed to emit awaiting_input status_change; status already persisted, suspension continues'
+              );
+            }
 
             const userInput = await userInputPromise.finally(() => {
               if (abortHandler)
