@@ -6,6 +6,7 @@ import type {
   Plugin,
   PluginContext,
   PluginFactory,
+  ExecutionContext,
   PreModelRequestPayload,
   PostModelResponsePayload,
   PostToolCallPayload,
@@ -243,6 +244,13 @@ class BudgetPlugin implements Plugin {
 
   private readonly accumulators = new Map<string, BudgetAccumulator>();
 
+  /**
+   * Captured at install() — used to emit `budget:warning` / `budget:block`
+   * notification events when a cap is exceeded. Optional: a plugin that never
+   * sees install() (or is driven by a bare enforcement handler) emits nothing.
+   */
+  private hooks: IHookRegistry | undefined;
+
   constructor(
     private readonly db: unknown,
     private readonly cfg: PluginConfig,
@@ -253,6 +261,7 @@ class BudgetPlugin implements Plugin {
   ) {}
 
   install(hooks: IHookRegistry): void {
+    this.hooks = hooks;
     hooks.register('task:start', (p) => {
       try {
         this.onTaskStart(p);
@@ -720,27 +729,74 @@ class BudgetPlugin implements Plugin {
     return base;
   }
 
-  private evaluateCap(
+  /**
+   * Emit a `budget:*` notification event for an exceeded cap. Pure notification
+   * layer (owner ruling 7): HookRegistry.emit swallows handler errors and is a
+   * no-op when no handler is registered, so emission can never affect
+   * enforcement. `message` defaults to cap.message, then the standard
+   * `"<field> limit is <maximum>, current value is <current>"` string — the
+   * same resolution `makeEnforcementError` uses, so the block event's message
+   * always matches the error the orchestrator sees.
+   */
+  private async emitBudgetEvent(
+    event: 'budget:warning' | 'budget:block',
+    ctx: ExecutionContext,
+    cap: Cap,
+    current: number,
+    message?: string
+  ): Promise<void> {
+    if (!this.hooks) return;
+    await this.hooks.emit(event, {
+      executionContext: ctx,
+      field: cap.field,
+      maximum: cap.maximum,
+      current,
+      message:
+        message ??
+        cap.message ??
+        `${cap.field} limit is ${cap.maximum}, current value is ${Math.round(
+          current
+        )}`,
+    });
+  }
+
+  /**
+   * Evaluate a single cap against the snapshot. Mode resolution matches the
+   * tool path (`cap.mode ?? dimMode ?? 'warning'`, owner ruling 5): warning
+   * (the default) emits `budget:warning` and resolves — the run continues;
+   * block emits `budget:block` BEFORE throwing the enforcement error.
+   */
+  private async evaluateCap(
     cap: Cap,
     snap: Record<string, number>,
+    ctx: ExecutionContext,
+    dimMode?: string,
     dimScope?: string
-  ): void {
+  ): Promise<void> {
     const current = this.getSnapshotValue(snap, cap, dimScope);
-    if (current >= cap.maximum) {
-      throw makeEnforcementError(cap.field, cap.maximum, current, cap.message);
+    if (current < cap.maximum) return;
+    const capMode = cap.mode ?? dimMode ?? 'warning';
+    if (capMode === 'warning') {
+      await this.emitBudgetEvent('budget:warning', ctx, cap, current);
+      return;
     }
+    await this.emitBudgetEvent('budget:block', ctx, cap, current);
+    throw makeEnforcementError(cap.field, cap.maximum, current, cap.message);
   }
 
   // ── Enforcement: pre:model_request ────────────────────────────────────────
 
-  private enforcePreModel(p: PreModelRequestPayload): void {
+  private async enforcePreModel(p: PreModelRequestPayload): Promise<void> {
     const { taskId, sessionId, agentName } = p.executionContext;
     const providerType =
       p.executionContext.agentDefinition?.provider?.type ?? 'unknown';
     const acc = this.accumulators.get(taskId);
     if (!acc) return;
 
-    const { caps, scope: dimScope } = this.resolveCaps(agentName, providerType);
+    const { caps, mode: dimMode, scope: dimScope } = this.resolveCaps(
+      agentName,
+      providerType
+    );
     const modelCaps = caps.filter((c) => c.field !== 'toolCalls');
     if (modelCaps.length === 0) return;
 
@@ -754,13 +810,13 @@ class BudgetPlugin implements Plugin {
       dimScope
     );
     for (const cap of modelCaps) {
-      this.evaluateCap(cap, snap);
+      await this.evaluateCap(cap, snap, p.executionContext, dimMode, dimScope);
     }
   }
 
   // ── Enforcement: pre:tool_call ────────────────────────────────────────────
 
-  private enforcePreTool(p: PreToolCallPayload): void {
+  private async enforcePreTool(p: PreToolCallPayload): Promise<void> {
     const { toolName, callId, executionContext } = p;
     const {
       caps,
@@ -795,8 +851,25 @@ class BudgetPlugin implements Plugin {
           }, current value is ${Math.round(current)}`;
         const capMode = cap.mode ?? mode ?? 'warning';
         if (capMode === 'warning') {
+          // Notification only — the IToolWarning soft-block stays the action.
+          await this.emitBudgetEvent(
+            'budget:warning',
+            executionContext,
+            cap,
+            current,
+            msg
+          );
           throw makeToolWarning(toolName, callId, msg);
         }
+        // Notification only (owner ruling 7, symmetric with warning) — the
+        // IEnforcementError throw stays the action.
+        await this.emitBudgetEvent(
+          'budget:block',
+          executionContext,
+          cap,
+          current,
+          msg
+        );
         throw makeEnforcementError(
           `tool:${toolName}:${cap.field}`,
           cap.maximum,
