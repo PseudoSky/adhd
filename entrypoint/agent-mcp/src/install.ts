@@ -208,8 +208,20 @@ function parseInstallArgs(argv: string[]): ParsedInstallArgs {
   let scope: McpScope = 'user';
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === '--host') hostArg = argv[++i] ?? 'all';
-    else if (arg === '--scope') scope = (argv[++i] as McpScope) ?? 'user';
+    if (arg === '--host') {
+      // DEBT-AGENTMCP-INSTALL-HOST-DEFAULT-001: a bare trailing --host (no
+      // value after it) must error — never silently degrade to the "all"
+      // default and install into every host's config. `all` is only legal
+      // when spelled out literally.
+      const value = argv[i + 1];
+      if (value === undefined) {
+        throw new Error(
+          `agent-mcp-install: --host requires a value (${[...ALL_HOSTS, 'all'].join('|')}) — got a bare trailing --host with no value; see --help for usage`,
+        );
+      }
+      i++;
+      hostArg = value;
+    } else if (arg === '--scope') scope = (argv[++i] as McpScope) ?? 'user';
     else throw new Error(`agent-mcp-install: unknown argument "${arg}" (expected --host/--scope)`);
   }
   if (scope !== 'user' && scope !== 'project') {

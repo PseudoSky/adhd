@@ -200,6 +200,32 @@ describe('agent-mcp-install (BUG-AGENTMCP-006)', () => {
     expect(() => install(['--scope', 'bogus'], tmp, tmp)).toThrow(/--scope/);
   });
 
+  it('DEBT-AGENTMCP-INSTALL-HOST-DEFAULT-001: a bare trailing --host throws and does NOT silently install to every host', () => {
+    let error: unknown;
+    try {
+      install(['--host'], tmp, tmp);
+    } catch (e) {
+      error = e;
+    }
+    // Must throw — never degrade a missing --host value to the "all" default.
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message).toMatch(/--host/); // names the offending host argument
+    expect(message).toMatch(/usage|--help|value/); // points at usage
+    // And nothing may have been written anywhere: no config for any host.
+    expect(existsSync(join(tmp, '.claude.json'))).toBe(false);
+    expect(existsSync(join(tmp, '.config', 'opencode', 'opencode.json'))).toBe(false);
+    expect(existsSync(join(tmp, '.codex', 'config.toml'))).toBe(false);
+  });
+
+  it('explicit --host all still registers the MCP entry for every host', () => {
+    const result = install(['--host', 'all', '--scope', 'user'], tmp, tmp);
+    expect(result.mcp).toHaveLength(3);
+    expect(existsSync(join(tmp, '.claude.json'))).toBe(true);
+    expect(existsSync(join(tmp, '.config', 'opencode', 'opencode.json'))).toBe(true);
+    expect(existsSync(join(tmp, '.codex', 'config.toml'))).toBe(true);
+  });
+
   it('runInstallCommand --help prints usage and never touches the filesystem', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     await runInstallCommand(['--help']);
