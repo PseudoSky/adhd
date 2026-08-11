@@ -1,6 +1,8 @@
 import type { Message } from '../validation/index.js';
 import { generateId } from '../utils/ids.js';
 import { nowIso } from '../utils/timestamps.js';
+import { contextWindowFor } from '@adhd/agent-base-types';
+export { contextWindowFor };
 
 /**
  * Context-window management for the tool-calling loop.
@@ -23,41 +25,11 @@ import { nowIso } from '../utils/timestamps.js';
 /** Fraction of the true context window at which we compact. */
 export const DEFAULT_COMPACTION_TRIGGER_FRACTION = 0.75;
 
-/**
- * True input context window (tokens) per model family. Used to decide WHEN to compact.
- * Deliberately conservative — an unknown model falls back to a safe small window rather
- * than never compacting. Longest-prefix match wins.
- */
-const CONTEXT_WINDOWS: [prefix: string, window: number][] = [
-    ['deepseek-v4', 1_000_000],
-    ['deepseek', 128_000],
-    ['claude-opus-4', 200_000],
-    ['claude-sonnet-4', 200_000],
-    ['claude-haiku-4', 200_000],
-    ['claude-fable', 200_000],
-    ['claude-3', 200_000],
-    ['gpt-4o', 128_000],
-    ['gpt-4.1', 1_000_000],
-    ['gpt-5', 400_000],
-    ['o1', 200_000],
-    ['o3', 200_000],
-];
-
-const FALLBACK_CONTEXT_WINDOW = 128_000;
-
-/** Resolve a model's true input context window (tokens). */
-export function contextWindowFor(model: string | undefined): number {
-    if (!model) return FALLBACK_CONTEXT_WINDOW;
-    let best: number | undefined;
-    let bestLen = -1;
-    for (const [prefix, window] of CONTEXT_WINDOWS) {
-        if (model.startsWith(prefix) && prefix.length > bestLen) {
-            best = window;
-            bestLen = prefix.length;
-        }
-    }
-    return best ?? FALLBACK_CONTEXT_WINDOW;
-}
+// The `CONTEXT_WINDOWS` registry + `contextWindowFor` resolver moved VERBATIM to
+// `@adhd/agent-base-types/src/model-context.ts` (Packet B — the budget plugin's peer dep
+// is base-types, and the registry is the single source for its `contextWindowFraction`
+// math, PLAN-run-control-v2 §5.4). Imported + re-exported here unchanged: engine
+// consumers import the same symbols from the same path.
 
 /**
  * Estimate a message's cost at ~4 chars/token, over its full serialized wire form —
