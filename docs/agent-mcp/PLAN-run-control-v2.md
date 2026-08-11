@@ -104,6 +104,24 @@ owner ruling, §6).
 
 ### Packet B — `tokens` → `context` (M; windowed caps retained per ruling 3)
 
+> **SHIPPED `da3373d2` (2026-08-11).** Review gate PASSED (deviations D1-D4
+> accepted; H1 release ordering below). Implementation commit `ccaa661c`
+> (5 files): `model-context.ts` registry moved verbatim from the engine (engine
+> re-exports, zero API change); `estimateRequestContext` tools-aware estimator in
+> the plugin (D1); scoped `context` folds the pending estimate
+> `max(db-peak, in-memory peak, estimate)` (D2); fraction limit floored (D3);
+> `assertNoLegacyTokensConfig` hard removal; `maxTokensPer24h` → windowed
+> `inputTokens`; 59/59 tests green incl. the BUG-AGENTMCP-009-named cache-warm
+> regression (red proven on pre-fix source). Configs migrated (repo + global) to
+> `context:128000 block` + `inputTokens:500000 PT24H warning`; verified live on
+> main after rebuild (`createPlugin` accepts the migrated config — the loader
+> skip that silenced budget between config-migration and merge is closed).
+> §5.2 resolution (MAX(peak_context_tokens)) confirmed at dispatch.
+> **H1 (release-gate):** the plugin's module-level `import { contextWindowFor }`
+> makes published base-types a hard prerequisite — the release wave MUST publish
+> `agent-base-types` FIRST (with the export) and raise the plugin's peerDependency
+> floor, or every npm consumer's budget silently dies at module load. See §9.
+
 - **Semantics:** `context` = `MAX` over model responses of provider-reported
   normalized `inputTokens` (byte-identical to usage-plugin's `peakContextTokens`,
   usage-plugin.ts:143,172-181). Enforcement value =
@@ -272,6 +290,15 @@ written because memory/backlog stores were down). Highlights:
 8. **Tool-path `budget:block` event asymmetry (F1) — FIXED in Packet A review
    fold-in (commit `1d3b5bd1`):** tool-path block branch now emits `budget:block`
    before the throw, symmetric with the model path (owner ruling 7).
+9. **Tool-scoped `context` caps are silently inert** (Packet B review finding,
+   low): `enforcePreTool` filters out `context`, `enforcePreModel` can't see tool
+   overrides, yet capSchema permits the placement — a silent no-op. Decision:
+   capSchema REJECTS `context` in tool scope (schema error, not warning); folded
+   into Packet C dispatch (same file/test).
+10. **Release-ordering hazard (H1, Packet B review, HIGH):** published
+    `@adhd/agent-base-types@2.2.0` lacks `contextWindowFor`; the plugin's new
+    module-level import makes base-types a hard publish prerequisite. Release
+    wave must publish base-types FIRST + raise plugin peerDependency floor.
 
 ## 9. Dispatch plan (when approved)
 
@@ -283,5 +310,15 @@ budget,agent-mcp,agent-engine-orchestrator,agent-base-types`; then release wave
 (bump + publish plugin and agent-mcp together). Worktrees under `.worktrees/`.
 
 **Status: Packet A DONE** (worktree `.worktrees/run-control-v2`, commits `8876fa00`
-+ `1d3b5bd1`, merge `fa2b3152` on main). Packet B next in the same worktree (rebase
-branch onto main or continue from the merge point), then Packet C.
++ `1d3b5bd1`, merge `fa2b3152` on main). **Packet B DONE** (commit `ccaa661c`,
+merge `da3373d2` on main). Packet C next in the same worktree (re-point branch to
+main), then the release wave.
+
+**Release wave (amended for H1):** publish order is REQUIRED, not optional —
+1. `agent-base-types` (contains the new `model-context.ts` export; the plugin's
+   module-level import fails against the published 2.2.0 without it)
+2. `agent-plugin-budget` (bump version; RAISE the `@adhd/agent-base-types`
+   peerDependency floor to the new base-types version)
+3. `agent-mcp` (bump + ship together)
+Verify with a clean-room install + `npx @adhd/agent-mcp` + budget accounting
+exercised through the published artifacts before calling the release done.
