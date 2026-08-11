@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.lib.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "rootDir": "../../..",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
+  }
+}
