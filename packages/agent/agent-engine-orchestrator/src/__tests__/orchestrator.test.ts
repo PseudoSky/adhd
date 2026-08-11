@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Orchestrator } from "../engine/orchestrator.js";
+import { Orchestrator, resolveHitl } from "../engine/orchestrator.js";
 import type { OrchestratorTaskStore, OrchestratorSessionStore } from "../engine/orchestrator.js";
 import { ToolError } from "../validation/errors.js";
 import { nowIso } from "../utils/timestamps.js";
@@ -546,5 +546,94 @@ describe("Orchestrator", () => {
                 code: "MAX_TOOL_LOOPS_EXCEEDED",
             });
         });
+    });
+
+    // ─────────────────────────────────────────────────────────────────────
+    // HITL suspend ordering — DEBT-AGENTMCP-HITL-TEST-CLEANUP-001
+    // ─────────────────────────────────────────────────────────────────────
+    describe("HITL suspend/resume ordering", () => {
+        it("registers the hitl resolver BEFORE the awaiting_input status write (no resume-in-window race)", async () => {
+            const ctx = makeCtx();
+            const orch = new Orchestrator();
+            const taskId = generateId();
+
+            // Simulates a taskResume landing the INSTANT the 'awaiting_input'
+            // status becomes observable: the status write itself is the resume
+            // trigger. If the orchestrator writes the status before registering
+            // the resolver, this synchronous resume returns false (the
+            // catastrophic TASK_NOT_RESUMABLE path) — the assertion below then
+            // goes red. The setImmediate retry mirrors a real client polling +
+            // retrying after observing the status, so the run always completes
+            // and the assertion — not a timeout — is the red signal.
+            let resolverPresentAtStatusWrite: boolean | undefined;
+            const hitlTaskStore: OrchestratorTaskStore = {
+                updateStatus: (tid, status) => {
+                    if (status === "awaiting_input") {
+                        resolverPresentAtStatusWrite = resolveHitl(tid, "yes");
+                        if (resolverPresentAtStatusWrite === false) {
+                            setImmediate(() => resolveHitl(tid, "yes"));
+                        }
+                    }
+                },
+                appendEvent: () => { /* no-op: test stub */ },
+                unregisterCancellation: () => { /* no-op: test stub */ },
+            };
+
+            // Turn 1 → request_human_input; after resume → 'completed'.
+            let turn = 0;
+            const hitlProvider: LLMProvider = {
+                chat: async (): Promise<ProviderChatResponse> => {
+                    turn++;
+                    if (turn === 1) {
+                        return {
+                            message: {
+                                id: generateId(),
+                                sessionId: ctx.sessionId,
+                                role: "assistant",
+                                content: "",
+                                toolCalls: [
+                                    {
+                                        id: generateId(),
+                                        server: "builtin",
+                                        tool: "request_human_input",
+                                        arguments: { prompt: "do you confirm?" },
+                                    },
+                                ],
+                                createdAt: nowIso(),
+                            },
+                            stopReason: "tool_calls",
+                        };
+                    }
+                    return {
+                        message: {
+                            id: generateId(),
+                            sessionId: ctx.sessionId,
+                            role: "assistant",
+                            content: "confirmed",
+                            createdAt: nowIso(),
+                        },
+                        stopReason: "completed",
+                    };
+                },
+            };
+
+            const result = await orch.run({
+                executionContext: ctx,
+                messages: [makeUserMessage(ctx.sessionId)],
+                registry,
+                provider: hitlProvider,
+                policy,
+                taskStore: hitlTaskStore,
+                sessionStore,
+                signal: new AbortController().signal,
+                taskId,
+            });
+
+            expect(
+                resolverPresentAtStatusWrite,
+                "hitl resolver must be registered before the awaiting_input status is written (a resume in that window must not see TASK_NOT_RESUMABLE)"
+            ).toBe(true);
+            expect(result.result).toBe("confirmed");
+        }, 10_000);
     });
 });
