@@ -1,6 +1,8 @@
 # Run-Control v2 — Budget Cap Vocabulary & Semantics Redesign
 
-Status: PLAN (approved design) — **Packet A implemented & merged `fa2b3152` (2026-08-11)**; Packets B/C pending dispatch
+Status: PLAN (approved design) — **Packets A (`fa2b3152`), B (`da3373d2`), C
+(`ce930882`), F2 fold-in (`<f2-merge>`) all implemented, reviewed, merged**;
+release wave pending (needs publish signoff)
 Author: product + architect, 2026-08-11
 Scope: `packages/agent/agent-plugin-budget`, `packages/agent/agent-base-types`,
        `packages/agent/agent-engine-orchestrator` (re-export only)
@@ -162,6 +164,27 @@ owner ruling, §6).
 
 ### Packet C — `errors` + `consecutiveErrors` (S–M)
 
+> **SHIPPED `ce930882` (2026-08-11).** Review gate PASSED (D1 standard threshold
+> semantics accepted — `consecutiveErrors: N` blocks the N+1th call after N
+> consecutive failures; D2 coverage-pin accepted; D3 non-task scope rejection
+> accepted — same silent-no-op class as §8.9). Implementation `0be163d8`
+> (2 files): counters mutate only in the plugin's `post:tool_call` handler fed
+> from the engine's `isError` (executed tools only) — non-self-amplifying proven
+> (5 warn-skip cycles all report current:2). 69/69 green, 9/10 tests proven red
+> pre-fix. Configs: repo errors 5 / consecutiveErrors 3 mode **block**
+> (operational dead-task guard), global same caps mode **warning** (ruling 5).
+> Known limitations (documented): F1 dimension-level scope on error caps
+> silently task-scoped (low, theoretical); F3 `consecutiveErrors` approximates
+> under concurrent parallel tool execution (inherent to the engine's
+> `Promise.all` seam).
+> **F2 fold-in `940f2667` (merged, see §8.11):** windowed caps at task scope
+> were a silent no-op (queryWindowTokens has no task branch → window
+> contributes 0; the cap silently degraded to task-cumulative). capSchema now
+> REJECTS `window` at (implicit or explicit) task scope; the `maxTokensPer24h`
+> alias stamps `scope: 'global'`; migrated configs carry explicit
+> `scope: 'global'` on the 24h burn caps. Red→green reproduced (150K window
+> history invisible pre-fix) → 74/74.
+
 - **Count:** at `post:tool_call` from the existing `isError` flag (orchestrator.ts:
   764-772; fires only for executed tools; thrown-errors-only — matches owner lean;
   error-shaped non-throwing results are indistinguishable at this boundary).
@@ -299,6 +322,19 @@ written because memory/backlog stores were down). Highlights:
     `@adhd/agent-base-types@2.2.0` lacks `contextWindowFor`; the plugin's new
     module-level import makes base-types a hard publish prerequisite. Release
     wave must publish base-types FIRST + raise plugin peerDependency floor.
+11. **F2 — windowed caps at task scope were a silent no-op — FIXED `940f2667`**
+    (Packet C review finding, folded in): capSchema rejects `window` at task
+    scope (implicit or explicit) with a scope-directing message; the
+    `maxTokensPer24h` flat alias stamps `scope: 'global'`; repo + global
+    configs migrated to explicit `scope: 'global'` on the 24h `inputTokens`
+    burn caps. Live-verified: window now contributes (warning at 500K→600K,
+    block rejects).
+12. **Deferral, same silent-no-op class (NOT filed — graph store down):**
+    a windowed cap at session/agent/global scope on a plugin wired with
+    `db: null` returns 0 from queryWindowTokens — unreachable in production
+    (the loader always passes the sqlite db) and the schema cannot reject a
+    runtime condition. Memory episode `01KZSJJSKQ6Y0DVBFGHMY395SM`; revisit
+    at next review wave.
 
 ## 9. Dispatch plan (when approved)
 
@@ -311,8 +347,11 @@ budget,agent-mcp,agent-engine-orchestrator,agent-base-types`; then release wave
 
 **Status: Packet A DONE** (worktree `.worktrees/run-control-v2`, commits `8876fa00`
 + `1d3b5bd1`, merge `fa2b3152` on main). **Packet B DONE** (commit `ccaa661c`,
-merge `da3373d2` on main). Packet C next in the same worktree (re-point branch to
-main), then the release wave.
+merge `da3373d2` on main). **Packet C DONE** (commit `0be163d8`, merge
+`ce930882`). **F2 fold-in DONE** (commit `940f2667`, merged). All four merges
+green on the post-merge gate (build/lint/test/typecheck, 4 projects, 31 tasks);
+live configs load through the rebuilt dist (`createPlugin` verified after each
+merge). **Remaining: the release wave below.**
 
 **Release wave (amended for H1):** publish order is REQUIRED, not optional —
 1. `agent-base-types` (contains the new `model-context.ts` export; the plugin's
@@ -322,3 +361,4 @@ main), then the release wave.
 3. `agent-mcp` (bump + ship together)
 Verify with a clean-room install + `npx @adhd/agent-mcp` + budget accounting
 exercised through the published artifacts before calling the release done.
+Requires npm publish signoff (OTP).
