@@ -73,17 +73,17 @@ describe('BudgetPlugin — task scope', () => {
     hooks = new HookRegistry();
   });
 
-  it('passes when tokens are under the limit', async () => {
+  it('passes when input tokens are under the limit', async () => {
     const plugin = createPlugin({
       db: null,
-      config: configSchema.parse({ maxTotalTokens: 1000 }),
+      config: configSchema.parse({ maxInputTokens: 1000 }),
     });
     await plugin.install(hooks);
     const ctx = makeCtx();
 
     await runTaskTurns(hooks, ctx, [{ inputTokens: 200, outputTokens: 100 }]);
 
-    // Second model request — 300 total tokens, limit 1000 → should pass
+    // Second model request — 200 input tokens, limit 1000 → should pass
     await hooks.emit('pre:model_request', {
       executionContext: ctx,
       messages: [],
@@ -98,10 +98,10 @@ describe('BudgetPlugin — task scope', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('throws when maxTotalTokens is reached', async () => {
+  it('throws when a flat volume cap (maxInputTokens) is reached', async () => {
     const plugin = createPlugin({
       db: null,
-      config: configSchema.parse({ maxTotalTokens: 100, mode: 'block' }),
+      config: configSchema.parse({ maxInputTokens: 100, mode: 'block' }),
     });
     await plugin.install(hooks);
     const ctx = makeCtx();
@@ -121,7 +121,7 @@ describe('BudgetPlugin — task scope', () => {
       executionContext: ctx,
       stopReason: 'stop',
       toolCallCount: 0,
-      tokenUsage: makeTokenUsage(60, 60), // 120 total — exceeds 100
+      tokenUsage: makeTokenUsage(120, 60), // 120 input — exceeds 100
     });
 
     await hooks.emit('pre:model_request', {
@@ -482,7 +482,7 @@ describe('BudgetPlugin — task scope', () => {
           scope: 'agent',
           caps: [
             {
-              field: 'tokens',
+              field: 'inputTokens',
               maximum: 100_000,
               window: 'PT24H',
               scope: 'agent',
@@ -1043,14 +1043,14 @@ describe('per-tool overrides', () => {
   });
 });
 
-describe('maxTokensPer24h — mock DB', () => {
+describe('maxTokensPer24h — mock DB (re-expressed as windowed inputTokens, Packet B ruling 3)', () => {
   let hooks: HookRegistry;
   const mockDb = {
     prepare(sql: string) {
       return {
         get(..._params: unknown[]) {
           if (sql.includes('created_at')) {
-            return { total: 150_000 };
+            return { total: 180_000 };
           }
           return undefined;
         },
@@ -1066,16 +1066,16 @@ describe('maxTokensPer24h — mock DB', () => {
     // this describe aborted before asserting anything.
   });
 
-  it('blocks when 24h total + current exceeds maxTokensPer24h', async () => {
+  it('blocks when 24h total + current exceeds the windowed inputTokens cap', async () => {
     const plugin = createPlugin({
       db: mockDb,
       config: pluginConfigSchema.parse({
         defaults: {
           scope: 'agent',
           caps: [
-            { field: 'tokens', maximum: 1_000_000 },
+            { field: 'inputTokens', maximum: 1_000_000 },
             {
-              field: 'tokens',
+              field: 'inputTokens',
               maximum: 200_000,
               window: 'PT24H',
               scope: 'agent',
@@ -1119,11 +1119,11 @@ describe('maxTokensPer24h — mock DB', () => {
         tools: [],
       })
     ).rejects.toMatchObject({
-      message: expect.stringContaining('tokens'),
+      message: expect.stringContaining('inputTokens'),
     });
   });
 
-  it('passes when 24h total + current is under maxTokensPer24h', async () => {
+  it('passes when 24h total + current is under the windowed inputTokens cap', async () => {
     const lowMockDb = {
       prepare(sql: string) {
         return {
@@ -1140,9 +1140,9 @@ describe('maxTokensPer24h — mock DB', () => {
         defaults: {
           scope: 'agent',
           caps: [
-            { field: 'tokens', maximum: 1_000_000 },
+            { field: 'inputTokens', maximum: 1_000_000 },
             {
-              field: 'tokens',
+              field: 'inputTokens',
               maximum: 200_000,
               window: 'PT24H',
               scope: 'agent',
@@ -1189,23 +1189,23 @@ describe('maxTokensPer24h — mock DB', () => {
   });
 });
 
-describe('tool maxTotalTokens override', () => {
+describe('tool inputTokens override', () => {
   let hooks: HookRegistry;
 
   beforeEach(() => {
     hooks = new HookRegistry();
   });
 
-  it('blocks tool call when tool maxTotalTokens is exceeded', async () => {
+  it('blocks tool call when tool inputTokens cap is exceeded', async () => {
     const plugin = createPlugin({
       db: null,
       config: pluginConfigSchema.parse({
-        defaults: { caps: [{ field: 'tokens', maximum: 1_000_000 }] },
+        defaults: { caps: [{ field: 'inputTokens', maximum: 1_000_000 }] },
         tool: {
           default: {},
           overrides: {
             big_output: {
-              caps: [{ field: 'tokens', maximum: 50 }],
+              caps: [{ field: 'inputTokens', maximum: 50 }],
               mode: 'block',
             },
           },
@@ -1231,10 +1231,10 @@ describe('tool maxTotalTokens override', () => {
       executionContext: ctx,
       stopReason: 'tool_calls',
       toolCallCount: 1,
-      tokenUsage: { inputTokens: 30, outputTokens: 30 },
+      tokenUsage: { inputTokens: 60, outputTokens: 0 },
     });
 
-    // Calling big_output → 60 total > 50 limit
+    // Calling big_output → 60 input >= 50 limit
     await expect(
       enforcePreTool(hooks, ctx, 'big_output', 'call-1')
     ).rejects.toMatchObject({
@@ -1295,10 +1295,10 @@ describe('cache-token double-count (BUG-ORCH-010)', () => {
     hooks = new HookRegistry();
   });
 
-  it('does not double-count cache tokens in the tokens cap field (task scope, in-memory)', async () => {
+  it('does not double-count cache tokens in the inputTokens cap field (task scope, in-memory)', async () => {
     const plugin = createPlugin({
       db: null,
-      config: configSchema.parse({ maxTotalTokens: 150, mode: 'block' }),
+      config: configSchema.parse({ maxInputTokens: 150, mode: 'block' }),
     });
     await plugin.install(hooks);
     const ctx = makeCtx();
@@ -1320,9 +1320,9 @@ describe('cache-token double-count (BUG-ORCH-010)', () => {
       },
     });
 
-    // Real total = inputTokens(100) + outputTokens(40) = 140, under the 150 cap -> must PASS.
+    // Real input = 100, under the 150 cap -> must PASS.
     // A double-count would add cacheReadTokens+cacheCreationTokens (90) again, producing
-    // 230 >= 150 -> a premature BUDGET_EXCEEDED that never should have fired.
+    // 190 >= 150 -> a premature BUDGET_EXCEEDED that never should have fired.
     await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
   });
 
@@ -1330,7 +1330,7 @@ describe('cache-token double-count (BUG-ORCH-010)', () => {
     // Proves the fix isn't "never block" — a cap still fires on real usage growth.
     const plugin = createPlugin({
       db: null,
-      config: configSchema.parse({ maxTotalTokens: 150, mode: 'block' }),
+      config: configSchema.parse({ maxInputTokens: 150, mode: 'block' }),
     });
     await plugin.install(hooks);
     const ctx = makeCtx();
@@ -1343,20 +1343,20 @@ describe('cache-token double-count (BUG-ORCH-010)', () => {
       stopReason: 'stop',
       toolCallCount: 0,
       tokenUsage: {
-        inputTokens: 120,
+        inputTokens: 160,
         outputTokens: 40,
         cacheReadTokens: 80,
-        cacheCreationTokens: 10,
+        cacheCreationTokens: 0,
       },
     });
 
-    // Real total = 120 + 40 = 160 >= 150 -> must block.
+    // Real input = 160 >= 150 -> must block.
     await expect(enforcePreModel(hooks, ctx)).rejects.toMatchObject({
-      message: expect.stringContaining('tokens'),
+      message: expect.stringContaining('inputTokens'),
     });
   });
 
-  it('does not double-count cache tokens in the windowed tokens total (agent scope + maxTokensPer24h)', async () => {
+  it('does not double-count cache tokens in the windowed inputTokens total (agent scope)', async () => {
     // A real (fake) DB standing in for better-sqlite3: returns a row already reflecting
     // correct provider-neutral totals for prior tasks, and records the exact SQL text so
     // the assertion can catch a regression that re-adds cache columns into the SUM.
@@ -1383,7 +1383,7 @@ describe('cache-token double-count (BUG-ORCH-010)', () => {
           scope: 'agent',
           caps: [
             {
-              field: 'tokens',
+              field: 'inputTokens',
               maximum: 130_000,
               window: 'PT24H',
               scope: 'agent',
@@ -1398,7 +1398,7 @@ describe('cache-token double-count (BUG-ORCH-010)', () => {
     await hooks.emit('task:start', { executionContext: ctx, messages: [] });
     await enforcePreModel(hooks, ctx);
 
-    // This call's own real usage: 5k total. 120k (window) + 5k (this call) = 125k < 130k -> PASS.
+    // This call's own real input: 4.8k. 120k (window) + 4.8k (this call) = 124.8k < 130k -> PASS.
     await hooks.emit('post:model_response', {
       executionContext: ctx,
       stopReason: 'stop',
@@ -1811,6 +1811,490 @@ describe('Packet A — cap.mode on the model path (budget:warning / budget:block
       maximum: 1,
       current: 1,
       message: expect.stringContaining('blocked_tool'),
+    });
+  });
+});
+
+// ── Packet B — tokens → context (BUG-AGENTMCP-009) ───────────────────────────
+//
+// PLAN-run-control-v2 §3 Packet B + owner rulings 1/2/4/6 (2026-08-11): the
+// 'tokens' cap field (CUMULATIVE input+output, misread as context size) is
+// REMOVED with no alias; 'context' is the PEAK single-request input, enforced
+// on the model path only, with the enforcement value = max(provider-reported
+// peak, tools-aware estimate of the pending request) (ruling 4 — catch early,
+// reject one-request-lag). 'inputTokens'/'outputTokens' are CUMULATIVE volume
+// fields carrying the windowed resource-burn caps (ruling 3); flat
+// 'maxTokensPer24h' is retained and re-expressed as a windowed inputTokens cap.
+// 'contextWindowFraction` resolves against the base-types context-window
+// registry (contextWindowFor; 128K fallback).
+//
+// Regression discipline (BL-225): the cache-warm test below is the BUG-AGENTMCP-009
+// regression — on the pre-Packet-B code the `context` field fails capSchema
+// validation (createPlugin throws), so the test fails red before the fix and
+// goes green after.
+describe('Packet B — tokens → context (BUG-AGENTMCP-009)', () => {
+  let hooks: HookRegistry;
+
+  beforeEach(() => {
+    hooks = new HookRegistry();
+  });
+
+  it('REGRESSION BUG-AGENTMCP-009: cache-warm run — 100 turns of 8K input (850K cumulative volume) with context: 50_000 → every enforce resolves', async () => {
+    // The 2026-08-11 production failure: a deepseek implementer killed at ~turn 6
+    // by `tokens: 500000` — cumulative input+output hit 604_800 at $0.03 real spend
+    // because a cache-warm run re-reads the whole conversation every turn. Under the
+    // new 'context' semantics (PEAK, not cumulative) the cumulative volume is
+    // irrelevant: peak stays ~8.5K while 850K cumulative volume passes through.
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: { caps: [{ field: 'context', maximum: 50_000, mode: 'block' }] },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    let enforced = 0;
+    for (let turn = 0; turn < 100; turn++) {
+      await hooks.emit('pre:model_request', {
+        executionContext: ctx,
+        messages: [],
+        tools: [],
+      });
+      await expect(
+        hooks.enforce('pre:model_request', {
+          executionContext: ctx,
+          messages: [],
+          tools: [],
+        })
+      ).resolves.toBeUndefined();
+      enforced += 1;
+      // 8K input + 500 output per turn → 850K cumulative across 100 turns.
+      await hooks.emit('post:model_response', {
+        executionContext: ctx,
+        stopReason: 'stop',
+        toolCallCount: 0,
+        tokenUsage: { inputTokens: 8_000, outputTokens: 500 },
+      });
+    }
+
+    // Every one of the 100 enforcements resolved — cumulative volume never feeds
+    // the peak-based cap. (The OLD 'tokens' cap at 500K would have killed at
+    // ~turn 62; at 50K it would have killed at ~turn 6 — matching the incident.)
+    expect(enforced).toBe(100);
+  });
+
+  it('a single 60K-peak turn with context: 50_000 → the NEXT enforce rejects (peak, one-request-lag rejected)', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: { caps: [{ field: 'context', maximum: 50_000, mode: 'block' }] },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    // Turn 1: 60K input — peak exceeds the 50K cap, but the cap is checked on the
+    // NEXT model request (enforcement runs pre-flight; the exceeded peak becomes
+    // visible after the response lands).
+    await hooks.emit('pre:model_request', {
+      executionContext: ctx,
+      messages: [],
+      tools: [],
+    });
+    await hooks.enforce('pre:model_request', {
+      executionContext: ctx,
+      messages: [],
+      tools: [],
+    });
+    await hooks.emit('post:model_response', {
+      executionContext: ctx,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: { inputTokens: 60_000, outputTokens: 0 },
+    });
+
+    // Turn 2 pre-flight: max(peak 60K, estimate 0) = 60K >= 50K → BUDGET_EXCEEDED.
+    await expect(enforcePreModel(hooks, ctx)).rejects.toMatchObject({
+      isEnforcementError: true,
+      code: 'BUDGET_EXCEEDED',
+      message: expect.stringContaining('context'),
+    });
+  });
+
+  it('contextWindowFraction: 0.5 on a 128K-window model (gpt-4o-mini) trips at 70K, not 60K (limit 64K)', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: {
+          caps: [
+            { field: 'context', contextWindowFraction: 0.5, mode: 'block' },
+          ],
+        },
+      }),
+    });
+    await plugin.install(hooks);
+    // makeCtx defaults to provider openai/gpt-4o-mini → contextWindowFor = 128K;
+    // fraction 0.5 → limit 64K.
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    // 60K turn → peak 60K < 64K → passes (this is the "not 60K" half).
+    await enforcePreModel(hooks, ctx);
+    await hooks.emit('post:model_response', {
+      executionContext: ctx,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: { inputTokens: 60_000, outputTokens: 0 },
+    });
+    await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
+
+    // 70K turn → peak 70K >= 64K → blocks ("trips at 70K").
+    await hooks.emit('post:model_response', {
+      executionContext: ctx,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: { inputTokens: 70_000, outputTokens: 0 },
+    });
+    await expect(enforcePreModel(hooks, ctx)).rejects.toMatchObject({
+      isEnforcementError: true,
+      code: 'BUDGET_EXCEEDED',
+    });
+  });
+
+  it('pre-flight: an oversized PENDING request trips the context cap before any response (owner ruling 4)', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: { caps: [{ field: 'context', maximum: 10_000, mode: 'block' }] },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    // Provider-reported peak is still 0 — but the pending request is ~25K tokens
+    // (100K chars / 4). The estimate must catch it pre-flight.
+    const payload = {
+      executionContext: ctx,
+      messages: [
+        {
+          id: '00000000-0000-4000-8000-000000000001',
+          sessionId: 'session-1',
+          role: 'user' as const,
+          content: 'x'.repeat(100_000),
+          createdAt: '2026-08-11T00:00:00.000Z',
+        },
+      ],
+      tools: [],
+    };
+    await hooks.emit('pre:model_request', payload);
+    await expect(hooks.enforce('pre:model_request', payload)).rejects.toMatchObject(
+      {
+        isEnforcementError: true,
+        code: 'BUDGET_EXCEEDED',
+      }
+    );
+  });
+
+  it('pre-flight: the tools array counts toward the pending-request estimate (BUG-ORCH-006 undercount fix)', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: { caps: [{ field: 'context', maximum: 10_000, mode: 'block' }] },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    // Tiny messages, but one tool whose schema is ~80K chars (~20K tokens). The
+    // engine's OLD local estimator ignored the tools array entirely (BUG-ORCH-006)
+    // and would have let this request through; the tools-aware estimator must not.
+    const payload = {
+      executionContext: ctx,
+      messages: [],
+      tools: [
+        {
+          name: 'huge_tool',
+          description: 'x'.repeat(40_000),
+          inputSchema: {
+            type: 'object',
+            properties: { data: { type: 'string', description: 'x'.repeat(40_000) } },
+          },
+        },
+      ],
+    };
+    await hooks.emit('pre:model_request', payload);
+    await expect(hooks.enforce('pre:model_request', payload)).rejects.toMatchObject(
+      {
+        isEnforcementError: true,
+        code: 'BUDGET_EXCEEDED',
+      }
+    );
+  });
+
+  it('structured caps[].field === "tokens" → factory throws with a context-mentioning migration message', async () => {
+    expect(() =>
+      createPlugin({
+        db: null,
+        config: {
+          defaults: { caps: [{ field: 'tokens', maximum: 500_000, mode: 'block' }] },
+        },
+      })
+    ).toThrow(/context/);
+  });
+
+  it('flat maxTotalTokens → factory throws with a context-mentioning migration message', async () => {
+    expect(() =>
+      createPlugin({
+        db: null,
+        config: { maxTotalTokens: 500_000, mode: 'block' },
+      })
+    ).toThrow(/context/);
+  });
+
+  it('context + window → schema validation error (windowed peak is meaningless)', async () => {
+    const result = pluginConfigSchema.safeParse({
+      defaults: {
+        caps: [{ field: 'context', maximum: 100_000, window: 'PT24H' }],
+      },
+    });
+    expect(result.success).toBe(false);
+    // And the factory path (what the loader hits) throws too.
+    expect(() =>
+      createPlugin({
+        db: null,
+        config: {
+          defaults: { caps: [{ field: 'context', maximum: 100_000, window: 'PT24H' }] },
+        },
+      })
+    ).toThrow();
+  });
+
+  it('context with NEITHER maximum nor contextWindowFraction → schema validation error', async () => {
+    const result = pluginConfigSchema.safeParse({
+      defaults: { caps: [{ field: 'context' }] },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('contextWindowFraction on a NON-context field → schema validation error', async () => {
+    const result = pluginConfigSchema.safeParse({
+      defaults: { caps: [{ field: 'calls', contextWindowFraction: 0.5 }] },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('flat maxTokensPer24h is still accepted, re-expressed as a windowed inputTokens cap, and ENFORCES across turns', async () => {
+    // Ruling 3: maxTokensPer24h is NOT dropped — the flat alias re-maps to
+    // {field:'inputTokens', window:'PT24H'} + the flat `scope:'agent'`. Historical
+    // 24h window: 150K from the mock DB; this call's in-memory input adds on top.
+    const mockDb = {
+      prepare(sql: string) {
+        return {
+          get(..._params: unknown[]) {
+            if (sql.includes('created_at')) return { total: 150_000 };
+            return undefined;
+          },
+        };
+      },
+    };
+    const plugin = createPlugin({
+      db: mockDb,
+      config: { maxTokensPer24h: 180_000, scope: 'agent', mode: 'block' },
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    // Turn 1 pre-flight: 0 in-memory + 150K window = 150K < 180K → passes.
+    await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
+    await hooks.emit('post:model_response', {
+      executionContext: ctx,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: { inputTokens: 30_000, outputTokens: 0 },
+    });
+
+    // Turn 2 pre-flight: 30K in-memory + 150K window = 180K >= 180K → blocks.
+    await expect(enforcePreModel(hooks, ctx)).rejects.toMatchObject({
+      isEnforcementError: true,
+      code: 'BUDGET_EXCEEDED',
+      message: expect.stringContaining('inputTokens'),
+    });
+  });
+
+  it('windowed inputTokens/outputTokens caps enforce across turns (resource-burn axis)', async () => {
+    const mockDb = {
+      prepare(sql: string) {
+        return {
+          get(..._params: unknown[]) {
+            if (sql.includes('created_at')) return { total: 0 };
+            return undefined;
+          },
+        };
+      },
+    };
+    const plugin = createPlugin({
+      db: mockDb,
+      config: pluginConfigSchema.parse({
+        defaults: {
+          scope: 'agent',
+          caps: [
+            {
+              field: 'inputTokens',
+              maximum: 50_000,
+              window: 'PT24H',
+              scope: 'agent',
+              mode: 'block',
+            },
+            {
+              field: 'outputTokens',
+              maximum: 30_000,
+              window: 'PT24H',
+              scope: 'agent',
+              mode: 'block',
+            },
+          ],
+        },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    // Turn 1: 30K in + 10K out → under both caps.
+    await enforcePreModel(hooks, ctx);
+    await hooks.emit('post:model_response', {
+      executionContext: ctx,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: { inputTokens: 30_000, outputTokens: 10_000 },
+    });
+    await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
+
+    // Turn 2: cumulative input 60K >= 50K → blocks on inputTokens.
+    await hooks.emit('post:model_response', {
+      executionContext: ctx,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: { inputTokens: 30_000, outputTokens: 20_000 },
+    });
+    await expect(enforcePreModel(hooks, ctx)).rejects.toMatchObject({
+      isEnforcementError: true,
+      message: expect.stringContaining('inputTokens'),
+    });
+
+    // Fresh task: only output grows — outputTokens windowed cap blocks.
+    const hooks2 = new HookRegistry();
+    const outOnly = createPlugin({
+      db: mockDb,
+      config: pluginConfigSchema.parse({
+        defaults: {
+          scope: 'agent',
+          caps: [
+            {
+              field: 'outputTokens',
+              maximum: 30_000,
+              window: 'PT24H',
+              scope: 'agent',
+              mode: 'block',
+            },
+          ],
+        },
+      }),
+    });
+    await outOnly.install(hooks2);
+    const ctx2 = makeCtx({ taskId: 'task-2' });
+    await hooks2.emit('task:start', { executionContext: ctx2, messages: [] });
+    await enforcePreModel(hooks2, ctx2);
+    await hooks2.emit('post:model_response', {
+      executionContext: ctx2,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: { inputTokens: 0, outputTokens: 25_000 },
+    });
+    await hooks2.emit('post:model_response', {
+      executionContext: ctx2,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: { inputTokens: 0, outputTokens: 10_000 },
+    });
+    await expect(enforcePreModel(hooks2, ctx2)).rejects.toMatchObject({
+      isEnforcementError: true,
+      message: expect.stringContaining('outputTokens'),
+    });
+  });
+
+  it('scoped context reads MAX(peak_context_tokens) from task_usage (session/agent/global)', async () => {
+    // Mock DB stands in for seeded task_usage rows: the agent-scope query reports
+    // the historical peak across prior tasks. The mock is stateful so the test can
+    // watch the scoped value cross the cap.
+    let dbPeak = 45_000;
+    const mockDb = {
+      prepare(sql: string) {
+        return {
+          get(..._params: unknown[]) {
+            if (
+              sql.includes('MAX(tu.peak_context_tokens)') ||
+              sql.includes('MAX(peak_context_tokens)')
+            ) {
+              return { input: 0, output: 0, calls: 0, peak: dbPeak };
+            }
+            return undefined;
+          },
+        };
+      },
+    };
+    const plugin = createPlugin({
+      db: mockDb,
+      config: pluginConfigSchema.parse({
+        defaults: {
+          scope: 'agent',
+          caps: [
+            {
+              field: 'context',
+              maximum: 50_000,
+              scope: 'agent',
+              mode: 'block',
+            },
+          ],
+        },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    // DB peak 45K + current in-memory peak 0 → 45K < 50K → passes.
+    await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
+
+    // Current task peaks at 30K → scoped = max(45K, 30K) = 45K < 50K → still passes.
+    await hooks.emit('post:model_response', {
+      executionContext: ctx,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: { inputTokens: 30_000, outputTokens: 0 },
+    });
+    await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
+
+    // A prior task in the scope peaked at 55K → scoped = 55K >= 50K → blocks.
+    dbPeak = 55_000;
+    await expect(enforcePreModel(hooks, ctx)).rejects.toMatchObject({
+      isEnforcementError: true,
+      code: 'BUDGET_EXCEEDED',
+      message: expect.stringContaining('context'),
     });
   });
 });

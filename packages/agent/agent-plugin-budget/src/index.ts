@@ -12,7 +12,10 @@ import type {
   PostToolCallPayload,
   TaskStartPayload,
   PreToolCallPayload,
+  Message,
+  ToolDefinition,
 } from '@adhd/agent-base-types';
+import { contextWindowFor } from '@adhd/agent-base-types';
 
 // ── ISO8601 duration parser ──────────────────────────────────────────────────
 
@@ -36,8 +39,17 @@ function parseIsoDuration(dur: string): number {
 
 // ── Cap schema ───────────────────────────────────────────────────────────────
 
+// Field vocabulary (PLAN-run-control-v2 Packet B, BUG-AGENTMCP-009):
+//   - 'context' — PEAK single-request input size (the high-water mark the model
+//     actually saw, or the tools-aware estimate of the pending request), NOT
+//     cumulative volume. Model-path only.
+//   - 'inputTokens'/'outputTokens' — CUMULATIVE per-dimension volume (the
+//     resource-burn axis); windowed caps on them express the old
+//     maxTokensPer24h-class limits (owner ruling 3).
+// 'tokens' (cumulative input+output, misread as context size) is REMOVED —
+// `assertNoLegacyTokensConfig` rejects it with an explicit migration message.
 const FIELD_NAMES = [
-  'tokens',
+  'context',
   'inputTokens',
   'outputTokens',
   'calls',
@@ -48,14 +60,65 @@ const FIELD_NAMES = [
   'responseSize',
 ] as const;
 
-const capSchema = z.object({
-  field: z.enum(FIELD_NAMES),
-  maximum: z.number().min(0),
-  window: z.string().optional(),
-  scope: z.enum(['task', 'session', 'agent', 'global']).optional(),
-  mode: z.enum(['warning', 'block']).optional(),
-  message: z.string().optional(),
-});
+/**
+ * Cap schema. `maximum` is optional at the base level because a `context` cap may
+ * instead use `contextWindowFraction` (0..1 of the model's true window); the
+ * superRefine below enforces the cross-field invariants:
+ *   - `context` requires EXACTLY ONE of `maximum` / `contextWindowFraction`;
+ *   - `context` REJECTS `window` (a windowed PEAK is meaningless; windowed
+ *     cumulative volume is expressible via `inputTokens`/`outputTokens` + `window`);
+ *   - non-`context` fields REJECT `contextWindowFraction` and REQUIRE `maximum`.
+ */
+const capSchema = z
+  .object({
+    field: z.enum(FIELD_NAMES),
+    maximum: z.number().min(0).optional(),
+    contextWindowFraction: z.number().min(0).max(1).optional(),
+    window: z.string().optional(),
+    scope: z.enum(['task', 'session', 'agent', 'global']).optional(),
+    mode: z.enum(['warning', 'block']).optional(),
+    message: z.string().optional(),
+  })
+  .superRefine((cap, ctx) => {
+    if (cap.field === 'context') {
+      const hasMaximum = cap.maximum !== undefined;
+      const hasFraction = cap.contextWindowFraction !== undefined;
+      if (hasMaximum === hasFraction) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['contextWindowFraction'],
+          message:
+            "cap field 'context' requires exactly one of 'maximum' or 'contextWindowFraction'",
+        });
+      }
+      if (cap.window !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['window'],
+          message:
+            "cap field 'context' rejects 'window' — a windowed peak is meaningless; " +
+            "windowed cumulative volume is expressible via 'inputTokens'/'outputTokens' + 'window'",
+        });
+      }
+    } else {
+      if (cap.contextWindowFraction !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['contextWindowFraction'],
+          message: `'contextWindowFraction' is only valid on cap field 'context' (got '${
+            cap.field
+          }')`,
+        });
+      }
+      if (cap.maximum === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['maximum'],
+          message: `cap field '${cap.field}' requires a 'maximum'`,
+        });
+      }
+    }
+  });
 
 export type Cap = z.infer<typeof capSchema>;
 
@@ -114,16 +177,20 @@ export type PluginConfig = z.input<typeof pluginConfigSchema>;
 export const configSchema = z.object({}).passthrough();
 
 // ── Backward compat: flat fields → caps ──────────────────────────────────────
+//
+// Packet B (BUG-AGENTMCP-009): `maxTotalTokens` is REMOVED (its field 'tokens' is
+// gone — `assertNoLegacyTokensConfig` throws first); `maxTokensPer24h` is RETAINED
+// (owner ruling 3) and re-expressed as a windowed cumulative `inputTokens` cap —
+// the resource-burn axis the windowed vocabulary now lives on.
 
 const FIELD_MAP: Record<string, { field: Cap['field']; window?: string }> = {
   maxInputTokens: { field: 'inputTokens' },
   maxOutputTokens: { field: 'outputTokens' },
-  maxTotalTokens: { field: 'tokens' },
   maxModelCalls: { field: 'calls' },
   maxWallClockMs: { field: 'wallClock' },
   maxModelMs: { field: 'modelMs' },
   maxCostUSD: { field: 'cost' },
-  maxTokensPer24h: { field: 'tokens', window: 'PT24H' },
+  maxTokensPer24h: { field: 'inputTokens', window: 'PT24H' },
   maxCalls: { field: 'toolCalls' },
 };
 
@@ -154,7 +221,71 @@ function flatFieldsToDimension(raw: Record<string, unknown>): DimensionConfig {
   return dimensionSchema.parse(result);
 }
 
+/**
+ * Packet B hard removal (owner ruling 1 — no deprecated alias): any config that
+ * still uses the `tokens` cap field or the flat `maxTotalTokens` key fails with
+ * an explicit migration message. `maxTokensPer24h` is deliberately NOT rejected —
+ * it is re-expressed as a windowed cumulative `inputTokens` cap (ruling 3).
+ *
+ * Runs at the top of `normalizeConfig`, so it fires inside the plugin factory.
+ * The loader catches factory throws and logs (loader.ts:227-233) — a legacy
+ * config skips the plugin, never crashes the server.
+ */
+const LEGACY_TOKENS_MESSAGE = (where: string): string =>
+  `legacy 'tokens' budget cap detected (${where}): cap field 'tokens' is removed; ` +
+  `use 'context' (peak request input) or 'inputTokens'/'outputTokens' (windowed volume)`;
+
+function assertNoLegacyTokensConfig(raw: unknown): void {
+  const obj = (raw ?? {}) as Record<string, unknown>;
+
+  // Flat format — legacy keys sit at the top level of the config object.
+  if (typeof obj['maxTotalTokens'] === 'number') {
+    throw new Error(LEGACY_TOKENS_MESSAGE("flat 'maxTotalTokens'"));
+  }
+
+  // Scan a single dimension block (may carry caps[] and/or nested flat keys).
+  const scanDimension = (dim: unknown): void => {
+    if (typeof dim !== 'object' || dim === null) return;
+    const d = dim as Record<string, unknown>;
+    if (typeof d['maxTotalTokens'] === 'number') {
+      throw new Error(LEGACY_TOKENS_MESSAGE("structured 'maxTotalTokens'"));
+    }
+    const caps = d['caps'];
+    if (Array.isArray(caps)) {
+      for (const cap of caps) {
+        if (
+          typeof cap === 'object' &&
+          cap !== null &&
+          (cap as Record<string, unknown>)['field'] === 'tokens'
+        ) {
+          throw new Error(LEGACY_TOKENS_MESSAGE("caps[].field === 'tokens'"));
+        }
+      }
+    }
+  };
+
+  // Scan an agent/provider/tool block: { default?, overrides? } of dimensions.
+  const scanBlock = (block: unknown): void => {
+    if (typeof block !== 'object' || block === null) return;
+    const b = block as Record<string, unknown>;
+    scanDimension(b);
+    if ('default' in b) scanDimension(b['default']);
+    const overrides = b['overrides'];
+    if (typeof overrides === 'object' && overrides !== null) {
+      for (const value of Object.values(overrides as Record<string, unknown>)) {
+        scanDimension(value);
+      }
+    }
+  };
+
+  scanDimension(obj['defaults']);
+  scanBlock(obj['agent']);
+  scanBlock(obj['provider']);
+  scanBlock(obj['tool']);
+}
+
 function normalizeConfig(raw: unknown): PluginConfig {
+  assertNoLegacyTokensConfig(raw);
   const obj = raw as Record<string, unknown>;
   if (
     obj['defaults'] !== undefined ||
@@ -204,6 +335,41 @@ function makeToolWarning(
   return { isToolWarning: true, toolName, callId, message };
 }
 
+/**
+ * Estimate the PENDING request's input size (tokens) from the messages + tool
+ * definitions about to be sent to the model — the tools-aware estimator that
+ * fixes BUG-ORCH-006 (the engine's local estimator historically undercounted by
+ * ignoring the tools array). ~4 chars/token over the full serialized wire form:
+ * message content + toolCall arguments + toolResults payloads + tool schemas.
+ *
+ * Used on the MODEL path as the early-catch half of the 'context' enforcement
+ * value (owner ruling 4): `max(provider-reported peak, estimate)` — an oversized
+ * request is caught pre-flight, not one response late.
+ */
+function estimateRequestContext(
+  messages: readonly Message[],
+  tools: readonly ToolDefinition[]
+): number {
+  let chars = 0;
+  for (const message of messages) {
+    chars += message.content?.length ?? 0;
+    for (const toolCall of message.toolCalls ?? []) {
+      chars += JSON.stringify(toolCall.arguments ?? {}).length;
+    }
+    for (const toolResult of message.toolResults ?? []) {
+      chars += JSON.stringify(toolResult.result ?? null).length;
+    }
+  }
+  for (const tool of tools) {
+    chars += JSON.stringify({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+    }).length;
+  }
+  return Math.ceil(chars / 4);
+}
+
 // ── In-memory accumulator ────────────────────────────────────────────────────
 
 interface BudgetAccumulator {
@@ -225,6 +391,12 @@ interface BudgetAccumulator {
   cacheCreationTokens: number;
   inputTokens: number;
   outputTokens: number;
+  // PEAK single-call input (tokens) across the task's model responses — the
+  // 'context' cap's provider-reported high-water mark. NOT a sum: cumulative
+  // input is billed volume, not context size (FINDING-ORCH-007 / PLAN-run-
+  // control-v2 §1 — a cache-warm run re-reads history every turn, so cumulative
+  // volume compounds while peak stays flat).
+  peakContextTokens: number;
   modelCalls: number;
   totalModelMs: number;
   modelCallStartMs?: number;
@@ -235,6 +407,8 @@ interface UsageTotals {
   inputTokens: number;
   outputTokens: number;
   modelCalls: number;
+  /** MAX(peak_context_tokens) across the scope's task set (+ this task in-memory). */
+  peakContextTokens: number;
 }
 
 // ── Plugin class ─────────────────────────────────────────────────────────────
@@ -336,6 +510,7 @@ class BudgetPlugin implements Plugin {
       cacheCreationTokens: 0,
       inputTokens: 0,
       outputTokens: 0,
+      peakContextTokens: 0,
       modelCalls: 0,
       totalModelMs: 0,
       toolCalls: new Map(),
@@ -383,6 +558,11 @@ class BudgetPlugin implements Plugin {
       // BUG-ORCH-010 double-count); inputTokens IS the sum of the three classes.
       acc.inputTokens += uncached + read + creation;
       acc.outputTokens += usage.outputTokens ?? 0;
+      // PEAK, not sum — byte-identical to usage-plugin's peakContextTokens
+      // (usage-plugin.ts:143,172-181): the provider-reported total input of this
+      // call is what the model actually saw. Cumulative input must never feed
+      // this (BUG-AGENTMCP-009 — cache-warm cumulative volume ≠ context size).
+      acc.peakContextTokens = Math.max(acc.peakContextTokens, total);
     }
     acc.modelCalls += 1;
     if (acc.modelCallStartMs !== undefined) {
@@ -462,8 +642,14 @@ class BudgetPlugin implements Plugin {
           inputTokens: acc.inputTokens,
           outputTokens: acc.outputTokens,
           modelCalls: acc.modelCalls,
+          peakContextTokens: acc.peakContextTokens,
         }
-      : { inputTokens: 0, outputTokens: 0, modelCalls: 0 };
+      : {
+          inputTokens: 0,
+          outputTokens: 0,
+          modelCalls: 0,
+          peakContextTokens: 0,
+        };
 
     if (scope === 'task' || !this.db) return inMem;
 
@@ -472,13 +658,19 @@ class BudgetPlugin implements Plugin {
         prepare: (sql: string) => {
           get: (
             ...args: unknown[]
-          ) => { input: number; output: number; calls: number } | undefined;
+          ) =>
+            | { input: number; output: number; calls: number; peak?: number }
+            | undefined;
         };
       };
       // NOTE (BUG-ORCH-010): input_tokens is already the provider-neutral total
       // (uncached + cache-read + cache-creation) — do not also SUM the cache columns
       // here, they are a subset of input_tokens, not additive.
-      let row: { input: number; output: number; calls: number } | undefined;
+      // `peak` = MAX(peak_context_tokens) over the scope's task set — the scoped
+      // 'context' cap value (owner ruling, §5.2).
+      let row:
+        | { input: number; output: number; calls: number; peak?: number }
+        | undefined;
 
       if (scope === 'session' && sessionId) {
         row = db
@@ -486,7 +678,8 @@ class BudgetPlugin implements Plugin {
             `SELECT
                COALESCE(SUM(tu.input_tokens), 0) AS input,
                COALESCE(SUM(tu.output_tokens), 0) AS output,
-               COALESCE(SUM(tu.model_calls), 0) AS calls
+               COALESCE(SUM(tu.model_calls), 0) AS calls,
+               COALESCE(MAX(tu.peak_context_tokens), 0) AS peak
              FROM task_usage tu
              JOIN tasks t ON tu.task_id = t.id
              WHERE t.session_id = ? AND tu.task_id != ?`
@@ -498,7 +691,8 @@ class BudgetPlugin implements Plugin {
             `SELECT
                COALESCE(SUM(input_tokens), 0) AS input,
                COALESCE(SUM(output_tokens), 0) AS output,
-               COALESCE(SUM(model_calls), 0) AS calls
+               COALESCE(SUM(model_calls), 0) AS calls,
+               COALESCE(MAX(peak_context_tokens), 0) AS peak
              FROM task_usage
              WHERE agent_name = ? AND task_id != ?`
           )
@@ -509,7 +703,8 @@ class BudgetPlugin implements Plugin {
             `SELECT
                COALESCE(SUM(input_tokens), 0) AS input,
                COALESCE(SUM(output_tokens), 0) AS output,
-               COALESCE(SUM(model_calls), 0) AS calls
+               COALESCE(SUM(model_calls), 0) AS calls,
+               COALESCE(MAX(peak_context_tokens), 0) AS peak
              FROM task_usage
              WHERE task_id != ?`
           )
@@ -521,6 +716,10 @@ class BudgetPlugin implements Plugin {
           inputTokens: (row.input ?? 0) + inMem.inputTokens,
           outputTokens: (row.output ?? 0) + inMem.outputTokens,
           modelCalls: (row.calls ?? 0) + inMem.modelCalls,
+          // Scoped context = MAX over the scope's task set of peak_context_tokens,
+          // with the current task's in-memory peak folded in (it is a member of the
+          // set; the queries above exclude it by `task_id != ?`).
+          peakContextTokens: Math.max(row.peak ?? 0, inMem.peakContextTokens),
         };
       }
     } catch {
@@ -607,6 +806,10 @@ class BudgetPlugin implements Plugin {
    *   W = number of unique (scope, window) pairs across all caps
    *
    * Independent of cap count, agent count, session count, or history depth.
+   *
+   * `requestEstimate` (tokens) is the tools-aware estimate of the PENDING
+   * request, computed on the model path; it feeds the 'context' enforcement
+   * value = max(provider-reported peak, estimate) per owner ruling 4.
    */
   private buildSnapshot(
     caps: Cap[],
@@ -614,7 +817,8 @@ class BudgetPlugin implements Plugin {
     taskId: string,
     sessionId: string | undefined,
     agentName: string,
-    dimScope?: string
+    dimScope?: string,
+    requestEstimate = 0
   ): Record<string, number> {
     const snap: Record<string, number> = {};
 
@@ -623,6 +827,10 @@ class BudgetPlugin implements Plugin {
     snap['calls'] = acc.modelCalls;
     snap['wallClock'] = Date.now() - acc.startedAtMs;
     snap['modelMs'] = acc.totalModelMs;
+    // 'context' enforcement value — max of the provider-reported peak so far and
+    // the tools-aware estimate of the request about to be sent (ruling 4: catch
+    // early, reject one-request-lag).
+    snap['context'] = Math.max(acc.peakContextTokens, requestEstimate);
     // Cache-weighted cost (BUG-AGENTMCP-008): each input class bills at its own rate.
     // With costPerCacheReadToken/costPerCacheWriteToken unset (default = costPerInput),
     // this collapses to inputTokens × costPerInput + outputTokens × costPerOutput —
@@ -657,6 +865,13 @@ class BudgetPlugin implements Plugin {
       snap[`${scope}:inputTokens`] = t.inputTokens;
       snap[`${scope}:outputTokens`] = t.outputTokens;
       snap[`${scope}:calls`] = t.modelCalls;
+      // Scoped 'context' = MAX(peak_context_tokens) across the task set; the
+      // pending-request estimate also applies at scope level (the current task is
+      // a member of the set).
+      snap[`${scope}:context`] = Math.max(
+        t.peakContextTokens,
+        requestEstimate
+      );
     }
 
     for (const [key, { scope, windowMs }] of uniqueWindows) {
@@ -693,15 +908,12 @@ class BudgetPlugin implements Plugin {
       case 'outputTokens':
         base = snap[`${scopeKey}outputTokens`] ?? snap['outputTokens'];
         break;
-      case 'tokens':
-        // NOTE (BUG-ORCH-010): `inputTokens` is the provider-neutral TOTAL input a call
-        // processed — uncachedInputTokens + cacheReadTokens + cacheCreationTokens are
-        // already summed into it at the provider boundary (normaliseAnthropicUsage /
-        // normaliseOpenAIUsage). Adding `cacheTokens` again here would double-count the
-        // cached portion and trip 'tokens'/maxTotalTokens caps far earlier than real usage.
-        base =
-          (snap[`${scopeKey}inputTokens`] ?? snap['inputTokens']) +
-          (snap[`${scopeKey}outputTokens`] ?? snap['outputTokens']);
+      case 'context':
+        // PEAK single-request input — the in-memory enforcement value computed in
+        // buildSnapshot (max of provider-reported peak and the pending-request
+        // estimate), or MAX(peak_context_tokens) for scoped caps. 'context' rejects
+        // `window` at the schema level, so the windowed path below never fires here.
+        base = snap[`${scopeKey}context`] ?? snap['context'];
         break;
       case 'calls':
         base = snap[`${scopeKey}calls`] ?? snap['calls'];
@@ -734,30 +946,49 @@ class BudgetPlugin implements Plugin {
    * layer (owner ruling 7): HookRegistry.emit swallows handler errors and is a
    * no-op when no handler is registered, so emission can never affect
    * enforcement. `message` defaults to cap.message, then the standard
-   * `"<field> limit is <maximum>, current value is <current>"` string — the
+   * `"<field> limit is <limit>, current value is <current>"` string — the
    * same resolution `makeEnforcementError` uses, so the block event's message
    * always matches the error the orchestrator sees.
+   *
+   * `limit` is the RESOLVED cap limit (`maximum`, or the context-window-derived
+   * limit for `contextWindowFraction` caps) — the payload must report the real
+   * number the cap trips at, not an undefined `maximum`.
    */
   private async emitBudgetEvent(
     event: 'budget:warning' | 'budget:block',
     ctx: ExecutionContext,
     cap: Cap,
     current: number,
+    limit: number,
     message?: string
   ): Promise<void> {
     if (!this.hooks) return;
     await this.hooks.emit(event, {
       executionContext: ctx,
       field: cap.field,
-      maximum: cap.maximum,
+      maximum: limit,
       current,
       message:
         message ??
         cap.message ??
-        `${cap.field} limit is ${cap.maximum}, current value is ${Math.round(
+        `${cap.field} limit is ${limit}, current value is ${Math.round(
           current
         )}`,
     });
+  }
+
+  /**
+   * Resolve a cap's numeric limit. A `context` cap configured via
+   * `contextWindowFraction` has no `maximum`: the limit is
+   * `contextWindowFor(modelId) * fraction` (128K fallback for unknown models).
+   * Every other cap carries an explicit `maximum` (schema-enforced).
+   */
+  private resolveCapLimit(cap: Cap, ctx: ExecutionContext): number {
+    if (cap.maximum !== undefined) return cap.maximum;
+    const provider = ctx.agentDefinition.provider;
+    return Math.floor(
+      contextWindowFor(provider.model) * (cap.contextWindowFraction ?? 0)
+    );
   }
 
   /**
@@ -773,15 +1004,16 @@ class BudgetPlugin implements Plugin {
     dimMode?: string,
     dimScope?: string
   ): Promise<void> {
+    const limit = this.resolveCapLimit(cap, ctx);
     const current = this.getSnapshotValue(snap, cap, dimScope);
-    if (current < cap.maximum) return;
+    if (current < limit) return;
     const capMode = cap.mode ?? dimMode ?? 'warning';
     if (capMode === 'warning') {
-      await this.emitBudgetEvent('budget:warning', ctx, cap, current);
+      await this.emitBudgetEvent('budget:warning', ctx, cap, current, limit);
       return;
     }
-    await this.emitBudgetEvent('budget:block', ctx, cap, current);
-    throw makeEnforcementError(cap.field, cap.maximum, current, cap.message);
+    await this.emitBudgetEvent('budget:block', ctx, cap, current, limit);
+    throw makeEnforcementError(cap.field, limit, current, cap.message);
   }
 
   // ── Enforcement: pre:model_request ────────────────────────────────────────
@@ -797,17 +1029,22 @@ class BudgetPlugin implements Plugin {
       agentName,
       providerType
     );
+    // Tool-path-only caps are excluded here; 'context' (peak request) is
+    // model-path-only and stays in the evaluated set.
     const modelCaps = caps.filter((c) => c.field !== 'toolCalls');
     if (modelCaps.length === 0) return;
 
-    // One snapshot, one DB round-trip per unique scope/window
+    // One snapshot, one DB round-trip per unique scope/window. The tools-aware
+    // estimate of the PENDING request feeds the 'context' enforcement value
+    // (owner ruling 4 — catch early, reject one-request-lag).
     const snap = this.buildSnapshot(
       modelCaps,
       acc,
       taskId,
       sessionId,
       agentName,
-      dimScope
+      dimScope,
+      estimateRequestContext(p.messages, p.tools)
     );
     for (const cap of modelCaps) {
       await this.evaluateCap(cap, snap, p.executionContext, dimMode, dimScope);
@@ -826,11 +1063,14 @@ class BudgetPlugin implements Plugin {
     const acc = this.accumulators.get(executionContext.taskId);
     if (!acc) return;
 
-    if (caps.length === 0) return;
+    // 'context' is peak-request — model path only (there is no pending request to
+    // estimate at tool-call time). Exclude it from the tool path.
+    const toolCaps = caps.filter((c) => c.field !== 'context');
+    if (toolCaps.length === 0) return;
 
     const currentToolCalls = acc.toolCalls.get(toolName) ?? 0;
     const snap = this.buildSnapshot(
-      caps,
+      toolCaps,
       acc,
       executionContext.taskId,
       executionContext.sessionId,
@@ -838,16 +1078,17 @@ class BudgetPlugin implements Plugin {
       dimScope
     );
 
-    for (const cap of caps) {
+    for (const cap of toolCaps) {
+      const limit = this.resolveCapLimit(cap, executionContext);
       const current =
         cap.field === 'toolCalls'
           ? currentToolCalls
           : this.getSnapshotValue(snap, cap, dimScope);
-      if (current >= cap.maximum) {
+      if (current >= limit) {
         const msg =
           cap.message ??
           `tool "${toolName}": ${cap.field} limit is ${
-            cap.maximum
+            limit
           }, current value is ${Math.round(current)}`;
         const capMode = cap.mode ?? mode ?? 'warning';
         if (capMode === 'warning') {
@@ -857,6 +1098,7 @@ class BudgetPlugin implements Plugin {
             executionContext,
             cap,
             current,
+            limit,
             msg
           );
           throw makeToolWarning(toolName, callId, msg);
@@ -868,11 +1110,12 @@ class BudgetPlugin implements Plugin {
           executionContext,
           cap,
           current,
+          limit,
           msg
         );
         throw makeEnforcementError(
           `tool:${toolName}:${cap.field}`,
-          cap.maximum,
+          limit,
           current,
           cap.message
         );
@@ -908,7 +1151,10 @@ class BudgetPlugin implements Plugin {
     }
 
     for (const cap of sizeCaps) {
-      if (totalChars <= cap.maximum) continue;
+      // responseSize caps always carry an explicit `maximum` (schema-enforced);
+      // resolveCapLimit just narrows the optional for TS.
+      const limit = this.resolveCapLimit(cap, p.executionContext);
+      if (totalChars <= limit) continue;
 
       const capMode = cap.mode ?? mode ?? 'warning';
       if (capMode === 'block') {
@@ -917,12 +1163,12 @@ class BudgetPlugin implements Plugin {
             type: 'text',
             text:
               cap.message ??
-              `Response size (${totalChars} chars) exceeds limit of ${cap.maximum}. Use offset/limit or shell paging tools instead.`,
+              `Response size (${totalChars} chars) exceeds limit of ${limit}. Use offset/limit or shell paging tools instead.`,
           },
         ];
         p.isError = true;
       } else {
-        let remaining = cap.maximum;
+        let remaining = limit;
         const truncated: unknown[] = [];
         for (const part of content) {
           if (typeof part !== 'object' || part === null) {
