@@ -24,6 +24,15 @@
  * Safety guarantees:
  *  - Read-only over the flat file (a separate `{ readonly: true }`
  *    better-sqlite3 connection) — the legacy file is never modified.
+ *  - Pinned-path exception (DEBT-AGENTMCP-MIGRATION-PINNED-MARKER-001): when
+ *    the operational DB is itself pinned to the flat legacy path
+ *    (`ADHD_AGENT_DATABASE_PATH` → the flat file, the exact configuration the
+ *    global server runs under), `canonical` IS the flat file. In that case
+ *    the migration is DEFERRED without writing anything — not even the
+ *    marker, whose `CREATE TABLE`/`INSERT` would modify the very store this
+ *    module promises to leave untouched. The deferral is logged explicitly;
+ *    the namespaced store stays empty only until a zero-config boot resolves
+ *    a distinct canonical path and performs the real copy.
  *  - Zero-agent guard: if the canonical store ALREADY has agent rows, nothing
  *    is copied (canonical is authoritative; no merging, no duplication) and
  *    the marker is still recorded so the guard is stable across boots.
@@ -76,7 +85,8 @@ export interface LegacyMigrationOutcome {
     | "already-migrated"
     | "canonical-populated"
     | "canonical-not-migrated"
-    | "flat-empty";
+    | "flat-empty"
+    | "deferred-pinned-flat";
 }
 
 /** The flat legacy path: `~/.adhd/agent-mcp/agents.db`. `$HOME` wins over
@@ -149,6 +159,27 @@ export function migrateLegacyOperationalDb(
 ): LegacyMigrationOutcome {
   const flatDbPath = opts.flatDbPath ?? resolveFlatLegacyDbPath();
   const log = opts.log ?? ((level, message) => console[level](message));
+
+  // DEBT-AGENTMCP-MIGRATION-PINNED-MARKER-001: when the operational DB is
+  // pinned (`ADHD_AGENT_DATABASE_PATH` → the flat legacy path — the exact
+  // configuration the global server runs under), `canonical` IS the flat
+  // file. Recording the marker here would `CREATE TABLE`/`INSERT` on the
+  // very store this module promises never to modify, and the "copy" would be
+  // flat→same-file. Detect the pin via the canonical connection's own file
+  // path (better-sqlite3 `db.name`), compared with the SAME `path.resolve`
+  // lexical normalization `db/client.ts` applies to the canonical path. On a
+  // pin, defer WITHOUT writing anything and log it explicitly — the
+  // namespaced store stays empty only until a zero-config boot.
+  const canonicalDbPath = path.resolve(canonical.name);
+  if (canonicalDbPath === path.resolve(flatDbPath)) {
+    log(
+      "info",
+      `migrate-legacy: deferred — operational DB is pinned to the flat legacy path "${canonicalDbPath}"; ` +
+        "not modifying the flat store; the namespaced migration runs at a zero-config boot " +
+        "(DEBT-AGENTMCP-MIGRATION-PINNED-MARKER-001)",
+    );
+    return { copied: false, agentsCopied: 0, reason: "deferred-pinned-flat" };
+  }
 
   if (!fs.existsSync(flatDbPath)) {
     return { copied: false, agentsCopied: 0, reason: "no-flat-db" };
