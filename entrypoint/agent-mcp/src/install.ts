@@ -208,9 +208,35 @@ function parseInstallArgs(argv: string[]): ParsedInstallArgs {
   let scope: McpScope = 'user';
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === '--host') hostArg = argv[++i] ?? 'all';
-    else if (arg === '--scope') scope = (argv[++i] as McpScope) ?? 'user';
-    else throw new Error(`agent-mcp-install: unknown argument "${arg}" (expected --host/--scope)`);
+    if (arg === '--host') {
+      // DEBT-AGENTMCP-INSTALL-HOST-DEFAULT-001: a missing --host value —
+      // whether a bare trailing --host or a flag sitting in the value
+      // position (`--host --scope user`) — must error, never silently
+      // degrade to the "all" default and install into every host's config.
+      // `all` is only legal when spelled out literally.
+      const value = argv[i + 1];
+      if (value === undefined || value.startsWith('--')) {
+        throw new Error(
+          `agent-mcp-install: --host requires a value (${[...ALL_HOSTS, 'all'].join('|')}) — got no value before the next flag; see --help for usage`,
+        );
+      }
+      i++;
+      hostArg = value;
+    } else if (arg === '--scope') {
+      // DEBT-AGENTMCP-INSTALL-HOST-DEFAULT-001 (scope mirror): a missing
+      // --scope value — bare trailing --scope, or a flag sitting in the
+      // value position (`--scope --host claude`) — must error, never
+      // silently degrade to the "user" default and install into every
+      // host's config.
+      const value = argv[i + 1];
+      if (value === undefined || value.startsWith('--')) {
+        throw new Error(
+          `agent-mcp-install: --scope requires a value (user|project) — got no value before the next flag; see --help for usage`,
+        );
+      }
+      i++;
+      scope = value as McpScope;
+    } else throw new Error(`agent-mcp-install: unknown argument "${arg}" (expected --host/--scope)`);
   }
   if (scope !== 'user' && scope !== 'project') {
     throw new Error(`agent-mcp-install: --scope must be "user" or "project", got "${scope}"`);
