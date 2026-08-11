@@ -29,7 +29,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 
-import { migrateLegacyOperationalDb, resolveFlatLegacyDbPath } from '../db/migrate-legacy.js';
+import {
+  LEGACY_MIGRATION_MARKER_TABLE,
+  migrateLegacyOperationalDb,
+  resolveFlatLegacyDbPath,
+} from '../db/migrate-legacy.js';
 import { runMigrationsOn } from '../db/migrate-runner.js';
 
 const cleanupDirs: string[] = [];
@@ -189,6 +193,51 @@ describe('DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001 — legacy flat-path migratio
 
     expect(outcome.copied).toBe(false);
     expect(countRows(canonical, 'agents')).toBe(0);
+
+    canonical.close();
+  });
+
+  it('DEBT-AGENTMCP-MIGRATION-PINNED-MARKER-001 — when the operational DB is pinned to the flat legacy path, defers WITHOUT writing the marker to (or otherwise modifying) the flat file, and logs it explicitly', () => {
+    const flatDir = mkTmpDir('legacy-migration-pinned');
+    const flatPath = join(flatDir, '.adhd', 'agent-mcp', 'agents.db');
+    const flat = openMigratedDb(flatPath);
+    seedAgents(flat, ['pinned-agent-1', 'pinned-agent-2', 'pinned-agent-3']);
+    expect(countRows(flat, 'agents')).toBe(3);
+    flat.close();
+
+    // Simulate the production pin: db/client.ts resolves
+    // `ADHD_AGENT_DATABASE_PATH` (the flat legacy path) via `path.resolve`
+    // and opens the canonical connection ON that file. So `canonical` IS the
+    // flat file — and the zero-agent guard sees the 3 real agents. Pre-fix
+    // this is exactly where `recordMarker()` wrote `__legacy_db_migration`
+    // INTO the flat store, violating the read-only guarantee.
+    const canonical = openMigratedDb(flatPath);
+    expect(countRows(canonical, 'agents')).toBe(3);
+
+    const logs: Array<[string, string]> = [];
+    const outcome = migrateLegacyOperationalDb(canonical, {
+      flatDbPath: flatPath,
+      log: (level, message) => logs.push([level, message]),
+    });
+
+    // (a) Deferred outcome — no copy claimed, nothing written.
+    expect(outcome.copied).toBe(false);
+    expect(outcome.agentsCopied).toBe(0);
+    expect(outcome.reason).toBe('deferred-pinned-flat');
+
+    // (c) The deferral is logged explicitly at info level, naming the pin.
+    expect(
+      logs.some(
+        ([level, message]) => level === 'info' && message.includes('pinned to the flat legacy path'),
+      ),
+    ).toBe(true);
+
+    // (b) The file's schema is untouched — no marker table, data intact.
+    const markerTable = canonical
+      .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`)
+      .get(LEGACY_MIGRATION_MARKER_TABLE);
+    expect(markerTable).toBeUndefined();
+    expect(countRows(canonical, 'agents')).toBe(3);
 
     canonical.close();
   });
