@@ -1277,6 +1277,30 @@ async function enforcePreTool(
   await hooks.enforce('pre:tool_call', payload);
 }
 
+/**
+ * Packet C helper: emit post:tool_call for an EXECUTED tool call, the seam the
+ * engine fires ONLY for tools that actually ran (orchestrator.ts Phase 2 map).
+ * `isError: true` simulates client.callTool throwing — the only signal the
+ * error budget counts (thrown-errors-only per owner lean, plan §3).
+ */
+async function emitPostToolCall(
+  hooks: HookRegistry,
+  ctx: ExecutionContext,
+  toolName: string,
+  callId: string,
+  isError: boolean
+): Promise<void> {
+  await hooks.emit('post:tool_call', {
+    executionContext: ctx,
+    toolName,
+    callId,
+    toolInput: {},
+    result: isError ? { error: 'tool boom' } : { ok: true },
+    isError,
+    estResultTokens: 0,
+  });
+}
+
 // ── Cache-token double-count (BUG-ORCH-010) ─────────────────────────────────
 //
 // Since the shipped BUG-ORCH-010 provider-neutral fix, `TokenUsage.inputTokens` is
@@ -2296,5 +2320,321 @@ describe('Packet B — tokens → context (BUG-AGENTMCP-009)', () => {
       code: 'BUDGET_EXCEEDED',
       message: expect.stringContaining('context'),
     });
+  });
+});
+
+// ── Packet C — errors + consecutiveErrors caps (plan §3) ─────────────────────
+//
+// Task-level ERROR BUDGET: counted at post:tool_call from the engine's isError
+// flag (thrown-errors-only — the only signal distinguishable at that seam),
+// enforced on the TOOL path only. `errors` is cumulative; `consecutiveErrors`
+// resets to 0 on any successful tool call. Windowed/non-task-scoped error caps
+// are schema errors (not expressible this wave). Warning-by-default is free on
+// the tool path (`cap.mode ?? dimMode ?? 'warning'`, owner ruling 5).
+//
+// Regression discipline (BL-225): on the pre-Packet-C code the 'errors' /
+// 'consecutiveErrors' fields fail capSchema validation (createPlugin throws),
+// so every enforcement test below fails red before the fix and goes green after.
+describe('Packet C — errors + consecutiveErrors caps', () => {
+  let hooks: HookRegistry;
+
+  beforeEach(() => {
+    hooks = new HookRegistry();
+  });
+
+  it('3 failures with errors: 2 mode block → the 3rd enforce rejects (BUDGET_EXCEEDED)', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: { caps: [{ field: 'errors', maximum: 2, mode: 'block' }] },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    // Fail 1: pre sees 0 < 2 → passes, executes, errors=1.
+    await enforcePreTool(hooks, ctx, 'shell__run', 'call-1');
+    await emitPostToolCall(hooks, ctx, 'shell__run', 'call-1', true);
+    // Fail 2: pre sees 1 < 2 → passes, executes, errors=2.
+    await enforcePreTool(hooks, ctx, 'shell__run', 'call-2');
+    await emitPostToolCall(hooks, ctx, 'shell__run', 'call-2', true);
+    // Fail 3: pre sees 2 >= 2 → BUDGET_EXCEEDED, never executes.
+    await expect(
+      enforcePreTool(hooks, ctx, 'shell__run', 'call-3')
+    ).rejects.toMatchObject({
+      isEnforcementError: true,
+      code: 'BUDGET_EXCEEDED',
+      message: expect.stringContaining('errors'),
+    });
+  });
+
+  it('consecutive reset: fail, fail, success, fail with consecutiveErrors: 3 mode block → never blocks', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: {
+          caps: [{ field: 'consecutiveErrors', maximum: 3, mode: 'block' }],
+        },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    // Fail 1: streak 0→1. Fail 2: streak 1→2. Success: pre sees 2 < 3 passes,
+    // then the success RESETS the streak to 0. Fail 3: pre sees 0 < 3 passes.
+    // The reset is what keeps every enforce below the cap.
+    await enforcePreTool(hooks, ctx, 'shell__run', 'call-1');
+    await emitPostToolCall(hooks, ctx, 'shell__run', 'call-1', true);
+    await enforcePreTool(hooks, ctx, 'shell__run', 'call-2');
+    await emitPostToolCall(hooks, ctx, 'shell__run', 'call-2', true);
+    await enforcePreTool(hooks, ctx, 'shell__run', 'call-3');
+    await emitPostToolCall(hooks, ctx, 'shell__run', 'call-3', false); // success resets
+    await enforcePreTool(hooks, ctx, 'shell__run', 'call-4');
+    await emitPostToolCall(hooks, ctx, 'shell__run', 'call-4', true);
+
+    // A 5th call is still under the cap — the streak never survived the success.
+    await expect(
+      enforcePreTool(hooks, ctx, 'shell__run', 'call-5')
+    ).resolves.toBeUndefined();
+  });
+
+  it('fail, fail, fail with consecutiveErrors: 3 → streak reaches 3, the NEXT enforce rejects', async () => {
+    // Semantics note: enforcement uses `current >= maximum` at pre:tool_call
+    // with the streak counted AFTER each executed error — the exact threshold
+    // the `errors` cap relies on (3rd of 3 rejects at maximum 2). So at
+    // maximum 3 the third fail itself executes (streak 2 < 3) and the call
+    // after it rejects (3 >= 3).
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: {
+          caps: [{ field: 'consecutiveErrors', maximum: 3, mode: 'block' }],
+        },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    await enforcePreTool(hooks, ctx, 'shell__run', 'call-1');
+    await emitPostToolCall(hooks, ctx, 'shell__run', 'call-1', true); // streak 1
+    await enforcePreTool(hooks, ctx, 'shell__run', 'call-2');
+    await emitPostToolCall(hooks, ctx, 'shell__run', 'call-2', true); // streak 2
+    // Third fail: 2 < 3 → executes, streak reaches 3.
+    await enforcePreTool(hooks, ctx, 'shell__run', 'call-3');
+    await emitPostToolCall(hooks, ctx, 'shell__run', 'call-3', true); // streak 3
+
+    // The next enforce sees 3 >= 3 → BUDGET_EXCEEDED.
+    await expect(
+      enforcePreTool(hooks, ctx, 'shell__run', 'call-4')
+    ).rejects.toMatchObject({
+      isEnforcementError: true,
+      code: 'BUDGET_EXCEEDED',
+      message: expect.stringContaining('consecutiveErrors'),
+    });
+  });
+
+  it('errors: 2 mode-less → warns (IToolWarning soft-block), does not block (ruling 5 default)', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: { caps: [{ field: 'errors', maximum: 2 }] }, // no mode
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    await enforcePreTool(hooks, ctx, 'shell__run', 'call-1');
+    await emitPostToolCall(hooks, ctx, 'shell__run', 'call-1', true);
+    await enforcePreTool(hooks, ctx, 'shell__run', 'call-2');
+    await emitPostToolCall(hooks, ctx, 'shell__run', 'call-2', true);
+
+    // 3rd call: 2 >= 2, mode-less → warning (IToolWarning), NOT an
+    // IEnforcementError — the run continues with a soft-blocked call.
+    let caught: unknown;
+    try {
+      await enforcePreTool(hooks, ctx, 'shell__run', 'call-3');
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toMatchObject({ isToolWarning: true, callId: 'call-3' });
+    expect(caught).not.toMatchObject({ isEnforcementError: true });
+  });
+
+  it('all-success run never trips either cap', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: {
+          caps: [
+            { field: 'errors', maximum: 2, mode: 'block' },
+            { field: 'consecutiveErrors', maximum: 3, mode: 'block' },
+          ],
+        },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    for (let i = 1; i <= 5; i++) {
+      await enforcePreTool(hooks, ctx, 'shell__run', `call-${i}`);
+      await emitPostToolCall(hooks, ctx, 'shell__run', `call-${i}`, false);
+    }
+    // Still alive after 5 successful calls.
+    await expect(
+      enforcePreTool(hooks, ctx, 'shell__run', 'call-6')
+    ).resolves.toBeUndefined();
+  });
+
+  it('both caps reject window (schema error) — and the rejection is about window, not the field', async () => {
+    for (const field of ['errors', 'consecutiveErrors'] as const) {
+      const result = pluginConfigSchema.safeParse({
+        defaults: { caps: [{ field, maximum: 5, window: 'PT24H' }] },
+      });
+      expect(result.success).toBe(false);
+      // The failure must be the window rejection (post-fix), not the enum
+      // rejection (pre-fix the field doesn't exist at all) — asserting the
+      // issue path makes this test discriminate red vs green.
+      expect(
+        result.success === false &&
+          result.error.issues.some(
+            (i) => i.path.join('.') === 'defaults.caps.0.window'
+          )
+      ).toBe(true);
+      // The factory path (what the loader hits) throws too.
+      expect(() =>
+        createPlugin({
+          db: null,
+          config: { defaults: { caps: [{ field, maximum: 5, window: 'PT24H' }] } },
+        })
+      ).toThrow();
+    }
+  });
+
+  it('errors caps are enforced on the tool path only — a model-path-only task never increments errors', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: { caps: [{ field: 'errors', maximum: 0, mode: 'block' }] },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    // Model path: an errors cap with maximum 0 would reject at the very first
+    // enforce IF errors were enforced there. It resolves — the cap is excluded
+    // from the model path (TOOL_PATH_ONLY_FIELDS), and a model-only task has
+    // executed zero tools, so the counter is 0.
+    await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
+
+    // Control: the same cap IS live on the tool path — the first tool call
+    // (current 0 >= maximum 0) is blocked. Proves the cap wasn't just inert.
+    await expect(
+      enforcePreTool(hooks, ctx, 'shell__run', 'call-1')
+    ).rejects.toMatchObject({
+      isEnforcementError: true,
+      code: 'BUDGET_EXCEEDED',
+      message: expect.stringContaining('errors'),
+    });
+  });
+
+  it('NON-SELF-AMPLIFYING: a warning-mode errors cap never feeds its own counter (plan §3 verified paragraph)', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: { caps: [{ field: 'errors', maximum: 2, mode: 'warning' }] },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+    const warnings: BudgetWarningPayload[] = [];
+    hooks.register('budget:warning', (p) => {
+      warnings.push(p);
+    });
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    // Two REAL errors execute and are counted: errors = 2.
+    await enforcePreTool(hooks, ctx, 'shell__run', 'call-1');
+    await emitPostToolCall(hooks, ctx, 'shell__run', 'call-1', true);
+    await enforcePreTool(hooks, ctx, 'shell__run', 'call-2');
+    await emitPostToolCall(hooks, ctx, 'shell__run', 'call-2', true);
+
+    // The cap now trips (2 >= 2). Each tripped call fires IToolWarning at
+    // pre:tool_call; the orchestrator injects a warningResult and SKIPS the
+    // call (orchestrator.ts:619-626, Phase-2 filter 645-647) — it never
+    // reaches post:tool_call, so the counter cannot grow from its own
+    // warnings. The test models that skip: no emitPostToolCall in this loop.
+    for (let cycle = 1; cycle <= 5; cycle++) {
+      let caught: unknown;
+      try {
+        await enforcePreTool(hooks, ctx, 'shell__run', `call-w${cycle}`);
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught).toMatchObject({ isToolWarning: true });
+    }
+
+    // Every warning reports current === 2. Had the counter fed itself, cycle 2
+    // onwards would report 3, 4, ... — the proof of non-amplification.
+    expect(warnings).toHaveLength(5);
+    for (const w of warnings) {
+      expect(w).toMatchObject({ field: 'errors', maximum: 2, current: 2 });
+    }
+  });
+
+  it('tool-scoped context cap → schema error (Packet B review finding, plan §8.9)', async () => {
+    // A `{field:'context'}` cap in the tool block is a silent no-op: the tool
+    // path filters 'context' out and the model path can't see tool overrides.
+    // Rejected at the schema level — in tool.default AND tool.overrides.
+    const inDefault = pluginConfigSchema.safeParse({
+      defaults: {},
+      tool: { default: { caps: [{ field: 'context', maximum: 1000 }] } },
+    });
+    expect(inDefault.success).toBe(false);
+
+    const inOverride = pluginConfigSchema.safeParse({
+      defaults: {},
+      tool: { overrides: { some_tool: { caps: [{ field: 'context', maximum: 1000 }] } } },
+    });
+    expect(inOverride.success).toBe(false);
+
+    // The factory path (what the loader hits) throws too.
+    expect(() =>
+      createPlugin({
+        db: null,
+        config: {
+          tool: { default: { caps: [{ field: 'context', maximum: 1000 }] } },
+        },
+      })
+    ).toThrow();
+  });
+
+  it('context with BOTH maximum and contextWindowFraction set → schema error (Packet B finding 3 negative test)', async () => {
+    // The Packet B superRefine handles the both-set (illegal) case via
+    // `hasMaximum === hasFraction`; this negative test pins that branch.
+    const result = pluginConfigSchema.safeParse({
+      defaults: {
+        caps: [{ field: 'context', maximum: 1000, contextWindowFraction: 0.5 }],
+      },
+    });
+    expect(result.success).toBe(false);
+    expect(
+      result.success === false &&
+        result.error.issues.some(
+          (i) => i.path.join('.') === 'defaults.caps.0.contextWindowFraction'
+        )
+    ).toBe(true);
   });
 });

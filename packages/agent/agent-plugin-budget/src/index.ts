@@ -39,13 +39,17 @@ function parseIsoDuration(dur: string): number {
 
 // ── Cap schema ───────────────────────────────────────────────────────────────
 
-// Field vocabulary (PLAN-run-control-v2 Packet B, BUG-AGENTMCP-009):
+// Field vocabulary (PLAN-run-control-v2 Packet B/C, BUG-AGENTMCP-009):
 //   - 'context' — PEAK single-request input size (the high-water mark the model
 //     actually saw, or the tools-aware estimate of the pending request), NOT
 //     cumulative volume. Model-path only.
 //   - 'inputTokens'/'outputTokens' — CUMULATIVE per-dimension volume (the
 //     resource-burn axis); windowed caps on them express the old
 //     maxTokensPer24h-class limits (owner ruling 3).
+//   - 'errors'/'consecutiveErrors' — task-level ERROR BUDGET (Packet C): counted
+//     at post:tool_call from the engine's isError flag, enforced on the tool
+//     path only. Windowed/scoped errors are not expressible this wave (schema
+//     rejects `window` and non-task `scope` — no task_usage column for errors).
 // 'tokens' (cumulative input+output, misread as context size) is REMOVED —
 // `assertNoLegacyTokensConfig` rejects it with an explicit migration message.
 const FIELD_NAMES = [
@@ -57,8 +61,19 @@ const FIELD_NAMES = [
   'modelMs',
   'cost',
   'toolCalls',
+  'errors',
+  'consecutiveErrors',
   'responseSize',
 ] as const;
+
+/**
+ * Cap fields enforced exclusively at pre:tool_call. They must NEVER appear on
+ * the model path: 'toolCalls' is per-tool; 'errors'/'consecutiveErrors'
+ * (Packet C) are counted at post:tool_call — the only seam where the engine
+ * exposes an error signal — and therefore can only be enforced at the next
+ * tool call. `enforcePreModel` filters these out of the model-path cap set.
+ */
+const TOOL_PATH_ONLY_FIELDS = new Set(['toolCalls', 'errors', 'consecutiveErrors']);
 
 /**
  * Cap schema. `maximum` is optional at the base level because a `context` cap may
@@ -67,7 +82,9 @@ const FIELD_NAMES = [
  *   - `context` requires EXACTLY ONE of `maximum` / `contextWindowFraction`;
  *   - `context` REJECTS `window` (a windowed PEAK is meaningless; windowed
  *     cumulative volume is expressible via `inputTokens`/`outputTokens` + `window`);
- *   - non-`context` fields REJECT `contextWindowFraction` and REQUIRE `maximum`.
+ *   - non-`context` fields REJECT `contextWindowFraction` and REQUIRE `maximum`;
+ *   - `errors`/`consecutiveErrors` REJECT `window` and non-task `scope`
+ *     (Packet C — windowed/scoped error budgets are not expressible this wave).
  */
 const capSchema = z
   .object({
@@ -101,6 +118,27 @@ const capSchema = z
         });
       }
     } else {
+      if (cap.field === 'errors' || cap.field === 'consecutiveErrors') {
+        // Packet C (plan §3): the error budget is counted per-task in memory
+        // from the engine's post:tool_call isError flag — there is no
+        // task_usage column for errors, so windowed or session/agent/global
+        // scoped error budgets are not expressible this wave. Rejecting them
+        // here (schema error) prevents a silently mis-scoped cap.
+        if (cap.window !== undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['window'],
+            message: `cap field '${cap.field}' rejects 'window' — windowed error budgets are not expressible this wave`,
+          });
+        }
+        if (cap.scope !== undefined && cap.scope !== 'task') {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['scope'],
+            message: `cap field '${cap.field}' is counted per-task in memory (no task_usage column) — only 'task' scope is expressible this wave`,
+          });
+        }
+      }
       if (cap.contextWindowFraction !== undefined) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -139,6 +177,35 @@ const dimensionSchema = z.object({
 
 type DimensionConfig = z.infer<typeof dimensionSchema>;
 
+/**
+ * Tool-scoped cap dimensions REJECT 'context' (Packet B review finding, plan
+ * §8.9): `enforcePreTool` filters 'context' out (there is no pending request to
+ * estimate at tool-call time) and `enforcePreModel` cannot see tool overrides —
+ * so a `{field:'context'}` cap placed in `tool.default`/`tool.overrides` was a
+ * SILENT no-op. Reject it as a schema error, not a warning. A model-scope
+ * `context` cap belongs in `defaults`/`agent`/`provider` (where it merges into
+ * the model-path cap set).
+ *
+ * NOTE: `.partial()` must be applied BEFORE `.superRefine()` — Zod 4 rejects
+ * `.partial()` on a schema that already carries refinements.
+ */
+const toolDimensionSchema = dimensionSchema
+  .partial()
+  .superRefine((dim, ctx) => {
+    const caps = dim.caps ?? [];
+    for (const [i, cap] of caps.entries()) {
+      if (cap.field === 'context') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['caps', i, 'field'],
+          message:
+            "cap field 'context' is only valid at model scope — a tool-scoped 'context' cap is a silent no-op " +
+            "(enforced on the model path, invisible to tool overrides); place it in 'defaults'/'agent'/'provider' instead",
+        });
+      }
+    }
+  });
+
 // ── Full plugin config ───────────────────────────────────────────────────────
 
 export const pluginConfigSchema = z.object({
@@ -163,9 +230,9 @@ export const pluginConfigSchema = z.object({
     .optional(),
   tool: z
     .object({
-      default: dimensionSchema.optional(),
+      default: toolDimensionSchema.optional(),
       overrides: z
-        .record(z.string(), dimensionSchema.partial())
+        .record(z.string(), toolDimensionSchema)
         .optional()
         .default({}),
     })
@@ -401,6 +468,13 @@ interface BudgetAccumulator {
   totalModelMs: number;
   modelCallStartMs?: number;
   toolCalls: Map<string, number>;
+  // Packet C — task-level ERROR BUDGET (plan §3): fed ONLY at post:tool_call
+  // from the engine's isError flag (onPostToolCall), enforced on the tool path.
+  // `errors` is cumulative; `consecutiveErrors` resets to 0 on any successful
+  // tool call. Task scope only — windowed/scoped errors are not expressible
+  // this wave (schema rejects both).
+  errors: number;
+  consecutiveErrors: number;
 }
 
 interface UsageTotals {
@@ -453,6 +527,13 @@ class BudgetPlugin implements Plugin {
     hooks.register('post:model_response', (p) => {
       try {
         this.onPostModelResponse(p);
+      } catch {
+        /* observational */
+      }
+    });
+    hooks.register('post:tool_call', (p) => {
+      try {
+        this.onPostToolCall(p);
       } catch {
         /* observational */
       }
@@ -514,6 +595,8 @@ class BudgetPlugin implements Plugin {
       modelCalls: 0,
       totalModelMs: 0,
       toolCalls: new Map(),
+      errors: 0,
+      consecutiveErrors: 0,
     });
   }
 
@@ -573,6 +656,32 @@ class BudgetPlugin implements Plugin {
 
   private onTerminal(taskId: string): void {
     this.accumulators.delete(taskId);
+  }
+
+  /**
+   * Packet C — error counters (plan §3): the ONLY place the error budget
+   * changes. Fires at post:tool_call, which the orchestrator emits exclusively
+   * for EXECUTED tools (orchestrator.ts Phase 2 map, post:tool_call emit). A
+   * call soft-blocked by an IToolWarning at pre:tool_call is injected as a
+   * warningResult and SKIPPED (orchestrator.ts:619-626, filter at 645-647) —
+   * it never reaches Phase 2 and never emits post:tool_call. That is the
+   * non-self-amplifying guarantee: a warning-mode errors cap's own warnings are
+   * never counted, so the counter cannot feed itself.
+   *
+   * Thrown-errors-only (owner lean, plan §3): `isError` is true at this
+   * boundary only when the tool's callTool THREW (orchestrator.ts:718);
+   * error-shaped non-throwing results are indistinguishable from success here.
+   */
+  private onPostToolCall(p: PostToolCallPayload): void {
+    const acc = this.accumulators.get(p.executionContext.taskId);
+    if (!acc) return;
+    if (p.isError) {
+      acc.errors += 1;
+      acc.consecutiveErrors += 1;
+    } else {
+      // A successful tool call breaks the consecutive-error streak.
+      acc.consecutiveErrors = 0;
+    }
   }
 
   // ── Config resolution ─────────────────────────────────────────────────────
@@ -831,6 +940,11 @@ class BudgetPlugin implements Plugin {
     // the tools-aware estimate of the request about to be sent (ruling 4: catch
     // early, reject one-request-lag).
     snap['context'] = Math.max(acc.peakContextTokens, requestEstimate);
+    // Packet C — task-level error budget counters (fed ONLY at post:tool_call,
+    // onPostToolCall). Task scope only: no task_usage column for errors, and
+    // the schema rejects windowed/non-task-scoped error caps.
+    snap['errors'] = acc.errors;
+    snap['consecutiveErrors'] = acc.consecutiveErrors;
     // Cache-weighted cost (BUG-AGENTMCP-008): each input class bills at its own rate.
     // With costPerCacheReadToken/costPerCacheWriteToken unset (default = costPerInput),
     // this collapses to inputTokens × costPerInput + outputTokens × costPerOutput —
@@ -929,6 +1043,15 @@ class BudgetPlugin implements Plugin {
         break;
       case 'toolCalls':
         base = 0; // resolved at enforcement time via toolName
+        break;
+      case 'errors':
+        // Task-level in-memory counter only — no task_usage column for errors
+        // (schema rejects `window` and non-task `scope`). Always the
+        // unscoped value: a dimension-level scope cannot re-scope an error cap.
+        base = snap['errors'];
+        break;
+      case 'consecutiveErrors':
+        base = snap['consecutiveErrors'];
         break;
       default:
         base = 0;
@@ -1029,9 +1152,14 @@ class BudgetPlugin implements Plugin {
       agentName,
       providerType
     );
-    // Tool-path-only caps are excluded here; 'context' (peak request) is
+    // Tool-path-only caps are excluded here: 'toolCalls' is per-tool; the
+    // Packet C error budget ('errors'/'consecutiveErrors') is counted at
+    // post:tool_call — the only place the error signal exists — and enforced
+    // on the tool path only (plan §3 Packet C). 'context' (peak request) is
     // model-path-only and stays in the evaluated set.
-    const modelCaps = caps.filter((c) => c.field !== 'toolCalls');
+    const modelCaps = caps.filter(
+      (c) => !TOOL_PATH_ONLY_FIELDS.has(c.field)
+    );
     if (modelCaps.length === 0) return;
 
     // One snapshot, one DB round-trip per unique scope/window. The tools-aware
@@ -1064,7 +1192,11 @@ class BudgetPlugin implements Plugin {
     if (!acc) return;
 
     // 'context' is peak-request — model path only (there is no pending request to
-    // estimate at tool-call time). Exclude it from the tool path.
+    // estimate at tool-call time). Exclude it from the tool path. The Packet C
+    // error-budget fields ('errors'/'consecutiveErrors') PASS through here — they
+    // are enforced on this path from the task-level counters fed at
+    // post:tool_call (onPostToolCall); warning-by-default falls out of the
+    // `cap.mode ?? mode ?? 'warning'` resolution below (owner ruling 5).
     const toolCaps = caps.filter((c) => c.field !== 'context');
     if (toolCaps.length === 0) return;
 
