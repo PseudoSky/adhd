@@ -218,6 +218,38 @@ describe('agent-mcp-install (BUG-AGENTMCP-006)', () => {
     expect(existsSync(join(tmp, '.codex', 'config.toml'))).toBe(false);
   });
 
+  it('DEBT-AGENTMCP-INSTALL-HOST-DEFAULT-001 (scope mirror): a bare trailing --scope throws and does NOT silently install to every host as user', () => {
+    let error: unknown;
+    try {
+      install(['--scope'], tmp, tmp);
+    } catch (e) {
+      error = e;
+    }
+    // Must throw — never degrade a missing --scope value to the "user" default.
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message).toMatch(/--scope/); // names the offending scope argument
+    expect(message).toMatch(/usage|--help|value/); // points at usage
+    // And nothing may have been written anywhere: no config for any host.
+    expect(existsSync(join(tmp, '.claude.json'))).toBe(false);
+    expect(existsSync(join(tmp, '.config', 'opencode', 'opencode.json'))).toBe(false);
+    expect(existsSync(join(tmp, '.codex', 'config.toml'))).toBe(false);
+  });
+
+  it('DEBT-AGENTMCP-INSTALL-HOST-DEFAULT-001 (adjacent flags): --host --scope user errors with the --host-missing-value message, not "unknown argument"', () => {
+    // `--scope` sits where --host's value should be: the parser must name the
+    // real defect (--host requires a value), never the misleading
+    // 'unknown argument "user"'.
+    expect(() => install(['--host', '--scope', 'user'], tmp, tmp)).toThrow(/--host requires a value/);
+  });
+
+  it('DEBT-AGENTMCP-INSTALL-HOST-DEFAULT-001 (adjacent flags, scope): --scope --host claude errors with the --scope-missing-value message, not "unknown argument"', () => {
+    // Mirror of the above for the --scope branch: `--host` sits where
+    // --scope's value should be, so the parser must throw the
+    // --scope-requires-a-value error.
+    expect(() => install(['--scope', '--host', 'claude'], tmp, tmp)).toThrow(/--scope requires a value/);
+  });
+
   it('explicit --host all still registers the MCP entry for every host', () => {
     const result = install(['--host', 'all', '--scope', 'user'], tmp, tmp);
     expect(result.mcp).toHaveLength(3);
