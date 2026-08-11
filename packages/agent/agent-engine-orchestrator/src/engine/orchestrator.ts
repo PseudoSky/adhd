@@ -510,17 +510,16 @@ export class Orchestrator {
 
             const resumeToken = crypto.randomUUID();
 
-            await taskStore.updateStatus(taskId, 'awaiting_input', {
-              resumeToken,
-            });
-            emit({
-              type: 'status_change',
-              taskId,
-              status: 'awaiting_input',
-            });
-
+            // DEBT-AGENTMCP-HITL-TEST-CLEANUP-001: register the HITL resolver
+            // BEFORE the awaiting_input status write. taskResume (tools/task.ts)
+            // consumes the resolver synchronously right after observing the
+            // status + resumeToken, which are only published by the
+            // updateStatus/emit below — so a resume can never land in a window
+            // where the resolver is not yet registered. (Previously the write
+            // came first: a resume in that microtask window made resolveHitl
+            // return false → TASK_NOT_RESUMABLE and the task was marked FAILED.)
             let abortHandler: (() => void) | undefined;
-            const userInput = await new Promise<string>((resolve, reject) => {
+            const userInputPromise = new Promise<string>((resolve, reject) => {
               hitlResolvers.set(taskId, resolve);
               abortHandler = () => {
                 hitlResolvers.delete(taskId);
@@ -532,7 +531,27 @@ export class Orchestrator {
                 );
               };
               signal.addEventListener('abort', abortHandler, { once: true });
-            }).finally(() => {
+            });
+
+            try {
+              await taskStore.updateStatus(taskId, 'awaiting_input', {
+                resumeToken,
+              });
+            } catch (err) {
+              // Status write failed → the suspension never became observable;
+              // unregister the resolver + abort listener so nothing dangles.
+              hitlResolvers.delete(taskId);
+              if (abortHandler)
+                signal.removeEventListener('abort', abortHandler);
+              throw err;
+            }
+            emit({
+              type: 'status_change',
+              taskId,
+              status: 'awaiting_input',
+            });
+
+            const userInput = await userInputPromise.finally(() => {
               if (abortHandler)
                 signal.removeEventListener('abort', abortHandler);
             });
