@@ -861,6 +861,15 @@ class BudgetPlugin implements Plugin {
           );
           throw makeToolWarning(toolName, callId, msg);
         }
+        // Notification only (owner ruling 7, symmetric with warning) — the
+        // IEnforcementError throw stays the action.
+        await this.emitBudgetEvent(
+          'budget:block',
+          executionContext,
+          cap,
+          current,
+          msg
+        );
         throw makeEnforcementError(
           `tool:${toolName}:${cap.field}`,
           cap.maximum,

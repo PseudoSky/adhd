@@ -30,6 +30,12 @@
         ]
       }
     },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p packages/agent/agent-plugin-budget/tsconfig.lib.json --noEmit"
+      }
+    },
     "nx-release-publish": {
       "options": {
         "packageRoot": "{projectRoot}/dist"
