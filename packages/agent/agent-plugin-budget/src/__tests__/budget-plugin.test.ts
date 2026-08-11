@@ -622,7 +622,13 @@ describe('configSchema', () => {
     const hooks = new HookRegistry();
     plugin.install(hooks);
     const ctx = makeCtx();
-    // 2 calls should pass, 3rd blocked
+    // Flat maxModelCalls: 2 normalizes to a mode-less `calls` cap (maximum 2).
+    // Under warning-by-default (Packet A ruling 5) an exceeded mode-less cap
+    // WARNS — it never blocks. Two turns never exceed the cap at all, so
+    // nothing throws here; the "3rd blocked" reading was stale on both counts.
+    // Note: runTaskTurns is async and deliberately not awaited — the
+    // not.toThrow() wrapper only guards synchronous throws; vitest's
+    // unhandled-rejection detection is the real guard for async failures.
     expect(() => {
       runTaskTurns(hooks, ctx, [
         { inputTokens: 10, outputTokens: 10 },
@@ -1760,6 +1766,51 @@ describe('Packet A — cap.mode on the model path (budget:warning / budget:block
       field: 'toolCalls',
       maximum: 1,
       current: 1,
+    });
+  });
+
+  it('tool path: block-mode tool cap exceeded → budget:block emitted BEFORE the BUDGET_EXCEEDED throw', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: {},
+        tool: {
+          default: {},
+          overrides: {
+            blocked_tool: {
+              caps: [{ field: 'toolCalls', maximum: 1 }],
+              mode: 'block',
+            },
+          },
+        },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+    const order: string[] = [];
+    const blocks: BudgetBlockPayload[] = [];
+    hooks.register('budget:block', (p) => {
+      order.push('block-event');
+      blocks.push(p);
+    });
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    await enforcePreTool(hooks, ctx, 'blocked_tool', 'call-1'); // under cap → passes
+
+    await expect(
+      enforcePreTool(hooks, ctx, 'blocked_tool', 'call-2') // 1 >= 1 → block
+    ).rejects.toMatchObject({
+      isEnforcementError: true,
+      code: 'BUDGET_EXCEEDED',
+    });
+    // Emitted before the throw propagated — not after, not never.
+    expect(order).toEqual(['block-event']);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toMatchObject({
+      field: 'toolCalls',
+      maximum: 1,
+      current: 1,
+      message: expect.stringContaining('blocked_tool'),
     });
   });
 });
