@@ -110,8 +110,8 @@ describe("HITL suspend/resume (DEBT-AGENTMCP-HITL-TEST-001)", () => {
             expect(final.result).toBe("confirmed");
 
             // ── 5. TOOL_CALL task_event for request_human_input ───────────────
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const db = harness.db as any;
+            // harness.db is typed as TestDb (harness.ts) — no cast needed.
+            const db = harness.db;
             const events = db
                 .select()
                 .from(taskEventsTable)

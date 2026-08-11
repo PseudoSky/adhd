@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Orchestrator } from "../engine/orchestrator.js";
+import { Orchestrator, resolveHitl } from "../engine/orchestrator.js";
 import type { OrchestratorTaskStore, OrchestratorSessionStore } from "../engine/orchestrator.js";
 import { ToolError } from "../validation/errors.js";
 import { nowIso } from "../utils/timestamps.js";
@@ -546,5 +546,300 @@ describe("Orchestrator", () => {
                 code: "MAX_TOOL_LOOPS_EXCEEDED",
             });
         });
+    });
+
+    // ─────────────────────────────────────────────────────────────────────
+    // HITL suspend ordering — DEBT-AGENTMCP-HITL-TEST-CLEANUP-001
+    // ─────────────────────────────────────────────────────────────────────
+    describe("HITL suspend/resume ordering", () => {
+        it("registers the hitl resolver BEFORE the awaiting_input status write (no resume-in-window race)", async () => {
+            const ctx = makeCtx();
+            const orch = new Orchestrator();
+            const taskId = generateId();
+
+            // Simulates a taskResume landing the INSTANT the 'awaiting_input'
+            // status becomes observable: the status write itself is the resume
+            // trigger. If the orchestrator writes the status before registering
+            // the resolver, this synchronous resume returns false (the
+            // catastrophic TASK_NOT_RESUMABLE path) — the assertion below then
+            // goes red. The setImmediate retry mirrors a real client polling +
+            // retrying after observing the status, so the run always completes
+            // and the assertion — not a timeout — is the red signal.
+            let resolverPresentAtStatusWrite: boolean | undefined;
+            const hitlTaskStore: OrchestratorTaskStore = {
+                updateStatus: (tid, status) => {
+                    if (status === "awaiting_input") {
+                        resolverPresentAtStatusWrite = resolveHitl(tid, "yes");
+                        if (resolverPresentAtStatusWrite === false) {
+                            setImmediate(() => resolveHitl(tid, "yes"));
+                        }
+                    }
+                },
+                appendEvent: () => { /* no-op: test stub */ },
+                unregisterCancellation: () => { /* no-op: test stub */ },
+            };
+
+            // Turn 1 → request_human_input; after resume → 'completed'.
+            let turn = 0;
+            const hitlProvider: LLMProvider = {
+                chat: async (): Promise<ProviderChatResponse> => {
+                    turn++;
+                    if (turn === 1) {
+                        return {
+                            message: {
+                                id: generateId(),
+                                sessionId: ctx.sessionId,
+                                role: "assistant",
+                                content: "",
+                                toolCalls: [
+                                    {
+                                        id: generateId(),
+                                        server: "builtin",
+                                        tool: "request_human_input",
+                                        arguments: { prompt: "do you confirm?" },
+                                    },
+                                ],
+                                createdAt: nowIso(),
+                            },
+                            stopReason: "tool_calls",
+                        };
+                    }
+                    return {
+                        message: {
+                            id: generateId(),
+                            sessionId: ctx.sessionId,
+                            role: "assistant",
+                            content: "confirmed",
+                            createdAt: nowIso(),
+                        },
+                        stopReason: "completed",
+                    };
+                },
+            };
+
+            const result = await orch.run({
+                executionContext: ctx,
+                messages: [makeUserMessage(ctx.sessionId)],
+                registry,
+                provider: hitlProvider,
+                policy,
+                taskStore: hitlTaskStore,
+                sessionStore,
+                signal: new AbortController().signal,
+                taskId,
+            });
+
+            expect(
+                resolverPresentAtStatusWrite,
+                "hitl resolver must be registered before the awaiting_input status is written (a resume in that window must not see TASK_NOT_RESUMABLE)"
+            ).toBe(true);
+            expect(result.result).toBe("confirmed");
+        }, 10_000);
+
+        it("failed awaiting_input status_change emit does not kill the suspension or leak the resolver (DEBT-AGENTMCP-HITL-TEST-CLEANUP-001)", async () => {
+            const ctx = makeCtx();
+            const orch = new Orchestrator();
+            const taskId = generateId();
+
+            // Host's push-notification layer is broken: the awaiting_input
+            // broadcast throws (SSE listener failure). The status WRITE must
+            // still be the source of truth — the suspension survives, a
+            // resume completes normally, and no resolver is left dangling
+            // after the run finishes.
+            const warnCalls: unknown[] = [];
+            const testLogger = {
+                info: () => {},
+                warn: (msg: string | Record<string, unknown>) => {
+                    warnCalls.push(msg);
+                },
+                error: () => {},
+                debug: () => {},
+            };
+            const emitTaskEvent = (
+                event: { type: string; taskId: string; status?: string }
+            ) => {
+                if (
+                    event.type === "status_change" &&
+                    event.status === "awaiting_input"
+                ) {
+                    throw new Error("simulated SSE broadcast failure");
+                }
+            };
+
+            let turn = 0;
+            const hitlProvider: LLMProvider = {
+                chat: async (): Promise<ProviderChatResponse> => {
+                    turn++;
+                    if (turn === 1) {
+                        return {
+                            message: {
+                                id: generateId(),
+                                sessionId: ctx.sessionId,
+                                role: "assistant",
+                                content: "",
+                                toolCalls: [
+                                    {
+                                        id: generateId(),
+                                        server: "builtin",
+                                        tool: "request_human_input",
+                                        arguments: { prompt: "do you confirm?" },
+                                    },
+                                ],
+                                createdAt: nowIso(),
+                            },
+                            stopReason: "tool_calls",
+                        };
+                    }
+                    return {
+                        message: {
+                            id: generateId(),
+                            sessionId: ctx.sessionId,
+                            role: "assistant",
+                            content: "confirmed",
+                            createdAt: nowIso(),
+                        },
+                        stopReason: "completed",
+                    };
+                },
+            };
+
+            // Resume the suspension the moment the durable awaiting_input
+            // status is written (exactly how taskResume operates: it reads the
+            // STORE, not the failed broadcast). The emit failure must not
+            // have torn the suspension down — the resume completes normally.
+            const hitlTaskStore: OrchestratorTaskStore = {
+                updateStatus: (tid, status) => {
+                    if (status === "awaiting_input") {
+                        resolveHitl(tid, "yes");
+                    }
+                },
+                appendEvent: () => { /* no-op: test stub */ },
+                unregisterCancellation: () => { /* no-op: test stub */ },
+            };
+
+            try {
+                const result = await orch.run({
+                    executionContext: ctx,
+                    messages: [makeUserMessage(ctx.sessionId)],
+                    registry,
+                    provider: hitlProvider,
+                    policy,
+                    taskStore: hitlTaskStore,
+                    sessionStore,
+                    signal: new AbortController().signal,
+                    taskId,
+                    emitTaskEvent,
+                    logger: testLogger,
+                });
+
+                // The broadcast failure was a notification loss only — the
+                // suspension survived and the resume completed the task.
+                // Pre-fix this rejects instead (resolver leaked, run died).
+                expect(result.result).toBe("confirmed");
+            } finally {
+                // Defensive: if the run dies (pre-fix leak), drop any stray
+                // resolver so the module-level map never pollutes other tests.
+                resolveHitl(taskId, "test-cleanup");
+            }
+
+            // The failure was surfaced as a warn, not an exception.
+            expect(
+                warnCalls.length,
+                "emit failure must be logged at warn level, not thrown"
+            ).toBeGreaterThan(0);
+
+            // After a completed suspension the resolver is gone — a late
+            // resume must NOT "succeed" against a dangling entry.
+            expect(resolveHitl(taskId, "late")).toBe(false);
+        }, 10_000);
+
+        it("abort-during-status-write + write failure produces no unhandledRejection (DEBT-AGENTMCP-HITL-TEST-CLEANUP-001)", async () => {
+            const ctx = makeCtx();
+            const orch = new Orchestrator();
+            const taskId = generateId();
+            const controller = new AbortController();
+
+            // If the AbortSignal fires DURING the awaiting_input write and the
+            // write then throws, abortHandler has already rejected
+            // userInputPromise — a promise that is never awaited on this path.
+            // That rejection must be marked handled (void .catch in the
+            // catch block), otherwise Node 15+ crashes the process with
+            // unhandledRejection.
+            const unhandledRejections: unknown[] = [];
+            const onUnhandledRejection = (reason: unknown) => {
+                unhandledRejections.push(reason);
+            };
+            // Listen at the process level — the rejection escapes on a later
+            // event-loop tick, not in the same synchronous frame as the abort,
+            // so the listener must survive the drain below before it is
+            // removed (a premature removal would make the assertion vacuous).
+            process.on("unhandledRejection", onUnhandledRejection);
+
+            const hitlTaskStore: OrchestratorTaskStore = {
+                updateStatus: (tid, status) => {
+                    if (status === "awaiting_input") {
+                        // Fire the abort handler synchronously (it rejects
+                        // userInputPromise), then fail the write.
+                        controller.abort();
+                        throw new Error("simulated write failure during abort");
+                    }
+                },
+                appendEvent: () => { /* no-op: test stub */ },
+                unregisterCancellation: () => { /* no-op: test stub */ },
+            };
+
+            const hitlProvider: LLMProvider = {
+                chat: async (): Promise<ProviderChatResponse> => {
+                    return {
+                        message: {
+                            id: generateId(),
+                            sessionId: ctx.sessionId,
+                            role: "assistant",
+                            content: "",
+                            toolCalls: [
+                                {
+                                    id: generateId(),
+                                    server: "builtin",
+                                    tool: "request_human_input",
+                                    arguments: { prompt: "do you confirm?" },
+                                },
+                            ],
+                            createdAt: nowIso(),
+                        },
+                        stopReason: "tool_calls",
+                    };
+                },
+            };
+
+            try {
+                await expect(
+                    orch.run({
+                        executionContext: ctx,
+                        messages: [makeUserMessage(ctx.sessionId)],
+                        registry,
+                        provider: hitlProvider,
+                        policy,
+                        taskStore: hitlTaskStore,
+                        sessionStore,
+                        signal: controller.signal,
+                        taskId,
+                    })
+                ).rejects.toThrow("simulated write failure during abort");
+            } finally {
+                // Drain macro/microtask queues so a pre-fix unhandledRejection
+                // (emitted on a later tick) is observed by the listener before
+                // it is removed — no vacuous pass on timing.
+                await new Promise((resolve) => setTimeout(resolve, 20));
+                process.removeListener(
+                    "unhandledRejection",
+                    onUnhandledRejection
+                );
+            }
+
+            expect(
+                unhandledRejections,
+                "the abort-race rejection of userInputPromise must be marked handled"
+            ).toEqual([]);
+        }, 10_000);
     });
 });
