@@ -510,17 +510,16 @@ export class Orchestrator {
 
             const resumeToken = crypto.randomUUID();
 
-            await taskStore.updateStatus(taskId, 'awaiting_input', {
-              resumeToken,
-            });
-            emit({
-              type: 'status_change',
-              taskId,
-              status: 'awaiting_input',
-            });
-
+            // DEBT-AGENTMCP-HITL-TEST-CLEANUP-001: register the HITL resolver
+            // BEFORE the awaiting_input status write. taskResume (tools/task.ts)
+            // consumes the resolver synchronously right after observing the
+            // status + resumeToken, which are only published by the
+            // updateStatus/emit below — so a resume can never land in a window
+            // where the resolver is not yet registered. (Previously the write
+            // came first: a resume in that microtask window made resolveHitl
+            // return false → TASK_NOT_RESUMABLE and the task was marked FAILED.)
             let abortHandler: (() => void) | undefined;
-            const userInput = await new Promise<string>((resolve, reject) => {
+            const userInputPromise = new Promise<string>((resolve, reject) => {
               hitlResolvers.set(taskId, resolve);
               abortHandler = () => {
                 hitlResolvers.delete(taskId);
@@ -532,7 +531,54 @@ export class Orchestrator {
                 );
               };
               signal.addEventListener('abort', abortHandler, { once: true });
-            }).finally(() => {
+            });
+
+            try {
+              await taskStore.updateStatus(taskId, 'awaiting_input', {
+                resumeToken,
+              });
+            } catch (err) {
+              // Status write failed → the suspension never became observable;
+              // unregister the resolver + abort listener so nothing dangles.
+              // DEBT-AGENTMCP-HITL-TEST-CLEANUP-001: if the AbortSignal fired
+              // DURING the write, abortHandler already deleted the resolver and
+              // rejected userInputPromise — that rejection is never awaited on
+              // this path, so mark it handled to avoid an unhandledRejection
+              // (process-level crash risk in Node 15+) while rethrowing the
+              // write error.
+              hitlResolvers.delete(taskId);
+              if (abortHandler)
+                signal.removeEventListener('abort', abortHandler);
+              void userInputPromise.catch(() => {});
+              throw err;
+            }
+            try {
+              emit({
+                type: 'status_change',
+                taskId,
+                status: 'awaiting_input',
+              });
+            } catch (err) {
+              // DEBT-AGENTMCP-HITL-TEST-CLEANUP-001: the awaiting_input status
+              // write above is the source of truth (taskResume reads the store
+              // for status + resumeToken); this emit is only a push
+              // notification. A failed broadcast must NOT tear down a genuine
+              // suspension — rethrowing here would kill run() while the task
+              // sits in 'awaiting_input' holding a live resolver nobody awaits
+              // (leak + unhandledRejection on a later abort). Log and continue
+              // awaiting; the resolver stays registered by design so
+              // taskResume can still complete the suspension.
+              logger.warn(
+                {
+                  taskId,
+                  err,
+                  status: 'awaiting_input',
+                },
+                'Failed to emit awaiting_input status_change; status already persisted, suspension continues'
+              );
+            }
+
+            const userInput = await userInputPromise.finally(() => {
               if (abortHandler)
                 signal.removeEventListener('abort', abortHandler);
             });
