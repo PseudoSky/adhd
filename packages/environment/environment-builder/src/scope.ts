@@ -73,7 +73,7 @@ export function resolveScope(
       : { scope: options.scope };
   }
 
-  const envScope = processEnv.ADHD_ENV_SCOPE;
+  const envScope = processEnv['ADHD_ENV_SCOPE'];
   if (envScope !== undefined && VALID_SCOPES.has(envScope)) {
     const scope = envScope as Scope;
     return scope === 'project' ? { scope: 'project', projectRoot: findProjectRoot(cwd) ?? cwd } : { scope };

@@ -60,7 +60,7 @@
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "tsc -p packages/agent/agent-store-runtime/tsconfig.json --noEmit"
+        "command": "tsc -p packages/agent/agent-store-runtime/tsconfig.typecheck.json --noEmit"
       }
     },
     "clean": {

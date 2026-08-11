@@ -540,15 +540,15 @@ export function generateFieldSchema(
  *  must never leak through it. */
 function fieldDefinitionToJsonSchema(def: SchemaCompatibleField): Record<string, unknown> {
   const schema: Record<string, unknown> = { type: def.type };
-  if (def.default !== undefined && def.secret !== true) schema.default = def.default;
-  if (def.description !== undefined) schema.description = def.description;
-  if (def.minimum !== undefined) schema.minimum = def.minimum;
-  if (def.maximum !== undefined) schema.maximum = def.maximum;
-  if (def.enum !== undefined) schema.enum = def.enum;
-  if (def.pattern !== undefined) schema.pattern = def.pattern;
-  if (def.minLength !== undefined) schema.minLength = def.minLength;
-  if (def.maxLength !== undefined) schema.maxLength = def.maxLength;
-  if (def.items !== undefined) schema.items = def.items;
+  if (def.default !== undefined && def.secret !== true) schema['default'] = def.default;
+  if (def.description !== undefined) schema['description'] = def.description;
+  if (def.minimum !== undefined) schema['minimum'] = def.minimum;
+  if (def.maximum !== undefined) schema['maximum'] = def.maximum;
+  if (def.enum !== undefined) schema['enum'] = def.enum;
+  if (def.pattern !== undefined) schema['pattern'] = def.pattern;
+  if (def.minLength !== undefined) schema['minLength'] = def.minLength;
+  if (def.maxLength !== undefined) schema['maxLength'] = def.maxLength;
+  if (def.items !== undefined) schema['items'] = def.items;
   return schema;
 }
 

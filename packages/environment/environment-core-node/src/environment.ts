@@ -328,7 +328,7 @@ export class Environment<T = Record<string, unknown>> {
    */
   lock(name = 'singleton'): () => void {
     validateLockName(name);
-    const runDir = this.paths.run ?? this._runDirFallback();
+    const runDir = this.paths['run'] ?? this._runDirFallback();
     mkdirSync(runDir, { recursive: true });
     const lockPath = join(runDir, `${name}.lock`);
 

@@ -38,7 +38,7 @@
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "tsc -p packages/agent/agent-core-policy/tsconfig.json --noEmit"
+        "command": "tsc -p packages/agent/agent-core-policy/tsconfig.typecheck.json --noEmit"
       }
     },
     "test": {

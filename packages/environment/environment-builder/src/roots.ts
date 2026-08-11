@@ -56,10 +56,10 @@ export function systemAppDir(orgNamespace: string): string {
     return join(home, 'Library', 'Application Support', orgNamespace);
   }
   if (process.platform === 'win32') {
-    const appData = process.env.APPDATA ?? join(home, 'AppData', 'Roaming');
+    const appData = process.env['APPDATA'] ?? join(home, 'AppData', 'Roaming');
     return join(appData, orgNamespace);
   }
-  const xdgDataHome = process.env.XDG_DATA_HOME ?? join(home, '.local', 'share');
+  const xdgDataHome = process.env['XDG_DATA_HOME'] ?? join(home, '.local', 'share');
   return join(xdgDataHome, orgNamespace);
 }
 

@@ -48,7 +48,7 @@
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "tsc -p packages/agent/agent-engine-compiler/tsconfig.json --noEmit"
+        "command": "tsc -p packages/agent/agent-engine-compiler/tsconfig.typecheck.json --noEmit"
       }
     },
     "db:generate": {
