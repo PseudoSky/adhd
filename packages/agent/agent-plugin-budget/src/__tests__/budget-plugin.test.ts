@@ -2637,4 +2637,233 @@ describe('Packet C — errors + consecutiveErrors caps', () => {
         )
     ).toBe(true);
   });
+
+  // ── F2 (Packet C review fold-in) — windowed caps at task scope are a silent
+  // no-op; reject them at the schema, migrate the 24h burn guard to global ────
+  //
+  // Finding: a windowed cap with no explicit scope resolves to 'task' scope
+  // (`cap.scope ?? dimScope ?? 'task'`), and queryWindowTokens has NO task
+  // branch — the window query returns 0, so the PT24H burn guard (owner ruling
+  // 3: "across all sessions we never burn through resources") never enforces;
+  // the cap silently degrades to a task-cumulative cap. RED proven pre-fix:
+  // 150K of mock 24h history vs a 100K maximum did NOT trip (see the temp
+  // RED-F2 test this suite carried before the fix landed).
+
+  it('windowed cap with NO explicit scope → schema error directing an explicit scope (F2 — task-scoped window is a silent no-op)', () => {
+    const result = pluginConfigSchema.safeParse({
+      defaults: {
+        caps: [{ field: 'inputTokens', maximum: 100_000, window: 'PT24H' }],
+      },
+    });
+    expect(result.success).toBe(false);
+    // The rejection must be the scope issue (post-fix), and its message must
+    // direct the operator — asserting path + message discriminates red (pre-fix
+    // the config parsed cleanly, so this test failed) vs green.
+    expect(
+      result.success === false &&
+        result.error.issues.some(
+          (i) =>
+            i.path.join('.') === 'defaults.caps.0.scope' &&
+            i.message.includes('scope')
+        )
+    ).toBe(true);
+
+    // Same rejection in a tool dimension — windowed caps need an explicit
+    // non-task scope everywhere they can be placed.
+    const inTool = pluginConfigSchema.safeParse({
+      tool: {
+        default: {
+          caps: [{ field: 'inputTokens', maximum: 100_000, window: 'PT24H' }],
+        },
+      },
+    });
+    expect(inTool.success).toBe(false);
+
+    // The factory path (what the loader hits) throws too.
+    expect(() =>
+      createPlugin({
+        db: null,
+        config: {
+          defaults: {
+            caps: [{ field: 'inputTokens', maximum: 100_000, window: 'PT24H' }],
+          },
+        },
+      })
+    ).toThrow(/scope/);
+  });
+
+  it('windowed cap with explicit scope: "task" → schema error (F2)', () => {
+    const result = pluginConfigSchema.safeParse({
+      defaults: {
+        caps: [
+          {
+            field: 'inputTokens',
+            maximum: 100_000,
+            window: 'PT24H',
+            scope: 'task',
+          },
+        ],
+      },
+    });
+    expect(result.success).toBe(false);
+    expect(
+      result.success === false &&
+        result.error.issues.some(
+          (i) => i.path.join('.') === 'defaults.caps.0.scope'
+        )
+    ).toBe(true);
+  });
+
+  it('windowed inputTokens cap at GLOBAL scope ENFORCES — 24h window history alone trips the first enforce (F2, ruling 3)', async () => {
+    // The exact scenario the temp RED-F2 test proved was a no-op at task scope:
+    // 150K of 24h history vs a 100K maximum with ZERO in-memory usage. At global
+    // scope the window query runs and the cap must trip immediately.
+    let windowQueryRan = false;
+    const mockDb = {
+      prepare(sql: string) {
+        return {
+          get(..._params: unknown[]) {
+            if (sql.includes('created_at')) {
+              windowQueryRan = true;
+              return { total: 150_000 };
+            }
+            return undefined;
+          },
+        };
+      },
+    };
+    const plugin = createPlugin({
+      db: mockDb,
+      config: pluginConfigSchema.parse({
+        defaults: {
+          caps: [
+            {
+              field: 'inputTokens',
+              maximum: 100_000,
+              window: 'PT24H',
+              scope: 'global',
+              mode: 'block',
+            },
+          ],
+        },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    await expect(enforcePreModel(hooks, ctx)).rejects.toMatchObject({
+      isEnforcementError: true,
+      code: 'BUDGET_EXCEEDED',
+      message: expect.stringContaining('inputTokens'),
+    });
+    // The enforcement value came from the global window query, not the
+    // in-memory accumulator — proof the window path actually contributes.
+    expect(windowQueryRan).toBe(true);
+  });
+
+  it('windowed inputTokens cap at GLOBAL scope enforces across turns — window + in-memory cumulative cross the maximum (F2)', async () => {
+    const mockDb = {
+      prepare(sql: string) {
+        return {
+          get(..._params: unknown[]) {
+            if (sql.includes('created_at')) return { total: 120_000 };
+            return undefined;
+          },
+        };
+      },
+    };
+    const plugin = createPlugin({
+      db: mockDb,
+      config: pluginConfigSchema.parse({
+        defaults: {
+          caps: [
+            {
+              field: 'inputTokens',
+              maximum: 150_000,
+              window: 'PT24H',
+              scope: 'global',
+              mode: 'block',
+            },
+          ],
+        },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    // Turn 1 pre-flight: 0 in-memory + 120K window = 120K < 150K → passes.
+    await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
+    await hooks.emit('post:model_response', {
+      executionContext: ctx,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: { inputTokens: 20_000, outputTokens: 0 },
+    });
+
+    // Turn 2 pre-flight: 20K in-memory + 120K window = 140K < 150K → passes.
+    await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
+    await hooks.emit('post:model_response', {
+      executionContext: ctx,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: { inputTokens: 20_000, outputTokens: 0 },
+    });
+
+    // Turn 3 pre-flight: 40K in-memory + 120K window = 160K >= 150K → blocks.
+    await expect(enforcePreModel(hooks, ctx)).rejects.toMatchObject({
+      isEnforcementError: true,
+      code: 'BUDGET_EXCEEDED',
+      message: expect.stringContaining('inputTokens'),
+    });
+  });
+
+  it('windowed inputTokens cap at GLOBAL scope, warning mode → budget:warning event, resolves (F2 — trips per mode)', async () => {
+    const mockDb = {
+      prepare(sql: string) {
+        return {
+          get(..._params: unknown[]) {
+            if (sql.includes('created_at')) return { total: 150_000 };
+            return undefined;
+          },
+        };
+      },
+    };
+    const plugin = createPlugin({
+      db: mockDb,
+      config: pluginConfigSchema.parse({
+        defaults: {
+          caps: [
+            {
+              field: 'inputTokens',
+              maximum: 100_000,
+              window: 'PT24H',
+              scope: 'global',
+              mode: 'warning',
+            },
+          ],
+        },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+    const warnings: BudgetWarningPayload[] = [];
+    hooks.register('budget:warning', (p) => {
+      warnings.push(p);
+    });
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    // 150K window history vs 100K maximum: warning mode emits the event and
+    // the run continues (owner ruling 5 — mode-less/warning caps warn, block
+    // is opt-in per-cap).
+    await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({
+      field: 'inputTokens',
+      maximum: 100_000,
+      current: 150_000,
+    });
+  });
 });
