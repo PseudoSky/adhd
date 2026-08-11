@@ -82,7 +82,8 @@ This was a version bump only for agent-mcp to align it with other projects, ther
 
 - **agent-mcp:** 2.1.1 — ship drizzle migrations + pin external deps (2.1.0 was broken)
 
-- **agent-mcp:** agent-mcp-tail no longer fans per-task usage across every event (BUG-AGENTMCP-006)
+<!-- Historical entry (2.1.3, 2026-07-23): this agent-mcp-tail usage-accounting fix has no backlog graph ID — it was tracked pre-migration as BUG-AGENTMCP-006 in the old markdown BACKLOG.md (FIXED 2026-07-15, commit 2c42cf67), and that ID was later recycled for the opencode-install bug. Do not re-attach BUG-AGENTMCP-006 here (DEBT-AGENTMCP-CHANGELOG-ID-COLLISION-001). -->
+- **agent-mcp:** agent-mcp-tail no longer fans per-task usage across every event
 
 - **agent-mcp:** create + migrate registry DB on fresh machines instead of crashing SQLITE_CANTOPEN
 
