@@ -1,6 +1,6 @@
 # Run-Control v2 — Budget Cap Vocabulary & Semantics Redesign
 
-Status: PLAN (approved design, pending implementation dispatch)
+Status: PLAN (approved design) — **Packet A implemented & merged `fa2b3152` (2026-08-11)**; Packets B/C pending dispatch
 Author: product + architect, 2026-08-11
 Scope: `packages/agent/agent-plugin-budget`, `packages/agent/agent-base-types`,
        `packages/agent/agent-engine-orchestrator` (re-export only)
@@ -76,6 +76,14 @@ owner ruling, §6).
 ## 3. Packet designs (architect-verified, pending these rulings)
 
 ### Packet A — fix `cap.mode` on the model path (S, prerequisite)
+
+> **SHIPPED `fa2b3152` (2026-08-11).** Review gate PASSED; findings folded in
+> (commit `1d3b5bd1`): F1 tool-path `budget:block` emission (symmetry, ruling 7),
+> F3 stale test comment, F5 typecheck targets on both projects
+> (`tsconfig.lib.json` pattern). Operational guard (F4): explicit `mode: "block"`
+> added to all mode-less model caps in the untracked repo config
+> `.adhd/agent-mcp/config.json` so live behavior is unchanged until Packet B's
+> config migration supersedes it. §5.5 resolution recorded in the plan.
 
 - **Change:** `enforcePreModel` honors `cap.mode` — warning caps emit
   `budget:warning` and continue; block caps emit `budget:block` then throw
@@ -196,6 +204,11 @@ owner ruling, §6).
    orchestrator needs to *act* on the event (e.g. host-facing) or whether the
    existing `ToolError('BUDGET_EXCEEDED')` conversion is the action and the event is
    pure notification. (Owner: block "should probably hook into that event".)
+   **RESOLVED at Packet A dispatch (2026-08-11):** the event is the notification
+   layer only; the orchestrator's existing `IEnforcementError` →
+   `ToolError('BUDGET_EXCEEDED')` conversion (orchestrator.ts:318-319) is the action;
+   hosts hook the event via `HookEventMap`. Verified the orchestrator already
+   performs the conversion and was untouched by Packet A.
 
 ## 6. Deferred future feature — recursion / subagent budget rollup
 
@@ -243,6 +256,22 @@ written because memory/backlog stores were down). Highlights:
 5. **Backlog graph write path down** (sox-graph-store FK mismatch after turso
    migration 70faf42e) — blocks all filing; needs store repair.
 6. **Memory server down** (stale WAL sidecar, BL-373) — needs manual sidecar move.
+   NOTE 2026-08-11 16:30: recovery deferred — another agent is actively performing
+   forensic analysis of the sidecar (`/var/folders/.../opencode/forensic-wal`); do
+   not move the sidecar while that investigation is in flight.
+7. **TS6305 in fresh worktrees: `tsc -p tsconfig.json --noEmit` typecheck targets
+   fail on 7 projects** — agent-engine-orchestrator, agent-core-provider,
+   agent-core-policy, agent-engine-compiler, agent-store-runtime, agent-store-prompts,
+   agent-store-tools. Root cause: their root tsconfigs mix `include` with
+   `references` to composite projects whose `dist/packages/<proj>/` outputs are
+   never produced by the vite builds, so a fresh worktree fails TS6305 (main
+   checkout masks it with stale artifacts). Found 2026-08-11 while adding Packet A
+   typecheck targets. Backlog-worthy (BL-248-adjacent); file when the graph store
+   is repaired. Packet A used the `tsconfig.lib.json` pattern instead
+   (dispatch-cli/backlog/apigen-base-types cluster) — clean in fresh worktrees.
+8. **Tool-path `budget:block` event asymmetry (F1) — FIXED in Packet A review
+   fold-in (commit `1d3b5bd1`):** tool-path block branch now emits `budget:block`
+   before the throw, symmetric with the model path (owner ruling 7).
 
 ## 9. Dispatch plan (when approved)
 
@@ -252,3 +281,7 @@ separately by pathspec; review gate before merge (read-only review agent, no cf/
 post-merge full gate `npx nx run-many -t build,lint,test --projects=agent-plugin-
 budget,agent-mcp,agent-engine-orchestrator,agent-base-types`; then release wave
 (bump + publish plugin and agent-mcp together). Worktrees under `.worktrees/`.
+
+**Status: Packet A DONE** (worktree `.worktrees/run-control-v2`, commits `8876fa00`
++ `1d3b5bd1`, merge `fa2b3152` on main). Packet B next in the same worktree (rebase
+branch onto main or continue from the merge point), then Packet C.
