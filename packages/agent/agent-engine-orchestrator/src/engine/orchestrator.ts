@@ -7,6 +7,7 @@ import type {
   PostToolCallPayload,
 } from '@adhd/agent-base-types';
 import { encode } from 'gpt-tokenizer';
+import { randomUUID } from 'node:crypto';
 import { ToolError } from '../validation/errors.js';
 import { generateId } from '../utils/ids.js';
 import { nowIso } from '../utils/timestamps.js';
@@ -508,7 +509,7 @@ export class Orchestrator {
               );
             }
 
-            const resumeToken = crypto.randomUUID();
+            const resumeToken = randomUUID();
 
             // DEBT-AGENTMCP-HITL-TEST-CLEANUP-001: register the HITL resolver
             // BEFORE the awaiting_input status write. taskResume (tools/task.ts)

@@ -48,7 +48,7 @@ export class ValidationError extends Error {
 export function validateConfig(config: Record<string, unknown>, schema: object | null | undefined): void {
   if (!schema) return;
   const schemaRecord = schema as Record<string, unknown>;
-  const properties = schemaRecord.properties as Record<string, unknown> | undefined;
+  const properties = schemaRecord['properties'] as Record<string, unknown> | undefined;
   if (properties !== undefined && Object.keys(properties).length === 0) return;
 
   const ajv = new Ajv({ allErrors: true, strict: false });

@@ -53,7 +53,7 @@
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "tsc -p packages/agent/agent-engine-orchestrator/tsconfig.json --noEmit"
+        "command": "tsc -p packages/agent/agent-engine-orchestrator/tsconfig.typecheck.json --noEmit"
       }
     },
     "clean": {

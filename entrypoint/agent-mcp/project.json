@@ -49,6 +49,12 @@
         "config": "entrypoint/agent-mcp/vite.config.ts"
       }
     },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p entrypoint/agent-mcp/tsconfig.typecheck.json --noEmit"
+      }
+    },
     "nx-release-publish": {
       "dependsOn": [
         "build",
