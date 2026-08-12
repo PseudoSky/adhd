@@ -10,6 +10,7 @@
 // "./dist/index.js" }`) — see the entry-guard at the bottom.
 import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { initTelemetry } from '@adhd/sox-telemetry';
 import { runBacklogCli } from './cli.js';
 
 export {
@@ -118,6 +119,35 @@ export * from './model.js';
 // resolving correctly from both `dist/index.js`, the rollup CJS output where
 // it's shimmed as `pathToFileURL(__filename).href`, and `dist/index.mjs`.)
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
+  // Telemetry composition root — the ONLY initTelemetry() call in this process.
+  // Every telemetry record emitted by the store substrate (@adhd/sox-store-
+  // adapter + @adhd/sox-graph-store dist emitters: retry, engine-guard, turso
+  // reconnect, graph-store heal) is stamped with the service/role configured
+  // here. Without it, the runtime falls back to role:'harness', logSink:'none'
+  // and silently drops every record (one-shot BL-404-style stderr warning).
+  //
+  // Runs only in this bin-entry branch, so library importers of this barrel
+  // (tests, `src/test/fixtures/mcp-stdio-entry.js`, in-process consumers) never
+  // trigger it. It also covers `serve`: that subcommand is dispatched from
+  // inside `runBacklogCli()` (`cli.ts`), same process, same bin — there is no
+  // separate serve entry to initialise.
+  //
+  // The runtime is NOT memoised: a second initTelemetry() would close this
+  // sink and open a fresh one, silently rotating the JSONL file. This is the
+  // single call site, so it fires exactly once per process by construction.
+  //
+  // The default file-sink dir is ~/.adhd/sox-ecosystem/backlog/logs
+  // (ecosystemHome()/service/logs, BL-353 §5.1 role-qualified component).
+  // Failure is non-fatal by design — telemetry must never take the CLI down.
+  try {
+    initTelemetry({ service: 'backlog', role: 'cli', logSink: 'file' });
+  } catch (err) {
+    console.error(
+      `[sox-telemetry] WARNING: initTelemetry failed (${
+        err instanceof Error ? err.message : String(err)
+      }); telemetry records will be silently dropped this process`,
+    );
+  }
   runBacklogCli().catch((err) => {
     console.error(err instanceof Error ? (err.stack ?? err.message) : String(err));
     process.exitCode = 1;

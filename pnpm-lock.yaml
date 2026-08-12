@@ -558,6 +558,9 @@ importers:
       '@adhd/sox-store-adapter':
         specifier: ^0.5.4
         version: 0.5.4
+      '@adhd/sox-telemetry':
+        specifier: ^0.2.0
+        version: 0.2.0
       pino:
         specifier: 10.3.1
         version: 10.3.1
