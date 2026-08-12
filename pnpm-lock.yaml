@@ -556,8 +556,8 @@ importers:
         specifier: ^0.8.3
         version: 0.8.3
       '@adhd/sox-store-adapter':
-        specifier: ^0.5.3
-        version: 0.5.3
+        specifier: ^0.5.4
+        version: 0.5.4
       pino:
         specifier: 10.3.1
         version: 10.3.1
@@ -1467,6 +1467,16 @@ packages:
 
   /@adhd/sox-store-adapter@0.5.3:
     resolution: {integrity: sha512-OefBEB92HXdD6LR1IpUh+RdIG8Tqw38p0tTmNt9qlzWAN/JzAOzJrRQOBnIuKpCEn69PHJ0wWc4fuhjGerhAiQ==}
+    engines: {node: '>=20'}
+    dependencies:
+      '@adhd/sox-telemetry': 0.2.0
+      '@tursodatabase/database': 0.7.2
+    optionalDependencies:
+      better-sqlite3: 12.10.0
+    dev: false
+
+  /@adhd/sox-store-adapter@0.5.4:
+    resolution: {integrity: sha512-rnkeVodlCNeSusN/+6aoveL9tjzW596ijzMTMXgTzprpFoliam/qW8C/KYYiKhen8tK1YxjlynMW8/uHHyn/rQ==}
     engines: {node: '>=20'}
     dependencies:
       '@adhd/sox-telemetry': 0.2.0
