@@ -147,7 +147,8 @@
   },
   "pnpm": {
     "overrides": {
-      "estree-walker": "2.0.2"
+      "estree-walker": "2.0.2",
+      "@nx/devkit@>=22.0.0": "22.7.8"
     }
   },
   "nx": {
