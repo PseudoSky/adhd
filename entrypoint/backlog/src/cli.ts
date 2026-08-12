@@ -26,7 +26,7 @@ import type { Descriptor, Operation, Plugin } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
 import type { BacklogCtx } from './client.js';
 import { openGraphBacklogStore, closeGraphBacklogStoreSafe, type GraphBacklogStore } from './store/graph-backlog-store.js';
-import { buildBacklogEnv } from './env.js';
+import { buildBacklogEnv, resolveBacklogDbPath } from './env.js';
 import { buildBacklogApigenPackage, requireRun, testSilentLogger } from './server.js';
 import { runInstallSkillCommand } from './install-skill.js';
 import { runInstallCommand } from './install.js';
@@ -273,7 +273,10 @@ export async function runBacklogCli(argv?: string[], opts: RunBacklogCliOpts = {
     if (!opened) {
       const env = buildBacklogEnv({ scope: opts.scope, adhdRoot: opts.adhdRoot, cwd: opts.cwd });
       env.ensureDirs();
-      const store = await openGraphBacklogStore(env.files.db, env.config.db.busyTimeoutMs);
+      // BUG-002: open through `resolveBacklogDbPath` so ADHD_BACKLOG_DATABASE_PATH
+      // (→ config.db.path) actually redirects the store; `env.files.db` is only
+      // the fallback.
+      const store = await openGraphBacklogStore(resolveBacklogDbPath(env), env.config.db.busyTimeoutMs);
       opened = { store, ctx: { store, env } };
     }
     return opened.ctx;

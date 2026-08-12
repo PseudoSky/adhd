@@ -66,7 +66,7 @@ export type { InstallSkillResult, SkillHost, SkillScope } from './install-skill.
 export { runServeCommand } from './serve.js';
 export type { RunServeCommandOpts } from './serve.js';
 
-export { buildBacklogEnv, resolveBacklogScope, suggestClaimantIdentity, backlogEnvironmentSpec } from './env.js';
+export { buildBacklogEnv, resolveBacklogScope, resolveBacklogDbPath, suggestClaimantIdentity, backlogEnvironmentSpec } from './env.js';
 export type { BacklogConfig, BuildBacklogEnvOptions } from './env.js';
 
 export { openGraphBacklogStore, closeGraphBacklogStore } from './store/graph-backlog-store.js';

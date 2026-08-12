@@ -95,6 +95,32 @@ export function buildBacklogEnv(options: BuildBacklogEnvOptions = {}): Environme
 }
 
 /**
+ * BUG-002: the effective SQLite backlog-graph DB path. Every store-open site
+ * (`cli.ts`'s `runBacklogCli`, `server.ts`'s `startBacklogServer`) must
+ * resolve the path through THIS helper — never `env.files.db` directly —
+ * or a consumer setting `ADHD_BACKLOG_DATABASE_PATH` silently hits the
+ * scope-root file instead of the path they asked for (the env var was
+ * declared on `db.path` in `backlogEnvironmentSpec` but nothing consumed
+ * it, so a controlled scratch experiment redirected nowhere and opened the
+ * production store). Resolution order, matching the FieldSpec cascade the
+ * `@adhd/environment` builder implements (config-resolver.ts §2.2):
+ *
+ *   1. `ADHD_BACKLOG_DATABASE_PATH` (env var → `config.db.path`) — wins;
+ *   2. `db.path` from a config file (system/global/project/local layers);
+ *   3. fallback: `files.db` — the namespaced `backlog.db` under the resolved
+ *      scope root (the declaration's own "Unset ⇒ falls back to env.files.db").
+ *
+ * Mirrors `agent-mcp`'s `db/client.ts` precedent
+ * (`config.db.path ?? files['db']`), with one deliberate divergence: no
+ * `path.resolve` wrap here, because `openGraphBacklogStore` treats the
+ * literal `':memory:'` as a special in-memory path and `resolve()` would
+ * corrupt it into `<cwd>/':memory:'`.
+ */
+export function resolveBacklogDbPath(env: Environment<BacklogConfig>): string {
+  return env.config.db.path ?? env.files.db;
+}
+
+/**
  * DESIGN.md §4.4 — the recommended (not enforced) claimant identity shape:
  * `${agentName}:${instanceId}`. Exposed as a plain helper, never baked into
  * `claimItem` itself.

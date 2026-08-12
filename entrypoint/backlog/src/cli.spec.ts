@@ -44,7 +44,7 @@ interface SpawnResult {
 }
 
 /** Spawns the REAL built `backlog` bin as a genuine child process. Never imported. */
-function runBin(args: string[], cwd: string): SpawnResult {
+function runBin(args: string[], cwd: string, extraEnv: Record<string, string> = {}): SpawnResult {
   const result = spawnSync(process.execPath, [DIST_INDEX, ...args], {
     cwd,
     // `ADHD_BACKLOG_SCOPE=project` + a fresh, empty `cwd` with no ancestor
@@ -53,8 +53,9 @@ function runBin(args: string[], cwd: string): SpawnResult {
     // global `~/.adhd/backlog` store. Confirmed empirically: a manual smoke
     // run of this exact shape (`cd <tmp> && ADHD_BACKLOG_SCOPE=project node
     // dist/index.js …`) left the real repo's `.adhd/` and the real global
-    // `~/.adhd/backlog/` both untouched.
-    env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project' },
+    // `~/.adhd/backlog/` both untouched. `extraEnv` layers BUG-002's
+    // `ADHD_BACKLOG_DATABASE_PATH` redirection probe on top.
+    env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project', ...extraEnv },
     encoding: 'utf8',
     timeout: 30_000,
   });
@@ -246,6 +247,31 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     const real = runBin(['list-items', '--filter', '{}'], adhdRoot);
     expect(real.status, `stderr:\n${real.stderr}`).toBe(0);
     expect(existsSync(expectedDbPath), 'a real dispatched command must still open the store as before').toBe(true);
+  });
+
+  it('BUG-002: ADHD_BACKLOG_DATABASE_PATH redirects the store the bin opens — the env var wins over the scope-root fallback', () => {
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-dbpath-'));
+    const redirectDb = join(adhdRoot, 'redirect', 'backlog.db');
+
+    const res = runBin(['list-items', '--filter', '{}'], adhdRoot, { ADHD_BACKLOG_DATABASE_PATH: redirectDb });
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
+
+    // The env-var path is the store the CLI actually opened…
+    expect(existsSync(redirectDb), 'the ADHD_BACKLOG_DATABASE_PATH target must be the opened store').toBe(true);
+    // …and the scope-root fallback must NOT have been created (pre-fix, this
+    // test went red: the bin opened env.files.db and ignored the env var).
+    const fallback = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot }).files.db;
+    expect(existsSync(fallback), 'the scope-root fallback must not be created when the env var is set').toBe(false);
+  });
+
+  it('BUG-002 regression guard: with ADHD_BACKLOG_DATABASE_PATH unset, the bin still opens the scope-root fallback as before', () => {
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-dbpath-default-'));
+    const fallback = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot }).files.db;
+    expect(existsSync(fallback), 'sanity: no store should exist before the CLI runs').toBe(false);
+
+    const res = runBin(['list-items', '--filter', '{}'], adhdRoot);
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
+    expect(existsSync(fallback), 'unset env var ⇒ the scope-root fallback store is created, exactly as before BUG-002').toBe(true);
   });
 
   it('a PLAIN "get-item --repo … --human-id …" (bare, no manual namespace prefix) resolves — proves runBacklogCli prepends the namespace itself', async () => {
