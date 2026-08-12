@@ -556,8 +556,8 @@ importers:
         specifier: ^0.8.3
         version: 0.8.3
       '@adhd/sox-store-adapter':
-        specifier: ^0.5.4
-        version: 0.5.4
+        specifier: ^0.5.5
+        version: 0.5.5
       '@adhd/sox-telemetry':
         specifier: ^0.2.0
         version: 0.2.0
@@ -1478,8 +1478,8 @@ packages:
       better-sqlite3: 12.10.0
     dev: false
 
-  /@adhd/sox-store-adapter@0.5.4:
-    resolution: {integrity: sha512-rnkeVodlCNeSusN/+6aoveL9tjzW596ijzMTMXgTzprpFoliam/qW8C/KYYiKhen8tK1YxjlynMW8/uHHyn/rQ==}
+  /@adhd/sox-store-adapter@0.5.5:
+    resolution: {integrity: sha512-LlvimY0EuCryUQ9qgzViAeei2oCbOsdeJiCkfWpv+7VoZuREQkMTPHyd4/3JFYjNyC6MwFglz8RMxmGlX9k4Uw==}
     engines: {node: '>=20'}
     dependencies:
       '@adhd/sox-telemetry': 0.2.0
