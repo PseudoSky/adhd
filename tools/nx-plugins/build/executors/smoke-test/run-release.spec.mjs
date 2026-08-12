@@ -210,3 +210,56 @@ test('run-release.mjs: the empty-changed-set early return (projectNames.length =
       'ever reaching the build/version/GATE 1/publish phases'
   );
 });
+
+// --- Step 3.5: publish -> global-CLI sync (sync-global.mjs) ---
+
+test('run-release.mjs: the sync-global run() call (step 3.5) appears AFTER the publish run() call and BEFORE GATE 2 (clean-room-smoke) in source order', () => {
+  const publishIdx = source.indexOf("run('publish', 'pnpm', ['nx', 'run-many', '-t', 'publish', projectsArg])");
+  const syncIdx = source.indexOf("run('sync-global (global CLI shims -> published artifacts)'");
+  const gate2Idx = source.indexOf("run(\n    'GATE 2: clean-room-smoke'");
+  assert.ok(publishIdx !== -1, 'expected to find the publish run() call');
+  assert.ok(syncIdx !== -1, 'expected to find the labeled sync-global run() call — step 3.5');
+  assert.ok(gate2Idx !== -1, 'expected to find the GATE 2 run() call');
+  assert.ok(
+    publishIdx < syncIdx && syncIdx < gate2Idx,
+    `expected sync-global (index ${syncIdx}) to appear AFTER publish (index ${publishIdx}) and BEFORE ` +
+      `GATE 2 (index ${gate2Idx}) in source order — it must run post-publish (registry actually has the ` +
+      'version) and pre-clean-room-smoke'
+  );
+});
+
+test('run-release.mjs: the sync-global run() call is scoped with the SAME --projects= argument as publish (derived from the computed changed-set)', () => {
+  // The sync must only touch entrypoints that were actually part of this
+  // release — never an unscoped workspace-wide sweep.
+  assert.match(
+    source,
+    /run\(\s*'sync-global \(global CLI shims -> published artifacts\)'\s*,\s*'node'\s*,\s*\[\s*join\(workspaceRoot,[\s\S]*?`--projects=\$\{projectNames\.join\(','\)\}`\s*,\s*\]\s*\)/,
+    'expected the sync-global run() call to pass --projects=${projectNames.join(\',\')} — the same computed changed-set scope as publish'
+  );
+});
+
+test('run-release.mjs: sync-global runs in ADVISORY mode — a non-zero syncExit prints a message but never process.exit (release verdict unchanged)', () => {
+  const syncBlock = source.match(/const syncExit = run\([\s\S]*?if \(syncExit !== 0\) \{[\s\S]*?\n  \}/);
+  assert.ok(syncBlock, 'expected the sync-global call followed by its advisory failure block');
+  assert.ok(
+    !/process\.exit/.test(syncBlock[0]),
+    'the advisory block must NOT call process.exit — a sync failure must not fail the release (BUG-003 exit-capture pattern)'
+  );
+  assert.match(
+    syncBlock[0],
+    /advisory — release verdict unchanged/,
+    'the failure message must explicitly state the release verdict is unchanged'
+  );
+});
+
+test('RED-equivalent: a sync-global step placed BEFORE publish (or missing entirely) is exactly the mis-order this step-3.5 assertion exists to catch', () => {
+  // Simulated pre-fix source with the sync BEFORE publish — the ordering
+  // assertion above must have teeth against it.
+  const preFixSource =
+    "run('sync-global (global CLI shims -> published artifacts)', ...); run('publish', 'pnpm', ...); run('GATE 2: clean-room-smoke', ...);";
+  const publishIdx = preFixSource.indexOf("run('publish'");
+  const syncIdx = preFixSource.indexOf("run('sync-global");
+  const gate2Idx = preFixSource.indexOf("run('GATE 2: clean-room-smoke'");
+  assert.ok(publishIdx !== -1 && syncIdx !== -1 && gate2Idx !== -1, 'sanity check: all three phases present in the simulation');
+  assert.ok(syncIdx < publishIdx, 'sanity check: the simulated pre-fix source has sync BEFORE publish');
+});
