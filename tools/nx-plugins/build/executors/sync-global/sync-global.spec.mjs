@@ -22,33 +22,111 @@
  * Plus the positive twins (verifyShim true, real-sync path with a fake
  * pnpmAdd, restore-on-verify-failure) and the global-dir scan fallback.
  *
+ * BUG-004 coverage (the content gate — a shim may only flip when the
+ * worktree's dist content PROVABLY matches the published artifact at the
+ * same version string; see sync-global.mjs's step-2.5 comment for the
+ * incident):
+ *   (a) content MISMATCH -> REFUSED: pnpm add never called, shim untouched;
+ *   (b) content MATCH -> the real sync path proceeds exactly as before;
+ *   (c) missing local dist -> REFUSED (cannot verify, never flip blind);
+ *   (d) published-state cache MISS -> backfill seam: backfilled mismatch
+ *       REFUSED, backfilled match PROCEEDS, backfill-unavailable PROCEEDS
+ *       on the version gate alone.
+ *
+ * The fixture's published-state entry is the STAMPED hash of the local dist
+ * (what publish's write-through records) — computed here with the REAL
+ * generateDistManifest/normalizedHash primitives so the spec never depends
+ * on sync-global's own implementation of the stamp (RED→GREEN per BL-225:
+ * these tests run against the PRE-fix code first, where the version-only
+ * gate flips on a content-mismatched worktree — the (a) test fails RED).
+ *
  * Run: node --test tools/nx-plugins/build/executors/sync-global/sync-global.spec.mjs
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { detectStaleShims, resolvePnpmGlobalDir, syncGlobalShims, verifyShim } from './sync-global.mjs';
 
+// The REAL primitives (not sync-global's copies) — used to build the fixture's
+// published-state entry the way publish's write-through would, and to build the
+// deliberately-stale published hash for the mismatch case.
+const require = createRequire(import.meta.url);
+const { normalizedHash } = require('../version/compare-published.js');
+const { generateDistManifest } = require('../manifest/generate-manifest.js');
+
+/**
+ * The STAMPED normalized hash of a dist dir — what publish's write-through
+ * records into published-state.json. Copies the dist, re-stamps its
+ * package.json via the REAL generateDistManifest (rebase bin/exports, drop
+ * files/devDeps/scripts — the exact shape that ships), then hashes. Mirrors
+ * sync-global's own gate implementation, but built from the shared
+ * primitives so the spec independently proves the gate's comparison.
+ *
+ * @param {string} distDir
+ * @param {Record<string, any>} srcPkg the entrypoint's SOURCE package.json
+ * @returns {string} `sha256:<hex>`
+ */
+function stampedDistHashOf(distDir, srcPkg) {
+  const tmp = mkdtempSync(join(tmpdir(), 'sync-global-stamped-'));
+  try {
+    // Recurse-copy the dist, then replace package.json with the stamped manifest.
+    const copyTree = (from, to) => {
+      for (const e of readdirSync(from, { withFileTypes: true })) {
+        const src = join(from, e.name);
+        const dst = join(to, e.name);
+        if (e.isDirectory()) {
+          mkdirSync(dst, { recursive: true });
+          copyTree(src, dst);
+        } else {
+          copyFileSync(src, dst);
+        }
+      }
+    };
+    copyTree(distDir, tmp);
+    writeFileSync(join(tmp, 'package.json'), JSON.stringify(generateDistManifest(srcPkg, {}), null, 2) + '\n');
+    return normalizedHash(tmp);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 /**
  * Build an isolated fixture: fake workspace root with one bin-shipping
  * entrypoint (`entrypoint/backlog` -> @adhd/backlog@0.1.4), a fake pnpm
  * global bin dir with a PLANTED stale link shim whose content references the
- * workspace root, and a fake (empty) global store dir.
+ * workspace root, a fake (empty) global store dir, a REAL local dist dir,
+ * and a published-state.json whose entry is the STAMPED hash of that dist
+ * (what a real write-through would have recorded after publishing it).
  *
- * @returns {{ root: string, workspaceRoot: string, pnpmGlobalBinDir: string, pnpmGlobalDir: string, shimPath: string, shimContent: string }}
+ * @returns {{ root: string, workspaceRoot: string, pnpmGlobalBinDir: string, pnpmGlobalDir: string, shimPath: string, shimContent: string, distDir: string, publishedStatePath: string }}
  */
 function makeFixture() {
   const root = mkdtempSync(join(tmpdir(), 'sync-global-fixture-'));
   const workspaceRoot = join(root, 'ws');
   const pnpmGlobalBinDir = join(root, 'bin');
   const pnpmGlobalDir = join(root, 'global', '5');
-  mkdirSync(join(workspaceRoot, 'entrypoint', 'backlog'), { recursive: true });
+  const pkgDir = join(workspaceRoot, 'entrypoint', 'backlog');
+  const distDir = join(pkgDir, 'dist');
+  mkdirSync(distDir, { recursive: true });
+  const srcPkg = { name: '@adhd/backlog', version: '0.1.4', bin: { backlog: './dist/index.js' } };
+  writeFileSync(join(pkgDir, 'package.json'), JSON.stringify(srcPkg, null, 2));
+  // The RAW built dist (what `nx build` leaves: un-stamped bin path, files
+  // allowlist, devDeps — i.e. NOT yet dist-manifest'd). The gate must hash
+  // the STAMPED form, not this raw one — the raw hash differs from the
+  // published-state hash even when content matches (clobbered-manifest case).
   writeFileSync(
-    join(workspaceRoot, 'entrypoint', 'backlog', 'package.json'),
-    JSON.stringify({ name: '@adhd/backlog', version: '0.1.4', bin: { backlog: './dist/index.js' } }, null, 2)
+    join(distDir, 'package.json'),
+    JSON.stringify({ ...srcPkg, main: './dist/index.js', files: ['dist', 'CHANGELOG.md', 'skill'], devDependencies: { typescript: '^5.0.0' } }, null, 2)
+  );
+  writeFileSync(join(distDir, 'index.js'), 'export const x = 1;\n');
+  const publishedStatePath = join(workspaceRoot, 'published-state.json');
+  writeFileSync(
+    publishedStatePath,
+    JSON.stringify({ '@adhd/backlog': { version: '0.1.4', normalizedHash: stampedDistHashOf(distDir, srcPkg) } }, null, 2) + '\n'
   );
   mkdirSync(pnpmGlobalBinDir, { recursive: true });
   // The planted shim mirrors a real `pnpm link -g` shim: NODE_PATH walking up
@@ -58,7 +136,15 @@ function makeFixture() {
     `exec node "${workspaceRoot}/entrypoint/backlog/dist/index.js" "$@"\n`;
   const shimPath = join(pnpmGlobalBinDir, 'backlog');
   writeFileSync(shimPath, shimContent, { mode: 0o755 });
-  return { root, workspaceRoot, pnpmGlobalBinDir, pnpmGlobalDir, shimPath, shimContent };
+  return { root, workspaceRoot, pnpmGlobalBinDir, pnpmGlobalDir, shimPath, shimContent, distDir, publishedStatePath };
+}
+
+/** Write a published-state.json whose entry for @adhd/backlog carries the given hash. */
+function writePublishedHash(f, normalizedHashValue) {
+  writeFileSync(
+    f.publishedStatePath,
+    JSON.stringify({ '@adhd/backlog': { version: '0.1.4', normalizedHash: normalizedHashValue } }, null, 2) + '\n'
+  );
 }
 
 /** Write the "published-artifact" global-store shape a real `pnpm add -g` would leave. */
@@ -356,3 +442,226 @@ test('resolvePnpmGlobalDir: pnpm 8 prints the literal string "undefined" for uns
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// --- BUG-004: the content gate (version-string-only gate had a blind spot) ---
+
+/**
+ * The stamped hash of a dist whose index.js holds the GIVEN code — the
+ * "published at an OLDER/DIFFERENT code state" baseline for mismatch tests.
+ */
+function stampedHashWithCode(code) {
+  const tmp = mkdtempSync(join(tmpdir(), 'sync-global-old-'));
+  try {
+    mkdirSync(join(tmp, 'dist'), { recursive: true });
+    writeFileSync(join(tmp, 'dist', 'index.js'), code);
+    const srcPkg = { name: '@adhd/backlog', version: '0.1.4', bin: { backlog: './dist/index.js' } };
+    writeFileSync(join(tmp, 'dist', 'package.json'), JSON.stringify(srcPkg, null, 2));
+    return stampedDistHashOf(join(tmp, 'dist'), srcPkg);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+test('BUG-004 (a): content MISMATCH — worktree dist differs from published-state hash under the SAME version -> REFUSED, pnpm add never called, shim untouched', async () => {
+  const f = makeFixture();
+  try {
+    // Simulate the incident: published @adhd/backlog@0.1.4 content (recorded
+    // in published-state.json) is OLDER code than this worktree's dist —
+    // e.g. pre-turso vs turso under the same 0.1.4 string. The version gate
+    // (npmView -> '0.1.4') passes; the content gate must refuse the flip.
+    const publishedOld = stampedHashWithCode('export const x = 99; /* pre-turso */\n');
+    assert.notEqual(publishedOld, stampedHashOfFixture(f), 'sanity: the stale baseline must differ from the worktree dist');
+    writePublishedHash(f, publishedOld);
+    let addCalls = 0;
+    const summary = await syncGlobalShims({
+      workspaceRoot: f.workspaceRoot,
+      pnpmGlobalBinDir: f.pnpmGlobalBinDir,
+      npmView: async () => '0.1.4', // version string IS on the registry — the old gate would have flipped
+      pnpmAdd: async () => {
+        addCalls++;
+        return { ok: true };
+      },
+      globalDir: f.pnpmGlobalDir,
+    });
+    assert.equal(addCalls, 0, 'a content-mismatched worktree must NEVER reach pnpm add');
+    assert.equal(readFileSync(f.shimPath, 'utf8'), f.shimContent, 'the shim must be untouched — never flipped to the stale artifact');
+    assert.equal(summary.length, 1);
+    assert.equal(summary[0].action, 'refused');
+    assert.equal(summary[0].verified, false);
+    assert.deepEqual(
+      readdirSync(f.pnpmGlobalBinDir).filter((n) => n.includes('.pre-sync-')),
+      [],
+      'a refused sync must not even create backups'
+    );
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('BUG-004 (b): content MATCH — worktree dist matches published-state hash -> sync proceeds exactly as before', async () => {
+  const f = makeFixture(); // fixture default: published-state holds the STAMPED hash of this dist
+  try {
+    const summary = await syncGlobalShims({
+      workspaceRoot: f.workspaceRoot,
+      pnpmGlobalBinDir: f.pnpmGlobalBinDir,
+      npmView: async () => '0.1.4',
+      pnpmAdd: async (name, version) => {
+        writeFileSync(f.shimPath, `#!/bin/sh\nexec node "${f.pnpmGlobalDir}/node_modules/@adhd/backlog/index.js" "$@"\n`);
+        writeGlobalStoreVersion(f, name, version);
+        return { ok: true };
+      },
+      globalDir: f.pnpmGlobalDir,
+    });
+    assert.equal(summary.length, 1);
+    assert.equal(summary[0].action, 'synced', 'a content-matching worktree must flip exactly as before BUG-004');
+    assert.equal(summary[0].verified, true);
+    assert.equal(readFileSync(f.shimPath, 'utf8').includes(f.workspaceRoot), false, 'shim must be flipped away from the workspace');
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('BUG-004 (c): no local dist at all -> REFUSED (cannot verify content; never flip blind)', async () => {
+  const f = makeFixture();
+  try {
+    rmSync(f.distDir, { recursive: true, force: true });
+    let addCalls = 0;
+    const summary = await syncGlobalShims({
+      workspaceRoot: f.workspaceRoot,
+      pnpmGlobalBinDir: f.pnpmGlobalBinDir,
+      npmView: async () => '0.1.4',
+      pnpmAdd: async () => {
+        addCalls++;
+        return { ok: true };
+      },
+      globalDir: f.pnpmGlobalDir,
+    });
+    assert.equal(addCalls, 0, 'a worktree with no local dist must never flip');
+    assert.equal(summary.length, 1);
+    assert.equal(summary[0].action, 'refused');
+    assert.equal(summary[0].verified, false);
+    assert.match(summary[0].pkg + '', /@adhd\/backlog/);
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('BUG-004 (d): published-state cache MISS (no entry) -> backfill seam consulted; backfilled MISMATCH refused, backfilled MATCH proceeds', async () => {
+  const f = makeFixture();
+  try {
+    rmSync(f.publishedStatePath, { force: true }); // no committed entry -> must backfill
+    // (i) backfilled entry records OLDER published content than the worktree -> REFUSED
+    const publishedOld = stampedHashWithCode('export const x = 99; /* pre-turso */\n');
+    let reconcileCalls = 0;
+    let addCalls = 0;
+    const summaryRefused = await syncGlobalShims({
+      workspaceRoot: f.workspaceRoot,
+      pnpmGlobalBinDir: f.pnpmGlobalBinDir,
+      npmView: async () => '0.1.4',
+      reconcilePkg: async ({ name, version }) => {
+        reconcileCalls++;
+        assert.equal(name, '@adhd/backlog');
+        assert.equal(version, '0.1.4');
+        return { entry: { version: '0.1.4', normalizedHash: publishedOld } };
+      },
+      pnpmAdd: async () => {
+        addCalls++;
+        return { ok: true };
+      },
+      globalDir: f.pnpmGlobalDir,
+    });
+    assert.equal(reconcileCalls, 1, 'a cache miss must consult the backfill seam exactly once');
+    assert.equal(addCalls, 0, 'a backfilled MISMATCH must never reach pnpm add');
+    assert.equal(summaryRefused[0].action, 'refused');
+    assert.equal(summaryRefused[0].verified, false);
+    assert.equal(readFileSync(f.shimPath, 'utf8'), f.shimContent, 'shim must be untouched after the backfilled-mismatch refusal');
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+
+  const f2 = makeFixture();
+  try {
+    rmSync(f2.publishedStatePath, { force: true });
+    // (ii) backfilled entry records the SAME content as the worktree -> proceeds
+    const matchHash = stampedHashOfFixture(f2);
+    const summaryProceed = await syncGlobalShims({
+      workspaceRoot: f2.workspaceRoot,
+      pnpmGlobalBinDir: f2.pnpmGlobalBinDir,
+      npmView: async () => '0.1.4',
+      reconcilePkg: async () => ({ entry: { version: '0.1.4', normalizedHash: matchHash } }),
+      pnpmAdd: async (name, version) => {
+        writeFileSync(f2.shimPath, `#!/bin/sh\nexec node "${f2.pnpmGlobalDir}/node_modules/@adhd/backlog/index.js" "$@"\n`);
+        writeGlobalStoreVersion(f2, name, version);
+        return { ok: true };
+      },
+      globalDir: f2.pnpmGlobalDir,
+    });
+    assert.equal(summaryProceed.length, 1);
+    assert.equal(summaryProceed[0].action, 'synced', 'a backfilled MATCH must proceed exactly as a committed match');
+    assert.equal(summaryProceed[0].verified, true);
+  } finally {
+    rmSync(f2.root, { recursive: true, force: true });
+  }
+
+  const f3 = makeFixture();
+  try {
+    rmSync(f3.publishedStatePath, { force: true });
+    // (iii) backfill unavailable (reconcile error) -> degrade to the version gate alone (proceed as today)
+    const summaryDegraded = await syncGlobalShims({
+      workspaceRoot: f3.workspaceRoot,
+      pnpmGlobalBinDir: f3.pnpmGlobalBinDir,
+      npmView: async () => '0.1.4',
+      reconcilePkg: async () => ({ error: 'registry unreachable' }),
+      pnpmAdd: async (name, version) => {
+        writeFileSync(f3.shimPath, `#!/bin/sh\nexec node "${f3.pnpmGlobalDir}/node_modules/@adhd/backlog/index.js" "$@"\n`);
+        writeGlobalStoreVersion(f3, name, version);
+        return { ok: true };
+      },
+      globalDir: f3.pnpmGlobalDir,
+    });
+    assert.equal(summaryDegraded.length, 1);
+    assert.equal(summaryDegraded[0].action, 'synced', 'when the published baseline cannot be established, the version gate alone decides (as today)');
+    assert.equal(summaryDegraded[0].verified, true);
+  } finally {
+    rmSync(f3.root, { recursive: true, force: true });
+  }
+});
+
+test('BUG-004 (e): the content gate hashes the STAMPED dist, not the raw one — a build-clobbered manifest must not cause a false refusal', async () => {
+  // Regression pin for the layout subtlety: publish's write-through records
+  // normalizedHash AFTER writeDistManifest re-stamped dist/package.json
+  // (rebase bin, drop files/devDeps). The raw on-disk dist has the UN-stamped
+  // manifest (bin "./dist/index.js", files allowlist, devDeps present), so a
+  // gate that hashed the raw dir would see "changed" even for byte-identical
+  // content and falsely refuse every worktree whose dist was rebuilt by a
+  // plain `nx build` after the release. The gate must hash the stamped form.
+  const f = makeFixture();
+  try {
+    // The fixture's dist IS deliberately raw/un-stamped (see makeFixture) —
+    // and its published-state entry is the STAMPED hash of the same content.
+    // If the gate compared raw hashes, this would REFUSE. It must PROCEED.
+    assert.match(readFileSync(join(f.distDir, 'package.json'), 'utf8'), /"files"/, 'sanity: fixture dist manifest is the raw build-clobbered shape');
+    const summary = await syncGlobalShims({
+      workspaceRoot: f.workspaceRoot,
+      pnpmGlobalBinDir: f.pnpmGlobalBinDir,
+      npmView: async () => '0.1.4',
+      pnpmAdd: async (name, version) => {
+        writeFileSync(f.shimPath, `#!/bin/sh\nexec node "${f.pnpmGlobalDir}/node_modules/@adhd/backlog/index.js" "$@"\n`);
+        writeGlobalStoreVersion(f, name, version);
+        return { ok: true };
+      },
+      globalDir: f.pnpmGlobalDir,
+    });
+    assert.equal(summary.length, 1);
+    assert.equal(summary[0].action, 'synced', 'byte-identical content with a clobbered manifest must NOT be refused (stamped-hash gate)');
+    assert.equal(summary[0].verified, true);
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+/** The STAMPED hash of the fixture's own local dist — what a real write-through would have recorded. */
+function stampedHashOfFixture(f) {
+  const srcPkg = JSON.parse(readFileSync(join(f.workspaceRoot, 'entrypoint', 'backlog', 'package.json'), 'utf8'));
+  return stampedDistHashOf(f.distDir, srcPkg);
+}
