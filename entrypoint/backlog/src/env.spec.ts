@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { buildBacklogEnv } from './env.js';
+import { buildBacklogEnv, resolveBacklogDbPath } from './env.js';
 import { createItem, getItem } from './client.js';
 import type { BacklogCtx } from './client.js';
 import { openGraphBacklogStore, closeGraphBacklogStore, type GraphBacklogStore } from './store/graph-backlog-store.js';
@@ -127,6 +127,35 @@ describe('scope isolation — real Environment instances, real temp filesystem r
     } finally {
       if (prev === undefined) delete process.env['ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS'];
       else process.env['ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS'] = prev;
+    }
+  });
+
+  it('BUG-002: ADHD_BACKLOG_DATABASE_PATH wins over the scope-root fallback in resolveBacklogDbPath — and unset still falls back to files.db', async () => {
+    const prev = process.env['ADHD_BACKLOG_DATABASE_PATH'];
+    try {
+      const scratchDir = mkdtempSync(join(tmpdir(), 'backlog-env-dbpath-'));
+      const scratchDb = join(scratchDir, 'scratch.db');
+
+      process.env['ADHD_BACKLOG_DATABASE_PATH'] = scratchDb;
+      const redirected = buildBacklogEnv({ scope: 'global', adhdRoot: globalHomeDir });
+      // The Environment surfaces the env var as config.db.path (proving the
+      // declared env→config binding works)…
+      expect(redirected.config.db.path).toBe(scratchDb);
+      // …and resolveBacklogDbPath returns it over the scope-root file.
+      expect(resolveBacklogDbPath(redirected)).toBe(scratchDb);
+
+      // Unset ⇒ falls back to files.db under the resolved scope root — the
+      // exact behavior the FieldSpec description promises ("Unset ⇒ falls
+      // back to env.files.db under the resolved scope root").
+      delete process.env['ADHD_BACKLOG_DATABASE_PATH'];
+      const fallback = buildBacklogEnv({ scope: 'global', adhdRoot: globalHomeDir });
+      expect(fallback.config.db.path).toBeUndefined();
+      expect(resolveBacklogDbPath(fallback)).toBe(fallback.files.db);
+
+      rmSync(scratchDir, { recursive: true, force: true });
+    } finally {
+      if (prev === undefined) delete process.env['ADHD_BACKLOG_DATABASE_PATH'];
+      else process.env['ADHD_BACKLOG_DATABASE_PATH'] = prev;
     }
   });
 
