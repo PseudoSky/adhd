@@ -26,6 +26,12 @@
  *      uses a normal early-return; it is correct for it to gate, not race.
  *   2. `nx run-many -t publish` is attempted. Its exit code is CAPTURED, not
  *      thrown — a non-zero here does not stop step 3.
+ *   3.5. `sync-global.mjs` (ADVISORY, NOT a gate) — after publish, flip any
+ *      stale global CLI link shims (shims execing local workspace source) to
+ *      the published artifacts. Its exit code is CAPTURED, never thrown: a
+ *      non-zero here prints an advisory ERROR and does NOT change the release
+ *      verdict (BUG-003 exit-capture pattern, same as publish). See
+ *      PUBLISHING.md §Workflow "Step 3.5".
  *   3. `clean-room-smoke.mjs` (GATE 2) ALWAYS runs after step 2, regardless
  *      of step 2's outcome.
  *   4. A COMPOUND verdict is printed distinguishing the three outcomes the
@@ -99,6 +105,10 @@
  *   3. `nx run-many -t publish --projects=<computed-list>` — the actual
  *      publish, now scoped. Exit code CAPTURED, not thrown — a non-zero here
  *      does not stop step 4 (BUG-003, unchanged from before).
+ *   3.5. `sync-global.mjs` (ADVISORY, NOT a gate) — after publish, flip any
+ *      stale global CLI link shims to the published artifacts. Exit code
+ *      CAPTURED, never thrown — a non-zero here prints an advisory ERROR and
+ *      does NOT change the release verdict (BUG-003 exit-capture pattern).
  *   4. `clean-room-smoke.mjs` (GATE 2) ALWAYS runs after step 3, regardless
  *      of step 3's outcome. GATE 2's own scoping (audit §6.3, "scope GATE 2
  *      to only the packages actually published this run") is explicitly OUT
@@ -271,6 +281,25 @@ function main() {
   // happens here (BUG-003).
   const publishExit = run('publish', 'pnpm', ['nx', 'run-many', '-t', 'publish', projectsArg]);
   const publishOk = publishExit === 0;
+
+  // Step 3.5 — sync-global (ADVISORY, NOT a gate): flip any stale global CLI
+  // link shims (shims whose content references this workspace — the
+  // `pnpm link -g` shape) to the published artifacts via
+  // `pnpm add -g <name>@<exact-version>`, gated on the exact version being
+  // on the registry. Runs AFTER publish (so the registry actually has the
+  // version) and BEFORE GATE 2 (so clean-room-smoke still exercises the real
+  // registry path). Exit code captured, never thrown: a sync failure prints
+  // an advisory ERROR and must NOT change the release verdict (BUG-003
+  // exit-capture pattern) — retry it manually with `pnpm release:sync-global`.
+  const syncExit = run('sync-global (global CLI shims -> published artifacts)', 'node', [
+    join(workspaceRoot, 'tools/nx-plugins/build/executors/sync-global/sync-global.mjs'),
+    `--projects=${projectNames.join(',')}`,
+  ]);
+  if (syncExit !== 0) {
+    console.error(
+      'run-release: sync-global reported errors (advisory — release verdict unchanged); retry with pnpm release:sync-global.'
+    );
+  }
 
   // GATE 2 — ALWAYS runs, even after a partial/failed publish. Deliberately
   // NOT scoped to the computed project list (audit §6.3 — a separate, later

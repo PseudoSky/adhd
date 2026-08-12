@@ -144,6 +144,8 @@ pnpm release:commit       # stage + commit ONLY the bumped package.json + CHANGE
 ```
 `release-commit` (`tools/nx-plugins/build/executors/publish/release-commit.mjs`) stages explicit pathspecs only — never `git add -A`/`.` — so unrelated concurrent work in the tree is never swept in. Then `git push` (human-approved). No tag push is needed; the registry itself records what's released. (Leaving them uncommitted is still coherent — next release sees source == npm/cache and re-detects from the artifact — but committing keeps git, npm, and the cache aligned for the next contributor/CI run.)
 
+**Step 3.5 — global-CLI sync (advisory, runs inside `pnpm release`).** After publish (and before GATE 2), `sync-global.mjs` flips any stale global link shims — a `~/Library/pnpm/<bin>` whose content still execs local workspace source (the `pnpm link -g` shape) — to the published artifacts via `pnpm add -g <name>@<exact-version>`, gated on the exact version being on the registry. Sync failures print `ERROR` but never fail the release (BUG-003 exit-capture pattern) — retry manually with `pnpm release:sync-global` (preview: `pnpm release:sync-global:dry`).
+
 ## Installability gates (BUG-RELEASE-UNINSTALLABLE-AGENTMCP-001)
 
 Neither gate below existed before; every prior gate (`dist-manifest`, `verify-dist-load`, `@nx/dependency-checks`/`sync-deps`, `publish-hygiene`) validates against the **local on-disk workspace**, never the real registry — so a range like `agent-store-tools: "^2.1.7"` can ship even when the registry's max published version is `2.1.6`. Full write-up + reconciliation matrix: [`tools/nx-plugins/build/lib/range-resolvability.js`](tools/nx-plugins/build/lib/range-resolvability.js).
