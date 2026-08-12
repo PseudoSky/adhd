@@ -1,3 +1,23 @@
+## 2.3.0 (2026-08-11)
+
+
+### 🩹 Fixes
+
+- **agent-mcp:** reject bare trailing --host instead of installing to all hosts (DEBT-AGENTMCP-INSTALL-HOST-DEFAULT-001)
+
+- **backlog:** DEBT-AGENTMCP-MIGRATION-PINNED-MARKER-001 — defer migration when operational DB is pinned to the flat legacy path
+
+- **agent-mcp:** DEBT-AGENTMCP-HITL-TEST-CLEANUP-001 — typed TestDb access + hitl resolver-before-status ordering
+
+- **agent-mcp:** reject bare trailing --scope instead of silently installing to all hosts (DEBT-AGENTMCP-INSTALL-HOST-DEFAULT-001 scope mirror)
+
+- **agent:** typecheck targets no longer fail TS6305 in fresh worktrees (additive typecheck configs + real type fixes)
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## Unreleased
 
 

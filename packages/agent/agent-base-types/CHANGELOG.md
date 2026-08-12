@@ -1,3 +1,25 @@
+## 2.3.0 (2026-08-11)
+
+
+### 🚀 Features
+
+- **agent-plugin-budget:** rename tokens cap to context with peak semantics + contextWindowFraction (Packet B, BUG-AGENTMCP-009)
+
+
+### 🩹 Fixes
+
+- **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
+
+- **agent-plugin-budget:** honor cap.mode on the model path with budget:warning/budget:block events (Packet A)
+
+- **agent-plugin-budget:** emit budget:block on tool path; add typecheck targets (Packet A review F1/F5)
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+
 ## 2.1.6 (2026-07-25)
 
 
