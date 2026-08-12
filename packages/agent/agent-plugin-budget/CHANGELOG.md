@@ -1,3 +1,31 @@
+## 0.2.0 (2026-08-11)
+
+
+### 🚀 Features
+
+- **agent-plugin-budget:** rename tokens cap to context with peak semantics + contextWindowFraction (Packet B, BUG-AGENTMCP-009)
+
+- **agent-plugin-budget:** add errors/consecutiveErrors caps + reject tool-scoped context (Packet C, plan §8.9)
+
+
+### 🩹 Fixes
+
+- **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
+
+- **agent-plugin-budget:** cache-weighted cost enforcement (BUG-AGENTMCP-008)
+
+- **agent-plugin-budget:** honor cap.mode on the model path with budget:warning/budget:block events (Packet A)
+
+- **agent-plugin-budget:** emit budget:block on tool path; add typecheck targets (Packet A review F1/F5)
+
+- **agent-plugin-budget:** reject windowed caps at task scope (F2 fold-in — silent no-op class, plan §8.9-precedent)
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+
 ## 0.0.7 (2026-07-25)
 
 
