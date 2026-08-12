@@ -13,6 +13,22 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+// BUG (flaky CPU-guard trips under real machine load, test:build-tools):
+// mirror of `../sync/impl.spec.mjs` — same class of flake, same fix. This file
+// exercises the real `check` executor end-to-end, which wraps its work in
+// `withMetrics` (BUILD-TOOLING-METRICS-001), and `withMetrics` always runs the
+// REAL `checkCpuGuard` (FEAT-NXMETRICS-CPU-GUARD-001) against a REAL
+// `process.cpuUsage()` measurement of single-digit-ms wall windows (the child
+// boundary is mocked). On a loaded machine that real measured % can
+// legitimately exceed the default `ADHD_NX_METRICS_MAX_CPU_PCT=300` threshold
+// for such short bursts, tripping the guard and failing a test that has
+// nothing to do with the guard itself. The guard's own pass/fail LOGIC is
+// fully covered, deterministically, by `tools/nx-plugins/lib/metrics.spec.mjs`
+// — this file only asserts check orchestration + metrics-record shape, so
+// disable the guard here (metrics recording, including the real `cpuPercent`
+// value, still happens; only the throw-on-trip is turned off).
+process.env.ADHD_NX_METRICS_MAX_CPU_PCT = '0';
+
 const require = createRequire(import.meta.url);
 const implAbs = require.resolve('./impl.js');
 const metricsAbs = require.resolve('../../../lib/metrics.js');
