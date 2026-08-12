@@ -52,7 +52,7 @@ import { mcpPlugin } from '@adhd/apigen-plugin-mcp';
 import { batchPlugin } from '@adhd/apigen-plugin-batch';
 import * as clientMod from './client.js';
 import type { BacklogCtx } from './client.js';
-import { openGraphBacklogStore, closeGraphBacklogStore } from './store/graph-backlog-store.js';
+import { openGraphBacklogStore, closeGraphBacklogStoreSafe } from './store/graph-backlog-store.js';
 import { buildBacklogEnv } from './env.js';
 import type { Logger, OutputPlugin, RunInput } from '@adhd/apigen-core-client';
 
@@ -483,6 +483,6 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
   try {
     await Promise.all(runs);
   } finally {
-    await closeGraphBacklogStore(store);
+    await closeGraphBacklogStoreSafe(store);
   }
 }
