@@ -1,3 +1,15 @@
+## 0.1.6 (2026-08-12)
+
+
+### 🩹 Fixes
+
+- **backlog:** honor ADHD_BACKLOG_DATABASE_PATH env override (BUG-002)
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.5 (2026-08-12)
 
 
