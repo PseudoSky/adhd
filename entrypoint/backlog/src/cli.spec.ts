@@ -23,11 +23,11 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createItem } from './client.js';
+import { createItem, getItem } from './client.js';
 import type { BacklogCtx } from './client.js';
 import { buildBacklogEnv } from './env.js';
 import { openGraphBacklogStore, closeGraphBacklogStore } from './store/graph-backlog-store.js';
@@ -475,5 +475,70 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     // `buildBacklogApigenPackage`/`getCtx` entirely, the same property
     // `DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001`'s own test proves for `--help`.
     expect(existsSync(join(adhdRoot, '.adhd', 'backlog'))).toBe(false);
+  });
+
+  // close-on-error regression: a command that OPENS the store and then FAILS
+  // (cross-repo get-item → BacklogItemNotFoundError, thrown AFTER ctx/store
+  // creation) must still close the store in `runBacklogCli`'s finally — the
+  // BL-512 TRUNCATE guarantee (adapter close checkpoints + truncates the -wal
+  // to ~0 bytes) must hold on the ERROR path too, not just the happy path.
+  //
+  // RED-to-GREEN discriminator: this test FAILS if the finally close in
+  // `cli.ts`'s `runBacklogCli` is deleted ENTIRELY — the -wal stays large
+  // (measured 284 KB with the close deleted) because the adapter never got its
+  // close(), so the WAL-truncation assertion below trips. It does NOT fail
+  // because close() itself throws — a close() that throws is exactly what
+  // `closeGraphBacklogStoreSafe` swallows so it can never mask the command
+  // outcome, and this test's exit-1 assertion would still pass either way.
+  //
+  // NOTE the deliberately CROSS-REPO lookup: a humanId that exists in NO repo
+  // returns `null` from getItem (exit 0 — no failure, no exercise of the
+  // error path); only a humanId found in a DIFFERENT repo throws
+  // BacklogItemNotFoundError (getItem → getItemNode → buildNotFoundError →
+  // foundInRepos.length > 0 → throw), which is the exact "opens the store,
+  // then fails" shape this regression needs. `--help`/`install`/`serve` never
+  // open the store and are deliberately NOT used here.
+  it('a command that OPENS the store then fails still closes it in the finally (WAL truncated, store reopens cleanly)', async () => {
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-close-on-error-'));
+    const repo = 'PseudoSky/cli-close-on-error';
+
+    // Seed real data through a real store BEFORE the CLI subprocess owns the
+    // file — then close it so the subprocess's own GraphBacklogStore can open
+    // it exclusively (identical pattern to the get-item tests above).
+    const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
+    seedEnv.ensureDirs();
+    const dbPath = seedEnv.files.db;
+    const seedStore = await openGraphBacklogStore(dbPath);
+    const seeded = await createItem(
+      { store: seedStore, env: seedEnv },
+      { family: 'BUG-CLCLOSE', title: 'close on error', body: 'x', repo }
+    );
+    await closeGraphBacklogStore(seedStore);
+
+    // Cross-repo get-item: the humanId EXISTS but under `repo`, not the
+    // queried repo — throws BacklogItemNotFoundError AFTER the store opened.
+    const res = runBin(['get-item', '--repo', 'PseudoSky/other-repo', '--human-id', seeded.item.humanId], adhdRoot);
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(1);
+
+    // BL-512 TRUNCATE guarantee on the ERROR path: a proper close checkpoints
+    // and truncates the -wal to ~0 bytes (absent or < 4096). A skipped close
+    // leaves it growing (measured 284 KB with the finally close deleted).
+    const walPath = dbPath + '-wal';
+    const walSize = existsSync(walPath) ? statSync(walPath).size : 0;
+    expect(
+      walSize,
+      `-wal must be truncated after a failing command (was ${walSize} bytes) — the finally close did not run`
+    ).toBeLessThan(4096);
+
+    // The store must reopen cleanly in THIS process and still read the seeded
+    // data — proving the failed command's close left a healthy, consistent db.
+    const reopened = await openGraphBacklogStore(dbPath);
+    try {
+      const got = await getItem({ store: reopened, env: seedEnv }, repo, seeded.item.humanId);
+      expect(got?.humanId).toBe(seeded.item.humanId);
+      expect(got?.title).toBe('close on error');
+    } finally {
+      await closeGraphBacklogStore(reopened);
+    }
   });
 });
