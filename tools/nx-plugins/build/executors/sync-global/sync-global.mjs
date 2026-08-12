@@ -24,10 +24,21 @@
  *      AND its content includes the workspace root path (a link shim).
  *      Shims that don't reference the workspace are already pointing at
  *      published artifacts (or nothing) — left alone.
- *   2. GATE — `npm view <name>@<version> version` must return exactly the
- *      on-disk source version. This is the partial-publish gate: a package
- *      whose version isn't on the registry yet (e.g. an upstream publish in
- *      the same release failed) is SKIPPED, never half-flipped.
+ *   2. GATE 1 (version) — `npm view <name>@<version> version` must return
+ *      exactly the on-disk source version. This is the partial-publish gate:
+ *      a package whose version isn't on the registry yet (e.g. an upstream
+ *      publish in the same release failed) is SKIPPED, never half-flipped.
+ *   2.5. GATE 2 (CONTENT — BUG-004): the version string alone is NOT proof
+ *      the worktree matches the published artifact. The local dist's STAMPED
+ *      content hash (see `stampedDistHash`) must equal the published
+ *      artifact's hash recorded in `published-state.json` (backfilled from
+ *      the registry on a cache miss). A worktree whose dist differs from the
+ *      published artifact under the SAME version string is REFUSED with
+ *      "worktree ahead of published content — run release first" and NEVER
+ *      flipped — the incident this fixes: published @adhd/backlog@0.1.4
+ *      (pre-turso, better-sqlite3) was flipped while the worktree held
+ *      turso-adapter code under the same 0.1.4 string, breaking the CLI
+ *      against the live store (SQLITE_CORRUPT).
  *   3. DRY-RUN — prints `WOULD run: pnpm add -g <name>@<version>` and moves
  *      on. Nothing is modified.
  *   4. SYNC — backs up every stale shim to `<shim>.pre-sync-<ts>` (the
@@ -46,8 +57,14 @@
  *
  * EXIT CODE CONTRACT (advisory — it must never fail the release):
  *   exit 0 — the script ran to completion. Sync-level failures (registry
- *            gate, `pnpm add -g` failing, post-verify failing + restore)
- *            are logged as `ERROR` lines but do NOT change the exit code.
+ *            gate, content gate refusal, `pnpm add -g` failing, post-verify
+ *            failing + restore) are logged as `ERROR` lines but do NOT
+ *            change the exit code — the content gate reports its refusal as
+ *            an ERROR row (`action: 'refused'`, `verified: false`) and keeps
+ *            the shim untouched, per the task's "report as error, never flip
+ *            to the stale artifact" mandate (a non-zero exit here would fail
+ *            the release for a worktree-state problem, which is exactly the
+ *            advisory scope this script is documented to stay inside).
  *   exit 1 — internal failure only: an unexpected exception, an unreadable
  *            manifest, or a hard spawn failure (command not found).
  *   exit 2 — usage error (unknown CLI argument).
@@ -62,18 +79,28 @@
  * `projectNames` and passes through). `--dry-run` prints the WOULD lines and
  * exits without modifying anything.
  *
- * Testability: `detectStaleShims`, `syncGlobalShims`, `verifyShim`, and
- * `resolvePnpmGlobalDir` are exported and pure-ish (temp-fixture friendly);
- * `syncGlobalShims` additionally accepts optional `npmView` / `pnpmAdd` /
- * `globalDir` overrides so the registry-gate, sync, and verify branches are
- * unit-testable WITHOUT ever touching real globals or the network — the
- * defaults reproduce production behavior exactly (see the spec file).
+ * Testability: `detectStaleShims`, `syncGlobalShims`, `verifyShim`,
+ * `resolvePnpmGlobalDir`, and `contentGate` are exported and pure-ish
+ * (temp-fixture friendly); `syncGlobalShims` additionally accepts optional
+ * `npmView` / `pnpmAdd` / `globalDir` / `reconcilePkg` overrides so the
+ * registry-gate, content-gate, sync, and verify branches are unit-testable
+ * WITHOUT ever touching real globals or the network — the defaults reproduce
+ * production behavior exactly (see the spec file).
  */
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+// CJS build-tooling primitives (same modules the version/reconcile/publish
+// executors use) — loaded via createRequire because this script is ESM.
+const require = createRequire(import.meta.url);
+const { normalizedHash } = require('../version/compare-published.js');
+const { generateDistManifest } = require('../manifest/generate-manifest.js');
+const { readState } = require('../../lib/published-state.js');
+const { reconcilePackage } = require('../reconcile/reconcile-core.js');
 
 /** Same root-walk as run-release.mjs / clean-room-smoke.mjs — up until a dir containing nx.json. */
 const findRoot = (d) => {
@@ -240,6 +267,169 @@ function restoreBackups(backups) {
   }
 }
 
+/**
+ * BUG-004 CONTENT GATE — the STAMPED normalized hash of a local dist dir:
+ * the same digest `publish`'s write-through records into published-state.json
+ * (`normalizedHash(distDir)` AFTER `writeDistManifest` re-stamped
+ * dist/package.json — see BUG-BUILD-PUBLISH-DISTMANIFEST-CLOBBERED-001 for
+ * why the raw on-disk manifest cannot be trusted to match the published
+ * tarball's). Hashes a temp copy of the dist with the resolved dist-root
+ * manifest (`generateDistManifest`) written in place of the raw one, so the
+ * result is directly comparable to the cache's `normalizedHash` — this is
+ * what makes the version-only gate's blind spot (a worktree whose dist
+ * differs from the published artifact under the SAME version string) visible.
+ *
+ * Pure-ish: never touches the real dist, never spawns, never writes outside
+ * the temp copy. Throws only if the dist dir is unreadable.
+ *
+ * @param {string} distDir absolute {entrypointDir}/{name}/dist
+ * @param {Record<string, any>} srcPkg the entrypoint's SOURCE package.json (the stamp is derived from it)
+ * @returns {string} `sha256:<hex>`
+ */
+function stampedDistHash(distDir, srcPkg) {
+  const tmp = mkdtempSync(join(tmpdir(), 'sync-global-gate-'));
+  try {
+    // Recurse-copy the dist into the temp dir, then overwrite its manifest
+    // with the stamped one (the shape that actually ships on npm).
+    const copyTree = (from, to) => {
+      mkdirSync(to, { recursive: true });
+      for (const entry of readdirSync(from, { withFileTypes: true })) {
+        const s = join(from, entry.name);
+        const d = join(to, entry.name);
+        if (entry.isDirectory()) copyTree(s, d);
+        else copyFileSync(s, d);
+      }
+    };
+    copyTree(distDir, tmp);
+    writeFileSync(join(tmp, 'package.json'), JSON.stringify(generateDistManifest(srcPkg, {}), null, 2) + '\n');
+    return normalizedHash(tmp);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+/**
+ * BUG-004 CACHE-MISS BACKFILL — default implementation: reconcile the ONE
+ * package's published-state entry from npm via reconcile-core's
+ * `reconcilePackage` (the exact same primitive `version/impl.js`'s
+ * `backfillOnMiss` uses on a cache miss). Returns `{ entry }` on
+ * fast/slow success, `{ error }` on reconcile failure, or `{ entry: null }`
+ * when the version genuinely isn't on npm yet (the version-string gate
+ * upstream already decided the version is on the registry, so this is the
+ * defensive tail, not the common path).
+ *
+ * Injectable seam — `syncGlobalShims` accepts `reconcilePkg` so tests can
+ * fake the network.
+ *
+ * @param {{ name: string, version: string, distDir: string, workspaceRoot: string }} args
+ * @returns {Promise<{ entry?: object, error?: string }>}
+ */
+async function defaultReconcilePkg({ name, version, distDir, workspaceRoot }) {
+  const workDir = join(workspaceRoot, 'tmp', 'sync-global-backfill', name.replace(/[^a-z0-9-]+/gi, '-'));
+  try {
+    const result = reconcilePackage({ name, version, distDir, workDir });
+    if (result.status === 'error') return { error: result.error };
+    if (result.status === 'pending') return { entry: null };
+    return { entry: result.entry };
+  } finally {
+    try {
+      rmSync(workDir, { recursive: true, force: true });
+    } catch {
+      // best-effort scratch cleanup
+    }
+  }
+}
+
+/**
+ * BUG-004 CONTENT GATE — the fix for the version-string-only blind spot.
+ *
+ * Decides whether a stale global link shim may be flipped, by comparing the
+ * worktree's local dist content against the PUBLISHED content at the same
+ * version string — never the version string alone. The published baseline is
+ * `published-state.json[<name>].normalizedHash` (the same compare-published.js
+ * digest `publish`'s write-through records; zero network on the happy path).
+ *
+ * Verdicts:
+ *   { ok: true }                 — content matches published: proceed as today.
+ *   { ok: true, note }           — no authoritative baseline and backfill was
+ *                                  unavailable: proceed as today (the version
+ *                                  gate upstream already confirmed the version
+ *                                  is on the registry).
+ *   { ok: false, error }         — REFUSE: local dist content differs from the
+ *                                  published artifact (or cannot be verified).
+ *                                  The flip must NEVER happen here.
+ *
+ * Cache-miss handling: when published-state has no entry for the package —
+ * or its entry records a DIFFERENT version than the worktree's — the entry is
+ * BACKFILLED from the registry via the injectable `reconcilePkg` seam (the
+ * same reconcile-core primitive `version/impl.js`'s `backfillOnMiss` uses).
+ * The backfilled hash is the authoritative published baseline, so rule 2 then
+ * applies to it exactly as it does to a committed entry: mismatch -> refuse.
+ * Only when the backfill itself is unavailable (network failure / reconcile
+ * error / version not on npm) does the gate degrade to "proceed as today",
+ * with a loud note — verification is impossible, not merely unattempted.
+ *
+ * The local side is the STAMPED hash of the dist (`stampedDistHash`), not the
+ * raw on-disk hash: publish's write-through recorded the hash AFTER
+ * `writeDistManifest` re-stamped dist/package.json (rebase bin/exports, drop
+ * files/devDeps — see BUG-BUILD-PUBLISH-DISTMANIFEST-CLOBBERED-001), so only
+ * a stamped comparison is apples-to-apples. A raw comparison would falsely
+ * refuse a worktree whose dist is byte-identical to the published artifact
+ * but whose manifest happens to be in build-clobbered shape (verified live:
+ * backlog/apigen-cli/decompile-cli/agent-mcp raw-hash differ but stamped-hash
+ * match the committed published-state.json).
+ *
+ * @param {{ pkg: { name: string, version: string }, distDir: string, workspaceRoot: string,
+ *           reconcilePkg?: ({ name: string, version: string, distDir: string, workspaceRoot: string }) => Promise<{ entry?: object | null, error?: string }> }} args
+ * @returns {Promise<{ ok: boolean, error?: string, note?: string }>}
+ */
+export async function contentGate({ pkg, distDir, workspaceRoot, reconcilePkg = defaultReconcilePkg }) {
+  if (!existsSync(distDir)) {
+    return {
+      ok: false,
+      error: `no local dist at ${distDir} — cannot verify this worktree's content matches published ${pkg.name}@${pkg.version}; run the release/build first`,
+    };
+  }
+  let entry = readState(workspaceRoot)[pkg.name];
+  if (!entry || entry.version !== pkg.version) {
+    // Cache miss for THIS version (no entry, or an entry for a different
+    // version) — backfill the authoritative published baseline from the
+    // registry, like compare-published's consumers do on a miss. The
+    // backfilled hash is what rule 2 compares against, so the incident shape
+    // (published @adhd/backlog@0.1.4 pre-turso vs a worktree holding turso
+    // code under the same 0.1.4 string) is refused here exactly as it would
+    // be with a committed entry.
+    let backfill;
+    try {
+      backfill = await reconcilePkg({ name: pkg.name, version: pkg.version, distDir, workspaceRoot });
+    } catch (err) {
+      console.error(`sync-global: WARNING ${pkg.name}@${pkg.version}: published-state backfill threw (${err.message}) — proceeding on the version gate only`);
+      return { ok: true, note: 'backfill unavailable — proceeding on the version gate only' };
+    }
+    if (backfill.error || !backfill.entry) {
+      console.error(`sync-global: WARNING ${pkg.name}@${pkg.version}: published-state backfill ${backfill.error ? `failed (${backfill.error})` : 'returned no entry'} — proceeding on the version gate only`);
+      return { ok: true, note: 'backfill unavailable — proceeding on the version gate only' };
+    }
+    entry = backfill.entry;
+  }
+  if (!entry.normalizedHash) {
+    // An entry with no hash (e.g. an ancient or hand-written one) cannot gate
+    // on content — degrade to today's behavior rather than block.
+    return { ok: true, note: `published-state entry for ${pkg.name} has no normalizedHash — proceeding on the version gate only` };
+  }
+  let localHash;
+  try {
+    localHash = stampedDistHash(distDir, pkg);
+  } catch (err) {
+    return { ok: false, error: `cannot hash local dist ${distDir} (${err.message}) — refusing to flip to the published artifact` };
+  }
+  if (entry.normalizedHash === localHash) return { ok: true };
+  return {
+    ok: false,
+    error: `worktree ahead of published content — run release first (local dist ${localHash} != published-state ${entry.normalizedHash} for ${pkg.name}@${pkg.version})`,
+  };
+}
+
 /** Default registry gate: `npm view <name>@<version> version`. Non-zero exit (not found) -> ''. */
 async function defaultNpmView(name, version) {
   const res = spawnSync('npm', ['view', `${name}@${version}`, 'version'], { encoding: 'utf8', timeout: 60_000 });
@@ -276,12 +466,18 @@ function printSummary(summary) {
  * `SyncSummary`:
  *
  *   [{ pkg: string, version: string, bins: string[],
- *      action: 'synced' | 'skipped' | 'unchanged', verified: boolean,
+ *      action: 'synced' | 'skipped' | 'refused' | 'unchanged', verified: boolean,
  *      dryRun?: true }]
  *
  *   - `unchanged`: no stale global link (nothing to do; `verified: true`).
  *   - `skipped`: version not on the registry yet (partial-publish gate), OR
  *     dry-run WOULD (in which case `dryRun: true` is also set).
+ *   - `refused`: BUG-004 content gate — the worktree's dist does NOT match
+ *     the published artifact's content at the same version string (or no
+ *     local dist exists to verify). NEVER flips; `verified: false`. Logged
+ *     as an ERROR line. This is the incident shape (published backlog@0.1.4
+ *     pre-turso flipped while the worktree held turso code under the same
+ *     0.1.4 string) — a refusal here is the fix, not a noise failure.
  *   - `synced`: `pnpm add -g` ran; `verified` is the post-sync verification
  *     result (false -> backups were restored and an ERROR was logged).
  *
@@ -291,15 +487,16 @@ function printSummary(summary) {
  *
  * TEST SEAM (documented deviation): the spec'd signature is
  * `{ workspaceRoot, pnpmGlobalBinDir, projects, dryRun }`; `npmView`,
- * `pnpmAdd`, and `globalDir` are OPTIONAL extra keys used only to make the
- * registry-gate/sync/verify branches unit-testable without touching real
- * globals or the network. When omitted, the defaults above reproduce
- * production behavior exactly.
+ * `pnpmAdd`, `globalDir`, and `reconcilePkg` are OPTIONAL extra keys used
+ * only to make the registry-gate/sync/verify/content-gate branches
+ * unit-testable without touching real globals or the network. When omitted,
+ * the defaults above reproduce production behavior exactly.
  *
  * @param {{ workspaceRoot: string, pnpmGlobalBinDir: string, projects?: string[] | null, dryRun?: boolean,
  *           npmView?: (name: string, version: string) => Promise<string>,
  *           pnpmAdd?: (name: string, version: string) => Promise<{ ok: boolean }>,
- *           globalDir?: string }} opts
+ *           globalDir?: string,
+ *           reconcilePkg?: ({ name: string, version: string, distDir: string, workspaceRoot: string }) => Promise<{ entry?: object, error?: string }> }} opts
  * @returns {Promise<Array<{ pkg: string, version: string, bins: string[], action: string, verified: boolean, dryRun?: boolean }>>}
  */
 export async function syncGlobalShims({
@@ -310,6 +507,7 @@ export async function syncGlobalShims({
   npmView = defaultNpmView,
   pnpmAdd = defaultPnpmAdd,
   globalDir = undefined,
+  reconcilePkg = defaultReconcilePkg,
 }) {
   const view = npmView;
   const add = pnpmAdd || ((name, version) => defaultPnpmAdd(name, version, workspaceRoot));
@@ -380,6 +578,23 @@ export async function syncGlobalShims({
       continue;
     }
     console.error(`sync-global: ${pkg.name}@${pkg.version}: confirmed on registry (npm view)`);
+
+    // Step 2.5 — BUG-004 content gate: the version string being on the
+    // registry is NOT proof the worktree's dist matches the published
+    // artifact. The incident: published @adhd/backlog@0.1.4 (pre-turso,
+    // better-sqlite3) was flipped while this worktree held turso-adapter
+    // code under the same 0.1.4 string — breaking the CLI against the live
+    // store (SQLITE_CORRUPT). Only flip when the local dist's STAMPED
+    // content hash equals the published artifact's hash; refuse otherwise
+    // and NEVER flip to the stale artifact. See `contentGate`'s doc comment.
+    const distDir = join(entrypointDir, dirName, 'dist');
+    const gate = await contentGate({ pkg, distDir, workspaceRoot, reconcilePkg });
+    if (!gate.ok) {
+      console.error(`sync-global: ERROR ${pkg.name}@${pkg.version}: ${gate.error} — skipping sync, shim(s) [${staleBins.join(', ')}] left untouched`);
+      summary.push({ pkg: pkg.name, version: pkg.version, bins: staleBins, action: 'refused', verified: false });
+      continue;
+    }
+    if (gate.note) console.error(`sync-global: ${pkg.name}@${pkg.version}: ${gate.note}`);
 
     // Step 3 — dry-run: show the intent, touch nothing.
     if (dryRun) {
