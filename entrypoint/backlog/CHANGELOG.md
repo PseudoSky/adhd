@@ -1,3 +1,33 @@
+## 0.1.5 (2026-08-12)
+
+
+### 🚀 Features
+
+- **backlog:** swap raw better-sqlite3 handle for sox store adapter (F-01)
+
+- **backlog:** F-01 turso adapter migration (resolves blockers)
+
+- **backlog:** convert store to turso store-adapter (F-01+F-02)
+
+
+### 🩹 Fixes
+
+- **backlog:** dedupe-scan weak FTS match + required-field completeness
+
+- **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
+
+- **backlog:** remove better-sqlite3 — turso-native concurrency fixtures (substrate invariant)
+
+- **backlog:** best-effort store close in finally paths (close error must not mask command outcome)
+
+- **backlog:** init telemetry at CLI composition root (stop silent record drop, role:'cli')
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+
 ## 0.1.3 (2026-07-30)
 
 

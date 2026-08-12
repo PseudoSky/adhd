@@ -1,3 +1,17 @@
+## 0.1.5 (2026-08-12)
+
+
+### 🩹 Fixes
+
+- **agent-mcp:** assert a DELTA on REPO_ROOT/data, not an absolute — unblocks 2.2.2 publish
+
+- **agent:** typecheck targets no longer fail TS6305 in fresh worktrees (additive typecheck configs + real type fixes)
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.4 (2026-08-07)
 
 
