@@ -20,6 +20,23 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+// BUG (flaky CPU-guard trips under real machine load, test:build-tools): this
+// file exercises the real `publish` executor end-to-end (only `spawnSync` is
+// mocked), which wraps its work in `withMetrics` (BUILD-TOOLING-METRICS-001) —
+// and `withMetrics` always runs the REAL `checkCpuGuard`
+// (FEAT-NXMETRICS-CPU-GUARD-001) against a REAL `process.cpuUsage()`
+// measurement of whatever brief work `run()` just did. On a loaded machine
+// (e.g. many concurrent `node --test` workers sharing cores) that real
+// measured % can legitimately exceed the default
+// `ADHD_NX_METRICS_MAX_CPU_PCT=300` threshold for these short bursts, tripping
+// the guard and failing a test that has nothing to do with the guard itself.
+// The guard's own pass/fail LOGIC is fully covered, deterministically, by
+// `tools/nx-plugins/lib/metrics.spec.mjs` — this file only asserts publish
+// cache/dist/backstop orchestration, so disable the guard here (metrics
+// recording, including the real `cpuPercent` value, still happens; only the
+// throw-on-trip is turned off).
+process.env.ADHD_NX_METRICS_MAX_CPU_PCT = '0';
+
 const require = createRequire(import.meta.url);
 const implAbs = require.resolve('./impl.js');
 const npmRegistryAbs = require.resolve('../../lib/npm-registry.js');

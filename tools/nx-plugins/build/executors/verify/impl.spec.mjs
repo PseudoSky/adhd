@@ -25,6 +25,22 @@ import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from 'node
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// BUG (flaky CPU-guard trips under real machine load): this file exercises the
+// real `verify-dist-load` executor, which wraps its work in `withMetrics`
+// (BUILD-TOOLING-METRICS-001) — and `withMetrics` always runs the REAL
+// `checkCpuGuard` (FEAT-NXMETRICS-CPU-GUARD-001) against a REAL
+// `process.cpuUsage()` measurement of whatever brief work `run()` just did
+// (mocked restamp; the mocked/real `node <script>` child boundary keeps the
+// parent's wall window small). On a loaded machine that real measured % can
+// legitimately exceed the default `ADHD_NX_METRICS_MAX_CPU_PCT=300` threshold
+// for such short bursts, tripping the guard and failing a test that has
+// nothing to do with the guard itself. The guard's own pass/fail LOGIC is
+// fully covered, deterministically, by `tools/nx-plugins/lib/metrics.spec.mjs`
+// — this file only asserts the dist-manifest re-stamp regression fix, so
+// disable the guard here (metrics recording, including the real `cpuPercent`
+// value, still happens; only the throw-on-trip is turned off).
+process.env.ADHD_NX_METRICS_MAX_CPU_PCT = '0';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const implAbs = require.resolve('./impl.js');
