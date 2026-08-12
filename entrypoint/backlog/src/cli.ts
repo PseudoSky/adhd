@@ -25,7 +25,7 @@ import { batchPlugin } from '@adhd/apigen-plugin-batch';
 import type { Descriptor, Operation, Plugin } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
 import type { BacklogCtx } from './client.js';
-import { openGraphBacklogStore, closeGraphBacklogStore, type GraphBacklogStore } from './store/graph-backlog-store.js';
+import { openGraphBacklogStore, closeGraphBacklogStoreSafe, type GraphBacklogStore } from './store/graph-backlog-store.js';
 import { buildBacklogEnv } from './env.js';
 import { buildBacklogApigenPackage, requireRun, testSilentLogger } from './server.js';
 import { runInstallSkillCommand } from './install-skill.js';
@@ -304,6 +304,6 @@ export async function runBacklogCli(argv?: string[], opts: RunBacklogCliOpts = {
       logger: testSilentLogger(),
     });
   } finally {
-    if (opened) await closeGraphBacklogStore(opened.store);
+    await closeGraphBacklogStoreSafe(opened?.store);
   }
 }

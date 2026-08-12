@@ -73,3 +73,25 @@ export async function openGraphBacklogStore(dbPath: string, busyTimeoutMs = 5000
 export async function closeGraphBacklogStore(store: GraphBacklogStore): Promise<void> {
   await store.adapter.close();
 }
+
+/**
+ * Best-effort close for teardown finally-paths (cli.ts / server.ts).
+ * closeGraphBacklogStore may throw only in the extreme edge where the
+ * driver's own db.close() fails (every checkpoint/verify failure is already
+ * caught and logged inside the adapter — turso-adapter close()). On that edge
+ * this logs and returns so a close failure can never mask a command/transport
+ * error or turn a successful command into a failed exit. The adapter's own
+ * logs are the durable record; the client never rethrows here.
+ */
+export async function closeGraphBacklogStoreSafe(store: GraphBacklogStore | undefined): Promise<void> {
+  if (!store) return;
+  try {
+    await closeGraphBacklogStore(store);
+  } catch (err) {
+    console.error(
+      `backlog: store close failed (data is durable; WAL checkpoint may be pending): ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
+  }
+}
