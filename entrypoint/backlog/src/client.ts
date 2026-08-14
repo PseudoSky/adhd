@@ -31,6 +31,7 @@ import type {
   MigrationStatusResult,
   Priority,
   ReleaseResult,
+  RepoMigrationResult,
   SetMigrationPhaseResult,
   StatsScope,
   TopoOrderResult,
@@ -47,6 +48,7 @@ import { toBacklogItem } from './store/mapping.js';
 import { claimItemNode, releaseClaimNode, renewClaimNode } from './store/claim.js';
 import { addCitationNode, appendNoteNode, archiveTerminalItems, resolveItemNode, startWorkNode, transitionStatusNode } from './store/lifecycle.js';
 import { addDependencyNode, assignItemNode, attachToPlanNode, linkRelatedNode, mergeItemsNode, removeDependencyNode, setPriorityNode, splitItemNode, supersedeItemNode } from './store/structure.js';
+import { migrateRepo as migrateRepoNode } from './store/repo-migration.js';
 import { buildChangelogSection, parseBacklogMarkdownWithDiagnostics, renderItemsToMarkdown, toImportItems } from './markdown.js';
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -263,6 +265,33 @@ export async function setPriority(ctx: BacklogCtx, repo: string, humanId: string
 /** MEMBER_OF edge to a plan node (auto-created if the plan slug hasn't been seen before). */
 export async function attachToPlan(ctx: BacklogCtx, repo: string, humanId: string, planSlug: string): Promise<void> {
   await attachToPlanNode(ctx.store, repo, humanId, planSlug);
+}
+
+/**
+ * BUG-BACKLOG-REPO-SPLIT-001 / DEBT-BACKLOG-REPO-MOVE-001 — the dedicated
+ * primitive to move every live item out of `fromRepo` into `toRepo` (a
+ * repo-key correction, e.g. a legacy `"adhd"` string onto the canonical
+ * `"PseudoSky/adhd"`). `dryRun` defaults to `true`: a caller must pass
+ * `dryRun:false` explicitly to write anything — the default call is always
+ * safe to make speculatively and returns the full plan (including which
+ * items would be renamed, and to what) with zero mutation.
+ *
+ * Collisions (a humanId already live in `toRepo`) are never silently
+ * dropped, overwritten, or left ambiguous — each is deterministically
+ * renamed to the next free number in its own family within `toRepo`
+ * (`store/repo-migration.ts`'s `planRepoMigration`), and an audit note
+ * recording the original `(fromRepo, humanId)` is attached to the moved
+ * item so the rename is traceable. Cross-item links (DEPENDS_ON,
+ * RELATES_TO, PART_OF, SUPERSEDES, SAME_AS, MEMBER_OF, ASSIGNED_TO) are
+ * preserved automatically — a move never changes a node's id, only its
+ * `namespace`/`repo`/`humanId`/`name`/`content`.
+ *
+ * Every planned item gets exactly one reported outcome
+ * (`results[i].ok`/`error`) when `dryRun:false` — a per-item failure never
+ * aborts the rest of the batch and never goes unreported.
+ */
+export async function migrateRepo(ctx: BacklogCtx, fromRepo: string, toRepo: string, by: string, dryRun?: boolean): Promise<RepoMigrationResult> {
+  return migrateRepoNode(ctx.store, fromRepo, toRepo, by, dryRun ?? true);
 }
 
 // ============================================================================
