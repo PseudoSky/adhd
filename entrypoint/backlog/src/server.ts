@@ -52,7 +52,8 @@ import { mcpPlugin } from '@adhd/apigen-plugin-mcp';
 import { batchPlugin } from '@adhd/apigen-plugin-batch';
 import * as clientMod from './client.js';
 import type { BacklogCtx } from './client.js';
-import { openGraphBacklogStore, closeGraphBacklogStoreSafe } from './store/graph-backlog-store.js';
+import { openGraphBacklogStore, closeGraphBacklogStoreSafe, type GraphBacklogStore } from './store/graph-backlog-store.js';
+import { hasExternalSignalHandling, installSignalCleanup } from './store/signal-cleanup.js';
 import { buildBacklogEnv, resolveBacklogDbPath } from './env.js';
 import type { Logger, OutputPlugin, RunInput } from '@adhd/apigen-core-client';
 
@@ -448,10 +449,35 @@ export async function buildBacklogApigenPackage(ctx: BacklogCtx | (() => Backlog
 export async function startBacklogServer(opts: StartOpts): Promise<void> {
   const env = buildBacklogEnv({ scope: opts.scope, adhdRoot: opts.adhdRoot, cwd: opts.cwd });
   env.ensureDirs();
+
+  // BUG-BACKLOG-NO-SIGNAL-HANDLERS-001: `serve.ts`'s `runServeCommand`
+  // registers its OWN SIGINT/SIGTERM handling (→ `AbortController.abort()`,
+  // driving a graceful drain of whichever transports are mounted below)
+  // BEFORE ever calling this function — checked here, at the top, before the
+  // store even starts opening, so this only installs a SECOND, competing
+  // handler for callers that reach `startBacklogServer` directly, with no
+  // external SIGINT/SIGTERM coverage of their own (see
+  // `hasExternalSignalHandling`'s doc comment for why installing both would
+  // race the caller's graceful drain instead of helping it).
+  let closePromise: Promise<void> | undefined;
+  // Deliberately `let`, not folded into `const store = await
+  // openGraphBacklogStore(...)` below: this must stay visible (and
+  // `undefined`) to `closeStoreOnce`'s closure for the ENTIRE async open
+  // window, so a signal arriving before the open finishes correctly closes
+  // "nothing yet" (a documented no-op) instead of the closure capturing a
+  // not-yet-existing binding.
+  // eslint-disable-next-line prefer-const
+  let store: GraphBacklogStore | undefined;
+  const closeStoreOnce = (): Promise<void> => {
+    if (!closePromise) closePromise = closeGraphBacklogStoreSafe(store);
+    return closePromise;
+  };
+  const signalCleanup = hasExternalSignalHandling() ? undefined : installSignalCleanup(closeStoreOnce);
+
   // BUG-002: open through `resolveBacklogDbPath` so ADHD_BACKLOG_DATABASE_PATH
   // (→ config.db.path) actually redirects the store; `env.files.db` is only
   // the fallback.
-  const store = await openGraphBacklogStore(resolveBacklogDbPath(env), env.config.db.busyTimeoutMs);
+  store = await openGraphBacklogStore(resolveBacklogDbPath(env), env.config.db.busyTimeoutMs);
   const ctx: BacklogCtx = { store, env };
 
   const { pkg, operations } = await buildBacklogApigenPackage(ctx);
@@ -486,6 +512,7 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
   try {
     await Promise.all(runs);
   } finally {
-    await closeGraphBacklogStoreSafe(store);
+    signalCleanup?.dispose();
+    await closeStoreOnce();
   }
 }

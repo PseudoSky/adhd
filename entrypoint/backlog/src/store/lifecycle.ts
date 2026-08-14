@@ -36,9 +36,12 @@ async function requireItemNode(store: GraphBacklogStore, repo: string, humanId: 
  * with no actual file is not evidence. Every write path that accepts a
  * caller-supplied `Citation` (inline on `transitionStatus`/`resolveItem`, and
  * standalone `addCitation`) runs every entry through this before it is
- * persisted.
+ * persisted. Also reused by `crud.ts`'s `createItemNode` and
+ * `structure.ts`'s `supersedeItemNode` for citations supplied inline on
+ * `CreateItemInput` (BUG-BACKLOG-CREATE-ITEM-DROPS-CITATIONS-001) — one
+ * validation rule, every write path.
  */
-function assertValidCitation(citation: Citation): void {
+export function assertValidCitation(citation: Citation): void {
   if (typeof citation.file !== 'string' || citation.file.trim().length === 0) {
     throw new InvalidArgumentError(
       'citation.file',

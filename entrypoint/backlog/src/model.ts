@@ -275,6 +275,16 @@ export interface CreateItemInput {
   dedupeScan?: DedupeScanInput;
   /** Skip the dedupe gate and file anyway (planner override after reviewing candidates). */
   force?: boolean;
+  /**
+   * Citations to attach at creation time (BUG-BACKLOG-CREATE-ITEM-DROPS-CITATIONS-001).
+   * Previously absent from this interface entirely — a caller passing
+   * `citations` on create got a success response with the item created and
+   * the citations silently discarded (no such field existed to carry them
+   * through). Validated the same way as every other citation write path
+   * (`Citation.file` non-empty — see `lifecycle.ts`'s `assertValidCitation`)
+   * and rejected as a whole (no partial write) before allocation runs.
+   */
+  citations?: Citation[];
 }
 
 export interface CreateItemResult {
@@ -520,4 +530,81 @@ export interface MigrationStatusResult {
  *  in-memory value). */
 export interface SetMigrationPhaseResult extends MigrationStatusResult {
   configPath: string;
+}
+
+// ============================================================================
+// BUG-BACKLOG-REPO-SPLIT-001 / DEBT-BACKLOG-REPO-MOVE-001 — repo migration.
+//
+// `repo` has no dedicated mutation primitive anywhere in this store (see
+// DEBT-BACKLOG-REPO-MOVE-001 Finding 1) and is stored in TWO places that can
+// diverge — the graph node's `namespace` column (what every `repo`-scoped
+// FILTER/lookup keys on) and `metadata.repo` (what every RENDERED
+// `BacklogItem.repo` reads — `mapping.ts`'s `toBacklogItem`) — see Finding 2.
+// `planRepoMigration`/`migrateRepo` (`store/repo-migration.ts`) are the
+// dedicated primitive: they operate on `namespace` (so a node whose fields
+// have already diverged, e.g. `namespace:"adhd"` but `metadata.repo:
+// "PseudoSky/adhd"`, is still found and fully repaired — both fields end up
+// consistent again), and write BOTH fields atomically per item.
+// ============================================================================
+
+/** One item's move within a `RepoMigrationPlan` — always dry-runnable, never mutates on its own. */
+export interface RepoMigrationPlanItem {
+  nodeId: number;
+  /** The humanId this item currently carries in `fromRepo`. */
+  humanId: string;
+  /**
+   * The humanId this item will carry in `toRepo` — identical to `humanId`
+   * unless `renamed` is true. Deterministic: preserves the item's `family`
+   * prefix and picks the next free number in that family within `toRepo`
+   * (mirrors `computeNextHumanId`'s own `max + 1` allocation rule), scanning
+   * BOTH `toRepo`'s pre-existing items AND every earlier item in this same
+   * plan already assigned a number in that family — so two colliding items
+   * sharing a family (e.g. two different `BUG-001`s) never collide with each
+   * other's rename target either.
+   */
+  targetHumanId: string;
+  /** True iff `humanId` already exists as a LIVE item in `toRepo` and had to be renamed to avoid an id collision. */
+  renamed: boolean;
+  title: string;
+  status: BacklogStatus;
+}
+
+/**
+ * The full, deterministic plan for moving every live item out of `fromRepo`
+ * into `toRepo` — computed by a pure read-only scan (`planRepoMigration`),
+ * safe to call repeatedly and to inspect before ever mutating anything.
+ */
+export interface RepoMigrationPlan {
+  fromRepo: string;
+  toRepo: string;
+  items: RepoMigrationPlanItem[];
+  /** Count of `items` where `renamed === true` — the collision count. */
+  collisionCount: number;
+}
+
+/** Per-item outcome of actually executing a `RepoMigrationPlan`. Every planned item gets exactly one of these — nothing is ever silently dropped. */
+export interface RepoMigrationItemResult {
+  nodeId: number;
+  fromHumanId: string;
+  toHumanId: string;
+  renamed: boolean;
+  ok: boolean;
+  /** Present iff `ok === false` — the item was left untouched in `fromRepo`, never partially moved. */
+  error?: string;
+}
+
+/**
+ * `migrateRepo`'s result. When `dryRun` is true (the default — a caller must
+ * pass `dryRun:false` explicitly to mutate anything), `results` is absent and
+ * NOTHING was written; `plan` alone previews exactly what would happen.
+ */
+export interface RepoMigrationResult {
+  fromRepo: string;
+  toRepo: string;
+  dryRun: boolean;
+  plan: RepoMigrationPlan;
+  /** Present only when `dryRun === false`. One entry per `plan.items` entry, same order. */
+  results?: RepoMigrationItemResult[];
+  succeeded?: number;
+  failed?: number;
 }
