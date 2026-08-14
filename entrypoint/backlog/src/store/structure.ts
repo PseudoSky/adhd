@@ -10,6 +10,7 @@ import { buildNotFoundError, findItemNode } from './query.js';
 import { mutateMetadata } from './mutate-metadata.js';
 import { createItemNode } from './crud.js';
 import { allocateHumanIdAndInsert } from './ids.js';
+import { assertValidCitation } from './lifecycle.js';
 import {
   BACKLOG_ASSIGNEE_TAG,
   BACKLOG_ITEM_TAG,
@@ -76,6 +77,15 @@ export async function supersedeItemNode(store: GraphBacklogStore, repo: string, 
       `backlog: supersedeItem requires a non-empty "reason" — received reason=${JSON.stringify(reason)}.`
     );
   }
+  // BUG-BACKLOG-CREATE-ITEM-DROPS-CITATIONS-001: `newInput` is the same
+  // `CreateItemInput` shape `createItemNode` accepts and validates —
+  // `supersedeItemNode` mints its replacement node by hand (see the mint
+  // block below) rather than delegating to `createItemNode`, so it needs
+  // the identical up-front validation or it would silently reintroduce the
+  // same drop for the supersede path alone.
+  if (newInput.citations) {
+    for (const citation of newInput.citations) assertValidCitation(citation);
+  }
   const old = await requireItemNode(store, repo, oldHumanId);
 
   // The new item's humanId must be allocated BEFORE minting (it is baked
@@ -113,7 +123,7 @@ export async function supersedeItemNode(store: GraphBacklogStore, repo: string, 
       body: newInput.body,
       status: 'OPEN',
       repo,
-      citations: [],
+      citations: newInput.citations ?? [],
       notes: [],
       createdAt: nowIso,
       updatedAt: nowIso,

@@ -26,6 +26,7 @@ import type { Descriptor, Operation, Plugin } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
 import type { BacklogCtx } from './client.js';
 import { openGraphBacklogStore, closeGraphBacklogStoreSafe, type GraphBacklogStore } from './store/graph-backlog-store.js';
+import { installSignalCleanup } from './store/signal-cleanup.js';
 import { buildBacklogEnv, resolveBacklogDbPath } from './env.js';
 import { buildBacklogApigenPackage, requireRun, testSilentLogger } from './server.js';
 import { runInstallSkillCommand } from './install-skill.js';
@@ -282,6 +283,27 @@ export async function runBacklogCli(argv?: string[], opts: RunBacklogCliOpts = {
     return opened.ctx;
   };
 
+  // `closeStoreOnce` memoizes the actual close so the signal handler (which
+  // may fire concurrently with, or just before, the normal-path `finally`
+  // below) and the normal-path `finally` can both unconditionally call it
+  // without racing a double `adapter.close()` — the SECOND caller just
+  // awaits the SAME in-flight/settled promise the first one kicked off.
+  let closePromise: Promise<void> | undefined;
+  const closeStoreOnce = (): Promise<void> => {
+    if (!closePromise) closePromise = closeGraphBacklogStoreSafe(opened?.store);
+    return closePromise;
+  };
+
+  // BUG-BACKLOG-NO-SIGNAL-HANDLERS-001: installed BEFORE the store open even
+  // starts (`getCtx()`'s `openGraphBacklogStore` await is entirely inside
+  // `buildBacklogApigenPackage`/`requireRun` below), covering the whole
+  // async window a Ctrl-C/SIGTERM could otherwise land in with zero handler
+  // registered — see signal-cleanup.ts's doc comment for the full rationale
+  // and its stated (SIGKILL/native-panic) limit. `cleanup` reads `opened` by
+  // closure at signal time, not at install time, so it correctly sees
+  // whichever store (if any) had actually finished opening by then.
+  const signalCleanup = installSignalCleanup(closeStoreOnce);
+
   try {
     const { pkg, operations } = await buildBacklogApigenPackage(getCtx);
     const userArgv = userArgvEarly;
@@ -307,6 +329,10 @@ export async function runBacklogCli(argv?: string[], opts: RunBacklogCliOpts = {
       logger: testSilentLogger(),
     });
   } finally {
-    await closeGraphBacklogStoreSafe(opened?.store);
+    // Normal-path completion: dispose the signal handler FIRST so a signal
+    // arriving after this point (once we're already closing/closed) is not
+    // double-handled, then close through the same memoized lease-release path.
+    signalCleanup.dispose();
+    await closeStoreOnce();
   }
 }

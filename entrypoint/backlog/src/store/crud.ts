@@ -12,6 +12,7 @@ import type { GraphBacklogStore } from './graph-backlog-store.js';
 import { allocateHumanIdAndInsert } from './ids.js';
 import { buildNotFoundError, findItemNode, knownRepos } from './query.js';
 import { mutateMetadata } from './mutate-metadata.js';
+import { assertValidCitation } from './lifecycle.js';
 import {
   BACKLOG_ITEM_TAG,
   buildNodeContent,
@@ -241,6 +242,14 @@ export async function createItemNode(store: GraphBacklogStore, input: CreateItem
     );
   }
 
+  // BUG-BACKLOG-CREATE-ITEM-DROPS-CITATIONS-001: validated up front, before
+  // any allocation runs — same "a rejected write is not a partial write"
+  // guarantee as the field guards above and `transitionStatus`'s inline
+  // citation validation (lifecycle.ts).
+  if (input.citations) {
+    for (const citation of input.citations) assertValidCitation(citation);
+  }
+
   // `idOverride` (import path, or a planner-chosen id) must never mint a
   // SECOND node claiming an already-live humanId — `humanId` is documented
   // as "unique within (repo, family)" (SPEC.md §4.1). This is a HARD check,
@@ -301,7 +310,7 @@ export async function createItemNode(store: GraphBacklogStore, input: CreateItem
       body: input.body,
       status: 'OPEN',
       repo: input.repo,
-      citations: [],
+      citations: input.citations ?? [],
       notes: [],
       createdAt: nowIso,
       updatedAt: nowIso,
