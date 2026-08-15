@@ -11,7 +11,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { buildBacklogEnv, resolveBacklogDbPath } from './env.js';
+import { buildBacklogEnv, resolveBacklogDbPath, resolveIrCacheFile } from './env.js';
+import { osTmpDir } from './test/helpers/tmp-store.js';
 import { createItem, getItem } from './client.js';
 import type { BacklogCtx } from './client.js';
 import { openGraphBacklogStore, closeGraphBacklogStore, type GraphBacklogStore } from './store/graph-backlog-store.js';
@@ -173,5 +174,66 @@ describe('scope isolation — real Environment instances, real temp filesystem r
       if (prev === undefined) delete process.env['ADHD_BACKLOG_MIGRATION_PHASE'];
       else process.env['ADHD_BACKLOG_MIGRATION_PHASE'] = prev;
     }
+  });
+
+  describe('BUG-CACHE-CWD-001 — resolveIrCacheFile is process.cwd()-independent', () => {
+    let prevCwd: string;
+    let prevEnvFile: string | undefined;
+
+    beforeEach(() => {
+      prevCwd = process.cwd();
+      prevEnvFile = process.env['APIGEN_IR_CACHE_FILE'];
+      delete process.env['APIGEN_IR_CACHE_FILE'];
+    });
+
+    afterEach(() => {
+      process.chdir(prevCwd);
+      if (prevEnvFile === undefined) delete process.env['APIGEN_IR_CACHE_FILE'];
+      else process.env['APIGEN_IR_CACHE_FILE'] = prevEnvFile;
+    });
+
+    it('resolves to the SAME absolute path from two different cwds under the same adhdRoot (regression: the old default was `join(process.cwd(), \'tmp\', \'apigen\', \'ir-cache\', ...)`, a fresh cache — and directory — per invocation cwd)', () => {
+      const adhdRoot = globalHomeDir;
+      const cwdA = osTmpDir('backlog-ir-cache-cwd-a');
+      const cwdB = osTmpDir('backlog-ir-cache-cwd-b');
+
+      process.chdir(cwdA);
+      const pathFromA = resolveIrCacheFile({ adhdRoot });
+
+      process.chdir(cwdB);
+      const pathFromB = resolveIrCacheFile({ adhdRoot });
+
+      expect(pathFromA).toBe(pathFromB);
+      expect(pathFromA.startsWith(cwdA)).toBe(false);
+      expect(pathFromA.startsWith(cwdB)).toBe(false);
+      expect(pathFromA.startsWith(adhdRoot)).toBe(true);
+      expect(pathFromA.endsWith(join('apigen', 'ir-cache', 'backlog-client.ir.json'))).toBe(true);
+
+      rmSync(cwdA, { recursive: true, force: true });
+      rmSync(cwdB, { recursive: true, force: true });
+    });
+
+    it('is also independent of the caller-requested scope (project vs global) — the IR cache stays one machine-wide location regardless of ADHD_BACKLOG_SCOPE', () => {
+      const adhdRoot = globalHomeDir;
+      const prevScope = process.env['ADHD_BACKLOG_SCOPE'];
+      try {
+        process.env['ADHD_BACKLOG_SCOPE'] = 'project';
+        const withProjectScopeEnvVar = resolveIrCacheFile({ adhdRoot });
+
+        delete process.env['ADHD_BACKLOG_SCOPE'];
+        const withNoScopeOverride = resolveIrCacheFile({ adhdRoot });
+
+        expect(withProjectScopeEnvVar).toBe(withNoScopeOverride);
+      } finally {
+        if (prevScope === undefined) delete process.env['ADHD_BACKLOG_SCOPE'];
+        else process.env['ADHD_BACKLOG_SCOPE'] = prevScope;
+      }
+    });
+
+    it('APIGEN_IR_CACHE_FILE still wins outright over the resolved default (test-isolation escape hatch preserved)', () => {
+      const override = join(osTmpDir('backlog-ir-cache-override'), 'custom.ir.json');
+      process.env['APIGEN_IR_CACHE_FILE'] = override;
+      expect(resolveIrCacheFile({ adhdRoot: globalHomeDir })).toBe(override);
+    });
   });
 });

@@ -4,6 +4,7 @@
  * project-marker-found ⇒ `project`) — SPEC.md §3 requirement #3/#4: one shared
  * graph spanning every repo on the machine, by default.
  */
+import { join } from 'node:path';
 import { Environment } from '@adhd/environment';
 import type { EnvironmentOptions, EnvironmentSpec, Scope } from '@adhd/environment-base-spec';
 
@@ -18,6 +19,16 @@ export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
   namespaces: ['production'],
   dirs: {
     data: { kind: 'data' },
+    // BUG-CACHE-CWD-001: the apigen extract-stage IR-cache root. `kind:
+    // 'cache'` resolves under the same `${HOME}/.adhd/backlog/...` scope
+    // root `data` does (`DEFAULT_SHARE_BY_KIND['cache'] === 'shared'`) —
+    // NEVER `process.cwd()`. Consumed only via `resolveIrCacheFile` below,
+    // always forcing `scope: 'global'` regardless of the caller's own
+    // `ADHD_BACKLOG_SCOPE`/`opts.scope` — the IR cache caches backlog's own
+    // generated client, not per-repo data, so it must stay at one stable
+    // machine-wide location no matter which scope a given invocation
+    // resolved its backlog *data* to. See `server.ts`'s `irCacheFile()`.
+    cache: { kind: 'cache' },
   },
   files: {
     // Deliberately a DIFFERENT file/dir than agent-mcp's operational db or
@@ -127,4 +138,43 @@ export function resolveBacklogDbPath(env: Environment<BacklogConfig>): string {
  */
 export function suggestClaimantIdentity(agentName: string, instanceId: string): string {
   return `${agentName}:${instanceId}`;
+}
+
+/**
+ * BUG-CACHE-CWD-001: the effective apigen extract-stage IR-cache file path.
+ * Prior to this fix, `server.ts`'s `irCacheFile()` defaulted to
+ * `join(process.cwd(), 'tmp', 'apigen', 'ir-cache', 'backlog-client.ir.json')`
+ * — a NEW cache (and a NEW `tmp/apigen/ir-cache/` directory) was created in
+ * every distinct directory `backlog` was ever invoked from: every repo, every
+ * git worktree, and — because `startBacklogServer`'s `opts.cwd` test-override
+ * plumbing was sometimes used unintentionally as a live cwd — even
+ * `~/.adhd/backlog/production/data/tmp/apigen/ir-cache/`, nested one level
+ * inside the live store's own data directory. None of these scattered copies
+ * ever saw a cache HIT from any other copy, so every distinct invocation
+ * directory paid a full re-extraction — a correctness-neutral but pure
+ * performance and disk-hygiene regression (FEAT-002's entire point, undone).
+ *
+ * Resolution order (highest precedence first), matching `resolveBacklogDbPath`'s
+ * own precedence-comment convention:
+ *
+ *   1. `APIGEN_IR_CACHE_FILE` (explicit escape hatch — tests point this at a
+ *      throwaway file; see `ir-cache.integration.spec.ts`) — wins outright.
+ *   2. The `cache` dir's resolved path (`kind: 'cache'` → shared, scope
+ *      forced to `'global'` — see the `dirs.cache` doc comment above) +
+ *      `apigen/ir-cache/backlog-client.ir.json`. Absolute, `process.cwd()`-
+ *      independent, and identical across every scope/repo/worktree on this
+ *      machine — exactly the fast-path guarantee FEAT-002 designed for.
+ *
+ * `adhdRoot`/`instanceId` are accepted purely for test isolation (mirrors
+ * `buildBacklogEnv`'s own test-isolation fields) — production callers never
+ * pass them.
+ */
+export function resolveIrCacheFile(options: { adhdRoot?: string; instanceId?: string } = {}): string {
+  const fromEnv = process.env['APIGEN_IR_CACHE_FILE'];
+  if (fromEnv) return fromEnv;
+  const envOptions: EnvironmentOptions = { namespace: 'production', scope: 'global' };
+  if (options.adhdRoot !== undefined) envOptions.adhdRoot = options.adhdRoot;
+  if (options.instanceId !== undefined) envOptions.instanceId = options.instanceId;
+  const env = new Environment<BacklogConfig>('backlog', backlogEnvironmentSpec, envOptions);
+  return join(env.paths['cache'] as string, 'apigen', 'ir-cache', 'backlog-client.ir.json');
 }
