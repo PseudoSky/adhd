@@ -54,7 +54,7 @@ import * as clientMod from './client.js';
 import type { BacklogCtx } from './client.js';
 import { openGraphBacklogStore, closeGraphBacklogStoreSafe, type GraphBacklogStore } from './store/graph-backlog-store.js';
 import { hasExternalSignalHandling, installSignalCleanup } from './store/signal-cleanup.js';
-import { buildBacklogEnv, resolveBacklogDbPath } from './env.js';
+import { buildBacklogEnv, resolveBacklogDbPath, resolveIrCacheFile } from './env.js';
 import type { Logger, OutputPlugin, RunInput } from '@adhd/apigen-core-client';
 
 /**
@@ -256,15 +256,16 @@ const CORE_CLIENT_VERSION: string = requirePkg(
  * FEAT-002 Revision 2 (design doc R2.2/R2.3, implementation spec R2-4):
  * RUNTIME CACHE mode targets a single, literal file — not a directory of
  * many content-addressed entries. Env-overridable (the integration spec
- * points it at a fresh throwaway file); default under the repo's canonical
- * `tmp/` (AGENTS.md §10 — gitignored, removable with `nx reset`).
+ * points it at a fresh throwaway file); default resolves through
+ * `resolveIrCacheFile` (`env.ts`) to a single stable absolute path under
+ * `~/.adhd/backlog/production/cache/apigen/ir-cache/backlog-client.ir.json`
+ * — NEVER `process.cwd()` (BUG-CACHE-CWD-001: the prior `join(process.cwd(),
+ * 'tmp', 'apigen', 'ir-cache', ...)` default scattered a fresh, permanently-
+ * cold cache directory into every repo/worktree `backlog` was ever run from).
  * `APIGEN_IR_CACHE_FILE` replaces the Revision-1 `APIGEN_IR_CACHE_DIR`.
  */
 function irCacheFile(): string {
-  return (
-    process.env['APIGEN_IR_CACHE_FILE'] ??
-    join(process.cwd(), 'tmp', 'apigen', 'ir-cache', 'backlog-client.ir.json')
-  );
+  return resolveIrCacheFile();
 }
 
 /**
