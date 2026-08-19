@@ -556,8 +556,8 @@ importers:
         specifier: ^0.8.4
         version: 0.8.4
       '@adhd/sox-store-adapter':
-        specifier: ^0.5.8
-        version: 0.5.8
+        specifier: ^0.7.0
+        version: 0.7.0
       '@adhd/sox-telemetry':
         specifier: ^0.2.0
         version: 0.2.0
@@ -1478,8 +1478,30 @@ packages:
       better-sqlite3: 12.10.0
     dev: false
 
+  /@adhd/sox-store-adapter@0.7.0:
+    resolution: {integrity: sha512-gJ+wYhi52cji5/MDJB/93YGQwqr0Jah8YEwCd8DD+oq7OweHmUmZKglFW7+fl1KcdpB4VJeTJ9uMGiJRDiafLA==}
+    engines: {node: '>=20'}
+    dependencies:
+      '@adhd/sox-telemetry': 0.2.1
+      '@tursodatabase/database': 0.7.2
+    optionalDependencies:
+      better-sqlite3: 12.10.0
+    dev: false
+
   /@adhd/sox-telemetry@0.2.0:
     resolution: {integrity: sha512-r9t4dwqtt4g300hQkeA59mJW7qZF8IUTN9dNa5nVC9ryAs9NHZPcuN68hpDn4uRii0l56CXsVR5cxV0N+Vd2Hw==}
+    engines: {node: '>=20'}
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/context-async-hooks': 2.10.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.10.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-metrics': 2.10.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.10.0(@opentelemetry/api@1.9.1)
+      ulid: 2.4.0
+    dev: false
+
+  /@adhd/sox-telemetry@0.2.1:
+    resolution: {integrity: sha512-joPql1U0Ua5xyOPeZiuktfn0pAHOrApZLrDVK5yT8P9FEv9ePdUTYKuDOSAh36E1BBHPGS1QIKNiWpmk8sIUEQ==}
     engines: {node: '>=20'}
     dependencies:
       '@opentelemetry/api': 1.9.1
