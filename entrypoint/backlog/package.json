@@ -1,6 +1,6 @@
 {
   "name": "@adhd/backlog",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "bin": {
     "backlog": "./dist/index.js"
   },
@@ -16,7 +16,7 @@
     "@adhd/environment": "^0.1.0",
     "@adhd/environment-base-spec": "^0.1.0",
     "@adhd/sox-graph-store": "^0.8.4",
-    "@adhd/sox-store-adapter": "^0.5.8",
+    "@adhd/sox-store-adapter": "^0.7.0",
     "@adhd/sox-telemetry": "^0.2.0",
     "pino": "10.3.1",
     "pino-pretty": "13.1.3",
