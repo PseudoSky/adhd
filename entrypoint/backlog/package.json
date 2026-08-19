@@ -1,6 +1,6 @@
 {
   "name": "@adhd/backlog",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "bin": {
     "backlog": "./dist/index.js"
   },
