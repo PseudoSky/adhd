@@ -54,6 +54,7 @@ import * as clientMod from './client.js';
 import type { BacklogCtx } from './client.js';
 import { openGraphBacklogStore, closeGraphBacklogStoreSafe, type GraphBacklogStore } from './store/graph-backlog-store.js';
 import { hasExternalSignalHandling, installSignalCleanup } from './store/signal-cleanup.js';
+import { acquireServeLock, isLockableDbPath, type ServeLockHandle } from './store/serve-lock.js';
 import { buildBacklogEnv, resolveBacklogDbPath, resolveIrCacheFile } from './env.js';
 import type { Logger, OutputPlugin, RunInput } from '@adhd/apigen-core-client';
 
@@ -469,8 +470,17 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
   // not-yet-existing binding.
   // eslint-disable-next-line prefer-const
   let store: GraphBacklogStore | undefined;
+  // [inv:singleton] (docs/spec/service-lifecycle.md §5, sox-ecosystem) — see
+  // serve-lock.ts's header for the full incident/rationale. Released ONLY
+  // after the store is actually closed below (never merely on signal
+  // receipt), so a second `serve` attempted while THIS one is mid-shutdown
+  // is refused, not raced.
+  const dbPath = resolveBacklogDbPath(env);
+  const serveLock: ServeLockHandle | undefined = isLockableDbPath(dbPath) ? acquireServeLock(dbPath) : undefined;
   const closeStoreOnce = (): Promise<void> => {
-    if (!closePromise) closePromise = closeGraphBacklogStoreSafe(store);
+    if (!closePromise) {
+      closePromise = closeGraphBacklogStoreSafe(store).finally(() => serveLock?.release());
+    }
     return closePromise;
   };
   const signalCleanup = hasExternalSignalHandling() ? undefined : installSignalCleanup(closeStoreOnce);
@@ -478,7 +488,16 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
   // BUG-002: open through `resolveBacklogDbPath` so ADHD_BACKLOG_DATABASE_PATH
   // (→ config.db.path) actually redirects the store; `env.files.db` is only
   // the fallback.
-  store = await openGraphBacklogStore(resolveBacklogDbPath(env), env.config.db.busyTimeoutMs);
+  try {
+    store = await openGraphBacklogStore(dbPath, env.config.db.busyTimeoutMs);
+  } catch (err) {
+    // The lock was acquired but the store open itself failed (bad path,
+    // corrupt file, etc.) — release the lock we're holding before propagating,
+    // or the failed attempt would permanently block every subsequent `serve`.
+    serveLock?.release();
+    signalCleanup?.dispose();
+    throw err;
+  }
   const ctx: BacklogCtx = { store, env };
 
   const { pkg, operations } = await buildBacklogApigenPackage(ctx);
