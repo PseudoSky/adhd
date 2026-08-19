@@ -1,3 +1,28 @@
+## 0.1.8 (2026-08-19)
+
+
+### 🩹 Fixes
+
+- **backlog:** singleton writer lock for `serve` — two concurrent servers against one store corrupted the db (BUG-020). O_EXCL PID-file lock keyed on the canonical realpath'd db path, held from before the store opens until after it is fully closed, so a second `serve` during shutdown drain is refused rather than admitted. Dead holders reclaimed; refusal names the holder pid and lock path.
+- **backlog:** consume `@adhd/sox-store-adapter` 0.7.0. The dependency was pinned `^0.5.8`, and a caret on a 0.x pins the MINOR — so it could never resolve past 0.6.0 and none of the WAL/durability work reached this store. Brings the adaptive idle-flush debounce (BL-590), baseline-relative WAL cap (BL-587), and verified busy-error classification in the wal-cap backstop (BUG-019).
+
+
+### ❤️  Thank You
+
+- pseudosky
+
+## 0.1.7 (2026-08-14)
+
+
+### 🩹 Fixes
+
+- **backlog:** persist citations, atomic repo migration, signal cleanup
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.6 (2026-08-12)
 
 
