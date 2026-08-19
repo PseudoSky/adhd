@@ -20,10 +20,26 @@
  * step 3.5 of `run-release.mjs`.
  *
  * HOW IT WORKS (per entrypoint/* package that declares a `bin`):
- *   1. DETECT — a shim is "stale" iff it exists in the pnpm global bin dir
- *      AND its content includes the workspace root path (a link shim).
- *      Shims that don't reference the workspace are already pointing at
- *      published artifacts (or nothing) — left alone.
+ *   1. DETECT — a shim is "stale" for one of TWO reasons:
+ *      (a) LINK — it exists in the pnpm global bin dir AND its content
+ *          includes the workspace root path (a `pnpm link -g` shim).
+ *      (b) VERSION DRIFT (BUG-027) — it exists, is NOT a link shim, but the
+ *          global store's installed `node_modules/<name>/package.json`
+ *          version differs from the source version. This is the ordinary
+ *          case a plain `pnpm add -g <name>@<oldVersion>` install ends up
+ *          in after a release: the shim never referenced the workspace, so
+ *          (a) alone reports "no stale link" — which is true but is NOT a
+ *          currency claim. Incident: @adhd/backlog@0.1.8 published clean,
+ *          GATE 2 passed, this script logged "no stale global link" / summary
+ *          `verified=true` — and the operator's CLI stayed on 0.1.7 (missing
+ *          the BUG-020 singleton-lock fix) until someone manually upgraded
+ *          it. A bin with NO shim at all is reported `not-installed` — there
+ *          is nothing to enforce, and that is reported distinctly from
+ *          `current` (installed + verified current) so `verified=true` can
+ *          never be misread as "the operator's CLI is up to date" when
+ *          nothing was actually installed to check.
+ *      Both reasons feed the SAME downstream pipeline (gates 2/2.5, sync,
+ *      verify, fail-safe restore) below.
  *   2. GATE 1 (version) — `npm view <name>@<version> version` must return
  *      exactly the on-disk source version. This is the partial-publish gate:
  *      a package whose version isn't on the registry yet (e.g. an upstream
@@ -55,17 +71,26 @@
  *      workspace references — so verification passes and the global CLI is
  *      genuinely decoupled from the worktree.
  *
- * EXIT CODE CONTRACT (advisory — it must never fail the release):
- *   exit 0 — the script ran to completion. Sync-level failures (registry
- *            gate, content gate refusal, `pnpm add -g` failing, post-verify
- *            failing + restore) are logged as `ERROR` lines but do NOT
- *            change the exit code — the content gate reports its refusal as
- *            an ERROR row (`action: 'refused'`, `verified: false`) and keeps
- *            the shim untouched, per the task's "report as error, never flip
- *            to the stale artifact" mandate (a non-zero exit here would fail
- *            the release for a worktree-state problem, which is exactly the
- *            advisory scope this script is documented to stay inside).
- *   exit 1 — internal failure only: an unexpected exception, an unreadable
+ * EXIT CODE CONTRACT (BUG-027 REVISED — no longer purely advisory):
+ *   exit 0 — the script ran to completion AND every package processed ended
+ *            in a currency-verified state: `current`/`unchanged` (verified
+ *            true), `not-installed` (nothing to enforce), or `skipped`
+ *            (registry doesn't have the version yet — a partial-publish
+ *            timing issue, not a currency failure; or a dry-run WOULD, which
+ *            never attempted anything).
+ *   exit 1 (NEW, `computeExitCode`) — at least one package ended UNRESOLVED:
+ *            `refused` (BUG-004 content gate blocked a flip) or `synced`
+ *            with `verified: false` (an upgrade was ATTEMPTED — `pnpm add -g`
+ *            ran — and failed, or post-sync verification failed and the
+ *            backup was restored). This is deliberate: BUG-027's incident was
+ *            exactly a script that logged ERROR lines while exiting 0, which
+ *            `run-release.mjs` (BUG-003 exit-capture pattern) then reads as
+ *            "advisory, ignore" and reports the release as a full success.
+ *            "A release that leaves the operator on a stale binary must not
+ *            report success" (BUG-027) required this script itself to be
+ *            able to say so in its own exit code — `run-release.mjs` step 3.5
+ *            now folds this into the compound verdict (see its own header).
+ *   exit 1 — internal failure: an unexpected exception, an unreadable
  *            manifest, or a hard spawn failure (command not found).
  *   exit 2 — usage error (unknown CLI argument).
  *   No env-var toggles — every knob is a CLI flag or an explicit function
@@ -445,6 +470,15 @@ async function defaultPnpmAdd(name, version, cwd) {
   return { ok: res.status === 0 };
 }
 
+/**
+ * BUG-027: `verified=true`/`verified=false` render as-is (both are real
+ * currency claims post-fix — `verified=true` means "this global install was
+ * checked against the published version and matches", not merely "no stale
+ * link found"). `verified: null` (the `not-installed` action) renders as
+ * `verified=n/a (not installed — nothing to verify)` so it can never be
+ * misread as a currency claim about a package that was never checked because
+ * it isn't installed globally at all.
+ */
 function printSummary(summary) {
   console.error('\nsync-global summary:');
   if (summary.length === 0) {
@@ -453,8 +487,9 @@ function printSummary(summary) {
   }
   for (const row of summary) {
     const bins = `[${row.bins.join(', ')}]`;
+    const verifiedStr = row.verified === null ? 'n/a (not installed — nothing to verify)' : String(row.verified);
     console.error(
-      `  ${String(row.pkg).padEnd(28)} ${String(row.version).padEnd(10)} ${bins.padEnd(36)} ${row.action.padEnd(10)} verified=${row.verified}` +
+      `  ${String(row.pkg).padEnd(28)} ${String(row.version).padEnd(10)} ${bins.padEnd(36)} ${row.action.padEnd(12)} verified=${verifiedStr}` +
         (row.dryRun ? '  (dry-run)' : '')
     );
   }
@@ -466,10 +501,15 @@ function printSummary(summary) {
  * `SyncSummary`:
  *
  *   [{ pkg: string, version: string, bins: string[],
- *      action: 'synced' | 'skipped' | 'refused' | 'unchanged', verified: boolean,
- *      dryRun?: true }]
+ *      action: 'synced' | 'skipped' | 'refused' | 'current' | 'not-installed',
+ *      verified: boolean | null, dryRun?: true }]
  *
- *   - `unchanged`: no stale global link (nothing to do; `verified: true`).
+ *   - `not-installed`: no bin shim exists for this package at all — nothing
+ *     to enforce. `verified: null` (NOT `true` — BUG-027: this must never be
+ *     read as a currency claim about a package that was never checked).
+ *   - `current`: a bin shim exists, is not a link shim, and its global-store
+ *     version already equals the published version — a REAL currency claim.
+ *     `verified: true`.
  *   - `skipped`: version not on the registry yet (partial-publish gate), OR
  *     dry-run WOULD (in which case `dryRun: true` is also set).
  *   - `refused`: BUG-004 content gate — the worktree's dist does NOT match
@@ -478,8 +518,11 @@ function printSummary(summary) {
  *     as an ERROR line. This is the incident shape (published backlog@0.1.4
  *     pre-turso flipped while the worktree held turso code under the same
  *     0.1.4 string) — a refusal here is the fix, not a noise failure.
- *   - `synced`: `pnpm add -g` ran; `verified` is the post-sync verification
- *     result (false -> backups were restored and an ERROR was logged).
+ *   - `synced`: `pnpm add -g` ran, triggered by EITHER a stale link shim OR
+ *     BUG-027 version drift (an ordinary, non-link global install on an
+ *     older version than what was just published); `verified` is the
+ *     post-sync verification result (false -> backups were restored and an
+ *     ERROR was logged, and `computeExitCode` makes the overall run fail).
  *
  * Sync failures never throw — they log ERROR and are reflected in the
  * summary. Only internal failures (unreadable manifest, spawn failure of
@@ -540,8 +583,10 @@ export async function syncGlobalShims({
     if (!pkg.name || !pkg.bin) continue;
     const bins = typeof pkg.bin === 'string' ? { [pkg.name.split('/').pop()]: pkg.bin } : pkg.bin;
 
-    // Step 1 — detect stale link shims (content references the workspace).
+    // Step 1 — detect stale link shims (content references the workspace) AND
+    // whether the package is installed globally at all.
     const stale = [];
+    const installedBins = [];
     for (const binName of Object.keys(bins)) {
       const shimPath = join(pnpmGlobalBinDir, binName);
       let shimContent = null;
@@ -550,18 +595,72 @@ export async function syncGlobalShims({
       } catch {
         shimContent = null; // unreadable shim — not provably stale
       }
-      if (shimContent !== null && shimContent.includes(workspaceRoot)) stale.push({ binName, shimPath });
+      if (shimContent === null) continue; // not installed globally at all — nothing to enforce
+      installedBins.push(binName);
+      if (shimContent.includes(workspaceRoot)) stale.push({ binName, shimPath });
     }
-    if (stale.length === 0) {
-      console.error(`sync-global: ${pkg.name}: no stale global link`);
-      summary.push({ pkg: pkg.name, version: pkg.version, bins: Object.keys(bins), action: 'unchanged', verified: true });
+
+    // Step 1.5 (BUG-027) — VERSION CURRENCY CHECK for a NORMAL (non-link)
+    // global install. A stale link shim is not the only way the operator's
+    // CLI can be left behind: `pnpm add -g <name>@<oldVersion>` installs a
+    // real registry tarball whose shim content never references the
+    // workspace, so the step-1 link-detection above correctly reports it
+    // "not stale" — but that says nothing about whether it's the CURRENT
+    // published version. Incident: `@adhd/backlog` was installed globally as
+    // a normal (non-link) 0.1.7 tarball; 0.1.8 published clean, GATE 2
+    // (clean-room-smoke) passed, sync-global logged "no stale global link"
+    // and reported `verified=true` — but the operator's CLI stayed on 0.1.7
+    // (missing the BUG-020 singleton-lock fix) until someone manually ran
+    // `pnpm add -g`. `verified=true` here was never a currency claim; it
+    // only meant "no link shim" — this check is what makes it one. When any
+    // installed (non-link) bin's package.json version in the global store
+    // differs from the source version, treat the package as needing sync
+    // exactly like a stale link shim — same registry/content gates, same
+    // `pnpm add -g` sync, same post-verify, same fail-safe restore.
+    let versionDrift = false;
+    let installedVersion = null;
+    if (stale.length === 0 && installedBins.length > 0) {
+      const globalPkgJsonPath = join(pnpmGlobalDir, 'node_modules', pkg.name, 'package.json');
+      if (existsSync(globalPkgJsonPath)) {
+        try {
+          installedVersion = JSON.parse(readFileSync(globalPkgJsonPath, 'utf8')).version;
+        } catch {
+          installedVersion = null; // unreadable global manifest — can't prove drift, don't force a sync
+        }
+      }
+      if (installedVersion && installedVersion !== pkg.version) versionDrift = true;
+    }
+
+    if (stale.length === 0 && !versionDrift) {
+      if (installedBins.length === 0) {
+        console.error(`sync-global: ${pkg.name}: not installed globally (no bin shim(s) found) — nothing to verify`);
+        summary.push({ pkg: pkg.name, version: pkg.version, bins: Object.keys(bins), action: 'not-installed', verified: null });
+      } else {
+        console.error(`sync-global: ${pkg.name}: global install is CURRENT (${installedVersion ?? pkg.version}), no stale link — verified`);
+        summary.push({ pkg: pkg.name, version: pkg.version, bins: installedBins, action: 'current', verified: true });
+      }
       continue;
     }
+
+    // Unify the two trigger reasons (stale link vs version drift) into one
+    // list of {binName, shimPath} for the shared sync/backup/verify pipeline
+    // below — `stale` from here on means "needs syncing", regardless of why.
+    const linkStale = stale.length > 0;
+    if (!linkStale && versionDrift) {
+      for (const binName of installedBins) stale.push({ binName, shimPath: join(pnpmGlobalBinDir, binName) });
+    }
     const staleBins = stale.map((s) => s.binName);
-    console.error(
-      `sync-global: ${pkg.name}: stale global link detected for bin(s) [${staleBins.join(', ')}] — ` +
-        `shim(s) reference the workspace: ${stale.map((s) => s.shimPath).join(', ')}`
-    );
+    if (linkStale) {
+      console.error(
+        `sync-global: ${pkg.name}: stale global link detected for bin(s) [${staleBins.join(', ')}] — ` +
+          `shim(s) reference the workspace: ${stale.map((s) => s.shimPath).join(', ')}`
+      );
+    } else {
+      console.error(
+        `sync-global: ${pkg.name}: global install is STALE — installed version ${installedVersion} != published ${pkg.version} ` +
+          `for bin(s) [${staleBins.join(', ')}] — this is what left BUG-020 inert (BUG-027)`
+      );
+    }
 
     // Step 2 — partial-publish gate: only sync versions the registry has.
     let published;
@@ -638,7 +737,8 @@ export async function syncGlobalShims({
       console.error(
         `sync-global: ERROR ${pkg.name}@${pkg.version}: pnpm add -g failed` +
           (addResult.error ? ` (${addResult.error.message})` : '') +
-          ` — restoring ${backups.length} backup(s)`
+          ` — restoring ${backups.length} backup(s). ` +
+          `THE OPERATOR'S GLOBAL CLI IS STILL STALE — run manually: pnpm add -g ${pkg.name}@${pkg.version}`
       );
       restoreBackups(backups);
       summary.push({ pkg: pkg.name, version: pkg.version, bins: staleBins, action: 'synced', verified: false });
@@ -656,7 +756,8 @@ export async function syncGlobalShims({
       summary.push({ pkg: pkg.name, version: pkg.version, bins: staleBins, action: 'synced', verified: true });
     } else {
       console.error(
-        `sync-global: ERROR ${pkg.name}@${pkg.version}: post-sync verification failed — restoring ${backups.length} backup(s)`
+        `sync-global: ERROR ${pkg.name}@${pkg.version}: post-sync verification failed — restoring ${backups.length} backup(s). ` +
+          `THE OPERATOR'S GLOBAL CLI IS STILL STALE — run manually: pnpm add -g ${pkg.name}@${pkg.version}`
       );
       restoreBackups(backups);
       summary.push({ pkg: pkg.name, version: pkg.version, bins: staleBins, action: 'synced', verified: false });
@@ -665,6 +766,29 @@ export async function syncGlobalShims({
 
   printSummary(summary);
   return summary;
+}
+
+/**
+ * BUG-027 — decide the process exit code from the summary. A release must
+ * NEVER report success while the operator's global CLI is left unverified
+ * current. Non-zero iff any row represents an UNRESOLVED currency problem:
+ *   - `refused`  — the content gate blocked a flip (worktree/published mismatch).
+ *   - `synced` with `verified: false` — an upgrade was ATTEMPTED and failed
+ *     (pnpm add -g failed, or post-sync verification failed) — the exact
+ *     BUG-027 shape: an outdated global install that stayed outdated.
+ * Deliberately NOT included: `skipped` (registry doesn't have the version
+ * yet — a partial-publish timing issue, not a currency failure; or a
+ * dry-run WOULD, which never attempted anything), `not-installed` (nothing
+ * to enforce), `current`/`unchanged` (already verified true).
+ *
+ * @param {Array<{ action: string, verified: boolean | null, dryRun?: boolean }>} summary
+ * @returns {number} 0 or 1
+ */
+export function computeExitCode(summary) {
+  const unresolved = summary.filter(
+    (row) => row.action === 'refused' || (row.action === 'synced' && row.verified === false)
+  );
+  return unresolved.length > 0 ? 1 : 0;
 }
 
 /** @param {string[]} argv */
@@ -700,15 +824,25 @@ async function main() {
   // global bin dir: `pnpm config get global-bin-dir` || ~/Library/pnpm
   const configuredBinDir = pnpmConfigGet('global-bin-dir');
   const pnpmGlobalBinDir = configuredBinDir || join(homedir(), 'Library', 'pnpm');
+  let summary;
   try {
-    await syncGlobalShims({ workspaceRoot, pnpmGlobalBinDir, projects: args.projects, dryRun: args.dryRun });
+    summary = await syncGlobalShims({ workspaceRoot, pnpmGlobalBinDir, projects: args.projects, dryRun: args.dryRun });
   } catch (err) {
     console.error(`sync-global: INTERNAL FAILURE: ${err && err.stack ? err.stack : String(err)}`);
     process.exit(1);
     return;
   }
-  // Sync-level errors were advisory (ERROR lines above) — exit 0 by contract.
-  process.exit(0);
+  // BUG-027: exit non-zero when any package ended UNRESOLVED (content-gate
+  // refusal, or an attempted upgrade that failed/didn't verify) — the whole
+  // point of this fix is that this can no longer be silently advisory.
+  const exitCode = computeExitCode(summary);
+  if (exitCode !== 0) {
+    console.error(
+      '\nsync-global: FAILED — the operator global CLI for one or more packages could not be verified current. ' +
+        'See the ERROR line(s) above for the exact `pnpm add -g <name>@<version>` remediation command.'
+    );
+  }
+  process.exit(exitCode);
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];

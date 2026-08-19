@@ -238,18 +238,37 @@ test('run-release.mjs: the sync-global run() call is scoped with the SAME --proj
   );
 });
 
-test('run-release.mjs: sync-global runs in ADVISORY mode — a non-zero syncExit prints a message but never process.exit (release verdict unchanged)', () => {
-  const syncBlock = source.match(/const syncExit = run\([\s\S]*?if \(syncExit !== 0\) \{[\s\S]*?\n  \}/);
-  assert.ok(syncBlock, 'expected the sync-global call followed by its advisory failure block');
+test('BUG-027: run-release.mjs — sync-global exit code is CAPTURED (not thrown, so GATE 2 still runs) but DOES feed the compound verdict via syncOk', () => {
+  // Exit-capture pattern preserved (does not stop GATE 2 below it) — but,
+  // UNLIKE the pre-BUG-027 contract, `syncOk` must be computed from
+  // `syncExit` and folded into the final RESULT branches, not merely logged.
+  const syncBlock = source.match(/const syncExit = run\([\s\S]*?const syncOk = syncExit === 0;/);
+  assert.ok(syncBlock, 'expected `const syncOk = syncExit === 0;` immediately following the sync-global run() call — BUG-027 requires the exit code to be turned into a real verdict input, not just an advisory log line');
   assert.ok(
-    !/process\.exit/.test(syncBlock[0]),
-    'the advisory block must NOT call process.exit — a sync failure must not fail the release (BUG-003 exit-capture pattern)'
+    !/process\.exit/.test(source.slice(source.indexOf('const syncExit = run'), source.indexOf('const syncOk = syncExit === 0;') + 40)),
+    'the sync-global run() call itself must not process.exit — GATE 2 must still run regardless (BUG-003 exit-capture pattern preserved)'
   );
+});
+
+test('BUG-027: run-release.mjs — the compound verdict requires syncOk (not just publishOk && smokeOk) to report full success', () => {
   assert.match(
-    syncBlock[0],
-    /advisory — release verdict unchanged/,
-    'the failure message must explicitly state the release verdict is unchanged'
+    source,
+    /if \(publishOk && smokeOk && syncOk\)/,
+    'RESULT (a) — full success — must require syncOk in addition to publishOk/smokeOk; a release that leaves the ' +
+      'operator on a stale global CLI must not report success (BUG-027)'
   );
+});
+
+test('BUG-027: run-release.mjs — a publish+smoke-OK-but-sync-unresolved outcome is its own RESULT branch (d) that exits non-zero', () => {
+  const branchMatch = source.match(/\} else if \(!syncOk\) \{[\s\S]*?RESULT \(d\)[\s\S]*?process\.exit\(1\);\s*\n  \}/);
+  assert.ok(branchMatch, 'expected an `else if (!syncOk)` branch labeled RESULT (d) that exits 1');
+});
+
+test('RED-equivalent: the pre-BUG-027 shape (publishOk && smokeOk alone deciding RESULT (a), with no RESULT (d) branch at all) is exactly the shape that let a stale operator CLI report success', () => {
+  const preFixSource =
+    'if (publishOk && smokeOk) {\n    console.error("run-release: RESULT (a)");\n    process.exit(0);\n  } else if (!publishOk && smokeOk) {\n  } else if (!smokeOk) {\n  }';
+  assert.ok(!/publishOk && smokeOk && syncOk/.test(preFixSource), 'sanity: the pre-fix simulated source never gates on syncOk');
+  assert.ok(!/RESULT \(d\)/.test(preFixSource), 'sanity: the pre-fix simulated source has no RESULT (d) branch at all');
 });
 
 test('RED-equivalent: a sync-global step placed BEFORE publish (or missing entirely) is exactly the mis-order this step-3.5 assertion exists to catch', () => {
