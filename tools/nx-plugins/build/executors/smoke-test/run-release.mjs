@@ -26,26 +26,37 @@
  *      uses a normal early-return; it is correct for it to gate, not race.
  *   2. `nx run-many -t publish` is attempted. Its exit code is CAPTURED, not
  *      thrown — a non-zero here does not stop step 3.
- *   3.5. `sync-global.mjs` (ADVISORY, NOT a gate) — after publish, flip any
- *      stale global CLI link shims (shims execing local workspace source) to
- *      the published artifacts. Its exit code is CAPTURED, never thrown: a
- *      non-zero here prints an advisory ERROR and does NOT change the release
- *      verdict (BUG-003 exit-capture pattern, same as publish). See
- *      PUBLISHING.md §Workflow "Step 3.5".
+ *   3.5. `sync-global.mjs` (BUG-027 REVISED — a real currency gate, no longer
+ *      purely advisory) — after publish, flip any stale global CLI link shims
+ *      (shims execing local workspace source) to the published artifacts,
+ *      AND (BUG-027) verify/upgrade any ordinary, non-link global install
+ *      that's simply on an older version than what was just published. Its
+ *      exit code is CAPTURED, not thrown (a non-zero here does not stop step
+ *      4, mirroring the BUG-003 pattern for publish) — but, UNLIKE publish's
+ *      capture, it now DOES feed the compound verdict below: a non-zero
+ *      `syncExit` means the operator's global CLI could not be verified
+ *      current, and the release must not report success. Incident this
+ *      closes: @adhd/backlog@0.1.8 published clean, GATE 2 passed, and this
+ *      step logged "no stale global link" while the operator's CLI silently
+ *      stayed on 0.1.7 for hours — `pnpm run release` still printed RESULT
+ *      (a). See PUBLISHING.md §Workflow "Step 3.5".
  *   3. `clean-room-smoke.mjs` (GATE 2) ALWAYS runs after step 2, regardless
  *      of step 2's outcome.
- *   4. A COMPOUND verdict is printed distinguishing the three outcomes the
- *      audit called out:
- *        (a) publish fully succeeded AND smoke passed        -> exit 0
- *        (b) publish partially/fully FAILED but smoke passed -> exit 1
+ *   4. A COMPOUND verdict is printed distinguishing the FOUR outcomes:
+ *        (a) publish fully succeeded, smoke passed, AND the operator global
+ *            CLI is verified current                            -> exit 0
+ *        (b) publish partially/fully FAILED but smoke passed    -> exit 1
  *            (still a failed release — nothing about a successful smoke
  *            excuses a broken publish — but it tells you unambiguously that
  *            what DID get published is installable, which changes the
  *            remediation: fix/retry the failed packages, not panic about a
  *            corrupted registry state).
  *        (c) smoke FAILED (regardless of publish outcome)      -> exit 1
- *      The overall exit code is non-zero if EITHER step 2 or step 3 failed;
- *      it is only 0 when both succeeded.
+ *        (d) publish + smoke both OK but sync-global could NOT verify the
+ *            operator's global CLI is current (BUG-027)        -> exit 1
+ *      The overall exit code is non-zero if ANY of step 2 (publish), step
+ *      3.5 (sync-global currency), or step 3 (smoke) failed; it is only 0
+ *      when all three succeeded (or had nothing to do).
  *
  * `release:dry` is DELIBERATELY NOT routed through this runner. A `--dryRun`
  * publish never actually touches the registry (it can't ETARGET, and it
@@ -105,27 +116,26 @@
  *   3. `nx run-many -t publish --projects=<computed-list>` — the actual
  *      publish, now scoped. Exit code CAPTURED, not thrown — a non-zero here
  *      does not stop step 4 (BUG-003, unchanged from before).
- *   3.5. `sync-global.mjs` (ADVISORY, NOT a gate) — after publish, flip any
- *      stale global CLI link shims to the published artifacts. Exit code
- *      CAPTURED, never thrown — a non-zero here prints an advisory ERROR and
- *      does NOT change the release verdict (BUG-003 exit-capture pattern).
+ *   3.5. `sync-global.mjs` (BUG-027 REVISED — a real currency gate, no longer
+ *      purely advisory) — after publish, flip any stale global CLI link
+ *      shims AND (BUG-027) verify/upgrade an ordinary non-link global install
+ *      that's simply behind the just-published version. Exit code CAPTURED,
+ *      not thrown (does not stop step 4) — but DOES feed the compound
+ *      verdict below.
  *   4. `clean-room-smoke.mjs` (GATE 2) ALWAYS runs after step 3, regardless
  *      of step 3's outcome. GATE 2's own scoping (audit §6.3, "scope GATE 2
  *      to only the packages actually published this run") is explicitly OUT
  *      OF SCOPE for this change — GATE 2 still runs unscoped, exactly as
  *      before; that is a separate, later fix.
- *   5. A COMPOUND verdict is printed distinguishing the three outcomes the
- *      original BUG-003 fix called out:
- *        (a) publish fully succeeded AND smoke passed        -> exit 0
- *        (b) publish partially/fully FAILED but smoke passed -> exit 1
- *            (still a failed release — nothing about a successful smoke
- *            excuses a broken publish — but it tells you unambiguously that
- *            what DID get published is installable, which changes the
- *            remediation: fix/retry the failed packages, not panic about a
- *            corrupted registry state).
- *        (c) smoke FAILED (regardless of publish outcome)      -> exit 1
- *      The overall exit code is non-zero if EITHER step 3 or step 4 failed;
- *      it is only 0 when both succeeded.
+ *   5. A COMPOUND verdict is printed distinguishing the FOUR outcomes (see
+ *      the file-level header above for the full breakdown, including (d) —
+ *      BUG-027, sync-global unable to verify the operator's global CLI):
+ *        (a) publish OK, smoke OK, sync-global currency verified -> exit 0
+ *        (b) publish partially/fully FAILED but smoke passed     -> exit 1
+ *        (c) smoke FAILED (regardless of publish outcome)        -> exit 1
+ *        (d) publish+smoke OK but sync-global currency unresolved -> exit 1
+ *      The overall exit code is non-zero if ANY of publish, sync-global
+ *      currency, or smoke failed; it is only 0 when all three succeeded.
  *
  * If the computed project list is EMPTY (nothing changed since `baseRef` and
  * every publishable project's on-disk version already matches
@@ -282,22 +292,31 @@ function main() {
   const publishExit = run('publish', 'pnpm', ['nx', 'run-many', '-t', 'publish', projectsArg]);
   const publishOk = publishExit === 0;
 
-  // Step 3.5 — sync-global (ADVISORY, NOT a gate): flip any stale global CLI
-  // link shims (shims whose content references this workspace — the
-  // `pnpm link -g` shape) to the published artifacts via
-  // `pnpm add -g <name>@<exact-version>`, gated on the exact version being
-  // on the registry. Runs AFTER publish (so the registry actually has the
-  // version) and BEFORE GATE 2 (so clean-room-smoke still exercises the real
-  // registry path). Exit code captured, never thrown: a sync failure prints
-  // an advisory ERROR and must NOT change the release verdict (BUG-003
-  // exit-capture pattern) — retry it manually with `pnpm release:sync-global`.
+  // Step 3.5 (BUG-027 REVISED) — sync-global: flip any stale global CLI link
+  // shims (shims whose content references this workspace — the `pnpm link
+  // -g` shape) AND verify/upgrade an ordinary non-link global install that's
+  // simply behind the just-published version, via `pnpm add -g
+  // <name>@<exact-version>`, gated on the exact version being on the
+  // registry. Runs AFTER publish (so the registry actually has the version)
+  // and BEFORE GATE 2 (so clean-room-smoke still exercises the real registry
+  // path). Exit code captured, not thrown (does not stop GATE 2 below) — but
+  // UNLIKE the old advisory-only contract, a non-zero `syncExit` now DOES
+  // feed the compound verdict: it means sync-global itself could not verify
+  // the operator's global CLI is current (BUG-027's `computeExitCode`), and
+  // "a release that leaves the operator on a stale binary must not report
+  // success." Retry manually with `pnpm release:sync-global` (or run the
+  // exact `pnpm add -g <name>@<version>` command sync-global's own ERROR
+  // line prints).
   const syncExit = run('sync-global (global CLI shims -> published artifacts)', 'node', [
     join(workspaceRoot, 'tools/nx-plugins/build/executors/sync-global/sync-global.mjs'),
     `--projects=${projectNames.join(',')}`,
   ]);
-  if (syncExit !== 0) {
+  const syncOk = syncExit === 0;
+  if (!syncOk) {
     console.error(
-      'run-release: sync-global reported errors (advisory — release verdict unchanged); retry with pnpm release:sync-global.'
+      'run-release: sync-global could NOT verify the operator global CLI is current (BUG-027) — this WILL fail ' +
+        'the release verdict below. Retry with `pnpm release:sync-global`, or run the exact `pnpm add -g ' +
+        '<name>@<version>` command printed in the sync-global ERROR line(s) above.'
     );
   }
 
@@ -313,10 +332,11 @@ function main() {
 
   console.error('\nrun-release: ==================== COMPOUND RESULT ====================');
   console.error(`run-release: publish: ${publishOk ? 'OK' : `FAILED (exit ${publishExit})`}`);
+  console.error(`run-release: sync-global (operator CLI currency, BUG-027): ${syncOk ? 'OK — verified current' : `FAILED (exit ${syncExit})`}`);
   console.error(`run-release: clean-room-smoke: ${smokeOk ? 'OK' : `FAILED (exit ${smokeExit})`}`);
 
-  if (publishOk && smokeOk) {
-    console.error('run-release: RESULT (a) — full publish + smoke pass. Release complete.');
+  if (publishOk && smokeOk && syncOk) {
+    console.error('run-release: RESULT (a) — full publish + smoke pass + operator global CLI verified current. Release complete.');
     process.exit(0);
   } else if (!publishOk && smokeOk) {
     console.error(
@@ -330,6 +350,14 @@ function main() {
     console.error(
       `run-release: RESULT (c) — clean-room-smoke FAILED${publishOk ? ' (publish itself succeeded)' : ' (publish also failed)'}. ` +
         'See the smoke output above for which entrypoint(s) failed to install/start cleanly.'
+    );
+    process.exit(1);
+  } else if (!syncOk) {
+    console.error(
+      'run-release: RESULT (d) — publish and clean-room-smoke both succeeded, but the operator global CLI ' +
+        'could NOT be verified current (BUG-027). The registry is fine; YOUR terminal is not — do not report ' +
+        'this release as done until you rerun `pnpm release:sync-global` (or the printed `pnpm add -g` command) ' +
+        'and it reports success.'
     );
     process.exit(1);
   }

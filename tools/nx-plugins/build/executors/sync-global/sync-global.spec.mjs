@@ -49,7 +49,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdir
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { detectStaleShims, resolvePnpmGlobalDir, syncGlobalShims, verifyShim } from './sync-global.mjs';
+import { computeExitCode, detectStaleShims, resolvePnpmGlobalDir, syncGlobalShims, verifyShim } from './sync-global.mjs';
 
 // The REAL primitives (not sync-global's copies) — used to build the fixture's
 // published-state entry the way publish's write-through would, and to build the
@@ -665,3 +665,189 @@ function stampedHashOfFixture(f) {
   const srcPkg = JSON.parse(readFileSync(join(f.workspaceRoot, 'entrypoint', 'backlog', 'package.json'), 'utf8'));
   return stampedDistHashOf(f.distDir, srcPkg);
 }
+
+// --- BUG-027: version-drift currency check for a NORMAL (non-link) global install ---
+
+/**
+ * Plant a NORMAL (non-link) global install shim — content execs the global
+ * store, never references workspaceRoot — at the given installed version,
+ * distinct from the fixture's published/source version (0.1.4). This is the
+ * BUG-027 incident shape: `pnpm add -g @adhd/backlog@0.1.7` while the source
+ * has already moved to 0.1.4-equivalent-but-newer (fixture keeps the SAME
+ * version string across source/registry for simplicity — see each test for
+ * the exact version numbers used).
+ */
+function plantNormalInstall(f, installedVersion) {
+  writeFileSync(f.shimPath, `#!/bin/sh\nexec node "${f.pnpmGlobalDir}/node_modules/@adhd/backlog/index.js" "$@"\n`);
+  writeGlobalStoreVersion(f, '@adhd/backlog', installedVersion);
+}
+
+test('BUG-027 (RED without the fix): a normal (non-link) global install on an OLDER version is reported "no stale global link" — never checked for currency', () => {
+  // This test pins the OLD, buggy behavior of the version-only link-shim
+  // check in isolation (detectStaleShims), proving why the bug existed: link
+  // detection alone is blind to version drift on an ordinary install.
+  const f = makeFixture();
+  try {
+    plantNormalInstall(f, '0.1.7'); // installed OLDER than the fixture's published 0.1.4... this line
+    // intentionally uses a version that ISN'T the fixture's — the point is
+    // only that detectStaleShims (link-only) reports nothing regardless.
+    const stale = detectStaleShims({ workspaceRoot: f.workspaceRoot, pnpmGlobalBinDir: f.pnpmGlobalBinDir });
+    assert.deepEqual(stale, [], 'link-only detection correctly finds nothing — this IS the blind spot BUG-027 closes at the syncGlobalShims level');
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('BUG-027: a normal (non-link) global install behind the published version is synced to current, not reported "unchanged"', async () => {
+  const f = makeFixture();
+  try {
+    plantNormalInstall(f, '0.1.3'); // installed OLDER than the fixture's published/source 0.1.4
+    let addCalls = 0;
+    const summary = await syncGlobalShims({
+      workspaceRoot: f.workspaceRoot,
+      pnpmGlobalBinDir: f.pnpmGlobalBinDir,
+      npmView: async () => '0.1.4',
+      pnpmAdd: async (name, version) => {
+        addCalls++;
+        writeFileSync(f.shimPath, `#!/bin/sh\nexec node "${f.pnpmGlobalDir}/node_modules/@adhd/backlog/index.js" "$@"\n`);
+        writeGlobalStoreVersion(f, name, version);
+        return { ok: true };
+      },
+      globalDir: f.pnpmGlobalDir,
+    });
+    assert.equal(addCalls, 1, 'BUG-027: an outdated normal global install must trigger pnpm add -g, exactly like a stale link shim');
+    assert.equal(summary.length, 1);
+    assert.notEqual(summary[0].action, 'unchanged', 'BUG-027 incident: this must never be silently reported unchanged');
+    assert.equal(summary[0].action, 'synced');
+    assert.equal(summary[0].verified, true);
+    const globalPkg = JSON.parse(
+      readFileSync(join(f.pnpmGlobalDir, 'node_modules', '@adhd/backlog', 'package.json'), 'utf8')
+    );
+    assert.equal(globalPkg.version, '0.1.4', 'the global store must now hold the published version');
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('BUG-027: an installed-but-not-upgradable (content-refused) global install is reported refused, not unchanged/verified:true', async () => {
+  const f = makeFixture();
+  try {
+    plantNormalInstall(f, '0.1.3');
+    // Force the BUG-004 content gate to refuse (published-state hash mismatch).
+    writePublishedHash(f, stampedHashWithCode('export const x = 99; /* pre-turso */\n'));
+    let addCalls = 0;
+    const summary = await syncGlobalShims({
+      workspaceRoot: f.workspaceRoot,
+      pnpmGlobalBinDir: f.pnpmGlobalBinDir,
+      npmView: async () => '0.1.4',
+      pnpmAdd: async () => {
+        addCalls++;
+        return { ok: true };
+      },
+      globalDir: f.pnpmGlobalDir,
+    });
+    assert.equal(addCalls, 0, 'a content-mismatched worktree must never flip the global install, even under BUG-027 version drift');
+    assert.equal(summary[0].action, 'refused');
+    assert.equal(summary[0].verified, false);
+    const globalPkg = JSON.parse(
+      readFileSync(join(f.pnpmGlobalDir, 'node_modules', '@adhd/backlog', 'package.json'), 'utf8')
+    );
+    assert.equal(globalPkg.version, '0.1.3', 'the stale global install must be left exactly as it was — never flipped to unverifiable content');
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('BUG-027: a global install whose upgrade attempt FAILS is reported synced/verified:false — never silently "unchanged"', async () => {
+  const f = makeFixture();
+  try {
+    plantNormalInstall(f, '0.1.3');
+    const summary = await syncGlobalShims({
+      workspaceRoot: f.workspaceRoot,
+      pnpmGlobalBinDir: f.pnpmGlobalBinDir,
+      npmView: async () => '0.1.4',
+      pnpmAdd: async () => ({ ok: false, error: new Error('ETARGET simulated') }),
+      globalDir: f.pnpmGlobalDir,
+    });
+    assert.equal(summary[0].action, 'synced');
+    assert.equal(summary[0].verified, false);
+    assert.equal(
+      computeExitCode(summary),
+      1,
+      'BUG-027: a release must not report success while the operator global CLI stays stale — this must drive a non-zero exit'
+    );
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('BUG-027: a global install already matching the published version is reported "current" with verified:true (no pnpm add called)', async () => {
+  const f = makeFixture();
+  try {
+    plantNormalInstall(f, '0.1.4'); // already current
+    let addCalls = 0;
+    const summary = await syncGlobalShims({
+      workspaceRoot: f.workspaceRoot,
+      pnpmGlobalBinDir: f.pnpmGlobalBinDir,
+      npmView: async () => '0.1.4',
+      pnpmAdd: async () => {
+        addCalls++;
+        return { ok: true };
+      },
+      globalDir: f.pnpmGlobalDir,
+    });
+    assert.equal(addCalls, 0, 'an already-current global install must never trigger pnpm add -g');
+    assert.equal(summary.length, 1);
+    assert.equal(summary[0].action, 'current');
+    assert.equal(summary[0].verified, true);
+    assert.equal(computeExitCode(summary), 0);
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('BUG-027: a package with NO global install at all is reported "not-installed" with verified:null (never a currency claim)', async () => {
+  const f = makeFixture();
+  try {
+    rmSync(f.shimPath, { force: true }); // no bin shim in the global bin dir at all
+    let addCalls = 0;
+    const summary = await syncGlobalShims({
+      workspaceRoot: f.workspaceRoot,
+      pnpmGlobalBinDir: f.pnpmGlobalBinDir,
+      npmView: async () => '0.1.4',
+      pnpmAdd: async () => {
+        addCalls++;
+        return { ok: true };
+      },
+      globalDir: f.pnpmGlobalDir,
+    });
+    assert.equal(addCalls, 0);
+    assert.equal(summary.length, 1);
+    assert.equal(summary[0].action, 'not-installed');
+    assert.equal(summary[0].verified, null, 'BUG-027: a package that was never installed must never report verified:true — that would be a false currency claim');
+    assert.equal(computeExitCode(summary), 0, 'nothing to enforce is not a failure');
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+// --- computeExitCode (BUG-027: the pipeline must be able to detect an unresolved currency failure) ---
+
+test('computeExitCode: 0 when every row is current/not-installed/skipped; 1 when any row is refused or synced+unverified', () => {
+  assert.equal(computeExitCode([]), 0);
+  assert.equal(computeExitCode([{ action: 'current', verified: true }]), 0);
+  assert.equal(computeExitCode([{ action: 'not-installed', verified: null }]), 0);
+  assert.equal(computeExitCode([{ action: 'skipped', verified: false }]), 0);
+  assert.equal(computeExitCode([{ action: 'skipped', verified: false, dryRun: true }]), 0);
+  assert.equal(computeExitCode([{ action: 'synced', verified: true }]), 0);
+  assert.equal(computeExitCode([{ action: 'refused', verified: false }]), 1);
+  assert.equal(computeExitCode([{ action: 'synced', verified: false }]), 1);
+  assert.equal(
+    computeExitCode([
+      { action: 'current', verified: true },
+      { action: 'synced', verified: false },
+    ]),
+    1,
+    'one unresolved row among many must still fail the whole run'
+  );
+});
