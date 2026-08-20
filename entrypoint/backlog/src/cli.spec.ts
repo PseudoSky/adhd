@@ -320,6 +320,101 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     expect(storeEvents.length, 'a real store command must emit store-open telemetry records').toBeGreaterThan(0);
   });
 
+  // DEBT-BACKLOG-CLI-STORE-OPEN-001: `migration-status`/`set-migration-phase`
+  // are `hasCtx` client.ts actions that only read/write the `migration.phase`
+  // config cascade (`env.config.migration.phase`, and the GLOBAL layer's
+  // `config.yaml` via `migration-admin.ts` for the write) — never the graph
+  // store. But dispatching them through the apigen command table still called
+  // `createClient` → `getCtx()` and opened the real SQLite store (emitting
+  // `store_adapter.turso.recursive_cte_probe_failed` +
+  // `store_adapter.turso.close_tshm_reset`), even though neither command ever
+  // touches `ctx.store` — the same eager-open class the `version`
+  // short-circuit above closes. This test asserts the CLOSED state across
+  // telemetry AND DB creation for both commands, a durable write→re-read
+  // round trip through TWO separate processes, byte-parity of the CLI-visible
+  // result shape (configPath first), and error/exit parity
+  // (invalid_argument → 2) — with a real store command as the positive
+  // control so the assertions provably have teeth.
+  //
+  // `HOME` is redirected into the temp scope for every migration-phase
+  // invocation: `set-migration-phase` persists to the GLOBAL layer's
+  // `config.yaml` via `os.homedir()` (the `BacklogCtx.adhdRoot` test override
+  // is never set by the real CLI path), so without the redirect the write
+  // would land in the REAL machine-global `~/.adhd/backlog/production/
+  // config.yaml` — the exact regression `migration-admin.spec.ts`'s negative
+  // control was filed for.
+  it('migration-status and set-migration-phase emit ZERO store-open telemetry records, never create the DB, and persist config durably (DEBT-BACKLOG-CLI-STORE-OPEN-001)', () => {
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-no-store-open-migration-'));
+    const soxHome = join(adhdRoot, 'sox-ecosystem');
+    const expectedDbPath = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot }).files.db;
+    expect(existsSync(expectedDbPath), 'sanity: no store should exist before the CLI ever runs').toBe(false);
+    const migrationEnv = { SOX_ECOSYSTEM_HOME: soxHome, HOME: soxHome };
+
+    // `migration-status` is store-free, exits 0, reports the live config value
+    // (not-started on a fresh scope), and emits zero store-open telemetry.
+    const status = runBin(['migration-status'], adhdRoot, migrationEnv);
+    expect(status.status, `stderr:\n${status.stderr}\nstdout:\n${status.stdout}`).toBe(0);
+    const statusBody = JSON.parse(status.stdout.trim()) as { phase: string; toolIsAuthoritative: boolean };
+    expect(statusBody.phase).toBe('not-started');
+    expect(statusBody.toolIsAuthoritative).toBe(false);
+    expect(readTelemetryEvents(soxHome), 'migration-status must emit zero store-open telemetry records').toHaveLength(0);
+    expect(existsSync(expectedDbPath), 'migration-status must not create the store').toBe(false);
+
+    // `set-migration-phase` writes THROUGH to the global config.yaml (the
+    // temp-HOME-redirected path), still store-free. The CLI-visible result
+    // serializes configPath FIRST — the schema-order shape the apigen
+    // dispatch produces (see `setBacklogMigrationPhase`'s doc comment).
+    const set = runBin(['set-migration-phase', '--phase', 'phase-3'], adhdRoot, migrationEnv);
+    expect(set.status, `stderr:\n${set.stderr}\nstdout:\n${set.stdout}`).toBe(0);
+    const setBody = JSON.parse(set.stdout.trim()) as { configPath: string; phase: string; toolIsAuthoritative: boolean };
+    expect(Object.keys(setBody)[0]).toBe('configPath');
+    expect(setBody.phase).toBe('phase-3');
+    expect(setBody.toolIsAuthoritative).toBe(true);
+    expect(setBody.configPath.startsWith(soxHome), 'the config write must land under the temp HOME, never the real ~/.adhd').toBe(true);
+    expect(readTelemetryEvents(soxHome), 'set-migration-phase must emit zero store-open telemetry records').toHaveLength(0);
+    expect(existsSync(expectedDbPath), 'set-migration-phase must not create the store').toBe(false);
+
+    // Durable read-back: a FRESH store-free migration-status process reads the
+    // just-written phase purely from disk (Environment.config is a
+    // point-in-time snapshot per process).
+    const status2 = runBin(['migration-status'], adhdRoot, migrationEnv);
+    expect(status2.status, `stderr:\n${status2.stderr}`).toBe(0);
+    expect((JSON.parse(status2.stdout.trim()) as { phase: string }).phase).toBe('phase-3');
+    expect(readTelemetryEvents(soxHome)).toHaveLength(0);
+    expect(existsSync(expectedDbPath)).toBe(false);
+
+    // Error/exit parity with the apigen dispatch (invalid_argument → exit 2,
+    // error JSON as the LAST stderr line): bad enum, missing flag, missing
+    // value, unknown flag — all still store-free.
+    const badEnum = runBin(['set-migration-phase', '--phase', 'bogus'], adhdRoot, migrationEnv);
+    expect(badEnum.status, `stderr:\n${badEnum.stderr}`).toBe(2);
+    const badEnumLine = badEnum.stderr.trim().split('\n').pop() ?? '';
+    expect((JSON.parse(badEnumLine) as { code: string }).code).toBe('invalid_argument');
+    expect(readTelemetryEvents(soxHome)).toHaveLength(0);
+    expect(existsSync(expectedDbPath)).toBe(false);
+
+    const missingFlag = runBin(['set-migration-phase'], adhdRoot, migrationEnv);
+    expect(missingFlag.status, `stderr:\n${missingFlag.stderr}`).toBe(2);
+    expect(readTelemetryEvents(soxHome)).toHaveLength(0);
+    expect(existsSync(expectedDbPath)).toBe(false);
+
+    // `--help` shows the same usage line the apigen path renders, exit 0.
+    const help = runBin(['set-migration-phase', '--help'], adhdRoot, migrationEnv);
+    expect(help.status, `stderr:\n${help.stderr}\nstdout:\n${help.stdout}`).toBe(0);
+    expect(help.stdout).toContain('backlog set-migration-phase');
+    expect(readTelemetryEvents(soxHome)).toHaveLength(0);
+    expect(existsSync(expectedDbPath)).toBe(false);
+
+    // Negative control / teeth: a real store command MUST emit store-open
+    // telemetry records AND create the DB — proving the assertions above are
+    // not trivially green because the telemetry sink or DB path never fires.
+    const real = runBin(['list-items', '--filter', '{}'], adhdRoot, migrationEnv);
+    expect(real.status, `stderr:\n${real.stderr}`).toBe(0);
+    expect(existsSync(expectedDbPath), 'a real dispatched command must open the store').toBe(true);
+    const storeEvents = readTelemetryEvents(soxHome).filter((e) => e.startsWith('store_adapter'));
+    expect(storeEvents.length, 'a real store command must emit store-open telemetry records').toBeGreaterThan(0);
+  });
+
   it('BUG-002: ADHD_BACKLOG_DATABASE_PATH redirects the store the bin opens — the env var wins over the scope-root fallback', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-dbpath-'));
     const redirectDb = join(adhdRoot, 'redirect', 'backlog.db');

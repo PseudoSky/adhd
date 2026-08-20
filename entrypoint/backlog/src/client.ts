@@ -40,7 +40,6 @@ import type {
 } from './model.js';
 import { isTerminalStatus, requiresCitation, requiresReason } from './model.js';
 import type { BacklogConfig } from './env.js';
-import { writeMigrationPhase } from './migration-admin.js';
 import type { GraphBacklogStore } from './store/graph-backlog-store.js';
 import { createItemNode, getItemNode, softDeleteItemNode, updateItemNode } from './store/crud.js';
 import { auditTrail as auditTrailNode, blockers as blockersNode, buildNotFoundError, computeStats, dependencyGraph as dependencyGraphNode, knownRepos, listItems as listItemsNode, queryItemNodes, readyItems as readyItemsNode, spotlight as spotlightNode, staleClaims as staleClaimsNode, topoOrder as topoOrderNode } from './store/query.js';
@@ -52,6 +51,7 @@ import { migrateRepo as migrateRepoNode } from './store/repo-migration.js';
 import { buildChangelogSection, parseBacklogMarkdownWithDiagnostics, renderItemsToMarkdown, toImportItems } from './markdown.js';
 import { readFileSync } from 'node:fs';
 import { readBacklogVersionInfo } from './version-info.js';
+import { readBacklogMigrationStatus, setBacklogMigrationPhase } from './migration-phase.js';
 
 /** The one type apigen special-cases via the `ctx-name-only` invariant. */
 export interface BacklogCtx {
@@ -484,16 +484,6 @@ export async function auditTrail(ctx: BacklogCtx, repo: string, humanId: string)
   return auditTrailNode(ctx.store, repo, humanId);
 }
 
-const MIGRATION_PHASE_DESCRIPTIONS: Record<MigrationPhase, string> = {
-  'not-started': 'not-started: BACKLOG.md is authoritative everywhere; the tool has not been adopted for this repo yet.',
-  'phase-1': 'phase-1: seed import complete (or in progress) — BACKLOG.md remains authoritative; the graph is a read-only shadow copy.',
-  'phase-2': 'phase-2: BACKLOG.md is still authoritative; the tool is shadow-running in parity-check mode (render vs. hand-edited markdown, non-blocking).',
-  'phase-3': 'phase-3: the graph is authoritative. File/claim/transition/resolve via the backlog CLI/MCP — every BACKLOG.md is a generated projection, never hand-edited.',
-  'phase-4': 'phase-4: phase-3 write path is live; the backlog-usage skill is published and distributed for agent discovery.',
-  'phase-5': 'phase-5: the legacy tools/util/backlog.mjs parser has been deprecated/removed.',
-  complete: 'complete: migration fully done, including cross-repo rollout (Phase 6) where applicable.',
-};
-
 /**
  * MIGRATION.md §4.4 — a QUERIED signal, never hardcoded prose: reports the
  * live `migration.phase` config value (`env.ts`, env-overridable via
@@ -502,16 +492,14 @@ const MIGRATION_PHASE_DESCRIPTIONS: Record<MigrationPhase, string> = {
  * the tool is authoritative right now, instead of trusting a stale doc
  * sentence. NOT yet per-repo-keyed (MIGRATION.md §9 open decision 6) — one
  * global value for the whole machine.
+ *
+ * The read itself lives in `migration-phase.ts`'s `readBacklogMigrationStatus()`
+ * (store-free) so `cli.ts` can short-circuit `backlog migration-status`
+ * without opening the store (DEBT-BACKLOG-CLI-STORE-OPEN-001) — this
+ * function and that short-circuit share the exact same reading path.
  */
 export async function migrationStatus(ctx: BacklogCtx): Promise<MigrationStatusResult> {
-  const phase = ctx.env.config.migration.phase as MigrationPhase;
-  return describeMigrationPhase(phase);
-}
-
-function describeMigrationPhase(phase: MigrationPhase): MigrationStatusResult {
-  const description = MIGRATION_PHASE_DESCRIPTIONS[phase] ?? `unknown phase value: ${phase}`;
-  const toolIsAuthoritative = phase === 'phase-3' || phase === 'phase-4' || phase === 'phase-5' || phase === 'complete';
-  return { phase, description, toolIsAuthoritative };
+  return readBacklogMigrationStatus(ctx.env);
 }
 
 /**
@@ -521,10 +509,14 @@ function describeMigrationPhase(phase: MigrationPhase): MigrationStatusResult {
  * env var scoped to whoever's shell happened to export it. Whoever executes
  * a phase's Definition of Done calls this exactly once, after verifying the
  * DoD, never speculatively.
+ *
+ * The write itself lives in `migration-phase.ts`'s `setBacklogMigrationPhase()`
+ * (store-free) so `cli.ts` can short-circuit `backlog set-migration-phase`
+ * without opening the store (DEBT-BACKLOG-CLI-STORE-OPEN-001) — this
+ * function and that short-circuit share the exact same write path.
  */
 export async function setMigrationPhase(ctx: BacklogCtx, phase: MigrationPhase): Promise<SetMigrationPhaseResult> {
-  const configPath = writeMigrationPhase(ctx.env, phase, ctx.adhdRoot);
-  return { ...describeMigrationPhase(phase), configPath };
+  return setBacklogMigrationPhase(ctx.env, phase, ctx.adhdRoot);
 }
 
 // ============================================================================
