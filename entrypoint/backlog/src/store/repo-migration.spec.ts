@@ -65,6 +65,43 @@ describe('planRepoMigration — pure, read-only, deterministic', () => {
     expect(plan.collisionCount).toBe(0);
   });
 
+  it('renames ONLY genuine collisions — a kept id is never displaced by a rename (no cascade)', async () => {
+    // Target holds BUG-001 and BUG-002. Source holds BUG-001..BUG-004.
+    // Only BUG-001/BUG-002 genuinely collide. A single greedy pass moves
+    // BUG-001 -> BUG-003, which then makes the source's OWN BUG-003 look
+    // taken and cascades until every item is renamed. Measured on the real
+    // production store that turned 8 collisions into 43 renames, silently
+    // invalidating 35 ids that are already cited elsewhere.
+    await createItemNode(tmp.store, { family: 'BUG', title: 'target one', body: 'b', repo: CANONICAL });
+    await createItemNode(tmp.store, { family: 'BUG', title: 'target two', body: 'b', repo: CANONICAL });
+    for (const title of ['s1', 's2', 's3', 's4']) {
+      await createItemNode(tmp.store, { family: 'BUG', title, body: 'b', repo: LEGACY });
+    }
+
+    const plan = await planRepoMigration(tmp.store, LEGACY, CANONICAL);
+    const byId = new Map(plan.items.map((i) => [i.humanId, i]));
+
+    expect(plan.items).toHaveLength(4);
+    expect(plan.collisionCount).toBe(2);
+
+    // The two non-colliding ids keep their identity.
+    expect(byId.get('BUG-003')).toMatchObject({ targetHumanId: 'BUG-003', renamed: false });
+    expect(byId.get('BUG-004')).toMatchObject({ targetHumanId: 'BUG-004', renamed: false });
+
+    // The two real collisions are reallocated past everything reserved.
+    expect(byId.get('BUG-001')?.renamed).toBe(true);
+    expect(byId.get('BUG-002')?.renamed).toBe(true);
+    expect(byId.get('BUG-001')?.targetHumanId).toBe('BUG-005');
+    expect(byId.get('BUG-002')?.targetHumanId).toBe('BUG-006');
+
+    // And the plan is internally consistent: no two items land on one id,
+    // and nothing lands on an id the target repo already holds.
+    const targets = plan.items.map((i) => i.targetHumanId);
+    expect(new Set(targets).size).toBe(targets.length);
+    expect(targets).not.toContain('BUG-001');
+    expect(targets).not.toContain('BUG-002');
+  });
+
   it('never writes anything — the store is byte-identical before and after planning', async () => {
     const created = await createItemNode(tmp.store, { family: 'BUG-PURE', title: 't', body: 'b', repo: LEGACY });
     await planRepoMigration(tmp.store, LEGACY, CANONICAL);
