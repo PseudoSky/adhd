@@ -33,6 +33,7 @@ import { runInstallSkillCommand } from './install-skill.js';
 import { runInstallCommand } from './install.js';
 import { runServeCommand } from './serve.js';
 import { readBacklogVersionInfo } from './version-info.js';
+import { MIGRATION_PHASES, readBacklogMigrationStatus, setBacklogMigrationPhase } from './migration-phase.js';
 
 /**
  * Derives the internal command-path PREFIX every `client.ts` operation
@@ -206,6 +207,137 @@ export interface RunBacklogCliOpts {
 }
 
 /**
+ * The one migration-phase command that takes a flag: `set-migration-phase`'s
+ * `phase` is a required domain param, so its flags list is exactly `--phase`
+ * (a `migration-status` invocation with any flag is an error — zero legal
+ * flags). Hardcoded here because these commands never reach the apigen
+ * command table (see the short-circuit in {@link runBacklogCli}), where the
+ * flag table would otherwise come from the extracted schema.
+ */
+const SET_MIGRATION_PHASE_FLAG = 'phase' as const;
+
+/**
+ * Store-free dispatch for `migration-status`/`set-migration-phase`
+ * (DEBT-BACKLOG-CLI-STORE-OPEN-001). Both commands only read/write the
+ * `migration.phase` config cascade, so this never calls `getCtx()` or opens
+ * the SQLite store — `migration-status` reports
+ * `env.config.migration.phase` via `readBacklogMigrationStatus()`,
+ * `set-migration-phase` persists through `setBacklogMigrationPhase()` →
+ * `migration-admin.ts`'s `writeMigrationPhase`. Argv parsing + error/exit
+ * semantics deliberately mirror `@adhd/apigen-plugin-cli-output`'s
+ * `parseArgs`/validate-Layer byte-for-byte, so the short-circuit accepts and
+ * rejects EXACTLY what the apigen dispatch would:
+ *
+ *  - `--phase <value>` and `--phase=<value>` both parse (BUG-APIGEN-031
+ *    parity); any other flag → `Unknown option: --X. Available: --phase`;
+ *    a non-flag token → `Unexpected positional argument: "X"`; a missing
+ *    `--phase` value → `Missing value for --phase`; a missing flag →
+ *    validate-Layer's "required property 'phase'" message; a non-enum value
+ *    → validate-Layer's "must be equal to one of the allowed values"
+ *    message. All failures print `{"code":"invalid_argument","message":…}`
+ *    as the last stderr line and set `process.exitCode = 2`
+ *    (`CLI_EXIT_CODE['invalid_argument']` in `@adhd/apigen-base-errors`).
+ *  - `--help`/`-h` anywhere in the rest prints the same usage line the
+ *    apigen path renders from `paramsText` (exit 0), with the flag list
+ *    (`{ phase: enum }` — the extracted schema's type text) for the
+ *    flag-taking command.
+ *
+ * Success prints the identical `console.log(JSON.stringify(...))` shape the
+ * apigen path's `writeResult` emits (BUG-APIGEN-015 parity); the returned
+ * `SetMigrationPhaseResult` spreads `configPath` FIRST to match the
+ * schema-order re-serialization the apigen dispatch applies (see
+ * `setBacklogMigrationPhase`'s own doc comment in `migration-phase.ts`).
+ */
+function runMigrationPhaseCommand(
+  command: 'migration-status' | 'set-migration-phase',
+  rest: readonly string[],
+  opts: RunBacklogCliOpts
+): void {
+  const fail = (message: string): void => {
+    console.error(JSON.stringify({ code: 'invalid_argument', message }));
+    process.exitCode = 2;
+  };
+
+  // `rest.includes('--help')` mirrors cli-output's own pre-dispatch check —
+  // a `--help` anywhere after the command shows usage, never an error.
+  if (rest.includes('--help') || rest.includes('-h')) {
+    console.log(
+      command === 'set-migration-phase'
+        ? `backlog ${command}  { ${SET_MIGRATION_PHASE_FLAG}: enum }`
+        : `backlog ${command}`
+    );
+    return;
+  }
+
+  // `buildBacklogEnv` is pure path/config resolution — no fs writes, no
+  // store — so constructing it here is the store-free env the two commands
+  // need (the `getCtx()` thunk the apigen path would otherwise invoke also
+  // calls `ensureDirs()`/`openGraphBacklogStore`, which is exactly what
+  // must NOT happen for these two commands).
+  const env = buildBacklogEnv({ scope: opts.scope, adhdRoot: opts.adhdRoot, cwd: opts.cwd });
+
+  if (command === 'migration-status') {
+    if (rest.length > 0) {
+      const token = rest[0] as string;
+      fail(
+        token.startsWith('--')
+          ? `Unknown option: ${token}. Available: ` // migration-status has zero legal flags (empty list, like parseArgs renders)
+          : `Unexpected positional argument: "${token}"`
+      );
+      return;
+    }
+    console.log(JSON.stringify(readBacklogMigrationStatus(env)));
+    return;
+  }
+
+  // set-migration-phase: walk the tokens exactly like parseArgs walks argv
+  // against a one-flag table (`--phase`), including the `--phase=value`
+  // inline form.
+  let phaseValue: string | undefined;
+  let i = 0;
+  while (i < rest.length) {
+    const token = rest[i] as string;
+    if (!token.startsWith('--')) {
+      fail(`Unexpected positional argument: "${token}"`);
+      return;
+    }
+    let name = token.slice(2);
+    let inlineValue: string | undefined;
+    const eq = name.indexOf('=');
+    if (eq !== -1) {
+      inlineValue = name.slice(eq + 1);
+      name = name.slice(0, eq);
+    }
+    if (name !== SET_MIGRATION_PHASE_FLAG) {
+      fail(`Unknown option: --${name}. Available: --${SET_MIGRATION_PHASE_FLAG}`);
+      return;
+    }
+    i += 1;
+    if (inlineValue !== undefined) {
+      phaseValue = inlineValue;
+    } else {
+      if (i >= rest.length) {
+        fail(`Missing value for --${SET_MIGRATION_PHASE_FLAG}`);
+        return;
+      }
+      phaseValue = rest[i] as string;
+      i += 1;
+    }
+  }
+  if (phaseValue === undefined) {
+    // validate-Layer's missing-required message, verbatim.
+    fail(`Validation failed: /data must have required property 'phase' — Example: {"data":{"phase":"not-started"}}`);
+    return;
+  }
+  if (!MIGRATION_PHASES.includes(phaseValue as (typeof MIGRATION_PHASES)[number])) {
+    // validate-Layer's enum message, verbatim.
+    fail(`Validation failed: /data/phase must be equal to one of the allowed values — Example: {"data":{"phase":"not-started"}}`);
+    return;
+  }
+  console.log(JSON.stringify(setBacklogMigrationPhase(env, phaseValue as (typeof MIGRATION_PHASES)[number])));
+}
+
+/**
  * Opens (or reuses) the backlog store + env, then dispatches EXACTLY ONE CLI
  * command live through `@adhd/apigen-plugin-cli-output`'s `run()` — no code
  * generation, no bespoke argument parsing. Mirrors `startBacklogServer`'s
@@ -278,6 +410,24 @@ export async function runBacklogCli(argv?: string[], opts: RunBacklogCliOpts = {
   // CLI command emits (BUG-APIGEN-015 parity).
   if (userArgvEarly[0] === 'version') {
     console.log(JSON.stringify(readBacklogVersionInfo()));
+    return;
+  }
+  // `migration-status`/`set-migration-phase` (client.ts §5.6) read/write the
+  // `migration.phase` config cascade — `migration-status` reads
+  // `env.config.migration.phase`, `set-migration-phase` persists through
+  // `migration-admin.ts`'s `writeMigrationPhase` — neither ever touches the
+  // graph store. But both are `hasCtx` client.ts actions (their signatures
+  // carry `ctx` for the `ctx-name-only` invariant), so dispatching them
+  // through the apigen command table would call `createClient` → `getCtx()`
+  // and open the real SQLite store for no reason
+  // (DEBT-BACKLOG-CLI-STORE-OPEN-001 — the exact store-open telemetry this
+  // fix eliminates). Short-circuit them here, before the apigen
+  // package/command table is built, using the SAME store-free paths
+  // `client.ts`'s own exports delegate to (`migration-phase.ts`), and print
+  // the identical `console.log(JSON.stringify(...))` JSON shape every other
+  // CLI command emits (BUG-APIGEN-015 parity).
+  if (userArgvEarly[0] === 'migration-status' || userArgvEarly[0] === 'set-migration-phase') {
+    runMigrationPhaseCommand(userArgvEarly[0], userArgvEarly.slice(1), opts);
     return;
   }
 
