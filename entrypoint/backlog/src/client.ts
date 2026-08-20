@@ -50,9 +50,8 @@ import { addCitationNode, appendNoteNode, archiveTerminalItems, resolveItemNode,
 import { addDependencyNode, assignItemNode, attachToPlanNode, linkRelatedNode, mergeItemsNode, removeDependencyNode, setPriorityNode, splitItemNode, supersedeItemNode } from './store/structure.js';
 import { migrateRepo as migrateRepoNode } from './store/repo-migration.js';
 import { buildChangelogSection, parseBacklogMarkdownWithDiagnostics, renderItemsToMarkdown, toImportItems } from './markdown.js';
-import { readFileSync, existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { readBacklogVersionInfo } from './version-info.js';
 
 /** The one type apigen special-cases via the `ctx-name-only` invariant. */
 export interface BacklogCtx {
@@ -540,27 +539,6 @@ export interface BacklogVersionInfo {
 }
 
 /**
- * Resolves this MODULE's own `package.json`, probing the exact SAME two
- * layouts (in the same sibling-first order) `install-skill.ts`'s
- * `installSkillToHosts` and `server.ts`'s `backlogDistDir()` already probe
- * for this file — reused, not reinvented, per that precedent's own doc
- * comment:
- *
- *  1. PUBLISHED / DEV-BUILT (`dist/client.js` next to `package.json`, either
- *     as the packed npm root or this repo's own `nx build backlog` output):
- *     `package.json` is a SIBLING of this module's own directory.
- *  2. VITEST (`src/client.ts` transformed and run in place, never built):
- *     `package.json` is one level UP from `src/` (the package root) — the
- *     `join(here, '..', 'package.json')` fallback.
- */
-function resolveOwnPackageJsonPath(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const sibling = join(here, 'package.json');
-  if (existsSync(sibling)) return sibling;
-  return join(here, '..', 'package.json');
-}
-
-/**
  * Reports this running package's own real `name`/`version`, read fresh from
  * `package.json` on every call (never a compiled-in constant, so a
  * republished build can never drift from what this reports). `ctx` is
@@ -569,6 +547,11 @@ function resolveOwnPackageJsonPath(): string {
  * path in this package assumes, per this file's own top-of-file doc
  * comment) rather than special-casing a bare, ctx-less export whose
  * extraction/dispatch behavior has not been verified.
+ *
+ * The reading itself lives in `version-info.ts`'s `readBacklogVersionInfo()`
+ * (store-free) so `cli.ts` can short-circuit `backlog version` without
+ * opening the store (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001) — this function
+ * and that short-circuit share the exact same reading path.
  */
 export async function version(ctx: BacklogCtx): Promise<BacklogVersionInfo> {
   // `ctx` deliberately unused (see doc comment above) — the param MUST be
@@ -579,7 +562,5 @@ export async function version(ctx: BacklogCtx): Promise<BacklogVersionInfo> {
   // the literal name `ctx`, not an underscore-prefixed variant). `void ctx`
   // satisfies `@typescript-eslint/no-unused-vars` without renaming the param.
   void ctx;
-  const pkgJsonPath = resolveOwnPackageJsonPath();
-  const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8')) as { name: string; version: string };
-  return { name: pkg.name, version: pkg.version };
+  return readBacklogVersionInfo();
 }

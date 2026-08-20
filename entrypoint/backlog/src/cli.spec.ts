@@ -23,7 +23,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,6 +63,30 @@ function runBin(args: string[], cwd: string, extraEnv: Record<string, string> = 
     throw new Error(`spawn failed for ${DIST_INDEX} ${JSON.stringify(args)}: ${String(result.error)}`);
   }
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+}
+
+/**
+ * Reads every telemetry event the spawned bins have written under a temp
+ * `SOX_ECOSYSTEM_HOME` redirect (so the suite never touches the real machine
+ * telemetry log), returning just the `event` name per record. The store
+ * substrate emits `store_adapter.*` records ONLY when the real SQLite store is
+ * actually opened+closed — so `store_adapter` events are the exact,
+ * unambiguous marker DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001 hinges on.
+ */
+function readTelemetryEvents(soxHome: string): string[] {
+  const logsDir = join(soxHome, 'backlog', 'logs');
+  if (!existsSync(logsDir)) return [];
+  const events: string[] = [];
+  for (const name of readdirSync(logsDir)) {
+    if (!name.endsWith('.jsonl')) continue;
+    const text = readFileSync(join(logsDir, name), 'utf8').trim();
+    if (!text) continue;
+    for (const line of text.split('\n')) {
+      const rec = JSON.parse(line) as { event?: string };
+      if (typeof rec.event === 'string') events.push(rec.event);
+    }
+  }
+  return events;
 }
 
 // ---------------------------------------------------------------------------
@@ -247,6 +271,53 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     const real = runBin(['list-items', '--filter', '{}'], adhdRoot);
     expect(real.status, `stderr:\n${real.stderr}`).toBe(0);
     expect(existsSync(expectedDbPath), 'a real dispatched command must still open the store as before').toBe(true);
+  });
+
+  // DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001 (re-opened 2026-08-20): the July
+  // fix (lazy getCtx) closed `--help`/no-args/unknown-command, but `version`
+  // is a REAL `hasCtx` client.ts action — dispatching it through the apigen
+  // command table still called `createClient` → `getCtx()` and opened the real
+  // SQLite store (emitting `store_adapter.turso.recursive_cte_probe_failed` +
+  // `store_adapter.turso.close_tshm_reset`), even though `version` only reads
+  // `package.json`. This test asserts the CLOSED state across telemetry AND
+  // DB creation, with a real store command as the positive control so the
+  // assertion provably has teeth.
+  it('version, --help, no-args, and install-skill --help emit ZERO store-open telemetry records and never create the DB', () => {
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-no-store-open-'));
+    const soxHome = join(adhdRoot, 'sox-ecosystem');
+    const expectedDbPath = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot }).files.db;
+    expect(existsSync(expectedDbPath), 'sanity: no store should exist before the CLI ever runs').toBe(false);
+
+    // `version`/`--help`/bare must exit 0 AND stay store-free. `install-skill
+    // --help` is store-free too but exits 1 (its parser rejects `--help` — a
+    // pre-existing, out-of-scope quirk), so only the store-open property is
+    // asserted for it, never its exit code.
+    const zeroExit = [
+      ['version'],
+      ['--help'],
+      [],
+    ] as const;
+    for (const args of zeroExit) {
+      const res = runBin([...args], adhdRoot, { SOX_ECOSYSTEM_HOME: soxHome });
+      const label = args.length === 0 ? '(no args)' : args.join(' ');
+      expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
+      expect(readTelemetryEvents(soxHome), `"${label}" must emit zero store-open telemetry records`).toHaveLength(0);
+      expect(existsSync(expectedDbPath), `"${label}" must not create the store`).toBe(false);
+    }
+
+    const installSkillHelp = runBin(['install-skill', '--help'], adhdRoot, { SOX_ECOSYSTEM_HOME: soxHome });
+    expect(readTelemetryEvents(soxHome), '"install-skill --help" must emit zero store-open telemetry records').toHaveLength(0);
+    expect(existsSync(expectedDbPath), '"install-skill --help" must not create the store').toBe(false);
+    expect(installSkillHelp.status).not.toBe(0);
+
+    // Negative control / teeth: a real store command MUST emit store-open
+    // telemetry records AND create the DB — proving the assertions above are
+    // not trivially green because the telemetry sink or DB path never fires.
+    const real = runBin(['list-items', '--filter', '{}'], adhdRoot, { SOX_ECOSYSTEM_HOME: soxHome });
+    expect(real.status, `stderr:\n${real.stderr}`).toBe(0);
+    expect(existsSync(expectedDbPath), 'a real dispatched command must open the store').toBe(true);
+    const storeEvents = readTelemetryEvents(soxHome).filter((e) => e.startsWith('store_adapter'));
+    expect(storeEvents.length, 'a real store command must emit store-open telemetry records').toBeGreaterThan(0);
   });
 
   it('BUG-002: ADHD_BACKLOG_DATABASE_PATH redirects the store the bin opens — the env var wins over the scope-root fallback', () => {
