@@ -32,6 +32,7 @@ import { buildBacklogApigenPackage, requireRun, testSilentLogger } from './serve
 import { runInstallSkillCommand } from './install-skill.js';
 import { runInstallCommand } from './install.js';
 import { runServeCommand } from './serve.js';
+import { readBacklogVersionInfo } from './version-info.js';
 
 /**
  * Derives the internal command-path PREFIX every `client.ts` operation
@@ -262,6 +263,21 @@ export async function runBacklogCli(argv?: string[], opts: RunBacklogCliOpts = {
   // the one-shot apigen CLI-output package.
   if (userArgvEarly[0] === 'serve') {
     await runServeCommand(userArgvEarly.slice(1), opts);
+    return;
+  }
+  // `version` (client.ts §5.7) reads this package's own `package.json` — it
+  // never touches the graph store. But it is a `hasCtx` action (its signature
+  // carries `ctx` for the `ctx-name-only` invariant), so dispatching it
+  // through the apigen command table would call `createClient` → `getCtx()`
+  // and open the real SQLite store for no reason
+  // (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001 — the exact store-open telemetry
+  // this fix eliminates). Short-circuit it here, before the apigen
+  // package/command table is built, using the SAME store-free reading path
+  // `client.ts`'s own `version()` delegates to (`version-info.ts`), and print
+  // the identical `console.log(JSON.stringify(...))` JSON shape every other
+  // CLI command emits (BUG-APIGEN-015 parity).
+  if (userArgvEarly[0] === 'version') {
+    console.log(JSON.stringify(readBacklogVersionInfo()));
     return;
   }
 
