@@ -321,8 +321,14 @@ export function parseArgs(
 
     const spec = flags.get(lookupName);
     if (!spec) {
+      // Alias entries (`aliasOf` set — the camelCase spellings registered by
+      // `computeCliFlags`, BUG-BACKLOG-CLI-FLAG-CASE-MISMATCH-001) are ACCEPTED
+      // on input but never ADVERTISED: kebab-case stays the single canonical
+      // spelling this error points the reader at.
       throw usageError(
-        `Unknown option: --${name}. Available: ${[...flags.keys()]
+        `Unknown option: --${name}. Available: ${[...flags.entries()]
+          .filter(([, f]) => f.aliasOf === undefined)
+          .map(([f]) => f)
           .sort()
           .map((f) => `--${f}`)
           .join(', ')}`

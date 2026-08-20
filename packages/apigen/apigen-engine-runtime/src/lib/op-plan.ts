@@ -178,6 +178,13 @@ export interface OpPlanCliFlag {
   valueKind: 'boolean' | 'json' | 'string';
   /** (envelope only) `APIGEN_<PLUGINID>_<FIELD>` fallback when the flag is absent. */
   envVar?: string;
+  /**
+   * Set ONLY on a camelCase alias entry, naming the canonical kebab-case key it
+   * resolves to (BUG-BACKLOG-CLI-FLAG-CASE-MISMATCH-001). Transports must
+   * exclude aliased entries when LISTING available flags — kebab-case remains
+   * the single advertised spelling — while still accepting them on input.
+   */
+  aliasOf?: string;
 }
 
 /**
@@ -257,6 +264,43 @@ function computeEnvelopeFields(
   return fields;
 }
 
+/**
+ * Registers the camelCase spelling of a flag as an alias for its canonical
+ * kebab-case key (BUG-BACKLOG-CLI-FLAG-CASE-MISMATCH-001).
+ *
+ * WHY THIS EXISTS. The flag table is keyed kebab-case, but every schema field
+ * name is camelCase — and so is every field name printed in a validation
+ * error's `Example:` payload (`{"data":{"humanId":"<string>"}}`). The primary
+ * consumers of these CLIs are LLM agents, which read that example, reach for
+ * `--humanId`, and get `Unknown option: --humanId. Available: --human-id`.
+ * Measured: a 31-citation backfill failed 31/31 on the first attempt purely
+ * from following the tool's own printed example, then succeeded 31/31 after
+ * switching spellings. The worse failure is an agent concluding the operation
+ * is unsupported and skipping it, silently degrading data quality.
+ *
+ * WHY IT TAKES `camel` RATHER THAN RE-DERIVING IT. The alias key is the
+ * ORIGINAL param/field string — the same value stored as `camelKey`, and the
+ * exact spelling the `Example:` payload prints. Nothing here re-implements a
+ * naming transform, so this cannot drift from the projection that produced
+ * `canonical`: even where `kebabCase` renders something unexpected (`dbURL` →
+ * `db-u-r-l`, matching Commander), `--dbURL` still resolves, because the alias
+ * is the literal source name rather than a second guess at tokenization.
+ *
+ * The alias shares the canonical entry's `camelKey`/`valueKind`/`envVar` and
+ * adds only `aliasOf`, so transports can list canonical flags alone.
+ */
+function registerCamelAlias(
+  flags: Map<string, OpPlanCliFlag>,
+  camel: string,
+  canonical: string,
+  flag: OpPlanCliFlag
+): void {
+  // Identical spellings (single-word names like `repo`) need no alias, and an
+  // alias must never shadow a real flag that already owns that key.
+  if (camel === canonical || flags.has(camel)) return;
+  flags.set(camel, { ...flag, aliasOf: canonical });
+}
+
 function computeCliFlags(
   schema: ComposedSchemas[string],
   envelope: OpPlanEnvelopeField[]
@@ -267,20 +311,28 @@ function computeCliFlags(
     let valueKind: OpPlanCliFlag['valueKind'] = 'string';
     if (isBooleanTypedProp(prop)) valueKind = 'boolean';
     else if (isJsonTypedProp(prop) || isNumberTypedProp(prop)) valueKind = 'json';
-    flags.set(kebabCase(param), {
-      camelKey: param,
-      kind: 'domain',
-      valueKind,
-    });
+    const canonical = kebabCase(param);
+    const flag: OpPlanCliFlag = { camelKey: param, kind: 'domain', valueKind };
+    flags.set(canonical, flag);
+    registerCamelAlias(flags, param, canonical, flag);
   }
   for (const field of envelope) {
     const flagName = field.cliFlag.replace(/^--/, '');
-    flags.set(flagName, {
+    const flag: OpPlanCliFlag = {
       camelKey: field.field,
       kind: 'envelope',
       valueKind: 'string',
       envVar: field.envVar,
-    });
+    };
+    // NO camelCase alias for envelope flags. Their canonical name is derived
+    // from `pluginId` + field (`session` → `--auth-session`), not from a
+    // kebab-casing of the field name — so the "camelCase spelling" here would
+    // be the bare, UN-namespaced `--session`, which is a different flag, not an
+    // alias. Registering it would also collide the moment two plugins each
+    // declare a `session` field. The camelCase confusion this fixes is specific
+    // to `data` params, which is where the `Example:` payload's field names
+    // come from.
+    flags.set(flagName, flag);
   }
   return flags;
 }
