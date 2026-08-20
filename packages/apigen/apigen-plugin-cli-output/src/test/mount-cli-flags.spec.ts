@@ -86,7 +86,17 @@ describe('projectMountInputSchema — flat (non-union) mount input', () => {
       transport: 'cli',
     });
 
-    expect(plan.cliFlags.size).toBe(6);
+    // 6 canonical kebab keys + 2 camelCase aliases for the two multi-word
+    // params (BUG-BACKLOG-CLI-FLAG-CASE-MISMATCH-001). These are precisely the
+    // batch flags an agent reaches for by their schema spelling —
+    // `--itemTimeoutMs` / `--onItemError` — which previously errored out.
+    expect(plan.cliFlags.size).toBe(8);
+    expect(
+      [...plan.cliFlags.entries()].filter(([, f]) => f.aliasOf !== undefined).map(([k, f]) => [k, f.aliasOf]),
+    ).toEqual([
+      ['onItemError', 'on-item-error'],
+      ['itemTimeoutMs', 'item-timeout-ms'],
+    ]);
     expect(plan.cliFlags.get('operation')).toEqual({
       camelKey: 'operation',
       kind: 'domain',
@@ -168,7 +178,17 @@ describe('projectMountInputSchema — root-level oneOf+discriminator mount input
     // Every shared control-plane field, present in BOTH branches, resolves to
     // exactly one flag entry — proving the merge, not a per-branch duplicate
     // or a first-branch-only projection.
-    expect(plan.cliFlags.size).toBe(6);
+    //
+    // Counted over CANONICAL entries only, so the camelCase aliases
+    // (BUG-BACKLOG-CLI-FLAG-CASE-MISMATCH-001) cannot mask a per-branch
+    // duplicate by inflating the total — this keeps the original teeth exactly.
+    const canonical = [...plan.cliFlags.values()].filter((f) => f.aliasOf === undefined);
+    expect(canonical).toHaveLength(6);
+    // Each alias points at a canonical key, so aliasing can never introduce a
+    // flag that no branch actually declared.
+    for (const [, f] of [...plan.cliFlags.entries()].filter(([, f]) => f.aliasOf !== undefined)) {
+      expect(plan.cliFlags.get(f.aliasOf as string)?.aliasOf).toBeUndefined();
+    }
     expect(plan.cliFlags.get('operation')?.valueKind).toBe('string');
     expect(plan.cliFlags.get('items')?.valueKind).toBe('json');
     expect(plan.cliFlags.get('concurrency')?.valueKind).toBe('json');

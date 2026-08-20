@@ -197,7 +197,14 @@ describe('buildOpPlan — source op', () => {
   });
 
   it('computes the precomputed cliFlags table with kebab keys + correct valueKind per prop [serve-core-primitives.5]', () => {
-    expect(plan.cliFlags.size).toBe(5);
+    // 5 canonical kebab keys + 1 camelCase alias (`outputLabel` → `output-label`);
+    // `bytes`/`pretty`/`tags` are single-word, so their camel and kebab
+    // spellings coincide and no alias is registered
+    // (BUG-BACKLOG-CLI-FLAG-CASE-MISMATCH-001).
+    expect(plan.cliFlags.size).toBe(6);
+    expect([...plan.cliFlags.entries()].filter(([, f]) => f.aliasOf !== undefined).map(([k]) => k)).toEqual([
+      'outputLabel',
+    ]);
     // BUG-APIGEN-CLI-OUTPUT-001 (fixed alongside the mount-cliFlags gap): a
     // `number`-typed domain param now resolves `valueKind: 'json'` (JSON.parse
     // produces a real JS `number`) — it previously fell through to `'string'`,
@@ -226,6 +233,40 @@ describe('buildOpPlan — source op', () => {
       kind: 'domain',
       valueKind: 'string',
     });
+  });
+
+  /**
+   * BUG-BACKLOG-CLI-FLAG-CASE-MISMATCH-001. Every schema field name is
+   * camelCase, and so is every field printed in a validation error's
+   * `Example:` payload — but the flag table was keyed kebab-case only, so an
+   * agent following the tool's own example got `Unknown option: --humanId`.
+   * Measured: a 31-citation backfill failed 31/31 that way, then succeeded
+   * 31/31 after switching spellings.
+   *
+   * The alias key is the ORIGINAL param string, never a re-derivation, so it
+   * cannot drift from whatever `kebabCase` produced for the canonical key.
+   */
+  it('registers the camelCase spelling as an alias resolving to the same flag [BUG-BACKLOG-CLI-FLAG-CASE-MISMATCH-001]', () => {
+    const canonical = plan.cliFlags.get('output-label');
+    const alias = plan.cliFlags.get('outputLabel');
+
+    expect(alias, '--outputLabel must resolve, not throw Unknown option').toBeDefined();
+    // Same target param and same typing — the alias differs ONLY by `aliasOf`.
+    expect(alias?.camelKey).toBe(canonical?.camelKey);
+    expect(alias?.kind).toBe(canonical?.kind);
+    expect(alias?.valueKind).toBe(canonical?.valueKind);
+    expect(alias?.aliasOf).toBe('output-label');
+    // The canonical entry is NOT marked as an alias — it stays the advertised
+    // spelling, which is what `Available:` lists.
+    expect(canonical?.aliasOf).toBeUndefined();
+  });
+
+  it('registers no alias where camel and kebab spellings already coincide [BUG-BACKLOG-CLI-FLAG-CASE-MISMATCH-001]', () => {
+    // Guards against the table doubling in size for single-word params, and
+    // against a canonical entry being overwritten by its own "alias".
+    for (const single of ['bytes', 'pretty', 'tags']) {
+      expect(plan.cliFlags.get(single)?.aliasOf, `${single} must not be aliased`).toBeUndefined();
+    }
   });
 
   it('carries envVar on the envelope cliFlags entry so parseArgs env-var fallback is not regressed [serve-core-primitives.9 / F2]', () => {
