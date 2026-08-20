@@ -37,10 +37,10 @@
     "publishedIntegrity": "sha512-aD+IsxIrVoise8xxYk2wvrGjlMYo/itGbcBaYKO3Dz55cSspiOhS6hBccIYmBY+1s2S1QoWowrnvgdF9qxJ4Gw=="
   },
   "@adhd/agent-mcp": {
-    "version": "2.3.0",
-    "normalizedHash": "sha256:7bae70e4c29f3ca1304d1e3c4c6b197d314d248eb264c642545d73c7adec996c",
-    "publishedIntegrity": "sha512-emvBJKPcMtNxPUpfz4LNRTC/U9WS6SJf0pMwip3l+tD15nKgRlvlpNjfZzDnUXV8opDuc1kj1olmad4iMPGX0A==",
-    "publishedFromRef": "23e8c5f9498f3586bcfb054df02dc45f9f4072ec"
+    "version": "2.3.1",
+    "normalizedHash": "sha256:403489af02a05a01d917ac68ba0c1885d609cbf5e788269839c32ae756ad451c",
+    "publishedIntegrity": "sha512-V2EswASKUzXuw+TCjUPMtHMQv/Oeyvc+YdfR34lW6m9FuBuH2OsFezEe13NNybr8wB+dZTmzv8hSK3y+3CUUkA==",
+    "publishedFromRef": "fe50bbb7501e8cdbfb66bb9b8bfcfeb681aa2e7b"
   },
   "@adhd/agent-plugin-budget": {
     "version": "0.2.0",
@@ -200,10 +200,10 @@
     "publishedIntegrity": "sha512-UTbYCU0GBPwY8FmxT7JPb+StGJML5i7/GeXxI1z0tWcWpN8uW9dKz/5s84kIYHtuC4wE1FVaoX6VEzOF8B5vtw=="
   },
   "@adhd/backlog": {
-    "version": "0.1.6",
-    "normalizedHash": "sha256:57300e17cf8afd3ca41d632c6f1c7bcac2f41ddbcf825c7102b466877f14e13c",
-    "publishedIntegrity": "sha512-59zrPcHD39E7I9HfEUySZEbh9aRIMO3dGcfp01OFXDnfnxudqvvc1pUPrTXzWanD0BrRFacx3+faBQ8CaRnCzw==",
-    "publishedFromRef": "a7a152fc70c700c18e06bebaf87282d14f5344d6"
+    "version": "0.1.9",
+    "normalizedHash": "sha256:46c073364c8c135d555ad0d90aed997201d8b19fdc941f1093a9e3013dc8af85",
+    "publishedIntegrity": "sha512-HM/kYfsdt2b0rqeR3ESlfcfnGcc7Y6d7XP+MmpvFsY3e52tH75VGXeu1U/AHpVXfKhx/uT3SAgMR8dr7YVHl7Q==",
+    "publishedFromRef": "f2bd579e48ed99d251fff2d24ec77fe64ee38d33"
   },
   "@adhd/data-base-transforms": {
     "version": "2.3.0",
