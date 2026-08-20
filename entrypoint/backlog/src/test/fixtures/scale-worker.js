@@ -52,6 +52,12 @@ async function main() {
       type: 'error',
       message: err instanceof Error ? err.message : String(err),
       code: err && err.code,
+      // The stack is what distinguishes a retry-budget exhaustion inside
+      // `withImmediateRetry` from a bounce on an UNRETRIED path (the reads in
+      // `requireItem`, or `writeAuditEvent`'s post-commit event write). Without
+      // it, a failure here is indistinguishable from this test's own timing
+      // margin — which is exactly how the unretried paths stayed invisible.
+      stack: err instanceof Error ? err.stack : undefined,
       elapsedMs: Date.now() - startedAt,
     });
   } finally {
