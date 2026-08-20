@@ -22,10 +22,21 @@ const { parentPort, workerData } = require('node:worker_threads');
 
 async function main() {
   const backlog = require(workerData.distIndexPath);
-  const store =
-    workerData.busyTimeoutMs === undefined
-      ? await backlog.openGraphBacklogStore(workerData.dbPath)
-      : await backlog.openGraphBacklogStore(workerData.dbPath, workerData.busyTimeoutMs);
+  // The store OPEN is deliberately NOT run under `busyTimeoutMs`. That knob
+  // exists to squeeze the operation under test (the contended claim, AFTER
+  // the gate); applying it to the open too would also squeeze
+  // `applySchema()`'s DDL, which no test here is trying to stress and which
+  // happens BEFORE the barrier, outside the measured race entirely. With 20
+  // workers opening at once on a loaded box, a tiny value made `applySchema`
+  // bounce with "database is locked" during startup — a pure artifact of the
+  // fixture that presented as a failure of the claim path.
+  //
+  // So: open at the default busy_timeout, then narrow it to the test's value
+  // once the schema is in place and before parking on the gate.
+  const store = await backlog.openGraphBacklogStore(workerData.dbPath);
+  if (workerData.busyTimeoutMs !== undefined) {
+    await store.adapter.pragmaSet('busy_timeout', workerData.busyTimeoutMs);
+  }
   const env = backlog.buildBacklogEnv({ scope: 'project', adhdRoot: workerData.adhdRoot });
   const ctx = { store, env };
 
@@ -65,4 +76,17 @@ async function main() {
   }
 }
 
-main();
+// A failure BEFORE the gate (store open, schema apply, env build) used to
+// escape as an unhandled rejection: the worker never posted `ready`, the
+// harness's `ready` promise had no reject path, and the whole spec died on a
+// 60s timeout with the real cause detached in vitest's "Unhandled Rejection"
+// section. Reporting it as a normal `startup-error` message keeps every
+// failure attributable to the thing that actually failed.
+main().catch((err) => {
+  parentPort.postMessage({
+    type: 'startup-error',
+    message: err instanceof Error ? err.message : String(err),
+    code: err && err.code,
+    stack: err instanceof Error ? err.stack : undefined,
+  });
+});
