@@ -106,25 +106,63 @@ export async function planRepoMigration(store: GraphBacklogStore, fromRepo: stri
 
   const sorted = [...sourceNodes].sort((a, b) => (metaOf(a).humanId ?? '').localeCompare(metaOf(b).humanId ?? ''));
 
+  // TWO PASSES, deliberately. A single greedy pass that grows `targetHumanIds`
+  // as it walks `sorted` CASCADES: moving `BUG-001` onto the next free
+  // `BUG-005` puts `BUG-005` in the taken-set, so the source's OWN `BUG-005`
+  // — which never collided with anything — is then renamed too, and so on
+  // down the family. Measured against the real production store, that turned
+  // 8 genuine collisions into 43 renames. Every rename silently invalidates
+  // that id everywhere it is already referenced (citations, cross-links,
+  // commit messages, docs), so renaming an item that did not have to move is
+  // not a cosmetic difference — it is 35 broken references.
+  //
+  // Pass 1 reserves every source id that is genuinely free in the target.
+  // Pass 2 allocates fresh ids for the true collisions only, skipping
+  // anything reserved in pass 1.
+  const originalTargetIds = new Set(targetHumanIds);
+  const reserved = new Set(originalTargetIds);
+  const conflicted: typeof sorted = [];
+  for (const node of sorted) {
+    const humanId = metaOf(node).humanId ?? '';
+    if (originalTargetIds.has(humanId)) conflicted.push(node);
+    else reserved.add(humanId);
+  }
+
+  // Family high-water marks must account for the ids pass 1 just reserved,
+  // or pass 2 would hand out an id a kept item is already sitting on.
+  const familyMax = new Map<string, number>(familyMaxInTarget);
+  for (const id of reserved) {
+    const num = familyNumber(id);
+    if (num === undefined) continue;
+    const fam = humanIdFamily(id);
+    familyMax.set(fam, Math.max(familyMax.get(fam) ?? 0, num));
+  }
+
+  const renames = new Map<number, string>();
+  for (const node of conflicted) {
+    const meta = metaOf(node);
+    const family = meta.family ?? humanIdFamily(meta.humanId ?? '');
+    let next = (familyMax.get(family) ?? 0) + 1;
+    let candidate = `${family}-${String(next).padStart(3, '0')}`;
+    while (reserved.has(candidate)) {
+      next += 1;
+      candidate = `${family}-${String(next).padStart(3, '0')}`;
+    }
+    familyMax.set(family, next);
+    reserved.add(candidate);
+    renames.set(node.id, candidate);
+  }
+
   const items: RepoMigrationPlanItem[] = [];
   for (const node of sorted) {
     const meta = metaOf(node);
     const humanId = meta.humanId ?? '';
-    const family = meta.family ?? humanIdFamily(humanId);
-    let targetHumanId = humanId;
-    let renamed = false;
-    if (targetHumanIds.has(humanId)) {
-      const nextNum = (familyMaxInTarget.get(family) ?? 0) + 1;
-      familyMaxInTarget.set(family, nextNum);
-      targetHumanId = `${family}-${String(nextNum).padStart(3, '0')}`;
-      renamed = true;
-    }
-    targetHumanIds.add(targetHumanId);
+    const renamedTo = renames.get(node.id);
     items.push({
       nodeId: node.id,
       humanId,
-      targetHumanId,
-      renamed,
+      targetHumanId: renamedTo ?? humanId,
+      renamed: renamedTo !== undefined,
       title: meta.title ?? '',
       status: meta.status ?? 'UNKNOWN',
     });
