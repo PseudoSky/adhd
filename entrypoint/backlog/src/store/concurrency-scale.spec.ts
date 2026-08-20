@@ -272,17 +272,29 @@ describe(`concurrency-scale — ${N} real worker_threads (MIGRATION.md §3.3)`, 
     // must still let every one of the 20 losers eventually observe the
     // winner's committed claim and return a clean 'held' — never an
     // unhandled busy/locked error thrown to the caller.
-    // 50ms was the original value here and is knowingly at the edge of
-    // viable: with 20 real threads racing one row lock, the fixed 5-attempt/
-    // jittered-backoff schedule in `immediate-retry.ts` (worst case ~850ms
-    // total across all attempts) occasionally loses the coupon-collector
-    // race at 50ms per attempt — a loser's LAST retry can still land inside
-    // another loser's still-open window and get bounced again, exhausting
-    // its budget and throwing a real (uncaught-by-the-test) busy/locked error.
-    // That's a flake in this test's OWN timing margin, not a correctness
-    // bug (`claimedCount === 1` below never flakes) — 150ms gives every
-    // loser's `busy_timeout` window enough headroom to observe the winner's
-    // commit well within the retry budget, deterministically.
+    // HISTORY — READ BEFORE WIDENING THIS TIMEOUT AGAIN.
+    // This test failed roughly 1 run in 5, and the failure was written off
+    // here as its own timing margin: the theory was that a loser's last retry
+    // lands inside another loser's still-open window, exhausting the 5-attempt
+    // budget. The "fix" was widening this constant 50ms -> 150ms.
+    //
+    // That diagnosis was wrong, and the widening only made the real defect
+    // rarer. Two measurements refute it:
+    //   * busy_timeout IS honored, and the adapter retries ~4x internally, so
+    //     ONE `withImmediateRetry` attempt at 150ms costs ~684ms and the full
+    //     5-attempt budget is ~3.4s. The failing worker threw at ~194ms — a
+    //     quarter of a SINGLE attempt, so it never exhausted anything.
+    //   * the captured stack (scale-worker.js now reports `err.stack` for
+    //     exactly this reason) landed in `SqliteGraphBackend.writeNode` under
+    //     `claimItem` -> `logClaimEvent` -> `writeAuditEvent` — the
+    //     POST-COMMIT audit-event write, which at the time had neither
+    //     busy-retry nor containment.
+    //
+    // So the error came off an unretried path, AFTER the claim had already
+    // committed: BUG-BACKLOG-AUDIT-WRITE-FAILS-COMMITTED-CLAIM-001, covered
+    // deterministically by `audit-write-containment.spec.ts`. If this test
+    // ever goes red again, capture the stack and find the unretried path —
+    // do not widen the timeout.
     const TINY_BUSY_TIMEOUT_MS = 150;
     const created = await createItemNode(tmp.store, { family: 'BUG-SCALE-RETRY', title: 'retry-recovers item', body: 'x', repo: REPO });
 
