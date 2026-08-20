@@ -19,6 +19,7 @@ import { createStoreAdapter, type StoreAdapter } from '@adhd/sox-store-adapter';
 import { createGraphBackend, type GraphBackend } from '@adhd/sox-graph-store';
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { withImmediateRetry } from './immediate-retry.js';
 
 export interface GraphBacklogStore {
   /** Store-adapter handle — ONLY for the CAS transaction wrapper (mutate-metadata.ts / ids.ts). */
@@ -66,7 +67,16 @@ export async function openGraphBacklogStore(dbPath: string, busyTimeoutMs = 5000
   // (AdapterConfig has no busy_timeout field — types.ts).
   await adapter.pragmaSet('busy_timeout', busyTimeoutMs);
   const graph = createGraphBackend(adapter);
-  await graph.applySchema();
+  // DEBT-BACKLOG-APPLYSCHEMA-UNRETRIED-AT-OPEN-001. `applySchema()` issues DDL,
+  // which takes the same write lock as every other write in this package — so
+  // it gets the same bounded busy-retry the other four write paths get
+  // (mutate-metadata.ts, ids.ts, repo-migration.ts, audit-log.ts). Without it,
+  // opening a store while another process holds the write lock could fail
+  // outright: measured with 20 concurrent opens at busy_timeout=150 on a loaded
+  // box, `applySchema` threw "database is locked" from SqliteGraphBackend.
+  // Production's 5000ms default left ample headroom, so this closes the gap
+  // before it becomes an incident rather than after.
+  await withImmediateRetry(() => graph.applySchema());
   return { adapter, graph };
 }
 
