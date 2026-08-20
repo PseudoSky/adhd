@@ -33,10 +33,13 @@ const REPO = 'PseudoSky/scale-test';
 const N = 20;
 
 interface WorkerMsg {
-  type: 'ready' | 'result' | 'error';
+  /** `startup-error` is a failure BEFORE the gate (store open, schema apply) —
+   *  distinct from `error`, which is a failure of the operation under test. */
+  type: 'ready' | 'result' | 'error' | 'startup-error';
   result?: { status?: string; claimedBy?: string; heldBy?: string; item?: { humanId: string } };
   message?: string;
   code?: string;
+  stack?: string;
   elapsedMs?: number;
 }
 
@@ -58,15 +61,37 @@ function spawnWorker(opts: SpawnOpts): { worker: Worker; ready: Promise<void>; o
     workerData: { distIndexPath: DIST_INDEX, repo: REPO, ...opts },
   });
   let resolveReady!: () => void;
-  const ready = new Promise<void>((resolve) => {
+  // `ready` MUST have a reject path. Without one, a worker that dies before
+  // posting `ready` — a store-open/schema-apply failure, a thrown require —
+  // left `runBarrieredBatch`'s `Promise.all(ready)` pending forever, so the
+  // spec died on its own 60s timeout while the real error surfaced only as a
+  // detached "Unhandled Rejection" in vitest's summary. Every startup failure
+  // now fails the batch fast, carrying the cause.
+  let rejectReady!: (err: unknown) => void;
+  const ready = new Promise<void>((resolve, reject) => {
     resolveReady = resolve;
+    rejectReady = reject;
   });
   const outcome = new Promise<WorkerMsg>((resolve, reject) => {
     worker.on('message', (msg: WorkerMsg) => {
       if (msg.type === 'ready') resolveReady();
-      else resolve(msg);
+      else if (msg.type === 'startup-error') {
+        const err = new Error(`worker failed before the gate: ${msg.message}\n${msg.stack ?? ''}`);
+        rejectReady(err);
+        reject(err);
+      } else resolve(msg);
     });
-    worker.on('error', reject);
+    worker.on('error', (err) => {
+      rejectReady(err);
+      reject(err);
+    });
+    worker.on('exit', (code) => {
+      if (code !== 0) {
+        const err = new Error(`worker exited with code ${code} before reporting an outcome`);
+        rejectReady(err);
+        reject(err);
+      }
+    });
   });
   return { worker, ready, outcome };
 }
