@@ -1,3 +1,19 @@
+## 0.1.9 (2026-08-20)
+
+
+### 🩹 Fixes
+
+- **release:** global-CLI currency gate (BUG-027) + assets/build output-scope cache bug (BUG-026)
+
+- **backlog:** converge @adhd/sox-telemetry to a single instance (BUG-BACKLOG-TELEMETRY-001)
+
+- **backlog:** don't open the graph store for --help/version (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001)
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.8 (2026-08-19)
 
 
