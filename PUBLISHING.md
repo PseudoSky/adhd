@@ -458,6 +458,39 @@ package-specific verification steps. Check there for the full smoke-test procedu
 
 ---
 
+## Running a global CLI against local source (dev mode)
+
+Sometimes you want the globally-installed `backlog` / `apigen` / `agent-mcp` binary to run **this
+worktree's** code rather than the published artifact — to exercise a fix before it ships, or because
+the published version is behind a commit you need. That is the `pnpm link -g` shape the
+`sync-global` step calls a "stale link shim".
+
+**It is a legitimate dev state, and it is deliberately temporary.**
+
+```bash
+# point the global bin at local source
+npx nx build <project>                  # the shim execs dist/, so dist must exist and be current
+cd <entrypoint-dir> && pnpm link --global
+
+# confirm which build you are actually running
+readlink -f "$(which <bin>)"            # or: cat "$(which <bin>)" | grep exec
+<bin> --version
+```
+
+**Step 3.5 of `pnpm release` will silently undo this.** `sync-global.mjs` detects a shim whose
+content embeds the workspace root and flips it back to the published artifact via
+`pnpm add -g <name>@<exact-version>` — that is its entire purpose (see line 147 above). So after any
+release, a dev-mode link is gone and the global CLI is on the registry build again, with no warning
+beyond the release log. Re-link with the commands above if you still want local source.
+
+**Know which build answered you.** The global bin and a repo-relative
+`node <entrypoint>/dist/index.js` are *different artifacts* and can be different versions while
+writing to the same store. If an MCP server entry also points at one of them
+(`~/.claude.json` vs a repo `.mcp.json`), the same tool name can resolve to two different builds —
+see `BUG-BACKLOG-MCP-CLI-SPLIT-BRAIN-001`. When verifying a fix, state which binary you ran.
+
+---
+
 ## Troubleshooting
 
 (Current pipeline — `@adhd/nx-build:version`/`:publish`, no git tags, `tools/nx-plugins/build/executors/publish/release-publish.mjs` and everything referencing `nx release`/`updateDependents`/tag deletion belongs to the retired workflow above, not this one.)
