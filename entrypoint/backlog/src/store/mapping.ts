@@ -44,6 +44,18 @@ export function computeContentHash(content: string): string {
 }
 
 /**
+ * Canonical normalized form of a repo key, for COMPARISON ONLY — never
+ * stored or returned to a caller (BUG-BACKLOG-REPO-LOOKUP-UX-001 hardening).
+ * Trims whitespace and lowercases so 'PseudoSky/adhd', ' pseudosky/ADHD ',
+ * and 'pseudosky/adhd' all compare equal without changing the stored
+ * namespace format — namespace-qualified values are never rewritten by this,
+ * only matched against each other.
+ */
+export function normalizeRepoKey(repo: string): string {
+  return repo.trim().toLowerCase();
+}
+
+/**
  * `@adhd/sox-graph-store`'s `searchNodes(query)` binds `query` DIRECTLY as an
  * FTS5 `MATCH` argument, parsed by FTS5's own boolean/column-filter query
  * grammar — NOT a plain-text search. `searchNodes`'s own `query.replace(/"/g,
