@@ -17,7 +17,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openTmpStore, type TmpStore } from '../test/helpers/tmp-store.js';
-import * as client from '../client.js';
+import * as client from '../ops-v1.js';
 import type { BacklogCtx } from '../client.js';
 import { buildBacklogEnv } from '../env.js';
 import { BacklogItemNotFoundError } from '../model.js';

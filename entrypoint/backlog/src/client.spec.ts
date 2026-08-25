@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as client from './client.js';
+import * as client from './ops-v1.js';
 import type { BacklogCtx } from './client.js';
 import { openTmpStore, type TmpStore } from './test/helpers/tmp-store.js';
 import { buildBacklogEnv } from './env.js';

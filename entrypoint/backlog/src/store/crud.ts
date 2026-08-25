@@ -6,8 +6,8 @@
  * DESIGN.md §2.4).
  */
 import type { NodeRecord } from '@adhd/sox-graph-store';
-import type { BacklogItem, CreateItemInput, CreateItemResult, UpdateItemInput } from '../model.js';
-import { InvalidArgumentError } from '../model.js';
+import type { BacklogItem, CreateItemInput, CreateItemResult, ICreateSuppressionReason, IUpdatePatch } from '../model.js';
+import { InvalidArgumentError, UnsupportedOperationError, assertKnownPatchKeys, assertNoSilentlyDiscardedPatchKeys } from '../model.js';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
 import { allocateHumanIdAndInsert } from './ids.js';
 import { buildNotFoundError, findItemNode, knownRepos } from './query.js';
@@ -193,7 +193,68 @@ async function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateI
   return [...candidates.values()].map(toBacklogItem);
 }
 
-export async function createItemNode(store: GraphBacklogStore, input: CreateItemInput): Promise<CreateItemResult> {
+/**
+ * Superset of the landed v1 `CreateItemResult` contract (model.ts) — extends
+ * it rather than redefining it, and adds only the two fields needed to close
+ * BUG-BACKLOG-CREATE-ITEM-SILENT-DEDUP-DROP-001 and
+ * BUG-BACKLOG-CREATE-DEDUPE-RETURNS-FOREIGN-ID-001 without touching model.ts
+ * (out of this file's ownership).
+ *
+ * `item` stays REQUIRED, matching `CreateItemResult` exactly, so every
+ * existing caller that reads `result.item` unconditionally (`client.ts`'s
+ * `createItem`/`importFromMarkdown`, `structure.ts`'s `splitItemNode`) keeps
+ * compiling and keeps working: on a suppressed write `item` is still the
+ * matched existing item, same as before this fix. What changes is that a
+ * caller no longer has to infer "this humanId belongs to someone else" from
+ * `item.humanId` alone — `existingHumanId` and `reason` name that fact
+ * explicitly, so a caller that DOES check them (as every caller now should)
+ * cannot mistake a suppressed write for a real one.
+ *
+ * `reason` reuses model.ts's own `ICreateSuppressionReason` — "why a create
+ * variant wrote nothing. Never a silent drop." (model.ts `ICreateOutcome`
+ * doc comment) — the type the contracts agent already ships for exactly
+ * this, rather than inventing a parallel enum.
+ */
+export interface CreateItemOutcome extends CreateItemResult {
+  /**
+   * Set ONLY when `created === false` — the humanId of the EXISTING item the
+   * write was suppressed in favor of. Never set when `created === true`.
+   *
+   * BUG-BACKLOG-CREATE-DEDUPE-RETURNS-FOREIGN-ID-001: on the dedupe-scan
+   * path (as opposed to the exact-idOverride-collision path, where the
+   * "existing" item legitimately shares the caller's own requested id) the
+   * only id `item.humanId` carries belongs to a DIFFERENT item than the one
+   * the caller tried to file. A caller that stored `item.humanId` as "the
+   * item I just filed" is now pointing at someone else's ticket. This field
+   * is the honest, unambiguous way to read that id back.
+   */
+  existingHumanId?: string;
+  /** Set ONLY when `created === false` — why nothing was written. */
+  reason?: ICreateSuppressionReason;
+}
+
+/**
+ * FEAT-013 — increments the matched item's `dupeHits` counter every time the
+ * filing-time dedupe scan suppresses a create in its favor: the demand
+ * signal `sort:"demand"`/`filter.dupeHitsMin` reads (model.ts
+ * `IBacklogItemV2.dupeHits`, `BACKLOG_FILTER_KEYS`) — an item filed 5 times
+ * is wanted more than one filed once.
+ *
+ * `BacklogNodeMeta` (mapping.ts) does not yet declare a `dupeHits` field —
+ * mapping.ts is not owned by this fix, and node metadata storage is
+ * schemaless JSON, so an undeclared key round-trips safely through
+ * `mutateMetadata`'s generic `<M>` without needing a mapping.ts change.
+ * `toBacklogItem` simply doesn't surface it back out yet; that read-side
+ * wiring is separate, later work.
+ */
+async function incrementDupeHits(store: GraphBacklogStore, nodeId: number): Promise<void> {
+  await mutateMetadata<BacklogNodeMeta & { dupeHits?: number }>(store, nodeId, (meta) => ({
+    ...meta,
+    dupeHits: (meta.dupeHits ?? 0) + 1,
+  }));
+}
+
+export async function createItemNode(store: GraphBacklogStore, input: CreateItemInput): Promise<CreateItemOutcome> {
   // BUG-BACKLOG-HUMANID-COLLISION-001 fix #1: `family` is REQUIRED unless
   // `idOverride` is given (SPEC.md §5.1, model.ts `CreateItemInput.family`
   // doc comment). Validated HERE, before any allocation runs, so a missing/
@@ -270,13 +331,33 @@ export async function createItemNode(store: GraphBacklogStore, input: CreateItem
     const existing = await findItemNode(store, input.repo, input.idOverride);
     if (existing) {
       const existingItem = toBacklogItem(existing);
-      return { item: existingItem, created: false, duplicateCandidates: [existingItem] };
+      // The caller asked for THIS exact id and it already exists — not a
+      // "foreign" id (the caller requested it), so `existingHumanId` is
+      // still set for consistency ("never a silent drop") but always equals
+      // the id the caller themselves passed as `idOverride`.
+      return { item: existingItem, created: false, duplicateCandidates: [existingItem], existingHumanId: existingItem.humanId, reason: 'id-collision' };
     }
   }
 
   const duplicateCandidates = input.force ? [] : await dedupeScan(store, input.repo, input);
   if (duplicateCandidates.length > 0 && !input.force) {
-    return { item: duplicateCandidates[0], created: false, duplicateCandidates };
+    // BUG-BACKLOG-CREATE-ITEM-SILENT-DEDUP-DROP-001 /
+    // BUG-BACKLOG-CREATE-DEDUPE-RETURNS-FOREIGN-ID-001: this is the branch
+    // that used to hand back `{ item: duplicateCandidates[0], created:
+    // false }` and nothing else — a shape a caller that doesn't check
+    // `created` reads exactly like a real create success, with ANOTHER
+    // item's humanId sitting where a caller expects its own new id. Both
+    // fixes are additive fields (`existingHumanId`, `reason`), never a
+    // change to `item`'s presence — see `CreateItemOutcome`'s doc comment.
+    const matched = duplicateCandidates[0];
+    await incrementDupeHits(store, matched.nodeId);
+    return {
+      item: matched,
+      created: false,
+      duplicateCandidates,
+      existingHumanId: matched.humanId,
+      reason: 'duplicate-suppressed',
+    };
   }
 
   // BUG-BACKLOG-REPO-LOOKUP-UX-001 (write-time half): a genuinely NEW repo
@@ -295,7 +376,11 @@ export async function createItemNode(store: GraphBacklogStore, input: CreateItem
   return allocateHumanIdAndInsert(store, input.repo, input.family, input.idOverride, async (humanId, existingAtCommit) => {
     if (existingAtCommit) {
       const existingItem = toBacklogItem(existingAtCommit);
-      return { item: existingItem, created: false, duplicateCandidates: [existingItem] };
+      // Same idOverride-collision case as the speculative check above, just
+      // caught by the authoritative in-transaction re-check instead — see
+      // that branch's comment for why `existingHumanId` here is never
+      // "foreign" (it is the id the caller themselves asked to use).
+      return { item: existingItem, created: false, duplicateCandidates: [existingItem], existingHumanId: existingItem.humanId, reason: 'id-collision' };
     }
 
     const kind = humanIdKind(humanId);
@@ -372,16 +457,139 @@ async function requireItemNode(store: GraphBacklogStore, repo: string, humanId: 
  * ANY write to `node.content`/`name`/`summary`, so no separate FTS statement
  * is needed here.
  */
-export async function updateItemNode(store: GraphBacklogStore, repo: string, humanId: string, patch: UpdateItemInput): Promise<BacklogItem> {
+/**
+ * BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001: this function used to read
+ * exactly five keys off `patch` — `title`, `body`, `projectPath`,
+ * `importedFrom`, `tags` — and return the mapped item as a SUCCESS
+ * regardless of what else the caller passed. `IUpdatePatch` (model.ts §4)
+ * declares ten MORE keys (`priority`, `status`, `plan`, `assignee`, `kind`,
+ * `humanId`, `repo`, `files`, `author`, `reporter`); every one of them used
+ * to be silently accepted and silently ignored.
+ *
+ * The fix is two gates, both BEFORE any write happens (a rejected patch must
+ * never be a partial write, same rule `createItemNode`'s field guards
+ * follow):
+ *
+ * 1. `assertKnownPatchKeys` — reject a key `IUpdatePatch` doesn't declare at
+ *    all (a typo/unknown field) by name.
+ * 2. The per-key checks below — reject a key `IUpdatePatch` DOES declare but
+ *    this operation does not implement, by name, pointing at whichever
+ *    operation actually owns that field (verified against this repo's own
+ *    `store/*.ts` exports, not guessed):
+ *      - `priority`  -> `setPriorityNode`   (store/structure.ts:210)
+ *      - `status`    -> `transitionStatusNode` / `resolveItemNode` (store/lifecycle.ts) —
+ *                       a raw patch must not become a way around the §5a.2
+ *                       citation/reason evidence gate those enforce.
+ *      - `plan`      -> `attachToPlanNode`  (store/structure.ts:234)
+ *      - `assignee`  -> `assignItemNode`    (store/structure.ts:254)
+ *      - `humanId`   -> `renameHumanIdNode` (store/structure.ts:295) — a
+ *                       rename is never a blind metadata write.
+ *      - `kind`      -> `kind` is DERIVED from `humanId`'s prefix
+ *                       (`mapping.ts:humanIdKind`), not an independent field;
+ *                       it can only change via the same `renameHumanIdNode`
+ *                       repair primitive as `humanId` itself.
+ *      - `repo`      -> `UnsupportedOperationError`, per model.ts's OWN
+ *                       documented contract for this field (model.ts
+ *                       `IUpdatePatch.repo` doc comment, DEBT-BACKLOG-REPO-MOVE-001):
+ *                       illegal until repo is a graph node (EPIC-A); use
+ *                       `migrateRepoItemNode` (store/repo-migration.ts) instead.
+ *      - `files`, `author`, `reporter` -> `UnsupportedOperationError` — §5a.3
+ *                       / FEAT-012 have no write path ANYWHERE in this store
+ *                       yet (`BacklogNodeMeta`, mapping.ts, declares none of
+ *                       these fields); there is no operation to point to.
+ *
+ * `assertNoSilentlyDiscardedPatchKeys` runs last, as a final defense-in-depth
+ * check against the keys this function DOES claim to apply — so a future
+ * regression here (a key added to the "handled" set below without actually
+ * being written) still fails loudly instead of silently, exactly like the
+ * bug this whole function exists to fix.
+ */
+export async function updateItemNode(store: GraphBacklogStore, repo: string, humanId: string, patch: IUpdatePatch): Promise<BacklogItem> {
+  assertKnownPatchKeys(patch as unknown as Record<string, unknown>);
+
+  if (patch.priority !== undefined) {
+    throw new InvalidArgumentError(
+      'priority',
+      `patch.priority is not applied by updateItem — priority changes go through setPriority (store/structure.ts:setPriorityNode). See BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001.`
+    );
+  }
+  if (patch.status !== undefined) {
+    throw new InvalidArgumentError(
+      'status',
+      `patch.status is not applied by updateItem — status changes must go through transitionStatus/resolveItem (store/lifecycle.ts), which enforce the citation/reason evidence gate a raw patch would otherwise bypass. See BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001.`
+    );
+  }
+  if (patch.plan !== undefined) {
+    throw new InvalidArgumentError(
+      'plan',
+      `patch.plan is not applied by updateItem — plan attachment goes through attachToPlan (store/structure.ts:attachToPlanNode). See BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001.`
+    );
+  }
+  if (patch.assignee !== undefined) {
+    throw new InvalidArgumentError(
+      'assignee',
+      `patch.assignee is not applied by updateItem — assignment goes through assignItem (store/structure.ts:assignItemNode). See BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001.`
+    );
+  }
+  if (patch.humanId !== undefined) {
+    throw new InvalidArgumentError(
+      'humanId',
+      `patch.humanId is not applied by updateItem — renaming an item's humanId must go through the store's renameHumanId repair primitive (store/structure.ts:renameHumanIdNode), never a blind metadata write. See BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001.`
+    );
+  }
+  if (patch.kind !== undefined) {
+    throw new InvalidArgumentError(
+      'kind',
+      `patch.kind is not applied by updateItem — kind is DERIVED from humanId's prefix (mapping.ts:humanIdKind), so it cannot be changed independently; rename the item via renameHumanId (store/structure.ts:renameHumanIdNode) to change its kind, or file a new item under the desired family. See BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001.`
+    );
+  }
+  if (patch.repo !== undefined) {
+    throw new UnsupportedOperationError(
+      'repo',
+      `patch.repo cannot move an item between repos yet — repo is not a graph node until EPIC-A lands (DEBT-BACKLOG-REPO-MOVE-001). Use migrateRepoItemNode (store/repo-migration.ts) instead. See BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001.`
+    );
+  }
+  if (patch.files !== undefined) {
+    throw new UnsupportedOperationError(
+      'files',
+      `patch.files has no write path yet — §5a.3's declared-file-paths feature is not implemented at the storage layer (BacklogNodeMeta has no "files" field). See BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001.`
+    );
+  }
+  if (patch.author !== undefined) {
+    throw new UnsupportedOperationError(
+      'author',
+      `patch.author has no write path yet — FEAT-012's author-role edge is not implemented at the storage layer. See BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001.`
+    );
+  }
+  if (patch.reporter !== undefined) {
+    throw new UnsupportedOperationError(
+      'reporter',
+      `patch.reporter has no write path yet — FEAT-012's reporter-role edge is not implemented at the storage layer. See BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001.`
+    );
+  }
+
   const node = await requireItemNode(store, repo, humanId);
+  const appliedKeys = new Set<string>();
   let finalTitle = '';
   let finalBody = '';
   await mutateMetadata<BacklogNodeMeta>(store, node.id, (meta) => {
     const next: BacklogNodeMeta = { ...meta, updatedAt: new Date().toISOString() };
-    if (patch.title !== undefined) next.title = patch.title;
-    if (patch.body !== undefined) next.body = patch.body;
-    if (patch.projectPath !== undefined) next.projectPath = patch.projectPath;
-    if (patch.importedFrom !== undefined) next.importedFrom = patch.importedFrom;
+    if (patch.title !== undefined) {
+      next.title = patch.title;
+      appliedKeys.add('title');
+    }
+    if (patch.body !== undefined) {
+      next.body = patch.body;
+      appliedKeys.add('body');
+    }
+    if (patch.projectPath !== undefined) {
+      next.projectPath = patch.projectPath;
+      appliedKeys.add('projectPath');
+    }
+    if (patch.importedFrom !== undefined) {
+      next.importedFrom = patch.importedFrom;
+      appliedKeys.add('importedFrom');
+    }
     finalTitle = next.title;
     finalBody = next.body;
     return next;
@@ -393,6 +601,7 @@ export async function updateItemNode(store: GraphBacklogStore, repo: string, hum
       const kind = humanIdKind(humanId);
       const family = humanIdFamily(humanId);
       touchPatch['tags'] = buildTags(kind, family, patch.tags);
+      appliedKeys.add('tags');
     }
     if (patch.projectPath !== undefined) touchPatch['projectPath'] = patch.projectPath;
     await store.graph.touch(node.id, touchPatch);
@@ -404,6 +613,15 @@ export async function updateItemNode(store: GraphBacklogStore, repo: string, hum
       [newContent, computeContentHash(newContent), node.id]
     );
   }
+
+  // Final defense-in-depth, per `assertNoSilentlyDiscardedPatchKeys`'s own
+  // documented purpose (model.ts): every key ABOVE that reached this point
+  // must actually have landed in `appliedKeys`. It only ever fires for a
+  // future regression (a key moved into the "handled" set above without its
+  // write actually being wired up) — every key that reaches here today is
+  // one of the five this function has always applied.
+  assertNoSilentlyDiscardedPatchKeys(patch as unknown as Record<string, unknown>, appliedKeys);
+
   const updated = await store.graph.getNode(node.id);
   if (!updated) throw await buildNotFoundError(store, repo, humanId);
   return toBacklogItem(updated);

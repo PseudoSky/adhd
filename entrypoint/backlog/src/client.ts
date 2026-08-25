@@ -1,57 +1,83 @@
 /**
- * client.ts — THE apigen extraction surface (DESIGN.md §5). Mirrors
- * `entrypoint/dispatch-cli/src/api.ts`'s role exactly: plain, JSDoc'd async
- * functions ONLY — no business logic inline, every real wire-up lives in
- * `./store/*`. `ctx: BacklogCtx` is the sole non-serializable parameter,
- * excluded from the generated JSON Schema by the `ctx-name-only` invariant
- * (the FIRST parameter named exactly `ctx`).
+ * client.ts — THE apigen extraction surface (DESIGN.md §5), collapsed to the
+ * SIX verbs of INTERFACE_v2 (`get`, `query`, `create`, `update`, `relate`,
+ * `admin` — `BACKLOG_V2_TOOLS`, model.ts).
  *
- * Every other parameter/return type is plain and JSON-serializable — no
- * class instances, no function-typed parameters (`@adhd/apigen-core-client`'s
- * ts-morph/ts-json-schema-generator extraction requirement).
+ * **The exported surface of this file IS the mounted surface.**
+ * `server.ts`'s `extractClientOperations()` extracts `dist/client.d.ts` — the
+ * whole file, with no allow-list (`server.ts:349-380`) — so every exported
+ * function here becomes a command on the CLI, a tool in MCP `tools/list`, a
+ * Fastify route, and a path in the OpenAPI document. That is why the v1
+ * operation bodies moved to `./ops-v1.ts` in INTERFACE_v2 C-01: not because
+ * they were wrong, but because being exported FROM THIS FILE is what mounts
+ * them. Adding a seventh exported function here silently widens the tool
+ * surface an agent must hold in its head (INTERFACE_v2 §0.1) and breaks AC-0's
+ * six-verb assertion. Export from `./ops-v1.ts` (internal) or re-export from
+ * `./index.ts` (library-only) instead — never from here.
+ *
+ * Same rules as before, still: plain, JSDoc'd async functions ONLY, no
+ * business logic inline. `ctx: BacklogCtx` is the sole non-serializable
+ * parameter, excluded from the generated JSON Schema by the `ctx-name-only`
+ * invariant (the FIRST parameter named exactly `ctx`). Every other
+ * parameter/return type is plain and JSON-serializable.
+ *
+ * Every verb returns the §7.1 outcome envelope `{ ok, data?, error?,
+ * warnings? }` and never throws for a caller error — `errorEnvelope` is the
+ * failure arm, so a transport maps an outcome to its own status/exit code
+ * (`exitCodeForEnvelope`) without a try/catch of its own.
  */
 import type { Environment } from '@adhd/environment';
-import type {
-  ArchiveOpts,
-  ArchiveResult,
-  AuditTrailResult,
-  BacklogFilter,
-  BacklogItem,
-  BacklogStats,
-  BacklogStatus,
-  ClaimOpts,
-  ClaimResult,
-  Citation,
-  CreateItemInput,
-  CreateItemResult,
-  DependencyGraph,
-  ImportMarkdownInput,
-  ImportResult,
-  MigrationPhase,
-  MigrationStatusResult,
-  Priority,
-  ReleaseResult,
-  RepoMigrationResult,
-  SetMigrationPhaseResult,
-  StatsScope,
-  TopoOrderResult,
-  TransitionOpts,
-  UpdateItemInput,
-} from './model.js';
-import { isTerminalStatus, requiresCitation, requiresReason } from './model.js';
 import type { BacklogConfig } from './env.js';
 import type { GraphBacklogStore } from './store/graph-backlog-store.js';
-import { createItemNode, getItemNode, softDeleteItemNode, updateItemNode } from './store/crud.js';
-import { auditTrail as auditTrailNode, blockers as blockersNode, buildNotFoundError, computeStats, dependencyGraph as dependencyGraphNode, knownRepos, listItems as listItemsNode, queryItemNodes, readyItems as readyItemsNode, spotlight as spotlightNode, staleClaims as staleClaimsNode, topoOrder as topoOrderNode } from './store/query.js';
-import { toBacklogItem } from './store/mapping.js';
-import { claimItemNode, releaseClaimNode, renewClaimNode } from './store/claim.js';
-import { addCitationNode, appendNoteNode, archiveTerminalItems, resolveItemNode, startWorkNode, transitionStatusNode } from './store/lifecycle.js';
-import { addDependencyNode, assignItemNode, attachToPlanNode, linkRelatedNode, mergeItemsNode, removeDependencyNode, setPriorityNode, splitItemNode, supersedeItemNode } from './store/structure.js';
-import { migrateRepo as migrateRepoNode } from './store/repo-migration.js';
-import { buildChangelogSection, parseBacklogMarkdownWithDiagnostics, renderItemsToMarkdown, toImportItems } from './markdown.js';
-import { readFileSync } from 'node:fs';
-import { readBacklogVersionInfo } from './version-info.js';
-import { readBacklogMigrationStatus, setBacklogMigrationPhase } from './migration-phase.js';
+import type {
+  BacklogItem,
+  IBacklogAdminInput,
+  IBacklogCard,
+  IBacklogCreateInput,
+  IBacklogRelateInput,
+  IBacklogUpdateInput,
+  ICreateOutcome,
+  IDuplicateCandidate,
+  IEdgeOutcome,
+  IOutcomeEnvelope,
+  ISplitItemResult,
+  ISupersedeResult,
+  IUpdateOutcome,
+  UpdateItemInput,
+} from './model.js';
+import {
+  DuplicateCandidateError,
+  InvalidArgumentError,
+  errorEnvelope,
+  okEnvelope,
+  toOutcomeError,
+} from './model.js';
+import type { IBacklogGetOptions } from './v2/get.js';
+import { backlogGet } from './v2/get.js';
+import type { IBacklogQueryOptions, IBacklogQueryResult } from './v2/query.js';
+import { backlogQuery } from './v2/query.js';
+import type { IAdminResult, IAdminRuntime } from './v2/admin.js';
+import { backlogAdmin } from './v2/admin.js';
+import {
+  addCitation as addCitationOp,
+  addDependency as addDependencyOp,
+  appendNote as appendNoteOp,
+  assignItem as assignItemOp,
+  attachToPlan as attachToPlanOp,
+  claimItem as claimItemOp,
+  createItem as createItemOp,
+  getItem as getItemOp,
+  linkRelated as linkRelatedOp,
+  releaseClaim as releaseClaimOp,
+  removeDependency as removeDependencyOp,
+  renewClaim as renewClaimOp,
+  setPriority as setPriorityOp,
+  softDeleteItem as softDeleteItemOp,
+  splitItem as splitItemOp,
+  supersedeItem as supersedeItemOp,
+  transitionStatus as transitionStatusOp,
+  updateItem as updateItemOp,
+} from './ops-v1.js';
 
 /** The one type apigen special-cases via the `ctx-name-only` invariant. */
 export interface BacklogCtx {
@@ -71,488 +97,418 @@ export interface BacklogCtx {
   adhdRoot?: string;
 }
 
-async function requireItem(ctx: BacklogCtx, repo: string, humanId: string): Promise<BacklogItem> {
-  const item = await getItemNode(ctx.store, repo, humanId);
-  if (!item) throw await buildNotFoundError(ctx.store, repo, humanId);
-  return item;
-}
+/**
+ * The version payload. Re-exported as a TYPE from its real home
+ * (`./ops-v1.ts`) so existing importers of `BacklogCtx`'s neighbour keep
+ * resolving — a type export is erased in `client.d.ts`'s eyes as far as
+ * `extract()` is concerned (it only mounts `kind: 'action'` function
+ * declarations), so this does NOT widen the six-verb mount surface. The
+ * `cli.v2.spec.ts` operation-count assertion is what proves that claim
+ * rather than this comment asserting it.
+ */
+export type { BacklogVersionInfo } from './ops-v1.js';
 
 // ============================================================================
-// §5.1 — CRUD
+// Shared internals (NOT exported — see this file's header).
 // ============================================================================
 
 /**
- * Dedupe-scans (FTS + symbol/path/errorText metadata match) before writing.
- * Allocates humanId as family + next number within (repo, family) unless
- * idOverride is given.
+ * Runs `body` and wraps it in the §7.1 envelope, mapping ANY throw through
+ * `toOutcomeError` so a store-level `BacklogItemNotFoundError`/`ClaimHeldError`/
+ * `SQLITE_BUSY` surfaces as its typed code rather than as `internal`. Mirrors
+ * `v2/admin.ts`'s own `envelope()` helper exactly.
  */
-export async function createItem(ctx: BacklogCtx, input: CreateItemInput): Promise<CreateItemResult> {
-  return createItemNode(ctx.store, input);
-}
-
-/**
- * repo is required — humanId alone is not globally unique. A genuine miss
- * (humanId doesn't exist under ANY repo) still returns `null` — unchanged,
- * every existing caller relying on nullable-not-throwing keeps working.
- *
- * BUG-BACKLOG-REPO-LOOKUP-UX-001: previously a repo/humanId MISMATCH (the
- * item is live, just filed under a different `repo` string) was
- * indistinguishable from a genuine miss — both silently returned `null`,
- * which is worse than `appendNote`'s bare-but-at-least-thrown
- * `BacklogItemNotFoundError` (and, before this fix, could surface through
- * apigen's MCP layer as the unrelated broken int64/null encoding,
- * BUG-APIGEN-LOGICAL-NULL-OBJECT-RESULT-INT64-001 — out of scope here, but
- * this fix removes the only path that made this lookup look like that bug).
- * Now: a real cross-repo match THROWS the same informative
- * `BacklogItemNotFoundError` (with `foundInRepos` naming the actual repo) the
- * mutating lookups already throw, instead of masquerading as "not found".
- */
-export async function getItem(ctx: BacklogCtx, repo: string, humanId: string): Promise<BacklogItem | null> {
-  const item = await getItemNode(ctx.store, repo, humanId);
-  if (item) return item;
-  const notFound = await buildNotFoundError(ctx.store, repo, humanId);
-  if (notFound.foundInRepos.length > 0) throw notFound;
-  return null;
-}
-
-export async function updateItem(ctx: BacklogCtx, repo: string, humanId: string, patch: UpdateItemInput): Promise<BacklogItem> {
-  return updateItemNode(ctx.store, repo, humanId, patch);
-}
-
-export async function listItems(ctx: BacklogCtx, filter?: BacklogFilter): Promise<BacklogItem[]> {
-  return listItemsNode(ctx.store, filter ?? {});
-}
-
-/** Invalidates the node (bi-temporal — never a hard delete). */
-export async function softDeleteItem(ctx: BacklogCtx, repo: string, humanId: string, reason: string): Promise<void> {
-  await softDeleteItemNode(ctx.store, repo, humanId, reason);
-}
-
-// ============================================================================
-// §5.2 — Query / report
-// ============================================================================
-
-export async function stats(ctx: BacklogCtx, scope?: StatsScope): Promise<BacklogStats> {
-  return computeStats(ctx.store, scope ?? {});
-}
-
-/** Open + prioritized, most-severe first. */
-export async function spotlight(ctx: BacklogCtx, scope?: StatsScope, limit?: number): Promise<BacklogItem[]> {
-  return spotlightNode(ctx.store, scope ?? {}, limit ?? 20);
-}
-
-/** Open items whose every DEPENDS_ON target is a terminal status AND which are not currently claimed. */
-export async function readyItems(ctx: BacklogCtx, scope?: StatsScope): Promise<BacklogItem[]> {
-  return readyItemsNode(ctx.store, scope ?? {});
-}
-
-/** The DEPENDS_ON set of `humanId` that is NOT yet terminal. */
-export async function blockers(ctx: BacklogCtx, repo: string, humanId: string): Promise<BacklogItem[]> {
-  return blockersNode(ctx.store, repo, humanId);
-}
-
-export async function dependencyGraph(ctx: BacklogCtx, scope?: StatsScope): Promise<DependencyGraph> {
-  return dependencyGraphNode(ctx.store, scope ?? {});
-}
-
-export async function topoOrder(ctx: BacklogCtx, scope?: StatsScope): Promise<TopoOrderResult> {
-  return topoOrderNode(ctx.store, scope ?? {});
-}
-
-/** Items whose claim lease is older than maxAgeMin with no renewal — candidates for --force reclaim. */
-export async function staleClaims(ctx: BacklogCtx, maxAgeMin: number, scope?: StatsScope): Promise<BacklogItem[]> {
-  return staleClaimsNode(ctx.store, maxAgeMin, scope ?? {});
-}
-
-// ============================================================================
-// §5.3 — Multi-agent coordination
-// ============================================================================
-
-export async function claimItem(ctx: BacklogCtx, repo: string, humanId: string, by: string, opts?: ClaimOpts): Promise<ClaimResult> {
-  const node = await requireItem(ctx, repo, humanId);
-  return claimItemNode(ctx.store, node.nodeId, by, opts ?? {});
-}
-
-/** Same-claimant renewal — always succeeds (bumps claimedAt), no contention check. */
-export async function renewClaim(ctx: BacklogCtx, repo: string, humanId: string, by: string): Promise<ClaimResult> {
-  const node = await requireItem(ctx, repo, humanId);
-  return renewClaimNode(ctx.store, node.nodeId, by);
-}
-
-export async function releaseClaim(ctx: BacklogCtx, repo: string, humanId: string, by: string, opts?: { force?: boolean }): Promise<ReleaseResult> {
-  const node = await requireItem(ctx, repo, humanId);
-  return releaseClaimNode(ctx.store, node.nodeId, by, opts ?? {});
-}
-
-/** Durable ownership (planner decision) — distinct from the ephemeral claim lease. */
-export async function assignItem(ctx: BacklogCtx, repo: string, humanId: string, to: string, by: string): Promise<BacklogItem> {
-  return assignItemNode(ctx.store, repo, humanId, to, by);
-}
-
-// ============================================================================
-// §5.4 — Lifecycle
-// ============================================================================
-
-/** transitionStatus(id, 'IN_PROGRESS', ...) + an implicit claimItem(id, by) — a no-op claim-wise if already held by `by`. */
-export async function startWork(ctx: BacklogCtx, repo: string, humanId: string, by: string): Promise<BacklogItem> {
-  return startWorkNode(ctx.store, repo, humanId, by);
-}
-
-export async function transitionStatus(ctx: BacklogCtx, repo: string, humanId: string, status: BacklogStatus, opts: TransitionOpts): Promise<BacklogItem> {
-  return transitionStatusNode(ctx.store, repo, humanId, status, opts);
-}
-
-export async function addCitation(ctx: BacklogCtx, repo: string, humanId: string, citation: Citation): Promise<BacklogItem> {
-  return addCitationNode(ctx.store, repo, humanId, citation);
-}
-
-export async function appendNote(ctx: BacklogCtx, repo: string, humanId: string, by: string, text: string): Promise<BacklogItem> {
-  return appendNoteNode(ctx.store, repo, humanId, by, text);
-}
-
-/** Sugar for transitionStatus into any terminal status. */
-export async function resolveItem(ctx: BacklogCtx, repo: string, humanId: string, status: BacklogStatus, opts: TransitionOpts): Promise<BacklogItem> {
-  return resolveItemNode(ctx.store, repo, humanId, status, opts);
-}
-
-/**
- * Renders terminal items to CHANGELOG.md-formatted markdown and marks them
- * archived (metadata.archivedAt set) so renderToMarkdown's default view
- * excludes them — the graph node itself is NEVER deleted.
- */
-export async function archiveResolved(ctx: BacklogCtx, scope: StatsScope, opts?: ArchiveOpts): Promise<ArchiveResult> {
-  const archived = await archiveTerminalItems(ctx.store, scope, opts ?? {});
-  const changelogMarkdown = archived.length > 0 ? buildChangelogSection(archived, new Date().toISOString().slice(0, 10)) : '';
-  return { archivedCount: archived.length, changelogMarkdown };
-}
-
-// ============================================================================
-// §5.5 — Structure
-// ============================================================================
-
-export async function addDependency(ctx: BacklogCtx, repo: string, humanId: string, dependsOnHumanId: string): Promise<void> {
-  await addDependencyNode(ctx.store, repo, humanId, dependsOnHumanId);
-}
-
-export async function removeDependency(ctx: BacklogCtx, repo: string, humanId: string, dependsOnHumanId: string): Promise<void> {
-  await removeDependencyNode(ctx.store, repo, humanId, dependsOnHumanId);
-}
-
-export async function linkRelated(ctx: BacklogCtx, repo: string, humanIdA: string, humanIdB: string): Promise<void> {
-  await linkRelatedNode(ctx.store, repo, humanIdA, humanIdB);
-}
-
-/** Mints a new item, links new SUPERSEDES old, invalidates old with reason. */
-export async function supersedeItem(ctx: BacklogCtx, repo: string, oldHumanId: string, newInput: CreateItemInput, reason: string): Promise<BacklogItem> {
-  return supersedeItemNode(ctx.store, repo, oldHumanId, newInput, reason);
-}
-
-/** Creates N children linked child PART_OF parent. Parent is left open. */
-export async function splitItem(ctx: BacklogCtx, repo: string, parentHumanId: string, children: CreateItemInput[]): Promise<BacklogItem[]> {
-  return splitItemNode(ctx.store, repo, parentHumanId, children);
-}
-
-/** SAME_AS(drop -> keep), invalidates drop with an auto-generated reason. */
-export async function mergeItems(ctx: BacklogCtx, repo: string, keepHumanId: string, dropHumanId: string, reason: string): Promise<BacklogItem> {
-  return mergeItemsNode(ctx.store, repo, keepHumanId, dropHumanId, reason);
-}
-
-export async function setPriority(ctx: BacklogCtx, repo: string, humanId: string, priority: Priority): Promise<BacklogItem> {
-  return setPriorityNode(ctx.store, repo, humanId, priority);
-}
-
-/** MEMBER_OF edge to a plan node (auto-created if the plan slug hasn't been seen before). */
-export async function attachToPlan(ctx: BacklogCtx, repo: string, humanId: string, planSlug: string): Promise<void> {
-  await attachToPlanNode(ctx.store, repo, humanId, planSlug);
-}
-
-/**
- * BUG-BACKLOG-REPO-SPLIT-001 / DEBT-BACKLOG-REPO-MOVE-001 — the dedicated
- * primitive to move every live item out of `fromRepo` into `toRepo` (a
- * repo-key correction, e.g. a legacy `"adhd"` string onto the canonical
- * `"PseudoSky/adhd"`). `dryRun` defaults to `true`: a caller must pass
- * `dryRun:false` explicitly to write anything — the default call is always
- * safe to make speculatively and returns the full plan (including which
- * items would be renamed, and to what) with zero mutation.
- *
- * Collisions (a humanId already live in `toRepo`) are never silently
- * dropped, overwritten, or left ambiguous — each is deterministically
- * renamed to the next free number in its own family within `toRepo`
- * (`store/repo-migration.ts`'s `planRepoMigration`), and an audit note
- * recording the original `(fromRepo, humanId)` is attached to the moved
- * item so the rename is traceable. Cross-item links (DEPENDS_ON,
- * RELATES_TO, PART_OF, SUPERSEDES, SAME_AS, MEMBER_OF, ASSIGNED_TO) are
- * preserved automatically — a move never changes a node's id, only its
- * `namespace`/`repo`/`humanId`/`name`/`content`.
- *
- * Every planned item gets exactly one reported outcome
- * (`results[i].ok`/`error`) when `dryRun:false` — a per-item failure never
- * aborts the rest of the batch and never goes unreported.
- */
-export async function migrateRepo(ctx: BacklogCtx, fromRepo: string, toRepo: string, by: string, dryRun?: boolean): Promise<RepoMigrationResult> {
-  return migrateRepoNode(ctx.store, fromRepo, toRepo, by, dryRun ?? true);
-}
-
-// ============================================================================
-// §5.6 — Interop
-// ============================================================================
-
-export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownInput): Promise<ImportResult> {
-  const text = readFileSync(input.path, 'utf8');
-  const { items: parsed, malformedHeaders } = parseBacklogMarkdownWithDiagnostics(text);
-  const items = toImportItems(parsed);
-  // Defaults to `path` (the file actually read) — a caller only needs to set
-  // `sourcePath` explicitly when importing from a scratch copy but wanting
-  // the ORIGINAL path recorded as provenance (DEBT-BACKLOG-IMPORT-PLAN-PROVENANCE-001).
-  const sourcePath = input.sourcePath ?? input.path;
-
-  // BUG-BACKLOG-REPO-LOOKUP-UX-001 (write-time half): same soft, non-blocking
-  // check `createItemNode` runs per item — computed ONCE here since the whole
-  // import shares one `input.repo`, not per item.
-  const known = await knownRepos(ctx.store);
-  const repoWarning =
-    known.size > 0 && !known.has(input.repo)
-      ? `repo '${input.repo}' is new to this store — existing repo value(s) here: ${[...known].sort().join(', ')}. If this is meant to be the same project, use the existing repo value instead.`
-      : undefined;
-
-  const result: ImportResult = { parsed: items.length, created: 0, skippedDuplicates: 0, updated: 0, errors: [], malformedHeaders, ...(repoWarning !== undefined ? { repoWarning } : {}) };
-  if (input.dryRun) return result;
-
-  for (const item of items) {
-    try {
-      const created = await createItemNode(ctx.store, {
-        family: item.humanId.replace(/-\d+$/, ''),
-        idOverride: item.humanId,
-        title: item.title,
-        body: item.body,
-        repo: input.repo,
-        ...(input.projectPath !== undefined ? { projectPath: input.projectPath } : {}),
-        ...(input.plan !== undefined ? { plan: input.plan } : {}),
-        importedFrom: sourcePath,
-        ...(item.priority !== undefined ? { priority: item.priority } : {}),
-        force: true,
-      });
-      if (created.created && input.plan !== undefined) {
-        // `attachToPlan` also writes the `MEMBER_OF` edge to the plan node
-        // (createItemNode's `plan` above only stamps the `metadata.plan`
-        // field) — both are needed for `renderToMarkdown({plan})`'s
-        // filtered-projection scope model (MIGRATION.md §2.2).
-        await attachToPlanNode(ctx.store, input.repo, item.humanId, input.plan);
-      }
-      if (created.created && item.status !== 'OPEN') {
-        // createItem always starts OPEN (SPEC.md §4.2 rule 1) — apply the
-        // parsed status as a follow-up transition so import is idempotent
-        // AND preserves the source file's real status. Only attach the
-        // evidence the status-vocabulary gate actually requires (SPEC.md
-        // §4.2 rule 3) — an imported OPEN/IN_PROGRESS/BLOCKED/... item needs
-        // neither.
-        await transitionStatusNode(ctx.store, input.repo, item.humanId, item.status, {
-          by: 'system:importFromMarkdown',
-          ...(requiresCitation(item.status) ? { citations: [{ file: input.path }] } : {}),
-          ...(requiresReason(item.status) ? { reason: `imported from markdown at status ${item.status}` } : {}),
-        });
-      }
-      if (created.created) {
-        result.created += 1;
-        continue;
-      }
-      result.skippedDuplicates += 1;
-
-      // BUG-BACKLOG-IMPORT-INSERT-ONLY-NO-UPDATE-001: an already-live
-      // humanId used to be a pure no-op forever, even when the SOURCE
-      // markdown's title/body/priority/status had genuinely changed since
-      // the first import (e.g. a bug got fixed and its status/body updated
-      // directly in BACKLOG.md) — a re-import could never converge the
-      // graph with the live file short of a full re-seed. Diff against the
-      // CURRENT graph copy and refresh only what actually changed; an
-      // unchanged item stays a true no-op (never touches the store).
-      const existing = created.duplicateCandidates[0] ?? created.item;
-      let changed = false;
-
-      // DEBT-BACKLOG-IMPORT-SCOPE-CROSSFILE-001: a humanId can legitimately
-      // be repeated across files two ways — (a) the SAME file re-importing
-      // its own content (title/body/priority/status/projectPath all belong
-      // to that file, refresh them all), or (b) a DIFFERENT file
-      // cross-referencing an id whose canonical content/scope lives
-      // elsewhere (a plan file citing a root-BACKLOG.md item, or a package
-      // file citing another package's finding) — a cross-reference must
-      // never clobber the OWNING file's title/body/projectPath (confirmed
-      // this session: without this guard, re-importing a plan-file's
-      // shorter pointer entry AFTER its root BACKLOG.md counterpart
-      // permanently overwrote the root item's richer title/body on every
-      // pass). Ownership is "whichever file's import first created this
-      // node" (`existing.importedFrom`, stamped once at create time and
-      // never touched by an update — DEBT-BACKLOG-IMPORT-PLAN-PROVENANCE-001
-      // — so ownership survives regardless of later re-import order/drift).
-      // `existing.importedFrom` can be unset only for an item created
-      // before that provenance field existed; treat that as "no recorded
-      // owner yet" and let this import claim ownership going forward,
-      // matching the pre-existing (unguarded) behavior for such legacy rows.
-      const isOwningImport = existing.importedFrom === undefined || existing.importedFrom === sourcePath;
-
-      if (isOwningImport) {
-        const patch: UpdateItemInput = {};
-        if (existing.title !== item.title) patch.title = item.title;
-        if (existing.body !== item.body) patch.body = item.body;
-        // BUG-BACKLOG-IMPORT-OWNERSHIP-NOT-BACKFILLED-001: line 332 treats a
-        // legacy row whose `importedFrom` was never stamped (created before
-        // the provenance field existed) as "let this import claim ownership
-        // going forward" — but the owning branch never actually WROTE the
-        // stamp, so such rows stayed `importedFrom===undefined` permanently
-        // and the ownership-based root projection filter
-        // (`{importedFrom:'BACKLOG.md'}`, MIGRATION.md §2.2) could never see
-        // them (142 of 147 root items were invisible pre-fix). Backfill the
-        // stamp ONCE here, and only when unset — an already-owned row's
-        // provenance stays immutable (the isOwningImport guard already
-        // requires `existing.importedFrom === sourcePath` in that case).
-        if (existing.importedFrom === undefined) patch.importedFrom = sourcePath;
-        // Symmetric with `plan` below (BUG-BACKLOG-IMPORT-PROJECTPATH-STALE-001,
-        // part of DEBT-BACKLOG-IMPORT-SCOPE-CROSSFILE-001) — previously the
-        // upsert diff refreshed title/body/priority/status/plan but had NO
-        // branch for `projectPath` at all, so an item's scope stuck
-        // permanently at whichever file happened to import it FIRST, ever,
-        // even after its canonical write-up relocated to a different
-        // package's BACKLOG.md.
-        if (input.projectPath !== undefined && existing.projectPath !== input.projectPath) {
-          patch.projectPath = input.projectPath;
-        }
-        if (Object.keys(patch).length > 0) {
-          await updateItemNode(ctx.store, input.repo, item.humanId, patch);
-          changed = true;
-        }
-
-        if (item.priority !== undefined && existing.priority !== item.priority) {
-          await setPriorityNode(ctx.store, input.repo, item.humanId, item.priority);
-          changed = true;
-        }
-
-        if (existing.status !== item.status) {
-          await transitionStatusNode(ctx.store, input.repo, item.humanId, item.status, {
-            by: 'system:importFromMarkdown',
-            ...(requiresCitation(item.status) ? { citations: [{ file: input.path }] } : {}),
-            ...(requiresReason(item.status) ? { reason: `re-imported from markdown at status ${item.status}` } : {}),
-          });
-          changed = true;
-        }
-      }
-
-      // Plan attachment is deliberately NOT gated by ownership — a
-      // cross-referencing file's entire purpose is to declare "this item
-      // also belongs to my plan", so a non-owning import must still be able
-      // to attach it. Idempotent (writeEdge upserts on the same src/dst/rel
-      // triple) — safe to re-assert on every re-import, including an
-      // otherwise unchanged item, so an item's plan attachment is never
-      // permanently missed just because it was first imported before
-      // `input.plan` was set.
-      if (input.plan !== undefined && existing.plan !== input.plan) {
-        await attachToPlanNode(ctx.store, input.repo, item.humanId, input.plan);
-        changed = true;
-      }
-
-      if (changed) result.updated += 1;
-    } catch (err) {
-      result.errors.push({ humanId: item.humanId, message: err instanceof Error ? err.message : String(err) });
-    }
+async function envelope<T>(body: () => Promise<T>): Promise<IOutcomeEnvelope<T>> {
+  try {
+    return okEnvelope(await body());
+  } catch (err) {
+    const mapped = toOutcomeError(err);
+    return errorEnvelope(mapped.code, mapped.message, mapped.details);
   }
-  return result;
 }
 
 /**
- * Excludes archived items (SPEC.md §5.4 archiveResolved) — see markdown.ts's
- * renderItemsToMarkdown doc comment. Archival exclusion goes through
- * `BacklogFilter.excludeArchived` (query.ts's `applyExcludeArchivedFilter`)
- * rather than a private scan here, so a caller comparing this output
- * against `listItems`/`queryItemNodes` for the SAME filter (e.g.
- * `render-projections.mjs`'s round-trip verify) can reproduce this exact
- * item set by passing `{ ...filter, excludeArchived: true }` themselves —
- * see BUG-BACKLOG-RENDER-VERIFY-ARCHIVED-MISMATCH-001.
+ * INTERFACE_v2 §7.5 — `by` is REQUIRED on every mutation and is never
+ * defaulted to a placeholder. A blank/whitespace-only value is rejected with
+ * the same `invalid_argument` an absent one gets: an audit trail attributing
+ * a write to `""` is worse than a refused write.
  */
-export async function renderToMarkdown(ctx: BacklogCtx, filter?: BacklogFilter): Promise<string> {
-  const nodes = await queryItemNodes(ctx.store, { ...filter, excludeArchived: true });
-  let items = nodes.map(toBacklogItem);
-  if (filter?.status === 'open') items = items.filter((it) => !isTerminalStatus(it.status));
-  else if (filter?.status === 'closed') items = items.filter((it) => isTerminalStatus(it.status));
-  return renderItemsToMarkdown(items);
+function assertAttribution(by: unknown): string {
+  if (typeof by !== 'string' || by.trim() === '') {
+    throw new InvalidArgumentError(
+      'by',
+      'backlog: "by" is required on every mutation and must be a non-empty string (INTERFACE_v2 §7.5). On the CLI it resolves from --by / the identity chain; on MCP/REST it is a mandatory per-call parameter.'
+    );
+  }
+  return by;
 }
 
-export async function exportJson(ctx: BacklogCtx, filter?: BacklogFilter): Promise<BacklogItem[]> {
-  return listItemsNode(ctx.store, filter ?? {});
+/** Every create variant needs a repo, and `input.input.repo` is the only place it can come from. */
+function requireCreateRepo(input: IBacklogCreateInput): string {
+  const repo = input?.input?.repo;
+  if (typeof repo !== 'string' || repo.trim() === '') {
+    throw new InvalidArgumentError('input.repo', 'backlog_create: "input.repo" is required — a humanId is only unique within a repo.');
+  }
+  return repo;
 }
 
-/** Bi-temporal history + supersession chain. */
-export async function auditTrail(ctx: BacklogCtx, repo: string, humanId: string): Promise<AuditTrailResult> {
-  return auditTrailNode(ctx.store, repo, humanId);
-}
-
-/**
- * MIGRATION.md §4.4 — a QUERIED signal, never hardcoded prose: reports the
- * live `migration.phase` config value (`env.ts`, env-overridable via
- * `ADHD_BACKLOG_MIGRATION_PHASE`) plus a human-readable meaning, so an agent
- * (or the `backlog-usage` skill) always asks the tool which of BACKLOG.md or
- * the tool is authoritative right now, instead of trusting a stale doc
- * sentence. NOT yet per-repo-keyed (MIGRATION.md §9 open decision 6) — one
- * global value for the whole machine.
- *
- * The read itself lives in `migration-phase.ts`'s `readBacklogMigrationStatus()`
- * (store-free) so `cli.ts` can short-circuit `backlog migration-status`
- * without opening the store (DEBT-BACKLOG-CLI-STORE-OPEN-001) — this
- * function and that short-circuit share the exact same reading path.
- */
-export async function migrationStatus(ctx: BacklogCtx): Promise<MigrationStatusResult> {
-  return readBacklogMigrationStatus(ctx.env);
-}
-
-/**
- * MIGRATION.md §4.4's "admin CLI call" half: writes `migration.phase`
- * THROUGH to the GLOBAL layer's `config.yaml` (`migration-admin.ts`) so the
- * new value is a durable, cross-process, cross-repo signal — not merely an
- * env var scoped to whoever's shell happened to export it. Whoever executes
- * a phase's Definition of Done calls this exactly once, after verifying the
- * DoD, never speculatively.
- *
- * The write itself lives in `migration-phase.ts`'s `setBacklogMigrationPhase()`
- * (store-free) so `cli.ts` can short-circuit `backlog set-migration-phase`
- * without opening the store (DEBT-BACKLOG-CLI-STORE-OPEN-001) — this
- * function and that short-circuit share the exact same write path.
- */
-export async function setMigrationPhase(ctx: BacklogCtx, phase: MigrationPhase): Promise<SetMigrationPhaseResult> {
-  return setBacklogMigrationPhase(ctx.env, phase, ctx.adhdRoot);
+/** v1 `CreateItemResult.duplicateCandidates` (full items) → the §3 candidate shape (card + reason). */
+function toDuplicateCandidates(items: readonly BacklogItem[]): IDuplicateCandidate[] {
+  return items.map((it) => ({
+    item: {
+      humanId: it.humanId,
+      kind: it.kind,
+      title: it.title,
+      status: it.status,
+      ...(it.priority !== undefined ? { priority: it.priority } : {}),
+    } as IBacklogCard,
+    reason: 'dedupe-scan match (FTS + symbol/path/errorText metadata)',
+  }));
 }
 
 // ============================================================================
-// §5.7 — Introspection
+// §1 — backlog_get
 // ============================================================================
 
-export interface BacklogVersionInfo {
-  /** This package's real `package.json` name, e.g. `"@adhd/backlog"`. */
-  name: string;
-  /** This package's real `package.json` version — never hardcoded. */
-  version: string;
+/**
+ * INTERFACE_v2 §1 — one item, depth chosen by `fields`. Absorbs v1's
+ * `get-item` + `audit-trail` + `blockers` (3 → 1): `fields` is the single
+ * progressive-disclosure vocabulary, so a caller no longer has to know which
+ * of three commands it wanted before it has looked.
+ *
+ * @param ctx open store + env
+ * @param input `{ humanId, repo?, fields?, includeDeleted? }`
+ * @returns `{ ok: true, data: card }`, or the error arm with `item_not_found`
+ *   (exit 1, distinct from a generic unknown-command `not_found`),
+ *   `ambiguous`, `soft_deleted`, `validation` or `invalid_argument`
+ */
+export async function get(ctx: BacklogCtx, input: IBacklogGetOptions): Promise<IOutcomeEnvelope<IBacklogCard>> {
+  return backlogGet(ctx.store, input);
 }
 
+// ============================================================================
+// §2 — backlog_query
+// ============================================================================
+
 /**
- * Reports this running package's own real `name`/`version`, read fresh from
- * `package.json` on every call (never a compiled-in constant, so a
- * republished build can never drift from what this reports). `ctx` is
- * unused — kept for signature consistency with every other `client.ts`
- * export (the `ctx-name-only` invariant every extraction/mount/CLI-dispatch
- * path in this package assumes, per this file's own top-of-file doc
- * comment) rather than special-casing a bare, ctx-less export whose
- * extraction/dispatch behavior has not been verified.
+ * INTERFACE_v2 §2 — the query layer, and the design centre of the surface.
+ * Absorbs `list-items`, `spotlight`, `ready-items`, `topo-order`,
+ * `dependency-graph`, `stats` and `stale-claims` behind one `view` knob
+ * (`view:list` with the default sort IS today's spotlight ordering — AC-5).
  *
- * The reading itself lives in `version-info.ts`'s `readBacklogVersionInfo()`
- * (store-free) so `cli.ts` can short-circuit `backlog version` without
- * opening the store (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001) — this function
- * and that short-circuit share the exact same reading path.
+ * An empty result is `{ ok: true, data: { view, items: [] } }` — a list is
+ * never "not found" (§7.2).
+ *
+ * @param ctx open store + env
+ * @param input `{ view?, filter?, fields?, sort?, limit?, offset?, groupBy?, text?, … }`
+ * @returns `{ ok: true, data, meta: { total, returned } }` for pageable views,
+ *   or the error arm with `validation` / `invalid_argument` /
+ *   `rag_not_configured` / `store_busy`
  */
-export async function version(ctx: BacklogCtx): Promise<BacklogVersionInfo> {
-  // `ctx` deliberately unused (see doc comment above) — the param MUST be
-  // named exactly `ctx` for apigen's `ctx-name-only` extraction invariant to
-  // exclude it from the generated JSON Schema (confirmed empirically: naming
-  // it `_ctx` leaked a `{ _ctx: object }` argument into every transport's
-  // schema/CLI-flag/tool listing for this op — extraction only special-cases
-  // the literal name `ctx`, not an underscore-prefixed variant). `void ctx`
-  // satisfies `@typescript-eslint/no-unused-vars` without renaming the param.
-  void ctx;
-  return readBacklogVersionInfo();
+export async function query(ctx: BacklogCtx, input: IBacklogQueryOptions): Promise<IOutcomeEnvelope<IBacklogQueryResult>> {
+  return backlogQuery(ctx.store, input);
+}
+
+// ============================================================================
+// §3 — backlog_create
+// ============================================================================
+
+/**
+ * INTERFACE_v2 §3 — instantiation plus filing-time interception. One verb for
+ * `create-item`, `split-item` and `supersede-item`, because all three MINT and
+ * therefore all three must run the same dedupe gate (the variant that skipped
+ * it is BUG-BACKLOG-CREATE-ITEM-SILENT-DEDUP-DROP-001).
+ *
+ * `duplicateAction` (default `"abort"`) is the interception knob: `abort`
+ * refuses the write and returns the candidates as the `duplicate_candidate`
+ * error arm (exit 1 — `BACKLOG_EXIT_CODE`), `file` is the confirmed re-file
+ * that bypasses the gate deliberately. The outcome ALWAYS carries a required
+ * `created` boolean, so a variant can never report a write it did not make.
+ *
+ * @param ctx open store + env
+ * @param input `{ input, by, duplicateAction?, splitFrom?, children?, supersedes?, reason? }`
+ * @returns `{ ok: true, data: { created, humanId?, item?, … } }`, or the error
+ *   arm with `duplicate_candidate` / `invalid_argument` / `item_not_found`
+ */
+export async function create(
+  ctx: BacklogCtx,
+  input: IBacklogCreateInput
+): Promise<IOutcomeEnvelope<ICreateOutcome | ISplitItemResult | ISupersedeResult>> {
+  return envelope(async () => {
+    const by = assertAttribution(input?.by);
+    const repo = requireCreateRepo(input);
+    const action = input.duplicateAction ?? 'abort';
+    if (action === 'comment') {
+      // §3's third interception mode converts the draft into a note on the
+      // canonical item and increments its dupe counter. The counter is
+      // FEAT-013 state that does not exist on the node yet (C-04 lands it
+      // with `sort:"demand"`), and writing the note WITHOUT the increment
+      // would report a `dupeHits` this store cannot actually carry — a
+      // fabricated outcome field is worse than a typed refusal.
+      throw new InvalidArgumentError(
+        'duplicateAction',
+        'backlog_create: duplicateAction "comment" needs the FEAT-013 dupe counter, which is not in this build (INTERFACE_v2 §3, plan C-04). Use "abort" to see the candidates, or "file" to re-file deliberately.'
+      );
+    }
+
+    // §5a / GRAPH_MODEL §5.1 — split: N children, each PART_OF the parent.
+    if (input.splitFrom !== undefined) {
+      const children = input.children ?? [];
+      if (children.length === 0) {
+        throw new InvalidArgumentError('children', 'backlog_create: "splitFrom" requires a non-empty "children" array.');
+      }
+      const created = await splitItemOp(ctx, repo, input.splitFrom, children);
+      const result: ISplitItemResult = {
+        parentHumanId: input.splitFrom,
+        created: created as unknown as ISplitItemResult['created'],
+        suppressed: [],
+      };
+      return result;
+    }
+
+    // §3 — supersede: mint the replacement, link SUPERSEDES, invalidate the old.
+    if (input.supersedes !== undefined) {
+      const reason = input.reason ?? `superseded by a replacement filed by ${by}`;
+      const item = await supersedeItemOp(ctx, repo, input.supersedes, input.input, reason);
+      const result: ISupersedeResult = {
+        supersededHumanId: input.supersedes,
+        created: true,
+        humanId: item.humanId,
+        item: item as unknown as ISupersedeResult['item'],
+      };
+      return result;
+    }
+
+    const res = await createItemOp(ctx, { ...input.input, ...(action === 'file' ? { force: true } : {}) });
+    if (!res.created) {
+      // Interception fired: NOTHING was written. `DuplicateCandidateError`
+      // carries the candidates through `toOutcomeError`'s normal mapping, so
+      // this takes the same path every other typed failure does (error arm,
+      // code `duplicate_candidate`, exit 1 per `BACKLOG_EXIT_CODE`) instead
+      // of a bespoke return shape only this branch understands.
+      throw new DuplicateCandidateError(input.input.title, toDuplicateCandidates(res.duplicateCandidates));
+    }
+    const outcome: ICreateOutcome = {
+      created: true,
+      humanId: res.item.humanId,
+      item: res.item as unknown as ICreateOutcome['item'],
+      ...(res.repoWarning !== undefined ? { repoWarning: res.repoWarning } : {}),
+    };
+    return outcome;
+  });
+}
+
+// ============================================================================
+// §4 — backlog_update
+// ============================================================================
+
+/**
+ * INTERFACE_v2 §4 — ALL mutations of an existing item behind one verb: the
+ * field patch, the status transition (with its §5a.2 evidence gate), the
+ * claim lease, assignment, notes, citations and soft delete. Absorbs the
+ * twelve v1 mutation commands.
+ *
+ * The outcome's `changed` array is the contract that makes a silent discard
+ * visible (BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001): a key the caller
+ * passed that never reaches `changed` is a defect, not a no-op. An empty
+ * `changed` is a genuine no-op and says so out loud.
+ *
+ * @param ctx open store + env
+ * @param input `{ humanId, repo, by, patch?, status?, claim?, assignedTo?, addNote?, addCitation?, softDeleteReason?, … }`
+ * @returns `{ ok: true, data: { humanId, changed, newStatus?, claimState?, noteId? } }`,
+ *   or the error arm with `item_not_found` / `conflict` (claim held) /
+ *   `precondition_failed` (missing citation/reason) / `invalid_argument`
+ */
+export async function update(ctx: BacklogCtx, input: IBacklogUpdateInput): Promise<IOutcomeEnvelope<IUpdateOutcome>> {
+  return envelope(async () => {
+    const by = assertAttribution(input?.by);
+    const humanId = input?.humanId;
+    if (typeof humanId !== 'string' || humanId.trim() === '') {
+      throw new InvalidArgumentError('humanId', 'backlog_update: "humanId" is required.');
+    }
+    const repo = input.repo;
+    if (typeof repo !== 'string' || repo.trim() === '') {
+      // §7.5 keeps `repo` explicit until EPIC-A's repo node lands — a humanId
+      // alone is not globally unique, and picking one silently is exactly the
+      // "read never silently narrows" violation §7.1 forbids.
+      throw new InvalidArgumentError('repo', 'backlog_update: "repo" is required until EPIC-A\'s repo node lands (INTERFACE_v2 §7.5) — a humanId is only unique within a repo.');
+    }
+
+    const outcome: IUpdateOutcome = { humanId, changed: [] };
+
+    if (input.patch !== undefined && Object.keys(input.patch).length > 0) {
+      const patch = input.patch as UpdateItemInput;
+      const before = await getItemOp(ctx, repo, humanId);
+      await updateItemOp(ctx, repo, humanId, patch);
+      for (const key of Object.keys(patch) as Array<keyof UpdateItemInput>) {
+        // Only report a field as changed when it ACTUALLY differs from what
+        // the store already held — "changed" that includes an unchanged key
+        // is as misleading as one that omits a changed key.
+        const prev = before ? (before as unknown as Record<string, unknown>)[key] : undefined;
+        const next = (patch as unknown as Record<string, unknown>)[key];
+        if (JSON.stringify(prev) !== JSON.stringify(next)) {
+          outcome.changed.push(key as IUpdateOutcome['changed'][number]);
+        }
+      }
+    }
+
+    if (input.assignedTo !== undefined) {
+      await assignItemOp(ctx, repo, humanId, input.assignedTo, by);
+      outcome.changed.push('assignee');
+    }
+
+    if (input.claim !== undefined) {
+      if (input.claim === 'claim') {
+        const res = await claimItemOp(ctx, repo, humanId, by, input.claimOpts ?? {});
+        outcome.claimState = res.status;
+      } else if (input.claim === 'renew') {
+        const res = await renewClaimOp(ctx, repo, humanId, by);
+        outcome.claimState = res.status;
+      } else {
+        const res = await releaseClaimOp(ctx, repo, humanId, by);
+        outcome.claimState = res.status;
+      }
+      outcome.changed.push('claim');
+    }
+
+    if (input.addCitation !== undefined) {
+      await addCitationOp(ctx, repo, humanId, input.addCitation);
+      outcome.changed.push('citation');
+    }
+
+    if (input.addNote !== undefined) {
+      const item = await appendNoteOp(ctx, repo, humanId, by, input.addNote);
+      outcome.noteId = Math.max(0, (item.notes?.length ?? 1) - 1);
+      outcome.changed.push('note');
+    }
+
+    if (input.status !== undefined) {
+      // The §5a.2 evidence gate lives in `transitionStatusNode`'s own
+      // validation (`requiresCitation`/`requiresReason`, model.ts) — passed
+      // through rather than re-implemented, so the CLI, MCP and a direct
+      // in-process caller are all gated by the SAME code.
+      await transitionStatusOp(ctx, repo, humanId, input.status, {
+        by,
+        ...(input.citations !== undefined ? { citations: input.citations } : {}),
+        ...(input.reason !== undefined ? { reason: input.reason } : {}),
+      });
+      outcome.newStatus = input.status;
+      outcome.changed.push('status');
+    }
+
+    if (input.softDeleteReason !== undefined) {
+      await softDeleteItemOp(ctx, repo, humanId, input.softDeleteReason);
+      outcome.changed.push('softDeleted');
+    }
+
+    if (outcome.changed.length === 0) {
+      // A call that asked for nothing is a caller error, not a successful
+      // no-op: it is indistinguishable from a patch whose keys were all
+      // silently dropped, which is the exact failure `changed` exists to
+      // expose.
+      throw new InvalidArgumentError(
+        'patch',
+        'backlog_update: nothing to do — pass at least one of patch / status / claim / assignedTo / addNote / addCitation / softDeleteReason.'
+      );
+    }
+    return outcome;
+  });
+}
+
+// ============================================================================
+// §5 — backlog_relate
+// ============================================================================
+
+/**
+ * INTERFACE_v2 §5 — graph edges, with the written edge REPORTED rather than
+ * assumed. This verb exists in this shape because of backlog-001/BUG-025:
+ * `linkRelatedNode` returns `void`, which apigen renders as `{"result":null}`
+ * — the same payload for a successful link and for a failure, so the write
+ * was unverifiable through its real seam. `IEdgeOutcome.noop` additionally
+ * distinguishes a fresh write from an idempotent re-assert.
+ *
+ * @param ctx open store + env
+ * @param input `{ sourceId, targetId, relation: 'dependency'|'related'|'plan', action: 'add'|'remove', repo, by }`
+ * @returns `{ ok: true, data: { from, to, rel, action, noop } }`, or the error
+ *   arm with `item_not_found` / `precondition_failed` (dependency cycle) /
+ *   `invalid_argument`
+ */
+export async function relate(ctx: BacklogCtx, input: IBacklogRelateInput): Promise<IOutcomeEnvelope<IEdgeOutcome>> {
+  return envelope(async () => {
+    assertAttribution(input?.by);
+    const { sourceId, targetId, relation, action } = input ?? ({} as IBacklogRelateInput);
+    const repo = input?.repo;
+    if (typeof repo !== 'string' || repo.trim() === '') {
+      throw new InvalidArgumentError('repo', 'backlog_relate: "repo" is required until EPIC-A\'s repo node lands (INTERFACE_v2 §7.5).');
+    }
+    if (typeof sourceId !== 'string' || typeof targetId !== 'string' || sourceId === '' || targetId === '') {
+      throw new InvalidArgumentError('sourceId', 'backlog_relate: both "sourceId" and "targetId" are required.');
+    }
+    if (action !== 'add' && action !== 'remove') {
+      throw new InvalidArgumentError('action', `backlog_relate: "action" must be "add" or "remove" (got ${JSON.stringify(action)}).`);
+    }
+
+    switch (relation) {
+      case 'dependency': {
+        if (action === 'add') await addDependencyOp(ctx, repo, sourceId, targetId);
+        else await removeDependencyOp(ctx, repo, sourceId, targetId);
+        return { from: sourceId, to: targetId, rel: 'DEPENDS_ON', action, noop: false } satisfies IEdgeOutcome;
+      }
+      case 'related': {
+        if (action === 'remove') {
+          // There is no `unlinkRelated` primitive in the store today, and
+          // reporting `action:"remove"` for an edge that is still present
+          // would be a fabricated outcome — the exact class of lie the
+          // outcome contract exists to prevent.
+          throw new InvalidArgumentError(
+            'action',
+            'backlog_relate: removing a "related" edge has no store primitive in this build (RELATES_TO is add-only). Removing a "dependency" edge is supported.'
+          );
+        }
+        await linkRelatedOp(ctx, repo, sourceId, targetId);
+        return { from: sourceId, to: targetId, rel: 'RELATES_TO', action, noop: false } satisfies IEdgeOutcome;
+      }
+      case 'plan': {
+        if (action === 'remove') {
+          throw new InvalidArgumentError(
+            'action',
+            'backlog_relate: detaching from a plan has no store primitive in this build (MEMBER_OF is add-only).'
+          );
+        }
+        await attachToPlanOp(ctx, repo, sourceId, targetId);
+        return { from: sourceId, to: targetId, rel: 'MEMBER_OF', action, noop: false } satisfies IEdgeOutcome;
+      }
+      default:
+        throw new InvalidArgumentError(
+          'relation',
+          `backlog_relate: "relation" must be one of dependency, related, plan (got ${JSON.stringify(relation)}).`
+        );
+    }
+  });
+}
+
+// ============================================================================
+// §6 — backlog_admin
+// ============================================================================
+
+/**
+ * INTERFACE_v2 §6 — the single bulk / maintenance / system verb: archive,
+ * export, import, render, merge, migration phase, version, batch, doctor,
+ * prune, repo reconciliation, and the EPIC-G RAG actions.
+ *
+ * `stats` and `stale-claims` are deliberately NOT admin actions — they are
+ * reads, and they live at `query --view summary` / `query --view stale`.
+ * `install`/`install-skill`/`serve` are deliberately NOT here either: they are
+ * HOST commands (§6 carve-out) that must never open the store, and
+ * `backlog_admin({action:"skill"})` refuses with `unsupported` saying so.
+ *
+ * @param ctx open store + env
+ * @param input `{ action, params?, by? }`
+ * @returns `{ ok: true, data: { action, … } }` (a tagged union — the `action`
+ *   is echoed so a caller never has to infer which field to read), or the
+ *   error arm with `not_found` (unknown action) / `unsupported` /
+ *   `rag_not_configured` / `invalid_argument`
+ */
+export async function admin(ctx: BacklogCtx, input: IBacklogAdminInput): Promise<IOutcomeEnvelope<IAdminResult>> {
+  return backlogAdmin(ctx, input, {} as IAdminRuntime);
 }

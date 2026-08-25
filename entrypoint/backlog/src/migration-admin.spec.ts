@@ -9,7 +9,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { parse as parseYaml } from 'yaml';
 import { buildBacklogEnv } from './env.js';
 import { globalConfigPath, writeMigrationPhase } from './migration-admin.js';
-import { setMigrationPhase, migrationStatus, type BacklogCtx } from './client.js';
+import { setMigrationPhase, migrationStatus } from './ops-v1.js';
+import type { BacklogCtx } from './client.js';
 import { openTmpStore, freshTmpDir, type TmpStore } from './test/helpers/tmp-store.js';
 
 describe('migration-admin — durable, cross-process migration.phase (MIGRATION.md §4.4)', () => {

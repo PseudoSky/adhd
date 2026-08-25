@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildBacklogEnv, resolveBacklogDbPath, resolveIrCacheFile } from './env.js';
 import { osTmpDir } from './test/helpers/tmp-store.js';
-import { createItem, getItem } from './client.js';
+import { createItem, getItem } from './ops-v1.js';
 import type { BacklogCtx } from './client.js';
 import { openGraphBacklogStore, closeGraphBacklogStore, type GraphBacklogStore } from './store/graph-backlog-store.js';
 

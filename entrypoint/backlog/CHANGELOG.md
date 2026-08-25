@@ -1,3 +1,19 @@
+## 0.1.10 (2026-08-20)
+
+
+### 🩹 Fixes
+
+- **backlog:** plan repo migrations in two passes so a rename cannot cascade
+
+- **backlog:** don't open the graph store for migration-status/set-migration-phase (DEBT-BACKLOG-CLI-STORE-OPEN-001)
+
+- **backlog:** a failed audit write must not fail an already-committed claim
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.9 (2026-08-20)
 
 

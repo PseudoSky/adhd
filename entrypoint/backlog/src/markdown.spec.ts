@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { openTmpStore, type TmpStore } from './test/helpers/tmp-store.js';
-import { archiveResolved, createItem, getItem, importFromMarkdown, listItems, renderToMarkdown, transitionStatus } from './client.js';
+import { archiveResolved, createItem, getItem, importFromMarkdown, listItems, renderToMarkdown, transitionStatus } from './ops-v1.js';
 import type { BacklogCtx } from './client.js';
 import { buildBacklogEnv } from './env.js';
 import {

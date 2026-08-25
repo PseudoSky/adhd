@@ -5,8 +5,24 @@
  * store module needs.
  */
 import type { NodeFilter, NodeRecord } from '@adhd/sox-graph-store';
-import type { AuditTrailEntry, AuditTrailResult, BacklogFilter, BacklogItem, DependencyGraph, StatsScope, TopoOrderResult } from '../model.js';
-import { AmbiguousHumanIdError, BacklogItemNotFoundError, isTerminalStatus } from '../model.js';
+import type {
+  AuditTrailEntry,
+  AuditTrailResult,
+  BacklogFilter,
+  BacklogItem,
+  BacklogStatus,
+  DependencyGraph,
+  IBacklogStats,
+  IDateBound,
+  IDateRangeFilter,
+  IDurationStats,
+  IQueryEnvelopeMeta,
+  IStatsCoverage,
+  Priority,
+  StatsScope,
+  TopoOrderResult,
+} from '../model.js';
+import { AmbiguousHumanIdError, BacklogItemNotFoundError, assertOpenScopedStats, isTerminalStatus } from '../model.js';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
 import { BACKLOG_ITEM_TAG, buildNodeName, isLiveBacklogItemNode, sanitizeFtsQuery, toBacklogItem, type BacklogNodeMeta } from './mapping.js';
 import { queryAuditEvents } from './audit-log.js';
@@ -70,8 +86,70 @@ function applyExcludeArchivedFilter(nodes: NodeRecord[], filter: BacklogFilter):
   return nodes.filter((n) => !(n.metadata as Partial<BacklogNodeMeta> | undefined)?.archivedAt);
 }
 
-/** Raw NodeRecord query — used internally where the full node (not just the mapped BacklogItem) is needed. */
-export async function queryItemNodes(store: GraphBacklogStore, filter: BacklogFilter = {}): Promise<NodeRecord[]> {
+/**
+ * BUG-BACKLOG-003 fix (b) — a stable, deterministic ordering every page
+ * boundary is drawn against. `store.graph.queryNodes` issues `LIMIT n OFFSET
+ * m` with NO `ORDER BY` at all unless the caller sets `NodeFilter.orderBy`
+ * (verified against the installed `@adhd/sox-graph-store` dist:
+ * `buildOrderClause`, dist/index.js:754-772 — `nodeFilterFromBacklogFilter`
+ * above never sets it). A `LIMIT/OFFSET` page drawn from an UNORDERED SQL
+ * result set has no guarantee that two separate calls against the same
+ * `WHERE` clause return rows in the same relative order — paging "page 2"
+ * after "page 1" could reorder or duplicate rows already seen, even with
+ * zero writes in between (confirmed live: root-caused via the installed
+ * `sox-graph-store` 0.8.4 SQL, see the backlog item's evidence). Sorting by
+ * `id` — the store's own monotonic insertion-order rowid — in JS, ONCE,
+ * before any slicing, makes every page boundary reproducible across calls.
+ */
+function stableNodeOrder(nodes: NodeRecord[]): NodeRecord[] {
+  return [...nodes].sort((a, b) => a.id - b.id);
+}
+
+/**
+ * BUG-BACKLOG-003 fix (a) + (b) — the ONE place `limit`/`offset` are ever
+ * applied, and only to an array that has ALREADY been fully filtered
+ * (rootLevel, excludeArchived and — for `listItems` — the open/closed
+ * status filter) and already put in `stableNodeOrder`. Previously
+ * `queryItemNodes` forwarded `filter.limit`/`filter.offset` straight into
+ * the SQL-level `NodeFilter` (or, on the grep path, sliced by `offset`
+ * AFTER the FTS fetch had already been capped to `filter.limit` — a double
+ * bug, since `offset` was then applied to an array already too short to
+ * honor it), so the page boundary was drawn BEFORE the open/closed
+ * post-filter ever ran: a filtered page silently under-returned instead of
+ * signalling "there are more, keep paging". Returns the pagination truth
+ * (INTERFACE_v2 §7.4 `IQueryEnvelopeMeta`) so a caller can tell a short page
+ * (the result set legitimately ended) from one that merely filtered down
+ * hard.
+ */
+function paginate<T>(sorted: T[], filter: Pick<BacklogFilter, 'limit' | 'offset'>): { page: T[]; meta: IQueryEnvelopeMeta } {
+  const total = sorted.length;
+  const offset = filter.offset ?? 0;
+  const page = filter.limit !== undefined ? sorted.slice(offset, offset + filter.limit) : sorted.slice(offset);
+  const meta: IQueryEnvelopeMeta = { total, returned: page.length };
+  if (filter.limit !== undefined) meta.limit = filter.limit;
+  if (filter.offset !== undefined) meta.offset = filter.offset;
+  return { page, meta };
+}
+
+/**
+ * Internal fetch budget for the grep (FTS5) path — NOT `filter.limit`
+ * (BUG-BACKLOG-003 fix (a)). `limit` bounds the OUTPUT page; fetching only
+ * `filter.limit` candidate rows and THEN post-filtering/paginating them (the
+ * pre-fix behavior) starves both the post-filter and the pagination that
+ * come after it. Candidates beyond this budget are the pre-existing,
+ * documented grep truncation (INTERFACE_v2 §7.4's "grep full-fetch-then-
+ * slice budget") — a separate, already-accepted limitation, not this bug.
+ */
+const GREP_FETCH_BUDGET = 1000;
+
+/**
+ * Fetches every LIVE node matching `filter` — rootLevel/excludeArchived
+ * applied — with `limit`/`offset` deliberately WITHHELD (see `paginate`'s
+ * doc comment). The shared, unpaginated base both `queryItemNodes` and
+ * `listItems` page from, so pagination always runs LAST, over the fully
+ * filtered set.
+ */
+async function fetchFilteredNodes(store: GraphBacklogStore, filter: BacklogFilter): Promise<NodeRecord[]> {
   if (filter.grep) {
     const nodeFilter = nodeFilterFromBacklogFilter({ ...filter, grep: undefined });
     // Sanitized — same FTS5-syntax-crash guard as crud.ts's dedupeScan
@@ -79,25 +157,47 @@ export async function queryItemNodes(store: GraphBacklogStore, filter: BacklogFi
     // containing `-`/`:`/`(`/`)`/`"` crashes `searchNodes` outright.
     const ftsQuery = sanitizeFtsQuery(filter.grep);
     if (!ftsQuery) return [];
-    const hits = await store.graph.searchNodes(ftsQuery, {
-      limit: filter.limit ?? 1000,
-      filter: nodeFilter,
-    });
-    let live = applyExcludeArchivedFilter(applyRootLevelFilter(hits.filter(isLiveBacklogItemNode), filter), filter);
-    if (filter.offset) live = live.slice(filter.offset);
-    return live;
+    const hits = await store.graph.searchNodes(ftsQuery, { limit: GREP_FETCH_BUDGET, filter: nodeFilter });
+    return applyExcludeArchivedFilter(applyRootLevelFilter(hits.filter(isLiveBacklogItemNode), filter), filter);
   }
+  // No `nodeFilter.limit`/`nodeFilter.offset` — the SQL fetch is deliberately
+  // unbounded here (BUG-BACKLOG-003 fix (a)); `paginate` slices AFTER every
+  // post-filter has run.
   const nodeFilter = nodeFilterFromBacklogFilter(filter);
-  if (filter.limit !== undefined) nodeFilter.limit = filter.limit;
-  if (filter.offset !== undefined) nodeFilter.offset = filter.offset;
   const nodes = await store.graph.queryNodes(nodeFilter);
   return applyExcludeArchivedFilter(applyRootLevelFilter(nodes.filter(isLiveBacklogItemNode), filter), filter);
 }
 
+/** Raw NodeRecord query — used internally where the full node (not just the mapped BacklogItem) is needed. */
+export async function queryItemNodes(store: GraphBacklogStore, filter: BacklogFilter = {}): Promise<NodeRecord[]> {
+  const nodes = await fetchFilteredNodes(store, filter);
+  return paginate(stableNodeOrder(nodes), filter).page;
+}
+
 export async function listItems(store: GraphBacklogStore, filter: BacklogFilter = {}): Promise<BacklogItem[]> {
-  const nodes = await queryItemNodes(store, filter);
-  const items = nodes.map(toBacklogItem);
-  return applyOpenClosedFilter(items, filter);
+  // BUG-BACKLOG-003 fix (a): `applyOpenClosedFilter` reads the MAPPED
+  // `BacklogItem.status` — it cannot be expressed in `NodeFilter`, so it can
+  // only run once nodes are mapped. Fetch the fully-filtered but UNPAGINATED
+  // node set, apply the status filter, and only THEN paginate — so a
+  // limited/offset page is drawn from the already-status-filtered set,
+  // never before it.
+  const nodes = await fetchFilteredNodes(store, filter);
+  const items = applyOpenClosedFilter(stableNodeOrder(nodes).map(toBacklogItem), filter);
+  return paginate(items, filter).page;
+}
+
+/**
+ * BUG-BACKLOG-003 fix (b) — same composition as `listItems`, but ALSO
+ * returns the pagination truth (`total`/`returned`/`limit`/`offset`,
+ * INTERFACE_v2 §7.4 `IQueryEnvelopeMeta`) a caller needs to tell a short
+ * page from the true last page, rather than guessing from `returned <
+ * limit` against a `total` it never saw.
+ */
+export async function listItemsPage(store: GraphBacklogStore, filter: BacklogFilter = {}): Promise<{ items: BacklogItem[]; meta: IQueryEnvelopeMeta }> {
+  const nodes = await fetchFilteredNodes(store, filter);
+  const items = applyOpenClosedFilter(stableNodeOrder(nodes).map(toBacklogItem), filter);
+  const { page, meta } = paginate(items, filter);
+  return { items: page, meta };
 }
 
 /**
@@ -184,20 +284,232 @@ function countByKey(items: BacklogItem[], keyFn: (item: BacklogItem) => string |
   return out;
 }
 
-export async function computeStats(store: GraphBacklogStore, scope: StatsScope = {}): Promise<import('../model.js').BacklogStats> {
-  const items = await listItems(store, { repo: scope.repo, projectPath: scope.projectPath });
+/** Every consumer of `IBacklogStats.byPriority`/`byPriorityAllStatuses` sees all four keys, zero-filled — never `?? 0` at the call site, never an absent key mistaken for a genuine zero. */
+function zeroPriorities(): Record<Priority, number> {
+  return { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+}
+
+function countByPriority(items: BacklogItem[]): Record<Priority, number> {
+  const out = zeroPriorities();
+  for (const item of items) {
+    if (item.priority) out[item.priority] += 1;
+  }
+  return out;
+}
+
+/**
+ * `StatsScope` composed with the v2 time-boundary grammar (`IDateRangeFilter`,
+ * INTERFACE_v2 §2.1/§7.7) — `computeStats`'s FEAT-010 half reads
+ * `scope.dateRange.updated`, mirroring how the query surface elsewhere reads
+ * `filter.dateRange.updated`. An intersection of two ALREADY-existing
+ * contract types (`model.ts`'s `StatsScope` and `IDateRangeFilter`), not a
+ * new parallel type — `StatsScope` itself is untouched, so every existing
+ * caller (a bare `{repo, projectPath}`) is still a valid argument.
+ */
+export type StatsScopeWithWindow = StatsScope & { dateRange?: IDateRangeFilter };
+
+/** AC-15: "window defaults to last 30 days when `dateRange` is absent". */
+const DEFAULT_STATS_WINDOW_MS = 30 * 24 * 60 * 60_000;
+
+function resolveStatsWindow(scope: StatsScopeWithWindow): IDateBound {
+  const updated = scope.dateRange?.updated;
+  if (updated?.since !== undefined || updated?.until !== undefined) {
+    const window: IDateBound = {};
+    if (updated.since !== undefined) window.since = updated.since;
+    if (updated.until !== undefined) window.until = updated.until;
+    return window;
+  }
+  return { since: new Date(Date.now() - DEFAULT_STATS_WINDOW_MS).toISOString() };
+}
+
+/** ISO-8601 strings compare lexicographically the same as chronologically — every timestamp here is `Date.prototype.toISOString()`'s fixed-width format, so this never needs `Date.parse`. */
+function withinWindow(at: string, window: IDateBound): boolean {
+  if (window.since !== undefined && at < window.since) return false;
+  if (window.until !== undefined && at > window.until) return false;
+  return true;
+}
+
+function eventTo(event: AuditTrailEntry): BacklogStatus | undefined {
+  return (event.detail as { to?: BacklogStatus }).to;
+}
+function eventFrom(event: AuditTrailEntry): BacklogStatus | undefined {
+  return (event.detail as { from?: BacklogStatus }).from;
+}
+
+function percentile(sortedAsc: number[], p: number): number {
+  const idx = Math.min(sortedAsc.length - 1, Math.floor(p * sortedAsc.length));
+  return sortedAsc[idx] as number;
+}
+
+/** AC-15 — `null` percentiles mean "no sample" (`IDurationStats` doc comment), never a fabricated `0ms`. */
+function durationStats(durationsMs: number[]): IDurationStats {
+  if (durationsMs.length === 0) return { medianMs: null, p90Ms: null, sampleSize: 0 };
+  const sorted = [...durationsMs].sort((a, b) => a - b);
+  return { medianMs: percentile(sorted, 0.5), p90Ms: percentile(sorted, 0.9), sampleSize: sorted.length };
+}
+
+/** Clips the dwell span `[startMs, endMs)` to `window` and, if any of it survives, records the overlap under `status` — AC-15's negative control ("a transition outside the window must not contribute to the window's counts") is enforced HERE, at the one place every span is recorded. */
+function addStatusSpan(durationsByStatus: Map<string, number[]>, status: string, startMs: number, endMs: number, window: IDateBound): void {
+  const winStart = window.since !== undefined ? Date.parse(window.since) : -Infinity;
+  const winEnd = window.until !== undefined ? Date.parse(window.until) : Infinity;
+  const clippedStart = Math.max(startMs, winStart);
+  const clippedEnd = Math.min(endMs, winEnd);
+  if (clippedEnd <= clippedStart) return;
+  const arr = durationsByStatus.get(status) ?? [];
+  arr.push(clippedEnd - clippedStart);
+  durationsByStatus.set(status, arr);
+}
+
+interface HistoryDerivedStats {
+  coverage: IStatsCoverage;
+  timeToResolution?: IDurationStats;
+  timeInStatus?: Record<string, IDurationStats>;
+  reopenRate?: number;
+}
+
+/**
+ * FEAT-010 / DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001 — everything `IBacklogStats`
+ * derives from the persisted `transition` audit-event log (`audit-log.ts`),
+ * for the `(nodes, items)` pair `computeStats` already fetched (same index
+ * alignment — both mapped from the identical `fetchFilteredNodes` result, in
+ * the same order). One `queryAuditEvents` call per item — the same N+1
+ * pattern this file already uses in `readyItems`/`dependencyGraph`.
+ */
+async function computeHistoryDerivedStats(store: GraphBacklogStore, nodes: NodeRecord[], items: BacklogItem[], window: IDateBound): Promise<HistoryDerivedStats> {
+  let auditWindowStart: string | undefined;
+  let itemsWithHistory = 0;
+  const resolutionDurationsMs: number[] = [];
+  const durationsByStatus = new Map<string, number[]>();
+  let reachedTerminalInWindowCount = 0;
+  let reopenedAfterCount = 0;
+
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    const item = items[i];
+    if (!node || !item) continue;
+    const events = await queryAuditEvents(store, node.id);
+    if (events.length === 0) continue;
+
+    for (const e of events) {
+      if (auditWindowStart === undefined || e.at < auditWindowStart) auditWindowStart = e.at;
+    }
+    if (events.some((e) => withinWindow(e.at, window))) itemsWithHistory += 1;
+
+    const transitions = events.filter((e) => e.kind === 'transition');
+
+    // time-to-resolution: created -> the FIRST transition into a terminal
+    // status, counted only when that transition itself falls inside `window`
+    // (AC-15's negative control).
+    const firstTerminal = transitions.find((e) => {
+      const to = eventTo(e);
+      return to !== undefined && isTerminalStatus(to);
+    });
+    if (firstTerminal && withinWindow(firstTerminal.at, window)) {
+      const createdMs = Date.parse(item.createdAt);
+      const resolvedMs = Date.parse(firstTerminal.at);
+      if (Number.isFinite(createdMs) && Number.isFinite(resolvedMs) && resolvedMs >= createdMs) {
+        resolutionDurationsMs.push(resolvedMs - createdMs);
+      }
+    }
+
+    // time-in-status: walk the transition timeline as dwell segments
+    // (created -> t1.from, t1 -> t2.from, …, tLast -> now), clipping each to
+    // `window` via `addStatusSpan`.
+    let segStart = Date.parse(item.createdAt);
+    let segStatus: BacklogStatus | undefined = transitions.length > 0 ? eventFrom(transitions[0]!) : item.status;
+    for (const t of transitions) {
+      const tAt = Date.parse(t.at);
+      if (segStatus !== undefined) addStatusSpan(durationsByStatus, segStatus, segStart, tAt, window);
+      segStart = tAt;
+      segStatus = eventTo(t);
+    }
+    if (segStatus !== undefined) addStatusSpan(durationsByStatus, segStatus, segStart, Date.now(), window);
+
+    // reopen rate: item reached a terminal status inside `window`, then
+    // LATER transitioned to a non-terminal status (any time after).
+    let sawWindowTerminal = false;
+    let reopened = false;
+    for (const t of transitions) {
+      const to = eventTo(t);
+      if (to === undefined) continue;
+      if (!sawWindowTerminal) {
+        if (isTerminalStatus(to) && withinWindow(t.at, window)) sawWindowTerminal = true;
+      } else if (!isTerminalStatus(to)) {
+        reopened = true;
+      }
+    }
+    if (sawWindowTerminal) {
+      reachedTerminalInWindowCount += 1;
+      if (reopened) reopenedAfterCount += 1;
+    }
+  }
+
+  const coverage: IStatsCoverage = { itemsWithHistory, itemsTotal: items.length };
+  if (auditWindowStart !== undefined) coverage.auditWindowStart = auditWindowStart;
+
+  const timeInStatus: Record<string, IDurationStats> = {};
+  for (const [status, durations] of durationsByStatus) timeInStatus[status] = durationStats(durations);
+
+  const result: HistoryDerivedStats = { coverage };
+  if (resolutionDurationsMs.length > 0) result.timeToResolution = durationStats(resolutionDurationsMs);
+  if (Object.keys(timeInStatus).length > 0) result.timeInStatus = timeInStatus;
+  if (reachedTerminalInWindowCount > 0) result.reopenRate = reopenedAfterCount / reachedTerminalInWindowCount;
+  return result;
+}
+
+/**
+ * INTERFACE_v2 §2.2 `view:"summary"` / FEAT-010 — the v2 stats contract
+ * (`model.ts`'s `IBacklogStats`).
+ *
+ * **BUG-023 (CRITICAL, CONFIRMED LIVE 2026-08-21) fix.** The old
+ * implementation computed `byPriority`/`byKind`/`byFamily` via `countByKey`
+ * over ALL items (both open and closed) while `open`/`closed` were computed
+ * separately — so `byPriority.CRITICAL` reported 33 (every CRITICAL item,
+ * including RESOLVED/FIXED/VERIFIED ones) while only 16 CRITICAL items were
+ * actually open. The fix: `byPriority`/`byKind`/`byFamily`/`byRepo` are now
+ * computed over `open` ONLY (the field every triage query means), and the
+ * all-status totals are carried in the separately-named
+ * `byPriorityAllStatuses`/`byKindAllStatuses`/`byFamilyAllStatuses`/
+ * `byRepoAllStatuses` fields — both REQUIRED, so neither can silently default
+ * to the wrong scope. `assertOpenScopedStats` re-checks this invariant at
+ * runtime before every return, so the exact BUG-023 shape (an open-scoped
+ * map summing higher than `open`) throws instead of shipping.
+ */
+export async function computeStats(store: GraphBacklogStore, scope: StatsScopeWithWindow = {}): Promise<IBacklogStats> {
+  const filter: BacklogFilter = { repo: scope.repo, projectPath: scope.projectPath };
+  const nodes = await fetchFilteredNodes(store, filter);
+  const items = nodes.map(toBacklogItem);
   const open = items.filter((it) => !isTerminalStatus(it.status));
   const closed = items.filter((it) => isTerminalStatus(it.status));
-  return {
+
+  const window = resolveStatsWindow(scope);
+  const history = await computeHistoryDerivedStats(store, nodes, items, window);
+
+  const stats: IBacklogStats = {
     total: items.length,
     open: open.length,
     closed: closed.length,
     byStatus: countByKey(items, (it) => it.status),
-    byKind: countByKey(items, (it) => it.kind),
-    byFamily: countByKey(items, (it) => it.family),
-    byPriority: countByKey(items, (it) => it.priority),
-    byRepo: scope.repo === undefined ? countByKey(items, (it) => it.repo) : {},
+    // BUG-023 — OPEN-scoped, never the unscoped `items` array.
+    byPriority: countByPriority(open),
+    byPriorityAllStatuses: countByPriority(items),
+    byKind: countByKey(open, (it) => it.kind),
+    byKindAllStatuses: countByKey(items, (it) => it.kind),
+    byFamily: countByKey(open, (it) => it.family),
+    byFamilyAllStatuses: countByKey(items, (it) => it.family),
+    byRepo: scope.repo === undefined ? countByKey(open, (it) => it.repo) : {},
+    byRepoAllStatuses: scope.repo === undefined ? countByKey(items, (it) => it.repo) : {},
+    coverage: history.coverage,
+    window,
   };
+  if (history.timeToResolution) stats.timeToResolution = history.timeToResolution;
+  if (history.timeInStatus) stats.timeInStatus = history.timeInStatus;
+  if (history.reopenRate !== undefined) stats.reopenRate = history.reopenRate;
+
+  // BUG-023's runtime teeth (model.ts `assertOpenScopedStats`): throws if any
+  // open-scoped map was ever computed over the wrong (all-status) array.
+  assertOpenScopedStats(stats);
+  return stats;
 }
 
 export async function spotlight(store: GraphBacklogStore, scope: StatsScope = {}, limit = 20): Promise<BacklogItem[]> {
