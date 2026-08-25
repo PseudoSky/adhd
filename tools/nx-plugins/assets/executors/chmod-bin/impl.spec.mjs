@@ -1,15 +1,15 @@
 /**
- * Teeth tests for the `assets` copy executor's bin-chmod step —
- * DEBT-002 #4: the chmod loop only handled OBJECT-form `bin`
- * ({ name: path }); a STRING-form `bin` ("bin": "./cli.js", the common
- * single-executable shape) silently skipped the chmod entirely, so a CLI
- * package declaring `bin` as a string would ship without its executable bit
- * — npm's publish-time bin validation then silently strips it.
+ * Teeth tests for the `chmod-bin` executor — DEBT-002 #4 (STRING-form `bin`
+ * normalization) plus BUG-NXASSETS-001 (this logic moved here, to its own
+ * uncacheable target, from the `assets` copy executor — see
+ * `impl.js`'s doc comment for why: a `cache: true` target's body never
+ * runs on a cache hit, so the chmod silently stopped happening once an
+ * `assets` cache entry existed).
  *
  * Mocking boundary: none. Runs the real executor against a real temp dist
  * directory and asserts the real chmod bit on disk.
  *
- * Run: node --test tools/nx-plugins/assets/executors/copy/impl.spec.mjs
+ * Run: node --test tools/nx-plugins/assets/executors/chmod-bin/impl.spec.mjs
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // BUG (flaky CPU-guard trips under real machine load): this file runs the REAL
-// `assets` copy executor (no mocking boundary at all), which wraps its work in
+// `chmod-bin` executor (no mocking boundary at all), which wraps its work in
 // `withMetrics` (BUILD-TOOLING-METRICS-001) — and `withMetrics` always runs the
 // REAL `checkCpuGuard` (FEAT-NXMETRICS-CPU-GUARD-001) against a REAL
 // `process.cpuUsage()` measurement. A tiny temp-dist copy is single-digit-ms of
@@ -40,6 +40,7 @@ function loadFreshImpl() {
   delete require.cache[implAbs];
   return require(implAbs);
 }
+
 
 function makeProject({ rootDir, name, projectRoot, pkg, distFiles = {} }) {
   const pkgRoot = join(rootDir, projectRoot);
@@ -62,7 +63,7 @@ function isExecutable(path) {
 }
 
 test('DEBT-002 #4: STRING-form "bin" is normalized and chmod +x is applied (previously silently skipped)', async () => {
-  const rootDir = mkdtempSync(join(tmpdir(), 'assets-copy-'));
+  const rootDir = mkdtempSync(join(tmpdir(), 'assets-chmod-bin-'));
   try {
     const pkg = { name: '@adhd/some-cli', version: '1.0.0', bin: './dist/index.js' };
     const { distDir, context } = makeProject({
@@ -72,8 +73,8 @@ test('DEBT-002 #4: STRING-form "bin" is normalized and chmod +x is applied (prev
     const binFile = join(distDir, 'index.js');
     assert.equal(isExecutable(binFile), false, 'precondition: dist output starts non-executable, like a real tsc/vite build');
 
-    const copy = loadFreshImpl();
-    const result = await copy({}, context);
+    const chmodBin = loadFreshImpl();
+    const result = await chmodBin({}, context);
     assert.equal(result.success, true);
     assert.equal(isExecutable(binFile), true, 'a string-form bin must now get chmod +x, same as object-form');
   } finally {
@@ -82,15 +83,15 @@ test('DEBT-002 #4: STRING-form "bin" is normalized and chmod +x is applied (prev
 });
 
 test('DEBT-002 #4: STRING-form bin key is derived from the package name\'s basename (scoped name)', async () => {
-  const rootDir = mkdtempSync(join(tmpdir(), 'assets-copy-'));
+  const rootDir = mkdtempSync(join(tmpdir(), 'assets-chmod-bin-'));
   try {
     const pkg = { name: '@adhd/apigen-cli', version: '1.0.0', bin: './dist/cli.js' };
     const { distDir, context } = makeProject({
       rootDir, name: 'apigen-cli', projectRoot: 'entrypoint/apigen-cli', pkg,
       distFiles: { 'cli.js': '#!/usr/bin/env node\n' },
     });
-    const copy = loadFreshImpl();
-    const result = await copy({}, context);
+    const chmodBin = loadFreshImpl();
+    const result = await chmodBin({}, context);
     assert.equal(result.success, true);
     assert.equal(isExecutable(join(distDir, 'cli.js')), true);
   } finally {
@@ -99,15 +100,15 @@ test('DEBT-002 #4: STRING-form bin key is derived from the package name\'s basen
 });
 
 test('object-form "bin" still works exactly as before (no regression)', async () => {
-  const rootDir = mkdtempSync(join(tmpdir(), 'assets-copy-'));
+  const rootDir = mkdtempSync(join(tmpdir(), 'assets-chmod-bin-'));
   try {
     const pkg = { name: '@adhd/multi-cli', version: '1.0.0', bin: { 'multi-cli': './dist/index.js', 'multi-cli-admin': './dist/admin.js' } };
     const { distDir, context } = makeProject({
       rootDir, name: 'multi-cli', projectRoot: 'entrypoint/multi-cli', pkg,
       distFiles: { 'index.js': '#!/usr/bin/env node\n', 'admin.js': '#!/usr/bin/env node\n' },
     });
-    const copy = loadFreshImpl();
-    const result = await copy({}, context);
+    const chmodBin = loadFreshImpl();
+    const result = await chmodBin({}, context);
     assert.equal(result.success, true);
     assert.equal(isExecutable(join(distDir, 'index.js')), true);
     assert.equal(isExecutable(join(distDir, 'admin.js')), true);
@@ -117,15 +118,15 @@ test('object-form "bin" still works exactly as before (no regression)', async ()
 });
 
 test('a package with no "bin" field at all is unaffected (no crash, no chmod attempted)', async () => {
-  const rootDir = mkdtempSync(join(tmpdir(), 'assets-copy-'));
+  const rootDir = mkdtempSync(join(tmpdir(), 'assets-chmod-bin-'));
   try {
     const pkg = { name: '@adhd/lib-only', version: '1.0.0', main: './dist/index.js' };
     const { distDir, context } = makeProject({
       rootDir, name: 'lib-only', projectRoot: 'packages/lib-only', pkg,
       distFiles: { 'index.js': 'module.exports = {};\n' },
     });
-    const copy = loadFreshImpl();
-    const result = await copy({}, context);
+    const chmodBin = loadFreshImpl();
+    const result = await chmodBin({}, context);
     assert.equal(result.success, true);
     assert.equal(isExecutable(join(distDir, 'index.js')), false, 'a plain library entry must never be chmod +x-ed');
   } finally {
@@ -134,15 +135,15 @@ test('a package with no "bin" field at all is unaffected (no crash, no chmod att
 });
 
 test('string-form bin whose target does not exist in dist logs and skips chmod without failing the task', async () => {
-  const rootDir = mkdtempSync(join(tmpdir(), 'assets-copy-'));
+  const rootDir = mkdtempSync(join(tmpdir(), 'assets-chmod-bin-'));
   try {
     const pkg = { name: '@adhd/broken-cli', version: '1.0.0', bin: './dist/missing.js' };
     const { context } = makeProject({
       rootDir, name: 'broken-cli', projectRoot: 'entrypoint/broken-cli', pkg,
       distFiles: { 'index.js': 'x\n' }, // "missing.js" deliberately never written
     });
-    const copy = loadFreshImpl();
-    const result = await copy({}, context);
+    const chmodBin = loadFreshImpl();
+    const result = await chmodBin({}, context);
     assert.equal(result.success, true, 'a missing bin target must not fail the whole assets-copy task (matches pre-existing object-form behavior)');
   } finally {
     rmSync(rootDir, { recursive: true, force: true });

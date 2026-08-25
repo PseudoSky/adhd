@@ -52,10 +52,25 @@ exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) => {
   if (skip(projectRoot)) return {};
   if (!existsSync(join(ctx.workspaceRoot, projectRoot, 'project.json'))) return {};
   if (!hasBuildTarget(ctx.workspaceRoot, projectRoot)) return {};
-  return { projects: { [projectRoot]: { targets: { assets: {
-    executor: '@adhd/nx-assets:copy',
-    dependsOn: ['build'],
-    cache: true,
-    outputs: assetOutputs(ctx.workspaceRoot, projectRoot),
-  } } } } };
+  return { projects: { [projectRoot]: { targets: {
+    assets: {
+      executor: '@adhd/nx-assets:copy',
+      // BUG-NXASSETS-001: `chmod-bin` in the dependsOn list (not merely
+      // `build`) is what pulls the always-runs chmod into every EXISTING
+      // consumer of `assets` (e.g. `test`'s own `dependsOn: ["^build",
+      // "build", "assets"]`) via nx's transitive task graph — no per-project
+      // `project.json` needs to know chmod-bin exists.
+      dependsOn: ['build', 'chmod-bin'],
+      cache: true,
+      outputs: assetOutputs(ctx.workspaceRoot, projectRoot),
+    },
+    'chmod-bin': {
+      executor: '@adhd/nx-assets:chmod-bin',
+      dependsOn: ['build'],
+      // Deliberately UNCACHEABLE — see executors/chmod-bin/impl.js's doc
+      // comment. The whole point is that this must run on every invocation;
+      // caching it reintroduces the exact defect it fixes.
+      cache: false,
+    },
+  } } } };
 }];

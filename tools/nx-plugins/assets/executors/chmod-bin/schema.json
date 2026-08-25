@@ -1,0 +1,9 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "cli": "nx",
+  "title": "chmod-bin executor",
+  "description": "Set the executable bit on every file package.json's bin field points at.",
+  "type": "object",
+  "properties": {},
+  "required": []
+}
