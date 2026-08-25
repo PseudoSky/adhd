@@ -466,6 +466,49 @@ async function liveEdgeDsts(store: GraphBacklogStore, src: number, rel: string):
  * exactly what it would do, touching nothing" without a second code path
  * that could drift from the real one.
  */
+/**
+ * DEBT-BACKLOG-EPICA-001 (b) — every field that determines what
+ * `runEpicABackfill` will actually WRITE for an item: which dimension nodes
+ * it targets and whether it is a no-op. `staleEdgeCount`/`warning` are
+ * deliberately excluded — they affect reporting, never the write itself.
+ * Returns a short list of human-readable divergences (empty = identical).
+ */
+export function diffEpicABackfillPlans(
+  reported: IEpicABackfillPlan,
+  fresh: IEpicABackfillPlan
+): string[] {
+  const diffs: string[] = [];
+  const byId = (items: IEpicABackfillPlanItem[]): Map<number, IEpicABackfillPlanItem> =>
+    new Map(items.map((i) => [i.nodeId, i]));
+  const a = byId(reported.items);
+  const b = byId(fresh.items);
+
+  for (const [nodeId, item] of a) {
+    if (!b.has(nodeId)) diffs.push(`item nodeId=${nodeId} (${item.humanId}) is no longer on the store`);
+  }
+  for (const [nodeId, item] of b) {
+    if (!a.has(nodeId)) diffs.push(`item nodeId=${nodeId} (${item.humanId}) is new since the reported plan was taken`);
+  }
+  for (const [nodeId, x] of a) {
+    const y = b.get(nodeId);
+    if (!y) continue;
+    if (x.repoKey !== y.repoKey || x.packageKey !== y.packageKey || x.needsWrite !== y.needsWrite) {
+      diffs.push(
+        `item nodeId=${nodeId} (${x.humanId}) target changed: repoKey ${JSON.stringify(x.repoKey)}->${JSON.stringify(
+          y.repoKey
+        )}, packageKey ${JSON.stringify(x.packageKey)}->${JSON.stringify(y.packageKey)}, needsWrite ${x.needsWrite}->${y.needsWrite}`
+      );
+      continue;
+    }
+    const sameEdges = (p: number[], q: number[]): boolean =>
+      p.length === q.length && [...p].sort().every((v, i) => v === [...q].sort()[i]);
+    if (!sameEdges(x.existingRepoEdgeDsts, y.existingRepoEdgeDsts) || !sameEdges(x.existingPackageEdgeDsts, y.existingPackageEdgeDsts)) {
+      diffs.push(`item nodeId=${nodeId} (${x.humanId}) live edges changed since the reported plan was taken`);
+    }
+  }
+  return diffs;
+}
+
 export async function planEpicABackfill(
   store: GraphBacklogStore,
   options: IEpicABackfillPlanOptions = {}
@@ -1033,6 +1076,20 @@ export interface IEpicABackfillOptions extends IEpicABackfillPlanOptions {
    */
   dryRun: boolean;
   /**
+   * DEBT-BACKLOG-EPICA-001 (b): a plan an operator already reviewed (from an
+   * earlier `planEpicABackfill`/`runEpicABackfill({dryRun:true})` call).
+   * When given, `runEpicABackfill` still recomputes a FRESH plan from the
+   * store's CURRENT state (never blindly trusts a possibly-stale one — the
+   * store may have changed between the dry run and this call), then diffs
+   * the two with `diffEpicABackfillPlans`. Any divergence throws
+   * `InvalidArgumentError` and performs NO write at all: the whole point of
+   * a dry run is that the report an operator approved describes exactly
+   * what the apply will do, so a silent mismatch is refused rather than
+   * applied. Omitting `plan` (the pre-existing behavior) skips this check —
+   * the fresh plan is simply used as-is, same as before.
+   */
+  plan?: IEpicABackfillPlan;
+  /**
    * Directory backup manifests are written under. Tests should always pass a
    * dir inside their own tmp store so backups are cleaned up with everything
    * else.
@@ -1053,7 +1110,7 @@ export interface IEpicABackfillOptions extends IEpicABackfillPlanOptions {
 export interface IEpicABackfillResult {
   dryRun: boolean;
   plan: IEpicABackfillPlan;
-  /** Present whenever a backup was taken (i.e. every real run with at least one item). */
+  /** Present whenever a backup was taken — every real run with at least one item NEEDING a write; a true no-op writes no backup (DEBT-BACKLOG-EPICA-001). */
   backupPath?: string;
   repoNodesCreated: string[];
   packageNodesCreated: string[];
@@ -1132,6 +1189,20 @@ export async function runEpicABackfill(
   const plan = await planEpicABackfill(store, options);
   warnings.push(...plan.warnings);
 
+  // DEBT-BACKLOG-EPICA-001 (b): if the caller supplied a previously-reviewed
+  // plan, this fresh one must match it EXACTLY before any write happens —
+  // see IEpicABackfillOptions.plan's doc comment.
+  if (options.plan) {
+    const drift = diffEpicABackfillPlans(options.plan, plan);
+    if (drift.length > 0) {
+      throw new InvalidArgumentError(
+        'plan',
+        'backlog: the store changed since the supplied plan was computed — ' +
+          `re-run with dryRun:true to get a current report before applying. Divergences: ${drift.join('; ')}`
+      );
+    }
+  }
+
   if (dryRun) {
     return {
       dryRun: true,
@@ -1147,7 +1218,17 @@ export async function runEpicABackfill(
 
   // ---- Backup, before ANY write. Fails CLOSED. --------------------------
   const backupDir = options.backupDir ?? DEFAULT_EPIC_A_BACKFILL_BACKUP_DIR;
-  const backup = plan.items.length > 0 ? await createEpicABackfillBackup(store, plan, actor, backupDir, api) : undefined;
+  // DEBT-BACKLOG-EPICA-001 (a): gated on `itemsNeedingWrite`, NOT
+  // `plan.items.length`. The latter is every item currently on the store —
+  // a run that changes nothing (everything already correctly dimensioned)
+  // still has `plan.items.length > 0` on any non-empty store, so it used to
+  // write a manifest describing zero work on every single re-run. An
+  // operator who runs the backfill twice got a second manifest and the
+  // manifest directory stopped being a reliable record of what actually
+  // happened. A true no-op run now writes nothing at all — nothing to undo,
+  // nothing to record.
+  const backup =
+    plan.itemsNeedingWrite > 0 ? await createEpicABackfillBackup(store, plan, actor, backupDir, api) : undefined;
 
   // ---- Materialize dimension nodes ---------------------------------------
   // Deliberately OUTSIDE the per-item transactions. Minting a repo node is

@@ -374,15 +374,79 @@ describe('runEpicABackfill — idempotence', () => {
     expect(second.itemsWritten).toBe(0);
     expect(second.itemsSkipped).toBe(SEEDS.length);
     expect(second.staleEdgesRemoved).toBe(0);
-    // A backup manifest IS still written on this no-op run — `runEpicABackfill`
-    // gates the backup on `plan.items.length > 0` (every live item, whether or
-    // not it needs a write), not on `itemsNeedingWrite > 0`. That is a real,
-    // separately-filed gap (an operator's incident directory fills with
-    // no-op snapshots on every re-run) — this assertion documents the ACTUAL
-    // behaviour rather than the one a stale doc comment implied.
-    expect(second.backupPath).toBeDefined();
+    // DEBT-BACKLOG-EPICA-001 (a), fixed: the backup gate is
+    // `itemsNeedingWrite > 0`, not `plan.items.length > 0` (every live item,
+    // whether or not it needs a write). A true no-op run — everything
+    // already correctly dimensioned — writes NO manifest at all, so an
+    // operator re-running the backfill does not fill their incident
+    // directory with zero-work snapshots.
+    expect(second.backupPath).toBeUndefined();
     expect((await findIncompleteEpicABackfillBackups(backupDir)).length).toBe(backupsAfterFirst);
     expect(await pendingItems(tmp.store)).toEqual([]);
+  });
+});
+
+describe('runEpicABackfill — apply consumes the reported plan (DEBT-BACKLOG-EPICA-001 (b))', () => {
+  it('a plan that still matches the live store is accepted and applies exactly as reported', async () => {
+    const reported = await planEpicABackfill(tmp.store, {});
+    expect(reported.itemsNeedingWrite).toBe(SEEDS.length);
+
+    const result = await runEpicABackfill(tmp.store, { dryRun: false, backupDir, plan: reported });
+    expect(result.itemsWritten).toBe(SEEDS.length);
+    expect(await pendingItems(tmp.store)).toEqual([]);
+  });
+
+  it('REFUSES to apply a stale plan when the store changed since it was computed — no write happens at all', async () => {
+    const reported = await planEpicABackfill(tmp.store, {});
+    expect(reported.itemsNeedingWrite).toBeGreaterThan(0);
+
+    // Store changes: a new item lands after the plan was taken, and it is
+    // NOT reflected in `reported`.
+    const extra = await createItemNode(tmp.store, {
+      family: 'BUG-DRIFT',
+      title: 'filed after the plan was taken',
+      body: 'DEBT-BACKLOG-EPICA-001 (b) drift-detection fixture.',
+      repo: 'adhd',
+      force: true,
+    });
+    expect(extra.created).toBe(true);
+
+    const fingerprintBefore = await tableFingerprint(tmp.store);
+    await expect(runEpicABackfill(tmp.store, { dryRun: false, backupDir, plan: reported })).rejects.toThrow(
+      /store changed since the supplied plan|is new since the reported plan/
+    );
+    // Refused BEFORE any write — not even the backup manifest.
+    expect(await tableFingerprint(tmp.store)).toBe(fingerprintBefore);
+    expect((await findIncompleteEpicABackfillBackups(backupDir)).length).toBe(0);
+  });
+
+  it('REFUSES when an item the plan reported has since been repaired by another process (drift the other direction)', async () => {
+    const reported = await planEpicABackfill(tmp.store, {});
+    expect(reported.itemsNeedingWrite).toBe(SEEDS.length);
+
+    // Someone else runs the real backfill first — the store is now fully
+    // dimensioned, but `reported` still describes the OLD, unlinked state.
+    const firstRun = await runEpicABackfill(tmp.store, { dryRun: false, backupDir });
+    expect(firstRun.itemsWritten).toBe(SEEDS.length);
+
+    await expect(runEpicABackfill(tmp.store, { dryRun: false, backupDir, plan: reported })).rejects.toThrow(
+      /store changed since the supplied plan/
+    );
+  });
+
+  it('NEGATIVE CONTROL — omitting `plan` entirely applies the live state with no drift check at all (proves the check above has teeth)', async () => {
+    const reported = await planEpicABackfill(tmp.store, {});
+    await createItemNode(tmp.store, {
+      family: 'BUG-DRIFT-NEGCTRL',
+      title: 'filed after the plan was taken, but plan is never passed this time',
+      body: 'DEBT-BACKLOG-EPICA-001 (b) negative control.',
+      repo: 'adhd',
+      force: true,
+    });
+    // No `plan` option this time — the exact same drift exists, but with
+    // nothing to diff against there is nothing to refuse.
+    const result = await runEpicABackfill(tmp.store, { dryRun: false, backupDir });
+    expect(result.itemsWritten).toBe(reported.itemsNeedingWrite + 1);
   });
 });
 
