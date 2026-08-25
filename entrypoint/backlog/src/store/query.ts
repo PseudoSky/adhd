@@ -24,7 +24,7 @@ import type {
 } from '../model.js';
 import { AmbiguousHumanIdError, BacklogItemNotFoundError, assertOpenScopedStats, isTerminalStatus } from '../model.js';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
-import { BACKLOG_ITEM_TAG, buildNodeName, isLiveBacklogItemNode, sanitizeFtsQuery, toBacklogItem, type BacklogNodeMeta } from './mapping.js';
+import { BACKLOG_ITEM_TAG, buildNodeName, isLiveBacklogItemNode, normalizeRepoKey, sanitizeFtsQuery, toBacklogItem, type BacklogNodeMeta } from './mapping.js';
 import { queryAuditEvents } from './audit-log.js';
 
 const PRIORITY_RANK: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
@@ -150,22 +150,28 @@ const GREP_FETCH_BUDGET = 1000;
  * filtered set.
  */
 async function fetchFilteredNodes(store: GraphBacklogStore, filter: BacklogFilter): Promise<NodeRecord[]> {
-  if (filter.grep) {
-    const nodeFilter = nodeFilterFromBacklogFilter({ ...filter, grep: undefined });
+  // Resolve a case/whitespace-variant `repo` to its canonical stored form
+  // BEFORE it becomes an exact-match `namespace` filter below — otherwise
+  // 'pseudosky/adhd' silently matches zero rows against 'PseudoSky/adhd'.
+  const resolvedFilter: BacklogFilter =
+    filter.repo !== undefined ? { ...filter, repo: (await resolveCanonicalRepo(store, filter.repo)).canonical } : filter;
+
+  if (resolvedFilter.grep) {
+    const nodeFilter = nodeFilterFromBacklogFilter({ ...resolvedFilter, grep: undefined });
     // Sanitized — same FTS5-syntax-crash guard as crud.ts's dedupeScan
     // (BUG-BACKLOG-DEDUPE-FTS-SYNTAX-CRASH-001): an unsanitized `grep` term
     // containing `-`/`:`/`(`/`)`/`"` crashes `searchNodes` outright.
-    const ftsQuery = sanitizeFtsQuery(filter.grep);
+    const ftsQuery = sanitizeFtsQuery(resolvedFilter.grep);
     if (!ftsQuery) return [];
     const hits = await store.graph.searchNodes(ftsQuery, { limit: GREP_FETCH_BUDGET, filter: nodeFilter });
-    return applyExcludeArchivedFilter(applyRootLevelFilter(hits.filter(isLiveBacklogItemNode), filter), filter);
+    return applyExcludeArchivedFilter(applyRootLevelFilter(hits.filter(isLiveBacklogItemNode), resolvedFilter), resolvedFilter);
   }
   // No `nodeFilter.limit`/`nodeFilter.offset` — the SQL fetch is deliberately
   // unbounded here (BUG-BACKLOG-003 fix (a)); `paginate` slices AFTER every
   // post-filter has run.
-  const nodeFilter = nodeFilterFromBacklogFilter(filter);
+  const nodeFilter = nodeFilterFromBacklogFilter(resolvedFilter);
   const nodes = await store.graph.queryNodes(nodeFilter);
-  return applyExcludeArchivedFilter(applyRootLevelFilter(nodes.filter(isLiveBacklogItemNode), filter), filter);
+  return applyExcludeArchivedFilter(applyRootLevelFilter(nodes.filter(isLiveBacklogItemNode), resolvedFilter), resolvedFilter);
 }
 
 /** Raw NodeRecord query — used internally where the full node (not just the mapped BacklogItem) is needed. */
@@ -215,11 +221,12 @@ export async function listItemsPage(store: GraphBacklogStore, filter: BacklogFil
  * guessing.
  */
 export async function findItemNode(store: GraphBacklogStore, repo: string, humanId: string): Promise<NodeRecord | null> {
-  const name = buildNodeName(repo, humanId);
-  const nodes = await store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG], namespace: repo, metadata: { humanId } });
+  const { canonical } = await resolveCanonicalRepo(store, repo);
+  const name = buildNodeName(canonical, humanId);
+  const nodes = await store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG], namespace: canonical, metadata: { humanId } });
   const live = nodes.filter(isLiveBacklogItemNode);
   if (live.length > 1) {
-    throw new AmbiguousHumanIdError(repo, humanId, live.map((n) => n.id));
+    throw new AmbiguousHumanIdError(canonical, humanId, live.map((n) => n.id));
   }
   return live.find((n) => n.name === name) ?? live[0] ?? null;
 }
@@ -258,6 +265,29 @@ export async function knownRepos(store: GraphBacklogStore): Promise<Set<string>>
     if (repo) repos.add(repo);
   }
   return repos;
+}
+
+/**
+ * Case/whitespace-insensitive repo resolution (BUG-BACKLOG-REPO-LOOKUP-UX-001
+ * hardening — this repo's namespace column is otherwise matched by exact
+ * string, so 'adhd' and 'PseudoSky/adhd' were two disjoint scopes to every
+ * verb). Looks `repo` up against every LIVE repo value already in the store
+ * via `normalizeRepoKey`. If a stored value matches once normalized, that
+ * EXACT stored form is returned as `canonical` (never `repo` itself), so
+ * every reader/writer converges on the one casing already on disk. A repo
+ * string never seen before — even after normalizing — is always a
+ * genuinely new project: `isNewRepo:true`, `canonical` equal to the input
+ * unchanged. This never strips or rewrites a namespace prefix; it only
+ * collapses exact case/whitespace variants of an ALREADY-namespaced value.
+ */
+export async function resolveCanonicalRepo(store: GraphBacklogStore, repo: string): Promise<{ canonical: string; isNewRepo: boolean }> {
+  const known = await knownRepos(store);
+  if (known.has(repo)) return { canonical: repo, isNewRepo: false };
+  const normalized = normalizeRepoKey(repo);
+  for (const candidate of known) {
+    if (normalizeRepoKey(candidate) === normalized) return { canonical: candidate, isNewRepo: false };
+  }
+  return { canonical: repo, isNewRepo: true };
 }
 
 /**

@@ -22,7 +22,8 @@ import type { BacklogCtx } from '../client.js';
 import { buildBacklogEnv } from '../env.js';
 import { BacklogItemNotFoundError } from '../model.js';
 import { createItemNode } from './crud.js';
-import { buildNotFoundError, findHumanIdInAnyRepo, knownRepos } from './query.js';
+import { buildNotFoundError, findHumanIdInAnyRepo, findItemNode, knownRepos, resolveCanonicalRepo } from './query.js';
+import { normalizeRepoKey } from './mapping.js';
 
 const REPO_A = 'PseudoSky/adhd';
 const REPO_B = 'adhd';
@@ -160,5 +161,71 @@ describe('write-time: importFromMarkdown carries the same repoWarning, once per 
     const result = await client.importFromMarkdown(ctx, { path, repo: REPO_A });
     expect(result.created).toBe(1);
     expect(result.repoWarning).toBeUndefined();
+  });
+});
+
+describe('write-time: a case/whitespace-only variant of an EXISTING repo is now a hard reject, not a silent warning', () => {
+  it('normalizeRepoKey trims and lowercases, nothing else', () => {
+    expect(normalizeRepoKey('PseudoSky/adhd')).toBe('pseudosky/adhd');
+    expect(normalizeRepoKey('  PseudoSky/adhd  ')).toBe('pseudosky/adhd');
+    expect(normalizeRepoKey('adhd')).toBe('adhd'); // not equal to the above — different path, not a case variant
+  });
+
+  it('resolveCanonicalRepo: an exact known match returns itself, isNewRepo:false', async () => {
+    await createItemNode(tmp.store, { family: 'BUG-EXACT', title: 't', body: 'b', repo: REPO_A });
+    const resolved = await resolveCanonicalRepo(tmp.store, REPO_A);
+    expect(resolved).toEqual({ canonical: REPO_A, isNewRepo: false });
+  });
+
+  it('resolveCanonicalRepo: a case/whitespace-only variant of a known repo resolves to the STORED canonical form', async () => {
+    await createItemNode(tmp.store, { family: 'BUG-CANON', title: 't', body: 'b', repo: REPO_A });
+    expect(await resolveCanonicalRepo(tmp.store, 'pseudosky/ADHD')).toEqual({ canonical: REPO_A, isNewRepo: false });
+    expect(await resolveCanonicalRepo(tmp.store, `  ${REPO_A}  `)).toEqual({ canonical: REPO_A, isNewRepo: false });
+  });
+
+  it('resolveCanonicalRepo: a genuinely novel repo (not a case variant of anything known) is isNewRepo:true, canonical unchanged', async () => {
+    await createItemNode(tmp.store, { family: 'BUG-NOVEL', title: 't', body: 'b', repo: REPO_A });
+    expect(await resolveCanonicalRepo(tmp.store, REPO_UNRELATED)).toEqual({ canonical: REPO_UNRELATED, isNewRepo: true });
+  });
+
+  it('createItem HARD-REJECTS a case-variant of an already-known repo instead of silently writing under the new casing', async () => {
+    await client.createItem(ctx, { family: 'BUG-GUARD1', title: 't', body: 'b', repo: REPO_A });
+    await expect(client.createItem(ctx, { family: 'BUG-GUARD2', title: 't2', body: 'b', repo: 'pseudosky/ADHD' })).rejects.toMatchObject(
+      { name: 'InvalidArgumentError', message: expect.stringContaining(`use '${REPO_A}' instead`) }
+    );
+    // Negative-control proof: without the fix (comparing exact strings only,
+    // as the pre-fix code did), the line above would NOT throw — it would
+    // silently create a second, permanently disjoint 'pseudosky/ADHD' scope,
+    // exactly reproducing the real PseudoSky/adhd-vs-adhd split found live.
+  });
+
+  it('createItem still succeeds for the EXACT known casing after the guard was added — no regression on the hot path', async () => {
+    await client.createItem(ctx, { family: 'BUG-EXACT1', title: 't', body: 'b', repo: REPO_A });
+    const second = await client.createItem(ctx, { family: 'BUG-EXACT2', title: 't2', body: 'b', repo: REPO_A });
+    expect(second.created).toBe(true);
+    expect(second.repoWarning).toBeUndefined();
+  });
+
+  it('createItem still succeeds for a genuinely NEW repo after the guard was added — never blocks first-time use', async () => {
+    await client.createItem(ctx, { family: 'BUG-STILLNEW1', title: 't', body: 'b', repo: REPO_A });
+    const result = await client.createItem(ctx, { family: 'BUG-STILLNEW2', title: 't', body: 'b', repo: REPO_UNRELATED });
+    expect(result.created).toBe(true);
+    expect(result.repoWarning).toContain(REPO_A);
+  });
+});
+
+describe('read-time: get/query resolve a case/whitespace-variant repo to the canonical stored scope instead of matching zero rows', () => {
+  it('findItemNode resolves a case-variant repo argument to the item filed under the canonical casing', async () => {
+    const created = await createItemNode(tmp.store, { family: 'BUG-READCANON', title: 't', body: 'b', repo: REPO_A });
+    const node = await findItemNode(tmp.store, 'pseudosky/ADHD', created.item.humanId);
+    expect(node).not.toBeNull();
+    expect(node?.namespace).toBe(REPO_A);
+  });
+
+  it('getItem (client layer) resolves a case-variant repo the same way', async () => {
+    const created = await client.createItem(ctx, { family: 'BUG-READCANON2', title: 't', body: 'b', repo: REPO_A });
+    const fetched = await client.getItem(ctx, ' PseudoSky/Adhd ', created.item.humanId);
+    expect(fetched).not.toBeNull();
+    expect(fetched?.humanId).toBe(created.item.humanId);
   });
 });

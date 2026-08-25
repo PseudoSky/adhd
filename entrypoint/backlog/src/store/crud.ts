@@ -10,7 +10,7 @@ import type { BacklogItem, CreateItemInput, CreateItemResult, ICreateSuppression
 import { InvalidArgumentError, UnsupportedOperationError, assertKnownPatchKeys, assertNoSilentlyDiscardedPatchKeys } from '../model.js';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
 import { allocateHumanIdAndInsert } from './ids.js';
-import { buildNotFoundError, findItemNode, knownRepos } from './query.js';
+import { buildNotFoundError, findItemNode, knownRepos, resolveCanonicalRepo } from './query.js';
 import { mutateMetadata } from './mutate-metadata.js';
 import { assertValidCitation } from './lifecycle.js';
 import {
@@ -360,16 +360,23 @@ export async function createItemNode(store: GraphBacklogStore, input: CreateItem
     };
   }
 
-  // BUG-BACKLOG-REPO-LOOKUP-UX-001 (write-time half): a genuinely NEW repo
-  // must always be allowed to file its first item (an empty `known` set, or
-  // `input.repo` already known, both produce no warning) — this only flags
-  // the case most likely to be a typo/inconsistent-repo-string drift: a repo
-  // this store has NEVER seen before, filed alongside others it HAS seen.
-  // Soft warning only — never blocks the write (per the backlog item's fix
-  // direction and this repo's CLAUDE.md "never hard-fail on new repo" rule).
+  // BUG-BACKLOG-REPO-LOOKUP-UX-001 hardening: a case/whitespace-only variant
+  // of an ALREADY-KNOWN repo is now a hard reject (was: silent write behind
+  // an ignorable warning, letting 'adhd' and 'PseudoSky/adhd' become two
+  // permanently disjoint scopes). A genuinely NEW repo string — never seen
+  // before even normalized — is still always allowed to file its first item
+  // (this repo's CLAUDE.md "never hard-fail on new repo" rule); it gets a
+  // soft advisory warning instead, same as before.
+  const { canonical, isNewRepo } = await resolveCanonicalRepo(store, input.repo);
+  if (!isNewRepo && canonical !== input.repo) {
+    throw new InvalidArgumentError(
+      'repo',
+      `repo '${input.repo}' differs from the existing canonical value '${canonical}' only by case/whitespace — use '${canonical}' instead.`
+    );
+  }
   const known = await knownRepos(store);
   const repoWarning =
-    known.size > 0 && !known.has(input.repo)
+    known.size > 0 && isNewRepo
       ? `repo '${input.repo}' is new to this store — existing repo value(s) here: ${[...known].sort().join(', ')}. If this is meant to be the same project, use the existing repo value instead.`
       : undefined;
 
