@@ -15,12 +15,130 @@
  * transaction — the identical mechanism `mutate-metadata.ts`/`claim.ts`
  * already rely on for their own CAS correctness — closes the window: no two
  * concurrent `.immediate()` transactions can interleave.
+ *
+ * BUG-BACKLOG-COMPUTENEXTHUMANID-GRAPH-ONLY-SCAN-001: that fix made
+ * "resolve the id" and "insert the node" atomic against EACH OTHER, but it
+ * never addressed WHAT `computeNextHumanId` actually scans to find "the
+ * current max" — the public `GraphBackend.queryNodes()` it called ALWAYS
+ * excludes invalidated (`t_invalid IS NOT NULL`, i.e. soft-deleted/
+ * tombstoned) nodes, with no filter flag to opt back in (verified by reading
+ * `@adhd/sox-graph-store`'s `queryNodes()`, which hardcodes
+ * `buildNodeFilterClause(filter, /* liveOnly *\/ true, 'n')`). A tombstoned
+ * node still carries the humanId it was minted with forever —
+ * `softDeleteItemNode`/`supersedeItemNode` (crud.ts / structure.ts) never
+ * touch that field — so scanning only LIVE nodes for "the max already
+ * taken" can compute a "next" id that a DEAD node already holds, silently
+ * re-minting a tombstoned identity onto a brand-new, unrelated item. This is
+ * not hypothetical: querying the real production store directly (2026-08-21,
+ * read-only, via `@adhd/sox-store-adapter`, bypassing this exact
+ * `queryNodes` limitation on purpose to look) found 20 existing
+ * `(namespace, humanId)` pairs where a LIVE node's humanId is ALSO held by
+ * an invalidated node — see `id-uniqueness.spec.ts`'s header for the exact
+ * queries and counts. Fix: `computeNextHumanId` now runs the IDENTICAL
+ * filter `queryNodes` builds, but via `buildNodeFilterClause(...,
+ * liveOnly=false, ...)` (the same public helper `@adhd/sox-graph-store`
+ * itself uses internally) over `store.adapter.executeAll` directly — the
+ * same sanctioned raw-SQL escape hatch `crud.ts` / `structure.ts` /
+ * `repo-migration.ts` already reach for when the public `GraphBackend`
+ * surface doesn't expose what's needed (DESIGN.md §14). This scan still runs
+ * inside the SAME `.immediate()` transaction as the insert, so it inherits
+ * exactly the same concurrency guarantee the fix above already established
+ * — only WHICH rows are visible to the max-scan changed, not the atomicity.
+ *
+ * DEBT-BACKLOG-HUMANID-NOT-UNIQUE-001: the in-app scan above (both before
+ * and after the fix immediately above it) is the ONLY thing that ever stood
+ * between two writers and a genuine `humanId` collision — nothing in the
+ * schema enforced it, despite every lookup in this package
+ * (`findItemNode`/`findLiveByHumanId` below) treating `(repo, humanId)` as
+ * if it WERE a unique key. A consumer that keys a `Map`/`Set` on `humanId`
+ * (as happened over the course of this very session) silently drops one of
+ * two colliding rows with no error at all. Closed at the store boundary: a
+ * partial `UNIQUE` index over LIVE rows only (`t_invalid IS NULL`), scoped
+ * to backlog-item-tagged nodes so it never collides with the UNRELATED
+ * `backlog-audit-event` rows that legitimately carry the SAME
+ * `meta.humanId` value (pointing at the item their entry documents, not
+ * claiming to BE that item). This was verified safe to add, not merely
+ * assumed: querying the real production store directly (2026-08-21,
+ * read-only) found 1271 live backlog-item nodes and ZERO
+ * `(namespace, humanId)` groups with more than one LIVE row under this
+ * EXACT (tag-scoped) predicate — a single row (rowid 654,
+ * `PseudoSky/adhd::FEAT-APIGEN-TS-TYPE-CODEGEN-001`) would have collided
+ * under a naive, untagged grouping, and turned out to be a
+ * `backlog-audit-event` row, not a second backlog item — confirming the tag
+ * scope is load-bearing, not merely cautious. No reconciliation step was
+ * needed: the constraint would not have rejected any row that exists in the
+ * real store today. See `id-uniqueness.spec.ts`'s header for the exact
+ * queries run and their output.
  */
-import type { NodeRecord } from '@adhd/sox-graph-store';
+import { buildNodeFilterClause, type NodeFilter, type NodeRecord } from '@adhd/sox-graph-store';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
 import { AmbiguousHumanIdError, InvalidArgumentError } from '../model.js';
 import { BACKLOG_ITEM_TAG, isLiveBacklogItemNode, type BacklogNodeMeta } from './mapping.js';
 import { withImmediateRetry } from './immediate-retry.js';
+
+/**
+ * DEBT-BACKLOG-HUMANID-NOT-UNIQUE-001's enforcement primitive: a partial
+ * `UNIQUE` index over `(namespace, meta.humanId)`, restricted to LIVE
+ * (`t_invalid IS NULL`) backlog-item-tagged rows. See the file-header doc
+ * comment above for the full justification and the live-data verification
+ * that makes this safe to add unconditionally.
+ *
+ * `instr(tags, '"${BACKLOG_ITEM_TAG}"')` (rather than `json_each`, which
+ * `buildNodeFilterClause` uses for regular queries) is deliberate: SQLite
+ * partial-index predicates must be simple deterministic expressions, not
+ * correlated subqueries against another table-valued function — `json_each`
+ * is not usable here. Matching the literal, double-quoted JSON token is
+ * exact (not a loose substring test): a JSON array serializes each string
+ * element wrapped in its own quotes and separated by commas/brackets, so
+ * `"backlog-item"` can only appear as this substring when `backlog-item` is
+ * itself a full array element — a longer tag like `"backlog-item-x"` or
+ * `"x-backlog-item"` never produces this exact quoted substring. Verified
+ * against the real production store (2026-08-21): the `instr(...)` predicate
+ * and a plain `tags LIKE '%backlog-item%'` scan agreed on every single row
+ * (zero rows differed) — see `id-uniqueness.spec.ts`'s header.
+ */
+const HUMAN_ID_LIVE_UNIQUE_INDEX = 'ix_backlog_humanid_live_unique';
+
+/**
+ * Idempotently ensures the partial unique index above exists — `IF NOT
+ * EXISTS` makes every call after the first a cheap `sqlite_master` lookup,
+ * so this is safe to call on every allocation rather than needing its own
+ * one-time bootstrap hook (this file does not own `graph-backlog-store.ts`,
+ * where `applySchema()` lives, so a call site there is not an option
+ * anyway). Always invoked from INSIDE the same retried `.immediate()`
+ * transaction as the mint itself (never a separate, unretried DDL call) —
+ * DDL is fully transactional in SQLite, so this commits atomically with
+ * whatever insert follows it, and a busy/locked contention on the DDL
+ * itself is retried by the SAME `withImmediateRetry` wrapper the whole
+ * transaction already goes through.
+ */
+async function ensureHumanIdUniqueIndex(store: GraphBacklogStore): Promise<void> {
+  await store.adapter.executeRun(`
+    CREATE UNIQUE INDEX IF NOT EXISTS ${HUMAN_ID_LIVE_UNIQUE_INDEX}
+    ON node (namespace, json_extract(meta, '$.humanId'))
+    WHERE t_invalid IS NULL
+      AND json_extract(meta, '$.humanId') IS NOT NULL
+      AND instr(tags, '"${BACKLOG_ITEM_TAG}"') > 0
+  `);
+}
+
+/**
+ * Best-effort JSON parse of the raw `node.meta` column. `computeNextHumanId`
+ * below reads `meta` directly via raw SQL (to reach invalidated rows
+ * `queryNodes`'s `NodeRecord` mapping would otherwise hide — see the file
+ * header), so it does not get `NodeRecord.metadata`'s parsing for free.
+ * Malformed JSON degrades to "no humanId visible here" rather than throwing
+ * — the same as a node with no `meta` at all — since a single corrupt row
+ * must never abort the whole max-scan.
+ */
+function parseNodeMeta(raw: string | null): Partial<BacklogNodeMeta> | undefined {
+  if (raw == null) return undefined;
+  try {
+    return JSON.parse(raw) as Partial<BacklogNodeMeta>;
+  } catch {
+    return undefined;
+  }
+}
 
 async function computeNextHumanId(store: GraphBacklogStore, repo: string, family: string): Promise<string> {
   // BUG-BACKLOG-HUMANID-COLLISION-001 fix #1 (authoritative, in-transaction
@@ -39,15 +157,20 @@ async function computeNextHumanId(store: GraphBacklogStore, repo: string, family
         `non-empty string, received ${JSON.stringify(family)}. See BUG-BACKLOG-HUMANID-COLLISION-001.`
     );
   }
-  const existing = await store.graph.queryNodes({
-    kind: 'generic',
-    tags: [BACKLOG_ITEM_TAG],
-    namespace: repo,
-    metadata: { family },
-  });
+  // BUG-BACKLOG-COMPUTENEXTHUMANID-GRAPH-ONLY-SCAN-001: this used to be
+  // `store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG],
+  // namespace: repo, metadata: { family } })` — which ALWAYS excludes
+  // invalidated nodes (see the file-header doc comment). `buildNodeFilterClause`
+  // is the exact same filter-building primitive `queryNodes` uses
+  // internally, called here with `liveOnly=false` so invalidated rows are
+  // included in the max-scan too — everything else (the tag/namespace/
+  // family match) is byte-identical to what `queryNodes` would have built.
+  const nodeFilter: NodeFilter = { kind: 'generic', tags: [BACKLOG_ITEM_TAG], namespace: repo, metadata: { family } };
+  const { where, params } = buildNodeFilterClause(nodeFilter, false, 'n');
+  const { rows } = await store.adapter.executeAll<{ meta: string | null }>(`SELECT n.meta AS meta FROM node n ${where}`, params);
   let max = 0;
-  for (const node of existing) {
-    const meta = node.metadata as Partial<BacklogNodeMeta> | undefined;
+  for (const row of rows) {
+    const meta = parseNodeMeta(row.meta);
     const match = /-(\d+)$/.exec(meta?.humanId ?? '');
     if (match) max = Math.max(max, Number(match[1]));
   }
@@ -92,6 +215,12 @@ async function findLiveByHumanId(store: GraphBacklogStore, repo: string, humanId
  * not just by an earlier, racy caller-side check) — `insert` is expected to
  * short-circuit on a non-null `existing` exactly like `createItemNode`'s
  * documented idempotent-reimport behavior, but now race-free.
+ *
+ * `ensureHumanIdUniqueIndex` runs first, on BOTH branches (not just the
+ * auto-mint path) — DEBT-BACKLOG-HUMANID-NOT-UNIQUE-001's DB-level backstop
+ * must exist before ANY insert this function drives, including an
+ * `idOverride`-only import flow that might be the very first write a fresh
+ * store ever sees.
  */
 export async function allocateHumanIdAndInsert<T>(
   store: GraphBacklogStore,
@@ -103,6 +232,7 @@ export async function allocateHumanIdAndInsert<T>(
   return withImmediateRetry(() =>
     store.adapter.transaction(
       async () => {
+        await ensureHumanIdUniqueIndex(store);
         if (idOverride) {
           const existing = await findLiveByHumanId(store, repo, idOverride);
           return insert(idOverride, existing);
@@ -125,6 +255,12 @@ export async function allocateHumanIdAndInsert<T>(
  */
 export async function allocateHumanId(store: GraphBacklogStore, repo: string, family: string): Promise<string> {
   return withImmediateRetry(() =>
-    store.adapter.transaction(() => computeNextHumanId(store, repo, family), { mode: 'immediate' })
+    store.adapter.transaction(
+      async () => {
+        await ensureHumanIdUniqueIndex(store);
+        return computeNextHumanId(store, repo, family);
+      },
+      { mode: 'immediate' }
+    )
   );
 }

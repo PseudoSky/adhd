@@ -51,7 +51,13 @@ export {
   transitionStatus,
   updateItem,
   version,
-} from './client.js';
+} from './ops-v1.js';
+
+// INTERFACE_v2 §3 — the six consolidated verbs. These, and only these, are the
+// apigen mount surface (`server.ts` extracts `dist/client.d.ts`); the v1 ops
+// above now live in `ops-v1.ts` and are barrel-only, so re-exporting them here
+// does NOT re-widen the mounted tool set.
+export { get, query, create, update, relate, admin } from './client.js';
 export type { BacklogCtx, BacklogVersionInfo } from './client.js';
 
 export { startBacklogServer, buildBacklogApigenPackage } from './server.js';

@@ -27,7 +27,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSyn
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createItem, getItem } from './client.js';
+import { createItem, getItem } from './ops-v1.js'; // v1 ops: still real functions, used here ONLY for direct-store seeding — never mounted as CLI commands (AC-5).
 import type { BacklogCtx } from './client.js';
 import { buildBacklogEnv } from './env.js';
 import { openGraphBacklogStore, closeGraphBacklogStore } from './store/graph-backlog-store.js';
@@ -114,7 +114,12 @@ describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (
   it('every client.ts operation shares the identical prefix (one source file, flat path ⇒ one uniform prefix)', async () => {
     const { operations } = await buildBacklogApigenPackage({} as BacklogCtx);
     const actions = operations.filter((op) => op.kind === 'action');
-    expect(actions.length).toBeGreaterThan(10); // sanity: client.ts exports many operations
+    // AC-5 / AC-0's six-verb assertion: client.ts's mounted surface is EXACTLY
+    // `get, query, create, update, relate, admin` — not ">10" (that pinned the
+    // pre-consolidation v1 surface of ~20 flat verbs). A widened action count
+    // here is real evidence of scope creep back onto client.ts's exported
+    // surface (see client.ts's own doc comment on why a 7th export is a bug).
+    expect(actions.length).toBe(6);
     const prefix = resolveCommandPrefix(actions);
     for (const op of actions) {
       expect(resolveCommandPrefix([op])).toEqual(prefix);
@@ -217,16 +222,18 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-noargs-'));
     const res = runBin([], adhdRoot);
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
-    expect(res.stdout).toContain('backlog get-item');
-    expect(res.stdout).toContain('backlog create-item');
-    expect(res.stdout).toContain('backlog list-items');
+    // AC-5: the flat v1 verbs (`get-item`/`create-item`/`list-items`) are
+    // retired from the mount; the live command table is the six v2 verbs.
+    expect(res.stdout).toContain('backlog get');
+    expect(res.stdout).toContain('backlog create');
+    expect(res.stdout).toContain('backlog query');
   });
 
   it('--help exits 0 with the identical usage listing', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-help-'));
     const res = runBin(['--help'], adhdRoot);
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
-    expect(res.stdout).toContain('backlog get-item');
+    expect(res.stdout).toContain('backlog get');
   });
 
   it('BUG-BACKLOG-001: --help and no-args surface the special-cased commands (install-skill/install/serve) that never enter the apigen command table', () => {
@@ -265,10 +272,10 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     expect(existsSync(expectedDbPath), 'an unrecognized command must not create the store either — it never reaches a real function').toBe(false);
 
     // Sanity check the assertion itself has teeth: a command that DOES reach
-    // a real function (`list-items`, on an empty/nonexistent store) MUST
-    // create it — proving `expectedDbPath` is the right path and `existsSync`
-    // isn't just trivially false for an unrelated reason.
-    const real = runBin(['list-items', '--filter', '{}'], adhdRoot);
+    // a real function (`query`, on an empty/nonexistent store) MUST create
+    // it — proving `expectedDbPath` is the right path and `existsSync` isn't
+    // just trivially false for an unrelated reason.
+    const real = runBin(['query', '--input', '{}'], adhdRoot);
     expect(real.status, `stderr:\n${real.stderr}`).toBe(0);
     expect(existsSync(expectedDbPath), 'a real dispatched command must still open the store as before').toBe(true);
   });
@@ -313,7 +320,7 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     // Negative control / teeth: a real store command MUST emit store-open
     // telemetry records AND create the DB — proving the assertions above are
     // not trivially green because the telemetry sink or DB path never fires.
-    const real = runBin(['list-items', '--filter', '{}'], adhdRoot, { SOX_ECOSYSTEM_HOME: soxHome });
+    const real = runBin(['query', '--input', '{}'], adhdRoot, { SOX_ECOSYSTEM_HOME: soxHome });
     expect(real.status, `stderr:\n${real.stderr}`).toBe(0);
     expect(existsSync(expectedDbPath), 'a real dispatched command must open the store').toBe(true);
     const storeEvents = readTelemetryEvents(soxHome).filter((e) => e.startsWith('store_adapter'));
@@ -408,7 +415,7 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     // Negative control / teeth: a real store command MUST emit store-open
     // telemetry records AND create the DB — proving the assertions above are
     // not trivially green because the telemetry sink or DB path never fires.
-    const real = runBin(['list-items', '--filter', '{}'], adhdRoot, migrationEnv);
+    const real = runBin(['query', '--input', '{}'], adhdRoot, migrationEnv);
     expect(real.status, `stderr:\n${real.stderr}`).toBe(0);
     expect(existsSync(expectedDbPath), 'a real dispatched command must open the store').toBe(true);
     const storeEvents = readTelemetryEvents(soxHome).filter((e) => e.startsWith('store_adapter'));
@@ -419,7 +426,7 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-dbpath-'));
     const redirectDb = join(adhdRoot, 'redirect', 'backlog.db');
 
-    const res = runBin(['list-items', '--filter', '{}'], adhdRoot, { ADHD_BACKLOG_DATABASE_PATH: redirectDb });
+    const res = runBin(['query', '--input', '{}'], adhdRoot, { ADHD_BACKLOG_DATABASE_PATH: redirectDb });
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
 
     // The env-var path is the store the CLI actually opened…
@@ -435,12 +442,12 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     const fallback = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot }).files.db;
     expect(existsSync(fallback), 'sanity: no store should exist before the CLI runs').toBe(false);
 
-    const res = runBin(['list-items', '--filter', '{}'], adhdRoot);
+    const res = runBin(['query', '--input', '{}'], adhdRoot);
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
     expect(existsSync(fallback), 'unset env var ⇒ the scope-root fallback store is created, exactly as before BUG-002').toBe(true);
   });
 
-  it('a PLAIN "get-item --repo … --human-id …" (bare, no manual namespace prefix) resolves — proves runBacklogCli prepends the namespace itself', async () => {
+  it('a PLAIN "get --input …" (bare, no manual namespace prefix) resolves — proves runBacklogCli prepends the namespace itself', async () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-getitem-'));
     const repo = 'PseudoSky/cli-test';
 
@@ -458,17 +465,23 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     await closeGraphBacklogStore(seedStore);
 
     // Deliberately BARE — no `backlog` prefix typed by the "user" here,
-    // exactly like a real `backlog get-item …` invocation arrives at this
-    // process as `process.argv.slice(2)`.
-    const res = runBin(['get-item', '--repo', repo, '--human-id', seeded.item.humanId], adhdRoot);
+    // exactly like a real `backlog get …` invocation arrives at this
+    // process as `process.argv.slice(2)`. `fields` explicitly asks for
+    // `repo` — DEFAULT_GET_FIELDS omits it (model.ts), confirmed empirically
+    // against the real built bin, so it must be requested to assert on it.
+    const res = runBin(
+      ['get', '--input', JSON.stringify({ humanId: seeded.item.humanId, repo, fields: ['humanId', 'title', 'repo'] })],
+      adhdRoot
+    );
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
-    const parsed = JSON.parse(res.stdout.trim()) as { humanId: string; title: string; repo: string };
-    expect(parsed.humanId).toBe(seeded.item.humanId);
-    expect(parsed.title).toBe('via cli');
-    expect(parsed.repo).toBe(repo);
+    const body = JSON.parse(res.stdout.trim()) as { ok: boolean; data: { humanId: string; title: string; repo: string } };
+    expect(body.ok).toBe(true);
+    expect(body.data.humanId).toBe(seeded.item.humanId);
+    expect(body.data.title).toBe('via cli');
+    expect(body.data.repo).toBe(repo);
   });
 
-  it('a fully-prefixed "backlog get-item …" ALSO resolves — proves prefixCommand is idempotent at the real dispatch, not just in the unit test', async () => {
+  it('a fully-prefixed "backlog get …" ALSO resolves — proves prefixCommand is idempotent at the real dispatch, not just in the unit test', async () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-getitem-prefixed-'));
     const repo = 'PseudoSky/cli-test-prefixed';
 
@@ -481,31 +494,44 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     );
     await closeGraphBacklogStore(seedStore);
 
-    const res = runBin(['backlog', 'get-item', '--repo', repo, '--human-id', seeded.item.humanId], adhdRoot);
+    const res = runBin(
+      ['backlog', 'get', '--input', JSON.stringify({ humanId: seeded.item.humanId, repo })],
+      adhdRoot
+    );
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
-    const parsed = JSON.parse(res.stdout.trim()) as { humanId: string };
-    expect(parsed.humanId).toBe(seeded.item.humanId);
+    const body = JSON.parse(res.stdout.trim()) as { ok: boolean; data: { humanId: string } };
+    expect(body.ok).toBe(true);
+    expect(body.data.humanId).toBe(seeded.item.humanId);
   });
 
-  it('a full CLI round trip — "create-item --input <json>" then "get-item" — persists across TWO separate process invocations', () => {
+  it('a full CLI round trip — "create --input <json>" then "get" — persists across TWO separate process invocations', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-roundtrip-'));
     const repo = 'PseudoSky/cli-roundtrip';
 
     const createRes = runBin(
-      ['create-item', '--input', JSON.stringify({ family: 'BUG-CLIRT', title: 'roundtrip', body: 'x', repo })],
+      [
+        'create',
+        '--input',
+        JSON.stringify({ input: { family: 'BUG-CLIRT', title: 'roundtrip', body: 'x', repo }, by: 'cli.spec' }),
+      ],
       adhdRoot
     );
     expect(createRes.status, `stderr:\n${createRes.stderr}\nstdout:\n${createRes.stdout}`).toBe(0);
-    const created = JSON.parse(createRes.stdout.trim()) as { item: { humanId: string } };
-    expect(created.item.humanId).toBe('BUG-CLIRT-001');
+    const created = JSON.parse(createRes.stdout.trim()) as { ok: boolean; data: { humanId: string } };
+    expect(created.ok).toBe(true);
+    expect(created.data.humanId).toBe('BUG-CLIRT-001');
 
-    const getRes = runBin(['get-item', '--repo', repo, '--human-id', created.item.humanId], adhdRoot);
+    const getRes = runBin(
+      ['get', '--input', JSON.stringify({ humanId: created.data.humanId, repo })],
+      adhdRoot
+    );
     expect(getRes.status, `stderr:\n${getRes.stderr}\nstdout:\n${getRes.stdout}`).toBe(0);
-    const got = JSON.parse(getRes.stdout.trim()) as { title: string };
-    expect(got.title).toBe('roundtrip');
+    const got = JSON.parse(getRes.stdout.trim()) as { ok: boolean; data: { title: string } };
+    expect(got.ok).toBe(true);
+    expect(got.data.title).toBe('roundtrip');
   });
 
-  it('"list-items" returns the seeded item', async () => {
+  it('"query" (view:list) returns the seeded item, filtered by repo', async () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-list-'));
     const repo = 'PseudoSky/cli-list-test';
 
@@ -518,12 +544,20 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     );
     await closeGraphBacklogStore(seedStore);
 
-    const res = runBin(['list-items', '--filter', JSON.stringify({ repo })], adhdRoot);
+    const res = runBin(['query', '--input', JSON.stringify({ filter: { repo } })], adhdRoot);
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
-    const parsed = JSON.parse(res.stdout.trim()) as Array<{ humanId: string; title: string }>;
-    expect(parsed).toHaveLength(1);
-    expect(parsed[0]?.humanId).toBe(seeded.item.humanId);
-    expect(parsed[0]?.title).toBe('listed via cli');
+    const body = JSON.parse(res.stdout.trim()) as {
+      ok: boolean;
+      data: { view: string; items: Array<{ humanId: string; title: string }> };
+      meta: { total: number; returned: number };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.data.view).toBe('list');
+    expect(body.data.items).toHaveLength(1);
+    expect(body.data.items[0]?.humanId).toBe(seeded.item.humanId);
+    expect(body.data.items[0]?.title).toBe('listed via cli');
+    expect(body.meta.total).toBe(1);
+    expect(body.meta.returned).toBe(1);
   });
 
   it('an unknown command exits with CLI_EXIT_CODE.not_found (4), never 0', () => {
@@ -540,7 +574,7 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
 
   it('an unknown flag exits with CLI_EXIT_CODE.invalid_argument (2), never 0', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-badflag-'));
-    const res = runBin(['get-item', '--this-flag-does-not-exist', 'x'], adhdRoot);
+    const res = runBin(['get', '--this-flag-does-not-exist', 'x'], adhdRoot);
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(2);
     const lastLine = res.stderr.trim().split('\n').pop() ?? '';
     const body = JSON.parse(lastLine) as { code: string; message: string };
@@ -571,53 +605,65 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
   // a real 2-item batch fan-out dispatched through the real spawned CLI bin,
   // reaching the REAL `createItem` (`client.ts`) via the REAL
   // `_batch/action` mount, over a real temp-scoped SQLite store — no mocks.
-  it('"batch action --operation backlog/create-item --items […]" fans out via the real CLI to real client.ts createItem, and both items persist independently (BUG-018 / batch-CLI wiring)', () => {
+  it('"batch action --operation backlog/create --items […]" fans out via the real CLI to real client.ts create, and both items persist independently (BUG-018 / batch-CLI wiring)', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-batch-'));
     const repo = 'PseudoSky/cli-batch-test';
 
+    // Each batch item's `input` is the WHOLE `backlog_create` request shape
+    // (`IBacklogCreateInput`: `{ input, by, duplicateAction? }`), confirmed
+    // empirically against the real built bin — batch fans each item straight
+    // into the named operation's own input, and `create`'s v2 input nests the
+    // domain payload one level deeper than the retired v1 `create-item` did.
     const items = JSON.stringify([
-      { input: { family: 'BUG-CLIBATCH', title: 'batch one', body: 'x', repo } },
-      { input: { family: 'BUG-CLIBATCH', title: 'batch two', body: 'y', repo } },
+      { input: { input: { family: 'BUG-CLIBATCH', title: 'batch one', body: 'x', repo }, by: 'cli.spec' } },
+      { input: { input: { family: 'BUG-CLIBATCH', title: 'batch two', body: 'y', repo }, by: 'cli.spec' } },
     ]);
     const res = runBin(
-      ['batch', 'action', '--operation', 'backlog/create-item', '--items', items, '--concurrency', '2', '--on-item-error', 'continue'],
+      ['batch', 'action', '--operation', 'backlog/create', '--items', items, '--concurrency', '2', '--on-item-error', 'continue'],
       adhdRoot
     );
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
 
+    // Each batch item's `.value` is the WHOLE outcome envelope the real
+    // `create()` returned (INTERFACE_v2 §7.1 — `create` reports failure in
+    // the envelope rather than throwing, so a business failure still shows up
+    // as `status: 'fulfilled'` with `value.ok === false`, confirmed
+    // empirically) — never the bare v1 `{created, item}` shape.
     interface BatchItemResult {
       index: number;
       status: 'fulfilled' | 'rejected';
-      value?: { item: { humanId: string; title: string; repo: string }; created: boolean };
+      value?: { ok: boolean; data?: { item: { humanId: string; title: string; repo: string }; created: boolean } };
       reason?: { message?: string; code?: string };
     }
     const results = JSON.parse(res.stdout.trim()) as BatchItemResult[];
     expect(results).toHaveLength(2);
 
     expect(results[0]?.status).toBe('fulfilled');
-    expect(results[0]?.value?.created).toBe(true);
-    expect(results[0]?.value?.item.title).toBe('batch one');
-    const firstHumanId = results[0]?.value?.item.humanId;
+    expect(results[0]?.value?.ok).toBe(true);
+    expect(results[0]?.value?.data?.created).toBe(true);
+    expect(results[0]?.value?.data?.item.title).toBe('batch one');
+    const firstHumanId = results[0]?.value?.data?.item.humanId;
     expect(firstHumanId).toBeTruthy();
 
     expect(results[1]?.status).toBe('fulfilled');
-    expect(results[1]?.value?.created).toBe(true);
-    expect(results[1]?.value?.item.title).toBe('batch two');
-    const secondHumanId = results[1]?.value?.item.humanId;
+    expect(results[1]?.value?.ok).toBe(true);
+    expect(results[1]?.value?.data?.created).toBe(true);
+    expect(results[1]?.value?.data?.item.title).toBe('batch two');
+    const secondHumanId = results[1]?.value?.data?.item.humanId;
     expect(secondHumanId).toBeTruthy();
     expect(secondHumanId).not.toBe(firstHumanId);
 
-    // Follow-up REAL "get-item" (a separate process invocation, through the
+    // Follow-up REAL "get" (a separate process invocation, through the
     // ordinary `backlog`-prefixed command path) proves both batch-created
     // items are genuinely persisted in the store — not just echoed back in
     // the batch response.
-    const get1 = runBin(['get-item', '--repo', repo, '--human-id', firstHumanId as string], adhdRoot);
+    const get1 = runBin(['get', '--input', JSON.stringify({ humanId: firstHumanId, repo })], adhdRoot);
     expect(get1.status, `stderr:\n${get1.stderr}`).toBe(0);
-    expect((JSON.parse(get1.stdout.trim()) as { title: string }).title).toBe('batch one');
+    expect((JSON.parse(get1.stdout.trim()) as { data: { title: string } }).data.title).toBe('batch one');
 
-    const get2 = runBin(['get-item', '--repo', repo, '--human-id', secondHumanId as string], adhdRoot);
+    const get2 = runBin(['get', '--input', JSON.stringify({ humanId: secondHumanId, repo })], adhdRoot);
     expect(get2.status, `stderr:\n${get2.stderr}`).toBe(0);
-    expect((JSON.parse(get2.stdout.trim()) as { title: string }).title).toBe('batch two');
+    expect((JSON.parse(get2.stdout.trim()) as { data: { title: string } }).data.title).toBe('batch two');
   });
 
   it('an "operation" not in this mount\'s batchable set is rejected by the batch handler\'s own validation (proves the CLI mount is bound to the real backlog descriptor, not a stub)', () => {
@@ -707,9 +753,12 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     );
     await closeGraphBacklogStore(seedStore);
 
-    // Cross-repo get-item: the humanId EXISTS but under `repo`, not the
-    // queried repo — throws BacklogItemNotFoundError AFTER the store opened.
-    const res = runBin(['get-item', '--repo', 'PseudoSky/other-repo', '--human-id', seeded.item.humanId], adhdRoot);
+    // Cross-repo get: the humanId EXISTS but under `repo`, not the queried
+    // repo — reports `item_not_found` (exit 1) AFTER the store opened.
+    const res = runBin(
+      ['get', '--input', JSON.stringify({ humanId: seeded.item.humanId, repo: 'PseudoSky/other-repo' })],
+      adhdRoot
+    );
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(1);
 
     // BL-512 TRUNCATE guarantee on the ERROR path: a proper close checkpoints
