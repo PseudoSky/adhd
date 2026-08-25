@@ -38,8 +38,7 @@ import {
   resolveCodexHomeDir,
   type InstallSkillResult,
   type SkillHost,
-  type SkillScope,
-} from './install-skill.js';
+  type SkillScope, BacklogUsageError, failUsage,} from './install-skill.js';
 
 export type McpHost = SkillHost;
 export type McpScope = SkillScope;
@@ -214,18 +213,23 @@ function parseInstallArgs(argv: string[], commandName: string): ParsedInstallArg
     else if (arg === '--scope') scope = (argv[++i] as McpScope) ?? 'user';
     else if (arg === '--skill-only') skillOnly = true;
     else if (arg === '--mcp-only') mcpOnly = true;
-    else throw new Error(`backlog ${commandName}: unknown argument "${arg}" (expected --host/--scope/--skill-only/--mcp-only)`);
+    else throw new BacklogUsageError(`backlog ${commandName}: unknown argument "${arg}" (expected --host/--scope/--skill-only/--mcp-only)`);
   }
   if (skillOnly && mcpOnly) {
-    throw new Error(`backlog ${commandName}: --skill-only and --mcp-only are mutually exclusive`);
+    throw new BacklogUsageError(`backlog ${commandName}: --skill-only and --mcp-only are mutually exclusive`);
   }
   if (scope !== 'user' && scope !== 'project') {
-    throw new Error(`backlog ${commandName}: --scope must be "user" or "project", got "${scope}"`);
+    // See install-skill.ts's identical check: name the correct spelling for
+    // the common "global" guess, never silently coerce it.
+    const hint = (scope as string) === 'global' ? ' — the machine-wide scope is spelled "user"' : '';
+    throw new BacklogUsageError(
+      `backlog ${commandName}: --scope must be "user" or "project", got "${scope}"${hint}`
+    );
   }
   const hosts = hostArg === 'all' ? [...ALL_HOSTS] : [hostArg as McpHost];
   for (const h of hosts) {
     if (!ALL_HOSTS.includes(h)) {
-      throw new Error(`backlog ${commandName}: --host must be one of ${ALL_HOSTS.join('|')}|all, got "${hostArg}"`);
+      throw new BacklogUsageError(`backlog ${commandName}: --host must be one of ${ALL_HOSTS.join('|')}|all, got "${hostArg}"`);
     }
   }
   return { hosts, scope, skillOnly, mcpOnly };
@@ -279,11 +283,21 @@ export function install(argv: string[], cwd: string = process.cwd(), homeOverrid
  *  printed to stderr so it never disturbs the machine-readable stdout JSON
  *  a script might parse. */
 export async function runInstallCommand(argv: string[]): Promise<void> {
-  if (argv[0] === '--help' || argv[0] === '-h') {
+  // `--help`/`-h` ANYWHERE, not just at argv[0]: `backlog install --host
+  // claude --help` is plainly a usage request, and answering it with
+  // `unknown argument "--help"` on a stack trace is the defect
+  // BUG-BACKLOG-INSTALLSKILL-UX-001 describes.
+  if (argv.includes('--help') || argv.includes('-h')) {
     console.log(INSTALL_HELP_TEXT);
     return;
   }
-  const result = install(argv);
+  let result: InstallResult;
+  try {
+    result = install(argv);
+  } catch (err) {
+    if (err instanceof BacklogUsageError) return failUsage(err, INSTALL_HELP_TEXT);
+    throw err;
+  }
   for (const s of result.skill) {
     console.error(`[backlog install] skill -> ${s.host} (${s.scope}): ${s.path}`);
   }

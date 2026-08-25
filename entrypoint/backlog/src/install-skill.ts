@@ -91,6 +91,54 @@ function packagedSkillMdPath(): string {
   return join(here, '..', 'skill', 'SKILL.md');
 }
 
+/**
+ * A USAGE error — the caller typed something wrong — as opposed to a genuine
+ * internal fault. BUG-BACKLOG-INSTALLSKILL-UX-001: `install-skill`/`install`
+ * are special-cased in `cli.ts` BEFORE the apigen command table is built, so
+ * they never get the outcome-envelope error handling the six mounted verbs
+ * get. Their argument errors used to propagate to the bin entry-guard, which
+ * prints `err.stack` — burying a perfectly good one-line message under ten
+ * frames of minified dist. Distinguishing usage errors by TYPE (rather than
+ * catching everything) keeps real faults loud and stack-bearing while giving
+ * typos the short, actionable output the mounted verbs already produce.
+ */
+export class BacklogUsageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BacklogUsageError';
+  }
+}
+
+/**
+ * Prints a usage error the SAME way the apigen-mounted verbs and
+ * `runMigrationPhaseCommand` already do — a machine-readable
+ * `{"code":"invalid_argument","message":…}` as the last stderr line, exit
+ * code 2 (`CLI_EXIT_CODE['invalid_argument']`) — plus the human-readable
+ * usage text, so a reader gets both the parse and the fix in one screen.
+ */
+export function failUsage(err: BacklogUsageError, helpText: string): void {
+  console.error(JSON.stringify({ code: 'invalid_argument', message: err.message }));
+  console.error('');
+  console.error(helpText);
+  process.exitCode = 2;
+}
+
+export const INSTALL_SKILL_HELP_TEXT = `backlog install-skill [--host claude|codex|opencode|all] [--scope user|project]
+
+Copies the packaged backlog SKILL.md into an agent host's skills directory.
+(\`backlog install\` is the richer successor — it also registers the MCP server.)
+
+  --host <name>   claude | codex | opencode | all (default: all)
+  --scope <name>  user | project (default: user)
+                  "user" is the machine-wide install (~/.claude/skills/...);
+                  there is no "global" — that is spelled "user" here.
+
+Examples:
+  backlog install-skill
+  backlog install-skill --host opencode --scope user
+  backlog install-skill --host claude --scope project
+`;
+
 interface ParsedInstallSkillArgs {
   hosts: SkillHost[];
   scope: SkillScope;
@@ -103,15 +151,23 @@ function parseArgs(argv: string[]): ParsedInstallSkillArgs {
     const arg = argv[i];
     if (arg === '--host') hostArg = argv[++i] ?? 'all';
     else if (arg === '--scope') scope = (argv[++i] as SkillScope) ?? 'user';
-    else throw new Error(`backlog install-skill: unknown argument "${arg}" (expected --host/--scope)`);
+    else throw new BacklogUsageError(`backlog install-skill: unknown argument "${arg}" (expected --host/--scope)`);
   }
   if (scope !== 'user' && scope !== 'project') {
-    throw new Error(`backlog install-skill: --scope must be "user" or "project", got "${scope}"`);
+    // "global" is the single most common wrong guess (it is what every other
+    // install tool calls this), so name the correct spelling rather than only
+    // listing the valid set. Deliberately NOT silently aliased to "user":
+    // silent coercion of a caller's stated intent is the defect shape this
+    // codebase treats as a bug (see BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001).
+    const hint = scope === 'global' ? ' — the machine-wide scope is spelled "user"' : '';
+    throw new BacklogUsageError(
+      `backlog install-skill: --scope must be "user" or "project", got "${scope}"${hint}`
+    );
   }
   const hosts = hostArg === 'all' ? [...ALL_HOSTS] : [hostArg as SkillHost];
   for (const h of hosts) {
     if (!ALL_HOSTS.includes(h)) {
-      throw new Error(`backlog install-skill: --host must be one of ${ALL_HOSTS.join('|')}|all, got "${hostArg}"`);
+      throw new BacklogUsageError(`backlog install-skill: --host must be one of ${ALL_HOSTS.join('|')}|all, got "${hostArg}"`);
     }
   }
   return { hosts, scope };
@@ -188,6 +244,21 @@ export function installSkillToHosts(hosts: SkillHost[], scope: SkillScope, cwd: 
  *  with the rest of the CLI's output convention despite bypassing apigen
  *  dispatch entirely. */
 export async function runInstallSkillCommand(argv: string[]): Promise<void> {
-  const results = installSkill(argv);
+  // `--help`/`-h` ANYWHERE in argv is a usage request, never an unknown
+  // argument — matching `runMigrationPhaseCommand`'s `rest.includes('--help')`
+  // and cli-output's own pre-dispatch check. Previously `--help` fell through
+  // to parseArgs and came back as `unknown argument "--help"` on a stack
+  // trace, which is the exact opposite of what the reader asked for.
+  if (argv.includes('--help') || argv.includes('-h')) {
+    console.log(INSTALL_SKILL_HELP_TEXT);
+    return;
+  }
+  let results: InstallSkillResult[];
+  try {
+    results = installSkill(argv);
+  } catch (err) {
+    if (err instanceof BacklogUsageError) return failUsage(err, INSTALL_SKILL_HELP_TEXT);
+    throw err;
+  }
   console.log(JSON.stringify({ installed: results }));
 }
