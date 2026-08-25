@@ -792,18 +792,48 @@ async function buildActionOpAtPath(
     tsconfig,
     session
   );
-  // DEBT-APIGEN-007: unlike the param path above, `outputSchema` is used
-  // DIRECTLY with no `hoistNestedDefs` clone — `buildSchema`'s own doc
-  // comment (BUG-APIGEN-029, see above) states its results are memoized by
-  // reference and MUST be treated as immutable by callers. Mutating
-  // `outputSchema` in place would corrupt the shared schema cache for every
-  // other operation that resolves the same return type. Only shallow-clone
-  // (and only when there's actually a format to merge) — the merge itself
-  // only ever touches top-level scalar keys, never anything nested.
-  const finalOutputSchema = returnFormat
-    ? { ...outputSchema }
-    : outputSchema;
+  // BUG-APIGEN-OUTPUT-DANGLING-REF-001 (found via mcp-discoverability-real-ops.spec.ts
+  // driving real backlog/query|create|update return types): a return type
+  // assembled from more than one nested schema fragment (a discriminated
+  // union of outcome shapes, an enum used only inside one branch, ...) can
+  // carry its OWN `definitions`/`$defs` at any depth, exactly like an
+  // unhoisted param fragment used to (BUG-APIGEN-029) — and a bare
+  // `#/definitions/<Name>` `$ref` resolves against the document root
+  // `ajv.compile()` is actually called with, never the nearest ancestor
+  // object that happens to carry a `definitions` key. This function used to
+  // skip hoisting here (DEBT-APIGEN-007) citing `buildSchema`'s memoized-by-
+  // reference cache: mutating `outputSchema` in place would corrupt that
+  // shared cache for every other operation resolving the same return type.
+  // `hoistNestedDefs` already solves precisely that concern (it deep-clones
+  // instead of mutating — see its own doc comment) and is reused here with
+  // its own accumulator, so a return type's hoisted defs never mix with a
+  // sibling param's.
+  const outputHoisted = {
+    definitions: {} as Record<string, unknown>,
+    $defs: {} as Record<string, unknown>,
+  };
+  const hoistedOutputSchema = hoistNestedDefs(
+    outputSchema as Record<string, unknown>,
+    outputHoisted,
+    exportName,
+    '<return>'
+  );
+  const finalOutputSchema: Record<string, unknown> = returnFormat
+    ? { ...hoistedOutputSchema }
+    : hoistedOutputSchema;
   mergeFormatIfPlainScalar(finalOutputSchema, returnFormat);
+  if (Object.keys(outputHoisted.definitions).length > 0) {
+    finalOutputSchema['definitions'] = {
+      ...(finalOutputSchema['definitions'] as Record<string, unknown> | undefined),
+      ...outputHoisted.definitions,
+    };
+  }
+  if (Object.keys(outputHoisted.$defs).length > 0) {
+    finalOutputSchema['$defs'] = {
+      ...(finalOutputSchema['$defs'] as Record<string, unknown> | undefined),
+      ...outputHoisted.$defs,
+    };
+  }
 
   const inputSchema: Record<string, unknown> = {
     type: 'object',
