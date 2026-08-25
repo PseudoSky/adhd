@@ -4,6 +4,11 @@
       "implementation": "./executors/copy/impl",
       "schema": "./executors/copy/schema.json",
       "description": "Copy README/CHANGELOG + declared assets into dist."
+    },
+    "chmod-bin": {
+      "implementation": "./executors/chmod-bin/impl",
+      "schema": "./executors/chmod-bin/schema.json",
+      "description": "Set the executable bit on pkg.bin targets. Uncacheable \u2014 runs every invocation (BUG-NXASSETS-001)."
     }
   }
 }
