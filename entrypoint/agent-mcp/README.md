@@ -81,18 +81,23 @@ The database (SQLite, agents/sessions/messages/usage) is stored in the resolved 
 
 **Gemini is not implemented.** There is no `gemini` provider `type`, no Gemini provider adapter, and no `GOOGLE_API_KEY`/Gemini credential path — despite having appeared in older versions of this document.
 
-### Provider credentials are NOT part of the `@adhd/environment` config cascade
+### Provider credentials are NOT declared `AgentMcpConfig` fields — but they DO resolve via a `.env` file cascade
 
-Most of agent-mcp's configuration (`db`, `logging`, `queue`, `server`, `transport`, `sse`, `plugins`) resolves through `@adhd/environment`'s file-based cascade (code defaults → global → project → env var), documented in `src/config.ts`. **Provider-credential env vars are deliberately excluded from that cascade** — they are not declared fields of `AgentMcpConfig` at all. They resolve purely from `process.env` on the agent-mcp server process itself, at the moment an agent is constructed, and never from a config file (`.adhd/agent-mcp/config.json` or any namespace/scope file).
+Most of agent-mcp's configuration (`db`, `logging`, `queue`, `server`, `transport`, `sse`, `plugins`) resolves through `@adhd/environment`'s file-based cascade (code defaults → global → project → env var), documented in `src/config.ts`. Provider-credential env vars are **not** declared fields of `AgentMcpConfig` and are not part of that specific cascade — they resolve via `env.resolveEnvName()` (`packages/environment/environment-core-node/src/environment.ts:317-320`), a direct `process.env` read gated only by an `ADHD_AGENT` prefix allowlist.
 
-Practically: whatever process spawns the agent-mcp server (an MCP host, a shell, `.mcp.json`) must already have `ADHD_AGENT_ANTHROPIC_SECRET` (or the sibling `_OPENAI_`/`_DEEPSEEK_` names) set in *its own* environment before spawning — a config file cannot supply it.
+Critically, `process.env` is not just "whatever the spawning process happened to set." `src/config.ts` calls `loadEnvHierarchy()` (`src/utils/load-env.ts`) unconditionally at module load, **before** the `Environment` singleton is constructed or any secret is resolved. `loadEnvHierarchy()` populates `process.env` itself, least-specific first, via `dotenv`:
 
-### Known gap: this repo's `.mcp.json` does not forward provider credentials
+1. `~/.adhd/.env` (no override)
+2. `<cwd>/.adhd/.env` (override: true)
+3. `<cwd>/.env` (override: true)
 
-The `agent-mcp` entry in this repo's own `.mcp.json` only forwards `ADHD_ENV_SCOPE`, `ADHD_AGENT_CONFIG`, and `ADHD_AGENT_REGISTRY_DB_PATH` in its `env` block — there is no `ADHD_AGENT_ANTHROPIC_SECRET` (or other provider secret) passthrough, and nothing derives one from an existing Claude Code OAuth token. A real `task` call against an `anthropic`- or `openai`-type agent spawned this way currently fails with `No credential for <provider>; set ADHD_AGENT_<PROVIDER>_SECRET` unless the variable happens to already be set in the environment that launched the MCP host. This is a known, tracked gap (backlog `agent-mcp-001` in the `adhd` repo) — there is no config-file-based fix, since credentials are deliberately excluded from the cascade (above). Until it's closed, either:
+So a provider secret defined in `~/.adhd/.env` resolves for **every** agent-mcp launch — regardless of what env block the spawning `.mcp.json` entry (or shell, or MCP host) forwards — because the server reads the file itself on startup. This mechanism was restored under `BUG-MCP-CREDENTIALS-001` after a prior refactor (commit `b38369f3`) deleted it; the restoration is landed in code today (`src/config.ts:27-37`, `src/utils/load-env.ts:19-37`).
 
-- export the relevant `ADHD_AGENT_<PROVIDER>_SECRET` in the shell/session that launches your MCP host before it spawns `agent-mcp`, or
-- use a `claudecli`-type agent, which needs no credential env var at all (see the table above).
+Practically: as long as `~/.adhd/.env` (or a more-specific `.adhd/.env`/`.env`) defines `ADHD_AGENT_ANTHROPIC_SECRET` (or the sibling `_OPENAI_`/`_DEEPSEEK_` names) for a given provider, an `anthropic`- or `openai`-type agent resolves real credentials at task time — with **no** explicit passthrough required in `.mcp.json`'s `env` block. A `.mcp.json` entry that only forwards `ADHD_ENV_SCOPE`/`ADHD_AGENT_CONFIG`/`ADHD_AGENT_REGISTRY_DB_PATH` (as both the repo-root and global entries in this repo do) still resolves credentials fine via this fallback.
+
+The one real remaining gap is a **data-completeness** one, not a wiring one: if none of the three `.env` files in the hierarchy defines the secret a given provider needs, `getProviderConfig` still fails with `No credential for <provider>; set ADHD_AGENT_<PROVIDER>_SECRET` — e.g. a CI runner, a different user's machine, or any environment without a populated `~/.adhd/.env`. Because the `.mcp.json` `env` block doesn't *explicitly* forward the secret, that failure mode is silent until you're on a machine without the fallback file. If you want defense-in-depth against that (rather than relying on `~/.adhd/.env` always being present), export the relevant `ADHD_AGENT_<PROVIDER>_SECRET` explicitly in the spawning shell/session, or use a `claudecli`-type agent (see the table above), which needs no credential env var at all.
+
+Tracked as `DEBT-MCP-CREDENTIALS-001` in the backlog graph (repo `PseudoSky/adhd`; a legacy duplicate, `agent-mcp-001` under repo key `adhd`, describes the pre-fix failure mode and should be resolved/merged into this item). README staleness in the wider registry-package family is separately tracked as `DEBT-AGENTMCP-README-STALE-001`.
 
 ### Example: Create and run an agent task (via MCP client)
 
