@@ -3,7 +3,7 @@
  * splitItem/mergeItems/setPriority/attachToPlan/assignItem (SPEC.md §5.5,
  * DESIGN.md §2.3/§14).
  */
-import type { BacklogItem, CreateItemInput, Priority } from '../model.js';
+import type { BacklogItem, CreateItemInput, ILinkRelatedResult, Priority } from '../model.js';
 import { InvalidArgumentError } from '../model.js';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
 import { buildNotFoundError, findItemNode } from './query.js';
@@ -11,6 +11,7 @@ import { mutateMetadata } from './mutate-metadata.js';
 import { createItemNode } from './crud.js';
 import { allocateHumanIdAndInsert } from './ids.js';
 import { assertValidCitation } from './lifecycle.js';
+import { withImmediateRetry } from './immediate-retry.js';
 import {
   BACKLOG_ASSIGNEE_TAG,
   BACKLOG_ITEM_TAG,
@@ -54,10 +55,80 @@ export async function removeDependencyNode(store: GraphBacklogStore, repo: strin
   await store.adapter.executeRun(`DELETE FROM edge WHERE src = ? AND dst = ? AND rel = 'DEPENDS_ON'`, [from.id, to.id]);
 }
 
-export async function linkRelatedNode(store: GraphBacklogStore, repo: string, humanIdA: string, humanIdB: string): Promise<void> {
-  const a = await requireItemNode(store, repo, humanIdA);
-  const b = await requireItemNode(store, repo, humanIdB);
-  await store.graph.writeEdge(a.id, b.id, 'RELATES_TO');
+/**
+ * BUG-025: `store.graph.writeEdge()` is an upsert — `INSERT ... ON CONFLICT
+ * (src, dst, rel) DO UPDATE` (`@adhd/sox-graph-store`'s
+ * `writeEdgeInternal`) — and returns `Promise<void>` either way, so its
+ * return value cannot tell a fresh write from a no-op re-write of an edge
+ * that was already there. `RELATES_TO` between two given items is only ever
+ * written in ONE direction (`a -> b`, the order the caller happened to pass
+ * this call) but the relation it models is symmetric — `linkRelated(A, B)`
+ * and a later `linkRelated(B, A)` mean the same thing to a caller — so
+ * "already linked" must check for a live `RELATES_TO` edge in EITHER
+ * direction between the two nodes, not just the exact (src, dst) pair this
+ * call is about to write.
+ *
+ * Both the existence check and the write happen inside ONE
+ * `BEGIN IMMEDIATE` transaction (the same pattern `mutateMetadata` uses,
+ * DESIGN.md §3/§4.3) so a concurrent `linkRelated` call on the same pair
+ * cannot land between the read and the write and turn a true "already
+ * linked" into a false "fresh link" (or vice versa) — `.immediate()`
+ * acquires SQLite's RESERVED lock up front, so a second concurrent call
+ * blocks (up to `busy_timeout`, retried by `withImmediateRetry`) rather than
+ * interleaving its own read with this one's write.
+ */
+async function hasLiveRelatesToEdge(store: GraphBacklogStore, nodeIdA: number, nodeIdB: number): Promise<boolean> {
+  const [forward, backward] = await Promise.all([
+    store.graph.getEdges({ src: nodeIdA, dst: nodeIdB, rel: 'RELATES_TO' }),
+    store.graph.getEdges({ src: nodeIdB, dst: nodeIdA, rel: 'RELATES_TO' }),
+  ]);
+  return forward.length > 0 || backward.length > 0;
+}
+
+export async function linkRelatedNode(store: GraphBacklogStore, repo: string, humanIdA: string, humanIdB: string): Promise<ILinkRelatedResult> {
+  return withImmediateRetry(() =>
+    store.adapter.transaction(
+      async () => {
+        const a = await requireItemNode(store, repo, humanIdA);
+        const b = await requireItemNode(store, repo, humanIdB);
+        const alreadyLinked = await hasLiveRelatesToEdge(store, a.id, b.id);
+        await store.graph.writeEdge(a.id, b.id, 'RELATES_TO');
+        return { linked: true, repo, humanIdA, humanIdB, alreadyLinked };
+      },
+      { mode: 'immediate' }
+    )
+  );
+}
+
+/**
+ * BUG-025 read side: the write becoming verifiable is only half the fix if
+ * there is still no way to list what a `linkRelated` call actually produced.
+ * Returns the humanIds of every OTHER live item connected to `humanId` by a
+ * live `RELATES_TO` edge, checking both edge directions for the same
+ * symmetric-relation reason `hasLiveRelatesToEdge` does — `linkRelated(A, B)`
+ * writes `A -> B` only, so listing B's related items must also look at
+ * edges where B is the `dst`, not only ones where it is the `src`, or half
+ * of every link this store has ever written would be invisible from one of
+ * its two endpoints.
+ */
+export async function listRelatedNode(store: GraphBacklogStore, repo: string, humanId: string): Promise<string[]> {
+  const node = await requireItemNode(store, repo, humanId);
+  const [outgoing, incoming] = await Promise.all([
+    store.graph.getEdges({ src: node.id, rel: 'RELATES_TO' }),
+    store.graph.getEdges({ dst: node.id, rel: 'RELATES_TO' }),
+  ]);
+  const otherNodeIds = new Set<number>();
+  for (const edge of outgoing) otherNodeIds.add(edge.dst);
+  for (const edge of incoming) otherNodeIds.add(edge.src);
+
+  const related: string[] = [];
+  for (const otherId of otherNodeIds) {
+    const other = await store.graph.getNode(otherId);
+    if (!other || other.tInvalid || !isLiveBacklogItemNode(other)) continue;
+    const otherHumanId = toBacklogItem(other).humanId;
+    if (otherHumanId) related.push(otherHumanId);
+  }
+  return related.sort();
 }
 
 /**

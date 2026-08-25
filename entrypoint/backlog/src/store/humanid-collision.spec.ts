@@ -10,15 +10,35 @@
  *     sharing the same `(repo, humanId)` key throws `AmbiguousHumanIdError`
  *     listing every colliding nodeId, instead of silently picking one (the
  *     exact failure mode that caused a real mis-transition — see the
- *     backlog item body). The ambiguous state is constructed directly
- *     against the graph backend (bypassing the now-fixed `createItemNode`
- *     guard) to simulate the pre-existing collision.
+ *     backlog item body).
  *  3. The `renameHumanIdNode` repair primitive: nodeId-scoped, so it works
  *     even while two nodes share a key; rejects renaming into an
  *     already-claimed id; rejects a nodeId/oldHumanId mismatch.
  *
- * Every assertion has teeth: negative controls confirm the un-ambiguous,
- * non-empty-family path is completely unaffected.
+ * DEBT-BACKLOG-HUMANID-NOT-UNIQUE-001 (see `ids.ts`'s header) added a DB-level
+ * backstop on top of fix #2 above: a partial `UNIQUE` index over
+ * `(namespace, meta.humanId)`, scoped to LIVE backlog-item rows. That index is
+ * created lazily, inside `allocateHumanIdAndInsert`'s transaction (`ids.ts`'s
+ * `ensureHumanIdUniqueIndex`) — NOT by `applySchema()` itself — so it exists
+ * after the first ordinary write through this package, which every test below
+ * that needs a live baseline item already performs. Two consequences for this
+ * file:
+ *
+ *   - On a store that has taken at least one such write, a SECOND live node
+ *     forced onto an existing `(repo, humanId)` via a raw `graph.writeNode`
+ *     call (bypassing the higher-level `createItemNode` guard) is now
+ *     REJECTED by SQLite itself ("DB-level backstop" describe block below) —
+ *     this is new coverage, proving the index is load-bearing in production,
+ *     not just documented.
+ *   - The two tests below that need to construct an actual in-memory
+ *     collision (to prove `findItemNode`'s `AmbiguousHumanIdError` guard and
+ *     `renameHumanIdNode`'s nodeId-scoping still work) can no longer do so on
+ *     a normal store — the index refuses the second write outright. They
+ *     simulate a LEGACY store (created before this index existed, or one
+ *     where it was somehow dropped) by explicitly `DROP INDEX`-ing it first.
+ *     That in-app guard path is still real and still reachable — see
+ *     `ids.ts`'s header — so it stays tested, just against the honest
+ *     precondition that makes the collision possible at all.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openTmpStore, type TmpStore } from '../test/helpers/tmp-store.js';
@@ -29,6 +49,28 @@ import { renameHumanIdNode } from './structure.js';
 import { BACKLOG_ITEM_TAG, buildNodeContent, buildNodeName } from './mapping.js';
 
 const REPO = 'PseudoSky/adhd';
+
+/** Must match `HUMAN_ID_LIVE_UNIQUE_INDEX` in `ids.ts` exactly. */
+const HUMAN_ID_LIVE_UNIQUE_INDEX = 'ix_backlog_humanid_live_unique';
+
+/**
+ * Drops the DEBT-BACKLOG-HUMANID-NOT-UNIQUE-001 backstop index to simulate a
+ * legacy store (pre-dating the index, or one where it was otherwise lost) —
+ * the only honest way left to construct an in-memory `(repo, humanId)`
+ * collision now that a normal store refuses it at the DB level.
+ */
+async function dropHumanIdUniqueIndex(tmpStore: TmpStore): Promise<void> {
+  await tmpStore.store.adapter.executeRun(`DROP INDEX IF EXISTS ${HUMAN_ID_LIVE_UNIQUE_INDEX}`);
+}
+
+/** Whether the backstop index is present in `sqlite_master` right now. */
+async function humanIdUniqueIndexExists(tmpStore: TmpStore): Promise<boolean> {
+  const row = await tmpStore.store.adapter.executeGet<{ name: string }>(
+    `SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?`,
+    [HUMAN_ID_LIVE_UNIQUE_INDEX]
+  );
+  return row != null;
+}
 
 let tmp: TmpStore;
 
@@ -82,6 +124,63 @@ describe('fix #1: createItemNode rejects a missing/empty family unless idOverrid
   });
 });
 
+describe('DEBT-BACKLOG-HUMANID-NOT-UNIQUE-001: DB-level partial-unique-index backstop', () => {
+  /** Same raw-write helper used elsewhere in this file to force a second live node onto an existing (repo, humanId) key. */
+  async function forceCollidingNode(tmpStore: TmpStore, repo: string, humanId: string, title: string, body: string): Promise<number> {
+    return tmpStore.store.graph.writeNode(buildNodeContent(repo, humanId, title, body) + `\n<!-- dup:${Math.random()} -->`, {
+      kind: 'generic',
+      name: buildNodeName(repo, humanId),
+      summary: title,
+      tags: [BACKLOG_ITEM_TAG, 'undefined', 'undefined'],
+      namespace: repo,
+      metadata: {
+        humanId,
+        kind: 'undefined',
+        family: 'undefined',
+        title,
+        body,
+        status: 'OPEN',
+        repo,
+        citations: [],
+        notes: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  }
+
+  it('the partial unique index exists in sqlite_master after a normal store open + first write', async () => {
+    // The index is created lazily inside allocateHumanIdAndInsert's
+    // transaction (ids.ts), not by applySchema() at open — so a normal write
+    // through this package (every real caller does at least one) is what
+    // actually brings it into being. Confirm it is genuinely absent before
+    // that write, and genuinely present after — proving this assertion has
+    // teeth against the "the index silently stopped being created" failure
+    // mode, not just checking a tautology.
+    expect(await humanIdUniqueIndexExists(tmp)).toBe(false);
+    await createItemNode(tmp.store, { family: 'BUG-BACKSTOP', title: 't', body: 'b', repo: REPO });
+    expect(await humanIdUniqueIndexExists(tmp)).toBe(true);
+  });
+
+  it('a normally-opened store REFUSES a second live node forced onto an existing (repo, humanId) key', async () => {
+    const first = await createItemNode(tmp.store, { family: 'BUG-BACKSTOP2', title: 'first', body: 'b1', repo: REPO });
+    // The write above already created the index (see the previous test) — do
+    // NOT drop it here; this proves the backstop is live on a normal store.
+    expect(await humanIdUniqueIndexExists(tmp)).toBe(true);
+
+    let caught: unknown;
+    try {
+      await forceCollidingNode(tmp, REPO, first.item.humanId, 'second', 'b2');
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    // Assert on the actual constraint failure, not just "it threw something".
+    expect((caught as Error).message).toMatch(/UNIQUE constraint failed/i);
+    expect((caught as Error).message).toContain('humanId');
+  });
+});
+
 describe('fix #2: ambiguous (repo, humanId) lookups throw instead of silently picking one', () => {
   /** Directly writes a second live node sharing an existing (repo, humanId) key — simulating the pre-existing collision without going through the now-guarded createItemNode. */
   async function forceCollidingNode(repo: string, humanId: string, title: string, body: string): Promise<number> {
@@ -111,7 +210,11 @@ describe('fix #2: ambiguous (repo, humanId) lookups throw instead of silently pi
     const first = await createItemNode(tmp.store, { family: 'undefined', title: 'first colliding item', body: 'b1', repo: REPO });
     // createItemNode above legitimately mints "undefined-001" (a VALID family
     // literally named "undefined" is allowed — the guard only rejects
-    // missing/empty family). Force a SECOND live node onto the exact same key.
+    // missing/empty family). The write above also lazily created the
+    // DEBT-BACKLOG-HUMANID-NOT-UNIQUE-001 backstop index (ids.ts), which now
+    // refuses a second live node on this exact key — so simulate a LEGACY
+    // store (pre-dating the index) to force the collision this test needs.
+    await dropHumanIdUniqueIndex(tmp);
     const secondNodeId = await forceCollidingNode(REPO, first.item.humanId, 'second colliding item', 'b2');
 
     let caught: unknown;
@@ -157,6 +260,10 @@ describe('renameHumanIdNode repair primitive', () => {
 
   it('is nodeId-scoped: works even while another node shares the OLD colliding key', async () => {
     const first = await createItemNode(tmp.store, { family: 'undefined', title: 'item A', body: 'bA', repo: REPO });
+    // Same legacy-store simulation as above — a normal store's backstop index
+    // (already created by the write above) would otherwise refuse this
+    // second live node outright.
+    await dropHumanIdUniqueIndex(tmp);
     const secondNodeId = await tmp.store.graph.writeNode(buildNodeContent(REPO, first.item.humanId, 'item B', 'bB') + '\n<!-- dup -->', {
       kind: 'generic',
       name: buildNodeName(REPO, first.item.humanId),

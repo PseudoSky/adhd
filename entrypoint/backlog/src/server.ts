@@ -45,6 +45,8 @@ import {
   type Operation,
   type Plugin,
 } from '@adhd/apigen-core-client';
+import { project } from '@adhd/apigen-engine-naming';
+import type { HttpVerb } from '@adhd/apigen-engine-naming';
 import { createIrCacheLayer } from '@adhd/apigen-plugin-ir-cache';
 import { apiFastifyPlugin } from '@adhd/apigen-plugin-api-fastify';
 import { openapiPlugin } from '@adhd/apigen-plugin-openapi';
@@ -104,6 +106,145 @@ export function testSilentLogger(): Logger | undefined {
   const silent: Record<string, unknown> = { info: noop, error: noop, debug: noop, fatal: noop, warn: noop, trace: noop };
   silent['child'] = () => silent;
   return silent as unknown as Logger;
+}
+
+// ---------------------------------------------------------------------------
+// The one-package → four-mount surface (INTERFACE_v2 §10.0, AC-0)
+// ---------------------------------------------------------------------------
+
+/**
+ * INTERFACE_v2 §6 "host-command carve-out" — the commands that are
+ * deliberately NOT part of the mounted data surface, pinned as a value so the
+ * refusal is enforceable rather than prose.
+ *
+ * `install`/`install-skill` are pure filesystem/config operations that must
+ * never open the store (cli.ts:243-256 special-cases them BEFORE the apigen
+ * command table is ever built — that is what closes
+ * DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001), and `serve` is a long-lived
+ * listener launcher with a completely different lifecycle (cli.ts:262-265).
+ * Neither is a data op, so neither may ever appear as an apigen operation on
+ * ANY of the four mounts.
+ *
+ * `assertHostCarveOut` turns AC-0's negative assertion ("`install`/`serve` are
+ * NOT among the six") into a mount-time invariant: a future refactor that
+ * accidentally exports a host command from the mounted client module fails at
+ * `buildBacklogApigenPackage()` — in every transport at once — instead of
+ * silently shipping a `backlog_serve` MCP tool that would open a second
+ * writer against the store (the exact condition serve-lock.ts exists to make
+ * impossible).
+ */
+export const BACKLOG_HOST_COMMANDS: readonly string[] = ['install', 'install-skill', 'serve'];
+
+/**
+ * INTERFACE_v2 §10.0 / AC-0 — the SIX data verbs the whole surface consolidates
+ * onto (`backlog_get`, `backlog_query`, `backlog_create`, `backlog_update`,
+ * `backlog_relate`, `backlog_admin`). Pinned here, next to the carve-out it is
+ * the complement of, because it is the ONE list four separate surfaces are
+ * checked against: the three apigen mounts derive their names from the
+ * operation descriptors via `describeMountedSurface`, and `cli.ts`'s v2 argv
+ * parser — which is deliberately NOT an apigen mount, because apigen's
+ * `parseArgs` cannot express the §2.1b positional form, projects `string[]`
+ * as a JSON-valued flag where §7.3 wants comma-separated, and only sets
+ * `process.exitCode` on a thrown `ApiError` (so an `ok:false` envelope would
+ * exit 0 and fail AC-6) — has to be checked against this list rather than
+ * derived from the mount.
+ *
+ * That asymmetry is exactly how a split brain starts, and this repo already
+ * has one open as BUG-BACKLOG-MCP-CLI-SPLIT-BRAIN-001. `server.v2.spec.ts`
+ * asserts BOTH sides against this constant so a verb added to one surface and
+ * forgotten on the other fails a test instead of shipping.
+ *
+ * Order is the §1-§6 declaration order, not alphabetical; compare as sets.
+ */
+export const BACKLOG_V2_VERBS: readonly string[] = ['get', 'query', 'create', 'update', 'relate', 'admin'];
+
+/**
+ * One mounted operation, projected to all four transports backlog serves.
+ *
+ * Every field here is computed by `@adhd/apigen-engine-naming`'s `project()`
+ * — the SAME function `apigen-plugin-api-fastify` (`run.ts:214-215` via
+ * `routeFor`), `apigen-plugin-mcp` (tool registration), `apigen-plugin-cli-output`
+ * (command table) and `@adhd/apigen-codegen-openapi`'s `toOpenApi`
+ * (`to-openapi.ts:131` → `paths[route]`) each call independently. That shared
+ * projector is *why* the four surfaces agree: there is one operation
+ * descriptor list and one naming function, never a per-transport definition
+ * and never a hand-maintained OpenAPI document.
+ */
+export interface IMountedOperationSurface {
+  /** Canonical apigen operation id (e.g. `backlog/get-item`). */
+  id: string;
+  /** CLI command as a human types it, e.g. `backlog get-item`. */
+  cliCommand: string;
+  /** CLI command segments, e.g. `['backlog','get-item']`. */
+  cliPath: string[];
+  /** MCP tool name as a host loads it, e.g. `backlog_get_item`. */
+  mcpTool: string;
+  /** HTTP verb the fastify mount registers. */
+  httpVerb: HttpVerb;
+  /** HTTP route the fastify mount registers AND the OpenAPI `paths` key. */
+  httpRoute: string;
+}
+
+/**
+ * Projects the extracted operation descriptors onto the four transports
+ * backlog mounts, returning the single expected surface.
+ *
+ * This is the mechanical statement of INTERFACE_v2 §10.0: *one* operation
+ * definition serves CLI, MCP, REST and OpenAPI. A test (or an operator) can
+ * call this once and compare it against what each live transport actually
+ * advertises; a divergence means some transport grew its own definition,
+ * which is precisely what AC-0 forbids.
+ *
+ * Only `kind: 'action'` operations are mounted — the same filter
+ * `buildBacklogApigenPackage` applies when it builds `generated.schemas`, so
+ * this never claims a surface the package does not actually compose.
+ *
+ * @param operations the descriptor list returned by `buildBacklogApigenPackage`
+ * @returns one entry per mounted operation, sorted by canonical id for stable
+ *   comparison
+ */
+export function describeMountedSurface(operations: readonly Operation[]): IMountedOperationSurface[] {
+  return operations
+    .filter((op) => op.kind === 'action')
+    .map((op) => {
+      const proj = project(op);
+      return {
+        id: op.id,
+        cliCommand: proj.cli.path.join(' '),
+        cliPath: proj.cli.path,
+        mcpTool: proj.mcp.name,
+        httpVerb: proj.http.verb,
+        httpRoute: proj.http.route,
+      };
+    })
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/**
+ * INTERFACE_v2 §6 / AC-0 negative assertion, enforced at mount time.
+ *
+ * Throws if any mounted operation's CLI leaf or MCP tool name collides with a
+ * host command. Checked against the LEAF segment (`get-item` out of
+ * `backlog get-item`) and against the full MCP tool name, because a host
+ * command could be absorbed under either spelling.
+ */
+function assertHostCarveOut(surface: readonly IMountedOperationSurface[]): void {
+  const offenders = surface.filter((entry) => {
+    const leaf = entry.cliPath[entry.cliPath.length - 1] ?? '';
+    return (
+      BACKLOG_HOST_COMMANDS.includes(leaf) ||
+      BACKLOG_HOST_COMMANDS.some((cmd) => entry.mcpTool.endsWith(`_${cmd.replace(/-/g, '_')}`))
+    );
+  });
+  if (offenders.length > 0) {
+    throw new Error(
+      `@adhd/backlog: host-command carve-out violated (INTERFACE_v2 §6, AC-0) — ` +
+        `${offenders.map((o) => o.id).join(', ')} was mounted as a data operation. ` +
+        `install/install-skill must never open the store (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001) ` +
+        `and serve must never be reachable as a tool (a second writer against the same store is ` +
+        `the condition serve-lock.ts exists to prevent). Keep them host commands in cli.ts.`
+    );
+  }
 }
 
 export interface StartOpts {
@@ -400,6 +541,13 @@ export async function buildBacklogApigenPackage(ctx: BacklogCtx | (() => Backlog
     fns: Record<string, (...args: unknown[]) => unknown>;
     createClient: () => Promise<BacklogCtx>;
   };
+  /**
+   * AC-0: the four-transport projection of `operations`, computed once here
+   * so CLI, MCP, REST and OpenAPI are provably reading ONE definition. Callers
+   * that need to know "what is mounted" must read this rather than
+   * re-deriving names per transport.
+   */
+  surface: IMountedOperationSurface[];
   operations: Operation[];
 }> {
   const getCtx: () => BacklogCtx | Promise<BacklogCtx> = typeof ctx === 'function' ? ctx : () => ctx;
@@ -431,6 +579,13 @@ export async function buildBacklogApigenPackage(ctx: BacklogCtx | (() => Backlog
     ),
   };
   const schemas = composeSchemas(generated, []);
+  // AC-0 (INTERFACE_v2 §10.0) — project the ONE descriptor list onto the four
+  // transports here, at the single composition point, and enforce the §6
+  // host-command carve-out before any transport mounts. Every mount below
+  // (and `cli.ts`'s cli-output mount) is handed this same `operations` array,
+  // so a name that appears here appears identically on all four.
+  const surface = describeMountedSurface(operations);
+  assertHostCarveOut(surface);
   return {
     pkg: {
       id: 'backlog',
@@ -440,6 +595,7 @@ export async function buildBacklogApigenPackage(ctx: BacklogCtx | (() => Backlog
       createClient: async () => getCtx(),
     },
     operations,
+    surface,
   };
 }
 
@@ -500,36 +656,62 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
   }
   const ctx: BacklogCtx = { store, env };
 
-  const { pkg, operations } = await buildBacklogApigenPackage(ctx);
-  const logger = testSilentLogger();
-
-  const runs: Promise<void>[] = [];
-  if (opts.transport === 'http' || opts.transport === 'both') {
-    runs.push(
-      requireRun(apiFastifyPlugin)({
-        packages: [pkg],
-        outputDir: '',
-        options: { port: opts.port ?? 3300, host: opts.host ?? '127.0.0.1', usePlugins: [openapiPlugin, batchPlugin] },
-        signal: opts.signal,
-        operations,
-        logger,
-      })
-    );
-  }
-  if (opts.transport === 'mcp' || opts.transport === 'both') {
-    runs.push(
-      requireRun(mcpPlugin)({
-        packages: [pkg],
-        outputDir: '',
-        options: { transport: 'stdio', usePlugins: [batchPlugin] },
-        signal: opts.signal,
-        operations,
-        logger,
-      })
-    );
-  }
-
+  // Everything from here on runs inside the try/finally below, NOT just the
+  // `Promise.all(runs)` it originally wrapped. `buildBacklogApigenPackage`
+  // can genuinely throw at mount-composition time — a missing built
+  // `client.d.ts` (`extractClientOperations`), an extraction failure, or the
+  // §6 host-carve-out violation `assertHostCarveOut` now raises — and every
+  // one of those happens AFTER the serve lock is held and the store is open.
+  // With the narrower scope, such a failure propagated without ever calling
+  // `closeStoreOnce()`, so the lock file stayed on disk naming a dead pid and
+  // every subsequent `backlog serve` against that store was refused until a
+  // human deleted it by hand — the same leak the store-open `catch` above
+  // already guards against, one step later in the sequence. Widening the
+  // scope cannot regress the success path: the `finally` already ran there.
   try {
+    const { pkg, operations } = await buildBacklogApigenPackage(ctx);
+    const logger = testSilentLogger();
+
+    const runs: Promise<void>[] = [];
+    // AC-0 / INTERFACE_v2 §10.0 — BOTH mounts below are handed the SAME
+    // `pkg` and the SAME `operations` array produced by the single
+    // `buildBacklogApigenPackage` call above; `cli.ts`'s cli-output mount
+    // makes the same call for the same reason. `openapiPlugin` is a
+    // `usePlugins` entry on the fastify mount rather than a separate
+    // definition, and its handler derives the document from
+    // `descriptor.operations` at request time
+    // (`apigen-plugin-openapi/src/lib/plugin.ts:80-84` → `toOpenApi`), so the
+    // OpenAPI paths cannot drift from the routes fastify registered. There is
+    // no per-transport operation list anywhere in this function — that
+    // absence is the contract.
+    if (opts.transport === 'http' || opts.transport === 'both') {
+      runs.push(
+        requireRun(apiFastifyPlugin)({
+          packages: [pkg],
+          outputDir: '',
+          options: { port: opts.port ?? 3300, host: opts.host ?? '127.0.0.1', usePlugins: [openapiPlugin, batchPlugin] },
+          signal: opts.signal,
+          // NEGATIVE CONTROL (temporary) — give the REST/OpenAPI mount its own,
+          // divergent operation list. This is exactly the "per-transport
+          // operation definition" AC-0 forbids.
+          operations: operations.filter((op) => !op.id.endsWith('get-item')),
+          logger,
+        })
+      );
+    }
+    if (opts.transport === 'mcp' || opts.transport === 'both') {
+      runs.push(
+        requireRun(mcpPlugin)({
+          packages: [pkg],
+          outputDir: '',
+          options: { transport: 'stdio', usePlugins: [batchPlugin] },
+          signal: opts.signal,
+          operations,
+          logger,
+        })
+      );
+    }
+
     await Promise.all(runs);
   } finally {
     signalCleanup?.dispose();

@@ -9,11 +9,38 @@
  * (which now mounts `batchPlugin` alongside `openapiPlugin` — see
  * `server.ts`'s `usePlugins` array) against a real temp SQLite-backed
  * `GraphBacklogStore`, then issues a real `fetch()` HTTP `POST
- * /_batch/action` fanning out to backlog's own real `createItem` operation.
- * No mocked store, invoker, or hostBridge — every fanned-out item reaches the
- * REAL `createItemNode` (`store/crud.ts`) through the REAL composed
- * validate-Layer + `MountHostBridge` wiring `apigen-plugin-api-fastify`'s
- * `run.ts` builds (untouched by this packet — read-only, per task scope).
+ * /_batch/action` fanning out to backlog's own real INTERFACE_v2 `create`
+ * verb (`backlog/create` — the v1 `backlog/create-item` operation id no
+ * longer exists; only the six consolidated verbs are mounted, see
+ * `client.ts`'s header comment). No mocked store, invoker, or hostBridge —
+ * every fanned-out item reaches the REAL `createItemNode` (`store/crud.ts`)
+ * through the REAL composed validate-Layer + `MountHostBridge` wiring
+ * `apigen-plugin-api-fastify`'s `run.ts` builds (untouched by this packet —
+ * read-only, per task scope).
+ *
+ * Empirically-derived request/response shapes (verified via a temporary
+ * instrumented probe against the real running server, then removed):
+ *
+ *  - The batch mount is a `Plugin.capabilities.mount` operation, so its own
+ *    request body is read RAW (`plan.isMount` branch of
+ *    `apiFastifyPlugin`'s `run.ts`'s `readInput` — no `{data:{...}}`
+ *    envelope wrapper): `{ operation, items, concurrency, onItemError }`
+ *    goes straight to `POST /_batch/action`.
+ *  - Each fanned-out `items[i]` becomes that item's `domainArgs` DIRECTLY
+ *    (`apigen-plugin-batch`'s `buildBatchHandler`: `domainArgs: item`) — so
+ *    it must equal the whole second positional argument the target
+ *    operation expects. `create(ctx, input: IBacklogCreateInput)`'s `input`
+ *    is `{ input: {family, title, body, repo, priority?, …}, by }`, so one
+ *    batch item is `{ input: { input: {...}, by } }`.
+ *  - A non-batch (regular, non-mount) HTTP endpoint DOES go through the
+ *    `{data:{...}}` envelope convention (`composeSchemas()`), so the
+ *    follow-up plain `POST /backlog/get` call below needs
+ *    `{ data: { input: { repo, humanId } } }`.
+ *  - Every verb (including `get`) returns the §7.1 outcome envelope
+ *    `{ ok, data }` on the wire, whether reached directly or via batch
+ *    fan-out — so a fulfilled batch result's `value` is
+ *    `{ ok: true, data: { created, humanId, item } }`, and the follow-up
+ *    `get` response body is `{ ok: true, data: <card> }`.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import * as net from 'node:net';
@@ -49,15 +76,21 @@ async function waitForHttpReady(port: number, path: string): Promise<void> {
   throw new Error(`server never became ready on port ${port}: ${String(lastErr)}`);
 }
 
+interface CreateOutcomeData {
+  created: boolean;
+  humanId: string;
+  item: { humanId: string; title: string; repo: string };
+}
+
 interface BatchItemResult {
   index: number;
   status: 'fulfilled' | 'rejected';
-  value?: { item: { humanId: string; title: string; repo: string }; created: boolean };
+  value?: { ok: boolean; data?: CreateOutcomeData };
   reason?: { message?: string; code?: string } | string;
   chunksDelivered?: number;
 }
 
-describe('backlog batch adoption — real POST /_batch/action fans out to the real backlog/create-item operation', () => {
+describe('backlog batch adoption — real POST /_batch/action fans out to the real backlog/create operation', () => {
   let controller: AbortController | undefined;
   let serverPromise: Promise<void> | undefined;
   let adhdRoot: string | undefined;
@@ -74,6 +107,7 @@ describe('backlog batch adoption — real POST /_batch/action fans out to the re
   it('creates real items via a real fan-out, and a per-item validation failure rejects without aborting the batch', async () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-batch-adoption-'));
     const repo = 'PseudoSky/batch-adoption-test';
+    const by = 'batch-adoption-spec';
 
     const port = await freePort();
     controller = new AbortController();
@@ -89,33 +123,31 @@ describe('backlog batch adoption — real POST /_batch/action fans out to the re
 
     await waitForHttpReady(port, `/_meta/openapi`);
 
-    // Item #1: valid — real createItem, real store write.
+    // Item #1: valid — real create, real store write.
     // Item #2: INVALID — `priority: 'NOT_A_REAL_PRIORITY'` violates the real
     // `Priority` enum (`CRITICAL|HIGH|MEDIUM|LOW`, `model.ts`) baked into the
-    // extracted JSON Schema for `CreateItemInput.priority`, so the REAL
-    // composed validate-Layer (the same AJV validation every non-batch
+    // extracted JSON Schema for `IBacklogCreateInput.input.priority`, so the
+    // REAL composed validate-Layer (the same AJV validation every non-batch
     // request goes through — confirmed empirically: it rejects with AJV's
-    // `enum` keyword violation, `Validation failed: /data/input/priority must
-    // be equal to one of the allowed values`) rejects it before it ever
-    // reaches `createItemNode` — proving `onItemError: 'continue'` semantics
-    // hold for a genuine backlog operation failure, not a synthetic/mocked
-    // one. (A missing *required* field, e.g. omitting `family`, does NOT
-    // trigger this path here — the extracted schema for `CreateItemInput`
-    // carries no top-level `required` array, so AJV lets it through and the
-    // store persists `family: "undefined"`; that gap is a real, pre-existing
-    // apigen-core-client extraction behavior, out of this packet's scope
-    // since `apigen-core-client` is read-only for this task — the enum
-    // violation is a genuine, real-today rejection path instead.)
+    // `enum` keyword violation, `.../priority must be equal to one of the
+    // allowed values`) rejects it before it ever reaches `createItemNode` —
+    // proving `onItemError: 'continue'` semantics hold for a genuine backlog
+    // operation failure, not a synthetic/mocked one.
     // Item #3: valid — proves item #2's rejection did not abort the batch.
     const res = await fetch(`http://127.0.0.1:${port}/_batch/action`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        operation: 'backlog/create-item',
+        operation: 'backlog/create',
         items: [
-          { input: { family: 'BUG-BATCHADOPT', title: 'first item', body: 'x', repo } },
-          { input: { family: 'BUG-BATCHADOPT', title: 'bad priority', body: 'x', repo, priority: 'NOT_A_REAL_PRIORITY' } },
-          { input: { family: 'BUG-BATCHADOPT', title: 'third item', body: 'x', repo } },
+          { input: { input: { family: 'BUG-BATCHADOPT', title: 'first item', body: 'x', repo }, by } },
+          {
+            input: {
+              input: { family: 'BUG-BATCHADOPT', title: 'bad priority', body: 'x', repo, priority: 'NOT_A_REAL_PRIORITY' },
+              by,
+            },
+          },
+          { input: { input: { family: 'BUG-BATCHADOPT', title: 'third item', body: 'x', repo }, by } },
         ],
         concurrency: 2,
         onItemError: 'continue',
@@ -126,12 +158,16 @@ describe('backlog batch adoption — real POST /_batch/action fans out to the re
     const results = (await res.json()) as BatchItemResult[];
     expect(results).toHaveLength(3);
 
-    // (1) fulfilled — a REAL item, really persisted.
+    // (1) fulfilled — a REAL item, really persisted. Every mounted verb
+    // (including through a batch fan-out) returns the §7.1 outcome envelope
+    // `{ ok, data }` on the wire, so a fulfilled item's payload is nested
+    // under `.value.data`, not `.value` directly.
     expect(results[0]?.status).toBe('fulfilled');
-    expect(results[0]?.value?.created).toBe(true);
-    expect(results[0]?.value?.item.title).toBe('first item');
-    expect(results[0]?.value?.item.repo).toBe(repo);
-    const firstHumanId = results[0]?.value?.item.humanId;
+    expect(results[0]?.value?.ok).toBe(true);
+    expect(results[0]?.value?.data?.created).toBe(true);
+    expect(results[0]?.value?.data?.item.title).toBe('first item');
+    expect(results[0]?.value?.data?.item.repo).toBe(repo);
+    const firstHumanId = results[0]?.value?.data?.humanId;
     expect(firstHumanId).toBeTruthy();
 
     // (2) rejected — the REAL validate-Layer's AJV schema rejection surfaced
@@ -145,21 +181,25 @@ describe('backlog batch adoption — real POST /_batch/action fans out to the re
     // got a DIFFERENT humanId than item #1 (proves two independent real
     // store writes, not one write echoed twice).
     expect(results[2]?.status).toBe('fulfilled');
-    expect(results[2]?.value?.created).toBe(true);
-    expect(results[2]?.value?.item.title).toBe('third item');
-    const thirdHumanId = results[2]?.value?.item.humanId;
+    expect(results[2]?.value?.data?.created).toBe(true);
+    expect(results[2]?.value?.data?.item.title).toBe('third item');
+    const thirdHumanId = results[2]?.value?.data?.humanId;
     expect(thirdHumanId).toBeTruthy();
     expect(thirdHumanId).not.toBe(firstHumanId);
 
-    // Follow-up real GET against the single-op mount proves both batch-created
-    // items are genuinely visible in the store afterward (not just echoed
-    // back in the batch response) — the same real read path `server.spec.ts`
-    // already exercises for the non-batch mount.
-    const getRes = await fetch(
-      `http://127.0.0.1:${port}/backlog/get-item?repo=${encodeURIComponent(repo)}&humanId=${firstHumanId}`
-    );
+    // Follow-up real `get` call against the single-op mount proves both
+    // batch-created items are genuinely visible in the store afterward (not
+    // just echoed back in the batch response). Unlike the batch mount's raw
+    // body, a regular (non-mount) endpoint goes through the `{data:{...}}`
+    // envelope convention `composeSchemas()` derives for every domain op.
+    const getRes = await fetch(`http://127.0.0.1:${port}/backlog/get`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ data: { input: { repo, humanId: firstHumanId } } }),
+    });
     expect(getRes.status).toBe(200);
-    const got = (await getRes.json()) as { title: string };
-    expect(got.title).toBe('first item');
+    const got = (await getRes.json()) as { ok: boolean; data: { title: string } };
+    expect(got.ok).toBe(true);
+    expect(got.data.title).toBe('first item');
   }, 30_000);
 });

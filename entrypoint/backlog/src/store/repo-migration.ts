@@ -53,6 +53,9 @@ import {
   toBacklogItem,
   type BacklogNodeMeta,
 } from './mapping.js';
+import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 function metaOf(node: NodeRecord): Partial<BacklogNodeMeta> {
   return (node.metadata ?? {}) as Partial<BacklogNodeMeta>;
@@ -357,16 +360,308 @@ export async function executeRepoMigration(store: GraphBacklogStore, plan: RepoM
   return results;
 }
 
+// ============================================================================
+// BUG-BACKLOG-REPO-MIGRATION-NON-ATOMIC — backup, resumability, reversibility
+// ============================================================================
+//
+// The three writes inside `migrateRepoItemNode` are now one `immediate`
+// transaction (see that function's doc comment) — a crash mid-item is
+// provably impossible to observe as a split (metadata.repo, namespace) state;
+// `repo-migration-atomicity.spec.ts` proves this by injecting failure at the
+// LAST of the three writes and reopening/re-reading the row.
+//
+// That closes the WITHIN-item hole but not the ACROSS-item one:
+// `executeRepoMigration` still runs N single-item transactions back to back
+// with nothing wrapping the batch, so a crash BETWEEN item 5 and item 6
+// legitimately leaves items 1-5 moved and 6..N not — that is not corruption
+// (every individual item is internally consistent), but it IS an
+// operator-visible partial run with no record of what state the batch was in
+// or how to get back to the pre-run state. Two things fix that, deliberately
+// scoped to THIS path rather than building the general mechanism tracked by
+// `FEAT-BACKLOG-SNAPSHOT-001`:
+//
+//  1. REVERSIBLE: `createRepoMigrationBackup` snapshots, for every item the
+//     plan is about to touch, every field `migrateRepoItemNode` can mutate
+//     (`namespace`, `name`, `tags`, `metadata`, `content` — `content_hash` is
+//     always `computeContentHash(content)`, so it never needs its own slot),
+//     read BEFORE any write in the run, and writes it to a durable JSON
+//     manifest under `tmp/backlog/repo-migration-backups/` (AGENTS.md §10 —
+//     the canonical ephemeral-artifact root; "ephemeral" here means
+//     "operator-cleaned", not "safe to lose mid-incident" — nothing else
+//     deletes it). `restoreRepoMigrationBackup` replays that manifest back
+//     onto the live store, one item per `immediate` transaction (the exact
+//     same atomicity guarantee `migrateRepoItemNode` gets), so a botched run
+//     — of ANY size, not just the crash case — can always be undone exactly.
+//
+//  2. RESUMABLE + DETECTABLE: the manifest is written with `completedAt`
+//     absent, and only gets `completedAt` (+ a result summary) once
+//     `executeRepoMigration` returns — so a manifest missing `completedAt` on
+//     disk IS the crash signal, findable by `findIncompleteRepoMigrationBackups`
+//     without touching the store at all. Resuming needs no special machinery
+//     beyond that detection, though: because `planRepoMigration` scopes by
+//     `namespace === fromRepo` (this file's own top-of-file doc comment,
+//     Finding 1) and a successfully-migrated item's `namespace` is no longer
+//     `fromRepo`, simply re-running `planRepoMigration` + `executeRepoMigration`
+//     against the same (fromRepo, toRepo) after an interrupted run naturally
+//     produces a plan containing ONLY the still-unmigrated remainder — a
+//     completed item is never revisited, and there is nothing left to
+//     "resume" by hand.
+//
+// `migrateRepo` wires both in automatically for every real (non-dry-run)
+// execution: it fails CLOSED if the backup cannot be written (no migration
+// proceeds without one), so there is no window where a live mutation can run
+// unprotected.
+
+/** One item's pre-migration snapshot — everything `migrateRepoItemNode` can overwrite, captured before any write in the run touches it. */
+export interface IRepoMigrationBackupItem {
+  nodeId: number;
+  namespace: string;
+  name: string;
+  tags: string[];
+  /** `NodeRecord.metadata` as it stood before the move — a plain object, never re-typed as `BacklogNodeMeta` (same untrusted-JSON discipline `migrateRepoItemNode` follows). */
+  metadata: Record<string, unknown>;
+  content: string;
+}
+
+/** One optional result-summary slot, filled in only once the guarded run has finished (successfully or not) — see `markRepoMigrationBackupComplete`. */
+export interface IRepoMigrationBackupResultSummary {
+  succeeded: number;
+  failed: number;
+}
+
+/**
+ * The on-disk snapshot for one `migrateRepo({dryRun:false})` run.
+ * `completedAt`/`resultSummary` are absent from the moment the file is first
+ * written until the guarded run finishes — their absence on a manifest found
+ * on disk IS the "this run never finished" signal `findIncompleteRepoMigrationBackups`
+ * looks for.
+ */
+export interface IRepoMigrationBackupManifest {
+  version: 1;
+  fromRepo: string;
+  toRepo: string;
+  actor: string;
+  createdAt: string;
+  completedAt?: string;
+  resultSummary?: IRepoMigrationBackupResultSummary;
+  items: IRepoMigrationBackupItem[];
+}
+
+export interface IRepoMigrationBackupHandle {
+  backupPath: string;
+  itemCount: number;
+}
+
+/** Options accepted by `migrateRepo`'s automatic backup step. */
+export interface IRepoMigrationRunOptions {
+  /** Directory backup manifests are written under. Defaults to `tmp/backlog/repo-migration-backups/` (AGENTS.md §10), resolved once at module load against the process's cwd at that time — mirrors `test/helpers/tmp-store.ts`'s own `TMP_ROOT` pattern. Tests should always pass an explicit dir under their own tmp store's `dir` so backups are cleaned up with everything else. */
+  backupDir?: string;
+}
+
+/**
+ * Default backup root. `process.cwd()` at module-load time, matching
+ * `test/helpers/tmp-store.ts`'s `TMP_ROOT` — both resolve once, not per-call,
+ * since a process's cwd does not change in normal operation and re-resolving
+ * per call would let two calls in the same run silently disagree on where
+ * the backup for THIS run lives.
+ */
+const DEFAULT_REPO_MIGRATION_BACKUP_DIR = join(process.cwd(), 'tmp', 'backlog', 'repo-migration-backups');
+
+/** Repo names contain `/` (e.g. `PseudoSky/adhd`) — not valid in a filename component. */
+function sanitizeRepoForFileName(repo: string): string {
+  return repo.replace(/[^A-Za-z0-9._-]+/g, '_');
+}
+
+/**
+ * Writes `manifest` to `path` via write-then-rename so a crash mid-write can
+ * never leave a half-written, unparseable JSON file behind — the temp file
+ * gets an unfinished write, the RENAME is what makes the real path exist at
+ * all, and a rename of a fully-written file is atomic on the same filesystem.
+ */
+function writeManifestAtomic(path: string, manifest: IRepoMigrationBackupManifest): void {
+  const tmpPath = `${path}.tmp`;
+  writeFileSync(tmpPath, JSON.stringify(manifest, null, 2), 'utf8');
+  renameSync(tmpPath, path);
+}
+
+async function captureBackupItem(store: GraphBacklogStore, nodeId: number): Promise<IRepoMigrationBackupItem> {
+  const node = await store.graph.getNode(nodeId);
+  if (!node) {
+    throw new InvalidArgumentError(
+      'nodeId',
+      `backlog: cannot back up nodeId=${nodeId} before migrating it — the node no longer exists. Re-run planRepoMigration and retry.`
+    );
+  }
+  return {
+    nodeId,
+    namespace: node.namespace,
+    name: node.name ?? '',
+    tags: [...node.tags],
+    metadata: { ...(node.metadata ?? {}) },
+    content: node.content,
+  };
+}
+
+/**
+ * Snapshots every item `plan` is about to touch, BEFORE any write in the run
+ * happens, to a durable JSON manifest under `backupDir`. Read-only against
+ * the store (never mutates); the manifest alone is sufficient for
+ * `restoreRepoMigrationBackup` to put every item back exactly where it
+ * started, and for `findIncompleteRepoMigrationBackups` to detect a run that
+ * never finished.
+ */
+export async function createRepoMigrationBackup(
+  store: GraphBacklogStore,
+  plan: RepoMigrationPlan,
+  actor: string,
+  backupDir: string = DEFAULT_REPO_MIGRATION_BACKUP_DIR
+): Promise<IRepoMigrationBackupHandle> {
+  const items: IRepoMigrationBackupItem[] = [];
+  for (const planItem of plan.items) {
+    items.push(await captureBackupItem(store, planItem.nodeId));
+  }
+  const manifest: IRepoMigrationBackupManifest = {
+    version: 1,
+    fromRepo: plan.fromRepo,
+    toRepo: plan.toRepo,
+    actor,
+    createdAt: new Date().toISOString(),
+    items,
+  };
+  mkdirSync(backupDir, { recursive: true });
+  const fileName = `${sanitizeRepoForFileName(plan.fromRepo)}__to__${sanitizeRepoForFileName(plan.toRepo)}-${manifest.createdAt.replace(/[:.]/g, '-')}-${randomUUID()}.json`;
+  const backupPath = join(backupDir, fileName);
+  writeManifestAtomic(backupPath, manifest);
+  return { backupPath, itemCount: items.length };
+}
+
+/**
+ * Marks `backupPath`'s manifest as belonging to a run that finished (not
+ * necessarily successfully — `summary.failed` may be nonzero; the point is
+ * only that `executeRepoMigration` returned rather than the process dying
+ * mid-batch). Called exactly once, immediately after `executeRepoMigration`
+ * returns, by `migrateRepo`.
+ */
+export async function markRepoMigrationBackupComplete(backupPath: string, summary: IRepoMigrationBackupResultSummary): Promise<void> {
+  const manifest = JSON.parse(readFileSync(backupPath, 'utf8')) as IRepoMigrationBackupManifest;
+  manifest.completedAt = new Date().toISOString();
+  manifest.resultSummary = summary;
+  writeManifestAtomic(backupPath, manifest);
+}
+
+/**
+ * Every manifest under `backupDir` whose run never reached completion — the
+ * "was a migration interrupted?" check an operator or the CLI runs before
+ * trusting the store's current state, or before deciding whether to
+ * `restoreRepoMigrationBackup` one back to its pre-run snapshot. Never
+ * touches the store. A missing `backupDir` (nothing has ever run with backups
+ * enabled) is simply "nothing incomplete", not an error.
+ */
+export async function findIncompleteRepoMigrationBackups(backupDir: string = DEFAULT_REPO_MIGRATION_BACKUP_DIR): Promise<IRepoMigrationBackupManifest[]> {
+  if (!existsSync(backupDir)) return [];
+  const manifests: IRepoMigrationBackupManifest[] = [];
+  for (const file of readdirSync(backupDir)) {
+    if (!file.endsWith('.json')) continue;
+    const manifest = JSON.parse(readFileSync(join(backupDir, file), 'utf8')) as IRepoMigrationBackupManifest;
+    if (!manifest.completedAt) manifests.push(manifest);
+  }
+  return manifests.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+/** Per-item outcome of replaying a backup manifest back onto the live store. */
+export interface IRepoMigrationRestoreItemResult {
+  nodeId: number;
+  ok: boolean;
+  /** Present iff `ok === false` — that one item was left as the store currently has it, never partially restored. */
+  error?: string;
+}
+
+/**
+ * Replays `manifest` back onto `store`, restoring every item's
+ * `namespace`/`name`/`tags`/`metadata`/`content` (+ recomputed
+ * `content_hash`) to exactly what `createRepoMigrationBackup` captured
+ * before the guarded run touched them. Mirrors `migrateRepoItemNode`'s own
+ * split — `graph.touch` for name/tags/metadata, the raw `namespace`/
+ * `content`/`content_hash` `UPDATE` for the column `touch()` cannot reach —
+ * with the SAME single `immediate` transaction per item, so a restore is
+ * exactly as crash-safe as the migration it undoes: one item is either fully
+ * put back or left exactly as the (possibly partially-migrated) store had
+ * it, never split. One item's restore failing (e.g. the node was deleted
+ * since the backup was taken) does not abort the rest of the batch — every
+ * item in `manifest.items` gets exactly one reported outcome, mirroring
+ * `executeRepoMigration`'s own never-silently-drop guarantee.
+ */
+export async function restoreRepoMigrationBackup(store: GraphBacklogStore, manifest: IRepoMigrationBackupManifest): Promise<IRepoMigrationRestoreItemResult[]> {
+  const results: IRepoMigrationRestoreItemResult[] = [];
+  for (const item of manifest.items) {
+    try {
+      await withImmediateRetry(() =>
+        store.adapter.transaction(
+          async () => {
+            await store.graph.touch(item.nodeId, { metadata: item.metadata, name: item.name, tags: item.tags });
+            const contentHash = computeContentHash(item.content);
+            const res = await store.adapter.executeRun(`UPDATE node SET namespace = ?, content = ?, content_hash = ? WHERE rowid = ? AND t_invalid IS NULL`, [
+              item.namespace,
+              item.content,
+              contentHash,
+              item.nodeId,
+            ]);
+            if (res.rowsAffected !== 1) {
+              throw new InvalidArgumentError(
+                'nodeId',
+                `backlog: restore UPDATE for nodeId=${item.nodeId} affected ${res.rowsAffected} row(s), expected exactly 1 — rolling back this item's restore rather than leaving it half-applied.`
+              );
+            }
+          },
+          { mode: 'immediate' }
+        )
+      );
+      results.push({ nodeId: item.nodeId, ok: true });
+    } catch (err) {
+      results.push({ nodeId: item.nodeId, ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  return results;
+}
+
 /**
  * The single entry point client.ts/CLI/MCP expose. `dryRun` defaults to
  * `true` — a caller MUST pass `dryRun:false` explicitly to mutate anything,
  * so a bare "preview this migration" call (e.g. an agent double-checking
  * before committing) can never accidentally execute.
+ *
+ * A real (non-dry-run) execution with at least one planned item is guarded
+ * end to end: `createRepoMigrationBackup` runs FIRST and must succeed before
+ * a single item is touched (fails CLOSED — if the backup cannot be written,
+ * `executeRepoMigration` never runs, so there is no window where a live
+ * mutation proceeds unprotected), and `markRepoMigrationBackupComplete` runs
+ * LAST, once execution has returned, recording the run finished. The
+ * returned object carries `backupPath` (present whenever a backup was taken)
+ * as a plain extra field — `RepoMigrationResult` (model.ts, the shared v1/v2
+ * contract) does not declare it, so callers typed against that interface
+ * don't see it in their type checking, but it is there on the real object at
+ * runtime for any caller (this module's own tests included) that wants it.
  */
-export async function migrateRepo(store: GraphBacklogStore, fromRepo: string, toRepo: string, actor: string, dryRun = true): Promise<RepoMigrationResult> {
+export async function migrateRepo(
+  store: GraphBacklogStore,
+  fromRepo: string,
+  toRepo: string,
+  actor: string,
+  dryRun = true,
+  options: IRepoMigrationRunOptions = {}
+): Promise<RepoMigrationResult & { backupPath?: string }> {
   const plan = await planRepoMigration(store, fromRepo, toRepo);
   if (dryRun) return { fromRepo, toRepo, dryRun: true, plan };
+
+  const backupDir = options.backupDir ?? DEFAULT_REPO_MIGRATION_BACKUP_DIR;
+  const backup = plan.items.length > 0 ? await createRepoMigrationBackup(store, plan, actor, backupDir) : undefined;
+
   const results = await executeRepoMigration(store, plan, actor);
   const succeeded = results.filter((r) => r.ok).length;
-  return { fromRepo, toRepo, dryRun: false, plan, results, succeeded, failed: results.length - succeeded };
+  const failed = results.length - succeeded;
+
+  if (backup) await markRepoMigrationBackupComplete(backup.backupPath, { succeeded, failed });
+
+  const result = { fromRepo, toRepo, dryRun: false as const, plan, results, succeeded, failed, backupPath: backup?.backupPath };
+  return result;
 }

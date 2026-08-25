@@ -33,6 +33,7 @@ import { runInstallSkillCommand } from './install-skill.js';
 import { runInstallCommand } from './install.js';
 import { runServeCommand } from './serve.js';
 import { readBacklogVersionInfo } from './version-info.js';
+import { exitCodeForEnvelope, isOutcomeEnvelope } from './model.js';
 import { MIGRATION_PHASES, readBacklogMigrationStatus, setBacklogMigrationPhase } from './migration-phase.js';
 
 /**
@@ -490,7 +491,17 @@ export async function runBacklogCli(argv?: string[], opts: RunBacklogCliOpts = {
       // (`@adhd/apigen-plugin-batch`) is reachable over HTTP/MCP but not the
       // CLI, since `@adhd/apigen-plugin-cli-output`'s `run()` only mounts
       // plugins it's explicitly handed via `readUsePlugins(input.options)`.
-      options: { argv: prefixCommand(userArgv, prefix, reservedNamespaces), usePlugins: [...USE_PLUGINS] },
+      options: {
+        argv: prefixCommand(userArgv, prefix, reservedNamespaces),
+        usePlugins: [...USE_PLUGINS],
+        // INTERFACE_v2 §7.1 — the six verbs REPORT failure in the envelope
+        // rather than throwing, so without this hook every `{ok:false}` still
+        // exited 0 and a scripted caller read a failure as a success
+        // (BUG-BACKLOG-GETITEM-NULL-EXIT-ZERO-001). `exitCodeForEnvelope` is
+        // the single source of the code table for every transport.
+        exitCode: (result: unknown) =>
+          isOutcomeEnvelope(result) ? exitCodeForEnvelope(result) : undefined,
+      },
       signal: opts.signal ?? new AbortController().signal,
       logger: testSilentLogger(),
     });
