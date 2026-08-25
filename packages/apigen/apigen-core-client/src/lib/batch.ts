@@ -195,18 +195,87 @@ export interface BatchKindSchema {
  * for a kind with zero operations; `groupBatchableOperationsByKind` never
  * produces an empty group.
  */
+/**
+ * BUG-APIGEN-BATCH-DANGLING-REF-001: `extract.ts`'s `hoistNestedDefs` already
+ * hoists a single operation's own recursive/self-referential types up to
+ * THAT operation's own `input`/`output` schema root (`op.input.definitions`,
+ * `op.output.definitions` — bare `#/definitions/<Name>` refs, matching
+ * `compose-schemas.ts`'s BUG-APIGEN-029 fix for the `{data:{...}}`-enveloped
+ * path). But a `_batch/<kind>` mount embeds N operations' `input`/`output`
+ * schemas several levels deep inside ITS OWN document (one branch's
+ * `itemsSchema` sits at `oneOf[i].properties.items.items`) — and a bare
+ * `$ref` is always resolved from the root of whatever document `ajv.compile`
+ * was actually called with, never the nearest ancestor object that happens
+ * to carry a `definitions` key. Left unfixed, any batched operation whose
+ * schema uses such a $ref (e.g. real backlog `query`'s `IStatusSelector`)
+ * produces a `_batch/<kind>` schema AJV cannot compile at all.
+ *
+ * Fixed the same way `hoistNestedDefs` merges within one function: collect
+ * every batched operation's own top-level `definitions`/`$defs` up onto the
+ * shared batch document's root, merging by bare name and throwing if two
+ * operations contribute a same-named definition with different content
+ * (apigen cannot safely merge two structurally different types under one
+ * shared key). Existing bare `#/definitions/<Name>` refs inside each
+ * operation's nested schema then resolve correctly without any rewriting,
+ * because JSON Pointer resolution is root-relative, not depth-relative.
+ */
+function collectBatchDefs(
+  ops: readonly Operation[],
+  schemaOf: (op: Operation) => JSONSchema
+): Pick<JSONSchema, 'definitions' | '$defs'> {
+  const definitions: Record<string, unknown> = {};
+  const dollarDefs: Record<string, unknown> = {};
+  const buckets = [
+    ['definitions', definitions],
+    ['$defs', dollarDefs],
+  ] as const;
+
+  for (const op of ops) {
+    const schema = schemaOf(op) as Record<string, unknown>;
+    for (const [defKey, bucket] of buckets) {
+      const defs = schema[defKey] as Record<string, unknown> | undefined;
+      if (!defs) continue;
+      for (const [name, value] of Object.entries(defs)) {
+        const existing = bucket[name];
+        if (existing !== undefined && JSON.stringify(existing) !== JSON.stringify(value)) {
+          throw new Error(
+            `[apigen-core-client] _batch mount: operation "${op.id}" contributes a ` +
+              `"${defKey}.${name}" definition that conflicts with an identically-named ` +
+              `definition already hoisted from another batched operation. Two structurally ` +
+              `different types share the same generated definition key, so apigen cannot ` +
+              `safely merge them into one _batch/<kind> schema.`
+          );
+        }
+        bucket[name] = value;
+      }
+    }
+  }
+
+  // The buckets are accumulated as `Record<string, unknown>` because the
+  // values are opaque sub-schemas lifted verbatim out of each operation's
+  // already-generated schema; they are re-narrowed to the declared
+  // `Pick<JSONSchema, …>` shape here rather than re-validated, since nothing
+  // in this merge step inspects their interior.
+  return {
+    ...(Object.keys(definitions).length > 0 ? { definitions } : {}),
+    ...(Object.keys(dollarDefs).length > 0 ? { $defs: dollarDefs } : {}),
+  } as Pick<JSONSchema, 'definitions' | '$defs'>;
+}
+
 export function buildBatchKindSchema(ops: readonly Operation[]): BatchKindSchema {
   if (ops.length === 0) {
     throw new Error('buildBatchKindSchema: at least one operation is required');
   }
   const branches = ops.map(deriveBatchOperationBranch);
+  const inputDefs = collectBatchDefs(ops, (op) => op.input);
+  const outputDefs = collectBatchDefs(ops, (op) => op.output);
 
   if (ops.length === 1) {
     const [op] = ops;
     const [branch] = branches;
     return {
-      input: branchInputSchema(branch, operationConstProp(op.id)),
-      output: { type: 'array', items: branch.resultSchema },
+      input: { ...branchInputSchema(branch, operationConstProp(op.id)), ...inputDefs },
+      output: { type: 'array', items: branch.resultSchema, ...outputDefs },
     };
   }
 
@@ -220,9 +289,11 @@ export function buildBatchKindSchema(ops: readonly Operation[]): BatchKindSchema
     input: {
       oneOf: inputVariants,
       ...(discriminator ? { discriminator } : {}),
+      ...inputDefs,
     },
     output: {
       oneOf: branches.map((b) => ({ type: 'array', items: b.resultSchema })),
+      ...outputDefs,
     },
     ...(discriminator ? { discriminator } : {}),
   };
