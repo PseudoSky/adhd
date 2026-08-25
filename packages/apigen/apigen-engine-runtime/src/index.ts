@@ -92,6 +92,7 @@ export type { TransportAdapter } from './lib/transport-adapter';
 export {
   createPackageInvoker,
   readUsePlugins,
+  readExitCodeHook,
   readUseOptions,
   adaptCoreLayer,
 } from './lib/package-invoker';

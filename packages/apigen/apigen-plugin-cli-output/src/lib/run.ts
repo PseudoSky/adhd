@@ -13,6 +13,7 @@ import {
   LayerContext,
   readUseOptions,
   readUsePlugins,
+  readExitCodeHook,
   isApiStream,
 } from '@adhd/apigen-engine-runtime';
 import type {
@@ -419,7 +420,11 @@ interface CliRoute {
 class CliTransportAdapter implements TransportAdapter<CliRawCall> {
   private readonly routes = new Map<string, CliRoute>();
 
-  constructor(private readonly signal?: AbortSignal) {}
+  constructor(
+    private readonly signal?: AbortSignal,
+    /** Opt-in `options.exitCode` mapper — see `writeResult`. */
+    private readonly exitCodeHook?: (result: unknown) => number | undefined
+  ) {}
 
   registerRoute(
     plan: OpPlan,
@@ -453,6 +458,14 @@ class CliTransportAdapter implements TransportAdapter<CliRawCall> {
     // BUG-APIGEN-015 parity: `undefined` (a void op) becomes `null` — canonical
     // JSON, never the bare word `undefined` (not valid JSON output on a wire).
     console.log(JSON.stringify(result === undefined ? null : result));
+
+    // Opt-in `options.exitCode` hook. A host whose operations RETURN a failure
+    // outcome instead of throwing (an `{ok:false, error}` envelope) otherwise
+    // exits 0 on a reported failure, so a caller's `&&` chain proceeds and
+    // `set -e` never trips. Absent by default — an unset hook leaves the
+    // existing "returned normally ⇒ exit 0" behaviour untouched.
+    const code = this.exitCodeHook?.(result);
+    if (typeof code === 'number' && code !== 0) process.exitCode = code;
   }
 
   writeError(_raw: CliRawCall, err: unknown, _plan: OpPlan): void {
@@ -511,7 +524,7 @@ export async function run(input: RunInput): Promise<void> {
 
   const usePlugins = readUsePlugins(input.options);
   const useOptions = readUseOptions(input.options);
-  const adapter = new CliTransportAdapter(input.signal);
+  const adapter = new CliTransportAdapter(input.signal, readExitCodeHook(input.options));
 
   // Resolve every op's OpPlan ONCE (buildCommandTable), then compose ONE
   // `--use`-aware invoker per package (BUG-APIGEN-009 / dod.11) and register
