@@ -1,21 +1,22 @@
 'use strict';
 /**
- * copy — makes {projectRoot}/dist publish-ready:
- *  1. README.md + CHANGELOG.md (if present) + package.json "assets" globs, flattened
- *     to the dist root (basename only) so a nested source path (e.g. "src/schema.json")
- *     still lands beside index.js, matching every asset consumer's expected lookup path.
- *  2. chmod 0o755 every file the package's own "bin" field points at. `@nx/vite:build`
- *     and `@nx/js:tsc` both emit dist files WITHOUT the executable bit, even when the
- *     built entry has a correct `#!/usr/bin/env node` shebang — npm's publish-time bin
- *     validation silently STRIPS any bin entry pointing at a non-executable file (no
- *     error, no warning that names the real cause — just "script name X was invalid
- *     and removed"). Without this, every CLI package (apigen-cli, decompile-cli,
- *     agent-mcp) would publish with its `bin` entry silently dropped — `npm install -g`
- *     would install fine but register no command at all.
+ * copy — makes {projectRoot}/dist publish-ready: copies README.md +
+ * CHANGELOG.md (if present) + package.json "assets" globs, flattened to the
+ * dist root (basename only) so a nested source path (e.g. "src/schema.json")
+ * still lands beside index.js, matching every asset consumer's expected
+ * lookup path.
+ *
+ * The `bin` chmod that used to live here moved to its own uncacheable
+ * `chmod-bin` target (`../chmod-bin/impl.js`) — BUG-NXASSETS-001: this
+ * target is `cache: true`, so its executor body (this file) never runs at
+ * all on a cache hit, which meant the chmod silently stopped happening once
+ * an `assets` cache entry existed. `chmod-bin` runs on every invocation
+ * instead, with no such gap.
+ *
  * In-tree ({projectRoot}/dist), never the old workspace-root dist/{projectRoot} — per
  * the pnpm/in-source-dist migration.
  */
-const { existsSync, mkdirSync, copyFileSync, cpSync, readFileSync, chmodSync, statSync } = require('node:fs');
+const { existsSync, mkdirSync, copyFileSync, cpSync, readFileSync, statSync } = require('node:fs');
 const { join, dirname, basename } = require('node:path');
 const { withMetrics } = require('../../../lib/metrics');
 async function run(options, context)
@@ -47,37 +48,6 @@ async function run(options, context)
       console.log('asset ' + f + ' -> ' + projRoot + '/dist/' + basename(f));
     }
     rec.phase('copyAssets');
-    // DEBT-002 #4: `pkg.bin` may be declared in STRING form ("bin": "./cli.js",
-    // the common single-executable shape) or OBJECT form ({ name: path }).
-    // The chmod loop below used to only handle the object form — a
-    // string-form `bin` silently skipped the chmod entirely, so
-    // `@nx/vite:build`/`@nx/js:tsc`'s non-executable-by-default output would
-    // ship without its executable bit, and npm's publish-time bin validation
-    // silently strips a bin entry pointing at a non-executable file. Normalize
-    // to the same `{ name: path }` shape `rebaseBin` (generate-manifest.js)
-    // already uses for its own string/object duality, keyed by the package
-    // name's basename (npm's own convention for a string-form bin: the
-    // executable is registered under the package's own name).
-    let binMap = null;
-    if (typeof pkg.bin === 'string') {
-      const pkgName = typeof pkg.name === 'string' ? pkg.name : '';
-      const key = pkgName.includes('/') ? pkgName.slice(pkgName.lastIndexOf('/') + 1) : pkgName;
-      if (key) binMap = { [key]: pkg.bin };
-    } else if (pkg.bin && typeof pkg.bin === 'object') {
-      binMap = pkg.bin;
-    }
-    if (binMap) {
-      for (const [name, relPath] of Object.entries(binMap)) {
-        const binFile = join(src, relPath);
-        if (!existsSync(binFile)) { console.error('assets: bin[' + name + '] -> ' + relPath + ' does not exist, skipping chmod'); continue; }
-        const mode = statSync(binFile).mode;
-        if ((mode & 0o111) !== 0o111) {
-          chmodSync(binFile, mode | 0o755);
-          console.log('assets: chmod +x ' + relPath + ' (bin[' + name + '])');
-        }
-      }
-    }
-    rec.phase('chmodBin');
     return { success: true };
   });
 }
