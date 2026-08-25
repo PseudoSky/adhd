@@ -292,6 +292,154 @@ describe('buildTranscoder', () => {
       // Dog branch: name is MARKED_FORMAT so codec runs
       expect(dogWire).toEqual({ kind: 'dog', name: 'encoded(Rex)' });
     });
+
+    // ── Structural branch selection (BUG-BACKLOG-V2-ENVELOPE-DATA-STRIPPED-001) ──
+    //
+    // TypeScript unions reaching apigen are overwhelmingly UNDISCRIMINATED
+    // (`A | B`); `ts-json-schema-generator` emits them as a bare `oneOf` with
+    // no `discriminator`. `pickUnionBranch` used to fall straight through to
+    // `oneOf[0]` for those, and because `encodeNode`'s object arm projects
+    // ONLY the chosen branch's declared `properties`, every field absent from
+    // that arbitrary first branch was SILENTLY DELETED from the wire.
+    //
+    // The shape below is `@adhd/backlog`'s real `IOutcomeEnvelope<T>`: an
+    // error arm FIRST, a success arm second. Encoding a SUCCESS value against
+    // it used to yield exactly `{ok:true}` — `data` and `meta` gone — over
+    // every transport, while the in-process call returned them correctly.
+    //
+    // NEGATIVE CONTROL (verified, not assumed): restore the old one-line body
+    // `return oneOf[0] ?? {}` in `pickUnionBranch` and the first test below
+    // fails with `{ok:true}`, exactly reproducing the shipped bug.
+    const OUTCOME_ENVELOPE: SchemaNode = {
+      oneOf: [
+        {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: { type: 'object' },
+            warnings: { type: 'array' },
+          },
+          required: ['ok', 'error'],
+        },
+        {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: { type: 'object' },
+            warnings: { type: 'array' },
+            meta: { type: 'object' },
+          },
+          required: ['ok', 'data'],
+        },
+      ],
+    };
+
+    it('an UNDISCRIMINATED union encodes through the branch the value actually satisfies, preserving every field', () => {
+      const transcoder = buildTranscoder(createRegistry().freeze());
+
+      const success = {
+        ok: true,
+        data: { created: true, humanId: 'BUG-001' },
+        meta: { total: 1 },
+      };
+
+      // Must select branch 1 (`required:['ok','data']`) even though the error
+      // arm is declared first. Before structural matching this returned
+      // `{ok:true}`.
+      expect(transcoder.encode(success, OUTCOME_ENVELOPE)).toEqual(success);
+    });
+
+    it('the SAME union still routes an error value through the error arm', () => {
+      const transcoder = buildTranscoder(createRegistry().freeze());
+
+      const failure = {
+        ok: false,
+        error: { code: 'item_not_found', message: 'nope' },
+      };
+
+      // Proves the fix is a real discriminating test, not a blanket
+      // "always take the last branch" that would merely invert the bug.
+      expect(transcoder.encode(failure, OUTCOME_ENVELOPE)).toEqual(failure);
+    });
+
+    it('an explicit discriminator still wins over structural scoring', () => {
+      // Regression guard for the resolution ORDER: a value that structurally
+      // fits the WRONG branch better must still follow its discriminator tag.
+      const transcoder = buildTranscoder(createRegistry().freeze());
+
+      const schema: SchemaNode = {
+        oneOf: [{ $ref: '#/$defs/A' }, { $ref: '#/$defs/B' }],
+        discriminator: {
+          propertyName: 'kind',
+          mapping: { a: '#/$defs/A', b: '#/$defs/B' },
+        },
+      };
+      const defs: Record<string, SchemaNode> = {
+        '#/$defs/A': {
+          type: 'object',
+          properties: { kind: { type: 'string' }, only: { type: 'string' } },
+        },
+        '#/$defs/B': {
+          type: 'object',
+          properties: { kind: { type: 'string' } },
+        },
+      };
+      const resolve = (ref: string): SchemaNode => defs[ref] ?? {};
+
+      // `only` makes branch A the better STRUCTURAL fit, but the tag says B —
+      // so `only` is legitimately projected away by B's declared properties.
+      expect(
+        transcoder.encode({ kind: 'b', only: 'x' }, schema, { resolve })
+      ).toEqual({ kind: 'b' });
+    });
+
+    it('a branch missing a required key is never chosen, even when declared first', () => {
+      const transcoder = buildTranscoder(createRegistry().freeze());
+
+      const schema: SchemaNode = {
+        oneOf: [
+          {
+            type: 'object',
+            properties: { id: { type: 'string' }, gone: { type: 'string' } },
+            required: ['gone'],
+          },
+          {
+            type: 'object',
+            properties: { id: { type: 'string' }, kept: { type: 'string' } },
+            required: ['kept'],
+          },
+        ],
+      };
+
+      // Branch 0 requires `gone`, which the value lacks ⇒ disqualified.
+      expect(transcoder.encode({ id: '1', kept: 'yes' }, schema)).toEqual({
+        id: '1',
+        kept: 'yes',
+      });
+    });
+
+    it('falls back to the first branch when nothing matches, rather than throwing', () => {
+      const transcoder = buildTranscoder(createRegistry().freeze());
+
+      const schema: SchemaNode = {
+        oneOf: [{ type: 'string' }, { type: 'number' }],
+      };
+
+      // A boolean inhabits neither branch. The walk must degrade to plain-JSON
+      // passthrough, never crash a live request.
+      expect(transcoder.encode(true, schema)).toBe(true);
+    });
+
+    it('decode uses the same structural selection, so the envelope round-trips', () => {
+      const transcoder = buildTranscoder(createRegistry().freeze());
+
+      const success = { ok: true, data: { humanId: 'BUG-001' }, meta: { total: 1 } };
+      const wire = transcoder.encode(success, OUTCOME_ENVELOPE);
+
+      // `pickUnionBranch` is shared by encodeNode and decodeNode — a fix to one
+      // that missed the other would surface as an asymmetric round-trip here.
+      expect(transcoder.decode(wire, OUTCOME_ENVELOPE)).toEqual(success);
+    });
   });
 
   describe('schema-less envelope (any position)', () => {
@@ -303,6 +451,7 @@ describe('buildTranscoder', () => {
         kind: 'scalar',
         schema: {},
         matches: () => false, // does NOT match via resolve — only used in schema-less path
+        ownsValue: () => true, // explicitly claims every value at a schema-less node
         encode: (v) => `wrapped(${String(v)})`,
         decode: (w) => `unwrapped(${String(w)})`,
       };
@@ -337,6 +486,121 @@ describe('buildTranscoder', () => {
 
       const wire = transcoder.encode('plain', {});
       expect(wire).toBe('plain');
+    });
+
+    // ── BUG-APIGEN-SCHEMALESS-CODEC-ROULETTE ────────────────────────────────
+    // `encodeSchemaless` used to claim a value for the first codec whose
+    // `encode` did not throw. Several real codecs are TOTAL (`int64` is
+    // `String(value)`), so the winner was decided by registry order and then
+    // REWROTE the value: a whole object at a `{}` node came back as
+    // `{$apigen:'int64', v:'[object Object]'}`. That is the schemaless path,
+    // which exists precisely because the schema cannot describe the value —
+    // so the corruption was silent and total.
+    it('a TOTAL codec never claims a value it does not own', () => {
+      const registry = createRegistry();
+      // Faithful to the real int64 codec: encode is String(), never throws.
+      const totalCodec: LogicalTypeCodec = {
+        id: 'int64',
+        kind: 'scalar',
+        schema: { type: 'string', format: 'int64' },
+        matches: (n) => n['format'] === 'int64',
+        ownsValue: (v) => typeof v === 'bigint',
+        encode: (v) => String(v),
+        decode: (w) => BigInt(String(w)),
+      };
+      registry.register(totalCodec);
+      const transcoder = buildTranscoder(registry.freeze());
+
+      const card = { humanId: 'BUG-001', title: 'a card', tags: [] };
+      // The exact consumer-visible outcome: the card comes back as the card.
+      expect(transcoder.encode(card, {})).toEqual(card);
+    });
+
+    it('a value a codec DOES own is still enveloped at a schema-less node', () => {
+      const registry = createRegistry();
+      const totalCodec: LogicalTypeCodec = {
+        id: 'int64',
+        kind: 'scalar',
+        schema: { type: 'string', format: 'int64' },
+        matches: (n) => n['format'] === 'int64',
+        ownsValue: (v) => typeof v === 'bigint',
+        encode: (v) => String(v),
+        decode: (w) => BigInt(String(w)),
+      };
+      registry.register(totalCodec);
+      const transcoder = buildTranscoder(registry.freeze());
+
+      const wire = transcoder.encode(42n, {});
+      expect(wire).toEqual({ $apigen: 'int64', v: '42' });
+      expect(transcoder.decode(wire as Wire, {})).toBe(42n);
+    });
+
+    it('an owned value NESTED in a plain payload is enveloped, and round-trips', () => {
+      const registry = createRegistry();
+      const totalCodec: LogicalTypeCodec = {
+        id: 'int64',
+        kind: 'scalar',
+        schema: { type: 'string', format: 'int64' },
+        matches: (n) => n['format'] === 'int64',
+        ownsValue: (v) => typeof v === 'bigint',
+        encode: (v) => String(v),
+        decode: (w) => BigInt(String(w)),
+      };
+      registry.register(totalCodec);
+      const transcoder = buildTranscoder(registry.freeze());
+
+      const host = { humanId: 'BUG-001', nodeId: 7n, tags: ['a'], nested: { count: 9n } };
+      const wire = transcoder.encode(host, {});
+      expect(wire).toEqual({
+        humanId: 'BUG-001',
+        nodeId: { $apigen: 'int64', v: '7' },
+        tags: ['a'],
+        nested: { count: { $apigen: 'int64', v: '9' } },
+      });
+      // Symmetry: decode must recurse too, or the host gets the raw bag back.
+      expect(transcoder.decode(wire as Wire, {})).toEqual(host);
+    });
+
+    it('claiming is independent of registration order', () => {
+      // Two total codecs; whichever is registered first previously swallowed
+      // every value. Both orders must now yield the untouched payload.
+      const build = (order: 'a-first' | 'b-first') => {
+        const registry = createRegistry();
+        const mk = (id: string): LogicalTypeCodec => ({
+          id,
+          kind: 'scalar',
+          schema: { type: 'string', format: id },
+          matches: (n) => n['format'] === id,
+          ownsValue: (v) => typeof v === 'bigint',
+          encode: (v) => String(v),
+          decode: (w) => BigInt(String(w)),
+        });
+        const [x, y] = order === 'a-first' ? ['int64', 'decimal'] : ['decimal', 'int64'];
+        registry.register(mk(x));
+        registry.register(mk(y));
+        return buildTranscoder(registry.freeze());
+      };
+      const payload = { title: 'order-independent' };
+      expect(build('a-first').encode(payload, {})).toEqual(payload);
+      expect(build('b-first').encode(payload, {})).toEqual(payload);
+    });
+
+    it('a JSON-native value is never rewritten at a schema-less node', () => {
+      const registry = createRegistry();
+      // uuid/decimal are branded STRINGS — JSON-native, so they declare no
+      // ownsValue and must leave a plain string exactly as it arrived.
+      const uuidLike: LogicalTypeCodec = {
+        id: 'uuid',
+        kind: 'scalar',
+        schema: { type: 'string', format: 'uuid' },
+        matches: (n) => n['format'] === 'uuid',
+        encode: (v) => String(v).toLowerCase(),
+        decode: (w) => w,
+      };
+      registry.register(uuidLike);
+      const transcoder = buildTranscoder(registry.freeze());
+
+      expect(transcoder.encode('A-B-C', {})).toBe('A-B-C');
     });
   });
 

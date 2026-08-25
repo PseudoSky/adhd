@@ -37,6 +37,25 @@ export interface LogicalTypeCodec<Host = unknown> {
   readonly schema: SchemaNode;
   /** Structural, cheap test: does this codec own `node`? (format match, or x-apigen-codec===id). */
   matches(node: SchemaNode): boolean;
+  /**
+   * Value-side claim test, used ONLY on the schemaless path (a `{}` / `any`
+   * schema node, where `matches(node)` cannot decide anything).
+   *
+   * Implement this on — and only on — codecs whose HOST type is not
+   * JSON-native (`Date`, `bigint`, `Uint8Array`, non-finite `number`). Those
+   * are the values that genuinely need the `{$apigen,v}` envelope to survive
+   * a JSON round-trip. A codec whose host type IS JSON-native (`uuid` and
+   * `decimal` are both branded strings) must NOT implement it: a plain string
+   * already round-trips, and claiming it would rewrite a consumer's payload
+   * for no gain.
+   *
+   * A codec that omits `ownsValue` is never eligible for schemaless claiming.
+   * That is the safe default — passthrough loses nothing, whereas a wrong
+   * claim silently destroys data.
+   *
+   * MUST be pure and side-effect free.
+   */
+  ownsValue?(value: unknown): boolean;
   /** Host -> wire. MUST NOT mutate `value`; MUST be deterministic. */
   encode(value: Host, node: SchemaNode, ctx: TranscodeCtx): Wire;
   /** Wire -> host. MUST validate-then-construct; MUST be the inverse of `encode` across the vectors. */

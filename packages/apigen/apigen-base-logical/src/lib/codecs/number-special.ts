@@ -50,6 +50,12 @@ export const numberSpecialCodec: LogicalTypeCodec<number> = {
     return node['type'] === 'number' && node['format'] === undefined;
   },
 
+  ownsValue(value: unknown): boolean {
+    // Only the three non-JSON-native numbers. A finite number is already
+    // representable and must pass through untouched.
+    return typeof value === 'number' && !Number.isFinite(value);
+  },
+
   encode(value: number, _node: SchemaNode, _ctx: TranscodeCtx): Wire {
     if (Number.isNaN(value)) return NAN_WIRE;
     if (value === Infinity) return INF_WIRE;

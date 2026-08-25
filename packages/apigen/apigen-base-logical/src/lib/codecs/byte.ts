@@ -24,6 +24,10 @@ export const byteCodec: LogicalTypeCodec<Uint8Array> = {
     return node['type'] === 'string' && node['format'] === 'byte';
   },
 
+  ownsValue(value: unknown): boolean {
+    return value instanceof Uint8Array;
+  },
+
   encode(value: Uint8Array, _node: SchemaNode, _ctx: TranscodeCtx): Wire {
     // Standard base64 (RFC 4648 §4): '+' and '/' with '=' padding.
     return Buffer.from(value).toString('base64');

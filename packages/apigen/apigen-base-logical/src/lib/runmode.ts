@@ -251,14 +251,48 @@ function decodeNode(
 // ---------------------------------------------------------------------------
 
 /**
- * For a `oneOf` schema, pick the branch whose discriminator property matches
- * `value`. Falls back to the first branch if no discriminator is present.
+ * For a `oneOf` schema, pick the branch that `value` actually inhabits.
+ *
+ * Resolution order (first match wins):
+ *  1. **Discriminator** — an explicit `discriminator.propertyName` + `mapping`
+ *     naming a branch by `$ref` (OpenAPI 3 style). Cheapest and unambiguous.
+ *  2. **Structural match** — the branch whose declared shape the value
+ *     actually satisfies, scored by {@link scoreUnionBranch}.
+ *  3. **First branch** — only when NOTHING structurally matches.
+ *
+ * Step 2 is not an optimisation; it is a correctness requirement. TypeScript
+ * unions reaching apigen are overwhelmingly UNDISCRIMINATED (`A | B`), and
+ * `ts-json-schema-generator` emits them as a bare `oneOf` with no
+ * `discriminator`. Before structural matching existed, every such union fell
+ * to step 3 and encoded against `oneOf[0]` regardless of the value — and
+ * because `encodeNode`'s object arm projects ONLY the branch's declared
+ * `properties`, every field absent from that arbitrary first branch was
+ * SILENTLY DROPPED from the wire.
+ *
+ * That is not a theoretical hazard: it shipped. `@adhd/backlog`'s six
+ * INTERFACE_v2 verbs return `IOutcomeEnvelope<T>` — an undiscriminated union
+ * of an error arm `{ok, error, warnings}` and a success arm `{ok, data,
+ * warnings, meta}`. `oneOf[0]` is the ERROR arm, so every successful call
+ * over every transport (CLI, MCP, HTTP, OpenAPI) serialized to exactly
+ * `{"ok":true}` — `data` and `meta` deleted — while the in-process function
+ * returned them correctly. Callers could not read an item, list a query, or
+ * learn the id they had just minted. Unit tests never saw it because they
+ * call the functions directly and never cross the mount.
+ * (BUG-BACKLOG-V2-ENVELOPE-DATA-STRIPPED-001.)
+ *
+ * Shared by BOTH `encodeNode` and `decodeNode`, so the fix is symmetric.
+ *
+ * @param value  The host (encode) or wire (decode) value being walked.
+ * @param oneOf  The branch schemas.
+ * @param schema The union node itself (carries any `discriminator`).
+ * @param ctx    Transcode ctx — used to resolve `$ref` branches.
+ * @returns The chosen branch schema.
  */
 function pickUnionBranch(
   value: unknown,
   oneOf: SchemaNode[],
   schema: SchemaNode,
-  _ctx: TranscodeCtx
+  ctx: TranscodeCtx
 ): SchemaNode {
   const discriminator = schema['discriminator'] as
     | { propertyName?: string; mapping?: Record<string, string> }
@@ -280,8 +314,126 @@ function pickUnionBranch(
     }
   }
 
-  // Fallback: return the first branch (later states handle structural matching)
+  // ── Structural match ───────────────────────────────────────────────────────
+  // Score every branch; keep the strictly-best. Ties resolve to the EARLIEST
+  // branch, preserving declaration order as the documented tie-break.
+  let best: SchemaNode | undefined;
+  let bestScore = -1;
+  for (const branch of oneOf) {
+    const resolved = resolveBranch(branch, ctx);
+    const score = scoreUnionBranch(value, resolved, ctx);
+    if (score !== null && score > bestScore) {
+      bestScore = score;
+      best = branch;
+    }
+  }
+  if (best !== undefined) return best;
+
+  // Nothing matched structurally — fall back to declaration order rather than
+  // throwing, so an unmodelled value still round-trips as plain JSON.
   return oneOf[0] ?? {};
+}
+
+/** Resolve a `$ref` branch to the node it names; other branches pass through. */
+function resolveBranch(branch: SchemaNode, ctx: TranscodeCtx): SchemaNode {
+  const ref = branch['$ref'];
+  return typeof ref === 'string' ? ctx.resolve(ref) : branch;
+}
+
+/** The JSON type name of a runtime value, for comparison against `type`. */
+function jsonTypeOf(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  const t = typeof value;
+  if (t === 'number') return Number.isInteger(value) ? 'integer' : 'number';
+  return t; // 'string' | 'boolean' | 'object' | 'undefined' | ...
+}
+
+/**
+ * Score how well `value` fits `branch`. Higher is a better fit.
+ *
+ * Returns `null` — meaning DISQUALIFIED, never chosen — when the branch is
+ * definitively wrong for this value:
+ *  - the branch declares a `type` the value cannot satisfy, or
+ *  - the branch declares `required` keys the value does not carry.
+ *
+ * The `required` test is what separates the two arms of an outcome envelope:
+ * a success value `{ok:true, data:{…}}` fails the error arm's
+ * `required:['ok','error']` and passes the success arm's `required:
+ * ['ok','data']`.
+ *
+ * Scoring weights required-key matches above optional ones, so a branch that
+ * pins the value's identity beats a broader branch that merely tolerates it.
+ * A branch with no constraints at all scores 0 — eligible, but only when
+ * nothing better fits.
+ */
+function scoreUnionBranch(
+  value: unknown,
+  branch: SchemaNode,
+  ctx: TranscodeCtx
+): number | null {
+  // A `oneOf` nested directly inside a branch: take its best sub-branch score
+  // so nesting does not silently disqualify the whole branch.
+  const nested = branch['oneOf'];
+  if (Array.isArray(nested)) {
+    let bestNested: number | null = null;
+    for (const sub of nested) {
+      const s = scoreUnionBranch(value, resolveBranch(sub, ctx), ctx);
+      if (s !== null && (bestNested === null || s > bestNested)) bestNested = s;
+    }
+    return bestNested;
+  }
+
+  const declaredType = branch['type'];
+  const actualType = jsonTypeOf(value);
+
+  if (typeof declaredType === 'string') {
+    // `integer` is a refinement of `number`; a whole number satisfies both.
+    const ok =
+      declaredType === actualType ||
+      (declaredType === 'number' && actualType === 'integer');
+    if (!ok) return null;
+  } else if (Array.isArray(declaredType)) {
+    const ok = declaredType.some(
+      (t) => t === actualType || (t === 'number' && actualType === 'integer')
+    );
+    if (!ok) return null;
+  }
+
+  // Non-objects carry no further structure to compare — a satisfied `type` is
+  // the whole signal.
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return typeof declaredType === 'string' ? 1 : 0;
+  }
+
+  const bag = value as Record<string, unknown>;
+  const required = branch['required'];
+  let score = 0;
+
+  if (Array.isArray(required)) {
+    for (const key of required) {
+      if (typeof key !== 'string') continue;
+      if (bag[key] === undefined) return null; // missing a required key ⇒ wrong branch
+      score += 2;
+    }
+  }
+
+  const props = branch['properties'] as
+    | Record<string, SchemaNode>
+    | undefined;
+  if (props) {
+    for (const key of Object.keys(props)) {
+      if (bag[key] !== undefined) score += 1;
+    }
+    // Penalise keys the value carries that this branch does not model at all —
+    // they would be DROPPED by `encodeNode`'s projection, which is precisely
+    // the data loss this scorer exists to prevent.
+    for (const key of Object.keys(bag)) {
+      if (props[key] === undefined) score -= 1;
+    }
+  }
+
+  return score;
 }
 
 // ---------------------------------------------------------------------------
@@ -299,23 +451,56 @@ function encodeSchemaless(
   _schema: SchemaNode,
   ctx: TranscodeCtx
 ): Wire {
-  // Try to find a codec by scanning the registry for one that matches the
-  // value directly (e.g. a Date instance). We use a heuristic: attempt every
-  // codec's encode; the first that does not throw wins and is wrapped.
+  // A codec may claim this value ONLY via its explicit `ownsValue` predicate.
+  //
+  // This used to "try every codec's encode; the first that does not throw
+  // wins". That heuristic is unsound, because a codec's `encode` is not a
+  // membership test: several are TOTAL and never throw for any input
+  // (`int64` is `String(value)`, `decimal` is a passthrough). So the winner
+  // was decided by registry iteration order, not by the value — and the
+  // winner then REWROTE the value. A whole object reaching a `{}` node came
+  // back as `{$apigen:'int64', v:'[object Object]'}`: silent, total data
+  // destruction on the one path that exists precisely because the schema
+  // could not describe the value. (This is DEBT-LT-006's registration-order
+  // sensitivity; the consequence was worse than that item recorded.)
+  //
+  // `ownsValue` is order-independent and false by default, so an unclaimed
+  // value now passes through structurally instead of being captured by
+  // whichever total codec happened to be registered first.
   for (const id of ctx.registry.ids()) {
     const codec = ctx.registry.get(id);
-    if (!codec) continue;
-    try {
-      const encoded = codec.encode(value, codec.schema, ctx);
-      // Wrap in the self-describing envelope
-      return { [ENVELOPE_KEY]: id, v: encoded };
-    } catch {
-      // Codec does not own this value; try the next one
-    }
+    if (!codec?.ownsValue?.(value)) continue;
+    return { [ENVELOPE_KEY]: id, v: codec.encode(value as never, codec.schema, ctx) };
   }
 
-  // No codec matched → passthrough
+  // Not owned by any codec: recurse, so a non-JSON-native value NESTED inside
+  // an otherwise plain payload still gets its envelope. Without this, only a
+  // top-level Date would survive a `{}` node.
+  if (Array.isArray(value)) {
+    return value.map((v) => encodeSchemaless(v, {}, ctx)) as Wire;
+  }
+  if (isPlainObject(value)) {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (v !== undefined) out[k] = encodeSchemaless(v, {}, ctx);
+    }
+    return out as Wire;
+  }
+
+  // Scalar (or an exotic object no codec claims) → existing passthrough rules.
   return encodePassthrough(value) as Wire;
+}
+
+/**
+ * True for a direct-`Object`/null-prototype object — NOT for arrays, `Date`,
+ * `Uint8Array`, or any other class instance. Used to decide what is safe to
+ * walk key-by-key; a class instance is opaque and belongs to a codec or to
+ * `encodePassthrough`, never to a structural walk.
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
 }
 
 /**
@@ -336,6 +521,21 @@ function decodeEnvelope(wire: Wire, ctx: TranscodeCtx): unknown {
       return codec.decode(env.v, codec.schema, ctx);
     }
   }
+
+  // Mirror `encodeSchemaless`'s recursion: an envelope nested inside a plain
+  // container must be unwrapped too, or a payload that encoded correctly
+  // decodes back to the raw `{$apigen,v}` bag instead of the host value.
+  if (Array.isArray(wire)) {
+    return wire.map((w) => decodeEnvelope(w as Wire, ctx));
+  }
+  if (isPlainObject(wire)) {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(wire)) {
+      out[k] = decodeEnvelope(v as Wire, ctx);
+    }
+    return out;
+  }
+
   return wire;
 }
 

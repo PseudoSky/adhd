@@ -22,6 +22,10 @@ export const dateTimeCodec: LogicalTypeCodec<Date> = {
     return node['type'] === 'string' && node['format'] === 'date-time';
   },
 
+  ownsValue(value: unknown): boolean {
+    return value instanceof Date;
+  },
+
   encode(value: Date, _node: SchemaNode, _ctx: TranscodeCtx): Wire {
     return value.toISOString();
   },
