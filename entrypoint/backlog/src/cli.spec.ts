@@ -295,14 +295,16 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     const expectedDbPath = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot }).files.db;
     expect(existsSync(expectedDbPath), 'sanity: no store should exist before the CLI ever runs').toBe(false);
 
-    // `version`/`--help`/bare must exit 0 AND stay store-free. `install-skill
-    // --help` is store-free too but exits 1 (its parser rejects `--help` — a
-    // pre-existing, out-of-scope quirk), so only the store-open property is
-    // asserted for it, never its exit code.
+    // `version`/`--help`/bare/`install-skill --help` must all exit 0 AND stay
+    // store-free. `install-skill --help` used to exit 1 (its parser rejected
+    // `--help` as an unknown argument, on a raw stack trace) — fixed by
+    // BUG-BACKLOG-INSTALLSKILL-UX-001, which made `--help` a usage request
+    // like every other command here, not a parse error.
     const zeroExit = [
       ['version'],
       ['--help'],
       [],
+      ['install-skill', '--help'],
     ] as const;
     for (const args of zeroExit) {
       const res = runBin([...args], adhdRoot, { SOX_ECOSYSTEM_HOME: soxHome });
@@ -311,11 +313,6 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
       expect(readTelemetryEvents(soxHome), `"${label}" must emit zero store-open telemetry records`).toHaveLength(0);
       expect(existsSync(expectedDbPath), `"${label}" must not create the store`).toBe(false);
     }
-
-    const installSkillHelp = runBin(['install-skill', '--help'], adhdRoot, { SOX_ECOSYSTEM_HOME: soxHome });
-    expect(readTelemetryEvents(soxHome), '"install-skill --help" must emit zero store-open telemetry records').toHaveLength(0);
-    expect(existsSync(expectedDbPath), '"install-skill --help" must not create the store').toBe(false);
-    expect(installSkillHelp.status).not.toBe(0);
 
     // Negative control / teeth: a real store command MUST emit store-open
     // telemetry records AND create the DB — proving the assertions above are
