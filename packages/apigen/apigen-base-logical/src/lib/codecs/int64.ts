@@ -23,6 +23,10 @@ export const int64Codec: LogicalTypeCodec<bigint> = {
     return node['type'] === 'string' && node['format'] === 'int64';
   },
 
+  ownsValue(value: unknown): boolean {
+    return typeof value === 'bigint';
+  },
+
   encode(value: bigint, _node: SchemaNode, _ctx: TranscodeCtx): Wire {
     return String(value);
   },
