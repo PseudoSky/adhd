@@ -19,8 +19,24 @@
 // `entrypoint/backlog` is read-only here (never modified) — its already-built
 // `dist/client.d.ts` is the input to `extract()`, exactly mirroring
 // `entrypoint/backlog/src/server.ts`'s own `extractClientOperations()`.
-
-import { describe, it, expect, beforeAll } from 'vitest';
+//
+// DELIBERATE DESIGN CHOICE — real package over a pinned fixture: this suite
+// used to hardcode three v1 verb names (`create-item`, `resolve-item`,
+// `get-item`). backlog's INTERFACE_v2 consolidation collapsed its whole
+// mounted surface to six verbs (`get`, `query`, `create`, `update`, `relate`,
+// `admin` — see `entrypoint/backlog/src/client.ts`), `resolve-item` has no v2
+// successor verb at all (resolution is now a mode of `update`), and the
+// hardcoded names broke. The fragile part was never "this test reads a real
+// package" — it was "this test hardcodes verb names owned by a package it
+// doesn't control." Pinning to a synthetic fixture instead would fix that
+// symptom by discarding the whole point of the file (see the header above):
+// it was driving REAL schemas from a REAL already-built package that found a
+// genuine cross-package bug (BUG-APIGEN-BATCH-DANGLING-REF-001, below) that a
+// hand-written fixture would never have exercised. So this suite now
+// iterates over WHATEVER `client.ts` currently exports — selected by
+// property (`operations.map(o => o.id)`), never by name — so a future
+// backlog verb rename/add/remove changes nothing here.
+import { describe, it, expect } from 'vitest';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import Ajv from 'ajv';
@@ -28,7 +44,7 @@ import addFormats from 'ajv-formats';
 import { synthesizeExample } from '@adhd/apigen-base-logical';
 import { extract } from '../lib/extract';
 import { composeSchemas } from '../lib/compose-schemas';
-import { buildBatchKindSchema } from '../lib/batch';
+import { buildBatchKindSchema, deriveBatchOperationBranch } from '../lib/batch';
 import type { GeneratedSchemas } from '../lib/types';
 import type { Operation } from '../lib/descriptor';
 
@@ -52,37 +68,54 @@ const BACKLOG_CLIENT_DTS = path.join(
   '../../../../../entrypoint/backlog/dist/client.d.ts'
 );
 
-describe('[mcp-discoverability.real-ops] synthesized examples validate against REAL repo schemas', () => {
-  let operations: Operation[];
+if (!fs.existsSync(BACKLOG_CLIENT_DTS)) {
+  throw new Error(
+    `[mcp-discoverability.real-ops] ${BACKLOG_CLIENT_DTS} does not exist — ` +
+      `run "nx build backlog" first (this test extracts real schemas from the built .d.ts, ` +
+      `exactly like entrypoint/backlog/src/server.ts's extractClientOperations()).`
+  );
+}
 
-  beforeAll(async () => {
-    if (!fs.existsSync(BACKLOG_CLIENT_DTS)) {
-      throw new Error(
-        `[mcp-discoverability.real-ops] ${BACKLOG_CLIENT_DTS} does not exist — ` +
-          `run "nx build backlog" first (this test extracts real schemas from the built .d.ts, ` +
-          `exactly like entrypoint/backlog/src/server.ts's extractClientOperations()).`
-      );
-    }
-    operations = await extract({
-      sourceFile: BACKLOG_CLIENT_DTS,
-      namespace: 'backlog',
-      dropFileSegment: true,
-    });
-    expect(operations.length).toBeGreaterThan(0);
+// Module-scope, not beforeAll: `it.each` needs the real op ids at TEST
+// COLLECTION time (vitest collects `it.each` cases before any `beforeAll`
+// runs), and selecting by property instead of hardcoded name is the whole
+// point of this rewrite (see header comment).
+const operations: Operation[] = await extract({
+  sourceFile: BACKLOG_CLIENT_DTS,
+  namespace: 'backlog',
+  dropFileSegment: true,
+});
+
+if (operations.length === 0) {
+  throw new Error(
+    '[mcp-discoverability.real-ops] extracted zero operations from the real backlog ' +
+      'dist/client.d.ts — nothing for this suite to validate against.'
+  );
+}
+
+describe('[mcp-discoverability.real-ops] synthesized examples validate against REAL repo schemas', () => {
+  it('extracted at least the v2 backlog surface (sanity floor, not a name list)', () => {
+    // INTERFACE_v2 collapsed backlog to six mounted verbs; this is a floor,
+    // not an exact-count pin, so a future seventh verb doesn't break it.
+    expect(operations.length).toBeGreaterThanOrEqual(6);
   });
 
   // ---------------------------------------------------------------------
   // Real extracted operations, composed through composeSchemas — the
-  // `{data:{...}}`-enveloped convention.
+  // `{data:{...}}`-enveloped convention. Runs for EVERY real operation
+  // backlog's client.ts currently exports, selected by id, never hardcoded.
   // ---------------------------------------------------------------------
 
-  it.each(['create-item', 'resolve-item', 'get-item'])(
-    '[mcp-discoverability.real-ops.1] backlog/%s: synthesized example passes real AJV validation',
-    (opName) => {
-      const op = operations.find((o) => o.id === `backlog/${opName}`);
+  it.each(operations.map((o) => o.id))(
+    '[mcp-discoverability.real-ops.1] %s: synthesized example passes real AJV validation',
+    (opId) => {
+      const op = operations.find((o) => o.id === opId);
       if (!op) {
-        throw new Error(`operation "backlog/${opName}" must exist in the real extracted set`);
+        throw new Error(`operation "${opId}" must exist in the real extracted set`);
       }
+      // composeSchemas keys its map by bare function name, not the
+      // namespaced op id (e.g. "backlog/create" -> "create").
+      const opName = opId.split('/').pop() as string;
 
       const generated: GeneratedSchemas = {
         metadata: { namespace: 'backlog', phase: '' },
@@ -104,12 +137,23 @@ describe('[mcp-discoverability.real-ops] synthesized examples validate against R
       expect(
         valid,
         `synthesized example ${JSON.stringify(example)} must validate against the real ` +
-          `backlog/${opName} composed schema; ajv errors: ${JSON.stringify(validate.errors)}`
+          `${opId} composed schema; ajv errors: ${JSON.stringify(validate.errors)}`
       ).toBe(true);
 
-      // The convention actually documented (BUG-APIGEN-020): domain params
-      // land under "data".
-      expect(example).toHaveProperty('data');
+      // BUG-APIGEN-020: domain params land under "data" — but composeSchemas
+      // only lists "data" in the outer `required` array when the function
+      // actually has >=1 required domain param (FEAT-APIGEN-023). A
+      // zero-required-domain-param op's synthesized example can legitimately
+      // omit the optional "data" wrapper, so the assertion tracks the
+      // schema's own required-ness rather than blanket-asserting the field.
+      const outerRequired = (inputSchema as { required?: string[] }).required ?? [];
+      if (outerRequired.includes('data')) {
+        expect(
+          example,
+          `${opId}'s composed schema requires "data" but the synthesized example omitted it: ` +
+            JSON.stringify(example)
+        ).toHaveProperty('data');
+      }
     }
   );
 
@@ -141,5 +185,61 @@ describe('[mcp-discoverability.real-ops] synthesized examples validate against R
     expect(example).not.toHaveProperty('data');
     expect(example).toHaveProperty('operation');
     expect(example).toHaveProperty('items');
+  });
+
+  // ---------------------------------------------------------------------
+  // BUG-APIGEN-BATCH-DANGLING-REF-001 (found BY this suite, driving real
+  // backlog schemas): `backlog/query`'s real input schema carries its own
+  // top-level `definitions` (IStatusSelector, Priority, ...) with bare
+  // `#/definitions/<Name>` $refs, hoisted there by extract.ts's
+  // `hoistNestedDefs`. Before batch.ts's `buildBatchKindSchema` hoisted
+  // every batched op's own `definitions`/`$defs` up to the shared
+  // `_batch/<kind>` document root, embedding that operation's schema several
+  // levels deep inside a `oneOf` branch left its `$ref`s dangling — AJV
+  // resolves a bare `#/definitions/...` ref against the document root it was
+  // actually asked to compile, never the nearest ancestor object that
+  // happens to carry a `definitions` key. This negative control reproduces
+  // the pre-fix construction directly (rather than reverting product code)
+  // to prove real-ops.2 above actually has teeth: it fails the same way the
+  // unfixed code did, and the real, fixed `buildBatchKindSchema` output does
+  // not.
+  // ---------------------------------------------------------------------
+
+  it('[mcp-discoverability.real-ops.3] batch mount definitions-hoisting: negative control proves real-ops.2 has teeth', () => {
+    const actionOps = operations.filter((o) => o.kind === 'action');
+    const queryOp = actionOps.find((o) => o.id === 'backlog/query');
+    if (!queryOp) {
+      throw new Error('operation "backlog/query" must exist in the real extracted set');
+    }
+    expect(
+      Object.keys((queryOp.input as { definitions?: Record<string, unknown> }).definitions ?? {})
+        .length
+    ).toBeGreaterThan(0);
+
+    const branches = actionOps.map(deriveBatchOperationBranch);
+    // Exactly the pre-fix shape: each branch's raw `itemsSchema` (== op.input,
+    // definitions and all) embedded several levels deep, with NOTHING hoisted
+    // to the document root.
+    const brokenSchema = {
+      oneOf: actionOps.map((op, i) => ({
+        type: 'object',
+        required: ['operation', 'items'],
+        properties: {
+          operation: { type: 'string', enum: [op.id] },
+          items: { type: 'array', items: branches[i].itemsSchema },
+        },
+      })),
+    };
+    const ajv1 = makeAjv();
+    expect(
+      () => ajv1.compile(brokenSchema),
+      'the un-hoisted construction was expected to reproduce the dangling-$ref compile failure ' +
+        '(if this no longer throws, the underlying bug class this test guards may have changed shape)'
+    ).toThrow(/can't resolve reference/);
+
+    // The real, fixed mount schema compiles cleanly.
+    const { input: fixedSchema } = buildBatchKindSchema(actionOps);
+    const ajv2 = makeAjv();
+    expect(() => ajv2.compile(fixedSchema)).not.toThrow();
   });
 });
