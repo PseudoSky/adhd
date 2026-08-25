@@ -93,6 +93,31 @@ export function readUsePlugins(options: Record<string, unknown>): UsePlugin[] {
   return Array.isArray(raw) ? (raw as UsePlugin[]) : [];
 }
 
+/**
+ * Optional `options.exitCode` hook: maps a SUCCESSFULLY-RETURNED result to a
+ * process exit code.
+ *
+ * A host whose operations return a result-shaped outcome (`{ok:false, error}`)
+ * rather than throwing looks like unqualified success to a transport, so the
+ * CLI exits 0 on a reported failure — a caller's `&&` chain then proceeds and
+ * `set -e` never trips. This hook is the seam that lets such a host state its
+ * own mapping without apigen having to know the envelope shape.
+ *
+ * Opt-in and absent by default: a host that does not pass it keeps the
+ * existing "returned normally ⇒ exit 0" behaviour exactly.
+ *
+ * Thrown `ApiError`s are unaffected — those already map through
+ * `CLI_EXIT_CODE`.
+ */
+export function readExitCodeHook(
+  options: Record<string, unknown>
+): ((result: unknown) => number | undefined) | undefined {
+  const raw = options['exitCode'];
+  return typeof raw === 'function'
+    ? (raw as (result: unknown) => number | undefined)
+    : undefined;
+}
+
 export function readUseOptions(options: Record<string, unknown>): UseOptions {
   const raw = options['useOptions'];
   return raw && typeof raw === 'object' ? (raw as UseOptions) : {};
