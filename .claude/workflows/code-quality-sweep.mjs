@@ -1,0 +1,1241 @@
+/**
+ * code-quality-sweep — a reusable 3-stage, multi-agent code-quality sweep.
+ *
+ * WHAT IT DOES
+ *   Stage 0 "Discover"   — (only when `args.packages` is omitted) seeds the roster from nx
+ *                          project metadata, sizes each project, and packs oversized ones into
+ *                          several evenly-sized review units so a 20k-line package is not handed
+ *                          to a single agent that can only sample it.
+ *   Stage 1 "Isolated"   — one cheap specialist agent per unit. Each agent is given an EXACT
+ *                          file/dir list it may not read outside of and a required structured
+ *                          schema. Findings without file:line + verbatim evidence are dropped.
+ *   Stage 2 "Second lens"— every unit is re-read by a DIFFERENT specialist. Still blind.
+ *
+ * EVERY AGENT IS BLIND. No agent is ever told what to look for, what a previous pass found,
+ * or what vocabulary to use. Concepts are an OUTPUT — coined independently by each agent and
+ * clustered afterwards in post-processing. This is load-bearing, not stylistic:
+ *   - Handing an agent a concept to hunt makes it file borderline cases under that concept,
+ *     so the sweep "discovers" whatever it was sent to find and buries rare, severe defects.
+ *   - It also destroys the independence that makes agreement meaningful. Two passes primed
+ *     with the same tag vocabulary agreeing is one prior counted twice, not corroboration.
+ * Coverage therefore comes from PERSPECTIVE DIVERSITY (a second, different specialist) rather
+ * than from directed hunting, and cross-agent agreement at a file:line is reported to the
+ * synthesiser as a genuine confidence signal.
+ *   Stage 3 "Synthesize" — an architect agent turns the aggregated evidence into an EPIC SPEC:
+ *                          coherent themes, each with 3-8 independently-shippable child items
+ *                          carrying file:line citations, acceptance criteria, and a named
+ *                          red->green test expectation.
+ *
+ * IT RETURNS THE EPICS — IT DOES NOT FILE THEM.
+ *   Filing to the backlog graph deliberately stays with the INVOKING session: dedupe
+ *   (backlog_list_items grep by symbol/path/error-string), backlog_create_item, backlog_link_related,
+ *   and backlog_get_item verification all need the caller's judgement and repo context. The
+ *   workflow returns `{ epics, findings, concepts, dropped }`; the caller files them.
+ *
+ * SAFETY
+ *   Every worker is instructed READ-ONLY: no Edit/Write, and no build/test/lint/nx/tsc/vitest/pnpm
+ *   command of any kind. Several nx build targets `rm -rf dist` and these sweeps commonly run
+ *   against a live shared checkout.
+ *
+ * INVOKE
+ *   Workflow({ name: 'code-quality-sweep', args: { packages: [...], agentBudgetPerStage: 20 } })
+ *   See .claude/workflows/code-quality-sweep.md for the full argument reference.
+ */
+
+export const meta = {
+  name: 'code-quality-sweep',
+  description: 'Blind multi-agent code-quality sweep: nx-seeded scopes, two independent specialist passes, adversarial verification, then synthesis into a filed-by-caller epic spec',
+  whenToUse: 'A broad quality/debt audit across many packages, where you want evidence-backed, adversarially-verified findings clustered into shippable epics rather than a flat list of nits',
+  phases: [
+    { title: 'Discover', detail: 'nx-seeded project roster, sized and split into even review units; plus a backlog query for prior art to dedupe against' },
+    { title: 'Isolated', detail: 'one specialist per unit, blind, structured findings with file:line evidence' },
+    { title: 'Second lens', detail: 'every unit re-read by a different specialist, still blind' },
+    { title: 'Verify', detail: 'skeptics attempt to refute each critical/high finding; uncertain means refuted' },
+    { title: 'Synthesize', detail: 'architect turns surviving evidence into an epic spec' },
+  ],
+}
+
+// ---------------------------------------------------------------------------
+// Arguments & defaults
+// ---------------------------------------------------------------------------
+
+// `args` SHOULD arrive as a real object, but some callers (and some harness
+// paths) deliver it JSON-encoded. Parsing defensively costs nothing and turns a
+// hard "args.packages is required" failure — which looks exactly like a caller
+// forgetting the argument — into a working run.
+const a = (typeof args === 'string' ? JSON.parse(args) : args) || {}
+const BUDGET = a.agentBudgetPerStage || 20
+const WORKER_MODEL = a.workerModel || 'haiku'
+const SYNTH_MODEL = a.synthesisModel || undefined // undefined => inherit session model
+const ROOT = a.root || '.'
+const MAX_CONCEPTS = a.maxConcepts || 10
+// Existing backlog items the synthesiser must reconcile against: [{id, title}, ...].
+// Without this the sweep cannot tell a new defect class from one already filed, and a
+// second run re-derives epics that already exist (measured 2026-08-12: 5 of 9 epics were
+// duplicates of a prior sweep's, at ~3.7M tokens).
+let PRIOR_ART = Array.isArray(a.priorArt) ? a.priorArt : []
+// Where to look for prior art when the caller did NOT supply `priorArt`. Discovery queries the
+// backlog graph itself rather than making the caller remember to. Omit to let the discovery agent
+// infer the repo from the checkout; pass explicitly to pin it (the graph is shared across repos and
+// an unpinned query can drag in a sibling repo's items).
+const PRIOR_ART_REPOS = Array.isArray(a.priorArtRepos) ? a.priorArtRepos : null
+// Escape hatch: skip the prior-art query entirely. Use for a deliberately blind first sweep of a
+// repo with no backlog, or when the caller has already reconciled externally.
+const SKIP_PRIOR_ART = a.skipPriorArtDiscovery === true
+// Above this many non-test source lines, a project is packed into several review units.
+// One cheap agent handed 19.5k lines samples it; it does not review it. ~4k is about what a
+// worker can actually read with offset/limit chunking inside one context.
+const MAX_UNIT_LOC = a.maxUnitLoc || 4000
+
+// Every dispatch is recorded so the run can report what it actually spent, by tier and by
+// phase, instead of the caller inferring it from the transcript directory afterwards.
+const dispatchLog = []
+const _rawAgent = agent
+const agentTracked = (prompt, opts = {}) => {
+  dispatchLog.push({ phase: opts.phase || 'unphased', agentType: opts.agentType || null, model: opts.model || null, label: opts.label || null })
+  return _rawAgent(prompt, opts)
+}
+const MIN_CONCEPT_COUNT = a.minConceptCount || 2
+
+/**
+ * A roster entry maps an agent specialty onto the kind of scope it should analyse.
+ *   agentType       — a registered subagent type (code-reviewer, performance-engineer, ...)
+ *   lensDescription — what THAT specialist should look for, written as an instruction
+ *   packageSelector — substring/regex matched against a package path to claim it. '*' = fallback.
+ * Entries are tried in order; the first whose selector matches claims the package.
+ */
+// A lensDescription names WHO is reading, never WHAT to find.
+//
+// These used to enumerate defect categories ("N+1 IO, unbounded accumulation, redundant
+// passes…"). That is a planted concept list wearing a specialty label: it primes the agent to
+// file borderline cases under those headings and reproduces exactly the bias the blind-agent
+// rule exists to prevent — the tags it named were verbatim the ones the previous sweep then
+// "discovered". Worse, it applied unevenly: agents present in this roster were primed while
+// caller-named agents outside it got a neutral lens, so a mixed panel was not comparable.
+//
+// Each entry now states the reviewer's standing expertise and stops there. What counts as a
+// defect through that expertise is the agent's judgement, which is the entire point of
+// choosing a specialist.
+const NEUTRAL_LENS = 'Apply your own professional judgement. Report what YOUR expertise makes you best placed to notice — do not hunt any predetermined category, and do not limit yourself to what you assume was expected of you.'
+const DEFAULT_ROSTER = [
+  { agentType: 'database-administrator', lensDescription: `You are a database and storage-engine specialist reviewing this code. ${NEUTRAL_LENS}`, packageSelector: 'store|db|sql|turso|sqlite|graph-store|blob' },
+  { agentType: 'performance-engineer', lensDescription: `You are a performance engineer reviewing this code. ${NEUTRAL_LENS}`, packageSelector: 'search|vector|embed|ingest|analysis|cluster|queue' },
+  { agentType: 'security-auditor', lensDescription: `You are a security auditor reviewing this code. ${NEUTRAL_LENS}`, packageSelector: 'install|runtime|host|cli|apps/|service|proxy' },
+  { agentType: 'error-detective', lensDescription: `You are a failure-analysis specialist reviewing this code. ${NEUTRAL_LENS}`, packageSelector: 'supervisor|reaper|task|worker|daemon|queue' },
+  { agentType: 'typescript-pro', lensDescription: `You are a TypeScript type-system specialist reviewing this code. ${NEUTRAL_LENS}`, packageSelector: 'manifest|schema|types|authoring|registry|source-provider' },
+  { agentType: 'qa-expert', lensDescription: `You are a test-quality specialist reviewing this code and its tests. ${NEUTRAL_LENS}`, packageSelector: 'test|spec|e2e|fixtures' },
+  { agentType: 'refactoring-specialist', lensDescription: `You are a code-structure and maintainability specialist reviewing this code. ${NEUTRAL_LENS}`, packageSelector: 'refactor' },
+  { agentType: 'code-reviewer', lensDescription: `You are an experienced code reviewer. ${NEUTRAL_LENS}`, packageSelector: '*' },
+]
+
+// Caller-chosen review panel. `args.agents` is the ergonomic form — a list of agent-type
+// names, e.g. agents: ['typescript-pro', 'performance-engineer', 'product-manager'] — whose
+// lenses are looked up from DEFAULT_ROSTER when known. `args.roster` remains for fully
+// custom {agentType, lensDescription, packageSelector} entries.
+// This chooses WHO reviews, never WHAT they are told to find: a specialist's expertise is a
+// perspective the agent already has, not a concept planted in its prompt.
+const ROSTER = (() => {
+  if (a.roster && a.roster.length) return a.roster
+  const picked = Array.isArray(a.agents) && a.agents.length ? a.agents : null
+  if (!picked) return DEFAULT_ROSTER
+  const GENERIC = 'whatever defects your own specialty makes you best placed to catch — apply your expertise, do not go looking for any particular predetermined category'
+  const out = picked.map((p) => {
+    const type = typeof p === 'object' && p !== null ? p.agentType : String(p)
+    const base = DEFAULT_ROSTER.find((r) => r.agentType === type)
+    const custom = typeof p === 'object' && p !== null ? p : {}
+    return {
+      agentType: type,
+      lensDescription: custom.lensDescription || (base && base.lensDescription) || GENERIC,
+      packageSelector: custom.packageSelector || (base && base.packageSelector) || '*',
+    }
+  })
+  // Guarantee a catch-all entry so matchRoster always resolves to something.
+  if (!out.some((r) => (r.packageSelector || '*') === '*')) {
+    out[out.length - 1] = { ...out[out.length - 1], packageSelector: '*' }
+  }
+  return out
+})()
+
+// ---------------------------------------------------------------------------
+// Schemas
+// ---------------------------------------------------------------------------
+
+const FINDING_PROPS = {
+  file: { type: 'string', description: 'repo-relative path' },
+  line: { type: 'integer', description: '1-indexed line number' },
+  severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low'] },
+  // DELIBERATELY NO EXAMPLE VOCABULARY. Naming candidate tags here primes the agent
+  // to go looking for those categories and to file borderline findings under them,
+  // which manufactures the very cluster the sweep then "discovers". Agents coin tags
+  // blind; `canonicalTag()` merges the spelling variance afterwards, in post-processing,
+  // where it cannot bias what was found.
+  concept: { type: 'string', description: 'short kebab-case tag naming the PATTERN this finding is an instance of, not the instance itself' },
+  summary: { type: 'string' },
+  evidence: { type: 'string', description: 'verbatim snippet copied from the file, at most 3 lines' },
+}
+
+const ISOLATED_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['scope', 'findings'],
+  properties: {
+    scope: { type: 'string' },
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['file', 'line', 'severity', 'concept', 'summary', 'evidence'],
+        properties: FINDING_PROPS,
+      },
+    },
+  },
+}
+
+// (A CONCEPT_SCHEMA once lived here, for agents dispatched to hunt a named concept with
+// exemplars. That dispatch shape is deliberately gone — see the Stage 2 comment. Both passes
+// now return ISOLATED_SCHEMA, because both are blind and structurally identical.)
+
+const EPIC_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['epics'],
+  properties: {
+    epics: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['title', 'problem_statement', 'scope_packages', 'severity', 'children'],
+        properties: {
+          title: { type: 'string' },
+          problem_statement: { type: 'string', description: 'crisp, grounded in the aggregated evidence, names the cost' },
+          prior_art_relation: {
+            type: 'string',
+            description: 'NEW when no supplied prior-art item covers this theme; "CORROBORATES <id>" when an existing item covers the same defect class (the caller should append evidence to it, not file a duplicate); "EXTENDS <id>" when it covers part of this theme and this epic adds materially new scope. Never NEW just because the wording differs.',
+          },
+          scope_packages: { type: 'array', items: { type: 'string' } },
+          severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low'] },
+          family: { type: 'string', enum: ['DEBT', 'BUG'], description: 'BUG only when the evidence shows live incorrect behaviour' },
+          children: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['title', 'body', 'citations', 'acceptance_criteria', 'test_expectation'],
+              properties: {
+                title: { type: 'string' },
+                body: { type: 'string' },
+                family: { type: 'string', enum: ['DEBT', 'BUG'] },
+                severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low'] },
+                citations: { type: 'array', items: { type: 'string', description: 'path:line' } },
+                acceptance_criteria: { type: 'array', items: { type: 'string' } },
+                test_expectation: { type: 'string', description: 'named test that must go red before the fix and green after' },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+}
+
+// ---------------------------------------------------------------------------
+// Scope construction
+// ---------------------------------------------------------------------------
+
+// When the caller names a panel via `args.agents`, those agents are a DELIBERATE CHOICE and
+// every one of them must actually be used. Selector-matching them is wrong: an agent absent
+// from DEFAULT_ROSTER inherits a '*' selector, claims the first unit it sees, and starves the
+// rest of the panel (observed: naming three agents produced three identical Stage 1 lenses).
+// So a named panel round-robins across units instead; only the built-in roster — whose
+// selectors encode genuine package↔specialty fit — matches by path.
+const ROSTER_IS_NAMED_PANEL = !!(Array.isArray(a.agents) && a.agents.length && !(a.roster && a.roster.length))
+
+function matchRoster(pkgPath, i = 0) {
+  if (ROSTER_IS_NAMED_PANEL) return ROSTER[i % ROSTER.length]
+  for (const entry of ROSTER) {
+    const sel = entry.packageSelector || '*'
+    if (sel === '*') return entry
+    let hit = false
+    try {
+      hit = new RegExp(sel, 'i').test(pkgPath)
+    } catch (e) {
+      hit = pkgPath.toLowerCase().includes(sel.toLowerCase())
+    }
+    if (hit) return entry
+  }
+  return ROSTER[ROSTER.length - 1]
+}
+
+// ---------------------------------------------------------------------------
+// Stage 0 — project discovery (nx-seeded) and size-aware unit splitting
+// ---------------------------------------------------------------------------
+
+const DISCOVERY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['projects'],
+  properties: {
+    nxAvailable: { type: 'boolean' },
+    projects: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id', 'path', 'loc'],
+        properties: {
+          id: { type: 'string', description: 'the nx project NAME, exactly as nx reports it' },
+          path: { type: 'string', description: 'repo-relative project root' },
+          sourceRoot: { type: 'string' },
+          loc: { type: 'integer', description: 'non-test source lines, from wc -l' },
+          tags: { type: 'array', items: { type: 'string' }, description: 'nx project tags, e.g. area:data, type:lib' },
+          dependsOn: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'names of OTHER IN-REPO projects this project depends on (direct only — the script computes the transitive closure). Exclude external npm packages.',
+          },
+          largestFiles: {
+            type: 'array',
+            description: 'up to 12 biggest non-test source files, largest first, for size-aware splitting',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['file', 'loc'],
+              properties: { file: { type: 'string' }, loc: { type: 'integer' } },
+            },
+          },
+        },
+      },
+    },
+  },
+}
+
+/**
+ * Narrow the discovered project set BEFORE fan-out.
+ *
+ * The calling agent translates a human scope request into this shape; the resolution itself is
+ * pure and deterministic here, so "and all its in-repo deps" means the actual nx dependency
+ * closure rather than an agent's guess at one.
+ *
+ *   filter: {
+ *     projects:        ['agent-mcp'],        // exact nx names to seed from
+ *     include:         ['apigen'],           // regex/substring over name OR path
+ *     exclude:         ['-e2e$'],            // regex/substring, applied last
+ *     tags:            ['area:data'],        // nx tags (any-match)
+ *     withDeps:        true,                 // add seeds' transitive in-repo dependencies
+ *     withDependents:  false,                // add projects that transitively depend on seeds
+ *     depDepth:        Infinity,             // cap the walk (1 = direct only)
+ *   }
+ *
+ * Semantics: `projects` + `include` + `tags` union into a seed set (no criteria = everything);
+ * `withDeps`/`withDependents` expand it across the graph; `exclude` prunes last and always wins.
+ */
+function applyProjectFilter(projects, filter, logFn) {
+  if (!filter || typeof filter !== 'object') return projects
+  const byId = new Map(projects.map((p) => [p.id, p]))
+  const matches = (pats, p) =>
+    (pats || []).some((raw) => {
+      const s = String(raw)
+      for (const hay of [p.id || '', p.path || '']) {
+        try {
+          if (new RegExp(s, 'i').test(hay)) return true
+        } catch (e) {
+          if (hay.toLowerCase().includes(s.toLowerCase())) return true
+        }
+      }
+      return false
+    })
+
+  const hasSeedCriteria =
+    (filter.projects && filter.projects.length) ||
+    (filter.include && filter.include.length) ||
+    (filter.tags && filter.tags.length)
+
+  const seeds = new Set()
+  if (!hasSeedCriteria) {
+    for (const p of projects) seeds.add(p.id)
+  } else {
+    for (const p of projects) {
+      const byName = (filter.projects || []).some((n) => String(n) === p.id)
+      const byPattern = filter.include && filter.include.length ? matches(filter.include, p) : false
+      const byTag = filter.tags && filter.tags.length ? (p.tags || []).some((t) => filter.tags.includes(t)) : false
+      if (byName || byPattern || byTag) seeds.add(p.id)
+    }
+    for (const n of filter.projects || []) {
+      if (!byId.has(String(n))) logFn(`WARNING: filter.projects names "${n}", which nx did not report — check the exact project name.`)
+    }
+  }
+
+  // Transitive expansion across the in-repo dependency graph.
+  const depth = Number.isFinite(filter.depDepth) ? filter.depDepth : Infinity
+  const expanded = new Set(seeds)
+  if (filter.withDeps || filter.withDependents) {
+    const forward = new Map(projects.map((p) => [p.id, (p.dependsOn || []).filter((d) => byId.has(d))]))
+    const reverse = new Map(projects.map((p) => [p.id, []]))
+    for (const [id, deps] of forward) for (const d of deps) reverse.get(d).push(id)
+
+    const walk = (edges) => {
+      let frontier = [...seeds]
+      for (let d = 0; d < depth && frontier.length; d++) {
+        const next = []
+        for (const id of frontier) {
+          for (const n of edges.get(id) || []) {
+            if (!expanded.has(n)) {
+              expanded.add(n)
+              next.push(n)
+            }
+          }
+        }
+        frontier = next
+      }
+    }
+    if (filter.withDeps) walk(forward)
+    if (filter.withDependents) walk(reverse)
+  }
+
+  let out = projects.filter((p) => expanded.has(p.id))
+  if (filter.exclude && filter.exclude.length) {
+    const before = out.length
+    out = out.filter((p) => !matches(filter.exclude, p))
+    if (before !== out.length) logFn(`filter.exclude removed ${before - out.length} project(s).`)
+  }
+
+  const pulledIn = [...expanded].filter((id) => !seeds.has(id))
+  logFn(
+    `Project filter: ${projects.length} discovered → ${seeds.size} seed(s)` +
+      (pulledIn.length ? ` + ${pulledIn.length} via graph (${pulledIn.slice(0, 8).join(', ')}${pulledIn.length > 8 ? ', …' : ''})` : '') +
+      ` → ${out.length} in scope: ${out.map((p) => p.id).join(', ')}`,
+  )
+  if (!out.length) {
+    throw new Error(
+      `code-quality-sweep: the project filter matched nothing out of ${projects.length} discovered projects. ` +
+        `Seeds tried: ${JSON.stringify({ projects: filter.projects, include: filter.include, tags: filter.tags })}. ` +
+        `Discovered names: ${projects.map((p) => p.id).slice(0, 40).join(', ')}`,
+    )
+  }
+  return out
+}
+
+/** Split one oversized project into <=N sub-units by packing its largest files. */
+function splitBySize(proj, maxLoc) {
+  const files = (proj.largestFiles || []).filter((f) => f && f.file)
+  if (!files.length || proj.loc <= maxLoc) return [{ id: proj.id, files: [proj.path], loc: proj.loc }]
+  const parts = []
+  let cur = { files: [], loc: 0 }
+  for (const f of files) {
+    if (cur.files.length && cur.loc + f.loc > maxLoc) {
+      parts.push(cur)
+      cur = { files: [], loc: 0 }
+    }
+    cur.files.push(f.file)
+    cur.loc += f.loc
+  }
+  if (cur.files.length) parts.push(cur)
+  // COVERAGE IS UNCONDITIONAL. `largestFiles` is a capped list (top N), so everything outside it
+  // — potentially most of a project's files — lands in the remainder. An earlier version only
+  // emitted the catch-all when the remainder exceeded 25% of maxLoc, which silently left small
+  // remainders UNREVIEWED while the sweep reported the project as swept. Any remainder at all
+  // now gets a unit; a sweep that quietly skips code is worse than one that admits its budget.
+  const covered = parts.reduce((n, p) => n + p.loc, 0)
+  const remainder = Math.max(0, proj.loc - covered)
+  if (remainder > 0) parts.push({ files: [proj.path], loc: remainder, rest: true })
+  return parts.map((p, i) => ({
+    id: parts.length > 1 ? `${proj.id}#${i + 1}` : proj.id,
+    files: p.files,
+    loc: p.loc,
+    ...(p.rest ? { hint: `Everything in this project NOT already covered by sibling units ${proj.id}#1..${parts.length - 1}. Do not re-report findings in those files.` } : {}),
+  }))
+}
+
+let RAW_PACKAGES = a.packages && a.packages.length ? a.packages : []
+
+// PREFERRED PATH: the caller computed the project inventory itself and passed it in.
+//
+// The workflow runtime sandboxes this script — no filesystem, no child_process — so the script
+// cannot run nx directly. That leaves two options, and they are not equally good:
+//   (a) caller passes `nxProjects`  — deterministic, exact, free, reproducible.
+//   (b) an agent runs nx and reports — an LLM transcribing mechanical data, which can misname
+//       a project, miss one, or invent a dependency edge. Every downstream filter and closure
+//       then rests on that transcription.
+// (a) is strictly better and is what the calling session should do. (b) survives only as a
+// fallback for callers that cannot shell out. Generate (a) with:
+//
+//   npx nx graph --file=/tmp/nx.json    # then reshape into [{id, path, loc, tags, dependsOn, largestFiles}]
+//
+// See code-quality-sweep.md → "Seeding the project inventory" for a ready-made one-liner.
+if (!RAW_PACKAGES.length && Array.isArray(a.nxProjects) && a.nxProjects.length) {
+  phase('Discover')
+  const supplied = a.nxProjects.filter((p) => p && p.path && (p.loc || 0) > 0)
+  supplied.sort((x, y) => (y.loc || 0) - (x.loc || 0))
+  log(`Using ${supplied.length} caller-supplied project(s) — deterministic inventory, no discovery agent spawned.`)
+  const projects = applyProjectFilter(supplied, a.filter, log)
+  RAW_PACKAGES = projects.flatMap((p) => splitBySize(p, MAX_UNIT_LOC))
+  if (RAW_PACKAGES.length > BUDGET) {
+    log(`NOTE: ${RAW_PACKAGES.length} units for a budget of ${BUDGET}; DROPPING: ${RAW_PACKAGES.slice(BUDGET).map((u) => u.id).join(', ')}`)
+  }
+} else if (!RAW_PACKAGES.length) {
+  // Self-seed from nx rather than demanding the caller hand-build a roster. The workflow
+  // script has no filesystem access of its own, so discovery runs in a cheap agent.
+  phase('Discover')
+  log('No args.packages supplied — seeding the roster from nx project metadata.')
+  const disc = await agentTracked(
+    `Enumerate this repository's projects so a code-quality sweep can be scoped to them.
+
+1. Run \`npx nx show projects --json\` (fall back to globbing \`**/project.json\`, excluding node_modules/dist/.worktrees, if nx is unavailable — set nxAvailable:false in that case).
+2. For each project resolve its root directory and its source root.
+3. Size each project: count lines of NON-TEST source only (exclude \`*.spec.*\`, \`*.test.*\`, \`__tests__\`, \`dist/\`, generated files). \`wc -l\` is fine.
+4. For each project also list its up-to-12 LARGEST non-test source files with their line counts, largest first — a later step packs these into evenly-sized review units.
+5. Report each project's nx \`tags\` and its DIRECT in-repo dependencies in \`dependsOn\`, using nx project NAMES (not paths). \`npx nx graph --file=/tmp/nx-graph.json\` then reading that file is the reliable source; \`npx nx show project <name> --json\` also carries tags. Include only workspace projects — drop external npm packages. Direct edges only; do not attempt the transitive closure yourself, the caller computes it.
+
+Accuracy of \`id\` and \`dependsOn\` matters: they are used to resolve dependency closures for scoping, so a name that does not match nx exactly will silently fail to match.
+
+Rules: READ-ONLY. Use \`rg\`/\`ls\`/\`wc\`; never \`grep\`/\`find\`. NEVER run a build/test/lint target — \`nx show projects\` is metadata-only and safe, but \`nx build\`/\`nx test\` are destructive here. Return ONLY the structured output; report every project you find, do not pre-filter by importance.`,
+    { schema: DISCOVERY_SCHEMA, model: WORKER_MODEL, label: 'discover:nx', phase: 'Discover' },
+  )
+  const discovered = ((disc && disc.projects) || []).filter((p) => p && p.path && (p.loc || 0) > 0)
+  discovered.sort((x, y) => (y.loc || 0) - (x.loc || 0))
+  log(`Discovered ${discovered.length} projects${disc && disc.nxAvailable === false ? ' (nx unavailable — globbed project.json)' : ' via nx'}; largest: ${discovered.slice(0, 3).map((p) => `${p.id}(${p.loc})`).join(', ')}`)
+  const projects = applyProjectFilter(discovered, a.filter, log)
+  RAW_PACKAGES = projects.flatMap((p) => splitBySize(p, MAX_UNIT_LOC))
+  if (RAW_PACKAGES.length > BUDGET) {
+    log(`NOTE: discovery produced ${RAW_PACKAGES.length} units for a budget of ${BUDGET}; keeping the ${BUDGET} largest by LOC and DROPPING: ${RAW_PACKAGES.slice(BUDGET).map((u) => u.id).join(', ')}`)
+  }
+} else {
+  // Caller-supplied packages are still size-split when they carry LOC information.
+  RAW_PACKAGES = RAW_PACKAGES.flatMap((p) =>
+    typeof p === 'object' && p !== null && p.loc && p.loc > MAX_UNIT_LOC ? splitBySize(p, MAX_UNIT_LOC) : [p],
+  )
+}
+
+// Coverage accounting — what the sweep will and will NOT read, in LINES, stated up front.
+// A budget cap is a coverage decision, not a scheduling detail: units past the cap are code
+// nobody reviews, and that deserves a number the caller sees, not just a name in a dropped list.
+const COVERAGE = (() => {
+  const locOf = (p) => (typeof p === 'object' && p && p.loc) || 0
+  const totalLoc = RAW_PACKAGES.reduce((n, p) => n + locOf(p), 0)
+  const kept = RAW_PACKAGES.slice(0, BUDGET)
+  const keptLoc = kept.reduce((n, p) => n + locOf(p), 0)
+  const dropped = RAW_PACKAGES.slice(BUDGET)
+  return {
+    unitsTotal: RAW_PACKAGES.length,
+    unitsSwept: kept.length,
+    unitsDropped: dropped.length,
+    locTotal: totalLoc,
+    locSwept: keptLoc,
+    locUnreviewed: Math.max(0, totalLoc - keptLoc),
+    pctSwept: totalLoc ? Math.round((keptLoc / totalLoc) * 100) : 100,
+    droppedUnits: dropped.map((p) => (typeof p === 'object' ? p.id || p.path : p)),
+  }
+})()
+log(
+  COVERAGE.locUnreviewed > 0
+    ? `COVERAGE: ${COVERAGE.pctSwept}% of discovered source will be read (${COVERAGE.locSwept}/${COVERAGE.locTotal} lines). ${COVERAGE.locUnreviewed} lines in ${COVERAGE.unitsDropped} unit(s) are NOT reviewed: ${COVERAGE.droppedUnits.join(', ')}`
+    : `COVERAGE: 100% of discovered source in scope (${COVERAGE.locTotal} lines across ${COVERAGE.unitsSwept} unit(s)).`,
+)
+
+const UNITS = RAW_PACKAGES.slice(0, BUDGET).map((p, i) => {
+  const isObj = typeof p === 'object' && p !== null
+  const path = isObj ? p.path || (p.files && p.files[0]) || `unit-${i}` : p
+  const roster = matchRoster(isObj && p.agentType ? p.agentType : path, i)
+  return {
+    id: (isObj && p.id) || path,
+    files: isObj && p.files && p.files.length ? p.files : [path],
+    agentType: (isObj && p.agentType) || roster.agentType,
+    lens: (isObj && p.lensDescription) || roster.lensDescription,
+    hint: isObj ? p.hint : undefined,
+    ...(isObj && p.loc ? { loc: p.loc } : {}),
+  }
+})
+
+if (RAW_PACKAGES.length > BUDGET) {
+  log(`NOTE: ${RAW_PACKAGES.length} packages supplied but agentBudgetPerStage=${BUDGET}; DROPPED from Stage 1: ${RAW_PACKAGES.slice(BUDGET).map((p) => (typeof p === 'object' ? p.id || p.path : p)).join(', ')}`)
+}
+
+// ---------------------------------------------------------------------------
+// Discover (cont.) — PRIOR ART
+// ---------------------------------------------------------------------------
+// A sweep that cannot see what is already filed re-derives it. Measured 2026-08-12: 5 of 9 epics
+// duplicated an earlier sweep's, at ~3.7M tokens. The synthesiser has always accepted `priorArt`,
+// but it was the CALLER's job to assemble it — and a caller who forgets gets no warning, just a
+// full set of epics tagged UNKNOWN that look new. So the sweep now fetches it itself.
+//
+// Caller-supplied `priorArt` always wins: same principle as `nxProjects` above — deterministic
+// data the caller computed beats an agent transcribing it.
+//
+// This NEVER fails the sweep. No backlog CLI, no graph, a query that errors — all degrade to an
+// empty prior-art set with a loud log line, because a sweep with no dedupe is still worth having
+// and a sweep that refuses to run is not.
+if (PRIOR_ART.length) {
+  log(`PRIOR ART: ${PRIOR_ART.length} item(s) supplied by caller — skipping discovery query.`)
+} else if (SKIP_PRIOR_ART) {
+  log('PRIOR ART: skipPriorArtDiscovery=true — running BLIND. Every epic will be tagged UNKNOWN and may duplicate an existing item.')
+} else {
+  phase('Discover')
+  const scopeHint = UNITS.map((u) => u.id).slice(0, 60).join(', ')
+  const repoClause = PRIOR_ART_REPOS
+    ? `Restrict to these repos EXACTLY: ${JSON.stringify(PRIOR_ART_REPOS)}. Discard items from any other repo.`
+    : `The graph is SHARED ACROSS REPOSITORIES. Determine which repo name(s) correspond to the checkout at ${ROOT} (compare each item's repo field against the checkout's git remote / directory name) and keep ONLY those. Report which repo names you kept in \`reposUsed\`. Do NOT include a sibling repo's items — they are not prior art for this sweep.`
+
+  const priorArtRes = await agentTracked(
+    `Collect the ALREADY-FILED backlog items that a code-quality sweep of this repository must reconcile its findings against.
+
+This is a READ-ONLY data-collection task. Do not analyse code. Do not file, claim, transition, or resolve anything.
+
+## Where the data lives
+The backlog is a graph queried through the \`backlog\` CLI (it may also be exposed as \`mcp__backlog__*\` tools). Discover the correct invocation rather than assuming one:
+1. Run \`backlog\` with no arguments (or \`backlog --help\`) to list the available commands and their argument shapes.
+2. Prefer a bulk export command (e.g. \`export-json\`, \`list-items\`) over paging.
+3. **Read the usage carefully before calling.** These commands are strict: some take a JSON object behind a NAMED FLAG (\`--filter '{...}'\`) and REJECT a bare positional JSON argument, and a field may accept only a scalar where you would expect an array. If a call fails validation, read the error and correct the shape — do not give up after one attempt.
+4. Ask for OPEN/unresolved items only. Already-resolved items are not prior art.
+
+## Scope
+${repoClause}
+
+The sweep is reviewing these units:
+${scopeHint}
+
+Keep an item if a defect found in those units could plausibly be the SAME underlying issue, or a near neighbour, so a synthesiser can judge NEW vs CORROBORATES vs EXTENDS. Match on subsystem/package/symbol/file — not on title wording. When unsure, KEEP it: a false keep costs a few tokens of synthesiser context, a false drop silently recreates a duplicate ticket.
+
+## Return
+- \`items\`: [{id, title}] — \`id\` is the human-readable identifier (e.g. BUG-APIGEN-031), \`title\` trimmed to <= 90 chars. Cap at 150 items, keeping the most relevant.
+- \`available\`: false ONLY if no backlog tooling exists at all; then items MUST be [].
+- \`totalOpenSeen\`: how many open items you saw BEFORE relevance filtering (0 if unavailable).
+- \`reposUsed\`: the repo name(s) you kept items from.
+- \`note\`: one line — the exact command that worked, or why none did.
+
+Return ONLY the structured output.`,
+    {
+      label: 'discover:prior-art',
+      phase: 'Discover',
+      model: WORKER_MODEL,
+      agentType: 'general-purpose',
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['available', 'items', 'totalOpenSeen', 'reposUsed', 'note'],
+        properties: {
+          available: { type: 'boolean' },
+          totalOpenSeen: { type: 'integer', minimum: 0 },
+          reposUsed: { type: 'array', items: { type: 'string' } },
+          note: { type: 'string' },
+          items: {
+            type: 'array',
+            maxItems: 150,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['id', 'title'],
+              properties: { id: { type: 'string' }, title: { type: 'string' } },
+            },
+          },
+        },
+      },
+    },
+  ).catch((e) => ({ available: false, items: [], totalOpenSeen: 0, reposUsed: [], note: 'prior-art agent threw: ' + (e && e.message) }))
+
+  const paItems = (priorArtRes && Array.isArray(priorArtRes.items) ? priorArtRes.items : [])
+    .filter((i) => i && typeof i.id === 'string' && i.id.trim())
+  // De-duplicate by id — a bulk export can legitimately return the same item twice across pages.
+  const seenIds = new Set()
+  PRIOR_ART = paItems.filter((i) => (seenIds.has(i.id) ? false : (seenIds.add(i.id), true)))
+
+  if (!priorArtRes || priorArtRes.available === false) {
+    log(`PRIOR ART: UNAVAILABLE — running BLIND, every epic will be tagged UNKNOWN. Reason: ${(priorArtRes && priorArtRes.note) || 'no result'}`)
+  } else if (!PRIOR_ART.length) {
+    log(`PRIOR ART: backlog reachable but 0 relevant open items (saw ${priorArtRes.totalOpenSeen} open). Epics will be tagged UNKNOWN. ${priorArtRes.note || ''}`)
+  } else {
+    log(`PRIOR ART: ${PRIOR_ART.length} relevant open item(s) from ${priorArtRes.totalOpenSeen} open in [${(priorArtRes.reposUsed || []).join(', ') || 'unspecified repo'}] — synthesiser will tag NEW / CORROBORATES / EXTENDS. ${priorArtRes.note || ''}`)
+  }
+}
+
+const READONLY_RULES = `## Hard rules
+- READ-ONLY. Never Edit or Write any file.
+- NEVER run a build, test, lint, nx, tsc, vitest, pnpm, or npm command. Several build targets delete dist/ before rebuilding and this may be a live shared checkout — a "just to see the error" build is destructive.
+- Bash is permitted ONLY for read-only inspection. Use \`rg\` for text search and \`wc -l\`/\`ls\` for sizing. **NEVER \`grep\` or \`find\`** — \`rg\` respects ignore files and is the repo standard.
+- To understand code structure — what calls a symbol, what a change would affect, where a flow goes — prefer the **gitnexus** CLI over text search: \`gx query "<concept>"\`, \`gx context <symbol>\`, \`gx impact <target>\`. It is a local pre-built index and answers symbol/flow questions directly. Fall back to \`rg\` only when gitnexus returns nothing useful. (If \`gx\` is unavailable in your environment, say so in your return rather than silently reverting to text search for structural questions.)
+- Read the files in your scope properly — use offset/limit chunking on large files rather than skimming the first screen.
+- Every finding MUST carry a real file path, a real 1-indexed line number, and a VERBATIM evidence snippet (at most 3 lines) copied out of the file. If you cannot produce verbatim evidence, DROP the finding.
+- No speculation, no "consider adding", no formatting or style nits. Only defects with a concrete cost.
+- \`concept\`: name the PATTERN this finding instantiates, in short kebab-case, as YOU would describe it. Do not try to match a house vocabulary and do not reach for a familiar-sounding label if it does not fit — a precise tag you invented is better than a common one that approximates. Tag spellings are reconciled after the fact.
+- Return ONLY the structured output.`
+
+// ---------------------------------------------------------------------------
+// Stage 1 — Isolated
+// ---------------------------------------------------------------------------
+
+phase('Isolated')
+
+function isolatedPrompt(u) {
+  return `You are performing a READ-ONLY code-quality analysis of ONE isolated scope in the repository at ${ROOT}.
+
+## Your scope (do NOT read files outside this list)
+${u.files.map((f) => `- ${ROOT}/${f}`).join('\n')}
+${u.hint ? `\nNote: ${u.hint}` : ''}
+
+## Your lens (analyse what YOUR specialty covers, not everything)
+${u.lens}
+
+${READONLY_RULES}
+
+Aim for 5-15 high-signal findings. Quality over volume. Set \`scope\` to "${u.id}".`
+}
+
+const stage1 = await parallel(
+  UNITS.map((u) => () =>
+    agentTracked(isolatedPrompt(u), {
+      agentType: u.agentType,
+      model: WORKER_MODEL,
+      label: `${u.id}:${u.agentType}`,
+      phase: 'Isolated',
+      schema: ISOLATED_SCHEMA,
+    }).then((r) => ({ unit: u.id, agentType: u.agentType, files: u.files, findings: (r && r.findings) || [] }))
+  )
+)
+
+const s1ok = stage1.filter(Boolean).filter((r) => r.findings)
+const s1dropped = UNITS.map((u) => u.id).filter((id) => !s1ok.some((r) => r.unit === id))
+// `agentType` is carried on stage-1 findings too. It was omitted originally, which made every
+// stage-1 finding unattributable to a lens and left per-lens contribution unanswerable for the
+// larger of the two passes — the exact question a mixed panel exists to answer.
+const s1findings = s1ok.flatMap((r) => r.findings.map((f) => ({ ...f, unit: r.unit, agentType: r.agentType, stage: 1 })))
+log(`Stage 1: ${s1ok.length}/${UNITS.length} units returned, ${s1findings.length} findings.${s1dropped.length ? ` DROPPED (no result): ${s1dropped.join(', ')}` : ''}`)
+
+// ---------------------------------------------------------------------------
+// Stage 2 — cross-package concept sweeps
+// ---------------------------------------------------------------------------
+
+const SEV_WEIGHT = { critical: 8, high: 4, medium: 2, low: 1 }
+
+/**
+ * Agents coin near-identical tags for one pattern, and keying on the raw string splits the
+ * cluster so BOTH halves rank lower than the real thing. Measured 2026-08-12: the same defect
+ * arrived as `path-traversal-via-manifest` (13) and `path-traversal-manifest-entrypoint` (2)
+ * and was ranked as two concepts of 13 and 2 rather than one of 15.
+ *
+ * Canonicalise by token set: a tag whose tokens are a subset of an earlier tag's — or which
+ * overlaps it by Jaccard >= 0.5 — folds into that earlier tag. Order-independent within a run
+ * because candidates are considered most-frequent-first.
+ */
+function canonicalTag(raw, canon) {
+  const norm = (raw || 'unclassified').trim().toLowerCase().replace(/_/g, '-')
+  const toks = new Set(norm.split('-').filter((t) => t && !['a', 'the', 'in', 'on', 'of', 'via', 'to'].includes(t)))
+  for (const [existing, exTokens] of canon) {
+    const inter = [...toks].filter((t) => exTokens.has(t)).length
+    if (inter === 0) continue
+    const union = new Set([...toks, ...exTokens]).size
+    const subset = inter === toks.size || inter === exTokens.size
+    if (subset || inter / union >= 0.5) return existing
+  }
+  canon.set(norm, toks)
+  return norm
+}
+
+function rankConcepts(findings) {
+  const byConcept = new Map()
+  // Seed canonical tags most-frequent-first so the dominant spelling wins the merge.
+  const freq = new Map()
+  for (const f of findings) {
+    const n = (f.concept || 'unclassified').trim().toLowerCase().replace(/_/g, '-')
+    freq.set(n, (freq.get(n) || 0) + 1)
+  }
+  const canon = new Map()
+  for (const [n] of [...freq.entries()].sort((x, y) => y[1] - x[1])) canonicalTag(n, canon)
+
+  for (const f of findings) {
+    const k = canonicalTag(f.concept, canon)
+    if (!byConcept.has(k)) byConcept.set(k, { concept: k, count: 0, weight: 0, units: new Set(), exemplars: [] })
+    const c = byConcept.get(k)
+    c.count += 1
+    c.weight += SEV_WEIGHT[f.severity] || 1
+    c.units.add(f.unit)
+    if (c.exemplars.length < 3) c.exemplars.push(f)
+  }
+  return [...byConcept.values()]
+    .map((c) => ({ ...c, units: [...c.units], score: c.count * (c.weight / c.count) }))
+    .sort((x, y) => y.score - x.score)
+}
+
+// ---------------------------------------------------------------------------
+// Stage 2 — SECOND BLIND PASS under a different specialist lens
+//
+// This stage deliberately does NOT tell any agent what to look for. An earlier design
+// ranked Stage 1's concept tags and dispatched agents to hunt the top ones across the
+// remaining packages. That is invalid on two counts and both were observed live:
+//   1. It manufactures its own result. An agent told "hunt error-swallowing here" files
+//      borderline cases under that tag, so the sweep then "discovers" that the concepts it
+//      went looking for are the most prevalent — circular, and it crowds out rare-but-severe
+//      defects that no one was sent to find.
+//   2. It destroys independence. Two sweeps primed with the same tag vocabulary converging
+//      on the same clusters is not corroboration; it is the same prior, twice.
+// Coverage now comes from PERSPECTIVE DIVERSITY instead: each unit is re-read by a
+// different specialist than saw it first. The lens is the agent's own expertise, never a
+// planted concept, and the agent is told nothing about what the first pass found.
+// ---------------------------------------------------------------------------
+
+phase('Second lens')
+
+/** Pick a lens for `unit` that differs from the one that already reviewed it. */
+function alternateLens(unit, i) {
+  const pool = ROSTER.filter((r) => r.agentType !== unit.agentType)
+  if (!pool.length) return null
+  return pool[i % pool.length]
+}
+
+const secondPass = UNITS.map((u, i) => ({ unit: u, lens: alternateLens(u, i) }))
+  .filter((x) => x.lens)
+  .slice(0, BUDGET)
+
+if (UNITS.length > secondPass.length) {
+  log(`NOTE: second-lens pass capped at budget ${BUDGET}; NOT re-reviewed: ${UNITS.slice(secondPass.length).map((u) => u.id).join(', ')}`)
+}
+log(`Stage 2: ${secondPass.length} units re-read under a different lens (blind — no concepts supplied).`)
+
+const stage2 = secondPass.length
+  ? await parallel(
+      secondPass.map((x) => () =>
+        agentTracked(isolatedPrompt({ ...x.unit, agentType: x.lens.agentType, lens: x.lens.lensDescription }), {
+          agentType: x.lens.agentType,
+          model: WORKER_MODEL,
+          label: `${x.unit.id}:${x.lens.agentType}`,
+          phase: 'Second lens',
+          schema: ISOLATED_SCHEMA,
+        }).then((r) => ({ unit: x.unit.id, agentType: x.lens.agentType, findings: (r && r.findings) || [] })),
+      ),
+    )
+  : []
+
+const s2ok = stage2.filter(Boolean)
+const s2dropped = secondPass.length - s2ok.length
+const s2findings = s2ok.flatMap((r) => r.findings.map((f) => ({ ...f, unit: r.unit, agentType: r.agentType, stage: 2 })))
+log(`Stage 2: ${s2ok.length}/${secondPass.length} re-reads returned, ${s2findings.length} findings.${s2dropped ? ` DROPPED (no result): ${s2dropped}.` : ''}`)
+
+// Both stages are blind, so their findings are directly comparable and rank together.
+const rawFindings = [...s1findings, ...s2findings]
+
+// ---------------------------------------------------------------------------
+// Stage 2.5 — ADVERSARIAL VERIFY
+//
+// Discovery must be blind; verification must NOT be. A verifier is told the claim precisely
+// because its job is to destroy it. This exists because agreement between finders is not
+// proof: in an earlier run TWO independent agents both reported a `__PLACEHOLDER__` token as
+// a critical SQL syntax error when it was a documented caller-substituted seam — a human
+// caught it. Agents share blind spots, so consensus among finders can be confidently wrong.
+//
+// Each verifier is told to REFUTE and to default to refuted when uncertain, which is the
+// asymmetry that makes this useful: a finding survives only by being defensible, not by
+// being unchallenged. Refuted findings are REPORTED, never silently dropped.
+// ---------------------------------------------------------------------------
+
+const VERIFY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['verdicts'],
+  properties: {
+    verdicts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['ref', 'refuted', 'reason'],
+        properties: {
+          ref: { type: 'string', description: 'the exact ref string given to you, e.g. "file.ts:123#2"' },
+          refuted: { type: 'boolean', description: 'true if the finding does NOT hold as stated — including when you cannot confirm it' },
+          reason: { type: 'string', description: 'one sentence, citing what you actually read' },
+          severity_overstated: { type: 'boolean', description: 'true if real but less severe than claimed' },
+          // ENRICHMENT — you already read the code closely to judge the claim; that reading is
+          // the most expensive thing this stage produces and it would otherwise be thrown away.
+          corrected_line: { type: 'integer', description: 'the TRUE 1-indexed line if the claim cited the wrong one; omit when the cited line is right' },
+          precise_summary: { type: 'string', description: 'a sharper one-sentence statement of the defect as you now understand it, for a CONFIRMED finding — omit if the original is already precise' },
+          better_evidence: { type: 'string', description: 'the most probative verbatim snippet (<=3 lines) you saw, if it is better than the one quoted to you' },
+          related_sites: {
+            type: 'array',
+            description: 'other file:line locations you noticed carrying the SAME defect while checking this one. Only what you actually read — never a guess.',
+            items: { type: 'string' },
+          },
+          mechanism: { type: 'string', description: 'for a CONFIRMED finding: how it actually fails — the guard that is missing, the caller that reaches it, the state that results' },
+          suggested_fix: { type: 'string', description: 'for a CONFIRMED finding: the minimal correct change, one sentence' },
+        },
+      },
+    },
+  },
+}
+
+const VERIFY_SEVERITIES = a.verifySeverities || ['critical', 'high']
+const VERIFY_BATCH = a.verifyBatchSize || 6
+const refOf = (f, i) => `${f.file}:${f.line}#${i}`
+
+const toVerify = rawFindings
+  .map((f, i) => ({ ...f, ref: refOf(f, i) }))
+  .filter((f) => VERIFY_SEVERITIES.includes(f.severity))
+
+let verdictByRef = new Map()
+if (toVerify.length && a.skipVerify !== true) {
+  phase('Verify')
+  const batches = []
+  for (let i = 0; i < toVerify.length; i += VERIFY_BATCH) batches.push(toVerify.slice(i, i + VERIFY_BATCH))
+  const capped = batches.slice(0, BUDGET)
+  if (batches.length > capped.length) {
+    log(`NOTE: verification capped at budget ${BUDGET}; ${(batches.length - capped.length) * VERIFY_BATCH} findings go to synthesis UNVERIFIED.`)
+  }
+  log(`Stage 2.5: adversarially verifying ${capped.reduce((n, b) => n + b.length, 0)} ${VERIFY_SEVERITIES.join('/')} findings in ${capped.length} batches.`)
+
+  const verifyResults = await parallel(
+    capped.map((batch, bi) => () =>
+      agentTracked(
+        `You are a SKEPTIC. Other agents reviewed this repository at ${ROOT} and produced the claims below. Your job is to REFUTE them, not to confirm them.
+
+## Claims to attack
+${batch.map((f) => `### ref: ${f.ref}\n- file: ${ROOT}/${f.file}, line ${f.line}\n- claimed severity: ${f.severity}\n- claim: ${f.summary}\n- evidence they quoted:\n\`\`\`\n${(f.evidence || '').split('\n').slice(0, 3).join('\n')}\n\`\`\``).join('\n\n')}
+
+## How to attack each claim
+1. OPEN the real file and read the cited line IN CONTEXT — enough surrounding lines to understand it. The quoted evidence may be accurate but misleading out of context.
+2. Ask specifically: is this actually reachable? Is there a guard, an early return, a caller contract, a type constraint, or a documented convention upstream that makes the claimed failure impossible? Is the cited construct a deliberate, documented seam rather than a defect? Does a test already cover it?
+3. Use \`gx context <symbol>\` / \`gx impact <target>\` to check callers before asserting something is unreachable or unguarded — a claim about how a symbol is used cannot be settled from its definition alone.
+
+## Verdict rules — read carefully
+- \`refuted: true\` if the claim does not hold as stated, OR if after genuinely looking you CANNOT CONFIRM it. Uncertainty means refuted. Do not give a claim the benefit of the doubt.
+- \`refuted: false\` ONLY when you have read the code and the defect is real as described.
+- \`severity_overstated: true\` when the defect is real but cannot cost what the claim implies.
+- Judge each claim independently. Several may be about the same file; that is not evidence for or against any of them.
+
+## When you CONFIRM a claim, make it shippable
+You have just read this code more carefully than anyone else in the pipeline will. That reading is
+expensive and is otherwise discarded, so harvest it — a confirmed finding becomes a backlog item
+verbatim, and its quality is decided here:
+- \`corrected_line\` if the cited line is off (finders cite from memory and drift by a few lines).
+- \`better_evidence\` if you saw a more probative snippet than the one quoted at you.
+- \`precise_summary\` when you can state the defect more exactly than the original.
+- \`mechanism\`: HOW it fails — the missing guard, the caller that reaches it, the resulting state.
+- \`suggested_fix\`: the minimal correct change, one sentence.
+- \`related_sites\`: other file:line locations you ACTUALLY SAW carrying the same defect. Never guess
+  one; an invented citation is worse than a missing one because it will be filed and trusted.
+Leave a field out rather than filling it with something weak.
+
+${READONLY_RULES}
+
+Return a verdict for EVERY ref given to you, using the exact ref strings above.`,
+        {
+          agentType: 'code-reviewer',
+          model: WORKER_MODEL,
+          label: `verify:b${bi}`,
+          phase: 'Verify',
+          schema: VERIFY_SCHEMA,
+        },
+      ).then((r) => (r && r.verdicts) || []),
+    ),
+  )
+  for (const v of verifyResults.filter(Boolean).flat()) verdictByRef.set(v.ref, v)
+}
+
+// Fold the skeptic's reading back into the finding itself, so everything downstream — the
+// synthesiser's digest and the backlog item the caller eventually files — carries the CORRECTED
+// line, the better evidence and the mechanism, not the finder's first approximation.
+let enrichedCount = 0
+let correctedLines = 0
+const withVerdicts = rawFindings.map((f, i) => {
+  const ref = refOf(f, i)
+  const v = verdictByRef.get(ref)
+  if (!v) return { ...f, ref, verified: null, verifyReason: null, severityOverstated: false }
+  const enriched = { ...f, ref, verified: !v.refuted, verifyReason: v.reason, severityOverstated: !!v.severity_overstated }
+  if (!v.refuted) {
+    if (Number.isInteger(v.corrected_line) && v.corrected_line !== f.line) {
+      enriched.originalLine = f.line
+      enriched.line = v.corrected_line
+      correctedLines += 1
+    }
+    if (v.precise_summary) enriched.summary = v.precise_summary
+    if (v.better_evidence) enriched.evidence = v.better_evidence
+    if (v.mechanism) enriched.mechanism = v.mechanism
+    if (v.suggested_fix) enriched.suggestedFix = v.suggested_fix
+    if (Array.isArray(v.related_sites) && v.related_sites.length) enriched.relatedSites = v.related_sites
+    if (v.precise_summary || v.better_evidence || v.mechanism || v.suggested_fix || (v.related_sites || []).length) enrichedCount += 1
+  }
+  return enriched
+})
+
+const refuted = withVerdicts.filter((f) => f.verified === false)
+const allFindings = withVerdicts.filter((f) => f.verified !== false)
+if (refuted.length) {
+  log(`Stage 2.5: ${refuted.length} finding(s) REFUTED and excluded from synthesis (reported in result.refuted, not discarded).`)
+}
+
+// ---------------------------------------------------------------------------
+// Stage 3 — synthesis into an epic spec
+// ---------------------------------------------------------------------------
+
+phase('Synthesize')
+
+// Both passes were blind, so their findings are comparable and rank together. Concepts are
+// discovered here, in post-processing, from tags the agents coined independently — they are
+// an OUTPUT of the sweep, never an input to it.
+let finalRanked = rankConcepts(allFindings)
+
+// POST-HOC SEMANTIC CLUSTERING.
+//
+// Blind agents coin precise but idiosyncratic tags — `column-metadata-eager-evaluation`,
+// `redundant-type-assertion-nulling`, `capability-gate-post-factory`. Each is a good name for
+// ONE finding and useless as a category: token-overlap canonicalisation cannot merge
+// `incorrect-process-liveness-check` with `unhandled-reconnect-failure-state-inconsistency`
+// even when both are "a failure path resolves ambiguity unsafely", so a real theme arrives as
+// a scatter of singletons and looks like noise.
+//
+// The fix is NOT to hand agents a vocabulary — that biases discovery, which is the whole point
+// of the blind rule. It is to cluster AFTERWARDS, from outputs only. This agent sees tags and
+// one-line summaries; it never sees the repository, so it cannot influence what was found. It
+// runs only when there is enough scatter to be worth it.
+const SCATTER = finalRanked.length >= 8 && finalRanked.filter((c) => c.count === 1).length / finalRanked.length > 0.5
+if (SCATTER && a.skipClustering !== true) {
+  const CLUSTER_SCHEMA = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['clusters'],
+    properties: {
+      clusters: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['name', 'members'],
+          properties: {
+            name: { type: 'string', description: 'short kebab-case name for the shared underlying pattern' },
+            rationale: { type: 'string', description: 'one sentence: what these actually have in common mechanically' },
+            members: { type: 'array', items: { type: 'string' }, description: 'the exact original tag strings that belong to this cluster' },
+          },
+        },
+      },
+    },
+  }
+  const clustering = await agentTracked(
+    `Below are defect tags coined INDEPENDENTLY by different reviewers who could not see each other's work, each with example findings. Group tags that describe the SAME UNDERLYING PATTERN.
+
+## Tags
+${finalRanked.map((c) => `- \`${c.concept}\` (${c.count}×): ${(c.exemplars || []).slice(0, 2).map((e) => e.summary).join(' | ')}`).join('\n')}
+
+## Rules
+- Group on MECHANISM, not on wording. "a failure path resolves ambiguity in the unsafe direction" is one pattern whether a reviewer called it \`incorrect-process-liveness-check\` or \`unhandled-reconnect-failure-state-inconsistency\`.
+- A tag that genuinely stands alone stays alone — a singleton cluster is a valid answer and is far better than forcing an unrelated tag into a group to tidy the list.
+- Do NOT invent a tidy taxonomy. Only merge what the summaries show is mechanically the same.
+- Every member string must be copied EXACTLY from the list above. Do not rename or normalise them.
+- You are looking at labels and one-line summaries only. You have no access to the repository and must not speculate about code you cannot see.
+
+Return only the structured output.`,
+    { schema: CLUSTER_SCHEMA, model: WORKER_MODEL, label: 'cluster:tags', phase: 'Synthesize' },
+  )
+  const clusters = (clustering && clustering.clusters) || []
+  if (clusters.length) {
+    const parentOf = new Map()
+    for (const cl of clusters) for (const m of cl.members || []) parentOf.set(m, cl.name)
+    const merged = new Map()
+    for (const c of finalRanked) {
+      const key = parentOf.get(c.concept) || c.concept
+      if (!merged.has(key)) merged.set(key, { concept: key, count: 0, weight: 0, units: new Set(), exemplars: [], mergedFrom: [] })
+      const t = merged.get(key)
+      t.count += c.count
+      t.weight += c.weight
+      for (const u of c.units) t.units.add(u)
+      if (t.exemplars.length < 3) t.exemplars.push(...(c.exemplars || []).slice(0, 3 - t.exemplars.length))
+      if (key !== c.concept) t.mergedFrom.push(c.concept)
+    }
+    const before = finalRanked.length
+    finalRanked = [...merged.values()]
+      .map((c) => ({ ...c, units: [...c.units], score: c.count * (c.weight / c.count) }))
+      .sort((x, y) => y.score - x.score)
+    log(`Post-hoc clustering: ${before} coined tags → ${finalRanked.length} patterns (semantic merge on outputs only; discovery was unaffected).`)
+  }
+}
+
+// Agreement is meaningful precisely BECAUSE neither pass was primed: when two different
+// specialists, each blind to the other, flag the same file:line, that is independent
+// convergence rather than a shared prior. Surfaced to the synthesiser as a confidence signal.
+const agreement = new Map()
+for (const f of allFindings) {
+  const k = `${f.file}:${f.line}`
+  if (!agreement.has(k)) agreement.set(k, new Set())
+  agreement.get(k).add(f.agentType || `stage${f.stage}`)
+}
+const convergent = [...agreement.entries()].filter(([, v]) => v.size > 1).map(([k]) => k)
+
+/**
+ * CRITICAL SINGLETONS ARE NEVER TRUNCATED.
+ *
+ * A severity sort plus a hard cap silently loses the tail, and the tail is where the rare,
+ * severe, single-site defects live — exactly the ones no frequency-based process surfaces.
+ * Observed 2026-08-12: blob-store ordering every mutation backwards (guaranteed data loss)
+ * came from ONE scope and would never have ranked on commonality.
+ *
+ * So: every `critical` finding and every independently-convergent site is emitted in full,
+ * REGARDLESS of cap. The cap then applies only to what remains, and any real truncation is
+ * stated in the prompt rather than being invisible.
+ */
+function digest(findings, cap) {
+  const order = { critical: 0, high: 1, medium: 2, low: 3 }
+  const convergentSet = new Set(convergent)
+  const isProtected = (f) => f.severity === 'critical' || convergentSet.has(`${f.file}:${f.line}`)
+  const line = (f) =>
+    `- [${f.severity}${f.severityOverstated ? ' (severity disputed)' : ''}]${f.verified ? ' [verified]' : ''} (${f.concept}) ${f.file}:${f.line} — ${f.summary}` +
+    (f.mechanism ? `\n    mechanism: ${f.mechanism}` : '') +
+    (f.suggestedFix ? `\n    fix: ${f.suggestedFix}` : '') +
+    (f.relatedSites && f.relatedSites.length ? `\n    also at: ${f.relatedSites.join(', ')}` : '')
+
+  const protectedOnes = findings.filter(isProtected)
+  const rest = findings
+    .filter((f) => !isProtected(f))
+    .sort((x, y) => (order[x.severity] ?? 9) - (order[y.severity] ?? 9))
+  const room = Math.max(0, cap - protectedOnes.length)
+  const shown = rest.slice(0, room)
+  const omitted = rest.length - shown.length
+
+  return (
+    [...protectedOnes, ...shown].map(line).join('\n') +
+    (omitted > 0
+      ? `\n\n(${omitted} further finding(s) of severity medium/low omitted for length. Every critical and every independently-convergent site above is shown in full — nothing severe was truncated.)`
+      : '')
+  )
+}
+
+const epicSpec = await agentTracked(
+  `You are the architect synthesising a multi-agent code-quality sweep of the repository at ${ROOT} into a set of EPICS that will be filed as backlog items.
+
+## Concept ranking (concept, occurrences, scopes, severity-weighted score)
+Every agent in this sweep worked BLIND — none was told what to look for or what anyone else
+found. These tags were coined independently and clustered afterwards, so the ranking reflects
+what is actually in the code, not what anyone was sent to look for. Do not treat a low count
+as unimportant: a single CRITICAL finding in one scope can outrank a common shallow pattern.
+${finalRanked.map((c) => `- ${c.concept}: ${c.count} occurrences across ${c.units.length} scopes, score ${Math.round(c.score)}`).join('\n')}
+
+## Independently convergent sites (${convergent.length})
+Flagged by MORE THAN ONE blind specialist at the same file:line. Because no agent saw another's
+output, agreement here is genuine independent convergence — weight these highest.
+${convergent.slice(0, 40).map((k) => `- ${k}`).join('\n') || '(none)'}
+
+## Findings (${allFindings.length} total, highest severity first)
+${digest(allFindings, 220)}
+${PRIOR_ART.length === 0 ? `
+## Prior art
+NONE AVAILABLE. Either the backlog could not be reached, it holds no open items relevant to this
+scope, or the caller opted out. You therefore cannot tell which of these themes are already filed.
+Set \`prior_art_relation\` to "UNKNOWN — no prior art available" on every epic so the caller knows to
+dedupe by hand before filing.` : `
+## Prior art — items ALREADY FILED in this repo's backlog
+${PRIOR_ART.map((p) => `- ${p.id}: ${p.title}`).join('\n')}
+
+For EVERY epic you produce, set \`prior_art_relation\`:
+- "CORROBORATES <id>" if an item above already covers this defect class. Independent re-derivation is
+  valuable EVIDENCE, so still produce the epic — but say what it confirms and, critically, what it
+  found that the existing item does NOT name. The caller will append to that item instead of filing a duplicate.
+- "EXTENDS <id>" if an item covers part of this theme and you are adding materially new scope.
+- "NEW" only when no item above covers it. Differing wording is NOT grounds for NEW; the same defect
+  described differently is CORROBORATES.`}
+
+## What to produce
+A set of EPICS. Each epic is ONE coherent quality theme — not a package, not a grab-bag. For each:
+- \`problem_statement\`: crisp, grounded in the evidence above, naming the concrete cost (what breaks, what it slows, what it hides). No hedging, no "consider".
+- \`scope_packages\`: the scopes actually touched.
+- \`family\`: 'BUG' ONLY where the evidence shows live incorrect behaviour today; otherwise 'DEBT'.
+- \`children\`: 3-8 items, each INDEPENDENTLY SHIPPABLE. Every child needs
+  * \`citations\`: concrete path:line refs drawn from the findings above — never invent one;
+  * \`acceptance_criteria\`: binary, checkable statements;
+  * \`test_expectation\`: a NAMED test that must be seen to FAIL before the fix and PASS after. Not "add tests" — name it.
+
+Rules: prefer fewer, sharper epics over many thin ones. Do not create an epic for a single low-severity finding. Do not restate the findings list — architect it. Return ONLY the structured output.`,
+  {
+    label: 'synthesize-epics',
+    phase: 'Synthesize',
+    ...(SYNTH_MODEL ? { model: SYNTH_MODEL } : {}),
+    effort: 'high',
+    schema: EPIC_SCHEMA,
+  }
+)
+
+const epics = (epicSpec && epicSpec.epics) || []
+log(`Stage 3: ${epics.length} epics, ${epics.reduce((n, e) => n + (e.children || []).length, 0)} child items.`)
+
+// ---------------------------------------------------------------------------
+// Metrics — what this run cost and what it bought.
+//
+// Token attribution note, stated rather than fudged: the runtime exposes `budget.spent()` as a
+// SINGLE session-wide output-token total, not a per-agent figure, so a true per-tier split is
+// not derivable in-script. What IS exact is the agent COUNT per model tier, which is reported
+// here alongside the one real token number. Do not present the per-tier counts as token shares.
+// ---------------------------------------------------------------------------
+const tally = (arr, key) => arr.reduce((m, x) => ((m[x[key] || 'unknown'] = (m[x[key] || 'unknown'] || 0) + 1), m), {})
+const agentsByTier = dispatchLog.reduce((m, d) => ((m[d.model || 'inherit'] = (m[d.model || 'inherit'] || 0) + 1), m), {})
+const agentsByPhase = tally(dispatchLog, 'phase')
+const relationCounts = epics.reduce((m, e) => {
+  const rel = String(e.prior_art_relation || 'UNSPECIFIED').split(' ')[0]
+  m[rel] = (m[rel] || 0) + 1
+  return m
+}, {})
+
+const metrics = {
+  tokens: {
+    sessionOutputTokensSpent: (() => {
+      try {
+        return budget && typeof budget.spent === 'function' ? budget.spent() : null
+      } catch (e) {
+        return null
+      }
+    })(),
+    note: 'Session-wide output tokens from budget.spent(); the runtime does not expose per-agent usage, so this is NOT split by tier. Agent COUNTS per tier are exact and given below.',
+  },
+  agents: { total: dispatchLog.length, byTier: agentsByTier, byPhase: agentsByPhase, workerModel: WORKER_MODEL, synthesisModel: SYNTH_MODEL || 'inherited' },
+  findings: {
+    rawBySeverity: tally(rawFindings, 'severity'),
+    survivingBySeverity: tally(allFindings, 'severity'),
+    refutedBySeverity: tally(refuted, 'severity'),
+    byLens: dispatchLog
+      .filter((d) => d.phase === 'Isolated' || d.phase === 'Second lens')
+      .reduce((m, d) => {
+        const own = allFindings.filter((f) => f.agentType === d.agentType)
+        m[d.agentType] = { findings: own.length, bySeverity: tally(own, 'severity') }
+        return m
+      }, {}),
+    total: allFindings.length,
+    refuted: refuted.length,
+    refutationRate: rawFindings.length ? `${Math.round((refuted.length / Math.max(1, toVerify.length)) * 100)}% of verified` : '0%',
+    convergentSites: convergent.length,
+  },
+  enrichment: { findingsEnrichedByVerifier: enrichedCount, citationLinesCorrected: correctedLines },
+  duplicates: {
+    epicsByPriorArtRelation: relationCounts,
+    priorArtSupplied: PRIOR_ART.length,
+    priorArtSource: Array.isArray(a.priorArt) && a.priorArt.length ? 'caller' : SKIP_PRIOR_ART ? 'skipped' : 'discovered',
+  },
+  coverage: COVERAGE,
+  concepts: { distinctTagsCoined: new Set(rawFindings.map((f) => f.concept)).size, afterCanonicalisation: finalRanked.length },
+}
+log(
+  `METRICS: ${metrics.agents.total} agents (${Object.entries(agentsByTier).map(([k, v]) => `${v}×${k}`).join(', ')}) | ` +
+    `${allFindings.length} findings kept, ${refuted.length} refuted (${metrics.findings.refutationRate}) | ` +
+    `${enrichedCount} enriched, ${correctedLines} citation line(s) corrected | ` +
+    `coverage ${COVERAGE.pctSwept}% (${COVERAGE.locUnreviewed} lines unreviewed) | ` +
+    `epics ${Object.entries(relationCounts).map(([k, v]) => `${v} ${k}`).join(', ') || 'none'}`,
+)
+
+return {
+  epics,
+  metrics,
+  concepts: finalRanked,
+  findings: allFindings,
+  // Refuted findings are RETURNED, not discarded: a skeptic can be wrong, and the caller
+  // deserves to see what was thrown out and on what grounds.
+  refuted: refuted.map((f) => ({ file: f.file, line: f.line, severity: f.severity, summary: f.summary, reason: f.verifyReason })),
+  convergentSites: convergent,
+  verification: {
+    severitiesVerified: VERIFY_SEVERITIES,
+    attempted: toVerify.length,
+    adjudicated: verdictByRef.size,
+    unverified: Math.max(0, toVerify.length - verdictByRef.size),
+    refuted: refuted.length,
+    skipped: a.skipVerify === true,
+  },
+  roster: UNITS.map((u) => ({ id: u.id, agentType: u.agentType, ...(u.loc ? { loc: u.loc } : {}) })),
+  dropped: {
+    stage1_units_over_budget: RAW_PACKAGES.length > BUDGET ? RAW_PACKAGES.slice(BUDGET).map((p) => (typeof p === 'object' ? p.id || p.path : p)) : [],
+    stage1_no_result: s1dropped,
+    stage2_no_result: s2dropped,
+    stage2_units_not_rereviewed: UNITS.length > secondPass.length ? UNITS.slice(secondPass.length).map((u) => u.id) : [],
+  },
+  note: 'Epics are RETURNED, not filed. The invoking session must dedupe against the backlog graph (see prior_art_relation on each epic) and file them with backlog_create_item / backlog_link_related / backlog_get_item.',
+}
