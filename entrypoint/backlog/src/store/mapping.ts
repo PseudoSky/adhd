@@ -133,6 +133,9 @@ export interface BacklogNodeMeta {
   dedupeSymbol?: string;
   dedupePath?: string;
   dedupeErrorText?: string;
+  /** FEAT-012 role scalars — see `CreateItemInput.author`/`.reporter`'s doc comment (model.ts). */
+  author?: string;
+  reporter?: string;
 }
 
 export function humanIdKind(humanId: string): string {
