@@ -133,6 +133,21 @@ export interface BacklogNodeMeta {
   dedupeSymbol?: string;
   dedupePath?: string;
   dedupeErrorText?: string;
+  /** FEAT-012 / TASK-004 — see `BacklogItem.author`'s doc comment (model.ts). Plain metadata; no graph edge in this build. */
+  author?: string;
+  /** FEAT-012 / TASK-004 — see `BacklogItem.reporter`'s doc comment (model.ts). */
+  reporter?: string;
+  /**
+   * Renaming a humanId (`structure.ts:renameHumanIdNode`) or a repo-migration
+   * rename (`repo-migration.ts:migrateRepoItemNode`, when the target humanId
+   * collided) used to leave every existing citation to the OLD id permanently
+   * unresolvable — nothing recorded what the item used to be called. This is
+   * append-only history: each entry is the identity this node carried
+   * immediately before one such rename, oldest first. `query.ts`'s
+   * `findByRenamedFromId` is the read side, used by `v2/get.ts`'s
+   * `resolveGetTarget` to redirect a lookup by an old id to the current node.
+   */
+  renamedFrom?: Array<{ repo: string; humanId: string; at: string }>;
 }
 
 export function humanIdKind(humanId: string): string {
@@ -204,5 +219,7 @@ export function toBacklogItem(node: NodeRecord): BacklogItem {
     tags: node.tags.filter((t) => !reservedTags.has(t)),
     createdAt: meta.createdAt ?? node.tCreated,
     updatedAt: meta.updatedAt ?? meta.createdAt ?? node.tCreated,
+    author: meta.author,
+    reporter: meta.reporter,
   };
 }

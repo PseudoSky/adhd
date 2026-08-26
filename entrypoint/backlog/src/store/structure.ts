@@ -34,10 +34,41 @@ async function requireItemNode(store: GraphBacklogStore, repo: string, humanId: 
   return node;
 }
 
-export async function addDependencyNode(store: GraphBacklogStore, repo: string, humanId: string, dependsOnHumanId: string): Promise<void> {
-  const from = await requireItemNode(store, repo, humanId);
-  const to = await requireItemNode(store, repo, dependsOnHumanId);
-  await store.graph.writeEdge(from.id, to.id, 'DEPENDS_ON');
+async function hasLiveEdge(store: GraphBacklogStore, src: number, dst: number, rel: string): Promise<boolean> {
+  const edges = await store.graph.getEdges({ src, dst, rel });
+  return edges.length > 0;
+}
+
+/**
+ * `targetRepo` overrides which repo `dependsOnHumanId` resolves in, when it
+ * differs from `humanId`'s own `repo` — the cross-repo relate fix
+ * (FEAT-BACKLOG-004's still-real gap, `client.ts`'s `relate()`). Defaults to
+ * `repo` so every existing single-repo caller is unaffected.
+ *
+ * Returns `alreadyExisted` (checked and written inside ONE `BEGIN IMMEDIATE`
+ * transaction, same race-freedom reasoning as `linkRelatedNode`'s
+ * `hasLiveRelatesToEdge`) so a caller can report a true no-op instead of
+ * `client.ts`'s previous hardcoded `noop: false` for every `relate` call.
+ */
+export async function addDependencyNode(
+  store: GraphBacklogStore,
+  repo: string,
+  humanId: string,
+  dependsOnHumanId: string,
+  targetRepo?: string
+): Promise<{ alreadyExisted: boolean }> {
+  return withImmediateRetry(() =>
+    store.adapter.transaction(
+      async () => {
+        const from = await requireItemNode(store, repo, humanId);
+        const to = await requireItemNode(store, targetRepo ?? repo, dependsOnHumanId);
+        const alreadyExisted = await hasLiveEdge(store, from.id, to.id, 'DEPENDS_ON');
+        await store.graph.writeEdge(from.id, to.id, 'DEPENDS_ON');
+        return { alreadyExisted };
+      },
+      { mode: 'immediate' }
+    )
+  );
 }
 
 /**
@@ -48,11 +79,23 @@ export async function addDependencyNode(store: GraphBacklogStore, repo: string, 
  * table column names (`src`/`dst`/`rel`). F-01/F-02: routed through the
  * store-adapter's `executeRun` query surface (the raw `store.db` handle is
  * gone) — same SQL, same semantics.
+ *
+ * `targetRepo` — see `addDependencyNode`'s doc comment; same default.
+ * `alreadyExisted` is `false` (a genuine no-op remove) when `rowsAffected`
+ * comes back zero — the DELETE matched nothing because the edge was already
+ * gone.
  */
-export async function removeDependencyNode(store: GraphBacklogStore, repo: string, humanId: string, dependsOnHumanId: string): Promise<void> {
+export async function removeDependencyNode(
+  store: GraphBacklogStore,
+  repo: string,
+  humanId: string,
+  dependsOnHumanId: string,
+  targetRepo?: string
+): Promise<{ alreadyExisted: boolean }> {
   const from = await requireItemNode(store, repo, humanId);
-  const to = await requireItemNode(store, repo, dependsOnHumanId);
-  await store.adapter.executeRun(`DELETE FROM edge WHERE src = ? AND dst = ? AND rel = 'DEPENDS_ON'`, [from.id, to.id]);
+  const to = await requireItemNode(store, targetRepo ?? repo, dependsOnHumanId);
+  const result = await store.adapter.executeRun(`DELETE FROM edge WHERE src = ? AND dst = ? AND rel = 'DEPENDS_ON'`, [from.id, to.id]);
+  return { alreadyExisted: result.rowsAffected > 0 };
 }
 
 /**
@@ -85,12 +128,24 @@ async function hasLiveRelatesToEdge(store: GraphBacklogStore, nodeIdA: number, n
   return forward.length > 0 || backward.length > 0;
 }
 
-export async function linkRelatedNode(store: GraphBacklogStore, repo: string, humanIdA: string, humanIdB: string): Promise<ILinkRelatedResult> {
+/**
+ * `repoB` overrides which repo `humanIdB` resolves in, when it differs from
+ * `humanIdA`'s own `repo` — the cross-repo relate fix (FEAT-BACKLOG-004's
+ * still-real gap, `client.ts`'s `relate()`). Defaults to `repo` so every
+ * existing single-repo caller is unaffected.
+ */
+export async function linkRelatedNode(
+  store: GraphBacklogStore,
+  repo: string,
+  humanIdA: string,
+  humanIdB: string,
+  repoB?: string
+): Promise<ILinkRelatedResult> {
   return withImmediateRetry(() =>
     store.adapter.transaction(
       async () => {
         const a = await requireItemNode(store, repo, humanIdA);
-        const b = await requireItemNode(store, repo, humanIdB);
+        const b = await requireItemNode(store, repoB ?? repo, humanIdB);
         const alreadyLinked = await hasLiveRelatesToEdge(store, a.id, b.id);
         await store.graph.writeEdge(a.id, b.id, 'RELATES_TO');
         return { linked: true, repo, humanIdA, humanIdB, alreadyLinked };
@@ -202,6 +257,12 @@ export async function supersedeItemNode(store: GraphBacklogStore, repo: string, 
     if (newInput.priority !== undefined) newMeta.priority = newInput.priority;
     if (newInput.projectPath !== undefined) newMeta.projectPath = newInput.projectPath;
     if (newInput.plan !== undefined) newMeta.plan = newInput.plan;
+    // TASK-004 — same fix as `createItemNode` (store/crud.ts): this mints by
+    // hand rather than delegating to `createItemNode`, so it needs the
+    // identical author/reporter persistence or the supersede path alone
+    // would silently drop them again.
+    if (newInput.author !== undefined) newMeta.author = newInput.author;
+    if (newInput.reporter !== undefined) newMeta.reporter = newInput.reporter;
 
     const newId = await store.graph.supersede(old.id, buildNodeContent(repo, humanId, newInput.title, newInput.body), {
       kind: 'generic',
@@ -302,11 +363,30 @@ async function findOrCreatePlanNode(store: GraphBacklogStore, repo: string, plan
   });
 }
 
-export async function attachToPlanNode(store: GraphBacklogStore, repo: string, humanId: string, planSlug: string): Promise<void> {
+/**
+ * `planRepo` overrides which repo's plan namespace `planSlug` is looked up /
+ * minted in, when it differs from the item's own `repo` — the cross-repo
+ * relate fix (FEAT-BACKLOG-004's still-real gap, `client.ts`'s `relate()`:
+ * an item in one repo attached to a plan tracked under a different, e.g. hub,
+ * repo). Defaults to `repo` so every existing single-repo caller is
+ * unaffected.
+ *
+ * Returns `alreadyExisted` — checked before the write, same "report the
+ * signal instead of hardcoding `noop: false`" fix as `addDependencyNode`.
+ */
+export async function attachToPlanNode(
+  store: GraphBacklogStore,
+  repo: string,
+  humanId: string,
+  planSlug: string,
+  planRepo?: string
+): Promise<{ alreadyExisted: boolean }> {
   const item = await requireItemNode(store, repo, humanId);
-  const planId = await findOrCreatePlanNode(store, repo, planSlug);
+  const planId = await findOrCreatePlanNode(store, planRepo ?? repo, planSlug);
+  const alreadyExisted = await hasLiveEdge(store, item.id, planId, 'MEMBER_OF');
   await mutateMetadata<BacklogNodeMeta>(store, item.id, (meta) => ({ ...meta, plan: planSlug, updatedAt: new Date().toISOString() }));
   await store.graph.writeEdge(item.id, planId, 'MEMBER_OF');
+  return { alreadyExisted };
 }
 
 async function findOrCreateAssigneeNode(store: GraphBacklogStore, to: string): Promise<number> {
@@ -409,6 +489,11 @@ export async function renameHumanIdNode(store: GraphBacklogStore, repo: string, 
     finalTitle = meta.title;
     finalBody = meta.body;
     const nowIso = new Date().toISOString();
+    // A no-op rename (newHumanId === oldHumanId, explicitly allowed above)
+    // gets no renamedFrom entry — recording an alias TO ITSELF would make
+    // `findByRenamedFromId` redirect an id to the exact id it already is.
+    const renamedFrom =
+      newHumanId === oldHumanId ? meta.renamedFrom : [...(meta.renamedFrom ?? []), { repo, humanId: oldHumanId, at: nowIso }];
     return {
       ...meta,
       humanId: newHumanId,
@@ -416,6 +501,7 @@ export async function renameHumanIdNode(store: GraphBacklogStore, repo: string, 
       family: newFamily,
       notes: [...meta.notes, { by: 'system', at: nowIso, text: `[data repair] renamed humanId from "${oldHumanId}" to "${newHumanId}" (BUG-BACKLOG-HUMANID-COLLISION-001)` }],
       updatedAt: nowIso,
+      ...(renamedFrom !== undefined ? { renamedFrom } : {}),
     };
   });
 

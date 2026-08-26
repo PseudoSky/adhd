@@ -3,9 +3,7 @@
 // Coverage:
 //   - `resolveRootUnion` (schema-introspect.ts): detects a root-level
 //     `oneOf`+`discriminator` domain schema and decomposes it into per-branch
-//     flag data, using the REAL shape `@adhd/apigen-core-client`'s
-//     `buildBatchMountedOperations` (the actual, shipped `apigen-plugin-batch`
-//     mount derivation) produces — not an invented-in-isolation fixture.
+//     flag data.
 //   - `generate()`: renders N Commander subcommands (one per discriminator
 //     branch) instead of zero flags; a flat (non-union) operation's emitted
 //     source is completely unaffected (regression guard).
@@ -13,73 +11,99 @@
 //     disk next to a real target module and driven as a REAL spawned `node`
 //     child process (real argv parsing, real dispatch, real function call) —
 //     not an in-process shortcut.
+//
+// Fixture provenance (BUG-APIGEN-CLI-002 update): this suite's fixture used
+// to be sourced VERBATIM from `@adhd/apigen-core-client`'s real
+// `buildBatchMountedOperations` (`_batch/<kind>`'s actual production schema)
+// specifically because that was, at the time, the one real root-level
+// `oneOf`+`discriminator` domain schema shipping anywhere in this repo.
+// BUG-APIGEN-CLI-002 changed `batch.ts`'s `branchInputSchema` to nest every
+// control-plane field (INCLUDING the `operation` discriminator) under one
+// top-level `input` object, matching the single-JSON-blob convention every
+// other apigen-mounted operation uses — but a discriminator's `propertyName`
+// must, by the OpenAPI/JSON-Schema `discriminator` contract, name a property
+// that sits DIRECTLY on the oneOf'd object; once `operation` moved a level
+// deeper it can no longer serve that role, so `buildBatchKindSchema` no
+// longer emits a `discriminator` at all (see `batch.ts`'s own doc comment on
+// `branchInputSchema`). `_batch/<kind>` is therefore no longer a real
+// root-oneof+discriminator schema to source this fixture from.
+//
+// `resolveRootUnion`/`generate()`'s root-union codegen capability is still
+// real, shipped code — it exists for ANY future operation whose domain
+// schema is itself a discriminated `oneOf` (independent of batch) — so this
+// suite now hand-constructs an equivalent fixture in that exact shape
+// (mirroring what `_batch/<kind>` used to look like pre-fix) rather than
+// asserting nothing is left to test.
 
 import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type {
-  Descriptor,
-  Operation,
-  PluginInput,
-} from '@adhd/apigen-core-client';
-import { buildBatchMountedOperations } from '@adhd/apigen-core-client';
+import type { PluginInput } from '@adhd/apigen-core-client';
 import { generate } from '../lib/generate';
 import { resolveRootUnion, dataSchemaProps } from '../lib/schema-introspect';
 
 const execFileAsync = promisify(execFile);
 
 // ---------------------------------------------------------------------------
-// Real-shape fixture — builds an actual `_batch/<kind>` mount schema via the
-// REAL, shipped `apigen-core-client` batch derivation (not a hand-invented
-// oneOf shape), mirroring `apigen-core-client/src/test/batch.spec.ts`'s own
-// fixture helpers.
+// Hand-built root-level `oneOf`+`discriminator` domain schema (BUG-APIGEN-CLI-002
+// update — see file-header note above for why this is no longer sourced from
+// `@adhd/apigen-core-client`'s real batch derivation). Shape mirrors
+// `_batch/<kind>`'s PRE-fix output byte-for-byte: two branches, discriminated
+// by a top-level `operation` literal, each carrying a flat `items` (+ the
+// other batch control-plane fields) directly on the branch.
 // ---------------------------------------------------------------------------
 
-function seg(raw: string) {
-  return { raw, words: [raw.toLowerCase()] };
-}
-
-function op(id: string, input: Record<string, unknown>): Operation {
-  const [namespace, ...restPath] = id.split('/');
-  return {
-    id,
-    host: 'ts',
-    namespace: seg(namespace),
-    path: restPath.length > 0 ? restPath.map(seg) : [seg(id)],
-    kind: 'action',
-    async: true,
-    streaming: false,
-    safe: false,
-    input,
-    output: { type: 'object' },
-    envelope: {},
-    typeText: null,
-  };
-}
-
-/** Builds a real root-level `oneOf`+`discriminator` domain schema from the ACTUAL batch plugin machinery. */
 function realBatchDomainSchema(): Record<string, unknown> {
-  const ops: Operation[] = [
-    op('createItem', {
-      type: 'object',
-      properties: { name: { type: 'string' } },
-      required: ['name'],
-    }),
-    op('sendTask', {
-      type: 'object',
-      properties: { taskId: { type: 'string' } },
-      required: ['taskId'],
-    }),
-  ];
-  const descriptor: Descriptor = { host: 'ts', operations: ops };
-  const [mounted] = buildBatchMountedOperations(descriptor, {});
-  expect(mounted).toBeDefined();
-  // `buildBatchMountedOperations`'s `.input` IS the real root-level
-  // `oneOf`+`discriminator` schema (`buildBatchKindSchema`'s output) — the
-  // exact shape this bug is about, verbatim from production code.
-  return mounted.input as Record<string, unknown>;
+  return {
+    oneOf: [
+      {
+        type: 'object',
+        required: ['operation', 'items'],
+        properties: {
+          operation: { type: 'string', enum: ['createItem'] },
+          items: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { name: { type: 'string' } },
+              required: ['name'],
+            },
+          },
+          concurrency: { type: 'number' },
+          mode: { type: 'string', enum: ['parallel', 'serial', 'chained'] },
+          onItemError: { type: 'string', enum: ['continue', 'abort'] },
+          itemTimeoutMs: { type: 'number' },
+        },
+        additionalProperties: true,
+      },
+      {
+        type: 'object',
+        required: ['operation', 'items'],
+        properties: {
+          operation: { type: 'string', enum: ['sendTask'] },
+          items: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { taskId: { type: 'string' } },
+              required: ['taskId'],
+            },
+          },
+          concurrency: { type: 'number' },
+          mode: { type: 'string', enum: ['parallel', 'serial', 'chained'] },
+          onItemError: { type: 'string', enum: ['continue', 'abort'] },
+          itemTimeoutMs: { type: 'number' },
+        },
+        additionalProperties: true,
+      },
+    ],
+    discriminator: {
+      propertyName: 'operation',
+      mapping: { createItem: '#/oneOf/0', sendTask: '#/oneOf/1' },
+    },
+  };
 }
 
 function makeInput(overrides: Partial<PluginInput> = {}): PluginInput {

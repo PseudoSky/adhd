@@ -547,12 +547,18 @@ describe('py-flask plugin — batch mount (BATCH_0.0.1.md, batch-rollout F6)', (
         throw new Error('[py-flask-batch] echo_str operation not found in extracted operations');
       }
 
+      // BUG-APIGEN-CLI-002: every batch control-plane field now nests under
+      // one top-level "input" object (matching every other apigen-mounted
+      // operation's single-JSON-blob convention) — the request body must
+      // wrap {operation, items} accordingly.
       const res = await fetch(`${base}${batchRoute}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          operation: echoOp.id,
-          items: [{ msg: 'one' }, { msg: 123 }, { msg: 'two' }],
+          input: {
+            operation: echoOp.id,
+            items: [{ msg: 'one' }, { msg: 123 }, { msg: 'two' }],
+          },
         }),
       });
       expect(res.status).toBe(200);
@@ -577,7 +583,7 @@ describe('py-flask plugin — batch mount (BATCH_0.0.1.md, batch-rollout F6)', (
     const res = await fetch(`${base()}${batchRoute}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ operation: 'irrelevant', items: [] }),
+      body: JSON.stringify({ input: { operation: 'irrelevant', items: [] } }),
     });
     expect(res.status).toBe(404);
   });

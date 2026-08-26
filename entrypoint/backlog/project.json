@@ -82,6 +82,17 @@
         "{projectRoot}/package.json"
       ]
     },
+    "serve": {
+      "//": "web UI prototype: spawns the real built CLI (`serve --transport http`) + a static/proxy web server (tools/run-web-ui.mjs) and owns both lifecycles. `nx serve backlog` then `open http://127.0.0.1:4173/`. Pass-through flags (e.g. `--sandbox` for an isolated store) go after `--`: `npx nx serve backlog -- --sandbox`. Long-lived dev process — never cacheable.",
+      "executor": "nx:run-commands",
+      "cache": false,
+      "dependsOn": [
+        "build"
+      ],
+      "options": {
+        "command": "node entrypoint/backlog/tools/run-web-ui.mjs"
+      }
+    },
     "nx-release-publish": {
       "options": {
         "packageRoot": "{projectRoot}/dist"

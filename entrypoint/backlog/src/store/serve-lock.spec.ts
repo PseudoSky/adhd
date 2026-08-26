@@ -15,6 +15,8 @@ import { join } from 'node:path';
 import {
   acquireServeLock,
   canonicalDbPath,
+  forceReleaseServeLock,
+  inspectServeLock,
   isLockableDbPath,
   serveLockPath,
   ServeLockHeldError,
@@ -131,6 +133,106 @@ describe('acquireServeLock', () => {
     expect(existsSync(lockPath)).toBe(true);
     const firstLine = readFileSync(lockPath, 'utf8').split('\n')[0];
     expect(firstLine).toBe('424242');
+  });
+});
+
+describe('inspectServeLock', () => {
+  let dir: string | undefined;
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    dir = undefined;
+  });
+
+  it('reports exists:false for a dbPath with no lock file at all', () => {
+    dir = mkdtempSync(join(tmpdir(), 'serve-lock-status-'));
+    const dbPath = join(dir, 'backlog.db');
+    const status = inspectServeLock(dbPath);
+    expect(status).toEqual({ dbPath, lockPath: serveLockPath(dbPath), exists: false, holderPid: null, alive: false, lockedAt: null, stale: false });
+  });
+
+  it('reports a live holder (this process itself) as exists + alive + not stale', () => {
+    dir = mkdtempSync(join(tmpdir(), 'serve-lock-status-'));
+    const dbPath = join(dir, 'backlog.db');
+    const handle = acquireServeLock(dbPath);
+    try {
+      const status = inspectServeLock(dbPath);
+      expect(status.exists).toBe(true);
+      expect(status.holderPid).toBe(process.pid);
+      expect(status.alive).toBe(true);
+      expect(status.stale).toBe(false);
+      expect(status.lockedAt).not.toBeNull();
+    } finally {
+      handle.release();
+    }
+  });
+
+  it('reports a dead-pid lock file as exists + NOT alive + stale, without reclaiming it (read-only)', () => {
+    dir = mkdtempSync(join(tmpdir(), 'serve-lock-status-'));
+    const dbPath = join(dir, 'backlog.db');
+    const lockPath = serveLockPath(dbPath);
+    const deadPid = 999999;
+    writeFileSync(lockPath, `${deadPid}\n2020-01-01T00:00:00.000Z\n`);
+    const status = inspectServeLock(dbPath);
+    expect(status).toEqual({ dbPath, lockPath, exists: true, holderPid: deadPid, alive: false, lockedAt: '2020-01-01T00:00:00.000Z', stale: true });
+    // Read-only: the file must still be there afterward.
+    expect(existsSync(lockPath)).toBe(true);
+  });
+});
+
+describe('forceReleaseServeLock', () => {
+  let dir: string | undefined;
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    dir = undefined;
+  });
+
+  it('no-ops (released:false) when no lock file exists', () => {
+    dir = mkdtempSync(join(tmpdir(), 'serve-lock-force-'));
+    const dbPath = join(dir, 'backlog.db');
+    expect(forceReleaseServeLock(dbPath)).toEqual({ released: false, wasAlive: false, holderPid: null });
+  });
+
+  it('removes a dead-holder (stale) lock without needing force:true', () => {
+    dir = mkdtempSync(join(tmpdir(), 'serve-lock-force-'));
+    const dbPath = join(dir, 'backlog.db');
+    const lockPath = serveLockPath(dbPath);
+    writeFileSync(lockPath, `999999\n${new Date().toISOString()}\n`);
+    const result = forceReleaseServeLock(dbPath);
+    expect(result).toEqual({ released: true, wasAlive: false, holderPid: 999999 });
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  it('refuses a genuinely LIVE holder without force:true — throws ServeLockHeldError, lock file untouched', () => {
+    dir = mkdtempSync(join(tmpdir(), 'serve-lock-force-'));
+    const dbPath = join(dir, 'backlog.db');
+    const handle = acquireServeLock(dbPath);
+    try {
+      let caught: unknown;
+      try {
+        forceReleaseServeLock(dbPath);
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(ServeLockHeldError);
+      expect((caught as ServeLockHeldError).holderPid).toBe(process.pid);
+      expect(existsSync(serveLockPath(dbPath))).toBe(true);
+    } finally {
+      handle.release();
+    }
+  });
+
+  it('force:true removes a genuinely LIVE holder\'s lock anyway — the deliberate override', () => {
+    dir = mkdtempSync(join(tmpdir(), 'serve-lock-force-'));
+    const dbPath = join(dir, 'backlog.db');
+    const handle = acquireServeLock(dbPath);
+    const result = forceReleaseServeLock(dbPath, { force: true });
+    expect(result).toEqual({ released: true, wasAlive: true, holderPid: process.pid });
+    expect(existsSync(serveLockPath(dbPath))).toBe(false);
+    // Cleanup: the handle no longer owns anything real on disk, but release()
+    // must still not throw (idempotent-safe even after an external force-clear).
+    expect(() => handle.release()).not.toThrow();
   });
 });
 

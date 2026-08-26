@@ -10,6 +10,7 @@ import type { GraphBacklogStore } from './graph-backlog-store.js';
 import { mutateMetadata } from './mutate-metadata.js';
 import type { BacklogNodeMeta } from './mapping.js';
 import { writeAuditEvent } from './audit-log.js';
+import { dispatchBacklogHook } from './hooks.js';
 
 /** `claim.ts`'s three ops only ever receive `nodeId` (never `repo`/`humanId`
  *  directly — see their own call sites in `client.ts`), so this reads the
@@ -77,9 +78,11 @@ export async function claimItemNode(store: GraphBacklogStore, nodeId: number, by
   });
   // `held` is a REFUSAL — nothing changed, so nothing is logged
   // (DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001: an event log must reflect real
-  // state changes, never a no-op branch of the same code path).
+  // state changes, never a no-op branch of the same code path). Same
+  // reasoning for the FEAT-BACKLOG-001 hook dispatch just below.
   if (result.status !== 'held') {
     await logClaimEvent(store, nodeId, { status: result.status, by });
+    dispatchBacklogHook(store, { type: 'itemClaimed', nodeId, by, status: result.status });
   }
   return result;
 }
@@ -93,6 +96,7 @@ export async function renewClaimNode(store: GraphBacklogStore, nodeId: number, b
     return { ...meta, claimedBy: by, claimedAt: nowIso, updatedAt: nowIso };
   });
   await logClaimEvent(store, nodeId, { status: result.status, by });
+  dispatchBacklogHook(store, { type: 'itemClaimed', nodeId, by, status: result.status });
   return result;
 }
 
@@ -118,6 +122,7 @@ export async function releaseClaimNode(store: GraphBacklogStore, nodeId: number,
   // `release-noop` changed nothing — not logged, same reasoning as `held` above.
   if (result.status !== 'release-noop') {
     await logClaimEvent(store, nodeId, { status: result.status, by, wasClaimedBy: (result as { wasClaimedBy?: string }).wasClaimedBy });
+    dispatchBacklogHook(store, { type: 'itemReleased', nodeId, by });
   }
   return result;
 }

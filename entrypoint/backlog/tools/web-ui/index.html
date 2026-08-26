@@ -1,0 +1,1607 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>backlog web ui</title>
+<style>
+  :root {
+    --bg: #0f1117; --panel: #171a23; --panel-2: #1e2230; --border: #2a2f42;
+    --text: #dde2f0; --muted: #8b93ab; --accent: #6ea8fe; --accent-2: #7dd3a8;
+    --danger: #f87171; --warn: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: baseline; gap: 12px; padding: 12px 18px;
+    border-bottom: 1px solid var(--border); background: var(--panel); }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: .5px; }
+  header h1 span { color: var(--accent); }
+  header .status { margin-left: auto; font-size: 12px; color: var(--muted); }
+  header .status.ok { color: var(--accent-2); }
+  header .status.bad { color: var(--danger); }
+  button { background: var(--accent); color: #0b1220; border: 0; border-radius: 6px;
+    padding: 6px 14px; font-weight: 600; cursor: pointer; font-size: 13px; }
+  button.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+  button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button:hover:not(:disabled) { filter: brightness(1.12); }
+  main { display: grid; grid-template-columns: minmax(360px, 2fr) minmax(380px, 3fr); gap: 0; height: calc(100vh - 58px); }
+  .panel { display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--bg); min-width: 0; min-height: 0; }
+  .tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--panel); }
+  .tabs button { flex: 1; background: transparent; color: var(--muted); border: 0;
+    border-bottom: 2px solid transparent; border-radius: 0; padding: 10px; font-weight: 600; }
+  .tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+  .tab-pane { display: none; flex: 1; flex-direction: column; min-height: 0; min-width: 0; }
+  .tab-pane.active { display: flex; }
+
+  /* ---- filter rows: label left, control right, one per line ---- */
+  .filters { border-bottom: 1px solid var(--border); background: var(--panel-2); padding: 8px 14px; }
+  .frow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; }
+  .frow > label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; flex: 0 0 auto; }
+  .frow .fctrl { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; flex: 1; }
+  .frow input[type=text], .frow select { background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font-size: 13px; max-width: 260px; }
+  .msel { position: relative; }
+  .msel-btn { background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 10px; font-size: 13px; font-weight: 500; text-align: left; min-width: 200px; }
+  .msel-btn .dot { color: var(--accent); }
+  .msel-pop { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; min-width: 220px; max-height: 260px; overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+  .msel-pop .msel-clear { display: block; width: 100%; background: transparent; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 5px; padding: 4px 8px; font-size: 12px; margin-bottom: 4px; }
+  .msel-pop .msel-clear:hover { color: var(--danger); border-color: var(--danger); }
+  .msel-pop label { display: flex; gap: 8px; align-items: center; padding: 4px 6px; font-size: 13px; cursor: pointer; border-radius: 4px; text-transform: none; letter-spacing: 0; }
+  .msel-pop label:hover { background: var(--panel-2); }
+  .msel-pop .group { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; padding: 6px 6px 2px; }
+  .msel-pop .hint { font-size: 11px; color: var(--muted); padding: 2px 6px 4px; }
+
+  .knob-hint { font-size: 10px; color: var(--muted); margin: 0; padding: 4px 14px; background: var(--panel-2); border-bottom: 1px solid var(--border); }
+
+  /* ---- list ---- */
+  #list-pane .list { flex: 1; overflow-y: auto; padding: 12px 14px; min-height: 0; }
+  .count-row { display: flex; align-items: center; gap: 12px; font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+  .count-row label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; margin-bottom: 8px; cursor: pointer; }
+  .card:hover { border-color: var(--accent); }
+  .card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .card.selected { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
+  .card .l1 { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .card .l1-right { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+  .card .id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--accent); }
+  .card .title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 3px 0; }
+  .card .l3 { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .card .repo { font-size: 10px; color: var(--muted); font-family: ui-monospace, Menlo, monospace;
+    border: 1px solid var(--border); border-radius: 99px; padding: 0 7px; }
+  .card .age { font-size: 10px; color: var(--muted); margin-left: auto; }
+  .pill { padding: 1px 7px; border-radius: 99px; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
+  .pill.open { background: #16324f; color: var(--accent); }
+  .pill.terminal { background: #14362a; color: var(--accent-2); }
+  .pill.priority-CRITICAL, .pill.priority-HIGH { background: #4a1d1d; color: var(--danger); }
+  .pill.priority-MEDIUM { background: #45310f; color: var(--warn); }
+  .pill.priority-LOW { background: #14362a; color: var(--accent-2); }
+  .pill.tag { background: #232a3d; color: #a9b4d4; text-transform: none; }
+
+  /* ---- batch bar (bottom of side panel, only when ≥2 selected) ---- */
+  .batch-bar { display: none; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 14px;
+    border-top: 1px solid var(--border); background: #1a2030; font-size: 13px; }
+  .batch-bar.show { display: flex; }
+  .batch-bar .count { font-weight: 600; color: var(--accent); margin: 0; }
+  .batch-bar select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font-size: 13px; }
+  .batch-result { font-size: 12px; color: var(--muted); }
+  .batch-result.err { color: var(--danger); }
+
+  /* ---- detail ---- */
+  #detail { overflow-y: auto; padding: 14px 18px; min-height: 0; min-width: 0; }
+  #detail h2 { margin: 0 0 4px; font-size: 16px; }
+  #detail .id-line { font-family: ui-monospace, Menlo, monospace; color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+  #detail .body, #detail .note, #detail blockquote { background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px; font-size: 13px; margin: 10px 0; }
+  #detail .field { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 4px; }
+  #detail ul { margin: 0; padding-left: 18px; font-size: 13px; }
+  #detail .empty { color: var(--muted); font-style: italic; }
+  #detail code { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; font-size: 12px; }
+  #detail pre code { display: block; padding: 10px; overflow-x: auto; }
+  #detail .kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 16px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+  #detail .kv .k { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  #detail .kv .v { font-size: 13px; word-break: break-word; }
+  #detail .container { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 4px 12px 12px; margin: 8px 0; }
+  #detail .container h4 { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 10px 0 6px; }
+  #detail .timeline { list-style: none; padding-left: 0; margin: 0; }
+  #detail .timeline li { border-left: 2px solid var(--border); padding: 2px 0 8px 12px; font-size: 12px; position: relative; }
+  #detail .timeline li::before { content: ''; position: absolute; left: -5px; top: 7px; width: 8px; height: 8px;
+    border-radius: 50%; background: var(--accent); }
+  #detail .timeline .at { color: var(--muted); font-size: 11px; }
+  #detail .timeline .kind { color: var(--accent); text-transform: uppercase; font-size: 10px; letter-spacing: .5px; }
+  #detail a { color: var(--accent); }
+  .error { color: var(--danger); font-size: 13px; padding: 8px; border: 1px solid var(--danger); border-radius: 6px; margin: 8px 0; white-space: pre-wrap; }
+
+  /* ---- create / edit form ---- */
+  #create-pane { padding: 14px; overflow-y: auto; min-height: 0; }
+  #create-pane h3 { margin: 0 0 10px; font-size: 14px; }
+  #create-pane h3 span { color: var(--accent); }
+  #create-form { display: flex; flex-direction: column; gap: 2px; }
+  #create-form .frow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 0; }
+  #create-form .frow > label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; flex: 0 0 auto; }
+  #create-form .frow .fctrl { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; flex: 1; }
+  #create-form .frow input, #create-form .frow textarea, #create-form .frow select { background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 13px; font-family: inherit; width: 100%; max-width: 320px; }
+  #create-form .frow textarea { resize: vertical; }
+  #create-form .frow input[disabled], #create-form .frow select[disabled] { opacity: .55; cursor: not-allowed; }
+  #create-form .frow .note-inline { font-size: 11px; color: var(--muted); font-style: italic; text-transform: none; letter-spacing: 0; }
+  .cit-row { display: flex; gap: 6px; align-items: center; }
+  .cit-row input { flex: 1; }
+  .cit-row button { padding: 4px 10px; }
+  #create-form .actions { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+  #create-form .hint { font-size: 12px; color: var(--muted); }
+  .spinner { color: var(--muted); padding: 20px; text-align: center; }
+
+  /* ---- stats view ---- */
+  #stats-pane { grid-column: 1 / -1; overflow-y: auto; min-height: 0; min-width: 0; }
+  #stats-pane.active { display: flex; flex-direction: column; }
+  main.stats-mode #detail { display: none; }
+  .stat-section { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin-bottom: 14px; }
+  .stat-section > h4 { margin: 0 0 4px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .stat-section .sub { font-size: 11px; color: var(--muted); margin: 0 0 8px; }
+  .stat-chart { width: 100%; height: 260px; }
+  .stat-chart.tall { height: 340px; }
+  .sup { font-size: 10px; padding: 1px 8px; border-radius: 99px; text-transform: uppercase; letter-spacing: .4px; font-weight: 600; cursor: help; }
+  .sup-ok { background: #14362a; color: var(--accent-2); }
+  .sup-part { background: #45310f; color: var(--warn); }
+  .sup-no { background: #4a1d1d; color: var(--danger); }
+  .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+  .kpi { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
+  .kpi:hover { border-color: var(--accent); }
+  .kpi .n { font-size: 24px; font-weight: 700; line-height: 1.1; }
+  .kpi .l { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
+  .kpi .d { font-size: 11px; color: var(--muted); }
+  .kpi .d.pos { color: var(--accent-2); }
+  .kpi .d.neg { color: var(--danger); }
+  .stat-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .stat-table th, .stat-table td { border: 1px solid var(--border); padding: 4px 8px; text-align: right; }
+  .stat-table th { background: var(--panel-2); font-size: 10px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+  .stat-table td.rowh { text-align: left; font-weight: 600; }
+  .stat-table td.cell { cursor: pointer; }
+  .stat-table td.cell:hover { outline: 1px solid var(--accent); }
+  .stat-table td.total { font-weight: 700; background: var(--panel-2); }
+  .stat-table .cell0 { color: var(--muted); }
+  .pivot-controls { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; font-size: 12px; }
+  .pivot-controls select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+  .analytic-card { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .analytic-card .n { font-size: 20px; font-weight: 700; }
+  .analytic-card .l { font-size: 11px; color: var(--muted); margin: 2px 0 6px; }
+  .analytic-card .act { font-size: 11px; color: var(--accent); cursor: pointer; }
+  .analytic-card .act:hover { text-decoration: underline; }
+  .analytic-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>backlog <span>web ui</span></h1>
+  <button class="secondary" onclick="loadItems()">refresh</button>
+  <div class="status" id="api-status">checking api…</div>
+</header>
+
+<main id="main">
+  <div class="panel">
+    <div class="tabs">
+      <button id="tab-btn-list" class="active" onclick="switchTab('list')">list</button>
+      <button id="tab-btn-stats" onclick="switchTab('stats')">stats</button>
+      <button id="tab-btn-create" onclick="switchTab('create')">create</button>
+    </div>
+
+    <div id="list-pane" class="tab-pane active">
+      <div class="filters">
+        <div class="frow"><label>status</label><div class="fctrl"><div id="msel-status" class="msel"></div></div></div>
+        <div class="frow"><label>family</label><div class="fctrl"><div id="msel-family" class="msel"></div></div></div>
+        <div class="frow"><label>repo</label><div class="fctrl"><div id="msel-repo" class="msel"></div></div></div>
+        <div class="frow"><label>search</label><div class="fctrl"><input id="f-text" type="text" placeholder="title/body…"></div></div>
+        <div class="frow"><label>sort</label>
+          <div class="fctrl"><select id="f-sort">
+            <option value="priority">priority</option><option value="updated">updated</option>
+            <option value="created">created</option><option value="demand">demand</option>
+          </select></div>
+        </div>
+      </div>
+      <p class="knob-hint">The list defaults to <strong>open</strong> (non-terminal) — the API has no
+        “all statuses” mode. ⌘/Ctrl-click a card to toggle selection.</p>
+
+      <div class="list" id="list"><div class="spinner">loading…</div></div>
+
+      <div class="batch-bar" id="batch-bar">
+        <span class="count" id="batch-count"></span>
+        <select id="b-status">
+          <option value="">pick status…</option>
+          <optgroup label="lifecycle">
+            <option value="open">open (non-terminal)</option>
+            <option value="closed">closed (terminal)</option>
+          </optgroup>
+          <optgroup label="exact status">
+            <option>OPEN</option><option>IN_PROGRESS</option><option>PARTIAL</option>
+            <option>OUTSTANDING</option><option>DEFERRED</option><option>BLOCKED</option>
+            <option>MIXED</option><option>UNKNOWN</option><option>FIXED</option>
+            <option>RESOLVED</option><option>DONE</option><option>SHIPPED</option>
+            <option>VERIFIED</option><option>REMOVED</option><option>MITIGATED</option>
+            <option>SUPERSEDED</option><option>INVALID</option><option>DUPLICATE</option>
+            <option>WONTFIX</option>
+          </optgroup>
+        </select>
+        <button onclick="batchSetStatus()">set status</button>
+        <button class="danger" onclick="batchDelete()">delete</button>
+        <button id="b-move" disabled title="per-item repo move is not in the backlog API yet — filed as FEAT-008">move</button>
+        <button class="secondary" onclick="clearSelection()">clear</button>
+        <span class="batch-result" id="batch-result"></span>
+      </div>
+    </div>
+
+    <div id="create-pane" class="tab-pane">
+      <h3 id="create-title">new item</h3>
+      <form id="create-form" onsubmit="return submitItem(event)">
+        <div class="frow"><label>family</label><div class="fctrl"><input id="c-family" list="family-options" placeholder="BUG / DEBT / FEAT…" required></div></div>
+        <datalist id="family-options">
+          <option value="BUG"><option value="DEBT"><option value="FEAT"><option value="BACKLOG">
+          <option value="INVESTIGATION"><option value="PLAN"><option value="TASK">
+        </datalist>
+        <div class="frow"><label>id override</label><div class="fctrl"><input id="c-idoverride" placeholder="explicit humanId"></div></div>
+        <div class="frow"><label>repo</label><div class="fctrl"><input id="c-repo" list="repo-options" value="PseudoSky/adhd"></div></div>
+        <datalist id="repo-options"></datalist>
+        <div class="frow"><label>status</label>
+          <div class="fctrl"><select id="c-status">
+            <option value="">— (leave open)</option>
+            <optgroup label="lifecycle">
+              <option value="open">open (non-terminal)</option>
+              <option value="closed">closed (terminal)</option>
+            </optgroup>
+            <optgroup label="exact status">
+              <option>OPEN</option><option>IN_PROGRESS</option><option>PARTIAL</option>
+              <option>OUTSTANDING</option><option>DEFERRED</option><option>BLOCKED</option>
+              <option>MIXED</option><option>UNKNOWN</option><option>FIXED</option>
+              <option>RESOLVED</option><option>DONE</option><option>SHIPPED</option>
+              <option>VERIFIED</option><option>REMOVED</option><option>MITIGATED</option>
+              <option>SUPERSEDED</option><option>INVALID</option><option>DUPLICATE</option>
+              <option>WONTFIX</option>
+            </optgroup>
+          </select></div>
+        </div>
+        <div class="frow"><label>priority</label>
+          <div class="fctrl"><select id="c-priority">
+            <option value="">—</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option>
+          </select></div>
+        </div>
+        <div class="frow"><label>tags</label><div class="fctrl"><input id="c-tags" placeholder="comma, separated"></div></div>
+        <div class="frow"><label>plan</label><div class="fctrl"><input id="c-plan" placeholder="plan slug"></div></div>
+        <div class="frow"><label>project path</label><div class="fctrl"><input id="c-projectpath" placeholder="packages/…"></div></div>
+        <div class="frow" id="row-importedfrom"><label>imported from</label><div class="fctrl"><input id="c-importedfrom" placeholder="source md path"></div></div>
+        <div class="frow" id="row-author"><label>author</label><div class="fctrl"><input id="c-author" placeholder="role, e.g. product-manager"></div></div>
+        <div class="frow" id="row-reporter"><label>reporter</label><div class="fctrl"><input id="c-reporter" placeholder="role (defaults to author)"></div></div>
+        <div class="frow"><label>by</label><div class="fctrl"><input id="c-by" value="webui:1" required></div></div>
+        <div class="frow" id="row-force"><label>skip dedupe</label><div class="fctrl"><input id="c-force" type="checkbox" style="width:auto"></div></div>
+        <div class="frow"><label>title</label><div class="fctrl"><input id="c-title" required></div></div>
+        <div class="frow"><label>body</label><div class="fctrl"><textarea id="c-body" rows="7" placeholder="**markdown** supported"></textarea></div></div>
+        <div class="frow" id="row-citations">
+          <label>citations</label>
+          <div class="fctrl" style="flex-direction:column;align-items:stretch">
+            <div id="cit-rows"></div>
+            <button type="button" class="secondary" style="align-self:flex-end" onclick="addCitationRow()">+ citation</button>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="submit" id="submit-btn">create</button>
+          <button type="button" class="secondary" onclick="cancelEdit()" id="cancel-btn" hidden>cancel</button>
+          <span class="hint" id="create-hint"></span>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <section id="detail"><div class="empty">select an item</div></section>
+  <section id="stats-pane" class="tab-pane">
+    <div style="display:flex;align-items:baseline;gap:12px;padding:10px 18px;border-bottom:1px solid var(--border)">
+      <h3 style="margin:0;font-size:15px">stats</h3>
+      <span class="knob-hint" style="flex:1">Numbers respect the repo scope (left) and are computed from the current search population; backend support is flagged per section.</span>
+      <button class="secondary" onclick="loadStats()">refresh stats</button>
+    </div>
+    <div id="stats-content" style="overflow-y:auto;padding:14px 18px"><div class="spinner">loading stats…</div></div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.5/dist/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<script>
+'use strict';
+const state = {
+  items: [], selected: null, repos: [], families: [], sel: new Map(), msel: null,
+  filters: { status: new Set(['open']), family: new Set(), repo: new Set() },
+  edit: null, // {humanId, repo, item} when editing
+};
+let statsData = null;
+
+const TERMINAL_STATUSES = new Set(['FIXED','RESOLVED','DONE','SHIPPED','VERIFIED','REMOVED','MITIGATED','SUPERSEDED','INVALID','DUPLICATE','WONTFIX']);
+const ALL_STATUSES = ['OPEN','IN_PROGRESS','PARTIAL','OUTSTANDING','DEFERRED','BLOCKED','MIXED','UNKNOWN','FIXED','RESOLVED','DONE','SHIPPED','VERIFIED','REMOVED','MITIGATED','SUPERSEDED','INVALID','DUPLICATE','WONTFIX'];
+const PRIO_ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+const BATCH_ACTOR = 'webui:1';
+const FANOUT_CAP = 32;
+
+const selKey = (item) => (item.humanId || '') + '\u0000' + (item.repo || '');
+
+async function apiCall(verb, input) {
+  const res = await fetch('/backlog/' + verb, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ data: { input } }),
+  });
+  const json = await res.json().catch(() => ({ ok: false, error: { message: 'non-JSON response ' + res.status } }));
+  if (!json.ok) {
+    const msg = json.error?.message || json.message || JSON.stringify(json);
+    throw new Error(msg);
+  }
+  return json.data;
+}
+
+/** Batch mount takes the RAW body (no {data:{…}} envelope); items are
+ *  {input: <op payload>} — both verified live against the sandboxed API. */
+async function batchCall(payload) {
+  const res = await fetch('/_batch/action', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ input: payload }),
+  });
+  return res.json();
+}
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+function switchTab(name) {
+  document.getElementById('tab-btn-list').classList.toggle('active', name === 'list');
+  document.getElementById('tab-btn-stats').classList.toggle('active', name === 'stats');
+  document.getElementById('tab-btn-create').classList.toggle('active', name === 'create');
+  document.getElementById('list-pane').classList.toggle('active', name === 'list');
+  document.getElementById('create-pane').classList.toggle('active', name === 'create');
+  document.getElementById('stats-pane').classList.toggle('active', name === 'stats');
+  document.getElementById('main').classList.toggle('stats-mode', name === 'stats');
+  if (name === 'stats') loadStats();
+}
+
+function humanAge(iso) {
+  if (!iso) return '';
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s / 60) + 'm';
+  if (s < 86400) return Math.floor(s / 3600) + 'h';
+  if (s < 604800) return Math.floor(s / 86400) + 'd';
+  return Math.floor(s / 604800) + 'w';
+}
+
+// ---------------------------------------------------------------------------
+// Multi-select filters (status / family / repo) + fan-out query
+// ---------------------------------------------------------------------------
+
+/** Build a custom multi-select (button + checkbox popover) into containerId.
+ *  Idempotent: clears the container first (buildFilters may run again after
+ *  repo/family data refreshes). One global outside-click closer, installed
+ *  once, hides every open popover. */
+const _mselPops = new Set();
+document.addEventListener('click', (e) => {
+  for (const pop of _mselPops) {
+    if (!pop.closest('.msel')?.contains(e.target) && !pop.hidden) pop.hidden = true;
+  }
+});
+function buildMultiSelect(containerId, opts) {
+  const { label, groups, selected, onChange } = opts; // groups: [{name?, options:[{value,label}]}]
+  const root = document.getElementById(containerId);
+  root.innerHTML = '';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'msel-btn';
+  const pop = document.createElement('div');
+  pop.className = 'msel-pop';
+  pop.hidden = true;
+  _mselPops.add(pop);
+  root.append(btn, pop);
+  const renderLabel = () => {
+    const n = selected.size;
+    const first = [...selected][0];
+    btn.innerHTML = n === 0 ? `${label} <span class="dot">—</span>`
+      : n === 1 ? `${label} <span class="dot">· ${escapeHtml(first)}</span>`
+      : `${label} <span class="dot">· ${n} selected</span>`;
+  };
+  const renderOptions = () => {
+    pop.innerHTML = '';
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.className = 'msel-clear';
+    clear.textContent = 'clear';
+    clear.onclick = () => {
+      selected.clear();
+      renderLabel();
+      onChange();
+      pop.hidden = true;
+    };
+    pop.appendChild(clear);
+    for (const group of groups) {
+      if (group.name) {
+        const g = document.createElement('div');
+        g.className = 'group';
+        g.textContent = group.name;
+        pop.appendChild(g);
+      }
+      for (const o of group.options) {
+        const l = document.createElement('label');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = selected.has(o.value);
+        cb.onchange = () => {
+          if (cb.checked) selected.add(o.value); else selected.delete(o.value);
+          renderLabel(); onChange();
+        };
+        l.append(cb, document.createTextNode(o.label));
+        pop.appendChild(l);
+      }
+    }
+  };
+  btn.onclick = () => { pop.hidden = !pop.hidden; if (!pop.hidden) renderOptions(); };
+  renderLabel();
+  // Exposed for drills (stats view): set the selection programmatically.
+  const setSelected = (values) => {
+    selected.clear();
+    for (const v of values) selected.add(v);
+    renderLabel();
+  };
+  return { open: () => { renderOptions(); pop.hidden = false; }, setSelected };
+}
+
+function buildFilters() {
+  const statusGroups = [
+    { name: 'lifecycle (one knob)', options: [
+      { value: 'open', label: 'open — non-terminal' },
+      { value: 'closed', label: 'closed — terminal' },
+    ]},
+    { name: 'exact status', options: ALL_STATUSES.map((s) => ({ value: s, label: s })) },
+  ];
+  state.msel = {
+    status: buildMultiSelect('msel-status', {
+      label: 'status', groups: statusGroups, selected: state.filters.status,
+      onChange: () => { loadItems(); },
+    }),
+    family: buildMultiSelect('msel-family', {
+      label: 'family', groups: [{ options: state.families.map((f) => ({ value: f, label: f })) }],
+      selected: state.filters.family,
+      onChange: () => { loadItems(); },
+    }),
+    repo: buildMultiSelect('msel-repo', {
+      label: 'repo', groups: [{ options: state.repos.map((r) => ({ value: r, label: r })) }],
+      selected: state.filters.repo,
+      onChange: () => { loadItems(); },
+    }),
+  };
+}
+
+/** Query with client-side fan-out: the API's filter keys are single-valued,
+ *  so N selected values in a dimension become N queries, merged + de-duped
+ *  here, then re-sorted (the API can't sort across merged results). */
+async function queryMerged() {
+  const dims = [['status', state.filters.status], ['family', state.filters.family], ['repo', state.filters.repo]];
+  let combos = [{}];
+  for (const [key, vals] of dims) {
+    if (!vals.size) continue;
+    const next = [];
+    for (const c of combos) for (const v of vals) next.push({ ...c, [key]: v });
+    combos = next;
+  }
+  if (combos.length > FANOUT_CAP) {
+    throw new Error(`too many filter combinations (${combos.length} > ${FANOUT_CAP}) — narrow the selection`);
+  }
+  const sort = document.getElementById('f-sort').value;
+  const text = document.getElementById('f-text').value.trim();
+  const queries = combos.map((filter) => {
+    // The default card projection omits repo/family/updatedAt — request them
+    // explicitly or the cards can't render line 3 and detail gets repo:''.
+    // citationCount is FEAT-009's zero-extra-read per-item count: requesting
+    // it here lets the stats citation heatmap render from ONE population
+    // query instead of a per-item batch fan-out.
+    const input = { view: 'list', filter, sort, limit: 1000, fields: ['repo', 'family', 'updatedAt', 'citationCount'] };
+    if (text) input.text = text;
+    return input;
+  });
+  const results = await Promise.all(queries.map((q) => apiCall('query', q)));
+  const merged = new Map();
+  for (const r of results) for (const it of r.items || []) merged.set(selKey(it), it);
+  return sortItems([...merged.values()], sort);
+}
+
+function sortItems(items, sort) {
+  const dir = sort === 'priority' ? 1 : -1; // priority: CRITICAL first; others: newest first
+  return [...items].sort((a, b) => {
+    let d = 0;
+    if (sort === 'priority') d = (PRIO_ORDER[a.priority] ?? 9) - (PRIO_ORDER[b.priority] ?? 9);
+    else if (sort === 'updated') d = new Date(a.updatedAt || 0) - new Date(b.updatedAt || 0);
+    else if (sort === 'created') d = new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+    else d = new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0); // demand → activity fallback
+    if (d === 0) d = String(a.humanId).localeCompare(String(b.humanId));
+    return d * dir;
+  });
+}
+
+async function loadItems() {
+  const list = document.getElementById('list');
+  list.innerHTML = '<div class="spinner">loading…</div>';
+  try {
+    const items = await queryMerged();
+    state.items = items;
+    list.innerHTML = '';
+    const row = document.createElement('div');
+    row.className = 'count-row';
+    row.innerHTML = `<span>${items.length} item(s)</span>
+      <label><input type="checkbox" id="select-all" onchange="toggleSelectAll()"> select all</label>`;
+    list.appendChild(row);
+    if (!items.length) {
+      list.appendChild(Object.assign(document.createElement('div'), { className: 'empty', textContent: 'no items match' }));
+    }
+    for (const item of items) list.appendChild(renderCard(item));
+    const allSel = items.length > 0 && items.every((i) => state.sel.has(selKey(i)));
+    const sa = document.getElementById('select-all');
+    if (sa) { sa.checked = allSel; sa.indeterminate = state.sel.size > 0 && !allSel; }
+    updateBatchBar();
+    if (state.selected) selectItem(state.selected.humanId, state.selected.repo, true);
+  } catch (err) {
+    list.innerHTML = '';
+    list.appendChild(Object.assign(document.createElement('div'), { className: 'error', textContent: err.message }));
+  }
+}
+
+// Card: L1 = id (left) + status/priority chips (right); L2 = truncated title;
+// L3 = repo chip + right-aligned human age. Plain click focuses the item AND
+// adds it to the selection; ⌘/Ctrl-click toggles selection without focusing.
+function renderCard(item) {
+  const el = document.createElement('div');
+  const key = selKey(item);
+  el.className = 'card' + (state.selected?.humanId === item.humanId ? ' active' : '') + (state.sel.has(key) ? ' selected' : '');
+  const statusClass = TERMINAL_STATUSES.has(item.status || '') ? 'terminal' : 'open';
+  const age = humanAge(item.updatedAt);
+  el.innerHTML = `
+    <div class="l1">
+      <span class="id">${escapeHtml(item.humanId)}</span>
+      <span class="l1-right">
+        <span class="pill ${statusClass}">${escapeHtml(item.status || '')}</span>
+        ${item.priority ? `<span class="pill priority-${item.priority}">${escapeHtml(item.priority)}</span>` : ''}
+      </span>
+    </div>
+    <div class="title" title="${escapeHtml(item.title || '')}">${escapeHtml(item.title || '')}</div>
+    <div class="l3">
+      <span class="repo">${escapeHtml(item.repo || '')}</span>
+      <span class="age" title="updated ${escapeHtml(item.updatedAt || '')}">${age}</span>
+    </div>`;
+  el.onclick = (e) => {
+    // Single click RESETS the multi-select to exactly this item (focus =
+    // selection of one). ⌘/Ctrl-click is the explicit toggle that builds a
+    // multi-selection; select-all covers bulk selection.
+    if (e.metaKey || e.ctrlKey) { e.preventDefault(); toggleSelect(item, !state.sel.has(selKey(item)), el); return; }
+    state.sel.clear();
+    state.sel.set(selKey(item), { humanId: item.humanId, repo: item.repo || '' });
+    for (const c of document.querySelectorAll('.card')) c.classList.toggle('selected', c === el);
+    const sa = document.getElementById('select-all');
+    if (sa) { sa.checked = false; sa.indeterminate = false; }
+    updateBatchBar();
+    selectItem(item.humanId, item.repo || '', false);
+  };
+  return el;
+}
+
+// ---------------------------------------------------------------------------
+// Multi-select + batch actions
+// ---------------------------------------------------------------------------
+
+function toggleSelect(item, on, cardEl) {
+  const key = selKey(item);
+  if (on) state.sel.set(key, { humanId: item.humanId, repo: item.repo || '' });
+  else state.sel.delete(key);
+  const sa = document.getElementById('select-all');
+  if (sa) {
+    sa.checked = state.items.length > 0 && state.items.every((i) => state.sel.has(selKey(i)));
+    sa.indeterminate = state.sel.size > 0 && !sa.checked;
+  }
+  if (cardEl) cardEl.classList.toggle('selected', on);
+  updateBatchBar();
+}
+
+function toggleSelectAll() {
+  const on = document.getElementById('select-all').checked;
+  for (const item of state.items) {
+    if (on) state.sel.set(selKey(item), { humanId: item.humanId, repo: item.repo || '' });
+    else state.sel.delete(selKey(item));
+  }
+  for (const c of document.querySelectorAll('.card')) c.classList.toggle('selected', on);
+  updateBatchBar();
+}
+
+function clearSelection() {
+  state.sel.clear();
+  for (const c of document.querySelectorAll('.card')) c.classList.remove('selected');
+  const sa = document.getElementById('select-all');
+  if (sa) { sa.checked = false; sa.indeterminate = false; }
+  updateBatchBar();
+}
+
+/** Batch bar only when MULTIPLE (≥2) items are selected. */
+function updateBatchBar() {
+  const bar = document.getElementById('batch-bar');
+  const n = state.sel.size;
+  bar.classList.toggle('show', n >= 2);
+  if (n >= 2) document.getElementById('batch-count').textContent = n + ' selected';
+}
+
+function batchSummary(results) {
+  let ok = 0, fail = 0;
+  const failures = [];
+  for (const r of results || []) {
+    if (r?.status === 'fulfilled' && r.value?.ok) ok += 1;
+    else {
+      fail += 1;
+      const msg = r?.value?.error?.message || r?.reason?.message || JSON.stringify(r);
+      if (!failures.includes(msg)) failures.push(msg);
+    }
+  }
+  const parts = [`${ok} ok`, `${fail} failed`];
+  if (failures.length) parts.push('— ' + failures.slice(0, 3).join(' | '));
+  return parts.join(', ');
+}
+
+function showBatchResult(text, isErr) {
+  const el = document.getElementById('batch-result');
+  el.textContent = text;
+  el.className = 'batch-result' + (isErr ? ' err' : '');
+}
+
+async function batchSetStatus() {
+  const status = document.getElementById('b-status').value;
+  if (!status) { showBatchResult('pick a status first', true); return; }
+  const items = [...state.sel.values()].map((s) => ({
+    input: { humanId: s.humanId, repo: s.repo, by: BATCH_ACTOR, status, addCitation: { file: 'backlog-web-ui' } },
+  }));
+  await runBatch({ operation: 'backlog/update', items });
+}
+
+async function batchDelete() {
+  const n = state.sel.size;
+  if (!confirm(`Soft-delete ${n} item(s)? (restorable tombstone — excluded from lists)`)) return;
+  const items = [...state.sel.values()].map((s) => ({
+    input: { humanId: s.humanId, repo: s.repo, by: BATCH_ACTOR, softDeleteReason: 'deleted via backlog web ui batch' },
+  }));
+  await runBatch({ operation: 'backlog/update', items });
+}
+
+async function runBatch(payload) {
+  showBatchResult('running…', false);
+  try {
+    const res = await batchCall(payload);
+    if (Array.isArray(res)) showBatchResult(batchSummary(res), false);
+    else showBatchResult(res?.message || JSON.stringify(res), true);
+  } catch (err) {
+    showBatchResult(String(err.message || err), true);
+  }
+  clearSelection();
+  await loadItems();
+}
+
+// ---------------------------------------------------------------------------
+// Detail — every BacklogItem field, special containers, edit entry
+// ---------------------------------------------------------------------------
+
+async function selectItem(humanId, repo, skipList) {
+  state.selected = { humanId, repo };
+  const detail = document.getElementById('detail');
+  detail.innerHTML = '<div class="spinner">loading…</div>';
+  if (!skipList) {
+    for (const c of document.querySelectorAll('.card')) c.classList.toggle('active', c.querySelector('.id').textContent === humanId);
+  }
+  try {
+    const item = await apiCall('get', {
+      humanId, repo,
+      fields: ['body', 'citations', 'notes', 'audit_trail', 'related', 'rollup', 'blockers'],
+    });
+    state.lastDetail = item; // the edit button fills the form from this
+    renderDetail(item);
+  } catch (err) {
+    detail.innerHTML = '';
+    detail.appendChild(Object.assign(document.createElement('div'), { className: 'error', textContent: err.message }));
+  }
+}
+
+const kv = (k, v, raw) => {
+  const val = raw ? JSON.stringify(v) : v;
+  if (val === undefined || val === null || val === '' || (Array.isArray(v) && v.length === 0)) return '';
+  return `<div><div class="k">${escapeHtml(k)}</div><div class="v">${escapeHtml(val)}</div></div>`;
+};
+
+function renderDetail(item) {
+  const d = document.getElementById('detail');
+  const prio = item.priority ? `<span class="pill priority-${item.priority}">${item.priority}</span>` : '';
+  const statusClass = TERMINAL_STATUSES.has(item.status || '') ? 'terminal' : 'open';
+  const tags = (item.tags || []).map((t) => `<span class="pill tag">${escapeHtml(t)}</span>`).join(' ');
+  const kvs =
+    kv('nodeId', item.nodeId) + kv('kind', item.kind) + kv('family', item.family) +
+    kv('status', item.status) + kv('priority', item.priority) + kv('projectPath', item.projectPath) +
+    kv('plan', item.plan) + kv('importedFrom', item.importedFrom) + kv('assignee', item.assignee) +
+    kv('claimedBy', item.claimedBy) + kv('claimedAt', item.claimedAt) + kv('author', item.author) +
+    kv('reporter', item.reporter) + kv('createdAt', item.createdAt) + kv('updatedAt', item.updatedAt) +
+    (item.tags?.length ? `<div class="v" style="display:flex;gap:4px;flex-wrap:wrap">${tags}</div>` : '');
+  d.innerHTML = `
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <h2>${escapeHtml(item.title || '')}</h2>
+      <span class="pill ${statusClass}">${escapeHtml(item.status || '')}</span>
+      ${prio}
+      <button class="secondary" style="margin-left:auto" onclick="startEdit()">edit</button>
+    </div>
+    <div class="id-line">${escapeHtml(item.humanId)} · ${escapeHtml(item.repo || '')} · updated ${escapeHtml(item.updatedAt || '')}</div>
+    <div class="kv">${kvs}</div>
+    <div class="field">body</div>
+    <div class="body">${renderMarkdown(item.body) || '<span class="empty">(no body)</span>'}</div>
+    ${container('citations', item.citations, (v) => `${escapeHtml(v.file || JSON.stringify(v))}${v.line ? ':' + v.line : ''}`)}
+    ${container('notes', item.notes, (v) => renderMarkdown(v.text || JSON.stringify(v)))}
+    ${container('audit trail', item.audit_trail, (v) =>
+      `<span class="kind">${escapeHtml(v.kind || '')}</span> ${escapeHtml(typeof v.detail === 'string' ? v.detail : JSON.stringify(v.detail || {}))} — <span class="at">${escapeHtml(v.at || '')}</span>`, true)}
+    ${container('related', item.related, (v) => v.humanId || escapeHtml(String(v)))}
+    ${container('rollup', item.rollup, (v) => JSON.stringify(v), false, true)}
+    ${container('blockers', item.blockers, (v) => v.humanId || escapeHtml(String(v)))}
+  `;
+}
+
+function container(name, value, fmt, timeline, rawJson) {
+  if (value === undefined || value === null) return '';
+  const vals = Array.isArray(value) ? value : [value];
+  const items = vals.filter(Boolean);
+  const inner = items.length
+    ? (timeline
+        ? `<ul class="timeline">${items.map((v) => `<li>${fmt(v)}</li>`).join('')}</ul>`
+        : `<ul>${items.map((v) => `<li>${rawJson ? '<code>' + escapeHtml(fmt(v)) + '</code>' : fmt(v)}</li>`).join('')}</ul>`)
+    : '<span class="empty">none</span>';
+  return `<div class="container"><h4>${name}</h4>${inner}</div>`;
+}
+
+function renderMarkdown(src) {
+  if (!src) return '';
+  if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
+    return '<span class="empty">(markdown libs failed to load from CDN — check network)</span>';
+  }
+  marked.setOptions({ gfm: true, breaks: true });
+  return DOMPurify.sanitize(marked.parse(String(src)), { USE_PROFILES: { html: true } });
+}
+
+// ---------------------------------------------------------------------------
+// Create / Edit — one form, two modes
+// ---------------------------------------------------------------------------
+
+function addCitationRow(file) {
+  const rows = document.getElementById('cit-rows');
+  const div = document.createElement('div');
+  div.className = 'cit-row';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'cit-file';
+  input.placeholder = 'file path (citation)';
+  if (file) input.value = file;
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.className = 'danger';
+  del.textContent = '✕';
+  del.onclick = () => div.remove();
+  div.append(input, del);
+  rows.appendChild(div);
+}
+
+function collectCitations() {
+  return [...document.querySelectorAll('.cit-file')]
+    .map((i) => i.value.trim())
+    .filter(Boolean)
+    .map((file) => ({ file }));
+}
+
+/** Enter edit mode: pre-fill the create form, switch the submit to "save". */
+function startEdit() {
+  const item = state.lastDetail;
+  if (!item) return;
+  state.edit = { humanId: item.humanId, repo: item.repo, item };
+  document.getElementById('create-title').innerHTML = 'edit <span>' + escapeHtml(item.humanId) + '</span>';
+  document.getElementById('submit-btn').textContent = 'save';
+  document.getElementById('cancel-btn').hidden = false;
+  document.getElementById('c-family').value = item.family || '';
+  document.getElementById('c-family').disabled = true;
+  document.getElementById('c-repo').value = item.repo || '';
+  document.getElementById('c-repo').disabled = true;
+  document.getElementById('c-idoverride').value = '';
+  document.getElementById('c-idoverride').disabled = true;
+  document.getElementById('c-title').value = item.title || '';
+  document.getElementById('c-body').value = item.body || '';
+  document.getElementById('c-priority').value = item.priority || '';
+  document.getElementById('c-status').value = ALL_STATUSES.includes(item.status) ? item.status : '';
+  document.getElementById('c-tags').value = (item.tags || []).join(', ');
+  document.getElementById('c-plan').value = item.plan || '';
+  document.getElementById('c-plan').disabled = true; // not updatable via update op
+  document.getElementById('c-projectpath').value = item.projectPath || '';
+  document.getElementById('c-importedfrom').value = item.importedFrom || '';
+  // Hide fields that are not editable via the update op:
+  document.getElementById('row-importedfrom').hidden = true;
+  document.getElementById('row-author').hidden = true;
+  document.getElementById('row-reporter').hidden = true;
+  document.getElementById('row-force').hidden = true;
+  document.getElementById('row-citations').hidden = false;
+  document.getElementById('cit-rows').innerHTML = '';
+  for (const c of item.citations || []) addCitationRow(c.file);
+  if (!(item.citations || []).length) addCitationRow('');
+  updateSubmitState();
+  switchTab('create');
+}
+
+function cancelEdit() {
+  state.edit = null;
+  resetFormToCreate();
+  switchTab('list');
+}
+
+/** Restore the form to create mode (show hidden fields, clear values). */
+function resetFormToCreate() {
+  state.edit = null;
+  document.getElementById('create-title').textContent = 'new item';
+  document.getElementById('submit-btn').textContent = 'create';
+  document.getElementById('cancel-btn').hidden = true;
+  document.getElementById('c-family').disabled = false;
+  document.getElementById('c-repo').disabled = false;
+  document.getElementById('c-idoverride').disabled = false;
+  document.getElementById('c-idoverride').value = '';
+  document.getElementById('c-plan').disabled = false;
+  document.getElementById('row-importedfrom').hidden = false;
+  document.getElementById('row-author').hidden = false;
+  document.getElementById('row-reporter').hidden = false;
+  document.getElementById('row-force').hidden = false;
+  document.getElementById('row-citations').hidden = true;
+  document.getElementById('cit-rows').innerHTML = '';
+  updateSubmitState();
+}
+
+function submitItem(ev) {
+  ev.preventDefault();
+  return state.edit ? saveItem() : createItem();
+}
+
+/** Create — every CreateItemInput field. */
+async function createItem() {
+  const hint = document.getElementById('create-hint');
+  hint.textContent = 'creating…';
+  const g = (id) => document.getElementById(id).value.trim();
+  try {
+    const item = { family: g('c-family'), title: g('c-title'), body: document.getElementById('c-body').value, repo: g('c-repo') || 'PseudoSky/adhd' };
+    if (g('c-idoverride')) item.idOverride = g('c-idoverride');
+    if (g('c-priority')) item.priority = g('c-priority');
+    if (g('c-plan')) item.plan = g('c-plan');
+    if (g('c-projectpath')) item.projectPath = g('c-projectpath');
+    if (g('c-importedfrom')) item.importedFrom = g('c-importedfrom');
+    if (g('c-author')) item.author = g('c-author');
+    if (g('c-reporter')) item.reporter = g('c-reporter');
+    const tags = g('c-tags').split(',').map((t) => t.trim()).filter(Boolean);
+    if (tags.length) item.tags = tags;
+    const cits = collectCitations();
+    if (cits.length) item.citations = cits;
+    if (document.getElementById('c-force').checked) item.force = true;
+
+    const data = await apiCall('create', { item, by: g('c-by') || BATCH_ACTOR });
+    const id = data.humanId;
+    const repo = data.item?.repo;
+    hint.textContent = `created ${id}` + (data.repoWarning ? ' — ' + data.repoWarning : '');
+    document.getElementById('c-title').value = '';
+    document.getElementById('c-body').value = '';
+    switchTab('list');
+    await populateRepos();
+    await loadItems();
+    if (id && repo) selectItem(id, repo, true);
+  } catch (err) {
+    hint.textContent = '';
+    showFormError(err);
+  }
+  return false;
+}
+
+/** Save (edit mode) — title/body/tags/projectPath via patch, status/priority
+ *  transitions with inline citations, extra citations attached individually. */
+async function saveItem() {
+  if (!state.edit) return false;
+  const hint = document.getElementById('create-hint');
+  hint.textContent = 'saving…';
+  const g = (id) => document.getElementById(id).value.trim();
+  const { humanId, repo, item: original } = state.edit;
+  const by = g('c-by') || BATCH_ACTOR;
+  try {
+    const payload = { humanId, repo, by };
+    const patch = {};
+    if (g('c-title') !== (original.title || '')) patch.title = g('c-title');
+    if (document.getElementById('c-body').value !== (original.body || '')) patch.body = document.getElementById('c-body').value;
+    const tags = g('c-tags').split(',').map((t) => t.trim()).filter(Boolean);
+    if (JSON.stringify(tags) !== JSON.stringify(original.tags || [])) patch.tags = tags;
+    if (g('c-projectpath') !== (original.projectPath || '')) patch.projectPath = g('c-projectpath') || undefined;
+    if (Object.keys(patch).length) payload.patch = patch;
+
+    const cits = collectCitations();
+    const status = g('c-status');
+    const statusChanged = status && status !== (original.status || '');
+    if (statusChanged) {
+      payload.status = status;
+      if (cits.length) payload.citations = cits; // inline transition citations satisfy the terminal rule
+    }
+    const prio = g('c-priority');
+    if (prio && prio !== (original.priority || '')) payload.priority = prio;
+
+    await apiCall('update', payload);
+
+    // Citations not already passed inline (status unchanged) attach one-by-one.
+    if (!statusChanged) {
+      for (const c of cits) await apiCall('update', { humanId, repo, by, addCitation: c });
+    }
+
+    hint.textContent = 'saved';
+    state.edit = null;
+    resetFormToCreate();
+    switchTab('list');
+    await loadItems();
+    selectItem(humanId, repo, true);
+  } catch (err) {
+    hint.textContent = '';
+    showFormError(err);
+  }
+  return false;
+}
+
+function showFormError(err) {
+  const detail = document.getElementById('detail');
+  detail.innerHTML = '';
+  detail.appendChild(Object.assign(document.createElement('div'), { className: 'error', textContent: err.message }));
+}
+
+/** Disable create/save until the required fields are valid: family, title,
+ *  repo and by must all be non-empty (repo/by have defaults but must exist). */
+function updateSubmitState() {
+  const ok =
+    document.getElementById('c-family').value.trim() !== '' &&
+    document.getElementById('c-title').value.trim() !== '' &&
+    document.getElementById('c-repo').value.trim() !== '' &&
+    document.getElementById('c-by').value.trim() !== '';
+  document.getElementById('submit-btn').disabled = !ok;
+}
+for (const id of ['c-family', 'c-title', 'c-repo', 'c-by']) {
+  document.getElementById(id).addEventListener('input', updateSubmitState);
+}
+
+/** Repo + family dropdown data from distinct values in the store.
+ *  fields must name family explicitly — the default card projection omits it,
+ *  which previously left the family multi-select with zero options. */
+async function populateRepos() {
+  try {
+    const data = await apiCall('query', { view: 'list', limit: 1000, fields: ['repo', 'family'] });
+    const repos = new Set(); const families = new Set();
+    for (const it of data.items || []) {
+      if (it.repo) repos.add(it.repo);
+      if (it.family) families.add(it.family);
+    }
+    state.repos = [...repos].sort();
+    state.families = [...families].sort();
+    document.getElementById('repo-options').innerHTML =
+      state.repos.map((r) => `<option value="${escapeHtml(r)}">`).join('');
+    const famList = document.getElementById('family-options');
+    for (const f of state.families) {
+      if (![...famList.options].some((o) => o.value === f)) {
+        const o = document.createElement('option'); o.value = f; famList.appendChild(o);
+      }
+    }
+    if (!document.getElementById('c-repo').value && state.repos.length) {
+      document.getElementById('c-repo').value = state.repos.includes('PseudoSky/adhd') ? 'PseudoSky/adhd' : state.repos[0];
+    }
+    // Rebuild the family + repo multi-selects with fresh options.
+    buildFilters();
+  } catch (err) {
+    document.getElementById('list').innerHTML =
+      '<div class="error">could not load repos: ' + escapeHtml(err.message) + '</div>';
+  }
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+document.getElementById('f-text').addEventListener('input', debounce(loadItems, 300));
+document.getElementById('f-sort').addEventListener('change', loadItems);
+
+(async () => {
+  const badge = document.getElementById('api-status');
+  try {
+    const res = await fetch('/_meta/openapi', { headers: { accept: 'application/json' } });
+    if (!res.ok) throw new Error(String(res.status));
+    badge.textContent = 'api ok';
+    badge.className = 'status ok';
+  } catch (err) {
+    badge.textContent = 'api unreachable — is `nx serve backlog` running?';
+    badge.className = 'status bad';
+  }
+})();
+
+// Capture the last-detail item so the edit button has the full record.
+// (selectItem above stores it in state.lastDetail.)
+
+// ---------------------------------------------------------------------------
+// Stats view — Overview / Timelines / Pivot / Analytics + citation heatmap.
+// Every stat is flagged for backend support (badge per section); unsupported
+// numbers show WHY rather than pretending.
+// ---------------------------------------------------------------------------
+
+function sup(level, reason) {
+  const cls = level === 'ok' ? 'sup-ok' : level === 'part' ? 'sup-part' : 'sup-no';
+  const label = level === 'ok' ? 'supported' : level === 'part' ? 'partial' : 'unsupported';
+  return `<span class="sup ${cls}" title="${escapeHtml(reason)}">${label}</span>`;
+}
+
+let _charts = [];
+function disposeCharts() { for (const c of _charts) c.dispose(); _charts = []; }
+function mountChart(el, option) {
+  if (typeof echarts === 'undefined') {
+    el.innerHTML = '<span class="empty">(charts lib failed to load from CDN)</span>';
+    return null;
+  }
+  const chart = echarts.init(el);
+  chart.setOption(option);
+  _charts.push(chart);
+  return chart;
+}
+
+const WEEKS = (d) => { // ISO-ish week key for a date string
+  const dt = new Date(d);
+  const day = (dt.getUTCDay() + 6) % 7;
+  dt.setUTCDate(dt.getUTCDate() - day + 3);
+  const firstThu = new Date(Date.UTC(dt.getUTCFullYear(), 0, 4));
+  const w = 1 + Math.round(((dt - firstThu) / 86400000 - 3 + ((firstThu.getUTCDay() + 6) % 7)) / 7);
+  return `${dt.getUTCFullYear()}-W${String(w).padStart(2, '0')}`;
+};
+const AGE_BUCKET = (createdAt) => {
+  const days = (Date.now() - new Date(createdAt).getTime()) / 86400000;
+  return days < 7 ? '0-7d' : days < 30 ? '7-30d' : days < 90 ? '30-90d' : '90d+';
+};
+const isStale = (it, days = 30) => it.updatedAt && (Date.now() - new Date(it.updatedAt).getTime()) / 86400000 > days;
+
+async function collectStats() {
+  const repos = [...state.filters.repo];
+  const families = [...state.filters.family];
+  // The stats view's own "no scope" default is the list's default selection
+  // {'open'} — a deliberate status selection (closed, an exact status, a mix)
+  // IS scope and is now honoured by the backend summary (FEAT-BACKLOG-STATS-
+  // TIME-WINDOWED-THROUGHPUT-001 — no more silently-unscoped numbers).
+  const statusScope = state.filters.status.size !== 1 || !state.filters.status.has('open');
+  const familyScope = families.length > 0;
+
+  // 1. Backend summary — repo AND family AND status scope are all honoured
+  //    now; multi-valued dimensions fan out per value and merge (the backend
+  //    filter keys are single-valued, exactly like the list view's fan-out).
+  const summaryCombos = buildSummaryCombos({ repos, families, statusScope });
+  let summary = null, summaryFlag = '';
+  if (summaryCombos.length === 0) {
+    summary = await apiCall('query', { view: 'summary' });
+  } else if (summaryCombos.length === 1) {
+    summary = await apiCall('query', { view: 'summary', filter: summaryCombos[0] });
+  } else {
+    const parts = await Promise.all(summaryCombos.map((f) => apiCall('query', { view: 'summary', filter: f })));
+    summary = mergeSummaries(parts);
+    summaryFlag = `summarised across ${summaryCombos.length} scoped bucket(s)`;
+  }
+  const scopeParts = [];
+  if (repos.length) scopeParts.push(repos.length === 1 ? `repo ${repos[0]}` : `${repos.length} repos`);
+  if (familyScope) scopeParts.push(families.length === 1 ? `family ${families[0]}` : `${families.length} families`);
+  if (statusScope) scopeParts.push('status ' + [...state.filters.status].join(','));
+  if (scopeParts.length) summaryFlag += (summaryFlag ? ' · ' : '') + 'scoped to ' + scopeParts.join(' · ');
+
+  // 2. Current search population (full scope) for client-side aggregates.
+  const population = await queryMerged();
+
+  // 3. Doctor quality gates — store-global (not scope-scoped).
+  let doctor = null;
+  try {
+    const d = await apiCall('admin', { action: 'doctor', params: { checks: ['missing_citations', 'terminal_without_citations'] }, by: 'webui:stats' });
+    doctor = d.report;
+  } catch { doctor = null; }
+
+  // 4. Citation heatmap data — FEAT-009: `citationCount` rides on the
+  //    population query itself (zero per-item gets, no cap). An older server
+  //    returns cards without the field; fall back to the batch-get path for
+  //    exactly the items that lack it (capped, as before).
+  const CITATION_CAP = 150;
+  const citationData = new Map(); // humanId -> {repo, citations: n, has: bool}
+  const missing = [];
+  for (const it of population) {
+    if (typeof it.citationCount === 'number') {
+      citationData.set(it.humanId, { repo: it.repo || '', citations: it.citationCount });
+    } else {
+      missing.push(it);
+    }
+  }
+  let citationTruncated = false;
+  if (missing.length > 0) {
+    const fetched = await fetchCitationCounts(missing.slice(0, CITATION_CAP));
+    for (const [k, v] of fetched) citationData.set(k, v);
+    citationTruncated = missing.length > CITATION_CAP;
+  }
+  // True when the backend served the whole population in ONE query (no batch,
+  // no cap) — drives the support badge.
+  const citationBackend = missing.length === 0 && population.length > 0;
+
+  return { summary, summaryFlag, population, doctor, citationData, citationTruncated, citationBackend };
+}
+
+/** Build the cross-product of summary filter combos for the selected repo /
+ *  family / status scope. Each backend filter key is single-valued (except
+ *  status, which takes an explicit list of exact statuses), so N selections
+ *  become N scoped calls that are summed by `mergeSummaries`. */
+function buildSummaryCombos({ repos, families, statusScope }) {
+  const dims = [];
+  if (repos.length) dims.push(repos.map((repo) => ({ repo })));
+  if (families.length) dims.push(families.map((family) => ({ family })));
+  if (statusScope) {
+    const statuses = [...state.filters.status];
+    const allExact = statuses.every((s) => ALL_STATUSES.includes(s));
+    // A set of ONLY exact statuses is one call (the selector takes a list);
+    // a lifecycle-word mix fans out per value.
+    if (allExact && statuses.length > 1) {
+      dims.push([{ status: statuses }]);
+    } else {
+      dims.push(statuses.map((status) => ({ status })));
+    }
+  }
+  let combos = [{}];
+  for (const dim of dims) {
+    const next = [];
+    for (const c of combos) for (const v of dim) next.push({ ...c, ...v });
+    combos = next;
+  }
+  if (combos.length > FANOUT_CAP) throw new Error(`too many summary scope combinations (${combos.length} > ${FANOUT_CAP}) — narrow the selection`);
+  return combos;
+}
+
+function mergeSummaries(parts) {
+  const out = { total: 0, open: 0, closed: 0, closedInWindow: 0, openedInWindow: 0, netInWindow: 0,
+    byStatus: {}, byPriority: {}, byPriorityAllStatuses: {}, byKind: {}, byKindAllStatuses: {},
+    byFamily: {}, byFamilyAllStatuses: {}, byRepo: {}, byRepoAllStatuses: {},
+    citationsTotal: 0, citationCoverage: 0, byFamilyCitationCoverage: {},
+    transitionsByBucket: [], closedByBucket: [], openedByBucket: [] };
+  const buckets = new Map(), closedBuckets = new Map(), openedBuckets = new Map();
+  const citeFam = new Map();
+  for (const p of parts) {
+    const s = p.summary || p;
+    out.total += s.total || 0; out.open += s.open || 0; out.closed += s.closed || 0;
+    out.closedInWindow += s.closedInWindow || 0; out.openedInWindow += s.openedInWindow || 0;
+    out.netInWindow += s.netInWindow || 0;
+    out.citationsTotal += s.citationsTotal || 0;
+    for (const k of ['byStatus', 'byPriority', 'byPriorityAllStatuses', 'byKind', 'byKindAllStatuses', 'byFamily', 'byFamilyAllStatuses', 'byRepo', 'byRepoAllStatuses']) {
+      for (const [key, v] of Object.entries(s[k] || {})) out[k][key] = (out[k][key] || 0) + v;
+    }
+    // FEAT-009 coverage % over the merged population: sum cited counts and
+    // totals per family, recompute the percentage at the end.
+    for (const [key, v] of Object.entries(s.byFamilyCitationCoverage || {})) citeFam.set(key, (citeFam.get(key) || 0) + v);
+    for (const b of s.transitionsByBucket || []) buckets.set(b.bucket, (buckets.get(b.bucket) || 0) + (b.count || 0));
+    for (const b of s.closedByBucket || []) closedBuckets.set(b.bucket, (closedBuckets.get(b.bucket) || 0) + (b.count || 0));
+    for (const b of s.openedByBucket || []) openedBuckets.set(b.bucket, (openedBuckets.get(b.bucket) || 0) + (b.count || 0));
+  }
+  out.transitionsByBucket = [...buckets.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([bucket, count]) => ({ bucket, count }));
+  out.closedByBucket = [...closedBuckets.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([bucket, count]) => ({ bucket, count }));
+  out.openedByBucket = [...openedBuckets.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([bucket, count]) => ({ bucket, count }));
+  // Coverage % cannot be merged from per-part percentages (a ratio of ratios
+  // is meaningless) — the heatmap recomputes it client-side from the
+  // population + citationData, which is exact. The merged summary therefore
+  // carries the per-family totals (summed above) and leaves the headline at 0.
+  out.byFamilyCitationCoverage = Object.fromEntries([...citeFam.entries()].map(([k, v]) => [k, v]));
+  return out;
+}
+
+/** Batched per-item citation counts via _batch/action → backlog/get. */
+async function fetchCitationCounts(items) {
+  const counts = new Map(); // humanId -> {repo, citations: n, has: bool}
+  if (!items.length) return counts;
+  const batch = await batchCall({
+    operation: 'backlog/get',
+    onItemError: 'continue',
+    items: items.map((it) => ({ input: { humanId: it.humanId, repo: it.repo || '', fields: ['citations'] } })),
+  });
+  for (const r of batch || []) {
+    if (r?.status === 'fulfilled' && r.value?.ok && r.value.data) {
+      const d = r.value.data;
+      counts.set(d.humanId, { repo: d.repo, citations: (d.citations || []).length });
+    }
+  }
+  return counts;
+}
+
+/** Drill: set the search filters + go to the list view. */
+function drill(filters) {
+  if (filters.status) {
+    state.filters.status.clear();
+    for (const s of (Array.isArray(filters.status) ? filters.status : [filters.status])) state.filters.status.add(s);
+    if (state.msel?.status) state.msel.status.setSelected([...state.filters.status]);
+  }
+  if (filters.family) { state.filters.family.clear(); state.filters.family.add(filters.family); state.msel?.family?.setSelected([filters.family]); }
+  if (filters.repo) { state.filters.repo.clear(); state.filters.repo.add(filters.repo); state.msel?.repo?.setSelected([filters.repo]); }
+  switchTab('list');
+  loadItems();
+}
+
+// ---------------------------------------------------------------------------
+// Renderers
+// ---------------------------------------------------------------------------
+
+function renderStats() {
+  const d = statsData;
+  const host = document.getElementById('stats-content');
+  const scopeRepo = state.filters.repo.size === 1 ? [...state.filters.repo][0] : '';
+  const openItems = d.population.filter((i) => !TERMINAL_STATUSES.has(i.status || ''));
+  const stale = openItems.filter((i) => isStale(i));
+  const medianAgeDays = (arr) => {
+    if (!arr.length) return '—';
+    const ages = arr.map((i) => (Date.now() - new Date(i.createdAt || Date.now()).getTime()) / 86400000).sort((a, b) => a - b);
+    return Math.round(ages[Math.floor(ages.length / 2)]) + 'd';
+  };
+  const avgWeeklyClose = d.summary?.closedInWindow
+    ? d.summary.closedInWindow / Math.max(1, (Date.now() - new Date(d.summary.window?.since || Date.now()).getTime()) / 604800000)
+    : 0;
+  const forecastWeeks = d.summary?.open && avgWeeklyClose > 0 ? Math.round(d.summary.open / avgWeeklyClose) : null;
+
+  let html = '';
+
+  // --- KPI row ---
+  const kpis = [
+    { n: d.summary?.open ?? '—', l: 'open', d: 'non-terminal', drill: { status: ['open'] } },
+    { n: d.summary?.closed ?? '—', l: 'closed', d: 'all-time terminal', drill: { status: ['closed'] } },
+    { n: d.summary?.openedInWindow ?? '—', l: 'opened this window', d: 'since ' + (d.summary?.window?.since || '').slice(0, 10), drill: null },
+    { n: d.summary?.closedInWindow ?? '—', l: 'closed this window', d: '', drill: { status: ['closed'] } },
+    { n: d.summary?.netInWindow ?? '—', l: 'net this window', d: (d.summary?.netInWindow ?? 0) > 0 ? 'backlog growing' : 'backlog shrinking', drill: null },
+    { n: stale.length, l: 'stale >30d', d: 'open, no update', drill: null },
+    { n: medianAgeDays(openItems), l: 'median open age', d: 'of ' + openItems.length + ' open', drill: null },
+    { n: forecastWeeks === null ? '—' : forecastWeeks + 'w', l: 'drain forecast', d: 'open ÷ weekly close (est.)', drill: null },
+  ];
+  html += statSection('KPI', sup('ok', 'open/closed/net/citations come from the backend summary view (repo, family and status scope all honoured); stale, median age and forecast are computed client-side from item timestamps'),
+    (d.summaryFlag || '') + (scopeRepo ? ' · scope: ' + escapeHtml(scopeRepo) : ' · global'),
+    '<div class="kpi-row">' + kpis.map((k) =>
+      `<div class="kpi" ${k.drill ? `onclick="drill(${JSON.stringify(k.drill).replace(/"/g, '&quot;')})"` : ''}>
+        <div class="n">${k.n}</div><div class="l">${k.l}</div><div class="d">${k.d}</div></div>`).join('') + '</div>');
+
+  // --- Family composition ---
+  const famAll = sortEntries(d.summary?.byFamilyAllStatuses || {});
+  const famOpen = d.summary?.byFamily || {};
+  const famTop = famAll.slice(0, 10);
+  html += statSection('Composition by family', sup('ok', 'backend summary byFamily/byFamilyAllStatuses'),
+    'top 10 families — open vs closed; click a family to drill',
+    `<div class="stat-chart" id="ch-family"></div>`);
+  // --- Priority × lifecycle matrix ---
+  html += statSection('Priority × lifecycle', sup('ok', 'backend summary byPriority / byPriorityAllStatuses'),
+    'click a cell to drill to that population',
+    `<div id="prio-matrix"></div>`);
+  // --- Status distribution ---
+  html += statSection('Status distribution', sup('ok', 'backend summary byStatus'),
+    'terminal statuses in green; click a bar to drill',
+    `<div class="stat-chart" id="ch-status"></div>`);
+  // --- Repo breakdown ---
+  html += statSection('Repo breakdown', sup('ok', 'backend summary byRepo / byRepoAllStatuses'),
+    'click a row to drill to that repo',
+    `<div class="stat-chart" id="ch-repo"></div>`);
+  // --- Aging histogram ---
+  html += statSection('Aging of open items', sup('ok', 'computed client-side from createdAt on the search population'),
+    'createdAt age buckets — how long open items have been alive',
+    `<div class="stat-chart" id="ch-aging"></div>`);
+  // --- Timelines ---
+  const timelineSup = d.summary?.closedByBucket?.length
+    ? sup('ok', 'closed-per-week now comes from the backend summary (closedByBucket, historical); transitions/day comes from the backend summary; created/week is client-side')
+    : sup('part', 'transitions/day comes from the backend summary; created/week is client-side; historical closed-per-week is NOT available on this server (no closedByBucket — only the current-window total closedInWindow)');
+  html += statSection('Activity timeline', timelineSup,
+    'daily transition volume (backend) + created/week (client-side) + closed/week (backend, historical)',
+    `<div class="stat-chart tall" id="ch-timeline"></div>`);
+  // --- Pivot ---
+  html += statSection('Slice & dice (pivot)', sup('ok', 'pure client-side aggregation over the current search population'),
+    'any dimension × any dimension, with a measure; click a cell to drill',
+    `<div class="pivot-controls">
+      <label>rows <select id="p-row"></select></label>
+      <label>cols <select id="p-col"></select></label>
+      <label>measure <select id="p-measure"></select></label>
+      <button class="secondary" onclick="renderPivot()">recompute</button>
+    </div><div id="pivot-out"></div>`);
+  // --- Analytics ---
+  const critOpen = openItems.filter((i) => i.priority === 'CRITICAL');
+  const critAging = critOpen.filter((i) => isStale(i, 7));
+  const staleByRepo = repoLeaderboard(stale);
+  html += statSection('Analytics', sup('part', 'critical-aging, rot and stale are client-side; quality gates come from the backend doctor action but are STORE-GLOBAL, not scoped to the current population'),
+    'the “so what” layer — every card drills to the population',
+    `<div class="analytic-grid">
+      <div class="analytic-card"><div class="n">${critAging.length}</div><div class="l">open CRITICAL, older than 7d</div>
+        <span class="act" onclick="drill({status:['open'],priority:'CRITICAL'})">→ drill</span></div>
+      <div class="analytic-card"><div class="n">${openItems.length ? Math.round(stale.length / openItems.length * 100) : 0}%</div><div class="l">of open items stale >30d</div>
+        <span class="act" onclick="drill({status:['open']})">→ drill</span></div>
+      <div class="analytic-card"><div class="n">${doctor?.checks?.find((c) => c.name === 'terminal_without_citations')?.count ?? '—'}</div><div class="l">terminal items without citations (store-wide)</div>
+        <span class="act" onclick="drill({status:['closed']})">→ drill</span></div>
+      <div class="analytic-card"><div class="n">${doctor?.checks?.find((c) => c.name === 'missing_citations')?.count ?? '—'}</div><div class="l">items missing citations (store-wide)</div>
+        <span class="act" onclick="drill({status:['open']})">→ drill</span></div>
+      <div class="analytic-card"><div class="n">${avgWeeklyClose ? Math.round(avgWeeklyClose) : '—'}</div><div class="l">avg closures / week (window)</div></div>
+      ${staleByRepo.slice(0, 3).map(([r, n]) => `<div class="analytic-card"><div class="n">${n}</div><div class="l">stale in ${escapeHtml(r)}</div>
+        <span class="act" onclick="drill({repo:'${escapeHtml(r)}'})">→ drill</span></div>`).join('')}
+    </div>`);
+  // --- Citation heatmap ---
+  html += statSection('Citation heatmap', d.citationBackend
+      ? sup('ok', 'citationCount comes from the backend population query (fields:["citationCount"]) — no batch fan-out, no cap')
+      : sup('part', d.citationTruncated
+          ? 'this server does not expose citationCount — per-item citation counts fetched via batch get, truncated at 150 items (population is ' + d.population.length + ')'
+          : 'this server does not expose citationCount — per-item citation counts fetched via batch get'),
+    'coverage % of items with ≥1 citation, by family × lifecycle',
+    `<div class="stat-chart" id="ch-citation"></div>`);
+
+  host.innerHTML = html;
+  // render charts + matrix + pivot after DOM is in place
+  renderFamilyChart(famTop, famOpen);
+  renderPrioMatrix(famOpen ? d.summary : null);
+  renderStatusChart(d.summary?.byStatus || {});
+  renderRepoChart(d.summary?.byRepoAllStatuses || {}, d.summary?.byRepo || {});
+  renderAgingChart(openItems);
+  renderTimeline(d.summary);
+  renderCitationHeatmap(d);
+  buildPivotControls(d.population);
+}
+
+function sortEntries(obj) {
+  return Object.entries(obj || {}).sort((a, b) => b[1] - a[1]);
+}
+function repoLeaderboard(items) {
+  const m = {};
+  for (const i of items) m[i.repo || '?'] = (m[i.repo || '?'] || 0) + 1;
+  return Object.entries(m).sort((a, b) => b[1] - a[1]);
+}
+
+function barOption(x, series, extra = {}) {
+  const isH = extra.horizontal;
+  return {
+    grid: { left: isH ? 140 : 40, right: 16, top: 24, bottom: 28 },
+    tooltip: { trigger: 'axis' },
+    xAxis: isH ? { type: 'value' } : { type: 'category', data: x, axisLabel: { rotate: 30, fontSize: 10 } },
+    yAxis: isH ? { type: 'category', data: x, axisLabel: { fontSize: 10 } } : { type: 'value' },
+    series,
+  };
+}
+
+function renderFamilyChart(famTop, famOpen) {
+  const el = document.getElementById('ch-family');
+  if (!el) return;
+  const names = famTop.map(([k]) => k);
+  mountChart(el, barOption(names, [
+    { name: 'open', type: 'bar', stack: 's', data: famTop.map(([k]) => famOpen[k] || 0), itemStyle: { color: '#6ea8fe' } },
+    { name: 'closed', type: 'bar', stack: 's', data: famTop.map(([k]) => (famTop.find(([f]) => f === k) || [])[1] - (famOpen[k] || 0)), itemStyle: { color: '#7dd3a8' } },
+  ]));
+}
+
+function renderPrioMatrix(sum) {
+  const el = document.getElementById('prio-matrix');
+  if (!el || !sum) { if (el) el.innerHTML = '<span class="empty">no data</span>'; return; }
+  const prios = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+  const open = sum.byPriority || {};
+  const all = sum.byPriorityAllStatuses || {};
+  const rows = prios.map((p) => {
+    const o = open[p] || 0, tot = all[p] || 0, c = tot - o;
+    return `<tr>
+      <td class="rowh">${p}</td>
+      <td class="cell" style="background:rgba(248,113,113,${o ? Math.min(0.5, o / 60) : 0})" onclick="drill({priority:'${p}',status:['open']})">${o}</td>
+      <td class="cell" onclick="drill({priority:'${p}',status:['closed']})">${c}</td>
+      <td class="total">${tot}</td></tr>`;
+  }).join('');
+  const openTot = prios.reduce((a, p) => a + (open[p] || 0), 0);
+  const allTot = prios.reduce((a, p) => a + (all[p] || 0), 0);
+  el.innerHTML = `<table class="stat-table"><thead><tr><th>priority</th><th>open</th><th>closed</th><th>total</th></tr></thead>
+    <tbody>${rows}<tr><td class="rowh">unprioritized</td>
+    <td class="cell">${Math.max(0, (sum.open || 0) - openTot)}</td><td class="cell">${Math.max(0, (sum.closed || 0) - (allTot - openTot))}</td>
+    <td class="total">${Math.max(0, (sum.total || 0) - allTot)}</td></tr></tbody></table>`;
+}
+
+function renderStatusChart(byStatus) {
+  const el = document.getElementById('ch-status');
+  if (!el) return;
+  const entries = sortEntries(byStatus);
+  const chart = mountChart(el, barOption(entries.map(([k]) => k), [{
+    type: 'bar', data: entries.map(([k, v]) => v),
+    itemStyle: { color: (p) => TERMINAL_STATUSES.has(entries[p.dataIndex][0]) ? '#7dd3a8' : '#6ea8fe' },
+  }]));
+  chart?.on('click', (p) => { if (p.dataIndex != null) drill({ status: [entries[p.dataIndex][0]] }); });
+}
+
+function renderRepoChart(byRepoAll, byRepo) {
+  const el = document.getElementById('ch-repo');
+  if (!el) return;
+  const entries = sortEntries(byRepoAll).slice(0, 10);
+  mountChart(el, barOption(entries.map(([k]) => k), [
+    { name: 'open', type: 'bar', stack: 's', data: entries.map(([k]) => byRepo[k] || 0), itemStyle: { color: '#6ea8fe' } },
+    { name: 'closed', type: 'bar', stack: 's', data: entries.map(([k]) => (byRepoAll[k] || 0) - (byRepo[k] || 0)), itemStyle: { color: '#7dd3a8' } },
+  ], { horizontal: true }));
+}
+
+function renderAgingChart(openItems) {
+  const el = document.getElementById('ch-aging');
+  if (!el) return;
+  const buckets = ['0-7d', '7-30d', '30-90d', '90d+'];
+  const counts = buckets.map((b) => openItems.filter((i) => AGE_BUCKET(i.createdAt) === b).length);
+  mountChart(el, barOption(buckets, [{ type: 'bar', data: counts, itemStyle: { color: '#6ea8fe' } }]));
+}
+
+function renderTimeline(sum) {
+  const el = document.getElementById('ch-timeline');
+  if (!el) return;
+  const buckets = (sum?.transitionsByBucket || []).slice(-42);
+  // FEAT-BACKLOG-010: closed-per-week from the backend's HISTORICAL
+  // closedByBucket series. The default bucket grain is 'day', so the daily
+  // series is aggregated to ISO weeks here. Older servers omit the series →
+  // the line simply doesn't render (badge stays honest).
+  const closedByWeek = {};
+  for (const b of sum?.closedByBucket || []) {
+    const wk = WEEKS(b.bucket + 'T00:00:00Z');
+    closedByWeek[wk] = (closedByWeek[wk] || 0) + (b.count || 0);
+  }
+  const createdByWeek = {};
+  for (const i of statsData.population) {
+    const wk = WEEKS(i.createdAt);
+    createdByWeek[wk] = (createdByWeek[wk] || 0) + 1;
+  }
+  const weekKeys = [...new Set([...Object.keys(closedByWeek), ...Object.keys(createdByWeek)])].sort().slice(-16);
+  // Union axis: daily transition buckets first, weekly keys after — each
+  // series' data array is aligned to its own run of positions in that order.
+  const xKeys = [...new Set([...buckets.map((b) => b.bucket), ...weekKeys])];
+  const series = [
+    { name: 'transitions (backend)', type: 'bar', data: buckets.map((b) => b.count), itemStyle: { color: '#6ea8fe' } },
+    { name: 'created/week (client)', type: 'line', smooth: true, data: weekKeys.map((w) => createdByWeek[w] || 0), itemStyle: { color: '#7dd3a8' } },
+  ];
+  if (Object.keys(closedByWeek).length > 0) {
+    series.push({ name: 'closed/week (backend)', type: 'line', smooth: true, data: weekKeys.map((w) => closedByWeek[w] || 0), itemStyle: { color: '#fbbf24' } });
+  }
+  mountChart(el, {
+    tooltip: { trigger: 'axis' },
+    legend: { textStyle: { color: '#8b93ab' }, top: 0 },
+    grid: { left: 40, right: 16, top: 28, bottom: 28 },
+    xAxis: { type: 'category', data: xKeys, axisLabel: { rotate: 40, fontSize: 9 } },
+    yAxis: { type: 'value' },
+    series,
+  });
+}
+
+// --- Pivot ---
+const PIVOT_DIMS = ['family', 'status', 'lifecycle', 'priority', 'repo', 'assignee', 'plan', 'ageBucket', 'createdWeek'];
+const PIVOT_MEASURES = ['count', 'open', 'closed', 'medianAge', 'stale'];
+function dimValue(item, dim) {
+  switch (dim) {
+    case 'lifecycle': return TERMINAL_STATUSES.has(item.status || '') ? 'closed' : 'open';
+    case 'ageBucket': return AGE_BUCKET(item.createdAt);
+    case 'createdWeek': return WEEKS(item.createdAt);
+    default: return item[dim] || '(none)';
+  }
+}
+function buildPivotControls(population) {
+  for (const id of ['p-row', 'p-col', 'p-measure']) {
+    const sel = document.getElementById(id);
+    if (!sel) continue;
+    sel.innerHTML = '';
+    const opts = id === 'p-measure' ? PIVOT_MEASURES : PIVOT_DIMS;
+    for (const o of opts) {
+      const el = document.createElement('option');
+      el.value = o; el.textContent = o;
+      if ((id === 'p-row' && o === 'family') || (id === 'p-col' && o === 'lifecycle') || (id === 'p-measure' && o === 'count')) el.selected = true;
+      sel.appendChild(el);
+    }
+  }
+  renderPivot();
+}
+function renderPivot() {
+  const out = document.getElementById('pivot-out');
+  const rowDim = document.getElementById('p-row')?.value, colDim = document.getElementById('p-col')?.value, measure = document.getElementById('p-measure')?.value;
+  if (!out || !rowDim || !colDim || !measure || !statsData) return;
+  const pop = statsData.population;
+  const cells = new Map(); // `${rowVal}\0${colVal}` -> items[]
+  const rowSet = new Set(), colSet = new Set();
+  for (const it of pop) {
+    const rv = dimValue(it, rowDim), cv = dimValue(it, colDim);
+    rowSet.add(rv); colSet.add(cv);
+    const k = rv + '\u0000' + cv;
+    if (!cells.has(k)) cells.set(k, []);
+    cells.get(k).push(it);
+  }
+  const rows = [...rowSet].sort(), cols = [...colSet].sort();
+  const cellMeasure = (items) => {
+    switch (measure) {
+      case 'count': return items.length;
+      case 'open': return items.filter((i) => !TERMINAL_STATUSES.has(i.status || '')).length;
+      case 'closed': return items.filter((i) => TERMINAL_STATUSES.has(i.status || '')).length;
+      case 'stale': return items.filter((i) => isStale(i)).length;
+      case 'medianAge': {
+        if (!items.length) return '—';
+        const a = items.map((i) => (Date.now() - new Date(i.createdAt || Date.now()).getTime()) / 86400000).sort((x, y) => x - y);
+        return Math.round(a[Math.floor(a.length / 2)]) + 'd';
+      }
+    }
+  };
+  let html = `<table class="stat-table"><thead><tr><th>${rowDim}</th>`;
+  for (const c of cols) html += `<th>${escapeHtml(c)}</th>`;
+  html += '<th>total</th></tr></thead><tbody>';
+  const colTotals = cols.map(() => []);
+  for (const rv of rows) {
+    html += `<tr><td class="rowh">${escapeHtml(rv)}</td>`;
+    let rowTotal = [];
+    for (let ci = 0; ci < cols.length; ci++) {
+      const items = cells.get(rv + '\u0000' + cols[ci]) || [];
+      const v = cellMeasure(items);
+      rowTotal = rowTotal.concat(items);
+      colTotals[ci] = colTotals[ci].concat(items);
+      const drill = {};
+      if (rowDim === 'family' || rowDim === 'priority' || rowDim === 'repo') drill[rowDim] = rv;
+      if (colDim === 'lifecycle') drill.status = [rv === 'closed' ? 'closed' : 'open'];
+      html += `<td class="cell${v === 0 || v === '—' ? ' cell0' : ''}" ${items.length && rowDim !== 'createdWeek' && colDim !== 'createdWeek' ? `onclick="drill(${JSON.stringify(drill).replace(/"/g, '&quot;')})"` : ''}>${v}</td>`;
+    }
+    html += `<td class="total">${cellMeasure(rowTotal)}</td></tr>`;
+  }
+  html += `<tr><td class="rowh">total</td>`;
+  for (const c of colTotals) html += `<td class="total">${cellMeasure(c)}</td>`;
+  html += `<td class="total">${cellMeasure(pop)}</td></tr></tbody></table>`;
+  out.innerHTML = html;
+}
+
+// --- Citation heatmap ---
+function renderCitationHeatmap(d) {
+  const el = document.getElementById('ch-citation');
+  if (!el) return;
+  const famCount = {}, famHas = {};
+  for (const it of d.population) {
+    const f = it.family || '(none)', lc = TERMINAL_STATUSES.has(it.status || '') ? 'closed' : 'open';
+    const k = f + '\u0000' + lc;
+    famCount[k] = (famCount[k] || 0) + 1;
+    if (d.citationData.get(it.humanId)?.citations > 0) famHas[k] = (famHas[k] || 0) + 1;
+  }
+  const fams = [...new Set(d.population.map((i) => i.family || '(none)'))].slice(0, 12);
+  const ys = ['open', 'closed'];
+  const data = [];
+  for (let yi = 0; yi < ys.length; yi++) {
+    for (let xi = 0; xi < fams.length; xi++) {
+      const k = fams[xi] + '\u0000' + ys[yi];
+      const total = famCount[k] || 0;
+      const has = famHas[k] || 0;
+      data.push([xi, yi, total ? Math.round((has / total) * 100) : null]);
+    }
+  }
+  mountChart(el, {
+    tooltip: { formatter: (p) => {
+      const fam = fams[p.value[0]], y = ys[p.value[1]];
+      return `${fam} · ${y}<br/>citation coverage: ${p.value[2] === null ? 'no items' : p.value[2] + '%'}`;
+    } },
+    grid: { left: 60, right: 20, top: 10, bottom: 60 },
+    xAxis: { type: 'category', data: fams, axisLabel: { rotate: 45, fontSize: 9 } },
+    yAxis: { type: 'category', data: ys },
+    visualMap: { min: 0, max: 100, calculable: false, orient: 'horizontal', left: 'center', bottom: 0,
+      inRange: { color: ['#1e2230', '#7d3a3a', '#f87171', '#fbbf24', '#7dd3a8'] } },
+    series: [{ type: 'heatmap', data: data.filter((x) => x[2] !== null),
+      label: { show: true, fontSize: 9, formatter: (p) => p.value[2] + '%' } }],
+  });
+}
+
+async function loadStats() {
+  const host = document.getElementById('stats-content');
+  host.innerHTML = '<div class="spinner">loading stats…</div>';
+  disposeCharts();
+  try {
+    statsData = await collectStats();
+    renderStats();
+  } catch (err) {
+    host.innerHTML = `<div class="error">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+(async () => {
+  buildFilters();
+  await populateRepos();
+  updateSubmitState();
+  loadItems();
+})();
+</script>
+</body>
+</html>

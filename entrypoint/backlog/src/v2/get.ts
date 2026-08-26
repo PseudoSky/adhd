@@ -35,6 +35,7 @@ import type { NodeRecord } from '@adhd/sox-graph-store';
 import type {
   AuditTrailEntry,
   BacklogItem,
+  BacklogStatus,
   IBacklogCard,
   IBacklogField,
   IBacklogGetInput,
@@ -55,11 +56,13 @@ import {
 } from '../model.js';
 import type { GraphBacklogStore } from '../store/graph-backlog-store.js';
 import { queryAuditEvents } from '../store/audit-log.js';
-import { BACKLOG_ITEM_TAG, toBacklogItem, type BacklogNodeMeta } from '../store/mapping.js';
+import { BACKLOG_ITEM_TAG, isLiveBacklogItemNode, toBacklogItem, type BacklogNodeMeta } from '../store/mapping.js';
+import { listRelatedNode } from '../store/structure.js';
 import {
   auditTrail as auditTrailOp,
   blockers as blockersOp,
   buildNotFoundError,
+  findByRenamedFromId,
   findHumanIdInAnyRepo,
   findItemNode,
 } from '../store/query.js';
@@ -143,8 +146,10 @@ const PSEUDO_FIELD_SET: ReadonlySet<string> = new Set<string>([
   'audit_trail',
   'blockers',
   'citations',
+  'closedAt',
   'notes',
   'rollup',
+  'related',
   '_vector',
 ]);
 
@@ -184,6 +189,15 @@ export async function backlogGet(store: GraphBacklogStore, input: IBacklogGetOpt
 
     const target = await resolveGetTarget(store, input.humanId, input.repo);
     const warnings: string[] = [];
+
+    if (target.redirectedFrom !== undefined) {
+      // FEAT-BACKLOG-006 — the redirect is never silent: a caller that typed
+      // (or copy-pasted, from an old citation) a retired id gets the current
+      // item back, but also learns its lookup didn't match what it asked for.
+      warnings.push(
+        `${target.redirectedFrom.repo}::${target.redirectedFrom.humanId} was renamed — redirected to ${target.item.repo}::${target.item.humanId}.`
+      );
+    }
 
     if (target.deletedAt !== undefined) {
       if (input.includeDeleted !== true) {
@@ -291,6 +305,13 @@ interface IGetTarget {
   item: BacklogItem;
   /** ISO invalidation timestamp when this node is a soft-delete tombstone; absent for live items. */
   deletedAt?: string;
+  /**
+   * FEAT-BACKLOG-006 — set when the lookup resolved via `findByRenamedFromId`
+   * rather than the requested `(repo, humanId)` directly: the identity the
+   * caller actually asked for, which no longer names this node. `backlogGet`
+   * surfaces this as a `warnings` entry so a redirect is never silent.
+   */
+  redirectedFrom?: { repo: string; humanId: string };
 }
 
 /**
@@ -354,6 +375,17 @@ async function resolveGetTarget(store: GraphBacklogStore, humanId: string, repo?
     const tombstone = deleted[0];
     if (tombstone) return { node: tombstone, item: toBacklogItem(tombstone), deletedAt: tombstone.tInvalid };
 
+    // FEAT-BACKLOG-006 — before giving up, check whether `(repo, humanId)`
+    // is a RETIRED identity: this repo's own citations, or a caller's stale
+    // notes, may still name the id the item carried before a rename
+    // (`structure.ts:renameHumanIdNode`) or a rename-on-migration
+    // (`repo-migration.ts:migrateRepoItemNode`). Live-only — a renamed id
+    // pointing at a now soft-deleted node is not a case worth chasing.
+    const renamed = await findByRenamedFromId(store, repo, humanId);
+    if (renamed.length > 1) throw ambiguousLookupError(humanId, renamed);
+    const redirect = renamed[0];
+    if (redirect) return { node: redirect, item: toBacklogItem(redirect), redirectedFrom: { repo, humanId } };
+
     // Carries the "did you mean repo X?" hint (BUG-BACKLOG-REPO-LOOKUP-UX-001)
     // and maps to `item_not_found` via `toOutcomeError`.
     throw await buildNotFoundError(store, repo, humanId);
@@ -368,6 +400,20 @@ async function resolveGetTarget(store: GraphBacklogStore, humanId: string, repo?
   if (deleted.length > 1) throw ambiguousLookupError(humanId, deleted);
   const tombstone = deleted[0];
   if (tombstone) return { node: tombstone, item: toBacklogItem(tombstone), deletedAt: tombstone.tInvalid };
+
+  // FEAT-BACKLOG-006 — same redirect, repo-unscoped: an old id can be found
+  // even when the caller didn't (or couldn't) name the repo it used to live
+  // under.
+  const renamedAnywhere = await findByRenamedFromId(store, undefined, humanId);
+  if (renamedAnywhere.length > 1) throw ambiguousLookupError(humanId, renamedAnywhere);
+  const redirectAnywhere = renamedAnywhere[0];
+  if (redirectAnywhere) {
+    return {
+      node: redirectAnywhere,
+      item: toBacklogItem(redirectAnywhere),
+      redirectedFrom: { repo: '(any repo)', humanId },
+    };
+  }
 
   // The contract's own error type, so `toOutcomeError` maps it to
   // `item_not_found` (AC-6) with no local special-casing. The repo slot reads
@@ -483,6 +529,10 @@ async function buildCard(store: GraphBacklogStore, target: IGetTarget, fields: S
       case 'files':
         setIfDefined('files', meta.files);
         break;
+      case 'citationCount':
+        // FEAT-009 — in-memory derivation (item.citations), zero extra reads.
+        card.citationCount = item.citations.length;
+        break;
       default:
         // Unreachable: `assertKnownFields` + `assertGetApplicableFields`
         // already rejected everything outside the vocabulary, and every
@@ -496,8 +546,19 @@ async function buildCard(store: GraphBacklogStore, target: IGetTarget, fields: S
   if (fields.has('citations')) card.citations = item.citations;
   if (fields.has('notes')) card.notes = item.notes;
   if (fields.has('audit_trail')) card.audit_trail = await auditHistory(store, target);
+  // FEAT-BACKLOG-010 — the first terminal transition's timestamp, read off
+  // the persisted audit log.
+  if (fields.has('closedAt')) card.closedAt = await firstTerminalTransitionAt(store, node.id);
   if (fields.has('blockers')) card.blockers = await blockerHumanIds(store, target);
   if (fields.has('rollup')) card.rollup = await computeRollup(store, target);
+  if (fields.has('related')) card.related = await relatedHumanIds(store, target);
+
+  // DEBT-BACKLOG-GET-001 — every pseudo-field the caller COULD have named
+  // but didn't, so "body omitted by projection" is distinguishable from
+  // "body actually is empty" without a second round trip. Absent (never an
+  // empty array) once every pseudo-field has been requested.
+  const omittedFields = [...PSEUDO_FIELD_SET].filter((f) => !fields.has(f as IBacklogField)) as IBacklogField[];
+  if (omittedFields.length > 0) card.omittedFields = omittedFields;
 
   return card;
 }
@@ -537,6 +598,22 @@ async function auditHistory(store: GraphBacklogStore, target: IGetTarget): Promi
 }
 
 /**
+ * FEAT-BACKLOG-010 — the ISO timestamp of the item's FIRST transition into a
+ * terminal status, reconstructed from the persisted audit log (the
+ * bi-temporal store already has the data — this is a read, never a guess).
+ * `undefined` for an item that has never reached a terminal status. Mirrors
+ * `v2/query.ts`'s same-named helper so `backlog_get` and `backlog_query`
+ * agree on one definition of "closed".
+ */
+async function firstTerminalTransitionAt(store: GraphBacklogStore, nodeId: number): Promise<string | undefined> {
+  const events = await queryAuditEvents(store, nodeId);
+  const first = events.find((e) => {
+    if (e.kind !== 'transition') return false;
+    const to = (e.detail as { to?: BacklogStatus }).to;
+    return to !== undefined && isTerminalStatus(to);
+  });
+  return first?.at;
+}/**
  * `fields: ["blockers"]` — the non-terminal `DEPENDS_ON` targets, as humanIds.
  * Absorbs v1's `blockers` command (§1's 3 → 1).
  *
@@ -558,6 +635,38 @@ async function blockerHumanIds(store: GraphBacklogStore, target: IGetTarget): Pr
     if (!isTerminalStatus(depItem.status)) out.push(depItem.humanId);
   }
   return out;
+}
+
+/**
+ * `fields: ["related"]` — BUG-025 read side: the humanIds of every OTHER
+ * live item linked to this one via a live `RELATES_TO` edge, in either
+ * direction. `linkRelated` writes the edge in ONE direction only, so
+ * `store/structure.ts`'s `listRelatedNode` (the same primitive `relate`'s
+ * own read affordance would use) already checks both — this just delegates.
+ *
+ * Same live/tombstone split as `auditHistory`/`blockerHumanIds`:
+ * `listRelatedNode` resolves via `requireItemNode`, which is live-only.
+ */
+async function relatedHumanIds(store: GraphBacklogStore, target: IGetTarget): Promise<string[]> {
+  if (target.deletedAt === undefined) {
+    return listRelatedNode(store, target.item.repo, target.item.humanId);
+  }
+  const [outgoing, incoming] = await Promise.all([
+    store.graph.getEdges({ src: target.node.id, rel: 'RELATES_TO' }),
+    store.graph.getEdges({ dst: target.node.id, rel: 'RELATES_TO' }),
+  ]);
+  const otherNodeIds = new Set<number>();
+  for (const edge of outgoing) otherNodeIds.add(edge.dst);
+  for (const edge of incoming) otherNodeIds.add(edge.src);
+
+  const related: string[] = [];
+  for (const otherId of otherNodeIds) {
+    const other = await store.graph.getNode(otherId);
+    if (!other || other.tInvalid || !isLiveBacklogItemNode(other)) continue;
+    const otherHumanId = toBacklogItem(other).humanId;
+    if (otherHumanId) related.push(otherHumanId);
+  }
+  return related.sort();
 }
 
 /**

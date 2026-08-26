@@ -6,8 +6,10 @@
 // CLI transport). All three mount live via apigen — no codegen. See SPEC.md /
 // DESIGN.md for the full contract.
 //
-// This file is ALSO the `backlog` bin (`package.json` `bin: { backlog:
-// "./dist/index.js" }`) — see the entry-guard at the bottom.
+// This file is ALSO the `adhd-backlog` bin (`package.json` `bin: {
+// "adhd-backlog": "./dist/index.js" }` — renamed from the bare `backlog` key,
+// which collided with the unrelated public npm package `backlog@1.4.56`) —
+// see the entry-guard at the bottom.
 import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { initTelemetry } from '@adhd/sox-telemetry';
@@ -60,7 +62,7 @@ export {
 export { get, query, create, update, relate, admin } from './client.js';
 export type { BacklogCtx, BacklogVersionInfo } from './client.js';
 
-export { startBacklogServer, buildBacklogApigenPackage } from './server.js';
+export { startBacklogServer, buildBacklogApigenPackage, resolveExpectedMcpToolNames } from './server.js';
 export type { StartOpts } from './server.js';
 
 export { runBacklogCli, resolveCommandPrefix, prefixCommand } from './cli.js';

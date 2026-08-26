@@ -27,7 +27,7 @@ import { openTmpStore, type TmpStore } from '../test/helpers/tmp-store.js';
 import { closeGraphBacklogStore, openGraphBacklogStore } from '../store/graph-backlog-store.js';
 import { createItemNode, softDeleteItemNode } from '../store/crud.js';
 import { transitionStatusNode, addCitationNode, appendNoteNode } from '../store/lifecycle.js';
-import { addDependencyNode, splitItemNode } from '../store/structure.js';
+import { addDependencyNode, linkRelatedNode, renameHumanIdNode, splitItemNode } from '../store/structure.js';
 import { auditTrail as auditTrailOp } from '../store/query.js';
 import {
   DEFAULT_GET_FIELDS,
@@ -135,17 +135,49 @@ describe('backlogGet (INTERFACE_v2 §1) — one item, deep context on demand', (
 
       const card = expectOk(await backlogGet(tmp.store, { humanId, repo: REPO }));
 
-      // The consumer-visible outcome: exactly the §7.3 default-get card keys.
-      expect(Object.keys(card).sort()).toEqual([...DEFAULT_GET_FIELDS].sort());
+      // The consumer-visible outcome: exactly the §7.3 default-get card keys,
+      // PLUS `omittedFields` (DEBT-BACKLOG-GET-001) — every pseudo-field this
+      // call could have named but didn't, so a caller reading `undefined`
+      // below can tell "omitted by projection" from "genuinely empty".
+      expect(Object.keys(card).sort()).toEqual([...DEFAULT_GET_FIELDS, 'omittedFields'].sort());
       expect(card.body).toBeUndefined();
       expect(card.notes).toBeUndefined();
       expect(card.citations).toBeUndefined();
       expect(card.audit_trail).toBeUndefined();
       expect(card.blockers).toBeUndefined();
       expect(card.rollup).toBeUndefined();
+      expect(card.related).toBeUndefined();
+      expect(card.omittedFields).toEqual(
+        expect.arrayContaining(['body', 'audit_trail', 'blockers', 'citations', 'notes', 'rollup', 'related', 'closedAt', '_vector'])
+      );
+      expect(card.omittedFields).toHaveLength(9);
       // 36 items × a 4KB body was the 90KB context blow. Measure the actual
       // payload, not the shape: the serialized card must stay tiny.
       expect(JSON.stringify(card).length).toBeLessThan(512);
+    });
+
+    it('`omittedFields` shrinks as pseudo-fields are named, down to just the one no live call can ever request (DEBT-BACKLOG-GET-001)', async () => {
+      const humanId = await seedItem(tmp);
+
+      const partial = expectOk(await backlogGet(tmp.store, { humanId, repo: REPO, fields: ['body', 'citations'] }));
+      expect(partial.omittedFields).not.toContain('body');
+      expect(partial.omittedFields).not.toContain('citations');
+      expect(partial.omittedFields).toContain('rollup');
+
+      // `_vector` is the one pseudo-field that ALWAYS throws `rag_not_configured`
+      // (AC-12/AC-20 — see `assertGetApplicableFields`) rather than ever
+      // landing on a card, so naming every OTHER pseudo-field is the closest a
+      // real call gets to "nothing omitted": `omittedFields` shrinks to just it.
+      // (`closedAt` — FEAT-BACKLOG-010 — is a real, requestable pseudo-field,
+      // so it is named here alongside the rest.)
+      const full = expectOk(
+        await backlogGet(tmp.store, {
+          humanId,
+          repo: REPO,
+          fields: ['body', 'audit_trail', 'blockers', 'citations', 'closedAt', 'notes', 'rollup', 'related'],
+        })
+      );
+      expect(full.omittedFields).toEqual(['_vector']);
     });
 
     it('`fields` is ADDITIVE to the card — the identity spine is present even when it is not named', async () => {
@@ -272,6 +304,36 @@ describe('backlogGet (INTERFACE_v2 §1) — one item, deep context on demand', (
       const closed = expectOk(await backlogGet(tmp.store, { humanId: parent, repo: REPO, fields: ['rollup'] }));
       expect(closed.rollup?.selfVerified).toBe(true);
       expect(closed.rollup?.childrenOpen).toEqual([childTwo.humanId]);
+    });
+
+    it('`fields:["related"]` returns BUG-025\'s read side: humanIds linked via RELATES_TO, visible from BOTH endpoints', async () => {
+      const a = await seedItem(tmp, { title: 'item A' });
+      const b = await seedItem(tmp, { title: 'item B' });
+      const c = await seedItem(tmp, { title: 'item C' });
+
+      // linkRelated writes ONE direction only (a -> b), and a's own related
+      // set is untouched by the OTHER edge (b -> c) it isn't part of.
+      await linkRelatedNode(tmp.store, REPO, a, b);
+      await linkRelatedNode(tmp.store, REPO, b, c);
+
+      const cardA = expectOk(await backlogGet(tmp.store, { humanId: a, repo: REPO, fields: ['related'] }));
+      expect(cardA.related).toEqual([b]);
+
+      // b is the DST of one edge and the SRC of the other — both must show up,
+      // proving `related` is not silently direction-scoped to `src`.
+      const cardB = expectOk(await backlogGet(tmp.store, { humanId: b, repo: REPO, fields: ['related'] }));
+      expect(cardB.related?.slice().sort()).toEqual([a, c].sort());
+
+      const cardC = expectOk(await backlogGet(tmp.store, { humanId: c, repo: REPO, fields: ['related'] }));
+      expect(cardC.related).toEqual([b]);
+    });
+
+    it('an item with no RELATES_TO edges reports `related: []`, not undefined, when the field is named', async () => {
+      const humanId = await seedItem(tmp);
+
+      const card = expectOk(await backlogGet(tmp.store, { humanId, repo: REPO, fields: ['related'] }));
+
+      expect(card.related).toEqual([]);
     });
   });
 
@@ -400,6 +462,69 @@ describe('backlogGet (INTERFACE_v2 §1) — one item, deep context on demand', (
 
       expect(card.title).toBe('only one of me');
       expect(card.repo).toBe(OTHER_REPO);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // FEAT-BACKLOG-006 — a renamed humanId redirects instead of 404ing forever.
+  // --------------------------------------------------------------------------
+
+  describe('rename redirect — a citation to a RETIRED humanId still resolves', () => {
+    it('scoped: a get for the OLD (repo, humanId) redirects to the renamed item, with a warning naming the redirect', async () => {
+      const created = await createItemNode(tmp.store, {
+        family: 'BUG-GET',
+        title: 'renamed item',
+        body: 'x',
+        repo: REPO,
+      });
+      const oldHumanId = created.item.humanId;
+      const renamed = await renameHumanIdNode(tmp.store, REPO, created.item.nodeId, oldHumanId, 'BUG-GET-RENAMED-001');
+
+      const env = await backlogGet(tmp.store, { humanId: oldHumanId, repo: REPO });
+
+      if (!isOutcomeOk(env)) throw new Error(`expected the redirect to succeed, got ${JSON.stringify((env as { error?: unknown }).error)}`);
+      // Resolves to the CURRENT item, not a 404 and not the old identity.
+      expect(env.data.humanId).toBe('BUG-GET-RENAMED-001');
+      expect(env.data.humanId).toBe(renamed.humanId);
+      expect(env.data.title).toBe('renamed item');
+      // Never silent (§7.1) — the response names both the old id looked up
+      // and the current one it was redirected to.
+      expect(env.warnings?.some((w) => w.includes(oldHumanId) && w.includes('BUG-GET-RENAMED-001'))).toBe(true);
+    });
+
+    it('unscoped: a repo-omitted get for the OLD humanId also redirects', async () => {
+      const created = await createItemNode(tmp.store, {
+        family: 'BUG-GET',
+        title: 'renamed item, unscoped lookup',
+        body: 'x',
+        repo: REPO,
+      });
+      const oldHumanId = created.item.humanId;
+      await renameHumanIdNode(tmp.store, REPO, created.item.nodeId, oldHumanId, 'BUG-GET-RENAMED-002');
+
+      const card = expectOk(await backlogGet(tmp.store, { humanId: oldHumanId }));
+
+      expect(card.humanId).toBe('BUG-GET-RENAMED-002');
+    });
+
+    it('a genuinely unknown humanId (never renamed, never created) still 404s — the redirect never masks a real miss', async () => {
+      const env = await backlogGet(tmp.store, { humanId: 'BUG-GET-NEVER-EXISTED-001', repo: REPO });
+
+      if (!isOutcomeError(env)) throw new Error(`expected a failure, got ${JSON.stringify(env)}`);
+      expect(env.error.code).toBe('item_not_found');
+    });
+
+    it('a rename chain (A -> B -> C) redirects from EITHER retired id to the current item', async () => {
+      const created = await createItemNode(tmp.store, { family: 'BUG-GET', title: 'twice renamed', body: 'x', repo: REPO });
+      const idA = created.item.humanId;
+      const afterFirst = await renameHumanIdNode(tmp.store, REPO, created.item.nodeId, idA, 'BUG-GET-CHAIN-B-001');
+      const idB = afterFirst.humanId;
+      await renameHumanIdNode(tmp.store, REPO, created.item.nodeId, idB, 'BUG-GET-CHAIN-C-001');
+
+      const fromA = expectOk(await backlogGet(tmp.store, { humanId: idA, repo: REPO }));
+      const fromB = expectOk(await backlogGet(tmp.store, { humanId: idB, repo: REPO }));
+      expect(fromA.humanId).toBe('BUG-GET-CHAIN-C-001');
+      expect(fromB.humanId).toBe('BUG-GET-CHAIN-C-001');
     });
   });
 });

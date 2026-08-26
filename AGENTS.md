@@ -23,7 +23,7 @@ You are an expert full-stack engineer operating within a high-scale **Nx Monorep
 - You never create folders in the repo root without human approval
 - You never chain file removals in bash commands
 - You never write fs removals within scripts relying on variables without human approval
-- You file, claim, transition, and resolve backlog items via the `backlog` CLI / `mcp__backlog__*` tools — never by hand-editing a `BACKLOG.md`. Every `BACKLOG.md` is now a generated projection of the global backlog graph (`@adhd/backlog`, migration phase-3); a hand edit is overwritten on the next render and rejected by the parity gate. Check `backlog migration-status` for the authoritative phase. (For this repo, this supersedes the global "store deferrals/bugs to BACKLOG.md" disclosure rule.)
+- You file, claim, transition, and resolve backlog items via the `adhd-backlog` CLI (renamed from the bare `backlog` bin, which collided with the unrelated public npm package `backlog@1.4.56`) / `mcp__backlog__*` tools — never by hand-editing a `BACKLOG.md`. Every `BACKLOG.md` is now a generated projection of the global backlog graph (`@adhd/backlog`, migration phase-3); a hand edit is overwritten on the next render and rejected by the parity gate. Check `adhd-backlog admin --input '{"action":"migration_status"}'` for the authoritative phase. (For this repo, this supersedes the global "store deferrals/bugs to BACKLOG.md" disclosure rule.)
 - You never declare bugs as "pre-existing"
 - After merging branches or worktrees, you always clean up the branch and write to the apropriate changelogs
 - You always update relevant docs to include surface features added (add to backlog if the docs do not exist)

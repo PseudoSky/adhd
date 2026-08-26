@@ -104,6 +104,14 @@ describe('computeStats — BUG-023 open-scoped priority/kind/family', () => {
       // coverage is REQUIRED (DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001) — never silent about partial history.
       expect(stats.coverage.itemsTotal).toBe(totalOpen + totalClosed);
       expect(stats.coverage.itemsWithHistory).toBeGreaterThan(0); // every RESOLVED transition wrote a real audit event
+
+      // BUG-024 (LOW, CONFIRMED): a repo-scoped computeStats call used to
+      // hardcode byRepo/byRepoAllStatuses to `{}` instead of returning the
+      // single-key breakdown the scope makes trivial. Every item above was
+      // seeded with repo: REPO_STATS, so a correct scoped call reports
+      // exactly one key with the real open/all-status counts — never `{}`.
+      expect(stats.byRepo).toEqual({ [REPO_STATS]: totalOpen });
+      expect(stats.byRepoAllStatuses).toEqual({ [REPO_STATS]: totalOpen + totalClosed });
     },
     30_000,
   );

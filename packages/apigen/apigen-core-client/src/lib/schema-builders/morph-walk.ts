@@ -281,6 +281,17 @@ export async function walkType(
         // Match ts-json-schema-generator's own convention: omit `required`
         // entirely when no property is required, rather than emitting `[]`.
         ...(required.length > 0 ? { required } : {}),
+        // BUG-APIGEN-017 (nested case): mirror compose-schemas.ts's top-level
+        // additionalProperties:false so Ajv rejects unknown keys on THIS
+        // interface-derived nested object too, not only at the envelope/data
+        // wrapper. Without this, an unrecognized key nested inside a domain
+        // param object (e.g. a typo'd flag on a query-options interface)
+        // validates successfully and is then silently discarded by
+        // `decodeNode`'s object branch (runtime.ts) instead of erroring —
+        // confirmed as BUG-BACKLOG-QUERY-001's actual mechanism: `full`/
+        // `view`-shaped optional keys on a nested options object were
+        // accepted-and-ignored rather than rejected.
+        additionalProperties: false,
       };
     }
     // An index-signature-only object resolved above; anything else with no

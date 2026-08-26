@@ -9,6 +9,7 @@ import type {
   Chunk,
   File,
 } from '@adhd/apigen-core-client';
+import { isApiError } from '@adhd/apigen-base-errors';
 
 // Plugin-specific options — extend as needed.
 export interface LoggerOptions {
@@ -173,6 +174,17 @@ function makeLayer(rootLogger: Logger) {
       );
     }
 
+    // Mirrors `@adhd/apigen-plugin-cli-output`'s `logDispatchError` /
+    // `@adhd/apigen-plugin-mcp`'s identical inline check: an ordinary,
+    // EXPECTED rejection (bad input, auth denial, not-found) is logged
+    // without its full stack trace (local absolute filesystem paths
+    // included) — only a genuine `code: 'internal'` fault (or a non-`ApiError`
+    // throw) keeps the full `Error` object, the one population a stack trace
+    // is actually diagnostic for.
+    function errorLogFields(e: unknown): Record<string, unknown> {
+      return isApiError(e) && e.code !== 'internal' ? { code: e.code, message: e.message } : { err: e };
+    }
+
     if (isAsyncIterable(downstream)) {
       // --- Streaming path (§11) ---
       // Wrap the iterable: log per-chunk, log end/error after stream closes.
@@ -186,7 +198,7 @@ function makeLayer(rootLogger: Logger) {
           }
           log.info({ op, ms: Date.now() - t, chunks }, `← ${op} ok`);
         } catch (e) {
-          log.error({ op, ms: Date.now() - t, err: e }, `✗ ${op} stream error`);
+          log.error({ op, ms: Date.now() - t, ...errorLogFields(e) }, `✗ ${op} stream error`);
           throw e; // §8.1 rule 2 — unwind outward
         }
       })();
@@ -200,7 +212,7 @@ function makeLayer(rootLogger: Logger) {
         return r;
       },
       (e: unknown) => {
-        log.error({ op, ms: Date.now() - t, err: e }, `✗ ${op} error`);
+        log.error({ op, ms: Date.now() - t, ...errorLogFields(e) }, `✗ ${op} error`);
         throw e; // §8.1 rule 2 — unwind outward
       }
     );

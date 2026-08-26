@@ -17,9 +17,18 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { buildBacklogApigenPackage, resolveExpectedMcpToolNames } from './server.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
+
+/** See install.e2e.spec.ts's identical helper doc comment. */
+async function expectedMcpToolNames(): Promise<string[]> {
+  const { operations } = await buildBacklogApigenPackage(() => {
+    throw new Error('expectedMcpToolNames: store must never be opened just to enumerate tool names');
+  });
+  return resolveExpectedMcpToolNames(operations);
+}
 
 describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, real spawned bin', () => {
   let client: Client | undefined;
@@ -53,31 +62,26 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
     await client.connect(transport);
 
     const tools = await client.listTools();
-    // INTERFACE_v2 AC-5 collapsed the 38 flat v1 verbs onto SIX `backlog_*`
-    // data verbs (`client.ts`'s only exports — `get`/`query`/`create`/
-    // `update`/`relate`/`admin`) plus the un-namespaced batch-dispatch tool
-    // `apigen-plugin-batch` mounts (`batch_action`). `backlog_create_item`/
-    // `backlog_get_item`/`backlog_list_items` are v1 names — those ops moved
-    // to `ops-v1.ts` and are no longer mounted on any transport (ops-v1.ts
-    // header, client.ts header). Verified live against `install.e2e.spec.ts`'s
-    // real-spawned-server ground truth for the 7-tool surface.
-    expect(tools.tools.map((t) => t.name).sort()).toEqual(
-      ['backlog_admin', 'backlog_create', 'backlog_get', 'backlog_query', 'backlog_relate', 'backlog_update', 'batch_action'].sort()
-    );
+    // Live-derived (not hardcoded) — see `expectedMcpToolNames()` above /
+    // `resolveExpectedMcpToolNames`'s doc comment (server.ts). Tracks
+    // whatever `client.ts` + the mounted plugins actually advertise instead
+    // of a literal array that silently goes stale on the next export change.
+    const expected = await expectedMcpToolNames();
+    expect(tools.tools.map((t) => t.name).sort()).toEqual(expected);
 
     // `create(ctx, input: IBacklogCreateInput)` is a single non-`ctx` param,
     // so apigen's MCP mount wraps it as `{ data: { input: <the param> } }`
     // (the "apigen calling convention" — observed directly from
     // `backlog_create`'s real `tools/list` inputSchema, whose
     // `description` states it, and from a real `callTool` round-trip against
-    // the spawned server below). `IBacklogCreateInput` itself carries a
-    // FIELD also named `input` (the create payload) plus the required `by`
-    // attribution (INTERFACE_v2 §7.5 — every mutation needs one), hence the
-    // double `input.input` nesting.
+    // the spawned server below). `IBacklogCreateInput` itself carries the
+    // create payload under `item` (renamed from the old, confusing
+    // `input.input` double-nesting) plus the required `by` attribution
+    // (INTERFACE_v2 §7.5 — every mutation needs one).
     const createResult = await client.callTool({
       name: 'backlog_create',
       arguments: {
-        data: { input: { input: { family: 'BUG-SERVECLI', title: 'created via serve cli', body: 'x', repo }, by: 'serve.spec' } },
+        data: { input: { item: { family: 'BUG-SERVECLI', title: 'created via serve cli', body: 'x', repo }, by: 'serve.spec' } },
       },
     });
     const createContent = createResult.content as Array<{ type: string; text: string }>;
@@ -107,6 +111,23 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
     expect(got.ok).toBe(true);
     expect(got.data.title).toBe('created via serve cli');
   }, 30_000);
+
+  it('BUG-033: `serve --help` prints usage and exits 0 — never a raw unhandled-exception stack trace', async () => {
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-serve-cli-help-'));
+    const { spawnSync } = await import('node:child_process');
+    const result = spawnSync(process.execPath, [DIST_INDEX, 'serve', '--help'], {
+      cwd: adhdRoot,
+      env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project' },
+      encoding: 'utf8',
+      timeout: 10_000,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/backlog serve/);
+    // The defect this proves fixed: a raw stack trace (`at file:///…`,
+    // ten-plus frames of minified dist) instead of the one-line usage text.
+    expect(result.stderr).not.toMatch(/at file:/);
+    expect(result.stderr).not.toMatch(/\.js:\d+:\d+/);
+  });
 
   it('rejects an unknown --transport value rather than silently defaulting', async () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-serve-cli-badtransport-'));

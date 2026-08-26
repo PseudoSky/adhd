@@ -169,11 +169,16 @@ describe('[BATCH_0.0.1.md §2/§F1] apigen-plugin-batch — real e2e over a live
     const res = await fetch(`http://127.0.0.1:${port}/_batch/action`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
+      // BUG-APIGEN-CLI-002: control-plane fields nest under one top-level
+      // "input" object, matching every other apigen-mounted operation's
+      // single-JSON-blob convention.
       body: JSON.stringify({
-        operation: 'catalog/getItem',
-        items: [{ id: 'a' }, { id: 'missing' }, { id: 'b' }],
-        concurrency: 2,
-        onItemError: 'continue',
+        input: {
+          operation: 'catalog/getItem',
+          items: [{ id: 'a' }, { id: 'missing' }, { id: 'b' }],
+          concurrency: 2,
+          onItemError: 'continue',
+        },
       }),
     });
 
@@ -237,7 +242,7 @@ describe('[BATCH_0.0.1.md §2/§F1] apigen-plugin-batch — real e2e over a live
     const res = await fetch(`http://127.0.0.1:${port}/_batch/action`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ operation: 'not/a-real-op', items: [] }),
+      body: JSON.stringify({ input: { operation: 'not/a-real-op', items: [] } }),
     });
 
     expect(res.status).toBe(400);

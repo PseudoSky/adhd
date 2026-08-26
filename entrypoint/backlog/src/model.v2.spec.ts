@@ -55,7 +55,21 @@ import {
   UnsupportedOperationError,
   UPDATE_PATCH_KEYS,
 } from './model.js';
-import type { IBacklogCard, IBacklogFilter, IBacklogStats, ILinkRelatedResult, IOutcomeEnvelope, IRepositoryNode, IUpdatePatch, Priority } from './model.js';
+import type {
+  CreateItemInput,
+  IBacklogCard,
+  IBacklogCreateInput,
+  IBacklogFilter,
+  IBacklogRelateInput,
+  IBacklogStats,
+  IBacklogUpdateInput,
+  ICreateItemInputV2,
+  ILinkRelatedResult,
+  IOutcomeEnvelope,
+  IRepositoryNode,
+  IUpdatePatch,
+  Priority,
+} from './model.js';
 
 // ---------------------------------------------------------------------------
 // §7.1 / §7.2 / AC-6 — the outcome envelope.
@@ -156,6 +170,18 @@ describe('toOutcomeError (INTERFACE_v2 §7.1, AC-6)', () => {
     const fromDriver = toOutcomeError(new Error('SQLITE_BUSY: database is locked'));
     expect(fromDriver.code).toBe('store_busy');
     expect(fromDriver.details?.retryable).toBe(true);
+  });
+
+  it('carries InvalidArgumentError.internalRef into error.details.internalRef, kept OUT of the user-facing message', () => {
+    const withRef = toOutcomeError(new InvalidArgumentError('repo', 'backlog_update: "repo" is required.', 'EPIC-A / INTERFACE_v2 §7.5'));
+    expect(withRef.message).not.toMatch(/EPIC-A|INTERFACE_v2/);
+    expect(withRef.details?.internalRef).toBe('EPIC-A / INTERFACE_v2 §7.5');
+    expect(withRef.details?.argument).toBe('repo');
+
+    // Absent when the caller never passed one — `internalRef` is never
+    // fabricated for an ordinary invalid_argument.
+    const withoutRef = toOutcomeError(new InvalidArgumentError('humanId', 'backlog_update: "humanId" is required.'));
+    expect(withoutRef.details?.internalRef).toBeUndefined();
   });
 });
 
@@ -436,6 +462,58 @@ describe('IUpdatePatch (BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001, INTERFACE_v2
 
   it('an explicitly-undefined key is not a discarded write', () => {
     expect(() => assertNoSilentlyDiscardedPatchKeys({ title: 't', priority: undefined }, ['title'])).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P1-core-write-verbs — priority reachability, cross-repo relate, the
+// `IBacklogCreateInput.item` rename, and author/reporter on create.
+// ---------------------------------------------------------------------------
+
+describe('IBacklogUpdateInput.priority (partial fix of BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001)', () => {
+  it('is a top-level field, distinct from patch.priority (which updateItemNode rejects outright)', () => {
+    const input: IBacklogUpdateInput = { humanId: 'BUG-1', repo: 'adhd', by: 'x', priority: 'CRITICAL' };
+    expect(input.priority).toBe('CRITICAL');
+    // `repo` is REQUIRED at the type level now (was `repo?`) — a caller
+    // building this object without `repo` fails to compile, not just to run.
+    expect(input.repo).toBe('adhd');
+  });
+});
+
+describe('IBacklogRelateInput.sourceRepo/targetRepo (FEAT-BACKLOG-004 cross-repo relate)', () => {
+  it('accepts two different repos for the two endpoints, defaulting to `repo` when omitted', () => {
+    const sameRepo: IBacklogRelateInput = { sourceId: 'BUG-1', targetId: 'BUG-2', relation: 'related', action: 'add', repo: 'adhd', by: 'x' };
+    expect(sameRepo.sourceRepo).toBeUndefined();
+    expect(sameRepo.targetRepo).toBeUndefined();
+
+    const crossRepo: IBacklogRelateInput = {
+      sourceId: 'BUG-1',
+      targetId: 'BUG-2',
+      relation: 'dependency',
+      action: 'add',
+      repo: 'adhd',
+      targetRepo: 'sox-ecosystem',
+      by: 'x',
+    };
+    expect(crossRepo.targetRepo).toBe('sox-ecosystem');
+  });
+});
+
+describe('IBacklogCreateInput.item (renamed from the confusing `input.input` double-nesting)', () => {
+  it('the create payload lives under `item`, not `input`', () => {
+    const req: IBacklogCreateInput = { item: { family: 'BUG-X', title: 't', body: 'b', repo: 'adhd' }, by: 'claude:1' };
+    expect(req.item.title).toBe('t');
+    expect('input' in req).toBe(false);
+  });
+
+  it('author/reporter round-trip on the item payload (TASK-004)', () => {
+    const withRoles: ICreateItemInputV2 = { family: 'BUG-X', title: 't', body: 'b', repo: 'adhd', author: 'researcher:a1', reporter: 'researcher:b2' };
+    expect(withRoles.author).toBe('researcher:a1');
+    expect(withRoles.reporter).toBe('researcher:b2');
+    // Also declared (and now actually persisted, store/crud.ts) on the base
+    // `CreateItemInput` the store layer accepts — not JUST the v2 wrapper.
+    const base: CreateItemInput = { family: 'BUG-X', title: 't', body: 'b', repo: 'adhd', author: 'researcher:a1' };
+    expect(base.author).toBe('researcher:a1');
   });
 });
 

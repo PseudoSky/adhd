@@ -150,32 +150,64 @@ describe('buildBatchKindSchema (F1)', () => {
     expect(input['oneOf']).toBeUndefined();
     expect(discriminator).toBeUndefined();
     expect(input['type']).toBe('object');
-    expect((input['properties'] as Record<string, unknown>)['operation']).toEqual({
+    // BUG-APIGEN-CLI-002: every control-plane field nests under one top-level
+    // `input` object, matching every other apigen-mounted operation's
+    // single-JSON-blob convention (`--input <json>` etc) instead of a flat,
+    // per-field-flag shape unique to batch.
+    expect(input['required']).toEqual(['input']);
+    const inputWrapper = (input['properties'] as Record<string, unknown>)['input'] as Record<
+      string,
+      unknown
+    >;
+    expect(inputWrapper['type']).toBe('object');
+    expect((inputWrapper['properties'] as Record<string, unknown>)['operation']).toEqual({
       type: 'string',
       enum: ['a/one'],
     });
     expect(output).toEqual({ type: 'array', items: expect.any(Object) });
   });
 
-  it('two+ ops of a kind produce a real oneOf + InlineDiscriminator (morph-walk mechanism)', () => {
+  it('two+ ops of a kind produce a real oneOf over the wrapped `input` shape', () => {
     const ops = [op('a/one', 'action'), op('a/two', 'action')];
     const { input, discriminator } = buildBatchKindSchema(ops);
     expect(Array.isArray(input['oneOf'])).toBe(true);
     expect((input['oneOf'] as unknown[]).length).toBe(2);
-    // InlineDiscriminator shape: propertyName + same-document JSON-Pointer mapping.
-    expect(discriminator).toEqual({
-      propertyName: 'operation',
-      mapping: { 'a/one': '#/oneOf/0', 'a/two': '#/oneOf/1' },
+    // BUG-APIGEN-CLI-002: `operation` no longer sits directly on each branch
+    // (it is nested under `input`), so OpenAPI/JSON-Schema `discriminator`
+    // — which requires the discriminating property to be a direct sibling —
+    // can no longer be derived. This is a deliberate consequence of the
+    // single-JSON-blob wrap, not a regression: `_batch/<kind>` dispatch never
+    // relied on oneOf/discriminator branch selection at request time
+    // (`MOUNT_PASSTHROUGH_SCHEMA` — `apigen-plugin-batch`'s own
+    // `parseBatchRequest` is the sole real gatekeeper).
+    expect(discriminator).toBeUndefined();
+    expect(input['discriminator']).toBeUndefined();
+    const variants = input['oneOf'] as Record<string, unknown>[];
+    const operationConsts = variants.map((v) => {
+      const inputWrapper = (v['properties'] as Record<string, unknown>)['input'] as Record<
+        string,
+        unknown
+      >;
+      return (
+        (inputWrapper['properties'] as Record<string, unknown>)['operation'] as Record<
+          string,
+          unknown
+        >
+      )['enum'];
     });
-    // discriminator is embedded on the input schema itself too.
-    expect(input['discriminator']).toEqual(discriminator);
+    expect(operationConsts).toEqual([['a/one'], ['a/two']]);
   });
 
-  it('branch object schemas are not closed (additionalProperties !== false) — additive-forward-compat', () => {
+  it('the outer `input`-wrapper key is closed (additionalProperties:false); the nested `input` object stays open for forward-compat', () => {
     const ops = [op('a/one', 'action'), op('a/two', 'action')];
     const { input } = buildBatchKindSchema(ops);
     for (const variant of input['oneOf'] as Record<string, unknown>[]) {
-      expect(variant['additionalProperties']).not.toBe(false);
+      expect(variant['additionalProperties']).toBe(false);
+      const inputWrapper = (variant['properties'] as Record<string, unknown>)['input'] as Record<
+        string,
+        unknown
+      >;
+      expect(inputWrapper['additionalProperties']).not.toBe(false);
     }
   });
 

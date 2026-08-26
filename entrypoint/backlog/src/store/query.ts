@@ -12,6 +12,7 @@ import type {
   BacklogItem,
   BacklogStatus,
   DependencyGraph,
+  IBacklogFilter,
   IBacklogStats,
   IDateBound,
   IDateRangeFilter,
@@ -22,10 +23,11 @@ import type {
   StatsScope,
   TopoOrderResult,
 } from '../model.js';
-import { AmbiguousHumanIdError, BacklogItemNotFoundError, assertOpenScopedStats, isTerminalStatus } from '../model.js';
+import { AmbiguousHumanIdError, BacklogItemNotFoundError, assertOpenScopedStats, isTerminalStatus, resolveStatusSelector } from '../model.js';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
 import { BACKLOG_ITEM_TAG, buildNodeName, isLiveBacklogItemNode, normalizeRepoKey, sanitizeFtsQuery, toBacklogItem, type BacklogNodeMeta } from './mapping.js';
 import { queryAuditEvents } from './audit-log.js';
+import { parseRepoKey } from './repo-nodes.js';
 
 const PRIORITY_RANK: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
@@ -106,6 +108,30 @@ function stableNodeOrder(nodes: NodeRecord[]): NodeRecord[] {
 }
 
 /**
+ * A `NodeRecord` as `store.graph.searchNodes` (FTS5) returns it — carrying
+ * the match's relevance `score` (`@adhd/sox-graph-store`'s `ftsSearch`, which
+ * already orders its rows `score DESC`, higher = better match). Structurally
+ * a `NodeRecord`, so every existing `NodeRecord[]`-typed caller is untouched;
+ * `score` is present only on rows that actually came from the FTS path.
+ */
+export type ScoredNodeRecord = NodeRecord & { score?: number };
+
+/**
+ * The one place a `queryItemNodes`/`listItems`/`listItemsPage` result gets
+ * its final, pre-pagination order. A `grep` query's rows already arrived
+ * from `store.graph.searchNodes` sorted by FTS relevance (`fetchFilteredNodes`
+ * preserves that order — see its own doc comment) — resorting them by
+ * `stableNodeOrder`'s insertion-id order, as every caller here used to do
+ * unconditionally, silently discarded that ranking and replaced it with an
+ * arbitrary one. A non-`grep` query has no relevance signal to preserve, so
+ * it still gets `stableNodeOrder`'s deterministic paging guarantee
+ * (BUG-BACKLOG-003 fix (b)).
+ */
+function orderForQuery(nodes: ScoredNodeRecord[], filter: Pick<BacklogFilter, 'grep'>): ScoredNodeRecord[] {
+  return filter.grep ? nodes : stableNodeOrder(nodes);
+}
+
+/**
  * BUG-BACKLOG-003 fix (a) + (b) — the ONE place `limit`/`offset` are ever
  * applied, and only to an array that has ALREADY been fully filtered
  * (rootLevel, excludeArchived and — for `listItems` — the open/closed
@@ -148,8 +174,14 @@ const GREP_FETCH_BUDGET = 1000;
  * doc comment). The shared, unpaginated base both `queryItemNodes` and
  * `listItems` page from, so pagination always runs LAST, over the fully
  * filtered set.
+ *
+ * A `grep` query's rows carry a real `score` (see `ScoredNodeRecord`) and
+ * arrive from `store.graph.searchNodes` already ordered by FTS relevance —
+ * `applyRootLevelFilter`/`applyExcludeArchivedFilter` are plain `Array#filter`
+ * calls, which preserve that order, so the relevance ranking survives this
+ * function intact for `orderForQuery` to use instead of `stableNodeOrder`.
  */
-async function fetchFilteredNodes(store: GraphBacklogStore, filter: BacklogFilter): Promise<NodeRecord[]> {
+async function fetchFilteredNodes(store: GraphBacklogStore, filter: BacklogFilter): Promise<ScoredNodeRecord[]> {
   // Resolve a case/whitespace-variant `repo` to its canonical stored form
   // BEFORE it becomes an exact-match `namespace` filter below — otherwise
   // 'pseudosky/adhd' silently matches zero rows against 'PseudoSky/adhd'.
@@ -175,9 +207,9 @@ async function fetchFilteredNodes(store: GraphBacklogStore, filter: BacklogFilte
 }
 
 /** Raw NodeRecord query — used internally where the full node (not just the mapped BacklogItem) is needed. */
-export async function queryItemNodes(store: GraphBacklogStore, filter: BacklogFilter = {}): Promise<NodeRecord[]> {
+export async function queryItemNodes(store: GraphBacklogStore, filter: BacklogFilter = {}): Promise<ScoredNodeRecord[]> {
   const nodes = await fetchFilteredNodes(store, filter);
-  return paginate(stableNodeOrder(nodes), filter).page;
+  return paginate(orderForQuery(nodes, filter), filter).page;
 }
 
 export async function listItems(store: GraphBacklogStore, filter: BacklogFilter = {}): Promise<BacklogItem[]> {
@@ -188,7 +220,7 @@ export async function listItems(store: GraphBacklogStore, filter: BacklogFilter 
   // limited/offset page is drawn from the already-status-filtered set,
   // never before it.
   const nodes = await fetchFilteredNodes(store, filter);
-  const items = applyOpenClosedFilter(stableNodeOrder(nodes).map(toBacklogItem), filter);
+  const items = applyOpenClosedFilter(orderForQuery(nodes, filter).map(toBacklogItem), filter);
   return paginate(items, filter).page;
 }
 
@@ -201,7 +233,7 @@ export async function listItems(store: GraphBacklogStore, filter: BacklogFilter 
  */
 export async function listItemsPage(store: GraphBacklogStore, filter: BacklogFilter = {}): Promise<{ items: BacklogItem[]; meta: IQueryEnvelopeMeta }> {
   const nodes = await fetchFilteredNodes(store, filter);
-  const items = applyOpenClosedFilter(stableNodeOrder(nodes).map(toBacklogItem), filter);
+  const items = applyOpenClosedFilter(orderForQuery(nodes, filter).map(toBacklogItem), filter);
   const { page, meta } = paginate(items, filter);
   return { items: page, meta };
 }
@@ -250,6 +282,36 @@ export async function findHumanIdInAnyRepo(store: GraphBacklogStore, humanId: st
 }
 
 /**
+ * FEAT-BACKLOG-006 read side — the redirect half of `mapping.ts`'s
+ * `BacklogNodeMeta.renamedFrom`: every LIVE node whose append-only rename
+ * history names `(repo, oldHumanId)` as an identity it used to carry.
+ * `v2/get.ts`'s `resolveGetTarget` calls this on the miss path (a genuine
+ * "not found" is checked FIRST via `findItemNode`/`findHumanIdInAnyRepo`, so
+ * this never shadows a live node that still legitimately holds the id), so a
+ * citation written against the OLD id resolves to the current item instead
+ * of 404ing forever.
+ *
+ * `renamedFrom.repo` is deliberately the OLD (pre-rename) repo, not the
+ * node's CURRENT namespace — a cross-repo migration-with-rename
+ * (`repo-migration.ts`'s `migrateRepoItemNode`) moves the node's `namespace`
+ * away from `repo` entirely, so this cannot be expressed as a `namespace`
+ * filter on the query and instead scans every live backlog item's
+ * `renamedFrom` array in application code. Same cost class as
+ * `findHumanIdInAnyRepo` above (both are miss-path-only, both scan without a
+ * `namespace` restriction) — renames are rare, so this is never on a hot
+ * path.
+ */
+export async function findByRenamedFromId(store: GraphBacklogStore, repo: string | undefined, oldHumanId: string): Promise<NodeRecord[]> {
+  const nodes = await store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG] });
+  return nodes.filter((n) => {
+    if (!isLiveBacklogItemNode(n)) return false;
+    const renamedFrom = (n.metadata as Partial<BacklogNodeMeta> | undefined)?.renamedFrom;
+    if (!Array.isArray(renamedFrom)) return false;
+    return renamedFrom.some((entry) => entry?.humanId === oldHumanId && (repo === undefined || entry?.repo === repo));
+  });
+}
+
+/**
  * Every distinct repo value any LIVE backlog item is currently filed under.
  * Used by `createItemNode`'s soft repo-drift warning (write-time half of
  * BUG-BACKLOG-REPO-LOOKUP-UX-001) — an empty store (no items yet) has no
@@ -279,6 +341,28 @@ export async function knownRepos(store: GraphBacklogStore): Promise<Set<string>>
  * genuinely new project: `isNewRepo:true`, `canonical` equal to the input
  * unchanged. This never strips or rewrites a namespace prefix; it only
  * collapses exact case/whitespace variants of an ALREADY-namespaced value.
+ *
+ * TASK-001 hardening: whole-string normalization (above) cannot see past an
+ * owner prefix — `normalizeRepoKey('Owner/X')` is `'owner/x'`, which never
+ * equals `normalizeRepoKey('X')` (`'x'`), so a bare repo `X` and an
+ * owner-qualified spelling of the SAME project, `Owner/X`, silently forked
+ * into two disjoint scopes (this is `store/mapping.ts`'s lowercase-only
+ * `normalizeRepoKey` — a second, narrower implementation than `model.ts`'s
+ * bare-segment one, and the two never agreeing is exactly the divergence
+ * TASK-001 names). `v2/query.ts`'s `resolveRepoCandidates` already treats a
+ * bare name and its owner-qualified spelling as the SAME repo for reads
+ * (AC-7) — this mirrors that exact predicate (same bare segment, via
+ * `repo-nodes.ts`'s `parseRepoKey`, AND compatible owners: equal when both
+ * sides name one, otherwise unconstrained) for the write/lookup path, so v1
+ * and v2 stop disagreeing.
+ *
+ * A bare name that matches known repos under >1 DIFFERENT owner (AC-24's
+ * genuine ambiguity — `alice/tool` and `bob/tool` both real, distinct
+ * projects) is deliberately NOT collapsed: picking one would silently merge
+ * two unrelated projects, which is worse than treating the ask as new. That
+ * case falls through to `isNewRepo:true` (a caller resolving `tool` gets some
+ * caller-visible warning through `knownRepos`-based UX elsewhere, not a
+ * hidden merge here).
  */
 export async function resolveCanonicalRepo(store: GraphBacklogStore, repo: string): Promise<{ canonical: string; isNewRepo: boolean }> {
   const known = await knownRepos(store);
@@ -287,6 +371,30 @@ export async function resolveCanonicalRepo(store: GraphBacklogStore, repo: strin
   for (const candidate of known) {
     if (normalizeRepoKey(candidate) === normalized) return { canonical: candidate, isNewRepo: false };
   }
+
+  let asked;
+  try {
+    asked = parseRepoKey(repo);
+  } catch {
+    // Not a parseable repo key at all (empty/garbage) — leave resolution to
+    // the exact/case-insensitive checks above; this read path must stay
+    // total rather than throwing on an already-invalid input.
+    return { canonical: repo, isNewRepo: true };
+  }
+  const bareMatches = new Set<string>();
+  for (const candidate of known) {
+    let parsed;
+    try {
+      parsed = parseRepoKey(candidate);
+    } catch {
+      continue;
+    }
+    if (parsed.bare.toLowerCase() !== asked.bare.toLowerCase()) continue;
+    if (asked.owner !== undefined && parsed.owner !== undefined && asked.owner.toLowerCase() !== parsed.owner.toLowerCase()) continue;
+    bareMatches.add(candidate);
+  }
+  if (bareMatches.size === 1) return { canonical: [...bareMatches][0]!, isNewRepo: false };
+
   return { canonical: repo, isNewRepo: true };
 }
 
@@ -338,10 +446,20 @@ function countByPriority(items: BacklogItem[]): Record<Priority, number> {
  */
 export type StatsScopeWithWindow = StatsScope & { dateRange?: IDateRangeFilter };
 
+/**
+ * FEAT-BACKLOG-STATS-TIME-WINDOWED-THROUGHPUT-001 — everything `computeStats`
+ * can scope by: the FULL v2 filter vocabulary (family/status/kind/priority/…
+ * are no longer silently discarded — the whole point of the work order) plus
+ * the window. `StatsScopeWithWindow` is a subset, so every pre-existing
+ * caller (v1 `admin:stats`, the narrow `StatsScope`-typed ops) still
+ * compiles against the widened parameter type.
+ */
+export type StatsQuery = IBacklogFilter & { dateRange?: IDateRangeFilter };
+
 /** AC-15: "window defaults to last 30 days when `dateRange` is absent". */
 const DEFAULT_STATS_WINDOW_MS = 30 * 24 * 60 * 60_000;
 
-function resolveStatsWindow(scope: StatsScopeWithWindow): IDateBound {
+function resolveStatsWindow(scope: StatsQuery): IDateBound {
   const updated = scope.dateRange?.updated;
   if (updated?.since !== undefined || updated?.until !== undefined) {
     const window: IDateBound = {};
@@ -350,6 +468,38 @@ function resolveStatsWindow(scope: StatsScopeWithWindow): IDateBound {
     return window;
   }
   return { since: new Date(Date.now() - DEFAULT_STATS_WINDOW_MS).toISOString() };
+}
+
+/**
+ * FEAT-BACKLOG-STATS-TIME-WINDOWED-THROUGHPUT-001 — applies the v2
+ * `IStatusSelector` (`open`/`closed`/`all` closedness words, a single status,
+ * or an explicit status LIST) over already-mapped items. The store-level
+ * `applyOpenClosedFilter` only handles the narrow v1 `BacklogFilter.status`
+ * (single value), so the v2 vocabulary is resolved here, once, exactly the
+ * way `v2/query.ts`'s own `applyStatusSelector` does for the list view.
+ * ABSENT selector means "no status restriction" — deliberately NOT the §2
+ * `'open'` default: `computeStats` is also v1 `admin:stats`'s backend, whose
+ * contract is all-status, and no existing caller may silently shrink.
+ *
+ * Returns a `(BacklogItem) => boolean` predicate so a caller can filter a
+ * JOINT `(node, item)` pair array — `computeStats` must keep nodes and
+ * items index-aligned for `computeHistoryDerivedStats`.
+ */
+function statusKeepPredicate(selector: IBacklogFilter['status'] | undefined): (item: BacklogItem) => boolean {
+  if (selector === undefined) return () => true;
+  const resolved = resolveStatusSelector(selector);
+  if (resolved.mode === 'explicit') {
+    const wanted = new Set<BacklogStatus>(resolved.statuses);
+    return (it) => wanted.has(it.status);
+  }
+  if (resolved.closedness === 'all') return () => true;
+  const wantOpen = resolved.closedness === 'open';
+  return (it) => !isTerminalStatus(it.status) === wantOpen;
+}
+
+/** FEAT-009 — one-decimal percentage, so `citationCoverage` is a clean number without floating-point noise. */
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
 }
 
 /** ISO-8601 strings compare lexicographically the same as chronologically — every timestamp here is `Date.prototype.toISOString()`'s fixed-width format, so this never needs `Date.parse`. */
@@ -395,6 +545,8 @@ interface HistoryDerivedStats {
   timeToResolution?: IDurationStats;
   timeInStatus?: Record<string, IDurationStats>;
   reopenRate?: number;
+  /** Items that reached a terminal status inside `window` (AC-15's "closed this week"). */
+  closedInWindow: number;
 }
 
 /**
@@ -480,7 +632,7 @@ async function computeHistoryDerivedStats(store: GraphBacklogStore, nodes: NodeR
   const timeInStatus: Record<string, IDurationStats> = {};
   for (const [status, durations] of durationsByStatus) timeInStatus[status] = durationStats(durations);
 
-  const result: HistoryDerivedStats = { coverage };
+  const result: HistoryDerivedStats = { coverage, closedInWindow: reachedTerminalInWindowCount };
   if (resolutionDurationsMs.length > 0) result.timeToResolution = durationStats(resolutionDurationsMs);
   if (Object.keys(timeInStatus).length > 0) result.timeInStatus = timeInStatus;
   if (reachedTerminalInWindowCount > 0) result.reopenRate = reopenedAfterCount / reachedTerminalInWindowCount;
@@ -505,20 +657,89 @@ async function computeHistoryDerivedStats(store: GraphBacklogStore, nodes: NodeR
  * runtime before every return, so the exact BUG-023 shape (an open-scoped
  * map summing higher than `open`) throws instead of shipping.
  */
-export async function computeStats(store: GraphBacklogStore, scope: StatsScopeWithWindow = {}): Promise<IBacklogStats> {
-  const filter: BacklogFilter = { repo: scope.repo, projectPath: scope.projectPath };
-  const nodes = await fetchFilteredNodes(store, filter);
-  const items = nodes.map(toBacklogItem);
+export async function computeStats(store: GraphBacklogStore, scope: StatsQuery = {}): Promise<IBacklogStats> {
+  // FEAT-BACKLOG-STATS-TIME-WINDOWED-THROUGHPUT-001: the OLD code built a
+  // filter from `scope.repo`/`scope.projectPath` ONLY — every other filter
+  // key a caller passed (family, status, kind, priority, …) was silently
+  // discarded, and the summary happily reported unscoped numbers that looked
+  // scoped. The push-down below carries every store-vocabulary key the
+  // caller supplied; the status selector is applied over the mapped items
+  // (it is a closedness predicate NodeFilter cannot express — the same
+  // reason `listItems` post-filters).
+  const pushDown: BacklogFilter = {
+    repo: scope.repo,
+    projectPath: scope.projectPath,
+    kind: scope.kind,
+    family: scope.family,
+    priority: typeof scope.priority === 'string' ? scope.priority : undefined,
+    plan: scope.plan,
+    assignee: scope.assignee,
+    claimedBy: scope.claimedBy,
+    tags: scope.tags !== undefined ? [...scope.tags] : undefined,
+    importedFrom: scope.importedFrom,
+    rootLevel: scope.rootLevel,
+    excludeArchived: scope.excludeArchived,
+  };
+  const nodes = await fetchFilteredNodes(store, pushDown);
+  const mapped = nodes.map(toBacklogItem);
+  // Status selection filters the (node, item) PAIRS jointly — never `items`
+  // alone: `computeHistoryDerivedStats` consumes `nodes[i]`/`items[i]` at
+  // the same index, and a single-array filter would silently misalign every
+  // history stat onto the wrong item (the exact silent-wrong-data class this
+  // package exists to prevent).
+  const keep = statusKeepPredicate(scope.status);
+  const keptNodes: NodeRecord[] = [];
+  const keptItems: BacklogItem[] = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    const item = mapped[i];
+    if (node === undefined || item === undefined) continue;
+    if (keep(item)) {
+      keptNodes.push(node);
+      keptItems.push(item);
+    }
+  }
+  const items = keptItems;
   const open = items.filter((it) => !isTerminalStatus(it.status));
   const closed = items.filter((it) => isTerminalStatus(it.status));
 
   const window = resolveStatsWindow(scope);
-  const history = await computeHistoryDerivedStats(store, nodes, items, window);
+  const history = await computeHistoryDerivedStats(store, keptNodes, items, window);
+
+  // AC-15 windowed activity: `openedInWindow` reads `item.createdAt` directly
+  // (not the audit log) — an item's creation is durable on the item itself,
+  // so this is exact for EVERY item, including ones that predate the audit
+  // log entirely (unlike `closedInWindow`, which needs a persisted
+  // `transition` event and so only sees items `coverage` reports as having
+  // history — the exact reason `coverage` is REQUIRED alongside it).
+  const openedInWindow = items.filter((it) => withinWindow(it.createdAt, window)).length;
+
+  // FEAT-009 — citation aggregates, derived from the SAME in-memory items
+  // every other count reads (zero extra queries). Coverage is REQUIRED on
+  // the contract, so a "citation coverage" that was never computed cannot
+  // silently ship as a stale number.
+  const citationsTotal = items.reduce((sum, it) => sum + it.citations.length, 0);
+  const itemsWithCitations = items.filter((it) => it.citations.length > 0).length;
+  const citationCoverage = items.length === 0 ? 0 : round1((itemsWithCitations / items.length) * 100);
+  const byFamilyCitationCoverage: Record<string, number> = {};
+  for (const family of new Set(items.map((it) => it.family ?? '(none)'))) {
+    const familyItems = items.filter((it) => (it.family ?? '(none)') === family);
+    const familyWithCitations = familyItems.filter((it) => it.citations.length > 0).length;
+    byFamilyCitationCoverage[family] = familyItems.length === 0 ? 0 : round1((familyWithCitations / familyItems.length) * 100);
+  }
 
   const stats: IBacklogStats = {
     total: items.length,
     open: open.length,
     closed: closed.length,
+    // AC-15 — "how many closed/opened THIS WEEK", answered over `window`
+    // rather than all-time (the bug this fixes: `view:"summary"` used to
+    // return only unwindowed all-time total/open/closed regardless of
+    // `dateRange`, so a caller asking "since Monday" got the same numbers as
+    // "ever").
+    closedInWindow: history.closedInWindow,
+    openedInWindow,
+    netInWindow: openedInWindow - history.closedInWindow,
     byStatus: countByKey(items, (it) => it.status),
     // BUG-023 — OPEN-scoped, never the unscoped `items` array.
     byPriority: countByPriority(open),
@@ -527,8 +748,17 @@ export async function computeStats(store: GraphBacklogStore, scope: StatsScopeWi
     byKindAllStatuses: countByKey(items, (it) => it.kind),
     byFamily: countByKey(open, (it) => it.family),
     byFamilyAllStatuses: countByKey(items, (it) => it.family),
-    byRepo: scope.repo === undefined ? countByKey(open, (it) => it.repo) : {},
-    byRepoAllStatuses: scope.repo === undefined ? countByKey(items, (it) => it.repo) : {},
+    // BUG-024 fix: byRepo/byRepoAllStatuses used to hardcode {} whenever
+    // scope.repo was supplied, discarding the one-key breakdown the scope
+    // makes trivial to compute (`{repo: n}`) instead of just returning it.
+    // countByKey over the already repo-filtered `open`/`items` arrays gives
+    // exactly that single-key map for a scoped call, and the full breakdown
+    // for an unscoped one — no ternary needed either way.
+    byRepo: countByKey(open, (it) => it.repo),
+    byRepoAllStatuses: countByKey(items, (it) => it.repo),
+    citationsTotal,
+    citationCoverage,
+    byFamilyCitationCoverage,
     coverage: history.coverage,
     window,
   };
