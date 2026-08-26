@@ -70,6 +70,15 @@ export interface PluginInput {
     id: string;
     schemas: ComposedSchemas;
     importPath: string;
+    /**
+     * The mounted package's own real version (e.g. read fresh from its
+     * `package.json`), threaded through so a `run()`-mode host — the MCP
+     * plugin's `initialize` handshake identity, in particular — can report
+     * which build is actually running instead of a hardcoded literal.
+     * Optional: extraction/test callers that predate this field, or that
+     * have no meaningful version (a raw source file mount), omit it.
+     */
+    version?: string;
     fns?: Record<string, (...args: unknown[]) => unknown>;
     createClient?: (envelope: Record<string, unknown>) => Promise<unknown>;
   }>;

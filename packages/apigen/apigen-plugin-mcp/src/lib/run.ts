@@ -587,14 +587,36 @@ function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
 // before the first disconnects; see the module doc's discovered-bug note).
 // ---------------------------------------------------------------------------
 
+/**
+ * The MCP `initialize` handshake identity for this process. Previously a
+ * hardcoded `{ name: 'apigen-mcp', version: '1.0.0' }` literal — identical
+ * across EVERY apigen-hosted MCP server (backlog, or any future host),
+ * regardless of which real package/version was actually running, so an agent
+ * connecting over stdio/SSE/streaming-http had no way to tell which build it
+ * was talking to (MCP handshake identity finding, P5-cli-serve-transport).
+ * Falls back to the old literal only when the mounted package genuinely
+ * supplies neither `id` nor `version` (non-TS-extraction / test callers that
+ * predate `PluginInput.packages[].version`).
+ */
+export interface McpServerIdentity {
+  name: string;
+  version: string;
+}
+
+function resolveMcpServerIdentity(input: RunInput): McpServerIdentity {
+  const pkg = input.packages[0];
+  return {
+    name: pkg?.id ?? 'apigen-mcp',
+    version: pkg?.version ?? '1.0.0',
+  };
+}
+
 function createMcpServer(
   adapter: McpTransportAdapter,
-  logger: Logger
+  logger: Logger,
+  identity: McpServerIdentity
 ): InstanceType<typeof Server> {
-  const server = new Server(
-    { name: 'apigen-mcp', version: '1.0.0' },
-    { capabilities: { tools: {} } }
-  );
+  const server = new Server(identity, { capabilities: { tools: {} } });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: adapter.listTools(),
@@ -623,7 +645,16 @@ function createMcpServer(
       // branch, not an escape from real type-checking.
       return raw.output as unknown as ServerResult;
     } catch (err) {
-      logger.error({ tool: name, ms: Date.now() - start, err }, `✗ ${name}`);
+      // See `logDispatchError`'s doc comment (mirrored from
+      // `@adhd/apigen-plugin-cli-output`'s `run.ts`): an ordinary, EXPECTED
+      // rejection (bad input, auth denial, not-found) never gets a full
+      // stack trace with local absolute filesystem paths — only a genuine
+      // `code: 'internal'` fault (or a non-`ApiError` throw) does.
+      if (isApiError(err) && err.code !== 'internal') {
+        logger.error({ tool: name, ms: Date.now() - start, code: err.code, message: err.message }, `✗ ${name}`);
+      } else {
+        logger.error({ tool: name, ms: Date.now() - start, err }, `✗ ${name}`);
+      }
       adapter.writeError(raw, err, plan);
       // writeError always re-throws (§9 marshal for mcp) — unreachable, but
       // keeps this handler's control flow (and inferred return type) honest.
@@ -693,8 +724,11 @@ export async function run(input: RunInput): Promise<void> {
     );
   }
 
+  const identity = resolveMcpServerIdentity(input);
+  logger.info({ identity }, `mcp handshake identity: ${identity.name}@${identity.version}`);
+
   if (transport === 'stdio') {
-    const server = createMcpServer(adapter, logger);
+    const server = createMcpServer(adapter, logger, identity);
     const t = new StdioServerTransport();
     await server.connect(t);
     logger.info('stdio transport ready');
@@ -720,7 +754,7 @@ export async function run(input: RunInput): Promise<void> {
       guardHttpTransport(logger, async (req, res) => {
         const url = req.url ?? '';
         if (req.method === 'GET' && url === '/sse') {
-          const server = createMcpServer(adapter, logger);
+          const server = createMcpServer(adapter, logger, identity);
           const sseTransport = new SSEServerTransport('/messages', res);
           sessions.set(sseTransport.sessionId, sseTransport);
           sseTransport.onclose = () => sessions.delete(sseTransport.sessionId);
@@ -771,7 +805,7 @@ export async function run(input: RunInput): Promise<void> {
   // ([mcp-adapter.8]).
   const httpServer = createServer(
     guardHttpTransport(logger, async (req, res) => {
-      const server = createMcpServer(adapter, logger);
+      const server = createMcpServer(adapter, logger, identity);
       const mcpTransport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
       });
