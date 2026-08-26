@@ -15,6 +15,7 @@ import path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { describe, it, expect, vi } from 'vitest';
+import Ajv from 'ajv';
 import { extract } from '../lib/extract';
 
 const fixture = (name: string) => path.resolve(__dirname, 'fixtures', name);
@@ -797,5 +798,96 @@ describe('DEBT-APIGEN-007: user type-alias with @format JSDoc preserves format a
     } finally {
       fs.rmSync(tmpDir, { recursive: true });
     }
+  });
+});
+
+describe('extract — streaming output schema still runs through hoistNestedDefs (BUG-APIGEN-029 / BUG-APIGEN-OUTPUT-DANGLING-REF-001 regression guard)', () => {
+  it('[extract.stream.hoist.1] a self-referential chunk type (RecursiveChunk) produces an output schema whose $ref(s) resolve at the fragment root, not dangling several levels deep', async () => {
+    const ops = await extract({ sourceFile: fixture('extract-streaming.ts') });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'streamRecursiveChunks');
+    expect(op).toBeDefined();
+    expect(op?.streaming).toBe(true);
+
+    const output = op?.output as Record<string, unknown>;
+    // Confirm this fixture actually exercises the hoisting machinery at all
+    // (a self-referential named type reliably produces a definitions/$defs
+    // sibling per hoistNestedDefs's own doc comment) — otherwise this test
+    // would pass vacuously whether or not hoisting still ran.
+    const hasDefs =
+      Object.keys((output['definitions'] as Record<string, unknown>) ?? {})
+        .length > 0 ||
+      Object.keys((output['$defs'] as Record<string, unknown>) ?? {}).length >
+        0;
+    expect(hasDefs).toBe(true);
+
+    // The real assertion: ajv can compile the output schema STANDALONE (as
+    // its own document root) — exactly how a downstream plugin embeds
+    // `op.output` verbatim into a larger document. If hoisting were bypassed
+    // on the streaming path, any `$ref` nested below the fragment's own root
+    // would dangle and this compile would throw
+    // "can't resolve reference ... from id #".
+    const ajv = new Ajv({ allErrors: true, strict: false });
+    expect(() => ajv.compile(output)).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Streaming return types (SPEC §11) — BUG-APIGEN-STREAMING-EXTRACT-001
+// ---------------------------------------------------------------------------
+//
+// `extract.ts` hardcoded `streaming: false` unconditionally regardless of the
+// export's actual return type, even though the runtime layer (`isApiStream`
+// in `apigen-engine-runtime/src/lib/stream.ts`) already detects and dispatches
+// an `AsyncIterable`-returning export as a stream. This left the generated
+// MCP/OpenAPI schema describing a non-streaming operation returning an opaque
+// `AsyncGenerator` object instead of the per-chunk shape (descriptor.ts's
+// documented `Operation.streaming` / `Operation.output` contract).
+
+describe('extract — streaming return types (SPEC §11)', () => {
+  it('[extract.stream.1] an `async function*` (AsyncGenerator<T>) export is streaming:true', async () => {
+    const ops = await extract({ sourceFile: fixture('extract-streaming.ts') });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'streamChunks');
+    expect(op).toBeDefined();
+    expect(op?.streaming).toBe(true);
+  });
+
+  it('[extract.stream.2] the AsyncGenerator output schema describes the per-chunk element (Chunk), not the generator wrapper', async () => {
+    const ops = await extract({ sourceFile: fixture('extract-streaming.ts') });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'streamChunks');
+    const output = op?.output as { properties?: Record<string, unknown> };
+    // Chunk = { n: number } — the generator/AsyncGenerator wrapper carries no
+    // `n` property itself, so this fails if the wrapper type leaked through.
+    expect(output?.properties).toHaveProperty('n');
+    // `typeText.output` renders whatever `ts-morph` prints for the unwrapped
+    // element type; for a same-file named interface (not inline) TypeScript's
+    // printer emits an import-qualified form (e.g.
+    // `import(".../extract-streaming").Chunk`) rather than the bare `Chunk` —
+    // pre-existing behavior of `Signature.getReturnType().getText()`, not
+    // something this fix introduces or needs to normalize (`buildSchema`
+    // already resolves the qualified text correctly, per the `n`-property
+    // assertion above). Assert on the meaningful part only.
+    expect(op?.typeText?.output).toContain('Chunk');
+    // Tighten: `toContain('Chunk')` alone would also pass if the wrapper
+    // leaked back in (`'AsyncGenerator<Chunk, any, unknown>'` contains
+    // `'Chunk'` too) — explicitly rule that out.
+    expect(op?.typeText?.output).not.toContain('AsyncGenerator');
+  });
+
+  it('[extract.stream.3] a plain function returning AsyncIterable<T> directly (no generator syntax) is also streaming:true', async () => {
+    const ops = await extract({ sourceFile: fixture('extract-streaming.ts') });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'streamViaIterable');
+    expect(op).toBeDefined();
+    expect(op?.streaming).toBe(true);
+    const output = op?.output as { properties?: Record<string, unknown> };
+    expect(output?.properties).toHaveProperty('label');
+  });
+
+  it('[extract.stream.NEGATIVE] a plain Promise<T>-returning async function is unaffected — streaming:false, no regression', async () => {
+    const ops = await extract({ sourceFile: fixture('extract-streaming.ts') });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'getScalar');
+    expect(op).toBeDefined();
+    expect(op?.streaming).toBe(false);
+    const output = op?.output as { properties?: Record<string, unknown> };
+    expect(output?.properties).toHaveProperty('value');
   });
 });

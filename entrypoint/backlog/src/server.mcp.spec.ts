@@ -102,7 +102,7 @@ describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotoco
     const createResult = await client.callTool({
       name: 'backlog_create',
       arguments: {
-        data: { input: { input: { family: 'BUG-MCPCREATE', title: 'created via mcp', body: 'x', repo }, by: 'mcp-test-client' } },
+        data: { input: { item: { family: 'BUG-MCPCREATE', title: 'created via mcp', body: 'x', repo }, by: 'mcp-test-client' } },
       },
     });
     const createContent = createResult.content as Array<{ type: string; text: string }>;

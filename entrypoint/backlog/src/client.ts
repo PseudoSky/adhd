@@ -36,6 +36,7 @@ import type {
   IBacklogCreateInput,
   IBacklogRelateInput,
   IBacklogUpdateInput,
+  ICreateItemInputV2,
   ICreateOutcome,
   IDuplicateCandidate,
   IEdgeOutcome,
@@ -48,6 +49,7 @@ import type {
 import {
   DuplicateCandidateError,
   InvalidArgumentError,
+  canonicalIdentityKey,
   errorEnvelope,
   okEnvelope,
   toOutcomeError,
@@ -143,13 +145,27 @@ function assertAttribution(by: unknown): string {
   return by;
 }
 
-/** Every create variant needs a repo, and `input.input.repo` is the only place it can come from. */
+/** Every create variant needs a repo, and `item.repo` is the only place it can come from. */
 function requireCreateRepo(input: IBacklogCreateInput): string {
-  const repo = input?.input?.repo;
+  const repo = input?.item?.repo;
   if (typeof repo !== 'string' || repo.trim() === '') {
-    throw new InvalidArgumentError('input.repo', 'backlog_create: "input.repo" is required — a humanId is only unique within a repo.');
+    throw new InvalidArgumentError('item.repo', 'backlog_create: "item.repo" is required — a humanId is only unique within a repo.');
   }
   return repo;
+}
+
+/**
+ * TASK-004 — `author` defaults to `canonicalIdentityKey(by)` and `reporter`
+ * defaults to the (now-resolved) `author` when either is absent, per
+ * `ICreateItemInputV2.author`'s documented contract. `by` is only ever in
+ * scope here (the caller of `createItemOp`/`splitItemOp`/`supersedeItemOp`),
+ * never inside `createItemNode` itself, so the default MUST be computed at
+ * this layer.
+ */
+function withAuthorDefaults<T extends ICreateItemInputV2>(item: T, by: string): T {
+  const author = item.author ?? canonicalIdentityKey(by);
+  const reporter = item.reporter ?? author;
+  return { ...item, author, reporter };
 }
 
 /** v1 `CreateItemResult.duplicateCandidates` (full items) → the §3 candidate shape (card + reason). */
@@ -257,7 +273,7 @@ export async function create(
       if (children.length === 0) {
         throw new InvalidArgumentError('children', 'backlog_create: "splitFrom" requires a non-empty "children" array.');
       }
-      const created = await splitItemOp(ctx, repo, input.splitFrom, children);
+      const created = await splitItemOp(ctx, repo, input.splitFrom, children.map((child) => withAuthorDefaults(child, by)));
       const result: ISplitItemResult = {
         parentHumanId: input.splitFrom,
         created: created as unknown as ISplitItemResult['created'],
@@ -269,7 +285,7 @@ export async function create(
     // §3 — supersede: mint the replacement, link SUPERSEDES, invalidate the old.
     if (input.supersedes !== undefined) {
       const reason = input.reason ?? `superseded by a replacement filed by ${by}`;
-      const item = await supersedeItemOp(ctx, repo, input.supersedes, input.input, reason);
+      const item = await supersedeItemOp(ctx, repo, input.supersedes, withAuthorDefaults(input.item, by), reason);
       const result: ISupersedeResult = {
         supersededHumanId: input.supersedes,
         created: true,
@@ -279,14 +295,14 @@ export async function create(
       return result;
     }
 
-    const res = await createItemOp(ctx, { ...input.input, ...(action === 'file' ? { force: true } : {}) });
+    const res = await createItemOp(ctx, { ...withAuthorDefaults(input.item, by), ...(action === 'file' ? { force: true } : {}) });
     if (!res.created) {
       // Interception fired: NOTHING was written. `DuplicateCandidateError`
       // carries the candidates through `toOutcomeError`'s normal mapping, so
       // this takes the same path every other typed failure does (error arm,
       // code `duplicate_candidate`, exit 1 per `BACKLOG_EXIT_CODE`) instead
       // of a bespoke return shape only this branch understands.
-      throw new DuplicateCandidateError(input.input.title, toDuplicateCandidates(res.duplicateCandidates));
+      throw new DuplicateCandidateError(input.item.title, toDuplicateCandidates(res.duplicateCandidates));
     }
     const outcome: ICreateOutcome = {
       created: true,
@@ -328,10 +344,10 @@ export async function update(ctx: BacklogCtx, input: IBacklogUpdateInput): Promi
     }
     const repo = input.repo;
     if (typeof repo !== 'string' || repo.trim() === '') {
-      // §7.5 keeps `repo` explicit until EPIC-A's repo node lands — a humanId
-      // alone is not globally unique, and picking one silently is exactly the
-      // "read never silently narrows" violation §7.1 forbids.
-      throw new InvalidArgumentError('repo', 'backlog_update: "repo" is required until EPIC-A\'s repo node lands (INTERFACE_v2 §7.5) — a humanId is only unique within a repo.');
+      // §7.5 keeps `repo` explicit — a humanId alone is not globally unique,
+      // and picking one silently is exactly the "read never silently
+      // narrows" violation §7.1 forbids.
+      throw new InvalidArgumentError('repo', 'backlog_update: "repo" is required — a humanId is only unique within a repo.', 'EPIC-A / INTERFACE_v2 §7.5');
     }
 
     const outcome: IUpdateOutcome = { humanId, changed: [] };
@@ -401,6 +417,16 @@ export async function update(ctx: BacklogCtx, input: IBacklogUpdateInput): Promi
       outcome.changed.push('softDeleted');
     }
 
+    if (input.priority !== undefined) {
+      // Partial fix of BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001: priority
+      // was previously UNREACHABLE through the six-verb surface —
+      // `patch.priority` always threw (`updateItemNode`'s explicit rejection,
+      // store/crud.ts), and nothing else called the store's `setPriority`
+      // primitive. This is that missing call.
+      await setPriorityOp(ctx, repo, humanId, input.priority);
+      outcome.changed.push('priority');
+    }
+
     if (outcome.changed.length === 0) {
       // A call that asked for nothing is a caller error, not a successful
       // no-op: it is indistinguishable from a patch whose keys were all
@@ -408,7 +434,7 @@ export async function update(ctx: BacklogCtx, input: IBacklogUpdateInput): Promi
       // expose.
       throw new InvalidArgumentError(
         'patch',
-        'backlog_update: nothing to do — pass at least one of patch / status / claim / assignedTo / addNote / addCitation / softDeleteReason.'
+        'backlog_update: nothing to do — pass at least one of patch / status / priority / claim / assignedTo / addNote / addCitation / softDeleteReason.'
       );
     }
     return outcome;
@@ -428,7 +454,7 @@ export async function update(ctx: BacklogCtx, input: IBacklogUpdateInput): Promi
  * distinguishes a fresh write from an idempotent re-assert.
  *
  * @param ctx open store + env
- * @param input `{ sourceId, targetId, relation: 'dependency'|'related'|'plan', action: 'add'|'remove', repo, by }`
+ * @param input `{ sourceId, targetId, relation: 'dependency'|'related'|'plan', action: 'add'|'remove', repo, sourceRepo?, targetRepo?, by }`
  * @returns `{ ok: true, data: { from, to, rel, action, noop } }`, or the error
  *   arm with `item_not_found` / `precondition_failed` (dependency cycle) /
  *   `invalid_argument`
@@ -439,7 +465,7 @@ export async function relate(ctx: BacklogCtx, input: IBacklogRelateInput): Promi
     const { sourceId, targetId, relation, action } = input ?? ({} as IBacklogRelateInput);
     const repo = input?.repo;
     if (typeof repo !== 'string' || repo.trim() === '') {
-      throw new InvalidArgumentError('repo', 'backlog_relate: "repo" is required until EPIC-A\'s repo node lands (INTERFACE_v2 §7.5).');
+      throw new InvalidArgumentError('repo', 'backlog_relate: "repo" is required.', 'EPIC-A / INTERFACE_v2 §7.5');
     }
     if (typeof sourceId !== 'string' || typeof targetId !== 'string' || sourceId === '' || targetId === '') {
       throw new InvalidArgumentError('sourceId', 'backlog_relate: both "sourceId" and "targetId" are required.');
@@ -447,12 +473,21 @@ export async function relate(ctx: BacklogCtx, input: IBacklogRelateInput): Promi
     if (action !== 'add' && action !== 'remove') {
       throw new InvalidArgumentError('action', `backlog_relate: "action" must be "add" or "remove" (got ${JSON.stringify(action)}).`);
     }
+    // FEAT-BACKLOG-004: `sourceRepo`/`targetRepo` let the two endpoints live
+    // in two different repos — a single `repo` alone can never resolve a
+    // cross-repo pair. Both default to `repo` so the common single-repo call
+    // is unaffected.
+    const sourceRepo = input?.sourceRepo ?? repo;
+    const targetRepo = input?.targetRepo ?? repo;
 
     switch (relation) {
       case 'dependency': {
-        if (action === 'add') await addDependencyOp(ctx, repo, sourceId, targetId);
-        else await removeDependencyOp(ctx, repo, sourceId, targetId);
-        return { from: sourceId, to: targetId, rel: 'DEPENDS_ON', action, noop: false } satisfies IEdgeOutcome;
+        if (action === 'add') {
+          const res = await addDependencyOp(ctx, sourceRepo, sourceId, targetId, targetRepo);
+          return { from: sourceId, to: targetId, rel: 'DEPENDS_ON', action, noop: res.alreadyExisted } satisfies IEdgeOutcome;
+        }
+        const res = await removeDependencyOp(ctx, sourceRepo, sourceId, targetId, targetRepo);
+        return { from: sourceId, to: targetId, rel: 'DEPENDS_ON', action, noop: !res.alreadyExisted } satisfies IEdgeOutcome;
       }
       case 'related': {
         if (action === 'remove') {
@@ -465,8 +500,8 @@ export async function relate(ctx: BacklogCtx, input: IBacklogRelateInput): Promi
             'backlog_relate: removing a "related" edge has no store primitive in this build (RELATES_TO is add-only). Removing a "dependency" edge is supported.'
           );
         }
-        await linkRelatedOp(ctx, repo, sourceId, targetId);
-        return { from: sourceId, to: targetId, rel: 'RELATES_TO', action, noop: false } satisfies IEdgeOutcome;
+        const res = await linkRelatedOp(ctx, sourceRepo, sourceId, targetId, targetRepo);
+        return { from: sourceId, to: targetId, rel: 'RELATES_TO', action, noop: res.alreadyLinked } satisfies IEdgeOutcome;
       }
       case 'plan': {
         if (action === 'remove') {
@@ -475,8 +510,8 @@ export async function relate(ctx: BacklogCtx, input: IBacklogRelateInput): Promi
             'backlog_relate: detaching from a plan has no store primitive in this build (MEMBER_OF is add-only).'
           );
         }
-        await attachToPlanOp(ctx, repo, sourceId, targetId);
-        return { from: sourceId, to: targetId, rel: 'MEMBER_OF', action, noop: false } satisfies IEdgeOutcome;
+        const res = await attachToPlanOp(ctx, sourceRepo, sourceId, targetId, targetRepo);
+        return { from: sourceId, to: targetId, rel: 'MEMBER_OF', action, noop: res.alreadyExisted } satisfies IEdgeOutcome;
       }
       default:
         throw new InvalidArgumentError(

@@ -541,7 +541,7 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
       [
         'create',
         '--input',
-        JSON.stringify({ input: { family: 'BUG-CLIRT', title: 'roundtrip', body: 'x', repo }, by: 'cli.spec' }),
+        JSON.stringify({ item: { family: 'BUG-CLIRT', title: 'roundtrip', body: 'x', repo }, by: 'cli.spec' }),
       ],
       adhdRoot
     );
@@ -639,13 +639,14 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     const repo = 'PseudoSky/cli-batch-test';
 
     // Each batch item's `input` is the WHOLE `backlog_create` request shape
-    // (`IBacklogCreateInput`: `{ input, by, duplicateAction? }`), confirmed
+    // (`IBacklogCreateInput`: `{ item, by, duplicateAction? }`), confirmed
     // empirically against the real built bin — batch fans each item straight
     // into the named operation's own input, and `create`'s v2 input nests the
-    // domain payload one level deeper than the retired v1 `create-item` did.
+    // domain payload under `item`, one level deeper than the retired v1
+    // `create-item` did.
     const items = JSON.stringify([
-      { input: { input: { family: 'BUG-CLIBATCH', title: 'batch one', body: 'x', repo }, by: 'cli.spec' } },
-      { input: { input: { family: 'BUG-CLIBATCH', title: 'batch two', body: 'y', repo }, by: 'cli.spec' } },
+      { input: { item: { family: 'BUG-CLIBATCH', title: 'batch one', body: 'x', repo }, by: 'cli.spec' } },
+      { input: { item: { family: 'BUG-CLIBATCH', title: 'batch two', body: 'y', repo }, by: 'cli.spec' } },
     ]);
     const res = runBin(
       ['batch', 'action', '--operation', 'backlog/create', '--items', items, '--concurrency', '2', '--on-item-error', 'continue'],
@@ -810,5 +811,83 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     } finally {
       await closeGraphBacklogStore(reopened);
     }
+  });
+});
+
+describe('--sandbox / sandbox-path — P5-cli-serve-transport: the CLI must never default straight to the live production store', () => {
+  let fakeProdHome: string | undefined;
+  let sandboxDirs: string[] = [];
+
+  afterEach(() => {
+    if (fakeProdHome) rmSync(fakeProdHome, { recursive: true, force: true });
+    fakeProdHome = undefined;
+    for (const dir of sandboxDirs) rmSync(dir, { recursive: true, force: true });
+    sandboxDirs = [];
+  });
+
+  /** Spawns the real bin with NO `ADHD_BACKLOG_SCOPE` override — i.e. the
+   *  default `global` scope every real, un-flagged invocation actually uses
+   *  — with `HOME` redirected to a throwaway dir standing in for "the real
+   *  machine's home", so this test can prove `--sandbox` diverts away from
+   *  it without ever touching the real `~/.adhd`. */
+  function runGlobalScoped(args: string[], home: string): SpawnResult {
+    const result = spawnSync(process.execPath, [DIST_INDEX, ...args], {
+      cwd: home,
+      env: { ...process.env, HOME: home },
+      encoding: 'utf8',
+      timeout: 30_000,
+    });
+    if (result.error) throw new Error(`spawn failed: ${String(result.error)}`);
+    return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+  }
+
+  it('sandbox-path (no --sandbox) reports the real, un-isolated production path — store-free, exits 0', () => {
+    fakeProdHome = mkdtempSync(join(tmpdir(), 'backlog-sandbox-prodhome-'));
+    const res = runGlobalScoped(['sandbox-path'], fakeProdHome);
+    expect(res.status, `stderr:\n${res.stderr}`).toBe(0);
+    const body = JSON.parse(res.stdout.trim().split('\n').pop() ?? '{}') as {
+      sandbox: boolean;
+      dbPath: string;
+    };
+    expect(body.sandbox).toBe(false);
+    expect(body.dbPath.startsWith(fakeProdHome), `expected the real prod path to live under ${fakeProdHome}, got ${body.dbPath}`).toBe(true);
+    // Store-free: reporting the path must never actually open/create it.
+    expect(existsSync(body.dbPath)).toBe(false);
+  });
+
+  it('--sandbox diverts the store away from the (fake) production HOME entirely, and never creates anything under it', () => {
+    fakeProdHome = mkdtempSync(join(tmpdir(), 'backlog-sandbox-prodhome-'));
+    const pathRes = runGlobalScoped(['--sandbox', 'sandbox-path'], fakeProdHome);
+    expect(pathRes.status, `stderr:\n${pathRes.stderr}`).toBe(0);
+    const body = JSON.parse(pathRes.stdout.trim().split('\n').pop() ?? '{}') as {
+      sandbox: boolean;
+      adhdRoot: string;
+      dbPath: string;
+    };
+    expect(body.sandbox).toBe(true);
+    expect(body.adhdRoot, '--sandbox must report where it isolated to').toBeTruthy();
+    sandboxDirs.push(body.adhdRoot);
+    expect(
+      body.dbPath.startsWith(fakeProdHome),
+      `--sandbox must NEVER resolve into the (fake) production HOME — got ${body.dbPath}`
+    ).toBe(false);
+    expect(body.dbPath.startsWith(body.adhdRoot), 'the sandboxed db path must live under the reported sandbox root').toBe(true);
+
+    // Drive a REAL write (`create`) under --sandbox, then prove the fake
+    // production HOME's `.adhd` tree was never created at all — the
+    // strongest possible proof an isolation flag that "looks like isolation
+    // but isn't" (advisor's own stated trap) is not what shipped here.
+    const createRes = runGlobalScoped(
+      ['--sandbox', 'create', '--input', JSON.stringify({ input: { family: 'BUG-SANDBOX', title: 'sandboxed', body: 'x', repo: 'PseudoSky/sandbox-test' }, by: 'cli.spec' })],
+      fakeProdHome
+    );
+    expect(createRes.status, `stderr:\n${createRes.stderr}\nstdout:\n${createRes.stdout}`).toBe(0);
+    const created = JSON.parse(createRes.stdout.trim().split('\n').pop() ?? '{}') as { ok: boolean; data: { humanId: string } };
+    expect(created.ok).toBe(true);
+
+    const prodAdhdDir = join(fakeProdHome, '.adhd');
+    expect(existsSync(prodAdhdDir), `--sandbox wrote into the (fake) production HOME at ${prodAdhdDir} — isolation failed`).toBe(false);
+    // And the write really did land in the sandbox: the sandboxed db file exists.
+    expect(existsSync(body.dbPath), 'the sandboxed db must actually have been created by the create above').toBe(true);
   });
 });

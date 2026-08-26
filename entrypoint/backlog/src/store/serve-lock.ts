@@ -112,6 +112,16 @@ function readLockPid(lockPath: string): number | null {
   }
 }
 
+/** The `writeLockFile`-written second line (an ISO timestamp), or `null` when the file is absent/unreadable/malformed. */
+function readLockTimestamp(lockPath: string): string | null {
+  try {
+    const secondLine = readFileSync(lockPath, 'utf8').split('\n')[1]?.trim();
+    return secondLine && secondLine.length > 0 ? secondLine : null;
+  } catch {
+    return null;
+  }
+}
+
 function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -182,6 +192,80 @@ export function acquireServeLock(dbPath: string): ServeLockHandle {
   }
   const raceHolderPid = readLockPid(lockPath);
   throw new ServeLockHeldError(raceHolderPid ?? -1, lockPath);
+}
+
+/**
+ * The `lock_status`/`force_release_lock` diagnostic pair (P4 —
+ * "Orphaned live serve-lock holder blocks future `backlog serve` starts").
+ *
+ * `acquireServeLock` already self-heals the common case (holder pid dead —
+ * crash, SIGKILL): the NEXT `serve` attempt reclaims it silently. What it
+ * cannot self-heal is a holder that is genuinely still alive but wedged —
+ * hung past the point of ever calling `release()` (deadlock, orphaned after
+ * its parent shell died in a way that left the process itself running,
+ * stuck in an unkillable syscall). That case has no automatic recovery path
+ * at all today: every future `serve` refuses with `ServeLockHeldError`
+ * forever, and there is no way to even SEE the holder's pid/age without
+ * reading the lock file by hand. `inspectServeLock` is the read-only
+ * diagnostic; `forceReleaseServeLock` is the deliberate, attributed override
+ * an operator reaches for once they've confirmed (via `ps`/`kill -0`/their
+ * own judgement) that the holder should not be trusted.
+ */
+export interface ServeLockStatus {
+  dbPath: string;
+  lockPath: string;
+  /** False when no lock file exists — nothing else in this shape is meaningful then. */
+  exists: boolean;
+  holderPid: number | null;
+  /** `process.kill(pid, 0)` liveness of `holderPid`, at the moment of the call — never cached. */
+  alive: boolean;
+  /** The lock file's second line (an ISO timestamp), `null` if unreadable/malformed. */
+  lockedAt: string | null;
+  /** `exists && !alive` — a holder that is dead (or a lock file too malformed to name a pid at all). */
+  stale: boolean;
+}
+
+/**
+ * Read-only inspection of the serve lock for `dbPath` — never acquires,
+ * never releases, never mutates anything. Safe to call at any time, including
+ * while a live `serve` holds the lock.
+ */
+export function inspectServeLock(dbPath: string): ServeLockStatus {
+  const lockPath = serveLockPath(dbPath);
+  if (!existsSync(lockPath)) {
+    return { dbPath, lockPath, exists: false, holderPid: null, alive: false, lockedAt: null, stale: false };
+  }
+  const holderPid = readLockPid(lockPath);
+  const lockedAt = readLockTimestamp(lockPath);
+  const alive = holderPid !== null && isAlive(holderPid);
+  return { dbPath, lockPath, exists: true, holderPid, alive, lockedAt, stale: !alive };
+}
+
+/**
+ * Unconditionally removes the serve lock for `dbPath` — UNLIKE
+ * {@link ServeLockHandle.release}, this does NOT check that the caller is
+ * the recorded holder (a diagnostic admin action has no "own" lock to check
+ * against). Refuses when the holder is genuinely alive unless `force: true`
+ * is passed explicitly — the whole point of this primitive is a deliberate,
+ * informed override, never an accidental one that kills a real running
+ * server's writer lock out from under it.
+ *
+ * @throws {ServeLockHeldError} when the holder is alive and `force` is not `true`.
+ */
+export function forceReleaseServeLock(dbPath: string, opts: { force?: boolean } = {}): { released: boolean; wasAlive: boolean; holderPid: number | null } {
+  const status = inspectServeLock(dbPath);
+  if (!status.exists) return { released: false, wasAlive: false, holderPid: null };
+  if (status.alive && opts.force !== true) {
+    throw new ServeLockHeldError(status.holderPid as number, status.lockPath);
+  }
+  try {
+    unlinkSync(status.lockPath);
+  } catch {
+    // Already gone (lost a race with something else clearing it) — the
+    // invariant this call exists to establish ("no lock file remains")
+    // already holds, so this is not a failure for the caller.
+  }
+  return { released: true, wasAlive: status.alive, holderPid: status.holderPid };
 }
 
 function makeHandle(lockPath: string): ServeLockHandle {

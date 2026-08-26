@@ -309,3 +309,61 @@ describe('extractClasses — re-exported class via `export * from` wildcard', ()
     expect(op?.path[1].raw).toBe('SourceClass');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Streaming return types (SPEC §11) — BUG-APIGEN-STREAMING-EXTRACT-001
+// ---------------------------------------------------------------------------
+//
+// Same bug as extract.ts's hardcoded `streaming: false`, but for class-method
+// exports: `extract-classes.ts` hardcoded `streaming: false` for both static
+// (kind:'action') and instance-method ops regardless of the method's actual
+// return type.
+
+describe('extractClasses — streaming return types (SPEC §11)', () => {
+  it('[cls.stream.1] a static async-generator method (AsyncGenerator<T>) is streaming:true', async () => {
+    const ops = await extractClasses({
+      sourceFile: fixture('extract-class-streaming.ts'),
+    });
+    const op = findOp(ops, 'streamStatic');
+    expect(op).toBeDefined();
+    expect(op?.kind).toBe('action');
+    expect(op?.streaming).toBe(true);
+    const output = op?.output as { properties?: Record<string, unknown> };
+    expect(output?.properties).toHaveProperty('n');
+  });
+
+  it('[cls.stream.2] an instance async-generator method (AsyncGenerator<T>) is streaming:true', async () => {
+    const ops = await extractClasses({
+      sourceFile: fixture('extract-class-streaming.ts'),
+      includeInstances: true,
+    });
+    const op = findOp(ops, 'streamInstance');
+    expect(op).toBeDefined();
+    expect(op?.kind).toBe('instance-method');
+    expect(op?.streaming).toBe(true);
+    const output = op?.output as { properties?: Record<string, unknown> };
+    expect(output?.properties).toHaveProperty('label');
+  });
+
+  it('[cls.stream.NEGATIVE] a plain Promise<T>-returning instance method is unaffected — streaming:false, no regression', async () => {
+    const ops = await extractClasses({
+      sourceFile: fixture('extract-class-streaming.ts'),
+      includeInstances: true,
+    });
+    const op = findOp(ops, 'getValue');
+    expect(op).toBeDefined();
+    expect(op?.streaming).toBe(false);
+    const output = op?.output as { properties?: Record<string, unknown> };
+    expect(output?.properties).toHaveProperty('value');
+  });
+
+  it('[cls.stream.NEGATIVE2] the constructor op remains streaming:false (never a stream — always {instanceId})', async () => {
+    const ops = await extractClasses({
+      sourceFile: fixture('extract-class-streaming.ts'),
+      includeInstances: true,
+    });
+    const op = ops.find((o) => o.kind === 'constructor');
+    expect(op).toBeDefined();
+    expect(op?.streaming).toBe(false);
+  });
+});

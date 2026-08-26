@@ -10,7 +10,9 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as client from './ops-v1.js';
+import { create as v2Create, relate as v2Relate, update as v2Update } from './client.js';
 import type { BacklogCtx } from './client.js';
+import { isOutcomeOk } from './model.js';
 import { openTmpStore, type TmpStore } from './test/helpers/tmp-store.js';
 import { buildBacklogEnv } from './env.js';
 
@@ -376,6 +378,114 @@ describe('structure', () => {
     await client.linkRelated(ctx, REPO, a.item.humanId, b.item.humanId);
     const graph = await client.dependencyGraph(ctx, { repo: REPO });
     expect(graph.edges).toContainEqual({ from: a.item.humanId, to: b.item.humanId, rel: 'RELATES_TO' });
+  });
+});
+
+describe('P1-core-write-verbs — priority, relate outcomes, cross-repo relate, author/reporter, create shape, error messages', () => {
+  it('priority is reachable through backlog_update (partial fix of BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001)', async () => {
+    const created = await client.createItem(ctx, { family: 'BUG-P1', title: 'priority reachability', body: 'b', repo: REPO });
+    const env = await v2Update(ctx, { humanId: created.item.humanId, repo: REPO, by: 'claude:1', priority: 'CRITICAL' });
+    expect(isOutcomeOk(env)).toBe(true);
+    if (!isOutcomeOk(env)) throw new Error('unreachable');
+    expect(env.data.changed).toContain('priority');
+    const after = await client.getItem(ctx, REPO, created.item.humanId);
+    expect(after?.priority).toBe('CRITICAL');
+  });
+
+  it('patch.priority is still rejected — priority ONLY goes through the top-level field', async () => {
+    const created = await client.createItem(ctx, { family: 'BUG-P1', title: 'patch priority rejected', body: 'b', repo: REPO });
+    const env = await v2Update(ctx, { humanId: created.item.humanId, repo: REPO, by: 'claude:1', patch: { priority: 'HIGH' } });
+    expect(isOutcomeOk(env)).toBe(false);
+  });
+
+  it('relate reports a real noop signal on a re-add, for every relation kind (was hardcoded false)', async () => {
+    const a = await client.createItem(ctx, { family: 'BUG-P1', title: 'a', body: 'b', repo: REPO });
+    const b = await client.createItem(ctx, { family: 'BUG-P1', title: 'b', body: 'b', repo: REPO });
+
+    // dependency
+    const dep1 = await v2Relate(ctx, { sourceId: a.item.humanId, targetId: b.item.humanId, relation: 'dependency', action: 'add', repo: REPO, by: 'x' });
+    const dep2 = await v2Relate(ctx, { sourceId: a.item.humanId, targetId: b.item.humanId, relation: 'dependency', action: 'add', repo: REPO, by: 'x' });
+    if (!isOutcomeOk(dep1) || !isOutcomeOk(dep2)) throw new Error('unreachable');
+    expect(dep1.data.noop).toBe(false);
+    expect(dep2.data.noop).toBe(true);
+
+    // dependency remove: real removal is not a noop, a second remove IS
+    const rm1 = await v2Relate(ctx, { sourceId: a.item.humanId, targetId: b.item.humanId, relation: 'dependency', action: 'remove', repo: REPO, by: 'x' });
+    const rm2 = await v2Relate(ctx, { sourceId: a.item.humanId, targetId: b.item.humanId, relation: 'dependency', action: 'remove', repo: REPO, by: 'x' });
+    if (!isOutcomeOk(rm1) || !isOutcomeOk(rm2)) throw new Error('unreachable');
+    expect(rm1.data.noop).toBe(false);
+    expect(rm2.data.noop).toBe(true);
+
+    // related
+    const rel1 = await v2Relate(ctx, { sourceId: a.item.humanId, targetId: b.item.humanId, relation: 'related', action: 'add', repo: REPO, by: 'x' });
+    const rel2 = await v2Relate(ctx, { sourceId: a.item.humanId, targetId: b.item.humanId, relation: 'related', action: 'add', repo: REPO, by: 'x' });
+    if (!isOutcomeOk(rel1) || !isOutcomeOk(rel2)) throw new Error('unreachable');
+    expect(rel1.data.noop).toBe(false);
+    expect(rel2.data.noop).toBe(true);
+
+    // plan
+    const plan1 = await v2Relate(ctx, { sourceId: a.item.humanId, targetId: 'my-plan', relation: 'plan', action: 'add', repo: REPO, by: 'x' });
+    const plan2 = await v2Relate(ctx, { sourceId: a.item.humanId, targetId: 'my-plan', relation: 'plan', action: 'add', repo: REPO, by: 'x' });
+    if (!isOutcomeOk(plan1) || !isOutcomeOk(plan2)) throw new Error('unreachable');
+    expect(plan1.data.noop).toBe(false);
+    expect(plan2.data.noop).toBe(true);
+  });
+
+  it('relate links two items across TWO DIFFERENT repos via sourceRepo/targetRepo (FEAT-BACKLOG-004)', async () => {
+    const otherRepo = 'PseudoSky/backlog-test-other';
+    const a = await client.createItem(ctx, { family: 'BUG-P1', title: 'a (repo1)', body: 'b', repo: REPO });
+    const b = await client.createItem(ctx, { family: 'BUG-P1', title: 'b (repo2)', body: 'b', repo: otherRepo });
+
+    const env = await v2Relate(ctx, {
+      sourceId: a.item.humanId,
+      targetId: b.item.humanId,
+      relation: 'dependency',
+      action: 'add',
+      repo: REPO,
+      targetRepo: otherRepo,
+      by: 'x',
+    });
+    expect(isOutcomeOk(env)).toBe(true);
+
+    const blockers = await client.blockers(ctx, REPO, a.item.humanId);
+    expect(blockers.map((i) => i.humanId)).toEqual([b.item.humanId]);
+  });
+
+  it('create defaults author to canonicalIdentityKey(by) and reporter to author when both are absent (TASK-004)', async () => {
+    const env = await v2Create(ctx, { item: { family: 'BUG-P1', title: 'author default', body: 'b', repo: REPO }, by: 'researcher:instance-1' });
+    expect(isOutcomeOk(env)).toBe(true);
+    if (!isOutcomeOk(env)) throw new Error('unreachable');
+    const created = env.data as { humanId: string };
+    const item = await client.getItem(ctx, REPO, created.humanId);
+    expect(item?.author).toBe('researcher');
+    expect(item?.reporter).toBe('researcher');
+  });
+
+  it('create persists an explicit author/reporter without discarding them (TASK-004)', async () => {
+    const env = await v2Create(ctx, {
+      item: { family: 'BUG-P1', title: 'explicit roles', body: 'b', repo: REPO, author: 'alice', reporter: 'bob' },
+      by: 'claude:1',
+    });
+    expect(isOutcomeOk(env)).toBe(true);
+    if (!isOutcomeOk(env)) throw new Error('unreachable');
+    const created = env.data as { humanId: string };
+    const item = await client.getItem(ctx, REPO, created.humanId);
+    expect(item?.author).toBe('alice');
+    expect(item?.reporter).toBe('bob');
+  });
+
+  it('backlog_update / backlog_relate missing-repo errors read as plain English, with the internal reference moved to details.internalRef', async () => {
+    const updateEnv = await v2Update(ctx, { humanId: 'BUG-1', by: 'x' } as never);
+    expect(isOutcomeOk(updateEnv)).toBe(false);
+    if (isOutcomeOk(updateEnv)) throw new Error('unreachable');
+    expect(updateEnv.error.message).not.toMatch(/EPIC-A|INTERFACE_v2/);
+    expect(updateEnv.error.details?.internalRef).toContain('EPIC-A');
+
+    const relateEnv = await v2Relate(ctx, { sourceId: 'BUG-1', targetId: 'BUG-2', relation: 'related', action: 'add', by: 'x' } as never);
+    expect(isOutcomeOk(relateEnv)).toBe(false);
+    if (isOutcomeOk(relateEnv)) throw new Error('unreachable');
+    expect(relateEnv.error.message).not.toMatch(/EPIC-A|INTERFACE_v2/);
+    expect(relateEnv.error.details?.internalRef).toContain('EPIC-A');
   });
 });
 

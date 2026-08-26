@@ -154,7 +154,7 @@ describe('startBacklogServer — live HTTP mount, real fetch, no mocked fns', ()
     const createRes = await fetch(`http://127.0.0.1:${port}/backlog/create`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ data: { input: { input: { family: 'BUG-HTTPPOST', title: 'posted', body: 'x', repo }, by: 'http-spec' } } }),
+      body: JSON.stringify({ data: { input: { item: { family: 'BUG-HTTPPOST', title: 'posted', body: 'x', repo }, by: 'http-spec' } } }),
     });
     expect(createRes.status).toBe(200);
     const createEnvelope = (await createRes.json()) as IOutcomeEnvelope<ICreateOutcome>;

@@ -639,8 +639,8 @@ export async function adminDoctor(ctx: BacklogCtx, params: ParamBag = {}): Promi
 // FEAT-009 - `prune`: bounded, dry-run-by-default maintenance deletion.
 // ============================================================================
 
-/** FEAT-009 - what a `prune` run targets. */
-export const PRUNE_TARGETS = ['archived', 'dangling_edges'] as const;
+/** FEAT-009 - what a `prune` run targets. `'item'` (P4) is the hard-delete half of the two-step soft-delete-then-prune contract (`update`'s `softDeleteReason` retires an id; `prune({target:'item'})` frees it for `computeNextHumanId` to re-mint — store/ids.ts). */
+export const PRUNE_TARGETS = ['archived', 'dangling_edges', 'item'] as const;
 
 /** FEAT-009 - see {@link PRUNE_TARGETS}. */
 export type IPruneTarget = (typeof PRUNE_TARGETS)[number];
@@ -670,7 +670,7 @@ export interface IPruneReport {
   failures: Array<{ candidate: IPruneCandidate; message: string }>;
 }
 
-const PRUNE_PARAM_KEYS = ['target', 'repo', 'olderThanDays', 'confirm', 'limit', 'reason'] as const;
+const PRUNE_PARAM_KEYS = ['target', 'repo', 'olderThanDays', 'confirm', 'limit', 'reason', 'humanId'] as const;
 const DEFAULT_PRUNE_OLDER_THAN_DAYS = 90;
 const DEFAULT_PRUNE_LIMIT = 500;
 

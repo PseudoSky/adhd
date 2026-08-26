@@ -181,10 +181,14 @@ describe('[mcp-discoverability.real-ops] synthesized examples validate against R
     ).toBe(true);
 
     // The genuinely different, non-enveloped convention (§4 of the task):
-    // no "data" wrapper — a flat {operation, items} shape instead.
+    // no "data" wrapper — but (BUG-APIGEN-CLI-002) every control-plane field
+    // DOES nest under one top-level "input" object, matching the
+    // single-JSON-blob convention every other apigen-mounted operation uses.
     expect(example).not.toHaveProperty('data');
-    expect(example).toHaveProperty('operation');
-    expect(example).toHaveProperty('items');
+    expect(example).toHaveProperty('input');
+    const input = (example as { input: Record<string, unknown> }).input;
+    expect(input).toHaveProperty('operation');
+    expect(input).toHaveProperty('items');
   });
 
   // ---------------------------------------------------------------------

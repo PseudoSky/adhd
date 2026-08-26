@@ -78,6 +78,16 @@ module.exports = {
       env: { node: true },
     },
     {
+      // `tools/*.mjs` (web UI prototype: `run-web-ui.mjs`,
+      // `web-ui-server.mjs`) are genuine ESM modules — top-level `import`
+      // and top-level `await`. Without this override the base config's
+      // ES5/script default parse rejects `import` outright ("The keyword
+      // 'import' is reserved").
+      files: ['*.mjs'],
+      parserOptions: { ecmaVersion: 2022, sourceType: 'module' },
+      env: { node: true },
+    },
+    {
       files: ['*.json'],
       parser: 'jsonc-eslint-parser',
       rules: {
