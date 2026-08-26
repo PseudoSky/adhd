@@ -23,5 +23,28 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "Code-first API generation - derive JSON Schemas from TypeScript types and live-mount to HTTP, MCP, CLI, OpenAPI, Python, and Java with zero codegen",
+  "keywords": [
+    "openapi",
+    "typescript",
+    "codegen",
+    "json-schema",
+    "swagger",
+    "api",
+    "code-first",
+    "mcp",
+    "grpc",
+    "schema"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/apigen/apigen-core-client"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/apigen/apigen-core-client#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

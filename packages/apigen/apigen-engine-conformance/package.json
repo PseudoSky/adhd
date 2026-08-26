@@ -17,5 +17,25 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "Conformance testing for apigen across TypeScript, Python, and Java hosts",
+  "keywords": [
+    "api",
+    "conformance",
+    "testing",
+    "codegen",
+    "typescript",
+    "python",
+    "java"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/apigen/apigen-engine-conformance"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/apigen/apigen-engine-conformance#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

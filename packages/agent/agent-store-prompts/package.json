@@ -45,5 +45,12 @@
   "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/agent/agent-store-prompts#readme",
   "bugs": {
     "url": "https://github.com/PseudoSky/adhd/issues"
-  }
+  },
+  "keywords": [
+    "agent",
+    "prompts",
+    "store",
+    "llm",
+    "typescript"
+  ]
 }

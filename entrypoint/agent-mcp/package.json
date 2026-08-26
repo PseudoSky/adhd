@@ -51,5 +51,15 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "description": "Agent orchestration as an MCP server - providers, tools, plugins, and multi-agent execution",
+  "keywords": [
+    "agent",
+    "mcp",
+    "llm",
+    "orchestration",
+    "ai",
+    "server",
+    "typescript"
+  ]
 }

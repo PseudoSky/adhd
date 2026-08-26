@@ -13,5 +13,23 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "apigen plugin that emits JSON Schema from TypeScript",
+  "keywords": [
+    "json-schema",
+    "apigen",
+    "typescript",
+    "plugin",
+    "codegen"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/apigen/apigen-plugin-jsonschema"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/apigen/apigen-plugin-jsonschema#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

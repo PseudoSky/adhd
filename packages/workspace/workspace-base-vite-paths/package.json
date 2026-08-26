@@ -4,5 +4,22 @@
   "dependencies": {},
   "main": "./index.js",
   "module": "./index.mjs",
-  "typings": "./index.d.ts"
+  "typings": "./index.d.ts",
+  "description": "Vite path resolution for @adhd workspace packages",
+  "keywords": [
+    "vite",
+    "paths",
+    "workspace",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/workspace/workspace-base-vite-paths"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/workspace/workspace-base-vite-paths#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

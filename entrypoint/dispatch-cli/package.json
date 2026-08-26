@@ -22,5 +22,23 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "CLI for @adhd/dispatch - execute task DAGs",
+  "keywords": [
+    "dag",
+    "cli",
+    "orchestration",
+    "workflow",
+    "task"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "entrypoint/dispatch-cli"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/entrypoint/dispatch-cli#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

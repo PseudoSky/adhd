@@ -20,5 +20,23 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "React hooks for the @adhd UI ecosystem",
+  "keywords": [
+    "react",
+    "hooks",
+    "ui",
+    "typescript",
+    "browser"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/ui-react/ui-react-base-hooks"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/ui-react/ui-react-base-hooks#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

@@ -40,5 +40,26 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "Decompile and deobfuscate code bundled with webpack and other bundlers - recover structure and symbols",
+  "keywords": [
+    "decompile",
+    "reverse-engineering",
+    "deobfuscate",
+    "unminify",
+    "bundler",
+    "webpack",
+    "javascript",
+    "cli"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "entrypoint/decompile-cli"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/entrypoint/decompile-cli#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

@@ -10,5 +10,22 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "Base tools for the @adhd workspace ecosystem",
+  "keywords": [
+    "workspace",
+    "tools",
+    "typescript",
+    "nx"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/workspace/workspace-base-tools"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/workspace/workspace-base-tools#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

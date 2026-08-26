@@ -10,5 +10,23 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "Schema derivation for apigen - TypeScript types to JSON Schema",
+  "keywords": [
+    "api",
+    "schema",
+    "codegen",
+    "json-schema",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/apigen/apigen-base-schema"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/apigen/apigen-base-schema#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

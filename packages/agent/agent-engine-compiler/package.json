@@ -53,5 +53,12 @@
   "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/agent/agent-engine-compiler#readme",
   "bugs": {
     "url": "https://github.com/PseudoSky/adhd/issues"
-  }
+  },
+  "keywords": [
+    "agent",
+    "compiler",
+    "engine",
+    "llm",
+    "typescript"
+  ]
 }

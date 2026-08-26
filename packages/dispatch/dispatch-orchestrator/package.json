@@ -24,5 +24,24 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "Orchestrator for @adhd/dispatch - schedule and execute task DAGs with dependency ordering",
+  "keywords": [
+    "dag",
+    "orchestrator",
+    "workflow",
+    "task",
+    "scheduler",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/dispatch/dispatch-orchestrator"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/dispatch/dispatch-orchestrator#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

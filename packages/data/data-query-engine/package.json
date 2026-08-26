@@ -13,5 +13,25 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "In-memory SQL query engine for browser and Node - query typed datasets with SQL, no server",
+  "keywords": [
+    "sql",
+    "in-memory",
+    "database",
+    "query-engine",
+    "browser",
+    "typescript",
+    "query"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/data/data-query-engine"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/data/data-query-engine#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }
