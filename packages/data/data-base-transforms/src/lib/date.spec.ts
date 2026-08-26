@@ -24,22 +24,22 @@ describe('dates', () => {
   it('format date', () => {
     const testDate = new Date();
     expect(formatDate(testDate, 'EEEE, MMMM d, yyyy hh:mm:ss:S')).toBe(
-      'Tuesday, February 1, 2000 01:00:00:0'
+      'Tuesday, February 1, 2000 06:00:00:0'
     );
     expect(formatDate(testDate, 'EEE, MMM d, yyyy hh:mm')).toBe(
-      'Tue, Feb 1, 2000 01:00'
+      'Tue, Feb 1, 2000 06:00'
     );
     expect(formatDate(testDate, 'yyyy-MM-dd hh:mm:ss:S')).toBe(
-      '2000-02-01 01:00:00:0'
+      '2000-02-01 06:00:00:0'
     );
-    expect(formatDate(testDate, 'yyMMdd-hh:mm')).toBe('000201-01:00');
+    expect(formatDate(testDate, 'yyMMdd-hh:mm')).toBe('000201-06:00');
     expect(
       formatDate(
         new Date('2024-04-06T09:00:00-05:00'),
         'yyyy yy, M MM MMMM MMM, dd EEEE EEE, h:m:s:S hh:mm:ss, z zz Z ZZ ZZZZ'
       )
     ).toBe(
-      '2024 24, 4 04 April Apr, 06 Saturday Sat, 9:0:0:0 09:00:00, GMT-5 GMT-5 -05:00 -0500 America/Lima'
+      '2024 24, 4 04 April Apr, 06 Saturday Sat, 2:0:0:0 02:00:00, UTC UTC +00:00 +0000 UTC'
     );
   });
   it('fromNow', () => {

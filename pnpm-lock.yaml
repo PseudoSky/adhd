@@ -1238,6 +1238,9 @@ importers:
 
   packages/apigen/apigen-plugin-logger:
     dependencies:
+      '@adhd/apigen-base-errors':
+        specifier: ^0.2.0
+        version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
         specifier: ^0.3.0
         version: link:../apigen-core-client
