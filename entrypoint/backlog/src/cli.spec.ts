@@ -320,8 +320,26 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     const real = runBin(['query', '--input', '{}'], adhdRoot, { SOX_ECOSYSTEM_HOME: soxHome });
     expect(real.status, `stderr:\n${real.stderr}`).toBe(0);
     expect(existsSync(expectedDbPath), 'a real dispatched command must open the store').toBe(true);
-    const storeEvents = readTelemetryEvents(soxHome).filter((e) => e.startsWith('store_adapter'));
-    expect(storeEvents.length, 'a real store command must emit store-open telemetry records').toBeGreaterThan(0);
+    const allEvents = readTelemetryEvents(soxHome);
+    const storeEvents = allEvents.filter((e) => e.startsWith('store_adapter'));
+    // DEBT-BACKLOG-CLI-STORE-OPEN-001 postmortem: this exact assertion once
+    // failed against a stale worktree whose `node_modules/@adhd/sox-store-
+    // adapter` (0.5.8) predated `pnpm-lock.yaml`'s pinned 0.7.0 — a
+    // `node_modules` install-drift problem, not a source regression. The
+    // bare `toBeGreaterThan(0)` message ("expected 0 to be greater than 0")
+    // gave zero signal toward that; dump what was actually captured (or the
+    // installed adapter version, if events came back empty) so the next
+    // failure is diagnosable without a live debugging session.
+    expect(
+      storeEvents.length,
+      storeEvents.length > 0
+        ? 'a real store command must emit store-open telemetry records'
+        : `a real store command must emit store-open telemetry records — got zero. ` +
+          `All ${allEvents.length} captured event(s): ${JSON.stringify(allEvents)}. ` +
+          `If this is unexpectedly zero, first suspect node_modules/dist drift ` +
+          `(stale worktree install vs pnpm-lock.yaml's pinned @adhd/sox-store-adapter) ` +
+          `before assuming a source regression.`,
+    ).toBeGreaterThan(0);
   });
 
   // DEBT-BACKLOG-CLI-STORE-OPEN-001: `migration-status`/`set-migration-phase`
@@ -415,8 +433,22 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     const real = runBin(['query', '--input', '{}'], adhdRoot, migrationEnv);
     expect(real.status, `stderr:\n${real.stderr}`).toBe(0);
     expect(existsSync(expectedDbPath), 'a real dispatched command must open the store').toBe(true);
-    const storeEvents = readTelemetryEvents(soxHome).filter((e) => e.startsWith('store_adapter'));
-    expect(storeEvents.length, 'a real store command must emit store-open telemetry records').toBeGreaterThan(0);
+    const allEvents = readTelemetryEvents(soxHome);
+    const storeEvents = allEvents.filter((e) => e.startsWith('store_adapter'));
+    // See the identical assertion's comment above (line ~324) — zero here
+    // most likely means installed-dependency drift (node_modules vs
+    // pnpm-lock.yaml), not a source regression; dump events to make that
+    // diagnosable without a live debugging session.
+    expect(
+      storeEvents.length,
+      storeEvents.length > 0
+        ? 'a real store command must emit store-open telemetry records'
+        : `a real store command must emit store-open telemetry records — got zero. ` +
+          `All ${allEvents.length} captured event(s): ${JSON.stringify(allEvents)}. ` +
+          `If this is unexpectedly zero, first suspect node_modules/dist drift ` +
+          `(stale worktree install vs pnpm-lock.yaml's pinned @adhd/sox-store-adapter) ` +
+          `before assuming a source regression.`,
+    ).toBeGreaterThan(0);
   });
 
   it('BUG-002: ADHD_BACKLOG_DATABASE_PATH redirects the store the bin opens — the env var wins over the scope-root fallback', () => {
