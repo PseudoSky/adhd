@@ -89,6 +89,34 @@ export interface Citation {
   lines?: string;
   /** Free text — active git context / agent name / model, per the citation format. */
   context?: string;
+  /**
+   * FEAT-BACKLOG-006 — the symbol this citation is about, if known (e.g. a
+   * function/class name). Purely opt-in: supplying it is what enables the
+   * best-effort `blastRadius` enrichment below (`store/enrichment.ts`); a
+   * citation naming only a file/lines is unaffected.
+   */
+  symbol?: string;
+  /**
+   * FEAT-BACKLOG-006 — best-effort blast-radius enrichment, computed at
+   * write time by shelling out to `gitnexus impact <symbol>` (bounded
+   * timeout, never blocks or fails the write). Absent whenever `symbol` was
+   * not given, `gitnexus` is not installed/indexed for this repo, the call
+   * timed out, or the symbol was not found — a caller must treat absence as
+   * "not enriched," never as "zero blast radius."
+   */
+  blastRadius?: CitationBlastRadius;
+}
+
+/** FEAT-BACKLOG-006 — see `Citation.blastRadius`. */
+export interface CitationBlastRadius {
+  /** `gitnexus impact`'s own risk bucket; `'UNKNOWN'` when gitnexus returned a value outside its documented vocabulary. */
+  risk: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'UNKNOWN';
+  /** Total impacted-symbol count, when gitnexus reported one. */
+  impactedCount?: number;
+  /** Which direction the blast radius was computed in — upstream (dependants) is the default gitnexus uses. */
+  direction?: 'upstream' | 'downstream';
+  /** ISO timestamp the enrichment ran at — this is a point-in-time snapshot, not a live value. */
+  computedAt: string;
 }
 
 export interface Note {
@@ -129,6 +157,16 @@ export interface BacklogItem {
   tags: string[];
   createdAt: string; // ISO
   updatedAt: string; // ISO
+  /**
+   * FEAT-012 — canonicalised author role, stamped at create time (defaults to
+   * `canonicalIdentityKey(by)` when the caller doesn't pass one explicitly —
+   * see `client.ts`'s `create()`). Plain metadata only in this build; the
+   * `AUTHORED_BY` graph edge (GRAPH_MODEL_v2.md §2.2) is reserved for the
+   * identity-node agent (`repo-nodes.ts`).
+   */
+  author?: string;
+  /** FEAT-012 — canonicalised reporter role, defaults to `author` when absent. Same plain-metadata scope as `author`. */
+  reporter?: string;
 }
 
 // ============================================================================
@@ -215,7 +253,14 @@ export class DependencyCycleError extends Error {
 export class InvalidArgumentError extends Error {
   constructor(
     public readonly argument: string,
-    message: string
+    message: string,
+    /**
+     * Internal doc/plan reference (e.g. `"EPIC-A / INTERFACE_v2 §7.5"`) kept
+     * OUT of `message` and surfaced only in `error.details.internalRef` — a
+     * user-facing message should read as English, not leak an internal
+     * ticket/section id an external caller cannot look up.
+     */
+    public readonly internalRef?: string
   ) {
     super(message);
     this.name = 'InvalidArgumentError';
@@ -275,6 +320,16 @@ export interface CreateItemInput {
   dedupeScan?: DedupeScanInput;
   /** Skip the dedupe gate and file anyway (planner override after reviewing candidates). */
   force?: boolean;
+  /**
+   * FEAT-012 — the item's author role. Defaults to `canonicalIdentityKey(by)`
+   * when absent (stamped by `client.ts`'s `create()`, which is the only
+   * caller with `by` in scope) — TASK-004: previously declared on
+   * `ICreateItemInputV2` but never read by `createItemNode`, so a caller
+   * passing it got a success response with the value silently discarded.
+   */
+  author?: string;
+  /** FEAT-012 — the item's reporter role. Defaults to `author` when absent. Same TASK-004 fix as `author`. */
+  reporter?: string;
   /**
    * Citations to attach at creation time (BUG-BACKLOG-CREATE-ITEM-DROPS-CITATIONS-001).
    * Previously absent from this interface entirely — a caller passing
@@ -386,7 +441,7 @@ export interface BacklogStats {
   byKind: Record<string, number>;
   byFamily: Record<string, number>;
   byPriority: Record<string, number>;
-  byRepo: Record<string, number>; // only populated when scope.repo is absent
+  byRepo: Record<string, number>; // single-key when scope.repo is set, full breakdown otherwise (BUG-024)
 }
 
 export interface DependencyGraph {
@@ -724,6 +779,13 @@ export interface IOutcomeErrorDetails {
   retryable?: boolean;
   /** Suggested backoff in milliseconds; only meaningful when `retryable`. */
   retryAfterMs?: number;
+  /**
+   * Internal doc/plan reference for an `invalid_argument` whose underlying
+   * reason cites internal terminology (a plan id, a spec section) that does
+   * not belong in the user-facing `message` — see `InvalidArgumentError`'s
+   * own `internalRef` param. Absent on every other error code.
+   */
+  internalRef?: string;
   [key: string]: unknown;
 }
 
@@ -964,7 +1026,11 @@ export function toOutcomeError(err: unknown): IOutcomeError {
     return { code: 'validation', message: err.message, details: { keys: err.keys } };
   }
   if (err instanceof InvalidArgumentError) {
-    return { code: 'invalid_argument', message: err.message, details: { argument: err.argument } };
+    return {
+      code: 'invalid_argument',
+      message: err.message,
+      details: { argument: err.argument, ...(err.internalRef !== undefined ? { internalRef: err.internalRef } : {}) },
+    };
   }
   if (err instanceof UnsupportedOperationError) {
     return { code: 'unsupported', message: err.message, details: { operation: err.operation } };
@@ -1339,9 +1405,16 @@ export function isBacklogView(value: unknown): value is IBacklogView {
  * `demand` (FEAT-013) is the weighted dupe-counter score: an item re-filed 5
  * times outranks one filed once. It is the automatic-prioritisation surface,
  * and AC-17's negative control pins the dupe counter as the DOMINANT term
- * rather than an incidental tiebreak. `relevance` is the EPIC-G embedding hook.
+ * rather than an incidental tiebreak. `relevance` is the EPIC-G embedding hook
+ * (rejected with `rag_not_configured` until an embedding backend exists —
+ * `assertNoSemanticInputs`). `textMatch` is the FTS5 keyword-relevance score a
+ * `text` query's `filter.grep` fallback already computes (BM25-derived,
+ * `@adhd/sox-graph-store`'s `searchNodes`) — it is a REAL, already-available
+ * ranking signal, unlike `relevance`, so a `text` query defaults to it instead
+ * of degrading to `priority` (which discarded match quality entirely and
+ * ranked by triage priority instead — not what "search for X" means).
  */
-export const BACKLOG_SORTS = ['priority', 'updated', 'created', 'demand', 'relevance'] as const;
+export const BACKLOG_SORTS = ['priority', 'updated', 'created', 'demand', 'relevance', 'textMatch'] as const;
 
 /** INTERFACE_v2 §2.3 — see `BACKLOG_SORTS`. */
 export type IBacklogSort = (typeof BACKLOG_SORTS)[number];
@@ -1391,6 +1464,8 @@ export const BACKLOG_FIELDS = [
   'citations',
   'notes',
   'rollup',
+  // BUG-025 read side — the humanIds of every live item linked via RELATES_TO.
+  'related',
   'items',
   '_score',
   '_vector',
@@ -1404,7 +1479,7 @@ export type IBacklogField = (typeof BACKLOG_FIELDS)[number];
  * (a join, a traversal, a derivation) or returns a large blob, so a caller
  * must ask for them by name.
  */
-export const BACKLOG_PSEUDO_FIELDS: readonly IBacklogField[] = ['body', 'audit_trail', 'blockers', 'citations', 'notes', 'rollup', 'items', '_score', '_vector'];
+export const BACKLOG_PSEUDO_FIELDS: readonly IBacklogField[] = ['body', 'audit_trail', 'blockers', 'citations', 'notes', 'rollup', 'related', 'items', '_score', '_vector'];
 
 /** AC-18 — the default terse card for EVERY read tool. */
 export const DEFAULT_CARD_FIELDS: readonly IBacklogField[] = ['humanId', 'kind', 'title', 'status', 'priority'];
@@ -1641,6 +1716,19 @@ export interface IBacklogStats {
   /** Terminal items. `open + closed === total`. */
   closed: number;
 
+  /**
+   * AC-15 — items that reached a terminal status inside `window` (default:
+   * last 30 days — see `window` below). Derived from the persisted
+   * `transition` audit log, so it only sees items `coverage` reports as
+   * having history (DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001) — partial, never
+   * silently wrong.
+   */
+  closedInWindow: number;
+  /** AC-15 — items created inside `window`, read from `item.createdAt` directly (exact for every item, unlike `closedInWindow`). */
+  openedInWindow: number;
+  /** AC-15 — `openedInWindow - closedInWindow`: net backlog growth/shrink over `window`. */
+  netInWindow: number;
+
   /** Per-status counts. Inherently all-status — a status breakdown scoped to "open" would be tautological. */
   byStatus: Record<string, number>;
 
@@ -1659,7 +1747,7 @@ export interface IBacklogStats {
   /** Family counts over every status. */
   byFamilyAllStatuses: Record<string, number>;
 
-  /** **OPEN-SCOPED** counts by repo. Populated only for a cross-repo scope (v1 parity: `query.ts:199`). */
+  /** **OPEN-SCOPED** counts by repo. Single-key when `scope.repo` is set, full cross-repo breakdown otherwise (BUG-024). */
   byRepo: Record<string, number>;
   /** Repo counts over every status. */
   byRepoAllStatuses: Record<string, number>;
@@ -2128,10 +2216,20 @@ export interface IBacklogCard {
   blockers?: string[];
   /** `fields: ["rollup"]` — §5a.1's two-axis derivation, computed per item on read. */
   rollup?: IItemRollup;
+  /** `fields: ["related"]` — BUG-025 read side: humanIds of every OTHER live item linked to this one via `RELATES_TO` (either direction). */
+  related?: string[];
   /** `fields: ["_score"]` — matcher score on `view:"similar"` / `sort:"relevance"`. */
   _score?: number;
   /** `fields: ["_vector"]` — AC-20: the embedding blob is returned ONLY when named explicitly. */
   _vector?: number[];
+  /**
+   * DEBT-BACKLOG-GET-001 — the complement of every pseudo-field the caller
+   * COULD have named (§7.3's `BACKLOG_PSEUDO_FIELDS`) but did not. Lets a
+   * caller tell "body omitted by projection" from "body actually is the
+   * empty string" without re-requesting it just to check. Absent (never an
+   * empty array) once every pseudo-field has been requested.
+   */
+  omittedFields?: readonly IBacklogField[];
 }
 
 /**
@@ -2502,7 +2600,13 @@ export interface IBacklogQueryInput extends IProjection {
 
 /** INTERFACE_v2 §3 — `backlog_create`. Absorbs `create-item`, `split-item`, `supersede-item`. */
 export interface IBacklogCreateInput {
-  input: ICreateItemInputV2;
+  /**
+   * The item payload. Named `item`, not `input` — a prior shape put the item
+   * payload on a field ALSO named `input` (`IBacklogCreateInput.input`),
+   * which double-nested every call as `{"input":{"input":{...}}}` and reads
+   * as a typo. `item` says what the field actually holds.
+   */
+  item: ICreateItemInputV2;
   /** §7.5 — REQUIRED. `assertAttribution` rejects an absent/blank value rather than stamping a placeholder. */
   by: string;
   splitFrom?: string;
@@ -2516,11 +2620,23 @@ export interface IBacklogCreateInput {
 /** INTERFACE_v2 §4 — `backlog_update`. Absorbs all twelve v1 mutation commands. */
 export interface IBacklogUpdateInput {
   humanId: string;
-  repo?: string;
+  /** REQUIRED — a humanId is only unique within a repo. */
+  repo: string;
   /** §7.5 — REQUIRED. */
   by: string;
   patch?: IUpdatePatch;
   status?: BacklogStatus;
+  /**
+   * Priority reassignment. A SEPARATE top-level field, not `patch.priority`
+   * (which `updateItemNode` rejects outright — priority changes go through
+   * the dedicated `setPriority` store primitive, same as `status` goes
+   * through `transitionStatus`). Partial fix of
+   * BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001: before this field existed
+   * there was no path to reassign priority through the six-verb surface at
+   * all — `patch.priority` always threw, and nothing else called
+   * `setPriority`.
+   */
+  priority?: Priority;
   /** §5a.2 evidence gate — required (≥1) for a terminal-done/workaround transition (model.ts:75). */
   citations?: Citation[];
   /** §5a.2 — required for a terminal-dismissed transition (model.ts:79). */
@@ -2539,7 +2655,18 @@ export interface IBacklogRelateInput {
   targetId: string;
   relation: IRelationKind;
   action: 'add' | 'remove';
-  repo?: string;
+  /** REQUIRED — the repo `sourceId` resolves in (and `targetId`'s too, unless `targetRepo` overrides it). */
+  repo: string;
+  /**
+   * Overrides which repo `sourceId` resolves in, when it differs from
+   * `targetId`'s repo. Defaults to `repo`. Together with `targetRepo`, this
+   * is the cross-repo relate fix (FEAT-BACKLOG-004's still-real gap): a
+   * single `repo` alone could never resolve two endpoints living in two
+   * different repos.
+   */
+  sourceRepo?: string;
+  /** Overrides which repo `targetId` resolves in. Defaults to `repo`. See `sourceRepo`. */
+  targetRepo?: string;
   /** §7.5 — REQUIRED. */
   by: string;
 }
@@ -2566,6 +2693,8 @@ export const BACKLOG_ADMIN_ACTIONS = [
   'embedding_backfill',
   'embedding_health',
   'list_near_duplicates',
+  'backup',
+  'restore',
 ] as const;
 
 /** INTERFACE_v2 §6 — see `BACKLOG_ADMIN_ACTIONS`. `install`/`install-skill`/`serve` are deliberately NOT here (the §6 host-command carve-out). */

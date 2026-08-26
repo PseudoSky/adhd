@@ -326,6 +326,59 @@ export interface ParsedImportItem {
   priority?: Priority;
 }
 
+// ── CHANGELOG.md id reservation (P4 — computeNextHumanId's blind spot) ─────
+//
+// `computeNextHumanId` (store/ids.ts) scans every node — live AND
+// soft-deleted — under `(repo, family)` for the current max suffix, so it
+// never re-mints an id a soft-deleted node still holds. But an id that was
+// retired ONLY in `CHANGELOG.md` history (moved out of BACKLOG.md, its graph
+// node hard-pruned or never migrated in the first place) leaves NO trace in
+// the store at all — nothing for that scan to see — so a brand-new item can
+// silently mint the exact same humanId a completed piece of work already
+// used. `parseChangelogIds` is the pure extraction half of the fix:
+// `admin.ts`'s `import` action (the composition layer, which owns the
+// store) reads this, checks each id against the live store, and reserves
+// any genuinely-unknown one as a soft-deleted placeholder node — see that
+// file's `changelogPath` handling for the store-side half.
+//
+// Pure text scan, no markdown structure assumed beyond "an id-shaped token
+// appears somewhere in the file" — CHANGELOG.md entries cite ids inline in
+// prose and in parenthesized lists inside `###` headings (see this repo's
+// own CHANGELOG.md for real examples: `(BUG-APIGEN-CORE-CLIENT-001)`,
+// `(FEAT-APIGEN-BULK-OPS-001)`), never as a dedicated `##`/`###` header the
+// way BACKLOG.md's `HEADER_RE` expects — so this deliberately does NOT reuse
+// `HEADER_RE`.
+
+/**
+ * A backlog humanId, exactly as `store/mapping.ts`'s `humanIdFamily`/
+ * `humanIdKind` expect to split it: one or more uppercase/digit/hyphen
+ * segments ending in a numeric suffix (`computeNextHumanId`'s own
+ * `${family}-NNN` mint shape). Requires the trailing `-\d{3,}` specifically
+ * (not just "ends in a hyphen and a digit") so this does not false-positive
+ * on incidental uppercase-hyphenated tokens in prose (a version string, an
+ * all-caps acronym followed by a single digit, etc.) — every real humanId
+ * this package has ever minted pads to at least 3 digits.
+ */
+const CHANGELOG_ID_RE = /\b[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\d{3,}\b/g;
+
+/**
+ * Extracts every distinct backlog-shaped humanId mentioned anywhere in
+ * `changelogText`. Pure — no store access, no I/O (mirrors this file's own
+ * layering rule, see the file header). Order is first-appearance, ids are
+ * deduplicated.
+ */
+export function parseChangelogIds(changelogText: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const match of changelogText.matchAll(CHANGELOG_ID_RE)) {
+    const id = match[0];
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
 /** Bridges the legacy parser's raw shape into the canonical vocabulary (SPEC.md §5.6 `importFromMarkdown`). */
 export function toImportItems(parsed: ParsedMarkdownItem[]): ParsedImportItem[] {
   return parsed.map((p) => {

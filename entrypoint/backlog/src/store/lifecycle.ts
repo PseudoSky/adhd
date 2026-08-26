@@ -22,6 +22,8 @@ import { buildNotFoundError, findItemNode, listItems } from './query.js';
 import { mutateMetadata } from './mutate-metadata.js';
 import { toBacklogItem, type BacklogNodeMeta } from './mapping.js';
 import { writeAuditEvent } from './audit-log.js';
+import { enrichCitationsBlastRadius } from './enrichment.js';
+import { dispatchBacklogHook } from './hooks.js';
 
 async function requireItemNode(store: GraphBacklogStore, repo: string, humanId: string) {
   const node = await findItemNode(store, repo, humanId);
@@ -61,9 +63,17 @@ export async function transitionStatusNode(store: GraphBacklogStore, repo: strin
   const node = await requireItemNode(store, repo, humanId);
   let fromStatus: BacklogStatus | undefined;
 
+  // FEAT-BACKLOG-006 — best-effort blast-radius enrichment, BEFORE the
+  // metadata transaction opens (`mutateMetadata`'s updater is synchronous —
+  // see mutate-metadata.ts — so async I/O cannot live inside it). Bounded by
+  // `enrichCitationBlastRadius`'s own timeout; a slow/missing/unindexed
+  // gitnexus degrades the citation to un-enriched, it never blocks or fails
+  // this transition.
+  const enrichedCitations = opts.citations && opts.citations.length > 0 ? await enrichCitationsBlastRadius(opts.citations, repo) : opts.citations;
+
   await mutateMetadata<BacklogNodeMeta>(store, node.id, (meta) => {
     fromStatus = meta.status;
-    const citations = opts.citations && opts.citations.length > 0 ? [...meta.citations, ...opts.citations] : meta.citations;
+    const citations = enrichedCitations && enrichedCitations.length > 0 ? [...meta.citations, ...enrichedCitations] : meta.citations;
 
     if (requiresCitation(status) && citations.length === 0) {
       throw new CitationRequiredError(status);
@@ -95,12 +105,23 @@ export async function transitionStatusNode(store: GraphBacklogStore, repo: strin
 
   const updated = await store.graph.getNode(node.id);
   if (!updated) throw await buildNotFoundError(store, repo, humanId);
-  return toBacklogItem(updated);
+  const item = toBacklogItem(updated);
+  // FEAT-BACKLOG-001 — fired only after the audit event above, so a hook
+  // observer never sees the transition before the audit trail does.
+  dispatchBacklogHook(store, { type: 'itemTransitioned', item, from: fromStatus, to: status, by: opts.by });
+  return item;
 }
 
 /** Sugar for transitionStatus into any terminal status (SPEC.md §5.4). */
 export async function resolveItemNode(store: GraphBacklogStore, repo: string, humanId: string, status: BacklogStatus, opts: TransitionOpts): Promise<BacklogItem> {
-  return transitionStatusNode(store, repo, humanId, status, opts);
+  const item = await transitionStatusNode(store, repo, humanId, status, opts);
+  // FEAT-BACKLOG-001 — a SECOND, more specific event on top of the
+  // `itemTransitioned` `transitionStatusNode` already fired: a hook that
+  // only cares about "this item just closed" (e.g. a notifier) can listen
+  // for `itemResolved` alone instead of re-deriving terminality from every
+  // `itemTransitioned` event's `to` status.
+  dispatchBacklogHook(store, { type: 'itemResolved', item, by: opts.by });
+  return item;
 }
 
 /**
@@ -121,14 +142,19 @@ export async function startWorkNode(store: GraphBacklogStore, repo: string, huma
 export async function addCitationNode(store: GraphBacklogStore, repo: string, humanId: string, citation: Citation): Promise<BacklogItem> {
   assertValidCitation(citation);
   const node = await requireItemNode(store, repo, humanId);
+  // FEAT-BACKLOG-006 — see transitionStatusNode's identical enrichment step
+  // for why this runs BEFORE mutateMetadata's synchronous updater.
+  const [enrichedCitation] = await enrichCitationsBlastRadius([citation], repo);
   await mutateMetadata<BacklogNodeMeta>(store, node.id, (meta) => ({
     ...meta,
-    citations: [...meta.citations, citation],
+    citations: [...meta.citations, enrichedCitation ?? citation],
     updatedAt: new Date().toISOString(),
   }));
   const updated = await store.graph.getNode(node.id);
   if (!updated) throw await buildNotFoundError(store, repo, humanId);
-  return toBacklogItem(updated);
+  const item = toBacklogItem(updated);
+  dispatchBacklogHook(store, { type: 'itemUpdated', item });
+  return item;
 }
 
 export async function appendNoteNode(store: GraphBacklogStore, repo: string, humanId: string, by: string, text: string): Promise<BacklogItem> {

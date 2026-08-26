@@ -70,14 +70,16 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
     // (the "apigen calling convention" — observed directly from
     // `backlog_create`'s real `tools/list` inputSchema, whose
     // `description` states it, and from a real `callTool` round-trip against
-    // the spawned server below). `IBacklogCreateInput` itself carries a
-    // FIELD also named `input` (the create payload) plus the required `by`
-    // attribution (INTERFACE_v2 §7.5 — every mutation needs one), hence the
-    // double `input.input` nesting.
+    // the spawned server below). `IBacklogCreateInput` carries the create
+    // payload on a field named `item` (not `input` — the earlier
+    // `IBacklogCreateInput.input` shape double-nested every call as
+    // `{"input":{"input":{...}}}` and read as a typo, model.ts's
+    // `IBacklogCreateInput.item` doc comment) plus the required `by`
+    // attribution (INTERFACE_v2 §7.5 — every mutation needs one).
     const createResult = await client.callTool({
       name: 'backlog_create',
       arguments: {
-        data: { input: { input: { family: 'BUG-SERVECLI', title: 'created via serve cli', body: 'x', repo }, by: 'serve.spec' } },
+        data: { input: { item: { family: 'BUG-SERVECLI', title: 'created via serve cli', body: 'x', repo }, by: 'serve.spec' } },
       },
     });
     const createContent = createResult.content as Array<{ type: string; text: string }>;

@@ -541,7 +541,7 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
       [
         'create',
         '--input',
-        JSON.stringify({ input: { family: 'BUG-CLIRT', title: 'roundtrip', body: 'x', repo }, by: 'cli.spec' }),
+        JSON.stringify({ item: { family: 'BUG-CLIRT', title: 'roundtrip', body: 'x', repo }, by: 'cli.spec' }),
       ],
       adhdRoot
     );
@@ -639,13 +639,15 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     const repo = 'PseudoSky/cli-batch-test';
 
     // Each batch item's `input` is the WHOLE `backlog_create` request shape
-    // (`IBacklogCreateInput`: `{ input, by, duplicateAction? }`), confirmed
+    // (`IBacklogCreateInput`: `{ item, by, duplicateAction? }`), confirmed
     // empirically against the real built bin — batch fans each item straight
     // into the named operation's own input, and `create`'s v2 input nests the
-    // domain payload one level deeper than the retired v1 `create-item` did.
+    // domain payload one level deeper than the retired v1 `create-item` did,
+    // on a field named `item` (model.ts `IBacklogCreateInput.item` doc
+    // comment — not `input`, which double-nested every call as a typo).
     const items = JSON.stringify([
-      { input: { input: { family: 'BUG-CLIBATCH', title: 'batch one', body: 'x', repo }, by: 'cli.spec' } },
-      { input: { input: { family: 'BUG-CLIBATCH', title: 'batch two', body: 'y', repo }, by: 'cli.spec' } },
+      { input: { item: { family: 'BUG-CLIBATCH', title: 'batch one', body: 'x', repo }, by: 'cli.spec' } },
+      { input: { item: { family: 'BUG-CLIBATCH', title: 'batch two', body: 'y', repo }, by: 'cli.spec' } },
     ]);
     const res = runBin(
       ['batch', 'action', '--operation', 'backlog/create', '--items', items, '--concurrency', '2', '--on-item-error', 'continue'],
