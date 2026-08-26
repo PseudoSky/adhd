@@ -64,6 +64,7 @@ import type {
   IBacklogStats,
   IBacklogView,
   ICriticalPathResult,
+  IDateBound,
   IGroupBucket,
   IGroupBy,
   IGroupByAxis,
@@ -110,6 +111,7 @@ import type { GraphBacklogStore } from '../store/graph-backlog-store.js';
 import { queryAuditEvents } from '../store/audit-log.js';
 import { BACKLOG_ITEM_TAG, toBacklogItem, type BacklogNodeMeta } from '../store/mapping.js';
 import { parseRepoKey } from '../store/repo-nodes.js';
+import { listRelatedNode } from '../store/structure.js';
 import {
   blockers as blockersOp,
   computeStats,
@@ -119,6 +121,7 @@ import {
   readyItems as readyItemsOp,
   staleClaims as staleClaimsOp,
   topoOrder as topoOrderOp,
+  type StatsQuery,
 } from '../store/query.js';
 
 // ----------------------------------------------------------------------------
@@ -167,6 +170,9 @@ export const BACKLOG_QUERY_INPUT_KEYS = [
   'weightFn',
   'format',
   'staleAfterMinutes',
+  // FEAT-BACKLOG-STATS-TIME-WINDOWED-THROUGHPUT-001 — view:"summary"'s
+  // explicit time window (see `IBacklogQueryInput.window`).
+  'window',
 ] as const;
 
 // Compile-time exhaustiveness: adding a property to `IBacklogQueryOptions`
@@ -213,6 +219,7 @@ const DEFAULT_SORT_DIRECTION: Record<IBacklogSort, ISortDirection> = {
   created: 'desc',
   demand: 'desc',
   relevance: 'desc',
+  textMatch: 'desc',
 };
 
 /**
@@ -225,14 +232,19 @@ const DEFAULT_SORT_DIRECTION: Record<IBacklogSort, ISortDirection> = {
  * the accept-and-ignore §7 forbids — so those keys are a typed error naming
  * both the key and the view.
  *
- * Two deliberate absences, both spec-driven:
- * - `status` is not honourable on `summary` (an all-status breakdown scoped
- *   to "open" is tautological — model.ts's `IBacklogStats.byStatus` doc) nor
- *   on `plan` (the two-axis rollup §5a.1 requires ALL members, open and
- *   closed; a status filter would silently corrupt `childrenClosed`).
- * - `claimedBy` on `plan` is NOT a member filter — §5a.6/AC-16 define it as
- *   the selector for the `myClaims` set. It is handled there, and the member
- *   set stays whole.
+ * `summary` honours every key `computeStats` can actually scope by
+ * (FEAT-BACKLOG-STATS-TIME-WINDOWED-THROUGHPUT-001): the old
+ * `['repo', 'projectPath', 'dateRange']` list meant a caller passing
+ * `filter:{family, status:'open'}` got a summary that LOOKED scoped but was
+ * not — the silent-discard the work order exists to close. `family`,
+ * `status` (including the `open`/`closed` closedness words), `kind` and
+ * `priority` now reach the store's push-down + status selector; anything
+ * still outside the list (e.g. `plan`) is a typed error rather than a quiet
+ * drop.
+ *
+ * One deliberate absence stays: `claimedBy` on `plan` is NOT a member
+ * filter — §5a.6/AC-16 define it as the selector for the `myClaims` set. It
+ * is handled there, and the member set stays whole.
  */
 const VIEW_FILTER_KEYS: Record<IBacklogView, 'all' | readonly (keyof IBacklogFilter)[]> = {
   list: 'all',
@@ -242,7 +254,7 @@ const VIEW_FILTER_KEYS: Record<IBacklogView, 'all' | readonly (keyof IBacklogFil
   order: ['repo', 'projectPath'],
   graph: ['repo', 'projectPath'],
   stale: ['repo', 'projectPath'],
-  summary: ['repo', 'projectPath', 'dateRange'],
+  summary: ['repo', 'projectPath', 'dateRange', 'family', 'status', 'kind', 'priority'],
   plan: ['plan', 'repo', 'projectPath', 'claimedBy', 'dateRange'],
   overlap: ['repo', 'projectPath'],
 };
@@ -302,6 +314,8 @@ export interface IBacklogQueryResult {
 interface IQueryRow {
   node: NodeRecord;
   item: BacklogItem;
+  /** FTS5 relevance score (`sort:"textMatch"`) — present only for a row that came from a `grep`/`text` query; `undefined` otherwise. */
+  score?: number;
 }
 
 /** FEAT-012 / FEAT-013 / §5a.3 metadata that has no `BacklogNodeMeta` field yet — read defensively off the node, exactly as `v2/get.ts` does. */
@@ -393,7 +407,7 @@ export async function backlogQuery(store: GraphBacklogStore, input: IBacklogQuer
       case 'graph':
         return await runGraphView(ctx);
       case 'summary':
-        return await runSummaryView(ctx, (raw['bucket'] as ISummaryBucket | undefined) ?? 'day', format);
+        return await runSummaryView(ctx, (raw['bucket'] as ISummaryBucket | undefined) ?? 'day', format, resolveWindow(raw['window']));
       case 'grouped':
         return await runGroupedView(ctx, raw['groupBy'] as IGroupByAxis | IGroupBy | undefined, format);
       case 'plan':
@@ -503,6 +517,12 @@ function assertViewScopedKeys(view: IBacklogView, raw: Record<string, unknown>):
   if (raw['bucket'] !== undefined && view !== 'summary') reject('bucket', 'period bucketing is view:"summary"\'s');
   if (raw['weightFn'] !== undefined && view !== 'plan') reject('weightFn', 'critical-path weighting is view:"plan"\'s (§5a.8)');
   if (raw['staleAfterMinutes'] !== undefined && view !== 'stale') reject('staleAfterMinutes', 'the claim-lease window is view:"stale"\'s');
+  // FEAT-BACKLOG-STATS-TIME-WINDOWED-THROUGHPUT-001 — the explicit time
+  // window is summary's alone; accepting it on a view that never reads it
+  // would be the accept-and-ignore §7 forbids.
+  if (raw['window'] !== undefined && view !== 'summary') {
+    reject('window', 'the explicit time window is view:"summary"\'s (it composes over filter.dateRange.updated there)');
+  }
   if (raw['text'] !== undefined && view !== 'list') {
     reject('text', 'the natural-language form compiles into a list query (§2.1b); for raw vector recall use view:"similar"');
   }
@@ -541,6 +561,36 @@ function resolveOffset(value: unknown): number {
     throw new BacklogValidationError(`offset: must be a non-negative integer (got ${JSON.stringify(value)})`, ['offset']);
   }
   return value as number;
+}
+
+/**
+ * FEAT-BACKLOG-STATS-TIME-WINDOWED-THROUGHPUT-001 — the explicit `window`
+ * param: an `IDateBound` whose `since`/`until` must be ISO-8601 strings.
+ * Anything else fails loudly (a window that read as "no bound" would make an
+ * all-history query look like a no-op — §7's accept-and-ignore class).
+ */
+function resolveWindow(value: unknown): IDateBound | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new InvalidArgumentError('window', `window: expected { since?, until? } with ISO-8601 strings (got ${JSON.stringify(value)})`);
+  }
+  const raw = value as Record<string, unknown>;
+  const known = new Set<string>(['since', 'until']);
+  const unknown = Object.keys(raw).filter((k) => !known.has(k));
+  if (unknown.length > 0) {
+    throw new InvalidArgumentError('window', `window: unknown bound key(s) ${unknown.map((k) => `"${k}"`).join(', ')} — expected "since" | "until"`);
+  }
+  for (const key of ['since', 'until'] as const) {
+    const bound = raw[key];
+    if (bound === undefined) continue;
+    if (typeof bound !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(bound)) {
+      throw new InvalidArgumentError('window', `window.${key}: expected an ISO-8601 string (got ${JSON.stringify(bound)})`);
+    }
+  }
+  const out: IDateBound = {};
+  if (typeof raw['since'] === 'string') out.since = raw['since'];
+  if (typeof raw['until'] === 'string') out.until = raw['until'];
+  return out;
 }
 
 /**
@@ -837,7 +887,7 @@ async function fetchRows(store: GraphBacklogStore, filter: IBacklogFilter, warni
   // truncation nobody can see is a silent truncation.
   const truncated = filter.grep !== undefined && nodes.length >= GREP_FETCH_BUDGET;
 
-  let rows: IQueryRow[] = nodes.map((node) => ({ node, item: toBacklogItem(node) }));
+  let rows: IQueryRow[] = nodes.map((node) => ({ node, item: toBacklogItem(node), score: node.score }));
   if (repoCandidates !== undefined && repoCandidates.size !== 1) {
     const allowed = repoCandidates;
     rows = rows.filter((r) => allowed.has(r.item.repo));
@@ -887,6 +937,17 @@ function compareRows(a: IQueryRow, b: IQueryRow, sort: IBacklogSort): number {
       // the tiebreak has to be inverted here to stay "better first" after it.
       return rankB - rankA || b.item.humanId.localeCompare(a.item.humanId);
     }
+    case 'textMatch': {
+      // Real FTS5 relevance (BM25-derived `score`, `@adhd/sox-graph-store`'s
+      // `searchNodes`), NOT the semantic `relevance` sort — this is the
+      // keyword-match ranking a `text`/`grep` query already computes for
+      // free. A row with no score (a non-`grep` query, or nothing plausibly
+      // ranks it) sorts as the WORST match (`-Infinity`), never a fabricated
+      // tie with genuine matches — humanId still breaks a real tie.
+      const scoreA = a.score ?? -Infinity;
+      const scoreB = b.score ?? -Infinity;
+      return scoreA - scoreB || a.item.humanId.localeCompare(b.item.humanId);
+    }
     case 'relevance':
       // Unreachable — `assertNoSemanticInputs` rejects `sort:"relevance"`
       // with `rag_not_configured` before any row is fetched (AC-12).
@@ -932,7 +993,7 @@ function paginateRows(sorted: IQueryRow[], limit: number | undefined, offset: nu
 // ----------------------------------------------------------------------------
 
 /** Pseudo-fields resolved by this module; each costs a real extra read, which is why none of them is ever in a default projection (§0.2/AC-18). */
-const PSEUDO_FIELD_SET: ReadonlySet<string> = new Set<string>(['body', 'audit_trail', 'blockers', 'citations', 'notes', 'rollup', 'items', '_score', '_vector']);
+const PSEUDO_FIELD_SET: ReadonlySet<string> = new Set<string>(['body', 'audit_trail', 'blockers', 'citations', 'closedAt', 'notes', 'rollup', 'related', 'items', '_score', '_vector']);
 
 /**
  * §2.4 — projects one row into a terse card plus exactly the fields the
@@ -1008,6 +1069,12 @@ async function buildCard(store: GraphBacklogStore, row: IQueryRow, fields: Reado
       case 'files':
         setIfDefined('files', meta.files);
         break;
+      case 'citationCount':
+        // FEAT-009 — in-memory derivation from the mapped item's citation
+        // array: zero extra reads, which is the whole point of the field
+        // (a citation heatmap needs NO per-item gets).
+        card.citationCount = item.citations.length;
+        break;
       default:
         break;
     }
@@ -1017,8 +1084,16 @@ async function buildCard(store: GraphBacklogStore, row: IQueryRow, fields: Reado
   if (fields.has('citations')) card.citations = item.citations;
   if (fields.has('notes')) card.notes = item.notes;
   if (fields.has('audit_trail')) card.audit_trail = await queryAuditEvents(store, node.id);
+  // FEAT-BACKLOG-010 — the first terminal transition's timestamp, read
+  // straight off the persisted audit log (reconstructed, never guessed).
+  if (fields.has('closedAt')) card.closedAt = await firstTerminalTransitionAt(store, node.id);
   if (fields.has('blockers')) card.blockers = (await blockersOp(store, item.repo, item.humanId)).map((b) => b.humanId);
   if (fields.has('rollup')) card.rollup = await computeRollup(store, row);
+  // BUG-025 read side, wired here too (mirrors v2/get.ts's buildCard) —
+  // without this, `fields:["related"]` on backlog_query would silently
+  // return every card MINUS the one field it asked for, exactly the
+  // accept-and-ignore failure §7 forbids.
+  if (fields.has('related')) card.related = await listRelatedNode(store, item.repo, item.humanId);
   return card;
 }
 
@@ -1203,36 +1278,86 @@ async function runGraphView(ctx: IQueryContext): Promise<IOutcomeEnvelope<IBackl
  * BUG-023's open-scoped counts, its `assertOpenScopedStats` runtime guard,
  * the median/p90 time-to-resolution and time-in-status, the reopen rate, and
  * the REQUIRED `coverage` block that makes partial audit history visible
- * (DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001). The window is
- * `filter.dateRange.updated`, defaulting to the last 30 days (AC-15).
+ * (DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001). The window is the EXPLICIT
+ * top-level `window` param composed per-bound over `filter.dateRange.updated`
+ * (FEAT-BACKLOG-STATS-TIME-WINDOWED-THROUGHPUT-001), defaulting to the last
+ * 30 days (AC-15).
  *
- * The one thing this layer adds is `transitionsByBucket`: FEAT-010's
- * "transition counts bucketed by period", which `computeStats` does not
- * produce. It is computed from the SAME audit events (`queryAuditEvents`) over
- * the SAME window, so a bucket total can never disagree with the coverage
- * block beside it.
+ * Everything a caller's filter can scope is honoured (family/status/kind/
+ * priority — no more silent discard), and the FEAT-009 citation aggregates
+ * + FEAT-BACKLOG-010 historical throughput series ride along on the same
+ * payload:
+ *
+ * - `transitionsByBucket` — FEAT-010's "transition counts bucketed by
+ *   period", over the SAME AC-15 window `computeStats` reported, from the
+ *   SAME audit events, so a bucket total can never disagree with the
+ *   coverage block beside it.
+ * - `closedByBucket` / `openedByBucket` — FEAT-BACKLOG-010's historical
+ *   throughput series. These deliberately span ALL history by default (they
+ *   are the "historical closed-per-week" numbers the stats were missing);
+ *   an explicit window bounds them. See `IBacklogStats.closedByBucket`'s doc
+ *   for the stated distinction.
  */
-async function runSummaryView(ctx: IQueryContext, bucket: ISummaryBucket, format: 'json' | 'table'): Promise<IOutcomeEnvelope<IBacklogQueryResult>> {
+async function runSummaryView(
+  ctx: IQueryContext,
+  bucket: ISummaryBucket,
+  format: 'json' | 'table',
+  windowInput: IDateBound | undefined
+): Promise<IOutcomeEnvelope<IBacklogQueryResult>> {
   if (!['hour', 'day', 'week', 'month'].includes(bucket)) {
     throw new InvalidArgumentError('bucket', `bucket: expected "hour" | "day" | "week" | "month", received ${JSON.stringify(bucket)}`);
   }
-  const scope = scopeOf(ctx.filter);
-  const statsScope = ctx.filter.dateRange === undefined ? scope : { ...scope, dateRange: ctx.filter.dateRange };
+  // The whole filter reaches `computeStats` now — family/status/kind/priority
+  // are honoured, never silently dropped (FEAT-BACKLOG-STATS-TIME-WINDOWED-
+  // THROUGHPUT-001). The explicit `window` composes per-bound over
+  // `filter.dateRange.updated` (documented precedence: `window.since` beats
+  // `dateRange.updated.since`; an absent bound falls through).
+  const statsScope: StatsQuery = {
+    ...ctx.filter,
+    dateRange: windowInput === undefined ? ctx.filter.dateRange : { updated: { ...(ctx.filter.dateRange?.updated ?? {}), ...windowInput } },
+  };
   const stats = await computeStats(ctx.store, statsScope);
   stats.transitionsByBucket = await transitionsByBucket(ctx.store, ctx.filter, stats.window ?? {}, bucket);
+  // The throughput series is ALL-HISTORY unless an explicit window bounds it:
+  // the top-level `window` param wins, then `filter.dateRange.updated`.
+  let explicitWindow: IDateBound | undefined = windowInput;
+  if (explicitWindow === undefined && ctx.filter.dateRange?.updated !== undefined) {
+    explicitWindow = ctx.filter.dateRange.updated;
+  }
+  const series = await historicalBucketedSeries(ctx.store, ctx.filter, explicitWindow, bucket);
+  stats.closedByBucket = series.closed;
+  stats.openedByBucket = series.opened;
   const payload: Omit<IBacklogQueryResult, 'view' | 'query'> = { summary: stats };
   if (format === 'table') payload.table = renderSummaryTable(stats);
   return envelopeOf(ctx, payload);
 }
 
-/** FEAT-010 — transition events per period, over the SAME window `computeStats` reported. `AC-15`'s bound is honoured, not computed from all history. */
+/** The store-vocabulary subset of a v2 filter — everything `fetchFilteredNodes` can push into a `NodeFilter` (status is a closedness predicate and stays a post-filter). */
+function pushDownOf(filter: IBacklogFilter): BacklogFilter {
+  return {
+    repo: filter.repo,
+    projectPath: filter.projectPath,
+    kind: filter.kind,
+    family: filter.family,
+    priority: typeof filter.priority === 'string' ? filter.priority : undefined,
+    plan: filter.plan,
+    assignee: filter.assignee,
+    claimedBy: filter.claimedBy,
+    tags: filter.tags !== undefined ? [...filter.tags] : undefined,
+    importedFrom: filter.importedFrom,
+    rootLevel: filter.rootLevel,
+    excludeArchived: filter.excludeArchived,
+  };
+}
+
+/** FEAT-010 — transition events per period, over the SAME window `computeStats` reported. `AC-15`'s bound is honoured, not computed from all history. Scoped to the caller's population (repo/family/status/…), so the series can never disagree with the summary numbers beside it. */
 async function transitionsByBucket(
   store: GraphBacklogStore,
   filter: IBacklogFilter,
   window: { since?: string; until?: string },
   bucket: ISummaryBucket
 ): Promise<Array<{ bucket: string; count: number }>> {
-  const nodes = await queryItemNodes(store, { repo: filter.repo, projectPath: filter.projectPath });
+  const nodes = await populationNodes(store, filter);
   const counts = new Map<string, number>();
   for (const node of nodes) {
     for (const event of await queryAuditEvents(store, node.id)) {
@@ -1243,6 +1368,93 @@ async function transitionsByBucket(
     }
   }
   return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([key, count]) => ({ bucket: key, count }));
+}
+
+/**
+ * FEAT-BACKLOG-010 — the population behind the throughput series, with the
+ * caller's status selector applied (joint node+item filtering keeps the
+ * audit loop aligned with the items it describes).
+ */
+async function populationNodes(store: GraphBacklogStore, filter: IBacklogFilter): Promise<NodeRecord[]> {
+  const nodes = await queryItemNodes(store, pushDownOf(filter));
+  if (filter.status === undefined) return nodes;
+  const resolved = resolveStatusSelector(filter.status);
+  const keep = (status: BacklogStatus): boolean => {
+    if (resolved.mode === 'explicit') return resolved.statuses.includes(status);
+    if (resolved.closedness === 'all') return true;
+    const wantOpen = resolved.closedness === 'open';
+    return !isTerminalStatus(status) === wantOpen;
+  };
+  return nodes.filter((n) => keep(toBacklogItem(n).status));
+}
+
+/**
+ * FEAT-BACKLOG-010 — the historical closed/opened-per-period series.
+ *
+ * - `closed`: each scoped item's FIRST transition into a terminal status,
+ *   bucketed by `bucket` grain. One event per item (an item closes once),
+ *   so `sum(closedByBucket)` is exactly "how many items have ever closed"
+ *   within the scoped population.
+ * - `opened`: each scoped item's `createdAt`, bucketed — exact for every
+ *   item, including ones predating the audit log (mirrors
+ *   `openedInWindow`'s reasoning).
+ *
+ * Window semantics (documented in `IBacklogStats.closedByBucket`): DEFAULT
+ * spans all history; an explicit window (top-level `window` or
+ * `filter.dateRange.updated`) bounds the series. Contrast with
+ * `transitionsByBucket`, which is always AC-15-window-bounded.
+ */
+async function historicalBucketedSeries(
+  store: GraphBacklogStore,
+  filter: IBacklogFilter,
+  explicitWindow: IDateBound | undefined,
+  bucket: ISummaryBucket
+): Promise<{ closed: Array<{ bucket: string; count: number }>; opened: Array<{ bucket: string; count: number }> }> {
+  const nodes = await populationNodes(store, filter);
+  const closedCounts = new Map<string, number>();
+  const openedCounts = new Map<string, number>();
+  for (const node of nodes) {
+    const item = toBacklogItem(node);
+    if (explicitWindow === undefined || withinBound(item.createdAt, explicitWindow)) {
+      const key = bucketKey(item.createdAt, bucket);
+      openedCounts.set(key, (openedCounts.get(key) ?? 0) + 1);
+    }
+    const events = await queryAuditEvents(store, node.id);
+    const firstTerminal = events.find(isTerminalTransition);
+    if (firstTerminal && (explicitWindow === undefined || withinBound(firstTerminal.at, explicitWindow))) {
+      const key = bucketKey(firstTerminal.at, bucket);
+      closedCounts.set(key, (closedCounts.get(key) ?? 0) + 1);
+    }
+  }
+  const sorted = (m: Map<string, number>): Array<{ bucket: string; count: number }> =>
+    [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([key, count]) => ({ bucket: key, count }));
+  return { closed: sorted(closedCounts), opened: sorted(openedCounts) };
+}
+
+/** Reads a transition event's destination status (FEAT-BACKLOG-010 uses it to find first-terminal transitions). */
+function eventTo(event: AuditTrailEntry): BacklogStatus | undefined {
+  return (event.detail as { to?: BacklogStatus }).to;
+}
+
+/** Is this transition event a move INTO a terminal status? */
+function isTerminalTransition(event: AuditTrailEntry): boolean {
+  if (event.kind !== 'transition') return false;
+  const to = eventTo(event);
+  return to !== undefined && isTerminalStatus(to);
+}
+
+/**
+ * FEAT-BACKLOG-010 — the ISO timestamp of the item's FIRST transition into a
+ * terminal status, reconstructed from the persisted audit log. One
+ * `queryAuditEvents` read, oldest-first — the first `transition` event whose
+ * `to` is terminal. `undefined` for an item that has never reached a
+ * terminal status (open items, or terminal items whose transition predates
+ * the audit log — the same coverage caveat `IStatsCoverage` makes visible).
+ */
+async function firstTerminalTransitionAt(store: GraphBacklogStore, nodeId: number): Promise<string | undefined> {
+  const events = await queryAuditEvents(store, nodeId);
+  const first = events.find(isTerminalTransition);
+  return first?.at;
 }
 
 /** Period key for a bucketed count. ISO prefixes for hour/day/month; ISO-8601 week (`YYYY-Www`) for week, so buckets sort lexicographically in chronological order. */
@@ -1764,11 +1976,15 @@ async function compileTextQuery(
     filter: compiled,
     boosts: extracted.filter((e) => e.applied === 'boost'),
     extracted,
-    // §2.1b step 5: `relevance` when embeddings are configured, `priority` as
-    // the FTS fallback. This build has no matcher, so the fallback is the
-    // truth — and an explicit `sort:"relevance"` is rejected by
-    // `assertNoSemanticInputs` rather than silently downgraded to this.
-    sort: requestedSort ?? 'priority',
+    // §2.1b step 5: `relevance` when embeddings are configured, `textMatch`
+    // (the real FTS5 match-quality score) as the fallback. This build has no
+    // embedding matcher, so `textMatch` is the truth — a `text` query means
+    // "find me the best keyword matches", and ranking by `priority` instead
+    // (the old default) discarded match quality entirely in favor of triage
+    // priority, which is not what the caller asked for. An explicit
+    // `sort:"relevance"` is still rejected by `assertNoSemanticInputs` rather
+    // than silently downgraded to this.
+    sort: requestedSort ?? 'textMatch',
   };
   return { filter: compiled, plan, warnings };
 }
@@ -1817,6 +2033,12 @@ function renderSummaryTable(stats: IBacklogStats): string {
       ['coverage.itemsWithHistory', `${stats.coverage.itemsWithHistory}/${stats.coverage.itemsTotal}`],
       ['timeToResolution.medianMs', String(stats.timeToResolution?.medianMs ?? '(n/a)')],
       ['reopenRate', String(stats.reopenRate ?? '(n/a)')],
+      // FEAT-009 — the citation aggregates ride in the same table as every
+      // other scoped count, so "how much evidence does this population
+      // carry" is one glance, not a per-item fan-out.
+      ['citationsTotal', String(stats.citationsTotal)],
+      ['citationCoverage', `${stats.citationCoverage}%`],
+      ['closed all-time (closedByBucket Σ)', String((stats.closedByBucket ?? []).reduce((a, b) => a + b.count, 0))],
     ]
   );
   return `${totals}\n\n${status}`;

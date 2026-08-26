@@ -264,11 +264,15 @@ describe('§7 input contract', () => {
     expect(isOutcomeError(grouped) && grouped.error.code).toBe('invalid_argument');
     expect(isOutcomeError(grouped) && grouped.error.message).toContain('groupBy');
 
-    // view:"summary" delegates to computeStats, which takes repo/projectPath/
-    // dateRange only — accepting `kind` would look scoped and not be.
-    const scoped = await backlogQuery(tmp.store, { view: 'summary', filter: { kind: 'BUG' } });
+    // view:"summary" delegates to computeStats, which (since
+    // FEAT-BACKLOG-STATS-TIME-WINDOWED-THROUGHPUT-001) honours
+    // family/status/kind/priority — `kind` is NO LONGER rejected here. The
+    // keys that genuinely still have no summary meaning (e.g. `plan`, whose
+    // members are the two-axis rollup's whole input) are the ones that must
+    // stay typed errors: accepting `plan` would look scoped and not be.
+    const scoped = await backlogQuery(tmp.store, { view: 'summary', filter: { plan: 'some-plan' } });
     expect(isOutcomeError(scoped) && scoped.error.code).toBe('invalid_argument');
-    expect(isOutcomeError(scoped) && scoped.error.message).toContain('"kind"');
+    expect(isOutcomeError(scoped) && scoped.error.message).toContain('"plan"');
   });
 });
 

@@ -22,9 +22,25 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { install, BACKLOG_MCP_NPX_ARGS } from './install.js';
+import { buildBacklogApigenPackage, resolveExpectedMcpToolNames } from './server.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
+
+/**
+ * Live-derived from `client.ts`'s ACTUAL exports (`buildBacklogApigenPackage`
+ * → `extractClientOperations` reads the built `dist/client.d.ts`) plus every
+ * mount plugin's own real tool contribution — never a hardcoded literal
+ * array/count. See `resolveExpectedMcpToolNames`'s doc comment (server.ts)
+ * for why a hardcoded list silently stops meaning anything the moment a
+ * `client.ts` export changes.
+ */
+async function expectedMcpToolNames(): Promise<string[]> {
+  const { operations } = await buildBacklogApigenPackage(() => {
+    throw new Error('expectedMcpToolNames: store must never be opened just to enumerate tool names');
+  });
+  return resolveExpectedMcpToolNames(operations);
+}
 
 describe('BUG-013 — install-written MCP config actually launches a working real server (claude + opencode)', () => {
   let tmp: string | undefined;
@@ -77,30 +93,18 @@ describe('BUG-013 — install-written MCP config actually launches a working rea
     await client.connect(transport);
 
     const tools = await client.listTools();
-    // 7 real tools: INTERFACE_v2 AC-0's SIX data verbs (`client.ts`'s ONLY
-    // exports — `get`, `query`, `create`, `update`, `relate`, `admin` —
-    // mounted as `backlog_get`/`backlog_query`/`backlog_create`/
-    // `backlog_update`/`backlog_relate`/`backlog_admin`) plus the
-    // batch-dispatch tool `apigen-plugin-batch` mounts (`batch_action`,
-    // deliberately UN-namespaced). The old 38 flat v1 verbs collapsed onto
-    // these six per INTERFACE_v2 AC-5 — they moved to `ops-v1.ts` and are no
-    // longer mounted on any transport.
-    //
-    // This count is derived, not guessed: driven live against the real
-    // built `dist/index.js` MCP server via `tools/list` (see the orchestrator
-    // ground truth this test was updated from). When you add a `client.ts`
-    // export you MUST bump this AND re-verify against AC-0's six-verb cap —
-    // the assertion exists to make a tool appearing or vanishing in the
-    // SHIPPED artifact impossible to miss, so "just make it pass" defeats its
-    // purpose. Re-derive the number by driving `tools/list`, never by
-    // arithmetic.
-    expect(tools.tools.length).toBe(7);
-    expect(tools.tools.map((t) => t.name).sort()).toEqual(
-      ['backlog_admin', 'backlog_create', 'backlog_get', 'backlog_query', 'backlog_relate', 'backlog_update', 'batch_action'].sort(),
-    );
+    // Live-derived (not hardcoded): every `client.ts`-mounted verb
+    // (INTERFACE_v2 AC-0) plus every mount plugin's own tool contribution
+    // (currently `apigen-plugin-batch`'s `batch_action`). See
+    // `expectedMcpToolNames()` above / `resolveExpectedMcpToolNames`'s doc
+    // comment (server.ts) — this assertion tracks the shipped surface
+    // automatically instead of silently going stale on the next `client.ts`
+    // export change.
+    const expected = await expectedMcpToolNames();
+    expect(tools.tools.map((t) => t.name).sort()).toEqual(expected);
   }, 30_000);
 
-  it('opencode-style config: spawning the real dist/index.js via the written command ARRAY shape advertises all 7 real tools', async () => {
+  it('opencode-style config: spawning the real dist/index.js via the written command ARRAY shape advertises the real tool set', async () => {
     tmp = mkdtempSync(join(tmpdir(), 'backlog-install-e2e-opencode-'));
     const result = install(['--host', 'opencode', '--scope', 'user', '--mcp-only'], tmp, tmp);
     const doc = JSON.parse(readFileSync(result.mcp[0]!.configPath, 'utf8')) as {
@@ -126,13 +130,11 @@ describe('BUG-013 — install-written MCP config actually launches a working rea
     await client.connect(transport);
 
     const tools = await client.listTools();
-    // Same 7-tool surface as the claude-style test above (INTERFACE_v2 AC-0's
-    // six `backlog_*` data verbs + `batch_action`) — the config SHAPE differs
-    // (opencode's command array vs. claude's command/args pair) but the
-    // spawned server and its advertised tool surface are identical.
-    expect(tools.tools.length).toBe(7);
-    expect(tools.tools.map((t) => t.name).sort()).toEqual(
-      ['backlog_admin', 'backlog_create', 'backlog_get', 'backlog_query', 'backlog_relate', 'backlog_update', 'batch_action'].sort(),
-    );
+    // Same live-derived tool surface as the claude-style test above — the
+    // config SHAPE differs (opencode's command array vs. claude's
+    // command/args pair) but the spawned server and its advertised tool
+    // surface are identical.
+    const expected = await expectedMcpToolNames();
+    expect(tools.tools.map((t) => t.name).sort()).toEqual(expected);
   }, 30_000);
 });

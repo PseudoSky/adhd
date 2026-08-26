@@ -44,6 +44,7 @@ import {
   type ExtractCall,
   type Operation,
   type Plugin,
+  type Descriptor,
 } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
 import type { HttpVerb } from '@adhd/apigen-engine-naming';
@@ -58,6 +59,7 @@ import { openGraphBacklogStore, closeGraphBacklogStoreSafe, type GraphBacklogSto
 import { hasExternalSignalHandling, installSignalCleanup } from './store/signal-cleanup.js';
 import { acquireServeLock, isLockableDbPath, type ServeLockHandle } from './store/serve-lock.js';
 import { buildBacklogEnv, resolveBacklogDbPath, resolveIrCacheFile } from './env.js';
+import { readBacklogVersionInfo } from './version-info.js';
 import type { Logger, OutputPlugin, RunInput } from '@adhd/apigen-core-client';
 
 /**
@@ -245,6 +247,42 @@ function assertHostCarveOut(surface: readonly IMountedOperationSurface[]): void 
         `the condition serve-lock.ts exists to prevent). Keep them host commands in cli.ts.`
     );
   }
+}
+
+/**
+ * Derives the FULL set of MCP tool names the real `serve --transport mcp`
+ * process advertises — every mounted `client.ts` verb (via
+ * `describeMountedSurface`'s `mcpTool`, itself `project(op).mcp.name`) PLUS
+ * every tool a mount plugin (currently just `apigen-plugin-batch`'s
+ * `batch_action`) contributes, using the exact same `project(op).mcp.name`
+ * derivation `cli.ts`'s `resolveMountNamespaces` uses for the CLI's own
+ * top-level segments.
+ *
+ * Exists so a test can assert against a LIVE-derived tool set instead of a
+ * hardcoded literal array/count — a hardcoded `['backlog_get', …]` (or a bare
+ * `.length === 7`) silently stops meaning anything the moment a `client.ts`
+ * export is added, renamed, or removed, and would then either falsely fail
+ * (a legitimate, intended surface change) or — worse — falsely pass (typo'd
+ * to match the wrong new count) with no signal that the assertion itself
+ * needs updating. Deriving it here, from the same `operations`/`usePlugins`
+ * every transport is actually built from, means the assertion tracks the
+ * shipped surface automatically.
+ */
+export function resolveExpectedMcpToolNames(
+  operations: readonly Operation[],
+  usePlugins: readonly Plugin[] = [batchPlugin]
+): string[] {
+  const surface = describeMountedSurface(operations);
+  const names = new Set<string>(surface.map((entry) => entry.mcpTool));
+  const descriptor: Descriptor = { host: 'backlog', operations: operations as Operation[] };
+  for (const plugin of usePlugins) {
+    const mount = plugin.capabilities.mount;
+    if (!mount) continue;
+    for (const op of mount.operations(descriptor, undefined, undefined)) {
+      names.add(project(op).mcp.name);
+    }
+  }
+  return [...names].sort();
 }
 
 export interface StartOpts {
@@ -536,6 +574,7 @@ async function extractClientOperations(): Promise<Operation[]> {
 export async function buildBacklogApigenPackage(ctx: BacklogCtx | (() => BacklogCtx | Promise<BacklogCtx>)): Promise<{
   pkg: {
     id: string;
+    version: string;
     schemas: ReturnType<typeof composeSchemas>;
     importPath: string;
     fns: Record<string, (...args: unknown[]) => unknown>;
@@ -586,9 +625,16 @@ export async function buildBacklogApigenPackage(ctx: BacklogCtx | (() => Backlog
   // so a name that appears here appears identically on all four.
   const surface = describeMountedSurface(operations);
   assertHostCarveOut(surface);
+  // MCP handshake identity finding (P5-cli-serve-transport): read fresh from
+  // `package.json` on every call, the SAME store-free path `backlog
+  // version`/`readBacklogVersionInfo` already uses, so an agent's `initialize`
+  // handshake reports which REAL published build it is talking to instead of
+  // a hardcoded placeholder shared by every apigen-hosted MCP server.
+  const { version } = readBacklogVersionInfo();
   return {
     pkg: {
       id: 'backlog',
+      version,
       schemas,
       importPath: join(backlogDistDir(), 'client.js'),
       fns: clientMod as unknown as Record<string, (...args: unknown[]) => unknown>,

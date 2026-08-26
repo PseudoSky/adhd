@@ -87,7 +87,7 @@ beforeAll(() => {
     'create',
     '--input',
     JSON.stringify({
-      input: { family: 'BUG', title: 'envelope seam item', body: 'b', repo: REPO },
+      item: { family: 'BUG', title: 'envelope seam item', body: 'b', repo: REPO },
       by: 'cli-envelope.spec',
       duplicateAction: 'file',
     }),
@@ -106,7 +106,7 @@ describe('outcome envelope over the real CLI mount', () => {
       'create',
       '--input',
       JSON.stringify({
-        input: { family: 'BUG', title: 'second item', body: 'b', repo: REPO },
+        item: { family: 'BUG', title: 'second item', body: 'b', repo: REPO },
         by: 'cli-envelope.spec',
         duplicateAction: 'file',
       }),
@@ -206,7 +206,7 @@ describe('backlog_admin tagged report union over the real CLI mount (BUG-BACKLOG
       'create',
       '--input',
       JSON.stringify({
-        input: { family: 'BUG', title: 'reconcile seed item', body: 'b', repo: RECONCILE_REPO },
+        item: { family: 'BUG', title: 'reconcile seed item', body: 'b', repo: RECONCILE_REPO },
         by: 'cli-envelope.spec',
       }),
     ]);

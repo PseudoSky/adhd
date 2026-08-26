@@ -25,15 +25,24 @@
  * per that item's verification requirement): `run.ts`'s mount-registration
  * loop now projects `MountedOperation.input` into a CLI-flag-compatible
  * schema (`./mount-cli-flags.ts`'s `projectMountInputSchema`) before calling
- * `buildOpPlan`, so `plan.cliFlags` is populated with real
- * `operation`/`items`/`concurrency`/`mode`/`onItemError`/`itemTimeoutMs`
- * flags — the exact set `@adhd/apigen-plugin-batch`'s own handler
- * (`parseBatchRequest`) reads off `call.data`. This spec now proves the
- * REAL, previously-impossible happy path: a real 3-item batch (2
- * fulfilled + 1 rejected) dispatched via real CLI argv, through the real
- * unmocked `CliTransportAdapter`/`dispatchForPlan`/hostBridge, with the same
+ * `buildOpPlan`. This spec proves the REAL, previously-impossible happy
+ * path: a real 3-item batch (2 fulfilled + 1 rejected) dispatched via real
+ * CLI argv, through the real unmocked
+ * `CliTransportAdapter`/`dispatchForPlan`/hostBridge, with the same
  * index-ordered, partial-failure (`onItemError: 'continue'`) semantics
  * already proven for fastify/express/mcp.
+ *
+ * BUG-APIGEN-CLI-002 (batch mount schema shape): `apigen-core-client`'s
+ * `batch.ts` now nests every control-plane field
+ * (`operation`/`items`/`concurrency`/`mode`/`onItemError`/`itemTimeoutMs`)
+ * under one top-level `input` object, matching every other apigen-mounted
+ * operation's single-JSON-blob CLI convention — so `plan.cliFlags` resolves
+ * to exactly ONE flag, `--input <json>`, carrying the whole object, rather
+ * than N per-field flags. This spec's argv/error-text assertions are updated
+ * accordingly (`--input '{"operation":...,"items":...}'` instead of
+ * `--operation .../--items ...`, and error text reads `"input.operation"`
+ * — `@adhd/apigen-plugin-batch`'s `parseBatchRequest` unwraps `data.input`
+ * before validating).
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { run as runCli } from '@adhd/apigen-plugin-cli-output';
@@ -134,22 +143,19 @@ describe('[BATCH_0.0.1.md §2/§F1] apigen-plugin-batch — real CLI live-dispat
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    const items = JSON.stringify([{ id: 'a' }, { id: 'missing' }, { id: 'b' }]);
-    // The exact intended invocation: `apigen run --type cli --use batch --
-    // batch action --operation catalog/getItem --items '[...]' --concurrency 2
-    // --on-item-error continue` — i.e. the CLI analogue of the fastify test's
-    // `POST /_batch/action` body.
+    // BUG-APIGEN-CLI-002: one JSON-blob `--input` flag carrying the whole
+    // control-plane object — the CLI analogue of the fastify test's
+    // `POST /_batch/action` body (`{"input": {...}}`).
     const argv = [
       'batch',
       'action',
-      '--operation',
-      'catalog/getItem',
-      '--items',
-      items,
-      '--concurrency',
-      '2',
-      '--on-item-error',
-      'continue',
+      '--input',
+      JSON.stringify({
+        operation: 'catalog/getItem',
+        items: [{ id: 'a' }, { id: 'missing' }, { id: 'b' }],
+        concurrency: 2,
+        onItemError: 'continue',
+      }),
     ];
 
     await runCli(buildRunInput(argv, usePlugins));
@@ -197,10 +203,8 @@ describe('[BATCH_0.0.1.md §2/§F1] apigen-plugin-batch — real CLI live-dispat
     const argv = [
       'batch',
       'action',
-      '--operation',
-      'not/a-real-op',
-      '--items',
-      '[]',
+      '--input',
+      JSON.stringify({ operation: 'not/a-real-op', items: [] }),
     ];
 
     await runCli(buildRunInput(argv, usePlugins));
@@ -214,13 +218,18 @@ describe('[BATCH_0.0.1.md §2/§F1] apigen-plugin-batch — real CLI live-dispat
     expect(logSpy).not.toHaveBeenCalled();
   });
 
-  it('[negative control — proves cliFlags are real, not vacuously present] omitting the required "--operation"/"--items" flags reaches the handler\'s own "operation must be a non-empty string" validation, not an "Unknown option" parse failure', async () => {
+  it('[negative control — proves the --input flag is real, not vacuously present] an --input blob missing "operation"/"items" reaches the handler\'s own "input.operation must be a non-empty string" validation, not an "Unknown option" parse failure', async () => {
     const usePlugins = await loadUsePlugins(['batch']);
 
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    const argv = ['batch', 'action'];
+    // BUG-APIGEN-CLI-002: `--input` itself is the one required flag now —
+    // supplying it with an EMPTY object (rather than omitting the flag
+    // entirely, which Commander would reject at the argv-parse layer before
+    // any handler runs) proves the JSON blob genuinely reaches
+    // `@adhd/apigen-plugin-batch`'s own `parseBatchRequest`.
+    const argv = ['batch', 'action', '--input', '{}'];
 
     await runCli(buildRunInput(argv, usePlugins));
 
@@ -231,9 +240,9 @@ describe('[BATCH_0.0.1.md §2/§F1] apigen-plugin-batch — real CLI live-dispat
 
     // Proves the fix reaches the handler at all (not an argv-parse failure) —
     // `@adhd/apigen-plugin-batch`'s own `parseBatchRequest` rejects the
-    // missing `operation` field.
+    // missing `input.operation` field.
     expect(body.code).toBe('invalid_argument');
-    expect(body.message).toMatch(/"operation" must be a non-empty string/);
+    expect(body.message).toMatch(/"input\.operation" must be a non-empty string/);
     expect(logSpy).not.toHaveBeenCalled();
   });
 });

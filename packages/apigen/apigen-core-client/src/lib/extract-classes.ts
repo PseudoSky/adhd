@@ -28,6 +28,7 @@ import { type Project, type SourceFile, Scope } from 'ts-morph';
 import type { Operation, Segment } from './descriptor';
 import { buildSchema } from './schema-builders/ts-json-schema';
 import { tokenize } from './extract';
+import { detectStreamElementType } from './stream-type';
 import {
   createExtractionSession,
   internalSession,
@@ -272,8 +273,14 @@ async function extractClassesWithSession(
         );
       }
 
-      // Unwrap Promise<T> → T
-      const resolvedReturn = returnText.replace(/^Promise<(.+)>$/, '$1').trim();
+      // Unwrap Promise<T> → T, then AsyncGenerator<T>/AsyncIterable<T>/etc
+      // (SPEC §11) — see stream-type.ts's header comment.
+      const promiseUnwrapped = returnText.replace(/^Promise<(.+)>$/, '$1').trim();
+      const streamElementType = detectStreamElementType(promiseUnwrapped);
+      const isStreamingMethod = streamElementType !== null;
+      const resolvedReturn = isStreamingMethod
+        ? streamElementType
+        : promiseUnwrapped;
       const outputSchema = await buildSchema(
         project,
         sf,
@@ -289,7 +296,7 @@ async function extractClassesWithSession(
         path: opPath,
         kind: 'instance-method',
         async: isAsync,
-        streaming: false,
+        streaming: isStreamingMethod,
         safe: false,
         input: { type: 'object', properties, required },
         output: outputSchema,
@@ -342,8 +349,12 @@ async function buildActionOpAtPath(
     );
   }
 
-  // Unwrap Promise<T> → T for output schema
-  const resolvedReturn = returnText.replace(/^Promise<(.+)>$/, '$1').trim();
+  // Unwrap Promise<T> → T, then AsyncGenerator<T>/AsyncIterable<T>/etc for
+  // output schema (SPEC §11) — see stream-type.ts's header comment.
+  const promiseUnwrapped = returnText.replace(/^Promise<(.+)>$/, '$1').trim();
+  const streamElementType = detectStreamElementType(promiseUnwrapped);
+  const isStreaming = streamElementType !== null;
+  const resolvedReturn = isStreaming ? streamElementType : promiseUnwrapped;
   const outputSchema = await buildSchema(
     project,
     sf,
@@ -361,7 +372,7 @@ async function buildActionOpAtPath(
     path: opPath,
     kind: 'action',
     async: isAsync,
-    streaming: false,
+    streaming: isStreaming,
     safe: false, // action → false per §4
     input: { type: 'object', properties, required },
     output: outputSchema,

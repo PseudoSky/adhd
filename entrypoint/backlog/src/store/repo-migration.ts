@@ -279,6 +279,15 @@ export async function migrateRepoItemNode(store: GraphBacklogStore, item: RepoMi
             text: `[repo migration] moved from repo=${JSON.stringify(fromRepo)}${renameNote} to repo=${JSON.stringify(toRepo)} — BUG-BACKLOG-REPO-SPLIT-001 / DEBT-BACKLOG-REPO-MOVE-001 reconciliation`,
           },
         ];
+        // FEAT-BACKLOG-006 — same alias record `structure.ts`'s
+        // `renameHumanIdNode` writes, only when this move ALSO renamed the
+        // humanId (collision with an existing item in `toRepo` — see
+        // `item.renamed`'s doc comment above). A repo move with no rename
+        // keeps the same humanId, and `findHumanIdInAnyRepo`/
+        // `buildNotFoundError`'s existing cross-repo "did you mean repo X?"
+        // hint already covers that case without needing an alias.
+        const renamedFrom = item.renamed ? [...(m.renamedFrom ?? []), { repo: fromRepo, humanId: item.humanId, at: nowIso }] : m.renamedFrom;
+
         // No type annotation and no cast: the spread of a partial plus these
         // overrides IS the new metadata, and `touch` takes a plain record.
         const nextMeta = {
@@ -289,6 +298,7 @@ export async function migrateRepoItemNode(store: GraphBacklogStore, item: RepoMi
           family: newFamily,
           notes,
           updatedAt: nowIso,
+          ...(renamedFrom !== undefined ? { renamedFrom } : {}),
         };
 
         // Write 1 — metadata (repo, humanId, kind, family, notes).

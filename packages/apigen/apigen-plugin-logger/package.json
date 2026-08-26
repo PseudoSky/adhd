@@ -4,7 +4,8 @@
   "main": "./dist/index.js",
   "dependencies": {
     "pino": "10.3.1",
-    "@adhd/apigen-core-client": "^0.3.0"
+    "@adhd/apigen-core-client": "^0.3.0",
+    "@adhd/apigen-base-errors": "^0.2.0"
   },
   "publishConfig": {
     "access": "public"
@@ -14,5 +15,22 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "Logging plugin for apigen servers",
+  "keywords": [
+    "logging",
+    "apigen",
+    "plugin",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/apigen/apigen-plugin-logger"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/apigen/apigen-plugin-logger#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

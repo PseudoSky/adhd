@@ -27,6 +27,7 @@
  */
 import path from 'node:path';
 import { describe, it, expect } from 'vitest';
+import Ajv from 'ajv';
 import { extract } from '../index';
 import type { GeneratedSchemas } from '../lib/types';
 
@@ -128,5 +129,60 @@ describe('BUG-APIGEN-CORE-CLIENT-001: required TS properties carry into JSON-Sch
     for (const field of optionalFields) {
       expect(nested.required).not.toContain(field);
     }
+  });
+});
+
+/**
+ * BUG-APIGEN-017 (nested case): `morph-walk.ts`'s object branch (Path 2,
+ * exercised by every test above) now stamps `additionalProperties: false` on
+ * every interface-derived nested object schema it emits — mirroring
+ * `compose-schemas.ts`'s existing top-level fix for the SAME bug class — so
+ * Ajv rejects an unrecognized key nested inside a domain param object
+ * instead of silently accepting it. Without this, an accepted-but-unknown
+ * nested key would validate successfully and then be silently discarded by
+ * `decodeNode`'s object branch (`apigen-base-logical/src/lib/runmode.ts`)
+ * rather than erroring — confirmed as `@adhd/backlog`'s query op accepting
+ * unrecognized optional flags (BUG-BACKLOG-QUERY-001's actual mechanism).
+ */
+describe('BUG-APIGEN-017 (nested): morph-walk-derived nested object schemas close over unknown keys', () => {
+  it('[additionalProperties.nested] a named interface param schema (Path 2) carries additionalProperties:false', async () => {
+    const result = await gen(fixture('required-fields.ts'));
+    const inputSchema = result.schemas['createThing']?.input as Record<
+      string,
+      unknown
+    >;
+    const nested = (inputSchema.properties as Record<string, unknown>)[
+      'input'
+    ] as Record<string, unknown>;
+
+    expect(nested['additionalProperties']).toBe(false);
+  });
+
+  it('[additionalProperties.nested] Ajv actually rejects an unrecognized nested key using the real generated schema', async () => {
+    const result = await gen(fixture('required-fields.ts'));
+    const inputSchema = result.schemas['createThing']?.input as Record<
+      string,
+      unknown
+    >;
+    const ajv = new Ajv({ allErrors: true });
+    const validate = ajv.compile(inputSchema);
+
+    const nested = (inputSchema.properties as Record<string, unknown>)[
+      'input'
+    ] as Record<string, unknown>;
+    const requiredProps = nested.required as string[];
+    const validPayload: Record<string, unknown> = {};
+    for (const key of requiredProps) validPayload[key] = 'x';
+
+    // Baseline: the legitimate payload validates.
+    expect(validate({ input: validPayload })).toBe(true);
+
+    // The SAME payload plus one unrecognized key must be rejected, not
+    // silently accepted-and-ignored.
+    const valid = validate({ input: { ...validPayload, notARealField: 'y' } });
+    expect(valid).toBe(false);
+    expect(
+      validate.errors?.some((e) => e.keyword === 'additionalProperties')
+    ).toBe(true);
   });
 });
