@@ -47,7 +47,11 @@ function normalizeLegacyStatus(raw) {
 function runCli(args) {
   const out = execFileSync('node', [CLI, ...args], { cwd: REPO_ROOT, encoding: 'utf8' });
   const lines = out.split('\n').filter((l) => l.trim());
-  return JSON.parse(lines[lines.length - 1]);
+  const envelope = JSON.parse(lines[lines.length - 1]);
+  if (envelope.ok !== true) {
+    throw new Error(`backlog CLI call failed: ${args.join(' ')}\n${JSON.stringify(envelope.error ?? envelope)}`);
+  }
+  return envelope.data;
 }
 
 function legacyJson(file) {
@@ -99,8 +103,8 @@ try {
     // `excludeArchived: true` here every archived item shows up as a false
     // `extra-in-render` divergence the moment the live file has been
     // re-rendered post-archival (BUG-BACKLOG-RENDER-VERIFY-ARCHIVED-MISMATCH-001).
-    const items = runCli(['list-items', '--filter', JSON.stringify({ ...entry.filter, excludeArchived: true })]);
-    const renderedMap = toMap(items.map((it) => ({ id: it.humanId, status: it.status, priority: it.priority })));
+    const { items } = runCli(['query', '--input', JSON.stringify({ filter: { ...entry.filter, excludeArchived: true } })]);
+    const renderedMap = toMap((items ?? []).map((it) => ({ id: it.humanId, status: it.status, priority: it.priority })));
 
     const divergences = diffMaps(oracle, renderedMap);
     const status = divergences.length === 0 ? 'PARITY' : 'DIVERGED';
