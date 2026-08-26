@@ -69,3 +69,24 @@ export async function createItemShaped(
   void ctx;
   void input;
 }
+
+// A mixed case for BUG-BACKLOG-QUERY-001's own fix: a named-parameter type
+// with BOTH named properties AND a string index signature — the shape of a
+// `metadata`/`extra`-style field. Reaching Path 2 (morph-walk.ts), such a
+// type must NOT be closed with `additionalProperties: false` (that would
+// reject every legitimate extra key the index signature explicitly allows);
+// instead `additionalProperties` must equal the index signature's OWN
+// resolved value schema.
+export interface MixedIndexedInput {
+  family: string;
+  title?: string;
+  [key: string]: string | undefined;
+}
+
+export async function createMixedIndexedThing(
+  ctx: unknown,
+  input: MixedIndexedInput
+): Promise<void> {
+  void ctx;
+  void input;
+}
