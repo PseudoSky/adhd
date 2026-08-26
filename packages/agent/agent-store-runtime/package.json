@@ -44,5 +44,12 @@
   "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/agent/agent-store-runtime#readme",
   "bugs": {
     "url": "https://github.com/PseudoSky/adhd/issues"
-  }
+  },
+  "keywords": [
+    "agent",
+    "runtime",
+    "store",
+    "llm",
+    "typescript"
+  ]
 }

@@ -25,5 +25,24 @@
   },
   "dependencies": {
     "zod": "*"
+  },
+  "keywords": [
+    "agent",
+    "sanitize",
+    "prompt-injection",
+    "llm",
+    "security",
+    "mcp",
+    "plugin"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/agent/agent-plugin-sanitize"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/agent/agent-plugin-sanitize#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
   }
 }

@@ -16,5 +16,23 @@
     "dist",
     "CHANGELOG.md",
     "generators.json"
-  ]
+  ],
+  "description": "Nx generators for apigen projects",
+  "keywords": [
+    "api",
+    "nx",
+    "generator",
+    "codegen",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/apigen/apigen-generator-nx"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/apigen/apigen-generator-nx#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

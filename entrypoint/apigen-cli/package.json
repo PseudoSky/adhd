@@ -55,5 +55,24 @@
   ],
   "assets": [
     "src/lib/default-tsconfig.json"
-  ]
+  ],
+  "description": "CLI for apigen - turn TypeScript types into live API servers with zero codegen",
+  "keywords": [
+    "api",
+    "cli",
+    "codegen",
+    "typescript",
+    "openapi",
+    "mcp"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "entrypoint/apigen-cli"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/entrypoint/apigen-cli#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

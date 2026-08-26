@@ -12,5 +12,22 @@
   },
   "files": [
     "dist"
-  ]
+  ],
+  "description": "Intermediate-representation cache for apigen",
+  "keywords": [
+    "cache",
+    "ir",
+    "apigen",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/apigen/apigen-plugin-ir-cache"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/apigen/apigen-plugin-ir-cache#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

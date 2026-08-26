@@ -14,5 +14,21 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "Core data structures for the @adhd data ecosystem",
+  "keywords": [
+    "data-structures",
+    "typescript",
+    "core"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/data/data-core-structures"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/data/data-core-structures#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }
