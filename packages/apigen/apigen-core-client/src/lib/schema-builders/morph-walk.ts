@@ -275,12 +275,36 @@ export async function walkType(
     }
 
     if (Object.keys(properties).length > 0) {
+      // BUG-APIGEN-017 (nested case) / BUG-BACKLOG-QUERY-001: mirror
+      // compose-schemas.ts's top-level additionalProperties:false so Ajv
+      // rejects unknown keys on THIS interface-derived nested object too,
+      // not only at the envelope/data wrapper. Without this, an
+      // unrecognized key nested inside a domain param object (e.g. a
+      // typo'd flag on a query-options interface) validates successfully
+      // and is then silently discarded by `decodeNode`'s object branch
+      // (runtime.ts) instead of erroring — confirmed as
+      // BUG-BACKLOG-QUERY-001's actual mechanism: `full`/`view`-shaped
+      // optional keys on a nested options object were accepted-and-ignored
+      // rather than rejected.
+      //
+      // Index-signature aware: a type with BOTH named properties AND a
+      // `[k: string]: V` / `[k: number]: V` index signature (e.g. a
+      // `metadata`/`extra`-shaped field) must still validate a legitimate
+      // extra key against the index signature's value type, not reject it
+      // outright — so `additionalProperties` becomes that resolved schema
+      // instead of `false` here. Only a type with NO index signature at all
+      // (the common case, and the one BUG-BACKLOG-QUERY-001 was filed
+      // against) gets the closed `false`.
+      const additionalProperties = indexValue
+        ? await recurse(indexValue.getText())
+        : false;
       return {
         type: 'object',
         properties,
         // Match ts-json-schema-generator's own convention: omit `required`
         // entirely when no property is required, rather than emitting `[]`.
         ...(required.length > 0 ? { required } : {}),
+        additionalProperties,
       };
     }
     // An index-signature-only object resolved above; anything else with no

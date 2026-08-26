@@ -116,7 +116,22 @@ export function projectMountInputSchema(
   input: unknown
 ): ComposedSchemas[string] {
   const schema = (input ?? {}) as MountInputSchema;
-  const isRootUnion = Array.isArray(schema.oneOf) && !!schema.discriminator;
+  // BUG-APIGEN-CLI-002 side effect (batch.ts's own doc comment, branchInputSchema):
+  // once a batch branch's discriminator property (`operation`) moves one level
+  // deeper under each branch's own `input` object, `detectDiscriminator`'s
+  // top-level-only scan correctly finds no discriminator to emit — so a REAL
+  // ≥2-op `_batch/<kind>` mount now legitimately produces `{oneOf: [...]}`
+  // with NO `discriminator` key at all. Requiring `schema.discriminator` here
+  // (this projection's prior condition) treated that root union as a single,
+  // non-union branch instead: `branchProps(schema)` then read `schema.properties`
+  // off a schema whose only key is `oneOf`, which is `undefined` — projecting
+  // ZERO merged properties, and therefore ZERO cliFlags, for every batch mount
+  // with ≥2 batchable operations sharing a kind (confirmed live: `Unknown
+  // option: --operation. Available: ` with an EMPTY flag list against
+  // `backlog`'s real `_batch/action` mount, which registers many actions).
+  // A root union is a root union whether or not it carries a discriminator —
+  // `oneOf` alone is sufficient and necessary to detect it.
+  const isRootUnion = Array.isArray(schema.oneOf);
   const branches: MountInputSchema[] = isRootUnion
     ? (schema.oneOf as MountInputSchema[])
     : [schema];

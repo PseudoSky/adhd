@@ -59,6 +59,7 @@
 import type { Scope } from '@adhd/environment-base-spec';
 import { initTelemetry } from '@adhd/sox-telemetry';
 import { startBacklogServer, type StartOpts } from './server.js';
+import { BacklogUsageError, failUsage } from './install-skill.js';
 
 export interface RunServeCommandOpts {
   scope?: Scope;
@@ -66,6 +67,34 @@ export interface RunServeCommandOpts {
   adhdRoot?: string;
   cwd?: string;
 }
+
+/**
+ * BUG-033: `backlog serve --help` used to throw a plain `Error` from
+ * `parseArgs` (unknown-argument), which `runServeCommand` neither caught nor
+ * short-circuited — the error propagated all the way to `index.ts`'s
+ * bin-entry guard, which prints `err.stack` unconditionally, so a completely
+ * ordinary "show me the help" request rendered as ten frames of minified
+ * dist. Mirrors `install.ts`'s established `--help` + `BacklogUsageError` +
+ * `failUsage` pattern exactly: `--help`/`-h` anywhere in argv short-circuits
+ * BEFORE parsing, and every argument-parsing failure is a `BacklogUsageError`
+ * (never a bare `Error`) so `runServeCommand` can catch it and hand it to
+ * `failUsage` instead of letting it reach the bin guard's stack-trace path.
+ */
+export const SERVE_HELP_TEXT = `backlog serve [--transport mcp|http|both] [--port N] [--host H]
+
+Starts the long-lived backlog server (MCP and/or HTTP), matching one of the
+process's own configured transports to the way an agent host or a script
+expects to reach it.
+
+  --transport <name>  mcp | http | both (default: mcp)
+  --port <N>           HTTP listen port (default: 3300; ignored for mcp-only)
+  --host <name>         HTTP listen host (default: 127.0.0.1; ignored for mcp-only)
+
+Examples:
+  backlog serve
+  backlog serve --transport http --port 3300
+  backlog serve --transport both --host 0.0.0.0
+`;
 
 function parseArgs(argv: string[]): Pick<StartOpts, 'transport' | 'port' | 'host'> {
   let transport: StartOpts['transport'] = 'mcp';
@@ -76,10 +105,10 @@ function parseArgs(argv: string[]): Pick<StartOpts, 'transport' | 'port' | 'host
     if (arg === '--transport') transport = argv[++i] as StartOpts['transport'];
     else if (arg === '--port') port = Number(argv[++i]);
     else if (arg === '--host') host = argv[++i];
-    else throw new Error(`backlog serve: unknown argument "${arg}" (expected --transport/--port/--host)`);
+    else throw new BacklogUsageError(`backlog serve: unknown argument "${arg}" (expected --transport/--port/--host)`);
   }
   if (transport !== 'mcp' && transport !== 'http' && transport !== 'both') {
-    throw new Error(`backlog serve: --transport must be mcp|http|both, got "${transport}"`);
+    throw new BacklogUsageError(`backlog serve: --transport must be mcp|http|both, got "${transport}"`);
   }
   const opts: Pick<StartOpts, 'transport' | 'port' | 'host'> = { transport };
   if (port !== undefined) opts.port = port;
@@ -91,7 +120,17 @@ function parseArgs(argv: string[]): Pick<StartOpts, 'transport' | 'port' | 'host
  *  process manager — or `.mcp.json`'s own stdio transport lifecycle — stops
  *  a long-lived MCP/HTTP server), then resolves cleanly. */
 export async function runServeCommand(argv: string[], opts: RunServeCommandOpts = {}): Promise<void> {
-  const parsed = parseArgs(argv);
+  if (argv.includes('--help') || argv.includes('-h')) {
+    console.log(SERVE_HELP_TEXT);
+    return;
+  }
+  let parsed: Pick<StartOpts, 'transport' | 'port' | 'host'>;
+  try {
+    parsed = parseArgs(argv);
+  } catch (err) {
+    if (err instanceof BacklogUsageError) return failUsage(err, SERVE_HELP_TEXT);
+    throw err;
+  }
   const controller = new AbortController();
   process.on('SIGTERM', () => controller.abort());
   process.on('SIGINT', () => controller.abort());

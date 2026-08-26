@@ -133,6 +133,10 @@ export interface BacklogNodeMeta {
   dedupeSymbol?: string;
   dedupePath?: string;
   dedupeErrorText?: string;
+  /** FEAT-012 — canonicalised author role (`AUTHORED_BY`). Read defensively via `v2Meta`-style casts until an update write path exists (TASK-004). */
+  author?: string;
+  /** FEAT-012 — canonicalised reporter role (`REPORTED_BY`). */
+  reporter?: string;
 }
 
 export function humanIdKind(humanId: string): string {
