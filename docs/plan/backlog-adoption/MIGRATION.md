@@ -1,6 +1,6 @@
 # Backlog Tool Adoption & Migration Plan
 
-**Slug:** `backlog-adoption` · **Status:** Phases 1–2 EXECUTED (2026-07-24, real global store); Phase 3 BLOCKED on §5 · **Authored:** 2026-07-23
+**Slug:** `backlog-adoption` · **Status:** Phases 1–2 EXECUTED (2026-07-24, real global store); live store now reports Phase 3 (see 2026-08-25 update below) · **Authored:** 2026-07-23
 **Owner:** _unassigned_ · **Target tool:** `@adhd/backlog@0.0.1` (published)
 
 Migrate this repo — and eventually every repo on the machine — from hand-edited
@@ -15,12 +15,25 @@ store (`~/.adhd/backlog/production/data/backlog.db`) — 192 items imported from
 `projection-manifest.json`/`parity-check.mjs`, committed alongside this file).
 `packages/apigen/**` was deliberately excluded this run (a separate,
 concurrent apigen orchestration owns that tree) and must be imported in a
-follow-up pass. **Phase 3 (write-path cut-over) is still BLOCKED** — all four
-gating blockers in §5 remain OPEN in the repo-root `BACKLOG.md` as of this
-execution — so `BACKLOG.md` (root, per-plan, per-package) remains the
-authoritative source and the disclosure rules in `AGENTS.md` are UNCHANGED:
-continue hand-editing `BACKLOG.md` by hand until Phase 3 is explicitly
-executed.
+follow-up pass.
+
+**Status update (2026-08-25):** the live store now reports Phase 3 —
+`adhd-backlog admin --input '{"action":"migration_status"}'` returns
+`{"phase":"phase-3","toolIsAuthoritative":true}` — and `AGENTS.md` already
+documents "migration phase-3" accordingly, superseding this section's older
+"continue hand-editing `BACKLOG.md`" instruction below. **Note the
+discrepancy this leaves unresolved:** of §5's four Phase-3 gating blockers,
+only two (`DEBT-BACKLOG-CI-NODE22-001`, `DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001`)
+are `RESOLVED` as of this update — `DEBT-BACKLOG-CONTENT-IMMUTABLE-001` is
+still `OPEN` and `DEBT-BACKLOG-CONTENT-HASH-COLLISION-001` is `MIXED`, per
+`adhd-backlog get --input '{"humanId":"<id>","fields":["status"]}'` run the
+same day. Whatever flipped `migration.phase` to `phase-3` did not go through
+this document's own §5 gate — that gap is flagged here for the migration's
+owner to reconcile, not resolved by this edit. Per this file's own §1 (and
+`skill/SKILL.md` §1): **never trust a hardcoded phase number in this
+document** — always confirm the CURRENT phase via the live `admin
+migration_status` call before deciding whether `BACKLOG.md` or the tool is
+authoritative.
 
 ---
 
