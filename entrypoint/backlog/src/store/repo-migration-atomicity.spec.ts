@@ -37,8 +37,8 @@ import { createItemNode } from './crud.js';
 import { findItemNode } from './query.js';
 import { migrateRepoItemNode, planRepoMigration } from './repo-migration.js';
 
-const LEGACY = 'adhd';
-const CANONICAL = 'PseudoSky/adhd';
+const LEGACY = 'legacy-project-alpha';
+const CANONICAL = 'canonical-project-beta';
 
 let tmp: TmpStore;
 

@@ -53,8 +53,8 @@ import {
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-const LEGACY = 'adhd';
-const CANONICAL = 'PseudoSky/adhd';
+const LEGACY = 'legacy-project-alpha';
+const CANONICAL = 'canonical-project-beta';
 
 let tmp: TmpStore;
 let backupDir: string;

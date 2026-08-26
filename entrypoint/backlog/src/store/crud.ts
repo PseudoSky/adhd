@@ -23,6 +23,7 @@ import {
   humanIdKind,
   importanceForPriority,
   isLiveBacklogItemNode,
+  normalizeRepoKey,
   sanitizeFtsQuery,
   toBacklogItem,
   type BacklogNodeMeta,
@@ -362,13 +363,22 @@ export async function createItemNode(store: GraphBacklogStore, input: CreateItem
 
   // BUG-BACKLOG-REPO-LOOKUP-UX-001 hardening: a case/whitespace-only variant
   // of an ALREADY-KNOWN repo is now a hard reject (was: silent write behind
-  // an ignorable warning, letting 'adhd' and 'PseudoSky/adhd' become two
-  // permanently disjoint scopes). A genuinely NEW repo string — never seen
-  // before even normalized — is still always allowed to file its first item
-  // (this repo's CLAUDE.md "never hard-fail on new repo" rule); it gets a
-  // soft advisory warning instead, same as before.
+  // an ignorable warning, letting 'Adhd' and 'adhd' become two permanently
+  // disjoint scopes). A genuinely NEW repo string — never seen before even
+  // normalized — is still always allowed to file its first item (this
+  // repo's CLAUDE.md "never hard-fail on new repo" rule); it gets a soft
+  // advisory warning instead, same as before.
+  //
+  // resolveCanonicalRepo also folds in a SEPARATE, broader match (TASK-001
+  // hardening: bare-name + compatible-owner, e.g. 'adhd' and
+  // 'PseudoSky/adhd') for read-side/UX resolution — those are deliberately
+  // NOT the same repo for write purposes: EPIC-A/FEAT-BACKLOG-004 models
+  // owner-qualified spellings as distinct, legitimate fork nodes of one
+  // project, not accidental duplicates. Only reject when the input is the
+  // SAME string modulo case/whitespace as the resolved canonical — never
+  // when resolution crossed a bare-name/owner match.
   const { canonical, isNewRepo } = await resolveCanonicalRepo(store, input.repo);
-  if (!isNewRepo && canonical !== input.repo) {
+  if (!isNewRepo && canonical !== input.repo && normalizeRepoKey(canonical) === normalizeRepoKey(input.repo)) {
     throw new InvalidArgumentError(
       'repo',
       `repo '${input.repo}' differs from the existing canonical value '${canonical}' only by case/whitespace — use '${canonical}' instead.`
@@ -411,6 +421,11 @@ export async function createItemNode(store: GraphBacklogStore, input: CreateItem
     if (input.projectPath !== undefined) meta.projectPath = input.projectPath;
     if (input.plan !== undefined) meta.plan = input.plan;
     if (input.importedFrom !== undefined) meta.importedFrom = input.importedFrom;
+    // TASK-004: declared on CreateItemInput (FEAT-012, model.ts) but never
+    // read here — a caller passing author/reporter got a success response
+    // with the value silently discarded.
+    if (input.author !== undefined) meta.author = input.author;
+    if (input.reporter !== undefined) meta.reporter = input.reporter;
     if (input.dedupeScan?.symbol !== undefined) meta.dedupeSymbol = input.dedupeScan.symbol;
     if (input.dedupeScan?.path !== undefined) meta.dedupePath = input.dedupeScan.path;
     if (input.dedupeScan?.errorText !== undefined) meta.dedupeErrorText = input.dedupeScan.errorText;
