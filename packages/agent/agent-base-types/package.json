@@ -21,5 +21,14 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "description": "Shared TypeScript types and schemas for the @adhd/agent ecosystem",
+  "keywords": [
+    "agent",
+    "llm",
+    "typescript",
+    "types",
+    "schema",
+    "mcp"
+  ]
 }

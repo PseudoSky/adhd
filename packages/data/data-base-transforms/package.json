@@ -12,5 +12,24 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "Type-safe data transforms - deepCopy, camelCase, and more, for browser and Node",
+  "keywords": [
+    "typescript",
+    "transforms",
+    "deepcopy",
+    "camelcase",
+    "utilities",
+    "data"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/data/data-base-transforms"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/data/data-base-transforms#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

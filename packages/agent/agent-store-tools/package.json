@@ -43,5 +43,12 @@
   "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/agent/agent-store-tools#readme",
   "bugs": {
     "url": "https://github.com/PseudoSky/adhd/issues"
-  }
+  },
+  "keywords": [
+    "agent",
+    "tools",
+    "registry",
+    "llm",
+    "typescript"
+  ]
 }

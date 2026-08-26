@@ -8,5 +8,23 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "Specification and types for the @adhd environment cascade",
+  "keywords": [
+    "config",
+    "environment",
+    "spec",
+    "node",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/environment/environment-base-spec"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/environment/environment-base-spec#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

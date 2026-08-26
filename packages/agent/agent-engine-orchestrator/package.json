@@ -61,5 +61,14 @@
   "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/agent/agent-engine-orchestrator#readme",
   "bugs": {
     "url": "https://github.com/PseudoSky/adhd/issues"
-  }
+  },
+  "keywords": [
+    "agent",
+    "llm",
+    "orchestration",
+    "mcp",
+    "ai",
+    "typescript",
+    "workflow"
+  ]
 }

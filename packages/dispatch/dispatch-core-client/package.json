@@ -13,5 +13,25 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "Client for the @adhd/dispatch task-DAG orchestration engine - execute typed task DAGs",
+  "keywords": [
+    "dag",
+    "orchestration",
+    "workflow",
+    "task",
+    "pipeline",
+    "scheduler",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/dispatch/dispatch-core-client"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/dispatch/dispatch-core-client#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

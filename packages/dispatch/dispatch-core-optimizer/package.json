@@ -10,5 +10,23 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "Optimizer for @adhd/dispatch task DAGs",
+  "keywords": [
+    "dag",
+    "optimizer",
+    "orchestration",
+    "task",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/dispatch/dispatch-core-optimizer"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/dispatch/dispatch-core-optimizer#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

@@ -14,5 +14,23 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "apigen plugin that live-mounts TypeScript as an OpenAPI document",
+  "keywords": [
+    "openapi",
+    "apigen",
+    "typescript",
+    "plugin",
+    "codegen"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/apigen/apigen-plugin-openapi"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/apigen/apigen-plugin-openapi#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

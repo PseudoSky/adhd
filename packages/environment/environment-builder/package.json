@@ -12,5 +12,24 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "Builds the @adhd environment cascade from code defaults, system, global, project, and env vars",
+  "keywords": [
+    "config",
+    "environment",
+    "cascade",
+    "node",
+    "typescript",
+    "builder"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/environment/environment-builder"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/environment/environment-builder#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

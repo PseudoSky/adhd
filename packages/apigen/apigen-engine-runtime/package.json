@@ -20,5 +20,25 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "Runtime executor for apigen - dispatch derived operations with pluggable concurrency and transports",
+  "keywords": [
+    "api",
+    "runtime",
+    "typescript",
+    "schema",
+    "dispatch",
+    "concurrency",
+    "codegen"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/apigen/apigen-engine-runtime"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/apigen/apigen-engine-runtime#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

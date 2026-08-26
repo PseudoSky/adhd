@@ -11,5 +11,23 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "Zero-config environment cascade - code defaults, system, global, project, and env vars",
+  "keywords": [
+    "config",
+    "environment",
+    "cascade",
+    "node",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/environment/environment-core-node"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/environment/environment-core-node#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

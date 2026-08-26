@@ -15,5 +15,23 @@
   "assets": [
     "src/dag-v4.schema.json",
     "src/valid-ops-by-kind.json"
-  ]
+  ],
+  "description": "Specification and types for @adhd/dispatch task DAGs",
+  "keywords": [
+    "dag",
+    "spec",
+    "task",
+    "orchestration",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/dispatch/dispatch-base-spec"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/dispatch/dispatch-base-spec#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

@@ -25,5 +25,23 @@
   },
   "dependencies": {
     "zod": "*"
+  },
+  "keywords": [
+    "agent",
+    "budget",
+    "plugin",
+    "llm",
+    "cost",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/agent/agent-plugin-budget"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/agent/agent-plugin-budget#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
   }
 }

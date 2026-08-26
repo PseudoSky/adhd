@@ -14,5 +14,22 @@
   "files": [
     "dist",
     "CHANGELOG.md"
-  ]
+  ],
+  "description": "JSON serializer for @adhd/dispatch DAG specs",
+  "keywords": [
+    "dag",
+    "serializer",
+    "json",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/dispatch/dispatch-serializer-json"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/dispatch/dispatch-serializer-json#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

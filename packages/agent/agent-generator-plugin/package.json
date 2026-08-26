@@ -14,5 +14,21 @@
     "CHANGELOG.md",
     "generators.json",
     "REGISTRY-PACKAGE-RULES.md"
-  ]
+  ],
+  "keywords": [
+    "agent",
+    "generator",
+    "plugin",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/agent/agent-generator-plugin"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/agent/agent-generator-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }
