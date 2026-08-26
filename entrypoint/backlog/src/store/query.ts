@@ -66,7 +66,7 @@ function applyOpenClosedFilter(items: BacklogItem[], filter: BacklogFilter): Bac
  * (two fields simultaneously unset) that `NodeFilter`'s AND-of-equals cannot
  * express. See `BacklogFilter.rootLevel`.
  */
-function applyRootLevelFilter(nodes: NodeRecord[], filter: BacklogFilter): NodeRecord[] {
+function applyRootLevelFilter<T extends NodeRecord>(nodes: T[], filter: BacklogFilter): T[] {
   if (!filter.rootLevel) return nodes;
   return nodes.filter((n) => {
     const m = n.metadata as Partial<BacklogNodeMeta> | undefined;
@@ -81,7 +81,7 @@ function applyRootLevelFilter(nodes: NodeRecord[], filter: BacklogFilter): NodeR
  * archived-exclusion implementation instead of `renderToMarkdown`
  * re-implementing its own `!metadata.archivedAt` scan.
  */
-function applyExcludeArchivedFilter(nodes: NodeRecord[], filter: BacklogFilter): NodeRecord[] {
+function applyExcludeArchivedFilter<T extends NodeRecord>(nodes: T[], filter: BacklogFilter): T[] {
   if (!filter.excludeArchived) return nodes;
   return nodes.filter((n) => !(n.metadata as Partial<BacklogNodeMeta> | undefined)?.archivedAt);
 }
@@ -101,7 +101,7 @@ function applyExcludeArchivedFilter(nodes: NodeRecord[], filter: BacklogFilter):
  * `id` — the store's own monotonic insertion-order rowid — in JS, ONCE,
  * before any slicing, makes every page boundary reproducible across calls.
  */
-function stableNodeOrder(nodes: NodeRecord[]): NodeRecord[] {
+function stableNodeOrder<T extends NodeRecord>(nodes: T[]): T[] {
   return [...nodes].sort((a, b) => a.id - b.id);
 }
 
@@ -149,7 +149,7 @@ const GREP_FETCH_BUDGET = 1000;
  * `listItems` page from, so pagination always runs LAST, over the fully
  * filtered set.
  */
-async function fetchFilteredNodes(store: GraphBacklogStore, filter: BacklogFilter): Promise<NodeRecord[]> {
+async function fetchFilteredNodes(store: GraphBacklogStore, filter: BacklogFilter): Promise<Array<NodeRecord & { score?: number }>> {
   // Resolve a case/whitespace-variant `repo` to its canonical stored form
   // BEFORE it becomes an exact-match `namespace` filter below — otherwise
   // 'pseudosky/adhd' silently matches zero rows against 'PseudoSky/adhd'.
@@ -175,7 +175,7 @@ async function fetchFilteredNodes(store: GraphBacklogStore, filter: BacklogFilte
 }
 
 /** Raw NodeRecord query — used internally where the full node (not just the mapped BacklogItem) is needed. */
-export async function queryItemNodes(store: GraphBacklogStore, filter: BacklogFilter = {}): Promise<NodeRecord[]> {
+export async function queryItemNodes(store: GraphBacklogStore, filter: BacklogFilter = {}): Promise<Array<NodeRecord & { score?: number }>> {
   const nodes = await fetchFilteredNodes(store, filter);
   return paginate(stableNodeOrder(nodes), filter).page;
 }
@@ -395,6 +395,8 @@ interface HistoryDerivedStats {
   timeToResolution?: IDurationStats;
   timeInStatus?: Record<string, IDurationStats>;
   reopenRate?: number;
+  /** AC-15 — items that reached a terminal status inside `window` (see `computeStats`'s `closedInWindow`). */
+  closedInWindow: number;
 }
 
 /**
@@ -480,7 +482,7 @@ async function computeHistoryDerivedStats(store: GraphBacklogStore, nodes: NodeR
   const timeInStatus: Record<string, IDurationStats> = {};
   for (const [status, durations] of durationsByStatus) timeInStatus[status] = durationStats(durations);
 
-  const result: HistoryDerivedStats = { coverage };
+  const result: HistoryDerivedStats = { coverage, closedInWindow: reachedTerminalInWindowCount };
   if (resolutionDurationsMs.length > 0) result.timeToResolution = durationStats(resolutionDurationsMs);
   if (Object.keys(timeInStatus).length > 0) result.timeInStatus = timeInStatus;
   if (reachedTerminalInWindowCount > 0) result.reopenRate = reopenedAfterCount / reachedTerminalInWindowCount;
@@ -514,11 +516,17 @@ export async function computeStats(store: GraphBacklogStore, scope: StatsScopeWi
 
   const window = resolveStatsWindow(scope);
   const history = await computeHistoryDerivedStats(store, nodes, items, window);
+  // AC-15 — exact for every item (unlike `closedInWindow`, which only sees
+  // what the audit log recorded): read directly off `item.createdAt`.
+  const openedInWindow = items.filter((it) => withinWindow(it.createdAt, window)).length;
 
   const stats: IBacklogStats = {
     total: items.length,
     open: open.length,
     closed: closed.length,
+    closedInWindow: history.closedInWindow,
+    openedInWindow,
+    netInWindow: openedInWindow - history.closedInWindow,
     byStatus: countByKey(items, (it) => it.status),
     // BUG-023 — OPEN-scoped, never the unscoped `items` array.
     byPriority: countByPriority(open),

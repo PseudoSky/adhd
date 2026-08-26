@@ -35,6 +35,7 @@ import type {
   CreateItemInput,
   CreateItemResult,
   DependencyGraph,
+  ILinkRelatedResult,
   ImportMarkdownInput,
   ImportResult,
   MigrationPhase,
@@ -49,7 +50,6 @@ import type {
   UpdateItemInput,
 } from './model.js';
 import { isTerminalStatus, requiresCitation, requiresReason } from './model.js';
-import type { GraphBacklogStore } from './store/graph-backlog-store.js';
 import { createItemNode, getItemNode, softDeleteItemNode, updateItemNode } from './store/crud.js';
 import { auditTrail as auditTrailNode, blockers as blockersNode, buildNotFoundError, computeStats, dependencyGraph as dependencyGraphNode, knownRepos, listItems as listItemsNode, queryItemNodes, readyItems as readyItemsNode, spotlight as spotlightNode, staleClaims as staleClaimsNode, topoOrder as topoOrderNode } from './store/query.js';
 import { toBacklogItem } from './store/mapping.js';
@@ -223,16 +223,31 @@ export async function archiveResolved(ctx: BacklogCtx, scope: StatsScope, opts?:
 // §5.5 — Structure
 // ============================================================================
 
-export async function addDependency(ctx: BacklogCtx, repo: string, humanId: string, dependsOnHumanId: string): Promise<void> {
-  await addDependencyNode(ctx.store, repo, humanId, dependsOnHumanId);
+/** `targetRepo` — see `addDependencyNode`'s doc comment (store/structure.ts). */
+export async function addDependency(
+  ctx: BacklogCtx,
+  repo: string,
+  humanId: string,
+  dependsOnHumanId: string,
+  targetRepo?: string
+): Promise<{ alreadyExisted: boolean }> {
+  return addDependencyNode(ctx.store, repo, humanId, dependsOnHumanId, targetRepo);
 }
 
-export async function removeDependency(ctx: BacklogCtx, repo: string, humanId: string, dependsOnHumanId: string): Promise<void> {
-  await removeDependencyNode(ctx.store, repo, humanId, dependsOnHumanId);
+/** `targetRepo` — see `removeDependencyNode`'s doc comment (store/structure.ts). */
+export async function removeDependency(
+  ctx: BacklogCtx,
+  repo: string,
+  humanId: string,
+  dependsOnHumanId: string,
+  targetRepo?: string
+): Promise<{ alreadyExisted: boolean }> {
+  return removeDependencyNode(ctx.store, repo, humanId, dependsOnHumanId, targetRepo);
 }
 
-export async function linkRelated(ctx: BacklogCtx, repo: string, humanIdA: string, humanIdB: string): Promise<void> {
-  await linkRelatedNode(ctx.store, repo, humanIdA, humanIdB);
+/** `targetRepo` — see `linkRelatedNode`'s doc comment (store/structure.ts). */
+export async function linkRelated(ctx: BacklogCtx, repo: string, humanIdA: string, humanIdB: string, targetRepo?: string): Promise<ILinkRelatedResult> {
+  return linkRelatedNode(ctx.store, repo, humanIdA, humanIdB, targetRepo);
 }
 
 /** Mints a new item, links new SUPERSEDES old, invalidates old with reason. */
@@ -254,9 +269,12 @@ export async function setPriority(ctx: BacklogCtx, repo: string, humanId: string
   return setPriorityNode(ctx.store, repo, humanId, priority);
 }
 
-/** MEMBER_OF edge to a plan node (auto-created if the plan slug hasn't been seen before). */
-export async function attachToPlan(ctx: BacklogCtx, repo: string, humanId: string, planSlug: string): Promise<void> {
-  await attachToPlanNode(ctx.store, repo, humanId, planSlug);
+/**
+ * MEMBER_OF edge to a plan node (auto-created if the plan slug hasn't been
+ * seen before). `planRepo` — see `attachToPlanNode`'s doc comment (store/structure.ts).
+ */
+export async function attachToPlan(ctx: BacklogCtx, repo: string, humanId: string, planSlug: string, planRepo?: string): Promise<{ alreadyExisted: boolean }> {
+  return attachToPlanNode(ctx.store, repo, humanId, planSlug, planRepo);
 }
 
 /**

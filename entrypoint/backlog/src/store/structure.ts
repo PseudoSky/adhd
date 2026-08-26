@@ -34,10 +34,35 @@ async function requireItemNode(store: GraphBacklogStore, repo: string, humanId: 
   return node;
 }
 
-export async function addDependencyNode(store: GraphBacklogStore, repo: string, humanId: string, dependsOnHumanId: string): Promise<void> {
-  const from = await requireItemNode(store, repo, humanId);
-  const to = await requireItemNode(store, repo, dependsOnHumanId);
-  await store.graph.writeEdge(from.id, to.id, 'DEPENDS_ON');
+/**
+ * FEAT-BACKLOG-004 — `targetRepo` lets `dependsOnHumanId` live in a
+ * DIFFERENT repo than `humanId` (defaults to `repo` when absent, so the
+ * common single-repo call is unaffected). `writeEdge` is an upsert (BUG-025
+ * — see `linkRelatedNode`'s doc comment below) and cannot itself distinguish
+ * "already there" from "freshly written", so `alreadyExisted` is checked
+ * BEFORE the write, inside the same immediate transaction `linkRelatedNode`
+ * uses for the identical race reason.
+ */
+export async function addDependencyNode(
+  store: GraphBacklogStore,
+  repo: string,
+  humanId: string,
+  dependsOnHumanId: string,
+  targetRepo?: string
+): Promise<{ alreadyExisted: boolean }> {
+  return withImmediateRetry(() =>
+    store.adapter.transaction(
+      async () => {
+        const from = await requireItemNode(store, repo, humanId);
+        const to = await requireItemNode(store, targetRepo ?? repo, dependsOnHumanId);
+        const existing = await store.graph.getEdges({ src: from.id, dst: to.id, rel: 'DEPENDS_ON' });
+        const alreadyExisted = existing.length > 0;
+        await store.graph.writeEdge(from.id, to.id, 'DEPENDS_ON');
+        return { alreadyExisted };
+      },
+      { mode: 'immediate' }
+    )
+  );
 }
 
 /**
@@ -49,10 +74,20 @@ export async function addDependencyNode(store: GraphBacklogStore, repo: string, 
  * store-adapter's `executeRun` query surface (the raw `store.db` handle is
  * gone) — same SQL, same semantics.
  */
-export async function removeDependencyNode(store: GraphBacklogStore, repo: string, humanId: string, dependsOnHumanId: string): Promise<void> {
+/** FEAT-BACKLOG-004 — `targetRepo`, same default-to-`repo` contract as `addDependencyNode`. `alreadyExisted` reports whether the edge was there BEFORE this delete (so a caller can tell a real removal from a no-op). */
+export async function removeDependencyNode(
+  store: GraphBacklogStore,
+  repo: string,
+  humanId: string,
+  dependsOnHumanId: string,
+  targetRepo?: string
+): Promise<{ alreadyExisted: boolean }> {
   const from = await requireItemNode(store, repo, humanId);
-  const to = await requireItemNode(store, repo, dependsOnHumanId);
+  const to = await requireItemNode(store, targetRepo ?? repo, dependsOnHumanId);
+  const existing = await store.graph.getEdges({ src: from.id, dst: to.id, rel: 'DEPENDS_ON' });
+  const alreadyExisted = existing.length > 0;
   await store.adapter.executeRun(`DELETE FROM edge WHERE src = ? AND dst = ? AND rel = 'DEPENDS_ON'`, [from.id, to.id]);
+  return { alreadyExisted };
 }
 
 /**
@@ -85,12 +120,19 @@ async function hasLiveRelatesToEdge(store: GraphBacklogStore, nodeIdA: number, n
   return forward.length > 0 || backward.length > 0;
 }
 
-export async function linkRelatedNode(store: GraphBacklogStore, repo: string, humanIdA: string, humanIdB: string): Promise<ILinkRelatedResult> {
+/** FEAT-BACKLOG-004 — `targetRepo` lets `humanIdB` live in a different repo than `humanIdA` (defaults to `repo`). */
+export async function linkRelatedNode(
+  store: GraphBacklogStore,
+  repo: string,
+  humanIdA: string,
+  humanIdB: string,
+  targetRepo?: string
+): Promise<ILinkRelatedResult> {
   return withImmediateRetry(() =>
     store.adapter.transaction(
       async () => {
         const a = await requireItemNode(store, repo, humanIdA);
-        const b = await requireItemNode(store, repo, humanIdB);
+        const b = await requireItemNode(store, targetRepo ?? repo, humanIdB);
         const alreadyLinked = await hasLiveRelatesToEdge(store, a.id, b.id);
         await store.graph.writeEdge(a.id, b.id, 'RELATES_TO');
         return { linked: true, repo, humanIdA, humanIdB, alreadyLinked };
@@ -302,11 +344,27 @@ async function findOrCreatePlanNode(store: GraphBacklogStore, repo: string, plan
   });
 }
 
-export async function attachToPlanNode(store: GraphBacklogStore, repo: string, humanId: string, planSlug: string): Promise<void> {
+/**
+ * FEAT-BACKLOG-004 — `planRepo` scopes the plan node's own namespace, letting
+ * an item in one repo attach to a plan that lives (or will be minted) in
+ * another (defaults to `repo`, so the common single-repo call is
+ * unaffected). `alreadyExisted` reports whether `item` was already a member
+ * of `planSlug` before this call.
+ */
+export async function attachToPlanNode(
+  store: GraphBacklogStore,
+  repo: string,
+  humanId: string,
+  planSlug: string,
+  planRepo?: string
+): Promise<{ alreadyExisted: boolean }> {
   const item = await requireItemNode(store, repo, humanId);
-  const planId = await findOrCreatePlanNode(store, repo, planSlug);
+  const planId = await findOrCreatePlanNode(store, planRepo ?? repo, planSlug);
+  const existing = await store.graph.getEdges({ src: item.id, dst: planId, rel: 'MEMBER_OF' });
+  const alreadyExisted = existing.length > 0;
   await mutateMetadata<BacklogNodeMeta>(store, item.id, (meta) => ({ ...meta, plan: planSlug, updatedAt: new Date().toISOString() }));
   await store.graph.writeEdge(item.id, planId, 'MEMBER_OF');
+  return { alreadyExisted };
 }
 
 async function findOrCreateAssigneeNode(store: GraphBacklogStore, to: string): Promise<number> {

@@ -39,6 +39,7 @@
  * the install. See the `case 'skill'` arm.
  */
 import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type {
   BacklogFilter,
   BacklogItem,
@@ -86,6 +87,7 @@ import { findHumanIdInAnyRepo, findItemNode, queryItemNodes, topoOrder } from '.
 import { getItemNode, softDeleteItemNode } from '../store/crud.js';
 import { toBacklogItem, type BacklogNodeMeta } from '../store/mapping.js';
 import { listRepositoryNodes, lookupRepository } from '../store/repo-nodes.js';
+import { backupStore, restoreStore, type IBackupResult, type IRestoreResult } from '../store/store-backup.js';
 
 // ============================================================================
 // Shared plumbing - envelope wrapping + parameter validation.
@@ -1481,6 +1483,68 @@ export async function computeOverlapView(
  * that dispatched dynamically can narrow the result without re-reading its own
  * request (0.4 outcome-reporting).
  */
+const BACKUP_PARAM_KEYS = ['destPath', 'overwrite'] as const;
+
+/**
+ * INTERFACE_v2 §6 `backup` (P4) — point-in-time snapshot of the live store
+ * via `store/store-backup.ts`'s `backupStore` (`VACUUM INTO` + a
+ * sha256-manifest sidecar). Read-only from the caller's point of view (it
+ * never mutates a live item), so unlike `prune`/`archive`/`merge` there is no
+ * dry-run/confirm gate — `overwrite` alone controls whether an existing
+ * `destPath` is replaced.
+ *
+ * @param params `{ destPath, overwrite? }`
+ */
+export async function adminBackup(ctx: BacklogCtx, params: ParamBag = {}): Promise<IOutcomeEnvelope<IBackupResult>> {
+  return envelope(async () => {
+    assertKnownParams('backup', params, BACKUP_PARAM_KEYS);
+    const destPath = requireString(params, 'destPath');
+    const overwrite = readBoolean(params, 'overwrite') ?? false;
+    const sourceDbPath = ctx.env.config.db.path ?? '<unknown — non-file db substrate>';
+    return { data: await backupStore(ctx.store, sourceDbPath, destPath, { overwrite }) };
+  });
+}
+
+const RESTORE_PARAM_KEYS = ['backupPath', 'destDbPath', 'confirm'] as const;
+
+/**
+ * INTERFACE_v2 §6 `restore` (P4) — verifies a backup's manifest/sha256 and,
+ * only when `confirm:true`, materialises it onto `destDbPath` via
+ * `store/store-backup.ts`'s `restoreStore`. Dry-run by default, same rule 3
+ * cross-cutting contract as `prune`/`archive`/`merge`/`reconcile_repo` — the
+ * dry run still fully verifies the backup (a caller learns about a corrupt
+ * backup even on the preview) but writes nothing.
+ *
+ * Refuses outright (never a dry-run-only warning) when `destDbPath` resolves
+ * to `ctx`'s OWN currently-open store file — `restoreStore` copies raw bytes
+ * onto a path, which is unsafe to do out from under this process's own open
+ * connection (`store-backup.ts`'s header doc comment); restoring the live
+ * store means targeting a fresh/foreign path and swapping it in externally,
+ * not asking a live `ctx` to do it to itself.
+ *
+ * @param params `{ backupPath, destDbPath, confirm? }`
+ */
+export async function adminRestore(ctx: BacklogCtx, params: ParamBag = {}): Promise<IOutcomeEnvelope<IRestoreResult>> {
+  return envelope(async () => {
+    assertKnownParams('restore', params, RESTORE_PARAM_KEYS);
+    const backupPath = requireString(params, 'backupPath');
+    const destDbPath = requireString(params, 'destDbPath');
+    const confirm = readBoolean(params, 'confirm') ?? false;
+    const liveDbPath = ctx.env.config.db.path;
+    if (liveDbPath !== undefined && resolve(destDbPath) === resolve(liveDbPath)) {
+      throw new InvalidArgumentError(
+        'destDbPath',
+        `backlog_admin(restore): destDbPath (${destDbPath}) is this ctx's own open store file — restoring onto a live connection's own file is unsafe. Restore to a fresh path and swap it in externally instead.`
+      );
+    }
+    const result = await restoreStore(backupPath, destDbPath, { confirm });
+    return {
+      data: result,
+      ...(confirm ? {} : { warnings: ['restore: dry run - nothing was written. Re-run with `confirm: true` to apply.'] }),
+    };
+  });
+}
+
 export type IAdminResult =
   | { action: 'doctor'; report: IDoctorReport }
   | { action: 'prune'; report: IPruneReport }
@@ -1493,7 +1557,9 @@ export type IAdminResult =
   | { action: 'set_migration_phase'; status: SetMigrationPhaseResult }
   | { action: 'version'; version: BacklogVersionInfo }
   | { action: 'batch'; report: IBatchReport }
-  | { action: 'reconcile_repo'; report: RepoMigrationResult };
+  | { action: 'reconcile_repo'; report: RepoMigrationResult }
+  | { action: 'backup'; result: IBackupResult }
+  | { action: 'restore'; result: IRestoreResult };
 
 /** Re-wraps a per-action envelope into the tagged union, preserving warnings and the exact error. */
 function tag<T>(env: IOutcomeEnvelope<T>, build: (data: T) => IAdminResult): IOutcomeEnvelope<IAdminResult> {
@@ -1577,6 +1643,10 @@ export async function backlogAdmin(
       return tag(await adminBatch(ctx, params, by, runtime.batchDispatch), (report) => ({ action: 'batch', report }));
     case 'reconcile_repo':
       return tag(await adminReconcileRepo(ctx, params, by), (report) => ({ action: 'reconcile_repo', report }));
+    case 'backup':
+      return tag(await adminBackup(ctx, params), (result) => ({ action: 'backup', result }));
+    case 'restore':
+      return tag(await adminRestore(ctx, params), (result) => ({ action: 'restore', result }));
     case 'skill':
       return envelope<IAdminResult>(async () => {
         throw new UnsupportedOperationError(

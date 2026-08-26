@@ -30,8 +30,10 @@
  *    (`apigen-plugin-batch`'s `buildBatchHandler`: `domainArgs: item`) — so
  *    it must equal the whole second positional argument the target
  *    operation expects. `create(ctx, input: IBacklogCreateInput)`'s `input`
- *    is `{ input: {family, title, body, repo, priority?, …}, by }`, so one
- *    batch item is `{ input: { input: {...}, by } }`.
+ *    is `{ item: {family, title, body, repo, priority?, …}, by }` (the
+ *    create payload lives on `item`, not `input` — model.ts
+ *    `IBacklogCreateInput.item` doc comment), so one batch item is
+ *    `{ input: { item: {...}, by } }`.
  *  - A non-batch (regular, non-mount) HTTP endpoint DOES go through the
  *    `{data:{...}}` envelope convention (`composeSchemas()`), so the
  *    follow-up plain `POST /backlog/get` call below needs
@@ -126,7 +128,7 @@ describe('backlog batch adoption — real POST /_batch/action fans out to the re
     // Item #1: valid — real create, real store write.
     // Item #2: INVALID — `priority: 'NOT_A_REAL_PRIORITY'` violates the real
     // `Priority` enum (`CRITICAL|HIGH|MEDIUM|LOW`, `model.ts`) baked into the
-    // extracted JSON Schema for `IBacklogCreateInput.input.priority`, so the
+    // extracted JSON Schema for `IBacklogCreateInput.item.priority`, so the
     // REAL composed validate-Layer (the same AJV validation every non-batch
     // request goes through — confirmed empirically: it rejects with AJV's
     // `enum` keyword violation, `.../priority must be equal to one of the
@@ -140,14 +142,14 @@ describe('backlog batch adoption — real POST /_batch/action fans out to the re
       body: JSON.stringify({
         operation: 'backlog/create',
         items: [
-          { input: { input: { family: 'BUG-BATCHADOPT', title: 'first item', body: 'x', repo }, by } },
+          { input: { item: { family: 'BUG-BATCHADOPT', title: 'first item', body: 'x', repo }, by } },
           {
             input: {
-              input: { family: 'BUG-BATCHADOPT', title: 'bad priority', body: 'x', repo, priority: 'NOT_A_REAL_PRIORITY' },
+              item: { family: 'BUG-BATCHADOPT', title: 'bad priority', body: 'x', repo, priority: 'NOT_A_REAL_PRIORITY' },
               by,
             },
           },
-          { input: { input: { family: 'BUG-BATCHADOPT', title: 'third item', body: 'x', repo }, by } },
+          { input: { item: { family: 'BUG-BATCHADOPT', title: 'third item', body: 'x', repo }, by } },
         ],
         concurrency: 2,
         onItemError: 'continue',

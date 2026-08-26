@@ -213,6 +213,7 @@ const DEFAULT_SORT_DIRECTION: Record<IBacklogSort, ISortDirection> = {
   created: 'desc',
   demand: 'desc',
   relevance: 'desc',
+  textMatch: 'desc',
 };
 
 /**
@@ -302,6 +303,8 @@ export interface IBacklogQueryResult {
 interface IQueryRow {
   node: NodeRecord;
   item: BacklogItem;
+  /** BM25 relevance score from `store.graph.searchNodes` (the `filter.grep` FTS path) — `undefined` off the non-grep path, where `sort:"textMatch"` has no signal to rank by. */
+  score?: number;
 }
 
 /** FEAT-012 / FEAT-013 / §5a.3 metadata that has no `BacklogNodeMeta` field yet — read defensively off the node, exactly as `v2/get.ts` does. */
@@ -837,7 +840,7 @@ async function fetchRows(store: GraphBacklogStore, filter: IBacklogFilter, warni
   // truncation nobody can see is a silent truncation.
   const truncated = filter.grep !== undefined && nodes.length >= GREP_FETCH_BUDGET;
 
-  let rows: IQueryRow[] = nodes.map((node) => ({ node, item: toBacklogItem(node) }));
+  let rows: IQueryRow[] = nodes.map((node) => ({ node, item: toBacklogItem(node), score: node.score }));
   if (repoCandidates !== undefined && repoCandidates.size !== 1) {
     const allowed = repoCandidates;
     rows = rows.filter((r) => allowed.has(r.item.repo));
@@ -891,6 +894,14 @@ function compareRows(a: IQueryRow, b: IQueryRow, sort: IBacklogSort): number {
       // Unreachable — `assertNoSemanticInputs` rejects `sort:"relevance"`
       // with `rag_not_configured` before any row is fetched (AC-12).
       throw new RagNotConfiguredError('sort:"relevance"');
+    case 'textMatch':
+      // §2.3 — the FTS5 bm25 score `filter.grep`'s `searchNodes` call already
+      // computed (`fetchRows` -> `queryItemNodes` -> `store/query.ts`'s
+      // `fetchFilteredNodes`, grep branch). Missing on the non-grep path
+      // (`score` is `undefined`) — those rows tie at 0 and fall back to the
+      // `humanId` tiebreak, same "never throw, degrade to a stable order"
+      // posture as every other comparator here.
+      return (a.score ?? 0) - (b.score ?? 0) || a.item.humanId.localeCompare(b.item.humanId);
     default: {
       const never: never = sort;
       throw new InvalidArgumentError('sort', `sort: unhandled sort ${JSON.stringify(never)}`);

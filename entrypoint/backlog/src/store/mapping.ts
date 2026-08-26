@@ -123,6 +123,10 @@ export interface BacklogNodeMeta {
   assignee?: string;
   claimedBy?: string;
   claimedAt?: string;
+  /** TASK-004/FEAT-012 — canonicalised author role, defaults to `canonicalIdentityKey(by)` at create time. */
+  author?: string;
+  /** TASK-004/FEAT-012 — canonicalised reporter role, defaults to `author` when absent. */
+  reporter?: string;
   citations: Citation[];
   notes: Note[];
   createdAt: string;
@@ -199,6 +203,8 @@ export function toBacklogItem(node: NodeRecord): BacklogItem {
     assignee: meta.assignee,
     claimedBy: meta.claimedBy,
     claimedAt: meta.claimedAt,
+    author: meta.author,
+    reporter: meta.reporter,
     citations: meta.citations ?? [],
     notes: meta.notes ?? [],
     tags: node.tags.filter((t) => !reservedTags.has(t)),

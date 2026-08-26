@@ -13,6 +13,7 @@ import { allocateHumanIdAndInsert } from './ids.js';
 import { buildNotFoundError, findItemNode, knownRepos, resolveCanonicalRepo } from './query.js';
 import { mutateMetadata } from './mutate-metadata.js';
 import { assertValidCitation } from './lifecycle.js';
+import { dispatchBacklogHook } from './hooks.js';
 import {
   BACKLOG_ITEM_TAG,
   buildNodeContent,
@@ -444,7 +445,16 @@ export async function createItemNode(store: GraphBacklogStore, input: CreateItem
 
     const node = await store.graph.getNode(nodeId);
     if (!node) throw new Error(`backlog: writeNode returned an id that does not resolve: ${nodeId}`);
-    return { item: toBacklogItem(node), created: true, duplicateCandidates: [], ...(repoWarning !== undefined ? { repoWarning } : {}) };
+    const item = toBacklogItem(node);
+    // FEAT-BACKLOG-001 — fired only on a genuine new-node write, after
+    // `allocateHumanIdAndInsert`'s transaction has committed. Never fired on
+    // the id-collision/duplicate-suppressed branches above (this closure's
+    // `existingAtCommit` short-circuit, and `createItemNode`'s own
+    // dedupe-scan/idOverride early returns) — those are read-shaped no-ops,
+    // not creates, so a hook listening for "a new item exists" must never
+    // see one for them.
+    dispatchBacklogHook(store, { type: 'itemCreated', item });
+    return { item, created: true, duplicateCandidates: [], ...(repoWarning !== undefined ? { repoWarning } : {}) };
   });
 }
 
@@ -646,7 +656,12 @@ export async function updateItemNode(store: GraphBacklogStore, repo: string, hum
 
   const updated = await store.graph.getNode(node.id);
   if (!updated) throw await buildNotFoundError(store, repo, humanId);
-  return toBacklogItem(updated);
+  const item = toBacklogItem(updated);
+  // FEAT-BACKLOG-001 — fired only after both the metadata transaction and
+  // the touch()/content-column resync above have committed, mirroring
+  // lifecycle.ts's addCitationNode.
+  dispatchBacklogHook(store, { type: 'itemUpdated', item });
+  return item;
 }
 
 export async function softDeleteItemNode(store: GraphBacklogStore, repo: string, humanId: string, reason: string): Promise<void> {
