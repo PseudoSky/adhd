@@ -68,53 +68,70 @@ interface ParsedBatchRequest {
  * request before the handler is ever called, but the handler must never
  * silently misbehave (e.g. fan out over an empty array, or invoke
  * `undefined` as an operation id) if it somehow is.
+ *
+ * BUG-APIGEN-CLI-002: `data` itself is now just `{ input: {...} }` —
+ * `batch.ts`'s `branchInputSchema` nests every control-plane field under one
+ * top-level `input` object so `_batch/<kind>` matches every other
+ * apigen-mounted operation's single-JSON-blob convention (`--input <json>`
+ * on the CLI, one JSON body/tool-arg object on every other transport).
+ * Unwrap that one extra level here — the only call site that reads this
+ * shape.
  */
 function parseBatchRequest(
   data: Record<string, unknown>,
   operationIds: readonly string[]
 ): ParsedBatchRequest {
-  const operation = data['operation'];
+  const inputRaw = data['input'];
+  if (inputRaw === null || typeof inputRaw !== 'object' || Array.isArray(inputRaw)) {
+    throw new ApiError(
+      'invalid_argument',
+      '@adhd/apigen-plugin-batch: "input" must be an object containing {operation, items, ...}'
+    );
+  }
+  const input = inputRaw as Record<string, unknown>;
+
+  const operation = input['operation'];
   if (typeof operation !== 'string' || operation.length === 0) {
     throw new ApiError(
       'invalid_argument',
-      '@adhd/apigen-plugin-batch: "operation" must be a non-empty string naming the target operation id'
+      '@adhd/apigen-plugin-batch: "input.operation" must be a non-empty string naming the target operation id'
     );
   }
   if (!operationIds.includes(operation)) {
     throw new ApiError(
       'invalid_argument',
-      `@adhd/apigen-plugin-batch: "operation" ("${operation}") is not one of this mount's batchable operations: ${operationIds.join(', ')}`
+      `@adhd/apigen-plugin-batch: "input.operation" ("${operation}") is not one of this mount's batchable operations: ${operationIds.join(', ')}`
     );
   }
-  const items = data['items'];
+  const items = input['items'];
   if (!Array.isArray(items)) {
     throw new ApiError(
       'invalid_argument',
-      '@adhd/apigen-plugin-batch: "items" must be an array'
+      '@adhd/apigen-plugin-batch: "input.items" must be an array'
     );
   }
 
-  const concurrency = data['concurrency'];
+  const concurrency = input['concurrency'];
   if (concurrency !== undefined && typeof concurrency !== 'number') {
-    throw new ApiError('invalid_argument', '@adhd/apigen-plugin-batch: "concurrency" must be a number');
+    throw new ApiError('invalid_argument', '@adhd/apigen-plugin-batch: "input.concurrency" must be a number');
   }
-  const mode = data['mode'];
+  const mode = input['mode'];
   if (mode !== undefined && mode !== 'parallel' && mode !== 'serial' && mode !== 'chained') {
     throw new ApiError(
       'invalid_argument',
-      '@adhd/apigen-plugin-batch: "mode" must be one of "parallel" | "serial" | "chained"'
+      '@adhd/apigen-plugin-batch: "input.mode" must be one of "parallel" | "serial" | "chained"'
     );
   }
-  const onItemError = data['onItemError'];
+  const onItemError = input['onItemError'];
   if (onItemError !== undefined && onItemError !== 'continue' && onItemError !== 'abort') {
     throw new ApiError(
       'invalid_argument',
-      '@adhd/apigen-plugin-batch: "onItemError" must be one of "continue" | "abort"'
+      '@adhd/apigen-plugin-batch: "input.onItemError" must be one of "continue" | "abort"'
     );
   }
-  const itemTimeoutMs = data['itemTimeoutMs'];
+  const itemTimeoutMs = input['itemTimeoutMs'];
   if (itemTimeoutMs !== undefined && typeof itemTimeoutMs !== 'number') {
-    throw new ApiError('invalid_argument', '@adhd/apigen-plugin-batch: "itemTimeoutMs" must be a number');
+    throw new ApiError('invalid_argument', '@adhd/apigen-plugin-batch: "input.itemTimeoutMs" must be a number');
   }
 
   return {

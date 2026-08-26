@@ -143,10 +143,27 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
   // single call site, so it fires exactly once per process by construction.
   //
   // The default file-sink dir is ~/.adhd/sox-ecosystem/backlog/logs
-  // (ecosystemHome()/service/logs, BL-353 §5.1 role-qualified component).
-  // Failure is non-fatal by design — telemetry must never take the CLI down.
+  // (ecosystemHome()/service/logs, BL-353 §5.1 role-qualified component) —
+  // always real-HOME-anchored, because `initTelemetry` has no notion of
+  // `cli.ts`'s `--sandbox`-minted `adhdRoot` (that mkdtemp happens later,
+  // inside `runBacklogCli()`, after this call has already opened its sink).
+  //
+  // BUG-BACKLOG-SANDBOX-TELEMETRY-LEAK-001: `--sandbox`'s whole contract is
+  // "diverts the store away from the (fake) production HOME entirely, and
+  // never creates anything under it" (`cli.spec.ts`) — a telemetry record is
+  // "anything." A cheap, read-only peek at `process.argv` for `--sandbox`
+  // (mirroring, not reusing, `cli.ts`'s `stripSandboxFlag` — that function
+  // mutates/strips the flag for the real parse that happens later in
+  // `runBacklogCli()`, so peeking here must not consume it) lets this
+  // composition root silence the file sink instead of writing into
+  // whatever HOME happens to be real at process-entry time. `logSink: 'none'`
+  // is a supported, documented value ("tests that don't want log noise") —
+  // dropping telemetry for a throwaway sandbox run is the correct trade,
+  // not a workaround: there is no persistent `adhdRoot` to attribute the
+  // record to (the sandbox tmpdir is deleted or unknown by the caller).
+  const sandboxRequested = process.argv.slice(2).includes('--sandbox');
   try {
-    initTelemetry({ service: 'backlog', role: 'cli', logSink: 'file' });
+    initTelemetry({ service: 'backlog', role: 'cli', logSink: sandboxRequested ? 'none' : 'file' });
   } catch (err) {
     console.error(
       `[sox-telemetry] WARNING: initTelemetry failed (${

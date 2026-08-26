@@ -150,25 +150,75 @@ function operationConstProp(opId: string): JSONSchema {
   return { type: 'string', enum: [opId] };
 }
 
+/**
+ * BUG-APIGEN-CLI-002: every OTHER apigen-mounted operation presents to a
+ * caller as ONE JSON blob — an extracted source op wraps its domain params
+ * under `data` (`compose-schemas.ts`), and every transport (including the
+ * CLI, via `--input <json>`) speaks that single-object convention
+ * uniformly. Before this fix, `_batch/<kind>`'s `branchInputSchema` was flat
+ * — `operation`/`items`/`concurrency`/`mode`/`onItemError`/`itemTimeoutMs`
+ * sat directly on the schema root — so the CLI rendered `batch` as a
+ * two-token `batch <action>` command taking N per-field flags
+ * (`--operation`, `--items`, …) while every other verb was one token taking
+ * a single `--input`. The help table then rendered both shapes identically,
+ * so a caller (frequently an LLM agent reading `--help`) could not tell
+ * `batch` apart from an ordinary op until it tried per-field flags and hit
+ * "Unknown option" — confirmed live via the built CLI.
+ *
+ * The fix: nest every batch control-plane field under one top-level `input`
+ * object, matching the one-flag convention exactly. This is a schema-shape
+ * change only, host-agnostic and fully backward-INcompatible on purpose (an
+ * `--opt` version bump is out of scope for a v0.0.1 batch surface) —
+ * `apigen-plugin-batch`'s `parseBatchRequest` (single call site) is updated
+ * in lockstep to read `data.input.*` instead of `data.*`.
+ *
+ * Side effect: `buildBatchKindSchema`'s `detectDiscriminator` call (below,
+ * ≥2-ops-per-kind branch) no longer finds a discriminator. OpenAPI/JSON
+ * Schema `discriminator.propertyName` names a property that must sit
+ * DIRECTLY on the oneOf'd object itself (a sibling of no other wrapper) —
+ * once `operation` moves one level deeper, inside each branch's own `input`,
+ * it can no longer serve that role; `detectDiscriminator`'s top-level-only
+ * scan correctly returns `undefined` rather than emit a discriminator that
+ * points at a property that isn't actually there. This is not a functional
+ * regression: `_batch/<kind>` mount dispatch never went through Ajv/oneOf
+ * branch selection to begin with (`MOUNT_PASSTHROUGH_SCHEMA` — see
+ * `dispatch-for-plan.ts`'s doc comment) — the ONLY real gatekeeper was
+ * always `apigen-plugin-batch`'s own hand-validating `parseBatchRequest`,
+ * unaffected by this. The `oneOf` branches remain fully distinguishable by
+ * their nested `input.properties.operation.enum` value for any documentation
+ * consumer (OpenAPI viewer, MCP tool description) that reads branch shapes
+ * directly rather than relying on `discriminator`.
+ */
 function branchInputSchema(
   branch: BatchOperationBranch,
   operationProp: JSONSchema
 ): JSONSchema {
   return {
     type: 'object',
-    required: ['operation', 'items'],
+    required: ['input'],
     properties: {
-      operation: operationProp,
-      items: { type: 'array', items: branch.itemsSchema },
-      concurrency: { type: 'number' },
-      mode: { type: 'string', enum: ['parallel', 'serial', 'chained'] },
-      onItemError: { type: 'string', enum: ['continue', 'abort'] },
-      itemTimeoutMs: { type: 'number' },
+      input: {
+        type: 'object',
+        required: ['operation', 'items'],
+        properties: {
+          operation: operationProp,
+          items: { type: 'array', items: branch.itemsSchema },
+          concurrency: { type: 'number' },
+          mode: { type: 'string', enum: ['parallel', 'serial', 'chained'] },
+          onItemError: { type: 'string', enum: ['continue', 'abort'] },
+          itemTimeoutMs: { type: 'number' },
+        },
+        // Additive-forward-compat (§7 open-question 3): a future `batchId`
+        // control-plane field must be addable without a breaking change, so
+        // this branch object must never be a closed schema.
+        additionalProperties: true,
+      },
     },
-    // Additive-forward-compat (§7 open-question 3): a future `batchId`
-    // control-plane field must be addable without a breaking change, so this
-    // branch object must never be a closed schema.
-    additionalProperties: true,
+    // The outer wrapper IS a closed shape — `input` is the only sanctioned
+    // top-level key for a `_batch/<kind>` mount call, mirroring
+    // `compose-schemas.ts`'s BUG-APIGEN-017 top-level `additionalProperties:
+    // false` for every extracted source op's envelope+data wrapper.
+    additionalProperties: false,
   };
 }
 

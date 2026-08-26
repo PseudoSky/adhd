@@ -72,6 +72,18 @@ export interface PluginInput {
     importPath: string;
     fns?: Record<string, (...args: unknown[]) => unknown>;
     createClient?: (envelope: Record<string, unknown>) => Promise<unknown>;
+    /**
+     * The real, published version of THIS package (e.g. `package.json`'s own
+     * `version`, read fresh — never a compiled-in constant). Optional: most
+     * `PluginInput.packages` callers never populate it and every existing
+     * construction site across the monorepo remains valid without it.
+     * `@adhd/apigen-plugin-mcp`'s `createMcpServer` reads it (falling back to
+     * this package's own `apigen-mcp`/`1.0.0` identity when absent) so an MCP
+     * client's `initialize` handshake reports which REAL build it is talking
+     * to, instead of a hardcoded placeholder identical across every apigen
+     * host (MCP handshake identity finding, P5-cli-serve-transport).
+     */
+    version?: string;
   }>;
   outputDir: string;
   options: Record<string, unknown>;

@@ -41,6 +41,7 @@ import {
 } from './extraction-session';
 import { extractParamDefault, applyParamDefault } from './param-defaults';
 import { detectFormatAnnotatedAlias } from './format-alias';
+import { detectStreamElementType } from './stream-type';
 
 // ---------------------------------------------------------------------------
 // Public entry-point
@@ -784,7 +785,15 @@ async function buildActionOpAtPath(
   }
 
   // Unwrap Promise<T> → T for output schema
-  const resolvedReturn = returnText.replace(/^Promise<(.+)>$/, '$1').trim();
+  const promiseUnwrapped = returnText.replace(/^Promise<(.+)>$/, '$1').trim();
+  // Then detect AsyncGenerator<T>/AsyncIterable<T>/Generator<T>/Iterable<T>/
+  // ApiStream<T> (SPEC §11) and unwrap the per-chunk element type — see
+  // stream-type.ts's header comment for why this is text-based, matching the
+  // Promise<T> unwrap immediately above, and for the async/sync asymmetry
+  // with the runtime `isApiStream()` guard.
+  const streamElementType = detectStreamElementType(promiseUnwrapped);
+  const isStreaming = streamElementType !== null;
+  const resolvedReturn = isStreaming ? streamElementType : promiseUnwrapped;
   const outputSchema = await buildSchema(
     project,
     sf,
@@ -859,7 +868,7 @@ async function buildActionOpAtPath(
     path: opPath,
     kind: 'action',
     async: isAsync,
-    streaming: false,
+    streaming: isStreaming,
     safe: false, // action → false per §4
     input: inputSchema,
     output: finalOutputSchema,

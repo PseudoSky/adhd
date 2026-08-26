@@ -44,7 +44,28 @@ function makeOp(id: string, kind: Operation['kind'] = 'action'): Operation {
   };
 }
 
-function fakeCall(data: Record<string, unknown>): Call {
+/**
+ * BUG-APIGEN-CLI-002: `_batch/<kind>`'s wire shape nests every control-plane
+ * field under one top-level `input` object (`batch.ts`'s `branchInputSchema`)
+ * — matching every other apigen-mounted operation's single-JSON-blob
+ * convention. `fakeCall` takes the bare `{operation, items, ...}` fields (as
+ * every test below already does) and wraps them into the real `{data:
+ * {input: {...}}}` shape the handler actually receives, so call sites read
+ * exactly like the batch request they're modeling.
+ */
+function fakeCall(input: Record<string, unknown>): Call {
+  return {
+    operation: makeOp('_batch/action'),
+    data: { input },
+    envelope: {},
+    ctx: { get: () => undefined, set: () => undefined },
+    transport: 'http',
+    signal: new AbortController().signal,
+  };
+}
+
+/** Builds a `Call` whose `data` is passed through UNWRAPPED — for asserting the `input` wrapper is actually required. */
+function fakeCallUnwrapped(data: Record<string, unknown>): Call {
   return {
     operation: makeOp('_batch/action'),
     data,
@@ -184,6 +205,16 @@ describe('batchPlugin handler: request validation', () => {
     const { op } = mountedOp();
     await expect(
       op.handler(fakeCall({ operation: 'ns/opA', items: [], mode: 'sideways' }))
+    ).rejects.toMatchObject({ code: 'invalid_argument' });
+  });
+
+  // BUG-APIGEN-CLI-002: the control-plane fields MUST be nested under a
+  // top-level `input` object — a request that sends them unwrapped (the
+  // pre-fix flat shape) must be rejected, not silently accepted.
+  it('rejects the pre-fix flat shape — {operation, items} directly on data, not nested under "input"', async () => {
+    const { op } = mountedOp();
+    await expect(
+      op.handler(fakeCallUnwrapped({ operation: 'ns/opA', items: [{ value: 'x' }] }))
     ).rejects.toMatchObject({ code: 'invalid_argument' });
   });
 });

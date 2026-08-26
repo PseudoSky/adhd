@@ -389,6 +389,28 @@ function reportFailure(err: unknown): void {
   process.exitCode = isApiError(err) ? CLI_EXIT_CODE[err.code] : CLI_EXIT_CODE.internal;
 }
 
+/**
+ * Logs a dispatch failure WITHOUT leaking a full stack trace (local absolute
+ * filesystem paths included) for an ordinary, EXPECTED rejection — bad input,
+ * an auth/permission denial, a not-found lookup — the caller typed something
+ * wrong or asked for something that doesn't exist; that is not a fault in
+ * this process. Only a genuine internal fault (`code: 'internal'`, or
+ * anything that isn't even a well-formed `ApiError`) is logged with its full
+ * `Error` object (pino's default `err` serialization, stack included) — the
+ * ONE population a stack trace is actually diagnostic for.
+ *
+ * Mirrored byte-for-byte in `@adhd/apigen-plugin-mcp`'s `run.ts` and
+ * `@adhd/apigen-plugin-logger`'s `plugin.ts` — the same rule applies to every
+ * transport and to the shared logger plugin, not just the CLI.
+ */
+function logDispatchError(logger: Logger, label: string, err: unknown): void {
+  if (isApiError(err) && err.code !== 'internal') {
+    logger.error({ command: label, code: err.code, message: err.message }, `✗ ${label}`);
+    return;
+  }
+  logger.error({ command: label, err }, `✗ ${label}`);
+}
+
 // ---------------------------------------------------------------------------
 // CliTransportAdapter — the cli `TransportAdapter` port implementation.
 // ---------------------------------------------------------------------------
@@ -703,7 +725,7 @@ export async function run(input: RunInput): Promise<void> {
     await adapter.writeResult(raw, result, plan);
     logger.info({ command: commandLabel, ms: Date.now() - start }, `→ ${commandLabel}`);
   } catch (err) {
-    logger.error({ command: commandLabel, err }, `✗ ${commandLabel}`);
+    logDispatchError(logger, commandLabel, err);
     await adapter.writeError(raw, err, plan);
   }
 }

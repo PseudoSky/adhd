@@ -138,6 +138,47 @@ describe('buildTranscoder', () => {
       const wire = transcoder.encode({ a: 'x' }, schema);
       expect(wire).toEqual({ a: 'x' });
     });
+
+    // BUG-APIGEN-DECODE-UNKNOWN-KEY-STRIP-001: decodeNode's object branch
+    // used to silently DROP any wire key not declared in `schema.properties`
+    // instead of passing it through. On a schema whose Ajv validation
+    // permits extra keys (no `additionalProperties: false`), a caller's
+    // unrecognized-but-accepted key would validate successfully at the
+    // Ajv layer and then vanish before the domain function ever saw it —
+    // e.g. `@adhd/backlog`'s `query` op silently accepted-and-ignored
+    // unrecognized optional flags like `full`/`view` instead of surfacing
+    // them at all (BUG-BACKLOG-QUERY-001's actual root mechanism, upstream
+    // in apigen — see runmode.ts's decodeNode doc comment).
+    it('passes through a wire key NOT declared in schema.properties instead of dropping it', () => {
+      const registry = createRegistry();
+      const transcoder = buildTranscoder(registry.freeze());
+
+      const schema: SchemaNode = {
+        type: 'object',
+        properties: {
+          a: { type: 'string' },
+        },
+      };
+      const wire = { a: 'x', unknownKey: 'y' } as unknown as Wire;
+      const host = transcoder.decode(wire, schema);
+      expect(host).toEqual({ a: 'x', unknownKey: 'y' });
+    });
+
+    it('still applies a declared property\'s own codec while passing an undeclared sibling through unchanged', () => {
+      const registry = createRegistry();
+      registry.register(markedCodec);
+      const transcoder = buildTranscoder(registry.freeze());
+
+      const schema: SchemaNode = {
+        type: 'object',
+        properties: {
+          tag: { type: 'string', format: MARKED_FORMAT },
+        },
+      };
+      const wire = { tag: 'encoded(value)', extra: 42 } as unknown as Wire;
+      const host = transcoder.decode(wire, schema);
+      expect(host).toEqual({ tag: 'decoded(encoded(value))', extra: 42 });
+    });
   });
 
   describe('array items walk', () => {

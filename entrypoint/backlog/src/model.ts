@@ -285,6 +285,18 @@ export interface CreateItemInput {
    * and rejected as a whole (no partial write) before allocation runs.
    */
   citations?: Citation[];
+  /**
+   * FEAT-012 — the item's author role (`AUTHORED_BY`), canonicalised via
+   * `canonicalIdentityKey`. Optional here because a v1 caller never supplies
+   * it; `ICreateItemInputV2` re-declares it only for its own doc comment
+   * (defaulting to `by` when absent) — the field itself lives here so every
+   * `CreateItemInput` caller, v1 or v2, can round-trip it through
+   * `createItemNode` (TASK-004; previously declared on `ICreateItemInputV2`
+   * only, so the create write path never read it — see `store/crud.ts`).
+   */
+  author?: string;
+  /** FEAT-012 — the item's reporter role (`REPORTED_BY`). Defaults to the author when absent. */
+  reporter?: string;
 }
 
 export interface CreateItemResult {
@@ -2502,7 +2514,15 @@ export interface IBacklogQueryInput extends IProjection {
 
 /** INTERFACE_v2 §3 — `backlog_create`. Absorbs `create-item`, `split-item`, `supersede-item`. */
 export interface IBacklogCreateInput {
-  input: ICreateItemInputV2;
+  /**
+   * BUG-BACKLOG-CREATE-DOUBLE-NESTED-INPUT-001: named `item`, not `input` —
+   * the create function's own single param is itself named `input` (matching
+   * apigen's `--input <json>`/`data.input` convention for every op), so a
+   * field ALSO named `input` here produced a confusing, easy-to-mis-type
+   * `input.input.<field>` double-nesting at every transport (CLI, HTTP,
+   * MCP). `item` names what it actually is: the domain item being created.
+   */
+  item: ICreateItemInputV2;
   /** §7.5 — REQUIRED. `assertAttribution` rejects an absent/blank value rather than stamping a placeholder. */
   by: string;
   splitFrom?: string;
