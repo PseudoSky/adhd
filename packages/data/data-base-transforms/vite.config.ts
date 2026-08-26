@@ -48,6 +48,21 @@ export default defineConfig({
   },
 
   test: {
+    // date.spec.ts stubs TZ via `vi.stubEnv('TZ', ...)` to make timezone-
+    // dependent formatting deterministic. Node only wires the live-TZ-
+    // invalidation hook into `process.env`'s setter on a process's main
+    // thread; a `worker_threads` worker (vitest's default `'threads'` pool)
+    // never observes a `TZ` mutation made after the thread starts, so
+    // `Intl`/`Date` local-time resolution silently keeps leaking the host
+    // machine's real default timezone regardless of the stub — this made
+    // date.spec.ts pass only by coincidence on machines whose real TZ
+    // happened to match the hardcoded expectations, and fail elsewhere
+    // (DEBT-DATA-BASE-TRANSFORMS-DATE-SPEC-TZ-FLAKE-001). `'forks'` gives
+    // each test file its own child process, whose main thread does observe
+    // the stub — verified directly: `vi.stubEnv('TZ','UTC')` correctly
+    // flips `Intl.DateTimeFormat().resolvedOptions().timeZone` under
+    // `'forks'` but not under `'threads'`.
+    pool: 'forks',
     poolOptions: vitestPoolOptions,
     globals: true,
     cache: {
