@@ -285,6 +285,20 @@ export interface CreateItemInput {
    * and rejected as a whole (no partial write) before allocation runs.
    */
   citations?: Citation[];
+  /**
+   * FEAT-012 role scalars. Present on the base interface (not just
+   * `ICreateItemInputV2`, which `extends` this) because the real runtime
+   * value flowing into `createItemNode` via `client.ts`'s V2 `create()` path
+   * (`createItemOp(ctx, { ...input.input, ... })`, where `input.input` is
+   * typed `ICreateItemInputV2`) already carries these fields structurally —
+   * the static type here was simply lagging (TASK-004, TS2339 at
+   * store/crud.ts). Carried through to `BacklogNodeMeta` as scalars for now;
+   * GRAPH_MODEL's `AUTHORED_BY`/`REPORTED_BY` edge write-through (see
+   * `IUpdatePatch.author`/`.reporter`'s doc comments) is a separate,
+   * not-yet-wired follow-up — DEBT-BACKLOG-CRUD-AUTHOR-REPORTER-EDGES-001.
+   */
+  author?: string;
+  reporter?: string;
 }
 
 export interface CreateItemResult {

@@ -58,6 +58,7 @@ import { openGraphBacklogStore, closeGraphBacklogStoreSafe, type GraphBacklogSto
 import { hasExternalSignalHandling, installSignalCleanup } from './store/signal-cleanup.js';
 import { acquireServeLock, isLockableDbPath, type ServeLockHandle } from './store/serve-lock.js';
 import { buildBacklogEnv, resolveBacklogDbPath, resolveIrCacheFile } from './env.js';
+import { readBacklogVersionInfo } from './version-info.js';
 import type { Logger, OutputPlugin, RunInput } from '@adhd/apigen-core-client';
 
 /**
@@ -538,6 +539,7 @@ export async function buildBacklogApigenPackage(ctx: BacklogCtx | (() => Backlog
     id: string;
     schemas: ReturnType<typeof composeSchemas>;
     importPath: string;
+    version: string;
     fns: Record<string, (...args: unknown[]) => unknown>;
     createClient: () => Promise<BacklogCtx>;
   };
@@ -591,6 +593,7 @@ export async function buildBacklogApigenPackage(ctx: BacklogCtx | (() => Backlog
       id: 'backlog',
       schemas,
       importPath: join(backlogDistDir(), 'client.js'),
+      version: readBacklogVersionInfo().version,
       fns: clientMod as unknown as Record<string, (...args: unknown[]) => unknown>,
       createClient: async () => getCtx(),
     },
