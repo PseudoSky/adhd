@@ -234,6 +234,22 @@ function decodeNode(
         });
       }
     }
+    // Pass through any wire key NOT declared in `properties` unchanged,
+    // instead of silently dropping it. `decodeNode` has no schema to decode
+    // an undeclared key against, so it cannot logical-transcode it — but
+    // deleting it outright is a correctness bug, not a decode step: a host
+    // whose Ajv validation permits extra keys (schema omits/has
+    // `additionalProperties: true`) is entitled to see them on the far side
+    // of decode. Schemas that must REJECT unknown keys enforce that at
+    // validate time via `additionalProperties: false` (see morph-walk.ts /
+    // compose-schemas.ts) — decode should never be the layer silently
+    // stripping input a validator was never asked to reject
+    // (BUG-APIGEN-DECODE-UNKNOWN-KEY-STRIP-001).
+    for (const [k, v] of Object.entries(wire as Record<string, Wire>)) {
+      if (!(k in props) && v !== undefined) {
+        result[k] = v;
+      }
+    }
     return result;
   }
 

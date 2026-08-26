@@ -71,7 +71,6 @@ import {
   releaseClaim as releaseClaimOp,
   removeDependency as removeDependencyOp,
   renewClaim as renewClaimOp,
-  setPriority as setPriorityOp,
   softDeleteItem as softDeleteItemOp,
   splitItem as splitItemOp,
   supersedeItem as supersedeItemOp,
@@ -143,9 +142,9 @@ function assertAttribution(by: unknown): string {
   return by;
 }
 
-/** Every create variant needs a repo, and `input.input.repo` is the only place it can come from. */
+/** Every create variant needs a repo, and `input.item.repo` is the only place it can come from. */
 function requireCreateRepo(input: IBacklogCreateInput): string {
-  const repo = input?.input?.repo;
+  const repo = input?.item?.repo;
   if (typeof repo !== 'string' || repo.trim() === '') {
     throw new InvalidArgumentError('input.repo', 'backlog_create: "input.repo" is required — a humanId is only unique within a repo.');
   }
@@ -226,7 +225,7 @@ export async function query(ctx: BacklogCtx, input: IBacklogQueryOptions): Promi
  * `created` boolean, so a variant can never report a write it did not make.
  *
  * @param ctx open store + env
- * @param input `{ input, by, duplicateAction?, splitFrom?, children?, supersedes?, reason? }`
+ * @param input `{ item, by, duplicateAction?, splitFrom?, children?, supersedes?, reason? }`
  * @returns `{ ok: true, data: { created, humanId?, item?, … } }`, or the error
  *   arm with `duplicate_candidate` / `invalid_argument` / `item_not_found`
  */
@@ -269,7 +268,7 @@ export async function create(
     // §3 — supersede: mint the replacement, link SUPERSEDES, invalidate the old.
     if (input.supersedes !== undefined) {
       const reason = input.reason ?? `superseded by a replacement filed by ${by}`;
-      const item = await supersedeItemOp(ctx, repo, input.supersedes, input.input, reason);
+      const item = await supersedeItemOp(ctx, repo, input.supersedes, input.item, reason);
       const result: ISupersedeResult = {
         supersededHumanId: input.supersedes,
         created: true,
@@ -279,14 +278,14 @@ export async function create(
       return result;
     }
 
-    const res = await createItemOp(ctx, { ...input.input, ...(action === 'file' ? { force: true } : {}) });
+    const res = await createItemOp(ctx, { ...input.item, ...(action === 'file' ? { force: true } : {}) });
     if (!res.created) {
       // Interception fired: NOTHING was written. `DuplicateCandidateError`
       // carries the candidates through `toOutcomeError`'s normal mapping, so
       // this takes the same path every other typed failure does (error arm,
       // code `duplicate_candidate`, exit 1 per `BACKLOG_EXIT_CODE`) instead
       // of a bespoke return shape only this branch understands.
-      throw new DuplicateCandidateError(input.input.title, toDuplicateCandidates(res.duplicateCandidates));
+      throw new DuplicateCandidateError(input.item.title, toDuplicateCandidates(res.duplicateCandidates));
     }
     const outcome: ICreateOutcome = {
       created: true,
