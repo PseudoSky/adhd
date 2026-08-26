@@ -254,10 +254,18 @@ function decodeNode(
  * For a `oneOf` schema, pick the branch that `value` actually inhabits.
  *
  * Resolution order (first match wins):
- *  1. **Discriminator** — an explicit `discriminator.propertyName` + `mapping`
- *     naming a branch by `$ref` (OpenAPI 3 style). Cheapest and unambiguous.
+ *  1. **Discriminator** — an explicit `discriminator.propertyName`:
+ *     1a. `mapping` naming a branch by `$ref` (OpenAPI 3 style) — only live
+ *         when branches are still `$ref`-wrapped.
+ *     1b. the resolved branch's OWN declared `propertyName` schema
+ *         (`const`/`enum`) matching the value's tag — works whether or not
+ *         `$ref`s survived dereferencing (BUG-APIGEN-RUNMODE-DISCRIMINATOR-
+ *         DEREF-001). Always tried when a discriminator is declared, since
+ *         1a is silently inert post-dereference.
  *  2. **Structural match** — the branch whose declared shape the value
- *     actually satisfies, scored by {@link scoreUnionBranch}.
+ *     actually satisfies, scored by {@link scoreUnionBranch}. Only reached
+ *     when NO discriminator is declared, or the discriminator's tag matched
+ *     no branch (e.g. an unmodelled tag value).
  *  3. **First branch** — only when NOTHING structurally matches.
  *
  * Step 2 is not an optimisation; it is a correctness requirement. TypeScript
@@ -299,17 +307,71 @@ function pickUnionBranch(
     | undefined;
 
   if (discriminator?.propertyName) {
+    const propertyName = discriminator.propertyName;
     const tag =
       value !== null && typeof value === 'object'
-        ? (value as Record<string, unknown>)[discriminator.propertyName]
+        ? (value as Record<string, unknown>)[propertyName]
         : undefined;
 
-    if (typeof tag === 'string' && discriminator.mapping) {
-      const ref = discriminator.mapping[tag];
-      if (ref) {
-        // Find the branch in oneOf whose $ref matches
-        const matched = oneOf.find((b) => b['$ref'] === ref);
-        if (matched) return matched;
+    if (typeof tag === 'string') {
+      // 1a. OpenAPI-style `discriminator.mapping` naming a branch by `$ref`
+      // (codegen mode, where oneOf branches stay `$ref`-wrapped).
+      if (discriminator.mapping) {
+        const ref = discriminator.mapping[tag];
+        if (ref) {
+          const matched = oneOf.find((b) => b['$ref'] === ref);
+          if (matched) return matched;
+        }
+      }
+
+      // 1b. BUG-APIGEN-RUNMODE-DISCRIMINATOR-DEREF-001: match by the
+      // RESOLVED branch's own declared discriminator value. 1a alone is
+      // silently inert whenever the caller has inlined every `$ref` before
+      // dispatch (`@adhd/backlog`'s `dereferenceSchema` does exactly this —
+      // its own doc comment explains WHY: run-mode's `ctx.resolve` has no
+      // descriptor root and unconditionally throws on any `$ref` it sees, so
+      // a host that wants run-mode dispatch to work AT ALL must strip every
+      // `$ref` before the schema ever reaches this transcoder). Once
+      // `oneOf`'s branches are inlined object schemas, NONE of them carry a
+      // `$ref` key any more, so `oneOf.find((b) => b['$ref'] === ref)` above
+      // always returns `undefined` and 1a silently no-ops — `mapping` was
+      // copied from the PRE-dereference schema, so it still exists and still
+      // looks correct, which is what made this invisible.
+      //
+      // Falling through to structural scoring (step 2) below is NOT a safe
+      // substitute here: `scoreUnionBranch` only checks required-key
+      // PRESENCE, not literal enum/const values, so any set of sibling
+      // branches sharing the exact same property NAMES (e.g. every
+      // `{action,report}`-shaped arm of a tagged-union `report` field) scores
+      // an exact tie on every call regardless of which branch is actually
+      // right, and the documented tie-break ("earliest declared branch wins")
+      // then silently re-encodes EVERY tied branch as `oneOf[0]` — dropping
+      // every field the real value has that `oneOf[0]`'s branch doesn't
+      // declare. Confirmed on `@adhd/backlog`'s `backlog_admin` output
+      // union: `prune`/`archive`/`merge`/`import`/`batch`/`reconcile_repo`
+      // (six actions, not just the one first reported) all share `doctor`'s
+      // `{action,report}` shape and were silently re-encoded as `{}` reports
+      // — everything past `action` vanished, live-verified via the built CLI.
+      //
+      // The correct, general fix: resolve each candidate branch and check
+      // whether ITS OWN declared schema for `propertyName` accepts `tag`
+      // (`const === tag` or `tag` in `enum`) — this is exactly what
+      // "discriminator" means, is agnostic to whether `$ref` survived
+      // dereferencing, and needs no `mapping` at all.
+      for (const branch of oneOf) {
+        const resolved = resolveBranch(branch, ctx);
+        const tagSchema = (
+          resolved['properties'] as Record<string, SchemaNode> | undefined
+        )?.[propertyName];
+        if (!tagSchema) continue;
+        const enumVals = tagSchema['enum'];
+        const constVal = tagSchema['const'];
+        if (
+          constVal === tag ||
+          (Array.isArray(enumVals) && enumVals.includes(tag))
+        ) {
+          return branch;
+        }
       }
     }
   }

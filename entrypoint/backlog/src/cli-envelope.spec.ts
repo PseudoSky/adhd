@@ -179,3 +179,89 @@ describe('exit-code contract (INTERFACE_v2 §7.1)', () => {
     expect(run.status).toBe(4);
   });
 });
+
+// ── BUG-BACKLOG-RECONCILE-REPO-EMPTY-REPORT-001 / BUG-APIGEN-RUNMODE-
+// DISCRIMINATOR-DEREF-001 ──────────────────────────────────────────────────
+//
+// `backlog_admin`'s `IAdminResult` is a DISCRIMINATED union tagged by
+// `action`, with a `discriminator.mapping` naming each branch by `$ref`. But
+// `server.ts`'s `dereferenceSchema` (required so run-mode dispatch can work
+// at all — `apigen-base-logical`'s transcoder throws on any unresolved `$ref`)
+// inlines every `$ref` before the schema reaches the transcoder, so no branch
+// carries a `$ref` any more and the mapping-based match silently no-ops.
+// Falling through to structural scoring then ties every branch sharing the
+// same property NAMES (`action`, `report`) — which is EVERY action here
+// except `export`/`render`/`version` — and the tie-break ("earliest declared
+// branch") always won as `doctor` (`oneOf[0]`), so every OTHER `{action,
+// report}`-shaped action's real report was silently re-encoded as `{}`.
+//
+// This block proves the fix at the real MOUNT boundary (the built CLI
+// subprocess) — never in-process, which cannot see this class of bug at all
+// (`v2/admin.spec.ts`'s in-process `reconcile_repo` test passed throughout).
+describe('backlog_admin tagged report union over the real CLI mount (BUG-BACKLOG-RECONCILE-REPO-EMPTY-REPORT-001)', () => {
+  const RECONCILE_REPO = 'reconcile-spec-legacy-repo';
+
+  beforeAll(() => {
+    const { run, body } = runJson([
+      'create',
+      '--input',
+      JSON.stringify({
+        input: { family: 'BUG', title: 'reconcile seed item', body: 'b', repo: RECONCILE_REPO },
+        by: 'cli-envelope.spec',
+      }),
+    ]);
+    expect(run.status, `reconcile seed create failed: ${run.stderr}`).toBe(0);
+    expect(body['ok']).toBe(true);
+  });
+
+  it("reconcile_repo's report carries fromRepo/toRepo/dryRun/plan — not {}", () => {
+    const { run, body } = runJson([
+      'admin',
+      '--input',
+      JSON.stringify({ action: 'reconcile_repo', params: { from: RECONCILE_REPO, to: REPO } }),
+    ]);
+    expect(run.status).toBe(0);
+    expect(body['ok']).toBe(true);
+    const data = body['data'] as Record<string, unknown> | undefined;
+    expect(data?.['action']).toBe('reconcile_repo');
+    const report = data?.['report'] as Record<string, unknown> | undefined;
+    // The whole defect: `report` used to arrive as `{}`.
+    expect(report, 'reconcile_repo report was collapsed to {} by the mount').toBeDefined();
+    expect(report?.['fromRepo']).toBe(RECONCILE_REPO);
+    expect(report?.['toRepo']).toBe(REPO);
+    expect(report?.['dryRun']).toBe(true);
+    const plan = report?.['plan'] as Record<string, unknown> | undefined;
+    expect(plan, 'reconcile_repo report.plan was dropped by the mount').toBeDefined();
+    expect(plan?.['fromRepo']).toBe(RECONCILE_REPO);
+    expect(plan?.['toRepo']).toBe(REPO);
+    expect(Array.isArray(plan?.['items'])).toBe(true);
+    expect((plan?.['items'] as unknown[]).length).toBeGreaterThan(0);
+  });
+
+  it("a sibling action with the SAME {action,report} shape (prune) is also no longer collapsed", () => {
+    // Proves the fix is general (fixes the discriminator, not a backlog-
+    // specific reconcile_repo special-case) — `prune` shares `doctor`'s exact
+    // property names and was silently re-encoded as `doctor`'s report too.
+    const { run, body } = runJson(['admin', '--input', JSON.stringify({ action: 'prune', params: {} })]);
+    expect(run.status).toBe(0);
+    const data = body['data'] as Record<string, unknown> | undefined;
+    expect(data?.['action']).toBe('prune');
+    const report = data?.['report'] as Record<string, unknown> | undefined;
+    expect(report, 'prune report was collapsed to {} by the mount').toBeDefined();
+    // `IPruneReport` has no `scannedItems`/`checks` (doctor's fields) — a
+    // report silently re-encoded as doctor's would come back as `{}` since
+    // prune's actual value has none of doctor's declared property names.
+    expect(report?.['dryRun']).toBe(true);
+    expect(Array.isArray(report?.['candidates'])).toBe(true);
+  });
+
+  it("doctor's own report (branch 0 — the accidental tie-break winner) is unaffected", () => {
+    const { run, body } = runJson(['admin', '--input', JSON.stringify({ action: 'doctor', params: {} })]);
+    expect(run.status).toBe(0);
+    const data = body['data'] as Record<string, unknown> | undefined;
+    expect(data?.['action']).toBe('doctor');
+    const report = data?.['report'] as Record<string, unknown> | undefined;
+    expect(typeof report?.['scannedItems']).toBe('number');
+    expect(Array.isArray(report?.['checks'])).toBe(true);
+  });
+});
