@@ -440,6 +440,96 @@ describe('buildTranscoder', () => {
       // that missed the other would surface as an asymmetric round-trip here.
       expect(transcoder.decode(wire, OUTCOME_ENVELOPE)).toEqual(success);
     });
+
+    // ── BUG-APIGEN-RUNMODE-DISCRIMINATOR-DEREF-001 ──────────────────────────
+    //
+    // A discriminator whose `mapping` values point at branches by `$ref`
+    // (`"#/oneOf/N"`, OpenAPI 3 style) goes silently inert once every `$ref`
+    // in the schema has been inlined — a real, load-bearing shape: a host
+    // that dispatches through THIS run-mode transcoder cannot resolve `$ref`
+    // at all (`buildCtx`'s default `resolve` unconditionally throws — see its
+    // doc comment above), so any host wanting run-mode dispatch to work must
+    // inline every `$ref` before the schema ever reaches `encode`/`decode`.
+    // `@adhd/backlog`'s own `dereferenceSchema` (entrypoint/backlog/src/
+    // server.ts) does exactly this. Once branches carry no `$ref` key,
+    // `oneOf.find((b) => b['$ref'] === ref)` always returns `undefined` and
+    // the discriminator match silently no-ops, falling through to structural
+    // scoring (step 2) — which only checks required-key PRESENCE, not the
+    // literal tag value, so sibling branches sharing the exact same property
+    // NAMES score an identical tie and the earliest-declared branch always
+    // wins regardless of the real tag.
+    //
+    // Live-reproduced against `@adhd/backlog`'s real `backlog_admin` output
+    // union: `IAdminResult`'s `prune`/`archive`/`merge`/`import`/`batch`/
+    // `reconcile_repo` arms (six actions, not just the one first reported —
+    // BUG-BACKLOG-RECONCILE-REPO-EMPTY-REPORT-001) all share `doctor`'s
+    // `{action,report}` shape; every one of them was silently re-encoded as
+    // `doctor`'s (empty, for a fresh store) report — `{"action":"prune",
+    // "report":{}}` — over the built CLI, dropping every real field the
+    // in-process call actually returned.
+    //
+    // NEGATIVE CONTROL (verified, not assumed): reverting `pickUnionBranch`'s
+    // step 1b (the resolved-branch `const`/`enum` match added for this fix)
+    // makes this test fail with `report: {}` — reproducing the shipped bug
+    // exactly, byte for byte.
+    it('an inlined (post-dereference) discriminator still routes by the tag, not by structural tie-break', () => {
+      const transcoder = buildTranscoder(createRegistry().freeze());
+
+      // Two sibling branches with IDENTICAL property names (`action`,
+      // `report`) — only their `action` enum and their `report` shape
+      // differ. Every `$ref` has already been inlined (dereferenceSchema's
+      // exact output shape): no branch carries a `$ref` key, but the
+      // discriminator's `mapping` — copied from the PRE-dereference schema —
+      // still exists and still names `#/oneOf/N`-style pointers that no
+      // longer resolve against anything.
+      const schema: SchemaNode = {
+        oneOf: [
+          {
+            type: 'object',
+            properties: {
+              action: { type: 'string', enum: ['doctor'] },
+              report: {
+                type: 'object',
+                properties: { scannedItems: { type: 'number' } },
+                required: ['scannedItems'],
+              },
+            },
+            required: ['action', 'report'],
+          },
+          {
+            type: 'object',
+            properties: {
+              action: { type: 'string', enum: ['reconcile_repo'] },
+              report: {
+                type: 'object',
+                properties: {
+                  fromRepo: { type: 'string' },
+                  toRepo: { type: 'string' },
+                  dryRun: { type: 'boolean' },
+                },
+                required: ['fromRepo', 'toRepo', 'dryRun'],
+              },
+            },
+            required: ['action', 'report'],
+          },
+        ],
+        discriminator: {
+          propertyName: 'action',
+          mapping: { doctor: '#/oneOf/0', reconcile_repo: '#/oneOf/1' },
+        },
+      };
+
+      const value = {
+        action: 'reconcile_repo',
+        report: { fromRepo: 'legacy-repo', toRepo: 'canonical-repo', dryRun: true },
+      };
+
+      // Both branches require exactly {action,report} and value has
+      // exactly those two keys, so structural scoring alone ties — the
+      // discriminator's OWN declared tag (`report`'s enum on branch 1) must
+      // decide, not declaration order.
+      expect(transcoder.encode(value, schema)).toEqual(value);
+    });
   });
 
   describe('schema-less envelope (any position)', () => {
