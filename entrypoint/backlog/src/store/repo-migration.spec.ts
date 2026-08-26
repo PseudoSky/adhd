@@ -41,8 +41,8 @@ import { findItemNode } from './query.js';
 import { buildNodeContent, buildNodeName, BACKLOG_ITEM_TAG } from './mapping.js';
 import { migrateRepoItemNode, planRepoMigration } from './repo-migration.js';
 
-const LEGACY = 'adhd';
-const CANONICAL = 'PseudoSky/adhd';
+const LEGACY = 'legacy-project-alpha';
+const CANONICAL = 'canonical-project-beta';
 
 let tmp: TmpStore;
 let ctx: BacklogCtx;
@@ -234,7 +234,7 @@ describe('migrateRepo — dryRun:false actually moves items', () => {
     const migrated = await client.getItem(ctx, CANONICAL, 'TASK-002');
     expect(migrated?.title).toBe('legacy TASK-001');
     expect(migrated?.nodeId).toBe(legacy.item.nodeId);
-    expect(migrated?.notes[migrated.notes.length - 1]?.text).toContain('moved from repo="adhd"');
+    expect(migrated?.notes[migrated.notes.length - 1]?.text).toContain('moved from repo="legacy-project-alpha"');
     expect(migrated?.notes[migrated.notes.length - 1]?.text).toContain('renamed humanId from "TASK-001" to "TASK-002"');
 
     // Old key is gone entirely (not even ambiguous) — no live item left behind

@@ -26,6 +26,14 @@ import { buildNotFoundError, findHumanIdInAnyRepo, findItemNode, knownRepos, res
 import { normalizeRepoKey } from './mapping.js';
 
 const REPO_A = 'PseudoSky/adhd';
+// TASK-001: `REPO_B` ('adhd') is the BARE form of `REPO_A`
+// ('PseudoSky/adhd') — since `resolveCanonicalRepo` now collapses an
+// owner-prefixed repo key and its bare spelling into ONE project (see the
+// "owner-prefix repo-key fork" describe block below), these two are NO
+// LONGER a valid "genuinely different repo" pair for a test to use. Tests
+// that need two repos the store must treat as distinct use `REPO_UNRELATED`
+// instead; `REPO_B` is used only where the fork-collapse itself is under
+// test.
 const REPO_B = 'adhd';
 const REPO_UNRELATED = 'some/other-project';
 
@@ -66,11 +74,11 @@ describe('read-time: helpful hint on a repo/humanId mismatch', () => {
 
   it('appendNote throws the enriched hint when called with the WRONG repo for a real item (the exact bug-report scenario)', async () => {
     const created = await client.createItem(ctx, { family: 'BUG-MISMATCH', title: 't', body: 'b', repo: REPO_A });
-    await expect(client.appendNote(ctx, REPO_B, created.item.humanId, 'agent-x', 'a note')).rejects.toMatchObject({
+    await expect(client.appendNote(ctx, REPO_UNRELATED, created.item.humanId, 'agent-x', 'a note')).rejects.toMatchObject({
       name: 'BacklogItemNotFoundError',
       foundInRepos: [REPO_A],
     });
-    await expect(client.appendNote(ctx, REPO_B, created.item.humanId, 'agent-x', 'a note')).rejects.toThrow(
+    await expect(client.appendNote(ctx, REPO_UNRELATED, created.item.humanId, 'agent-x', 'a note')).rejects.toThrow(
       `did you mean repo '${REPO_A}'`
     );
   });
@@ -88,7 +96,7 @@ describe('read-time: helpful hint on a repo/humanId mismatch', () => {
 
   it('getItem: a repo/humanId mismatch now THROWS the enriched hint instead of silently returning null', async () => {
     const created = await client.createItem(ctx, { family: 'BUG-GETMISMATCH', title: 't', body: 'b', repo: REPO_A });
-    await expect(client.getItem(ctx, REPO_B, created.item.humanId)).rejects.toMatchObject({
+    await expect(client.getItem(ctx, REPO_UNRELATED, created.item.humanId)).rejects.toMatchObject({
       name: 'BacklogItemNotFoundError',
       foundInRepos: [REPO_A],
     });
@@ -118,12 +126,12 @@ describe('write-time: soft repo-drift warning on createItem', () => {
 
   it('a genuinely NEW repo value still succeeds (never hard-blocked) but carries a repoWarning naming the existing repo(s)', async () => {
     await client.createItem(ctx, { family: 'BUG-ORIG', title: 't', body: 'b', repo: REPO_A });
-    const drifted = await client.createItem(ctx, { family: 'BUG-DRIFT', title: 'drifted', body: 'b', repo: REPO_B });
+    const drifted = await client.createItem(ctx, { family: 'BUG-DRIFT', title: 'drifted', body: 'b', repo: REPO_UNRELATED });
     expect(drifted.created).toBe(true);
-    expect(drifted.item.repo).toBe(REPO_B);
+    expect(drifted.item.repo).toBe(REPO_UNRELATED);
     expect(drifted.repoWarning).toBeDefined();
     expect(drifted.repoWarning).toContain(REPO_A);
-    expect(drifted.repoWarning).toContain(`'${REPO_B}'`);
+    expect(drifted.repoWarning).toContain(`'${REPO_UNRELATED}'`);
   });
 
   it('an unrelated, deliberately different repo also succeeds with a warning — the warning never blocks legitimate first-time use of a new repo', async () => {
