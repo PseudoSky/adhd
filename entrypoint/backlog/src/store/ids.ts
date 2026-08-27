@@ -140,7 +140,7 @@ function parseNodeMeta(raw: string | null): Partial<BacklogNodeMeta> | undefined
   }
 }
 
-async function computeNextHumanId(store: GraphBacklogStore, repo: string, family: string): Promise<string> {
+async function scanMaxOrdinal(store: GraphBacklogStore, repo: string, family: string): Promise<number> {
   // BUG-BACKLOG-HUMANID-COLLISION-001 fix #1 (authoritative, in-transaction
   // guard): mirrors `createItemNode`'s early check, but here — inside the
   // SAME `.immediate()` transaction that actually mints the humanId — so
@@ -174,7 +174,113 @@ async function computeNextHumanId(store: GraphBacklogStore, repo: string, family
     const match = /-(\d+)$/.exec(meta?.humanId ?? '');
     if (match) max = Math.max(max, Number(match[1]));
   }
-  return `${family}-${String(max + 1).padStart(3, '0')}`;
+  return max;
+}
+
+/**
+ * BUG-039 / DEBT-BACKLOG-MONOTONIC-HUMANID-001 — the allocator is a COUNTER,
+ * not a scan.
+ *
+ * `scanMaxOrdinal` above is a read-max-then-write: every `create` read every
+ * row of the family and took `max + 1`. That single shape is what forced the
+ * entire concurrency-control stack around this package — `.immediate()`
+ * escalation, `withImmediateRetry`, the partial unique index as a backstop —
+ * and it is STILL wrong across processes: two writers on separate connections
+ * can read the same max from their own WAL snapshot and both mint it. That is
+ * exactly BUG-039's silent-write-loss mechanism, and no amount of retrying or
+ * locking fixes a read-modify-write that reads stale.
+ *
+ * A one-row-per-`(namespace, family)` counter dissolves it. `UPDATE ... SET
+ * n = n + 1 ... RETURNING n` is evaluated BY THE ENGINE against the row it is
+ * writing under the write lock, so it never observes a stale snapshot, never
+ * scans, and cannot hand the same ordinal to two writers. It is also immune to
+ * the tombstone-visibility bug class the file header documents: the counter
+ * only ever moves forward, so invalidating a row can never make a previously
+ * minted ordinal look free again.
+ *
+ * The scan survives ONLY as the one-time seed for a family whose counter row
+ * does not exist yet — which is how the 1300+ items already in the production
+ * store keep their ids without a migration.
+ */
+const HUMAN_ID_COUNTER_TABLE = 'backlog_humanid_counter';
+
+async function ensureHumanIdCounterTable(store: GraphBacklogStore): Promise<void> {
+  await store.adapter.executeRun(`
+    CREATE TABLE IF NOT EXISTS ${HUMAN_ID_COUNTER_TABLE} (
+      namespace TEXT NOT NULL,
+      family    TEXT NOT NULL,
+      n         INTEGER NOT NULL,
+      PRIMARY KEY (namespace, family)
+    )
+  `);
+}
+
+/**
+ * Atomically allocate the next ordinal for `(repo, family)`.
+ *
+ * Hot path is a SINGLE statement with no scan. The cold path (first item ever
+ * minted for a family, including every family already in an existing store)
+ * seeds from `scanMaxOrdinal` and then upserts — the `ON CONFLICT ... n + 1`
+ * makes the seed itself safe against a concurrent writer that seeded first,
+ * so even the cold path cannot hand out a duplicate.
+ */
+async function nextOrdinal(store: GraphBacklogStore, repo: string, family: string): Promise<number> {
+  // BUG-BACKLOG-HUMANID-COLLISION-001: this guard used to live in the scan.
+  // The scan is now the COLD path only, so it must be re-asserted here or an
+  // empty/undefined family would stringify to a colliding `"undefined-001"`
+  // on every allocation after the first.
+  if (typeof family !== 'string' || family.trim().length === 0) {
+    throw new InvalidArgumentError(
+      'family',
+      `backlog: cannot allocate a humanId for repo=${JSON.stringify(repo)} — "family" is required and must be a ` +
+        `non-empty string, received ${JSON.stringify(family)}. See BUG-BACKLOG-HUMANID-COLLISION-001.`
+    );
+  }
+  const bumped = await store.adapter.executeAll<{ n: number }>(
+    `UPDATE ${HUMAN_ID_COUNTER_TABLE} SET n = n + 1 WHERE namespace = ? AND family = ? RETURNING n`,
+    [repo, family]
+  );
+  const hit = bumped.rows[0]?.n;
+  if (typeof hit === 'number') return hit;
+
+  // Cold path: no counter row yet — seed from the existing rows ONCE.
+  const seeded = await scanMaxOrdinal(store, repo, family);
+  const created = await store.adapter.executeAll<{ n: number }>(
+    `INSERT INTO ${HUMAN_ID_COUNTER_TABLE} (namespace, family, n) VALUES (?, ?, ?)
+     ON CONFLICT(namespace, family) DO UPDATE SET n = n + 1
+     RETURNING n`,
+    [repo, family, seeded + 1]
+  );
+  const n = created.rows[0]?.n;
+  if (typeof n !== 'number') {
+    throw new Error(
+      `backlog: humanId counter for ${JSON.stringify(repo)}/${JSON.stringify(family)} returned no ordinal — refusing to mint an id`
+    );
+  }
+  return n;
+}
+
+/**
+ * Keep the counter at or ahead of an explicitly supplied id.
+ *
+ * Without this, `idOverride` would be invisible to the counter (the old scan
+ * saw every row, so it handled overrides for free) and a later auto-allocation
+ * could mint straight into an id an override already took. Moves the counter
+ * FORWARD only — never rewinds it.
+ */
+async function reconcileCounterForOverride(store: GraphBacklogStore, repo: string, humanId: string): Promise<void> {
+  const match = /^(.*)-(\d+)$/.exec(humanId);
+  if (!match) return;
+  const [, overrideFamily, ordinal] = match;
+  await store.adapter.executeRun(
+    `INSERT INTO ${HUMAN_ID_COUNTER_TABLE} (namespace, family, n) VALUES (?, ?, ?)
+     ON CONFLICT(namespace, family) DO UPDATE SET n = MAX(n, excluded.n)`,
+    [repo, overrideFamily, Number(ordinal)]
+  );
+}
+
+function formatHumanId(family: string, ordinal: number): string {
+  return `${family}-${String(ordinal).padStart(3, '0')}`;
 }
 
 async function findLiveByHumanId(store: GraphBacklogStore, repo: string, humanId: string): Promise<NodeRecord | null> {
@@ -233,11 +339,13 @@ export async function allocateHumanIdAndInsert<T>(
     store.adapter.transaction(
       async () => {
         await ensureHumanIdUniqueIndex(store);
+        await ensureHumanIdCounterTable(store);
         if (idOverride) {
           const existing = await findLiveByHumanId(store, repo, idOverride);
+          await reconcileCounterForOverride(store, repo, idOverride);
           return insert(idOverride, existing);
         }
-        const humanId = await computeNextHumanId(store, repo, family);
+        const humanId = formatHumanId(family, await nextOrdinal(store, repo, family));
         return insert(humanId, null);
       },
       { mode: 'immediate' }
@@ -258,7 +366,8 @@ export async function allocateHumanId(store: GraphBacklogStore, repo: string, fa
     store.adapter.transaction(
       async () => {
         await ensureHumanIdUniqueIndex(store);
-        return computeNextHumanId(store, repo, family);
+        await ensureHumanIdCounterTable(store);
+        return formatHumanId(family, await nextOrdinal(store, repo, family));
       },
       { mode: 'immediate' }
     )
