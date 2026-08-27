@@ -57,6 +57,7 @@ import {
 import type { GraphBacklogStore } from '../store/graph-backlog-store.js';
 import { queryAuditEvents } from '../store/audit-log.js';
 import { BACKLOG_ITEM_TAG, isLiveBacklogItemNode, toBacklogItem, type BacklogNodeMeta } from '../store/mapping.js';
+import { isSemanticSearchConfigured, requireSemanticBackend } from '../store/semantic-search.js';
 import { listRelatedNode } from '../store/structure.js';
 import {
   auditTrail as auditTrailOp,
@@ -271,11 +272,13 @@ function assertGetHumanId(humanId: unknown): asserts humanId is string {
 /**
  * AC-19/AC-20 — a *known* field that cannot mean anything for a single-item
  * read must still fail loudly. `_vector` is different: it is a genuine
- * per-item property that simply has no backend in this build, so it gets
- * AC-12's `rag_not_configured` rather than a validation error.
+ * per-item property that has no backend ONLY while none is configured
+ * (RAG-SPEC §3 / `isSemanticSearchConfigured()`) — once a host wires one in,
+ * `_vector` is a normal opt-in-by-name projection (AC-20), same as `body` or
+ * `citations`.
  *
  * @throws {BacklogValidationError} for `items`/`_score`
- * @throws {RagNotConfiguredError} for `_vector`
+ * @throws {RagNotConfiguredError} for `_vector` on an unconfigured store
  */
 function assertGetApplicableFields(fields: readonly IBacklogField[] | undefined): void {
   if (!fields) return;
@@ -288,7 +291,7 @@ function assertGetApplicableFields(fields: readonly IBacklogField[] | undefined)
       [...inapplicable]
     );
   }
-  if (fields.includes('_vector')) throw new RagNotConfiguredError('_vector');
+  if (fields.includes('_vector') && !isSemanticSearchConfigured()) throw new RagNotConfiguredError('_vector');
 }
 
 /** §1 — the projection is the default card PLUS whatever the caller named. */
@@ -552,6 +555,16 @@ async function buildCard(store: GraphBacklogStore, target: IGetTarget, fields: S
   if (fields.has('blockers')) card.blockers = await blockerHumanIds(store, target);
   if (fields.has('rollup')) card.rollup = await computeRollup(store, target);
   if (fields.has('related')) card.related = await relatedHumanIds(store, target);
+  // RAG-SPEC §3 / AC-12 / AC-20 — reachable only when a backend is
+  // configured (`assertGetApplicableFields` already rejected `_vector`
+  // otherwise). A never-embedded item (backfill has not reached it, or its
+  // embed degraded per RAG-SPEC §2.5) legitimately has no vector — omitted
+  // rather than fabricated, same discipline as every other optional field.
+  if (fields.has('_vector')) {
+    const backend = requireSemanticBackend('_vector');
+    const vec = await backend.vectorFor(node.id);
+    if (vec !== null) card._vector = Array.from(vec);
+  }
 
   // DEBT-BACKLOG-GET-001 — every pseudo-field the caller COULD have named
   // but didn't, so "body omitted by projection" is distinguishable from

@@ -20,12 +20,29 @@ import { createGraphBackend, type GraphBackend } from '@adhd/sox-graph-store';
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { withImmediateRetry } from './immediate-retry.js';
+import { flushEmbeds as flushEmbedsFor } from './embed-queue.js';
 
 export interface GraphBacklogStore {
   /** Store-adapter handle — ONLY for the CAS transaction wrapper (mutate-metadata.ts / ids.ts). */
   readonly adapter: StoreAdapter;
   /** All non-CAS reads/writes go through this. */
   readonly graph: GraphBackend;
+  /**
+   * RAG-SPEC.md §2.2 — durability backstop for a short-lived process. Every
+   * `scheduleEmbed` (embed-queue.ts) call fired by `createItem`/`updateItem`
+   * is fire-and-forget by default; a CLI process that exits before those
+   * promises settle would otherwise lose the vector permanently even though
+   * the item itself is already durably committed. `flushEmbeds()` awaits
+   * every embed currently in flight for THIS store — bounded, deterministic,
+   * no sleeps — including one scheduled while the drain is already running.
+   * `closeGraphBacklogStore` calls this automatically before closing the
+   * adapter, so a caller that does nothing but `await
+   * closeGraphBacklogStore(store)` already gets the durability guarantee;
+   * this method exists for a caller that wants to keep the store open
+   * afterward (e.g. a long batch of writes wanting a checkpoint partway
+   * through) or wants the guarantee without a close.
+   */
+  flushEmbeds(): Promise<void>;
 }
 
 /**
@@ -77,10 +94,27 @@ export async function openGraphBacklogStore(dbPath: string, busyTimeoutMs = 5000
   // Production's 5000ms default left ample headroom, so this closes the gap
   // before it becomes an incident rather than after.
   await withImmediateRetry(() => graph.applySchema());
-  return { adapter, graph };
+  const store: GraphBacklogStore = {
+    adapter,
+    graph,
+    flushEmbeds: () => flushEmbedsFor(store),
+  };
+  return store;
 }
 
+/**
+ * Async (RAG-SPEC.md §2.2) — drains every embed still in flight for `store`
+ * BEFORE closing the adapter, so a one-shot process that does nothing more
+ * than `await closeGraphBacklogStore(store)` still gets the durability
+ * guarantee without having to remember to call `flushEmbeds()` itself. This
+ * is the belt-and-suspenders backstop `scheduleEmbed`'s doc comment
+ * describes: `awaitEmbed: true` on individual writes and an explicit
+ * `flushEmbeds()` mid-batch are the other two ways to get the same
+ * guarantee, but a caller that does none of them still cannot lose a vector
+ * as long as they close the store before the process exits.
+ */
 export async function closeGraphBacklogStore(store: GraphBacklogStore): Promise<void> {
+  await store.flushEmbeds();
   await store.adapter.close();
 }
 

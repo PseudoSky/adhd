@@ -11,7 +11,19 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+// `yaml` is pinned at 1.10.3, which ships CommonJS ONLY (`"type": "commonjs"`,
+// no ESM build). A NAMED import (`import { parse } from 'yaml'`) is kept
+// external by vite and emitted verbatim into `dist/index.mjs`, where Node
+// cannot statically resolve named exports off a CJS module — so the
+// published package's ESM entry threw `Named export 'parse' not found` on
+// import for EVERY ESM consumer, while the CJS entry worked fine (which is
+// why it went unnoticed; `verify-dist-load` only checks entry files exist,
+// it never imports them). A DEFAULT import is the interop form Node
+// guarantees for CJS (it binds `module.exports`), so it resolves correctly
+// from both bundles. See BUG-BACKLOG-ESM-YAML-001.
+import yaml from 'yaml';
+
+const { parse: parseYaml, stringify: stringifyYaml } = yaml;
 import type { Environment } from '@adhd/environment';
 import type { BacklogConfig } from './env.js';
 import type { MigrationPhase } from './model.js';
