@@ -6,6 +6,22 @@ import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 
 import { vitestPoolOptions } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
+
+// `date.spec.ts` asserts formatted output with a hardcoded UTC-5 offset (e.g.
+// "GMT-5 ... America/Lima"). Those assertions are only correct in a FIXED -5
+// zone, so the suite passed or failed depending on the MACHINE's local
+// timezone: it passed in America/New_York for the February fixtures (EST is
+// also -5) and failed for the April one (EDT is -4). Pinning TZ makes the
+// suite deterministic on every machine and in CI, which is what those
+// assertions always assumed.
+//
+// This must happen HERE, at config-module scope, not via vitest's `test.env`
+// and not via `vi.stubEnv('TZ', ...)` inside the spec: Node resolves the local
+// zone from the environment when the process starts, so setting it after a
+// worker is already running does not change how dates format. Setting it here
+// puts it in the parent's environment before any test worker is forked, so
+// every worker inherits it at startup.
+process.env.TZ = 'America/Lima';
 export default defineConfig({
   root: __dirname,
   cacheDir: projectCacheDir(__dirname),
