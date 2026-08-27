@@ -63,10 +63,13 @@ The type policy registers the five new rels in `DEFAULT_EDGE_RELS` — not `PUBL
 - `family` is **derived** from the humanId (`FEAT-BACKLOG-*` prefix) — never stored, never edged. It is a pure function of the id.
 - `importedFrom` remains a metadata scalar (provenance, not a query dimension).
 - `claimedBy` / `claimedAt` remain metadata-only (lease semantics, unchanged).
-- humanId allocation is an atomic counter, not a scan (§5.2). The dense sequential
-  `FAMILY-NNN` form is retained for readability, but nothing in this model depends on ids
-  being gapless — treat gaplessness as a display convention, never an invariant to
-  enforce with a read-max.
+- humanId allocation is an atomic counter, not a scan (§5.2) — **an interim state.**
+  `entrypoint/backlog/DATA_MODEL_v2.md` eliminates the humanId outright (§0.1 "one
+  identity, system-owned"; §3 `issue` carries "NO humanId"; §8 deletes
+  `computeNextHumanId` / `allocateHumanIdAndInsert` and the whole id-uniqueness
+  machinery, because the DB owns identity). This document's retention of a
+  user-visible `FAMILY-NNN` id is superseded on that point. Do not build new
+  invariants on it.
 
 ## 3. Repo identity and fork-key reconciliation
 
