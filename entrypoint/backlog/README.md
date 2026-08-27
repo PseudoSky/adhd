@@ -179,3 +179,75 @@ Resolved via `@adhd/environment` (see `env.ts`): `global` (default —
 `~/.adhd/backlog/<namespace>/data/backlog.db`, spans every repo on the
 machine), `project` (`<projectRoot>/.adhd/backlog/<namespace>/data/backlog.db`,
 one repo), or `system`. See `SPEC.md` §3 for the full resolution order.
+
+## Semantic search (RAG) — opt-in
+
+Backlog can find items by **meaning** rather than keywords: a paraphrased
+duplicate that shares no words with the original still matches. This is
+**off by default** and has no hard dependency — with it disabled, backlog
+behaves exactly as it always has.
+
+### Enabling it
+
+Install the two optional peers and turn it on:
+
+```bash
+pnpm add @adhd/sox-embedding-provider @adhd/sox-vector-store
+export ADHD_BACKLOG_EMBEDDING_ENABLED=true
+```
+
+| Setting | Env var | Default |
+|---|---|---|
+| `embedding.enabled` | `ADHD_BACKLOG_EMBEDDING_ENABLED` | `false` |
+| `embedding.provider` | `ADHD_BACKLOG_EMBEDDING_PROVIDER` | `fastembed` |
+| `embedding.model` | `ADHD_BACKLOG_EMBEDDING_MODEL` | `bge-base-en-v1.5` (768-dim) |
+
+Embedding runs **locally** (ONNX via fastembed) — no API key, no network
+after the model is cached, no per-query cost.
+
+**Requirements.** The store must be on a substrate with native vectors
+(the default turso adapter). Enabling it without the optional packages, on a
+non-vector adapter, or with a provider that fails to construct logs a typed
+reason and leaves semantic search off — it never crashes startup, and never
+silently pretends to work.
+
+### What it gives you
+
+```bash
+# find by meaning, not keywords
+adhd-backlog query --input '{"filter":{"semantic":"connections leak under load"}}'
+
+# items similar to a known one
+adhd-backlog query --input '{"view":"similar","filter":{"anchor":"BUG-BACKLOG-001"}}'
+```
+
+- `filter.semantic` — free-text meaning search
+- `view:"similar"` + `filter.anchor` — neighbours of a given item, plus
+  `suggestedRelated` / `suggestedDependencies`
+- `sort:"relevance"` — rank by similarity
+- `fields:["_vector"]` — the raw embedding
+- **Semantic dedupe on create** — filing an item that restates an existing
+  one is caught even when the wording is entirely different
+- `admin` actions: `embedding_health`, `embedding_backfill`,
+  `list_near_duplicates`, `run_dedup_sweep`, `cluster_into_plans`,
+  `promote_cluster_to_plan`
+
+### With it disabled
+
+Every semantic input fails **loudly** with `rag_not_configured` rather than
+quietly falling back to a keyword search that would return plausible-looking
+but wrong results. `filter.grep` is always pure full-text search and is
+never affected by this setting either way.
+
+### Notes
+
+- Embedding happens **after** the write commits, so creates never block on
+  the model and an embedding failure can never fail a write — the item stays
+  fully readable and full-text searchable, and `admin(embedding_backfill)`
+  repairs it. Pass `awaitEmbed: true` when you need the vector durable before
+  you return (tests, scripts).
+- The model id is recorded per item from the provider's **resolved** model,
+  so you can always tell what actually embedded a given row.
+- Changing `embedding.model` does not silently reinterpret existing vectors:
+  dimensions are a structural contract. Re-embed with
+  `admin(embedding_backfill)`.
