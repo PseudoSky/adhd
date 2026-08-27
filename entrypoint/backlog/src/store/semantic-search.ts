@@ -1,65 +1,132 @@
 /**
- * semantic-search.ts — P4 opt-in RAG scaffolding (AC-12).
+ * semantic-search.ts — the RAG seam (EPIC-G / RAG-SPEC.md).
  *
  * `@adhd/backlog` has zero HARD dependency on an embedding/vector substrate
  * — the default, unconfigured build answers every semantic input
  * (`filter.semantic`, `filter.anchor`, `view:"similar"`, `sort:"relevance"`,
- * `fields:["_vector"]`) with `RagNotConfiguredError` (AC-12), never a
- * silently-wrong keyword substitute. This module is the SEAM that lets a
- * host opt a real backend IN without backlog ever requiring one:
+ * `fields:["_vector"]`, and the six EPIC-G admin actions) with
+ * `RagNotConfiguredError` (AC-12), never a silently-wrong keyword
+ * substitute. This module is the SEAM that lets a host opt a real backend
+ * IN without backlog ever requiring one:
  *
- * 1. {@link SemanticBackend} — the small interface `v2/query.ts`/`v2/get.ts`
- *    consult. Fully injectable (`configureSemanticBackend`) so tests can
- *    prove the "configured" code paths deterministically with a FAKE
- *    backend — no model download, no native module, no network.
+ * 1. {@link SemanticBackend} — the small interface the store, `v2/query.ts`,
+ *    `v2/get.ts` and `v2/admin.ts` consult. Fully injectable
+ *    (`configureSemanticBackend`) so tests can prove the "configured" code
+ *    paths deterministically with a FAKE backend — no model download, no
+ *    native module, no network.
  * 2. {@link bootstrapSemanticBackend} — the REAL backend, built from
  *    `@adhd/sox-vector-store` + `@adhd/sox-embedding-provider`
- *    (`optionalDependencies` in package.json — never installed unless a host
- *    opts in). Both are loaded via `await import()` inside try/catch: a
- *    build with neither package installed (the default) degrades to `null`
- *    rather than crashing at import time, exactly like an unconfigured
- *    build today.
+ *    (`optionalDependencies` — never installed unless a host opts in).
+ *
+ * ## Why every method is async
+ *
+ * RAG-SPEC §0: backlog's store is opened through `@adhd/sox-store-adapter`,
+ * whose default substrate is **Turso**, and "the entire API is async".
+ * `@adhd/sox-vector-store`'s original `VectorBackend` is synchronous and
+ * backed by sqlite-vec — it *throws* when handed a Turso adapter, directing
+ * the caller elsewhere. The sync interface is bridged for LanceDB by running
+ * the driver in a `synckit` worker, but that trick is WRONG here: a worker
+ * thread would open a SECOND connection to backlog's own database file,
+ * breaking the "one file, one writer" invariant RAG-SPEC §0 pins. So the
+ * Turso path is async and in-process, reusing the store's existing adapter
+ * (`@adhd/sox-vector-store`'s additive `AsyncVectorBackend`), and this seam
+ * — backlog's own interface, not a vendored one — is async to match.
  *
  * Nothing in this module runs at import time — `configureSemanticBackend`
  * is never called automatically, and `bootstrapSemanticBackend` is never
  * invoked implicitly. A host (`cli.ts`/`server.ts`) that wants the real
- * backend calls it explicitly during startup, exactly like it explicitly
- * builds `BacklogCtx` today. This is the "scaffolding" P4 asks for, not a
- * production ranking pipeline: it is deliberately the smallest seam that
- * makes the configured path real, injectable, and testable, and the
- * unconfigured default (`RagNotConfiguredError`) is untouched.
+ * backend calls it explicitly during startup.
  */
 import type { NodeFilter } from '@adhd/sox-graph-store';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
+import { RagNotConfiguredError } from '../model.js';
 
-/** One nearest-neighbour hit: a node id (never a humanId — the caller resolves that) plus a similarity score, higher-is-better. */
+/** One nearest-neighbour hit: a node id (never a humanId — the caller resolves that) plus a similarity score, HIGHER-IS-BETTER. */
 export interface SemanticMatch {
   nodeId: number;
   score: number;
 }
 
 /**
- * The minimal surface `v2/query.ts` (`view:"similar"`, `sort:"relevance"`)
- * and `v2/get.ts` (`fields:["_vector"]`) need from a configured embedding
- * backend. Intentionally NOT the full `@adhd/sox-vector-store`/
- * `@adhd/sox-embedding-provider` APIs — this is the narrow slice backlog
- * actually calls, so a test double only has to implement four methods to
- * stand in for the real thing.
+ * Truthful provider health (RAG-SPEC §1.5: "a provider is never reported
+ * healthy without a resolved backend"). Mirrors
+ * `@adhd/sox-embedding-provider`'s `EmbeddingHealth`, restated locally so
+ * this seam keeps zero compile-time dependency on that package.
+ *
+ * `active` is `null` until the model has actually resolved — NEVER a
+ * placeholder or the configured name echoed back. That distinction is the
+ * whole point: a stamp that can be written before a provider resolves is
+ * unfalsifiable (§2.4).
+ */
+export interface SemanticHealth {
+  /** What was ASKED for, e.g. `fastembed:bge-base-en-v1.5`. */
+  configured: string;
+  /** What actually RESOLVED, or `null` while uninitialized/warming/errored. */
+  active: string | null;
+  state: 'uninitialized' | 'warming' | 'real' | 'error';
+  dimensions: number | null;
+  last_error: string | null;
+  /** Count of vectors currently indexed in this space, when the backend can report it cheaply. */
+  indexedCount?: number;
+}
+
+/**
+ * The surface backlog actually calls on a configured embedding backend.
+ * Intentionally NOT the full `@adhd/sox-vector-store` /
+ * `@adhd/sox-embedding-provider` APIs — this is the narrow slice, so a test
+ * double only has to implement these methods to stand in for the real thing.
+ *
+ * Every method is async: see this file's header for why.
  */
 export interface SemanticBackend {
+  /** The RESOLVED model id (§2.4) — the value stamped as `embed_model` provenance. */
   readonly modelId: string;
+  /** Vector dimensionality. Structural: a returned vector of any other length is a `PermanentEmbeddingError`, never silently truncated (§2.5). */
   readonly dim: number;
-  /** Embeds free text (a `filter.semantic`/text query) for a KNN lookup. */
+  /** Embeds free text as a QUERY (asymmetric models embed queries and documents differently — bge prefixes queries). */
   embedQuery(text: string): Promise<Float32Array>;
-  /** The already-indexed vector for a live node, or `null` if this node has never been embedded (`admin(embedding_backfill)` has not covered it yet). */
-  vectorFor(nodeId: number): Float32Array | null;
-  /** Top-`k` nearest neighbours to `query`, optionally scoped by `filter` (repo/family/etc — the same `NodeFilter` shape the rest of the store uses) or restricted to an explicit candidate `ids` set. */
-  knn(query: Float32Array, k: number, opts?: { filter?: NodeFilter; ids?: number[] }): SemanticMatch[];
+  /** Embeds item text as a DOCUMENT — the write path (§2.1 Phase B). */
+  embedDocument(text: string): Promise<Float32Array>;
+  /** The indexed vector for a live node, or `null` if it has never been embedded (backfill has not covered it). */
+  vectorFor(nodeId: number): Promise<Float32Array | null>;
+  /** Idempotent per `(nodeId, modelId)` — a plain overwrite, so re-embed on edit (§2.3) needs no delete-then-insert. */
+  upsertVector(nodeId: number, vec: Float32Array): Promise<void>;
+  /** Drops a node's vector (soft-delete / prune). Absent vector is a no-op, never an error. */
+  deleteVector(nodeId: number): Promise<void>;
+  /** Top-`k` nearest neighbours, scoped by `filter` (pushed into SQL BEFORE the limit — never a post-filter, §3.1) or an explicit candidate `ids` set. */
+  knn(query: Float32Array, k: number, opts?: { filter?: NodeFilter; ids?: number[] }): Promise<SemanticMatch[]>;
+  /** Every indexed vector in this space — the input to `cluster_into_plans` (DBSCAN) and `run_dedup_sweep` (§4, §5). */
+  iterVectors(opts?: { filter?: NodeFilter }): AsyncIterable<{ nodeId: number; vec: Float32Array }>;
+  /** §1.5 — truthful health, resolved from the provider, never echoed from config. */
+  health(): Promise<SemanticHealth>;
+}
+
+/**
+ * §2.5 — a returned vector whose dimension does not match the resolved
+ * model. Permanent and non-retryable by construction: the dimensional
+ * contract is structural (the vector column's type encodes it), so a
+ * mismatch means the provider is not the model the space was built for.
+ * Truncating or padding to fit would produce plausible-looking, permanently
+ * wrong neighbours — so this throws instead.
+ */
+export class PermanentEmbeddingDimensionError extends Error {
+  constructor(
+    readonly operation: string,
+    readonly modelId: string,
+    readonly expected: number,
+    readonly actual: number
+  ) {
+    super(
+      `backlog embedding: ${operation} produced a ${actual}-dimensional vector but space "${modelId}" is ${expected}-dimensional. ` +
+        `The dimensional contract is structural and is never silently truncated (RAG-SPEC §2.5) — the configured provider does not match this vector space.`
+    );
+    this.name = 'PermanentEmbeddingDimensionError';
+  }
 }
 
 let injectedBackend: SemanticBackend | null = null;
 
-/** Installs (or clears, with `null`) the backend `v2/query.ts`/`v2/get.ts` consult. Never called automatically — see this file's header. */
+/** Installs (or clears, with `null`) the backend every AC-12 gate consults. Never called automatically — see this file's header. */
 export function configureSemanticBackend(backend: SemanticBackend | null): void {
   injectedBackend = backend;
 }
@@ -69,40 +136,74 @@ export function getSemanticBackend(): SemanticBackend | null {
   return injectedBackend;
 }
 
-/** `true` iff a backend is configured — the single predicate every AC-12 gate in `v2/query.ts`/`v2/get.ts` checks before falling back to `RagNotConfiguredError`. */
+/** `true` iff a backend is configured — the single predicate every AC-12 gate checks before falling back to `RagNotConfiguredError`. */
 export function isSemanticSearchConfigured(): boolean {
   return injectedBackend !== null;
 }
 
+/**
+ * The configured backend, or a thrown `RagNotConfiguredError` — the single
+ * accessor every semantic code path uses, so "configured?" is asked exactly
+ * one way and the AC-12 message always names the feature that needed it.
+ */
+export function requireSemanticBackend(feature: string): SemanticBackend {
+  if (injectedBackend === null) throw new RagNotConfiguredError(feature);
+  return injectedBackend;
+}
+
 export interface SemanticBootstrapConfig {
-  /** Embedding provider config, forwarded verbatim to `@adhd/sox-embedding-provider`'s `createEmbeddingProvider()` (e.g. `{ type: 'fastembed', model: 'bge-small-en-v1.5' }`). */
+  /** Embedding provider config, forwarded verbatim to `@adhd/sox-embedding-provider`'s `createEmbeddingProvider()` (e.g. `{ type: 'fastembed', model: 'bge-base-en-v1.5' }`). */
   embedding: { type: string; model: string; options?: Record<string, unknown> };
-  /** Overrides the vector space's `{modelId, dim}` — defaults to the embedding provider's own `metadata` once it is constructed. */
+  /** Overrides the vector space's `{modelId, dim}` — defaults to the embedding provider's own resolved `metadata`. */
   space?: { modelId: string; dim: number };
 }
 
+/**
+ * Why a bootstrap did not produce a backend. Returned rather than swallowed:
+ * an opt-in feature that fails silently is indistinguishable from one that
+ * was never asked for, and that ambiguity costs hours. `not_installed` is
+ * the ordinary default-build case and is NOT an error; every other reason
+ * means a host explicitly asked for RAG and did not get it, which a host
+ * should surface (RAG-SPEC §1.6 — never a silent no-op).
+ */
+export type SemanticBootstrapFailure =
+  | { reason: 'not_installed'; detail: string }
+  | { reason: 'provider_failed'; detail: string }
+  | { reason: 'vector_store_failed'; detail: string }
+  | { reason: 'unsupported_adapter'; detail: string };
+
+export type SemanticBootstrapResult =
+  | { ok: true; backend: SemanticBackend }
+  | { ok: false; failure: SemanticBootstrapFailure };
+
 // Structural mirrors of the slices of `@adhd/sox-vector-store` /
-// `@adhd/sox-embedding-provider`'s real published APIs this module calls
-// (verified against their real `.d.ts` — `openVectorStore`,
-// `VectorBackend.ensureSpace/knn/get`, `createEmbeddingProvider`,
-// `EmbeddingProvider.metadata/embedSingle`). Declared locally, NOT imported
-// as types, so this file has ZERO compile-time dependency on either package
-// — see the module-loading comment below for why that matters.
+// `@adhd/sox-embedding-provider` this module calls. Declared locally, NOT
+// imported as types, so this file has ZERO compile-time dependency on either
+// package — see the module-loading comment on `loadOptional` for why.
 interface OptEmbeddingProvider {
   readonly metadata: { modelId: string; dimensions: number };
   embedSingle(text: string, role?: 'document' | 'query'): Promise<Float32Array>;
+  health?(): { configured: string; active: string | null; state: 'uninitialized' | 'warming' | 'real' | 'error'; dimensions: number | null; last_error: string | null };
 }
 interface OptVecFilter {
   ids?: number[];
   nodeFilter?: NodeFilter;
 }
-interface OptVectorBackend {
-  ensureSpace(space: { modelId: string; dim: number }): void;
-  get(id: number, modelId: string): Float32Array | null;
-  knn(query: Float32Array, space: { modelId: string; dim: number }, k: number, filter?: OptVecFilter): Array<{ id: number; score: number }>;
+interface OptVectorSpace {
+  modelId: string;
+  dim: number;
+}
+/** The ASYNC backend (`TursoVectorBackend`) — the Turso path, in-process on the store's own adapter. */
+interface OptAsyncVectorBackend {
+  ensureSpace(space: OptVectorSpace): Promise<void>;
+  upsert(id: number, vec: Float32Array, space: OptVectorSpace): Promise<void>;
+  delete(id: number, modelId: string): Promise<void>;
+  get(id: number, modelId: string): Promise<Float32Array | null>;
+  knn(query: Float32Array, space: OptVectorSpace, k: number, filter?: OptVecFilter): Promise<Array<{ id: number; score: number }>>;
+  iter(modelId: string, opts?: { filter?: OptVecFilter }): AsyncIterable<{ id: number; vec: Float32Array }>;
 }
 interface OptVectorStoreModule {
-  openVectorStore(adapterOrPath: unknown, opts: { dim: number; modelId: string }): OptVectorBackend;
+  openTursoVectorStore(adapter: unknown, opts: { dim: number; modelId: string }): Promise<OptAsyncVectorBackend>;
 }
 interface OptEmbeddingModule {
   createEmbeddingProvider(config: { type: string; model: string; options?: Record<string, unknown> }): Promise<OptEmbeddingProvider>;
@@ -112,83 +213,206 @@ interface OptEmbeddingModule {
  * Loads an optional package by name via a NON-LITERAL specifier.
  *
  * `@adhd/sox-vector-store`/`@adhd/sox-embedding-provider` are
- * `optionalDependencies` (package.json) — a `backlog` install may not have
- * either one present, and this package must still build and run correctly
- * without them (the default, unconfigured path). A literal
- * `import('@adhd/sox-vector-store')` would defeat that: TypeScript resolves
- * a literal dynamic-import specifier at compile time (fails the build if the
- * package's types are not installed) AND the bundler (vite/rollup) tries to
- * statically resolve and inline it at BUILD time too — both would break a
- * `backlog` build in an environment that never installed the optional
- * packages. Routing the specifier through a `const` defeats both static
- * analyses (a long-standing, deliberate technique for a genuinely optional
- * `require`/`import` in bundled code) — resolution happens only at RUNTIME,
- * inside this function's own try/catch.
+ * `optionalDependencies` — a `backlog` install may not have either one, and
+ * this package must still build and run correctly without them (the default,
+ * unconfigured path). A literal `import('@adhd/sox-vector-store')` would
+ * defeat that: TypeScript resolves a literal dynamic-import specifier at
+ * compile time (failing the build when the types are absent) AND the bundler
+ * (vite/rollup) tries to statically resolve and inline it at BUILD time too.
+ * Routing the specifier through a `const` defeats both static analyses, so
+ * resolution happens only at RUNTIME, inside this function's try/catch.
  */
-async function loadOptional<T>(specifier: string): Promise<T | null> {
+async function loadOptional<T>(specifier: string): Promise<{ mod: T } | { err: unknown }> {
   try {
     const dynamicSpecifier = specifier;
-    return (await import(/* @vite-ignore */ dynamicSpecifier)) as T;
-  } catch {
-    return null;
+    return { mod: (await import(/* @vite-ignore */ dynamicSpecifier)) as T };
+  } catch (err) {
+    return { err };
   }
 }
 
+const errText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
 /**
- * Best-effort construction of a REAL {@link SemanticBackend} from
- * `@adhd/sox-vector-store` (vectors, stored in `store`'s own adapter) +
- * `@adhd/sox-embedding-provider` (text→vector). Both are
- * `optionalDependencies` — loaded via {@link loadOptional}, so a build with
- * neither installed returns `null` rather than throwing (the caller's
- * `RagNotConfiguredError` default degrade stays intact). A failure to
- * actually CONSTRUCT the provider (bad config, model resolution failure)
- * also returns `null` rather than crashing startup — the whole point of
- * "opt-in" is that a broken/absent embedding stack can never take down the
- * rest of `backlog`, which works perfectly well without it.
+ * Builds a REAL {@link SemanticBackend} from `@adhd/sox-vector-store`
+ * (vectors, stored in the store's OWN adapter — one file, one writer) +
+ * `@adhd/sox-embedding-provider` (text→vector).
  *
- * Never called automatically (see this file's header) — a host that wants
- * the real backend calls this explicitly and then
- * `configureSemanticBackend(await bootstrapSemanticBackend(...))`.
+ * Unlike a bare `null` return, every failure is REPORTED with a reason (see
+ * {@link SemanticBootstrapFailure}), so a host that explicitly asked for RAG
+ * can tell "the optional packages are not installed" (the ordinary default
+ * build) from "they are installed and something is broken". Silently
+ * conflating those is how an opt-in feature becomes undebuggable.
+ *
+ * Never called automatically — a host calls this explicitly and then
+ * `configureSemanticBackend(result.backend)`.
  */
-export async function bootstrapSemanticBackend(store: GraphBacklogStore, config: SemanticBootstrapConfig): Promise<SemanticBackend | null> {
-  const [vectorStoreMod, embeddingMod] = await Promise.all([
+export async function bootstrapSemanticBackend(store: GraphBacklogStore, config: SemanticBootstrapConfig): Promise<SemanticBootstrapResult> {
+  // RAG-SPEC §0: the vector table lives in backlog's own database, reached
+  // through the SAME adapter the graph uses. `nativeVectors` is the blessed
+  // capability probe (never `config.type`): true => Turso, whose vector
+  // support is async; false => a sqlite adapter, which this async seam does
+  // not serve (sqlite-vec's backend is synchronous and lives behind
+  // `openVectorStore`). Refuse loudly rather than half-work.
+  const adapter = store.adapter as unknown as { capabilities?: { nativeVectors?: boolean } };
+  if (adapter?.capabilities?.nativeVectors !== true) {
+    return {
+      ok: false,
+      failure: {
+        reason: 'unsupported_adapter',
+        detail:
+          `backlog's RAG layer requires a Turso-backed store (capabilities.nativeVectors === true); ` +
+          `this store's adapter reports ${JSON.stringify(adapter?.capabilities?.nativeVectors)}. ` +
+          `Turso is @adhd/sox-store-adapter's default — a sqlite-backed store must be migrated before embeddings can be enabled.`,
+      },
+    };
+  }
+
+  const [vectorStoreLoad, embeddingLoad] = await Promise.all([
     loadOptional<OptVectorStoreModule>('@adhd/sox-vector-store'),
     loadOptional<OptEmbeddingModule>('@adhd/sox-embedding-provider'),
   ]);
-  if (vectorStoreMod === null || embeddingMod === null) {
-    // Neither (or one) of the optional deps is installed — the default,
-    // unconfigured build. Not an error: `RagNotConfiguredError` is exactly
-    // the correct behaviour for every semantic input from here on.
-    return null;
+  if ('err' in vectorStoreLoad || 'err' in embeddingLoad) {
+    const missing = [
+      ...('err' in vectorStoreLoad ? [`@adhd/sox-vector-store (${errText(vectorStoreLoad.err)})`] : []),
+      ...('err' in embeddingLoad ? [`@adhd/sox-embedding-provider (${errText(embeddingLoad.err)})`] : []),
+    ];
+    // NOT an error: this is the default build. `RagNotConfiguredError` on
+    // every semantic input is exactly the correct behaviour from here on.
+    return { ok: false, failure: { reason: 'not_installed', detail: `optional embedding packages unavailable: ${missing.join('; ')}` } };
   }
 
+  let provider: OptEmbeddingProvider;
   try {
-    const provider = await embeddingMod.createEmbeddingProvider(config.embedding);
-    const space = config.space ?? { modelId: provider.metadata.modelId, dim: provider.metadata.dimensions };
-    const vectorBackend = vectorStoreMod.openVectorStore(store.adapter, { dim: space.dim, modelId: space.modelId });
-    vectorBackend.ensureSpace(space);
+    provider = await embeddingLoad.mod.createEmbeddingProvider(config.embedding);
+  } catch (err) {
+    return { ok: false, failure: { reason: 'provider_failed', detail: `createEmbeddingProvider(${config.embedding.type}:${config.embedding.model}) failed: ${errText(err)}` } };
+  }
 
-    const backend: SemanticBackend = {
-      modelId: space.modelId,
-      dim: space.dim,
-      async embedQuery(text: string): Promise<Float32Array> {
-        return provider.embedSingle(text, 'query');
-      },
-      vectorFor(nodeId: number): Float32Array | null {
-        return vectorBackend.get(nodeId, space.modelId);
-      },
-      knn(query: Float32Array, k: number, opts?: { filter?: NodeFilter; ids?: number[] }): SemanticMatch[] {
-        const vecFilter: OptVecFilter | undefined =
-          opts?.filter !== undefined || opts?.ids !== undefined
-            ? { ...(opts.ids !== undefined ? { ids: opts.ids } : {}), ...(opts.filter !== undefined ? { nodeFilter: opts.filter } : {}) }
-            : undefined;
-        return vectorBackend.knn(query, space, k, vecFilter).map((m) => ({ nodeId: m.id, score: m.score }));
-      },
-    };
-    return backend;
-  } catch {
-    // Provider/vector-store construction failed (bad config, model
-    // resolution, etc.) — degrade to "not configured" rather than crash.
+  // §2.4 — provenance comes from the provider's RESOLVED metadata, never
+  // from `config`. An explicit `config.space` override is honoured, but it
+  // is the caller's deliberate act, not a default.
+  const space: OptVectorSpace = config.space ?? { modelId: provider.metadata.modelId, dim: provider.metadata.dimensions };
+
+  let vectorBackend: OptAsyncVectorBackend;
+  try {
+    vectorBackend = await vectorStoreLoad.mod.openTursoVectorStore(store.adapter, { dim: space.dim, modelId: space.modelId });
+    await vectorBackend.ensureSpace(space);
+  } catch (err) {
+    return { ok: false, failure: { reason: 'vector_store_failed', detail: `openTursoVectorStore(dim=${space.dim}, modelId=${space.modelId}) failed: ${errText(err)}` } };
+  }
+
+  /**
+   * §2.5 — the dimensional contract is STRUCTURAL. A provider that returns
+   * a vector of the wrong length is a permanent, non-retryable fault; it is
+   * never truncated or zero-padded to fit, because a silently-reshaped
+   * vector produces plausible, wrong neighbours forever after.
+   */
+  const checkDim = (vec: Float32Array, what: string): Float32Array => {
+    if (vec.length !== space.dim) {
+      throw new PermanentEmbeddingDimensionError(what, space.modelId, space.dim, vec.length);
+    }
+    return vec;
+  };
+
+  const backend: SemanticBackend = {
+    modelId: space.modelId,
+    dim: space.dim,
+    async embedQuery(text: string): Promise<Float32Array> {
+      return checkDim(await provider.embedSingle(text, 'query'), 'embedQuery');
+    },
+    async embedDocument(text: string): Promise<Float32Array> {
+      return checkDim(await provider.embedSingle(text, 'document'), 'embedDocument');
+    },
+    async vectorFor(nodeId: number): Promise<Float32Array | null> {
+      return vectorBackend.get(nodeId, space.modelId);
+    },
+    async upsertVector(nodeId: number, vec: Float32Array): Promise<void> {
+      await vectorBackend.upsert(nodeId, checkDim(vec, 'upsertVector'), space);
+    },
+    async deleteVector(nodeId: number): Promise<void> {
+      await vectorBackend.delete(nodeId, space.modelId);
+    },
+    async knn(query: Float32Array, k: number, opts?: { filter?: NodeFilter; ids?: number[] }): Promise<SemanticMatch[]> {
+      const vecFilter: OptVecFilter | undefined =
+        opts?.filter !== undefined || opts?.ids !== undefined
+          ? { ...(opts.ids !== undefined ? { ids: opts.ids } : {}), ...(opts.filter !== undefined ? { nodeFilter: opts.filter } : {}) }
+          : undefined;
+      const hits = await vectorBackend.knn(checkDim(query, 'knn'), space, k, vecFilter);
+      return hits.map((m) => ({ nodeId: m.id, score: m.score }));
+    },
+    async *iterVectors(opts?: { filter?: NodeFilter }): AsyncIterable<{ nodeId: number; vec: Float32Array }> {
+      const inner = vectorBackend.iter(space.modelId, opts?.filter !== undefined ? { filter: { nodeFilter: opts.filter } } : undefined);
+      for await (const row of inner) yield { nodeId: row.id, vec: row.vec };
+    },
+    async health(): Promise<SemanticHealth> {
+      // §1.5 — a provider is never reported healthy without a RESOLVED
+      // backend. When the provider exposes its own health, that is the
+      // truth and it is passed through verbatim. When it does not, `active`
+      // stays null rather than being invented from config.
+      const raw = provider.health?.();
+      if (raw) return { ...raw };
+      return {
+        configured: `${config.embedding.type}:${config.embedding.model}`,
+        active: null,
+        state: 'uninitialized',
+        dimensions: space.dim,
+        last_error: null,
+      };
+    },
+  };
+  return { ok: true, backend };
+}
+
+/**
+ * RAG-SPEC.md §1.6 — the ONE host-side opt-in path, shared by `cli.ts` and
+ * `server.ts` so the two entrypoints can never drift into configuring RAG
+ * differently.
+ *
+ * Contract, in order of importance:
+ *
+ * 1. **Disabled is the default and is completely silent.** With
+ *    `cfg.enabled === false` this returns `null` without loading a package,
+ *    touching the store, or logging anything — a build that never opts in
+ *    behaves exactly as it did before RAG existed, and every semantic input
+ *    keeps answering `RagNotConfiguredError` (AC-12).
+ * 2. **Enabling is best-effort and NEVER fatal.** If the optional packages
+ *    are missing, the adapter has no native vectors, or the provider fails
+ *    to construct, this logs the TYPED reason from
+ *    {@link bootstrapSemanticBackend} and returns `null`. Backlog works
+ *    perfectly well without RAG, so a broken embedding stack must never take
+ *    down the CLI or the server — but it must also never fail SILENTLY,
+ *    which is why the reason is surfaced rather than swallowed. (An earlier
+ *    revision returned a bare `null` here; that made a misconfigured stack
+ *    indistinguishable from an unconfigured one and was undebuggable.)
+ * 3. **It installs the backend itself** via `configureSemanticBackend`, so
+ *    callers get the seam wired as a side effect and cannot forget the
+ *    second half of the handshake.
+ *
+ * @param log where to report a failed opt-in. Defaults to `console.error`.
+ *            A host with a structured logger should pass its own sink.
+ * @returns the live backend, or `null` when RAG is off or unavailable.
+ */
+export async function enableSemanticSearchFromConfig(
+  store: GraphBacklogStore,
+  cfg: { enabled: boolean; provider: string; model: string },
+  log: (message: string) => void = (m) => console.error(m),
+): Promise<SemanticBackend | null> {
+  if (!cfg.enabled) return null;
+
+  const result = await bootstrapSemanticBackend(store, {
+    embedding: { type: cfg.provider, model: cfg.model },
+  });
+
+  if (!result.ok) {
+    log(
+      `backlog: embedding.enabled is set but the semantic backend could not start ` +
+        `(${result.failure.reason}): ${result.failure.detail}. ` +
+        `Continuing WITHOUT semantic search — every semantic input will answer rag_not_configured.`,
+    );
     return null;
   }
+
+  configureSemanticBackend(result.backend);
+  return result.backend;
 }

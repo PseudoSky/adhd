@@ -56,6 +56,7 @@ import { batchPlugin } from '@adhd/apigen-plugin-batch';
 import * as clientMod from './client.js';
 import type { BacklogCtx } from './client.js';
 import { openGraphBacklogStore, closeGraphBacklogStoreSafe, type GraphBacklogStore } from './store/graph-backlog-store.js';
+import { enableSemanticSearchFromConfig } from './store/semantic-search.js';
 import { hasExternalSignalHandling, installSignalCleanup } from './store/signal-cleanup.js';
 import { acquireServeLock, isLockableDbPath, type ServeLockHandle } from './store/serve-lock.js';
 import { buildBacklogEnv, resolveBacklogDbPath, resolveIrCacheFile } from './env.js';
@@ -444,8 +445,31 @@ const CORE_CLIENT_VERSION: string = requirePkg(
  * cold cache directory into every repo/worktree `backlog` was ever run from).
  * `APIGEN_IR_CACHE_FILE` replaces the Revision-1 `APIGEN_IR_CACHE_DIR`.
  */
-function irCacheFile(): string {
-  return resolveIrCacheFile();
+/**
+ * BUG-BACKLOG-SANDBOX-IRCACHE-001: previously took no arguments and always
+ * called `resolveIrCacheFile()` bare — which, absent an explicit `adhdRoot`,
+ * resolves against the process's real `HOME`. That is correct isolation
+ * ONLY along the `scope` axis (project vs global data — see this file's own
+ * comment above about the cache staying "one stable machine-wide location
+ * no matter which scope a given invocation resolved its backlog *data*
+ * to"). It is NOT correct along the `--sandbox`/test-isolation axis:
+ * `cli.ts`'s `runBacklogCli` and `startBacklogServer` both already thread an
+ * `adhdRoot` override through `buildBacklogEnv` for every OTHER path (the
+ * real SQLite store, `env.ensureDirs()`), but this cache file's own
+ * `resolveIrCacheFile({ adhdRoot, instanceId })` parameters were simply never
+ * wired to it — so a `--sandbox` invocation, despite reporting (and
+ * genuinely using) an isolated store root, would still create
+ * `~/.adhd/backlog/production/cache/apigen/ir-cache/...` on the real
+ * machine `HOME` on its first extraction, defeating the isolation guarantee
+ * `--sandbox` advertises (caught by `cli.spec.ts`'s
+ * "--sandbox diverts the store away from the (fake) production HOME
+ * entirely, and never creates anything under it" — a fake HOME stands in
+ * for the real one there, but the bug is identical against a real HOME).
+ * Now accepts the same `{ adhdRoot, instanceId }` test-isolation pair every
+ * other resolver in this file already takes, and forwards it verbatim.
+ */
+function irCacheFile(opts: { adhdRoot?: string; instanceId?: string } = {}): string {
+  return resolveIrCacheFile(opts);
 }
 
 /**
@@ -476,7 +500,7 @@ function irCacheEnabled(): boolean {
  * instead — exactly the escape hatch that module doc describes for a caller
  * wanting non-default configuration in the same process.
  */
-function backlogIrCachePlugin(): Plugin {
+function backlogIrCachePlugin(opts: { adhdRoot?: string; instanceId?: string } = {}): Plugin {
   return {
     id: 'ir-cache',
     description: 'Extract-stage IR cache, configured for the backlog hot path (BUG-019).',
@@ -484,7 +508,7 @@ function backlogIrCachePlugin(): Plugin {
     capabilities: {
       extractLayer: {
         layer: createIrCacheLayer({
-          cache: irCacheFile(),
+          cache: irCacheFile(opts),
           extractorVersion: CORE_CLIENT_VERSION,
         }),
       },
@@ -506,11 +530,21 @@ function backlogIrCachePlugin(): Plugin {
  * fire-and-forget. Built LAZILY on first use so callers/tests can point
  * `APIGEN_IR_CACHE_FILE`/`APIGEN_IR_CACHE_ENABLED` at test values before the
  * first extraction.
+ *
+ * BUG-BACKLOG-SANDBOX-IRCACHE-001: the memoized `extractInvoke` is
+ * configured from whichever `opts` the FIRST caller in this process passes
+ * — a pre-existing, unchanged constraint of the "lazy singleton" design
+ * described above. This is safe for `runBacklogCli` (one-shot process, one
+ * `adhdRoot` for its whole lifetime) and for `startBacklogServer` (long-
+ * lived but likewise fixed to one `adhdRoot`/scope for its whole lifetime);
+ * it is a latent hazard only for a hypothetical caller that invoked this
+ * function twice, in the same process, with two DIFFERENT `adhdRoot`s — no
+ * such caller exists today.
  */
 let extractInvoke: ((call: ExtractCall) => Promise<Operation[]>) | undefined;
-function getExtractInvoke(): (call: ExtractCall) => Promise<Operation[]> {
+function getExtractInvoke(opts: { adhdRoot?: string; instanceId?: string } = {}): (call: ExtractCall) => Promise<Operation[]> {
   extractInvoke ??= createExtractInvokerFromPlugins(
-    irCacheEnabled() ? [backlogIrCachePlugin()] : [],
+    irCacheEnabled() ? [backlogIrCachePlugin(opts)] : [],
     (call: ExtractCall) =>
       extract({
         sourceFile: call.source,
@@ -525,7 +559,9 @@ function getExtractInvoke(): (call: ExtractCall) => Promise<Operation[]> {
   return extractInvoke;
 }
 
-async function extractClientOperations(): Promise<Operation[]> {
+async function extractClientOperations(
+  opts: { adhdRoot?: string; instanceId?: string } = {}
+): Promise<Operation[]> {
   const clientDts = join(backlogDistDir(), 'client.d.ts');
   if (!existsSync(clientDts)) {
     throw new Error(
@@ -550,7 +586,7 @@ async function extractClientOperations(): Promise<Operation[]> {
   // before and writes the result through to the cache fire-and-forget. The
   // cached value is byte-identical to what `extract()` would produce, so the
   // downstream `composeSchemas`/`dereferenceSchema` behavior is unchanged.
-  return getExtractInvoke()({
+  return getExtractInvoke(opts)({
     source: clientDts,
     host: 'ts',
     namespace: 'backlog',
@@ -570,8 +606,20 @@ async function extractClientOperations(): Promise<Operation[]> {
  * computed purely from the built `client.d.ts` (via `extractClientOperations`)
  * and never touch `ctx` at all, so a lazy caller can defer opening the real
  * backing store until a command that actually needs it is dispatched.
+ *
+ * @param opts.adhdRoot/instanceId BUG-BACKLOG-SANDBOX-IRCACHE-001 — forwarded
+ *   verbatim to `extractClientOperations`/the IR-cache plugin, so a caller
+ *   already isolating its real store via `adhdRoot` (`--sandbox`, or any
+ *   other test-isolation caller of `buildBacklogEnv`) gets the extract-stage
+ *   IR cache isolated the SAME way, instead of it silently falling through
+ *   to the real machine `HOME`. Optional and additive — every existing call
+ *   site that omits it keeps its prior (real-`HOME`, shared-cache) behavior
+ *   exactly.
  */
-export async function buildBacklogApigenPackage(ctx: BacklogCtx | (() => BacklogCtx | Promise<BacklogCtx>)): Promise<{
+export async function buildBacklogApigenPackage(
+  ctx: BacklogCtx | (() => BacklogCtx | Promise<BacklogCtx>),
+  opts: { adhdRoot?: string; instanceId?: string } = {}
+): Promise<{
   pkg: {
     id: string;
     version: string;
@@ -590,7 +638,7 @@ export async function buildBacklogApigenPackage(ctx: BacklogCtx | (() => Backlog
   operations: Operation[];
 }> {
   const getCtx: () => BacklogCtx | Promise<BacklogCtx> = typeof ctx === 'function' ? ctx : () => ctx;
-  const operations = await extractClientOperations();
+  const operations = await extractClientOperations(opts);
   const generated = {
     metadata: { namespace: 'backlog', phase: '' },
     schemas: Object.fromEntries(
@@ -692,6 +740,12 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
   // the fallback.
   try {
     store = await openGraphBacklogStore(dbPath, env.config.db.busyTimeoutMs);
+    // RAG-SPEC.md §1.6 — opt-in semantic search. A no-op (and silent) unless
+    // `embedding.enabled`; never throws, so a missing/broken embedding stack
+    // can never stop the server from starting. Deliberately INSIDE this
+    // try/catch: if it ever did throw, the serve lock and signal handler
+    // below must still be released rather than leaked.
+    await enableSemanticSearchFromConfig(store, env.config.embedding);
   } catch (err) {
     // The lock was acquired but the store open itself failed (bad path,
     // corrupt file, etc.) — release the lock we're holding before propagating,
@@ -715,7 +769,7 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
   // already guards against, one step later in the sequence. Widening the
   // scope cannot regress the success path: the `finally` already ran there.
   try {
-    const { pkg, operations } = await buildBacklogApigenPackage(ctx);
+    const { pkg, operations } = await buildBacklogApigenPackage(ctx, { adhdRoot: opts.adhdRoot });
     const logger = testSilentLogger();
 
     const runs: Promise<void>[] = [];
@@ -737,10 +791,19 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
           outputDir: '',
           options: { port: opts.port ?? 3300, host: opts.host ?? '127.0.0.1', usePlugins: [openapiPlugin, batchPlugin] },
           signal: opts.signal,
-          // NEGATIVE CONTROL (temporary) — give the REST/OpenAPI mount its own,
-          // divergent operation list. This is exactly the "per-transport
-          // operation definition" AC-0 forbids.
-          operations: operations.filter((op) => !op.id.endsWith('get-item')),
+          // AC-0 / INTERFACE_v2 §10.0 — the SAME `operations` array the MCP
+          // mount below receives. A per-transport operation list is exactly
+          // what AC-0 forbids, because it lets the REST surface drift from
+          // the MCP one silently.
+          //
+          // This line previously read
+          // `operations.filter((op) => !op.id.endsWith('get-item'))`, labelled
+          // "NEGATIVE CONTROL (temporary)" — a deliberate AC-0 violation
+          // inserted to prove a parity assertion had teeth, which was never
+          // reverted and shipped on main in 0cb37400. The published server's
+          // REST/OpenAPI surface was therefore missing `get-item` entirely.
+          // See BUG-BACKLOG-003.
+          operations,
           logger,
         })
       );

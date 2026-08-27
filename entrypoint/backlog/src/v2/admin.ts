@@ -86,6 +86,20 @@ import { findHumanIdInAnyRepo, findItemNode, queryItemNodes, topoOrder } from '.
 import { getItemNode, softDeleteItemNode } from '../store/crud.js';
 import { toBacklogItem, type BacklogNodeMeta } from '../store/mapping.js';
 import { listRepositoryNodes, lookupRepository } from '../store/repo-nodes.js';
+import { isSemanticSearchConfigured, requireSemanticBackend, type SemanticHealth } from '../store/semantic-search.js';
+import {
+  clusterIntoPlans as clusterIntoPlansOp,
+  getEmbeddingHealth as getEmbeddingHealthOp,
+  listNearDuplicates as listNearDuplicatesOp,
+  promoteClusterToPlan as promoteClusterToPlanOp,
+  runDedupSweep as runDedupSweepOp,
+  runEmbeddingBackfill as runEmbeddingBackfillOp,
+  type IClusterIntoPlansReport,
+  type IDedupSweepReport,
+  type IEmbeddingBackfillReport,
+  type IListNearDuplicatesReport,
+  type IPromoteClusterToPlanReport,
+} from '../store/rag-ops.js';
 
 // ============================================================================
 // Shared plumbing - envelope wrapping + parameter validation.
@@ -164,6 +178,16 @@ function readInteger(params: ParamBag, key: string, min: number, max: number): n
       key,
       `backlog_admin: "${key}" must be an integer in [${min}, ${max}], received ${JSON.stringify(raw)}`
     );
+  }
+  return raw;
+}
+
+/** Float reader (`readInteger`'s sibling) — EPIC-G's `threshold`/`epsilon` params are cosine similarities/distances in `[0, 1]`, never whole numbers. */
+function readNumber(params: ParamBag, key: string, min: number, max: number): number | undefined {
+  const raw = params[key];
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < min || raw > max) {
+    throw new InvalidArgumentError(key, `backlog_admin: "${key}" must be a number in [${min}, ${max}], received ${JSON.stringify(raw)}`);
   }
   return raw;
 }
@@ -270,7 +294,9 @@ const MIGRATION_PHASES = [
 /**
  * 6 - the actions that only land with the embedding layer (EPIC-G). Asking
  * for one against a build with no configured matcher is `rag_not_configured`
- * (AC-12's contract), never a fabricated empty result.
+ * (AC-12's contract), never a fabricated empty result — checked via
+ * `isSemanticSearchConfigured()` in `backlogAdmin` below, so once a backend
+ * IS configured these dispatch to `store/rag-ops.ts`'s real handlers.
  */
 const EPIC_G_ACTIONS: readonly IBacklogAdminAction[] = [
   'run_dedup_sweep',
@@ -1473,6 +1499,177 @@ export async function computeOverlapView(
 }
 
 // ============================================================================
+// EPIC-G — the six embedding-layer actions (RAG-SPEC.md §4, §5, §7). Every
+// one of these is dispatched ONLY once `isSemanticSearchConfigured()` is
+// true (see `backlogAdmin` below); the algorithms themselves live in
+// `store/rag-ops.ts` (this file's own "composition layer" rule, header doc) —
+// each `admin*` wrapper here is just param validation + envelope, identical
+// in shape to `adminPrune`/`adminArchive` above.
+// ============================================================================
+
+const EMBEDDING_HEALTH_PARAM_KEYS = [] as const;
+
+/**
+ * RAG-SPEC.md §1.5 `embedding_health` — truthful backend health, straight
+ * from `SemanticBackend.health()`. Never invents or echoes `active` from
+ * config (see `SemanticHealth`'s own doc comment, semantic-search.ts).
+ */
+export async function adminEmbeddingHealth(ctx: BacklogCtx, params: ParamBag = {}): Promise<IOutcomeEnvelope<SemanticHealth>> {
+  return envelope(async () => {
+    assertKnownParams('embedding_health', params, EMBEDDING_HEALTH_PARAM_KEYS);
+    const backend = requireSemanticBackend('backlog_admin(embedding_health)');
+    return { data: await getEmbeddingHealthOp(backend) };
+  });
+}
+
+const EMBEDDING_BACKFILL_PARAM_KEYS = ['repo', 'dryRun', 'concurrency'] as const;
+
+/**
+ * RAG-SPEC.md §7 `embedding_backfill` — see `store/rag-ops.ts`'s
+ * `runEmbeddingBackfill` for the actual sweep (missing vectors AND the
+ * re-embed-on-content-change repair, in one pass). `dryRun` defaults `true`
+ * — the same "nothing written unless the caller opts in" convention
+ * `prune`/`archive` use for their own `confirm` flag (§7's own vocabulary
+ * names this param `dryRun` instead, so it is honoured under that name
+ * rather than silently aliased to `confirm`). `by` is required only once
+ * `dryRun: false` actually schedules embeds — a dry run is a read.
+ */
+export async function adminEmbeddingBackfill(
+  ctx: BacklogCtx,
+  params: ParamBag = {},
+  by?: string
+): Promise<IOutcomeEnvelope<IEmbeddingBackfillReport>> {
+  return envelope(async () => {
+    assertKnownParams('embedding_backfill', params, EMBEDDING_BACKFILL_PARAM_KEYS);
+    const repo = readString(params, 'repo');
+    const dryRun = readBoolean(params, 'dryRun') ?? true;
+    const concurrency = readInteger(params, 'concurrency', 1, 64);
+    const warnings: string[] = [];
+    if (!dryRun) assertAttribution(by);
+    else warnings.push('embedding_backfill: dry run - nothing was embedded. Re-run with `dryRun: false` (and `by`) to embed.');
+
+    const backend = requireSemanticBackend('backlog_admin(embedding_backfill)');
+    const report = await runEmbeddingBackfillOp(ctx.store, backend, {
+      ...(repo !== undefined ? { repo } : {}),
+      dryRun,
+      ...(concurrency !== undefined ? { concurrency } : {}),
+    });
+    return { data: report, ...(warnings.length > 0 ? { warnings } : {}) };
+  });
+}
+
+const LIST_NEAR_DUPLICATES_PARAM_KEYS = ['repo', 'threshold'] as const;
+
+/**
+ * RAG-SPEC.md §4 `list_near_duplicates` — READ-ONLY. Writes nothing (pinned
+ * by `admin.spec.ts`'s byte-identical edge-table snapshot, RAG-SPEC §8 DoD
+ * #4's suggestion-surface guarantee).
+ */
+export async function adminListNearDuplicates(
+  ctx: BacklogCtx,
+  params: ParamBag = {}
+): Promise<IOutcomeEnvelope<IListNearDuplicatesReport>> {
+  return envelope(async () => {
+    assertKnownParams('list_near_duplicates', params, LIST_NEAR_DUPLICATES_PARAM_KEYS);
+    const repo = readString(params, 'repo');
+    const threshold = readNumber(params, 'threshold', 0, 1);
+    const backend = requireSemanticBackend('backlog_admin(list_near_duplicates)');
+    const report = await listNearDuplicatesOp(ctx.store, backend, {
+      ...(repo !== undefined ? { repo } : {}),
+      ...(threshold !== undefined ? { threshold } : {}),
+    });
+    return { data: report };
+  });
+}
+
+const RUN_DEDUP_SWEEP_PARAM_KEYS = ['repo', 'threshold'] as const;
+
+/**
+ * RAG-SPEC.md §4 `run_dedup_sweep` — writes `SAME_AS` for confirmed
+ * near-dup pairs. Soft and non-blocking (review-then-merge): never merges,
+ * never invalidates either item. Requires `by` — this action writes.
+ */
+export async function adminRunDedupSweep(
+  ctx: BacklogCtx,
+  params: ParamBag = {},
+  by?: string
+): Promise<IOutcomeEnvelope<IDedupSweepReport>> {
+  return envelope(async () => {
+    assertKnownParams('run_dedup_sweep', params, RUN_DEDUP_SWEEP_PARAM_KEYS);
+    assertAttribution(by);
+    const repo = readString(params, 'repo');
+    const threshold = readNumber(params, 'threshold', 0, 1);
+    const backend = requireSemanticBackend('backlog_admin(run_dedup_sweep)');
+    const report = await runDedupSweepOp(ctx.store, backend, {
+      ...(repo !== undefined ? { repo } : {}),
+      ...(threshold !== undefined ? { threshold } : {}),
+    });
+    return { data: report };
+  });
+}
+
+const CLUSTER_INTO_PLANS_PARAM_KEYS = ['repo', 'epsilon', 'minPoints'] as const;
+
+/**
+ * RAG-SPEC.md §5 `cluster_into_plans` — DBSCAN over embedded OPEN items,
+ * persisted as CANDIDATE nodes only. Never auto-creates a plan — that is
+ * `promote_cluster_to_plan`'s job alone. Requires `by`: this action writes
+ * candidate nodes (soft, reviewable, but a write).
+ */
+export async function adminClusterIntoPlans(
+  ctx: BacklogCtx,
+  params: ParamBag = {},
+  by?: string
+): Promise<IOutcomeEnvelope<IClusterIntoPlansReport>> {
+  return envelope(async () => {
+    assertKnownParams('cluster_into_plans', params, CLUSTER_INTO_PLANS_PARAM_KEYS);
+    assertAttribution(by);
+    const repo = readString(params, 'repo');
+    const epsilon = readNumber(params, 'epsilon', 0, 2);
+    const minPoints = readInteger(params, 'minPoints', 2, 100);
+    const backend = requireSemanticBackend('backlog_admin(cluster_into_plans)');
+    const report = await clusterIntoPlansOp(ctx.store, backend, {
+      ...(repo !== undefined ? { repo } : {}),
+      ...(epsilon !== undefined ? { epsilon } : {}),
+      ...(minPoints !== undefined ? { minPoints } : {}),
+    });
+    return { data: report };
+  });
+}
+
+const PROMOTE_CLUSTER_TO_PLAN_PARAM_KEYS = ['candidateId', 'planSlug'] as const;
+
+/**
+ * RAG-SPEC.md §5 `promote_cluster_to_plan` — the explicit human promotion
+ * step. This is the ONLY EPIC-G action that creates real plan membership;
+ * `cluster_into_plans` alone never does. Requires `by`.
+ */
+export async function adminPromoteClusterToPlan(
+  ctx: BacklogCtx,
+  params: ParamBag = {},
+  by?: string
+): Promise<IOutcomeEnvelope<IPromoteClusterToPlanReport>> {
+  return envelope(async () => {
+    assertKnownParams('promote_cluster_to_plan', params, PROMOTE_CLUSTER_TO_PLAN_PARAM_KEYS);
+    assertAttribution(by);
+    const candidateId = readInteger(params, 'candidateId', 1, Number.MAX_SAFE_INTEGER);
+    if (candidateId === undefined) {
+      throw new InvalidArgumentError('candidateId', 'backlog_admin(promote_cluster_to_plan): "candidateId" is required');
+    }
+    const planSlug = requireString(params, 'planSlug');
+    // `requireSemanticBackend` is called for consistency with every other
+    // EPIC-G action (RagNotConfiguredError before anything else runs) even
+    // though `promoteClusterToPlanOp` itself never touches the embedding
+    // backend — a candidate's members are already-resolved plain data. This
+    // keeps the six actions' "unconfigured -> rag_not_configured" contract
+    // uniform rather than five actions following it and one not.
+    requireSemanticBackend('backlog_admin(promote_cluster_to_plan)');
+    const report = await promoteClusterToPlanOp(ctx.store, candidateId, planSlug);
+    return { data: report };
+  });
+}
+
+// ============================================================================
 // The `backlog_admin` entry point.
 // ============================================================================
 
@@ -1493,7 +1690,13 @@ export type IAdminResult =
   | { action: 'set_migration_phase'; status: SetMigrationPhaseResult }
   | { action: 'version'; version: BacklogVersionInfo }
   | { action: 'batch'; report: IBatchReport }
-  | { action: 'reconcile_repo'; report: RepoMigrationResult };
+  | { action: 'reconcile_repo'; report: RepoMigrationResult }
+  | { action: 'embedding_health'; health: SemanticHealth }
+  | { action: 'embedding_backfill'; report: IEmbeddingBackfillReport }
+  | { action: 'list_near_duplicates'; report: IListNearDuplicatesReport }
+  | { action: 'run_dedup_sweep'; report: IDedupSweepReport }
+  | { action: 'cluster_into_plans'; report: IClusterIntoPlansReport }
+  | { action: 'promote_cluster_to_plan'; report: IPromoteClusterToPlanReport };
 
 /** Re-wraps a per-action envelope into the tagged union, preserving warnings and the exact error. */
 function tag<T>(env: IOutcomeEnvelope<T>, build: (data: T) => IAdminResult): IOutcomeEnvelope<IAdminResult> {
@@ -1516,9 +1719,15 @@ function tag<T>(env: IOutcomeEnvelope<T>, build: (data: T) => IAdminResult): IOu
  * - `migrate_model_v2` -> `unsupported`. GRAPH_MODEL_v2 6's migration has a
  *   result contract (`IMigrateModelV2Result`, model.ts:2548) but no
  *   implementation in this build.
- * - the six EPIC-G actions -> `rag_not_configured` (AC-12), since the embedding
- *   substrate they operate on is not wired in this build.
+ * - the six EPIC-G actions (`run_dedup_sweep`, `cluster_into_plans`,
+ *   `promote_cluster_to_plan`, `embedding_backfill`, `embedding_health`,
+ *   `list_near_duplicates`) -> `rag_not_configured` (AC-12) UNLESS a
+ *   `SemanticBackend` has been installed via `configureSemanticBackend`
+ *   (`store/semantic-search.ts`) — RAG is opt-in, never a hard dependency,
+ *   but once a host DOES configure one, these dispatch to their real
+ *   handlers (`store/rag-ops.ts`) instead of refusing forever.
  *
+
  * @param input `{ action, params?, by? }` - `by` is required by the actions
  *   that actually write (see each `admin*` function).
  * @param runtime host-supplied, non-serializable collaborators (today: the
@@ -1546,7 +1755,14 @@ export async function backlogAdmin(
   const params = rawParams as ParamBag;
   const by = input.by;
 
-  if (EPIC_G_ACTIONS.includes(action)) {
+  // RAG-SPEC.md §1.6 / AC-12: the six EPIC-G actions are `rag_not_configured`
+  // ONLY while no embedding backend is configured — the exact
+  // `RagNotConfiguredError(`backlog_admin(${action})`)` this block always
+  // threw, preserved byte-for-byte (`admin.spec.ts`'s unconfigured-regression
+  // guard pins the message). Once `configureSemanticBackend` has installed a
+  // real (or test-fake) backend, these actions dispatch to their real
+  // handlers below instead — RAG is opt-in, never a silent no-op either way.
+  if (EPIC_G_ACTIONS.includes(action) && !isSemanticSearchConfigured()) {
     return envelope<IAdminResult>(async () => {
       throw new RagNotConfiguredError(`backlog_admin(${action})`);
     });
@@ -1577,6 +1793,18 @@ export async function backlogAdmin(
       return tag(await adminBatch(ctx, params, by, runtime.batchDispatch), (report) => ({ action: 'batch', report }));
     case 'reconcile_repo':
       return tag(await adminReconcileRepo(ctx, params, by), (report) => ({ action: 'reconcile_repo', report }));
+    case 'embedding_health':
+      return tag(await adminEmbeddingHealth(ctx, params), (health) => ({ action: 'embedding_health', health }));
+    case 'embedding_backfill':
+      return tag(await adminEmbeddingBackfill(ctx, params, by), (report) => ({ action: 'embedding_backfill', report }));
+    case 'list_near_duplicates':
+      return tag(await adminListNearDuplicates(ctx, params), (report) => ({ action: 'list_near_duplicates', report }));
+    case 'run_dedup_sweep':
+      return tag(await adminRunDedupSweep(ctx, params, by), (report) => ({ action: 'run_dedup_sweep', report }));
+    case 'cluster_into_plans':
+      return tag(await adminClusterIntoPlans(ctx, params, by), (report) => ({ action: 'cluster_into_plans', report }));
+    case 'promote_cluster_to_plan':
+      return tag(await adminPromoteClusterToPlan(ctx, params, by), (report) => ({ action: 'promote_cluster_to_plan', report }));
     case 'skill':
       return envelope<IAdminResult>(async () => {
         throw new UnsupportedOperationError(

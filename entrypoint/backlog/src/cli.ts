@@ -29,6 +29,7 @@ import type { Descriptor, Operation, Plugin } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
 import type { BacklogCtx } from './client.js';
 import { openGraphBacklogStore, closeGraphBacklogStoreSafe, type GraphBacklogStore } from './store/graph-backlog-store.js';
+import { enableSemanticSearchFromConfig } from './store/semantic-search.js';
 import { installSignalCleanup } from './store/signal-cleanup.js';
 import { buildBacklogEnv, resolveBacklogDbPath } from './env.js';
 import { buildBacklogApigenPackage, requireRun, testSilentLogger } from './server.js';
@@ -373,7 +374,12 @@ function runMigrationPhaseCommand(
  * `ADHD_ROOT=<printed path>` explicitly on a later invocation; deleting it
  * behind the caller's back the moment this process exits would defeat that.
  */
-function stripSandboxFlag(argv: readonly string[]): { argv: string[]; sandbox: boolean } {
+// Exported (BUG-BACKLOG-SANDBOX-TELEMETRY-001) so `index.ts`'s bin-entry
+// guard can detect `--sandbox` BEFORE its own `initTelemetry(...)` call —
+// which happens before `runBacklogCli` is ever invoked — and redirect the
+// telemetry file sink away from the real production `~/.adhd` tree too. See
+// that call site's own comment for the full rationale.
+export function stripSandboxFlag(argv: readonly string[]): { argv: string[]; sandbox: boolean } {
   const sandbox = argv.includes('--sandbox');
   return { argv: sandbox ? argv.filter((a) => a !== '--sandbox') : [...argv], sandbox };
 }
@@ -491,6 +497,11 @@ export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts
       // (→ config.db.path) actually redirects the store; `env.files.db` is only
       // the fallback.
       const store = await openGraphBacklogStore(resolveBacklogDbPath(env), env.config.db.busyTimeoutMs);
+      // RAG-SPEC.md §1.6 — opt-in semantic search. A no-op (and silent) unless
+      // `embedding.enabled`; never throws, so a missing/broken embedding stack
+      // can never stop the CLI from running. See
+      // `enableSemanticSearchFromConfig`'s contract.
+      await enableSemanticSearchFromConfig(store, env.config.embedding);
       opened = { store, ctx: { store, env } };
     }
     return opened.ctx;
@@ -518,7 +529,7 @@ export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts
   const signalCleanup = installSignalCleanup(closeStoreOnce);
 
   try {
-    const { pkg, operations } = await buildBacklogApigenPackage(getCtx);
+    const { pkg, operations } = await buildBacklogApigenPackage(getCtx, { adhdRoot: opts.adhdRoot });
     const userArgv = userArgvEarly;
     const prefix = resolveCommandPrefix(operations);
     // Derived from the SAME `USE_PLUGINS` array passed to `options.usePlugins`

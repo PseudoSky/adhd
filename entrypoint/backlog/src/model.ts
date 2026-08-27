@@ -340,6 +340,20 @@ export interface CreateItemInput {
    * and rejected as a whole (no partial write) before allocation runs.
    */
   citations?: Citation[];
+  /**
+   * RAG-SPEC.md §2.2 — durability for short-lived processes. Fire-and-forget
+   * embedding (the default, `false`) is correct for a long-lived server: the
+   * vector lands milliseconds after `createItem` returns. A one-shot CLI
+   * process that exits before that promise settles loses the vector
+   * permanently even though the item itself is already durably committed —
+   * `awaitEmbed: true` makes `createItem` wait for the embed (or its
+   * swallowed failure, §2.5 — this never turns a create into a failure) to
+   * settle before returning. See also `GraphBacklogStore.flushEmbeds()` and
+   * `closeGraphBacklogStore`'s automatic drain — either is an equally valid
+   * way to get the same guarantee across a batch of writes without setting
+   * this on every single one.
+   */
+  awaitEmbed?: boolean;
 }
 
 export interface CreateItemResult {
@@ -369,6 +383,8 @@ export interface UpdateItemInput {
    * immutable and must never be reassigned via this patch.
    */
   importedFrom?: string;
+  /** RAG-SPEC.md §2.2 — see `CreateItemInput.awaitEmbed`'s doc comment; same durability knob, applied to a re-embed on title/body change (§2.3). */
+  awaitEmbed?: boolean;
 }
 
 export interface BacklogFilter {
@@ -1270,6 +1286,17 @@ export interface IBacklogFilter {
   semantic?: string;
   /** §2.1 — item-anchored similarity: nearest neighbours to THIS item's vector ("what's like BUG-42"). */
   anchor?: string;
+
+  // ---- RAG-SPEC §5 / AC-30 — plan-graph intelligence ---------------------
+  /**
+   * RAG-SPEC §5 / INTERFACE_v2 AC-30 — the target item for `view:"order"`'s
+   * `blockerImpact` composition: "how much work does resolving THIS item
+   * unblock". Deliberately NOT a general item-identity filter (that is
+   * `backlog_get`'s job, §7.5's GET_ONLY_KEYS trap) — it exists solely to
+   * seed the one `view:"order"` traversal that needs a starting node, which
+   * is why `VIEW_FILTER_KEYS.order` is the only view that accepts it.
+   */
+  humanId?: string;
 }
 
 /**
@@ -1304,6 +1331,7 @@ export const BACKLOG_FILTER_KEYS = [
   'missingCitation',
   'semantic',
   'anchor',
+  'humanId',
 ] as const satisfies readonly (keyof IBacklogFilter)[];
 
 /**
@@ -1416,8 +1444,16 @@ export function isBacklogView(value: unknown): value is IBacklogView {
  * ranking signal, unlike `relevance`, so a `text` query defaults to it instead
  * of degrading to `priority` (which discarded match quality entirely and
  * ranked by triage priority instead — not what "search for X" means).
+ *
+ * `impact` (RAG-SPEC §5 `recommendNextWork`) ranks by critical-path position
+ * FIRST, then `blockerImpact` cone size, then priority — pure `DEPENDS_ON`
+ * graph traversal, no embedding dependency, so (like `criticalPath`/
+ * `blockerImpact`) it works with zero backend configured. It is meaningful
+ * ONLY on `view:"ready"` (the population it ranks is exactly "claimable
+ * right now"); every other view rejects it rather than silently falling
+ * back to an unranked order.
  */
-export const BACKLOG_SORTS = ['priority', 'updated', 'created', 'demand', 'relevance', 'textMatch'] as const;
+export const BACKLOG_SORTS = ['priority', 'updated', 'created', 'demand', 'relevance', 'textMatch', 'impact'] as const;
 
 /** INTERFACE_v2 §2.3 — see `BACKLOG_SORTS`. */
 export type IBacklogSort = (typeof BACKLOG_SORTS)[number];
@@ -2517,6 +2553,21 @@ export interface ISimilarHit {
   /** Overlap reason: shared files, shared citations, shared symbols. */
   sharedFiles?: string[];
   sharedCitations?: string[];
+}
+
+/**
+ * RAG-SPEC §5 `suggestDependencies` — a read-only, NON-DIRECTIONAL dependency
+ * candidate. `rel` is the LITERAL `'RELATES_TO'` (not `EdgeRel`, not
+ * `'RELATES_TO' | 'DEPENDS_ON'`) so that a caller who tries to widen this
+ * shape to also carry a directional `DEPENDS_ON` guess gets a COMPILE ERROR,
+ * not a runtime check — "a confirm gate is structural, not a flag" (RAG-SPEC
+ * §5) starts at the type. `hit` reuses the pinned `ISimilarHit` shape (same
+ * KNN candidate, same score, same "why it matched" fields) rather than
+ * inventing a second candidate shape for what is the same underlying match.
+ */
+export interface ISuggestedDependency {
+  readonly rel: 'RELATES_TO';
+  hit: ISimilarHit;
 }
 
 /** §5a.3 / AC-28 — the overlap axis. NEVER named `by`: that is reserved for the actor identity on mutations (§4/§7.5). */

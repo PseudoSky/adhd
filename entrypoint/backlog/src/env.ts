@@ -12,6 +12,13 @@ export interface BacklogConfig {
   readonly db: { readonly path: string | undefined; readonly busyTimeoutMs: number };
   readonly logging: { readonly level: string };
   readonly migration: { readonly phase: string };
+  /**
+   * RAG-SPEC.md §1.6 — the opt-in embedding/vector stack. `enabled` defaults
+   * to FALSE: an unconfigured build must behave exactly as it did before RAG
+   * existed (every semantic input answers `RagNotConfiguredError`, AC-12), so
+   * a host opts IN deliberately and nothing is ever switched on implicitly.
+   */
+  readonly embedding: { readonly enabled: boolean; readonly provider: string; readonly model: string };
 }
 
 export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
@@ -64,6 +71,32 @@ export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
       description:
         'MIGRATION.md §4.4 — a queried signal (never hardcoded prose) for whether BACKLOG.md or the tool is authoritative right now. ' +
         'Read via `migrationStatus(ctx)`/`backlog migration-status`. NOT yet per-repo-keyed (MIGRATION.md §9 open decision 6) — one global value.',
+    },
+    'embedding.enabled': {
+      type: 'boolean',
+      env: 'ADHD_BACKLOG_EMBEDDING_ENABLED',
+      default: false,
+      description:
+        'RAG-SPEC.md §1.6 — opt IN to the semantic/RAG stack. Default FALSE: semantic inputs (filter.semantic, filter.anchor, ' +
+        'view:"similar", sort:"relevance", fields:["_vector"]) answer RagNotConfiguredError (AC-12) until this is set. ' +
+        'Requires the optionalDependencies @adhd/sox-embedding-provider + @adhd/sox-vector-store to be installed, and a ' +
+        'store whose adapter reports capabilities.nativeVectors (turso). Enabling it with any of those missing logs a ' +
+        'typed reason and leaves RAG unconfigured — it never crashes startup.',
+    },
+    'embedding.provider': {
+      type: 'string',
+      env: 'ADHD_BACKLOG_EMBEDDING_PROVIDER',
+      default: 'fastembed',
+      description: "Embedding provider type, forwarded verbatim to @adhd/sox-embedding-provider's createEmbeddingProvider ('fastembed' | 'remote').",
+    },
+    'embedding.model': {
+      type: 'string',
+      env: 'ADHD_BACKLOG_EMBEDDING_MODEL',
+      default: 'bge-base-en-v1.5',
+      description:
+        'Embedding model id (768-dim bge-base-en-v1.5 by default). RAG-SPEC.md §2.5: the dimensional contract is STRUCTURAL — ' +
+        'changing this after items are embedded orphans existing vectors under the old model id rather than silently truncating; ' +
+        're-embed via admin(embedding_backfill).',
     },
   },
 };

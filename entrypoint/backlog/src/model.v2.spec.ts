@@ -249,6 +249,7 @@ describe('IBacklogFilter schema (INTERFACE_v2 §2.1, §7.8, AC-23)', () => {
       missingCitation: true,
       semantic: 'stats over-count',
       anchor: 'BUG-023',
+      humanId: 'BUG-023',
     };
     expect(() => assertKnownFilterKeys(filter as unknown as Record<string, unknown>)).not.toThrow();
     expect(Object.keys(filter).sort()).toEqual([...BACKLOG_FILTER_KEYS].sort());

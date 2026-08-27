@@ -148,6 +148,39 @@ export interface BacklogNodeMeta {
    * `resolveGetTarget` to redirect a lookup by an old id to the current node.
    */
   renamedFrom?: Array<{ repo: string; humanId: string; at: string }>;
+  /**
+   * RAG-SPEC.md §2.4 — provenance for this node's vector. Written by
+   * `store/embed-queue.ts`'s `scheduleEmbed`, in the same async step as the
+   * `upsertVector` call it follows, using `SemanticBackend.modelId` — which
+   * the seam (`semantic-search.ts`) guarantees is the provider's RESOLVED
+   * model id, never a config default and never a pre-initialised value (an
+   * unfalsifiable stamp is not accepted). Absent/`undefined` is honest:
+   * either no embed has ever landed for this node, or the last one failed
+   * and this item is FTS-only reachable until backfill repairs it (§2.5) —
+   * never invented or guessed.
+   */
+  embedModel?: string;
+  /**
+   * RAG-SPEC.md §7 — the `computeContentHash` value of `node.content` AT THE
+   * MOMENT this node's vector was last (re-)embedded, stamped by
+   * `store/rag-ops.ts`'s `embedding_backfill` sweep right after a successful
+   * embed. This is what makes the re-embed-on-content-change sweep possible:
+   * a "does this node have a vector at all" (`vectorFor(nodeId) !== null`)
+   * predicate alone can never detect that an EXISTING vector has gone stale
+   * because the title/body changed after the last embed — comparing the
+   * CURRENT `computeContentHash(node.content)` against this stamp is the only
+   * way to tell "embedded and current" from "embedded but stale" apart.
+   * Absent/`undefined` is honest: this node has never been through the
+   * backfill sweep's own stamping step — most commonly because its vector
+   * came from the write-path's `scheduleEmbed` (§2.1 Phase B) instead, which
+   * does NOT stamp this field. An absent stamp is deliberately treated as
+   * "vector present, staleness unknown, assume current" rather than "stale"
+   * — the sweep has no prior hash to compare against, so it trusts an
+   * existing vector rather than needlessly re-embedding every write-path
+   * vector on its very first run. Once the sweep has stamped a node, THAT
+   * stamp is authoritative for every run after.
+   */
+  embedContentHash?: string;
 }
 
 export function humanIdKind(humanId: string): string {
@@ -165,6 +198,22 @@ export function buildNodeContent(repo: string, humanId: string, title: string, b
 
 export function buildNodeName(repo: string, humanId: string): string {
   return `${repo}::${humanId}`;
+}
+
+/**
+ * The reverse of `buildNodeContent`'s appended uniqueness marker
+ * (RAG-SPEC.md §2.1 Phase B) — the embedding write path must never let the
+ * model see the trailing `<!-- adhd-backlog:repo::humanId -->` housekeeping
+ * comment appended above purely to defeat `@adhd/sox-graph-store`'s global
+ * content-hash dedupe (DEBT-BACKLOG-CONTENT-HASH-COLLISION-001): it carries
+ * zero semantic meaning about the item and would only be embedding noise
+ * (and, worse, two DIFFERENT items sharing no real content could end up with
+ * near-identical marker-dominated embeddings). Safe to call on content that
+ * never had a marker appended (a no-op) so callers never need to track
+ * whether a given content string is "raw" or "marked".
+ */
+export function stripContentMarker(content: string): string {
+  return content.replace(new RegExp(`\\n\\n<!--\\s*${CONTENT_MARKER_PREFIX}[^>]*-->\\s*$`), '');
 }
 
 /** DESIGN.md §2.2 — importance derived deterministically from priority. */

@@ -249,7 +249,20 @@ afterAll(async () => {
   await httpServer?.catch(() => undefined);
   for (const dir of tempRoots) rmSync(dir, { recursive: true, force: true });
   tempRoots.length = 0;
-});
+  // Explicit budget, deliberately matching `beforeAll`'s 180s rather than
+  // inheriting vitest's 30s default. This teardown does REAL work — aborting
+  // a live fastify listener and awaiting its drain, then removing several
+  // temp roots — and it runs while the other 58 suites in this project are
+  // still executing in parallel. In isolation the whole file finishes in ~4s,
+  // so 30s is ample when idle and simply too tight under full-suite load;
+  // the asymmetry (a 180s setup paired with a 30s teardown doing comparable
+  // I/O) was an oversight, not a deliberate limit.
+  //
+  // This is NOT the fix for the hang this suite used to exhibit even when
+  // run alone — that was an un-reverted negative control in `server.ts`
+  // crippling the fastify mount's operation list (BUG-BACKLOG-003). That is
+  // fixed at the source; this only right-sizes the budget.
+}, 180_000);
 
 describe('AC-0 / INTERFACE_v2 §10.0 — one apigen package composed once, mounted to four transports', () => {
   it('projects a non-empty operation surface from ONE buildBacklogApigenPackage call, without opening the store', () => {

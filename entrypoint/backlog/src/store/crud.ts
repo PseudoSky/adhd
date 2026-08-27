@@ -13,6 +13,8 @@ import { allocateHumanIdAndInsert } from './ids.js';
 import { buildNotFoundError, findItemNode, knownRepos, resolveCanonicalRepo } from './query.js';
 import { mutateMetadata } from './mutate-metadata.js';
 import { assertValidCitation } from './lifecycle.js';
+import { getSemanticBackend } from './semantic-search.js';
+import { scheduleEmbed } from './embed-queue.js';
 import {
   BACKLOG_ITEM_TAG,
   buildNodeContent,
@@ -28,6 +30,20 @@ import {
   toBacklogItem,
   type BacklogNodeMeta,
 } from './mapping.js';
+
+/**
+ * RAG-SPEC.md §4 — `IUpdatePatch` (model.ts) is the STRICT, exhaustively
+ * enumerated patch vocabulary (`UPDATE_PATCH_KEYS`/`assertKnownPatchKeys`,
+ * BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001's fix) — adding a field to it
+ * requires updating that exhaustiveness list in model.ts, which is out of
+ * this file's ownership for this change. `awaitEmbed` is a WRITE-PATH
+ * CONTROL FLAG (RAG-SPEC.md §2.2), not a persisted item field, so it is
+ * layered on top locally instead: destructured off the incoming patch BEFORE
+ * `assertKnownPatchKeys` ever sees the remainder (below), so the strict
+ * vocabulary check is completely unaware this flag exists and never rejects
+ * it as "unknown".
+ */
+export type UpdateItemPatchWithEmbed = IUpdatePatch & { awaitEmbed?: boolean };
 
 /**
  * Common English stopwords excluded from the title-overlap check below
@@ -129,6 +145,25 @@ function titleMeaningfullyOverlaps(newTitleTokens: readonly string[], candidateT
   return newTitleTokens.every((tok) => candidateTokens.has(tok));
 }
 
+/**
+ * RAG-SPEC.md §4 — how many nearest neighbours the semantic dedupe source
+ * considers. Small on purpose: this is a filing-time gate a human/agent reads,
+ * not a search result set, and a long candidate list is ignored rather than
+ * reviewed.
+ */
+export const SEMANTIC_DEDUPE_K = 5;
+
+/**
+ * RAG-SPEC.md §4 — cosine-similarity floor a KNN hit must clear to count as a
+ * duplicate candidate. `knn` returns its k nearest neighbours unconditionally,
+ * however distant, so without a floor every create in a sparse repo would
+ * surface unrelated items and the gate would be trained away. Tuned against
+ * bge-base-en-v1.5, where a genuine paraphrase scores well above this and an
+ * unrelated item scores well below (an observed real spread: 0.85 for a
+ * paraphrase vs 0.41-0.51 for unrelated items).
+ */
+export const SEMANTIC_DEDUPE_MIN_SCORE = 0.75;
+
 async function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateItemInput): Promise<BacklogItem[]> {
   const candidates = new Map<number, NodeRecord>();
 
@@ -188,6 +223,53 @@ async function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateI
       metadata: { dedupeErrorText: scan.errorText },
     })) {
       if (isLiveBacklogItemNode(hit)) candidates.set(hit.id, hit);
+    }
+  }
+
+  // 3. Semantic near-duplicates (RAG-SPEC.md §4) — the whole point of the RAG
+  // layer for dedupe: catches a PARAPHRASED duplicate that shares no
+  // meaningful title tokens with the new item, which source 1 (FTS +
+  // `titleMeaningfullyOverlaps`) structurally cannot find, and source 2
+  // (exact symbol/path/errorText) only finds when the filer happened to
+  // supply the same identifiers.
+  //
+  // Opt-in and non-fatal, in that order:
+  // - No backend configured (the default build) ⇒ skipped entirely, so
+  //   dedupe behaviour is byte-identical to what it was before RAG existed.
+  // - A backend that FAILS mid-scan must never block a legitimate filing:
+  //   the whole block is wrapped, and an error degrades this to
+  //   "FTS + exact-match only" rather than failing the create. Filing an
+  //   occasional duplicate is recoverable; refusing to file a real bug
+  //   because an ONNX model hiccuped is not.
+  //
+  // The KNN is scoped by `NodeFilter` (repo namespace + backlog-item tag) so
+  // the filter is pushed DOWN into the vector query rather than applied to
+  // an already-truncated top-k — post-filtering a k-limited result set would
+  // silently drop true duplicates whenever the k nearest happened to be
+  // out-of-repo nodes.
+  const semantic = getSemanticBackend();
+  if (semantic !== null) {
+    try {
+      const probe = `${input.title}\n\n${input.body}`;
+      const hits = await semantic.knn(await semantic.embedQuery(probe), SEMANTIC_DEDUPE_K, {
+        filter: { tags: [BACKLOG_ITEM_TAG], namespace: repo },
+      });
+      for (const hit of hits) {
+        // A similarity floor is required. `knn` always returns its k nearest
+        // neighbours no matter how far away they are, so without this every
+        // create in a small repo would surface unrelated items as
+        // "duplicates" and train filers to ignore the gate.
+        if (hit.score < SEMANTIC_DEDUPE_MIN_SCORE) continue;
+        if (candidates.has(hit.nodeId)) continue;
+        const node = await store.graph.getNode(hit.nodeId);
+        if (node && isLiveBacklogItemNode(node)) candidates.set(hit.nodeId, node);
+      }
+    } catch (err) {
+      console.error(
+        `backlog: semantic dedupe scan failed (falling back to FTS + exact-match candidates only): ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
     }
   }
 
@@ -255,7 +337,18 @@ async function incrementDupeHits(store: GraphBacklogStore, nodeId: number): Prom
   }));
 }
 
-export async function createItemNode(store: GraphBacklogStore, input: CreateItemInput): Promise<CreateItemOutcome> {
+/**
+ * The pre-embedding body of `createItemNode`, split out UNCHANGED (same
+ * contextual-typing shape the `allocateHumanIdAndInsert<T>` generic call
+ * relies on to infer `T = CreateItemOutcome` and narrow each branch's
+ * `reason` string literal correctly — moving that same `return
+ * allocateHumanIdAndInsert(...)` expression behind a `.then()`/extra `await`
+ * at the OUTER call site breaks that inference, per a build failure
+ * encountered wiring RAG-SPEC.md §2.1 Phase B in below) so
+ * `createItemNode` can layer `scheduleEmbed` on top AFTER this settles,
+ * without disturbing it.
+ */
+async function createItemNodeCore(store: GraphBacklogStore, input: CreateItemInput): Promise<CreateItemOutcome> {
   // BUG-BACKLOG-HUMANID-COLLISION-001 fix #1: `family` is REQUIRED unless
   // `idOverride` is given (SPEC.md §5.1, model.ts `CreateItemInput.family`
   // doc comment). Validated HERE, before any allocation runs, so a missing/
@@ -448,6 +541,22 @@ export async function createItemNode(store: GraphBacklogStore, input: CreateItem
   });
 }
 
+export async function createItemNode(store: GraphBacklogStore, input: CreateItemInput): Promise<CreateItemOutcome> {
+  const outcome = await createItemNodeCore(store, input);
+  // RAG-SPEC.md §2.1 Phase B: scheduled strictly AFTER `createItemNodeCore`
+  // has returned (i.e. its CAS transaction has committed and released the
+  // write lock) — never from inside `allocateHumanIdAndInsert`'s updater
+  // callback. Only a REAL new write gets embedded; the `created: false`
+  // branches (id-collision, dedupe-suppressed) never reach here with
+  // `created === true`, so they correctly schedule nothing.
+  if (outcome.created) {
+    const content = buildNodeContent(input.repo, outcome.item.humanId, input.title, input.body);
+    const embedPromise = scheduleEmbed(store, outcome.item.nodeId, content);
+    if (input.awaitEmbed) await embedPromise;
+  }
+  return outcome;
+}
+
 export async function getItemNode(store: GraphBacklogStore, repo: string, humanId: string): Promise<BacklogItem | null> {
   const node = await findItemNode(store, repo, humanId);
   return node ? toBacklogItem(node) : null;
@@ -526,8 +635,13 @@ async function requireItemNode(store: GraphBacklogStore, repo: string, humanId: 
  * being written) still fails loudly instead of silently, exactly like the
  * bug this whole function exists to fix.
  */
-export async function updateItemNode(store: GraphBacklogStore, repo: string, humanId: string, patch: IUpdatePatch): Promise<BacklogItem> {
-  assertKnownPatchKeys(patch as unknown as Record<string, unknown>);
+export async function updateItemNode(store: GraphBacklogStore, repo: string, humanId: string, patch: UpdateItemPatchWithEmbed): Promise<BacklogItem> {
+  // RAG-SPEC.md §2.2 — pulled off BEFORE `assertKnownPatchKeys` ever sees the
+  // rest of the object (see `UpdateItemPatchWithEmbed`'s doc comment above):
+  // the strict `IUpdatePatch` vocabulary check must never even observe this
+  // key, let alone reject it as unknown.
+  const { awaitEmbed, ...corePatch } = patch;
+  assertKnownPatchKeys(corePatch as unknown as Record<string, unknown>);
 
   if (patch.priority !== undefined) {
     throw new InvalidArgumentError(
@@ -628,8 +742,20 @@ export async function updateItemNode(store: GraphBacklogStore, repo: string, hum
     if (patch.projectPath !== undefined) touchPatch['projectPath'] = patch.projectPath;
     await store.graph.touch(node.id, touchPatch);
   }
+  // RAG-SPEC.md §2.3 — re-embed on every title/body change, and ONLY on a
+  // title/body change: the vector upsert is a plain overwrite (idempotent
+  // per (nodeId, modelId), `SemanticBackend.upsertVector`'s doc comment), so
+  // there is no delete-then-insert to reason about, but re-embedding a
+  // status/tags/priority-only edit would be pure waste (the text the
+  // embedding model sees never changed). `newContent` mirrors EXACTLY the
+  // string just written to the `content` column above (built from the same
+  // repo/humanId/finalTitle/finalBody), computed here (outside the
+  // transaction that already committed above) purely as a cheap string
+  // operation — never inside a mutation transaction, per embed-queue.ts's
+  // header.
+  let newContent: string | undefined;
   if (patch.title !== undefined || patch.body !== undefined) {
-    const newContent = buildNodeContent(repo, humanId, finalTitle, finalBody);
+    newContent = buildNodeContent(repo, humanId, finalTitle, finalBody);
     await store.adapter.executeRun(
       `UPDATE node SET content = ?, content_hash = ? WHERE rowid = ? AND t_invalid IS NULL`,
       [newContent, computeContentHash(newContent), node.id]
@@ -641,11 +767,20 @@ export async function updateItemNode(store: GraphBacklogStore, repo: string, hum
   // must actually have landed in `appliedKeys`. It only ever fires for a
   // future regression (a key moved into the "handled" set above without its
   // write actually being wired up) — every key that reaches here today is
-  // one of the five this function has always applied.
-  assertNoSilentlyDiscardedPatchKeys(patch as unknown as Record<string, unknown>, appliedKeys);
+  // one of the five this function has always applied. `corePatch` (not
+  // `patch`) is checked here — `awaitEmbed` is a write-path control flag, not
+  // a persisted field this function is claiming to apply, so it must never
+  // be flagged as "accepted but never written" (RAG-SPEC.md §2.2).
+  assertNoSilentlyDiscardedPatchKeys(corePatch as unknown as Record<string, unknown>, appliedKeys);
 
   const updated = await store.graph.getNode(node.id);
   if (!updated) throw await buildNotFoundError(store, repo, humanId);
+
+  if (newContent !== undefined) {
+    const embedPromise = scheduleEmbed(store, node.id, newContent);
+    if (awaitEmbed) await embedPromise;
+  }
+
   return toBacklogItem(updated);
 }
 
@@ -658,6 +793,27 @@ export async function softDeleteItemNode(store: GraphBacklogStore, repo: string,
   }
   const node = await requireItemNode(store, repo, humanId);
   await store.graph.invalidate(node.id, reason);
+
+  // RAG-SPEC.md — a soft-deleted (invalidated) item must never surface as a
+  // KNN neighbour: `deleteVector` drops its entry from the vector space so
+  // `semanticSearch`/`relatedItems` can no longer return it. No-op (never an
+  // error) when no backend is configured, and never propagates a backend
+  // failure into a soft-delete that has already committed above — the same
+  // "never throws into the caller" discipline as `scheduleEmbed` (§2.5): a
+  // vector-cleanup failure here just means backfill/a future prune sweep
+  // still needs to catch it, never that the delete itself should fail.
+  const backend = getSemanticBackend();
+  if (backend !== null) {
+    try {
+      await backend.deleteVector(node.id);
+    } catch (err) {
+      console.error(
+        `backlog: deleteVector failed for node ${node.id} after soft-delete (item is invalidated regardless; vector cleanup will need a later sweep): ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
+  }
 }
 
 export { dedupeScan };

@@ -10,10 +10,12 @@
 // "adhd-backlog": "./dist/index.js" }` — renamed from the bare `backlog` key,
 // which collided with the unrelated public npm package `backlog@1.4.56`) —
 // see the entry-guard at the bottom.
-import { realpathSync } from 'node:fs';
+import { realpathSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { initTelemetry } from '@adhd/sox-telemetry';
-import { runBacklogCli } from './cli.js';
+import { runBacklogCli, stripSandboxFlag } from './cli.js';
 
 export {
   addCitation,
@@ -65,7 +67,7 @@ export type { BacklogCtx, BacklogVersionInfo } from './client.js';
 export { startBacklogServer, buildBacklogApigenPackage, resolveExpectedMcpToolNames } from './server.js';
 export type { StartOpts } from './server.js';
 
-export { runBacklogCli, resolveCommandPrefix, prefixCommand } from './cli.js';
+export { runBacklogCli, resolveCommandPrefix, prefixCommand, stripSandboxFlag } from './cli.js';
 export type { RunBacklogCliOpts } from './cli.js';
 
 export { installSkill, runInstallSkillCommand } from './install-skill.js';
@@ -147,8 +149,31 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
   // The default file-sink dir is ~/.adhd/sox-ecosystem/backlog/logs
   // (ecosystemHome()/service/logs, BL-353 §5.1 role-qualified component).
   // Failure is non-fatal by design — telemetry must never take the CLI down.
+  //
+  // BUG-BACKLOG-SANDBOX-TELEMETRY-001: this call fires BEFORE `runBacklogCli`
+  // ever parses argv, so it used to write its file sink to the real
+  // `~/.adhd/sox-ecosystem/backlog/logs` unconditionally — even under
+  // `--sandbox`, defeating that flag's whole "never touches the real
+  // production tree" guarantee (caught by `cli.spec.ts`'s "--sandbox
+  // diverts the store away from the (fake) production HOME entirely, and
+  // never creates anything under it": a real `create` invocation left
+  // `<fakeProdHome>/.adhd/sox-ecosystem/backlog/logs/*.jsonl` behind even
+  // though the STORE itself was correctly isolated). `--sandbox` is
+  // recognized here the same way `cli.ts`'s own `stripSandboxFlag` does —
+  // this file peeks at it ONLY to redirect telemetry's `logDir`; the actual
+  // flag-stripping/dispatch still happens exactly once, inside
+  // `runBacklogCli` below.
+  const { sandbox } = stripSandboxFlag(process.argv.slice(2));
+  const sandboxLogDir = sandbox
+    ? mkdtempSync(join(tmpdir(), 'backlog-sandbox-logs-'))
+    : undefined;
   try {
-    initTelemetry({ service: 'backlog', role: 'cli', logSink: 'file' });
+    initTelemetry({
+      service: 'backlog',
+      role: 'cli',
+      logSink: 'file',
+      ...(sandboxLogDir !== undefined ? { logDir: sandboxLogDir } : {}),
+    });
   } catch (err) {
     console.error(
       `[sox-telemetry] WARNING: initTelemetry failed (${

@@ -24,8 +24,16 @@
  *  - The batch mount is a `Plugin.capabilities.mount` operation, so its own
  *    request body is read RAW (`plan.isMount` branch of
  *    `apiFastifyPlugin`'s `run.ts`'s `readInput` — no `{data:{...}}`
- *    envelope wrapper): `{ operation, items, concurrency, onItemError }`
- *    goes straight to `POST /_batch/action`.
+ *    envelope wrapper) — but per BUG-APIGEN-CLI-002, `apigen-core-client`'s
+ *    `branchInputSchema` nests every batch control-plane field ONE level
+ *    deeper under a top-level `input` key so `_batch/<kind>` matches every
+ *    other apigen-mounted operation's single-JSON-blob convention (the CLI's
+ *    `--input <json>`, one JSON body/tool-arg object on every other
+ *    transport) — so the raw body is `{ input: { operation, items,
+ *    concurrency, onItemError } }`, not the bare control-plane object
+ *    itself, confirmed against `apigen-plugin-batch`'s own
+ *    `parseBatchRequest` (reads `data.input.*`) and `plugin.spec.ts`'s
+ *    `fakeCall` helper.
  *  - Each fanned-out `items[i]` becomes that item's `domainArgs` DIRECTLY
  *    (`apigen-plugin-batch`'s `buildBatchHandler`: `domainArgs: item`) — so
  *    it must equal the whole second positional argument the target
@@ -138,19 +146,21 @@ describe('backlog batch adoption — real POST /_batch/action fans out to the re
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        operation: 'backlog/create',
-        items: [
-          { input: { item: { family: 'BUG-BATCHADOPT', title: 'first item', body: 'x', repo }, by } },
-          {
-            input: {
-              item: { family: 'BUG-BATCHADOPT', title: 'bad priority', body: 'x', repo, priority: 'NOT_A_REAL_PRIORITY' },
-              by,
+        input: {
+          operation: 'backlog/create',
+          items: [
+            { input: { item: { family: 'BUG-BATCHADOPT', title: 'first item', body: 'x', repo }, by } },
+            {
+              input: {
+                item: { family: 'BUG-BATCHADOPT', title: 'bad priority', body: 'x', repo, priority: 'NOT_A_REAL_PRIORITY' },
+                by,
+              },
             },
-          },
-          { input: { item: { family: 'BUG-BATCHADOPT', title: 'third item', body: 'x', repo }, by } },
-        ],
-        concurrency: 2,
-        onItemError: 'continue',
+            { input: { item: { family: 'BUG-BATCHADOPT', title: 'third item', body: 'x', repo }, by } },
+          ],
+          concurrency: 2,
+          onItemError: 'continue',
+        },
       }),
     });
 
