@@ -434,11 +434,12 @@ def _resolve_batch_concurrency(mode: str, requested: Any, item_count: int) -> in
 def _dispatch_batch(
     state: _ServerState, body: dict[str, Any], envelope: dict[str, Any]
 ) -> list[dict[str, Any]]:
-    """Fan out `body['items']` to the real operation `body['operation']` —
-    the Python host's OWN executor against BATCH_0.0.1.md §5's wire contract
-    (LEFT column only; this function is never a call into the TS
-    `invokeBatch`). Implements the architect-reviewed design's binding fixes
-    (`tmp/apigen-batch-python-design.md` §3.5):
+    """Fan out `body['input']['items']` to the real operation
+    `body['input']['operation']` — the Python host's OWN executor against
+    BATCH_0.0.1.md §5's wire contract (LEFT column only; this function is
+    never a call into the TS `invokeBatch`). Implements the
+    architect-reviewed design's binding fixes (`tmp/apigen-batch-python-design.md`
+    §3.5):
 
     - F2: `mode` branching — `parallel` uses a bounded `ThreadPoolExecutor`;
       `serial`/`chained` use a plain sequential loop; `chained` additionally
@@ -455,13 +456,32 @@ def _dispatch_batch(
     - F5: every rejected result's `reason` is a real `ApiError(...).to_json()`
       using an existing `errors.py` taxonomy code.
 
+    BUG-APIGEN-CLI-002: every batch control-plane field (`operation`,
+    `items`, `concurrency`, `mode`, `onItemError`, `itemTimeoutMs`) now nests
+    under one top-level `input` object on the wire — `batch.ts`'s
+    `branchInputSchema` matches every other apigen-mounted operation's
+    single-JSON-blob convention. `@adhd/apigen-plugin-batch`'s
+    `parseBatchRequest` already unwraps this one extra level (its own doc
+    comment: "Unwrap that one extra level here — the only call site that
+    reads this shape."); this Python host is a SECOND call site reading the
+    same wire shape and must unwrap identically, never operate on the raw
+    top-level `body`.
+
     Raises:
-        ApiError: for whole-request-level rejections (bad `operation`,
-            unsupported `itemTimeoutMs`, malformed `items`/`mode`/
-            `onItemError`/`concurrency`) — the caller maps this to a real
-            HTTP 4xx via `_send_error`, the SAME mechanism every other route
-            on this server already uses.
+        ApiError: for whole-request-level rejections (missing/malformed
+            `input`, bad `operation`, unsupported `itemTimeoutMs`, malformed
+            `items`/`mode`/`onItemError`/`concurrency`) — the caller maps
+            this to a real HTTP 4xx via `_send_error`, the SAME mechanism
+            every other route on this server already uses.
     """
+    input_raw = body.get("input")
+    if not isinstance(input_raw, dict):
+        raise ApiError(
+            "invalid_argument",
+            '"input" must be an object containing {operation, items, ...}',
+        )
+    body = input_raw
+
     # F3 — reject the WHOLE batch upfront; never a silently-weaker
     # wait-only guarantee under the same field name TS uses for real
     # cancellation.
