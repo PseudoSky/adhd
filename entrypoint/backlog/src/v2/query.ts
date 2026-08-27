@@ -42,12 +42,17 @@
  *    genuinely different repos returns BOTH repos' items plus a warning
  *    naming the ambiguity (AC-24), and the grep path reports
  *    `meta.truncated` when it hits the documented FTS fetch budget.
- * 5. **AC-12 — the semantic channel degrades LOUDLY.** This build has no
- *    embedding backend, so `filter.semantic`, `filter.anchor`,
- *    `view:"similar"`, `sort:"relevance"` and the `_score`/`_vector`
- *    projections all return `rag_not_configured` rather than quietly
- *    answering a semantic question with a keyword result. `grep` and every
- *    dimensional query keep working, exactly as AC-12 requires.
+ * 5. **AC-12 — the semantic channel degrades LOUDLY, CONDITIONALLY.**
+ *    `filter.semantic`, `filter.anchor`, `view:"similar"`, `sort:"relevance"`
+ *    and the `_score`/`_vector` projections return `rag_not_configured`
+ *    ONLY while no embedding backend is configured
+ *    (`isSemanticSearchConfigured()` — RAG-SPEC §3). The instant a host wires
+ *    one in (`configureSemanticBackend`), these inputs are served for real —
+ *    there is no second flag to flip. `grep` and every dimensional query keep
+ *    working in EITHER state, and — RAG-SPEC §3.1's load-bearing rule —
+ *    `grep` never becomes hybrid: the vector channel is reached exclusively
+ *    through `semantic`/`anchor`/`view:"similar"`/`sort:"relevance"`, and it
+ *    composes ADDITIVELY with `grep` rather than replacing it (AC-11).
  */
 import type { NodeRecord } from '@adhd/sox-graph-store';
 import type {
@@ -63,6 +68,7 @@ import type {
   IBacklogSort,
   IBacklogStats,
   IBacklogView,
+  IBlockerImpactResult,
   ICriticalPathResult,
   IDateBound,
   IGroupBucket,
@@ -81,8 +87,10 @@ import type {
   IQueryEnvelopeMeta,
   IQueryPlan,
   IExtractedTerm,
+  ISimilarHit,
   ISortDirection,
   IStaleClaimEntry,
+  ISuggestedDependency,
   ISummaryBucket,
   Priority,
 } from '../model.js';
@@ -90,6 +98,7 @@ import {
   BACKLOG_SORTS,
   BACKLOG_STATUSES,
   BACKLOG_VIEWS,
+  BacklogItemNotFoundError,
   BacklogValidationError,
   DEFAULT_CARD_FIELDS,
   InvalidArgumentError,
@@ -109,14 +118,19 @@ import {
 } from '../model.js';
 import type { GraphBacklogStore } from '../store/graph-backlog-store.js';
 import { queryAuditEvents } from '../store/audit-log.js';
-import { BACKLOG_ITEM_TAG, toBacklogItem, type BacklogNodeMeta } from '../store/mapping.js';
+import { BACKLOG_ITEM_TAG, isLiveBacklogItemNode, toBacklogItem, type BacklogNodeMeta } from '../store/mapping.js';
 import { parseRepoKey } from '../store/repo-nodes.js';
+import { isSemanticSearchConfigured, requireSemanticBackend } from '../store/semantic-search.js';
 import { listRelatedNode } from '../store/structure.js';
 import {
   blockers as blockersOp,
+  buildNotFoundError,
   computeStats,
   dependencyGraph as dependencyGraphOp,
+  findHumanIdInAnyRepo,
+  findItemNode,
   knownRepos,
+  nodeFilterFromBacklogFilter,
   queryItemNodes,
   readyItems as readyItemsOp,
   staleClaims as staleClaimsOp,
@@ -204,6 +218,19 @@ export const DEFAULT_STALE_AFTER_MINUTES = 30;
  */
 const GREP_FETCH_BUDGET = 1000;
 
+/**
+ * RAG-SPEC §3.1 — the vector channel's candidate budget when it composes
+ * ADDITIVELY with `grep`/dimensional filters (`view:"list"`/`"ready"`/
+ * `"grouped"`'s `filter.semantic`). Mirrors `GREP_FETCH_BUDGET`'s role: a
+ * bound large enough that the caller's own `limit`/`offset` — applied AFTER
+ * merge, sort and every post-filter (BUG-BACKLOG-003) — is what actually
+ * shapes the page, not this budget.
+ */
+const SEMANTIC_FETCH_BUDGET = 1000;
+
+/** RAG-SPEC §3.2 — `view:"similar"`'s default neighbour count when the caller passes no `limit`. */
+const DEFAULT_SIMILAR_LIMIT = 20;
+
 /** `spotlight`'s ranking table, reproduced verbatim from query.ts:30 so `sort:"priority"` IS spotlight's order (AC-5). */
 const PRIORITY_RANK: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
@@ -220,6 +247,11 @@ const DEFAULT_SORT_DIRECTION: Record<IBacklogSort, ISortDirection> = {
   demand: 'desc',
   relevance: 'desc',
   textMatch: 'desc',
+  // `compareRows`'s `'impact'` arm already orders "best first" ascending
+  // (on-critical-path before off-path, higher impact before lower, better
+  // priority before worse — mirroring `'priority'`'s own convention), so no
+  // reversal is needed by default.
+  impact: 'asc',
 };
 
 /**
@@ -251,7 +283,10 @@ const VIEW_FILTER_KEYS: Record<IBacklogView, 'all' | readonly (keyof IBacklogFil
   ready: 'all',
   grouped: 'all',
   similar: 'all',
-  order: ['repo', 'projectPath'],
+  // 'humanId' — RAG-SPEC §5 / AC-30's `blockerImpact` composition: the item
+  // whose backward-reachable `DEPENDS_ON` cone `view:"order"` also reports
+  // alongside the topological order/wave numbers it already computes.
+  order: ['repo', 'projectPath', 'humanId'],
   graph: ['repo', 'projectPath'],
   stale: ['repo', 'projectPath'],
   summary: ['repo', 'projectPath', 'dateRange', 'family', 'status', 'kind', 'priority'],
@@ -304,6 +339,32 @@ export interface IBacklogQueryResult {
   readiness?: IPlanReadinessResult;
   /** `view:"overlap"` — FEAT-005 Stage 3 pairwise intersections. */
   overlap?: IOverlapView;
+  /**
+   * `view:"order"` + `filter.humanId` — RAG-SPEC §5 / AC-30's `blockerImpact`:
+   * the item's BACKWARD-reachable (transitive) `DEPENDS_ON` cone — how much
+   * work resolving it unblocks. Pure graph traversal, no embedding
+   * dependency; present alongside `order` in the same payload, never a
+   * separate call.
+   */
+  blockerImpact?: IBlockerImpactResult;
+  /**
+   * `view:"similar"` + `filter.anchor` — RAG-SPEC §5 `suggestRelated`: the
+   * SAME KNN candidates `items` carries, recast into the pinned §2.2
+   * `ISimilarHit` shape. A read-only projection of an already-computed
+   * result — no second backend call.
+   */
+  suggestedRelated?: ISimilarHit[];
+  /**
+   * `view:"similar"` + `filter.anchor` — RAG-SPEC §5 `suggestDependencies`:
+   * candidates for a HUMAN to confirm as a new dependency edge. Structurally
+   * read-only (this module never calls a write/link primitive on this path)
+   * and structurally non-directional (`ISuggestedDependency.rel` is the
+   * LITERAL `'RELATES_TO'` — `DEPENDS_ON` is never auto-suggested with a
+   * directional guess, RAG-SPEC §5). Candidates already connected to the
+   * anchor by ANY live edge (either direction) are excluded — suggesting a
+   * dependency that already exists in some form is noise, not a candidate.
+   */
+  suggestedDependencies?: ISuggestedDependency[];
   /** §2.1b / AC-27 — the compiled plan for a `text` query. Present ONLY when `text` was supplied, so a caller can see exactly what the string became. */
   query?: IQueryPlan;
   /** §7.3 — the human-readable rendering, present only when `format: "table"` was requested. The structured payload above is ALSO present; `table` never replaces it. */
@@ -316,6 +377,24 @@ interface IQueryRow {
   item: BacklogItem;
   /** FTS5 relevance score (`sort:"textMatch"`) — present only for a row that came from a `grep`/`text` query; `undefined` otherwise. */
   score?: number;
+  /**
+   * RAG-SPEC §3 — the vector channel's similarity score (`sort:"relevance"`,
+   * `view:"similar"`, `fields:["_score"]`), HIGHER-IS-BETTER, from
+   * `SemanticBackend.knn`/`vectorFor`. Present only for a row the vector
+   * channel actually matched — a row `grep` alone found never carries this,
+   * which is exactly how AC-11 ("a caller can always tell which channel
+   * returned a hit") is provable: this field IS that tell.
+   */
+  vecScore?: number;
+  /**
+   * RAG-SPEC §5 `recommendNextWork` (`sort:"impact"`, `view:"ready"` only) —
+   * populated by `runReadyView` from a single `DEPENDS_ON` graph pass
+   * (`buildScopedDependsOnGraph`) before `compareRows`'s `'impact'` arm reads
+   * it. Absent on every row from every other view/sort — never a silent
+   * degrade, because `assertImpactSortScopedToReady` rejects `sort:"impact"`
+   * everywhere else before a row is ever fetched.
+   */
+  impactRank?: { onCriticalPath: boolean; impactedCount: number };
 }
 
 /** FEAT-012 / FEAT-013 / §5a.3 metadata that has no `BacklogNodeMeta` field yet — read defensively off the node, exactly as `v2/get.ts` does. */
@@ -380,11 +459,22 @@ export async function backlogQuery(store: GraphBacklogStore, input: IBacklogQuer
     }
 
     // AC-12 — every semantic input, checked BEFORE any work is done, so the
-    // degrade is the first thing the caller learns rather than a surprise
-    // after a full (and wrong) keyword answer.
+    // degrade (when nothing is configured) is the first thing the caller
+    // learns rather than a surprise after a full (and wrong) keyword answer.
+    // When a backend IS configured, this is a no-op and every input below is
+    // actually served.
     assertNoSemanticInputs(view, filter, raw);
+    // §2.1/§3.2 — `filter.anchor`'s item-anchored nearest-neighbour seed has
+    // meaning for `view:"similar"` alone. Checked only once the config gate
+    // above has passed: on an unconfigured store, `assertNoSemanticInputs`
+    // already threw `rag_not_configured` for ANY view carrying `anchor`
+    // (RAG-SPEC §8 DoD #7's exact contract), so reaching here with `anchor`
+    // set means a backend is configured and the view choice is the only
+    // remaining thing to validate.
+    assertAnchorScopedToSimilar(view, filter);
 
-    const sort = resolveSort(raw['sort'], queryPlan);
+    const sort = resolveSort(raw['sort'], queryPlan, view);
+    assertImpactSortScopedToReady(view, sort);
     const direction = resolveDirection(raw['direction'], sort);
     const limit = raw['limit'] as number | undefined;
     const offset = resolveOffset(raw['offset']);
@@ -415,10 +505,10 @@ export async function backlogQuery(store: GraphBacklogStore, input: IBacklogQuer
       case 'overlap':
         return await runOverlapView(ctx, raw['humanIds'] as unknown, (raw['overlapBy'] as IOverlapAxis | undefined) ?? 'file');
       case 'similar':
-        // Unreachable: `assertNoSemanticInputs` above rejects `view:"similar"`
-        // outright (AC-12). Kept explicit so a future embedding backend has
-        // exactly one place to land, and so the switch stays exhaustive.
-        throw new RagNotConfiguredError('view:"similar"');
+        // RAG-SPEC §3.2 — reachable only when a backend is configured:
+        // `assertNoSemanticInputs` above already rejected `view:"similar"`
+        // with `rag_not_configured` on an unconfigured store.
+        return await runSimilarView(ctx);
       default: {
         const never: never = view;
         throw new InvalidArgumentError('view', `view: unhandled view ${JSON.stringify(never)}`);
@@ -536,9 +626,21 @@ function assertViewScopedKeys(view: IBacklogView, raw: Record<string, unknown>):
   }
 }
 
-/** §2.3 — an unknown `sort` is `invalid_argument`. A `text` query defaults to the FTS fallback ranking the planner chose (§2.1b step 5). */
-function resolveSort(value: unknown, queryPlan: IQueryPlan | undefined): IBacklogSort {
-  if (value === undefined) return queryPlan?.sort ?? 'priority';
+/**
+ * §2.3 — an unknown `sort` is `invalid_argument`. Default precedence:
+ * 1. A `text` query's own compiled default (§2.1b step 5 — `relevance` when
+ *    a backend is configured, `textMatch` otherwise).
+ * 2. `view:"similar"`'s natural order IS the vector channel's score
+ *    (RAG-SPEC §3.2) — there is no sensible `priority` default for a
+ *    nearest-neighbour result set.
+ * 3. Every other view keeps `priority` (AC-5's spotlight parity).
+ */
+function resolveSort(value: unknown, queryPlan: IQueryPlan | undefined, view: IBacklogView): IBacklogSort {
+  if (value === undefined) {
+    if (queryPlan?.sort) return queryPlan.sort;
+    if (view === 'similar') return 'relevance';
+    return 'priority';
+  }
   if (!isBacklogSort(value)) {
     throw new InvalidArgumentError('sort', `sort: unknown sort ${JSON.stringify(value)} (expected one of ${BACKLOG_SORTS.join(', ')})`);
   }
@@ -639,15 +741,21 @@ function resolveFormat(view: IBacklogView, value: unknown): 'json' | 'table' {
 }
 
 /**
- * AC-12 — the semantic channel degrades LOUDLY.
+ * AC-12 — the semantic channel degrades LOUDLY, but ONLY while nothing is
+ * configured (RAG-SPEC §3 / `isSemanticSearchConfigured()`).
  *
- * `grep` and every dimensional query keep working; anything that would need
- * an embedding matcher returns `rag_not_configured` naming the input. The
- * alternative — quietly answering `semantic` with FTS — is precisely the
- * silently-wrong result §0.3 ranks as worse than a failure, and §7.6 forbids
- * `grep` from becoming the hybrid stand-in.
+ * Absent a backend, `grep` and every dimensional query keep working;
+ * anything that would need an embedding matcher returns `rag_not_configured`
+ * naming the input. The alternative — quietly answering `semantic` with FTS —
+ * is precisely the silently-wrong result §0.3 ranks as worse than a failure,
+ * and §7.6 forbids `grep` from becoming the hybrid stand-in.
+ *
+ * Once a host calls `configureSemanticBackend`, this function is a no-op: the
+ * gate exists to protect the UNCONFIGURED default build, not to permanently
+ * block the feature it names.
  */
 function assertNoSemanticInputs(view: IBacklogView, filter: IBacklogFilter, raw: Record<string, unknown>): void {
+  if (isSemanticSearchConfigured()) return;
   const requested: string[] = [];
   if (filter.semantic !== undefined) requested.push('filter.semantic');
   if (filter.anchor !== undefined) requested.push('filter.anchor');
@@ -662,6 +770,41 @@ function assertNoSemanticInputs(view: IBacklogView, filter: IBacklogFilter, raw:
   // Named as one feature string so the message lists everything the caller
   // asked for, not just the first thing that tripped.
   throw new RagNotConfiguredError(requested.join(' + '));
+}
+
+/**
+ * RAG-SPEC §2.1/§3.2 — `filter.anchor` (item-anchored nearest-neighbour) has
+ * meaning for `view:"similar"` alone; every other view has no vector target
+ * to interpret it against. Only ever reached once `assertNoSemanticInputs`
+ * has passed (i.e. a backend is configured) — on an unconfigured store, an
+ * `anchor` on ANY view already threw `rag_not_configured` before this runs,
+ * which is exactly RAG-SPEC §8 DoD #7's contract.
+ */
+/**
+ * RAG-SPEC §5 `recommendNextWork` — `sort:"impact"` ranks the "claimable
+ * right now" population `view:"ready"` already computes; every other view
+ * either has no such population (`view:"plan"`'s ready SET is a sub-array of
+ * a bigger payload, not the whole result) or would silently rank a
+ * population `runReadyView` never annotated with `impactRank` — an
+ * accept-and-ignore §7 forbids. Checked unconditionally (no embedding
+ * backend involved), so this is enforced identically configured or not.
+ */
+function assertImpactSortScopedToReady(view: IBacklogView, sort: IBacklogSort): void {
+  if (sort === 'impact' && view !== 'ready') {
+    throw new InvalidArgumentError(
+      'sort',
+      `sort:"impact" (RAG-SPEC §5 recommendNextWork) ranks view:"ready"'s claimable-now population — pass view:"ready", or drop sort:"impact" on view:"${view}".`
+    );
+  }
+}
+
+function assertAnchorScopedToSimilar(view: IBacklogView, filter: IBacklogFilter): void {
+  if (filter.anchor !== undefined && view !== 'similar') {
+    throw new InvalidArgumentError(
+      'filter',
+      `filter.anchor: item-anchored similarity is view:"similar"'s alone (RAG-SPEC §2.1/§3.2) — pass view:"similar", or drop "anchor" and use "semantic" for a plain-text query on view:"${view}".`
+    );
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -872,6 +1015,15 @@ function applyV2Filters(rows: IQueryRow[], filter: IBacklogFilter): IQueryRow[] 
  * with no `limit`/`offset`, i.e. the whole filtered set in a deterministic
  * order. This layer then adds the status selector and the v2 axes. Nothing
  * here slices: paging happens once, later, in `paginateRows`.
+ *
+ * RAG-SPEC §3.1 — `filter.semantic` is a SEPARATE candidate source, merged
+ * additively with whatever the FTS/dimensional fetch above already found
+ * (`mergeSemanticRows`). This is the one place that composition happens, so
+ * `runListView`/`runReadyView`/`runGroupedView` (every caller of `fetchRows`)
+ * get it uniformly. `filter.grep` never triggers this branch — only
+ * `filter.semantic` does — which is the whole of the "grep stays pure FTS,
+ * always" guarantee: nothing here ever promotes a keyword query into a
+ * vector one.
  */
 async function fetchRows(store: GraphBacklogStore, filter: IBacklogFilter, warnings: string[]): Promise<{ rows: IQueryRow[]; truncated: boolean }> {
   let repoCandidates: Set<string> | undefined;
@@ -884,10 +1036,22 @@ async function fetchRows(store: GraphBacklogStore, filter: IBacklogFilter, warni
   const v1 = compileV1Filter(filter, repoCandidates);
   const nodes = await queryItemNodes(store, v1);
   // §7.4 — the grep path's documented fetch budget, made VISIBLE. A
-  // truncation nobody can see is a silent truncation.
-  const truncated = filter.grep !== undefined && nodes.length >= GREP_FETCH_BUDGET;
+  // truncation nobody can see is a silent truncation. The vector channel gets
+  // the exact same treatment below (its own `SEMANTIC_FETCH_BUDGET`) — grep
+  // truncation and semantic truncation are ORed together because either one
+  // alone is sufficient to make this result set short of "everything that
+  // matched", and a caller reading `truncated` needs a single honest signal,
+  // not two they'd have to know to check separately.
+  let truncated = filter.grep !== undefined && nodes.length >= GREP_FETCH_BUDGET;
 
   let rows: IQueryRow[] = nodes.map((node) => ({ node, item: toBacklogItem(node), score: node.score }));
+
+  if (filter.semantic !== undefined) {
+    const semantic = await fetchSemanticRows(store, filter, repoCandidates);
+    rows = mergeSemanticRows(rows, semantic.rows);
+    truncated = truncated || semantic.truncated;
+  }
+
   if (repoCandidates !== undefined && repoCandidates.size !== 1) {
     const allowed = repoCandidates;
     rows = rows.filter((r) => allowed.has(r.item.repo));
@@ -895,6 +1059,63 @@ async function fetchRows(store: GraphBacklogStore, filter: IBacklogFilter, warni
   rows = applyStatusSelector(rows, filter.status);
   rows = applyV2Filters(rows, filter);
   return { rows, truncated };
+}
+
+/**
+ * RAG-SPEC §3.1 — the vector channel's candidate source for `filter.semantic`
+ * on `view:"list"`/`"ready"`/`"grouped"` (`view:"similar"` has its own
+ * dedicated seed logic in `runSimilarView` — it is not a `filter.semantic`
+ * consumer of this function, it drives the same `knn` primitive directly).
+ *
+ * Dimensional pushdown is load-bearing (§3.1's "a repo-scoped semantic search
+ * never returns another repo's items"): the SAME `BacklogFilter` the FTS path
+ * would have used (`compileV1Filter`) is translated to a `NodeFilter` via
+ * `nodeFilterFromBacklogFilter` — the ONE existing translation, reused
+ * verbatim rather than re-derived — and handed to `SemanticBackend.knn` as
+ * `opts.filter`, which the backend contract requires to apply it BEFORE the
+ * `k` cutoff (never a post-filter).
+ */
+async function fetchSemanticRows(store: GraphBacklogStore, filter: IBacklogFilter, repoCandidates: ReadonlySet<string> | undefined): Promise<{ rows: IQueryRow[]; truncated: boolean }> {
+  const backend = requireSemanticBackend('filter.semantic');
+  const queryVec = await backend.embedQuery(filter.semantic as string);
+  const nodeFilter = nodeFilterFromBacklogFilter(compileV1Filter(filter, repoCandidates));
+  const matches = await backend.knn(queryVec, SEMANTIC_FETCH_BUDGET, { filter: nodeFilter });
+  // Same visibility principle as the grep path's `GREP_FETCH_BUDGET` truncation
+  // (§7.4) applied to the vector channel: if the candidate fetch itself
+  // saturated its budget, callers must be told via `truncated` rather than
+  // silently seeing a short/incomplete merge.
+  const truncated = matches.length >= SEMANTIC_FETCH_BUDGET;
+
+  const rows: IQueryRow[] = [];
+  for (const match of matches) {
+    const node = await store.graph.getNode(match.nodeId);
+    // `getNode` reads tombstones unconditionally (see `v2/get.ts`'s
+    // `findSoftDeletedItemNodes` doc) — liveness must be checked explicitly,
+    // never assumed from "the vector store still had it indexed".
+    if (!node || node.tInvalid || !isLiveBacklogItemNode(node)) continue;
+    rows.push({ node, item: toBacklogItem(node), vecScore: match.score });
+  }
+  return { rows, truncated };
+}
+
+/**
+ * AC-11 — merges the vector channel's candidates into the FTS/dimensional
+ * base set BY NODE ID, additively: a node only `grep` found keeps its FTS
+ * `score` and gains no `vecScore` (never touched by the vector channel — the
+ * caller can tell, per `IQueryRow.vecScore`'s doc); a node BOTH channels
+ * found keeps both scores; a node only the vector channel found is added
+ * fresh. Union, never a replace — `grep`'s hits are never displaced by a
+ * semantic candidate set (§3.1).
+ */
+function mergeSemanticRows(base: readonly IQueryRow[], semantic: readonly IQueryRow[]): IQueryRow[] {
+  const byNodeId = new Map<number, IQueryRow>();
+  for (const row of base) byNodeId.set(row.node.id, row);
+  for (const row of semantic) {
+    const existing = byNodeId.get(row.node.id);
+    if (existing) existing.vecScore = row.vecScore;
+    else byNodeId.set(row.node.id, row);
+  }
+  return [...byNodeId.values()];
 }
 
 // ----------------------------------------------------------------------------
@@ -948,10 +1169,40 @@ function compareRows(a: IQueryRow, b: IQueryRow, sort: IBacklogSort): number {
       const scoreB = b.score ?? -Infinity;
       return scoreA - scoreB || a.item.humanId.localeCompare(b.item.humanId);
     }
-    case 'relevance':
-      // Unreachable — `assertNoSemanticInputs` rejects `sort:"relevance"`
-      // with `rag_not_configured` before any row is fetched (AC-12).
-      throw new RagNotConfiguredError('sort:"relevance"');
+    case 'relevance': {
+      // RAG-SPEC §3 — the vector channel's own similarity score
+      // (`row.vecScore`, HIGHER-IS-BETTER), populated by `fetchSemanticRows`/
+      // `runSimilarView` for every row the vector channel matched. A row
+      // that channel never touched (e.g. a `grep`-only hit merged in
+      // additively, AC-11) has no `vecScore` and sorts as the WORST match —
+      // never a fabricated tie with a genuine vector hit — with humanId
+      // still breaking a true tie. Unreachable on an unconfigured store:
+      // `assertNoSemanticInputs` rejects `sort:"relevance"` with
+      // `rag_not_configured` before any row is fetched.
+      const scoreA = a.vecScore ?? -Infinity;
+      const scoreB = b.vecScore ?? -Infinity;
+      return scoreA - scoreB || a.item.humanId.localeCompare(b.item.humanId);
+    }
+    case 'impact': {
+      // RAG-SPEC §5 `recommendNextWork`: critical-path position FIRST (an
+      // item on the plan's critical chain sorts ahead of an off-path item
+      // regardless of impact/priority), then `blockerImpact` cone size
+      // (bigger cone first — resolving it unblocks more), then priority.
+      // A row `runReadyView` never annotated (unreachable in practice —
+      // `assertImpactSortScopedToReady` gates this arm to `view:"ready"`
+      // alone, and that runner always populates it) degrades to "off path,
+      // zero impact" rather than throwing, matching every other sort's
+      // missing-signal-sorts-worst convention (`vecScore`/`score` above).
+      const rankA = a.impactRank ?? { onCriticalPath: false, impactedCount: 0 };
+      const rankB = b.impactRank ?? { onCriticalPath: false, impactedCount: 0 };
+      const criticalA = rankA.onCriticalPath ? 0 : 1;
+      const criticalB = rankB.onCriticalPath ? 0 : 1;
+      if (criticalA !== criticalB) return criticalA - criticalB;
+      if (rankA.impactedCount !== rankB.impactedCount) return rankB.impactedCount - rankA.impactedCount;
+      const priorityA = PRIORITY_RANK[a.item.priority ?? ''] ?? 4;
+      const priorityB = PRIORITY_RANK[b.item.priority ?? ''] ?? 4;
+      return priorityA - priorityB || a.item.humanId.localeCompare(b.item.humanId);
+    }
     default: {
       const never: never = sort;
       throw new InvalidArgumentError('sort', `sort: unhandled sort ${JSON.stringify(never)}`);
@@ -1094,6 +1345,24 @@ async function buildCard(store: GraphBacklogStore, row: IQueryRow, fields: Reado
   // return every card MINUS the one field it asked for, exactly the
   // accept-and-ignore failure §7 forbids.
   if (fields.has('related')) card.related = await listRelatedNode(store, item.repo, item.humanId);
+  // RAG-SPEC §3 / AC-12 / AC-20 — reachable only when a backend is
+  // configured (`assertNoSemanticInputs` already rejected these fields
+  // otherwise). `_score` prefers the vector channel's score when this row
+  // came through it, falling back to the FTS `textMatch` score so a `text`
+  // query's default projection still has SOMETHING to report; a row neither
+  // channel scored (e.g. plain dimensional filtering with no `grep`/
+  // `semantic`) carries no `_score` at all, which is the honest answer.
+  // `_vector` costs a real per-item read (`vectorFor`) — exactly why AC-20
+  // keeps it opt-in-by-name, never in a default projection.
+  if (fields.has('_score')) {
+    const score = row.vecScore ?? row.score;
+    if (score !== undefined) card._score = score;
+  }
+  if (fields.has('_vector')) {
+    const backend = requireSemanticBackend('_vector');
+    const vec = await backend.vectorFor(node.id);
+    if (vec !== null) card._vector = Array.from(vec);
+  }
   return card;
 }
 
@@ -1174,8 +1443,77 @@ async function runReadyView(ctx: IQueryContext): Promise<IOutcomeEnvelope<IBackl
   const { rows, truncated } = await fetchRows(ctx.store, ctx.filter, ctx.warnings);
   const readySet = await readyKeySet(ctx.store, ctx.filter);
   const ready = rows.filter((r) => readySet.has(itemKey(r.item)));
+  // RAG-SPEC §5 `recommendNextWork` — `assertImpactSortScopedToReady` already
+  // rejects `sort:"impact"` on every other view, so reaching here with it
+  // means this IS the ranking `recommendNextWork` describes; annotate the
+  // ready rows in place before `sortRows` reads `impactRank` off them.
+  if (ctx.sort === 'impact') await annotateImpactRank(ctx.store, ctx.filter, ready);
   const { page, meta } = paginateRows(sortRows(ready, ctx.sort, ctx.direction), ctx.limit, ctx.offset, truncated);
   return envelopeOf(ctx, { items: await buildCards(ctx.store, page, ctx.fields) }, meta);
+}
+
+/**
+ * RAG-SPEC §5 `recommendNextWork` — annotates each ready row's `impactRank`
+ * in place: whether it sits on the scope's own `DEPENDS_ON` critical chain
+ * (`criticalPath`, reused verbatim with `weightFn:"count"` — structural
+ * longest-chain, not priority-weighted, because priority is a SEPARATE,
+ * later ranking term in `compareRows`'s `'impact'` arm and weighting the
+ * chain by priority too would double-count it), and its own `blockerImpact`
+ * cone size (`computeBlockerImpact`, reused verbatim). Both traversals read
+ * the SAME one-pass `fetchDependsOnGraph` result, so the ranking can never
+ * disagree with itself about what the scope's dependency graph looks like.
+ *
+ * A no-op on an empty ready set — nothing to rank, and the population fetch
+ * this function would otherwise do is one query one is never paid.
+ */
+async function annotateImpactRank(store: GraphBacklogStore, filter: IBacklogFilter, ready: IQueryRow[]): Promise<void> {
+  if (ready.length === 0) return;
+  const { members, dependsOn, dependents } = await fetchDependsOnGraph(store, scopeOf(filter));
+  const statusByHumanId = new Map<string, BacklogStatus>(members.map((m) => [m.item.humanId, m.item.status]));
+  const chain = new Set(criticalPath('(recommendNextWork scope)', members, dependsOn, 'count').criticalChain);
+  for (const row of ready) {
+    const impact = computeBlockerImpact(dependents, statusByHumanId, row.item.humanId);
+    row.impactRank = { onCriticalPath: chain.has(row.item.humanId), impactedCount: impact.impactedCount };
+  }
+}
+
+/**
+ * RAG-SPEC §5's shared population fetch for `recommendNextWork`: every live
+ * item in `scope` (repo/projectPath — ALL statuses, unlike `readyItems`,
+ * because the critical chain and the impact cone both need the WHOLE
+ * dependency graph, not just the claimable-now subset) plus its
+ * `DEPENDS_ON` adjacency in BOTH directions, built in one edge walk. Mirrors
+ * `memberDependencies` (query.ts:2019) — forward adjacency clipped to a
+ * known member set, edges leaving the set silently dropped — except the
+ * member set here is the repo/projectPath population `view:"order"`'s own
+ * scope uses, not a plan's members, and this variant returns the reverse
+ * adjacency alongside the forward one because `computeBlockerImpact` needs
+ * it and a second walk would let the two adjacencies disagree.
+ */
+async function fetchDependsOnGraph(
+  store: GraphBacklogStore,
+  scope: { repo?: string; projectPath?: string }
+): Promise<{ members: IQueryRow[]; dependsOn: Map<string, string[]>; dependents: Map<string, string[]> }> {
+  const nodes = await queryItemNodes(store, { repo: scope.repo, projectPath: scope.projectPath });
+  const members: IQueryRow[] = nodes.map((node) => ({ node, item: toBacklogItem(node) }));
+  const byId = new Set(members.map((m) => m.item.humanId));
+  const dependsOn = new Map<string, string[]>();
+  const dependents = new Map<string, string[]>();
+  for (const member of members) {
+    dependsOn.set(member.item.humanId, []);
+    dependents.set(member.item.humanId, []);
+  }
+  for (const member of members) {
+    for (const edge of await store.graph.getEdges({ src: member.node.id, rel: 'DEPENDS_ON' })) {
+      const dst = await store.graph.getNode(edge.dst);
+      if (!dst || dst.tInvalid) continue;
+      const dstHumanId = (dst.metadata as Partial<BacklogNodeMeta> | undefined)?.humanId;
+      if (dstHumanId === undefined || !byId.has(dstHumanId)) continue;
+      dependsOn.get(member.item.humanId)?.push(dstHumanId);
+      dependents.get(dstHumanId)?.push(member.item.humanId);
+    }
+  }
+  return { members, dependsOn, dependents };
 }
 
 /** `(repo, humanId)` — the identity a `BacklogItem` is unique under (SPEC.md §3), so two repos' `BUG-001` never collide in a Set. */
@@ -1189,6 +1527,185 @@ async function readyKeySet(store: GraphBacklogStore, filter: IBacklogFilter): Pr
   if (filter.repo !== undefined) scope.repo = filter.repo;
   if (filter.projectPath !== undefined) scope.projectPath = filter.projectPath;
   return new Set((await readyItemsOp(store, scope)).map(itemKey));
+}
+
+// ----------------------------------------------------------------------------
+// RAG-SPEC §3.2 — `view:"similar"`, the nearest-neighbour view.
+// ----------------------------------------------------------------------------
+
+/**
+ * RAG-SPEC §2.1/§3.2 — resolves `filter.anchor` (a humanId) to its live
+ * `NodeRecord`, honouring `filter.repo` when the caller supplied one and
+ * scanning every repo otherwise. Deliberately reuses `findItemNode`/
+ * `findHumanIdInAnyRepo` — the SAME live-only, collision-guarded lookups
+ * `v2/get.ts` uses — rather than a second resolution path: an anchor is
+ * addressed exactly the way any other item is.
+ *
+ * @throws {BacklogItemNotFoundError} nothing live carries this humanId (in the named repo, or anywhere)
+ * @throws {InvalidArgumentError} the (repo-unscoped) humanId exists in more than one repo — a read never silently picks one (§7.1)
+ */
+async function resolveAnchorNode(store: GraphBacklogStore, anchorHumanId: string, repo: string | undefined): Promise<NodeRecord> {
+  if (repo !== undefined) {
+    const node = await findItemNode(store, repo, anchorHumanId);
+    if (node) return node;
+    throw await buildNotFoundError(store, repo, anchorHumanId);
+  }
+  const matches = await findHumanIdInAnyRepo(store, anchorHumanId);
+  if (matches.length > 1) {
+    throw new InvalidArgumentError(
+      'filter.anchor',
+      `filter.anchor: "${anchorHumanId}" is live in ${matches.length} repos (${[...new Set(matches.map((n) => (n.metadata as { repo?: string } | undefined)?.repo ?? n.namespace ?? ''))].sort().join(', ')}) — ` +
+        `pass filter.repo to disambiguate which one anchors the search (INTERFACE_v2 §7.1).`
+    );
+  }
+  const only = matches[0];
+  if (only) return only;
+  throw new BacklogItemNotFoundError('(any repo)', anchorHumanId);
+}
+
+/**
+ * RAG-SPEC §3.2 — `view:"similar"`: embed the seed (an anchor item's own
+ * vector, or free text) and KNN with the dimensional filter pushed into the
+ * SQL predicate (never a post-filter). The seed item itself is excluded, and
+ * only live items are returned.
+ *
+ * Two ways to seed, mutually exclusive:
+ * - `filter.anchor` — an existing item's humanId. Uses that item's OWN
+ *   indexed vector (`SemanticBackend.vectorFor`). If the anchor has never
+ *   been embedded (backfill has not reached it, or its embed failed and
+ *   degraded per RAG-SPEC §2.5), this returns an HONEST empty result plus a
+ *   `warnings` entry — never a silently-wrong "similar" set built from
+ *   whatever the anchor happens to be, which would be indistinguishable from
+ *   a real answer.
+ * - `filter.semantic` — free text, embedded as a query (asymmetric models
+ *   embed queries and documents differently).
+ *
+ * `knn` is asked for `SEMANTIC_FETCH_BUDGET` candidates — NOT a tight
+ * `limit + offset` — because `applyStatusSelector`/`applyV2Filters` run
+ * AFTER the KNN fetch (they cannot be pushed into `NodeFilter`; see their own
+ * docs), and a tight `k` would silently under-deliver a page whenever enough
+ * of the nearest vectors happen to fail one of those later filters (e.g. the
+ * closest neighbours are closed items and `filter.status` defaults to
+ * `"open"`) — the exact BUG-BACKLOG-003 pagination-composes-once class this
+ * file is required to avoid, now for the vector channel too. `truncated`
+ * mirrors the grep path's `GREP_FETCH_BUDGET` semantics: honestly `true` when
+ * the candidate fetch itself hit its bound, so a caller can tell a short page
+ * from a genuinely-exhausted result set.
+ */
+async function runSimilarView(ctx: IQueryContext): Promise<IOutcomeEnvelope<IBacklogQueryResult>> {
+  const backend = requireSemanticBackend('view:"similar"');
+
+  if (ctx.filter.anchor !== undefined && ctx.filter.semantic !== undefined) {
+    throw new InvalidArgumentError(
+      'filter',
+      'filter: "anchor" and "semantic" are two different ways to seed view:"similar" (RAG-SPEC §3.2) — pass exactly one.'
+    );
+  }
+  if (ctx.filter.anchor === undefined && ctx.filter.semantic === undefined) {
+    throw new InvalidArgumentError(
+      'filter',
+      'filter: view:"similar" needs either "anchor" (an existing item\'s humanId) or "semantic" (free text) to seed the nearest-neighbour search (RAG-SPEC §3.2).'
+    );
+  }
+
+  let repoCandidates: Set<string> | undefined;
+  if (ctx.filter.repo !== undefined) {
+    const resolution = await resolveRepoCandidates(ctx.store, ctx.filter.repo);
+    repoCandidates = resolution.candidates;
+    if (resolution.warning) ctx.warnings.push(resolution.warning);
+  }
+  // §3.1 — the SAME dimensional-pushdown translation the FTS/list path uses,
+  // reused verbatim: `compileV1Filter` (repo/kind/family/priority/plan/…)
+  // through `nodeFilterFromBacklogFilter`, handed to `knn` as `opts.filter`
+  // so the backend applies it BEFORE the `k` cutoff — never a post-filter.
+  const nodeFilter = nodeFilterFromBacklogFilter(compileV1Filter(ctx.filter, repoCandidates));
+
+  let queryVec: Float32Array;
+  let anchorNodeId: number | undefined;
+  if (ctx.filter.anchor !== undefined) {
+    const anchorNode = await resolveAnchorNode(ctx.store, ctx.filter.anchor, ctx.filter.repo);
+    anchorNodeId = anchorNode.id;
+    const vec = await backend.vectorFor(anchorNode.id);
+    if (vec === null) {
+      ctx.warnings.push(
+        `view:"similar": anchor item "${ctx.filter.anchor}" has no indexed vector yet (never embedded, or backfill has not reached it) — ` +
+          `returning an empty result rather than one built from an unrelated fallback.`
+      );
+      return envelopeOf(ctx, { items: [] }, { total: 0, returned: 0 });
+    }
+    queryVec = vec;
+  } else {
+    queryVec = await backend.embedQuery(ctx.filter.semantic as string);
+  }
+
+  const matches = await backend.knn(queryVec, SEMANTIC_FETCH_BUDGET, { filter: nodeFilter });
+  const truncated = matches.length >= SEMANTIC_FETCH_BUDGET;
+
+  let rows: IQueryRow[] = [];
+  for (const match of matches) {
+    if (match.nodeId === anchorNodeId) continue; // §3.2 — the seed item itself is excluded
+    const node = await ctx.store.graph.getNode(match.nodeId);
+    if (!node || node.tInvalid || !isLiveBacklogItemNode(node)) continue; // §3.2 — only live items
+    rows.push({ node, item: toBacklogItem(node), vecScore: match.score });
+  }
+  // A multi-candidate repo alias (AC-24) cannot be expressed as one
+  // `NodeFilter.namespace` equality — same reason `fetchRows` post-filters it
+  // — so it is applied here too, over the already-pushed-down result.
+  if (repoCandidates !== undefined && repoCandidates.size !== 1) {
+    const allowed = repoCandidates;
+    rows = rows.filter((r) => allowed.has(r.item.repo));
+  }
+  rows = applyStatusSelector(rows, ctx.filter.status);
+  rows = applyV2Filters(rows, ctx.filter);
+
+  const sorted = sortRows(rows, ctx.sort, ctx.direction);
+  const effectiveLimit = ctx.limit ?? DEFAULT_SIMILAR_LIMIT;
+  const { page, meta } = paginateRows(sorted, effectiveLimit, ctx.offset, truncated);
+  const payload: Omit<IBacklogQueryResult, 'view' | 'query'> = { items: await buildCards(ctx.store, page, ctx.fields) };
+
+  // RAG-SPEC §5 `suggestRelated`/`suggestDependencies` — meaningful only
+  // relative to a specific item (`filter.anchor`); a free-text `semantic`
+  // seed has no "this" for a dependency candidate to be a dependency OF.
+  // Both ride on the SAME already-fetched, already-filtered candidate set —
+  // no second `knn` call — and neither writes anything: `suggestedRelated`
+  // is a pure reshape into the pinned `ISimilarHit` shape, and
+  // `suggestedDependencies` only ever READS edges (`hasAnyLiveEdgeBetween`)
+  // to decide what to exclude, never calls `writeEdge`/`addDependencyNode`/
+  // `linkRelatedNode`. The confirm gate is structural: there is no code
+  // path from this function to any edge-write primitive at all.
+  if (anchorNodeId !== undefined) {
+    const cards = await buildCards(ctx.store, rows, ctx.fields);
+    const hits: ISimilarHit[] = rows.map((row, i) => ({ item: cards[i] as IBacklogCard, score: row.vecScore ?? 0 }));
+    payload.suggestedRelated = hits;
+    const suggestions: ISuggestedDependency[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i] as IQueryRow;
+      const hit = hits[i] as ISimilarHit;
+      // RAG-SPEC §5 — `DEPENDS_ON` is NEVER auto-suggested with a
+      // directional guess: only a non-directional `RELATES_TO` candidate is
+      // ever surfaced (`ISuggestedDependency.rel` is the literal type that
+      // makes this a compile-time guarantee, not a runtime check). A
+      // candidate already connected to the anchor by ANY live edge, in
+      // EITHER direction, is excluded — it is not a NEW candidate.
+      if (await hasAnyLiveEdgeBetween(ctx.store, anchorNodeId, row.node.id)) continue;
+      suggestions.push({ rel: 'RELATES_TO', hit });
+    }
+    payload.suggestedDependencies = suggestions;
+  }
+
+  return envelopeOf(ctx, payload, meta);
+}
+
+/**
+ * RAG-SPEC §5 `suggestDependencies` — does ANY live edge, of ANY relation,
+ * connect `a` and `b` in either direction? Read-only (`getEdges` alone,
+ * never `writeEdge`) — used purely to decide whether a KNN candidate is
+ * already connected to the anchor and therefore not a genuinely NEW
+ * suggestion.
+ */
+async function hasAnyLiveEdgeBetween(store: GraphBacklogStore, a: number, b: number): Promise<boolean> {
+  const [forward, backward] = await Promise.all([store.graph.getEdges({ src: a, dst: b }), store.graph.getEdges({ src: b, dst: a })]);
+  return forward.length > 0 || backward.length > 0;
 }
 
 /**
@@ -1244,24 +1761,121 @@ function scopeOf(filter: IBacklogFilter): { repo?: string; projectPath?: string 
 async function runOrderView(ctx: IQueryContext): Promise<IOutcomeEnvelope<IBacklogQueryResult>> {
   const scope = scopeOf(ctx.filter);
   const topo = await topoOrderOp(ctx.store, scope);
-  if (!topo.ok) return envelopeOf(ctx, { order: { ok: false, cycle: topo.cycle } });
 
   const graph = await dependencyGraphOp(ctx.store, scope);
   const dependsOn = new Map<string, string[]>();
-  for (const node of graph.nodes) dependsOn.set(node.humanId, []);
+  // RAG-SPEC §5 `blockerImpact`'s REVERSE adjacency — built in the SAME pass
+  // as the forward `dependsOn` map `wave` needs, over the SAME `DEPENDS_ON`
+  // edges: one graph read serves both the existing wave computation and the
+  // new backward-reachability query, so the two can never disagree about
+  // what the scope's dependency graph looks like. Built (and `blockerImpact`
+  // computed) UNCONDITIONALLY, even when `topo` reports a cycle: RAG-SPEC
+  // §5 requires `blockerImpact` to terminate and answer on a graph that is
+  // NOT guaranteed acyclic — a cyclic scope must still answer the impact
+  // question even though it cannot answer the topological-order one.
+  const dependents = new Map<string, string[]>();
+  for (const node of graph.nodes) {
+    dependsOn.set(node.humanId, []);
+    dependents.set(node.humanId, []);
+  }
   for (const edge of graph.edges) {
     if (edge.rel !== 'DEPENDS_ON') continue;
     dependsOn.get(edge.from)?.push(edge.to);
+    dependents.get(edge.to)?.push(edge.from);
   }
+
+  const payload: Omit<IBacklogQueryResult, 'view' | 'query'> = topo.ok
+    ? { order: { ok: true, order: computeWaves(topo.order, dependsOn) } }
+    : { order: { ok: false, cycle: topo.cycle } };
+
+  if (ctx.filter.humanId !== undefined) {
+    if (!dependents.has(ctx.filter.humanId)) {
+      throw new BacklogItemNotFoundError(ctx.filter.repo ?? '(scope)', ctx.filter.humanId);
+    }
+    const statusByHumanId = new Map(graph.nodes.map((n) => [n.humanId, n.status]));
+    payload.blockerImpact = computeBlockerImpact(dependents, statusByHumanId, ctx.filter.humanId);
+  }
+  return envelopeOf(ctx, payload);
+}
+
+/** `topo.order` is dependency-first, so every dependency's wave is already known by the time its dependent is visited — one pass, no fixpoint. */
+function computeWaves(order: readonly string[], dependsOn: ReadonlyMap<string, string[]>): Array<{ humanId: string; wave: number }> {
   const wave = new Map<string, number>();
-  // `topo.order` is dependency-first, so every dependency's wave is already
-  // known by the time its dependent is visited — one pass, no fixpoint.
-  for (const humanId of topo.order) {
+  for (const humanId of order) {
     const deps = dependsOn.get(humanId) ?? [];
     const deepest = deps.reduce((max, dep) => Math.max(max, wave.get(dep) ?? -1), -1);
     wave.set(humanId, deepest + 1);
   }
-  return envelopeOf(ctx, { order: { ok: true, order: topo.order.map((humanId) => ({ humanId, wave: wave.get(humanId) ?? 0 })) } });
+  return order.map((humanId) => ({ humanId, wave: wave.get(humanId) ?? 0 }));
+}
+
+/**
+ * RAG-SPEC §5 / INTERFACE_v2 AC-30 — `blockerImpact`: the size of `humanId`'s
+ * BACKWARD-reachable (transitive) `DEPENDS_ON` cone, i.e. every item that
+ * depends on it, directly or through a chain of other dependents. "How much
+ * work resolving THIS item unblocks" — not just the direct dependents
+ * `blockers()` (query.ts:806) already exposes in the other direction, but
+ * everything downstream of them too.
+ *
+ * `dependents` is the REVERSE adjacency (`humanId` -> the humanIds that
+ * depend on it, i.e. `edge.to === humanId` for a `DEPENDS_ON` edge whose
+ * `edge.from` is the dependent) — the mirror image of `criticalPath`'s
+ * forward `deps` map (query.ts:2089, `humanId` -> what it depends ON).
+ * Getting this backwards is the single highest-risk bug in this function: a
+ * chain A→B→C→D (A depends on B depends on C depends on D) must report
+ * `blockerImpact('D') === {A,B,C}` (resolving D unblocks all three) and
+ * `blockerImpact('A') === {}` (nothing depends on A) — the exact asymmetry a
+ * flipped map would not catch on a chain, which is why the test fixture
+ * pins BOTH ends, not just the count.
+ *
+ * A level-by-level BFS (not `criticalPath`'s recursive memoised walk,
+ * query.ts:2103-2117): the `seen` set is the reachability analogue of that
+ * walk's `visiting` set — a node already counted is never re-queued, so a
+ * cycle (the graph is NOT guaranteed acyclic, `hasDependencyCycle`,
+ * query.ts:2064) terminates the traversal instead of looping forever. BFS
+ * levels also make `maxDepth` a natural cutoff: level 0 is `humanId` itself
+ * (never counted), level 1 is its direct dependents, level 2 their
+ * dependents, and so on — `maxDepth: 1` counts ONLY direct dependents,
+ * which is AC-30's stated negative control (a real chain's count must drop
+ * from 3 to 1 when depth is capped, proving the traversal is genuinely
+ * transitive and not just counting direct edges).
+ *
+ * `maxDepth` defaults to unbounded (`Number.POSITIVE_INFINITY`) — the
+ * `view:"order"` wiring above always calls this with the default; the depth
+ * cap exists as a parameter specifically so the negative control is a real
+ * call into this function with a different argument, not a code edit.
+ *
+ * Pure graph traversal over data the caller already fetched — no store
+ * call, no embedding dependency, so (like `criticalPath`/`planReadiness`) it
+ * ships ahead of EPIC-G and works identically with zero backend configured.
+ */
+export function computeBlockerImpact(
+  dependents: ReadonlyMap<string, readonly string[]>,
+  statusByHumanId: ReadonlyMap<string, BacklogStatus>,
+  humanId: string,
+  maxDepth: number = Number.POSITIVE_INFINITY
+): IBlockerImpactResult {
+  const seen = new Set<string>();
+  let frontier: string[] = [humanId];
+  let depth = 0;
+  while (frontier.length > 0 && depth < maxDepth) {
+    const next: string[] = [];
+    for (const id of frontier) {
+      for (const dependent of dependents.get(id) ?? []) {
+        if (seen.has(dependent)) continue;
+        seen.add(dependent);
+        next.push(dependent);
+      }
+    }
+    frontier = next;
+    depth += 1;
+  }
+  const impactedHumanIds = [...seen].sort();
+  const impactedOpenCount = impactedHumanIds.filter((id) => {
+    const status = statusByHumanId.get(id);
+    return status !== undefined && !isTerminalStatus(status);
+  }).length;
+  return { humanId, impactedCount: impactedHumanIds.length, impactedOpenCount, impactedHumanIds };
 }
 
 /** §2.2 `view:"graph"` — dependency/related/part-of edges, delegated verbatim to `dependencyGraph`. */
@@ -1876,15 +2490,19 @@ function overlapUnits(row: IQueryRow, axis: IOverlapAxis): string[] {
 // ----------------------------------------------------------------------------
 
 /**
- * §2.1b / AC-27 — compiles `text` (the CLI's positional form) into a query.
+ * §2.1b / AC-27 / RAG-SPEC §3.1 — compiles `text` (the CLI's positional form)
+ * into a query.
  *
  * The contract this implements is "semantic search first, planner refinement
  * second", and the three rules that make it that rather than a string-shredder:
  *
  * 1. **The ENTIRE string is the query.** `plan.semantic` always carries the
- *    whole input, never a remainder after extraction. With an embedding
- *    backend it routes to the matcher; without one — this build — it falls
- *    back to FTS via `filter.grep`, which §2.1b step 1 names explicitly ("the
+ *    whole input, never a remainder after extraction. RAG-SPEC §3.1: with a
+ *    backend configured it IS the primary channel — the whole string routes
+ *    into `filter.semantic`, reaching `SemanticBackend.embedQuery` via the
+ *    exact same `fetchSemanticRows` path a caller-supplied `filter.semantic`
+ *    would use. Without one — the unconfigured default build — it falls back
+ *    to FTS via `filter.grep`, which §2.1b step 1 names explicitly ("the
  *    planner never requires EPIC-G to function"). `plan.filter` reports what
  *    ACTUALLY ran, so the fallback is visible rather than implied.
  * 2. **Unscoped by default — cross-repo recall is the contract.** Dimensional
@@ -1892,7 +2510,9 @@ function overlapUnits(row: IQueryRow, axis: IOverlapAxis): string[] {
  *    status or plan slug becomes a `boost` and a surfaced suggestion, never a
  *    filter: AC-27's own worked example ("nx bugs and apigen") pins
  *    `filter: {}` even though "bugs" is a kind word. The only way to scope is
- *    to say so with an explicit flag.
+ *    to say so with an explicit flag. This holds in BOTH the configured and
+ *    unconfigured worlds — neither branch below ever writes `filter.repo`/
+ *    `filter.kind`/etc from an extracted term, only `boosts`/`extracted`.
  * 3. **Time expressions are the ONE exception**, because §2.1b step 4 makes
  *    them a filter by name — and they are still surfaced in `extracted` with
  *    `applied: "filter"`, so nothing is silent either way.
@@ -1906,19 +2526,37 @@ async function compileTextQuery(
   if (text.trim().length === 0) {
     throw new InvalidArgumentError('text', 'text: the natural-language query must not be empty (INTERFACE_v2 §2.1b)');
   }
-  if (filter.grep !== undefined) {
+  const configured = isSemanticSearchConfigured();
+  if (filter.grep !== undefined && !configured) {
     // Without embeddings the text query IS the grep query; accepting both
     // would silently drop one of two keyword predicates the caller believes
-    // are both running.
+    // are both running. Once a backend is configured this restriction lifts
+    // (see below): the NL string routes into `filter.semantic`, which is a
+    // DIFFERENT channel from an explicit `filter.grep` — the two compose
+    // additively (AC-11) rather than colliding.
     throw new InvalidArgumentError(
       'text',
       'text: cannot be combined with filter.grep — without an embedding backend the natural-language form compiles INTO filter.grep (INTERFACE_v2 §2.1b step 1). Pass one or the other.'
     );
   }
+  if (filter.semantic !== undefined && configured) {
+    // The NL form already IS the semantic query; accepting a second,
+    // different `filter.semantic` alongside it would silently discard one —
+    // exactly the collision the `filter.grep` guard above exists to prevent
+    // in the unconfigured world.
+    throw new InvalidArgumentError(
+      'text',
+      'text: cannot be combined with filter.semantic — the natural-language form already routes the whole string into the semantic channel (RAG-SPEC §3.1). Pass one or the other.'
+    );
+  }
 
   const warnings: string[] = [];
   const extracted: IExtractedTerm[] = [];
-  const compiled: IBacklogFilter = { ...filter, grep: text };
+  // RAG-SPEC §3.1 — the whole string becomes the semantic query when a
+  // backend is configured; the FTS fallback (`filter.grep`) otherwise.
+  // Composes with whatever the caller's OWN filter already carries (repo,
+  // kind, dateRange, …) unchanged — only the query channel field differs.
+  const compiled: IBacklogFilter = configured ? { ...filter, semantic: text } : { ...filter, grep: text };
 
   const repos = await knownRepos(store);
   const repoBare = new Map<string, string>();
@@ -1976,15 +2614,13 @@ async function compileTextQuery(
     filter: compiled,
     boosts: extracted.filter((e) => e.applied === 'boost'),
     extracted,
-    // §2.1b step 5: `relevance` when embeddings are configured, `textMatch`
-    // (the real FTS5 match-quality score) as the fallback. This build has no
-    // embedding matcher, so `textMatch` is the truth — a `text` query means
-    // "find me the best keyword matches", and ranking by `priority` instead
-    // (the old default) discarded match quality entirely in favor of triage
-    // priority, which is not what the caller asked for. An explicit
-    // `sort:"relevance"` is still rejected by `assertNoSemanticInputs` rather
-    // than silently downgraded to this.
-    sort: requestedSort ?? 'textMatch',
+    // §2.1b step 5 — `relevance` (the vector channel's score) when a backend
+    // is configured, `textMatch` (the real FTS5 match-quality score) as the
+    // unconfigured fallback. Either way ranking by `priority` (the old
+    // default) discarded match quality entirely in favor of triage priority,
+    // which is not what a `text` query asked for. An explicit `sort` always
+    // wins over this default.
+    sort: requestedSort ?? (configured ? 'relevance' : 'textMatch'),
   };
   return { filter: compiled, plan, warnings };
 }

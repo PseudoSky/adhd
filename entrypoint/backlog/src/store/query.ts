@@ -31,7 +31,17 @@ import { parseRepoKey } from './repo-nodes.js';
 
 const PRIORITY_RANK: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
-function nodeFilterFromBacklogFilter(filter: BacklogFilter): NodeFilter {
+/**
+ * Exported for RAG-SPEC §3.1's pushdown constraint: `v2/query.ts`'s vector
+ * channel (`filter.semantic`/`filter.anchor`/`view:"similar"`) must push its
+ * dimensional filters (repo/kind/family/…) into `SemanticBackend.knn`'s
+ * `NodeFilter` seam BEFORE any limit is applied — never as a post-filter. The
+ * translation from a v1 `BacklogFilter` to a `NodeFilter` already exists
+ * exactly once, here; the vector channel reuses it verbatim rather than
+ * hand-rolling a second (and inevitably divergent) BacklogFilter→NodeFilter
+ * mapping.
+ */
+export function nodeFilterFromBacklogFilter(filter: BacklogFilter): NodeFilter {
   const tags = [BACKLOG_ITEM_TAG];
   if (filter.kind) tags.push(filter.kind);
   if (filter.tags) tags.push(...filter.tags);

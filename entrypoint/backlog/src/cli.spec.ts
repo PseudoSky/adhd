@@ -634,7 +634,7 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
   // a real 2-item batch fan-out dispatched through the real spawned CLI bin,
   // reaching the REAL `createItem` (`client.ts`) via the REAL
   // `_batch/action` mount, over a real temp-scoped SQLite store — no mocks.
-  it('"batch action --operation backlog/create --items […]" fans out via the real CLI to real client.ts create, and both items persist independently (BUG-018 / batch-CLI wiring)', () => {
+  it('"batch action --input {operation,items,…}" fans out via the real CLI to real client.ts create, and both items persist independently (BUG-018 / batch-CLI wiring)', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-batch-'));
     const repo = 'PseudoSky/cli-batch-test';
 
@@ -644,12 +644,30 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     // into the named operation's own input, and `create`'s v2 input nests the
     // domain payload under `item`, one level deeper than the retired v1
     // `create-item` did.
-    const items = JSON.stringify([
-      { input: { item: { family: 'BUG-CLIBATCH', title: 'batch one', body: 'x', repo }, by: 'cli.spec' } },
-      { input: { item: { family: 'BUG-CLIBATCH', title: 'batch two', body: 'y', repo }, by: 'cli.spec' } },
-    ]);
+    //
+    // BUG-APIGEN-CLI-002: a `_batch/<kind>` mount now presents to every
+    // transport (HTTP, CLI, MCP) as ONE JSON blob — `--input <json>` carries
+    // the whole `{operation, items, concurrency, onItemError}` control-plane
+    // object, mirroring every other apigen-mounted verb's single-object CLI
+    // convention. There is no longer a per-field `--operation`/`--items`/
+    // `--concurrency`/`--on-item-error` flag surface (confirmed empirically
+    // against the real built bin, and by `apigen-cli`'s own
+    // `batch-plugin-cli-live-dispatch.spec.ts`).
     const res = runBin(
-      ['batch', 'action', '--operation', 'backlog/create', '--items', items, '--concurrency', '2', '--on-item-error', 'continue'],
+      [
+        'batch',
+        'action',
+        '--input',
+        JSON.stringify({
+          operation: 'backlog/create',
+          items: [
+            { input: { item: { family: 'BUG-CLIBATCH', title: 'batch one', body: 'x', repo }, by: 'cli.spec' } },
+            { input: { item: { family: 'BUG-CLIBATCH', title: 'batch two', body: 'y', repo }, by: 'cli.spec' } },
+          ],
+          concurrency: 2,
+          onItemError: 'continue',
+        }),
+      ],
       adhdRoot
     );
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
@@ -698,7 +716,10 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
 
   it('an "operation" not in this mount\'s batchable set is rejected by the batch handler\'s own validation (proves the CLI mount is bound to the real backlog descriptor, not a stub)', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-batch-badop-'));
-    const res = runBin(['batch', 'action', '--operation', 'backlog/not-a-real-op', '--items', '[]'], adhdRoot);
+    const res = runBin(
+      ['batch', 'action', '--input', JSON.stringify({ operation: 'backlog/not-a-real-op', items: [] })],
+      adhdRoot
+    );
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).not.toBe(0);
     const lastLine = res.stderr.trim().split('\n').pop() ?? '';
     const body = JSON.parse(lastLine) as { code: string; message: string };
@@ -877,17 +898,42 @@ describe('--sandbox / sandbox-path — P5-cli-serve-transport: the CLI must neve
     // production HOME's `.adhd` tree was never created at all — the
     // strongest possible proof an isolation flag that "looks like isolation
     // but isn't" (advisor's own stated trap) is not what shipped here.
+    //
+    // `--sandbox` mints a FRESH `mkdtempSync` root on every distinct process
+    // invocation (`cli.ts`'s `runBacklogCli`: `if (sandbox && opts.adhdRoot
+    // === undefined)`) — there is no working cross-process "reuse this
+    // sandbox" mechanism today (the `ADHD_ROOT=<path>` env var this file's
+    // own `--sandbox` banner message advertises is not actually read by
+    // anything in `@adhd/environment` — a real, separate gap, not something
+    // this test can lean on). So this `create` invocation's OWN sandbox root
+    // is necessarily a DIFFERENT directory than `pathRes`'s — this test
+    // parses ITS OWN banner line for its own root, rather than reusing
+    // `body.adhdRoot`/`body.dbPath` from the earlier, independent process.
     const createRes = runGlobalScoped(
-      ['--sandbox', 'create', '--input', JSON.stringify({ input: { family: 'BUG-SANDBOX', title: 'sandboxed', body: 'x', repo: 'PseudoSky/sandbox-test' }, by: 'cli.spec' })],
+      ['--sandbox', 'create', '--input', JSON.stringify({ item: { family: 'BUG-SANDBOX', title: 'sandboxed', body: 'x', repo: 'PseudoSky/sandbox-test' }, by: 'cli.spec' })],
       fakeProdHome
     );
     expect(createRes.status, `stderr:\n${createRes.stderr}\nstdout:\n${createRes.stdout}`).toBe(0);
     const created = JSON.parse(createRes.stdout.trim().split('\n').pop() ?? '{}') as { ok: boolean; data: { humanId: string } };
     expect(created.ok).toBe(true);
 
+    const bannerMatch = createRes.stderr.match(/isolated store at (\S+)/);
+    expect(bannerMatch, `--sandbox banner not found in stderr:\n${createRes.stderr}`).toBeTruthy();
+    const createAdhdRoot = bannerMatch?.[1] ?? '';
+    sandboxDirs.push(createAdhdRoot);
+    expect(
+      createAdhdRoot.startsWith(fakeProdHome),
+      `--sandbox must NEVER isolate into the (fake) production HOME — got ${createAdhdRoot}`
+    ).toBe(false);
+
     const prodAdhdDir = join(fakeProdHome, '.adhd');
     expect(existsSync(prodAdhdDir), `--sandbox wrote into the (fake) production HOME at ${prodAdhdDir} — isolation failed`).toBe(false);
-    // And the write really did land in the sandbox: the sandboxed db file exists.
-    expect(existsSync(body.dbPath), 'the sandboxed db must actually have been created by the create above').toBe(true);
+    // And the write really did land in the sandbox: the sandboxed db file
+    // exists under THIS invocation's own reported root, at the same
+    // `<adhdRoot>/backlog/production/data/backlog.db` layout `sandbox-path`
+    // itself reports (confirmed above: `body.dbPath.startsWith(body.adhdRoot)`
+    // for the identical `backlog`/`production`/`global`-scope resolution).
+    const createDbPath = join(createAdhdRoot, 'backlog', 'production', 'data', 'backlog.db');
+    expect(existsSync(createDbPath), `the sandboxed db must actually have been created by the create above at ${createDbPath}`).toBe(true);
   });
 });
