@@ -55,6 +55,33 @@ function computeRealDependencyNames(packageJsonDir) {
     const depNames = new Set([
       ...Object.keys(pkg.dependencies ?? {}),
       ...Object.keys(pkg.peerDependencies ?? {}),
+      // `optionalDependencies` are REAL runtime dependencies — merely
+      // tolerated-absent. Both consumers of this walk need them:
+      //
+      //  * vite `rollupOptions.external`: an optional dependency must NEVER
+      //    be bundled. Inlining it would make the bundle hard-fail to build
+      //    or load when the package is absent, which is the exact situation
+      //    optionality exists to survive.
+      //  * `@nx/dependency-checks`'s `ignoredDependencies`: an optional
+      //    dependency is loaded through a deliberately NON-LITERAL specifier
+      //    (otherwise TypeScript and rollup would resolve it statically and
+      //    defeat the optionality), so the rule structurally cannot see any
+      //    reference to it and always concludes it is unused.
+      //
+      // That second point was not theoretical. `@adhd/backlog`'s
+      // `optionalDependencies` (`@adhd/sox-vector-store`,
+      // `@adhd/sox-embedding-provider`, loaded via `loadOptional()` in
+      // `src/store/semantic-search.ts`) were reported as two `@nx/
+      // dependency-checks` errors, and `nx run backlog:sync-deps` then
+      // "repaired" that by rewriting the field to `{}` — exiting 0 while
+      // silently deleting the declarations. A consumer installing the
+      // published tarball then never received the packages, so the entire
+      // opt-in semantic-search feature answered `rag_not_configured`
+      // forever, with the full in-repo test suite green (in-repo tests
+      // resolve `@adhd/sox-*` through tsconfig path aliases, so they pass
+      // regardless of what `package.json` declares).
+      // Guarded by `entrypoint/backlog/src/store/rag-optional-deps.spec.ts`.
+      ...Object.keys(pkg.optionalDependencies ?? {}),
     ]);
 
     for (const name of depNames) {
