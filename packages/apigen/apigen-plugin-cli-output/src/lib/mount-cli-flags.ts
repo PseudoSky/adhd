@@ -116,7 +116,24 @@ export function projectMountInputSchema(
   input: unknown
 ): ComposedSchemas[string] {
   const schema = (input ?? {}) as MountInputSchema;
-  const isRootUnion = Array.isArray(schema.oneOf) && !!schema.discriminator;
+  // BUG-APIGEN-CLI-OUTPUT-002: `schema.discriminator` can no longer be relied
+  // on to detect the root-union (≥2-ops-per-kind) case. Since
+  // `apigen-core-client`'s BUG-APIGEN-CLI-002 fix nested every batch
+  // control-plane field one level deeper under a top-level `input` object,
+  // `detectDiscriminator`'s top-level-only scan can never again find a
+  // discriminator property on the oneOf'd branches (see `batch.ts`'s
+  // `branchInputSchema` doc comment) — `buildBatchKindSchema` now ALWAYS
+  // omits `discriminator` from a ≥2-op mount schema, so gating on
+  // `!!schema.discriminator` here made this branch permanently unreachable
+  // for every real multi-op `_batch/<kind>` mount: `branches` fell back to
+  // `[schema]` (the bare `{oneOf: [...]}` wrapper, which has no `properties`
+  // of its own), so `branchProps` resolved zero flags and the CLI rejected
+  // every flag as "Unknown option" — including the mount's own single
+  // `--input` flag. A root-level `oneOf` array is by itself a sufficient and
+  // necessary signal for the union case (`buildBatchKindSchema` only ever
+  // emits `oneOf` for ≥2 branches — a single branch is inlined directly, no
+  // wrapper), so the discriminator's presence is no longer load-bearing here.
+  const isRootUnion = Array.isArray(schema.oneOf) && schema.oneOf.length > 0;
   const branches: MountInputSchema[] = isRootUnion
     ? (schema.oneOf as MountInputSchema[])
     : [schema];
