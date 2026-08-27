@@ -2,7 +2,14 @@
 
 **Version:** v2.0
 **Date:** 2026-08-08
-**Status:** Design basis for EPIC-A. Targets `@adhd/sox-graph-store` 0.6.0 (adapter-based, async) — implementation sequences AFTER EPIC-F.
+**Status:** Design basis for EPIC-A. Written against `@adhd/sox-graph-store` 0.6.0; the
+package now depends on `^0.8.6` (`entrypoint/backlog/package.json`), so version-specific
+claims below need re-verification against 0.8.x before implementation.
+
+**EPIC-F has landed.** §6's "`db` becomes `adapter: StoreAdapter`; all store functions
+become async" is already true in the code (`graph-backlog-store.ts` opens through
+`@adhd/sox-store-adapter`; store functions are async). Any sequencing note in this
+document that treats EPIC-F as a prerequisite is stale.
 
 ---
 
@@ -56,7 +63,10 @@ The type policy registers the five new rels in `DEFAULT_EDGE_RELS` — not `PUBL
 - `family` is **derived** from the humanId (`FEAT-BACKLOG-*` prefix) — never stored, never edged. It is a pure function of the id.
 - `importedFrom` remains a metadata scalar (provenance, not a query dimension).
 - `claimedBy` / `claimedAt` remain metadata-only (lease semantics, unchanged).
-- humanId allocation survives; only its scan scope changes (see BUG-2, §5.2).
+- humanId allocation is an atomic counter, not a scan (§5.2). The dense sequential
+  `FAMILY-NNN` form is retained for readability, but nothing in this model depends on ids
+  being gapless — treat gaplessness as a display convention, never an invariant to
+  enforce with a read-max.
 
 ## 3. Repo identity and fork-key reconciliation
 
@@ -89,9 +99,51 @@ The centerpiece. Two primitives:
 - `supersedeItemNode` runs the dedupe scan **before** minting and returns `{ ok, created, item?, humanId?, duplicateCandidates?, reason? }` — it never mints on suppression.
 - The interface shape is `{ ok, created, humanId?, duplicateCandidates?, reason? }` everywhere a create variant can suppress.
 
-### 5.2 BUG-2 — humanId re-mint (HIGH)
+### 5.2 BUG-2 — humanId re-mint (HIGH) — **SUPERSEDED, and the original prescription was wrong**
 
-`computeNextHumanId` must derive the next id from **full bi-temporal history** — live nodes and `t_invalid` rows — via `buildNodeFilterClause(liveOnly=false)` over `(canonicalRepo, family)`, taking the max trailing `-NNN`. Invalidate/supersede of the max-id item can never cause its id to be re-minted.
+This section previously required `computeNextHumanId` to derive the next id from **full
+bi-temporal history** — live nodes and `t_invalid` rows — via
+`buildNodeFilterClause(liveOnly=false)` over `(canonicalRepo, family)`, taking the max
+trailing `-NNN`.
+
+That prescription shipped (`ids.ts:169` passes `liveOnly=false`) and it did **not** fix
+the class of bug it belongs to. Widening the scan cures re-mint-after-invalidation while
+leaving the actual defect untouched: **allocation was still a read-max-then-write**, so
+every `create` in the system read a globally shared maximum and then wrote it back. Two
+writers on separate connections read the same max from their own WAL snapshots and both
+mint it (BUG-039). A wider scan reads a wider stale value; it is still stale.
+
+That single read-modify-write is what coupled every writer to every other writer, and it
+is what pulled in `.immediate()` escalation, `withImmediateRetry`, and the partial unique
+index over live rows — an entire concurrency-control apparatus downstream of one
+allocation decision.
+
+**Current design (commit `f2c70452`):** allocation is an atomic counter, not a scan.
+
+```sql
+UPDATE backlog_humanid_counter SET n = n + 1 WHERE namespace = ? AND family = ? RETURNING n
+```
+
+The engine evaluates `n + 1` against the row it writes, under the write lock, so no
+snapshot is involved and there is nothing to read stale. The counter is monotonic, which
+makes the tombstone-visibility question this section was originally about **structurally
+impossible** rather than merely mitigated — a monotonic counter cannot re-mint an id
+whether or not it can see invalidated rows. The bi-temporal scan survives only as
+`scanMaxOrdinal`, a one-time cold-path seed for a family that has no counter row yet
+(the production-upgrade path: existing items, no counter). `reconcileCounterForOverride`
+moves the counter forward (`MAX(n, excluded.n)`) when a caller supplies an explicit
+`humanId`, so overrides can never collide with a later auto-allocation.
+
+**What this section does NOT resolve.** The counter seeds from the same graph-only scan,
+so ids that exist only in markdown/CHANGELOG history and were never imported into the
+graph remain invisible to it — see `BL-476` and
+`BUG-BACKLOG-COMPUTENEXTHUMANID-GRAPH-ONLY-SCAN-001`, both still open.
+
+**The premise that was never examined.** §2.3's "humanId allocation survives; only its
+scan scope changes" is the sentence that kept the defect. The dense sequential
+`FAMILY-NNN` id is *why* a shared maximum had to be read at all; nothing in the model
+requires ids to be gapless. Any future change here should question that first, not widen
+a scan again.
 
 ## 6. Interface changes
 
@@ -132,7 +184,7 @@ Because the migration changes item content (canonical repo string in the marker)
 1. **Motivating query**: 2 repos × 2 authors; `{ repo: X, author: Z }` returns exactly the intersecting subset.
 2. **Fork-key reconciliation**: items filed under `adhd` and `PseudoSky/adhd` reconcile to one repo node; querying via either key returns the full set.
 3. **BUG-1**: split/supersede with a duplicate returns `{ created: false, reason }` — never a silent drop. Negative control: strip the guard, the created-flag loss makes the test go red.
-4. **BUG-2**: superseding the max-id item never re-mints it. Negative control: revert to live-only scan, the re-mint reproduces.
+4. **BUG-2**: allocation is atomic. Two genuinely separate OS processes each creating N items against one shared store produce exactly 2N distinct ids, zero rejections (`humanid-counter-concurrency.spec.ts`); and a populated store with no counter row seeds at `max + 1`, so existing items survive the upgrade without a migration. Negative controls: restore the read-max scan and the concurrency assertion goes red; reset the seed to 1 and the upgrade assertion goes red. Superseding the max-id item cannot re-mint it — the counter is monotonic, so this is structural, not a scan-scope property.
 5. **Migration parity**: legacy-shape store → migrate → zero drift; reopen verifies.
 6. **`aggregateBy('reporter')`** matches a manual count.
 7. **Cross-repo**: repo A item `DEPENDS_ON` repo B item → the project-level "which projects depend on repo B" query returns project of A.
