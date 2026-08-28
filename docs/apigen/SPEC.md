@@ -204,6 +204,19 @@ source → extractor → DESCRIPTOR (JSON-Schema IR, produced ONCE)
   boundary is the host's typed dispatch (for static hosts, the codegen-woven deserialize→typed-params
   step, §2). Hosts MUST NOT treat "validated" as "safe to transmute."
 
+### 6.1 `ts-types` — typed TS client codegen *(new output target)*
+
+`apigen generate --source ./api.ts --type ts-types --out-dir ./client` emits one `.ts` type-declaration
+file per exported function (named `interface`/`type`, never inline anonymous `object`), derived from the
+function's JSON-Schema IR (§4). Named types are package-qualified so output from several packages
+collides-free in one consumer. Discriminated unions (`oneOf` + `discriminator`, the `_batch` shape) emit a
+named union with per-branch interfaces retaining the discriminant. Round-1 scope: primitives, objects with
+`required`/optional, arrays, enums, `$ref`/`definitions`, `const`, and discriminated `oneOf`; constructs
+outside that subset (`allOf`/`anyOf`, untagged `oneOf`, `patternProperties`, `additionalProperties`
+schemas) fail with a clear error rather than degrading. The `data` envelope is dissolved (§4); `format`
+annotations are emitted as their base type (decimal/int64 stay `string`) in round 1. Package:
+`@adhd/apigen-plugin-ts-types`.
+
 ---
 
 ## 7. Plugins — terminology, interface, examples
