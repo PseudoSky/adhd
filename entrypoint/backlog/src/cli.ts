@@ -387,9 +387,43 @@ export function stripSandboxFlag(argv: readonly string[]): { argv: string[]; san
 export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts = {}): Promise<void> {
   const { argv: userArgvEarly, sandbox } = stripSandboxFlag(argvIn ?? process.argv.slice(2));
   const opts: RunBacklogCliOpts = { ...optsIn };
+  // BUG-BACKLOG-SANDBOX-ADHDROOT-UNWIRED-001: the very message printed two
+  // lines below has always told the caller to "pass ADHD_ROOT=<path> to
+  // reuse it" — but nothing in this codebase ever read `process.env['ADHD_ROOT']`
+  // (confirmed via `rg -n "ADHD_ROOT" --type ts -g '!*.spec.ts'`: every hit
+  // was this file's own comments/console.error string, never a read). A
+  // caller following that printed instruction got silently ignored and a
+  // BRAND NEW random sandbox minted instead — the exact "looks like
+  // isolation but isn't" trap this feature exists to avoid, just inverted
+  // (a caller who WANTS to reuse a specific sandbox can't). Reading it here,
+  // before the mint-a-fresh-one branch below, makes the printed promise real:
+  // an explicit `optsIn.adhdRoot` (a programmatic caller) still wins outright.
+  if (opts.adhdRoot === undefined && process.env['ADHD_ROOT']) {
+    opts.adhdRoot = process.env['ADHD_ROOT'];
+  }
   if (sandbox && opts.adhdRoot === undefined) {
     opts.adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-sandbox-'));
     console.error(`[backlog] --sandbox: isolated store at ${opts.adhdRoot} (not auto-deleted — pass ADHD_ROOT=${opts.adhdRoot} to reuse it, or remove it yourself when done)`);
+  }
+  // BUG-BACKLOG-SANDBOX-IRCACHE-LEAK-001: `--sandbox`'s promise is "diverts
+  // the store away from the (fake) production HOME entirely, and never
+  // creates anything under it" (`cli.spec.ts`) — but `server.ts`'s
+  // `irCacheFile()` calls `resolveIrCacheFile()` with no arguments, so its
+  // module-level lazy singleton (`getExtractInvoke`, built on first
+  // extraction) always resolves the REAL, HOME-anchored default
+  // (`~/.adhd/backlog/production/cache/apigen/ir-cache/backlog-client.ir.json`)
+  // regardless of `opts.adhdRoot`. `server.ts`'s own doc comment on that
+  // singleton documents exactly this escape hatch — "Built LAZILY on first
+  // use so callers/tests can point `APIGEN_IR_CACHE_FILE`… at test values
+  // before the first extraction" — so this redirects it into the same
+  // sandbox tmpdir rather than inventing a second isolation mechanism.
+  // Guarded on `adhdRoot` (not `sandbox`) so an explicit
+  // `runBacklogCli(argv, {adhdRoot})` caller (tests) gets the same
+  // isolation `--sandbox` gets on the CLI. Never overrides an
+  // already-set `APIGEN_IR_CACHE_FILE` — an explicit caller override (e.g.
+  // an integration test pointing at its own throwaway file) always wins.
+  if (opts.adhdRoot !== undefined && process.env['APIGEN_IR_CACHE_FILE'] === undefined) {
+    process.env['APIGEN_IR_CACHE_FILE'] = join(opts.adhdRoot, 'ir-cache', 'backlog-client.ir.json');
   }
   // `sandbox-path` (store-free diagnostic — DEBT-BACKLOG-001's narrower real
   // instance / P5-cli-serve-transport's sandbox finding) reports the
