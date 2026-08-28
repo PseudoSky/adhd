@@ -482,6 +482,9 @@ importers:
       '@adhd/apigen-plugin-py-grpc':
         specifier: ^0.2.4
         version: link:../../packages/apigen/apigen-plugin-py-grpc
+      '@adhd/apigen-plugin-ts-types':
+        specifier: ^0.0.1
+        version: link:../../packages/apigen/apigen-plugin-ts-types
       '@adhd/apigen-python-env':
         specifier: ^0.2.4
         version: link:../../packages/apigen/python-env
@@ -519,6 +522,9 @@ importers:
       decimal.js:
         specifier: ^10.4.3
         version: 10.6.0
+      esbuild:
+        specifier: ^0.25.12
+        version: 0.25.12
 
   entrypoint/backlog:
     dependencies:
@@ -1308,6 +1314,19 @@ importers:
       '@adhd/apigen-python-env':
         specifier: ^0.2.4
         version: link:../python-env
+
+  packages/apigen/apigen-plugin-ts-types:
+    dependencies:
+      '@adhd/apigen-core-client':
+        specifier: ^0.2.2
+        version: link:../apigen-core-client
+      '@adhd/apigen-engine-naming':
+        specifier: ^0.2.1
+        version: link:../apigen-engine-naming
+    devDependencies:
+      esbuild:
+        specifier: ^0.25.12
+        version: 0.25.12
 
   packages/apigen/codegen/openapi:
     dependencies:

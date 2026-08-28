@@ -17,6 +17,7 @@
     "pino-http": "11.0.0",
     "@adhd/apigen-plugin-mcp": "^0.2.3",
     "@adhd/apigen-plugin-jsonschema": "^0.2.0",
+    "@adhd/apigen-plugin-ts-types": "^0.0.1",
     "@adhd/apigen-plugin-api-fastify": "^0.2.3",
     "@adhd/apigen-plugin-api-express": "^0.2.3",
     "@adhd/apigen-plugin-cli-output": "^0.2.3",
@@ -35,7 +36,8 @@
     "@adhd/apigen-plugin-ir-cache": "^0.1.0"
   },
   "devDependencies": {
-    "decimal.js": "^10.4.3"
+    "decimal.js": "^10.4.3",
+    "esbuild": "^0.25.12"
   },
   "peerDependencies": {},
   "peerDependenciesMeta": {
