@@ -388,13 +388,15 @@ describe('FEAT-009/FEAT-BACKLOG-010/WO-3 over the REAL built HTTP server (spawne
     expect(created).toHaveLength(3);
 
     // Close ONE item through the real transition gate over HTTP (update with
-    // status + inline citations satisfies the §5a.2 evidence rule).
+    // status + statusEvidence.citations satisfies the §5a.2 evidence rule —
+    // DEBT-010: transition evidence is bundled under `statusEvidence`, not a
+    // standalone top-level `citations` field).
     const closed = await post('/backlog/update', {
       humanId: created[1],
       repo: HTTP_REPO,
       by: 'stats-surface-http:2',
       status: 'RESOLVED',
-      citations: [{ file: 'c.ts' }],
+      statusEvidence: { citations: [{ file: 'c.ts' }] },
     });
     expect((closed.json as { ok: boolean }).ok).toBe(true);
 
