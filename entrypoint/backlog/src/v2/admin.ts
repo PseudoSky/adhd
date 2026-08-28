@@ -86,7 +86,7 @@ import { findHumanIdInAnyRepo, findItemNode, queryItemNodes, topoOrder } from '.
 import { getItemNode, softDeleteItemNode } from '../store/crud.js';
 import { toBacklogItem, type BacklogNodeMeta } from '../store/mapping.js';
 import { listRepositoryNodes, lookupRepository } from '../store/repo-nodes.js';
-import { isSemanticSearchConfigured, requireSemanticBackend, type SemanticHealth } from '../store/semantic-search.js';
+import { isSemanticSearchConfigured, requireReadableSemanticBackend, requireSemanticBackend, type SemanticHealth } from '../store/semantic-search.js';
 import {
   clusterIntoPlans as clusterIntoPlansOp,
   getEmbeddingHealth as getEmbeddingHealthOp,
@@ -297,6 +297,14 @@ const MIGRATION_PHASES = [
  * (AC-12's contract), never a fabricated empty result — checked via
  * `isSemanticSearchConfigured()` in `backlogAdmin` below, so once a backend
  * IS configured these dispatch to `store/rag-ops.ts`'s real handlers.
+ *
+ * The three NEIGHBOUR-RANKING actions (`list_near_duplicates`,
+ * `run_dedup_sweep`, `cluster_into_plans`) additionally require a NON-EMPTY
+ * vector space (`requireReadableSemanticBackend`, BUG-045) — they have
+ * nothing to rank against otherwise. `embedding_backfill` and
+ * `embedding_health` deliberately do NOT: backfill is the operation that
+ * ends the empty state, so gating it on a populated space would make an
+ * empty store permanently unfillable.
  */
 const EPIC_G_ACTIONS: readonly IBacklogAdminAction[] = [
   'run_dedup_sweep',
@@ -1573,7 +1581,7 @@ export async function adminListNearDuplicates(
     assertKnownParams('list_near_duplicates', params, LIST_NEAR_DUPLICATES_PARAM_KEYS);
     const repo = readString(params, 'repo');
     const threshold = readNumber(params, 'threshold', 0, 1);
-    const backend = requireSemanticBackend('backlog_admin(list_near_duplicates)');
+    const backend = requireReadableSemanticBackend('backlog_admin(list_near_duplicates)');
     const report = await listNearDuplicatesOp(ctx.store, backend, {
       ...(repo !== undefined ? { repo } : {}),
       ...(threshold !== undefined ? { threshold } : {}),
@@ -1599,7 +1607,7 @@ export async function adminRunDedupSweep(
     assertAttribution(by);
     const repo = readString(params, 'repo');
     const threshold = readNumber(params, 'threshold', 0, 1);
-    const backend = requireSemanticBackend('backlog_admin(run_dedup_sweep)');
+    const backend = requireReadableSemanticBackend('backlog_admin(run_dedup_sweep)');
     const report = await runDedupSweepOp(ctx.store, backend, {
       ...(repo !== undefined ? { repo } : {}),
       ...(threshold !== undefined ? { threshold } : {}),
@@ -1627,7 +1635,7 @@ export async function adminClusterIntoPlans(
     const repo = readString(params, 'repo');
     const epsilon = readNumber(params, 'epsilon', 0, 2);
     const minPoints = readInteger(params, 'minPoints', 2, 100);
-    const backend = requireSemanticBackend('backlog_admin(cluster_into_plans)');
+    const backend = requireReadableSemanticBackend('backlog_admin(cluster_into_plans)');
     const report = await clusterIntoPlansOp(ctx.store, backend, {
       ...(repo !== undefined ? { repo } : {}),
       ...(epsilon !== undefined ? { epsilon } : {}),
@@ -1663,7 +1671,7 @@ export async function adminPromoteClusterToPlan(
     // backend — a candidate's members are already-resolved plain data. This
     // keeps the six actions' "unconfigured -> rag_not_configured" contract
     // uniform rather than five actions following it and one not.
-    requireSemanticBackend('backlog_admin(promote_cluster_to_plan)');
+    requireReadableSemanticBackend('backlog_admin(promote_cluster_to_plan)');
     const report = await promoteClusterToPlanOp(ctx.store, candidateId, planSlug);
     return { data: report };
   });
