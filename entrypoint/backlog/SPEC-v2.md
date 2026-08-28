@@ -6,8 +6,15 @@ npm packages.
 
 ## 0. Context & non-negotiable principles
 
-Full rebuild of the adhd-side backlog application layer on the sox library
-tier. Library versions (verified on npm): `@adhd/sox-graph-store@0.9.0`,
+**This is a FULL HARD REPLACEMENT, not a side-by-side rollout.** The entire v1
+application layer is WIPED and the v2 layer is architected fresh against the sox
+library tier — there is no coexistence, no dual-write bridge, no gradual
+deprecation window. The old store DATA is preserved by the one-time ETL (§8); the
+old CODE is deleted. This means: the library dep bump lands WITH the fresh v2
+build (§10) — there is no "must not break v1" constraint, because v1 is going
+away.
+
+Library versions (verified on npm): `@adhd/sox-graph-store@0.9.0`,
 `@adhd/sox-store-adapter@0.8.0`, `@adhd/sox-vector-store@0.6.0`,
 `@adhd/sox-hybrid-search@0.4.2`, `@adhd/sox-semantic@0.1.2`,
 `@adhd/sox-memory-core@0.9.2`.
@@ -208,13 +215,16 @@ CLI/MCP/HTTP keyed by `uid`; `statusEvidence` (DEBT-010) transition shape;
 web UI list/detail/stats over catalogs + edges; markdown projection (title
 headers, `[target sha:…]` citations).
 
-## 7. Retirement (legacy debt eliminated)
+## 7. Wipe (full hard replacement — the v1 app layer is deleted)
 
-Delete on cutover: `humanId` machinery, `idOverride`, `importedFrom`,
-repo-string identity, the repo-migration module, migration-phase machinery,
-`repoWarning`, the markdown `import` action, `firstTerminalTransitionAt`
-reconstruction, hardcoded terminal/citation/reason knobs (now `status.terminal`
-+ `project_policy` data).
+The entire v1 application layer is deleted, not retired: `humanId` machinery,
+`idOverride`, `importedFrom`, repo-string identity, the repo-migration module,
+migration-phase machinery, `repoWarning`, the markdown `import` action,
+`firstTerminalTransitionAt` reconstruction, hardcoded
+terminal/citation/reason knobs, and the six-verb v1 surface it all served. There
+is no coexistence shim and no legacy-id fallback: the v2 layer is the only
+surface, and old id-based references stop resolving by design. The store DATA is
+migrated once by the ETL (§8); the store FILE is never mutated in place.
 
 ## 8. Migration (ETL)
 
@@ -242,16 +252,16 @@ now that `graph-store@0.9.0` is published.
 
 ## 10. Dependencies & sequencing
 
-1. Library tier — published (FEAT-010..024, DEBT-011, BUG-040). **The adhd
-   consumer must bump its deps:** `entrypoint/backlog/package.json` currently
-   pins `graph-store ^0.8.6`/`store-adapter ^0.7.0`/`vector-store ^0.5.0` and
-   lacks `hybrid-search`/`semantic`/`memory-core`. Bump to graph-store 0.9.0,
-   store-adapter 0.8.0, vector-store 0.6.0, and ADD hybrid-search 0.4.2,
-   semantic 0.1.2, embedding-provider 0.4.1 — before the write layer compiles.
-2. BUG-040 ETL re-run.
-3. `v2-write.ts` → `v2-query.ts` → consumers → retirement (bottom-up).
-4. Gate: BUG-039 write-safety proof against the UUID write path (confirm, not
-   assume).
+1. Library tier — published (FEAT-010..024, DEBT-011, BUG-040).
+2. **Bump deps + build v2 fresh, in ONE change** (full replacement — no v1
+   build to protect): `entrypoint/backlog/package.json` bumps to graph-store
+   0.9.0 / store-adapter 0.8.0 / vector-store 0.6.0 and ADDs hybrid-search
+   0.4.2 / semantic 0.1.2 / embedding-provider 0.4.1, alongside the new
+   `v2-write.ts` → `v2-query.ts` → consumers. The old v1 code is wiped in the
+   same change; there is no intermediate state where both compile.
+3. BUG-040 ETL re-run (restore 1339 transitions + 7 issues into the fresh v2 store).
+4. Gate before cutover: BUG-039 write-safety proof against the UUID write path
+   (confirm, not assume).
 
 ## 11. Out of scope
 
