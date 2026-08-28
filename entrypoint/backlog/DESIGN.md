@@ -59,9 +59,12 @@ entrypoint, not a separate `packages/` library.
 | Plan | `'generic'` | `repo` slug | `['backlog-plan']` | `` `${repo}::plan:${planSlug}` `` |
 | Assignee identity | `'entity'` | *(none — identities are cross-repo)* | `['backlog-assignee']` | the raw identity string (e.g. `implementer:abc123`) |
 
-`kind:'generic'` is used for both items and plans (the closed `NodeMeta.kind` enum has
-no `'backlog-item'`/`'plan'` variant — the contract summary's guidance: *"use
-`kind:'generic'` + `'backlog-item'` in tags; carry structured fields in `metadata`"*).
+`kind:'generic'` is used for both items and plans (the store's open-schema
+vocabulary — node kinds are plain TEXT with an injectable TypePolicy; this
+repo's policy accepts `'generic'` for items/plans and `'entity'` for
+assignees, carrying the discriminator in tags per the contract summary's
+guidance: *"use `kind:'generic'` + `'backlog-item'` in tags; carry structured
+fields in `metadata`"*).
 Assignees use `kind:'entity'` because they are exactly the "named, cross-cutting thing
 other nodes point at" concept `entity` already models in the sox/memory ecosystem.
 

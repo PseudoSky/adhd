@@ -12,11 +12,13 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Worker } from 'node:worker_threads';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import { openTmpStore, type TmpStore } from '../test/helpers/tmp-store.js';
 import { createItemNode } from './crud.js';
 import { listItems } from './query.js';
+import { openGraphBacklogStore, closeGraphBacklogStoreSafe } from './graph-backlog-store.js';
 
 // The store substrate is TURSO — `createStoreAdapter({ dbPath })` defaults to
 // it, and every worker fixture below opens REAL turso store-adapter
@@ -29,6 +31,7 @@ import { listItems } from './query.js';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', '..', 'dist', 'index.js');
 const WORKER_SCRIPT = join(HERE, '..', 'test', 'fixtures', 'scale-worker.js');
+const CROSS_PROCESS_WRITER = join(HERE, '..', 'test', 'fixtures', 'cross-process-writer.cjs');
 const REPO = 'PseudoSky/scale-test';
 const N = 20;
 
@@ -338,4 +341,111 @@ describe(`concurrency-scale — ${N} real worker_threads (MIGRATION.md §3.3)`, 
     const claimedCount = outcomes.filter((o) => o.result?.status === 'claimed').length;
     expect(claimedCount).toBe(1);
   }, 60000);
+});
+
+// ---------------------------------------------------------------------------
+// BUG-039 — cross-process writers harness (SKIPPED by default; RUN EXPLICITLY)
+//
+// The literal "two servers, one store" condition the singleton serve lock
+// forbids. The loss is REAL but timing-dependent: manual runs observed
+// 440/500, 446/500 (same family) and 160/250, 246/250 (distinct families)
+// with writers reporting ok:true for every create — yet clean runs occur, so
+// these are NOT safe as gate assertions (flaky in both directions). They are
+// the fix-verification harness for BUG-039: run them explicitly when the
+// allocator/write-path fix lands (remove `.skip`), and they must go green.
+//
+//   npx vitest run src/store/concurrency-scale.spec.ts -t "BUG-039"
+// ---------------------------------------------------------------------------
+
+const CROSS_REPO = 'repro';
+const CROSS_N = 250;
+
+/** Spawn a writer, wait for its ready-<tag> barrier file, release GO once all
+ *  are parked, and resolve when the writer exits 0. */
+function runCrossProcessWriter(dbPath: string, root: string, tag: string, family: string, n: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [CROSS_PROCESS_WRITER, dbPath, tag, String(n), family], {
+      env: { ...process.env, REPRO_DIST: DIST_INDEX, REPRO_ROOT: root },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let out = '';
+    child.stdout.on('data', (d) => (out += String(d)));
+    child.stderr.on('data', (d) => (out += String(d)));
+    child.on('error', reject);
+    child.on('exit', (code) =>
+      code === 0 ? resolve() : reject(new Error(`cross-process writer ${tag} exited ${code}: ${out.slice(-400)}`)),
+    );
+  });
+}
+
+/** Run two writers concurrently through the file barrier (both park on
+ *  ready-<tag>, GO is touched once BOTH are parked, so allocation starts from
+ *  the identical committed state). */
+async function runBarrieredPair(dbPath: string, root: string, tagA: string, famA: string, tagB: string, famB: string, n: number): Promise<void> {
+  const fs = await import('node:fs');
+  const readyA = join(root, `ready-${tagA}`);
+  const readyB = join(root, `ready-${tagB}`);
+  const go = join(root, 'GO');
+  for (const f of [readyA, readyB, go]) fs.rmSync(f, { force: true });
+
+  const pair = Promise.all([
+    runCrossProcessWriter(dbPath, root, tagA, famA, n),
+    runCrossProcessWriter(dbPath, root, tagB, famB, n),
+  ]);
+
+  // Bounded wait for both to park at the barrier (not a sleep — an
+  // event-driven poll with a deadline, matching the thread gate's discipline).
+  const deadline = Date.now() + 30000;
+  while (!(fs.existsSync(readyA) && fs.existsSync(readyB))) {
+    if (Date.now() > deadline) throw new Error('writers never reached the barrier');
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  fs.writeFileSync(go, 'go');
+  await pair;
+}
+
+/** Count stored items through a FRESH reopen — never the pre-writers handle
+ *  (tmp.store's snapshot can predate the children's commits; the repo's own
+ *  contention test reopens fresh for the same reason). */
+async function storedCount(dbPath: string, repo: string, family: string): Promise<number> {
+  const store = await openGraphBacklogStore(dbPath, 5000);
+  try {
+    return (await listItems(store, { repo, family })).length;
+  } finally {
+    await closeGraphBacklogStoreSafe(store);
+  }
+}
+
+describe.skip('BUG-039 cross-process harness — same store, NO lock (RUN EXPLICITLY: npx vitest run src/store/concurrency-scale.spec.ts -t "BUG-039")', () => {
+  let tmp: TmpStore;
+
+  beforeEach(async () => {
+    tmp = await openTmpStore('cross-process');
+  });
+
+  afterEach(() => {
+    tmp.cleanup();
+  });
+
+  it('CONTROL: two PROCESSES, DISTINCT families, persist every write — the cross-process write path loses writes silently (~0-36%; observed 160/250 and 246/250) while both writers report ok:true', async () => {
+    // Escalated finding (fresh-reopen verification, repeated runs): the
+    // distinct-family control is NOT clean. Two processes with DISJOINT id
+    // sequences still lose writes silently while both report ok:true — so
+    // the defect is in the cross-process write/transaction path, not just
+    // the shared id allocator. MUST be green after the BUG-039 fix.
+    await runBarrieredPair(tmp.dbPath, tmp.dir, 'A', 'BUG-REPRO-A', 'B', 'BUG-REPRO-B', CROSS_N);
+    const a = await storedCount(tmp.dbPath, CROSS_REPO, 'BUG-REPRO-A');
+    const b = await storedCount(tmp.dbPath, CROSS_REPO, 'BUG-REPRO-B');
+    expect(a).toBe(CROSS_N);
+    expect(b).toBe(CROSS_N);
+  }, 120000);
+
+  it('same-family allocation across two PROCESSES must not lose writes silently — writers get ok:true for every create, yet some never persist (repro: 440-446 of 500)', async () => {
+    // The allocator's cross-process WAL-snapshot gap: both writers report
+    // ok:true for all creates and a fraction never persist. MUST be green
+    // after the BUG-039 fix (DB-level uniqueness on (namespace, humanId) or
+    // an atomic per-family counter).
+    await runBarrieredPair(tmp.dbPath, tmp.dir, 'A', 'BUG-REPRO', 'B', 'BUG-REPRO', CROSS_N);
+    expect(await storedCount(tmp.dbPath, CROSS_REPO, 'BUG-REPRO')).toBe(2 * CROSS_N);
+  }, 120000);
 });
