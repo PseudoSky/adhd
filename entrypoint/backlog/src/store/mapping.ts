@@ -1,8 +1,9 @@
 /**
  * mapping.ts — BacklogItem <-> graph node/edge (DESIGN.md §2).
  *
- * `kind: 'generic'` is used for backlog items (the closed `NodeMeta.kind`
- * enum has no `'backlog-item'` variant — DESIGN.md §2.1). `namespace` is the
+ * `kind: 'generic'` is used for backlog items (the store's open-schema
+ * vocabulary — node kinds are plain TEXT with an injectable TypePolicy;
+ * this repo's policy accepts `'generic'`, see DESIGN.md §2.1). `namespace` is the
  * repo slug (hard graph partition — SPEC.md §3). `metadata` carries every
  * other `BacklogItem` field verbatim as JSON (DESIGN.md §2.2).
  *
