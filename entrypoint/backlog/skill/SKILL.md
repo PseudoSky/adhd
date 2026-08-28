@@ -18,6 +18,62 @@ the global `CLAUDE.md`/`AGENTS.md` carry just one pointer line to this file.
 > library exports. A v1 command name now exits `4` (unknown command). Every
 > example in this file was verified against the real built binary.
 
+## Registry first — resolve "where does this live?" before searching
+
+The registry (`project` / `component` / `location` nodes) is the fastest way to
+answer **"which project/component owns this tool, file, or URL?"** — use it
+BEFORE `rg`/`gx`/websearch. It resolves in ONE call and returns the project's
+filesystem `path` + git `repoUrl` + the linked locations, so an agent learns both
+*where to fix something* and *which project to log the bug against* without
+searching.
+
+**Resolve a tool, file, or URL** (the go-to — try this first):
+
+```
+adhd-backlog query --input '{"view":"lookup","lookup":"memory_ping"}'
+# → data: { project:{name:"sox-ecosystem",path:"/Users/nix/dev/ai/sox-ecosystem",
+#            repoUrl:"git@github.com:…/sox-ecosystem.git"},
+#           component:{name:"memory-server",path:"extensions/bundles/sox-memory-bundle/members/memory-server"},
+#           location:{locType:"tool",value:"memory_ping"} }
+```
+
+`lookup` accepts a **tool** name (`memory_ping`, `backlog_query`), a **file**
+path (`extensions/.../index.ts`, absolute or repo-relative), or a **URL** — and
+classifies automatically. It returns a `hint` when it can only resolve to a
+project or a path prefix; it never silently returns nothing.
+
+**List known nodes:**
+
+```
+adhd-backlog query --input '{"view":"projects"}'
+adhd-backlog query --input '{"view":"components","filter":{"project":"adhd"}}'
+adhd-backlog query --input '{"view":"locations","filter":{"component":"memory-server"}}'
+```
+
+**Get full details on a project** (path + repo URL + linked locations + components):
+
+```
+adhd-backlog get --input '{"registry":"project","name":"adhd"}'
+adhd-backlog get --input '{"registry":"component","name":"memory-server","project":"sox-ecosystem"}'
+```
+
+**Register or update a project / component / location** (create-or-update by key,
+never a duplicate row — a worktree dir under a project resolves to the SAME project):
+
+```
+adhd-backlog create --input '{"registry":{"node":"project","name":"sox-ecosystem","path":"/Users/nix/dev/ai/sox-ecosystem","repoUrl":"git@github.com:…/sox-ecosystem.git"}}'
+adhd-backlog create --input '{"registry":{"node":"component","name":"memory-server","project":"sox-ecosystem","path":"extensions/bundles/sox-memory-bundle/members/memory-server"}}'
+adhd-backlog create --input '{"registry":{"node":"location","locType":"tool","value":"memory_ping","component":"memory-server"}}'
+```
+
+**When to use it:** hitting a failure in tool X → `lookup` X to get the owning
+project (where the code lives) AND the correct project to log the bug against, in
+one step. "Which repo is the memory server in?" → `lookup memory_ping`. "Where is
+component Y on disk?" → `get --input '{"registry":"component","name":"Y",…}'`.
+If you find yourself searching for where code lives, the registry (or a
+one-line `create --input '{"registry":{…}}'` to add the missing entry) is the
+answer, not a search.
+
 ## 1. Check migration status FIRST, every time
 
 Never trust a hardcoded phase number in this document — it goes stale the

@@ -94,9 +94,19 @@ project_field_requirement (project → required field)
 
 **Nodes** (`writeNode`, `kind` + `name` + `metadata`):
 
-- `project` — one canonical row; `name` unique.
-- `component` — `name` unique within project; `meta.metadata.projectUid`.
-- `location` — `type` (`path`|`remote_url`|`url`|`filesystem_path`) + `value`.
+- `project` — one canonical row; `name` (slug) unique. Carries the **navigation
+  spine**: `meta.path` (absolute local root, e.g. `/Users/nix/dev/node/adhd`),
+  `meta.repoUrl` (canonical git remote, e.g. `git@github.com:PseudoSky/adhd.git`),
+  `meta.monorepo` (bool hint), optional `meta.description`. A worktree directory
+  under the project resolves to the SAME project row — never a phantom row.
+- `component` — `name` unique within project; `meta.metadata.projectUid`. The
+  logical sub-unit (package/module/service/directory) with optional
+  `meta.path` (repo-relative) + `meta.description`.
+- `location` — a concrete reference that **resolves** to a component/project:
+  `meta.locType` ∈ `path` | `url` | `tool` + `meta.value` (the reference string).
+  `path` = filesystem path (absolute or repo-relative); `url` = full URL;
+  `tool` = MCP tool / CLI command / symbol name. Unique per
+  `(component, locType, value)` via the uniqueness policy.
 - `issue` — `title` (name), `body` (content); `kind`/`status`/`priority` as
   catalog refs (resolved via `findOrCreateNode`); `closed_at` stamped by the
   terminal transition.
@@ -142,6 +152,67 @@ drop. `supersede` is the ONLY content-mutation path — `touch` cannot change
 `content` (compile-time pinned). In-place restore (un-invalidate) is not yet a
 library primitive → tracked as a library ticket, never app-layer raw SQL.
 
+## 3a. Registry & resolution (the agent navigation index)
+
+`project` / `component` / `location` are not just write-layer resolution targets —
+they are a first-class, queryable **registry** that answers "where does this live?"
+without an agent touching the filesystem or a search index. This is the agent's
+**go-to before searching** — it must be faster and clearer than `rg`/`gx` for
+"which project/component owns this tool/file/url?"
+
+**Node payloads (the navigation spine):**
+
+- `project` = `{ name, path, repoUrl, monorepo?, description? }` — `path` is the
+  absolute local root, `repoUrl` the canonical git remote. A worktree dir under
+  the project resolves to the SAME project.
+- `component` = `{ name, projectUid, path?, description? }` — the sub-unit
+  (package/module/service/dir); `path` is repo-relative.
+- `location` = `{ locType: path|url|tool, value, componentUid }` — the concrete
+  reference. `path` (fs path), `url` (full URL), `tool` (MCP tool / CLI command /
+  symbol). Unique per (component, locType, value).
+
+**Edges:** `owns_project` (project→component), `has_location`
+(component→location). A location belongs to exactly one component; a component to
+exactly one project — the chain `location → component → project` is unambiguous.
+
+**Resolution (`lookup`):** `lookup(q)` normalizes `q` into one `locType` and walks
+the chain:
+
+1. **Classify:** `tool` if `q` matches a known MCP/CLI/symbol name (no `/`, no
+   scheme); `url` if `q` parses as a URL; else `path` (normalize to absolute via
+   the project `path` when repo-relative).
+2. **Match** a `location` node by `(locType, normalized value)` — exact first,
+   then suffix/prefix fallback for repo-relative paths (`extensions/.../index.ts`
+   matches the `location` whose value is that suffix of an absolute path).
+3. **Walk** `has_location` → component → `owns_project` → project.
+4. **Return** `{ project: {uid,name,path,repoUrl}, component: {uid,name,path?},
+   location: {uid,locType,value} }` — plus a `hint` when only a project-level (or
+   only a path-prefix) match exists. Never a silent null.
+
+Example: an agent sees `memory_ping` fail in the adhd repo → `lookup("memory_ping")`
+resolves to `project: sox-ecosystem` (`/Users/nix/dev/ai/sox-ecosystem`),
+`component: memory-server`
+(`extensions/bundles/sox-memory-bundle/members/memory-server`), `location: tool
+memory_ping` — so the agent knows exactly where to fix it AND exactly which
+project to log the bug against, in one call, with no search.
+
+**Surface (the verbs, one convention):**
+
+- `query --input '{"view":"projects"}'` / `"components"` / `"locations"` — list
+  registry nodes (`filter` narrows: `filter.project`, `filter.component`).
+- `query --input '{"view":"lookup","lookup":"<tool|file|url>"}'` — resolve.
+- `get --input '{"registry":"project","name":"adhd"}'` — expanded detail:
+  - project → `{ name, path, repoUrl, components:[{name,path}], locations:[{locType,value}] }`
+  - component → `{ name, path, project:{name,path,repoUrl}, locations[] }`
+  - location → `{ locType, value, component:{name,path}, project:{name,path,repoUrl} }`
+- CRUD via the write layer (§4): `upsertProject` / `upsertComponent` /
+  `upsertLocation` / `rmLocation` — mounted as registry create/update entries
+  (project upsert by `name`, component upsert by `(project,name)`, location upsert
+  by `(component, locType, value)`), never a hand-rolled scan.
+
+**Non-negotiable:** the registry is data, seeded from real repos, and resolvable in
+ONE call. If an agent has to search, the registry has failed its purpose.
+
 ## 4. Write layer (`v2-write.ts`)
 
 Every write is one `backend.transaction(fn)` over `writeNode` + `writeEdge`(s)
@@ -162,6 +233,13 @@ Every write is one `backend.transaction(fn)` over `writeNode` + `writeEdge`(s)
   `duplicate_of`) reject a second target.
 - `transition(uid, toStatus, { agent, note })`: writes a `transition` node +
   `has_transition` edge + stamps `closed_at` when terminal.
+- **Registry CRUD** (§3a): `upsertProject({ name, path, repoUrl, monorepo?,
+  description? })` (create-or-update by `name`), `upsertComponent({ project, name,
+  path? })` (upsert by `(project, name)`), `upsertLocation({ component, locType,
+  value })` (upsert by `(component, locType, value)`), `rmLocation(uid)`
+  (invalidate). Each is ONE transaction over `writeNode` + `owns_project`/
+  `has_location` edges + audit. No `humanId`, no repo-string, no second
+  `dimensionGraph` store.
 
 ### 4a. Automatic audit logging
 
@@ -199,6 +277,9 @@ Primitives: `queryNodes`, `countNodes`, `countBy`, `getNodesByIds`, `getEdges`
   (open) items by default; closed items only under an explicit terminal filter.
 - Keyset pagination for stable listing; `validAt` for cumulative-open curves.
 - **Hierarchical rollup (FEAT-005):** `part_of` + derived two-axis rollup.
+- **Registry views (§3a):** `view: projects|components|locations` (list), and
+  `view: lookup` with the `lookup` key (resolve tool/file/url →
+  project/component/location) — the agent navigation index, not an item list.
 
 ### 5a. Semantic search (FEAT-022)
 
@@ -221,7 +302,14 @@ The entire v1 application layer is deleted, not retired: `humanId` machinery,
 `idOverride`, `importedFrom`, repo-string identity, the repo-migration module,
 migration-phase machinery, `repoWarning`, the markdown `import` action,
 `firstTerminalTransitionAt` reconstruction, hardcoded
-terminal/citation/reason knobs, and the six-verb v1 surface it all served. There
+terminal/citation/reason knobs, and the six-verb v1 surface it all served. The
+**repo-nodes / repo-string machinery is replaced by the registry (§3a)**:
+`parseRepoKey`/`canonicalRepoKey`, `resolveRepository`/`lookupRepository`,
+`setRepositoryFork` (`DERIVED_FROM`), `dimensionGraph` (the second GraphBackend
+with `IN_REPO`/`IN_PACKAGE`/`PROJECT_OF`/`AUTHORED_BY`/`REPORTED_BY`),
+`findItemNodesInRepository`'s legacy-alias leg, and the package-key machinery —
+all folded into first-class `project`/`component`/`location` nodes + `lookup`.
+There
 is no coexistence shim and no legacy-id fallback: the v2 layer is the only
 surface, and old id-based references stop resolving by design. The store DATA is
 migrated once by the ETL (§8); the store FILE is never mutated in place.
@@ -249,6 +337,18 @@ now that `graph-store@0.9.0` is published.
    transition has `agent`+`note`+`sha`.
 7. **Semantic:** `searchRanked` over the v2 store returns text+vec fused results.
 8. **Keyset:** `queryNodes({after, limit})` pages stably, no gaps/dupes.
+9. **Registry list:** `view:projects`/`components`/`locations` return the seeded
+   nodes; a component list scoped by `filter.project` returns only that project's
+   components.
+10. **Registry lookup:** `lookup("memory_ping")` resolves to
+    `project: sox-ecosystem` + `component: memory-server` + `location: tool
+    memory_ping` with the project `path` and `repoUrl` — one call, no search.
+11. **Registry detail:** `get {registry:"project",name:"adhd"}` returns `path`,
+    `repoUrl`, and its linked `locations[]` + `components[]`; a worktree dir under
+    the project resolves to the SAME project (no phantom row).
+12. **Registry CRUD:** `upsertProject` twice with the same `name` is one row;
+    `upsertLocation` with the same `(component, locType, value)` is one row
+    (uniqueness policy, not a scan).
 
 ## 10. Dependencies & sequencing
 
