@@ -301,7 +301,7 @@ describe('the space opens the moment a real vector lands', () => {
     await seed('the first embedded item');
     // `scheduleEmbed` is fire-and-track; drain it the way the store's own
     // shutdown path does rather than sleeping.
-    await tmp.store.flushEmbeds?.();
+    await tmp.store.flushEmbeds();
 
     expect(backend.vectors.size).toBeGreaterThan(0);
     expect(isSemanticSearchReadable()).toBe(true);
