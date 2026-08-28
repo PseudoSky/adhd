@@ -275,47 +275,6 @@ export async function walkType(
     }
 
     if (Object.keys(properties).length > 0) {
-      // BUG-BACKLOG-QUERY-001 root cause: ts-json-schema-generator's
-      // DEFAULT_CONFIG closes every object schema (`additionalProperties:
-      // false`, `Config.js`) — but that default only applies on Path 1
-      // (`ts-json-schema.ts`'s `runScalarAwareGenerator`). Path 2 (this
-      // walker) is reached for exactly the case the BUG-APIGEN-CORE-CLIENT-001
-      // comment above documents: a named-interface function-PARAMETER type,
-      // whose no-context `Type.getText()` always prints a fully-qualified
-      // `import("<path>").TypeName` expression Path 1 cannot resolve as a
-      // root type name, so it throws and falls through here. Every such
-      // top-level operation-input object (`backlog_query`'s `input`,
-      // `backlog_get`'s `input`, and the same class of object for every
-      // other apigen-mounted operation) landed here with NO
-      // `additionalProperties` at all — silently open, unlike every object
-      // reached via Path 1 (e.g. a nested property type, which resolves
-      // with an enclosing-node context and keeps its bare name, so Path 1
-      // succeeds and the TJS default applies). An open object schema means
-      // the validate-Layer's `ajv.compile(schema.input)` accepts ANY extra
-      // top-level key instead of rejecting it — and the key still vanishes
-      // before the target function ever sees it, because `dispatch.ts`'s
-      // `decodeArg` → `apigen-base-logical`'s `decodeNode` object arm
-      // reconstructs the object from ONLY the schema's declared
-      // `properties`, silently dropping anything not declared. Net effect:
-      // a caller who mis-nests a filter predicate at the top level (e.g.
-      // `{"grep":"x"}` instead of `{"filter":{"grep":"x"}}`) gets `ok:true`
-      // back with the ENTIRE unfiltered result set, not a validation error.
-      // Closing this object by default here — the same convention `required`
-      // above already applies — makes the validate-Layer reject the call
-      // before decode ever runs, restoring the intended "closed unless a
-      // type explicitly opts out via an index signature" contract.
-      //
-      // "Opts out via an index signature" is the mixed case: a type with
-      // BOTH named properties AND a `[k: string]: V` / `[k: number]: V`
-      // index signature (e.g. `{ a: string; [k: string]: unknown }`) — the
-      // shape of a `metadata`/`extra`-style field. `indexValue` was already
-      // resolved above (the index-only branch handles the "no named props"
-      // half of that case); a legitimate additional key on such a type must
-      // still validate against the index signature's value type, not be
-      // rejected outright, so `additionalProperties` becomes that resolved
-      // schema instead of `false` here. Only a type with NO index signature
-      // at all — the common case, and the one BUG-BACKLOG-QUERY-001 was
-      // filed against — gets the closed `false`.
       const additionalProperties = indexValue
         ? await recurse(indexValue.getText())
         : false;
