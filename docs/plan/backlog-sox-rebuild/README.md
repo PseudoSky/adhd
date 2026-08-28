@@ -247,3 +247,125 @@ live checkout is untouched until cutover.
 
 **Nothing is merged, and the old store is not deleted, until the operator reviews
 and approves the cutover.**
+
+---
+
+## 11. Feature inventory (live system) → disposition in the new design
+
+Every feature in the live `@adhd/backlog` package, item by item, with what
+supersedes it in the rebuild or why it is being dropped as poor design.
+Convention: **→** = superseded by; **KEPT** = carried forward (possibly
+reimplemented); **DELETED — poor design** = removed with the reason stated.
+Ground truth was read from the source files (not filenames); symbols and paths
+are cited inline.
+
+### A. Six-verb client (`src/client.ts`)
+
+| Feature | Disposition |
+|---|---|
+| `get` (item by `humanId`) | → `read` keyed by `uid`; `humanId`→`uid` |
+| `query` (list/search) | → `query` keyed by `uid`; + registry views (§3a) |
+| `create` (create/split/supersede) | → `write` `createIssue` + registry `create`; `duplicateAction:"comment"` DELETED — poor design: declared-but-unimplemented (FEAT-013 never landed) |
+| `update` (all mutations) | → `write` `updateIssue` (`touch`/`supersede`/`transition`) |
+| `relate` (edges) | → `relate` (typed uid rels); `remove` add-only for `related`/`plan` — poor design: half-implemented inverse, fixed in new design (typed rels + real `noop`/`changed` outcome) |
+| `admin` (bulk/maintenance) | → `admin` (pruned — see C) |
+| `BacklogCtx` / `BacklogVersionInfo` | KEPT |
+
+### B. 37 legacy operations (`src/ops-v1.ts` — library-only, no longer mounted)
+
+| Feature | Disposition |
+|---|---|
+| `createItem`/`getItem`/`updateItem`/`listItems`/`softDeleteItem` | → `write`/`read`/`query` (uid); `humanId` DELETED |
+| `stats`/`spotlight`/`readyItems`/`blockers`/`dependencyGraph`/`topoOrder`/`staleClaims` | → `query` views (`summary`/`list`/`ready`/`order`/`graph`/`stale`) |
+| `claimItem`/`renewClaim`/`releaseClaim`/`assignItem` | → `update` claim/release/renew; `assignItem` → `write` assignee edge |
+| `startWork`/`transitionStatus`/`addCitation`/`appendNote`/`resolveItem`/`archiveResolved` | → `transition` + `write` note/citation nodes + `admin archive` |
+| `addDependency`/`removeDependency`/`linkRelated`/`supersedeItem`/`splitItem`/`mergeItems`/`setPriority`/`attachToPlan` | → `relate` (typed rels) + `write`; `attachToPlan` → registry/plan membership |
+| `importFromMarkdown`/`renderToMarkdown`/`exportJson`/`auditTrail` | import DELETED (→ one-time ETL); render/export/audit KEPT (projection) |
+| `migrateRepo`/`migrationStatus`/`setMigrationPhase`/`version` | migrate/migration DELETED (→ ETL + registry); `version` KEPT |
+
+### C. `backlogAdmin` actions (`src/v2/admin.ts`)
+
+| Action | Disposition |
+|---|---|
+| `doctor` | KEPT (integrity report over uid graph) |
+| `prune` / `archive` | KEPT (over `status.terminal` + `closed_at`) |
+| `merge` (`SAME_AS`) | DELETED — poor design: `SAME_AS` dedup of humanId-era duplicates; uid + ETL removes the need |
+| `export` / `render` | KEPT (projection) |
+| `import` | DELETED (→ one-time ETL) |
+| `migration_status` / `set_migration_phase` | DELETED (migration-phase machinery retired) |
+| `version` | KEPT |
+| `batch` | KEPT (transport fan-out) |
+| `reconcile_repo` | DELETED (→ ETL + registry; nothing to reconcile) |
+| `embedding_health` / `embedding_backfill` | → library semantic (`SemanticBackend.health()` / observer) |
+| `list_near_duplicates` / `run_dedup_sweep` | → library hybrid-search/semantic; `run_dedup_sweep` DELETED (`SAME_AS` dedup retired) |
+| `cluster_into_plans` / `promote_cluster_to_plan` | → library semantic clustering + plan membership |
+
+### D. Store capabilities (`src/store/*.ts`)
+
+| Module | Disposition |
+|---|---|
+| `crud.ts` (`createItemNode` + `dedupeScan`) | → `write` `createIssue`; `dedupeScan` DELETED — poor design: FTS+exact+semantic triple scan was part of the BUG-039 write-loss surface |
+| `claim.ts` | KEPT — reimplemented as item metadata (`claimedBy`/`claimedAt`) + claim audit; CAS semantics preserved |
+| `lifecycle.ts` (`transitionStatusNode` + terminal knobs) | → `transition` + `status.terminal` (data) + `project_policy` |
+| `ids.ts` (`allocateHumanIdAndInsert` + counter + partial unique index) | DELETED — poor design: allocator + dedupe-scan-in-transaction IS the BUG-039 race; DB-generated `uid` replaces it |
+| `structure.ts` (edges + `renameHumanId`) | → `relate`/`write` (typed rels); `renameHumanId` DELETED (no humanId) |
+| `repo-nodes.ts` (`parseRepoKey`/`resolveRepository`/`dimensionGraph`/`setRepositoryFork`/package-key) | → registry §3a; DELETED — poor design: repo-string identity + `namespace`/metadata dual-write + a second GraphBackend (`dimensionGraph`) |
+| `repo-migration.ts` | DELETED (→ ETL + registry) |
+| `migration-phase.ts` / `migration-admin.ts` | DELETED (retired) |
+| `embed-queue.ts` (`scheduleEmbed`/`flushEmbeds`) | → library `createEmbeddingObserver` (on-write embeddings) |
+| `rag-ops.ts` + `semantic-search.ts` | → library `@adhd/sox-semantic` + `@adhd/sox-hybrid-search` |
+| `audit-log.ts` | KEPT — reimplemented as write-layer `writeAudit` helper |
+| `mapping.ts` (`BacklogNodeMeta`/`toBacklogItem`/`humanId*`) | → direct node/kind model; `humanId` fields DELETED |
+| `mutate-metadata.ts` | → library `touch` (in write layer) |
+| `hooks.ts` | → library observer (`createEmbeddingObserver`) + audit |
+| `serve-lock.ts` | KEPT (singleton serve lock) |
+| `signal-cleanup.ts` | KEPT (signal handling) |
+| `store-backup.ts` + `backup-manifest.ts` | KEPT (backup/restore; note: no admin action dispatches them yet) |
+| `enrichment.ts` (gitnexus blast radius) | KEPT (best-effort citation enrichment) |
+| `immediate-retry.ts` | KEPT (busy/locked retry) |
+| `graph-backlog-store.ts` | → direct `@adhd/sox-graph-store@0.9.0` (open schema) |
+| `epic-a-backfill.ts` (dimension edges, raw SQL upsert) | DELETED — poor design: `dimensionGraph` second store + raw SQL; → registry + ETL |
+
+### E. Data-model / identity
+
+| Feature | Disposition |
+|---|---|
+| `humanId` + `(repo, humanId)` composite | DELETED — poor design: composite identity + allocator race (BUG-039) |
+| `idOverride` | DELETED — poor design: import-time identity hack; provenance = audit event |
+| `importedFrom` | DELETED — poor design: provenance stamp vs audit event |
+| repo-string identity (`namespace` + `metadata.repo` dual-write) | DELETED — poor design: dual-write divergence source; → `project` node |
+| `firstTerminalTransitionAt` / `closedAt` reconstruction | DELETED — stored `closed_at` (reconstructed once by ETL) |
+| hardcoded terminal/citation/reason knobs | → `status.terminal` + `project_policy` (data) |
+| migration-phase (7 states, `config.yaml`) | DELETED (retired) |
+| `canonicalIdentityKey` / `suggestClaimantIdentity` / `assertAttribution` | KEPT (attribution `by` required) |
+
+### F. Markdown (`src/markdown.ts`)
+
+| Feature | Disposition |
+|---|---|
+| parse/import (`parseBacklogMarkdown`/`toImportItems`) | import DELETED (→ ETL); parse KEPT for diagnostics |
+| render/export (`renderItemsToMarkdown`/`renderCitationsLine`) | KEPT (projection; `uid` not rendered) |
+| `buildChangelogSection` / `parseChangelogIds` | KEPT (CHANGELOG projection) |
+| `classifyStatus`/`detectStatus`/`detectPriority`/`normalizeLegacyStatus` | `normalizeLegacyStatus` DELETED (legacy vocabulary); classify/detect KEPT (import diagnostics) |
+
+### G. Install / skill (`src/install.ts`, `src/install-skill.ts`)
+
+| Feature | Disposition |
+|---|---|
+| `installSkillToHosts` / `install` / `registerMcp*` | KEPT (MCP/skill installation); skill content updated with the registry-first workflow |
+
+### H. Cross-cutting
+
+| Feature | Disposition |
+|---|---|
+| Outcome envelope (`IOutcomeEnvelope`) | KEPT (the single response contract) |
+| IR-cache (FEAT-002) | KEPT (extract-stage cache) |
+| serve singleton lock | KEPT |
+| `statusEvidence` transition shape (DEBT-010) | KEPT (transition evidence bundling) |
+
+**Net:** the rebuild keeps the read/query/write shape, the envelope, the audit
+discipline, claiming, backup, and the projection surfaces — and **deletes** the
+humanId/allocator/ids machinery (BUG-039), repo-string identity + dual-write,
+`dimensionGraph`, repo-migration, migration-phase, `SAME_AS` merge, and the
+`import` action. The registry (§3a of SPEC-v2.md) is the new home for the
+project/component/location navigation that `repo-nodes.ts` half-served.
