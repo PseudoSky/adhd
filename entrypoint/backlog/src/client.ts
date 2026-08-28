@@ -49,6 +49,7 @@ import type {
 import {
   DuplicateCandidateError,
   InvalidArgumentError,
+  assertKnownUpdateKeys,
   canonicalIdentityKey,
   errorEnvelope,
   okEnvelope,
@@ -349,6 +350,19 @@ export async function update(ctx: BacklogCtx, input: IBacklogUpdateInput): Promi
       // narrows" violation §7.1 forbids.
       throw new InvalidArgumentError('repo', 'backlog_update: "repo" is required — a humanId is only unique within a repo.', 'EPIC-A / INTERFACE_v2 §7.5');
     }
+    // DEBT-010 — closed top-level key set: an unknown key (a `citations` typo,
+    // etc.) fails loud rather than being silently absorbed.
+    assertKnownUpdateKeys(input as unknown as Record<string, unknown>);
+
+    // DEBT-010 — `statusEvidence` is transition evidence; without `status` it
+    // has nothing to attach to. The old top-level `citations`/`reason` were
+    // silently dropped in exactly this case — fail loud instead.
+    if (input.statusEvidence !== undefined && input.status === undefined) {
+      throw new InvalidArgumentError(
+        'statusEvidence',
+        'backlog_update: "statusEvidence" (citations/reason) requires "status" — evidence attaches to a status transition.',
+      );
+    }
 
     const outcome: IUpdateOutcome = { humanId, changed: [] };
 
@@ -405,8 +419,8 @@ export async function update(ctx: BacklogCtx, input: IBacklogUpdateInput): Promi
       // in-process caller are all gated by the SAME code.
       await transitionStatusOp(ctx, repo, humanId, input.status, {
         by,
-        ...(input.citations !== undefined ? { citations: input.citations } : {}),
-        ...(input.reason !== undefined ? { reason: input.reason } : {}),
+        ...(input.statusEvidence?.citations !== undefined ? { citations: input.statusEvidence.citations } : {}),
+        ...(input.statusEvidence?.reason !== undefined ? { reason: input.statusEvidence.reason } : {}),
       });
       outcome.newStatus = input.status;
       outcome.changed.push('status');
@@ -434,7 +448,7 @@ export async function update(ctx: BacklogCtx, input: IBacklogUpdateInput): Promi
       // expose.
       throw new InvalidArgumentError(
         'patch',
-        'backlog_update: nothing to do — pass at least one of patch / status / priority / claim / assignedTo / addNote / addCitation / softDeleteReason.'
+        'backlog_update: nothing to do — pass at least one of patch / status / statusEvidence / priority / claim / assignedTo / addNote / addCitation / softDeleteReason.'
       );
     }
     return outcome;

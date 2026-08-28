@@ -1387,6 +1387,56 @@ export function assertKnownFilterKeys(filter: Record<string, unknown>): void {
   throw new BacklogValidationError(`filter: unknown key(s) ${unknown.map((k) => `"${k}"`).join(', ')}`, unknown);
 }
 
+/** DEBT-010 — the closed top-level key set for `backlog_update` (INTERFACE_v2 §7.8, mirroring `BACKLOG_FILTER_KEYS`). */
+export const BACKLOG_UPDATE_INPUT_KEYS = [
+  'humanId',
+  'repo',
+  'by',
+  'patch',
+  'status',
+  'priority',
+  'statusEvidence',
+  'claim',
+  'claimOpts',
+  'assignedTo',
+  'addNote',
+  'addCitation',
+  'softDeleteReason',
+] as const;
+
+/**
+ * DEBT-010 — reject an unknown top-level `backlog_update` key instead of
+ * silently absorbing it (the "declared-but-unwired field" failure mode that
+ * `citations`/`reason` were). A caller typo (`citations` instead of
+ * `statusEvidence`, or `stauts` instead of `status`) now fails loud. The
+ * retired top-level `citations`/`reason` get a TARGETED error naming their
+ * replacement (`statusEvidence`), not the generic unknown-key message.
+ *
+ * @throws {InvalidArgumentError} for the retired `citations`/`reason` fields (naming `statusEvidence`)
+ * @throws {BacklogValidationError} for any other key outside {@link BACKLOG_UPDATE_INPUT_KEYS}
+ */
+export function assertKnownUpdateKeys(input: Record<string, unknown>): void {
+  const RENAMED: Readonly<Record<string, string>> = {
+    citations: 'statusEvidence',
+    reason: 'statusEvidence',
+  };
+  for (const key of Object.keys(input ?? {})) {
+    if (key in RENAMED) {
+      throw new InvalidArgumentError(
+        key,
+        `backlog_update: "${key}" is no longer a top-level field — pass "statusEvidence" (with "status") instead.`,
+      );
+    }
+  }
+  const known: ReadonlySet<string> = new Set<string>(BACKLOG_UPDATE_INPUT_KEYS);
+  const unknown = Object.keys(input ?? {}).filter((k) => !known.has(k));
+  if (unknown.length === 0) return;
+  throw new BacklogValidationError(
+    `backlog_update: unknown key(s) ${unknown.map((k) => `"${k}"`).join(', ')}`,
+    unknown,
+  );
+}
+
 // ----------------------------------------------------------------------------
 // §2.2 / §2.3 / §2.4 — views, sorts, projection.
 // ----------------------------------------------------------------------------
@@ -2772,10 +2822,14 @@ export interface IBacklogUpdateInput {
    * `setPriority`.
    */
   priority?: Priority;
-  /** §5a.2 evidence gate — required (≥1) for a terminal-done/workaround transition (model.ts:75). */
-  citations?: Citation[];
-  /** §5a.2 — required for a terminal-dismissed transition (model.ts:79). */
-  reason?: string;
+  /**
+   * §5a.2 transition evidence — `citations` and `reason` are ONLY meaningful on
+   * a `status` transition, so they are bundled here rather than exposed as
+   * standalone top-level fields (DEBT-010: the old top-level `citations`/`reason`
+   * were silently dropped unless `status` was also present). Passing
+   * `statusEvidence` without `status` is a client error and fails loud.
+   */
+  statusEvidence?: { citations?: Citation[]; reason?: string };
   claim?: IClaimAction;
   claimOpts?: ClaimOpts;
   assignedTo?: string;

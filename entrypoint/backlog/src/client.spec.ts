@@ -398,6 +398,44 @@ describe('P1-core-write-verbs — priority, relate outcomes, cross-repo relate, 
     expect(isOutcomeOk(env)).toBe(false);
   });
 
+  // DEBT-010 — transition evidence (`citations`/`reason`) is bundled under
+  // `statusEvidence`; the old top-level fields fail loud instead of silently
+  // discarding. Closed-key-set rejects genuinely unknown keys.
+  it('DEBT-010: top-level "citations" (old field, no status) fails loud naming statusEvidence', async () => {
+    const created = await client.createItem(ctx, { family: 'BUG-P1', title: 'debt010-old-citations', body: 'b', repo: REPO });
+    const env = await v2Update(ctx, { humanId: created.item.humanId, repo: REPO, by: 'x', citations: [{ file: 'x.ts' }] } as never);
+    expect(isOutcomeOk(env)).toBe(false);
+    if (isOutcomeOk(env)) throw new Error('unreachable');
+    expect(env.error.message).toMatch(/statusEvidence/);
+  });
+
+  it('DEBT-010: statusEvidence without status fails loud', async () => {
+    const created = await client.createItem(ctx, { family: 'BUG-P1', title: 'debt010-evidence-no-status', body: 'b', repo: REPO });
+    const env = await v2Update(ctx, { humanId: created.item.humanId, repo: REPO, by: 'x', statusEvidence: { citations: [{ file: 'x.ts' }] } });
+    expect(isOutcomeOk(env)).toBe(false);
+    if (isOutcomeOk(env)) throw new Error('unreachable');
+    expect(env.error.message).toMatch(/statusEvidence/);
+  });
+
+  it('DEBT-010: statusEvidence + status records the citation and reason on the terminal transition', async () => {
+    const created = await client.createItem(ctx, { family: 'BUG-P1', title: 'debt010-evidence', body: 'b', repo: REPO });
+    const env = await v2Update(ctx, {
+      humanId: created.item.humanId, repo: REPO, by: 'x',
+      status: 'RESOLVED',
+      statusEvidence: { citations: [{ file: 'x.ts' }], reason: 'verified' },
+    });
+    expect(isOutcomeOk(env)).toBe(true);
+    const after = await client.getItem(ctx, REPO, created.item.humanId);
+    expect(after?.status).toBe('RESOLVED');
+    expect(after?.citations?.some((c) => c.file === 'x.ts')).toBe(true);
+  });
+
+  it('DEBT-010: an unknown top-level key is rejected (closed key set)', async () => {
+    const created = await client.createItem(ctx, { family: 'BUG-P1', title: 'debt010-unknown-key', body: 'b', repo: REPO });
+    const env = await v2Update(ctx, { humanId: created.item.humanId, repo: REPO, by: 'x', stauts: 'DONE' } as never);
+    expect(isOutcomeOk(env)).toBe(false);
+  });
+
   it('relate reports a real noop signal on a re-add, for every relation kind (was hardcoded false)', async () => {
     const a = await client.createItem(ctx, { family: 'BUG-P1', title: 'a', body: 'b', repo: REPO });
     const b = await client.createItem(ctx, { family: 'BUG-P1', title: 'b', body: 'b', repo: REPO });
