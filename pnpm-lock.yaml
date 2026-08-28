@@ -1318,7 +1318,7 @@ importers:
   packages/apigen/apigen-plugin-ts-types:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: ^0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
         specifier: ^0.2.1
@@ -5512,7 +5512,6 @@ packages:
   /@lancedb/lancedb@0.31.0(apache-arrow@18.1.0):
     resolution: {integrity: sha512-EUEVpheKhaCNE6ybcW760OUyfeei2dKR2ZwgLWeC/ntHL4BBiBLIErh9fuEuUP3/mAx4B5UFraB2m5nDUx5XEA==}
     engines: {node: '>= 18'}
-    cpu: [x64, arm64]
     os: [darwin, linux, win32]
     requiresBuild: true
     peerDependencies:
