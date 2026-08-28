@@ -851,10 +851,10 @@ describe('--sandbox / sandbox-path — P5-cli-serve-transport: the CLI must neve
    *  — with `HOME` redirected to a throwaway dir standing in for "the real
    *  machine's home", so this test can prove `--sandbox` diverts away from
    *  it without ever touching the real `~/.adhd`. */
-  function runGlobalScoped(args: string[], home: string): SpawnResult {
+  function runGlobalScoped(args: string[], home: string, extraEnv: Record<string, string> = {}): SpawnResult {
     const result = spawnSync(process.execPath, [DIST_INDEX, ...args], {
       cwd: home,
-      env: { ...process.env, HOME: home },
+      env: { ...process.env, HOME: home, ...extraEnv },
       encoding: 'utf8',
       timeout: 30_000,
     });
@@ -899,41 +899,26 @@ describe('--sandbox / sandbox-path — P5-cli-serve-transport: the CLI must neve
     // strongest possible proof an isolation flag that "looks like isolation
     // but isn't" (advisor's own stated trap) is not what shipped here.
     //
-    // `--sandbox` mints a FRESH `mkdtempSync` root on every distinct process
-    // invocation (`cli.ts`'s `runBacklogCli`: `if (sandbox && opts.adhdRoot
-    // === undefined)`) — there is no working cross-process "reuse this
-    // sandbox" mechanism today (the `ADHD_ROOT=<path>` env var this file's
-    // own `--sandbox` banner message advertises is not actually read by
-    // anything in `@adhd/environment` — a real, separate gap, not something
-    // this test can lean on). So this `create` invocation's OWN sandbox root
-    // is necessarily a DIFFERENT directory than `pathRes`'s — this test
-    // parses ITS OWN banner line for its own root, rather than reusing
-    // `body.adhdRoot`/`body.dbPath` from the earlier, independent process.
+    // `--sandbox` alone mints a FRESH random tmpdir on every invocation
+    // (`cli.ts`'s own doc comment: "NOT auto-deleted — a caller may want to
+    // re-run further commands against the SAME sandbox by passing
+    // ADHD_ROOT=<printed path> explicitly on a later invocation"), so
+    // reusing THIS test's own first-call `body.adhdRoot` requires passing
+    // that env var explicitly, exactly as the CLI's printed message
+    // instructs — BUG-BACKLOG-SANDBOX-ADHDROOT-UNWIRED-001 (now fixed in
+    // `runBacklogCli`) is what makes this actually take effect.
     const createRes = runGlobalScoped(
       ['--sandbox', 'create', '--input', JSON.stringify({ item: { family: 'BUG-SANDBOX', title: 'sandboxed', body: 'x', repo: 'PseudoSky/sandbox-test' }, by: 'cli.spec' })],
-      fakeProdHome
+      fakeProdHome,
+      { ADHD_ROOT: body.adhdRoot }
     );
     expect(createRes.status, `stderr:\n${createRes.stderr}\nstdout:\n${createRes.stdout}`).toBe(0);
     const created = JSON.parse(createRes.stdout.trim().split('\n').pop() ?? '{}') as { ok: boolean; data: { humanId: string } };
     expect(created.ok).toBe(true);
 
-    const bannerMatch = createRes.stderr.match(/isolated store at (\S+)/);
-    expect(bannerMatch, `--sandbox banner not found in stderr:\n${createRes.stderr}`).toBeTruthy();
-    const createAdhdRoot = bannerMatch?.[1] ?? '';
-    sandboxDirs.push(createAdhdRoot);
-    expect(
-      createAdhdRoot.startsWith(fakeProdHome),
-      `--sandbox must NEVER isolate into the (fake) production HOME — got ${createAdhdRoot}`
-    ).toBe(false);
-
     const prodAdhdDir = join(fakeProdHome, '.adhd');
     expect(existsSync(prodAdhdDir), `--sandbox wrote into the (fake) production HOME at ${prodAdhdDir} — isolation failed`).toBe(false);
-    // And the write really did land in the sandbox: the sandboxed db file
-    // exists under THIS invocation's own reported root, at the same
-    // `<adhdRoot>/backlog/production/data/backlog.db` layout `sandbox-path`
-    // itself reports (confirmed above: `body.dbPath.startsWith(body.adhdRoot)`
-    // for the identical `backlog`/`production`/`global`-scope resolution).
-    const createDbPath = join(createAdhdRoot, 'backlog', 'production', 'data', 'backlog.db');
-    expect(existsSync(createDbPath), `the sandboxed db must actually have been created by the create above at ${createDbPath}`).toBe(true);
+    // And the write really did land in the sandbox: the sandboxed db file exists.
+    expect(existsSync(body.dbPath), 'the sandboxed db must actually have been created by the create above').toBe(true);
   });
 });

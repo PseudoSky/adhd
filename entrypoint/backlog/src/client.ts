@@ -242,7 +242,7 @@ export async function query(ctx: BacklogCtx, input: IBacklogQueryOptions): Promi
  * `created` boolean, so a variant can never report a write it did not make.
  *
  * @param ctx open store + env
- * @param input `{ input, by, duplicateAction?, splitFrom?, children?, supersedes?, reason? }`
+ * @param input `{ item, by, duplicateAction?, splitFrom?, children?, supersedes?, reason? }`
  * @returns `{ ok: true, data: { created, humanId?, item?, … } }`, or the error
  *   arm with `duplicate_candidate` / `invalid_argument` / `item_not_found`
  */
