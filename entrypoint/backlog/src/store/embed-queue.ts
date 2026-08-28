@@ -30,7 +30,7 @@
  * NEVER rejects; every failure is caught internally, logged, and the backfill
  * sweep (§7) is the designated repair path.
  */
-import { getSemanticBackend } from './semantic-search.js';
+import { getSemanticBackend, markSemanticVectorSpacePopulated } from './semantic-search.js';
 import { stripContentMarker } from './mapping.js';
 import { mutateMetadata } from './mutate-metadata.js';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
@@ -133,6 +133,12 @@ export function scheduleEmbed(store: GraphBacklogStore, nodeId: number, content:
     try {
       const vec = await backend.embedDocument(text);
       await backend.upsertVector(nodeId, vec);
+      // BUG-045 — the space is provably non-empty from here on, so the
+      // read-side AC-12 gates open without needing a process restart. This
+      // is the ONE place a vector reaches the space (the write path and the
+      // §7 backfill both funnel through here), so it is the only place the
+      // flag needs flipping.
+      markSemanticVectorSpacePopulated();
       // §2.4 — provenance stamp, written right after the upsert it describes
       // settles. The `SemanticBackend` seam exposes no joint-transaction
       // primitive spanning its own vector-store adapter call and this node's

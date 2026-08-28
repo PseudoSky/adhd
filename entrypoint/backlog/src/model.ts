@@ -959,11 +959,34 @@ export class UnsupportedOperationError extends Error {
   }
 }
 
-/** INTERFACE_v2 AC-12 — `semantic`/`anchor`/`view:similar`/`sort:relevance` with no embedding backend configured. */
+/**
+ * INTERFACE_v2 AC-12 — `semantic`/`anchor`/`view:similar`/`sort:relevance`
+ * asked of a store whose semantic channel cannot answer them.
+ *
+ * Two distinct causes, ONE outcome code (`rag_not_configured`), because the
+ * consumer contract is identical in both: the semantic channel is not usable,
+ * so refuse loudly and keep the keyword/dimensional channels working.
+ *
+ * - `not_configured` — no backend is installed. The ordinary default build.
+ * - `empty_vector_space` — a backend IS installed but its vector space holds
+ *   nothing, so nearest-neighbour has no neighbours to rank against. Serving
+ *   this state is WORSE than refusing it: every query returns the same
+ *   arbitrary page with `_score: null`, which reads as a working search and
+ *   is wrong for every input (BUG-045). An unbackfilled space is therefore
+ *   reported as *disabled*, not as an empty result.
+ */
+export type RagUnavailableReason = 'not_configured' | 'empty_vector_space';
+
 export class RagNotConfiguredError extends Error {
-  constructor(feature: string) {
+  constructor(
+    feature: string,
+    readonly reason: RagUnavailableReason = 'not_configured'
+  ) {
     super(
-      `backlog: "${feature}" needs a configured embedding backend and none is available. ` +
+      (reason === 'empty_vector_space'
+        ? `backlog: "${feature}" needs an embedded vector space and this store has none — a backend is configured, but zero items have been embedded, ` +
+          `so nearest-neighbour ranking has nothing to rank. Run \`backlog_admin(embedding_backfill)\` to populate it. `
+        : `backlog: "${feature}" needs a configured embedding backend and none is available. `) +
         `Keyword (\`grep\`) and dimensional queries still work — see INTERFACE_v2 AC-12.`
     );
     this.name = 'RagNotConfiguredError';

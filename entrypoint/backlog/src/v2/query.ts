@@ -45,10 +45,13 @@
  * 5. **AC-12 — the semantic channel degrades LOUDLY, CONDITIONALLY.**
  *    `filter.semantic`, `filter.anchor`, `view:"similar"`, `sort:"relevance"`
  *    and the `_score`/`_vector` projections return `rag_not_configured`
- *    ONLY while no embedding backend is configured
- *    (`isSemanticSearchConfigured()` — RAG-SPEC §3). The instant a host wires
- *    one in (`configureSemanticBackend`), these inputs are served for real —
- *    there is no second flag to flip. `grep` and every dimensional query keep
+ *    while the semantic channel cannot answer them
+ *    (`isSemanticSearchReadable()` — RAG-SPEC §3). That is TWO causes, one
+ *    outcome: no backend is configured, or one is configured over an empty
+ *    vector space (BUG-045 — an unbackfilled space returned the same
+ *    scoreless page for every query, which is worse than refusing). Once a
+ *    host wires a backend in AND the space holds vectors, these inputs are
+ *    served for real. `grep` and every dimensional query keep
  *    working in EITHER state, and — RAG-SPEC §3.1's load-bearing rule —
  *    `grep` never becomes hybrid: the vector channel is reached exclusively
  *    through `semantic`/`anchor`/`view:"similar"`/`sort:"relevance"`, and it
@@ -120,7 +123,7 @@ import type { GraphBacklogStore } from '../store/graph-backlog-store.js';
 import { queryAuditEvents } from '../store/audit-log.js';
 import { BACKLOG_ITEM_TAG, isLiveBacklogItemNode, toBacklogItem, type BacklogNodeMeta } from '../store/mapping.js';
 import { parseRepoKey } from '../store/repo-nodes.js';
-import { isSemanticSearchConfigured, requireSemanticBackend } from '../store/semantic-search.js';
+import { isSemanticSearchConfigured, isSemanticSearchReadable, requireReadableSemanticBackend } from '../store/semantic-search.js';
 import { listRelatedNode } from '../store/structure.js';
 import {
   blockers as blockersOp,
@@ -741,8 +744,9 @@ function resolveFormat(view: IBacklogView, value: unknown): 'json' | 'table' {
 }
 
 /**
- * AC-12 — the semantic channel degrades LOUDLY, but ONLY while nothing is
- * configured (RAG-SPEC §3 / `isSemanticSearchConfigured()`).
+ * AC-12 — the semantic channel degrades LOUDLY while it cannot answer:
+ * nothing configured, OR configured over an empty vector space
+ * (RAG-SPEC §3 / `isSemanticSearchReadable()` / BUG-045).
  *
  * Absent a backend, `grep` and every dimensional query keep working;
  * anything that would need an embedding matcher returns `rag_not_configured`
@@ -755,7 +759,7 @@ function resolveFormat(view: IBacklogView, value: unknown): 'json' | 'table' {
  * block the feature it names.
  */
 function assertNoSemanticInputs(view: IBacklogView, filter: IBacklogFilter, raw: Record<string, unknown>): void {
-  if (isSemanticSearchConfigured()) return;
+  if (isSemanticSearchReadable()) return;
   const requested: string[] = [];
   if (filter.semantic !== undefined) requested.push('filter.semantic');
   if (filter.anchor !== undefined) requested.push('filter.anchor');
@@ -769,7 +773,10 @@ function assertNoSemanticInputs(view: IBacklogView, filter: IBacklogFilter, raw:
   if (requested.length === 0) return;
   // Named as one feature string so the message lists everything the caller
   // asked for, not just the first thing that tripped.
-  throw new RagNotConfiguredError(requested.join(' + '));
+  // Which of the two unavailable causes? Same outcome code either way — the
+  // message is what tells the caller whether to install a backend or to
+  // backfill the one they already have.
+  throw new RagNotConfiguredError(requested.join(' + '), isSemanticSearchConfigured() ? 'empty_vector_space' : 'not_configured');
 }
 
 /**
@@ -1076,7 +1083,7 @@ async function fetchRows(store: GraphBacklogStore, filter: IBacklogFilter, warni
  * `k` cutoff (never a post-filter).
  */
 async function fetchSemanticRows(store: GraphBacklogStore, filter: IBacklogFilter, repoCandidates: ReadonlySet<string> | undefined): Promise<{ rows: IQueryRow[]; truncated: boolean }> {
-  const backend = requireSemanticBackend('filter.semantic');
+  const backend = requireReadableSemanticBackend('filter.semantic');
   const queryVec = await backend.embedQuery(filter.semantic as string);
   const nodeFilter = nodeFilterFromBacklogFilter(compileV1Filter(filter, repoCandidates));
   const matches = await backend.knn(queryVec, SEMANTIC_FETCH_BUDGET, { filter: nodeFilter });
@@ -1359,7 +1366,7 @@ async function buildCard(store: GraphBacklogStore, row: IQueryRow, fields: Reado
     if (score !== undefined) card._score = score;
   }
   if (fields.has('_vector')) {
-    const backend = requireSemanticBackend('_vector');
+    const backend = requireReadableSemanticBackend('_vector');
     const vec = await backend.vectorFor(node.id);
     if (vec !== null) card._vector = Array.from(vec);
   }
@@ -1593,7 +1600,7 @@ async function resolveAnchorNode(store: GraphBacklogStore, anchorHumanId: string
  * from a genuinely-exhausted result set.
  */
 async function runSimilarView(ctx: IQueryContext): Promise<IOutcomeEnvelope<IBacklogQueryResult>> {
-  const backend = requireSemanticBackend('view:"similar"');
+  const backend = requireReadableSemanticBackend('view:"similar"');
 
   if (ctx.filter.anchor !== undefined && ctx.filter.semantic !== undefined) {
     throw new InvalidArgumentError(
@@ -2526,7 +2533,10 @@ async function compileTextQuery(
   if (text.trim().length === 0) {
     throw new InvalidArgumentError('text', 'text: the natural-language query must not be empty (INTERFACE_v2 §2.1b)');
   }
-  const configured = isSemanticSearchConfigured();
+  // BUG-045 — "readable", not merely "installed": an empty vector space cannot
+  // answer a semantic query, so the NL form must compile into `filter.grep`
+  // exactly as it does on an unconfigured build.
+  const configured = isSemanticSearchReadable();
   if (filter.grep !== undefined && !configured) {
     // Without embeddings the text query IS the grep query; accepting both
     // would silently drop one of two keyword predicates the caller believes

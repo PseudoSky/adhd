@@ -47,7 +47,6 @@ import {
   BacklogValidationError,
   DEFAULT_GET_FIELDS,
   InvalidArgumentError,
-  RagNotConfiguredError,
   assertKnownFields,
   errorEnvelope,
   isTerminalStatus,
@@ -57,7 +56,7 @@ import {
 import type { GraphBacklogStore } from '../store/graph-backlog-store.js';
 import { queryAuditEvents } from '../store/audit-log.js';
 import { BACKLOG_ITEM_TAG, isLiveBacklogItemNode, toBacklogItem, type BacklogNodeMeta } from '../store/mapping.js';
-import { isSemanticSearchConfigured, requireSemanticBackend } from '../store/semantic-search.js';
+import { requireReadableSemanticBackend } from '../store/semantic-search.js';
 import { listRelatedNode } from '../store/structure.js';
 import {
   auditTrail as auditTrailOp,
@@ -272,13 +271,16 @@ function assertGetHumanId(humanId: unknown): asserts humanId is string {
 /**
  * AC-19/AC-20 — a *known* field that cannot mean anything for a single-item
  * read must still fail loudly. `_vector` is different: it is a genuine
- * per-item property that has no backend ONLY while none is configured
- * (RAG-SPEC §3 / `isSemanticSearchConfigured()`) — once a host wires one in,
- * `_vector` is a normal opt-in-by-name projection (AC-20), same as `body` or
+ * per-item property that has no value to return while the semantic channel
+ * cannot answer — either no backend is configured, or one is configured over
+ * an EMPTY vector space (`isSemanticSearchReadable()`, RAG-SPEC §3 /
+ * BUG-045). Once a host wires one in AND the space holds vectors, `_vector`
+ * is a normal opt-in-by-name projection (AC-20), same as `body` or
  * `citations`.
  *
  * @throws {BacklogValidationError} for `items`/`_score`
- * @throws {RagNotConfiguredError} for `_vector` on an unconfigured store
+ * @throws {RagNotConfiguredError} for `_vector` on an unconfigured store, or
+ *         on a configured store whose vector space is empty
  */
 function assertGetApplicableFields(fields: readonly IBacklogField[] | undefined): void {
   if (!fields) return;
@@ -291,7 +293,7 @@ function assertGetApplicableFields(fields: readonly IBacklogField[] | undefined)
       [...inapplicable]
     );
   }
-  if (fields.includes('_vector') && !isSemanticSearchConfigured()) throw new RagNotConfiguredError('_vector');
+  if (fields.includes('_vector')) requireReadableSemanticBackend('_vector');
 }
 
 /** §1 — the projection is the default card PLUS whatever the caller named. */
@@ -561,7 +563,7 @@ async function buildCard(store: GraphBacklogStore, target: IGetTarget, fields: S
   // embed degraded per RAG-SPEC §2.5) legitimately has no vector — omitted
   // rather than fabricated, same discipline as every other optional field.
   if (fields.has('_vector')) {
-    const backend = requireSemanticBackend('_vector');
+    const backend = requireReadableSemanticBackend('_vector');
     const vec = await backend.vectorFor(node.id);
     if (vec !== null) card._vector = Array.from(vec);
   }

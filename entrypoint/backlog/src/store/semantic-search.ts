@@ -125,10 +125,30 @@ export class PermanentEmbeddingDimensionError extends Error {
 }
 
 let injectedBackend: SemanticBackend | null = null;
+let vectorSpacePopulated = false;
 
-/** Installs (or clears, with `null`) the backend every AC-12 gate consults. Never called automatically — see this file's header. */
-export function configureSemanticBackend(backend: SemanticBackend | null): void {
+/**
+ * Installs (or clears, with `null`) the backend every AC-12 gate consults.
+ * Never called automatically — see this file's header.
+ *
+ * ## Why the second argument exists (BUG-045)
+ *
+ * "A backend is installed" and "this store can answer a similarity query"
+ * are DIFFERENT facts, and conflating them produced a silent-wrong-answer
+ * bug: with `embedding.enabled` on but zero items embedded, every
+ * `filter.semantic` — including deliberate gibberish — returned the same
+ * arbitrary page with `_score: null`, indistinguishable from a working
+ * search. So the seam tracks both, and the READ gates check the second.
+ *
+ * `vectorSpacePopulated` defaults to `true` when a backend is supplied,
+ * because the overwhelmingly common caller is a test installing a FAKE
+ * backend whose space it has already stocked. The real host
+ * ({@link enableSemanticSearchFromConfig}) probes the space and passes the
+ * measured value.
+ */
+export function configureSemanticBackend(backend: SemanticBackend | null, opts?: { vectorSpacePopulated?: boolean }): void {
   injectedBackend = backend;
+  vectorSpacePopulated = backend === null ? false : (opts?.vectorSpacePopulated ?? true);
 }
 
 /** The currently-configured backend, or `null` if none is (the default, unconfigured build). */
@@ -136,18 +156,63 @@ export function getSemanticBackend(): SemanticBackend | null {
   return injectedBackend;
 }
 
-/** `true` iff a backend is configured — the single predicate every AC-12 gate checks before falling back to `RagNotConfiguredError`. */
+/**
+ * `true` iff a backend is INSTALLED — the predicate the WRITE side checks
+ * (`embedding_backfill`, `embedding_health`).
+ *
+ * Deliberately does NOT consider whether the vector space holds anything:
+ * backfill is the operation that populates an empty space, so gating it on
+ * a populated space would make an empty store permanently unfillable.
+ */
 export function isSemanticSearchConfigured(): boolean {
   return injectedBackend !== null;
 }
 
 /**
- * The configured backend, or a thrown `RagNotConfiguredError` — the single
- * accessor every semantic code path uses, so "configured?" is asked exactly
- * one way and the AC-12 message always names the feature that needed it.
+ * `true` iff a similarity query can actually be ANSWERED — a backend is
+ * installed AND its vector space holds at least one vector. The predicate
+ * every READ-side AC-12 gate checks (`filter.semantic`, `filter.anchor`,
+ * `view:"similar"`, `sort:"relevance"`, `_score`, `_vector`, and the
+ * neighbour-ranking admin actions).
+ */
+export function isSemanticSearchReadable(): boolean {
+  return injectedBackend !== null && vectorSpacePopulated;
+}
+
+/**
+ * Records that the vector space is no longer empty. Called at the end of a
+ * backfill that actually wrote a vector, so the read gates open without a
+ * process restart.
+ *
+ * Monotonic by design: the only transition is empty → populated. A stale
+ * "populated" cannot arise from normal operation (vectors are deleted one
+ * node at a time, and a store that drops to zero is a re-embed away), and a
+ * stale "empty" costs a restart rather than a wrong answer — the correct
+ * direction for this failure.
+ */
+export function markSemanticVectorSpacePopulated(): void {
+  if (injectedBackend !== null) vectorSpacePopulated = true;
+}
+
+/**
+ * The configured backend, or a thrown `RagNotConfiguredError` — the accessor
+ * every WRITE-side semantic path uses, so "configured?" is asked exactly one
+ * way and the AC-12 message always names the feature that needed it.
  */
 export function requireSemanticBackend(feature: string): SemanticBackend {
   if (injectedBackend === null) throw new RagNotConfiguredError(feature);
+  return injectedBackend;
+}
+
+/**
+ * The backend, or a thrown `RagNotConfiguredError`, for a path that must
+ * RANK against existing vectors. Distinguishes the two unavailable causes in
+ * its message (`not_configured` vs `empty_vector_space`) while keeping the
+ * single `rag_not_configured` outcome code the AC-12 contract promises.
+ */
+export function requireReadableSemanticBackend(feature: string): SemanticBackend {
+  if (injectedBackend === null) throw new RagNotConfiguredError(feature, 'not_configured');
+  if (!vectorSpacePopulated) throw new RagNotConfiguredError(feature, 'empty_vector_space');
   return injectedBackend;
 }
 
@@ -173,7 +238,17 @@ export type SemanticBootstrapFailure =
   | { reason: 'unsupported_adapter'; detail: string };
 
 export type SemanticBootstrapResult =
-  | { ok: true; backend: SemanticBackend }
+  | {
+      ok: true;
+      backend: SemanticBackend;
+      /**
+       * Whether the vector space held at least one vector at bootstrap.
+       * `false` means the backend works but has nothing to search — see
+       * {@link configureSemanticBackend}; the read gates treat it as
+       * disabled rather than serving unranked results (BUG-045).
+       */
+      vectorSpacePopulated: boolean;
+    }
   | { ok: false; failure: SemanticBootstrapFailure };
 
 // Structural mirrors of the slices of `@adhd/sox-vector-store` /
@@ -361,7 +436,22 @@ export async function bootstrapSemanticBackend(store: GraphBacklogStore, config:
       };
     },
   };
-  return { ok: true, backend };
+  // BUG-045 — is there anything to search? An installed backend over an
+  // EMPTY space answers every query with the same arbitrary page and a null
+  // score, which is indistinguishable from a working search and wrong for
+  // every input. One `iter` step settles it; the iterator is lazy, so this
+  // reads at most one row regardless of corpus size.
+  let vectorSpacePopulated = false;
+  try {
+    for await (const _first of vectorBackend.iter(space.modelId)) {
+      vectorSpacePopulated = true;
+      break;
+    }
+  } catch (err) {
+    return { ok: false, failure: { reason: 'vector_store_failed', detail: `probing vector space "${space.modelId}" for existing vectors failed: ${errText(err)}` } };
+  }
+
+  return { ok: true, backend, vectorSpacePopulated };
 }
 
 /**
@@ -413,6 +503,17 @@ export async function enableSemanticSearchFromConfig(
     return null;
   }
 
-  configureSemanticBackend(result.backend);
+  if (!result.vectorSpacePopulated) {
+    // Loud, not fatal, and NOT silently degraded to keyword: the read gates
+    // now report `rag_not_configured` for this store until it is backfilled.
+    log(
+      `backlog: embedding.enabled is set and the semantic backend started, but its vector space ` +
+        `("${result.backend.modelId}", ${result.backend.dim}d) is EMPTY — zero items have been embedded. ` +
+        `Semantic reads will answer rag_not_configured rather than returning unranked results; ` +
+        `run \`backlog_admin(embedding_backfill)\` to populate it.`,
+    );
+  }
+
+  configureSemanticBackend(result.backend, { vectorSpacePopulated: result.vectorSpacePopulated });
   return result.backend;
 }
