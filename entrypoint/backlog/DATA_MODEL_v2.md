@@ -16,10 +16,11 @@ spine, entity, and relation model of SPEC.md §3 / DESIGN.md §2.1-2.2.
 4. **Every mutation is documented and content-addressed.** Transitions require
    agent + note + SHA; citations require SHA.
 5. **First-class node and edge kinds are a designed capability of the store.**
-   `@adhd/sox-graph-store` ≥0.6.0 ships an open-schema vocabulary: fresh-store
+   `@adhd/sox-graph-store` 0.9.x ships an open-schema vocabulary: fresh-store
    `node.kind` / `edge.rel` are plain `TEXT` with an injectable application-level
-   `TypePolicy` (`validateKind`/`validateRel`) enforcing the vocabulary on write
-   (CAPABILITY-CATALOG.md:184). Older stores migrate via the operator-invoked,
+   `TypePolicy` (`validateKind`/`validateRel`) enforcing the vocabulary on write.
+   The stable node UUID is surfaced as `NodeRecord.uid` + `getNodeByUid(uid)` as of
+   0.9.1. Older stores migrate via the operator-invoked,
    offline, verified-and-reversible `migrateToOpenSchema` path (PKT-61/BL-442,
    ADR-0010 D3). This model adopts that capability directly.
 
@@ -98,9 +99,10 @@ component    (id uuid pk, name text not null)
   -- was projectPath / sub-area. Ownership is the OWNS edge from project
   -- (§5) — no project_id string column.
 
-location     (id uuid pk, type text not null, value text not null)
-  -- 0..n per component via the HAS_LOCATION edge. type ∈ {path, remote_url,
-  -- url, filesystem_path}; the VALUE's interpretation is determined by type.
+location     (id uuid pk, locType text not null, value text not null)
+  -- 0..n per component via the HAS_LOCATION edge. locType ∈ {path, url, tool};
+  -- the VALUE's interpretation is determined by locType (path = filesystem path,
+  -- url = full URL, tool = MCP tool / CLI command / symbol name).
 
 issue        (id uuid pk,
               kind_id fk -> kind.id,
@@ -250,8 +252,10 @@ legacy artifact (and the pre-migration backup).
    migration time, noted as such), or sha unknown → mark unverified?
 2. **Transition sha semantics**: sha256 over the canonical serialization of
    `(issue_id, from, to, agent_id, note, at)` — confirm.
-3. **Location typing**: `type` as a string enum vs another catalog table
-   (`location_type`) — lean catalog, same first-class rationale.
+3. **Location typing**: resolved — `locType ∈ {path, url, tool}` as a string
+   enum (not a catalog table); the three values cover the agent's three lookups
+   (file / url / tool), and a `location_type` catalog would add indirection with
+   no extensibility payoff.
 4. **`blocks` inverse traversal** exposed as a first-class edge kind
    (`blocked_by`) or derived from `blocks` — lean derived, no second row.
 5. **TypePolicy injection point**: how the remodel's catalog-backed policy is
