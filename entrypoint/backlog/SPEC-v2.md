@@ -14,8 +14,9 @@ old CODE is deleted. This means: the library dep bump lands WITH the fresh v2
 build (§10) — there is no "must not break v1" constraint, because v1 is going
 away.
 
-Library versions (verified on npm): `@adhd/sox-graph-store@0.9.0`,
-`@adhd/sox-store-adapter@0.8.0`, `@adhd/sox-vector-store@0.6.0`,
+Library versions (verified on npm): `@adhd/sox-graph-store@0.9.1` (the 0.9.1
+patch surfaces `NodeRecord.uid` + `getNodeByUid` — the stable-identity correction,
+§1), `@adhd/sox-store-adapter@0.8.0`, `@adhd/sox-vector-store@0.6.0`,
 `@adhd/sox-hybrid-search@0.4.2`, `@adhd/sox-semantic@0.1.2`,
 `@adhd/sox-memory-core@0.9.2`.
 
@@ -38,24 +39,29 @@ Library versions (verified on npm): `@adhd/sox-graph-store@0.9.0`,
 
 ## 1. Identity, dedup, & uniqueness
 
-- **Identity = `uid` (UUID).** `writeNode` generates it; the app exposes `uid`,
-  uses `rowid` internally.
+- **Identity = `uid` (UUID), now a first-class library surface.** `graph-store`
+  ≥0.9.1 exposes `NodeRecord.uid` and `GraphBackend.getNodeByUid(uid)`, so the
+  app layer keys the *consumer-facing* identity on the stable, exportable UUID
+  and resolves an external `uid` → node with one call. `rowid` (`NodeRecord.id`)
+  remains the *internal* edge identity (`writeEdge`/`getEdges` are
+  `src`/`dst` rowids) — it is per-store and is NOT stable across the ETL or a
+  rebuild, so it must never escape as an external reference.
 - **Content is NEVER identity.** The library's global content-hash dedup
   (`skipDedupe` default `false`) is a content-idempotency convenience, not
   identity. **Every live write-layer entity write passes `skipDedupe: true`:**
   `createIssue`, and `supersede`-backed body edits — so two identical-body
   issues are two rows (two `uid`s), never one collapsed row. The ETL already
   passes it (§8); the live path must too. (This was the blind review's blocker.)
-- **Uniqueness = an injected `NodeUniquenessPolicy`**, not a DDL index:
-  - flat catalogs (`status`/`priority`/`kind`/`agent`/`edge_kind`): name unique
-    → `SELECT … WHERE kind=? AND name=?`.
-  - `project`: name unique → flat `(kind='project', name)`.
+- **Uniqueness = `findOrCreateNode` (flat) + `NodeUniquenessPolicy` (edge-scoped).**
+  - flat catalogs (`status`/`priority`/`kind`/`agent`/`edge_kind`) and `project`
+    (name unique) → `findOrCreateNode(kind, name)` — the library's idempotent
+    business-key primitive, NOT a hand-rolled scan.
   - `component` within a project: **the parent project `uid` is carried in
-    `meta.metadata.projectUid`**; the policy resolves it via `tx`
-    (`SELECT rowid FROM node WHERE uid=?`) then checks `owns_project` edges for
-    an existing same-name component under that project. This is implementable
-    because the parent is threaded into `meta` — the check runs BEFORE the
-    component's own INSERT, against *other* components, not itself.
+    `meta.metadata.projectUid`**; the injected `NodeUniquenessPolicy.check` reads
+    it (resolve parent via `getNodeByUid` on the tx handle), then checks
+    `owns_project` edges for an existing same-name component under that project.
+    This is implementable because the parent is threaded into `meta` — the check
+    runs BEFORE the component's own INSERT, against *other* components, not itself.
 - The policy runs inside `writeNode`'s transaction (tx-threaded), so catalog
   upsert is atomic with the check.
 
@@ -352,10 +358,12 @@ now that `graph-store@0.9.0` is published.
 
 ## 10. Dependencies & sequencing
 
-1. Library tier — published (FEAT-010..024, DEBT-011, BUG-040).
+1. Library tier — published (FEAT-010..024, DEBT-011, BUG-040), plus the
+   `graph-store` 0.9.1 patch that surfaces `NodeRecord.uid` + `getNodeByUid`
+   (the stable-identity correction — the ONE library change this plan required).
 2. **Bump deps + build v2 fresh, in ONE change** (full replacement — no v1
    build to protect): `entrypoint/backlog/package.json` bumps to graph-store
-   0.9.0 / store-adapter 0.8.0 / vector-store 0.6.0 and ADDs hybrid-search
+   0.9.1 / store-adapter 0.8.0 / vector-store 0.6.0 and ADDs hybrid-search
    0.4.2 / semantic 0.1.2 / embedding-provider 0.4.1, alongside the new
    `v2-write.ts` → `v2-query.ts` → consumers. The old v1 code is wiped in the
    same change; there is no intermediate state where both compile.
@@ -365,6 +373,7 @@ now that `graph-store@0.9.0` is published.
 
 ## 11. Out of scope
 
-Library-tier changes (published; new primitives are library tickets); data-model
+Library-tier changes beyond the `graph-store` 0.9.1 uid-surfacing patch (already
+committed); data-model
 changes beyond this spec; multi-tenancy/auth (identity = `agent` catalog;
 access control out of scope).
