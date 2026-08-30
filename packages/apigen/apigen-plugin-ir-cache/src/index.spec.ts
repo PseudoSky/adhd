@@ -13,13 +13,22 @@
 // the SAME process must land in two DIFFERENT files — proving the opts value
 // is actually read, not the env-var/default path silently reused regardless
 // of what `--opt` says (the exact bug this test exists to catch).
+//
+// BUG-APIGEN-058 default-path teeth: the bare default (no `--opt cache=`, no
+// `APIGEN_IR_CACHE_FILE`) must (a) land under the `@adhd/environment`-
+// namespaced global cache root, NOT the invocation cwd, (b) be PER-SOURCE so
+// two distinct extraction targets never overwrite each other's entry, and
+// (c) HIT on a repeat extraction of the same source. `ADHD_ROOT` points the
+// plugin's default at a throwaway temp root so these tests never touch the
+// real `~/.adhd`.
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { createExtractInvokerFromPlugins, type ExtractCall, type Operation } from '@adhd/apigen-core-client';
 import { irCachePlugin } from './index';
+import { defaultCacheFileName, resolveDefaultCacheFile } from './lib/default-cache-file';
 
 function makeOp(id: string): Operation {
   return {
@@ -49,21 +58,30 @@ async function waitUntil(check: () => boolean): Promise<void> {
 }
 
 let dir: string;
+let adhdRootDir: string;
 let sourcePath: string;
 let call: ExtractCall;
 
-const REAL_DEFAULT_PATH = path.join(process.cwd(), 'tmp', 'apigen', 'ir-cache', 'default.ir.json');
+/** The pre-BUG-APIGEN-058 default: a cache file in the invocation cwd. */
+const OLD_CWD_DEFAULT_PATH = path.join(process.cwd(), 'tmp', 'apigen', 'ir-cache', 'default.ir.json');
 
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'apigen-ir-cache-index-spec-'));
+  adhdRootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'apigen-ir-cache-adhdroot-spec-'));
   sourcePath = path.join(dir, 'entry.ts');
   fs.writeFileSync(sourcePath, `export async function doThing(): Promise<void> {}\n`);
   call = { source: sourcePath, host: 'ts', namespace: 'svc', extractorOptions: {} };
   delete process.env['APIGEN_IR_CACHE_FILE'];
-  // Self-isolating: a stray prior run's real-default-path artifact (tmp/ is
+  process.env['ADHD_ROOT'] = adhdRootDir;
+  // Self-isolating: a stray prior run's old-default-path artifact (tmp/ is
   // gitignored/ephemeral, but a leftover file there would make the
   // "not the default" assertion below flaky depending on execution history).
-  fs.rmSync(REAL_DEFAULT_PATH, { force: true });
+  fs.rmSync(OLD_CWD_DEFAULT_PATH, { force: true });
+});
+
+afterEach(() => {
+  delete process.env['ADHD_ROOT'];
+  delete process.env['APIGEN_IR_CACHE_FILE'];
 });
 
 describe('irCachePlugin.capabilities.extractLayer.createLayer — --opt cache=<path> is honored', () => {
@@ -84,7 +102,8 @@ describe('irCachePlugin.capabilities.extractLayer.createLayer — --opt cache=<p
     // Writes are fire-and-forget — poll for the real observable effect.
     await waitUntil(() => fs.existsSync(cachePathA));
 
-    expect(fs.existsSync(REAL_DEFAULT_PATH)).toBe(false);
+    // The default location must NOT have been written either.
+    expect(fs.existsSync(resolveDefaultCacheFile(call))).toBe(false);
   });
 
   it('two DIFFERENT --opt cache=<path> values against the same source produce two DIFFERENT cache files, each independently a HIT on repeat', async () => {
@@ -135,5 +154,84 @@ describe('irCachePlugin.capabilities.extractLayer.createLayer — --opt cache=<p
     // Must not throw and must still return real operations via the default path.
     const ops = await invoke(call);
     expect(ops).toHaveLength(1);
+  });
+});
+
+describe('irCachePlugin default path — machine-global, environment-namespaced, per-source (BUG-APIGEN-058)', () => {
+  it('a bare invocation (no --opt cache=, no APIGEN_IR_CACHE_FILE) caches under the @adhd/environment-namespaced root — NEVER the invocation cwd', async () => {
+    let calls = 0;
+    const runExtractor = async (): Promise<Operation[]> => {
+      calls++;
+      return [makeOp('svc/doThing')];
+    };
+
+    const invoke = createExtractInvokerFromPlugins([irCachePlugin], runExtractor, {});
+    await invoke(call); // MISS → writes through to the default file
+    expect(calls).toBe(1);
+
+    const defaultPath = resolveDefaultCacheFile(call);
+    // Namespaced under the (redirected) adhd root, not the cwd.
+    expect(defaultPath.startsWith(path.join(adhdRootDir, 'apigen', 'default', 'cache'))).toBe(true);
+    await waitUntil(() => fs.existsSync(defaultPath));
+
+    // No cache artifact may appear in the invocation cwd.
+    expect(fs.existsSync(OLD_CWD_DEFAULT_PATH)).toBe(false);
+    expect(fs.existsSync(path.join(process.cwd(), 'tmp', 'apigen'))).toBe(false);
+  });
+
+  it('a repeat extraction of the SAME source HITs its own default file — extractor not re-run (cross-invocation reuse)', async () => {
+    let calls = 0;
+    const runExtractor = async (): Promise<Operation[]> => {
+      calls++;
+      return [makeOp('svc/doThing')];
+    };
+
+    const invoke = createExtractInvokerFromPlugins([irCachePlugin], runExtractor, {});
+    await invoke(call);
+    await waitUntil(() => fs.existsSync(resolveDefaultCacheFile(call)));
+    expect(calls).toBe(1);
+
+    // A SECOND invoker (a fresh "process" in the reuse story) against the
+    // same source answers from the same default file — no re-extraction.
+    const invokeAgain = createExtractInvokerFromPlugins([irCachePlugin], runExtractor, {});
+    await invokeAgain(call);
+    expect(calls).toBe(1);
+  });
+
+  it('two DIFFERENT sources through the bare default get two DIFFERENT files — they cannot overwrite each other', async () => {
+    const otherSource = path.join(dir, 'other.ts');
+    fs.writeFileSync(otherSource, `export async function other(): Promise<void> {}\n`);
+    const callB: ExtractCall = { source: otherSource, host: 'ts', namespace: 'svc', extractorOptions: {} };
+    let calls = 0;
+    const runExtractor = async (): Promise<Operation[]> => {
+      calls++;
+      return [makeOp('svc/doThing')];
+    };
+
+    const invoke = createExtractInvokerFromPlugins([irCachePlugin], runExtractor, {});
+    await invoke(call);
+    await invoke(callB);
+    expect(calls).toBe(2);
+
+    const pathA = resolveDefaultCacheFile(call);
+    const pathB = resolveDefaultCacheFile(callB);
+    expect(pathA).not.toBe(pathB);
+    await waitUntil(() => fs.existsSync(pathA) && fs.existsSync(pathB));
+
+    // Each repeat HITs its OWN file — no cross-contamination.
+    await invoke(call);
+    await invoke(callB);
+    expect(calls).toBe(2);
+  });
+
+  it('defaultCacheFileName is stable per extraction identity and distinct across identities', () => {
+    const sameSource = { ...call, source: sourcePath };
+    expect(defaultCacheFileName(call)).toBe(defaultCacheFileName(sameSource));
+    const otherSource = { ...call, source: path.join(dir, 'other.ts') };
+    expect(defaultCacheFileName(otherSource)).not.toBe(defaultCacheFileName(call));
+    const otherNs = { ...call, namespace: 'other-ns' };
+    expect(defaultCacheFileName(otherNs)).not.toBe(defaultCacheFileName(call));
+    const otherHost = { ...call, host: 'py' };
+    expect(defaultCacheFileName(otherHost)).not.toBe(defaultCacheFileName(call));
   });
 });

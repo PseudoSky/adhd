@@ -136,11 +136,14 @@ apigen run --source client.ts --type api-fastify --use ir-cache --opt cache=./tm
 ```
 
 actually caches at `./tmp/ir-cache.json` — not the `APIGEN_IR_CACHE_FILE`
-env var or the `tmp/apigen/ir-cache/default.ir.json` default. `--opt
-extractorVersion=<v>` is honored the same way. Only a bare `--use ir-cache`
-with no `--opt cache=` falls back to the env-var/default middleware
-(`layer`) — unchanged from before this fix, and still the right choice for a
-caller with no per-invocation configuration need.
+env var or the machine-global default. `--opt extractorVersion=<v>` is
+honored the same way. Only a bare `--use ir-cache` with no `--opt cache=`
+falls back to the default middleware (`layer`): `APIGEN_IR_CACHE_FILE` if
+set, otherwise a per-source file under the `@adhd/environment`-namespaced
+global cache root — `~/.adhd/apigen/default/cache/ir-<hash>.json`, keyed by
+host/namespace/source so distinct uses never overwrite each other, and
+`ADHD_ROOT` (the same override backlog's CLI honors) redirects the root.
+Never the invocation cwd (BUG-APIGEN-058).
 
 A host with no `--use`/`--opt` CLI surface at all (e.g.
 `entrypoint/backlog/src/server.ts`'s live MCP/HTTP mount) still builds its
