@@ -492,8 +492,9 @@ function irCacheEnabled(): boolean {
  * `extractLayer.layer` resolves its cache file / extractor version lazily
  * from `APIGEN_IR_CACHE_FILE`/`APIGEN_IR_CACHE_EXTRACTOR_VERSION` env vars
  * with no per-call configuration hook (see that package's own `src/index.ts`
- * module doc) — backlog needs a DIFFERENT default file
- * (`backlog-client.ir.json`, not the plugin's own generic `default.ir.json`)
+ * module doc) — backlog needs a DIFFERENT, fixed default file
+ * (`backlog-client.ir.json` at one known path, not the plugin's per-source
+ * hashed default files under `~/.adhd/apigen/default/cache/`)
  * and a specific `extractorVersion` (`CORE_CLIENT_VERSION`, the actual
  * installed `@adhd/apigen-core-client` version, not an env-var-overridable
  * value), so it builds its own `Plugin`-shaped instance around the factory

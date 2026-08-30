@@ -1230,6 +1230,9 @@ importers:
       '@adhd/apigen-core-client':
         specifier: ^0.3.0
         version: link:../apigen-core-client
+      '@adhd/environment':
+        specifier: ^0.1.5
+        version: link:../../environment/environment-core-node
 
   packages/apigen/apigen-plugin-java-javalin:
     dependencies:

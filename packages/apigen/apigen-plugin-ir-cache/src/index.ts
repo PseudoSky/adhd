@@ -30,20 +30,24 @@
 // `backlogIrCachePlugin()`) already uses directly.
 //
 // `opts.cache` absent (e.g. a bare `--use ir-cache` with no `--opt`) falls
-// back to the pre-existing env-var default (`APIGEN_IR_CACHE_FILE`/
-// `APIGEN_IR_CACHE_EXTRACTOR_VERSION`, lazily resolved on first call and
-// memoized) — unchanged behaviour for any caller not passing `--opt cache=`.
-// `layer` (the static fallback field) still resolves to that same env-var
-// default, so a caller reading `irCachePlugin.capabilities.extractLayer.layer`
-// directly (rather than through `createExtractInvokerFromPlugins`, which
-// always prefers `createLayer` when present) still gets a working, if
-// unconfigurable, middleware.
+// back to the default middleware (`./lib/default-cache-file.ts`): the
+// `APIGEN_IR_CACHE_FILE` env-var override if set, otherwise a PER-SOURCE
+// file under the `@adhd/environment`-namespaced machine-global cache root
+// (`~/.adhd/apigen/default/cache/ir-<hash>.json`) — never the invocation
+// cwd (BUG-APIGEN-058), and never a single shared `default.ir.json` that
+// distinct uses would silently overwrite. `APIGEN_IR_CACHE_EXTRACTOR_VERSION`
+// overrides the extractor version the same way. `layer` (the static fallback
+// field) resolves the same way per call, so a caller reading
+// `irCachePlugin.capabilities.extractLayer.layer` directly (rather than
+// through `createExtractInvokerFromPlugins`, which always prefers
+// `createLayer` when present) still gets a working, if unconfigurable,
+// middleware.
 
-import { join } from 'node:path';
-import type { Plugin } from '@adhd/apigen-core-client';
+import type { Plugin, ExtractCall, ExtractMiddleware } from '@adhd/apigen-core-client';
 import { createIrCacheLayer, type IrCacheOptions } from './lib/ir-cache-layer';
 import { buildIrCacheArtifact } from './lib/target';
 import { readDefaultExtractorVersion } from './lib/version';
+import { resolveDefaultCacheFile } from './lib/default-cache-file';
 
 export {
   createIrCacheLayer,
@@ -62,30 +66,25 @@ export { buildIrCacheArtifact } from './lib/target';
 export { readDefaultExtractorVersion } from './lib/version';
 
 /**
- * Default RUNTIME CACHE mode cache-file path, env-overridable —
- * `APIGEN_IR_CACHE_FILE` (design doc R2-4's naming; this package does not
- * itself read `APIGEN_IR_CACHE_ENABLED` — the opt-out kill switch is a
- * caller/host concern, e.g. `entrypoint/backlog/src/server.ts` deciding
- * whether to include `irCachePlugin` in its plugin list at all, not this
- * plugin's own responsibility).
+ * Lazily built default `extractLayer` middleware, memoized PER resolved
+ * cache file — distinct extraction targets in one process each get their
+ * own layer (and their own cache file), so they can never overwrite each
+ * other's entry in the shared machine-global cache.
  */
-function defaultCacheFilePath(): string {
-  return (
-    process.env['APIGEN_IR_CACHE_FILE'] ??
-    join(process.cwd(), 'tmp', 'apigen', 'ir-cache', 'default.ir.json')
-  );
-}
+const defaultLayers = new Map<string, ExtractMiddleware>();
 
-let defaultLayer: ReturnType<typeof createIrCacheLayer> | undefined;
-
-/** Lazily build (and memoize) the default `extractLayer.layer` middleware. */
-function resolveDefaultLayer(): ReturnType<typeof createIrCacheLayer> {
-  defaultLayer ??= createIrCacheLayer({
-    cache: defaultCacheFilePath(),
-    extractorVersion:
-      process.env['APIGEN_IR_CACHE_EXTRACTOR_VERSION'] ?? readDefaultExtractorVersion(),
-  });
-  return defaultLayer;
+function resolveDefaultLayer(call: ExtractCall): ExtractMiddleware {
+  const cacheFile = resolveDefaultCacheFile(call);
+  let layer = defaultLayers.get(cacheFile);
+  if (!layer) {
+    layer = createIrCacheLayer({
+      cache: cacheFile,
+      extractorVersion:
+        process.env['APIGEN_IR_CACHE_EXTRACTOR_VERSION'] ?? readDefaultExtractorVersion(),
+    });
+    defaultLayers.set(cacheFile, layer);
+  }
+  return layer;
 }
 
 /**
@@ -113,13 +112,13 @@ export const irCachePlugin: Plugin<IrCacheOptions> = {
   },
   capabilities: {
     extractLayer: {
-      layer: (call, next) => resolveDefaultLayer()(call, next),
+      layer: (call, next) => resolveDefaultLayer(call)(call, next),
       createLayer: (opts) => {
         const cache = typeof opts['cache'] === 'string' ? opts['cache'] : undefined;
         if (!cache) {
           // No `--opt cache=` given — fall back to the env-var/default
           // middleware, identical to what `layer` above already resolves.
-          return (call, next) => resolveDefaultLayer()(call, next);
+          return (call, next) => resolveDefaultLayer(call)(call, next);
         }
         const extractorVersion =
           typeof opts['extractorVersion'] === 'string'
