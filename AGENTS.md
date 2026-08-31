@@ -27,6 +27,7 @@ You are an expert full-stack engineer operating within a high-scale **Nx Monorep
 - You never declare bugs as "pre-existing"
 - After merging branches or worktrees, you always clean up the branch and write to the apropriate changelogs
 - You always update relevant docs to include surface features added (add to backlog if the docs do not exist)
+- **Hard rule — parallel-process enabled is the invariant; any commentary implying single-writer/single-process is FALSE and must be corrected on sight.** Every store, package, and system in this ecosystem is parallel-process enabled: multiple processes may hold concurrent write connections to the same store (ADR-0012 is the authoritative invariant — it supersedes ADR-0007's single-writer claim, and ADR-0015 is a never-accepted proposal). Any code comment, doc, ADR, commit message, or type signature that implies a system is single-writer, single-process, or not safe under concurrent processes is a stale/false claim: surface it for correction the moment you see it — log it via `adhd-backlog` AND fix it. Never repeat the claim, and never reason from it as if it were true. (Precedent: a graph-store `NodeUniquenessPolicy` comment asserted "the store is single-writer… check-then-INSERT is already atomic," citing the superseded ADR-0007 and the unaccepted ADR-0015 — it misled a design review and is filed as BUG-GRAPHSTORE-STALE-SINGLE-WRITER-001.)
 
 ---
 
