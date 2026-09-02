@@ -151,7 +151,37 @@ adhd-backlog --help         # live-derived command listing
 adhd-backlog create --input '{"item":{"family":"BUG-EXAMPLE","title":"t","body":"b","repo":"org/repo"},"by":"me:1"}'
 adhd-backlog get --input '{"humanId":"BUG-EXAMPLE-001","repo":"org/repo"}'
 adhd-backlog query --input '{"filter":{"status":"OPEN"}}'
+adhd-backlog search "publish gate trips under load" --limit 5 --status open
 ```
+
+### `search` — the one shortcut
+
+`query`'s natural-language form is common enough to type that it gets a
+shortcut. `adhd-backlog search "<query>" [flags]` takes the query as a
+positional argument and the rest of the options as ordinary flags:
+
+```bash
+adhd-backlog search "connections leak under load"
+adhd-backlog search "flaky publish gate" --limit 5 --status open --priority HIGH
+adhd-backlog search "stale claims" --repo PseudoSky/adhd --kind BUG \
+  --fields humanId,title,status,_score      # _score shows the ranking scores
+adhd-backlog search --anchor BUG-BACKLOG-001 --limit 5   # more like this item
+adhd-backlog search --help                               # the full flag list
+```
+
+- It is **not a seventh verb** — it is an argv translation onto `query`, so
+  it produces the identical JSON envelope and the identical exit codes.
+  `search "x" --limit 2` is exactly `query --input '{"text":"x","limit":2}'`.
+- The query text is matched **semantically** when the embedding space is
+  populated and by **keyword (FTS)** when it is not, so it works on every
+  build — see Semantic search below.
+- Flags: `--limit`, `--offset`, `--sort`, `--direction`, `--fields`,
+  `--status`, `--priority`, `--kind`, `--family`, `--repo`, `--project-path`,
+  `--plan`, `--assignee`, `--claimed-by`, `--tag` (repeatable), `--grep`,
+  `--anchor`.
+- `--grep` composes with the query text only once the embedding space is
+  populated. Without one the query text *is* the keyword query, so passing
+  both is rejected rather than silently dropping one of them.
 
 - Same architecture as the HTTP/MCP transports above — `entrypoint/backlog/src/cli.ts`'s
   `runBacklogCli()` reuses `buildBacklogApigenPackage()` and hands it straight
@@ -260,10 +290,12 @@ silently pretends to work.
 ### What it gives you
 
 ```bash
-# find by meaning, not keywords
+# find by meaning, not keywords — the `search` shortcut is the short way to type this
+adhd-backlog search "connections leak under load"
 adhd-backlog query --input '{"filter":{"semantic":"connections leak under load"}}'
 
 # items similar to a known one
+adhd-backlog search --anchor BUG-BACKLOG-001
 adhd-backlog query --input '{"view":"similar","filter":{"anchor":"BUG-BACKLOG-001"}}'
 ```
 
