@@ -378,6 +378,16 @@ describe('FEAT-009/FEAT-BACKLOG-010/WO-3 over the REAL built HTTP server (spawne
       const r = await post('/backlog/create', {
         item: { family, title, body: 'x', repo: HTTP_REPO, citations },
         by: 'stats-surface-http:1',
+        // These three are STATS fixtures, not dedupe fixtures. They share a
+        // family and a one-character body by design, so once semantic dedupe
+        // is switched on (`embedding.enabled`, which the spawned server reads
+        // from the machine's own `@adhd/environment` config) the filing gate
+        // legitimately intercepts the third as a near-duplicate of the first
+        // and the suite fails on a feature working correctly. `file` is the
+        // documented confirmed-re-file that says "yes, mint it anyway" — the
+        // gate itself is proven by `rag-dedupe`'s own specs, which is where
+        // that assertion belongs.
+        duplicateAction: 'file',
       });
       expect(r.status).toBe(200);
       const env = r.json as { ok: boolean; data: { created: boolean; humanId: string } };

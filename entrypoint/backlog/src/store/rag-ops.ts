@@ -108,7 +108,7 @@ export async function getEmbeddingHealth(backend: SemanticBackend): Promise<Sema
 export interface IEmbeddingBackfillReport {
   /** `true` (the safe default): nothing was embedded, only counted — mirrors `prune`/`archive`'s "nothing written unless the caller opts in" convention (`v2/admin.ts`'s `confirm` fields), spelled `dryRun` here per RAG-SPEC §7's own vocabulary. */
   dryRun: boolean;
-  /** Every live item considered, in scope. */
+  /** Every live item considered, in scope — INCLUDING the terminal ones counted in `skippedTerminal`. */
   scanned: number;
   /** Of `scanned`, how many lack a current vector — missing entirely OR carrying a stale `embedContentHash` stamp (mapping.ts). This is the count a dry run reports without calling the provider. */
   needingEmbed: number;
@@ -118,13 +118,21 @@ export interface IEmbeddingBackfillReport {
   failed: number;
   /** Per-item breakdown of WHY each `needingEmbed` item needed one — never double-counted (an item is missing XOR stale, never both). */
   reasons: { missing: number; staleContent: number };
+  /**
+   * Of `scanned`, how many were skipped for being in a TERMINAL status
+   * (`isTerminalStatus`) while `includeTerminal` was false — reported
+   * explicitly, never silently dropped, so a caller can always tell a
+   * genuinely-clean sweep from a scoped one.
+   */
+  skippedTerminal: number;
 }
 
 const DEFAULT_BACKFILL_CONCURRENCY = 4;
 
 /**
- * RAG-SPEC.md §7 — iterates every LIVE item in scope lacking a CURRENT
- * vector and schedules embeds for it, batched to bound concurrent inference
+ * RAG-SPEC.md §7 — iterates every live, NON-TERMINAL item in scope lacking a
+ * CURRENT vector and schedules embeds for it, batched to bound concurrent
+ * inference
  * (never `Promise.all` over the whole scan — a store with thousands of items
  * would otherwise fire thousands of simultaneous ONNX calls at once).
  *
@@ -147,9 +155,10 @@ const DEFAULT_BACKFILL_CONCURRENCY = 4;
 export async function runEmbeddingBackfill(
   store: GraphBacklogStore,
   backend: SemanticBackend,
-  opts: { repo?: string; dryRun: boolean; concurrency?: number }
+  opts: { repo?: string; dryRun: boolean; concurrency?: number; includeTerminal?: boolean }
 ): Promise<IEmbeddingBackfillReport> {
   const concurrency = opts.concurrency ?? DEFAULT_BACKFILL_CONCURRENCY;
+  const includeTerminal = opts.includeTerminal ?? false;
   const nodes = await queryItemNodes(store, opts.repo !== undefined ? { repo: opts.repo } : {});
 
   interface Candidate {
@@ -158,7 +167,23 @@ export async function runEmbeddingBackfill(
     reason: 'missing' | 'staleContent';
   }
   const candidates: Candidate[] = [];
+  let skippedTerminal = 0;
   for (const node of nodes) {
+    // Terminal items are excluded by DEFAULT. A resolved/duplicate/wontfix
+    // item that sits in the vector space is not inert: `run_dedup_sweep`
+    // iterates EVERY vector with no status predicate of its own, so an
+    // embedded terminal item can pull a live item into an advisory `SAME_AS`
+    // edge with something already closed. `clusterIntoPlans` had already
+    // reached the same conclusion independently (its own
+    // `!isTerminalStatus(item.status)` candidate filter); this makes the
+    // embedding sweep that FEEDS those surfaces agree with them at the
+    // source, instead of every downstream consumer re-filtering. Callers who
+    // genuinely want history in the space (searching "has this been fixed
+    // before?") opt back in with `includeTerminal: true`.
+    if (!includeTerminal && isTerminalStatus(toBacklogItem(node).status)) {
+      skippedTerminal += 1;
+      continue;
+    }
     const meta = (node.metadata ?? {}) as Partial<BacklogNodeMeta>;
     const hash = computeContentHash(node.content);
     const vec = await backend.vectorFor(node.id);
@@ -184,6 +209,7 @@ export async function runEmbeddingBackfill(
     embedded: 0,
     failed: 0,
     reasons,
+    skippedTerminal,
   };
   if (opts.dryRun) return report;
 

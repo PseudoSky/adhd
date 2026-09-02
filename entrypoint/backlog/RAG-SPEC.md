@@ -104,7 +104,7 @@ All RAG operations land inside the 6-tool surface (INTERFACE_v2): read side as `
 
 ## 7. Backfill and ops
 
-`backfillEmbeddings` iterates every live item lacking a vector and schedules embeds, batched to bound concurrent inference (via the task-queue substrate). `dryRun` reports the count without calling the provider. A **re-embed-on-content-change sweep** ships with the graph-model migration: any item whose `content_hash` changed (e.g. canonical repo-string re-stamp) gets its embedding regenerated — a stale vector is a correctness defect, and the backfill's "only if null" predicate alone would never repair it. The sweep reuses the same batching and dry-run discipline.
+`backfillEmbeddings` iterates every live, **non-terminal** item lacking a vector and schedules embeds, batched to bound concurrent inference (via the task-queue substrate). `dryRun` reports the count without calling the provider. A **re-embed-on-content-change sweep** ships with the graph-model migration: any item whose `content_hash` changed (e.g. canonical repo-string re-stamp) gets its embedding regenerated — a stale vector is a correctness defect, and the backfill's "only if null" predicate alone would never repair it. The sweep reuses the same batching and dry-run discipline. Terminal items (`isTerminalStatus`) are excluded by default and counted in the report as `skippedTerminal` — `run_dedup_sweep` iterates every vector with no status predicate of its own, so an embedded closed item would otherwise pull live items into advisory `SAME_AS` edges with already-closed work (`cluster_into_plans` already filters terminal items at its own candidate step). `includeTerminal: true` opts closed history back in.
 
 ## 8. Testing / DoD (real components, teeth, no proxies)
 
