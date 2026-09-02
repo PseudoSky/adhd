@@ -28,6 +28,7 @@ import { openTmpStore, type TmpStore } from '../test/helpers/tmp-store.js';
 import { buildBacklogEnv } from '../env.js';
 import type { BacklogCtx } from '../client.js';
 import { createItemNode, getItemNode } from '../store/crud.js';
+import { transitionStatusNode } from '../store/lifecycle.js';
 import { mutateMetadata } from '../store/mutate-metadata.js';
 import { computeContentHash, type BacklogNodeMeta } from '../store/mapping.js';
 import {
@@ -290,6 +291,59 @@ describe('configured: embedding_backfill', () => {
     // Both missing items now have a vector.
     expect(await backend.vectorFor(missing1.nodeId)).not.toBeNull();
     expect(await backend.vectorFor(missing2.nodeId)).not.toBeNull();
+  });
+
+  // --------------------------------------------------------------------------
+  // Terminal-status scoping. `run_dedup_sweep` iterates EVERY vector with no
+  // status predicate of its own, so what the backfill puts into the space is
+  // what that sweep will act on — these pin the scope at the source.
+  // --------------------------------------------------------------------------
+
+  it('excludes TERMINAL items by default and reports the count it skipped', async () => {
+    const open1 = await seed('BUG-RAGBFTERM', 'still open and unembedded');
+    const closed = await seed('BUG-RAGBFTERM', 'already fixed and unembedded');
+    await transitionStatusNode(tmp.store, REPO, closed.humanId, 'FIXED', {
+      by: AGENT,
+      citations: [{ file: 'entrypoint/backlog/src/store/rag-ops.ts', lines: '147-165', context: 'fixture: a real terminal transition, not a metadata poke' }],
+    });
+
+    const backend = new FakeSemanticBackend(tmp.store);
+    configureSemanticBackend(backend);
+
+    const env = ok(await backlogAdmin(ctx, { action: 'embedding_backfill', params: { repo: REPO, dryRun: false }, by: AGENT }));
+    if (env.action !== 'embedding_backfill') throw new Error('wrong action tag');
+    expect(env.report.scanned).toBe(2);
+    expect(env.report.skippedTerminal).toBe(1);
+    expect(env.report.needingEmbed).toBe(1);
+    expect(env.report.embedded).toBe(1);
+
+    // The consumer-visible outcome, not the counter: the open item is IN the
+    // vector space and the closed one is NOT, so a later `run_dedup_sweep`
+    // cannot see it at all.
+    expect(await backend.vectorFor(open1.nodeId)).not.toBeNull();
+    expect(await backend.vectorFor(closed.nodeId)).toBeNull();
+  });
+
+  it('includeTerminal:true opts closed history back into the vector space', async () => {
+    const open1 = await seed('BUG-RAGBFTERM2', 'still open here too');
+    const closed = await seed('BUG-RAGBFTERM2', 'closed but wanted in the space');
+    await transitionStatusNode(tmp.store, REPO, closed.humanId, 'WONTFIX', {
+      by: AGENT,
+      reason: 'fixture: terminal-dismissed needs a reason, not a citation',
+    });
+
+    const backend = new FakeSemanticBackend(tmp.store);
+    configureSemanticBackend(backend);
+
+    const env = ok(
+      await backlogAdmin(ctx, { action: 'embedding_backfill', params: { repo: REPO, dryRun: false, includeTerminal: true }, by: AGENT })
+    );
+    if (env.action !== 'embedding_backfill') throw new Error('wrong action tag');
+    expect(env.report.skippedTerminal).toBe(0);
+    expect(env.report.needingEmbed).toBe(2);
+    expect(env.report.embedded).toBe(2);
+    expect(await backend.vectorFor(open1.nodeId)).not.toBeNull();
+    expect(await backend.vectorFor(closed.nodeId)).not.toBeNull();
   });
 
   it('requires "by" once dryRun:false actually schedules embeds', async () => {

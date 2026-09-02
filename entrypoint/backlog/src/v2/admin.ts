@@ -1530,7 +1530,7 @@ export async function adminEmbeddingHealth(ctx: BacklogCtx, params: ParamBag = {
   });
 }
 
-const EMBEDDING_BACKFILL_PARAM_KEYS = ['repo', 'dryRun', 'concurrency'] as const;
+const EMBEDDING_BACKFILL_PARAM_KEYS = ['repo', 'dryRun', 'concurrency', 'includeTerminal'] as const;
 
 /**
  * RAG-SPEC.md §7 `embedding_backfill` — see `store/rag-ops.ts`'s
@@ -1541,6 +1541,12 @@ const EMBEDDING_BACKFILL_PARAM_KEYS = ['repo', 'dryRun', 'concurrency'] as const
  * names this param `dryRun` instead, so it is honoured under that name
  * rather than silently aliased to `confirm`). `by` is required only once
  * `dryRun: false` actually schedules embeds — a dry run is a read.
+ *
+ * Scope defaults to NON-TERMINAL items only; the count excluded is reported
+ * as `skippedTerminal` rather than silently dropped. `includeTerminal: true`
+ * opts closed history back into the vector space — see
+ * `runEmbeddingBackfill`'s own comment for why the default runs the other
+ * way (`run_dedup_sweep` has no status predicate of its own).
  */
 export async function adminEmbeddingBackfill(
   ctx: BacklogCtx,
@@ -1552,6 +1558,7 @@ export async function adminEmbeddingBackfill(
     const repo = readString(params, 'repo');
     const dryRun = readBoolean(params, 'dryRun') ?? true;
     const concurrency = readInteger(params, 'concurrency', 1, 64);
+    const includeTerminal = readBoolean(params, 'includeTerminal');
     const warnings: string[] = [];
     if (!dryRun) assertAttribution(by);
     else warnings.push('embedding_backfill: dry run - nothing was embedded. Re-run with `dryRun: false` (and `by`) to embed.');
@@ -1561,6 +1568,7 @@ export async function adminEmbeddingBackfill(
       ...(repo !== undefined ? { repo } : {}),
       dryRun,
       ...(concurrency !== undefined ? { concurrency } : {}),
+      ...(includeTerminal !== undefined ? { includeTerminal } : {}),
     });
     return { data: report, ...(warnings.length > 0 ? { warnings } : {}) };
   });

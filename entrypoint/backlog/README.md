@@ -189,18 +189,64 @@ behaves exactly as it always has.
 
 ### Enabling it
 
-Install the two optional peers and turn it on:
+Install the two optional peers, then turn it on **in the `@adhd/environment`
+config file** — not with an environment variable. Backlog resolves to `global`
+scope by default (`SPEC.md` §3), so the one file below switches semantic search
+on for every backlog process on the machine: every CLI invocation, every MCP
+server registration, and every agent session, with nothing to remember to
+export and nothing to add to a `.mcp.json` `env` block.
 
 ```bash
 pnpm add @adhd/sox-embedding-provider @adhd/sox-vector-store
-export ADHD_BACKLOG_EMBEDDING_ENABLED=true
 ```
 
-| Setting | Env var | Default |
-|---|---|---|
-| `embedding.enabled` | `ADHD_BACKLOG_EMBEDDING_ENABLED` | `false` |
-| `embedding.provider` | `ADHD_BACKLOG_EMBEDDING_PROVIDER` | `fastembed` |
-| `embedding.model` | `ADHD_BACKLOG_EMBEDDING_MODEL` | `bge-base-en-v1.5` (768-dim) |
+`~/.adhd/backlog/production/config.yaml`:
+
+```yaml
+embedding:
+  enabled: true
+```
+
+Then populate the vector space once — until you do, semantic reads answer
+`rag_not_configured` rather than ranking against an empty index:
+
+```bash
+# count first — a dry run never calls the model
+adhd-backlog admin --input '{"action":"embedding_backfill","params":{"dryRun":true}}'
+# then embed (`by` is required as soon as the sweep actually writes)
+adhd-backlog admin --input '{"action":"embedding_backfill","params":{"dryRun":false},"by":"you"}'
+# expect ok:true
+adhd-backlog admin --input '{"action":"embedding_health"}'
+```
+
+The backfill embeds **non-terminal items only** and reports what it left out as
+`skippedTerminal`. That is deliberate: `run_dedup_sweep` iterates every vector
+with no status predicate of its own, so embedded closed items would pull live
+items into advisory `SAME_AS` edges with already-finished work. Pass
+`"includeTerminal": true` when you specifically want to search closed history
+("has this been fixed before?").
+
+| Setting | Config key | Env override | Default |
+|---|---|---|---|
+| Enable RAG | `embedding.enabled` | `ADHD_BACKLOG_EMBEDDING_ENABLED` | `false` |
+| Provider | `embedding.provider` | `ADHD_BACKLOG_EMBEDDING_PROVIDER` | `fastembed` |
+| Model | `embedding.model` | `ADHD_BACKLOG_EMBEDDING_MODEL` | `bge-base-en-v1.5` (768-dim) |
+
+The env vars still work and still win — they are the highest-precedence layer
+of the cascade (code default → system → **global** → project → local → env
+var), which makes them right for a one-off override in a single shell:
+
+```bash
+ADHD_BACKLOG_EMBEDDING_ENABLED=false adhd-backlog query --input '{"filter":{"grep":"leak"}}'
+```
+
+They are the wrong place for the standing setting, because an exported variable
+only reaches the processes that inherit it — a `.mcp.json`-launched server, a
+cron job, or another agent's shell would each silently fall back to `false`, and
+you would get `rag_not_configured` from one caller and results from another
+against the same store. Scope it narrower by writing the same two lines to
+`<repo>/.adhd/backlog/production/config.yaml` and running with
+`ADHD_BACKLOG_SCOPE=project`.
 
 Embedding runs **locally** (ONNX via fastembed) — no API key, no network
 after the model is cached, no per-query cost.
@@ -228,6 +274,20 @@ adhd-backlog query --input '{"view":"similar","filter":{"anchor":"BUG-BACKLOG-00
 - `fields:["_vector"]` — the raw embedding
 - **Semantic dedupe on create** — filing an item that restates an existing
   one is caught even when the wording is entirely different
+
+> **This one changes existing behaviour, so know it before you enable
+> globally.** Once the vector space is populated, a `create` that previously
+> succeeded can come back as the `duplicate_candidate` error arm, because the
+> filing gate now compares *meaning* and not just keywords. That is the
+> feature working — but it means scripts, fixtures, and agents that mint
+> similarly-worded items need to say so explicitly:
+>
+> ```json
+> {"item": {...}, "by": "you", "duplicateAction": "file"}
+> ```
+>
+> `duplicateAction` defaults to `"abort"` (refuse and return the candidates);
+> `"file"` is the confirmed re-file that mints anyway.
 - `admin` actions: `embedding_health`, `embedding_backfill`,
   `list_near_duplicates`, `run_dedup_sweep`, `cluster_into_plans`,
   `promote_cluster_to_plan`
