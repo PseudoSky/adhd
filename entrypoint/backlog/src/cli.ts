@@ -39,6 +39,7 @@ import { runServeCommand } from './serve.js';
 import { readBacklogVersionInfo } from './version-info.js';
 import { exitCodeForEnvelope, isOutcomeEnvelope } from './model.js';
 import { MIGRATION_PHASES, readBacklogMigrationStatus, setBacklogMigrationPhase } from './migration-phase.js';
+import { buildSearchArgv } from './search-shortcut.js';
 
 /**
  * Derives the internal command-path PREFIX every `client.ts` operation
@@ -449,6 +450,7 @@ export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts
     console.log('Special commands (handled before the apigen command table):');
     console.log('  install-skill [options]  Install the backlog skill for a host (alias: install)');
     console.log('  serve [options]          Start the long-lived HTTP/MCP server (--transport http|mcp|both)');
+    console.log('  search "<query>" [flags]  Natural-language search — `query --input` with the options as flags');
     console.log('  sandbox-path             Report the resolved store path (store-free) — see --sandbox below');
     console.log('');
     console.log('  --sandbox    Global flag, valid before ANY command: isolates this invocation');
@@ -518,6 +520,32 @@ export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts
     return;
   }
 
+  // `search` is NOT a seventh operation and NOT a store-free short-circuit
+  // like the five above — it is an argv TRANSLATION. `buildSearchArgv` turns
+  // `search "<text>" --limit 5 --status open` into the
+  // `['query', '--input', '<json>']` the mounted `query` verb already
+  // accepts, and everything below (lazy store open, signal cleanup,
+  // `exitCodeForEnvelope`, output shape) then runs unchanged. See
+  // `search-shortcut.ts`'s header for why this is a translation rather than
+  // a new `client.ts` export (INTERFACE_v2 §3's six-verb mount surface).
+  // `--help` and every rejection resolve HERE, before the store is opened.
+  let searchArgv: string[] | undefined;
+  if (userArgvEarly[0] === 'search') {
+    const outcome = buildSearchArgv(userArgvEarly.slice(1));
+    if (outcome.kind === 'help') {
+      console.log(outcome.text);
+      return;
+    }
+    if (outcome.kind === 'error') {
+      // Same rejection shape `runMigrationPhaseCommand`'s `fail` emits, and
+      // the same `CLI_EXIT_CODE['invalid_argument']` the apigen path uses.
+      console.error(JSON.stringify({ code: 'invalid_argument', message: outcome.message }));
+      process.exitCode = 2;
+      return;
+    }
+    searchArgv = outcome.argv;
+  }
+
   // Opened lazily, at most once, only if `getCtx()` is actually invoked (a
   // dispatched command reaching a real function) — never for `--help`,
   // no-args, an unknown command, or a bad-flag rejection, all of which `run()`
@@ -564,7 +592,7 @@ export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts
 
   try {
     const { pkg, operations } = await buildBacklogApigenPackage(getCtx, { adhdRoot: opts.adhdRoot });
-    const userArgv = userArgvEarly;
+    const userArgv = searchArgv ?? userArgvEarly;
     const prefix = resolveCommandPrefix(operations);
     // Derived from the SAME `USE_PLUGINS` array passed to `options.usePlugins`
     // below — see {@link resolveMountNamespaces}'s doc comment — never a

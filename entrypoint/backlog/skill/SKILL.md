@@ -110,9 +110,25 @@ adhd-backlog admin   --input '<IBacklogAdminInput json>'
 batch action         --operation <op> --items '<json[]>' [--concurrency <n>]
 ```
 
-Two special commands are handled before the command table and do NOT take
-`--input`: `adhd-backlog serve [--transport http|mcp|both]` and
-`adhd-backlog install-skill` (alias `install`).
+Special commands are handled before the command table and do NOT take
+`--input`: `adhd-backlog serve [--transport http|mcp|both]`,
+`adhd-backlog install-skill` (alias `install`), and `adhd-backlog search`.
+
+`search` is the one flag-shaped shortcut, and it is **not a seventh verb** —
+it is an argv translation onto `query`'s natural-language `text` form
+(INTERFACE_v2 §2.1b), so it returns the identical envelope and exit codes:
+
+```
+adhd-backlog search "<query text>" [--limit n] [--offset n] [--sort s] [--direction asc|desc]
+                                   [--fields a,b,c] [--status s] [--priority p] [--kind k]
+                                   [--family f] [--repo r] [--project-path p] [--plan s]
+                                   [--assignee a] [--claimed-by c] [--tag t] [--grep q]
+adhd-backlog search --anchor <ID> [flags]      # nearest neighbours of an existing item
+```
+
+`search "x" --limit 2` is exactly `query --input '{"text":"x","limit":2}'`.
+The text matches semantically when the embedding space is populated and by
+keyword (FTS) when it is not. Run `adhd-backlog search --help` for the list.
 
 ### The outcome envelope — every call, every transport
 

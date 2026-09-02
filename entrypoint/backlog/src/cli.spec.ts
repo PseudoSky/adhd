@@ -922,3 +922,149 @@ describe('--sandbox / sandbox-path — P5-cli-serve-transport: the CLI must neve
     expect(existsSync(body.dbPath), 'the sandboxed db must actually have been created by the create above').toBe(true);
   });
 });
+
+
+// ---------------------------------------------------------------------------
+// `backlog search "<text>" [flags]` — the argv translation onto the mounted
+// `query` verb (search-shortcut.ts). Driven through the REAL spawned bin, the
+// way a human runs it. The load-bearing assertion is PARITY: `search` must
+// produce the byte-identical envelope and exit code the equivalent
+// `query --input` produces, because that equivalence is the entire contract —
+// a translation that answers differently from the thing it translates to is a
+// second implementation, which is exactly what this shortcut exists not to be.
+//
+// `ADHD_BACKLOG_EMBEDDING_ENABLED=false` pins the FTS fallback branch: the
+// machine-wide config now enables embeddings globally, and a fresh sandbox
+// store's vector space is EMPTY, so leaving it on would mean paying an ONNX
+// model load per spawn to exercise the same `filter.grep` path anyway
+// (`compileTextQuery` routes to grep whenever the space is not readable —
+// BUG-045). Pinning it makes the branch explicit and the run deterministic.
+describe('backlog search — natural-language shortcut (real spawned bin)', () => {
+  let adhdRoot: string | undefined;
+  const NO_EMBED = { ADHD_BACKLOG_EMBEDDING_ENABLED: 'false' };
+
+  afterEach(() => {
+    if (adhdRoot) rmSync(adhdRoot, { recursive: true, force: true });
+    adhdRoot = undefined;
+  });
+
+  /** Seeds one real item through the real `create` command, returning its humanId. */
+  function seed(root: string, title: string, body: string): string {
+    const res = runBin(
+      ['create', '--input', JSON.stringify({ item: { family: 'BUG-SEARCHSHORTCUT', title, body, repo: 'PseudoSky/search-shortcut-test' }, by: 'cli.spec', duplicateAction: 'file' })],
+      root,
+      NO_EMBED
+    );
+    expect(res.status, `seed failed\nstderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
+    const created = JSON.parse(res.stdout.trim().split('\n').pop() ?? '{}') as { ok: boolean; data: { humanId: string } };
+    expect(created.ok).toBe(true);
+    return created.data.humanId;
+  }
+
+  /** The last stdout line — the JSON envelope every command prints (BUG-APIGEN-015 shape). */
+  function envelope(res: SpawnResult): string {
+    return res.stdout.trim().split('\n').pop() ?? '';
+  }
+
+  it('finds a real seeded item by natural-language text and returns the standard envelope', () => {
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-search-'));
+    const humanId = seed(adhdRoot, 'Publish gate trips intermittently under machine load', 'The release publish gate reports a spurious failure.');
+    seed(adhdRoot, 'Unrelated: storybook theme tokens drift between builds', 'Nothing to do with publishing.');
+
+    const res = runBin(['search', 'publish gate', '--limit', '5'], adhdRoot, NO_EMBED);
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
+    const body = JSON.parse(envelope(res)) as { ok: boolean; data: { view: string; items: { humanId: string }[] } };
+    expect(body.ok).toBe(true);
+    expect(body.data.view).toBe('list');
+    expect(body.data.items.map((i) => i.humanId)).toContain(humanId);
+  });
+
+  it('PARITY: `search "<text>" --limit N --status open` is byte-identical to the equivalent `query --input`', () => {
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-search-parity-'));
+    seed(adhdRoot, 'Publish gate trips intermittently under machine load', 'The release publish gate reports a spurious failure.');
+    seed(adhdRoot, 'Second publish gate observation from a different run', 'Also about the publish gate.');
+
+    const viaShortcut = runBin(['search', 'publish gate', '--limit', '2', '--status', 'open'], adhdRoot, NO_EMBED);
+    const viaQuery = runBin(
+      ['query', '--input', JSON.stringify({ limit: 2, text: 'publish gate', filter: { status: 'open' } })],
+      adhdRoot,
+      NO_EMBED
+    );
+    expect(viaShortcut.status, `stderr:\n${viaShortcut.stderr}`).toBe(0);
+    expect(viaShortcut.status).toBe(viaQuery.status);
+    expect(envelope(viaShortcut)).toBe(envelope(viaQuery));
+    // Teeth: the parity assertion is only meaningful if the envelope actually
+    // carries results — two identical empty answers would prove nothing.
+    const body = JSON.parse(envelope(viaShortcut)) as { data: { items: unknown[] } };
+    expect(body.data.items.length).toBeGreaterThan(0);
+  });
+
+  it('PARITY: `--anchor` reaches view:"similar" — identical envelope AND the identical AC-12 refusal on an unembedded store', () => {
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-search-anchor-'));
+    const humanId = seed(adhdRoot, 'Anchor seed item for similarity', 'Body text for the anchor probe.');
+
+    const viaShortcut = runBin(['search', '--anchor', humanId, '--limit', '3'], adhdRoot, NO_EMBED);
+    const viaQuery = runBin(
+      ['query', '--input', JSON.stringify({ limit: 3, view: 'similar', filter: { anchor: humanId } })],
+      adhdRoot,
+      NO_EMBED
+    );
+    expect(viaShortcut.status).toBe(viaQuery.status);
+    expect(envelope(viaShortcut)).toBe(envelope(viaQuery));
+    // Teeth. Unlike the text form, `--anchor` has NO keyword fallback: it is a
+    // pure semantic input, so on this deliberately unembedded store BOTH sides
+    // must be the AC-12 refusal — asserting that explicitly is what stops this
+    // from being two identical blank answers proving nothing. It also pins the
+    // translation's real payload: a shortcut that quietly dropped `--anchor`
+    // would produce a plain list, exit 0, and silently pass a bare
+    // envelope-equality check.
+    const body = JSON.parse(envelope(viaShortcut)) as { ok: boolean; error?: { code: string } };
+    expect(body.ok).toBe(false);
+    expect(body.error?.code).toBe('rag_not_configured');
+    expect(viaShortcut.status).not.toBe(0);
+  });
+
+  it('a rejected invocation exits 2 with the invalid_argument envelope on STDERR, and never opens the store', () => {
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-search-reject-'));
+    const expectedDbPath = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot }).files.db;
+    expect(existsSync(expectedDbPath), 'sanity: no store should exist before the CLI ever runs').toBe(false);
+
+    const res = runBin(['search', 'x', '--limitt', '5'], adhdRoot, NO_EMBED);
+    // CLI_EXIT_CODE['invalid_argument'] — the same code the apigen path uses.
+    expect(res.status).toBe(2);
+    const err = JSON.parse(res.stderr.trim().split('\n').pop() ?? '{}') as { code: string; message: string };
+    expect(err.code).toBe('invalid_argument');
+    expect(err.message).toContain('Unknown option: --limitt');
+    expect(existsSync(expectedDbPath), 'a rejected search must be resolved before the store is ever opened').toBe(false);
+  });
+
+  it('`search --help` exits 0, prints usage, and never opens the store', () => {
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-search-help-'));
+    const expectedDbPath = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot }).files.db;
+
+    const res = runBin(['search', '--help'], adhdRoot, NO_EMBED);
+    expect(res.status, `stderr:\n${res.stderr}`).toBe(0);
+    expect(res.stdout).toContain('backlog search');
+    expect(res.stdout).toContain('--anchor');
+    expect(existsSync(expectedDbPath), 'search --help must not create the store').toBe(false);
+  });
+
+  it('the top-level --help advertises `search` alongside the other special commands', () => {
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-search-advertised-'));
+    const help = runBin(['--help'], adhdRoot, NO_EMBED);
+    expect(help.status).toBe(0);
+    // The distinctive line, not the bare word `search` — which appears in
+    // enough unrelated help prose that asserting it could never fail.
+    expect(help.stdout).toContain('search "<query>" [flags]');
+  });
+
+  it('AC-5 guard: adding `search` did NOT widen the six-verb mount surface', () => {
+    // The whole reason `search` is an argv translation and not a `client.ts`
+    // export (INTERFACE_v2 §3). A seventh command in the live table means the
+    // translation was quietly replaced by an operation.
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-search-surface-'));
+    const listing = runBin([], adhdRoot, NO_EMBED);
+    expect(listing.status).toBe(0);
+    expect(listing.stdout).not.toContain('backlog search');
+  });
+});

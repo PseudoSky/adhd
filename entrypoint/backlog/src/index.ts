@@ -70,6 +70,12 @@ export type { StartOpts } from './server.js';
 export { runBacklogCli, resolveCommandPrefix, prefixCommand, stripSandboxFlag } from './cli.js';
 export type { RunBacklogCliOpts } from './cli.js';
 
+// `search`'s argv translation (see search-shortcut.ts). NOT a mount-surface
+// widening: `server.ts` extracts `client.ts`, never this barrel, so exporting
+// it here keeps it unit-testable without adding a seventh apigen operation.
+export { buildSearchArgv, SEARCH_FLAGS, SEARCH_HELP } from './search-shortcut.js';
+export type { SearchShortcutOutcome } from './search-shortcut.js';
+
 export { installSkill, runInstallSkillCommand } from './install-skill.js';
 export type { InstallSkillResult, SkillHost, SkillScope } from './install-skill.js';
 
