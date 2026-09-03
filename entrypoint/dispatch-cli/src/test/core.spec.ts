@@ -35,7 +35,7 @@ import {
   statusCore,
   validateCore,
 } from '../lib/core.js';
-import { makeCompletionLogEntry, makeFixtureDag } from './helpers/fixtures.js';
+import { makeCompletionLogEntry, makeFixtureDag, makeOp } from './helpers/fixtures.js';
 
 // Repo-canonical ephemeral root (CLAUDE.md "Test/ephemeral artifacts"):
 // tmp/<package>/<test-scoped>/ — gitignored, fully removed on teardown.
@@ -225,6 +225,76 @@ describe('runCycleCore', () => {
     // dispatch-orchestrator's default, and never a network call.
     const files = fs.readdirSync(DEFAULT_RUN_DEBUG_DIR);
     expect(files.some((f) => f.startsWith('agent-'))).toBe(true);
+  });
+
+  // ---------------------------------------------------------------------------
+  // FEAT-DISPATCH-GOVERNANCE-001 — `allowedFsActions` threading. All three
+  // asserted at the `runCycleCore` API boundary this package's CLI actually
+  // calls (`bin/cli.ts`'s `--allow-fs` -> `api.ts`'s `run` -> here).
+  // ---------------------------------------------------------------------------
+
+  function fsDeleteFixtureDag(targetPathRelToCwd: string) {
+    return makeFixtureDag({
+      operations: [
+        makeOp({
+          id: 'a.1',
+          milestone: 'a',
+          depends_on: [],
+          type: 'tool-call',
+          action: 'fs.delete',
+          args: { path: targetPathRelToCwd },
+          shape: null,
+        }),
+        makeOp({ id: 'b.1', milestone: 'b', depends_on: ['a.1'] }),
+        makeOp({ id: 'c.1', milestone: 'c', depends_on: ['b.1'] }),
+      ],
+    });
+  }
+
+  it('runCycleCore: with NO allowedFsActions (default []), an fs.delete op is denied — the target file survives on disk', async () => {
+    const targetDir = path.join(TMP_ROOT, `fs-deny-${caseN}`);
+    fs.mkdirSync(targetDir, { recursive: true });
+    const targetAbs = path.join(targetDir, 'protected.txt');
+    fs.writeFileSync(targetAbs, 'must survive', 'utf8');
+    const dagPath = await writeFixture(fsDeleteFixtureDag(path.relative(process.cwd(), targetAbs)));
+
+    const result = await runCycleCore(dagPath, true, new MockAgentRunner({ debugDir: path.join(targetDir, 'debug') }));
+
+    expect(result.persisted).toBe(true);
+    expect(fs.existsSync(targetAbs)).toBe(true);
+    expect(fs.readFileSync(targetAbs, 'utf8')).toBe('must survive');
+    const reloaded = await buildClient(dagPath).load();
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('failed');
+    expect((opResult?.tool_result as { error?: string } | null)?.error).toContain('denied by policy');
+  });
+
+  it('runCycleCore: with allowedFsActions: ["fs.delete"], the SAME op actually deletes the target file', async () => {
+    const targetDir = path.join(TMP_ROOT, `fs-allow-${caseN}`);
+    fs.mkdirSync(targetDir, { recursive: true });
+    const targetAbs = path.join(targetDir, 'protected.txt');
+    fs.writeFileSync(targetAbs, 'must survive', 'utf8');
+    const dagPath = await writeFixture(fsDeleteFixtureDag(path.relative(process.cwd(), targetAbs)));
+
+    const result = await runCycleCore(
+      dagPath,
+      true,
+      new MockAgentRunner({ debugDir: path.join(targetDir, 'debug') }),
+      ['fs.delete']
+    );
+
+    expect(result.persisted).toBe(true);
+    expect(fs.existsSync(targetAbs)).toBe(false);
+    const reloaded = await buildClient(dagPath).load();
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('complete');
+  });
+
+  it('runCycleCore: rejects an unknown --allow-fs action BEFORE touching the runner or the filesystem', async () => {
+    const dagPath = await writeFixture(makeFixtureDag());
+    await expect(runCycleCore(dagPath, true, undefined, ['fs.frobnicate'])).rejects.toThrow(
+      "unknown --allow-fs action 'fs.frobnicate'"
+    );
   });
 });
 

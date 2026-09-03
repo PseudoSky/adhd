@@ -122,9 +122,18 @@ program
   .description('run exactly one @adhd/dispatch-orchestrator scheduling cycle')
   .requiredOption('--dag-path <path>', "path to the plan's dag.json")
   .option('--no-dry-run', 'PAID BOUNDARY: fire real, billed model calls via a real AgentMcpRunner (npx -y @adhd/agent-mcp) instead of MockAgentRunner')
-  .action(async (opts: { dagPath: string; dryRun: boolean }) => {
+  .option(
+    '--allow-fs <actions>',
+    'comma-separated OperationAction values to allow for fs.* tool-call ops (default: none — fs ops are denied)',
+    ''
+  )
+  .action(async (opts: { dagPath: string; dryRun: boolean; allowFs: string }) => {
     try {
-      printAndExit(await run(opts.dagPath, opts.dryRun));
+      const allowedFsActions = opts.allowFs
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      printAndExit(await run(opts.dagPath, opts.dryRun, allowedFsActions));
     } catch (err) {
       fail(err);
     }
