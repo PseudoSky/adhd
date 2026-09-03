@@ -1282,6 +1282,9 @@ async function buildCard(store: GraphBacklogStore, row: IQueryRow, fields: Reado
       case 'priority':
         setIfDefined('priority', item.priority);
         break;
+      case 'compositeId':
+        setIfDefined('compositeId', item.compositeId);
+        break;
       case 'repo':
         setIfDefined('repo', item.repo);
         break;

@@ -42,8 +42,9 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openTmpStore, type TmpStore } from '../test/helpers/tmp-store.js';
-import { AmbiguousHumanIdError, InvalidArgumentError } from '../model.js';
-import { createItemNode } from './crud.js';
+import { AmbiguousHumanIdError, InvalidArgumentError, RepoAliasCollisionError } from '../model.js';
+import { createItemNode, getItemNode, updateItemNode } from './crud.js';
+import { transitionStatusNode } from './lifecycle.js';
 import { findItemNode } from './query.js';
 import { renameHumanIdNode } from './structure.js';
 import { BACKLOG_ITEM_TAG, buildNodeContent, buildNodeName } from './mapping.js';
@@ -311,5 +312,137 @@ describe('renameHumanIdNode repair primitive', () => {
   it('refuses when the given nodeId does not currently carry oldHumanId (wrong-node guard)', async () => {
     const created = await createItemNode(tmp.store, { family: 'BUG-REALID', title: 't', body: 'b', repo: REPO });
     await expect(renameHumanIdNode(tmp.store, REPO, created.item.nodeId, 'BUG-WRONG-999', 'BUG-NEW-001')).rejects.toThrow(InvalidArgumentError);
+  });
+});
+
+/**
+ * BUG-BACKLOG-REPO-SPLIT-001 (fix #3 — read-time cross-alias guard):
+ * `resolveCanonicalRepo` (store/query.ts) only reconciles a bare-segment
+ * alias (e.g. `'widget'` vs `'acme/widget'`) when it can collapse the ASKED
+ * repo string to a single already-known candidate. Once BOTH literal
+ * spellings independently have live nodes, each one's OWN literal-input
+ * short-circuit (`if (known.has(repo)) return {canonical: repo, …}`) fires
+ * first, so the alias-merge loop never runs for either — the two spellings
+ * are permanently unreconciled. A humanId minted independently under each
+ * spelling then resolves silently to whichever literal string the caller
+ * happens to pass, with no error — the exact shape this guard closes.
+ *
+ * Real writes only (no raw `graph.writeNode` collision-forcing needed here,
+ * unlike fix #2 above): `createItemNode` writes under the LITERAL `input.repo`
+ * namespace (crud.ts) and never redirects to a resolved canonical, so two
+ * ordinary creates under two alias spellings are enough to reproduce the
+ * hazard.
+ */
+describe('fix #3: repo-alias collision guard (BUG-BACKLOG-REPO-SPLIT-001)', () => {
+  const REPO_A = 'widget';
+  const REPO_B = 'acme/widget'; // bare-segment alias of REPO_A ('widget' === 'widget'), different literal string
+
+  /** Seeds a baseline item under each alias spelling so BOTH become "known" to `knownRepos` before the colliding humanId is minted — the precondition resolveCanonicalRepo's short-circuit needs to reproduce the split. */
+  async function seedBothReposKnown(): Promise<void> {
+    await createItemNode(tmp.store, { family: 'BUG-WIDGET-BASE', title: 'baseline A', body: 'b', repo: REPO_A });
+    await createItemNode(tmp.store, { family: 'BUG-ACME-BASE', title: 'baseline B', body: 'b', repo: REPO_B });
+  }
+
+  it('mints a genuine cross-alias collision: two live nodes share one humanId across REPO_A/REPO_B once both are known', async () => {
+    await seedBothReposKnown();
+    const first = await createItemNode(tmp.store, { family: 'BUG-SHARED', title: 'item under widget', body: 'b1', repo: REPO_A });
+    const second = await createItemNode(tmp.store, {
+      family: undefined as unknown as string,
+      idOverride: first.item.humanId,
+      title: 'item under acme/widget',
+      body: 'b2',
+      repo: REPO_B,
+    });
+    expect(second.created).toBe(true);
+    expect(second.item.humanId).toBe(first.item.humanId);
+    expect(second.item.nodeId).not.toBe(first.item.nodeId);
+
+    // Confirm the split is real: findItemNode with the literal REPO_B string
+    // for the OTHER alias's item returns null — the write really is under
+    // two disjoint namespaces, not silently deduped.
+    expect(await findItemNode(tmp.store, REPO_B, `does-not-exist-${first.item.humanId}`)).toBeNull();
+  });
+
+  /**
+   * NEGATIVE CONTROL (performed — see deviations[] in the task report):
+   * commenting out the `aliasCandidates`/`collisions` block in
+   * `findItemNode` (store/query.ts) so it falls straight through to
+   * `return canonicalMatch` turns this test RED — `findItemNode` then
+   * silently returns the REPO_A node with no error, instead of throwing
+   * `RepoAliasCollisionError` naming both repos and both nodeIds. Restored
+   * immediately after confirming the red result.
+   */
+  it('findItemNode throws RepoAliasCollisionError naming both repos and both nodeIds when addressed by EITHER alias spelling', async () => {
+    await seedBothReposKnown();
+    const first = await createItemNode(tmp.store, { family: 'BUG-SHARED2', title: 'item under widget', body: 'b1', repo: REPO_A });
+    const second = await createItemNode(tmp.store, {
+      family: undefined as unknown as string,
+      idOverride: first.item.humanId,
+      title: 'item under acme/widget',
+      body: 'b2',
+      repo: REPO_B,
+    });
+    expect(second.created).toBe(true);
+
+    for (const askedRepo of [REPO_A, REPO_B]) {
+      let caught: unknown;
+      try {
+        await findItemNode(tmp.store, askedRepo, first.item.humanId);
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(RepoAliasCollisionError);
+      const err = caught as RepoAliasCollisionError;
+      expect(err.message).toContain(first.item.humanId);
+      const reposNamed = err.matches.map((m) => m.repo).sort();
+      expect(reposNamed).toEqual([REPO_A, REPO_B].sort());
+      const nodeIdsNamed = err.matches.map((m) => m.nodeId).sort((a, b) => a - b);
+      expect(nodeIdsNamed).toEqual([first.item.nodeId, second.item.nodeId].sort((a, b) => a - b));
+    }
+  });
+
+  it('get/update/transitionStatus all surface RepoAliasCollisionError instead of silently resolving to one alias', async () => {
+    await seedBothReposKnown();
+    const first = await createItemNode(tmp.store, { family: 'BUG-SHARED3', title: 'item under widget', body: 'b1', repo: REPO_A });
+    await createItemNode(tmp.store, {
+      family: undefined as unknown as string,
+      idOverride: first.item.humanId,
+      title: 'item under acme/widget',
+      body: 'b2',
+      repo: REPO_B,
+    });
+
+    await expect(getItemNode(tmp.store, REPO_A, first.item.humanId)).rejects.toThrow(RepoAliasCollisionError);
+    await expect(updateItemNode(tmp.store, REPO_A, first.item.humanId, { title: 'renamed' })).rejects.toThrow(RepoAliasCollisionError);
+    await expect(transitionStatusNode(tmp.store, REPO_A, first.item.humanId, 'WONTFIX', { by: 'tester', reason: 'collision test' })).rejects.toThrow(
+      RepoAliasCollisionError
+    );
+  });
+
+  it('is a pure addition: an unambiguous humanId under ONE alias resolves exactly as before, no error, no behavior change', async () => {
+    await seedBothReposKnown();
+    // Baseline items above are each present under exactly ONE of the two
+    // aliases — REPO_A's baseline humanId never exists under REPO_B, and
+    // vice versa. The alias probe must find nothing on the other side and
+    // must NOT throw.
+    const baselineA = await getItemNode(tmp.store, REPO_A, 'BUG-WIDGET-BASE-001');
+    expect(baselineA).not.toBeNull();
+    expect(baselineA?.humanId).toBe('BUG-WIDGET-BASE-001');
+
+    const baselineB = await getItemNode(tmp.store, REPO_B, 'BUG-ACME-BASE-001');
+    expect(baselineB).not.toBeNull();
+    expect(baselineB?.humanId).toBe('BUG-ACME-BASE-001');
+
+    // Also unaffected via findItemNode directly, and via update.
+    const found = await findItemNode(tmp.store, REPO_A, 'BUG-WIDGET-BASE-001');
+    expect(found?.namespace).toBe(REPO_A);
+    const updated = await updateItemNode(tmp.store, REPO_A, 'BUG-WIDGET-BASE-001', { title: 'still fine' });
+    expect(updated.title).toBe('still fine');
+  });
+
+  it('a repo with NO bare-segment alias in the store is completely unaffected (findAliasRepoCandidates returns [])', async () => {
+    const created = await createItemNode(tmp.store, { family: 'BUG-LONER', title: 't', body: 'b', repo: 'totally-unrelated-repo' });
+    const found = await findItemNode(tmp.store, 'totally-unrelated-repo', created.item.humanId);
+    expect(found?.id).toBe(created.item.nodeId);
   });
 });

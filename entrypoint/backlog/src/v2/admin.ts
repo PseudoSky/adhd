@@ -327,6 +327,7 @@ export const DOCTOR_CHECKS = [
   'terminal_without_citations',
   'orphaned_repo_keys',
   'dependency_cycles',
+  'cross_repo_humanid_reuse',
 ] as const;
 
 /** FEAT-008 - see {@link DOCTOR_CHECKS}. */
@@ -357,6 +358,28 @@ export interface IDoctorDuplicateGroup {
   humanId: string;
   count: number;
   nodes: Array<IDoctorItemRef & { namespace: string }>;
+}
+
+/**
+ * BUG-BACKLOG-REPO-SPLIT-001 / DEBT-BACKLOG-HUMANID-NOT-UNIQUE-001 remedy
+ * (b) - a `humanId` (bare string, case-sensitive exact match) carried by LIVE
+ * nodes in MORE THAN ONE distinct repo namespace. This is a DIFFERENT hazard
+ * than `duplicate_human_ids` above: that check is scoped to same-(repo,
+ * humanId) exact duplication (the DB-level uniqueness the graph store
+ * enforces); this one is cross-repo homonym reuse - two independently-minted
+ * items that happen to share a humanId string across repos, which is exactly
+ * the shape `RepoAliasCollisionError` (store/query.ts) refuses to silently
+ * pick a winner for when the two repos are bare-segment aliases of each
+ * other, and a quieter but real hazard even when they are not (an operator
+ * addressing "BUG-003" without a repo qualifier has no way to know which
+ * project it means). Repo-UNSCOPED by design (queries every live node
+ * regardless of the `repo` doctor param) - a per-repo scope can never
+ * observe a cross-repo hazard.
+ */
+export interface IDoctorCrossRepoHumanIdGroup {
+  humanId: string;
+  repos: string[];
+  nodeIds: number[];
 }
 
 /** FEAT-008 - an edge pointing at a node that is gone or invalidated. */
@@ -411,6 +434,8 @@ export interface IDoctorReport {
   orphanedRepoKeys: IDoctorOrphanedRepoKey[];
   /** At most one representative cycle - `topoOrder` extracts one, not all (store/query.ts:611). */
   dependencyCycles: string[][];
+  /** BUG-BACKLOG-REPO-SPLIT-001 - see {@link IDoctorCrossRepoHumanIdGroup}. */
+  crossRepoHumanIdReuse: IDoctorCrossRepoHumanIdGroup[];
 }
 
 const DOCTOR_PARAM_KEYS = ['repo', 'checks', 'limitPerCheck'] as const;
@@ -475,6 +500,35 @@ async function scanDanglingEdges(store: BacklogCtx['store'], repo: string | unde
 
 function itemRef(item: BacklogItem): IDoctorItemRef {
   return { humanId: item.humanId, repo: item.repo, nodeId: item.nodeId, title: item.title, status: item.status };
+}
+
+/**
+ * BUG-BACKLOG-REPO-SPLIT-001 - see {@link IDoctorCrossRepoHumanIdGroup}.
+ * Deliberately re-queries with NO `repo` filter regardless of whether
+ * `runDoctor` itself was scoped to one repo - a per-repo scan can never see
+ * a cross-repo hazard, so this check always looks at the whole store.
+ */
+async function scanCrossRepoHumanIdReuse(store: BacklogCtx['store']): Promise<IDoctorCrossRepoHumanIdGroup[]> {
+  const nodes = await queryItemNodes(store, {});
+  const byHumanId = new Map<string, Array<{ repo: string; nodeId: number }>>();
+  for (const node of nodes) {
+    const item = toBacklogItem(node);
+    const bucket = byHumanId.get(item.humanId);
+    const entry = { repo: item.repo, nodeId: item.nodeId };
+    if (bucket) bucket.push(entry);
+    else byHumanId.set(item.humanId, [entry]);
+  }
+  const out: IDoctorCrossRepoHumanIdGroup[] = [];
+  for (const [humanId, entries] of byHumanId) {
+    const repos = [...new Set(entries.map((e) => e.repo))];
+    if (repos.length < 2) continue;
+    out.push({
+      humanId,
+      repos: repos.sort(),
+      nodeIds: entries.map((e) => e.nodeId).sort((a, b) => a - b),
+    });
+  }
+  return out.sort((a, b) => a.humanId.localeCompare(b.humanId));
 }
 
 async function runDoctor(ctx: BacklogCtx, params: ParamBag): Promise<{ data: IDoctorReport; warnings?: string[] }> {
@@ -604,12 +658,16 @@ async function runDoctor(ctx: BacklogCtx, params: ParamBag): Promise<{ data: IDo
     }
   }
 
+  // --- cross-repo humanId reuse -------------------------------------------
+  const crossRepoHumanIdReuse = selected.has('cross_repo_humanid_reuse') ? await scanCrossRepoHumanIdReuse(ctx.store) : [];
+
   const cappedDuplicates = duplicateHumanIds.slice(0, limitPerCheck);
   const cappedDangling = danglingEdges.slice(0, limitPerCheck);
   const cappedMissing = missingCitations.slice(0, limitPerCheck);
   const cappedTerminal = terminalWithoutCitations.slice(0, limitPerCheck);
   const cappedOrphans = orphanedRepoKeys.slice(0, limitPerCheck);
   const cappedCycles = dependencyCycles.slice(0, limitPerCheck);
+  const cappedCrossRepo = crossRepoHumanIdReuse.slice(0, limitPerCheck);
 
   const findings: Record<IDoctorCheckName, { count: number; sampled: number }> = {
     duplicate_human_ids: { count: duplicateHumanIds.length, sampled: cappedDuplicates.length },
@@ -618,6 +676,7 @@ async function runDoctor(ctx: BacklogCtx, params: ParamBag): Promise<{ data: IDo
     terminal_without_citations: { count: terminalWithoutCitations.length, sampled: cappedTerminal.length },
     orphaned_repo_keys: { count: orphanedRepoKeys.length, sampled: cappedOrphans.length },
     dependency_cycles: { count: dependencyCycles.length, sampled: cappedCycles.length },
+    cross_repo_humanid_reuse: { count: crossRepoHumanIdReuse.length, sampled: cappedCrossRepo.length },
   };
 
   const checks: IDoctorCheckSummary[] = [];
@@ -652,6 +711,7 @@ async function runDoctor(ctx: BacklogCtx, params: ParamBag): Promise<{ data: IDo
     terminalWithoutCitations: cappedTerminal,
     orphanedRepoKeys: cappedOrphans,
     dependencyCycles: cappedCycles,
+    crossRepoHumanIdReuse: cappedCrossRepo,
   };
   return { data: report, ...(warnings.length > 0 ? { warnings } : {}) };
 }

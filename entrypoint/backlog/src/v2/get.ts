@@ -486,6 +486,9 @@ async function buildCard(store: GraphBacklogStore, target: IGetTarget, fields: S
       case 'priority':
         setIfDefined('priority', item.priority);
         break;
+      case 'compositeId':
+        setIfDefined('compositeId', item.compositeId);
+        break;
       case 'repo':
         setIfDefined('repo', item.repo);
         break;
