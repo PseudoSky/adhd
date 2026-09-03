@@ -163,7 +163,7 @@ export async function walkType(
         enum: members.map((m) => m.getLiteralValue() as number),
       };
     }
-    const variants = await Promise.all(
+    const rawVariants = await Promise.all(
       members.map((m) => walkType(m, recurse, depth + 1))
     );
     // BUG-APIGEN-019: a TS union means the runtime value is EXACTLY ONE of
@@ -174,7 +174,14 @@ export async function walkType(
     // literal-discriminant property (the `{ kind: 'dog' } | { kind: 'cat' }`
     // shape), attach an advisory `discriminator` so consumers don't have to
     // structurally diff the branches to know which one matched.
-    const discriminator = detectDiscriminator(variants);
+    const discriminator = detectDiscriminator(rawVariants);
+    // BUG-APIGEN-059: detectDiscriminator correctly declines a discriminator for a
+    // union with a vacuous catch-all branch (by design) — but the returned `oneOf`
+    // must use the SANITIZED variants, or that catch-all still ambiguously matches
+    // a sibling branch's values. Discriminator detection itself must run on the RAW
+    // (pre-sanitized) variants — sanitizeCatchAllVariants's allOf/not wrapping would
+    // make a catch-all branch's `type` field indistinguishable from an object branch.
+    const variants = sanitizeCatchAllVariants(rawVariants);
     return {
       oneOf: variants,
       ...(discriminator ? { discriminator } : {}),
@@ -313,6 +320,59 @@ export async function walkType(
   // Anything else (intersections we can't frame, `unknown`, `any`, etc.) →
   // permissive empty schema, preserving the prior generator's behaviour.
   return {};
+}
+
+/**
+ * True when a schema fragment is a "vacuous catch-all" — one that places no
+ * constraint distinguishing it from an arbitrary object (or, for a bare `{}`,
+ * from ANY value at all). Two shapes reach here looking like this:
+ *   - `{ type: 'object', additionalProperties: <schema> }` with no (or empty)
+ *     `properties` — an index-signature-only / `Record<string, V>` object
+ *     (see `walkType`'s object branch, `indexValue && namedProps.length === 0`).
+ *   - `{}` — the permissive fallback for an unresolved/opaque/all-method type.
+ * A branch shaped like this inside a `oneOf` union matches virtually any value
+ * that ALSO matches a sibling, more specific branch — which breaks `oneOf`'s
+ * exactly-one-match semantics: AJV rejects an otherwise-valid, specifically-shaped
+ * value because it satisfies BOTH its own branch and the catch-all
+ * (BUG-APIGEN-059).
+ */
+function isVacuousCatchAll(schema: Record<string, unknown>): boolean {
+  if (Object.keys(schema).length === 0) return true;
+  return (
+    schema['type'] === 'object' &&
+    schema['additionalProperties'] !== undefined &&
+    schema['additionalProperties'] !== false &&
+    (schema['properties'] === undefined ||
+      Object.keys(schema['properties'] as Record<string, unknown>).length === 0)
+  );
+}
+
+/**
+ * Restores `oneOf` mutual-exclusivity when one or more variants is a vacuous
+ * catch-all (see {@link isVacuousCatchAll}): each catch-all variant is rewritten
+ * to `{ allOf: [ <catch-all>, { not: { anyOf: <every OTHER variant> } } ] }` so a
+ * value already covered by a more specific sibling branch no longer ALSO matches
+ * the catch-all (BUG-APIGEN-059). Skipped (variants returned unchanged) when
+ * there are fewer than 2 variants, when NO variant is a catch-all (nothing to
+ * fix), or when EVERY variant is a catch-all (nothing more specific to exclude
+ * against — narrowing would leave zero possible catch-all match, worse than a
+ * merely-ambiguous schema).
+ */
+function sanitizeCatchAllVariants(
+  variants: ReadonlyArray<Record<string, unknown>>
+): Record<string, unknown>[] {
+  if (variants.length < 2) return variants.slice();
+  const catchAllIdx = variants
+    .map((v, i) => (isVacuousCatchAll(v) ? i : -1))
+    .filter((i) => i >= 0);
+  if (catchAllIdx.length === 0 || catchAllIdx.length === variants.length) {
+    return variants.slice();
+  }
+  return variants.map((v, i) => {
+    if (!catchAllIdx.includes(i)) return v;
+    const others = variants.filter((_, j) => j !== i);
+    return { allOf: [v, { not: { anyOf: others } }] };
+  });
 }
 
 // ---------------------------------------------------------------------------
