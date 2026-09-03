@@ -44,7 +44,7 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { makeCompletionLogEntry, makeFixtureDag } from './helpers/fixtures.js';
+import { makeCompletionLogEntry, makeFixtureDag, makeOp } from './helpers/fixtures.js';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const TSCONFIG_BASE = path.join(REPO_ROOT, 'tsconfig.base.json');
@@ -88,6 +88,38 @@ const RUN_FIXTURE_PATH = path.join(TMP_ROOT, 'dag-for-run.json');
 const ALL_COMPLETE_FIXTURE_PATH = path.join(TMP_ROOT, 'dag-all-complete.json');
 const RUN_DEBUG_DIR = path.join(REPO_ROOT, 'tmp', 'dispatch-cli', 'run-debug');
 
+// FEAT-DISPATCH-GOVERNANCE-001 — `run --allow-fs` end-to-end proof. Both
+// target files live under TMP_ROOT (itself under the repo's own gitignored
+// `tmp/`), so `toolsRoot`'s undocumented default of `process.cwd()`
+// (REPO_ROOT, since `runCli` spawns with `cwd: REPO_ROOT`) never resolves an
+// fs.* op outside the ephemeral test tree — see the runCycleCore/core.ts
+// `toolsRoot` gap noted in this milestone's completion report (a real,
+// separate finding: dispatch-cli never threads a `--tools-root` flag, so a
+// real fs.* op via this CLI today runs rooted at whatever directory invoked
+// it; out of THIS milestone's scope, filed to the backlog).
+const FS_ALLOW_TARGET_PATH = path.join(TMP_ROOT, 'fs-allow-target.txt');
+const FS_ALLOW_FIXTURE_PATH = path.join(TMP_ROOT, 'dag-fs-allow.json');
+const FS_DENY_TARGET_PATH = path.join(TMP_ROOT, 'fs-deny-target.txt');
+const FS_DENY_FIXTURE_PATH = path.join(TMP_ROOT, 'dag-fs-deny.json');
+
+function makeFsDeleteFixtureDag(targetPathRelToRepoRoot: string) {
+  return makeFixtureDag({
+    operations: [
+      makeOp({
+        id: 'a.1',
+        milestone: 'a',
+        depends_on: [],
+        type: 'tool-call',
+        action: 'fs.delete',
+        args: { path: targetPathRelToRepoRoot },
+        shape: null,
+      }),
+      makeOp({ id: 'b.1', milestone: 'b', depends_on: ['a.1'] }),
+      makeOp({ id: 'c.1', milestone: 'c', depends_on: ['b.1'] }),
+    ],
+  });
+}
+
 beforeAll(() => {
   fs.rmSync(TMP_ROOT, { recursive: true, force: true });
   fs.mkdirSync(TMP_ROOT, { recursive: true });
@@ -103,6 +135,20 @@ beforeAll(() => {
     makeCompletionLogEntry('c', ['c.1'])
   );
   fs.writeFileSync(ALL_COMPLETE_FIXTURE_PATH, JSON.stringify(allComplete, null, 2), 'utf8');
+
+  // FEAT-DISPATCH-GOVERNANCE-001 fixtures — see the constants above.
+  fs.writeFileSync(FS_ALLOW_TARGET_PATH, 'must be deleted once allowlisted', 'utf8');
+  fs.writeFileSync(
+    FS_ALLOW_FIXTURE_PATH,
+    JSON.stringify(makeFsDeleteFixtureDag(path.relative(REPO_ROOT, FS_ALLOW_TARGET_PATH)), null, 2),
+    'utf8'
+  );
+  fs.writeFileSync(FS_DENY_TARGET_PATH, 'must survive — no --allow-fs given', 'utf8');
+  fs.writeFileSync(
+    FS_DENY_FIXTURE_PATH,
+    JSON.stringify(makeFsDeleteFixtureDag(path.relative(REPO_ROOT, FS_DENY_TARGET_PATH)), null, 2),
+    'utf8'
+  );
 
   // The real, deployable artifacts must exist before we ever spawn them.
   // This target's `dependsOn: ["generate-cli"]` (project.json) guarantees
@@ -266,6 +312,32 @@ describe('dispatch-cli — bin/cli.ts (fallback, fully working)', () => {
     const result = JSON.parse(res.stdout.trim()) as { terminal: boolean; terminalReason: string };
     expect(result.terminal).toBe(true);
     expect(result.terminalReason).toBe('all-complete');
+  });
+
+  it('run --dag-path <fs.delete fixture> WITHOUT --allow-fs denies the op — the real spawned CLI leaves the target file untouched on disk', () => {
+    expect(fs.existsSync(FS_DENY_TARGET_PATH)).toBe(true);
+    const res = runCli(FALLBACK_CLI_PATH, ['run', '--dag-path', FS_DENY_FIXTURE_PATH]);
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
+    // CONSUMER-VISIBLE OUTCOME: default (no --allow-fs) fails closed — real
+    // file, real spawned bin/cli.ts, no --allow-fs flag passed at all.
+    expect(fs.existsSync(FS_DENY_TARGET_PATH)).toBe(true);
+    expect(fs.readFileSync(FS_DENY_TARGET_PATH, 'utf8')).toBe('must survive — no --allow-fs given');
+  });
+
+  it('run --dag-path <fs.delete fixture> --allow-fs fs.delete really deletes the target file via the real spawned CLI', () => {
+    expect(fs.existsSync(FS_ALLOW_TARGET_PATH)).toBe(true);
+    const res = runCli(FALLBACK_CLI_PATH, [
+      'run',
+      '--dag-path',
+      FS_ALLOW_FIXTURE_PATH,
+      '--allow-fs',
+      'fs.delete',
+    ]);
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
+    // CONSUMER-VISIBLE OUTCOME: --allow-fs threads bin/cli.ts -> api.ts ->
+    // core.ts's runCycleCore -> OrchestratorDeps.allowedFsActions all the
+    // way to a real file deletion, via the real spawned binary.
+    expect(fs.existsSync(FS_ALLOW_TARGET_PATH)).toBe(false);
   });
 
   it('calibrate --model-tier <invalid> fails fast (exit 1) BEFORE ever touching the paid runner', () => {

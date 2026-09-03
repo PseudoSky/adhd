@@ -150,9 +150,18 @@ export async function status(dagPath: string): Promise<Record<string, MilestoneS
  * @param dagPath - Path to the plan's `dag.json`. Mutated in place when the
  *   cycle does real work (a `dispatch_log` entry is appended and persisted).
  * @param dryRun - See above. Optional, defaults to `true`.
+ * @param allowedFsActions - FEAT-DISPATCH-GOVERNANCE-001: `OperationAction`
+ *   names (e.g. `["fs.delete"]`) permitted to actually execute their
+ *   destructive `fs.*` tool-call op this cycle. Optional, defaults to `[]` —
+ *   every `fs.move`/`fs.delete`/`fs.scaffold`/`fs.edit` op is denied by
+ *   policy unless explicitly listed here. See `bin/cli.ts`'s `--allow-fs`.
  */
-export async function run(dagPath: string, dryRun = true): Promise<CycleResult> {
-  return runCycleCore(dagPath, dryRun);
+export async function run(
+  dagPath: string,
+  dryRun = true,
+  allowedFsActions: string[] = []
+): Promise<CycleResult> {
+  return runCycleCore(dagPath, dryRun, undefined, allowedFsActions);
 }
 
 /**
