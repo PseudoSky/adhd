@@ -155,13 +155,18 @@ export async function status(dagPath: string): Promise<Record<string, MilestoneS
  *   destructive `fs.*` tool-call op this cycle. Optional, defaults to `[]` —
  *   every `fs.move`/`fs.delete`/`fs.scaffold`/`fs.edit` op is denied by
  *   policy unless explicitly listed here. See `bin/cli.ts`'s `--allow-fs`.
+ * @param toolsRoot - BUG-DISPATCH-CLI-TOOLSROOT-001: filesystem root
+ *   `fs.move`/`fs.delete`/`fs.scaffold`/`fs.edit` ops are confined to (a path
+ *   escaping this root is rejected before it is ever touched). Optional,
+ *   defaults to `process.cwd()` — see `bin/cli.ts`'s `--tools-root`.
  */
 export async function run(
   dagPath: string,
   dryRun = true,
-  allowedFsActions: string[] = []
+  allowedFsActions: string[] = [],
+  toolsRoot?: string
 ): Promise<CycleResult> {
-  return runCycleCore(dagPath, dryRun, undefined, allowedFsActions);
+  return runCycleCore(dagPath, dryRun, undefined, allowedFsActions, toolsRoot);
 }
 
 /**

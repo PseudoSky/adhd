@@ -127,13 +127,17 @@ program
     'comma-separated OperationAction values to allow for fs.* tool-call ops (default: none — fs ops are denied)',
     ''
   )
-  .action(async (opts: { dagPath: string; dryRun: boolean; allowFs: string }) => {
+  .option(
+    '--tools-root <path>',
+    'filesystem root fs.move/fs.delete/fs.scaffold/fs.edit ops are confined to (default: process.cwd())'
+  )
+  .action(async (opts: { dagPath: string; dryRun: boolean; allowFs: string; toolsRoot?: string }) => {
     try {
       const allowedFsActions = opts.allowFs
         .split(',')
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
-      printAndExit(await run(opts.dagPath, opts.dryRun, allowedFsActions));
+      printAndExit(await run(opts.dagPath, opts.dryRun, allowedFsActions, opts.toolsRoot));
     } catch (err) {
       fail(err);
     }

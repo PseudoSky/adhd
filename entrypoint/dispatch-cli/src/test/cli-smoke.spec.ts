@@ -90,17 +90,27 @@ const RUN_DEBUG_DIR = path.join(REPO_ROOT, 'tmp', 'dispatch-cli', 'run-debug');
 
 // FEAT-DISPATCH-GOVERNANCE-001 — `run --allow-fs` end-to-end proof. Both
 // target files live under TMP_ROOT (itself under the repo's own gitignored
-// `tmp/`), so `toolsRoot`'s undocumented default of `process.cwd()`
-// (REPO_ROOT, since `runCli` spawns with `cwd: REPO_ROOT`) never resolves an
-// fs.* op outside the ephemeral test tree — see the runCycleCore/core.ts
-// `toolsRoot` gap noted in this milestone's completion report (a real,
-// separate finding: dispatch-cli never threads a `--tools-root` flag, so a
-// real fs.* op via this CLI today runs rooted at whatever directory invoked
-// it; out of THIS milestone's scope, filed to the backlog).
+// `tmp/`), so `toolsRoot`'s default of `process.cwd()` (REPO_ROOT, since
+// `runCli` spawns with `cwd: REPO_ROOT`) never resolves an fs.* op outside
+// the ephemeral test tree.
 const FS_ALLOW_TARGET_PATH = path.join(TMP_ROOT, 'fs-allow-target.txt');
 const FS_ALLOW_FIXTURE_PATH = path.join(TMP_ROOT, 'dag-fs-allow.json');
 const FS_DENY_TARGET_PATH = path.join(TMP_ROOT, 'fs-deny-target.txt');
 const FS_DENY_FIXTURE_PATH = path.join(TMP_ROOT, 'dag-fs-deny.json');
+
+// BUG-DISPATCH-CLI-TOOLSROOT-001 (found during FEAT-DISPATCH-GOVERNANCE-001's
+// code review, fixed here) — `--tools-root` end-to-end proof. Uses a BARE
+// relative filename (not `path.relative(REPO_ROOT, ...)`  like the fixtures
+// above) so the two directories a relative fs.* path could resolve against
+// (the passed `--tools-root`, vs. the default `process.cwd()` == REPO_ROOT)
+// are genuinely different, real directories.
+const TOOLS_ROOT_SCOPE_DIR = path.join(TMP_ROOT, 'tools-root-scope');
+const TOOLS_ROOT_TARGET_NAME = 'scoped-target.txt';
+const TOOLS_ROOT_ALLOW_TARGET_PATH = path.join(TOOLS_ROOT_SCOPE_DIR, TOOLS_ROOT_TARGET_NAME);
+const TOOLS_ROOT_ALLOW_FIXTURE_PATH = path.join(TMP_ROOT, 'dag-tools-root-allow.json');
+const TOOLS_ROOT_DEFAULT_TARGET_NAME = 'default-scope-target.txt';
+const TOOLS_ROOT_DEFAULT_TARGET_PATH = path.join(TOOLS_ROOT_SCOPE_DIR, TOOLS_ROOT_DEFAULT_TARGET_NAME);
+const TOOLS_ROOT_DEFAULT_FIXTURE_PATH = path.join(TMP_ROOT, 'dag-tools-root-default.json');
 
 function makeFsDeleteFixtureDag(targetPathRelToRepoRoot: string) {
   return makeFixtureDag({
@@ -147,6 +157,25 @@ beforeAll(() => {
   fs.writeFileSync(
     FS_DENY_FIXTURE_PATH,
     JSON.stringify(makeFsDeleteFixtureDag(path.relative(REPO_ROOT, FS_DENY_TARGET_PATH)), null, 2),
+    'utf8'
+  );
+
+  // BUG-DISPATCH-CLI-TOOLSROOT-001 fixtures — see the constants above.
+  fs.mkdirSync(TOOLS_ROOT_SCOPE_DIR, { recursive: true });
+  fs.writeFileSync(TOOLS_ROOT_ALLOW_TARGET_PATH, 'deleted via --tools-root', 'utf8');
+  fs.writeFileSync(
+    TOOLS_ROOT_ALLOW_FIXTURE_PATH,
+    JSON.stringify(makeFsDeleteFixtureDag(TOOLS_ROOT_TARGET_NAME), null, 2),
+    'utf8'
+  );
+  fs.writeFileSync(
+    TOOLS_ROOT_DEFAULT_TARGET_PATH,
+    'must survive — --tools-root not passed',
+    'utf8'
+  );
+  fs.writeFileSync(
+    TOOLS_ROOT_DEFAULT_FIXTURE_PATH,
+    JSON.stringify(makeFsDeleteFixtureDag(TOOLS_ROOT_DEFAULT_TARGET_NAME), null, 2),
     'utf8'
   );
 
@@ -338,6 +367,52 @@ describe('dispatch-cli — bin/cli.ts (fallback, fully working)', () => {
     // core.ts's runCycleCore -> OrchestratorDeps.allowedFsActions all the
     // way to a real file deletion, via the real spawned binary.
     expect(fs.existsSync(FS_ALLOW_TARGET_PATH)).toBe(false);
+  });
+
+  it('run --dag-path <fixture> --allow-fs fs.delete --tools-root <dir> resolves the relative fs.delete path against --tools-root, not cwd (BUG-DISPATCH-CLI-TOOLSROOT-001 fix)', () => {
+    expect(fs.existsSync(TOOLS_ROOT_ALLOW_TARGET_PATH)).toBe(true);
+    const res = runCli(FALLBACK_CLI_PATH, [
+      'run',
+      '--dag-path',
+      TOOLS_ROOT_ALLOW_FIXTURE_PATH,
+      '--allow-fs',
+      'fs.delete',
+      '--tools-root',
+      TOOLS_ROOT_SCOPE_DIR,
+    ]);
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
+    // CONSUMER-VISIBLE OUTCOME: --tools-root threads bin/cli.ts -> api.ts ->
+    // core.ts's runCycleCore -> OrchestratorDeps.toolsRoot all the way to the
+    // real path-resolution scope used by a real file deletion, via the real
+    // spawned binary.
+    expect(fs.existsSync(TOOLS_ROOT_ALLOW_TARGET_PATH)).toBe(false);
+  });
+
+  it('run --dag-path <fixture> --allow-fs fs.delete WITHOUT --tools-root resolves the SAME relative path against process.cwd() (REPO_ROOT) instead — the scoped file survives untouched', () => {
+    expect(fs.existsSync(TOOLS_ROOT_DEFAULT_TARGET_PATH)).toBe(true);
+    expect(fs.existsSync(path.join(REPO_ROOT, TOOLS_ROOT_DEFAULT_TARGET_NAME))).toBe(false);
+    const res = runCli(FALLBACK_CLI_PATH, [
+      'run',
+      '--dag-path',
+      TOOLS_ROOT_DEFAULT_FIXTURE_PATH,
+      '--allow-fs',
+      'fs.delete',
+      // --tools-root deliberately omitted
+    ]);
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
+    const result = JSON.parse(res.stdout.trim()) as {
+      dispatched: Array<{ milestones: string[] }>;
+    };
+    expect(result.dispatched.some((d) => d.milestones.includes('a'))).toBe(true);
+    // CONSUMER-VISIBLE OUTCOME: without --tools-root, the relative path
+    // resolved against REPO_ROOT instead (where it doesn't exist -> ENOENT,
+    // the op fails), so the copy actually sitting in TOOLS_ROOT_SCOPE_DIR was
+    // never reached and survives untouched.
+    expect(fs.existsSync(TOOLS_ROOT_DEFAULT_TARGET_PATH)).toBe(true);
+    expect(fs.readFileSync(TOOLS_ROOT_DEFAULT_TARGET_PATH, 'utf8')).toBe(
+      'must survive — --tools-root not passed'
+    );
+    expect(fs.existsSync(path.join(REPO_ROOT, TOOLS_ROOT_DEFAULT_TARGET_NAME))).toBe(false);
   });
 
   it('calibrate --model-tier <invalid> fails fast (exit 1) BEFORE ever touching the paid runner', () => {
