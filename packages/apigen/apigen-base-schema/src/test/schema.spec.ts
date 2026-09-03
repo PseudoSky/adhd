@@ -1,5 +1,5 @@
 /**
- * Tests for @adhd/apigen-schema public exports.
+ * Tests for @adhd/apigen-base-schema public exports.
  *
  * TEETH (CLAUDE.md §6):
  *   - Exercises the REAL exports — not stubs or mocks of the module.
@@ -24,8 +24,8 @@ import {
 // ---------------------------------------------------------------------------
 
 describe('__apigen_pkg', () => {
-  it('identifies the package as @adhd/apigen-schema', () => {
-    expect(__apigen_pkg).toBe('@adhd/apigen-schema');
+  it('identifies the package as @adhd/apigen-base-schema', () => {
+    expect(__apigen_pkg).toBe('@adhd/apigen-base-schema');
   });
 
   it('(negative) does not equal a different package name', () => {

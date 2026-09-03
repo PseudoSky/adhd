@@ -4,11 +4,11 @@
  * Platform: shared (pure TypeScript, safe in Node and Browser).
  *
  * Currently a minimal package. The canonical type IR (JSON Schema 2020-12),
- * extraction, and the validation Layer live in @adhd/apigen-core-clientand
+ * extraction, and the validation Layer live in @adhd/apigen-core-client and
  * @adhd/apigen-engine-runtime. This package exposes schema-level utilities.
  */
 
-export const __apigen_pkg = '@adhd/apigen-schema';
+export const __apigen_pkg = '@adhd/apigen-base-schema';
 
 /**
  * The minimal shape of a JSON Schema object that apigen cares about.
