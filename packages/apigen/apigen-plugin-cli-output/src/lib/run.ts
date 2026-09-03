@@ -260,13 +260,37 @@ function paramsText(params: ParamInfo[] | undefined): string {
     .join(', ');
 }
 
-/** Human-readable command listing, derived from the live OpPlan-keyed route table (never hardcoded). */
-function formatUsage(routes: Map<string, CliRoute>): string {
+/**
+ * Human-readable command listing, derived from the live OpPlan-keyed route
+ * table (never hardcoded).
+ *
+ * `elidablePrefix` (BUG-APIGEN-CLI-002) lets a host annotate a leading
+ * sequence of segments as an OPTIONAL, host-specific UX convenience (e.g.
+ * backlog's `resolveCommandPrefix`/`prefixCommand` make the leading
+ * `backlog` token elidable) WITHOUT this shared renderer having to know
+ * `backlog` is special. When a command's key starts with the full
+ * `elidablePrefix` sequence, that leading run is rendered bracketed
+ * (`[backlog] get-item`) to visually distinguish it from a MANDATORY
+ * mount-namespace segment (`batch action`), which is never bracketed.
+ * Default `[]` reproduces the prior verbatim-`key` behavior exactly for
+ * every other apigen-hosted CLI that doesn't opt in.
+ */
+function formatUsage(
+  routes: Map<string, CliRoute>,
+  elidablePrefix: readonly string[] = []
+): string {
   const lines = ['Available commands:', ''];
   const sorted = [...routes.entries()].sort(([a], [b]) => a.localeCompare(b));
   for (const [key, { plan }] of sorted) {
     const text = paramsText(plan.params);
-    lines.push(`  ${key}${text ? `  { ${text} }` : ''}`);
+    const segs = key.split(' ');
+    const isElidable =
+      elidablePrefix.length > 0 &&
+      elidablePrefix.every((seg, i) => segs[i] === seg);
+    const displayKey = isElidable
+      ? `[${elidablePrefix.join(' ')}] ${segs.slice(elidablePrefix.length).join(' ')}`
+      : key;
+    lines.push(`  ${displayKey}${text ? `  { ${text} }` : ''}`);
   }
   return lines.join('\n');
 }
@@ -546,6 +570,14 @@ export async function run(input: RunInput): Promise<void> {
 
   const usePlugins = readUsePlugins(input.options);
   const useOptions = readUseOptions(input.options);
+  // BUG-APIGEN-CLI-002: host-supplied, OPTIONAL annotation naming a leading
+  // segment sequence that a host's own argv-preprocessing (e.g. backlog's
+  // `resolveCommandPrefix`/`prefixCommand`) makes elidable — see
+  // `formatUsage`'s doc comment. Absent for every other apigen-hosted CLI,
+  // so this defaults to `[]` (no bracketing, unchanged behavior).
+  const elidablePrefix = Array.isArray(input.options['cliElidablePrefix'])
+    ? (input.options['cliElidablePrefix'] as string[])
+    : [];
   const adapter = new CliTransportAdapter(input.signal, readExitCodeHook(input.options));
 
   // Resolve every op's OpPlan ONCE (buildCommandTable), then compose ONE
@@ -677,7 +709,7 @@ export async function run(input: RunInput): Promise<void> {
   const routes = adapter.routeTable();
 
   if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') {
-    console.log(formatUsage(routes));
+    console.log(formatUsage(routes, elidablePrefix));
     return;
   }
 
@@ -690,7 +722,7 @@ export async function run(input: RunInput): Promise<void> {
     reportFailure(
       new ApiError(
         'not_found',
-        `Unknown command: ${argv.join(' ')}\n\n${formatUsage(routes)}`
+        `Unknown command: ${argv.join(' ')}\n\n${formatUsage(routes, elidablePrefix)}`
       )
     );
     return;

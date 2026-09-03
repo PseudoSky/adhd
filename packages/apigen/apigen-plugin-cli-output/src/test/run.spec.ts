@@ -406,6 +406,17 @@ describe('run() — help / usage listing (derived from the live command table)',
     expect(logSpy.mock.calls[0][0]).toContain('backlog get-item');
     expect(process.exitCode).toBeUndefined();
   });
+
+  it('a declared cliElidablePrefix brackets the elidable segment in the summary table', async () => {
+    await run(
+      makeInput({
+        options: { argv: ['--help'], cliElidablePrefix: ['backlog'] },
+      })
+    );
+    const printed = logSpy.mock.calls[0][0] as string;
+    expect(printed).toContain('[backlog] get-item');
+    expect(printed).not.toContain('  backlog get-item');
+  });
 });
 
 describe('run() — an already-aborted signal is a no-op', () => {
