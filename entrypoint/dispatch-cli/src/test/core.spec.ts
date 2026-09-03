@@ -296,6 +296,66 @@ describe('runCycleCore', () => {
       "unknown --allow-fs action 'fs.frobnicate'"
     );
   });
+
+  // ---------------------------------------------------------------------------
+  // BUG-DISPATCH-CLI-TOOLSROOT-001 (found during FEAT-DISPATCH-GOVERNANCE-001's
+  // code review) — `runCycleCore` never set `OrchestratorDeps.toolsRoot`, so
+  // fs.* ops always resolved relative to `process.cwd()` no matter where the
+  // dag.json's fixtures actually lived. The two tests below use the SAME
+  // relative path arg ('target.txt') against two DIFFERENT real directories,
+  // proving the explicit `toolsRoot` param actually changes which directory a
+  // relative fs.* path resolves against (not just that some default exists).
+  // ---------------------------------------------------------------------------
+
+  it('runCycleCore: an explicit toolsRoot scopes a relative fs.delete path to THAT directory, not process.cwd()', async () => {
+    const scopedRoot = path.join(TMP_ROOT, `tools-root-scoped-${caseN}`);
+    fs.mkdirSync(scopedRoot, { recursive: true });
+    const targetAbs = path.join(scopedRoot, 'target.txt');
+    fs.writeFileSync(targetAbs, 'scoped', 'utf8');
+    const dagPath = await writeFixture(fsDeleteFixtureDag('target.txt'));
+
+    const result = await runCycleCore(
+      dagPath,
+      true,
+      new MockAgentRunner({ debugDir: path.join(scopedRoot, 'debug') }),
+      ['fs.delete'],
+      scopedRoot
+    );
+
+    expect(result.persisted).toBe(true);
+    expect(fs.existsSync(targetAbs)).toBe(false);
+    const reloaded = await buildClient(dagPath).load();
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('complete');
+  });
+
+  it('runCycleCore: WITHOUT toolsRoot, the SAME relative fs.delete path resolves against process.cwd() instead — the scoped file is never touched', async () => {
+    const scopedRoot = path.join(TMP_ROOT, `tools-root-default-${caseN}`);
+    fs.mkdirSync(scopedRoot, { recursive: true });
+    const targetAbs = path.join(scopedRoot, 'target.txt');
+    fs.writeFileSync(targetAbs, 'scoped', 'utf8');
+    // Guard against test-order flakiness / accidental collision with a real
+    // repo file: this bare relative name must not already exist at cwd.
+    expect(fs.existsSync(path.join(process.cwd(), 'target.txt'))).toBe(false);
+    const dagPath = await writeFixture(fsDeleteFixtureDag('target.txt'));
+
+    const result = await runCycleCore(
+      dagPath,
+      true,
+      new MockAgentRunner({ debugDir: path.join(scopedRoot, 'debug') }),
+      ['fs.delete']
+      // toolsRoot omitted — must default to process.cwd(), per @adhd/dispatch-orchestrator
+    );
+
+    expect(result.persisted).toBe(true);
+    // The scoped copy survives: the op resolved 'target.txt' against
+    // process.cwd() (where it doesn't exist -> ENOENT), never against scopedRoot.
+    expect(fs.existsSync(targetAbs)).toBe(true);
+    expect(fs.readFileSync(targetAbs, 'utf8')).toBe('scoped');
+    const reloaded = await buildClient(dagPath).load();
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('failed');
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -236,12 +236,22 @@ export const DEFAULT_RUN_DEBUG_DIR = join(process.cwd(), 'tmp', 'dispatch-cli', 
  *   explicitly opted in. Rejects (throws, before ever touching a runner or
  *   the filesystem) any entry that is not one of
  *   `@adhd/dispatch-orchestrator`'s `FS_DESTRUCTIVE_ACTIONS`.
+ * @param toolsRoot - BUG-DISPATCH-CLI-TOOLSROOT-001 (found during
+ *   FEAT-DISPATCH-GOVERNANCE-001's code review): before this parameter
+ *   existed, `runCycleCore` never set `OrchestratorDeps.toolsRoot` at all, so
+ *   `@adhd/dispatch-orchestrator`'s `resolveToolPath` fell back to its own
+ *   default of `process.cwd()` — wherever the CLI happened to be invoked
+ *   from — rather than any path scoped to the plan being run. From
+ *   `--tools-root` (`bin/cli.ts`) via `api.ts`'s `run`. Optional; defaults to
+ *   `process.cwd()`, matching `@adhd/dispatch-orchestrator`'s own default so
+ *   omitting the flag is a no-op change in behavior.
  */
 export async function runCycleCore(
   dagPath: string,
   dryRun: boolean,
   runnerOverride?: IDispatchAgentRunner,
-  allowedFsActions: string[] = []
+  allowedFsActions: string[] = [],
+  toolsRoot?: string
 ): Promise<CycleResult> {
   await guardDagExists(dagPath);
   for (const action of allowedFsActions) {
@@ -265,6 +275,7 @@ export async function runCycleCore(
     bPerTier: DEFAULT_B_PER_TIER,
     contextWindowPerTier: DEFAULT_CONTEXT_WINDOW_PER_TIER,
     allowedFsActions: allowedFsActions as OperationAction[],
+    ...(toolsRoot !== undefined ? { toolsRoot } : {}),
   };
   return orchestrateCycle(deps);
 }
