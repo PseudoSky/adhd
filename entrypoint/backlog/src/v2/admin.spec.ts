@@ -268,6 +268,61 @@ describe('backlog_admin(doctor) - FEAT-008 integrity report', () => {
     expect(isOutcomeOk(env) && env.warnings?.some((w) => w.includes('orphaned_repo_keys check is inert'))).toBe(true);
   });
 
+  /**
+   * BUG-BACKLOG-REPO-SPLIT-001 / DEBT-BACKLOG-HUMANID-NOT-UNIQUE-001 remedy
+   * (b) - a DIFFERENT hazard than the `duplicate_human_ids` test above (which
+   * mutates ONE humanId's `metadata.repo` to make two nodes agree on the SAME
+   * effective repo). This seeds two items that share a humanId string under
+   * two genuinely DIFFERENT, NON-aliased repo namespaces (different bare
+   * segments - 'repo-x' vs 'repo-y' - so `resolveCanonicalRepo`'s alias-merge
+   * plays no part here at all; this is testing the doctor REPORT, not the
+   * `RepoAliasCollisionError` read-time guard covered in
+   * store/humanid-collision.spec.ts).
+   */
+  it('cross_repo_humanid_reuse finds a humanId whose LIVE nodes span more than one distinct repo namespace', async () => {
+    const REPO_X = 'PseudoSky/repo-x';
+    const REPO_Y = 'PseudoSky/repo-y';
+    const sharedHumanId = await seedItem('SHARED-001', { repo: REPO_X });
+    const second = await createItemNode(tmp.store, {
+      family: undefined as unknown as string,
+      idOverride: sharedHumanId,
+      title: 'same id, different repo',
+      body: 'b',
+      repo: REPO_Y,
+    });
+    expect(second.created).toBe(true);
+
+    const report = expectOk(await adminDoctor(ctx, { checks: ['cross_repo_humanid_reuse'] }));
+
+    const group = report.crossRepoHumanIdReuse.find((g) => g.humanId === sharedHumanId);
+    expect(group).toBeDefined();
+    expect(group?.repos.slice().sort()).toEqual([REPO_X, REPO_Y].sort());
+    expect(group?.nodeIds).toHaveLength(2);
+
+    const check = report.checks.find((c) => c.name === 'cross_repo_humanid_reuse');
+    expect(check?.count).toBeGreaterThanOrEqual(1);
+    expect(check?.ok).toBe(false);
+  });
+
+  /**
+   * NEGATIVE CONTROL (performed - see deviations[] in the task report):
+   * changing `scanCrossRepoHumanIdReuse`'s `if (repos.length < 2) continue;`
+   * guard to `if (repos.length < 3) continue;` turns this test RED - the
+   * genuine 2-repo collision above stops being reported at all. Restored
+   * immediately after confirming the red result.
+   */
+  it('does NOT fire cross_repo_humanid_reuse when every humanId is confined to one repo', async () => {
+    await seedItem('LONE-001', { repo: REPO });
+    await seedItem('LONE-002', { repo: REPO });
+
+    const report = expectOk(await adminDoctor(ctx, { checks: ['cross_repo_humanid_reuse'] }));
+
+    expect(report.crossRepoHumanIdReuse).toEqual([]);
+    const check = report.checks.find((c) => c.name === 'cross_repo_humanid_reuse');
+    expect(check?.count).toBe(0);
+    expect(check?.ok).toBe(true);
+  });
+
   it('rejects an unknown check name and an unknown param key by NAME, with exit 2 - never a silent default', async () => {
     const badCheck = expectError(await adminDoctor(ctx, { checks: ['duplicate_human_ids', 'invented_check'] }));
     expect(badCheck.code).toBe('validation');

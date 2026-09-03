@@ -130,6 +130,15 @@ export interface BacklogItem {
   nodeId: number;
   /** Human-facing id, e.g. "BUG-APIGEN-014". Unique within (repo, family). */
   humanId: string;
+  /**
+   * DEBT-BACKLOG-HUMANID-NOT-UNIQUE-001 remedy (a) — the `(repo, humanId)`
+   * composite key, `${repo}::${humanId}`, computed by `toBacklogItem` on
+   * every read. `humanId` alone is NOT globally unique (that is the whole
+   * defect this field exists to work around) — use `compositeId` anywhere a
+   * bare `humanId` would be used as a Map/Set key or dedupe key across more
+   * than one repo.
+   */
+  compositeId: string;
   /** First hyphen segment of humanId, e.g. "BUG". Open vocabulary — not an enum. */
   kind: string;
   /** humanId with the trailing "-NNN" stripped, e.g. "BUG-APIGEN". */
@@ -292,6 +301,34 @@ export class AmbiguousHumanIdError extends Error {
         `(e.g. rename one of these nodeIds to a distinct humanId) before retrying this operation.`
     );
     this.name = 'AmbiguousHumanIdError';
+  }
+}
+
+/**
+ * BUG-BACKLOG-REPO-SPLIT-001: two or more bare-segment-ALIAS repo namespaces
+ * (e.g. `'widget'` and `'acme/widget'`) each independently carry a LIVE node
+ * for the same `humanId`. Unlike `AmbiguousHumanIdError` (>1 live node inside
+ * the SAME namespace), this is a collision ACROSS namespaces that
+ * `resolveCanonicalRepo`'s alias-merge never reconciles once both spellings
+ * already have live nodes — a caller's literal repo string then silently
+ * decides which of two unrelated items it reaches, with no error. `matches`
+ * lists every colliding `(repo, nodeId)` pair; repair by either addressing
+ * the exact repo string that owns the item you mean, or reconciling the two
+ * namespaces via `admin merge` / `renameHumanIdNode` on one of the nodeIds.
+ */
+export class RepoAliasCollisionError extends Error {
+  constructor(
+    humanId: string,
+    public readonly matches: Array<{ repo: string; nodeId: number }>
+  ) {
+    super(
+      `backlog: repo-alias collision — humanId "${humanId}" resolves to LIVE items in ${matches.length} ` +
+        `alias repo(s) that were never reconciled (${matches.map((m) => `${m.repo}::${m.nodeId}`).join(', ')}). ` +
+        `Refusing to silently pick one — this is a data-integrity defect (see BUG-BACKLOG-REPO-SPLIT-001); ` +
+        `pass the exact repo string that owns the item you mean, or reconcile the collision via ` +
+        `'admin merge' / 'renameHumanIdNode' on one of these nodeIds before retrying this operation.`
+    );
+    this.name = 'RepoAliasCollisionError';
   }
 }
 
@@ -1550,6 +1587,13 @@ export type ISortDirection = 'asc' | 'desc';
 export const BACKLOG_FIELDS = [
   // plain item fields
   'humanId',
+  /**
+   * DEBT-BACKLOG-HUMANID-NOT-UNIQUE-001 remedy (a) — `${repo}::${humanId}`,
+   * always present on `BacklogItem` (`toBacklogItem`) but opt-in here like
+   * every other non-default-card field. Use this instead of `humanId` alone
+   * as a dedupe/Map key across more than one repo.
+   */
+  'compositeId',
   'kind',
   'title',
   'status',
@@ -2353,6 +2397,8 @@ export interface IBacklogCard {
   projectPath?: string;
   updatedAt?: string;
   // ---- opt-in via `fields` ----------------------------------------------
+  /** `fields: ["compositeId"]` — see `BACKLOG_FIELDS`'s doc comment. */
+  compositeId?: string;
   repo?: string;
   family?: string;
   plan?: string;

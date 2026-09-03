@@ -248,16 +248,18 @@ export function toBacklogItem(node: NodeRecord): BacklogItem {
   const kind = meta.kind ?? humanIdKind(humanId);
   const family = meta.family ?? humanIdFamily(humanId);
   const reservedTags = new Set<string>([BACKLOG_ITEM_TAG, kind, family]);
+  const repo = meta.repo ?? node.namespace;
   return {
     nodeId: node.id,
     humanId,
+    compositeId: `${repo}::${humanId}`,
     kind,
     family,
     title: meta.title ?? node.summary ?? '',
     body: meta.body ?? '',
     status: meta.status ?? 'UNKNOWN',
     priority: meta.priority,
-    repo: meta.repo ?? node.namespace,
+    repo,
     projectPath: meta.projectPath,
     plan: meta.plan,
     importedFrom: meta.importedFrom,

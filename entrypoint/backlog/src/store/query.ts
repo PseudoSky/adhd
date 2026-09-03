@@ -23,7 +23,7 @@ import type {
   StatsScope,
   TopoOrderResult,
 } from '../model.js';
-import { AmbiguousHumanIdError, BacklogItemNotFoundError, assertOpenScopedStats, isTerminalStatus, resolveStatusSelector } from '../model.js';
+import { AmbiguousHumanIdError, BacklogItemNotFoundError, RepoAliasCollisionError, assertOpenScopedStats, isTerminalStatus, resolveStatusSelector } from '../model.js';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
 import { BACKLOG_ITEM_TAG, buildNodeName, isLiveBacklogItemNode, normalizeRepoKey, sanitizeFtsQuery, toBacklogItem, type BacklogNodeMeta } from './mapping.js';
 import { queryAuditEvents } from './audit-log.js';
@@ -261,6 +261,23 @@ export async function listItemsPage(store: GraphBacklogStore, filter: BacklogFil
  * for one node silently landed on a different, unrelated one). Any lookup
  * that finds >1 live match now throws `AmbiguousHumanIdError` instead of
  * guessing.
+ *
+ * BUG-BACKLOG-REPO-SPLIT-001 (fix #3 — cross-alias guard): `resolveCanonicalRepo`
+ * only reconciles a bare-segment alias (e.g. `'widget'` vs `'acme/widget'`)
+ * when at most one of the two spellings already has live nodes — once BOTH
+ * are independently "known" it short-circuits each to itself and never
+ * merges them (see `findAliasRepoCandidates`'s own doc comment). That means a
+ * humanId minted under one alias spelling and, independently, under the
+ * other, used to resolve silently to whichever spelling the caller's
+ * literal string happened to hit — no error, wrong item. This probes every
+ * OTHER alias namespace (`findAliasRepoCandidates`, minus `canonical`
+ * itself) for a live node under the same humanId; if one exists AND it is a
+ * genuinely different node than the canonical lookup found, this throws
+ * `RepoAliasCollisionError` naming every colliding `(repo, nodeId)` pair
+ * instead of silently returning the canonical match alone. A canonical miss
+ * with an alias hit is NOT collapsed into an error here — that is the
+ * existing miss-path job of `buildNotFoundError`'s "did you mean" hint,
+ * unchanged.
  */
 export async function findItemNode(store: GraphBacklogStore, repo: string, humanId: string): Promise<NodeRecord | null> {
   const { canonical } = await resolveCanonicalRepo(store, repo);
@@ -270,7 +287,26 @@ export async function findItemNode(store: GraphBacklogStore, repo: string, human
   if (live.length > 1) {
     throw new AmbiguousHumanIdError(canonical, humanId, live.map((n) => n.id));
   }
-  return live.find((n) => n.name === name) ?? live[0] ?? null;
+  const canonicalMatch = live.find((n) => n.name === name) ?? live[0] ?? null;
+
+  const aliasCandidates = (await findAliasRepoCandidates(store, repo)).filter((alias) => alias !== canonical);
+  if (aliasCandidates.length > 0) {
+    const collisions: Array<{ repo: string; nodeId: number }> = canonicalMatch
+      ? [{ repo: canonical, nodeId: canonicalMatch.id }]
+      : [];
+    for (const alias of aliasCandidates) {
+      const aliasNodes = await store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG], namespace: alias, metadata: { humanId } });
+      const aliasLive = aliasNodes.filter(isLiveBacklogItemNode);
+      for (const node of aliasLive) {
+        if (!canonicalMatch || node.id !== canonicalMatch.id) collisions.push({ repo: alias, nodeId: node.id });
+      }
+    }
+    if (canonicalMatch && collisions.length > 1) {
+      throw new RepoAliasCollisionError(humanId, collisions);
+    }
+  }
+
+  return canonicalMatch;
 }
 
 /** `metadata.repo` is the source-of-truth field written at create time; `namespace` (== the `repo` a node was written under) is the fallback for the rare row predating that field. Mirrors `toBacklogItem`'s own `meta.repo ?? node.namespace` fallback. */
@@ -406,6 +442,58 @@ export async function resolveCanonicalRepo(store: GraphBacklogStore, repo: strin
   if (bareMatches.size === 1) return { canonical: [...bareMatches][0]!, isNewRepo: false };
 
   return { canonical: repo, isNewRepo: true };
+}
+
+/**
+ * BUG-BACKLOG-REPO-SPLIT-001: every candidate namespace in `known` that
+ * bare-segment-matches `repo` under the SAME predicate `resolveCanonicalRepo`
+ * uses above (same bare segment, case-insensitive; compatible owners — equal
+ * when both sides name one, unconstrained otherwise) — but, unlike
+ * `resolveCanonicalRepo`, WITHOUT that function's line-379 early return
+ * (`if (known.has(repo)) return …` before the bare-segment loop ever runs)
+ * and WITHOUT collapsing to a single winner. That early return is exactly
+ * what lets two literal repo strings that are the same logical project by
+ * bare-segment matching (e.g. `'adhd'` and `'PseudoSky/adhd'`) go
+ * unreconciled once BOTH already have live nodes: each literal spelling
+ * short-circuits to itself before the alias logic ever sees the other side.
+ *
+ * This helper is the probe `findItemNode` uses to detect that exact
+ * unreconciled-alias shape: it deliberately DOES include `repo` itself in the
+ * result whenever `repo` is itself a member of `known` (the literal
+ * self-match `resolveCanonicalRepo` short-circuits past), and it returns
+ * EVERY matching candidate rather than only when there is exactly one — the
+ * caller (`findItemNode`) needs the full candidate set to know whether more
+ * than one of them independently carries a live node for the same humanId.
+ *
+ * Cost: a repo with no bare-segment alias in `known` returns `[]` here, so
+ * the common case (no aliasing at all) is a single `knownRepos` scan plus a
+ * cheap loop — no behavior change, no extra query, for every caller that
+ * never hits this shape.
+ */
+export async function findAliasRepoCandidates(store: GraphBacklogStore, repo: string): Promise<string[]> {
+  const known = await knownRepos(store);
+  let asked;
+  try {
+    asked = parseRepoKey(repo);
+  } catch {
+    // Mirrors resolveCanonicalRepo's own guard (lines 385-393): an
+    // unparseable repo key has no bare segment to match against, so there
+    // are no alias candidates — stay total, never throw.
+    return [];
+  }
+  const matches = new Set<string>();
+  for (const candidate of known) {
+    let parsed;
+    try {
+      parsed = parseRepoKey(candidate);
+    } catch {
+      continue;
+    }
+    if (parsed.bare.toLowerCase() !== asked.bare.toLowerCase()) continue;
+    if (asked.owner !== undefined && parsed.owner !== undefined && asked.owner.toLowerCase() !== parsed.owner.toLowerCase()) continue;
+    matches.add(candidate);
+  }
+  return [...matches];
 }
 
 /**
