@@ -34,6 +34,8 @@ export type {
   DispatchedUnitSummary,
   CycleResult,
   PollOutcome,
+  FsOpDecision,
+  FsOpPolicyFn,
 } from './lib/orchestrator.js';
 export {
   orchestrateCycle,
@@ -45,5 +47,6 @@ export {
   DEFAULT_GUARD_TIMEOUT_MS,
   DEFAULT_MAX_CYCLES,
   POLL_TERMINAL_STATUSES,
+  FS_DESTRUCTIVE_ACTIONS,
   pollUntilTerminal,
 } from './lib/orchestrator.js';

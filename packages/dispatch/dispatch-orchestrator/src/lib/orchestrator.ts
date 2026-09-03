@@ -44,6 +44,7 @@ import type {
   ICalibrationStore,
   IOptimizerDeps,
   MilestoneDag,
+  OperationAction,
   OperationDag,
   OperationStatus,
   Turn,
@@ -222,6 +223,26 @@ export interface OrchestratorDeps {
    * `toolCallExec` — ignored if `toolCallExec` is injected.
    */
   toolsRoot?: string;
+  /**
+   * FEAT-DISPATCH-GOVERNANCE-001 / FEAT-DISPATCH-CAPFLOOR-002 — explicit
+   * allowlist of `OperationAction`s the default `fs.*` policy gate permits
+   * to actually execute. Default: `[]` — a DELIBERATE fail-closed change
+   * from the prior behavior (every `fs.move`/`fs.delete`/`fs.scaffold`/
+   * `fs.edit` op executed unconditionally). An action not in this list is
+   * denied with `{ ok: false, error: "... denied by policy ..." }` and the
+   * filesystem is never touched. Only consumed by the default `fsOpPolicy`
+   * (below) — ignored if `fsOpPolicy` is injected directly.
+   */
+  allowedFsActions?: OperationAction[];
+  /**
+   * FEAT-DISPATCH-GOVERNANCE-001 — the fail-closed permission gate itself.
+   * Default: `defaultFsOpPolicy(allowedFsActions)`. Only consumed by the
+   * default `toolCallExec` (`defaultToolCallExec`) — ignored if
+   * `toolCallExec` is injected, exactly like `toolsRoot`. Inject this
+   * directly for a policy richer than a flat allowlist (e.g. per-path rules)
+   * without having to reimplement the rest of `defaultToolCallExec`.
+   */
+  fsOpPolicy?: FsOpPolicyFn;
   /**
    * Safety cap for `orchestrate()`'s multi-cycle loop only (NOT consumed by
    * `orchestrateCycle()`, which always runs exactly one cycle regardless).
@@ -460,6 +481,47 @@ function setDagField(dag: DagJson, fieldPath: string, value: unknown): void {
 }
 
 /**
+ * FEAT-DISPATCH-GOVERNANCE-001 / FEAT-DISPATCH-CAPFLOOR-002 — the
+ * fail-closed permission gate for destructive `fs.*` tool-call ops.
+ *
+ * `resolveToolPath` (below) is a path-containment check only — it stops a
+ * dag.json from reaching outside `toolsRoot`, but says nothing about
+ * WHETHER an `fs.move`/`fs.delete`/`fs.scaffold`/`fs.edit` op should run at
+ * all. Prior to this fix there was no such decision: every destructive fs
+ * verb executed unconditionally the moment `defaultToolCallExec` reached its
+ * case, regardless of `--dry-run`. This is a deliberate behavior change: by
+ * default NO fs action is allowed (`allowedFsActions` defaults to `[]`), so
+ * every destructive fs op fails closed unless explicitly allowlisted.
+ */
+export type FsOpDecision = 'allow' | 'deny';
+
+/** Decides whether a single (already-resolved) `OperationDag` may execute its `fs.*` action. */
+export type FsOpPolicyFn = (op: OperationDag) => FsOpDecision;
+
+/**
+ * Every `OperationAction` this gate governs. Exported so a caller building
+ * its own `allowedFsActions` list (e.g. `dispatch-cli`'s `--allow-fs`
+ * option, validating user-supplied action names) can check membership
+ * without duplicating this list.
+ */
+export const FS_DESTRUCTIVE_ACTIONS: ReadonlySet<OperationAction> = new Set([
+  'fs.move',
+  'fs.delete',
+  'fs.scaffold',
+  'fs.edit',
+]);
+
+/**
+ * Production default policy: allow only actions explicitly present in
+ * `allowedFsActions`. An action outside `FS_DESTRUCTIVE_ACTIONS` (i.e. not
+ * one of the four fs verbs this gate governs) is never consulted here —
+ * this function is only ever called from the fs.* cases below.
+ */
+function defaultFsOpPolicy(allowedFsActions: ReadonlySet<OperationAction>): FsOpPolicyFn {
+  return (op) => (allowedFsActions.has(op.action) ? 'allow' : 'deny');
+}
+
+/**
  * Resolves an `fs.*` tool-call path relative to `root`, rejecting anything
  * that escapes it (`..` traversal, absolute paths outside root). A
  * maliciously- or buggily-authored dag.json must never be able to move/
@@ -483,7 +545,8 @@ function resolveToolPath(root: string, rel: string): string {
 async function defaultToolCallExec(
   op: OperationDag,
   dag: DagJson,
-  toolsRoot: string
+  toolsRoot: string,
+  fsOpPolicy: FsOpPolicyFn
 ): Promise<ToolCallResult> {
   const args = (op.args ?? {}) as Record<string, unknown>;
   try {
@@ -548,6 +611,9 @@ async function defaultToolCallExec(
         return { ok: true, result: { id: entry.id } };
       }
       case 'fs.move': {
+        if (fsOpPolicy(op) !== 'allow') {
+          return { ok: false, error: `fs op '${op.action}' denied by policy — not in allowedFsActions` };
+        }
         const from = resolveToolPath(toolsRoot, requireStringArg(args, 'from'));
         const to = resolveToolPath(toolsRoot, requireStringArg(args, 'to'));
         await fsp.mkdir(nodePath.dirname(to), { recursive: true });
@@ -555,12 +621,18 @@ async function defaultToolCallExec(
         return { ok: true, result: { from, to } };
       }
       case 'fs.delete': {
+        if (fsOpPolicy(op) !== 'allow') {
+          return { ok: false, error: `fs op '${op.action}' denied by policy — not in allowedFsActions` };
+        }
         const target = resolveToolPath(toolsRoot, requireStringArg(args, 'path'));
         const recursive = args['recursive'] === true;
         await fsp.rm(target, { recursive, force: false });
         return { ok: true, result: { path: target } };
       }
       case 'fs.scaffold': {
+        if (fsOpPolicy(op) !== 'allow') {
+          return { ok: false, error: `fs op '${op.action}' denied by policy — not in allowedFsActions` };
+        }
         const target = resolveToolPath(toolsRoot, requireStringArg(args, 'path'));
         const content = typeof args['content'] === 'string' ? (args['content'] as string) : '';
         await fsp.mkdir(nodePath.dirname(target), { recursive: true });
@@ -569,6 +641,20 @@ async function defaultToolCallExec(
           ok: true,
           result: { path: target, bytes: Buffer.byteLength(content, 'utf8') },
         };
+      }
+      case 'fs.edit': {
+        if (fsOpPolicy(op) !== 'allow') {
+          return { ok: false, error: `fs op '${op.action}' denied by policy — not in allowedFsActions` };
+        }
+        const target = resolveToolPath(toolsRoot, requireStringArg(args, 'path'));
+        const find = requireStringArg(args, 'find');
+        const replace = requireStringArg(args, 'replace');
+        const content = await fsp.readFile(target, 'utf8');
+        if (!content.includes(find)) {
+          return { ok: false, error: `fs.edit: '${find}' not found in ${target}` };
+        }
+        await fsp.writeFile(target, content.replace(find, replace), 'utf8');
+        return { ok: true, result: { path: target } };
       }
       default:
         return {
@@ -583,6 +669,10 @@ async function defaultToolCallExec(
 
 async function resolveDeps(deps: OrchestratorDeps): Promise<ResolvedDeps> {
   const toolsRoot = deps.toolsRoot ?? process.cwd();
+  // FEAT-DISPATCH-GOVERNANCE-001: fail-closed by default — an empty allowlist
+  // denies every fs.* action unless the caller explicitly opts in.
+  const allowedFsActions = new Set<OperationAction>(deps.allowedFsActions ?? []);
+  const fsOpPolicy = deps.fsOpPolicy ?? defaultFsOpPolicy(allowedFsActions);
   const coldStartBPerTier = deps.bPerTier ?? DEFAULT_B_PER_TIER;
   // DEBT-DISPATCH-018: when a calibration store is supplied, its persisted
   // per-tier B values win over the cold-start defaults (merged, not
@@ -607,7 +697,8 @@ async function resolveDeps(deps: OrchestratorDeps): Promise<ResolvedDeps> {
     poll: { ...DEFAULT_POLL, ...deps.poll },
     guardExec: deps.guardExec ?? defaultGuardExec,
     guardTimeoutMs: deps.guardTimeoutMs ?? DEFAULT_GUARD_TIMEOUT_MS,
-    toolCallExec: deps.toolCallExec ?? ((op, dagArg) => defaultToolCallExec(op, dagArg, toolsRoot)),
+    toolCallExec:
+      deps.toolCallExec ?? ((op, dagArg) => defaultToolCallExec(op, dagArg, toolsRoot, fsOpPolicy)),
     continueOnError: deps.continueOnError ?? true,
   };
 }

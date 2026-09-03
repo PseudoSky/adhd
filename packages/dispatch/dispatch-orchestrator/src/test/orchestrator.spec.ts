@@ -711,6 +711,7 @@ describe('orchestrateCycle — real tool-call execution (BUG-DISPATCH-EXEC-001)'
       })
     );
     deps.toolsRoot = dir;
+    deps.allowedFsActions = ['fs.scaffold'];
 
     await orchestrateCycle(deps);
 
@@ -747,6 +748,7 @@ describe('orchestrateCycle — real tool-call execution (BUG-DISPATCH-EXEC-001)'
       })
     );
     deps.toolsRoot = dir;
+    deps.allowedFsActions = ['fs.move'];
 
     await orchestrateCycle(deps);
 
@@ -760,7 +762,7 @@ describe('orchestrateCycle — real tool-call execution (BUG-DISPATCH-EXEC-001)'
     expect(opResult?.status).toBe('complete');
   });
 
-  it('fs.delete: really deletes a file on disk', async () => {
+  it('fs.delete: really deletes a file on disk when fs.delete is explicitly allowlisted', async () => {
     const name = 'tool-call-fs-delete';
     const dir = path.join(TMP_ROOT, name);
     fs.mkdirSync(dir, { recursive: true });
@@ -775,6 +777,7 @@ describe('orchestrateCycle — real tool-call execution (BUG-DISPATCH-EXEC-001)'
       })
     );
     deps.toolsRoot = dir;
+    deps.allowedFsActions = ['fs.delete'];
 
     await orchestrateCycle(deps);
 
@@ -782,6 +785,7 @@ describe('orchestrateCycle — real tool-call execution (BUG-DISPATCH-EXEC-001)'
     const reloaded = await reload(dagPath);
     const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
     expect(opResult?.status).toBe('complete');
+    expect(opResult?.tool_result).toEqual({ path: path.join(dir, 'doomed.txt') });
   });
 
   it('fs.delete: rejects a path that escapes the configured tools root — never executes it', async () => {
@@ -801,6 +805,7 @@ describe('orchestrateCycle — real tool-call execution (BUG-DISPATCH-EXEC-001)'
       })
     );
     deps.toolsRoot = dir;
+    deps.allowedFsActions = ['fs.delete'];
 
     await orchestrateCycle(deps);
 
@@ -808,6 +813,176 @@ describe('orchestrateCycle — real tool-call execution (BUG-DISPATCH-EXEC-001)'
     const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
     expect(opResult?.status).toBe('failed');
     expect((opResult?.tool_result as { error?: string } | null)?.error).toContain('escapes tools root');
+  });
+
+  // ---------------------------------------------------------------------------
+  // FEAT-DISPATCH-GOVERNANCE-001 / FEAT-DISPATCH-CAPFLOOR-002 — fail-closed
+  // permission gate: an `fs.*` destructive action is DENIED by default (no
+  // `allowedFsActions` supplied) and only executes once explicitly
+  // allowlisted. This is the acceptance-criteria-mandated negative control:
+  // proves the file is left untouched when the gate denies, and proves the
+  // SAME op succeeds once the specific action is allowlisted.
+  // ---------------------------------------------------------------------------
+
+  it('fs.delete: DEFAULT deps (no allowedFsActions) deny the op — the target file is left untouched on disk', async () => {
+    const name = 'tool-call-fs-delete-denied-by-default';
+    const dir = path.join(TMP_ROOT, name);
+    fs.mkdirSync(dir, { recursive: true });
+    const target = path.join(dir, 'protected.txt');
+    fs.writeFileSync(target, 'must survive', 'utf-8');
+
+    const { dagPath, deps } = await setupScenario(
+      name,
+      makeDag({
+        operations: [
+          makeOp({ type: 'tool-call', action: 'fs.delete', args: { path: 'protected.txt' }, shape: null }),
+        ],
+      })
+    );
+    deps.toolsRoot = dir;
+    // Deliberately NOT setting deps.allowedFsActions — proves the default
+    // (fail-closed, empty allowlist) actually denies.
+
+    await orchestrateCycle(deps);
+
+    // CONSUMER-VISIBLE OUTCOME #1: the file is untouched on disk.
+    expect(fs.existsSync(target)).toBe(true);
+    expect(fs.readFileSync(target, 'utf-8')).toBe('must survive');
+
+    // CONSUMER-VISIBLE OUTCOME #2: the persisted op result names the denial.
+    const reloaded = await reload(dagPath);
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('failed');
+    expect((opResult?.tool_result as { error?: string } | null)?.error).toContain('denied by policy');
+  });
+
+  it('fs.delete: the SAME op, with allowedFsActions: ["fs.delete"], actually deletes the file — proving the allowlist un-blocks the specific action', async () => {
+    const name = 'tool-call-fs-delete-allowlisted';
+    const dir = path.join(TMP_ROOT, name);
+    fs.mkdirSync(dir, { recursive: true });
+    const target = path.join(dir, 'protected.txt');
+    fs.writeFileSync(target, 'must survive', 'utf-8');
+
+    const { dagPath, deps } = await setupScenario(
+      name,
+      makeDag({
+        operations: [
+          makeOp({ type: 'tool-call', action: 'fs.delete', args: { path: 'protected.txt' }, shape: null }),
+        ],
+      })
+    );
+    deps.toolsRoot = dir;
+    deps.allowedFsActions = ['fs.delete'];
+
+    await orchestrateCycle(deps);
+
+    expect(fs.existsSync(target)).toBe(false);
+    const reloaded = await reload(dagPath);
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('complete');
+    expect(opResult?.tool_result).toEqual({ path: target });
+  });
+
+  // ---------------------------------------------------------------------------
+  // fs.edit — the new surgical-edit primitive (FEAT-DISPATCH-CAPFLOOR-002),
+  // gated by the SAME fail-closed policy as the other destructive fs verbs.
+  // ---------------------------------------------------------------------------
+
+  it('fs.edit: DEFAULT deps (no allowedFsActions) deny the op — the file content is left unchanged', async () => {
+    const name = 'tool-call-fs-edit-denied-by-default';
+    const dir = path.join(TMP_ROOT, name);
+    fs.mkdirSync(dir, { recursive: true });
+    const target = path.join(dir, 'edit-me.txt');
+    fs.writeFileSync(target, 'hello world', 'utf-8');
+
+    const { dagPath, deps } = await setupScenario(
+      name,
+      makeDag({
+        operations: [
+          makeOp({
+            type: 'tool-call',
+            action: 'fs.edit',
+            args: { path: 'edit-me.txt', find: 'world', replace: 'galaxy' },
+            shape: null,
+          }),
+        ],
+      })
+    );
+    deps.toolsRoot = dir;
+    // No allowedFsActions — must deny.
+
+    await orchestrateCycle(deps);
+
+    expect(fs.readFileSync(target, 'utf-8')).toBe('hello world');
+    const reloaded = await reload(dagPath);
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('failed');
+    expect((opResult?.tool_result as { error?: string } | null)?.error).toContain('denied by policy');
+  });
+
+  it('fs.edit: with allowedFsActions: ["fs.edit"], really replaces the first occurrence of `find` with `replace` on disk', async () => {
+    const name = 'tool-call-fs-edit-allowlisted';
+    const dir = path.join(TMP_ROOT, name);
+    fs.mkdirSync(dir, { recursive: true });
+    const target = path.join(dir, 'edit-me.txt');
+    fs.writeFileSync(target, 'hello world, hello world', 'utf-8');
+
+    const { dagPath, deps } = await setupScenario(
+      name,
+      makeDag({
+        operations: [
+          makeOp({
+            type: 'tool-call',
+            action: 'fs.edit',
+            args: { path: 'edit-me.txt', find: 'world', replace: 'galaxy' },
+            shape: null,
+          }),
+        ],
+      })
+    );
+    deps.toolsRoot = dir;
+    deps.allowedFsActions = ['fs.edit'];
+
+    await orchestrateCycle(deps);
+
+    // First-occurrence-only replacement — matches String.prototype.replace's
+    // default (non-global) semantics, the documented contract.
+    expect(fs.readFileSync(target, 'utf-8')).toBe('hello galaxy, hello world');
+    const reloaded = await reload(dagPath);
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('complete');
+  });
+
+  it('fs.edit: fails cleanly (never crashes the cycle) when `find` is not present in the file', async () => {
+    const name = 'tool-call-fs-edit-not-found';
+    const dir = path.join(TMP_ROOT, name);
+    fs.mkdirSync(dir, { recursive: true });
+    const target = path.join(dir, 'edit-me.txt');
+    fs.writeFileSync(target, 'hello world', 'utf-8');
+
+    const { dagPath, deps } = await setupScenario(
+      name,
+      makeDag({
+        operations: [
+          makeOp({
+            type: 'tool-call',
+            action: 'fs.edit',
+            args: { path: 'edit-me.txt', find: 'nonexistent-string', replace: 'x' },
+            shape: null,
+          }),
+        ],
+      })
+    );
+    deps.toolsRoot = dir;
+    deps.allowedFsActions = ['fs.edit'];
+
+    await orchestrateCycle(deps);
+
+    expect(fs.readFileSync(target, 'utf-8')).toBe('hello world');
+    const reloaded = await reload(dagPath);
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('failed');
+    expect((opResult?.tool_result as { error?: string } | null)?.error).toContain('not found in');
   });
 
   it('an op missing required args fails cleanly with a real error, never a silent skip', async () => {
