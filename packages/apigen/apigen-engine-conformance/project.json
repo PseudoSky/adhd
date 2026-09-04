@@ -41,6 +41,16 @@
     },
     "conformance": {
       "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        "{workspaceRoot}/packages/apigen/java/pom.xml",
+        "{workspaceRoot}/packages/apigen/java/src/**/*"
+      ],
+      "outputs": [
+        "{workspaceRoot}/tmp/apigen-engine-conformance/conformance-report.json"
+      ],
       "options": {
         "command": "{workspaceRoot}/node_modules/.bin/tsx --tsconfig packages/apigen/apigen-engine-conformance/tsconfig.json packages/apigen/apigen-engine-conformance/src/lib/gate.ts",
         "cwd": "{workspaceRoot}"
