@@ -99,7 +99,7 @@ export {
   renderItemsToMarkdown,
   toImportItems,
 } from './markdown.js';
-export type { ParsedImportItem, ParsedMarkdownItem, ParseWithDiagnosticsResult } from './markdown.js';
+export type { ParsedImportItem, ParsedMarkdownItem, ParseWithDiagnosticsResult, RenderGrammarOptions } from './markdown.js';
 
 export * from './model.js';
 

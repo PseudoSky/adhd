@@ -7,7 +7,8 @@
  * (store/lifecycle.ts + client.ts) can compose this without a layering
  * violation (store/* never depends on markdown.ts).
  */
-import type { BacklogFilter, BacklogItem, BacklogStatus, Citation, MalformedHeaderInfo, Priority } from './model.js';
+import type { BacklogFilter, BacklogItem, BacklogStatus, Citation, DuplicateHeaderInfo, MalformedHeaderInfo, Priority } from './model.js';
+import { isTerminalStatus } from './model.js';
 
 // ── An item header is a `##`/`###` line whose first token is an ID: starts
 //    uppercase, has ≥1 hyphenated segment, and contains a digit — ported
@@ -149,6 +150,8 @@ function looksLikeAttemptedId(headerText: string): boolean {
 export interface ParseWithDiagnosticsResult {
   items: ParsedMarkdownItem[];
   malformedHeaders: MalformedHeaderInfo[];
+  /** See `DuplicateHeaderInfo` (DEBT-BACKLOG-IMPORT-DUP-DETECT-001). */
+  duplicateHeaders: DuplicateHeaderInfo[];
 }
 
 /** Ported (structure preserved) from tools/util/backlog.mjs:106-155 (`parse`). */
@@ -156,6 +159,16 @@ function parseBacklogMarkdownInternal(text: string): ParseWithDiagnosticsResult 
   const lines = text.split('\n');
   const items: ParsedMarkdownItem[] = [];
   const malformedHeaders: MalformedHeaderInfo[] = [];
+  // DEBT-BACKLOG-IMPORT-DUP-DETECT-001: the parser previously tracked no
+  // uniqueness within a single parse pass at all — two headers sharing the
+  // same humanId in ONE file both silently landed in `items[]`. This maps
+  // humanId -> the line number of its most recent occurrence so far; on a
+  // repeat, the CURRENT map value (not necessarily the file's first
+  // occurrence) is reported as `firstLine`, since that is the closest prior
+  // pair and therefore the most actionable pointer for a human fixing the
+  // file. `items[]`'s own content/shape is unchanged — this is additive.
+  const seenIds = new Map<string, number>();
+  const duplicateHeaders: DuplicateHeaderInfo[] = [];
   let cur:
     | (Omit<ParsedMarkdownItem, 'status' | 'open' | 'terminal' | 'priority' | 'body'> & { bodyLines: string[] })
     | null = null;
@@ -185,6 +198,10 @@ function parseBacklogMarkdownInternal(text: string): ParseWithDiagnosticsResult 
     if (m && /\d/.test(m[2])) {
       flush();
       const id = m[2];
+      if (seenIds.has(id)) {
+        duplicateHeaders.push({ humanId: id, firstLine: seenIds.get(id)!, secondLine: i + 1 });
+      }
+      seenIds.set(id, i + 1);
       const title = line.replace(HEADER_RE, '').replace(/^\s*[—–-]\s*/, '').trim();
       const segs = id.split('-');
       cur = {
@@ -213,7 +230,7 @@ function parseBacklogMarkdownInternal(text: string): ParseWithDiagnosticsResult 
     }
   });
   flush();
-  return { items, malformedHeaders };
+  return { items, malformedHeaders, duplicateHeaders };
 }
 
 /** Ported (structure preserved) from tools/util/backlog.mjs:106-155 (`parse`). */
@@ -258,11 +275,31 @@ function toRenderedStatusText(status: BacklogStatus): string {
   return status;
 }
 
-function renderItemBlock(item: BacklogItem): string {
+/**
+ * Opt-in grammar knobs for `renderItemBlock`/`renderItemsToMarkdown`
+ * (DEBT-BACKLOG-API-RETURN-VALUES-DO-NOT-REPORT-OUTCOME-001). Both default
+ * `false` — omitting this parameter (every existing caller) produces
+ * byte-identical output to before this item; these are an intentionally
+ * versioned, opt-in contract, never a default behavior change.
+ */
+export interface RenderGrammarOptions {
+  /** Fold the status into the heading (`### [STATUS] id — title`) instead of a separate `**Status:**` body line. */
+  inlineStatusInHeading?: boolean;
+  /** Prepend a `# Total open: N` line before the first item block (renderItemsToMarkdown only — a single block has no notion of a set count). */
+  totalOpenHeader?: boolean;
+}
+
+function renderItemBlock(item: BacklogItem, opts?: RenderGrammarOptions): string {
   const lines: string[] = [];
-  lines.push(`### ${item.humanId} — ${item.title}`);
+  if (opts?.inlineStatusInHeading) {
+    lines.push(`### [${toRenderedStatusText(item.status)}] ${item.humanId} — ${item.title}`);
+  } else {
+    lines.push(`### ${item.humanId} — ${item.title}`);
+  }
   lines.push('');
-  lines.push(`**Status:** ${toRenderedStatusText(item.status)}`);
+  if (!opts?.inlineStatusInHeading) {
+    lines.push(`**Status:** ${toRenderedStatusText(item.status)}`);
+  }
   if (item.priority) lines.push(`**Priority:** ${item.priority}`);
   if (item.assignee) lines.push(`**Assignee:** ${item.assignee}`);
   if (item.plan) lines.push(`**Plan:** ${item.plan}`);
@@ -282,9 +319,15 @@ function renderItemBlock(item: BacklogItem): string {
  * field of its own, so this function (pure, no store access) cannot filter
  * on it and takes an already-filtered `items` array.
  */
-export function renderItemsToMarkdown(items: BacklogItem[]): string {
+export function renderItemsToMarkdown(items: BacklogItem[], opts?: RenderGrammarOptions): string {
   if (items.length === 0) return '';
-  return `${items.map(renderItemBlock).join('\n\n')}\n`;
+  const body = `${items.map((it) => renderItemBlock(it, opts)).join('\n\n')}\n`;
+  if (!opts?.totalOpenHeader) return body;
+  // `isTerminalStatus` is the ONE canonical closed-status check (model.ts) —
+  // deliberately reused rather than hand-rolled, per
+  // DEBT-BACKLOG-STATUS-VOCABULARY-SPRAWL-001.
+  const openCount = items.filter((it) => !isTerminalStatus(it.status)).length;
+  return `# Total open: ${openCount}\n\n${body}`;
 }
 
 /** Demote heading levels by two — ported from tools/util/backlog.mjs:342-349 (`demoteHeadings`). */

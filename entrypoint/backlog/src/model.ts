@@ -584,6 +584,21 @@ export interface MalformedHeaderInfo {
   headerLine: string;
 }
 
+/**
+ * Two `##`/`###` headers in the SAME parse pass sharing an identical
+ * humanId (DEBT-BACKLOG-IMPORT-DUP-DETECT-001) — surfaced, never silently
+ * merged/dropped. `firstLine` is the line of the most recent PRIOR
+ * occurrence of this id (not necessarily the file's first occurrence) so a
+ * caller fixing the file is pointed at the closest pair to disambiguate.
+ */
+export interface DuplicateHeaderInfo {
+  humanId: string;
+  /** 1-based line number of the most recent prior occurrence of this humanId. */
+  firstLine: number;
+  /** 1-based line number of this (repeated) occurrence. */
+  secondLine: number;
+}
+
 export interface ImportResult {
   parsed: number;
   created: number;
@@ -602,6 +617,12 @@ export interface ImportResult {
   errors: Array<{ humanId: string; message: string }>;
   /** Headers that look like a corrupted/typo'd id and were dropped instead of parsed — never silent (DEBT-BACKLOG-IMPORT-SILENT-DROP-001). */
   malformedHeaders: MalformedHeaderInfo[];
+  /**
+   * Same-file `##`/`###` headers sharing an identical humanId
+   * (DEBT-BACKLOG-IMPORT-DUP-DETECT-001) — visibility only; does NOT change
+   * which occurrence wins the upsert (last-occurrence-wins is unchanged).
+   */
+  duplicateHeaders: DuplicateHeaderInfo[];
   /** See `CreateItemResult.repoWarning` (BUG-BACKLOG-REPO-LOOKUP-UX-001) — computed once for `input.repo`, not per item. */
   repoWarning?: string;
 }
