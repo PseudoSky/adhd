@@ -42,7 +42,34 @@
  *   defaultAgent    string  default 'typescript-pro'
  *   reviewerAgent   string  default 'code-reviewer'
  *   stewardAgent    string  default 'sox-active:doc-steward'
+ *   testRunnerModel string  default 'haiku' — model for the centralized test-batch agent (see below)
  *   effort          string  default 'high'
+ *
+ * ---------------------------------------------------------------------------
+ * why the heavy gate is centralized (2026-09-03 incident)
+ * ---------------------------------------------------------------------------
+ * The gate used to be run independently, in full, by EVERY implement/review/fix/
+ * review2 agent, in its own cluster's worktree. With N packages across M cluster
+ * worktrees that pipelines without a barrier (by design, for wall-clock), the
+ * Workflow runtime happily ran up to 16 of those concurrently — each spinning a
+ * full `nx affected -t test` (its own vitest workers + esbuild service), plus,
+ * per-worktree, a redundant embedding-model host and (for apigen-java packages)
+ * a live JVM test server. Observed live: 22 concurrent `nx affected -t test`
+ * invocations across 14 worktrees, load average 115 -> 145, swap climbing to 95%
+ * used, and 30 leaked JVM test servers (one alive 3d22h) because nothing
+ * serialized who tears down what. See BUG-006.
+ *
+ * Fix: the HEAVY half of the gate (`nx affected -t test`, `nx affected -t
+ * verify-dist-load` — the two that spawn real test/runtime processes) now runs
+ * exactly once per wave-round, on a SINGLE agent, STRICTLY sequentially across
+ * every distinct (cluster, project) pair, deduped. Implement/fix agents still
+ * run the LIGHT half inline (lint + build/type-check — cheap, no child test
+ * processes) for fast local feedback; review/review2 read the centralized
+ * batch's exit codes as the authoritative test verdict rather than re-running
+ * `nx affected` themselves. This trades some wall-clock (heavy tests no longer
+ * overlap across packages) for keeping the host machine usable — worth it,
+ * because the prior design was making test runs SLOWER anyway once swap thrash
+ * set in.
  *
  * OPTIONAL — item store (set to '' to omit the instruction entirely)
  *   itemNoteHint  string  how an implementer appends a progress note to a tracked
@@ -98,8 +125,9 @@ export const meta = {
   name: 'backlog-remediation-pipeline',
   description: 'Parameterized backlog-remediation execution: per-package implement->review->fix->review, then a scoped doc-steward pass',
   phases: [
-    { title: 'Implement', detail: 'discipline-routed implementer per package, in its cluster worktree' },
-    { title: 'Review', detail: 'reviewer first pass — judges the diff, re-runs the gate' },
+    { title: 'Implement', detail: 'discipline-routed implementer per package, in its cluster worktree (light gate only)' },
+    { title: 'TestBatch', detail: 'ONE serialized test-runner agent runs the heavy nx affected test/verify-dist-load gate, one cluster/project group at a time' },
+    { title: 'Review', detail: 'reviewer first pass — judges the diff, trusts the centralized batch result' },
     { title: 'Fix', detail: 'implementer applies blocker/major findings (skipped when clean)' },
     { title: 'Review2', detail: 'final gate before merge' },
     { title: 'Docs', detail: 'one doc-steward per touched project, scoped to the incremental diff' },
@@ -163,12 +191,23 @@ const GATE = A.gate || [
   'npx nx lint {project}',
   'npx nx run {project}:sync-deps        # only if lint surfaced dependency drift; never hand-edit deps',
   'npx nx build {project}                # type-check via the real target',
-  'npx nx affected -t test --base={base}               # NOT targeted `nx test`, unless you PROVE zero dependents',
-  'npx nx affected -t verify-dist-load --base={base}   # prove the shipped artifact actually loads',
+  'npx nx affected -t test --base={base} --parallel=1               # NOT targeted `nx test`, unless you PROVE zero dependents. --parallel=1: the constraint under worktree-driven runs is RAM/swap, not CPU (perf item #7) — heavy targets can each pull 200MB-1GB (JVM/ONNX); do not raise this without a measured memory budget.',
+  'npx nx affected -t verify-dist-load --base={base} --parallel=1   # prove the shipped artifact actually loads',
   'git status --porcelain                # confirm ONLY your intended files changed',
 ]
-const gateFor = (p) =>
-  GATE.map((c) => '  ' + fill(c, { project: p.project || '<project>', base: BASE })).join('\n')
+const gateFor = (p, lines = GATE) =>
+  lines.map((c) => '  ' + fill(c, { project: p.project || '<project>', base: BASE })).join('\n')
+
+// The heavy lines spawn real child processes (vitest workers, esbuild, JVM test
+// servers, embedding-model hosts) and are the ones that must never run
+// concurrently across worktrees — see the incident note above. Everything else
+// (lint, build/type-check, sync-deps, git status) is cheap and stays inline.
+const isHeavyGateLine = (line) => /affected\s+-t\s+(test|verify-dist-load)\b/.test(line)
+const LIGHT_GATE = GATE.filter((c) => !isHeavyGateLine(c))
+const HEAVY_GATE = GATE.filter((c) => isHeavyGateLine(c))
+const lightGateFor = (p) => gateFor(p, LIGHT_GATE)
+const heavyGateFor = (p) => gateFor(p, HEAVY_GATE)
+const TEST_RUNNER_MODEL = A.testRunnerModel || 'haiku'
 
 const ITEM_NOTE_HINT = A.itemNoteHint === '' ? '' : (A.itemNoteHint ||
   'Append a note on each backlog item recording what you did (ToolSearch "select:mcp__backlog__backlog_append_note"). Do NOT resolve/close the items — a reviewer gates that.')
@@ -208,8 +247,10 @@ TEST STANDARD — this is the bar, not a suggestion:
 `
 
 const gateBlock = (p) => `
-VERIFICATION GATE — run from your worktree root before declaring done. Trust EXIT CODES, never a stdout grep:
-${ENVLINE ? '  ' + ENVLINE + '\n' : ''}${gateFor(p)}
+LOCAL VERIFICATION GATE — run from your worktree root before declaring done. Trust EXIT CODES, never a stdout grep. This is deliberately LIGHT (lint + type-check/build only):
+${ENVLINE ? '  ' + ENVLINE + '\n' : ''}${lightGateFor(p)}
+
+Do NOT run \`nx affected -t test\` or \`nx affected -t verify-dist-load\` yourself. A single centralized test-batch agent runs those for every package in this wave afterward, strictly one worktree/project group at a time — every implementer/fixer running the full test suite independently and concurrently is what previously drove this machine's load average past 140 and swap to 95% used (13+ worktrees each spinning a full suite at once; see BUG-006). If your acceptance criteria require proving a negative control (test goes red without your fix, then passes with it), you may run ONE narrowly-scoped command against just the spec file(s) you changed — e.g. \`npx nx test ${p.project || '<this-project>'}\` — never \`nx affected\` — and cite that in acceptanceEvidence. The authoritative pass/fail for merge purposes is the centralized batch result, reported to you in the review stage.
 `
 
 const acList = (p) => (p.acceptanceCriteria || []).map((c, i) => `  ${i + 1}. ${c}`).join('\n')
@@ -251,6 +292,28 @@ const REVIEW_SCHEMA = {
     },
     acceptanceVerified: { type: 'boolean' }, testsHaveTeeth: { type: 'boolean' },
     scopeClean: { type: 'boolean' }, bypassAudit: { type: 'string' }, notes: { type: 'string' },
+  },
+}
+
+const TEST_BATCH_SCHEMA = {
+  type: 'object', required: ['results'],
+  properties: {
+    results: {
+      type: 'array', items: {
+        type: 'object', required: ['cluster', 'gids', 'allPassed', 'results'],
+        properties: {
+          cluster: { type: 'string' }, project: { type: 'string' },
+          gids: { type: 'array', items: { type: 'string' } },
+          allPassed: { type: 'boolean' },
+          results: {
+            type: 'array', items: {
+              type: 'object', required: ['command', 'exitCode'],
+              properties: { command: { type: 'string' }, exitCode: { type: 'number' }, tail: { type: 'string' } },
+            },
+          },
+        },
+      },
+    },
   },
 }
 
@@ -297,11 +360,15 @@ Then commit your work with pathspec-scoped commits. ${ITEM_NOTE_HINT}
 Return the structured object, including acceptanceEvidence (criterion -> the command output proving it) and your negativeControl proof.`
 }
 
-function reviewPrompt(p, impl, isFinal) {
+function reviewPrompt(p, impl, isFinal, batchResult) {
   const wt = worktreeOf(p.cluster)
   const mandate = (!isFinal && p.extraReviewMandate)
-    ? `\n*** MANDATORY AUDIT — do this FIRST and record it in bypassAudit ***\n${p.extraReviewMandate}\nRe-run every gate command yourself and record each exit code. Do not accept the implementer's reported numbers as substitutes. Also verify the commits contain nothing beyond this package's declared scope (\`git log --stat ${BASE}..HEAD\`): any stray file, secret, scratch artifact, or swept-in foreign change is a blocker.\n`
+    ? `\n*** MANDATORY AUDIT — do this FIRST and record it in bypassAudit ***\n${p.extraReviewMandate}\nRe-run the LIGHT gate commands yourself and record each exit code (for the heavy test/verify-dist-load verdict, use the centralized batch result below — do not re-run it yourself). Do not accept the implementer's reported numbers as substitutes. Also verify the commits contain nothing beyond this package's declared scope (\`git log --stat ${BASE}..HEAD\`): any stray file, secret, scratch artifact, or swept-in foreign change is a blocker.\n`
     : ''
+
+  const batchSection = batchResult
+    ? `\nCENTRALIZED TEST-BATCH RESULT for this package's cluster/project group — the heavy gate (nx affected -t test, verify-dist-load) already ran for you, serialized, on a dedicated test-runner agent. Trust these exit codes as authoritative; do NOT re-run \`nx affected -t test\` or \`verify-dist-load\` yourself (that reintroduces the concurrent-nx-storm this design exists to prevent):\n${JSON.stringify(batchResult, null, 1)}\n`
+    : `\nNo centralized test-batch result was provided for this package's group. If that is unexpected (the wave script should always run one), flag it as a finding rather than silently running the heavy gate yourself.\n`
 
   return `${isFinal ? 'FINAL review gate' : 'Review ONE implementation'}. ${header(p)}
 
@@ -314,19 +381,19 @@ ${acList(p)}
 
 ${isFinal ? 'FIX-ROUND REPORT' : "IMPLEMENTER'S REPORT"}:
 ${JSON.stringify(impl, null, 1)}
-${mandate}
+${mandate}${batchSection}
 Review the ACTUAL DIFF, not the report. Run: cd ${wt} && git log --oneline ${BASE}..HEAD && git diff ${BASE}...HEAD
 
 Judge, and VERIFY don't trust:
-1. Correctness — does it actually fix the cited defect${isFinal ? ', and is every previously-raised blocker/major genuinely resolved with no regression or scope creep' : ''}? Re-run the verification gate YOURSELF and cite YOUR exit codes; never a stdout grep.
+1. Correctness — does it actually fix the cited defect${isFinal ? ', and is every previously-raised blocker/major genuinely resolved with no regression or scope creep' : ''}? Re-run the LIGHT gate (lint/build) yourself and cite YOUR exit codes; never a stdout grep. For test/verify-dist-load, rely on the centralized batch result above unless you have a concrete, stated reason to distrust it.
 2. Acceptance — is EVERY criterion met and proven by a real command, through the real consumer seam (built artifact / real components), not a proxy and not a mock of the thing under test?
-3. Tests have teeth — would the test actually FAIL if the bug came back? Verify the implementer's negative control, or run your own, then restore. Confirm the control's assertion step actually executed; a control that silently skips is a blocker. A test that stays green on broken code proves nothing.
+3. Tests have teeth — would the test actually FAIL if the bug came back? Read the implementer's negative-control proof (and the batch result's exit codes) rather than re-running the suite; if the proof is missing or unconvincing, that is itself a blocker finding — do not silently backfill it by running the heavy gate yourself. Confirm the control's assertion step actually executed; a control that silently skips is a blocker.
 4. Scope — did anything outside ${(p.filesTouched || []).length ? 'the intended files (' + (p.filesTouched || []).join(', ') + ')' : 'the intended files'} change? Did a commit sweep in another agent's work (git show --stat)? Any git add -A evidence is a blocker. Verify claimed artifacts exist ON DISK — do not accept "built and proven" from a report.
 5. Project rules — no direct tsc, no --skip-nx-cache, no --no-verify, no env-gated tests except a paid third-party service, import paths matching package.json exactly, dependency direction downward, correct platform isolation.
 6. Quality — reuse over reinvention, no dead code, docs on new public functions, lint clean.
 
-VERIFICATION GATE to re-run yourself:
-${gateFor(p)}
+LIGHT VERIFICATION GATE to re-run yourself (test/verify-dist-load come from the centralized batch result above, not from you):
+${lightGateFor(p)}
 
 Be specific and actionable: every finding names file:line and the fix. Do NOT edit code — you are the gate, not the author. Do NOT commit.
 ${isFinal ? 'This is the last gate before merge. APPROVE only if you would ship it. If not, list exactly what still blocks.' : ''}
@@ -353,6 +420,45 @@ ${TEST_STD}${RULES}
 ${gateBlock(p)}
 Re-run the FULL verification gate after your fixes and commit with pathspec-scoped commits.
 Return the structured object (same shape as the implementation report).`
+}
+
+// Groups packages by (cluster, project) — packages sharing a cluster share a
+// worktree, so their heavy gate is one command sequence, not one per package.
+function groupForBatch(pkgs) {
+  const groups = new Map()
+  for (const p of pkgs) {
+    const key = `${p.cluster}::${p.project || ''}`
+    if (!groups.has(key)) groups.set(key, { cluster: p.cluster, project: p.project, worktree: worktreeOf(p.cluster), gids: [] })
+    groups.get(key).gids.push(p.gid)
+  }
+  return [...groups.values()]
+}
+
+function testBatchPrompt(pkgs, roundLabel) {
+  const groups = groupForBatch(pkgs)
+  const entries = groups.map((g, i) => `${i + 1}. worktree: ${g.worktree}  (branch ${branchOf(g.cluster)})
+   packages: ${g.gids.join(', ')}
+   commands:
+${heavyGateFor({ project: g.project })}`).join('\n\n')
+
+  return `Run the HEAVY verification gate for ${groups.length} worktree/project group(s) from the "${roundLabel}" round of a backlog-remediation wave.
+
+RUN STRICTLY ONE GROUP AT A TIME, IN THE ORDER LISTED. Do not background any command, do not start group N+1 before every command in group N has exited. This repo runs many git worktrees concurrently for this remediation run; running these heavy commands in parallel across them has previously driven load average past 140 and swap usage to 95% (13+ worktrees each independently spinning a full \`nx affected -t test\` — its own vitest workers, esbuild service, embedding-model host, and for apigen-java packages a live JVM test server — all at once). Serializing this on one agent is the fix; do not undo it by parallelizing inside this call, and do not leave any spawned server/JVM/process running after its command exits — kill anything you started before moving to the next group.
+${ENVLINE ? `\nBefore each group's commands: ${ENVLINE}\n` : ''}
+GROUPS:
+${entries}
+
+For each group: cd into its worktree, run its commands in the listed order, and record the REAL exit code of each — never infer pass/fail from stdout text like "passed" or "OK" (a crash or segfault can still print success-looking output before dying). Trust exit codes only.
+
+After finishing every group, return one result object per group: which packages (gids) it covers, whether every command in it exited 0 (allPassed), and each command's exit code plus a short tail of its output (last ~20 lines — do not paste full logs, that wastes context for no benefit).`
+}
+
+function indexBatchByGid(batch) {
+  const map = {}
+  for (const g of (batch && batch.results) || []) {
+    for (const gid of g.gids || []) map[gid] = g
+  }
+  return map
 }
 
 function docPrompt(name, d) {
@@ -416,57 +522,90 @@ if (PHASES.includes('implement') && PKGS.length) {
   const byGid = Object.fromEntries(PKGS.map((p) => [p.gid, p]))
   const gids = PKGS.map((p) => p.gid)
 
+  // NOTE on structure: implement/fix run via parallel() (concurrent LLM calls,
+  // cheap — they no longer spawn heavy nx processes, see gateBlock above).
+  // TestBatch is an intentional BARRIER: it needs every implement/fix result
+  // in hand to dedupe (cluster, project) pairs before running the ONE
+  // expensive gate pass per pair, strictly serialized on a single agent. This
+  // is the canonical "dedupe across all results before expensive downstream
+  // work" barrier case — see the incident note at the top of this file.
+
   phase('Implement')
-  log(`remediation wave: ${gids.length} packages -> implement/review/fix/review (pipelined)`)
+  log(`remediation wave: ${gids.length} packages -> implement (parallel LLM work; heavy nx test deferred to a single serialized batch)`)
 
-  const out = await parallel([
-    () => pipeline(gids,
-      // --- stage 1: implement (or pass through a prior report on resume)
-      (gid) => {
-        const p = byGid[gid]
-        const at = p.startAt || 'implement'
-        if (at !== 'implement') return p.priorReport || { gid, status: 'DONE', summary: `resumed at ${at}`, resumed: at }
-        return agent(implementPrompt(p), {
-          label: `impl:${p.packageId}`, phase: 'Implement', schema: IMPL_SCHEMA,
-          agentType: AGENT_FOR[p.discipline] || DEFAULT_AGENT, effort: EFFORT,
-        })
-      },
-      // --- stage 2: first review
-      (impl, gid) => {
-        const p = byGid[gid]
-        if (!impl) return null
-        if (p.startAt === 'fix' || p.startAt === 'review2') return p.priorReview || null
-        return agent(reviewPrompt(p, impl, false), {
-          label: `review:${p.packageId}`, phase: 'Review', schema: REVIEW_SCHEMA,
-          agentType: REVIEWER, effort: EFFORT,
-        })
-      },
-      // --- stage 3: fix (skipped when the first review is clean)
-      (rev, gid) => {
-        const p = byGid[gid]
-        if (!rev) return null
-        if (!needsFix(rev)) return { gid, skipped: 'approved-clean', review: rev }
-        return agent(fixPrompt(p, rev), {
-          label: `fix:${p.packageId}`, phase: 'Fix', schema: IMPL_SCHEMA,
-          agentType: AGENT_FOR[p.discipline] || DEFAULT_AGENT, effort: EFFORT,
-        })
-      },
-      // --- stage 4: final gate
-      (fix, gid) => {
-        const p = byGid[gid]
-        if (!fix) return null
-        if (fix.skipped) {
-          return { ...fix.review, gid, firstPass: true, notes: `approved clean on first pass; no fix round needed. ${fix.review.notes || ''}` }
-        }
-        return agent(reviewPrompt(p, fix, true), {
-          label: `review2:${p.packageId}`, phase: 'Review2', schema: REVIEW_SCHEMA,
-          agentType: REVIEWER, effort: EFFORT,
-        })
-      },
-    ),
-  ])
+  const implResults = await parallel(gids.map((gid) => () => {
+    const p = byGid[gid]
+    const at = p.startAt || 'implement'
+    if (at !== 'implement') return Promise.resolve(p.priorReport || { gid, status: 'DONE', summary: `resumed at ${at}`, resumed: at })
+    return agent(implementPrompt(p), {
+      label: `impl:${p.packageId}`, phase: 'Implement', schema: IMPL_SCHEMA,
+      agentType: AGENT_FOR[p.discipline] || DEFAULT_AGENT, effort: EFFORT,
+    })
+  }))
+  const implByGid = Object.fromEntries(gids.map((gid, i) => [gid, implResults[i]]))
 
-  chains = (out[0] || []).filter(Boolean)
+  phase('TestBatch')
+  const round1Targets = gids.filter((gid) => implByGid[gid]).map((gid) => byGid[gid])
+  log(`test-batch (post-implement): ${round1Targets.length} package(s) across ${groupForBatch(round1Targets).length} cluster/project group(s) -> one ${TEST_RUNNER_MODEL} agent, strictly sequential`)
+  const batch1 = round1Targets.length
+    ? await agent(testBatchPrompt(round1Targets, 'post-implement'), {
+        label: 'test-batch:post-implement', phase: 'TestBatch', schema: TEST_BATCH_SCHEMA, model: TEST_RUNNER_MODEL,
+      })
+    : { results: [] }
+  const batch1ByGid = indexBatchByGid(batch1)
+
+  phase('Review')
+  const revResults = await parallel(gids.map((gid) => () => {
+    const p = byGid[gid]
+    const impl = implByGid[gid]
+    if (!impl) return Promise.resolve(null)
+    if (p.startAt === 'fix' || p.startAt === 'review2') return Promise.resolve(p.priorReview || null)
+    return agent(reviewPrompt(p, impl, false, batch1ByGid[gid]), {
+      label: `review:${p.packageId}`, phase: 'Review', schema: REVIEW_SCHEMA,
+      agentType: REVIEWER, effort: EFFORT,
+    })
+  }))
+  const revByGid = Object.fromEntries(gids.map((gid, i) => [gid, revResults[i]]))
+
+  phase('Fix')
+  const fixTargets = gids.filter((gid) => revByGid[gid] && needsFix(revByGid[gid]))
+  log(`fix round: ${fixTargets.length}/${gids.length} package(s) need fixes`)
+  const fixResultsArr = await parallel(fixTargets.map((gid) => () => {
+    const p = byGid[gid]
+    return agent(fixPrompt(p, revByGid[gid]), {
+      label: `fix:${p.packageId}`, phase: 'Fix', schema: IMPL_SCHEMA,
+      agentType: AGENT_FOR[p.discipline] || DEFAULT_AGENT, effort: EFFORT,
+    })
+  }))
+  const fixByGid = Object.fromEntries(fixTargets.map((gid, i) => [gid, fixResultsArr[i]]))
+
+  phase('TestBatch')
+  const round2Targets = fixTargets.filter((gid) => fixByGid[gid]).map((gid) => byGid[gid])
+  log(`test-batch (post-fix): ${round2Targets.length} package(s) across ${groupForBatch(round2Targets).length} cluster/project group(s) -> one ${TEST_RUNNER_MODEL} agent, strictly sequential`)
+  const batch2 = round2Targets.length
+    ? await agent(testBatchPrompt(round2Targets, 'post-fix'), {
+        label: 'test-batch:post-fix', phase: 'TestBatch', schema: TEST_BATCH_SCHEMA, model: TEST_RUNNER_MODEL,
+      })
+    : { results: [] }
+  const batch2ByGid = indexBatchByGid(batch2)
+
+  phase('Review2')
+  const rev2Results = await parallel(gids.map((gid) => () => {
+    const rev = revByGid[gid]
+    if (!rev) return Promise.resolve(null)
+    if (!needsFix(rev)) {
+      return Promise.resolve({ ...rev, gid, firstPass: true, notes: `approved clean on first pass; no fix round needed. ${rev.notes || ''}` })
+    }
+    const fix = fixByGid[gid]
+    if (!fix) return Promise.resolve(null)
+    const p = byGid[gid]
+    return agent(reviewPrompt(p, fix, true, batch2ByGid[gid]), {
+      label: `review2:${p.packageId}`, phase: 'Review2', schema: REVIEW_SCHEMA,
+      agentType: REVIEWER, effort: EFFORT,
+    })
+  }))
+
+  chains = gids.map((gid, i) => rev2Results[i]).filter(Boolean)
   const approved = chains.filter((r) => r && r.verdict === 'APPROVED')
   log(`wave done: ${approved.length}/${gids.length} APPROVED at final gate`)
   const notApproved = chains.filter((r) => r && r.verdict !== 'APPROVED').map((r) => r.gid)
