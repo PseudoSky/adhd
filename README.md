@@ -20,11 +20,16 @@ Building intelligent agents that work across multiple LLM providers, safely mana
 
 Each subproject has its own quick-start guide. Start here based on your goal:
 
+`entrypoint/` has six projects; five (`agent-mcp`, `apigen-cli`, `dispatch-cli`, `backlog`, `decompile-cli`) publish real, installable CLIs/servers with a `bin` entry. The sixth, `environment-cli`, is `private: true` with no `bin` — a library surface, not something you run from a terminal, despite the directory name.
+
 | Subproject | Purpose | Entry point |
 |------------|---------|-------------|
 | **agent-mcp** | Run agents as MCP servers; spawn agents, delegate across providers, HITL suspension | [`entrypoint/agent-mcp/README.md`](entrypoint/agent-mcp/README.md) |
 | **apigen-cli** | Code-first API generation: TypeScript → HTTP, MCP, CLI, OpenAPI, Python; batch/bulk fan-out operations | [`entrypoint/apigen-cli/README.md`](entrypoint/apigen-cli/README.md) |
 | **dispatch-cli** | Orchestrate task DAGs: validate, optimize, execute with cost estimation | [`entrypoint/dispatch-cli/README.md`](entrypoint/dispatch-cli/README.md) |
+| **backlog** | Multi-agent-safe graph-store backlog (bugs/debt/features) — CLI (`adhd-backlog`), HTTP, and MCP tools over one SQLite store; `adhd-backlog install` wires it into Claude Code/Codex/OpenCode in one step | [`entrypoint/backlog/README.md`](entrypoint/backlog/README.md) |
+| **decompile-cli** | Reverse-engineer bundled/minified JS via source maps — feed it a URL, domain, or local file (`npx @adhd/decompile-cli`, bin: `decompile`) | [`entrypoint/decompile-cli/README.md`](entrypoint/decompile-cli/README.md) |
+| **environment-cli** | *Not a runnable CLI* — `private: true`, no `bin` entry. A library of apigen-extractable functions (one per would-be CLI command) for the `@adhd/environment` family's own build tooling; nothing here is installed or invoked directly by end users | [`entrypoint/environment-cli/README.md`](entrypoint/environment-cli/README.md) |
 | **environment** | Zero-config configuration cascade (code defaults → system → global → project → env) | [`docs/environment/`](docs/environment/) |
 | **agent-registry family** | Core modular packages: stores for prompts, tools, policies, models; compiler | [`packages/agent/README.md`](packages/agent/README.md) |
 | **apigen-plugins** | Transport adapters: Fastify, Express, gRPC, Python Flask, OpenAPI, JSON Schema | [`packages/apigen/README.md`](packages/apigen/README.md) |
@@ -33,12 +38,15 @@ Each subproject has its own quick-start guide. Start here based on your goal:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Monorepo: 50 packages across 7 domains                    │
+│  Monorepo: 56 packages across 7 domains                    │
 ├─────────────────────────────────────────────────────────────┤
 │  Entrypoints (users interact here):                         │
 │    • entrypoint/agent-mcp — MCP server runner              │
 │    • entrypoint/apigen-cli — API generator CLI             │
 │    • entrypoint/dispatch-cli — DAG orchestrator CLI        │
+│    • entrypoint/backlog — backlog CLI/HTTP/MCP server      │
+│    • entrypoint/decompile-cli — source-map reverse-eng CLI │
+│    • entrypoint/environment-cli — library only, no bin     │
 ├─────────────────────────────────────────────────────────────┤
 │  Agent Registry Family (the core system):                   │
 │    • agent-store-prompts — component composition engine    │
