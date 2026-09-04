@@ -207,6 +207,97 @@ function findFatJar(javaPkgDir: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Process-lifecycle hygiene (BUG-006 root cause, fix #1) — kill any live
+// child JVM this module spawned if THIS Node process itself dies, not only
+// when the caller's `AbortSignal` fires. The existing `input.signal`-driven
+// path (below, in `run()`) only helps a caller that both wires an
+// `AbortSignal` AND lives long enough to fire it; it does nothing if the
+// parent process is itself SIGKILLed (OOM) or torn down by a test-runner
+// worker pool that never propagates an abort. These handlers are the
+// independent, unconditional backstop — see
+// docs/backlog/grooming/test-perf-improvements.md #1.
+// ---------------------------------------------------------------------------
+
+const liveJavaChildren = new Set<ChildProcessWithoutNullStreams>();
+let lifecycleHandlersInstalled = false;
+
+function isStillAlive(proc: ChildProcessWithoutNullStreams): boolean {
+  return proc.exitCode === null && proc.signalCode === null;
+}
+
+function killChildImmediately(proc: ChildProcessWithoutNullStreams): void {
+  try {
+    if (isStillAlive(proc)) {
+      proc.kill('SIGKILL');
+    }
+  } catch {
+    // Already dead / ESRCH-equivalent race — nothing left to do.
+  }
+}
+
+/**
+ * Registers `process`-level exit/signal handlers exactly once per process.
+ * Idempotent by design: `run()` may be called multiple times (multiple
+ * servers spawned from one Node process, as the test suite does), and must
+ * not accumulate duplicate listeners.
+ */
+function installProcessLifecycleHandlers(): void {
+  if (lifecycleHandlersInstalled) return;
+  lifecycleHandlersInstalled = true;
+
+  // `exit` handlers run synchronously with no further event-loop turns
+  // available before the process actually terminates — there is no time for
+  // a SIGTERM-then-wait grace period, so go straight to SIGKILL. This is the
+  // path that fires on an uncaught exception unwinding to exit, or a normal
+  // `process.exit()` call anywhere in the process — the exact shape of "the
+  // parent died and nothing else ever ran the AbortSignal path."
+  process.on('exit', () => {
+    for (const proc of liveJavaChildren) {
+      killChildImmediately(proc);
+    }
+  });
+
+  // SIGTERM/SIGINT are the signals a supervising test runner, shell, or
+  // process-group teardown sends for a graceful shutdown. Registering a
+  // listener here overrides Node's own default behavior of terminating
+  // immediately, so this handler must reproduce that default itself
+  // (`process.exit`) once cleanup has had its grace period.
+  for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+    process.on(sig, () => {
+      // Only WE should reproduce Node's "terminate on this signal" default
+      // if we're the sole listener. If a consumer (apigen-cli, a test
+      // runner, ...) has registered its own handler for the same signal,
+      // it owns the process's overall shutdown sequence — we still kill our
+      // own children unconditionally, but defer to that other handler for
+      // actually exiting the process, so we don't truncate its cleanup.
+      const soleListener = process.listenerCount(sig) === 1;
+
+      const pending = Array.from(liveJavaChildren);
+      for (const proc of pending) {
+        try {
+          if (isStillAlive(proc)) {
+            proc.kill('SIGTERM');
+          }
+        } catch {
+          // Already dead — nothing left to signal.
+        }
+      }
+      const graceTimer = setTimeout(() => {
+        for (const proc of pending) {
+          killChildImmediately(proc);
+        }
+        if (soleListener) {
+          process.exit(sig === 'SIGTERM' ? 143 : 130);
+        }
+      }, 3000);
+      graceTimer.unref();
+    });
+  }
+}
+
+installProcessLifecycleHandlers();
+
+// ---------------------------------------------------------------------------
 // Readiness wait (identical protocol to py-flask's waitForReady)
 // ---------------------------------------------------------------------------
 
@@ -357,6 +448,13 @@ async function run(input: RunInput): Promise<void> {
     cleanup();
     throw err;
   }
+
+  // Register with the process-lifecycle backstop the moment the JVM exists —
+  // independent of (and in addition to) the AbortSignal-driven path below.
+  liveJavaChildren.add(proc);
+  proc.once('exit', () => {
+    liveJavaChildren.delete(proc);
+  });
 
   proc.stderr.on('data', (chunk: Buffer) => {
     process.stderr.write(chunk);
