@@ -25,21 +25,34 @@ operation surface) and `DESIGN.md` (technical design: graph mapping, claim
 protocol, env/apigen wiring) in this package for the full contract.
 
 ```bash
-corepack enable
-corepack prepare pnpm@8.15.9 --activate   # pin to the repo's packageManager, avoids ERR_PNPM_UNEXPECTED_STORE
-pnpm add -g @adhd/backlog   # installs the `adhd-backlog` bin (renamed from the bare
-                             # `backlog` bin, which collided with the unrelated public
-                             # npm package `backlog@1.4.56`)
-adhd-backlog --help         # live-derived command listing
-adhd-backlog create --input '{"item":{"family":"BUG-EXAMPLE","title":"t","body":"b","repo":"org/repo"},"by":"me:1"}'
-adhd-backlog get --input '{"humanId":"BUG-EXAMPLE-001","repo":"org/repo"}'
-adhd-backlog query --input '{"filter":{"status":"OPEN"}}'
-adhd-backlog search "publish gate trips under load" --limit 5 --status open
+npm install -g @adhd/backlog   # or: pnpm add -g @adhd/backlog / yarn global add @adhd/backlog
+                                 # installs the `adhd-backlog` bin (renamed from the bare
+                                 # `backlog` bin, which collided with the unrelated public
+                                 # npm package `backlog@1.4.56`)
+adhd-backlog --help
 ```
 
-Full CLI reference (all six verbs, the `search` shortcut, exit codes): see
-"CLI" below. Using it from an agent instead of a terminal — MCP tools, the
-skill file — see the next section.
+The six verbs — every one takes a single `--input '<json>'` flag:
+
+```bash
+adhd-backlog get    --input '{"humanId":"BUG-EXAMPLE-001","repo":"org/repo"}'
+adhd-backlog query  --input '{"filter":{"status":"OPEN"}}'
+adhd-backlog create --input '{"item":{"family":"BUG-EXAMPLE","title":"t","body":"b","repo":"org/repo"},"by":"me:1"}'
+adhd-backlog update --input '{"humanId":"BUG-EXAMPLE-001","repo":"org/repo","patch":{"title":"t2"},"by":"me:1"}'
+adhd-backlog relate --input '{"sourceId":"BUG-EXAMPLE-001","targetId":"BUG-EXAMPLE-002","relation":"dependency","action":"add","repo":"org/repo","by":"me:1"}'
+adhd-backlog admin  --input '{"action":"migration_status"}'
+adhd-backlog search "publish gate trips under load" --limit 5 --status open   # shortcut onto query, see below
+```
+
+(This repo's own dev loop — building from source instead of installing the
+published package — is `corepack enable && corepack prepare pnpm@8.15.9
+--activate` at the repo root, per its `packageManager` pin; that's a
+repo-development detail, not something a consumer of the published package
+needs.)
+
+Full CLI reference (the `search` shortcut, exit codes): see "CLI" below.
+Using it from an agent instead of a terminal — MCP tools, the skill file —
+see the next section.
 
 ## Setting up for agent use (Claude Code, Codex, OpenCode)
 
