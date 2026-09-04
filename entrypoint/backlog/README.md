@@ -5,19 +5,170 @@ debt, features, investigations, plans) — a replacement for ad-hoc `BACKLOG.md`
 editing that stays compatible with the existing markdown convention this repo
 already uses.
 
+**In practice this is a CLI (`adhd-backlog`) and an MCP server** — that's how
+this repo and the agents working in it actually use it, day to day. It's
+published as an npm package because the CLI and MCP server need to ship
+*something*, and the same package happens to export a programmatic TypeScript
+API for the rarer case of embedding the store directly in another Node
+process — but reaching for that API is the exception, not the norm. If you're
+a human or an agent working with backlog items, start at the CLI section
+below or "Setting up for agent use"; skip straight to "Library usage" only if
+you're embedding the store inside your own service.
+
 Built on `@adhd/sox-graph-store` (bi-temporal nodes/edges over SQLite) and mounted
 live via `@adhd/apigen-core-client` (no code generation — `extract()` →
-`composeSchemas()` → `plugin.run()`).
+`composeSchemas()` → `plugin.run()`) — the same live mount serves the CLI, the
+MCP server, and the HTTP API, so all three are always in lockstep.
 
 See `SPEC.md` (functional spec: personas, data model, status vocabulary,
 operation surface) and `DESIGN.md` (technical design: graph mapping, claim
 protocol, env/apigen wiring) in this package for the full contract.
 
 ```bash
-pnpm add @adhd/backlog
+corepack enable
+corepack prepare pnpm@8.15.9 --activate   # pin to the repo's packageManager, avoids ERR_PNPM_UNEXPECTED_STORE
+pnpm add -g @adhd/backlog   # installs the `adhd-backlog` bin (renamed from the bare
+                             # `backlog` bin, which collided with the unrelated public
+                             # npm package `backlog@1.4.56`)
+adhd-backlog --help         # live-derived command listing
+adhd-backlog create --input '{"item":{"family":"BUG-EXAMPLE","title":"t","body":"b","repo":"org/repo"},"by":"me:1"}'
+adhd-backlog get --input '{"humanId":"BUG-EXAMPLE-001","repo":"org/repo"}'
+adhd-backlog query --input '{"filter":{"status":"OPEN"}}'
+adhd-backlog search "publish gate trips under load" --limit 5 --status open
 ```
 
-## Usage
+Full CLI reference (all six verbs, the `search` shortcut, exit codes): see
+"CLI" below. Using it from an agent instead of a terminal — MCP tools, the
+skill file — see the next section.
+
+## Setting up for agent use (Claude Code, Codex, OpenCode)
+
+This section is for wiring backlog up so an **agent** (not a human at a
+terminal) can call it — either as `mcp__backlog__*` tools, or via the
+`skill/SKILL.md` (16 KB) that documents the full six-verb contract for an
+agent's own context window. There are three independent pieces: the MCP
+server, the skill file, and (optionally) a one-shot installer that does both.
+None of them require any global Claude Code config beyond what's described
+below.
+
+### The fast path: `adhd-backlog install`
+
+Every published `@adhd/backlog` ships an `install` command (`src/install.ts`,
+verified 2026-09-03 by running `node entrypoint/backlog/dist/index.js install
+--scope project` against a scratch directory) that, in one step:
+
+1. Copies the packaged `skill/SKILL.md` into the target host's skill
+   directory (`.claude/skills/backlog/SKILL.md` for Claude Code project
+   scope, `~/.claude/skills/backlog/SKILL.md` for user scope — see the table
+   below for Codex/OpenCode).
+2. Registers the `backlog` MCP server into that host's own config file
+   (`.mcp.json` for Claude Code project scope, `~/.claude.json` for user
+   scope, `opencode.json`/`~/.config/opencode/opencode.json` for OpenCode,
+   `.codex/config.toml`/`$CODEX_HOME/config.toml` for Codex) — a deep-merged
+   upsert of just the `backlog` entry, leaving every other entry in that file
+   untouched.
+
+```bash
+npx @adhd/backlog@latest install                       # all hosts, user scope (machine-wide)
+npx @adhd/backlog@latest install --host claude --scope project   # this repo only
+npx @adhd/backlog@latest install --skill-only            # skill file only, no MCP config edit
+npx @adhd/backlog@latest install --mcp-only --host opencode
+```
+
+Real output from a `--scope project` run against a scratch directory (`node
+entrypoint/backlog/dist/index.js install --scope project`, no repo files
+touched):
+
+```
+[backlog install] skill -> claude (project): /path/.claude/skills/backlog/SKILL.md
+[backlog install] skill -> codex (project): /path/.codex/skills/backlog/SKILL.md
+[backlog install] skill -> opencode (project): /path/.opencode/skills/backlog/SKILL.md
+[backlog install] mcp   -> claude (project) [written]: /path/.mcp.json
+[backlog install] mcp   -> codex (project) [written]: /path/.codex/config.toml
+[backlog install] mcp   -> opencode (project) [written]: /path/opencode.json
+```
+
+The written `.mcp.json` (Claude Code, project scope) looks exactly like this:
+
+```json
+{
+  "mcpServers": {
+    "backlog": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@adhd/backlog@latest", "serve", "--transport", "mcp"]
+    }
+  }
+}
+```
+
+`backlog install-skill` remains available as a back-compat alias for
+`install --skill-only` (original `--host`/`--scope` grammar). Both `install`
+and `install-skill` are idempotent — re-running only touches the `backlog`
+skill files / the `backlog` MCP entry, never anything else already in those
+files. Full flag reference: `adhd-backlog install --help`.
+
+| Host | Skill dir (project) | Skill dir (user) | MCP config (project) | MCP config (user) |
+|---|---|---|---|---|
+| Claude Code | `.claude/skills/backlog/` | `~/.claude/skills/backlog/` | `.mcp.json` | `~/.claude.json` |
+| Codex | `.codex/skills/backlog/` | `$CODEX_HOME/skills/backlog/` (default `~/.codex/skills/backlog/`) | `.codex/config.toml` | `$CODEX_HOME/config.toml` |
+| OpenCode | `.opencode/skills/backlog/` | `~/.config/opencode/skills/backlog/` | `opencode.json` | `~/.config/opencode/opencode.json` |
+
+### The manual path (what `install` does for you)
+
+If you'd rather wire it up by hand instead of running `install`: this repo's
+own root [`.mcp.json`](../../.mcp.json) is a real, working example — it runs
+the locally-built dist rather than `npx` because it's the dev loop for this
+very package:
+
+```json
+{
+  "mcpServers": {
+    "backlog": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["entrypoint/backlog/dist/index.js", "serve", "--transport", "mcp"]
+    }
+  }
+}
+```
+
+For a third-party consumer (not developing this package), use the `npx`
+form the `install` command itself writes (shown above) instead of a local
+`dist/index.js` path.
+
+For the skill file, either run `adhd-backlog install-skill` or copy it
+yourself: `entrypoint/backlog/skill/SKILL.md` → `<project>/.claude/skills/backlog/SKILL.md`
+(project scope) or `~/.claude/skills/backlog/SKILL.md` (user scope, applies
+across every project on the machine). There is no other packaging step —
+`SKILL.md` is the entire skill; the `extension.json` the installer also
+writes alongside it (`{name, version, type:"skill", entrypoint:"SKILL.md"}`)
+is additive metadata some hosts consume, never required for Claude Code's
+own description-based auto-surfacing of the skill.
+
+### Does this need anything in global Claude Code config?
+
+**No — verified from this repo's own live setup, not asserted.** This very
+project's `.mcp.json` (checked into the repo) plus its `.claude/settings.json`
+(which lists `mcp__backlog__backlog_get_item`,
+`mcp__backlog__backlog_list_items`, etc. in `permissions.allow` — auto-approval
+entries, not a registration requirement) are the *only* backlog-related
+config in this repo, and the `mcp__backlog__*` tools are live and callable in
+every Claude Code session opened against this repo. No marketplace entry, no
+`~/.claude/settings.json` edit, and no plugin registration were needed beyond
+the project-local `.mcp.json` file itself. The `permissions.allow` entries in
+`.claude/settings.json` are optional — they pre-approve specific tools so
+Claude Code doesn't prompt per-call; omitting them means the first call to
+each tool prompts for approval instead, not that the tool is unavailable.
+Skills work the same way: dropping `SKILL.md` under `.claude/skills/<name>/`
+is sufficient for project-local discovery — no separate registration file.
+
+## Library usage (embedding the store directly)
+
+The exception path — most consumers want the CLI or MCP tools above, not this.
+Reach for this only when you're embedding `@adhd/backlog`'s store inside your
+own Node process (e.g. another service that needs direct, in-process access
+rather than shelling out or speaking MCP/HTTP).
 
 ```ts
 import { createItem, listItems, claimItem, transitionStatus } from '@adhd/backlog';
@@ -141,18 +292,9 @@ raw mount body — no `{data:{…}}` envelope — with items wrapped as
 
 ## CLI (`adhd-backlog`, live apigen mount — no codegen)
 
-```bash
-corepack enable
-corepack prepare pnpm@8.15.9 --activate   # pin to the repo's packageManager, avoids ERR_PNPM_UNEXPECTED_STORE
-pnpm add -g @adhd/backlog   # installs the `adhd-backlog` bin (renamed from the bare
-                             # `backlog` bin, which collided with the unrelated public
-                             # npm package `backlog@1.4.56`)
-adhd-backlog --help         # live-derived command listing
-adhd-backlog create --input '{"item":{"family":"BUG-EXAMPLE","title":"t","body":"b","repo":"org/repo"},"by":"me:1"}'
-adhd-backlog get --input '{"humanId":"BUG-EXAMPLE-001","repo":"org/repo"}'
-adhd-backlog query --input '{"filter":{"status":"OPEN"}}'
-adhd-backlog search "publish gate trips under load" --limit 5 --status open
-```
+Install and the six verbs are shown at the top of this file already — this
+section covers the rest of the CLI's contract: the `search` shortcut, exit
+codes, and scope.
 
 ### `search` — the one shortcut
 
