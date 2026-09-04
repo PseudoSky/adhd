@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs';
 import * as net from 'node:net';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import {
   parseMounts,
   namespaceOfSource,
@@ -689,12 +689,56 @@ describe('[serve.live] real cross-language serve front', () => {
         { stdio: ['ignore', 'pipe', 'pipe'], env: process.env }
       );
 
-      // Guarantee cleanup: if anything goes wrong, kill the spawned process.
+      // Direct children of `serveProc` whose command line is an `apigen-cli
+      // ... run --type <plugin>` host process (the fastify/py-flask/etc
+      // server `serve` spawns per source).
+      const findHostChildren = (): number[] => {
+        if (serveProc.pid === undefined) return [];
+        const result = spawnSync('pgrep', ['-P', String(serveProc.pid)], {
+          encoding: 'utf-8',
+        });
+        if (result.status !== 0 || !result.stdout) return [];
+        return result.stdout
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0)
+          .map(Number)
+          .filter((pid) => {
+            const ps = spawnSync('ps', ['-o', 'args=', '-p', String(pid)], {
+              encoding: 'utf-8',
+            });
+            return (ps.stdout ?? '').includes('apigen-cli');
+          });
+      };
+
+      // DEBT-APIGEN-CLI-SERVE-SIGTERM-TEST-ORPHAN-001: on ANY failure path
+      // here (readiness timeout, a failed assertion, an unexpected throw)
+      // `finally` used to reach straight for `serveProc.kill('SIGKILL')` —
+      // SIGKILL cannot be caught, so it never gives `serve`'s own SIGTERM
+      // handler (commands/serve.ts's `onSignal`/`killAll`) a chance to run,
+      // which is the ONLY thing that reaps the host child it already
+      // spawned. That orphaned the host child every time this test failed
+      // before reaching the graceful `serveProc.kill('SIGTERM')` below —
+      // confirmed live: 6 such `apigen-cli ... --type api-fastify` node
+      // processes were found still running from `apigen-sigterm-*` temp
+      // dirs, aged up to 1 day 2 hours. Track the host child directly and
+      // sweep it unconditionally, independent of whatever state `serveProc`
+      // is in — mirrors `process-cleanup.spec.ts`'s `afterEach` backstop for
+      // BUG-006's JVM child.
+      let hostChildPid: number | undefined;
       const cleanupProc = () => {
         try {
           serveProc.kill('SIGKILL');
         } catch {
           /* already dead */
+        }
+        const pidsToSweep = hostChildPid !== undefined ? [hostChildPid] : findHostChildren();
+        for (const pid of pidsToSweep) {
+          try {
+            process.kill(pid, 'SIGKILL');
+          } catch {
+            /* already dead */
+          }
         }
       };
 
@@ -718,6 +762,17 @@ describe('[serve.live] real cross-language serve front', () => {
           ready,
           `serve did not become ready on port ${port} within ${READY_TIMEOUT_MS}ms`
         ).toBe(true);
+
+        // Record the host child's real pid BEFORE signaling anything, so
+        // `cleanupProc()` (and the assertion below) can find it directly
+        // rather than re-`pgrep`ing a parent that may already be dead.
+        const hostChildrenBefore = findHostChildren();
+        expect(
+          hostChildrenBefore,
+          'expected exactly one api-fastify host child while serve is ready'
+        ).toHaveLength(1);
+        const capturedHostChildPid = hostChildrenBefore[0];
+        hostChildPid = capturedHostChildPid;
 
         // Send SIGTERM to the serve process.
         serveProc.kill('SIGTERM');
@@ -743,6 +798,21 @@ describe('[serve.live] real cross-language serve front', () => {
         expect(portFree, `port ${port} should be free after serve shutdown`).toBe(
           true
         );
+
+        // Assertion with teeth (DEBT-APIGEN-CLI-SERVE-SIGTERM-TEST-ORPHAN-001):
+        // the front exiting cleanly is not proof the host CHILD died too —
+        // that's exactly the gap that leaked real orphans. Directly check
+        // the recorded host child pid is gone.
+        let hostChildAlive = true;
+        try {
+          process.kill(capturedHostChildPid, 0);
+        } catch {
+          hostChildAlive = false;
+        }
+        expect(
+          hostChildAlive,
+          `host child pid ${capturedHostChildPid} should be reaped after serve's SIGTERM shutdown`
+        ).toBe(false);
       } finally {
         cleanupProc();
       }
