@@ -224,16 +224,20 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
     // AC-5: the flat v1 verbs (`get-item`/`create-item`/`list-items`) are
     // retired from the mount; the live command table is the six v2 verbs.
-    expect(res.stdout).toContain('backlog get');
-    expect(res.stdout).toContain('backlog create');
-    expect(res.stdout).toContain('backlog query');
+    // BUG-APIGEN-CLI-002: the leading `backlog` segment is bracketed
+    // (`[backlog]`) to mark it as an elidable host-prefix UX convenience,
+    // visually distinct from a mandatory mount-namespace command (`batch
+    // action`, never bracketed) — see cliElidablePrefix wiring above.
+    expect(res.stdout).toContain('[backlog] get');
+    expect(res.stdout).toContain('[backlog] create');
+    expect(res.stdout).toContain('[backlog] query');
   });
 
   it('--help exits 0 with the identical usage listing', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-help-'));
     const res = runBin(['--help'], adhdRoot);
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
-    expect(res.stdout).toContain('backlog get');
+    expect(res.stdout).toContain('[backlog] get');
   });
 
   it('BUG-BACKLOG-001: --help and no-args surface the special-cased commands (install-skill/install/serve) that never enter the apigen command table', () => {
