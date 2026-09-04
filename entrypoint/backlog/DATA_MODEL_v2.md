@@ -1,7 +1,7 @@
 # Backlog Data Model v2 — Proposed Specification
 
-Status: PROPOSED — design for architect-decision review. Supersedes the identity
-spine, entity, and relation model of SPEC.md §3 / DESIGN.md §2.1-2.2.
+Status: PROPOSED v2. Supersedes the identity spine, entity, and relation model
+of SPEC.md §3 / DESIGN.md §2.1-2.2. All design decisions closed (§10).
 
 ## 0. Design principles
 
@@ -110,10 +110,15 @@ issue        (id uuid pk,
               priority_id fk -> priority.id,
               title text not null,
               body text,
-              created_at, updated_at, closed_at)
+              created_at, updated_at)
   -- NO humanId. NO repo string. NO idOverride. NO importedFrom.
   -- Membership in a component is the OWNS edge, not a column.
-  -- closed_at stamped by the transition that moves status to terminal.
+  -- closed_at is NOT a relational column: the real @adhd/sox-graph-store
+  -- node table has a fixed column set with no such field (every domain
+  -- field beyond content/name lives in the JSON meta blob) — realized as
+  -- `meta.metadata.closedAt`, stamped by the transition that moves status
+  -- to terminal (SPEC-v2 §6.3.4). NodeFilter.metadata's gt/lt/between
+  -- operators make it range-queryable exactly as a real column would.
 ```
 
 ## 4. Event/evidence tables (first-class rows, all content-addressed)
@@ -167,8 +172,8 @@ kinds = new rows (plus TypePolicy extension), no code.
    time). Verification = re-hash and compare.
 3. **No humanId** anywhere — UUID is the only identifier; no legacy ids, no
    `legacy_ref`, no `repo_alias`, no `importedFrom`, no `idOverride`.
-4. **Closedness knob** = `status.terminal`; `issue.closed_at` is stamped by the
-   terminal transition.
+4. **Closedness knob** = `status.terminal`; `issue.meta.metadata.closedAt`
+   (§3 — not a relational column) is stamped by the terminal transition.
 5. **Edge kinds are first-class data** — extensible and filterable exactly like
    node kinds.
 
@@ -245,19 +250,28 @@ legacy artifact (and the pre-migration backup).
    references stop resolving by design. The old file remains as a read-only
    legacy artifact until a later, deliberate retirement.
 
-## 10. Open points (for architect-decision)
+## 10. Design decisions (closed)
 
-1. **Citation sha on migration**: existing citations' target content may have
-   changed since filing — migrate with sha of *current* content (verified at
-   migration time, noted as such), or sha unknown → mark unverified?
-2. **Transition sha semantics**: sha256 over the canonical serialization of
-   `(issue_id, from, to, agent_id, note, at)` — confirm.
-3. **Location typing**: resolved — `locType ∈ {path, url, tool}` as a string
-   enum (not a catalog table); the three values cover the agent's three lookups
+1. **Citation sha on migration**: resolved — SPEC-v2 §8.5 (Citation repair).
+   Re-hash *current* content at the citation's `target`, scoped to the
+   issue's owning project's known filesystem `path`; when no path is known
+   or the target no longer resolves, `sha` is the fixed sentinel string
+   `"unverified"` — never a fabricated hash, never a missing field.
+2. **Transition sha semantics**: sha256 over the canonical JSON serialization
+   of `{issue_id, from, to, agent_id, note, at}` with stable (sorted) key
+   order — the same convention SPEC-v2 §4a already states for the audit `sha`,
+   applied identically here rather than inventing a second scheme.
+3. **Location typing**: `locType ∈ {path, url, tool}` as a string enum (not a
+   catalog table); the three values cover the agent's three lookups
    (file / url / tool), and a `location_type` catalog would add indirection with
    no extensibility payoff.
-4. **`blocks` inverse traversal** exposed as a first-class edge kind
-   (`blocked_by`) or derived from `blocks` — lean derived, no second row.
-5. **TypePolicy injection point**: how the remodel's catalog-backed policy is
-   wired into `openGraphBacklogStore` (constructor option vs. post-open setter)
-   — confirm the seam.
+4. **`blocks` inverse traversal**: derived from `blocks`, never a second
+   first-class edge kind (`blocked_by`) — a traversal-time inversion, no
+   second row to keep in sync.
+5. **TypePolicy injection point**: a constructor-time option,
+   `openGraphBacklogStore({typePolicy})`, never a post-open setter — a
+   settable-after-open policy would let early bootstrap writes (catalog
+   seeding, SPEC-v2 §8.6 step 2) run under the wrong default six-kind/ten-rel
+   policy (`DEFAULT_TYPE_POLICY`, §1) if the store were opened before the
+   setter fired. Absent an injected policy the store's default applies (§1);
+   the remodel always supplies its own catalog-backed policy at construction.
