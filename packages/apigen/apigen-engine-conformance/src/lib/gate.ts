@@ -19,7 +19,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, type SpawnSyncOptionsWithStringEncoding } from 'node:child_process';
 import { ensurePythonEnv } from '@adhd/apigen-python-env';
 
 import {
@@ -722,6 +722,7 @@ export function runJavaMatrix(
     `apigen-gate-java-vectors-${process.pid}.json`
   );
 
+  let mvnPid: number | undefined;
   try {
     fs.writeFileSync(vectorsFile, JSON.stringify(vectors), 'utf-8');
 
@@ -729,6 +730,39 @@ export function runJavaMatrix(
     // 'compile' first — exec:java as a standalone goal does not run through
     // the default lifecycle, so target/classes must already exist (cheap
     // no-op on repeat invocations — Maven's own incremental compiler).
+    //
+    // `detached: true` gives the spawned `mvn` its OWN process group (group
+    // id == mvn's own pid) rather than sharing this Node process's group.
+    // This is load-bearing for the group-kill sweep below, NOT for the
+    // timeout itself: Node's `spawnSync` `timeout` option only ever sends
+    // `killSignal` to `mvn`'s own pid — `exec:java` forks the actual JVM as
+    // a GRANDCHILD of mvn (in the same process group as mvn, detached or
+    // not), so killing mvn alone does not reliably kill that grandchild JVM,
+    // which survives as an orphan (BUG-006, second independent leak path
+    // from the one fixed in apigen-plugin-java-javalin/src/lib/plugin.ts).
+    // `detached` IS honored by the underlying libuv spawn for `spawnSync`
+    // (a detached child's own pgid equals its own pid, distinct from the
+    // parent's — verified empirically) even though @types/node's
+    // `SpawnSyncOptions` doesn't declare it: only `SpawnOptions` (the async
+    // `spawn()` variant) does. Typed via a narrow local extension of the
+    // STRING-encoding overload's option type specifically (not the base
+    // `SpawnSyncOptions`) so `spawnSync` still resolves to the
+    // `SpawnSyncReturns<string>` overload and `result.stdout`/`.stderr`
+    // stay typed as `string`, not `as any` so any OTHER real type error in
+    // this options object still surfaces.
+    interface SpawnSyncOptionsWithDetached extends SpawnSyncOptionsWithStringEncoding {
+      detached?: boolean;
+    }
+    // Assigned to a typed variable (not passed as a fresh object literal)
+    // so TypeScript's excess-property check — which only fires on literals
+    // passed directly at a call site — doesn't reject `detached` against
+    // whichever `spawnSync` overload it resolves to.
+    const spawnOptions: SpawnSyncOptionsWithDetached = {
+      cwd: javaPkgDir,
+      timeout: 120_000,
+      encoding: 'utf-8',
+      detached: true,
+    };
     const result = spawnSync(
       mvn,
       [
@@ -740,8 +774,9 @@ export function runJavaMatrix(
         '-Dexec.mainClass=com.adhd.apigen.conformance.ApigenConformanceMatrix',
         `-Dexec.args=${vectorsFile}`,
       ],
-      { cwd: javaPkgDir, timeout: 120_000, encoding: 'utf-8' }
+      spawnOptions
     );
+    mvnPid = result.pid;
 
     if (result.status !== 0) {
       const detail = result.stderr ?? result.error?.message ?? 'unknown error';
@@ -769,6 +804,19 @@ export function runJavaMatrix(
       };
     });
   } finally {
+    // Sweep the whole `mvn` process GROUP unconditionally (negative pid =
+    // group-kill), covering both the timeout path (mvn was SIGTERM'd but
+    // its `exec:java` JVM grandchild wasn't) and any other error exit. This
+    // is a no-op (ESRCH) once the group has already exited cleanly on the
+    // success path — `mvn`'s own graceful shutdown normally reaps its
+    // exec:java child before mvn itself exits.
+    if (mvnPid !== undefined) {
+      try {
+        process.kill(-mvnPid, 'SIGKILL');
+      } catch {
+        /* group already empty — expected on the clean-exit path */
+      }
+    }
     try {
       fs.unlinkSync(vectorsFile);
     } catch {
@@ -1076,6 +1124,50 @@ export function resolveModuleDir(): string {
   return path.dirname(fileURLToPath(import.meta.url));
 }
 
+/**
+ * Where `main()` writes its durable JSON report (BL: nx cache correctness for
+ * the `conformance` target — see docs/backlog/grooming/test-perf-improvements.md
+ * #5). Ephemeral, gitignored, per AGENTS.md §10 ("Test/ephemeral artifacts").
+ * A `nx:run-commands` target has no output otherwise, so an `nx cache: true`
+ * hit would restore nothing observable and a stale-vs-fresh run would be
+ * indistinguishable from the cache's point of view; this file is what the
+ * `outputs` array in project.json points at, giving the cache something real
+ * to save and restore.
+ */
+export function conformanceReportPath(workspaceRoot: string): string {
+  return path.join(
+    workspaceRoot,
+    'tmp',
+    'apigen-engine-conformance',
+    'conformance-report.json'
+  );
+}
+
+function writeConformanceReport(
+  workspaceRoot: string,
+  matrixResults: HostMatrixResult[],
+  passed: boolean
+): void {
+  const reportPath = conformanceReportPath(workspaceRoot);
+  fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+  const report = {
+    passed,
+    generatedAt: new Date().toISOString(),
+    hosts: matrixResults.map((hostResult) => ({
+      host: hostResult.host,
+      passed: hostResult.passed,
+      logicalTypeVersion: hostResult.manifest.logicalTypeVersion,
+      supportedIds: hostResult.manifest.supportedIds,
+      vectorsPassed: hostResult.results.filter((r) => r.pass).length,
+      vectorsFailed: hostResult.results.filter((r) => !r.pass).length,
+      failures: hostResult.results
+        .filter((r) => !r.pass)
+        .map((r) => ({ vectorId: r.vectorId, phase: r.phase, error: r.error })),
+    })),
+  };
+  fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n', 'utf-8');
+}
+
 export function main(workspaceRootOverride?: string): void {
   // Resolve workspace root: walk up from this file's own directory to the
   // first ancestor containing nx.json.
@@ -1092,6 +1184,7 @@ export function main(workspaceRootOverride?: string): void {
     matrixResults = runConformanceMatrix(workspaceRoot);
   } catch (err) {
     console.error(`FATAL: ${String(err)}`);
+    writeConformanceReport(workspaceRoot, [], false);
     process.exit(1);
   }
 
@@ -1126,6 +1219,7 @@ export function main(workspaceRootOverride?: string): void {
   }
 
   if (anyFail) {
+    writeConformanceReport(workspaceRoot, matrixResults, false);
     const failedHosts = matrixResults
       .filter((r) => !r.passed)
       .map((r) => r.host)
@@ -1137,6 +1231,7 @@ export function main(workspaceRootOverride?: string): void {
     process.exit(1);
   }
 
+  writeConformanceReport(workspaceRoot, matrixResults, true);
   const passing = matrixResults.length;
   console.log(
     `Conformance gate PASSED: ${passing} host(s) conformant\n` +
