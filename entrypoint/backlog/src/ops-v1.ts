@@ -59,6 +59,7 @@ import { addCitationNode, appendNoteNode, archiveTerminalItems, resolveItemNode,
 import { addDependencyNode, assignItemNode, attachToPlanNode, linkRelatedNode, mergeItemsNode, removeDependencyNode, setPriorityNode, splitItemNode, supersedeItemNode } from './store/structure.js';
 import { migrateRepo as migrateRepoNode } from './store/repo-migration.js';
 import { buildChangelogSection, parseBacklogMarkdownWithDiagnostics, renderItemsToMarkdown, toImportItems } from './markdown.js';
+import type { RenderGrammarOptions } from './markdown.js';
 import { readFileSync } from 'node:fs';
 import { readBacklogVersionInfo } from './version-info.js';
 import { readBacklogMigrationStatus, setBacklogMigrationPhase } from './migration-phase.js';
@@ -311,7 +312,7 @@ export async function migrateRepo(ctx: BacklogCtx, fromRepo: string, toRepo: str
 
 export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownInput): Promise<ImportResult> {
   const text = readFileSync(input.path, 'utf8');
-  const { items: parsed, malformedHeaders } = parseBacklogMarkdownWithDiagnostics(text);
+  const { items: parsed, malformedHeaders, duplicateHeaders } = parseBacklogMarkdownWithDiagnostics(text);
   const items = toImportItems(parsed);
   // Defaults to `path` (the file actually read) — a caller only needs to set
   // `sourcePath` explicitly when importing from a scratch copy but wanting
@@ -327,7 +328,16 @@ export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownI
       ? `repo '${input.repo}' is new to this store — existing repo value(s) here: ${[...known].sort().join(', ')}. If this is meant to be the same project, use the existing repo value instead.`
       : undefined;
 
-  const result: ImportResult = { parsed: items.length, created: 0, skippedDuplicates: 0, updated: 0, errors: [], malformedHeaders, ...(repoWarning !== undefined ? { repoWarning } : {}) };
+  const result: ImportResult = {
+    parsed: items.length,
+    created: 0,
+    skippedDuplicates: 0,
+    updated: 0,
+    errors: [],
+    malformedHeaders,
+    duplicateHeaders,
+    ...(repoWarning !== undefined ? { repoWarning } : {}),
+  };
   if (input.dryRun) return result;
 
   for (const item of items) {
@@ -479,12 +489,12 @@ export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownI
  * item set by passing `{ ...filter, excludeArchived: true }` themselves —
  * see BUG-BACKLOG-RENDER-VERIFY-ARCHIVED-MISMATCH-001.
  */
-export async function renderToMarkdown(ctx: BacklogCtx, filter?: BacklogFilter): Promise<string> {
+export async function renderToMarkdown(ctx: BacklogCtx, filter?: BacklogFilter, grammar?: RenderGrammarOptions): Promise<string> {
   const nodes = await queryItemNodes(ctx.store, { ...filter, excludeArchived: true });
   let items = nodes.map(toBacklogItem);
   if (filter?.status === 'open') items = items.filter((it) => !isTerminalStatus(it.status));
   else if (filter?.status === 'closed') items = items.filter((it) => isTerminalStatus(it.status));
-  return renderItemsToMarkdown(items);
+  return renderItemsToMarkdown(items, grammar);
 }
 
 export async function exportJson(ctx: BacklogCtx, filter?: BacklogFilter): Promise<BacklogItem[]> {

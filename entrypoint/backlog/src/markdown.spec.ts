@@ -21,7 +21,7 @@ import {
   TERMINAL_STATUSES,
   type BacklogStatus,
 } from './model.js';
-import { normalizeLegacyStatus, parseBacklogMarkdown, parseBacklogMarkdownWithDiagnostics } from './markdown.js';
+import { normalizeLegacyStatus, parseBacklogMarkdown, parseBacklogMarkdownWithDiagnostics, renderItemsToMarkdown } from './markdown.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(HERE, '..', '..', '..');
@@ -212,6 +212,92 @@ describe('parseBacklogMarkdownWithDiagnostics — malformed id headers (DEBT-BAC
   });
 });
 
+describe('parseBacklogMarkdownWithDiagnostics — same-file duplicate headers (DEBT-BACKLOG-IMPORT-DUP-DETECT-001)', () => {
+  const DUP_ID = 'DEBT-DUP-TEST-001';
+  const dupFixture = [
+    `## ${DUP_ID} — first occurrence`,
+    '',
+    '**Status:** OPEN',
+    '',
+    'first body.',
+    '',
+    `## ${DUP_ID} — second occurrence, different body`,
+    '',
+    '**Status:** IN PROGRESS',
+    '',
+    'second body — a genuine content difference from the first.',
+    '',
+  ].join('\n');
+
+  it('reports exactly one duplicateHeaders entry with correct firstLine/secondLine, while items[] still contains both occurrences unchanged (additive, not a parsing behavior change)', () => {
+    const { items, duplicateHeaders } = parseBacklogMarkdownWithDiagnostics(dupFixture);
+
+    // Additive: parsing itself is unchanged — both occurrences still land
+    // in items[], with their own distinct bodies/lines, exactly as before
+    // this fix.
+    const dupItems = items.filter((i) => i.id === DUP_ID);
+    expect(dupItems).toHaveLength(2);
+    expect(dupItems[0]?.body).toContain('first body');
+    expect(dupItems[1]?.body).toContain('second body');
+    expect(dupItems[0]?.line).toBe(1);
+    expect(dupItems[1]?.line).toBe(7);
+
+    // New diagnostic: exactly one duplicate reported, naming DUP_ID, with
+    // the correct 1-based line numbers of the two header lines.
+    expect(duplicateHeaders).toHaveLength(1);
+    expect(duplicateHeaders[0]).toEqual({ humanId: DUP_ID, firstLine: 1, secondLine: 7 });
+  });
+
+  it('a third occurrence reports duplicate-against-the-SECOND (most recent prior line), not the file-first line', () => {
+    const tripleFixture = [
+      `## ${DUP_ID} — first`,
+      '',
+      '**Status:** OPEN',
+      '',
+      'body one.',
+      '',
+      `## ${DUP_ID} — second`,
+      '',
+      '**Status:** OPEN',
+      '',
+      'body two.',
+      '',
+      `## ${DUP_ID} — third`,
+      '',
+      '**Status:** OPEN',
+      '',
+      'body three.',
+      '',
+    ].join('\n');
+    const { duplicateHeaders } = parseBacklogMarkdownWithDiagnostics(tripleFixture);
+    expect(duplicateHeaders).toHaveLength(2);
+    expect(duplicateHeaders[0]).toEqual({ humanId: DUP_ID, firstLine: 1, secondLine: 7 });
+    // After the 2nd occurrence, seenIds[DUP_ID] is updated to line 7, so the
+    // 3rd occurrence (line 13) reports firstLine:7 — the most recent prior
+    // occurrence, the most actionable pointer for a human fixing the file.
+    expect(duplicateHeaders[1]).toEqual({ humanId: DUP_ID, firstLine: 7, secondLine: 13 });
+  });
+
+  it('never flags distinct ids as duplicates (negative control)', () => {
+    const distinctFixture = [
+      '## DEBT-DUP-TEST-002 — one',
+      '',
+      '**Status:** OPEN',
+      '',
+      'body.',
+      '',
+      '## DEBT-DUP-TEST-003 — two',
+      '',
+      '**Status:** OPEN',
+      '',
+      'body.',
+      '',
+    ].join('\n');
+    const { duplicateHeaders } = parseBacklogMarkdownWithDiagnostics(distinctFixture);
+    expect(duplicateHeaders).toHaveLength(0);
+  });
+});
+
 describe('importFromMarkdown — diagnostics + provenance (real store)', () => {
   let tmp: TmpStore;
   let ctx: BacklogCtx;
@@ -244,6 +330,42 @@ describe('importFromMarkdown — diagnostics + provenance (real store)', () => {
     expect(result.created).toBe(1);
     expect(result.malformedHeaders).toHaveLength(1);
     expect(result.malformedHeaders[0]?.headerLine).toContain('DEBT_ENV_CLI_002');
+  });
+
+  it('ImportResult.duplicateHeaders is non-empty on a real import of a file with a same-file duplicate id (DEBT-BACKLOG-IMPORT-DUP-DETECT-001), without changing the existing last-occurrence-wins upsert behavior', async () => {
+    const fixturePath = join(workDir, 'duplicate-header.md');
+    writeFileSync(
+      fixturePath,
+      [
+        '### BUG-DUPIMPORT-001 — first occurrence, stale title',
+        '',
+        '**Status:** OPEN',
+        '',
+        'stale body.',
+        '',
+        '### BUG-DUPIMPORT-001 — second occurrence, the one that should win',
+        '',
+        '**Status:** OPEN',
+        '',
+        'the body that should win — last-occurrence-wins is unchanged by this fix.',
+        '',
+      ].join('\n'),
+      'utf8'
+    );
+
+    const result = await importFromMarkdown(ctx, { path: fixturePath, repo: REPO_PROV });
+    // Visibility, not a behavior change: the hazard is now surfaced...
+    expect(result.duplicateHeaders).toHaveLength(1);
+    expect(result.duplicateHeaders[0]?.humanId).toBe('BUG-DUPIMPORT-001');
+    expect(result.duplicateHeaders[0]?.firstLine).toBe(1);
+    expect(result.duplicateHeaders[0]?.secondLine).toBe(7);
+
+    // ...but which occurrence wins the upsert is UNCHANGED — still the last
+    // one parsed (existing behavior, out of this item's scope to alter).
+    expect(result.created).toBe(1);
+    const item = await getItem(ctx, REPO_PROV, 'BUG-DUPIMPORT-001');
+    expect(item?.title).toBe('second occurrence, the one that should win');
+    expect(item?.body).toContain('the body that should win');
   });
 
   it('importFromMarkdown attaches plan + records importedFrom provenance (DEBT-BACKLOG-IMPORT-PLAN-PROVENANCE-001)', async () => {
@@ -530,5 +652,81 @@ describe('importFromMarkdown — diagnostics + provenance (real store)', () => {
       const excludingArchived = await listItems(ctx, { repo: REPO_ARCHIVE, excludeArchived: true });
       expect(excludingArchived.map((it) => it.humanId)).toEqual([open.item.humanId]);
     });
+  });
+});
+
+describe('renderItemsToMarkdown — RenderGrammarOptions (DEBT-BACKLOG-API-RETURN-VALUES-DO-NOT-REPORT-OUTCOME-001)', () => {
+  let tmp: TmpStore;
+  let ctx: BacklogCtx;
+  const REPO_GRAMMAR = 'PseudoSky/backlog-grammar-test';
+
+  beforeEach(async () => {
+    tmp = await openTmpStore('markdown-grammar-spec');
+    ctx = { store: tmp.store, env: buildBacklogEnv({ scope: 'project', adhdRoot: tmp.dir }) };
+  });
+
+  afterEach(() => {
+    tmp.cleanup();
+  });
+
+  it('no options: output is byte-identical to the pre-fix golden fixture — proving the default path is unchanged', async () => {
+    const created = await createItem(ctx, { family: 'BUG-GRAMMARTEST', title: 'a grammar fixture item', body: 'the body text.', repo: REPO_GRAMMAR });
+    expect(created.created).toBe(true);
+    const item = await getItem(ctx, REPO_GRAMMAR, created.item.humanId);
+    expect(item).not.toBeNull();
+
+    // Golden fixture: the EXACT pre-fix `renderItemBlock` shape for a fresh
+    // OPEN item with no priority/assignee/plan/citations/notes — heading,
+    // blank line, separate `**Status:**` line, blank line, body.
+    const golden = `### ${item!.humanId} — a grammar fixture item\n\n**Status:** OPEN\n\nthe body text.`;
+
+    const renderedNoOpts = renderItemsToMarkdown([item!]);
+    expect(renderedNoOpts).toBe(`${golden}\n`);
+
+    // Passing an explicit but all-default options object must be identical
+    // to omitting it entirely (both defaults are `false`).
+    const renderedExplicitDefault = renderItemsToMarkdown([item!], { inlineStatusInHeading: false, totalOpenHeader: false });
+    expect(renderedExplicitDefault).toBe(renderedNoOpts);
+  });
+
+  it('inlineStatusInHeading:true folds status into the heading and omits the separate Status line', async () => {
+    const created = await createItem(ctx, { family: 'BUG-GRAMMARTEST', title: 'inline status item', body: 'body.', repo: REPO_GRAMMAR });
+    const item = await getItem(ctx, REPO_GRAMMAR, created.item.humanId);
+    expect(item).not.toBeNull();
+
+    const rendered = renderItemsToMarkdown([item!], { inlineStatusInHeading: true });
+    const headingLine = rendered.split('\n')[0] ?? '';
+    expect(headingLine).toMatch(/^### \[.+\] .+ — .+$/);
+    expect(headingLine).toBe(`### [OPEN] ${item!.humanId} — inline status item`);
+    // The separate `**Status:**` body line must be gone — never rendered twice.
+    expect(rendered).not.toContain('**Status:**');
+  });
+
+  it('totalOpenHeader:true prepends "# Total open: N", counting only non-terminal items (reusing isTerminalStatus, not a hand-rolled closed-status check)', async () => {
+    const openItem = await createItem(ctx, { family: 'BUG-GRAMMARTEST', title: 'stays open', body: 'body.', repo: REPO_GRAMMAR });
+    const resolvedItem = await createItem(ctx, { family: 'BUG-GRAMMARTEST', title: 'gets resolved', body: 'body.', repo: REPO_GRAMMAR });
+    await transitionStatus(ctx, REPO_GRAMMAR, resolvedItem.item.humanId, 'RESOLVED', {
+      by: 'test',
+      citations: [{ file: 'markdown.spec.ts' }],
+    });
+    const items = [await getItem(ctx, REPO_GRAMMAR, openItem.item.humanId), await getItem(ctx, REPO_GRAMMAR, resolvedItem.item.humanId)].filter(
+      (it): it is NonNullable<typeof it> => it !== null
+    );
+    expect(items).toHaveLength(2);
+
+    const rendered = renderItemsToMarkdown(items, { totalOpenHeader: true });
+    expect(rendered.split('\n')[0]).toBe('# Total open: 1');
+
+    // Without the option, no such header is prepended — default unchanged.
+    const renderedNoOpt = renderItemsToMarkdown(items);
+    expect(renderedNoOpt.startsWith('# Total open:')).toBe(false);
+  });
+
+  it('renderToMarkdown (ops-v1) threads RenderGrammarOptions through to the real store-backed render path', async () => {
+    const created = await createItem(ctx, { family: 'BUG-GRAMMARTEST', title: 'threaded via renderToMarkdown', body: 'body.', repo: REPO_GRAMMAR });
+    expect(created.created).toBe(true);
+    const rendered = await renderToMarkdown(ctx, { repo: REPO_GRAMMAR }, { inlineStatusInHeading: true });
+    expect(rendered).toContain(`### [OPEN] ${created.item.humanId} — threaded via renderToMarkdown`);
+    expect(rendered).not.toContain('**Status:**');
   });
 });
