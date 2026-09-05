@@ -260,9 +260,16 @@ interface OptEmbeddingProvider {
   embedSingle(text: string, role?: 'document' | 'query'): Promise<Float32Array>;
   health?(): { configured: string; active: string | null; state: 'uninitialized' | 'warming' | 'real' | 'error'; dimensions: number | null; last_error: string | null };
 }
+/**
+ * (BUG-BACKLOG-VECSTORE-NODEFILTER-IGNORED-001) `@adhd/sox-vector-store`'s
+ * Turso backend's filter contract is pure `{ ids }` (see its own DEBT-011
+ * doc comment: "the store knows nothing about the graph's node table") — a
+ * `nodeFilter` field was never honoured, silently. There is no `nodeFilter`
+ * here BY DESIGN; a `NodeFilter` is resolved to concrete ids in THIS module
+ * (`resolveVecFilter`, below) before ever reaching the vector store.
+ */
 interface OptVecFilter {
   ids?: number[];
-  nodeFilter?: NodeFilter;
 }
 interface OptVectorSpace {
   modelId: string;
@@ -307,6 +314,46 @@ async function loadOptional<T>(specifier: string): Promise<{ mod: T } | { err: u
 }
 
 const errText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/**
+ * (BUG-BACKLOG-VECSTORE-NODEFILTER-IGNORED-001) Resolves a `NodeFilter`
+ * (e.g. namespace/repo scoping) into a concrete candidate `ids` set through
+ * the graph store's OWN `queryNodes` — the same primitive `query.ts`/
+ * `crud.ts`/`repo-migration.ts` already use for identical namespace-scoped
+ * reads — BEFORE it ever reaches `@adhd/sox-vector-store`. That package's
+ * Turso backend's filter contract is pure `{ ids }` (its own DEBT-011 doc
+ * comment: "the store knows nothing about the graph's node table"); passing
+ * it a `nodeFilter` field was a silent no-op that let cross-namespace items
+ * leak into KNN results (`filter.namespace` never reached the SQL). Doing
+ * the resolution here keeps `SemanticBackend.knn`'s documented invariant
+ * true: filtered "pushed into SQL BEFORE the limit — never a post-filter".
+ *
+ * Returns:
+ *  - `undefined` — neither `filter` nor `ids` requested; no scoping at all.
+ *  - `{ ids }` — the resolved set (intersected with an explicit `ids`, if
+ *    both were given).
+ *  - `null` — a `filter`/`ids` WAS requested but resolved to zero
+ *    candidates. Callers must treat this as "zero results", never pass an
+ *    empty `ids: []` through to the vector store: its own `ids.length > 0`
+ *    guard treats an empty array as "no filter" and falls through to an
+ *    UNFILTERED scan — the exact bug this function exists to prevent.
+ */
+async function resolveVecFilter(
+  store: GraphBacklogStore,
+  opts: { filter?: NodeFilter; ids?: number[] } | undefined,
+): Promise<OptVecFilter | undefined | null> {
+  if (opts?.filter === undefined && opts?.ids === undefined) return undefined;
+  let ids = opts?.ids;
+  if (opts?.filter !== undefined) {
+    const matches = await store.graph.queryNodes(opts.filter);
+    const filterIds = new Set(matches.map((n) => n.id));
+    ids = ids !== undefined ? ids.filter((id) => filterIds.has(id)) : [...filterIds];
+  }
+  // `ids` is always defined by this point: either passed in directly, or
+  // just populated from `filter` above — the early return handles "neither".
+  if (ids === undefined || ids.length === 0) return null;
+  return { ids };
+}
 
 /**
  * Builds a REAL {@link SemanticBackend} from `@adhd/sox-vector-store`
@@ -409,15 +456,21 @@ export async function bootstrapSemanticBackend(store: GraphBacklogStore, config:
       await vectorBackend.delete(nodeId, space.modelId);
     },
     async knn(query: Float32Array, k: number, opts?: { filter?: NodeFilter; ids?: number[] }): Promise<SemanticMatch[]> {
-      const vecFilter: OptVecFilter | undefined =
-        opts?.filter !== undefined || opts?.ids !== undefined
-          ? { ...(opts.ids !== undefined ? { ids: opts.ids } : {}), ...(opts.filter !== undefined ? { nodeFilter: opts.filter } : {}) }
-          : undefined;
+      const vecFilter = await resolveVecFilter(store, opts);
+      // (BUG-BACKLOG-VECSTORE-NODEFILTER-IGNORED-001) `vecFilter === null` means
+      // a `filter`/`ids` was requested but resolved to ZERO candidate node ids —
+      // NOT "no filter". Calling `vectorBackend.knn()` with an empty `ids` array
+      // would be silently treated as unfiltered by the installed
+      // `@adhd/sox-vector-store` (its `ids.length > 0` guard falls through to
+      // `1=1` on empty), so this short-circuits to "no results" here instead.
+      if (vecFilter === null) return [];
       const hits = await vectorBackend.knn(checkDim(query, 'knn'), space, k, vecFilter);
       return hits.map((m) => ({ nodeId: m.id, score: m.score }));
     },
     async *iterVectors(opts?: { filter?: NodeFilter }): AsyncIterable<{ nodeId: number; vec: Float32Array }> {
-      const inner = vectorBackend.iter(space.modelId, opts?.filter !== undefined ? { filter: { nodeFilter: opts.filter } } : undefined);
+      const vecFilter = await resolveVecFilter(store, opts);
+      if (vecFilter === null) return;
+      const inner = vectorBackend.iter(space.modelId, vecFilter !== undefined ? { filter: vecFilter } : undefined);
       for await (const row of inner) yield { nodeId: row.id, vec: row.vec };
     },
     async health(): Promise<SemanticHealth> {

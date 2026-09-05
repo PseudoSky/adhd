@@ -1,0 +1,253 @@
+/**
+ * registry.ts — §3a's registry read surface: `query --input '{"view":"projects"
+ * |"components"|"locations"}'`, `query --input '{"view":"lookup", ...}'`, and
+ * `get --input '{"registry":..., "name":...}'` (expanded detail).
+ *
+ * This is deliberately a SEPARATE module from `query.ts`'s issue-verb `query`
+ * dispatch — §3a states the registry views are "the agent's go-to before
+ * searching," a structural lookup with zero/one answer per input, never a
+ * ranked/paginated issue search (§6.1: "conflating the two would be wrong").
+ * A transport layer (CLI/MCP/HTTP) composes `query`'s `view` union (`query.ts`)
+ * and this module's `queryRegistry`/`lookup`/`getRegistryDetail` under ONE
+ * mounted `query`/`get` operation per §3a's own "one convention" — that
+ * transport-level merge is out of scope for this file, which exposes each as
+ * its own typed function.
+ */
+
+import type { GraphBackend, NodeRecord } from '@adhd/sox-graph-store';
+import { CatalogNotFoundError, InvalidArgumentError } from '../write/errors.js';
+import { isUidShaped, tryResolveComponentRef, tryResolveRef } from './resolve.js';
+import type {
+  IComponentDetail,
+  IComponentSummary,
+  ILocationDetail,
+  ILocationSummary,
+  ILocationType,
+  ILookupResult,
+  IProjectDetail,
+  IProjectSummary,
+  IRegistryQueryFilter,
+} from './types.js';
+
+function toProjectSummary(n: NodeRecord): IProjectSummary {
+  return {
+    uid: n.uid,
+    name: n.name ?? '',
+    path: typeof n.metadata?.path === 'string' ? n.metadata.path : undefined,
+    repoUrl: typeof n.metadata?.repoUrl === 'string' ? n.metadata.repoUrl : undefined,
+    monorepo: typeof n.metadata?.monorepo === 'boolean' ? n.metadata.monorepo : undefined,
+    description: typeof n.metadata?.description === 'string' ? n.metadata.description : undefined,
+  };
+}
+
+function toComponentSummary(n: NodeRecord): IComponentSummary {
+  return {
+    uid: n.uid,
+    name: n.name ?? '',
+    projectUid: typeof n.metadata?.projectUid === 'string' ? n.metadata.projectUid : '',
+    path: typeof n.metadata?.path === 'string' ? n.metadata.path : undefined,
+    description: typeof n.metadata?.description === 'string' ? n.metadata.description : undefined,
+  };
+}
+
+function toLocationSummary(n: NodeRecord): ILocationSummary {
+  return {
+    uid: n.uid,
+    locType: (typeof n.metadata?.locType === 'string' ? n.metadata.locType : 'path') as ILocationType,
+    value: typeof n.metadata?.value === 'string' ? n.metadata.value : (n.name ?? ''),
+    componentUid: typeof n.metadata?.componentUid === 'string' ? n.metadata.componentUid : '',
+  };
+}
+
+/** `query --input '{"view":"projects"}'` (§3a) — every live `project` row, optionally narrowed by `filter.project` (name/uid substring is NOT supported here; pass the exact ref — this is a listing view, not a search). */
+export async function listProjects(graph: GraphBackend, filter?: IRegistryQueryFilter): Promise<IProjectSummary[]> {
+  if (filter?.project !== undefined) {
+    const resolved = await tryResolveRef(graph, 'project', filter.project);
+    return resolved ? [toProjectSummary(resolved.record)] : [];
+  }
+  const nodes = await graph.queryNodes({ kind: 'project', liveOnly: true });
+  return nodes.map(toProjectSummary);
+}
+
+/** `query --input '{"view":"components"}'` (§3a) — every live `component` row, optionally narrowed by `filter.project`. */
+export async function listComponents(graph: GraphBackend, filter?: IRegistryQueryFilter): Promise<IComponentSummary[]> {
+  if (filter?.project !== undefined) {
+    const project = await tryResolveRef(graph, 'project', filter.project);
+    if (!project) return [];
+    const nodes = await graph.queryNodes({ kind: 'component', liveOnly: true, metadata: { projectUid: { eq: project.uid } } });
+    return nodes.map(toComponentSummary);
+  }
+  const nodes = await graph.queryNodes({ kind: 'component', liveOnly: true });
+  return nodes.map(toComponentSummary);
+}
+
+/** `query --input '{"view":"locations"}'` (§3a) — every live `location` row, optionally narrowed by `filter.component` (scoped within `filter.project` when both are given). */
+export async function listLocations(graph: GraphBackend, filter?: IRegistryQueryFilter): Promise<ILocationSummary[]> {
+  if (filter?.component !== undefined) {
+    const component = filter.project !== undefined
+      ? await (async () => {
+        const project = await tryResolveRef(graph, 'project', filter.project!);
+        return project ? tryResolveComponentRef(graph, project.uid, filter.component!) : null;
+      })()
+      : await tryResolveRef(graph, 'component', filter.component);
+    if (!component) return [];
+    const nodes = await graph.queryNodes({ kind: 'location', liveOnly: true, metadata: { componentUid: { eq: component.uid } } });
+    return nodes.map(toLocationSummary);
+  }
+  const nodes = await graph.queryNodes({ kind: 'location', liveOnly: true });
+  return nodes.map(toLocationSummary);
+}
+
+/**
+ * `get --input '{"registry":"project"|"component"|"location", "name":...}'`
+ * (§3a) — expanded detail. `name` accepts a uid or a name (project/component)
+ * per SPEC.md §6.1's shape-disambiguation rule; a location has no independent
+ * `name`, so it is looked up by uid only.
+ */
+export async function getRegistryDetail(
+  graph: GraphBackend,
+  input: { registry: 'project'; name: string },
+): Promise<IProjectDetail>;
+export async function getRegistryDetail(
+  graph: GraphBackend,
+  input: { registry: 'component'; name: string },
+): Promise<IComponentDetail>;
+export async function getRegistryDetail(
+  graph: GraphBackend,
+  input: { registry: 'location'; name: string },
+): Promise<ILocationDetail>;
+export async function getRegistryDetail(
+  graph: GraphBackend,
+  input: { registry: 'project' | 'component' | 'location'; name: string },
+): Promise<IProjectDetail | IComponentDetail | ILocationDetail> {
+  if (input.registry === 'project') {
+    const project = await tryResolveRef(graph, 'project', input.name);
+    if (!project) throw new CatalogNotFoundError('project', input.name);
+    const componentEdges = await graph.getEdges({ src: project.id, rel: 'owns_project' });
+    const components = componentEdges.length > 0 ? await graph.getNodesByIds(componentEdges.map((e) => e.dst)) : [];
+    const locationEdgesByComponent = await Promise.all(components.map((c) => graph.getEdges({ src: c.id, rel: 'has_location' })));
+    const locationIds = locationEdgesByComponent.flatMap((es) => es.map((e) => e.dst));
+    const locations = locationIds.length > 0 ? await graph.getNodesByIds(locationIds) : [];
+    return {
+      ...toProjectSummary(project.record),
+      components: components.map((c) => ({ name: c.name ?? '', path: typeof c.metadata?.path === 'string' ? c.metadata.path : undefined })),
+      locations: locations.map((l) => ({
+        locType: (typeof l.metadata?.locType === 'string' ? l.metadata.locType : 'path') as ILocationType,
+        value: typeof l.metadata?.value === 'string' ? l.metadata.value : (l.name ?? ''),
+      })),
+    };
+  }
+
+  if (input.registry === 'component') {
+    const component = await tryResolveRef(graph, 'component', input.name);
+    if (!component) throw new CatalogNotFoundError('component', input.name);
+    const projectUid = typeof component.record.metadata?.projectUid === 'string' ? component.record.metadata.projectUid : undefined;
+    const project = projectUid ? await graph.getNodeByUid(projectUid) : null;
+    const locationEdges = await graph.getEdges({ src: component.id, rel: 'has_location' });
+    const locations = locationEdges.length > 0 ? await graph.getNodesByIds(locationEdges.map((e) => e.dst)) : [];
+    return {
+      ...toComponentSummary(component.record),
+      project: {
+        name: project?.name ?? '',
+        path: typeof project?.metadata?.path === 'string' ? project.metadata.path : undefined,
+        repoUrl: typeof project?.metadata?.repoUrl === 'string' ? project.metadata.repoUrl : undefined,
+      },
+      locations: locations.map((l) => ({
+        locType: (typeof l.metadata?.locType === 'string' ? l.metadata.locType : 'path') as ILocationType,
+        value: typeof l.metadata?.value === 'string' ? l.metadata.value : (l.name ?? ''),
+      })),
+    };
+  }
+
+  // location — uid only (no independent business name, §3a)
+  if (!isUidShaped(input.name)) throw new InvalidArgumentError('name', 'a location has no name — pass its uid');
+  const location = await graph.getNodeByUid(input.name);
+  if (!location || location.kind !== 'location' || location.tInvalid) throw new CatalogNotFoundError('location', input.name);
+  const componentUid = typeof location.metadata?.componentUid === 'string' ? location.metadata.componentUid : undefined;
+  const component = componentUid ? await graph.getNodeByUid(componentUid) : null;
+  const projectUid = typeof component?.metadata?.projectUid === 'string' ? component.metadata.projectUid : undefined;
+  const project = projectUid ? await graph.getNodeByUid(projectUid) : null;
+  return {
+    ...toLocationSummary(location),
+    component: { name: component?.name ?? '', path: typeof component?.metadata?.path === 'string' ? component.metadata.path : undefined },
+    project: {
+      name: project?.name ?? '',
+      path: typeof project?.metadata?.path === 'string' ? project.metadata.path : undefined,
+      repoUrl: typeof project?.metadata?.repoUrl === 'string' ? project.metadata.repoUrl : undefined,
+    },
+  };
+}
+
+function looksLikeUrl(q: string): boolean {
+  try {
+    // eslint-disable-next-line no-new
+    new URL(q);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function classifyLookupQuery(q: string): ILocationType {
+  if (looksLikeUrl(q)) return 'url';
+  if (q.includes('/') || q.includes('.') || q.startsWith('~')) return 'path';
+  return 'tool';
+}
+
+/**
+ * `query --input '{"view":"lookup", "lookup": "<tool|file|url>"}'` (§3a) —
+ * classify → match → walk `location → component → project`. Never a silent
+ * null: an unresolved query throws `CatalogNotFoundError('location', q)`
+ * rather than returning an empty/undefined result, since "no match" is a
+ * distinct, actionable outcome from "found, but only a hint" (the `hint`
+ * field below).
+ */
+export async function lookup(graph: GraphBackend, q: string): Promise<ILookupResult> {
+  const locType = classifyLookupQuery(q);
+
+  let location = (await graph.queryNodes({ kind: 'location', liveOnly: true, metadata: { locType: { eq: locType }, value: { eq: q } }, limit: 1 }))[0];
+
+  let hint: string | undefined;
+  if (!location && locType === 'path') {
+    // suffix/prefix fallback for repo-relative paths (§3a step 2)
+    const candidates = await graph.queryNodes({ kind: 'location', liveOnly: true, metadata: { locType: { eq: 'path' } } });
+    const match = candidates.find((c) => {
+      const value = typeof c.metadata?.value === 'string' ? c.metadata.value : '';
+      return value.endsWith(q) || q.endsWith(value);
+    });
+    if (match) {
+      location = match;
+      hint = `matched by path suffix/prefix fallback, not an exact value match`;
+    }
+  }
+
+  if (!location) throw new CatalogNotFoundError('location', q);
+
+  const componentUid = typeof location.metadata?.componentUid === 'string' ? location.metadata.componentUid : undefined;
+  const component = componentUid ? await graph.getNodeByUid(componentUid) : null;
+  if (!component) {
+    throw new CatalogNotFoundError('component', componentUid ?? '(unresolved)');
+  }
+  const projectUid = typeof component.metadata?.projectUid === 'string' ? component.metadata.projectUid : undefined;
+  const project = projectUid ? await graph.getNodeByUid(projectUid) : null;
+  if (!project) {
+    return {
+      project: { uid: '', name: '' },
+      component: { uid: component.uid, name: component.name ?? '' },
+      location: { uid: location.uid, locType, value: q },
+      hint: 'component resolved but its owning project could not be found — data integrity gap, not a query error',
+    };
+  }
+
+  return {
+    project: {
+      uid: project.uid,
+      name: project.name ?? '',
+      path: typeof project.metadata?.path === 'string' ? project.metadata.path : undefined,
+      repoUrl: typeof project.metadata?.repoUrl === 'string' ? project.metadata.repoUrl : undefined,
+    },
+    component: { uid: component.uid, name: component.name ?? '', path: typeof component.metadata?.path === 'string' ? component.metadata.path : undefined },
+    location: { uid: location.uid, locType, value: typeof location.metadata?.value === 'string' ? location.metadata.value : q },
+    hint,
+  };
+}
