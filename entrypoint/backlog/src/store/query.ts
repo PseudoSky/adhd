@@ -4,7 +4,7 @@
  * `findItemNode`, the shared (repo, humanId) -> NodeRecord lookup every other
  * store module needs.
  */
-import type { NodeFilter, NodeRecord } from '@adhd/sox-graph-store';
+import type { MetadataFilterValue, NodeFilter, NodeRecord } from '@adhd/sox-graph-store';
 import type {
   AuditTrailEntry,
   AuditTrailResult,
@@ -46,7 +46,13 @@ export function nodeFilterFromBacklogFilter(filter: BacklogFilter): NodeFilter {
   if (filter.kind) tags.push(filter.kind);
   if (filter.tags) tags.push(...filter.tags);
 
-  const metadata: Record<string, unknown> = {};
+  // BUG-BACKLOG-QUERY-METADATA-FILTER-TYPE-001: this was `Record<string, unknown>`,
+  // which stopped satisfying NodeFilter.metadata's type after the
+  // graph-store 0.9.1 bump (FEAT-017, SPEC.md §10) narrowed
+  // NodeFilter.metadata to Record<string, MetadataFilterValue>. Every value
+  // pushed below is already a plain string, so this is a type-annotation
+  // correction only — no runtime behavior change.
+  const metadata: Record<string, MetadataFilterValue> = {};
   if (filter.family) metadata['family'] = filter.family;
   if (filter.priority) metadata['priority'] = filter.priority;
   if (filter.plan) metadata['plan'] = filter.plan;
