@@ -63,16 +63,32 @@ the `experimental.multiprocessWal:false` opt-out §4c requires be absent — see
   no transaction wrapping either. §4c proves this against the library source,
   and the primitive's own doc comment says so explicitly: under multi-writer
   the caller must wrap check+INSERT in one transaction itself.**
-  - flat catalogs (`status`/`priority`/`kind`/`agent`/`edge_kind`) and `project`
-    (name unique) → the write layer runs its own `tx.executeGet` SELECT by
-    `(kind, name)` against the SAME `immediate`-mode transaction handle the
-    verb already opened, and only on a miss issues the INSERT against that
-    same `tx` (§4c) — never a call to `findOrCreateNode()` itself.
+  - flat catalogs mintable on an unresolved NAME (`status`/`priority`/`kind`/
+    `agent`) — auto-mintable from any issue-mutating verb that accepts them
+    (§6.1's general rule) — and `project` (name unique, minted ONLY via the
+    explicit `upsertProject` registry verb, NEVER via `createIssue` or any
+    other issue verb, §6.1) → both resolved the SAME way mechanically: the
+    write layer runs its own `tx.executeGet` SELECT by `(kind, name)`
+    against the SAME `immediate`-mode transaction handle the verb already
+    opened, and only on a miss issues the INSERT against that same `tx`
+    (§4c) — never a call to `findOrCreateNode()` itself. `edge_kind` uses
+    the identical `tx.executeGet` SELECT for the VALIDATION lookup §2's
+    `source_kind`/`target_kind`/`multiplicity` check needs, but is NEVER
+    caller-mintable: every `edge_kind` row is seeded once from §3's fixed
+    edge table, and the one caller-supplied edge-type field, `relate`'s
+    `rel` (§6.3.6), is a closed TypeScript union, never an open name — so
+    there is no INSERT-on-miss path for it at all (§6.1).
   - `component` within a project: **the parent project `uid` is carried in
     `meta.metadata.projectUid`**; the injected `NodeUniquenessPolicy.check` reads
-    it (resolve parent via `getNodeByUid` on the tx handle), then checks
-    `owns_project` edges for an existing same-name component under that project.
-    This is implementable because the parent is threaded into `meta` — the check
+    it via the hand-composed, tx-scoped uid lookup §4c defines below —
+    `tx.executeGet('SELECT rowid FROM node WHERE uid = ?', [projectUid])`,
+    never a `getNodeByUid` call, which always runs against the bare adapter,
+    never the open `tx` (§4c) — then checks `owns_project` edges for an
+    existing same-name component under that project via the SAME `tx` handle
+    (`tx.executeAll('SELECT ... FROM edge WHERE dst = ? AND rel = ?
+    AND t_invalid IS NULL', [projectRowid, 'owns_project'])`, never
+    `getEdges()`, which is equally bare-adapter-only, §4c). This is
+    implementable because the parent is threaded into `meta` — the check
     runs BEFORE the component's own INSERT, against *other* components, not itself.
 - The policy is tx-threaded, and therefore genuinely atomic with the check,
   ONLY because it runs inside the write layer's own `immediate` transaction
@@ -138,8 +154,11 @@ write runs — the identical mechanism §6.3's `by` check already uses (line
   three-string predicate (no I/O — FEAT-013). The write layer resolves the
   `edge_kind` catalog row by `rel` name, checks `source_kind`/`target_kind`
   match the resolved endpoints and that `multiplicity` isn't exceeded, THEN
-  calls `writeEdge` (whose injected `validateEdge` does the pure vocabulary
-  check). Multiplicity/cardinality is therefore enforced by the app layer that
+  calls the SAME injected `TypePolicy` instance directly, in-process — never
+  through `writeEdge`, which always runs against the bare adapter, never the
+  write layer's own open `tx` (§4c) — before composing the edge INSERT itself
+  against the transaction handle (§4c's extended hand-composed-SQL rule).
+  Multiplicity/cardinality is therefore enforced by the app layer that
   can read the catalog — never smuggled into the pure seam.
 - **What `multiplicity` means, precisely** (§3's `(1:n)`/`(n:1)`/`(n:m)`
   markers ARE the catalog's `multiplicity` values, read verbatim — no second
@@ -185,7 +204,14 @@ write runs — the identical mechanism §6.3's `by` check already uses (line
   under the project resolves to the SAME project row — never a phantom row.
 - `component` — `name` unique within project; `meta.metadata.projectUid`. The
   logical sub-unit (package/module/service/directory) with optional
-  `meta.path` (repo-relative) + `meta.description`.
+  `meta.path` (repo-relative) + `meta.description`. Every project carries
+  exactly one reserved default component named `(root)`, representing "no
+  sub-area" — written atomically by `upsertProject` (§3a/§4) alongside the
+  project node itself, never created lazily at issue-creation time. `(root)`
+  is what `createIssue` (§6.3.2/§6.1) resolves to when its optional
+  `component` field is omitted, guaranteeing every issue always gets exactly
+  one live `owns_component` edge (§8.1 migrates v1's repo-level, no-`projectPath`
+  items onto this identical row — not a migration-only invention).
 - `location` — a concrete reference that **resolves** to a component/project:
   `meta.locType` ∈ `path` | `url` | `tool` + `meta.value` (the reference string).
   `path` = filesystem path (absolute or repo-relative); `url` = full URL;
@@ -305,34 +331,55 @@ ONE call. If an agent has to search, the registry has failed its purpose.
 ## 4. Write layer (`v2-write.ts`)
 
 Every write is one `store.adapter.transaction(fn, {mode:'immediate'})` (§4c)
-over `writeNode` + `writeEdge`(s) + audit; never `GraphBackend.transaction(fn)`
+over a hand-composed node write + hand-composed edge write(s) + audit —
+never a call to the library's `writeNode`/`writeEdge`/`invalidateEdge`/
+`getNodeByUid` themselves, all four of which run against the bare,
+un-transacted adapter and so would autocommit (or read committed-only state)
+outside the verb's own transaction if called from inside it (§4c proves this
+for each, by source); never `GraphBackend.transaction(fn)`
 (the graph-store's own composition method always runs at the adapter's
 default `deferred` mode and cannot request `immediate` — §4c), and never the
 raw adapter directly. **All entity writes pass `skipDedupe: true`.**
 
 - `createIssue(title, body, { project, component, kind, status, priority })`:
-  resolve catalogs via the write layer's hand-composed find-then-create (§4c);
-  write the issue + `owns_component` +
+  resolve catalogs via the write layer's hand-composed find-then-create (§4c).
+  `component` is optional: given, it must resolve to an existing component
+  under `project` (find-only — §6.3.2); omitted, it resolves instead to
+  `project`'s reserved default component `(root)` (§3), a row `upsertProject`
+  already guarantees is live — never minted here, in either case. Write the
+  issue + `owns_component` (always, to whichever component resolved) +
   `has_kind`/`has_status`/`has_priority`/`authored_by` edges + a `created`
   audit row — atomically.
 - `updateIssue(uid, patch)`:
   - **body change → `supersede`** (new node + `SUPERSEDES` edge) — the only
     content path; **title/metadata → `touch`**. Never `touch` a body.
   - status change → `transition` (§4a).
-- `moveIssue(uid, toComponent)` (FEAT-008): `invalidateEdge(old
-  owns_component)` + `writeEdge(new owns_component)` + audit, atomically.
+- `moveIssue(uid, toComponent)` (FEAT-008): hand-composed edge-invalidate (old
+  `owns_component`) + hand-composed edge-upsert (new `owns_component`) +
+  audit, atomically, all against the SAME `tx` handle — mirroring
+  `invalidateEdge`'s and `writeEdge`'s own SQL shape (§4c's extended rule)
+  rather than calling either method, both of which run against the bare
+  adapter and would autocommit outside this transaction.
 - `relate(uid, targetUid, rel, action)` (BUG-025/BUG-044): returns a real
   outcome (`noop` vs `changed`); single-valued rels (`supersedes`,
   `duplicate_of`, `part_of`) reject a second target (§6.3.6).
 - `transition(uid, toStatus, { agent, note })`: writes a `transition` node +
   `has_transition` edge + stamps `closed_at` when terminal.
 - **Registry CRUD** (§3a): `upsertProject({ name, path, repoUrl, monorepo?,
-  description? })` (create-or-update by `name`), `upsertComponent({ project, name,
+  description? })` (create-or-update by `name` — on first creation ONLY,
+  also writes the reserved default `component` row named `(root)` + its
+  `owns_project` edge, in the SAME transaction, so every project owns at
+  least one component before any issue can be filed under it, §3/§6.3.2; a
+  repeat `upsertProject` against an existing project finds `(root)` already
+  live and writes nothing further for it — idempotent, never a second row),
+  `upsertComponent({ project, name,
   path? })` (upsert by `(project, name)`), `upsertLocation({ component, locType,
   value })` (upsert by `(component, locType, value)`), `rmLocation(uid)`
   (invalidate). Each is ONE `store.adapter.transaction(fn, {mode:'immediate'})`
-  (§4c) over `writeNode` + `owns_project`/
-  `has_location` edges + audit. No `humanId`, no repo-string, no second
+  (§4c) over a hand-composed node write + hand-composed `owns_project`/
+  `has_location` edge write + audit, all against the SAME `tx` handle (§4c's
+  extended rule) — never a call to the library's `writeNode`/`writeEdge`,
+  which run against the bare adapter. No `humanId`, no repo-string, no second
   `dimensionGraph` store.
 
 ### 4a. Automatic audit logging
@@ -487,6 +534,86 @@ i.e. runs inside nothing — the policy is atomic with the check only because th
 write layer's own `immediate` transaction is what the hand-composed INSERT above
 runs inside.
 
+#### Edge writes and uid lookups inside a transaction: the same rule, extended
+
+`writeEdge`, `invalidateEdge`, and `getNodeByUid` have the identical defect just
+proven above for `writeNode`/`findOrCreateNode`: all three are declared on
+`GraphBackend`, and every one of them runs against `this.adapter` — the bare,
+un-transacted adapter — never against an open `AdapterTransaction`, and nothing
+in the class reroutes `this.adapter` to the open `tx` for the duration of a
+transaction callback. Verified against the same published dist:
+
+- `writeEdge(src,dst,rel,meta)` (`dist/index.d.ts:303`) is `async writeEdge(...){
+  await this.writeEdgeInternal(...); }` (`dist/index.js:1835-1837`), whose body
+  resolves endpoint kinds via `this.adapter.executeAll(...)` and inserts via
+  `this.adapter.executeRun(...)` (`dist/index.js:1865-1899`) — `this.adapter`,
+  always.
+- `invalidateEdge(src,dst,rel,reason)` (`dist/index.d.ts:271`) is
+  `this.adapter.executeGet(...)` then, on a hit, `this.adapter.executeRun(...)`
+  (`dist/index.js:1846-1856`) — two separate autocommit statements against the
+  bare adapter, no transaction at all.
+- `getNodeByUid(uid)` (`dist/index.d.ts:285`) is one
+  `this.adapter.executeGet('SELECT * FROM node WHERE uid = ?', [uid])`
+  (`dist/index.js:1573-1576`).
+- `transaction(fn)` itself — the method that would need to reroute
+  `this.adapter` for any of the above to work from inside it — is `return
+  this.adapter.transaction(fn)` (`dist/index.js:1584-1586`): no context swap,
+  `this.adapter` is never reassigned.
+
+So a `writeEdge`/`invalidateEdge`/`getNodeByUid` call made from **inside** a
+`store.adapter.transaction(fn, {mode:'immediate'})` callback still runs against
+the bare adapter, autocommitting (or reading committed-only state) outside
+that transaction — the identical "two separate autocommit statements" defect
+just proven for `findOrCreateNode`, now proven for the edge-level and
+uid-lookup primitives too. `AdapterTransaction` confirms there is nothing else
+to call: it exposes only `executeGet`/`executeAll`/`executeRun`/`exec`
+(`@adhd/sox-store-adapter@0.9.0`, `dist/types.d.ts:16-21`) — no graph-level
+method exists on it at all.
+
+Every place in this document that reads "atomically, inside the transaction"
+for an edge write, an edge invalidate, or a uid-keyed read therefore means the
+hand-composed form below, against the SAME `tx` handle the verb's `immediate`
+transaction already opened — never a call to `writeEdge`/`invalidateEdge`/
+`getNodeByUid` themselves:
+
+- **uid → node, inside a tx:** `tx.executeGet('SELECT * FROM node WHERE uid =
+  ?', [uid])`, mapped onto the fields the caller needs (`rowid`, `kind`,
+  `meta`, `is_superseded`, …) — exactly what `getNodeByUid` does at
+  `dist/index.js:1573-1576`, just issued against `tx`. This is what `claim`'s
+  CAS (§6.3.5) and `NodeUniquenessPolicy`'s component-parent resolution (§1)
+  both mean by "the transaction handle."
+- **Edge write, inside a tx (upsert, re-livening included):** mirror
+  `writeEdgeInternal`'s own INSERT exactly — `tx.executeRun(`INSERT INTO edge
+  (src, dst, rel, weight, origin, meta, t_created, t_valid) VALUES (?, ?, ?,
+  ?, 'user_asserted', ?, ?, ?) ON CONFLICT(src, dst, rel) DO UPDATE SET meta =
+  excluded.meta, weight = excluded.weight, t_invalid = NULL, t_valid =
+  excluded.t_valid`, [...])` (`dist/index.js:1894-1898`). This is also why a
+  hand-composed edge write re-lives an invalidated edge exactly as the
+  library's `writeEdge` does: same `ON CONFLICT` clause, same `t_invalid =
+  NULL`, just issued against `tx` instead of `this.adapter`.
+  Endpoint-existence (`writeEdgeInternal`'s `NodeNotFoundError` guard,
+  `dist/index.js:1881-1884`) is preserved via the SAME tx-scoped uid/rowid
+  lookup above; edge-kind vocabulary validation
+  (`TypePolicy.validateEdge`/`validateRel`, a PURE, no-I/O predicate — §2) is
+  preserved by calling the injected `TypePolicy` directly, in-process — the
+  write layer holds the same `TypePolicy` instance it passed to
+  `createGraphBackend` (or `DEFAULT_TYPE_POLICY`, `dist/index.d.ts:373`, when
+  none was supplied) — so no library call, transacted or not, is needed for
+  that check at all.
+- **Edge invalidate, inside a tx:** mirror `invalidateEdge` exactly —
+  `tx.executeGet('SELECT rowid, meta FROM edge WHERE src = ? AND dst = ? AND
+  rel = ? AND t_invalid IS NULL', [...])`, then on a hit, `tx.executeRun(
+  'UPDATE edge SET t_invalid = ?, meta = ? WHERE rowid = ?', [...])`
+  (`dist/index.js:1846-1855`) — same idempotent "already invalidated or
+  absent → no-op" behavior, same `tx`.
+
+This is not new machinery — it is the identical hand-composed-SQL rule this
+section already states for `writeNode`/`findOrCreateNode`, extended to the two
+other non-transactional primitives the rest of this document names. Every
+mention below of `writeEdge`, `invalidateEdge`, or `getNodeByUid` "on the
+transaction handle" means this hand-composed form, never the literal library
+call.
+
 #### `updateIssue`'s body path: `supersede` needs a CAS the library doesn't give it
 
 `GraphBackend.supersede(oldId, ...)` (`index.ts:1919-1936`) reads the target's
@@ -512,8 +639,20 @@ await store.adapter.transaction(async (tx) => {
   if (changed.rowsAffected !== 1) {
     throw new ETerminalConflict('E_CONSTRAINT', 'issue already superseded');
   }
-  const newRowid = /* INSERT the new content node, skipDedupe: true, same tx */;
-  /* writeEdge(newRowid, oldRowid, 'SUPERSEDES', ..., same tx) */
+  const newRowid = /* hand-composed INSERT INTO node(...), same tx, mirroring
+     writeNodeInTx's column list (index.ts:1869-1883), skipDedupe: true */;
+  const now = nowISO();
+  await tx.executeRun(
+    `INSERT INTO edge (src, dst, rel, weight, origin, meta, t_created, t_valid)
+     VALUES (?, ?, 'SUPERSEDES', 1.0, 'user_asserted', NULL, ?, ?)
+     ON CONFLICT(src, dst, rel) DO UPDATE SET
+       meta = excluded.meta, weight = excluded.weight,
+       t_invalid = NULL, t_valid = excluded.t_valid`,
+    [newRowid, oldRowid, now, now],
+  ); // mirrors writeEdgeInternal's own upsert exactly (index.js:1894-1898),
+     // issued against tx instead of this.adapter — never a writeEdge() call,
+     // which runs against the bare adapter and would autocommit outside this
+     // transaction (§4c, "edge writes and uid lookups inside a transaction")
   /* writeAudit(..., same tx) */
 }, { mode: 'immediate' });
 ```
@@ -566,14 +705,15 @@ driver-level failure — the shape a v2-write.ts verb's own catch block pattern-
 on, never the shape a caller of `v2-write.ts` or any transport (CLI/MCP/HTTP) ever
 receives directly. Every §6.3 verb catches it at its own transaction call site and
 does exactly one of two things: retries per the bound below (`E_CONTENTION` on
-every write class; `E_IO` only on business-keyed-node writes and the `supersede`
-CAS — keyless content-node writes do NOT auto-retry `E_IO`, see Retry semantics
-below), or — on final exhaustion (or, for a keyless content-node's `E_IO`, on the
-very first occurrence), or immediately for the CAS-detected `E_CONSTRAINT` case
+every write class, up to 3 attempts; `E_IO` on NO write class — see Retry
+semantics below for why the audit row riding along in every transaction rules
+this out uniformly, not just for keyless content-node subjects), or — on final
+exhaustion of an `E_CONTENTION` retry loop, on the very first (and only)
+occurrence of `E_IO`, or immediately for the CAS-detected `E_CONSTRAINT` case
 above — re-throws a NEW, transport-facing, named class carrying the envelope's
 fields forward: `WriteContentionError(retryAfterMs, cause)` (an exhausted
-`E_CONTENTION`), `WriteIOError(cause)` (an exhausted `E_IO`, or the first `E_IO`
-on a keyless content-node write), and
+`E_CONTENTION`), `WriteIOError(cause)` (the first, and only, `E_IO` — never a
+retried one), and
 `StaleSupersedeError(uid)` (the one deliberate `E_CONSTRAINT` this spec's own
 supersede CAS raises, above). Every §6.3 verb's Errors list that can reach a
 driver-level failure names these alongside its own validation errors. Those existing
@@ -594,14 +734,18 @@ ADR-0012 §4's own bound, adopted for consistency with the retry loop already
 operating one layer down inside the adapter (`TursoAdapterImpl._runTransaction`'s
 own `maxRetries: 3`, per ADR-0012 §4) rather than inventing a second, differently-tuned
 schedule at the write layer. `E_CONTENTION` is retried on every write class;
-`E_IO` is retried only on business-keyed-node writes and the `supersede` CAS — NOT
-on keyless content-node writes, where the first `E_IO` is surfaced immediately
-(the one asymmetry in this bound; see below). `E_CONSTRAINT` and `E_VALIDATION`
+`E_IO` is retried on NO write class — the first `E_IO` is surfaced
+immediately, for every verb without exception, never retried (see below: every
+write-layer transaction always carries the §4a audit INSERT riding along
+inside it, itself an un-guarded keyless-content-node write, a hazard no write
+class is exempt from). `E_CONSTRAINT` and `E_VALIDATION`
 are surfaced on the first attempt in every case — retrying a terminal failure
 cannot change its outcome and would only mask the real conflict from the caller.
 
 **Why retrying the whole closure is safe despite `skipDedupe: true` (§1) removing
-content-hash dedup as an accidental idempotency guard** — split by entity class:
+content-hash dedup as an accidental idempotency guard** — split by entity class,
+then unified by one hazard every class shares alike (the always-present audit
+row, §4a):
 
 - **Keyless content nodes** (`issue`, `note`, `citation`, `transition`, `audit`): these
   have no business key, so a naive retry that re-runs an already-committed INSERT
@@ -618,7 +762,12 @@ content-hash dedup as an accidental idempotency guard** — split by entity clas
     raised as a **thrown** error out of `adapter.transaction(fn, opts)` before any
     commit was attempted, so retrying the closure from scratch cannot produce two
     committed rows; it can only ever produce the one row the
-    eventually-successful attempt writes.
+    eventually-successful attempt writes. This BEGIN-phase argument is
+    identical for every write class in §4's table — it never depends on what
+    the callback's subject write looks like — which is why `E_CONTENTION` is
+    safe to retry uniformly, on every verb, including the business-keyed,
+    `supersede`-CAS, and touch-based-CAS buckets below (`claim`/`moveIssue`/
+    `update`'s touch path/`rmLocation`).
   - `E_IO` (the `isDatabaseError` catch-all for an unclassified driver/connection
     failure) carries no such guarantee. The published adapter's own
     `_runTransaction` retries ONLY a failure at `BEGIN` itself
@@ -641,28 +790,76 @@ content-hash dedup as an accidental idempotency guard** — split by entity clas
     the caller, who alone has the business context to check whether the write
     actually landed (e.g., a `query` before resubmitting), owns the decision to
     retry, not the write layer.
-- **Business-keyed nodes** (catalogs; `project`/`component`/`location`): these get a
-  second, independent guard on top of the first — the hand-composed find-then-create
-  (above) runs its find **inside the same retried `immediate` transaction**, so even
-  in the limiting case where an earlier attempt's write somehow did land (a scenario
-  the rollback contract above already rules out, kept here as defense-in-depth), the
-  retry's own SELECT sees that row and takes the "found existing" branch rather than
-  re-inserting. This is the exact hand-composed find-then-create +
-  `NodeUniquenessPolicy` guard §1 describes — the write layer's own composition,
-  never the library's `findOrCreateNode()` primitive itself.
-- **The `supersede` CAS** (previous section) is retry-safe by the same
-  single-row-conditional-UPDATE logic: a retried attempt's `UPDATE ... AND
-  is_superseded = 0` either affects the one row still eligible (if the prior attempt
-  rolled back) or affects zero rows and surfaces `E_CONSTRAINT` (if the prior attempt
-  somehow committed) — never a second supersede of the same target.
+- **Business-keyed nodes** (catalogs; `project`/`component`/`location`): the
+  hand-composed find-then-create (above) runs its find **inside the same
+  retried `immediate` transaction**, so even in the limiting case where an
+  earlier attempt's write somehow did land (the exact ambiguity the `E_IO`
+  discussion above describes), the retry's own SELECT sees that row and takes
+  the "found existing" branch rather than re-inserting — this is the exact
+  hand-composed find-then-create + `NodeUniquenessPolicy` guard §1 describes,
+  the write layer's own composition, never the library's `findOrCreateNode()`
+  primitive itself. That guard makes the *subject* node safe to retry under
+  either `E_CONTENTION` or `E_IO`. But the transaction is not only the subject
+  node: `writeAudit` (§4a) runs inside the SAME callback, against the SAME
+  `tx`, and it is itself a keyless-content-node INSERT with no business key
+  and no CAS guard of its own — the find-then-create guard above covers
+  `project`/`component`/`location`; it does not, and structurally cannot,
+  cover `audit`. A retry whose earlier attempt actually landed (the
+  `E_IO`-ambiguous case) therefore correctly no-ops the catalog/registry row
+  on the "found existing" branch, but still runs `writeAudit` again,
+  unconditionally, producing a second, spurious `audit` row for one logical
+  write. So business-keyed nodes get the SAME `E_IO` non-retry treatment as
+  keyless content nodes, for a different reason: not because the node itself
+  is unsafe to retry, but because the audit row riding along with it is.
+- **The `supersede` CAS** (previous section): the single-row-conditional
+  `UPDATE ... AND is_superseded = 0` is itself retry-safe — a retried
+  attempt's UPDATE either affects the one row still eligible (if the prior
+  attempt rolled back) or affects zero rows and surfaces `E_CONSTRAINT` (if
+  the prior attempt somehow committed) — never a second supersede of the same
+  target. But the same audit-row hazard applies regardless: `writeAudit` runs
+  in the same callback and would fire a second time on a retry whose earlier
+  attempt actually committed, exactly as in the business-keyed case above.
+  `E_IO` is therefore not retried here either, for the audit row's sake, not
+  the supersede row's.
+- **Touch-based CAS writes** (`claim`/`release`/`renew`, `moveIssue`'s
+  `invalidateEdge` + `writeEdge` pair, `update`'s title/metadata `touch`
+  path, `rmLocation`): none of these ever INSERT a fresh, business-keyless
+  row for their *subject* — `touch` is a blind `UPDATE node SET … WHERE
+  rowid = ?` recomputed from a fresh in-transaction read on every attempt
+  (verified, `@adhd/sox-graph-store@0.9.1` package dist, `dist/index.js:1482`
+  — no re-insert risk: re-running it lands on the same row state whether or
+  not a prior attempt already committed); `invalidateEdge` is documented
+  idempotent — "an edge that is already invalidated (or absent) is a no-op"
+  (`dist/index.js:1839-1840`, same package); `writeEdge` is an `INSERT ...
+  ON CONFLICT(src, dst, rel) DO UPDATE` upsert keyed on the edge's own
+  `(src, dst, rel)` business key, not a bare INSERT (`dist/index.js:1894-
+  1898`, same package). None of the three can produce a duplicate row on a
+  second run, so every subject write in this bucket — `claim`'s CAS-merged
+  metadata, `moveIssue`'s edge swap, `update`'s touch path, `rmLocation`'s
+  invalidate — is exactly as retry-safe as the business-keyed node case
+  above, for `E_CONTENTION` and `E_IO` alike. The audit row is still the
+  deciding factor: `writeAudit` rides along in the same callback here too,
+  with the same no-business-key INSERT shape, so `E_IO` is not retried for
+  this bucket either — for the audit row's sake, exactly as above, never
+  because the touch/edge write itself is unsafe.
 
-An exhausted retry — 3 attempts for `E_CONTENTION` on every write class and for
-`E_IO` on business-keyed-node/`supersede` writes, or the single first-occurrence
-attempt for `E_IO` on a keyless content-node write (above) — is surfaced to the
-caller as a `WriteError` with `retryable: true` still set — the caller, not the
-write layer, owns any retry beyond that (ADR-0012 §4). Silent loss — a retryable
-failure disappearing with nothing reaching the caller — is explicitly the failure
-mode this contract exists to prevent.
+Collapsing all four buckets into one rule: **`E_IO` is never auto-retried by
+the write layer, on any write-layer verb** — not because every subject write
+is retry-unsafe (business-keyed nodes, the `supersede` CAS, and every
+touch-based CAS write above are genuinely safe to retry on their own merits),
+but because `writeAudit` (§4a) is an un-guarded keyless-content-node INSERT
+that rides inside literally every write-layer transaction, with no exception
+among the verbs in §4's table. `E_CONTENTION`, by contrast, is safe to retry
+everywhere, on every verb without exception, because the BEGIN-phase argument
+above never depends on what the callback's subject write looks like.
+
+An exhausted retry — 3 attempts for `E_CONTENTION`, on every write class
+without exception — or the single first-and-only attempt for `E_IO`, on every
+write class without exception (above) — is surfaced to the caller as a
+`WriteError` with `retryable: true` still set — the caller, not the write
+layer, owns any retry beyond that (ADR-0012 §4). Silent loss — a retryable
+failure disappearing with nothing reaching the caller — is explicitly the
+failure mode this contract exists to prevent.
 
 #### §4a audit-write atomicity
 
@@ -678,16 +875,41 @@ audit write's failure surfaced as an unhandled error minutes after the state cha
 was recording had already taken effect (`BUG-BACKLOG-AUDIT-WRITE-FAILS-COMMITTED-CLAIM-001`,
 named at that same location).
 
-The v2 requirement, stated precisely: `writeAudit`'s INSERT (and its `audits` edge)
-executes against the **same `tx` handle**, inside the **same `immediate` transaction**,
-as the subject write it records — never a separate call, never after the subject
-transaction has committed, never with its own independent retry loop. A subject write
+The v2 requirement, stated precisely: `writeAudit`'s INSERT (and its `audits` edge —
+composed by hand against `tx`, mirroring `writeEdgeInternal`'s upsert shape per §4c's
+"edge writes and uid lookups inside a transaction" rule above; never a call to the
+library's `writeEdge`, which runs against the bare adapter and would autocommit
+outside this transaction) executes against the **same `tx` handle**, inside the
+**same `immediate` transaction**, as the subject write it records — never a separate
+call, never after the subject transaction has committed, never with its own
+independent retry loop. A subject write
 whose audit insert fails must roll back the subject write too (the single transaction
 already guarantees this — there is no separate step to get wrong once the audit
 INSERT lives inside the same `fn`). This closes off the exact race the postmortem
 found: an audit write can no longer fail *after* its subject has already durably
 committed, because there is no "after" — they commit or roll back together, as one
 statement sequence inside one `BEGIN IMMEDIATE`.
+
+**The one structural exception is the embedding audit row** (§4a/§4b:
+`embedding_upserted`/`embedding_deleted`/`embedding_failed`). Every OTHER audit
+row above is written inside the subject's own transaction because the outcome
+being recorded — an issue was created, a status changed, a claim was granted,
+a catalog row was upserted — is already fully known to the write layer before
+it ever opens that transaction's callback. The embed outcome is different in
+kind: it depends on the `createEmbeddingObserver`'s post-commit round-trip to
+`semanticBackend` (§4b), which cannot even START until the subject
+transaction has committed — there is no way to know
+"upserted / deleted / failed" before the fact it records has already
+happened. So this ONE audit class is written in its OWN follow-up `immediate`
+transaction, opened after the subject write's own transaction has already
+committed, exactly as §4a states — never against the subject's `tx` handle,
+because that handle no longer exists by the time the outcome is known. This is
+a deliberate, narrow carve-out from the same-tx rule above, not a second
+instance of it: every audit row this spec writes for an outcome that is known
+at write time — every row in every table across §4, §6.3.1–§6.3.7, including
+the `claim`/`release`/`renew` and `moveIssue` audit rows — still follows the
+same-tx rule above with zero exceptions; only the embed outcome is
+structurally unknowable early enough to follow it.
 
 ## 5. Query layer (`v2-query.ts`)
 
@@ -757,8 +979,11 @@ silently.
   because `humanId` was only unique within a repo; `uid` is globally unique,
   so no verb *requires* a scoping key any more. `project` survives as an
   optional **filter/creation** input, not an addressing key: `create` takes
-  `project` to place the new issue under `owns_component`'s chain (§3, §4),
-  and `query`'s `filter.project` narrows a listing. Every place that accepts
+  `project` to place the new issue under `owns_component`'s chain (§3, §4) —
+  under the named `component` when one is given, or under `project`'s
+  reserved default component `(root)` when `component` is omitted, so a new
+  issue is never left without a live `owns_component` edge (§3/§8.1/§9
+  AC-23) — and `query`'s `filter.project` narrows a listing. Every place that accepts
   an entity reference to a catalog/registry node (`project`, `component`,
   `kind`, `status`, `priority`, `agent`) accepts **either**:
   - the entity's `uid` (exact, always valid if it exists), **or**
@@ -776,7 +1001,13 @@ silently.
   the explicit registry CRUD verbs (§3a `upsertProject`/`upsertComponent`) —
   `createIssue` itself never silently mints a new `project`/`component` row,
   because doing so would let a typo'd project name fork the registry instead
-  of erroring. `createIssue({project: "adph", ...})` (typo) throws
+  of erroring. Omitting `component` entirely is a THIRD case, distinct from
+  both a resolved name and an unresolved one: there is no name to resolve or
+  fail to resolve, so `createIssue` instead falls back to `project`'s
+  reserved default component `(root)` (§3) — a row `upsertProject` already
+  guarantees is live before this call ever runs, so this is a plain resolve
+  of an existing row, never vivification; the same "never mints" rule holds
+  for the omitted case exactly as for a misspelled one. `createIssue({project: "adph", ...})` (typo) throws
   `CatalogNotFoundError('project', 'adph')` naming the mismatch, mirroring
   v1's `repoWarning` intent but as a hard error instead of a soft warning
   (§7 already retires `repoWarning` as a class of silent-drift bug). On
@@ -874,12 +1105,12 @@ interface ICreateIssueInput {
   title: string;
   body: string;
   project: string;   // uid or name — resolved per §6.1; REQUIRED (every issue has a component chain)
-  component?: string; // uid or name, scoped within `project`; RESOLVED ONLY, never created — the write layer's hand-composed find-then-create (§4c) runs its find-half alone here: a name that resolves to an existing component under `project` is used as-is, and an unresolved name throws CatalogNotFoundError('component', name) rather than silently forking a new component (see §6.1's project-vs-component asymmetry: components are NOT auto-vivified by createIssue, use upsertComponent first)
-  kind?: string;      // catalog name or uid; default catalog row "issue" if the project defines no default
-  status?: string;    // catalog name or uid; default is the project's configured initial status (project_policy — falls back to a global default "OPEN"-equivalent catalog row); an unresolved name MINTS a new status catalog row (§2, unlike `component` above) with terminal:false — a novel status name is presumed non-terminal until an operator deliberately reconciles it, so a typo can never silently close or exclude items under an unrecognized status
-  priority?: string;  // catalog name or uid; optional; an unresolved name mints a new priority catalog row (§2) with rank set to one past the current max rank (i.e. lowest urgency) — a novel priority can never silently outrank an existing one
+  component?: string; // uid or name, scoped within `project`; RESOLVED ONLY, never created — the write layer's hand-composed find-then-create (§4c) runs its find-half alone here: a name that resolves to an existing component under `project` is used as-is, and an unresolved name throws CatalogNotFoundError('component', name) rather than silently forking a new component (see §6.1's project-vs-component asymmetry: components are NOT auto-vivified by createIssue, use upsertComponent first). OMITTED (undefined) is a distinct third case, never an error: it resolves to `project`'s reserved default component `(root)`, already guaranteed live by `upsertProject` (§3/§4/§6.1) — every issue gets exactly one `owns_component` edge whether or not the caller names a component (§9 AC-23).
+  kind?: string;      // catalog name or uid; default catalog row "issue" if the project defines no default; an unresolved NAME mints a new kind catalog row (§2/§6.1's general rule — kind is open vocabulary, no allowlist, §8.1's `kind` field-mapping row) with no extra metadata beyond `name`; a uid-shaped `kind` that does not resolve instead throws CatalogNotFoundError('kind', ref) — minting never applies to a uid (§6.1)
+  status?: string;    // catalog name or uid; default is the project's configured initial status (project_policy — falls back to a global default "OPEN"-equivalent catalog row); an unresolved name MINTS a new status catalog row (§2, unlike `component` above) with terminal:false — a novel status name is presumed non-terminal until an operator deliberately reconciles it, so a typo can never silently close or exclude items under an unrecognized status; a uid-shaped `status` that does not resolve instead throws CatalogNotFoundError('status', ref) — minting never applies to a uid (§6.1)
+  priority?: string;  // catalog name or uid; optional; an unresolved name mints a new priority catalog row (§2) with rank set to one past the current max rank (i.e. lowest urgency) — a novel priority can never silently outrank an existing one; a uid-shaped `priority` that does not resolve instead throws CatalogNotFoundError('priority', ref) — minting never applies to a uid (§6.1)
   citations?: Citation[];
-  author?: string;    // catalog agent name/uid; defaults to `by`
+  author?: string;    // catalog agent name/uid; defaults to `by`; an unresolved NAME mints a new `agent` catalog row (§6.1's general rule), exactly like `kind`/`status`/`priority` above; a uid-shaped `author` that does not resolve instead throws CatalogNotFoundError('agent', ref) — minting never applies to a uid (§6.1)
   assignee?: string;  // plain metadata scalar (§6.2)
   awaitEmbed?: boolean;
   // duplicate-gate controls — §6.4
@@ -919,24 +1150,64 @@ retries the entire `create` call.
 instead it runs §4's `updateIssue(supersedes, {body: input.body})`
 (the `supersede`-backed content path) and returns that result mapped onto
 `ICreateOutcome`'s shape (`created: true`, `item`: the NEW node the
-`supersede` primitive minted, `supersededUid: input.supersedes`). Every
-other field on the input EXCEPT `project`/`component` (`title`, `kind`,
-`priority`, `author`, `assignee`) is applied via a following `touch`/
-edge-write against the same new node, atomically, inside the SAME
-transaction the `supersede` call opened — mirroring exactly the
-touch+edge-rewrite `update` (§6.3.3) already defines for each of those
-fields; this is the one case where `create`'s input maps onto
-`updateIssue`'s write path rather than `createIssue`'s. `project`/
-`component` are handled separately, never via a generic edge-write:
-`owns_component`'s invalidate-old+write-new sequence is reserved to `move`
-(§6.3.6) specifically to guarantee at most one live edge ever exists, so a
-`create+supersedes` call naming a `project`/`component` different from the
-target's current placement runs `move`'s own
-`invalidateEdge(old owns_component)` + `writeEdge(new owns_component)`
-sequence internally — inside the SAME transaction, immediately after the
-supersede write, never as an ad hoc edge-write outside that sequence. A
-`project`/`component` matching the target's current placement is a no-op
-(nothing invalidated or rewritten).
+`supersede` primitive minted, `supersededUid: input.supersedes`). The
+REMAINING `ICreateIssueInput` fields are each disposed of explicitly below
+— no field is silently dropped, and none is covered by a vague "every
+other field": every field maps onto exactly one of these named paths.
+
+- **`title`, `kind`, `priority`, `author`, `assignee`** — applied via a
+  following `touch`/edge-write against the same new node, atomically,
+  inside the SAME transaction the `supersede` call opened — mirroring
+  exactly the touch+edge-rewrite `update` (§6.3.3) already defines for
+  each of these fields (an unresolved `kind`/`priority`/`author` NAME
+  still auto-mints, §6.1's general rule, identically to a standalone
+  `update` call).
+- **`project`/`component`** — handled separately, never via a generic
+  edge-write: `owns_component`'s invalidate-old+write-new sequence is
+  reserved to `move` (§6.3.6) specifically to guarantee at most one live
+  edge ever exists, so a `create+supersedes` call naming a `project`/
+  `component` different from the target's current placement runs `move`'s
+  own `invalidateEdge(old owns_component)` + `writeEdge(new owns_component)`
+  sequence internally — inside the SAME transaction, immediately after the
+  supersede write, never as an ad hoc edge-write outside that sequence. A
+  `project`/`component` matching the target's current placement is a no-op
+  (nothing invalidated or rewritten); an unresolved `project`/`component`
+  NAME throws exactly as a standalone `move`/`create` would (§6.1) —
+  `create+supersedes` never auto-vivifies either.
+- **`status`** — mutually exclusive with `supersedes`, for the identical
+  structural reason `update` bans a `status` field outright (§6.3.3): a
+  status change carries its own evidence gate (`note`/`citations`,
+  policy-checked — and `ICreateIssueInput` has no `note` field to satisfy
+  `project_policy.transition_requires_note`, which defaults to `true`,
+  §6.3.4) and `closed_at` stamping, neither of which `create`'s input
+  shape or a `touch`-based composition can express. `create` throws
+  `InvalidArgumentError('status', ...)` if both `status` and `supersedes`
+  are given together; the caller instead omits `status` from the
+  `create`+`supersedes` call and follows it with a separate `transition`
+  call against the NEW node's `uid` (`ICreateOutcome.uid`/`.item.uid`,
+  §6.3.4). This keeps §6.2's DEBT-010 claim literally true — there
+  remains exactly ONE path into a status change, `transition`, never a
+  second one folded into `create`.
+- **`citations`** — written as `citation` nodes + `has_citation` edges
+  against the new node in the same transaction, exactly as a standalone
+  `create`'s citation handling (§6.2) — independent of `touch`, since
+  `IUpdateIssueInput` carries no `citations` field to mirror.
+- **`awaitEmbed`** — applied to the new node's on-write embedding exactly
+  as a standalone `create` (§4b): waits for the fire-and-forget embed
+  observer when `true`, fire-and-forget otherwise.
+- **`duplicateAction`** — inapplicable, stated explicitly rather than
+  silently ignored: the duplicate gate (§6.4) exists to catch an
+  ACCIDENTAL near-duplicate of an unknown existing issue at creation time,
+  and `supersedes` already names the exact existing issue being revised —
+  there is no duplicate to detect. `create` throws
+  `InvalidArgumentError('duplicateAction', ...)` if both `duplicateAction`
+  and `supersedes` are given together, rather than silently dropping one.
+- **`children`** — mutually exclusive with `supersedes`, for the same
+  reason `children` requires "the freshly-minted parent" (this section's
+  own `children` field comment, above): `children`'s parent identity comes
+  from a plain `createIssue` INSERT, which a `create+supersedes` call
+  never performs. `create` throws `InvalidArgumentError('children', ...)`
+  if both `children` and `supersedes` are given together.
 
 Output:
 
@@ -952,7 +1223,11 @@ interface ICreateOutcome {
 }
 ```
 
-Errors: `CatalogNotFoundError('project'|'component'|'kind'|'status'|'priority', ref)`,
+Errors: `CatalogNotFoundError('project'|'component'|'kind'|'status'|'priority', ref)`
+(`'component'` fires only when a name/uid was GIVEN and did not resolve —
+omitting `component` entirely never throws it, resolving instead to
+`project`'s reserved `(root)` default, §6.3.2's `component` comment/§9
+AC-23),
 `InvalidArgumentError` (missing `title`/`body`/`project`, or `citations[i].file`
 empty), `StaleSupersedeError(uid)` (only when `supersedes` is given — the
 body-change CAS (§4c) lost a race to a concurrent edit of the same target;
@@ -974,7 +1249,7 @@ interface IUpdateIssueInput {
   by: string;
   title?: string;       // → touch (metadata/name only)
   body?: string;         // → supersede (§3: "body change → supersede... never touch a body")
-  kind?: string;         // → touch + has_kind edge rewrite (invalidateEdge old, writeEdge new)
+  kind?: string;         // → touch + has_kind edge rewrite (hand-composed edge invalidate-old + upsert-new, same tx — §4c)
   priority?: string;     // → touch + has_priority edge rewrite
   assignee?: string;     // → touch (metadata scalar, §6.2)
   author?: string;       // → touch + authored_by edge rewrite
@@ -1009,8 +1284,11 @@ Every key present in the input with a defined value MUST appear in
 it is a general correctness rule, not v1-specific machinery, so it survives
 the wipe).
 
-Errors: `IssueNotFoundError`, `CatalogNotFoundError` (per catalog field
-above), `StaleSupersedeError(uid)` (body-change path only — the supersede CAS
+Errors: `IssueNotFoundError`, `CatalogNotFoundError('kind'|'priority'|'agent',
+ref)` (uid-shaped ref only — `update` never auto-mints from a uid; an
+unresolved NAME instead auto-mints per §6.1's general rule: `kind`/
+`priority` mint exactly as §6.3.2 states, `author` resolves through the same
+flat-catalog find-then-create as the `agent` catalog), `StaleSupersedeError(uid)` (body-change path only — the supersede CAS
 (§4c) lost a race to a concurrent edit of the same `uid`; the patch was not
 applied, re-`get` and retry, never a silent partial apply),
 `WriteContentionError`/`WriteIOError` (§4c), `InvalidArgumentError` (no fields
@@ -1071,7 +1349,12 @@ on reopen; a stale value would corrupt exactly this range-query guarantee
 (a reopened issue would keep matching `filter.closedAt.until` as though
 still closed).
 
-Errors: `IssueNotFoundError`, `CatalogNotFoundError('status', toStatus)`,
+Errors: `IssueNotFoundError`, `CatalogNotFoundError('status', toStatus)`
+(uid-shaped `toStatus` only — an unresolved NAME instead auto-mints a new
+status catalog row with `terminal:false`, exactly as `create`'s `status`
+field (§6.3.2) and §6.1's general rule — a novel status reached via
+`transition` can no more silently close/exclude items than one reached via
+`create`),
 `NoteRequiredError` (policy-gated), `CitationRequiredError` (policy-gated,
 terminal-only) — both replace v1's three-way
 `requiresCitation`/`requiresReason` split (§6.2) with the single
@@ -1113,7 +1396,9 @@ compare-and-swap, not a blind write. It runs inside ONE
 `store.adapter.transaction(fn, {mode:'immediate'})` (§4c's stated write
 pattern — `immediate` mode, never `GraphBackend.transaction(fn)`, which always
 runs `deferred` and cannot request it) that (1) re-fetches
-the node via `getNodeByUid` **on the transaction handle**, never a
+the node via the hand-composed, tx-scoped uid lookup (`tx.executeGet('SELECT *
+FROM node WHERE uid = ?', [uid])`, §4c — never a `getNodeByUid` call, which
+always runs against the bare adapter, never the open `tx`), never a
 pre-transaction read — mirroring exactly how §1's `NodeUniquenessPolicy`
 is tx-threaded — (2) evaluates the claim/release/renew rule against that
 fresh read, (3) `touch`es the merged metadata, all before the transaction
@@ -1201,8 +1486,11 @@ interface IMoveIssueInput {
 }
 ```
 
-`move` is `invalidateEdge(old owns_component)` + `writeEdge(new
-owns_component)` + audit, atomically (§4, `moveIssue`, unchanged). It is a
+`move` is a hand-composed edge-invalidate (old `owns_component`) + hand-composed
+edge-upsert (new `owns_component`) + audit, atomically, against the SAME `tx`
+handle (§4, `moveIssue`; §4c — never a call to the library's `invalidateEdge`/
+`writeEdge`, both of which run against the bare adapter and would autocommit
+outside this transaction). It is a
 DISTINCT verb from `relate` because `owns_component` is a structural
 placement (exactly one component per issue, enforced by having exactly one
 live `owns_component` edge at a time), not a peer relation — collapsing it
@@ -1568,7 +1856,7 @@ Source: `BacklogItem` (model.ts:128-170) as materialized by `toBacklogItem`
 | `status` | `status` catalog row + `has_status` edge | The write layer's hand-composed find-then-create (§4c), scoped to `(kind:'status', name:value)`. Catalog seeded once, up front (§8.6 step 2) with `terminal` taken directly from `TERMINAL_STATUSES` (model.ts:56-68) — not re-derived per item. |
 | `priority` | `priority` catalog row + `has_priority` edge, iff present | The write layer's hand-composed find-then-create (§4c), scoped to `(kind:'priority', name:value)`; `rank` seeded from the already-existing `PRIORITY_RANK` constant (store/query.ts:32: `CRITICAL:0, HIGH:1, MEDIUM:2, LOW:3`) — reused verbatim so every v1 sort-by-urgency comparator ports unchanged. No edge written when `priority` is absent — `byPriorityAllStatuses` sums to 937 of 1476 items WITH a priority present, leaving 539 absent (~36% of the corpus) — never defaulted to a fabricated value. |
 | `repo` | `project` catalog row (the write layer's hand-composed find-then-create, or `upsertProject` — §4c/§3a) | Normalized per §8.3, then an issue is never linked to a project directly — see `projectPath` below for the required `owns_component` hop. |
-| `projectPath` | `component` row (`upsertComponent`) + `owns_component` edge | The write layer's hand-composed find-then-create (§4c) scoped by project `uid` (§1's edge-scoped uniqueness policy) — the same composition `upsertComponent` (§3a/§4) uses, never a call to `findOrCreateNode()`. **Gap resolved:** SPEC-v2's edge table has no direct project→issue edge — every issue must hang off a `component`. A v1 item with no `projectPath` (repo-level item) is filed under a synthetic **default component** named `(root)`, one per project, created the same way as any other component (unique per project, §1) — not a new edge kind, just a real component that happens to represent "no sub-area." |
+| `projectPath` | `component` row (`upsertComponent`) + `owns_component` edge | The write layer's hand-composed find-then-create (§4c) scoped by project `uid` (§1's edge-scoped uniqueness policy) — the same composition `upsertComponent` (§3a/§4) uses, never a call to `findOrCreateNode()`. SPEC-v2's edge table has no direct project→issue edge — every issue must hang off a `component`. A v1 item with no `projectPath` (repo-level item) is filed under `project`'s reserved default component `(root)` (§3) — the SAME row `upsertProject` (§4) already guarantees exists for every project, and the SAME fallback `createIssue` (§6.3.2/§6.1) resolves to live when a caller omits `component` — this is that identical guarantee, exercised by the ETL, not a migration-only invention. |
 | `plan` | — (no v2 field) | No plan catalog in this spec (§11: data-model changes beyond it are out of scope). Folded into the audit note (§8.2a). The v1 `MEMBER_OF` edge to the synthetic plan node (store/structure.ts:351-359) collapses into the same note — it is the graph realization of this same string, nothing more. |
 | `importedFrom` | — (no v2 field) | The markdown-import subsystem is wiped (§7). Folded into the audit note. |
 | `assignee` | — (no v2 field/edge) | SPEC-v2 defines no assignment concept (§3/§4 have no assign verb or edge). Folded into the audit note — a real capability gap versus v1, flagged for the reader, not silently absorbed. |
@@ -1802,8 +2090,13 @@ missing or fabricated one.
    `PRIORITY_RANK`, store/query.ts:32). These need no data scan — the vocabulary
    is a TypeScript union, known before any item is read.
 3. **Seed `project` rows**, one per normalized repo string (§8.4).
-4. **Seed the default `(root)` component per project** (§8.1) — needed before
-   any repo-level issue can be filed.
+4. **Seed the default `(root)` component per project** (§8.1) — the SAME
+   reserved component `upsertProject` (§3/§4) guarantees for every
+   live-created project; seeded explicitly here because step 3 above writes
+   `project` rows via the hand-composed find-then-create directly (§8.1's
+   `repo` mapping), not through the `upsertProject` verb itself, so this
+   step restores the identical guarantee for ETL-created projects — needed
+   before any repo-level issue can be filed.
 5. **Pass 1 — issues + their own events, one issue per transaction**: for each
    live v1 item (`isLiveBacklogItemNode`, mapping.ts:241-243) AND every
    historically superseded/dropped-duplicate node the store still holds a
@@ -1960,6 +2253,7 @@ asserted from a remembered count:**
 20. **`query` sort/keyset conflict:** `query({after:<cursor>, sort:'priority'})` throws `InvalidArgumentError('sort', ...)` naming the incompatibility; the identical call without `sort` succeeds and pages in insertion order.
 21. **Registry `rmLocation`:** `rmLocation(uid)` invalidates the location; a subsequent `lookup` on that `(locType,value)` no longer resolves it; the location's own record remains addressable by uid (bi-temporal, never hard-deleted).
 22. **Concurrent write safety (BUG-039 gate):** the un-skipped, v2-repointed cross-process harness (§4c/§10.4) run against `createIssue` reports a fresh-reopen stored count exactly equal to the number of `ok`-reporting creates, for both the same-target and distinct-target cases, over two real OS processes with no serve-lock coordination; the identical run with the `immediate`-mode guard removed reports a stored count BELOW the expected total (the negative control proving the assertion has teeth).
+23. **`create` with no `component` defaults to `(root)`, never orphaned:** `createIssue({title, body, project:'adhd'})` — `component` omitted entirely — writes exactly one `owns_component` edge, to `project`'s reserved default component `(root)` (§3/§6.3.2), and never throws `CatalogNotFoundError('component', ...)`; a subsequent `query({filter:{project:'adhd'}})` (§6.5 rule 3) returns the new `uid` in its results, proving the issue is reachable through the project filter rather than orphaned; two separate no-`component` `createIssue` calls against the same project resolve to the SAME `(root)` component row (`get({registry:'component', name:'(root)', filter:{project:'adhd'}})` returns one row, not two) — proving the fallback is a resolve of an already-guaranteed row, never a per-call mint.
 
 ## 10. Dependencies & sequencing
 
