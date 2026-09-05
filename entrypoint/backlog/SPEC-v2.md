@@ -16,8 +16,12 @@ away.
 
 Library versions (verified on npm): `@adhd/sox-graph-store@0.9.1` (the 0.9.1
 patch surfaces `NodeRecord.uid` + `getNodeByUid` — the stable-identity correction,
-§1), `@adhd/sox-store-adapter@0.8.0`, `@adhd/sox-vector-store@0.6.0`,
-`@adhd/sox-hybrid-search@0.4.2`, `@adhd/sox-semantic@0.1.2`,
+§1), `@adhd/sox-store-adapter@0.9.0` (the concurrency-mode enforcement module §4c
+depends on — `resolveConcurrencyMode`/`VALID_CONCURRENCY_MODES` — ships starting
+only in 0.9.0; 0.8.0 has no such module at all and its own README still documents
+the `experimental.multiprocessWal:false` opt-out §4c requires be absent — see
+§4c), `@adhd/sox-vector-store@0.6.0`, `@adhd/sox-hybrid-search@0.4.2`,
+`@adhd/sox-semantic@0.1.2`, `@adhd/sox-embedding-provider@0.4.1`,
 `@adhd/sox-memory-core@0.9.2`.
 
 **Anti-antipatterns to NOT recreate:**
@@ -91,12 +95,43 @@ of the old hardcoded terminal/citation/reason knobs:
 
 ```
 project_policy (project → policy): transition_requires_note (default true),
-  transition_requires_sha (true), citation_required (false),
-  citation_requires_sha (true)
+  citation_required (false), citation_requires_sha (default true — gates
+  acceptance of an unverified citation, see below), default_status (catalog
+  ref; falls back to a global OPEN-equivalent catalog row when unset),
+  default_kind (catalog ref; falls back to the global "issue" catalog row
+  when unset), dedupe_scan_enabled (default true, §6.4), dedupe_threshold
+  (default 0.8, §6.4), claim_stale_after_min (default 30, §6.3.5)
 project_status  (project → allowed status set)
 project_kind    (project → allowed kind set)
 project_field_requirement (project → required field)
 ```
+
+`sha` is unconditionally computed by the write layer for every `citation`,
+`transition`, and `audit` node — "automatic, cannot be forgotten" (§4a) —
+so there is no `transition_requires_sha` column: a `transition`/`audit`
+node's `sha` hashes its own canonical serialization (never an external
+file), so it is always computable and §4a's "agent + note + sha REQUIRED"
+is a genuine hard invariant, never policy-tunable. A `citation`'s `sha`, by
+contrast, hashes EXTERNAL file content (§6.3.2/§8.5) and can legitimately
+fail to resolve to a real hash — `citation_requires_sha` is what that
+failure composes with: `true` (default) rejects a citation write that would
+resolve to the `"unverified"` sentinel with `CitationUnverifiableError`;
+`false` accepts it verbatim, matching the ETL's own default posture for a
+project with no known `path` (§8.4/§8.5).
+
+`project_status`/`project_kind` are enforced by the SAME write-layer step
+that resolves the `status`/`kind` catalog row (§4c's hand-composed
+find-then-create, used by `createIssue`/`update`/`transition`): once the row
+is resolved (or auto-created, §6.1), the write layer checks the resolved
+row's `name` against the project's `project_status`/`project_kind` set —
+empty means "no restriction, anything in the global catalog is allowed" —
+and throws `InvalidArgumentError('status'|'kind', value)` before the write
+if the name falls outside a non-empty set. `project_field_requirement` is
+enforced the same way, at the top of `createIssue`/`update`/`transition`:
+for every `(project, field)` row present, a missing/blank value for that
+field on the call throws `InvalidArgumentError(field, ...)` before any
+write runs — the identical mechanism §6.3's `by` check already uses (line
+700-701), generalized to any project-declared required field.
 
 - **Edge-kind schema enforcement is a WRITE-LAYER responsibility, not
   `validateEdge`.** `TypePolicy.validateEdge(srcKind, rel, dstKind)` is a PURE
@@ -106,6 +141,38 @@ project_field_requirement (project → required field)
   calls `writeEdge` (whose injected `validateEdge` does the pure vocabulary
   check). Multiplicity/cardinality is therefore enforced by the app layer that
   can read the catalog — never smuggled into the pure seam.
+- **What `multiplicity` means, precisely** (§3's `(1:n)`/`(n:1)`/`(n:m)`
+  markers ARE the catalog's `multiplicity` values, read verbatim — no second
+  vocabulary): `n:1` caps the SOURCE's out-degree at one for that `rel` (one
+  target per source — e.g. `has_kind`: an issue has exactly one `has_kind`
+  edge, many issues share a `kind`); `1:n` caps the TARGET's in-degree at one
+  (one source per target — e.g. `owns_component`: an issue has exactly one
+  owning component, one component owns many issues); `n:m` is uncapped on
+  both sides. The write layer enforces whichever side the resolved `rel`'s
+  row declares — the SAME check for every row, never two different checks
+  keyed off which side happens to be "1."
+- **`audits` is the one declared exception to "no polymorphic," and it is
+  declared, not smuggled in.** Its `edge_kind` row carries the sentinel
+  `source_kind: '*'`: the write layer's source-match step is skipped for this
+  ONE row (any resolved source kind is accepted); `target_kind` (`audit`) and
+  `multiplicity` (`1:n` — one source per target) are still checked exactly as
+  for every other row — and, like `has_note`/`has_citation`/`has_transition`/
+  `has_location` (also `1:n`), that check is trivially satisfied because the
+  target is a fresh node minted and linked exactly once per write, never an
+  existing node re-targeted. The one thing genuinely exceptional about
+  `audits` is `source_kind: '*'` alone: an audit's subject is identified by
+  its own `target_uid` metadata field (§3), never by the edge's
+  `source_kind` — the edge exists for traversal (`auditTrail`, §6.5), the
+  metadata field is what's authoritative. No other `edge_kind` row is
+  permitted to use `'*'`.
+- **This generic check IS `relate`'s enforcement — §6.3.6 hand-rolls
+  nothing.** The single-valued-rel rejection described there for
+  `supersedes`/`duplicate_of`/`part_of` (all three declared `n:1` in §3 — ONE
+  target per source) is this same `edge_kind.multiplicity` gate, applied to
+  those three rows; §6.3.6's prose states the gate's user-visible result for
+  `relate` callers, it is not a second, independently-maintained check. A
+  future rel declared `n:1` is enforced identically with no code change to
+  `relate`.
 
 ## 3. Entities & edges (graph nodes; event model is graph-native)
 
@@ -138,7 +205,9 @@ project_field_requirement (project → required field)
   - `audit` — `{ actor, action, target_uid, from, to, note, sha, at }`.
 
 **Edges** (typed rels, each name unique with ONE `(source_kind → target_kind)` —
-no polymorphic `owns`):
+no polymorphic `owns`, with exactly one declared exception, `audits`, whose
+sentinel `source_kind: '*'` and its precise enforcement carve-out are stated
+in §2):
 
 ```
 owns_project   project   → component   (1:n)
@@ -151,14 +220,15 @@ authored_by    issue     → agent       (n:1)   (notes/transitions/audits carry
 has_note       issue     → note        (1:n)
 has_citation   issue     → citation    (1:n)
 has_transition issue     → transition  (1:n)
-audits         *         → audit       (1:n)   (subject-of-audit link)
+audits         *         → audit       (1:n)   (subject-of-audit link — the ONE
+                                                sentinel source_kind; §2)
 depends_on     component → component   (n:m)
 has_location   component → location    (1:n)
 relates_to     issue     → issue       (n:m)
-supersedes     issue     → issue       (1:n)   (issue relation, lowercase)
+supersedes     issue     → issue       (n:1)   (issue relation, lowercase)
 blocks         issue     → issue       (n:m)   (inverse = blocked_by, derived)
-duplicate_of   issue     → issue       (1:n)
-part_of        issue     → issue       (1:n)   (hierarchical items, FEAT-005)
+duplicate_of   issue     → issue       (n:1)
+part_of        issue     → issue       (n:1)   (hierarchical items, FEAT-005)
 ```
 
 Note: the library's `supersede()` primitive (CONTENT mutation) writes a
@@ -253,7 +323,7 @@ raw adapter directly. **All entity writes pass `skipDedupe: true`.**
   owns_component)` + `writeEdge(new owns_component)` + audit, atomically.
 - `relate(uid, targetUid, rel, action)` (BUG-025/BUG-044): returns a real
   outcome (`noop` vs `changed`); single-valued rels (`supersedes`,
-  `duplicate_of`) reject a second target.
+  `duplicate_of`, `part_of`) reject a second target (§6.3.6).
 - `transition(uid, toStatus, { agent, note })`: writes a `transition` node +
   `has_transition` edge + stamps `closed_at` when terminal.
 - **Registry CRUD** (§3a): `upsertProject({ name, path, repoUrl, monorepo?,
@@ -277,23 +347,56 @@ canonical serialization (content-addressing, DATA_MODEL_v2 §0.4/§4/§6).
   validated on the write path (no bare transition).
 - **Embeddings are audited by the WRITE LAYER**, not the observer: the
   `createEmbeddingObserver` (FEAT-021) has no graph-write handle, so the write
-  layer records the `embedding_upserted`/`embedding_deleted` audit row after the
-  observer fires (it owns the actor context the observer lacks).
+  layer records an `embedding_upserted`/`embedding_deleted`/`embedding_failed`
+  audit row after the observer settles (it owns the actor context the
+  observer lacks) — in its OWN follow-up `immediate` transaction, opened
+  after the subject write's own transaction has already committed (the
+  observer's outcome isn't knowable before then; §4b states exactly when it
+  settles relative to `awaitEmbed`). The three outcomes are exhaustive:
+  `embedding_upserted`/`embedding_deleted` on success, `embedding_failed`
+  (`note` = the observer's caught error) when the embed round-trip rejects —
+  never silently skipped, and never a false `embedding_upserted` recorded
+  for a failed embed. This is the one audit class whose write is provably
+  NOT inside the same transaction as its subject write (every other audit
+  row is, per this section's opening paragraph) — a structural exception,
+  not an oversight: the embed outcome is unknowable before the subject write
+  commits.
 
 ### 4b. On-write embeddings (FEAT-021)
 
 `createEmbeddingObserver(semanticBackend)` registered at open: embed-on-write,
-delete-on-invalidate; degrades to a log. Batch is backfill-only
-(`reembed`/`deleteMany`).
+delete-on-invalidate. It fires on the graph-store's own post-commit write
+event — AFTER the write layer's `immediate` transaction has committed and
+released its RESERVED lock, never inside it, so the embedding round-trip (a
+network call to `semanticBackend`) never holds the write lock open and never
+delays a concurrent writer (§4c). **Fire-and-forget by default:** the
+write-layer verb (`create`/`update`) does not await the observer's promise
+unless the caller passes `awaitEmbed:true` (§6.2), in which case the verb
+awaits that SAME post-commit promise before returning to the caller — still
+after the subject transaction has committed, so `awaitEmbed:true` adds
+latency to the caller's own call, never lock-hold time to the store.
+**"Degrades to a log" on failure** means: a rejected embed/delete never
+throws back through the `create`/`update` call that triggered it (which, by
+the time the observer settles, may already have returned to its caller) and
+is never retried inline — the observer logs the error for operator
+visibility, AND the write layer independently persists it durably as an
+`embedding_failed` audit row (§4a), so the failure is never only a log line
+a caller could miss. Batch re-embed (`reembed`/`deleteMany`, backfill-only)
+is the sanctioned way to repair rows left un-embedded by a logged failure.
 
 ### 4c. Concurrency semantics & error taxonomy
 
-**Ground truth:** this store is parallel-process by mandate. `@adhd/sox-store-adapter`'s
-concurrency contract (`concurrency-mode.ts`) resolves exactly one mode per backend —
-Turso (the default backend) mandates `multiprocess-wal` with **no opt-out**
-(`resolveConcurrencyMode`/`VALID_CONCURRENCY_MODES`, `concurrency-mode.ts:54-65`); the
-better-sqlite3 fallback mandates `single-writer` (one synchronous in-process
-connection — `concurrency-mode.ts:50-57`). Under `multiprocess-wal`, **multiple
+**Ground truth:** this store is parallel-process by mandate. `@adhd/sox-store-adapter@0.9.0`'s
+concurrency contract (`concurrency-mode.ts`, shipped compiled as `dist/concurrency-mode.d.ts`/
+`dist/concurrency-mode.js` — no `.ts` source ships in the published package) resolves
+exactly one mode per backend — Turso (the default backend) mandates `multiprocess-wal`
+with **no opt-out** (`resolveConcurrencyMode`/`VALID_CONCURRENCY_MODES`,
+`dist/concurrency-mode.d.ts:32-50` — **this enforcement module ships starting in 0.9.0
+only; 0.8.0 has no `concurrency-mode.*` file at all, and 0.8.0's own README still
+documents the opposite, a working `experimental.multiprocessWal:false` opt-out example
+at `README.md:246,298` — hence the 0.9.0 pin, §0**); the better-sqlite3 fallback
+mandates `single-writer` (one synchronous in-process connection —
+`dist/concurrency-mode.d.ts:38-45`). Under `multiprocess-wal`, **multiple
 processes hold concurrent write connections to the one store file; writers are
 serialized, not concurrent** — `multiprocess_wal` extends single-writer WAL across
 process boundaries via a `.tshm` coordinator holding a single-writer slot, absorbed by
@@ -462,11 +565,15 @@ is `store.adapter.transaction(fn, {mode:'immediate'})`'s own INTERNAL envelope f
 driver-level failure — the shape a v2-write.ts verb's own catch block pattern-matches
 on, never the shape a caller of `v2-write.ts` or any transport (CLI/MCP/HTTP) ever
 receives directly. Every §6.3 verb catches it at its own transaction call site and
-does exactly one of two things: retries per the bound below (`E_CONTENTION`/`E_IO`,
-`retryable:true`), or — on final exhaustion, or immediately for the CAS-detected
-`E_CONSTRAINT` case above — re-throws a NEW, transport-facing, named class carrying
-the envelope's fields forward: `WriteContentionError(retryAfterMs, cause)` (an
-exhausted `E_CONTENTION`), `WriteIOError(cause)` (an exhausted `E_IO`), and
+does exactly one of two things: retries per the bound below (`E_CONTENTION` on
+every write class; `E_IO` only on business-keyed-node writes and the `supersede`
+CAS — keyless content-node writes do NOT auto-retry `E_IO`, see Retry semantics
+below), or — on final exhaustion (or, for a keyless content-node's `E_IO`, on the
+very first occurrence), or immediately for the CAS-detected `E_CONSTRAINT` case
+above — re-throws a NEW, transport-facing, named class carrying the envelope's
+fields forward: `WriteContentionError(retryAfterMs, cause)` (an exhausted
+`E_CONTENTION`), `WriteIOError(cause)` (an exhausted `E_IO`, or the first `E_IO`
+on a keyless content-node write), and
 `StaleSupersedeError(uid)` (the one deliberate `E_CONSTRAINT` this spec's own
 supersede CAS raises, above). Every §6.3 verb's Errors list that can reach a
 driver-level failure names these alongside its own validation errors. Those existing
@@ -486,8 +593,11 @@ inside the write layer, but it is never itself the value a caller receives.
 ADR-0012 §4's own bound, adopted for consistency with the retry loop already
 operating one layer down inside the adapter (`TursoAdapterImpl._runTransaction`'s
 own `maxRetries: 3`, per ADR-0012 §4) rather than inventing a second, differently-tuned
-schedule at the write layer. Only `E_CONTENTION` and `E_IO` are retried; `E_CONSTRAINT`
-and `E_VALIDATION` are surfaced on the first attempt — retrying a terminal failure
+schedule at the write layer. `E_CONTENTION` is retried on every write class;
+`E_IO` is retried only on business-keyed-node writes and the `supersede` CAS — NOT
+on keyless content-node writes, where the first `E_IO` is surfaced immediately
+(the one asymmetry in this bound; see below). `E_CONSTRAINT` and `E_VALIDATION`
+are surfaced on the first attempt in every case — retrying a terminal failure
 cannot change its outcome and would only mask the real conflict from the caller.
 
 **Why retrying the whole closure is safe despite `skipDedupe: true` (§1) removing
@@ -496,14 +606,41 @@ content-hash dedup as an accidental idempotency guard** — split by entity clas
 - **Keyless content nodes** (`issue`, `note`, `citation`, `transition`, `audit`): these
   have no business key, so a naive retry that re-runs an already-committed INSERT
   would produce a second, distinct row with no dedupe safety net to collapse it back
-  — exactly the risk `skipDedupe: true` opens up. The guard here is transactional,
-  not a check: a retryable failure is only ever raised as a **thrown** error out of
-  `adapter.transaction(fn, opts)`, and the adapter's transaction contract is
-  rollback-before-rethrow (ADR-0012 §4, citing `turso-adapter.ts`'s
-  `_runTransaction`) — so by the time the write layer sees a retryable error, nothing
-  from that attempt is durably committed. Retrying the closure from scratch cannot
-  therefore produce two committed rows for the same logical write; it can only ever
-  produce the one row the eventually-successful attempt writes.
+  — exactly the risk `skipDedupe: true` opens up. The guard here is transactional
+  for `E_CONTENTION` but does NOT extend to `E_IO` — the two retryable classes are
+  not equally safe to retry, and this spec's rule for keyless nodes follows that
+  split exactly:
+  - `E_CONTENTION` (busy/lock detection) is always a BEGIN-phase failure under
+    `immediate` mode (above: either the loser's own `BEGIN IMMEDIATE` fails busy
+    before any statement in the callback runs, or the loser blocks and its own
+    read then takes the "already done" branch) — in neither case has the loser's
+    callback reached `COMMIT`. A retryable failure of this class is only ever
+    raised as a **thrown** error out of `adapter.transaction(fn, opts)` before any
+    commit was attempted, so retrying the closure from scratch cannot produce two
+    committed rows; it can only ever produce the one row the
+    eventually-successful attempt writes.
+  - `E_IO` (the `isDatabaseError` catch-all for an unclassified driver/connection
+    failure) carries no such guarantee. The published adapter's own
+    `_runTransaction` retries ONLY a failure at `BEGIN` itself
+    (`dist/turso-adapter.js:2345-2365`, verified against the published
+    `@adhd/sox-store-adapter@0.9.0` package) — once inside the transaction, one
+    `try` wraps BOTH `await fn(tx)` AND the later `await this.db.exec('COMMIT')`,
+    and its `catch` attempts a `ROLLBACK` then rethrows the ORIGINAL error on the
+    spot, never retried by the adapter itself (`dist/turso-adapter.js:2366-2386`).
+    So the write layer's own outer 3-attempt loop is the ONLY retry protection an
+    `E_IO` here ever gets, and it cannot distinguish "COMMIT never reached the
+    server" from "COMMIT landed but the acknowledgment was lost" — a dropped
+    connection during or immediately after COMMIT is exactly this case, and
+    "rollback-before-rethrow" does not resolve it: a `ROLLBACK` issued after a
+    `COMMIT` that already landed server-side does not undo it, and the adapter's
+    own handling of a failed `ROLLBACK` says as much ("a failed ROLLBACK leaves
+    transaction state uncertain," `dist/turso-adapter.js:2378-2383`). **This spec
+    therefore does not auto-retry `E_IO` for keyless content-node writes:** the
+    first `E_IO` is surfaced immediately as `WriteIOError(cause)`
+    (`retryable: true` still set in the envelope, per ADR-0012 §4's contract) —
+    the caller, who alone has the business context to check whether the write
+    actually landed (e.g., a `query` before resubmitting), owns the decision to
+    retry, not the write layer.
 - **Business-keyed nodes** (catalogs; `project`/`component`/`location`): these get a
   second, independent guard on top of the first — the hand-composed find-then-create
   (above) runs its find **inside the same retried `immediate` transaction**, so even
@@ -519,11 +656,13 @@ content-hash dedup as an accidental idempotency guard** — split by entity clas
   rolled back) or affects zero rows and surfaces `E_CONSTRAINT` (if the prior attempt
   somehow committed) — never a second supersede of the same target.
 
-An exhausted retry (3 attempts, still `E_CONTENTION`/`E_IO`) is surfaced to the
-caller as a `WriteError` with `retryable: true` still set — the caller, not the write
-layer, owns any retry beyond the bound (ADR-0012 §4). Silent loss — an exhausted
-retry disappearing with nothing reaching the caller — is explicitly the failure mode
-this contract exists to prevent.
+An exhausted retry — 3 attempts for `E_CONTENTION` on every write class and for
+`E_IO` on business-keyed-node/`supersede` writes, or the single first-occurrence
+attempt for `E_IO` on a keyless content-node write (above) — is surfaced to the
+caller as a `WriteError` with `retryable: true` still set — the caller, not the
+write layer, owns any retry beyond that (ADR-0012 §4). Silent loss — a retryable
+failure disappearing with nothing reaching the caller — is explicitly the failure
+mode this contract exists to prevent.
 
 #### §4a audit-write atomicity
 
@@ -557,10 +696,25 @@ Primitives: `queryNodes`, `countNodes`, `countBy`, `getNodesByIds`, `getEdges`
 
 - Issues by project/component/kind/status/priority via filters + `has_*`/`owns_*`
   traversal.
-- **`countBy` supports `'kind' | 'namespace' | 'agentId'` only.** Status/priority
-  counts are EDGE-SCOPED (the library deliberately excludes them from `countBy`):
-  count `has_status`/`has_priority` edges per catalog node (a single grouped
-  edge query), never `countBy('status')`.
+- **`countBy` supports `'kind' | 'namespace' | 'agentId'` only** (verified,
+  `@adhd/sox-graph-store@0.9.1 dist/index.d.ts:300`) — and none of the three
+  is the domain BUG/DEBT/FEAT stat a caller actually wants. The library's
+  `'kind'` argument groups by the generic `node.kind` STRUCTURAL-type column
+  (verified, `NODE_TABLE_DDL_OPEN`, package dist, `dist/index.d.ts:58`:
+  `'issue'|'project'|'component'|'status'|'priority'|'kind'|'agent'|
+  'citation'|'note'|'transition'|'audit'`), never the domain `kind` catalog
+  (BUG/DEBT/FEAT), which — like status/priority — is a catalog reference
+  living on the `has_kind` EDGE (§3, §6.1), not a `NodeFilter`/`countBy`
+  column. So domain-kind counts are EDGE-SCOPED exactly like status/priority
+  under this spec's own model (the library deliberately excludes edge-scoped
+  references from `countBy`): count `has_kind`/`has_status`/`has_priority`
+  edges per catalog node (a single grouped edge query), never
+  `countBy('kind'|'status'|'priority')`. `namespace`/`agentId` are the
+  library's own memory-graph scoping columns with no v2 referent: §0.5
+  already bans namespace+metadata dual-write, and v2 attribution runs
+  through the `agent` catalog + `authored_by` edge (§3), never the
+  library's raw `agent_id` node column — so neither `countBy` argument is
+  ever meaningfully called from the v2 application layer.
 - **Stats are status-aware (BUG-023):** the priority matrix counts non-terminal
   (open) items by default; closed items only under an explicit terminal filter.
 - Keyset pagination for stable listing; `validAt` for cumulative-open curves.
@@ -673,7 +827,8 @@ consolidated six-verb inputs (`IBacklogCreateInput`/`IBacklogUpdateInput`/
 | `TransitionOpts.reason` (terminal-dismissed-only free text, distinct from `.note`) | v1 split evidence into `note` (always) vs `reason` (terminal-dismissed only), driven by `TERMINAL_DONE`/`TERMINAL_WORKAROUND`/`TERMINAL_DISMISSED` status categories | **collapsed into `note`** — DATA_MODEL_v2 §3's `transition` node has exactly one free-text field, `note`, and §2's `project_policy` has one boolean, `citation_required` (not three status-category-specific rules). The three-way status categorization (`requiresCitation`/`requiresReason`, model.ts:75-81) dies with it; `status.terminal` (a single bool) plus `project_policy.citation_required` (a single bool, project-tunable) is the entire v2 evidence gate. |
 | `statusEvidence: {citations?, reason?}` (`IBacklogUpdateInput`, DEBT-010) | bundling fix for the retired top-level `citations`/`reason` fields on the six-verb `update` | superseded by `transition`'s own input shape (§6.3.4), which HAS the `citations`/`note` fields directly — there is no separate generic `update` path into a status change any more (§6.3.3 `update` explicitly rejects `status`), so the DEBT-010 bundling problem (evidence attached to the wrong verb) cannot recur structurally |
 | `duplicateAction: 'abort'\|'file'\|'comment'` (`IBacklogCreateInput`) | still a real feature, needs re-grounding now that `skipDedupe:true` is universal (§1) | kept, renamed `'file'` → `'force'` for clarity, redesigned in full in §6.4 |
-| `splitFrom`/`children` (`IBacklogCreateInput`, `splitItem`) | "split into N children `part_of` a parent" — still real | kept: `create`'s `children?: ICreateIssueInput[]` field (§6.3.2) creates each child then `relate`s it `part_of` the freshly-created parent, atomically, in the same write transaction |
+| `children` (`IBacklogCreateInput`, `splitItem`, freshly-minted-parent case) | "split into N children `part_of` a parent" — still real | kept: `create`'s `children?: ICreateIssueInput[]` field (§6.3.2) creates each child then `relate`s it `part_of` the freshly-created parent, atomically, in the same write transaction |
+| `splitFrom` (`IBacklogCreateInput`, `splitItem`, EXISTING-parent case — v1 `splitItemNode(store, repo, parentHumanId, children)`, `store/structure.ts:295`, takes an already-live parent's `humanId` directly and mints only the children) | still real, and genuinely distinct from `children` above: the parent is NOT being created, it already has a `uid` | **no dedicated field — composed from two already-specified primitives, not silently dropped:** `create`'s `children` only fires alongside a freshly-minted parent (§6.3.2); splitting into an EXISTING parent is instead one `create` per child (no `children`, no `supersedes`) followed by `relate(childUid, existingParentUid, 'part_of', 'add')` (§6.3.6) for each — reaching the identical outcome (N children, each with one live `part_of` edge to the same parent) without a third verb |
 | `supersedes`/`reason` (`IBacklogCreateInput`, `supersedeItem`) | content-mutation supersession at create time — still real | kept: `create`'s `supersedes?: uid` field (§6.3.2) is sugar for `updateIssue(uid, {body: ...})`'s `supersede` path (§4) run against an EXISTING issue rather than minting via `create` — see §6.3.2 for the exact composition |
 | `IBacklogRelateInput.sourceRepo`/`targetRepo`, `addDependency`/`removeDependency`/`linkRelated`'s `targetRepo` | cross-repo disambiguation — needed only because `humanId` was repo-scoped | **no replacement** — `uid` is globally unique across every project in the store, so a `relate` between two issues in different projects needs no repo parameter at all; `relate(sourceUid, targetUid, rel, action)` just works |
 | `migrateRepo`'s `fromRepo`/`toRepo`/`planRepo`, `RepoMigrationPlan`/`RepoMigrationResult` | the whole repo-string-collision-repair module | already wiped by §7 ("the repo-migration module... folded into first-class `project`/`component`/`location` nodes") — restated here only for completeness, since nothing this section still owes a mapping for |
@@ -705,7 +860,7 @@ node (§4a). A missing/blank `by` on a mutating verb throws
 ```ts
 interface IIssueGetInput {
   uid: string;
-  fields?: readonly IIssueField[]; // §6.5; default DEFAULT_CARD_FIELDS + projectPath-equivalent + updatedAt
+  fields?: readonly IIssueField[]; // default: the SAME five-field card as §6.5/AC-13 — ['uid','kind','title','status','priority']
 }
 ```
 
@@ -719,10 +874,10 @@ interface ICreateIssueInput {
   title: string;
   body: string;
   project: string;   // uid or name — resolved per §6.1; REQUIRED (every issue has a component chain)
-  component?: string; // uid or name, scoped within `project`; auto-created via the write layer's hand-composed find-then-create (§4c) ONLY when given as a name that already resolves to an existing component under `project` — an unresolved name here throws CatalogNotFoundError('component', name) rather than silently forking a new component (see §6.1's project-vs-component asymmetry: components are NOT auto-vivified by createIssue, use upsertComponent first)
+  component?: string; // uid or name, scoped within `project`; RESOLVED ONLY, never created — the write layer's hand-composed find-then-create (§4c) runs its find-half alone here: a name that resolves to an existing component under `project` is used as-is, and an unresolved name throws CatalogNotFoundError('component', name) rather than silently forking a new component (see §6.1's project-vs-component asymmetry: components are NOT auto-vivified by createIssue, use upsertComponent first)
   kind?: string;      // catalog name or uid; default catalog row "issue" if the project defines no default
-  status?: string;    // catalog name or uid; default is the project's configured initial status (project_policy — falls back to a global default "OPEN"-equivalent catalog row)
-  priority?: string;  // catalog name or uid; optional
+  status?: string;    // catalog name or uid; default is the project's configured initial status (project_policy — falls back to a global default "OPEN"-equivalent catalog row); an unresolved name MINTS a new status catalog row (§2, unlike `component` above) with terminal:false — a novel status name is presumed non-terminal until an operator deliberately reconciles it, so a typo can never silently close or exclude items under an unrecognized status
+  priority?: string;  // catalog name or uid; optional; an unresolved name mints a new priority catalog row (§2) with rank set to one past the current max rank (i.e. lowest urgency) — a novel priority can never silently outrank an existing one
   citations?: Citation[];
   author?: string;    // catalog agent name/uid; defaults to `by`
   assignee?: string;  // plain metadata scalar (§6.2)
@@ -730,7 +885,7 @@ interface ICreateIssueInput {
   // duplicate-gate controls — §6.4
   duplicateAction?: 'abort' | 'force' | 'comment'; // default 'abort'
   // structural sugar — §6.2
-  children?: ICreateIssueInput[]; // each created, then `part_of` the freshly-minted parent, one transaction
+  children?: ICreateIssueInput[]; // each created, then `part_of` the freshly-minted parent, one transaction — see composition below
   supersedes?: string;            // uid of an existing issue this create supersedes — see composition below
 }
 
@@ -743,17 +898,45 @@ interface Citation {
 }
 ```
 
+**`children` composition (how N+1 writes land in ONE transaction):** a
+`create` call with `children` present still opens exactly the one
+`store.adapter.transaction(fn, {mode:'immediate'})` §4c mandates per
+verb — that rule is per PUBLIC VERB INVOCATION, not per node written. The
+parent's INSERT and every child's INSERT/edge/`part_of`-edge/audit writes
+all run, in sequence, through the SAME internal tx-threaded helpers §4c
+already defines for catalog resolution (a function taking the open `tx`
+handle, never opening one of its own) — a child is never dispatched as an
+independent public `create` call, which would attempt a second `BEGIN
+IMMEDIATE` nested inside the first; no savepoint/nested-transaction
+primitive is exposed by the store-adapter's `transaction()` API (§4c) for
+that to use even if it were attempted. Any child's catalog-resolution or
+duplicate-gate failure aborts the WHOLE transaction — a parent committed
+with only some of its children is never an observable state; the caller
+retries the entire `create` call.
+
 **`supersedes` composition (resolves the create/update overlap):** when
 `supersedes` is given, `create` does NOT mint a standalone new issue —
 instead it runs §4's `updateIssue(supersedes, {body: input.body})`
 (the `supersede`-backed content path) and returns that result mapped onto
 `ICreateOutcome`'s shape (`created: true`, `item`: the NEW node the
 `supersede` primitive minted, `supersededUid: input.supersedes`). Every
-other field on the input (`title`, `project`, `kind`, ...) is applied via a
-following `touch`/edge-write against the same new node, atomically, inside
-the SAME transaction the `supersede` call opened — this is the one case
-where `create`'s input maps onto `updateIssue`'s write path rather than
-`createIssue`'s.
+other field on the input EXCEPT `project`/`component` (`title`, `kind`,
+`priority`, `author`, `assignee`) is applied via a following `touch`/
+edge-write against the same new node, atomically, inside the SAME
+transaction the `supersede` call opened — mirroring exactly the
+touch+edge-rewrite `update` (§6.3.3) already defines for each of those
+fields; this is the one case where `create`'s input maps onto
+`updateIssue`'s write path rather than `createIssue`'s. `project`/
+`component` are handled separately, never via a generic edge-write:
+`owns_component`'s invalidate-old+write-new sequence is reserved to `move`
+(§6.3.6) specifically to guarantee at most one live edge ever exists, so a
+`create+supersedes` call naming a `project`/`component` different from the
+target's current placement runs `move`'s own
+`invalidateEdge(old owns_component)` + `writeEdge(new owns_component)`
+sequence internally — inside the SAME transaction, immediately after the
+supersede write, never as an ad hoc edge-write outside that sequence. A
+`project`/`component` matching the target's current placement is a no-op
+(nothing invalidated or rewritten).
 
 Output:
 
@@ -773,7 +956,10 @@ Errors: `CatalogNotFoundError('project'|'component'|'kind'|'status'|'priority', 
 `InvalidArgumentError` (missing `title`/`body`/`project`, or `citations[i].file`
 empty), `StaleSupersedeError(uid)` (only when `supersedes` is given — the
 body-change CAS (§4c) lost a race to a concurrent edit of the same target;
-nothing was written, re-`get` and retry), `WriteContentionError`/`WriteIOError`
+nothing was written, re-`get` and retry), `CitationUnverifiableError(target)`
+(policy-gated via `project_policy.citation_requires_sha`, §2 — a given
+citation's `file` did not resolve to a real, hashable file (§8.5) and the
+project requires one), `WriteContentionError`/`WriteIOError`
 (§4c — an exhausted driver-level retry on the underlying `immediate`
 transaction). `DuplicateSuppressedError` is NOT thrown — a suppressed create is a
 **success response** with `created:false` (mirrors v1's
@@ -839,7 +1025,7 @@ interface ITransitionInput {
   uid: string;
   by: string;
   toStatus: string;       // catalog name or uid
-  note: string;           // REQUIRED unless project_policy.transition_requires_note is false (default true)
+  note?: string;          // REQUIRED unless project_policy.transition_requires_note is false (default true) — optional in the type; the write layer enforces the policy-gated requirement at runtime, never at the TS level (see `NoteRequiredError` below)
   citations?: Citation[]; // REQUIRED (≥1) when project_policy.citation_required is true AND toStatus resolves to a terminal status
 }
 ```
@@ -864,10 +1050,26 @@ directly). So in SPEC-v2's graph-native re-interpretation
 (§3: "a first-class row is a node"), `closed_at` is
 `issue.meta.metadata.closedAt`, stamped by `touch` inside the SAME
 transaction that writes the `transition` node, whenever `toStatus.terminal`
-is true. This is not a downgrade: `NodeFilter.metadata` supports `gt`/`lt`/
-`between` operators (verified, `dist/index.d.ts:157-170`), so
-`filter.closedAt` range queries still push down to SQL exactly as a real
-column would.
+is true — and CLEARED (removed from the metadata object) in that same
+`touch` call whenever a transition's `toStatus` is NON-terminal, including a
+reopen of a previously-terminal issue. This clearing is not optional
+housekeeping: `touch(nodeId, meta)` REPLACES the entire `meta` column
+wholesale from the caller-supplied object rather than merging into it
+(verified, `@adhd/sox-graph-store@0.9.1` package dist, `dist/index.js:1482-
+1524` — `if (meta.metadata !== undefined) { … params.push(JSON.stringify(
+meta.metadata)) }`, one full-blob `UPDATE`, no merge with the existing row).
+So the write layer must build the new metadata object with `closedAt`
+explicitly omitted whenever `toStatus.terminal` is false; carrying the prior
+value forward — the natural bug if an implementer spreads the existing
+metadata and only overwrites `claimedBy`/`status`-adjacent keys — leaves a
+reopened issue's `closedAt` stamped with its LAST closing timestamp,
+indistinguishable from a currently-closed issue. This is not a downgrade:
+`NodeFilter.metadata` supports `gt`/`lt`/`between` operators (verified,
+`dist/index.d.ts:157-170`), so `filter.closedAt` range queries still push
+down to SQL exactly as a real column would — PROVIDED `closedAt` is cleared
+on reopen; a stale value would corrupt exactly this range-query guarantee
+(a reopened issue would keep matching `filter.closedAt.until` as though
+still closed).
 
 Errors: `IssueNotFoundError`, `CatalogNotFoundError('status', toStatus)`,
 `NoteRequiredError` (policy-gated), `CitationRequiredError` (policy-gated,
@@ -875,6 +1077,10 @@ terminal-only) — both replace v1's three-way
 `requiresCitation`/`requiresReason` split (§6.2) with the single
 `project_policy.citation_required` boolean; there is no more
 terminal-done-vs-terminal-dismissed distinction to error on.
+`CitationUnverifiableError(target)` (policy-gated via
+`project_policy.citation_requires_sha`, §2 — a given citation's `sha`
+resolved to the `"unverified"` sentinel, §8.5, and the project requires a
+real hash).
 `WriteContentionError`/`WriteIOError` (§4c) surface an exhausted
 driver-level retry on the underlying `immediate` transaction.
 
@@ -976,11 +1182,16 @@ interface IRelateOutcome {
 }
 ```
 
-Single-valued rels (`supersedes`, `duplicate_of` — each declared `1:n` in
-§3, meaning ONE target per source) reject a second `add` with a DIFFERENT
-target: `SingleValuedRelationConflictError(sourceUid, rel, existingTargetUid)`
-(carrying forward BUG-025/BUG-044's "never silently pick one" rule). A
-second `add` with the SAME target is `noop:true`, not an error.
+Single-valued rels (`supersedes`, `duplicate_of`, `part_of` — each declared
+`n:1` in §3, meaning ONE target per source) reject a second `add` with a
+DIFFERENT target: `SingleValuedRelationConflictError(sourceUid, rel,
+existingTargetUid)` (carrying forward BUG-025/BUG-044's "never silently pick
+one" rule). A second `add` with the SAME target is `noop:true`, not an
+error. This is the generic `edge_kind.multiplicity` check (§2) applied to
+these three `n:1` rows — not a separate list hardcoded into `relate` — so
+`part_of` (an item has exactly one live parent — §6.2's plan-attachment,
+§6.3.2's `children` composition) is rejected identically to the other two,
+and any future `n:1` rel is covered the same way with no change here.
 
 ```ts
 interface IMoveIssueInput {
@@ -1044,7 +1255,24 @@ product-feature half, which stays real:
    `StoreSearchBackend.searchRanked` primitive §5a already wires for
    `view:"similar"` (`signals:[{text},{vec}]`), scoped to
    `filter.project` (the target project only — cross-project title
-   collisions are not duplicates), over `{title, body}`.
+   collisions are not duplicates), over `{title, body}`. This scan runs
+   **before** the `immediate` transaction opens, never inside it:
+   `searchRanked` is an external, potentially network-backed round-trip (an
+   embedding-service call), and holding the RESERVED lock across that
+   round-trip would stall every other concurrent writer for its duration —
+   the exact failure mode §4c's `immediate`-mode table exists to prevent
+   for every check-then-act it covers. That placement makes the scan
+   deliberately **not** a CAS: two concurrent `createIssue` calls filing
+   near-identical content can both see zero candidates and both commit,
+   producing two rows that no transaction boundary closes the window on.
+   This is an accepted gap, not an oversight — the duplicate gate is a
+   filing-time UX feature (warn a human filer before they mint a redundant
+   row), never a uniqueness invariant. §1 already establishes identity is
+   `uid`, never content, so two duplicate rows landing from a lost race are
+   a missed warning, not a correctness defect — unlike every row in §4c's
+   mode table, which protects a real invariant (single-valued rels, claim
+   leases, edge cardinality) and therefore does need the airtight CAS
+   `immediate` provides.
 2. **Threshold is data, not code** — extending DATA_MODEL_v2 §2's
    `project_policy` table with two more project-tunable columns:
    `dedupe_scan_enabled` (default `true`) and `dedupe_threshold` (default
@@ -1053,7 +1281,13 @@ product-feature half, which stays real:
    distinct issues can raise its own threshold or disable the scan; the
    default stays on for every project that never opts out.
 3. **`duplicateAction` decides what happens when the scan finds ≥1
-   candidate at or above threshold:**
+   candidate at or above threshold.** Zero candidates at/above
+   `dedupe_threshold` is not a branch of `duplicateAction` at all: whichever
+   action was requested (`'abort'`/`'force'`/`'comment'`), a scan that
+   finds nothing proceeds straight to a normal create (`{created:true,
+   uid}`, no `duplicateCandidates` field) — there is nothing for `'abort'`
+   to suppress, `'force'` to write past, or `'comment'` to attach to. With
+   ≥1 candidate:
    - `'abort'` (default) — nothing is written. Response:
      `{created:false, reason:'duplicate-suppressed', duplicateCandidates}`.
    - `'force'` — the scan still runs (candidates are still reported, for
@@ -1087,8 +1321,10 @@ interface IIssueQueryInput {
   sort?: 'priority' | 'updated' | 'created' | 'relevance' | 'textMatch';
   direction?: 'asc' | 'desc';
   limit?: number;   // default 50, max 1000 (MAX_QUERY_LIMIT unchanged from v1) — see composition rule 6 below
+  offset?: number;  // offset-based paging when `after` is absent — see rule 6; mutually exclusive with `after` (rule 5), unstable under concurrent writes by design
   after?: string;   // opaque keyset cursor from a prior page's `nextCursor` — see rule 5
   view?: 'list' | 'ready' | 'graph' | 'order' | 'stale' | 'similar' | 'overlap'; // §5's existing view union, carried forward
+  format?: 'json' | 'markdown'; // default 'json'; 'markdown' renders this same page as issue-titled headers + `[target sha:…]` citations, never a second code path (§6.6)
 }
 
 interface IIssueFilter {
@@ -1117,11 +1353,22 @@ scaffolding):
 ```
 plain (cheap, always included when requested):
   uid, title, kind, status, priority, project, component,
-  createdAt, updatedAt, assignee, author
+  createdAt, updatedAt, assignee, author, closedAt
 pseudo (opt-in only — never in the default card, each costs a real extra read):
-  body, citations, notes, auditTrail, blockers, related, closedAt,
+  body, citations, notes, auditTrail, blockers, related,
   _score, _vector
 ```
+
+`closedAt` is classified `plain`, not `pseudo`: it is a scalar key inside the
+SAME `issue.meta.metadata` JSON blob `assignee` already lives in (§6.3.4),
+read in the identical single-row fetch — there is no second query, unlike
+every genuine `pseudo` field (`citations`/`notes`/`auditTrail`/`blockers`/
+`related` each require a separate edge traversal to another node kind;
+`_score`/`_vector` only exist on a `searchRanked` response; `body` is
+excluded for context-size reasons, §6.2's 'context-blow defense', not read
+cost). Classifying it `pseudo` under this section's own stated criterion
+('each costs a real extra read') was inconsistent with `assignee`'s `plain`
+classification given they are mechanistically identical.
 
 Default (`fields` omitted): `['uid', 'kind', 'title', 'status', 'priority']`
 — the exact five-field terse card v1's `DEFAULT_CARD_FIELDS` already
@@ -1168,7 +1415,23 @@ its key names (`humanId` → `uid`).
    SAME `ids` restriction as their own `filter` argument (both accept one,
    verified: `searchNodes(query, {limit?, offset?, filter?: NodeFilter})`)
    so a keyword/semantic search still composes with every edge-scoped
-   filter rather than searching the whole store and filtering after.
+   filter rather than searching the whole store and filtering after. **When
+   BOTH `grep` and `semantic` are given** (`filter.semantic`'s own comment,
+   above: 'composes with grep, neither swallows the other'), the mechanism
+   is: run them as two INDEPENDENT scans over that same edge-restricted
+   candidate set — `searchNodes(grepQuery, {filter})` (FTS-only, per
+   `grep`'s keyword-only rule) and `searchRanked({vec: embed(semanticQuery),
+   signals:[{vec}]}, limit)` (the embedding-only path, §5a; verified,
+   `@adhd/sox-hybrid-search@0.4.2 dist/index.d.ts:29-34` — `SearchQuery`
+   takes one `text`/`vec` pair, never two independently-scored query
+   strings, so `grep` and `semantic` cannot be fused into one `searchRanked`
+   call) — then INTERSECT the two candidate id sets, the SAME AND-
+   composition rule 3 already applies across multiple edge-scoped filters.
+   The surfaced `_score`/ordering come from the semantic pass; grep's pass
+   only gates membership. This is exactly how 'a title/body text match
+   surfaces even when its vector is not nearest' (§5a) holds when both are
+   given: grep's intersection guarantees the row is present at all,
+   semantic's ranking decides where it sorts.
 5. **Keyset stability (`after` given).** Per the verified library contract
    (`dist/index.d.ts:206-212`): `after` compiles to `WHERE rowid > ?
    ORDER BY rowid ASC`, **ignoring** `orderBy`/`offset` entirely. So: a
@@ -1176,7 +1439,19 @@ its key names (`humanId` → `uid`).
    also supply `sort` — `query({after, sort:'priority'})` throws
    `InvalidArgumentError('sort', 'sort is incompatible with keyset
    pagination (after) — request the first page unsorted, or page by
-   offset if a non-insertion order is required')`. This ordering is
+   offset if a non-insertion order is required')`. The SAME incompatibility
+   holds against `filter.grep`/`filter.semantic`: both route through
+   `searchNodes`/`searchRanked` (rule 4), which order by FTS/fusion score,
+   never by rowid — `searchRanked(query, limit)` (verified,
+   `@adhd/sox-hybrid-search@0.4.2 dist/index.d.ts:204`) takes no `after`/
+   keyset parameter at all, and `searchNodes`'s own `opts` (verified,
+   `@adhd/sox-graph-store@0.9.1 dist/index.d.ts:293-296`) exposes `offset`,
+   never `after`, at its top level — so `query({after, filter:{grep:...}})`
+   (or `semantic`) throws the same `InvalidArgumentError('after', 'after
+   (keyset) is incompatible with grep/semantic search — these route through
+   the ranked search primitives, which have no rowid-ordered keyset
+   contract; page a searched result set by sort + offset (rule 6) instead')`.
+   This ordering is
    provably stable and gapless under concurrent writes: every page's
    cursor is a strictly-increasing rowid boundary, a concurrent INSERT
    always lands at a HIGHER rowid than anything already paged (so it can
@@ -1291,7 +1566,7 @@ Source: `BacklogItem` (model.ts:128-170) as materialized by `toBacklogItem`
 | `title` | `issue.title` | Verbatim. |
 | `body` | `issue.body` | Verbatim, untouched — including any humanId-shaped text inside it (§8.3's "free text is not rewritten"). |
 | `status` | `status` catalog row + `has_status` edge | The write layer's hand-composed find-then-create (§4c), scoped to `(kind:'status', name:value)`. Catalog seeded once, up front (§8.6 step 2) with `terminal` taken directly from `TERMINAL_STATUSES` (model.ts:56-68) — not re-derived per item. |
-| `priority` | `priority` catalog row + `has_priority` edge, iff present | The write layer's hand-composed find-then-create (§4c), scoped to `(kind:'priority', name:value)`; `rank` seeded from the already-existing `PRIORITY_RANK` constant (store/query.ts:32: `CRITICAL:0, HIGH:1, MEDIUM:2, LOW:3`) — reused verbatim so every v1 sort-by-urgency comparator ports unchanged. No edge written when `priority` is absent (~36% of the corpus, per `byPriorityAllStatuses` summing to 937 of 1476) — never defaulted to a fabricated value. |
+| `priority` | `priority` catalog row + `has_priority` edge, iff present | The write layer's hand-composed find-then-create (§4c), scoped to `(kind:'priority', name:value)`; `rank` seeded from the already-existing `PRIORITY_RANK` constant (store/query.ts:32: `CRITICAL:0, HIGH:1, MEDIUM:2, LOW:3`) — reused verbatim so every v1 sort-by-urgency comparator ports unchanged. No edge written when `priority` is absent — `byPriorityAllStatuses` sums to 937 of 1476 items WITH a priority present, leaving 539 absent (~36% of the corpus) — never defaulted to a fabricated value. |
 | `repo` | `project` catalog row (the write layer's hand-composed find-then-create, or `upsertProject` — §4c/§3a) | Normalized per §8.3, then an issue is never linked to a project directly — see `projectPath` below for the required `owns_component` hop. |
 | `projectPath` | `component` row (`upsertComponent`) + `owns_component` edge | The write layer's hand-composed find-then-create (§4c) scoped by project `uid` (§1's edge-scoped uniqueness policy) — the same composition `upsertComponent` (§3a/§4) uses, never a call to `findOrCreateNode()`. **Gap resolved:** SPEC-v2's edge table has no direct project→issue edge — every issue must hang off a `component`. A v1 item with no `projectPath` (repo-level item) is filed under a synthetic **default component** named `(root)`, one per project, created the same way as any other component (unique per project, §1) — not a new edge kind, just a real component that happens to represent "no sub-area." |
 | `plan` | — (no v2 field) | No plan catalog in this spec (§11: data-model changes beyond it are out of scope). Folded into the audit note (§8.2a). The v1 `MEMBER_OF` edge to the synthetic plan node (store/structure.ts:351-359) collapses into the same note — it is the graph realization of this same string, nothing more. |
@@ -1359,7 +1634,12 @@ byte-identical, because both come from one JS statement. Reconstruction:
    `to_status` = the item's current status, `agent` = the item's `author` (or
    the literal string `unknown` if even that is absent), `at` = `createdAt`,
    `note = "[note_synthesized] pre-audit-log history unrecoverable; status at
-   migration time: <status>"`. `sha` is computed the normal way (§4a) over
+   migration time: <status>"`, extended — only when the item's current status
+   is terminal — with `"; closedAt reconstructed from updatedAt, not a
+   genuine closing timestamp"` (this is the exact call-out the `closed_at`
+   row of §8.1 promises; a non-terminal item's synthesized note needs no such
+   suffix, since §8.1's fallback only ever fires for a currently-terminal
+   item). `sha` is computed the normal way (§4a) over
    whatever was actually written — a hash of the record, not a truth claim
    about history. This is what makes v2's hard "no bare transition" rule
    (agent+note+sha always present) hold for every migrated issue without
@@ -1387,8 +1667,8 @@ verbatim, once, per issue — never both silently discarded and unmentioned.
 |---|---|---|
 | `RELATES_TO` (issue→issue, one directed edge standing in for a symmetric relation — model.ts:2592-2599, store/link-related.spec.ts:68) | `relates_to` (issue→issue, n:m) | Same direction, copied once. |
 | `SUPERSEDES` (new→old, store/structure.ts:267 via `graph.supersede()`) | `supersedes` (issue→issue, lowercase, catalog relation — SPEC-v2 §3) | Same direction (new→old). SPEC-v2 §3 explicitly keeps the two vocabularies (uppercase content-mutation vs. lowercase catalog relation) distinct; the ETL writes the catalog form since it is not performing a live content edit. |
-| `SAME_AS` (drop→keep, store/structure.ts:334) | `duplicate_of` (issue→issue, 1:n) | v1 has no edge named `duplicate_of` at all — `SAME_AS` is `mergeItems`' actual mechanism and is the only source of duplicate-relation data. Same direction (dropped/duplicate → kept/canonical). |
-| `PART_OF` (child→parent, store/structure.ts:300) | `part_of` (issue→issue, 1:n) | Same direction; matches SPEC-v2 §3's own framing ("hierarchical items, FEAT-005") exactly. |
+| `SAME_AS` (drop→keep, store/structure.ts:334) | `duplicate_of` (issue→issue, n:1) | v1 has no edge named `duplicate_of` at all — `SAME_AS` is `mergeItems`' actual mechanism and is the only source of duplicate-relation data. Same direction (dropped/duplicate → kept/canonical). |
+| `PART_OF` (child→parent, store/structure.ts:300) | `part_of` (issue→issue, n:1) | Same direction; matches SPEC-v2 §3's own framing ("hierarchical items, FEAT-005") exactly. |
 | `DEPENDS_ON` (dependent→dependency, i.e. `src` can't proceed until `dst` is done — store/structure.ts:66, confirmed by `blockers()`'s own semantics at store/query.ts:806-813: it returns the non-terminal targets of `src`'s own `DEPENDS_ON` edges) | `blocks` (blocker→blocked, SPEC-v2 §3: "inverse = blocked_by, derived") | **Direction is REVERSED, not copied.** v1 `A DEPENDS_ON B` means B blocks A; v2's `blocks` edge is written `B → A`. SPEC-v2 §3's own edge table defines `depends_on` as `component → component` — a different, component-scoped relation with no v1 source data at all (this ETL writes zero rows into it; it is seeded, empty, for future component-dependency work). The issue-level blocking relation v1 actually has lives entirely in `blocks`. Getting this backwards silently inverts `topoOrder`/readiness semantics. |
 | `MEMBER_OF` (item→plan node, store/structure.ts:351-386) | — | No v2 destination (§8.1's `plan` row). |
 | `IN_REPO` / `IN_PACKAGE` / `PROJECT_OF` / `DERIVED_FROM` (repo-dimension scaffolding, store/repo-nodes.ts:130-148, store/audit-log.ts:99) | — (replaced, not migrated) | This machinery is explicitly wiped and replaced by the registry (§7); it is not copied as data. Its INFORMATION seeds the repo normalization decision below instead. |
@@ -1425,13 +1705,16 @@ stop resolving by design"), but the ETL's OWN edge-rewriting pass (below) must
 still resolve a v1 edge recorded against a pre-rename humanId to the correct,
 current node.
 
-**Repo-key normalization.** The live corpus (`byRepoAllStatuses`, `query
---input '{"view":"summary"}'`, run 2026-09-04) confirms both `"adhd"` (6
-items) and `"PseudoSky/adhd"` (342 items) are live today, plus 15 other
-distinct repo strings (`sox-ecosystem`, `claude-agents`, `claude-tools`,
-`reverse-apis`, `global`, `scratch`, `legacy-repo`, three `zz-*-scratch-*`
-probes, `refuter-test-repo`, `qusecure/ceo-report`, `id8/dot`, two
-`PseudoSky/*` test repos — 17 distinct repo strings total). Resolution:
+**Repo-key normalization.** The live corpus's ALL-STATUSES breakdown
+(`byRepoAllStatuses`, `query --input '{"view":"summary"}'`, run 2026-09-04 —
+distinct from the OPEN-only `byRepo` key, which reports a much smaller slice
+since only 605 of 1482 items are open) confirms both `"adhd"` (15 items) and
+`"PseudoSky/adhd"` (658 items) are live today, plus 21 other distinct repo
+strings (`sox-ecosystem` 678, `claude-tools` 43, `claude-agents` 19,
+`reverse-apis` 18, `scratch` 9, `global` 4, `QuSecure/claude-tools` 5,
+`qusecure/ceo-report` 2, `id8/dot` 2, `legacy-repo` 1, `refuter-test-repo` 1,
+six `zz-*-scratch-*` probes, and four `PseudoSky/*` test repos — 23 distinct
+repo strings total, 1482 items). Resolution:
 
 - `adhd` / `PseudoSky/adhd` reconcile to **one** `project` row, name `"adhd"`
   — the bare form v1's OWN existing `normalizeRepoKey` (model.ts:2219-2226:
@@ -1446,7 +1729,7 @@ probes, `refuter-test-repo`, `qusecure/ceo-report`, `id8/dot`, two
   never merged into a shared bucket and never dropped** — this is the
   explicit decision DATA_MODEL_v2 §9 point 3 asks for regarding
   `global`/`scratch`/`legacy-repo`-shaped strings. Rationale: each already
-  carries real, distinct issues (1 to 190 of them); silently merging
+  carries real, distinct issues (1 to 678 of them); silently merging
   unrelated repos to "unmanaged" would be a second instance of exactly the
   `adhd`/`PseudoSky/adhd` collapse-by-string-drift bug this ETL exists to
   fix, just aimed at genuinely different projects. `path`/`repoUrl` are left
@@ -1481,7 +1764,11 @@ ever meant to dangle.
 
 ### 8.5 Citation repair (~320 items, `Citation.file` → now-deleted `BACKLOG.md` paths)
 
-Resolves DATA_MODEL_v2 §10 point 1. For every citation:
+Resolves DATA_MODEL_v2 §10 point 1. **This is also the canonical rule for
+computing `citation.sha` on the LIVE write path** (§6.3.2's `create`,
+§6.3.4's `transition`) — the ETL is simply the first, bulk caller of the
+same two-branch procedure the write layer runs for every citation, at
+creation time, forever after. For every citation:
 
 1. Resolve the issue's owning project's `path` (only `adhd` has one — §8.4).
    No known project path ⇒ go to step 3 directly.
@@ -1627,8 +1914,12 @@ asserted from a remembered count:**
 ## 9. Acceptance (negative-control teeth)
 
 1. `rg 'humanId'` over the v2 layer is empty; identity is `uid`.
-2. **Live-path identical-content:** two `createIssue` with identical body
-   produce two distinct `uid`s (skipDedupe:true on the live path, not just ETL).
+2. **Live-path identical-content:** two `createIssue` calls with
+   byte-identical `{title, body}` in the same project, the second passed
+   `duplicateAction:'force'`, produce two distinct `uid`s (skipDedupe:true
+   on the live path, not just ETL — `force` is the one `duplicateAction`
+   §6.4 point 3 guarantees this for; the default `'abort'` suppressing that
+   same identical pair instead is AC-19's assertion, not this one).
 3. **Automatic audit:** every transition/update/move/invalidate/embedding write
    produces one audit node (`actor`+`action`+`sha`); a transition missing
    `agent`/`note`/`sha` is rejected (red without the check).
@@ -1661,7 +1952,7 @@ asserted from a remembered count:**
     trio concurrently from two real OS processes still yields one row each.
 13. **`get`:** `get({uid})` with no `fields` returns exactly the five-field default card (`uid,kind,title,status,priority`); requesting the pseudo field `body` returns it; `get` on a `uid` that resolves to no live node throws `IssueNotFoundError(uid)`.
 14. **`update` touch + no-silent-discard:** `update({uid, by, title:'x'})` returns `changed:['title']`; a zero-field patch throws `InvalidArgumentError`; a call carrying `status` in its input is rejected naming `transition`, never silently applied as a status change (proves DEBT-010 cannot recur through `update`).
-15. **`transition` closedAt stamp:** transitioning an issue to a `terminal` status stamps `issue.meta.metadata.closedAt` and the outcome's `closedAt`, and `filter.closedAt.since` retrieves it via a subsequent `query`; transitioning to a non-terminal status leaves `closedAt` unset.
+15. **`transition` closedAt stamp:** transitioning an issue to a `terminal` status stamps `issue.meta.metadata.closedAt` and the outcome's `closedAt`, and `filter.closedAt.since` retrieves it via a subsequent `query`; transitioning a currently-terminal issue to a non-terminal status (reopen) CLEARS `issue.meta.metadata.closedAt` in the same `touch` call, and a subsequent `query({filter:{closedAt:{since:<the old closedAt>}}})` no longer matches the reopened issue — proving the stale-timestamp case has teeth, not just an unset-on-first-transition case.
 16. **`claim` CAS lease:** `claim` on an unclaimed issue returns `status:'claimed'`; a second `claim` by a DIFFERENT agent within `claim_stale_after_min` throws `ClaimHeldError`; the same call with `force:true` returns `status:'reclaimed-stale'` with `previousClaimant` set to the ousted agent; two concurrent `claim` calls against the SAME fresh uid, run as real barrier-synchronized OS processes, never both report `status:'claimed'` — exactly one wins (red if the CAS transaction is downgraded off `immediate`).
 17. **`relate`/`move` outcomes:** a second `relate(...,'supersedes','add')` naming a DIFFERENT target than an existing edge throws `SingleValuedRelationConflictError`; the SAME target returns `noop:true`; after `move`, exactly one live `owns_component` edge exists for the issue, both before and after — never two.
 18. **`delete` is soft:** `delete(uid, reason)` returns `{invalidated:true}`; the issue disappears from a default `query` listing but `getNodeByUid(uid)` still resolves it (bi-temporal, never a hard delete).
@@ -1677,13 +1968,25 @@ asserted from a remembered count:**
    (the stable-identity correction — the ONE library change this plan required).
 2. **Bump deps + build v2 fresh, in ONE change** (full replacement — no v1
    build to protect): `entrypoint/backlog/package.json` bumps to graph-store
-   0.9.1 / store-adapter 0.8.0 / vector-store 0.6.0 and ADDs hybrid-search
+   0.9.1 / store-adapter 0.9.0 / vector-store 0.6.0 and ADDs hybrid-search
    0.4.2 / semantic 0.1.2 / embedding-provider 0.4.1, alongside the new
    `v2-write.ts` → `v2-query.ts` → consumers. The old v1 code is wiped in the
    same change; there is no intermediate state where both compile.
-3. BUG-040 ETL re-run (restore 1339 transitions + 7 issues into the fresh v2 store).
-4. **Gate before cutover: BUG-039 write-safety proof against the UUID write
-   path — confirmed, not assumed, by the procedure in §10.4.**
+3. **Gate before any data is written: BUG-039 write-safety proof against the
+   UUID write path — confirmed, not assumed, by the procedure in §10.4.** Per
+   §8's own opening rule ("the ETL does not start until the BUG-039
+   write-safety proof ... is green — never write real data onto an unproven
+   write path"), this step MUST be green before step 4 runs; it is not a
+   second, independent check that merely happens to be listed last.
+4. **Run the full §8 migration ETL** (§8.1-8.8, every live v1 item — 603 open
+   / 1476 total at last count) against the now write-safety-proven v2 store.
+   This single run is what resolves BUG-040 in practice: the 1339 transitions
+   and 7 issues the library's global content-hash dedup previously collapsed
+   (BUG-040, already fixed at the library tier in step 1) land correctly for
+   the first time, confirmed by §8.8's acceptance-gate parity check (clause 2:
+   v1 source count equals v2 written count per entity kind, transitions
+   included) — there is no separate "BUG-040 ETL re-run" distinct from this
+   one corpus-wide run.
 
 ### 10.4 Gate procedure
 
