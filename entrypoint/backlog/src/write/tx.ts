@@ -175,29 +175,146 @@ export interface IWriteNodeTxInput {
    * it records was created.
    */
   at?: string;
+  /**
+   * NOT a real input — {@link writeNodeTx} unconditionally never dedupes (see
+   * its own doc comment below) and never reads a dedupe flag off `input` at
+   * all. Declared here ONLY as `never` so that a future call site which
+   * writes `{ ..., skipDedupe: true }` (or `false`) — believing, from having
+   * read the library's own `writeNodeInTx` signature, that this is a real
+   * per-call toggle — fails to COMPILE (excess-property check on an object
+   * literal) instead of silently having the property ignored. SPEC.md §1/§4
+   * state "All entity writes pass `skipDedupe: true`" with NO kind-scoped
+   * exception anywhere in the spec — every kind this write layer ever
+   * composes (`project`/`component`/`location`/`issue`/`kind`/`edge_kind`/
+   * `status`/`priority`/`agent`/`note`/`citation`/`transition`/`audit`,
+   * SPEC.md §3) skips dedupe unconditionally, so there is no legitimate
+   * call-site variance to gate: the safest surface for "always true" is a
+   * surface that cannot express anything else.
+   */
+  skipDedupe?: never;
+}
+
+/**
+ * The ONLY two legal values for {@link resolveDedupeMode}'s env var — named
+ * and structured to mirror {@link TX_MODES}/{@link resolveTransactionMode}
+ * EXACTLY (same two-value closed set, same "unset → the safe production
+ * default" rule, same "unrecognized value throws loudly" rule). `'off'` is
+ * what every write verb runs with in normal operation and is what
+ * {@link IWriteNodeTxInput.skipDedupe}'s `never` typing already makes
+ * uncontrollable from any call site (§1/§4: "All entity writes pass
+ * `skipDedupe: true`," no kind-scoped exception).
+ */
+const DEDUPE_MODES = ['off', 'on'] as const;
+type DedupeMode = (typeof DEDUPE_MODES)[number];
+
+/**
+ * `ADHD_BACKLOG_UNSAFE_DEDUPE_MODE` — the SOLE switchable point for whether
+ * {@link writeNodeTx} runs the library's own content-hash dedupe SELECT
+ * before inserting (`@adhd/sox-graph-store` `writeNodeInTx`,
+ * `!opts?.skipDedupe` branch) instead of always inserting a fresh row.
+ *
+ * **DANGER — negative-control test use ONLY. Never set this in normal
+ * operation, a deployed process, or a developer's own shell profile.**
+ * Setting it to `'on'` restores the library's own default
+ * (`skipDedupe` falsy) behavior this write layer deliberately overrides
+ * everywhere: `content_hash` dedupe is GLOBAL (it ignores `kind` entirely,
+ * BUG-040 in `@adhd/sox-graph-store`'s own dist comment) and is exactly the
+ * downgrade `cross-process-write-safety.spec.ts`'s dedupe negative control
+ * inverts to prove its own negative control goes red — two identical-body
+ * `createIssue` calls, from two different callers, both reporting `ok:true`
+ * while only ONE row actually lands. It exists as an env var, not a
+ * source-level test hook or a parameter threaded through
+ * `IWriteStoreHandle`/{@link IWriteNodeTxInput} (whose `skipDedupe` field is
+ * typed `never` specifically so no call site can compile one in — see that
+ * field's own doc comment), specifically so the downgrade can NEVER be left
+ * behind as a forgotten source edit — an env var reverts itself the moment
+ * the process that set it exits, where a source edit sitting in a file does
+ * not (this repo has already shipped a release with exactly that failure
+ * mode, `DEBT-PROCESS-DISPATCH-RESIDUE-001`). This env switch is the ONLY
+ * door back to non-`skipDedupe` behavior in this write layer, and that is
+ * intentional.
+ *
+ * Read at the single point of use inside {@link writeNodeTx} on EVERY call —
+ * never cached into a module-level constant captured at import time — same
+ * discipline as {@link resolveTransactionMode}, for the same reason: a test
+ * can set it via `env: { ...process.env, ADHD_BACKLOG_UNSAFE_DEDUPE_MODE: 'on' }`
+ * on a per-run (or per-subprocess) basis with no re-import required.
+ *
+ * Unset (or exactly `'off'`) → `'off'`, the only mode used in normal
+ * operation (matches this file's unconditional `skipDedupe: true` INSERT).
+ * Exactly `'on'` → `'on'`. Any OTHER value throws loudly rather than
+ * silently defaulting to `'off'` — a mistyped negative control that quietly
+ * ran with dedupe off would make its own test pass for the wrong reason,
+ * which is worse than a visible crash.
+ */
+function resolveDedupeMode(): DedupeMode {
+  const raw = process.env['ADHD_BACKLOG_UNSAFE_DEDUPE_MODE'];
+  if (raw === undefined) return 'off';
+  if ((DEDUPE_MODES as readonly string[]).includes(raw)) return raw as DedupeMode;
+  throw new Error(
+    `ADHD_BACKLOG_UNSAFE_DEDUPE_MODE="${raw}" is not a recognized dedupe mode (expected "off" or "on"). ` +
+      'This variable exists solely for negative-control test runs and must never be set in normal operation; ' +
+      'an unrecognized value fails loudly rather than silently defaulting to "off" so a mistyped negative ' +
+      'control can never pass for the wrong reason.',
+  );
 }
 
 /**
  * Hand-composed node INSERT, issued against `tx`. Mirrors `writeNodeInTx`'s
  * own INSERT column list and defaults EXACTLY (`@adhd/sox-graph-store`
- * dist/index.js:1410-1421) with `skipDedupe: true` UNCONDITIONALLY — the spec
- * §1 requires this on every entity write ("two identical-body issues are two
- * rows, never one collapsed row"), so this function never runs the
- * content-hash SELECT `writeNodeInTx` runs when `skipDedupe` is falsy; it
- * always inserts a fresh row. `uid` is `crypto.randomUUID()` — the SAME
- * generator the library uses (`generateUid()`, dist/index.js:646-648) — so a
- * write-layer-written row is byte-for-byte indistinguishable in shape from one the
- * library itself would have written, just composed by hand to stay inside
- * the caller's own transaction.
+ * dist/index.js:1410-1421) with `skipDedupe: true` UNCONDITIONALLY in every
+ * normal run — the spec §1 requires this on every entity write ("two
+ * identical-body issues are two rows, never one collapsed row") — so this
+ * function skips the content-hash SELECT `writeNodeInTx` runs when
+ * `skipDedupe` is falsy, and always inserts a fresh row. `uid` is
+ * `crypto.randomUUID()` — the SAME generator the library uses
+ * (`generateUid()`, dist/index.js:646-648) — so a write-layer-written row is
+ * byte-for-byte indistinguishable in shape from one the library itself would
+ * have written, just composed by hand to stay inside the caller's own
+ * transaction.
+ *
+ * **`skipDedupe` is uncontrollable from any call site, by construction, not
+ * by per-call convention.** {@link IWriteNodeTxInput} has no way to ask this
+ * function to dedupe (its `skipDedupe` field is typed `never` specifically
+ * so no call site can even compile one in). This is deliberate: seven more
+ * write verbs (`update`/`transition`/`claim`/`relate`/`move`/`delete`/
+ * `supersede`) are built on top of this file by separate agents, and
+ * SPEC.md §1/§4 ("All entity writes pass `skipDedupe: true`") name NO kind
+ * that is exempt — the catalog kinds (`kind`/`status`/`priority`/`agent`/
+ * `edge_kind`), the resolved-only kinds (`project`/`component`), and every
+ * subject kind (`issue`/`note`/`citation`/`transition`/`audit`/`location`)
+ * all go through this SAME unconditional INSERT. A future call site cannot
+ * "forget" to pass `skipDedupe: true` because there is no longer any code
+ * path — in this function OR in its input type — where forgetting it would
+ * change behavior. The ONLY door back to the library's own dedupe behavior
+ * is {@link resolveDedupeMode}'s env switch, checked below — negative-control
+ * test use only, never a per-call toggle.
  */
 export async function writeNodeTx(tx: AdapterTransaction, input: IWriteNodeTxInput): Promise<{ rowid: number; uid: string }> {
-  const uid = randomUUID();
   const now = input.at ?? nowISO();
   const content = input.content ?? input.name ?? '';
   // The library's own dedupe hash (trim + lowercase, dist/index.js:642-644)
   // — stored for schema parity with a library-written row even though
-  // skipDedupe:true means the write layer never looks this column up by value.
+  // skipDedupe:true (the production default) means the write layer never
+  // looks this column up by value.
   const contentHash = sha256Hex(content.trim().toLowerCase());
+
+  if (resolveDedupeMode() === 'on') {
+    // Negative-control-only path: mirrors `writeNodeInTx`'s own
+    // `!opts?.skipDedupe` branch (`SELECT rowid FROM node WHERE content_hash
+    // = ?`, dist/index.js:1400-1401) exactly, with `uid` added to the
+    // projection — the library's own version returns a bare `rowid` because
+    // its callers never need more; this write layer's contract always
+    // returns `{ rowid, uid }`, and `uid` is a column already present on the
+    // SAME matched row, not a second query or a new SQL shape.
+    const existing = await tx.executeGet<{ rowid: number; uid: string }>(
+      'SELECT rowid, uid FROM node WHERE content_hash = ?',
+      [contentHash],
+    );
+    if (existing) return { rowid: existing.rowid, uid: existing.uid };
+  }
+
+  const uid = randomUUID();
   const metaJson = input.metadata !== undefined ? JSON.stringify(input.metadata) : null;
 
   const result = await tx.executeGet<{ rowid: number }>(
@@ -422,10 +539,65 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * The ONLY two legal values for {@link resolveTransactionMode}'s env var.
+ * `immediate` is what every acceptance criterion in SPEC.md §4c requires in
+ * normal operation (`BEGIN IMMEDIATE` — the RESERVED-lock-at-BEGIN
+ * compare-and-swap primitive every check-then-act verb depends on).
+ */
+const TX_MODES = ['immediate', 'deferred'] as const;
+type TxMode = (typeof TX_MODES)[number];
+
+/**
+ * `ADHD_BACKLOG_UNSAFE_TX_MODE` — the SOLE switchable point for the
+ * transaction mode {@link executeWriteTransaction} opens every write with.
+ *
+ * **DANGER — negative-control test use ONLY. Never set this in normal
+ * operation, a deployed process, or a developer's own shell profile.**
+ * Setting it to `deferred` strips the `BEGIN IMMEDIATE` RESERVED-lock
+ * compare-and-swap guarantee every check-then-act write verb in this module
+ * relies on (SPEC.md §4c) — this is the EXACT downgrade AC-22 (cross-process
+ * write safety) and AC-16 (concurrent claim CAS) invert to prove their own
+ * negative control goes red. It exists as an env var, not a source-level
+ * test hook or a parameter threaded through `IWriteStoreHandle`, specifically
+ * so the downgrade can NEVER be left behind as a forgotten source edit — an
+ * env var reverts itself the moment the process that set it exits, where a
+ * source edit sitting in a file does not (this repo has already shipped a
+ * release with exactly that failure mode, `DEBT-PROCESS-DISPATCH-RESIDUE-001`).
+ *
+ * Read at the single point of use inside {@link executeWriteTransaction} on
+ * EVERY call — never cached into a module-level constant captured at import
+ * time — so a test can set it via `env: { ...process.env, ADHD_BACKLOG_UNSAFE_TX_MODE: 'deferred' }`
+ * on a per-run (or even per-subprocess) basis without needing this module to
+ * be re-imported.
+ *
+ * Unset (or exactly `'immediate'`) → `'immediate'`, the only mode used in
+ * normal operation. Exactly `'deferred'` → `'deferred'`. Any OTHER value
+ * (a typo'd `'Deferred'`, `'defered'`, `'none'`, …) throws loudly rather than
+ * silently falling back to `'immediate'` — a mistyped negative control that
+ * quietly ran in safe mode would make its own test pass for the wrong
+ * reason, which is worse than a visible crash.
+ */
+function resolveTransactionMode(): TxMode {
+  const raw = process.env['ADHD_BACKLOG_UNSAFE_TX_MODE'];
+  if (raw === undefined) return 'immediate';
+  if ((TX_MODES as readonly string[]).includes(raw)) return raw as TxMode;
+  throw new Error(
+    `ADHD_BACKLOG_UNSAFE_TX_MODE="${raw}" is not a recognized transaction mode (expected "immediate" or "deferred"). ` +
+      'This variable exists solely for negative-control test runs and must never be set in normal operation; ' +
+      'an unrecognized value fails loudly rather than silently defaulting to "immediate" so a mistyped negative ' +
+      'control can never pass for the wrong reason.',
+  );
+}
+
+/**
  * The one transaction wrapper every write verb calls — `store.adapter.transaction(fn,
- * {mode:'immediate'})` (§4c: `BEGIN IMMEDIATE`, the RESERVED-lock-at-BEGIN
- * "compare-and-swap primitive" every check-then-act verb in §4's table
- * depends on), with the §4c retry contract layered on top:
+ * {mode: resolveTransactionMode()})`, which is `'immediate'` (§4c: `BEGIN
+ * IMMEDIATE`, the RESERVED-lock-at-BEGIN "compare-and-swap primitive" every
+ * check-then-act verb in §4's table depends on) in every normal run and only
+ * ever `'deferred'` when a test has explicitly set
+ * `ADHD_BACKLOG_UNSAFE_TX_MODE=deferred` to prove a negative control (see
+ * {@link resolveTransactionMode}'s own doc comment) — with the §4c retry
+ * contract layered on top:
  *
  * - A {@link BacklogWriteError} thrown from `fn` (an app-level validation
  *   failure, or the `supersede` CAS's {@link StaleSupersedeError}) is
@@ -459,7 +631,7 @@ export async function executeWriteTransaction<T>(
   let attempt = 0;
   for (;;) {
     try {
-      return await handle.adapter.transaction(fn, { mode: 'immediate' });
+      return await handle.adapter.transaction(fn, { mode: resolveTransactionMode() });
     } catch (err) {
       if (err instanceof BacklogWriteError) throw err;
 
