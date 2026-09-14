@@ -42,7 +42,7 @@ Status: `todo` | `wip` | `blocked` | `done`
 | C2 | Wave S7 — transports | todo | Wire `src/query/`+`src/write/` to the live entrypoint (CLI / MCP / HTTP). This is what "src/query unwired" actually needs |
 | C3 | Wave S8 — ETL (stalled 6/6) | todo | |
 | C4 | S10 — acceptance | todo | |
-| C5 | S11 — wipe the old layer | todo | Deletes `client.ts`, `ops-v1.ts`, `src/v2/`. Satisfies the hard criterion: 0 references to v1/v2/migration |
+| C5 | S11 — wipe the old layer | todo | Deletes `client.ts`, `ops-v1.ts`, `src/v2/` AND the store-layer identity machinery (`ids.ts` allocator, `structure.ts`, `repo-migration.ts`, humanid-collision/id-uniqueness specs). Satisfies AC-1 + the 0-v1/v2/humanId/migration criterion. **Do this FIRST** — it removes 768 humanId sites before any hand work. |
 | C6 | S12 — vocabulary gate | todo | |
 | C7 | S13 — fresh extract + ETL + parity | todo | |
 | C8 | S14 — publish + blind test of the public package | todo | |
@@ -63,6 +63,14 @@ Status: `todo` | `wip` | `blocked` | `done`
 
 ## E. Hard acceptance criteria (check at the end)
 
+Full AC-by-AC audit: **[HANDOFF.md](./HANDOFF.md)**.
+
+- [ ] **0 `humanId`** — SPEC §0 anti-antipattern 1 and §9 AC-1. Identity is the
+      DB-generated `uid`; no allocator, no dedupe-scan, no `idOverride`, no
+      `importedFrom`, **no repo-string identity**. 2124 sites today; 768 die free
+      with the §7 wipe, the new layer is already uid-native (5 residual, all prose),
+      the store layer's 774 are the real work.
 - [ ] 0 references to `v1`, `v2`, or a migration anywhere in the backlog package — it is only "backlog"
 - [ ] 0 sqlite dependencies, imports, or references in the backlog package
+- [ ] All 23 SPEC §9 acceptance criteria driven — 12 covered, 11 outstanding
 - [ ] Public package blind-tested after publish
