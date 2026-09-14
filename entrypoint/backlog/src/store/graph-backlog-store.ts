@@ -16,7 +16,7 @@
  * migrate from.
  */
 import { createStoreAdapter, type StoreAdapter } from '@adhd/sox-store-adapter';
-import { createGraphBackend, type GraphBackend } from '@adhd/sox-graph-store';
+import { createGraphBackend, DEFAULT_TYPE_POLICY, type GraphBackend, type TypePolicy } from '@adhd/sox-graph-store';
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { withImmediateRetry } from './immediate-retry.js';
@@ -27,6 +27,23 @@ export interface GraphBacklogStore {
   readonly adapter: StoreAdapter;
   /** All non-CAS reads/writes go through this. */
   readonly graph: GraphBackend;
+  /**
+   * The SAME `TypePolicy` instance `graph` was constructed with. The write
+   * layer's `IWriteStoreHandle` (write/tx.ts) requires one, and it must be
+   * the store's own — importing a second copy at the call site is exactly how
+   * the production/ETL/test divergence documented in store/type-policy.ts
+   * came about.
+   *
+   * Currently `DEFAULT_TYPE_POLICY` (the closed ten-rel vocabulary), because
+   * `createGraphBackend(adapter)` below passes no policy. repo-nodes.ts's
+   * header explains why that is deliberate TODAY — the widened vocabulary is
+   * scoped to `dimensionGraph` so item-level writes stay on the closed
+   * default — and repo-nodes.spec.ts asserts it as a negative control. This
+   * field reports what is actually in force rather than what the new layer
+   * wants; both flip to OPEN_TYPE_POLICY together when the §7 wipe removes
+   * repo-nodes.ts.
+   */
+  readonly typePolicy: TypePolicy;
   /**
    * RAG-SPEC.md §2.2 — durability backstop for a short-lived process. Every
    * `scheduleEmbed` (embed-queue.ts) call fired by `createItem`/`updateItem`
@@ -97,6 +114,7 @@ export async function openGraphBacklogStore(dbPath: string, busyTimeoutMs = 5000
   const store: GraphBacklogStore = {
     adapter,
     graph,
+    typePolicy: DEFAULT_TYPE_POLICY,
     flushEmbeds: () => flushEmbedsFor(store),
   };
   return store;
