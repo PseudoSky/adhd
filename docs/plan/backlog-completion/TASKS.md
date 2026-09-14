@@ -22,8 +22,11 @@ Status: `todo` | `wip` | `blocked` | `done`
 | B4 | Resolve adhd BUG-010 | todo | `sqlite-vec` import removed from `src/query/views/semantic.spec.ts` |
 | B5 | Update DEBT-004 (zero-sqlite) | todo | Imports now zero; textual references remain |
 | B6 | File: nx `build` target `inputs` omit `package.json` | todo | Causes stale `dist/package.json`; documented in PUBLISHING.md by A1 |
-| B7 | File/resolve DEBT-005 | todo | Non-compliant `RUN_NEGATIVE_CONTROL` gate, `src/store/id-uniqueness.spec.ts:137` |
+| B7 | DEBT-005 | filed | Already exists in the graph — no new filing needed. Still to FIX. |
 | B8 | sox BUG-030 (turso SIGABRT) | todo | Trigger not yet established |
+| B9 | BUG-011 — `filter.humanId` silently ignored | filed | Violates SPEC §7, one of the five load-bearing query contracts. `{filter:{humanId:X}}` returns the full 622-item set with ok:true. Still to FIX. |
+| B10 | BUG-012 — `duplicate_candidate` returns empty `details` | filed | Refusal names no candidate; both refusals this session were false positives. Still to FIX. |
+| B11 | DEBT-006 (repo `adhd`) — vitest workers never call `initTelemetry()` | filed | Landed in the minority `adhd` repo bucket; collides by humanId with a different DEBT-006 under `PseudoSky/adhd`. Covered by the already-CRITICAL `BUG-BACKLOG-REPO-SPLIT-001` (adhd 52 / PseudoSky/adhd 348). |
 
 ## C. Project completion — the FEAT-017 hard replacement
 
