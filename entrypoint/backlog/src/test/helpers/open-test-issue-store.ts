@@ -38,20 +38,10 @@ import { createStoreAdapter, type StoreAdapter } from '@adhd/sox-store-adapter';
 import { createGraphBackend, type GraphBackend, type TypePolicy } from '@adhd/sox-graph-store';
 import { type IWriteStoreHandle, writeNodeTx, writeEdgeTx, nowISO } from '../../write/tx.js';
 import { resolveEdgeKindTx } from '../../write/catalog.js';
+export { OPEN_TYPE_POLICY } from '../../store/type-policy.js';
+import { OPEN_TYPE_POLICY } from '../../store/type-policy.js';
 import type { IQueryStoreHandle } from '../../query/query.js';
 
-/** Unconditionally permissive — see this file's own doc comment for why. */
-export const OPEN_TYPE_POLICY: TypePolicy = {
-  validateKind(): void {
-    /* open vocabulary: every kind is allowed */
-  },
-  validateRel(): void {
-    /* open vocabulary: every rel is allowed */
-  },
-  validateEdge(): void {
-    /* open vocabulary: every (srcKind, rel, dstKind) triple is allowed */
-  },
-};
 
 export interface TestIssueStore extends IWriteStoreHandle, IQueryStoreHandle {
   readonly adapter: StoreAdapter;

@@ -12,19 +12,10 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createStoreAdapter, type StoreAdapter } from '@adhd/sox-store-adapter';
 import { createGraphBackend, type TypePolicy } from '@adhd/sox-graph-store';
+export { OPEN_TYPE_POLICY } from '../../src/store/type-policy.js';
+import { OPEN_TYPE_POLICY } from '../../src/store/type-policy.js';
 import type { IWriteStoreHandle } from '../../src/write/tx.js';
 
-export const OPEN_TYPE_POLICY: TypePolicy = {
-  validateKind(): void {
-    /* open vocabulary: every kind is allowed */
-  },
-  validateRel(): void {
-    /* open vocabulary: every rel is allowed */
-  },
-  validateEdge(): void {
-    /* open vocabulary: every (srcKind, rel, dstKind) triple is allowed */
-  },
-};
 
 export interface IEtlStoreHandle extends IWriteStoreHandle {
   readonly adapter: StoreAdapter;
