@@ -1,0 +1,264 @@
+/**
+ * api.ts — THE apigen extraction surface (SPEC.md §6.7).
+ *
+ * **The exported surface of this file IS the mounted surface.** `server.ts`'s
+ * `extractClientOperations()` extracts the built `api.d.ts` — the whole file,
+ * with no allow-list — so every exported function here becomes a command on
+ * the CLI, a tool in MCP `tools/list`, a Fastify route, and a path in the
+ * OpenAPI document. Adding an exported function here widens the tool surface
+ * an agent must hold in its head; export from the implementation module and
+ * re-export via `./index.ts` (library-only) instead.
+ *
+ * Rules, enforced by apigen's extraction:
+ *  - plain, JSDoc'd async functions ONLY, no business logic inline;
+ *  - `ctx: BacklogCtx` is the sole non-serializable parameter, excluded from
+ *    the generated JSON Schema by the `ctx-name-only` invariant (the FIRST
+ *    parameter named exactly `ctx`);
+ *  - every other parameter/return type is plain and JSON-serializable.
+ *
+ * ## Why this file exists at all, given the verbs are already implemented
+ *
+ * The implementation layer (`./query/*`, `./write/*`) is written against
+ * STORE HANDLES, not against a transport ctx, and deliberately so: the write
+ * verbs take `IWriteStoreHandle` (`{adapter, typePolicy}`), `queryIssues`
+ * takes `IQueryStoreHandle` (`{graph, search?}`), and `getIssue`/`lookup`
+ * take a bare `GraphBackend`. Three different shapes, none of them named
+ * `ctx`, none of them serializable. That is the right seam for the ETL and
+ * for tests (which open a store directly and never build an `Environment`),
+ * but apigen cannot mount it.
+ *
+ * So this module is the ONE adapter between the two: it owns `BacklogCtx`,
+ * derives each handle shape from it, and presents the nine issue verbs plus
+ * `lookup` in the single shape every transport projects from. It contains no
+ * logic of its own beyond that derivation and the error mapping below.
+ *
+ * ## Errors
+ *
+ * The implementation layer THROWS named `BacklogWriteError` subclasses
+ * carrying `E_*` codes (`write/errors.ts`) rather than returning a result
+ * union — that is what SPEC §6.3 specifies ("A missing/blank `by` on a
+ * mutating verb throws `InvalidArgumentError('by', ...)` before any write
+ * runs"). Transports, however, need the `{ok, data?, error?}` outcome
+ * envelope: `exitCodeForEnvelope` (model.ts) is what maps a failure to a
+ * process exit code for the CLI, and apigen's own dispatch only sets
+ * `process.exitCode` on a thrown `ApiError`, which these are not. So every
+ * verb here catches and maps — `toEnvelopeError` below is the whole of that
+ * translation, and it is the reason a caller error never escapes as a stack
+ * trace on any of the four mounts.
+ */
+import type { Environment } from '@adhd/environment';
+import type { BacklogConfig } from './env.js';
+import type { GraphBacklogStore } from './store/graph-backlog-store.js';
+import type { IWriteStoreHandle } from './write/tx.js';
+import type { IQueryStoreHandle } from './query/query.js';
+import type { IOutcomeEnvelope, IOutcomeFailure, BacklogErrorCode } from './model.js';
+import { errorEnvelope, okEnvelope } from './model.js';
+import { BacklogWriteError } from './write/errors.js';
+
+import { getIssue } from './query/get.js';
+import { queryIssues } from './query/query.js';
+import { lookup as lookupRegistry } from './query/views/registry.js';
+import { createIssue } from './write/create-issue.js';
+import { update as updateIssueOp } from './write/update.js';
+import { transition as transitionIssueOp } from './write/transition.js';
+import { claim as claimIssueOp } from './write/claim.js';
+import { relate as relateIssueOp } from './write/relate.js';
+import { move as moveIssueOp } from './write/move.js';
+import { deleteIssue as deleteIssueOp } from './write/delete.js';
+
+import type {
+  IIssueCard,
+  IIssueGetInput,
+  IIssueQueryInput,
+  IIssueQueryResult,
+  ILookupResult,
+} from './query/types.js';
+import type { ICreateIssueInput, ICreateIssueResult } from './write/create-issue.js';
+import type { IUpdateIssueInput, IUpdateIssueOutcome } from './write/update.js';
+import type { ITransitionInput, ITransitionOutcome } from './write/transition.js';
+import type { IClaimInput, IClaimOutcome } from './write/claim.js';
+import type { IRelateInput, IRelateOutcome } from './write/relate.js';
+import type { IMoveIssueInput, IMoveIssueOutcome } from './write/move.js';
+import type { IDeleteIssueInput, IDeleteIssueOutcome } from './write/delete.js';
+
+/** The one type apigen special-cases via the `ctx-name-only` invariant. */
+export interface BacklogCtx {
+  store: GraphBacklogStore;
+  env: Environment<BacklogConfig>;
+  /**
+   * Test-isolation escape hatch ONLY — mirrors `BuildBacklogEnvOptions.adhdRoot`
+   * (the same value passed to `buildBacklogEnv({ adhdRoot })` when constructing
+   * `env`). NEVER set this in production code (`server.ts`/`cli.ts` never do).
+   */
+  adhdRoot?: string;
+}
+
+// ---------------------------------------------------------------------------
+// ctx -> store-handle derivation
+// ---------------------------------------------------------------------------
+
+/**
+ * The write layer's handle. `typePolicy` is read off the store rather than
+ * imported here, because the policy a write is validated against MUST be the
+ * same instance the store's `GraphBackend` was constructed with — importing a
+ * second copy is how the ETL/test/production divergence in
+ * `store/type-policy.ts`'s header came about.
+ */
+function writeHandle(ctx: BacklogCtx): IWriteStoreHandle {
+  return { adapter: ctx.store.adapter, typePolicy: ctx.store.typePolicy };
+}
+
+/**
+ * The query layer's handle.
+ *
+ * `search` is deliberately omitted: the query layer types it as
+ * `{backend: StoreSearchBackend, embedQuery}` (`@adhd/sox-hybrid-search`),
+ * and NOTHING in this package constructs a `StoreSearchBackend` outside
+ * `query/views/semantic.spec.ts`. The production semantic seam
+ * (`store/semantic-search.ts`) is a different shape — a module-level
+ * `SemanticBackend` singleton with `embedQuery`/`embedDocument`/`vectorFor`,
+ * reached through `getSemanticBackend()`, not a hybrid search backend — so
+ * there is no production construction path to hand over yet.
+ *
+ * Omitting it is the honest state and not a degradation: `queryIssues` reads
+ * an absent `search` as "semantic filters are unavailable" and SAYS so,
+ * rather than silently falling back to a substring scan. That is the same
+ * rule BUG-045 settled for the vector space — an unbackfilled/unwired search
+ * must report as disabled, never as a working search. Wiring the singleton
+ * through to a real `StoreSearchBackend` is the remaining work; until then a
+ * `semantic` filter fails loudly instead of quietly returning the wrong rows.
+ */
+function queryHandle(ctx: BacklogCtx): IQueryStoreHandle {
+  return { graph: ctx.store.graph };
+}
+
+// ---------------------------------------------------------------------------
+// error mapping
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps the write layer's `E_*` code onto the envelope's `BacklogErrorCode`
+ * vocabulary, which is what `BACKLOG_EXIT_CODE` (model.ts) keys the CLI's
+ * process exit code off. The four rows AC-6 depends on are `E_VALIDATION`
+ * (exit 2, a caller error) and `E_CONTENTION`/`E_IO`/`E_CONSTRAINT` (exit 1,
+ * a server-side failure the caller cannot fix by re-phrasing the request).
+ */
+const WRITE_CODE_TO_ENVELOPE_CODE: Readonly<Record<string, BacklogErrorCode>> = {
+  E_VALIDATION: 'validation',
+  E_CONTENTION: 'store_busy',
+  E_IO: 'internal',
+  E_CONSTRAINT: 'conflict',
+};
+
+/**
+ * Translates a thrown implementation-layer error into the transport-facing
+ * outcome error. A `BacklogWriteError` carries a classified code and is a
+ * caller-visible failure; anything else is an unclassified bug in this
+ * package and is reported as `internal` WITHOUT leaking its message shape
+ * into the contract.
+ */
+function toEnvelope(err: unknown): IOutcomeFailure {
+  if (err instanceof BacklogWriteError) {
+    const code = WRITE_CODE_TO_ENVELOPE_CODE[err.code] ?? 'internal';
+    // `retryable`/`retry_after_ms` are the write layer's own contract
+    // (ADR-0012 §4: `retryable` stays true even on exhaustion) and are
+    // forwarded verbatim so a caller can honour the backoff the store
+    // already measured. `errorEnvelope` defaults `retryable` for
+    // `store_busy`; passing it explicitly keeps the two in agreement rather
+    // than relying on that default.
+    return errorEnvelope(code, err.message, {
+      retryable: err.retryable,
+      ...(err.retry_after_ms === undefined ? {} : { retryAfterMs: err.retry_after_ms }),
+    });
+  }
+  // Not a classified failure: a bug in this package, not something the caller
+  // can fix by re-phrasing the request.
+  return errorEnvelope('internal', err instanceof Error ? err.message : String(err));
+}
+
+/** Runs one verb body, mapping a throw onto the failure arm of the envelope. */
+async function envelope<T>(run: () => Promise<T>): Promise<IOutcomeEnvelope<T>> {
+  try {
+    return okEnvelope(await run());
+  } catch (err) {
+    return toEnvelope(err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The mounted surface — nine issue verbs (SPEC §6.3) + `lookup` (§3a)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch one issue by `uid`, projected to the requested `fields`.
+ *
+ * Defaults to the same five-field card `query` returns
+ * (`uid`, `kind`, `title`, `status`, `priority`).
+ */
+export async function get(ctx: BacklogCtx, input: IIssueGetInput): Promise<IOutcomeEnvelope<IIssueCard>> {
+  return envelope(() => getIssue(ctx.store.graph, input));
+}
+
+/**
+ * Search, filter, group and paginate issues.
+ *
+ * Supports field projection, keyset and offset pagination, the `view`/`groupBy`
+ * aggregate axes, and `grep`/`semantic` text filters.
+ */
+export async function query(ctx: BacklogCtx, input: IIssueQueryInput): Promise<IOutcomeEnvelope<IIssueQueryResult>> {
+  return envelope(() => queryIssues(queryHandle(ctx), input));
+}
+
+/**
+ * Resolve a free-text reference to a project, component or location in the
+ * registry.
+ */
+export async function lookup(ctx: BacklogCtx, input: { q: string }): Promise<IOutcomeEnvelope<ILookupResult>> {
+  return envelope(() => lookupRegistry(ctx.store.graph, input.q));
+}
+
+/** File a new issue, minting its `uid` and linking it to a project component. */
+export async function create(ctx: BacklogCtx, input: ICreateIssueInput): Promise<IOutcomeEnvelope<ICreateIssueResult>> {
+  return envelope(() => createIssue(writeHandle(ctx), input));
+}
+
+/**
+ * Edit an existing issue.
+ *
+ * A `body` change supersedes the issue, minting a fresh `uid`; every other
+ * change edits the existing node in place. `status` is not editable here —
+ * use `transition`.
+ */
+export async function update(ctx: BacklogCtx, input: IUpdateIssueInput): Promise<IOutcomeEnvelope<IUpdateIssueOutcome>> {
+  return envelope(() => updateIssueOp(writeHandle(ctx), input));
+}
+
+/** Move an issue to a new status, recording the transition in its audit trail. */
+export async function transition(ctx: BacklogCtx, input: ITransitionInput): Promise<IOutcomeEnvelope<ITransitionOutcome>> {
+  return envelope(() => transitionIssueOp(writeHandle(ctx), input));
+}
+
+/** Take, renew or release an exclusive working lease on an issue. */
+export async function claim(ctx: BacklogCtx, input: IClaimInput): Promise<IOutcomeEnvelope<IClaimOutcome>> {
+  return envelope(() => claimIssueOp(writeHandle(ctx), input));
+}
+
+/** Create or remove a typed relationship between two issues. */
+export async function relate(ctx: BacklogCtx, input: IRelateInput): Promise<IOutcomeEnvelope<IRelateOutcome>> {
+  return envelope(() => relateIssueOp(writeHandle(ctx), input));
+}
+
+/** Re-file an issue under a different project component. */
+export async function move(ctx: BacklogCtx, input: IMoveIssueInput): Promise<IOutcomeEnvelope<IMoveIssueOutcome>> {
+  return envelope(() => moveIssueOp(writeHandle(ctx), input));
+}
+
+/**
+ * Soft-delete an issue.
+ *
+ * The node is closed off bi-temporally, never physically removed — its audit
+ * trail and every edge pointing at it remain readable.
+ */
+export async function remove(ctx: BacklogCtx, input: IDeleteIssueInput): Promise<IOutcomeEnvelope<IDeleteIssueOutcome>> {
+  return envelope(() => deleteIssueOp(writeHandle(ctx), input));
+}
