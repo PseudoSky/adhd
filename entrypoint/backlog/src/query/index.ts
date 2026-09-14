@@ -23,8 +23,17 @@
  * - `get.ts` — the `get` verb (§6.3.1).
  * - `query.ts` — the `query` verb (§5, §5a, §6.5) and its `view` union
  *   (`list`/`ready`/`graph`/`order`/`stale`/`similar`/`overlap`).
- * - `registry.ts` — §3a's registry read surface (`projects`/`components`/
+ * - `views/registry.ts` — §3a's registry read surface (`projects`/`components`/
  *   `locations`/`lookup`/registry `get` detail).
+ * - `views/stats.ts` — the stats/rollup read views (§5): the status-aware
+ *   priority matrix (`priorityMatrix`, BUG-023), the `part_of` hierarchy
+ *   rollup (`partOfRollup`, FEAT-005 — transitive, not one-level), and
+ *   `validAt` point-in-time cumulative-open curves (`openCurve`).
+ * - `views/semantic.ts` — the semantic read views (§5a, FEAT-022):
+ *   `querySimilarView` (`view:'similar'`) and the shared fused-relevance
+ *   ranking primitive (`rankByFusedRelevance`). `query.ts`'s `case 'similar':`
+ *   dispatch calls `querySimilarView` directly — there is no second,
+ *   embedding-only `view:'similar'` implementation left in `query.ts`.
  *
  * **Reconciliation note for the write layer.** `write/create-issue.ts`
  * declares its OWN `IIssueCard` (a narrower, always-fully-populated shape it
@@ -45,4 +54,6 @@ export * from './resolve.js';
 export * from './card.js';
 export * from './get.js';
 export * from './query.js';
-export * from './registry.js';
+export * from './views/registry.js';
+export * from './views/stats.js';
+export * from './views/semantic.js';

@@ -23,8 +23,8 @@
  * RAG-SPEC §0: backlog's store is opened through `@adhd/sox-store-adapter`,
  * whose default substrate is **Turso**, and "the entire API is async".
  * `@adhd/sox-vector-store`'s original `VectorBackend` is synchronous and
- * backed by sqlite-vec — it *throws* when handed a Turso adapter, directing
- * the caller elsewhere. The sync interface is bridged for LanceDB by running
+ * backed by a raw driver handle — it *throws* when handed a Turso adapter,
+ * directing the caller elsewhere. The sync interface is bridged for LanceDB by running
  * the driver in a `synckit` worker, but that trick is WRONG here: a worker
  * thread would open a SECOND connection to backlog's own database file,
  * breaking the "one file, one writer" invariant RAG-SPEC §0 pins. So the
@@ -373,9 +373,9 @@ export async function bootstrapSemanticBackend(store: GraphBacklogStore, config:
   // RAG-SPEC §0: the vector table lives in backlog's own database, reached
   // through the SAME adapter the graph uses. `nativeVectors` is the blessed
   // capability probe (never `config.type`): true => Turso, whose vector
-  // support is async; false => a sqlite adapter, which this async seam does
-  // not serve (sqlite-vec's backend is synchronous and lives behind
-  // `openVectorStore`). Refuse loudly rather than half-work.
+  // support is async; false => a substrate this async seam does not serve
+  // (its backend is synchronous and lives behind `openVectorStore`).
+  // Refuse loudly rather than half-work.
   const adapter = store.adapter as unknown as { capabilities?: { nativeVectors?: boolean } };
   if (adapter?.capabilities?.nativeVectors !== true) {
     return {

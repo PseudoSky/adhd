@@ -1,5 +1,5 @@
 /**
- * registry.ts — §3a's registry read surface: `query --input '{"view":"projects"
+ * views/registry.ts — §3a's registry read surface: `query --input '{"view":"projects"
  * |"components"|"locations"}'`, `query --input '{"view":"lookup", ...}'`, and
  * `get --input '{"registry":..., "name":...}'` (expanded detail).
  *
@@ -8,15 +8,15 @@
  * searching," a structural lookup with zero/one answer per input, never a
  * ranked/paginated issue search (§6.1: "conflating the two would be wrong").
  * A transport layer (CLI/MCP/HTTP) composes `query`'s `view` union (`query.ts`)
- * and this module's `queryRegistry`/`lookup`/`getRegistryDetail` under ONE
- * mounted `query`/`get` operation per §3a's own "one convention" — that
- * transport-level merge is out of scope for this file, which exposes each as
- * its own typed function.
+ * and this module's `listProjects`/`listComponents`/`listLocations`/`lookup`/
+ * `getRegistryDetail` under ONE mounted `query`/`get` operation per §3a's own
+ * "one convention" — that transport-level merge is out of scope for this
+ * file, which exposes each as its own typed function.
  */
 
 import type { GraphBackend, NodeRecord } from '@adhd/sox-graph-store';
-import { CatalogNotFoundError, InvalidArgumentError } from '../write/errors.js';
-import { isUidShaped, tryResolveComponentRef, tryResolveRef } from './resolve.js';
+import { CatalogNotFoundError, InvalidArgumentError } from '../../write/errors.js';
+import { isUidShaped, tryResolveComponentRef, tryResolveRef } from '../resolve.js';
 import type {
   IComponentDetail,
   IComponentSummary,
@@ -27,7 +27,7 @@ import type {
   IProjectDetail,
   IProjectSummary,
   IRegistryQueryFilter,
-} from './types.js';
+} from '../types.js';
 
 function toProjectSummary(n: NodeRecord): IProjectSummary {
   return {
@@ -124,10 +124,15 @@ export async function getRegistryDetail(
     const project = await tryResolveRef(graph, 'project', input.name);
     if (!project) throw new CatalogNotFoundError('project', input.name);
     const componentEdges = await graph.getEdges({ src: project.id, rel: 'owns_project' });
-    const components = componentEdges.length > 0 ? await graph.getNodesByIds(componentEdges.map((e) => e.dst)) : [];
+    // `getNodesByIds` already defaults `liveOnly` to `true` (verified against
+    // `@adhd/sox-graph-store` — an edge surviving past its endpoint's own
+    // invalidation cannot leak a tombstoned component here even without this);
+    // made explicit for readability/self-documentation of the chain-integrity
+    // invariant, not because the default is unsafe.
+    const components = componentEdges.length > 0 ? await graph.getNodesByIds(componentEdges.map((e) => e.dst), { liveOnly: true }) : [];
     const locationEdgesByComponent = await Promise.all(components.map((c) => graph.getEdges({ src: c.id, rel: 'has_location' })));
     const locationIds = locationEdgesByComponent.flatMap((es) => es.map((e) => e.dst));
-    const locations = locationIds.length > 0 ? await graph.getNodesByIds(locationIds) : [];
+    const locations = locationIds.length > 0 ? await graph.getNodesByIds(locationIds, { liveOnly: true }) : [];
     return {
       ...toProjectSummary(project.record),
       components: components.map((c) => ({ name: c.name ?? '', path: typeof c.metadata?.path === 'string' ? c.metadata.path : undefined })),
@@ -142,9 +147,14 @@ export async function getRegistryDetail(
     const component = await tryResolveRef(graph, 'component', input.name);
     if (!component) throw new CatalogNotFoundError('component', input.name);
     const projectUid = typeof component.record.metadata?.projectUid === 'string' ? component.record.metadata.projectUid : undefined;
-    const project = projectUid ? await graph.getNodeByUid(projectUid) : null;
+    // `getNodeByUid` has no `liveOnly` filter (unlike `getNodesByIds`), so an
+    // invalidated project row must be rejected explicitly — a tombstoned
+    // secondary chase must degrade the same as an unresolved one (§3a chain
+    // integrity), never surface a soft-deleted project's data as live.
+    const projectNode = projectUid ? await graph.getNodeByUid(projectUid) : null;
+    const project = projectNode && !projectNode.tInvalid ? projectNode : null;
     const locationEdges = await graph.getEdges({ src: component.id, rel: 'has_location' });
-    const locations = locationEdges.length > 0 ? await graph.getNodesByIds(locationEdges.map((e) => e.dst)) : [];
+    const locations = locationEdges.length > 0 ? await graph.getNodesByIds(locationEdges.map((e) => e.dst), { liveOnly: true }) : [];
     return {
       ...toComponentSummary(component.record),
       project: {
@@ -164,9 +174,13 @@ export async function getRegistryDetail(
   const location = await graph.getNodeByUid(input.name);
   if (!location || location.kind !== 'location' || location.tInvalid) throw new CatalogNotFoundError('location', input.name);
   const componentUid = typeof location.metadata?.componentUid === 'string' ? location.metadata.componentUid : undefined;
-  const component = componentUid ? await graph.getNodeByUid(componentUid) : null;
+  // Same tombstone-rejection as the `component` branch above — a soft-deleted
+  // component/project must not resurface via a location's secondary chase.
+  const componentNodeRaw = componentUid ? await graph.getNodeByUid(componentUid) : null;
+  const component = componentNodeRaw && !componentNodeRaw.tInvalid ? componentNodeRaw : null;
   const projectUid = typeof component?.metadata?.projectUid === 'string' ? component.metadata.projectUid : undefined;
-  const project = projectUid ? await graph.getNodeByUid(projectUid) : null;
+  const projectNodeRaw = projectUid ? await graph.getNodeByUid(projectUid) : null;
+  const project = projectNodeRaw && !projectNodeRaw.tInvalid ? projectNodeRaw : null;
   return {
     ...toLocationSummary(location),
     component: { name: component?.name ?? '', path: typeof component?.metadata?.path === 'string' ? component.metadata.path : undefined },
@@ -224,12 +238,18 @@ export async function lookup(graph: GraphBackend, q: string): Promise<ILookupRes
   if (!location) throw new CatalogNotFoundError('location', q);
 
   const componentUid = typeof location.metadata?.componentUid === 'string' ? location.metadata.componentUid : undefined;
-  const component = componentUid ? await graph.getNodeByUid(componentUid) : null;
+  // A tombstoned component must resolve the same as a missing one — `lookup`
+  // never surfaces a soft-deleted row as though it were live (§3a chain
+  // integrity; `getNodeByUid` has no `liveOnly` filter, so this must be
+  // checked explicitly).
+  const componentRaw = componentUid ? await graph.getNodeByUid(componentUid) : null;
+  const component = componentRaw && !componentRaw.tInvalid ? componentRaw : null;
   if (!component) {
     throw new CatalogNotFoundError('component', componentUid ?? '(unresolved)');
   }
   const projectUid = typeof component.metadata?.projectUid === 'string' ? component.metadata.projectUid : undefined;
-  const project = projectUid ? await graph.getNodeByUid(projectUid) : null;
+  const projectRaw = projectUid ? await graph.getNodeByUid(projectUid) : null;
+  const project = projectRaw && !projectRaw.tInvalid ? projectRaw : null;
   if (!project) {
     return {
       project: { uid: '', name: '' },

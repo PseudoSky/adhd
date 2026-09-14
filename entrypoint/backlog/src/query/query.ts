@@ -10,7 +10,7 @@
 
 import type { GraphBackend, NodeFilter, NodeRecord } from '@adhd/sox-graph-store';
 import type { SearchQuery, SearchResult, StoreSearchBackend } from '@adhd/sox-hybrid-search';
-import { BacklogValidationError, CatalogNotFoundError, InvalidArgumentError } from '../write/errors.js';
+import { BacklogValidationError, InvalidArgumentError } from '../write/errors.js';
 import { assembleIssueCards, assertKnownIssueFields, isStatusTerminal } from './card.js';
 import {
   getOutgoingEdges,
@@ -33,6 +33,7 @@ import {
   type ITopoOrderResult,
   MAX_QUERY_LIMIT,
 } from './types.js';
+import { querySimilarView } from './views/semantic.js';
 
 /**
  * The dependencies `query`/the view helpers need. `search` is OPTIONAL —
@@ -459,43 +460,6 @@ async function queryOrder(handle: IQueryStoreHandle, input: IIssueQueryInput): P
 }
 
 /**
- * `view:'similar'` (SPEC.md §5a) — `filter.anchor` (item-anchored) or
- * `filter.semantic` (free text) routed through `StoreSearchBackend.searchRanked`
- * with `signals:[{vec}]` (the embedding-only path, §5a: "the embedding-only
- * path is `searchRanked({vec, signals:[{vec}]})`").
- */
-async function querySimilar(handle: IQueryStoreHandle, input: IIssueQueryInput): Promise<IIssueCard[]> {
-  const { graph } = handle;
-  if (!handle.search) {
-    throw new InvalidArgumentError('semantic', 'semantic search is not configured for this store (no embedding/vector backend injected)');
-  }
-  const fields = (input.fields ?? DEFAULT_ISSUE_CARD_FIELDS) as readonly IIssueField[];
-  const limit = assertQueryLimit(input.limit);
-
-  let vec: Float32Array;
-  if (input.filter?.anchor !== undefined) {
-    const anchorIssue = await graph.getNodeByUid(input.filter.anchor);
-    if (!anchorIssue) throw new CatalogNotFoundError('issue', input.filter.anchor);
-    vec = await handle.search.embedQuery(`${anchorIssue.name ?? ''}\n${anchorIssue.content}`);
-  } else if (input.filter?.semantic !== undefined) {
-    vec = await handle.search.embedQuery(input.filter.semantic);
-  } else {
-    throw new InvalidArgumentError('filter', '`view:"similar"` requires `filter.anchor` or `filter.semantic`');
-  }
-
-  const candidateIds = await resolveEdgeScopedFilterIds(graph, input.filter);
-  const results = await handle.search.backend.searchRanked(
-    { vec, signals: [{ kind: 'vec' }], filters: { kind: 'issue', ...(candidateIds ? { ids: [...candidateIds] } : {}) } },
-    limit,
-  );
-  const nodes = await graph.getNodesByIds(results.map((r) => r.id));
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  const ordered = results.map((r) => byId.get(r.id)).filter((n): n is NodeRecord => n !== undefined);
-  const scoreByUid = new Map(results.map((r) => [byId.get(r.id)?.uid, r.score] as const).filter((e): e is [string, number] => e[0] !== undefined));
-  return assembleIssueCards(graph, ordered, fields, scoreByUid);
-}
-
-/**
  * `view:'overlap'` (SPEC.md §6.2: v1's `overlapBy`/`humanIds` renamed
  * `axis`/`uids`) — groups `overlapUids` by the requested `axis`'s value,
  * surfacing every group with ≥2 members (a genuine overlap; a singleton
@@ -581,7 +545,7 @@ export async function queryIssues(handle: IQueryStoreHandle, input: IIssueQueryI
     case 'stale':
       return { view: 'stale', items: await queryStale(handle, input) };
     case 'similar':
-      return { view: 'similar', items: await querySimilar(handle, input) };
+      return { view: 'similar', items: await querySimilarView(handle, input) };
     case 'overlap':
       return { view: 'overlap', groups: await queryOverlap(handle, input) };
     default: {
