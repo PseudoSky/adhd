@@ -259,6 +259,21 @@ export async function move(ctx: BacklogCtx, input: IMoveIssueInput): Promise<IOu
  * The node is closed off bi-temporally, never physically removed — its audit
  * trail and every edge pointing at it remain readable.
  */
-export async function remove(ctx: BacklogCtx, input: IDeleteIssueInput): Promise<IOutcomeEnvelope<IDeleteIssueOutcome>> {
+async function remove(ctx: BacklogCtx, input: IDeleteIssueInput): Promise<IOutcomeEnvelope<IDeleteIssueOutcome>> {
   return envelope(() => deleteIssueOp(writeHandle(ctx), input));
 }
+
+/**
+ * SPEC §6.7 names this verb `delete` on every mount (`backlog_delete`,
+ * `backlog delete`, `DELETE /issue`). `export async function delete` is a
+ * syntax error — `delete` is a reserved word — but an export CLAUSE may alias
+ * to any IdentifierName, reserved words included, and apigen resolves the
+ * mounted name from `sf.getExportedDeclarations()` (ts-morph's own
+ * rename/re-export resolver, which extract.ts documents as covering "named
+ * exports — local, renamed, AND re-exported"). So the operation mounts as
+ * `delete` while the implementation keeps a legal identifier.
+ *
+ * Do NOT "simplify" this to `export async function remove`: that silently
+ * renames the tool to `backlog_remove` on all four transports.
+ */
+export { remove as delete };
