@@ -345,6 +345,36 @@ describe('openCurve — validAt point-in-time reconstruction', () => {
     expect(result.points[1].open).toBe(2);
   });
 
+  it('resolves each issue\'s current status and audit trail independently — the batched has_status/audits fetch must never mix issues up', async () => {
+    const { store, projectUid } = await setupStore('open-curve-batched-per-issue');
+
+    const a = await createIssue(store, { title: 'a (will close)', body: 'b', project: projectUid, by: 'agent:t' });
+    const b = await createIssue(store, { title: 'b (stays open)', body: 'b', project: projectUid, by: 'agent:t' });
+
+    // Anchor to `a`'s own reported `createdAt` — deterministic regardless of
+    // real wall-clock speed.
+    const createdAtMs = new Date(a.item.createdAt).getTime();
+    const transitionAt = new Date(createdAtMs + 60_000).toISOString();
+    const sampleAt = new Date(createdAtMs + 120_000).toISOString();
+
+    // Only `a` transitions (to a terminal status); `b` never does — its trail
+    // has no `to`-carrying entry at all (reconstructStatusAt case 1), so its
+    // reconstructed status is just its unchanged CURRENT status ("open").
+    const transition = await simulateTransition(store, { uid: a.uid, toStatusName: 'done', toTerminal: true, actor: 'agent:t', at: transitionAt });
+    expect(transition.to).toBe('done');
+
+    const result = await openCurve(store, { filter: { project: projectUid }, at: [sampleAt] });
+    expect(result.points[0].existed).toBe(2);
+    // TEETH: if the batched `has_status`/`audits` fetch this test targets ever
+    // mixed the two issues' data up (e.g. assigning one issue's current status
+    // or trail to the other), `a` and `b` would no longer diverge — assert the
+    // per-issue outcome each independently AND assert they differ from each
+    // other, so a cross-contamination bug cannot hide behind a coincidental
+    // match.
+    expect(result.points[0].open).toBe(1); // only `b`
+    expect(result.points[0].closed).toBe(1); // only `a`
+  });
+
   it('counts an issue at an instant it truly existed, even though it has SINCE been soft-deleted', async () => {
     const { store, projectUid } = await setupStore('open-curve-deleted');
     const a = await createIssue(store, { title: 'a', body: 'b', project: projectUid, by: 'agent:t' });
