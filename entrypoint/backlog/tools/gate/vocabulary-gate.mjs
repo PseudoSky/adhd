@@ -50,6 +50,18 @@ function walk(dir) {
 
 const hits = [];
 for (const file of walk(ROOT)) {
+  // PATHS are scanned before contents. The zero-v1/v2-reference criterion
+  // covers the tree, not just what is inside the files: `server.v2.spec.ts`
+  // satisfies a contents-only gate while still shipping banned vocabulary in
+  // its own name, where every consumer, stack trace and test report shows it.
+  // A contents-only gate goes green on that file and defers the finding to the
+  // acceptance step, which is exactly too late.
+  const rel = relative(ROOT, file);
+  for (const term of TERMS) {
+    if (term.re.test(rel)) {
+      hits.push({ file: rel, line: 0, term: term.name, text: `[FILENAME] ${rel}` });
+    }
+  }
   const lines = readFileSync(file, 'utf8').split('\n');
   lines.forEach((line, i) => {
     for (const term of TERMS) {
