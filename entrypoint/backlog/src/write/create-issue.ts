@@ -16,7 +16,10 @@ import { createHash } from 'node:crypto';
 import { isAbsolute, relative, resolve as resolvePath } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
+import type { GraphBackend } from '@adhd/sox-graph-store';
+import { RRF_K, type SearchQuery, type SignalSpec, type StoreSearchBackend } from '@adhd/sox-hybrid-search';
 import {
+  type IProjectPolicy,
   type IResolvedCatalogRow,
   type IResolvedProjectRow,
   mintOrResolveCatalogTx,
@@ -29,7 +32,17 @@ import {
 } from './catalog.js';
 import { writeAudit } from './audit.js';
 import { CitationUnverifiableError, InvalidArgumentError, WriteIOError } from './errors.js';
-import { type IWriteStoreHandle, executeWriteTransaction, nowISO, writeEdgeTx, writeNodeTx } from './tx.js';
+import { type IWriteStoreHandle, executeWriteTransaction, nowISO, resolveLiveIssueTx, writeEdgeTx, writeNodeTx } from './tx.js';
+// Read-only reuse of the query layer's own, direction-bug-fixed project/
+// component ownership-chain resolver (SPEC.md §6.4 point 1: the duplicate
+// scan is scoped to `filter.project`, "the target project only" — never a
+// second, hand-rolled traversal of `owns_project`/`owns_component` here).
+// This is an IMPORT, not an edit, of a file this slice does not own
+// (`src/query/**`) — see this module's own `IDuplicateScanHandle` doc
+// comment for why the two packages' handle shapes are structurally, not
+// nominally, compatible.
+import { resolveSimilarFilterIds } from '../query/views/semantic.js';
+import type { IIssueFilter } from '../query/types.js';
 
 /**
  * A filing-time citation (§6.3.2, carried forward from the established `Citation` shape in
@@ -67,6 +80,74 @@ export interface ICreateIssueInput {
   /** The acting agent/human identity (§6.3's opening rule) — REQUIRED on every mutating verb. A missing/blank value throws `InvalidArgumentError('by', ...)` before any write runs. */
   by: string;
   /**
+   * The duplicate-gate control (§6.3.2, resolved in full at §6.4). Default
+   * `'abort'`. Only meaningful when the pre-write similarity scan (§6.4
+   * point 1) surfaces ≥1 candidate at/above `project_policy.dedupe_threshold`
+   * — a zero-candidate scan proceeds to a normal create regardless of this
+   * value (§6.4 point 3, first sentence).
+   *
+   * - `'abort'` — nothing is written; `{created:false,
+   *   reason:'duplicate-suppressed', duplicateCandidates}`.
+   * - `'force'` — the write proceeds to a genuinely new, distinct `uid`
+   *   despite the match; `duplicateCandidates` is still reported.
+   * - `'comment'` — no new issue node is written; a `note` node is attached
+   *   (`has_note`) to the TOP-scoring candidate instead, carrying the
+   *   would-be issue's title+body verbatim.
+   */
+  duplicateAction?: 'abort' | 'force' | 'comment';
+}
+
+/** §6.4 point 3 — the SET of legal `duplicateAction` values, checked at runtime (not just the TS type) since this verb is reachable from transports — MCP/HTTP/CLI — with no compile-time guarantee on the JSON they hand in. */
+const DUPLICATE_ACTIONS = ['abort', 'force', 'comment'] as const;
+type DuplicateAction = (typeof DUPLICATE_ACTIONS)[number];
+
+/**
+ * A dedupe candidate surfaced at filing time (§6.4), with the NORMALIZED
+ * `searchRanked` score that produced it — see {@link scanForDuplicates}'s own
+ * doc comment for the normalization derivation.
+ */
+export interface IDuplicateCandidate {
+  uid: string;
+  title: string;
+  /** Normalized to `[0,1]` — directly comparable to `project_policy.dedupe_threshold`. */
+  score: number;
+}
+
+/**
+ * The search substrate `createIssue`'s duplicate gate needs (§6.4 point 1),
+ * threaded alongside {@link IWriteStoreHandle} rather than folded into it:
+ * `IWriteStoreHandle` (tx.ts) is the write layer's OWN minimal dependency
+ * shape (`adapter`+`typePolicy`) and is not this slice's file to widen.
+ * Structurally — not nominally — compatible with `query/query.ts`'s
+ * `IQueryStoreHandle`: every real call site (`TestIssueStore` in tests,
+ * and the not-yet-built store-bootstrap module in production, §6.3.2's own
+ * `awaitEmbed` doc comment) already carries BOTH a `graph` and a `search`
+ * alongside the write handle's `adapter`/`typePolicy`, so a caller who
+ * already has an `IQueryStoreHandle`-shaped object satisfies this by
+ * construction — no adapter/wrapper needed.
+ *
+ * `search.embedQuery` is declared OPTIONAL here (unlike
+ * `IQueryStoreHandle.search.embedQuery`, which is mandatory) specifically to
+ * express §6.4 point 4's degraded case: a `StoreSearchBackend` can be wired
+ * (FTS/text always available, since it runs off the graph store directly)
+ * while no embedding model/vector space is configured — `searchRanked`
+ * itself stays callable, just scoped to `signals:[{text}]` rather than
+ * `signals:[{text},{vec}]`. `search` itself stays OPTIONAL (no backend
+ * mounted at all) for the same "never silently go dark" posture §6.4 point 4
+ * states, but applied one layer further out: `scanForDuplicates` treats a
+ * wholly-absent backend as "scan unavailable" (zero candidates, `create`
+ * proceeds normally) rather than throwing — filing an issue must never hard-
+ * fail because the product-feature-only dedupe UX (§6.4's own framing: "a
+ * missed warning, not a correctness defect") happens to be unwired in a given
+ * environment.
+ */
+export interface IDuplicateScanHandle {
+  readonly graph?: GraphBackend;
+  readonly search?: {
+    readonly backend: StoreSearchBackend;
+    embedQuery?(text: string): Promise<Float32Array>;
+  };
+  /**
    * §4b: waits for the fire-and-forget on-write embedding observer before
    * returning when `true`. **Not implemented in this slice.** the spec's own
    * embedding observer (`createEmbeddingObserver`, FEAT-021) fires from
@@ -99,12 +180,33 @@ export interface IIssueCard {
   closedAt?: string;
 }
 
+/**
+ * `ICreateOutcome` (§6.3.2's Output section, verbatim shape — ONE interface
+ * with optional fields, deliberately NOT a discriminated union): `created`
+ * is the only field guaranteed present. Every other field's presence is
+ * conditional per §6.4/§6.3.2:
+ *
+ * - `uid`/`item` — present iff `created`.
+ * - `duplicateCandidates` — present iff the scan surfaced ≥1 candidate
+ *   at/above threshold (§6.4 point 3) — on `'abort'` (suppressed) AND on
+ *   `'force'` (written anyway, reported for audit) AND on `'comment'`.
+ *   Absent entirely on a zero-candidate scan, regardless of
+ *   `duplicateAction` — this is NOT an empty array in that case (§6.4 point
+ *   3, first sentence).
+ * - `reason` — present iff `!created` and the gate suppressed the write
+ *   (`duplicateAction:'abort'`, the default).
+ * - `commentedOn` — present iff `duplicateAction:'comment'` fired.
+ * - `supersededUid` — always absent from `createIssue` alone; only the
+ *   `supersedes` composition (§6.3.2, not yet built here) would set it.
+ */
 export interface ICreateIssueResult {
-  created: true;
-  uid: string;
-  item: IIssueCard;
-  /** Present only when this create was superseding an existing issue — always absent here; `createIssue` alone never mints via the `supersedes` composition (§6.3.2), which is a separate, not-yet-built code path (`updateIssue`'s body-change CAS). */
+  created: boolean;
+  uid?: string;
+  item?: IIssueCard;
+  duplicateCandidates?: IDuplicateCandidate[];
+  reason?: 'duplicate-suppressed';
   supersededUid?: string;
+  commentedOn?: { uid: string; noteId: string };
 }
 
 function assertNonBlank(field: string, value: string | undefined): asserts value is string {
@@ -197,6 +299,106 @@ function enforceRequiredFields(required: readonly string[], resolvedValues: Reco
 }
 
 /**
+ * §6.4 point 1: `createIssue`'s app-level pre-write similarity scan — never
+ * the library's disabled content-hash path (§1's `skipDedupe:true` is
+ * untouched by this function). Runs `StoreSearchBackend.searchRanked`
+ * scoped to `project` (never cross-project) over `{title, body}`, exactly as
+ * §6.4 specifies, with two documented, deliberate departures from a literal
+ * reading:
+ *
+ * 1. **Score normalization.** `searchRanked`'s own SCALE NOTE
+ *    (`@adhd/sox-hybrid-search` dist/index.d.ts: "score here is on the raw
+ *    RRF magnitude scale... NOT the [0,1] min-max scale") means a raw score
+ *    tops out at `Σ 1/(RRF_K+1)` across the active signals — ~0.033 for two
+ *    unit-weight signals, ~0.016 for one — which can never clear
+ *    `project_policy.dedupe_threshold`'s documented [0,1] default of `0.8`
+ *    (catalog.ts's own `DEFAULT_PROJECT_POLICY`). Dividing by the
+ *    theoretical max for the SIGNAL SET ACTUALLY USED (computed from
+ *    `signals`, not hardcoded to two) rescales every result into `[0,1]`
+ *    without touching `searchRanked`'s call shape or its RRF semantics —
+ *    `dedupe_threshold` stays meaningful on the scale its own default was
+ *    chosen against.
+ * 2. **Degraded (no-embedding) mode.** §6.4 point 4: when the search
+ *    substrate cannot embed (`search.embedQuery` absent — see
+ *    {@link IDuplicateScanHandle}'s own doc comment), this runs
+ *    `signals:[{text}]` alone rather than skipping the scan.
+ *
+ * Returns `[]` (never throws) when: `project_policy.dedupe_scan_enabled` is
+ * `false`; no search backend is mounted at all (§6.4's "a missed warning,
+ * not a correctness defect" framing, extended one layer further — see
+ * {@link IDuplicateScanHandle}); or the project has zero existing issues to
+ * compare against. Returns only candidates AT OR ABOVE
+ * `project_policy.dedupe_threshold` — never the raw, unfiltered top-N.
+ */
+async function scanForDuplicates(
+  handle: IDuplicateScanHandle,
+  project: IResolvedProjectRow,
+  policy: IProjectPolicy,
+  title: string,
+  body: string,
+): Promise<IDuplicateCandidate[]> {
+  if (!policy.dedupeScanEnabled) return [];
+  const { search, graph } = handle;
+  if (!search || !graph) return [];
+
+  // §6.4 point 1: scoped to `project` only — reuses the query layer's own
+  // direction-bug-fixed `owns_project`/`owns_component` traversal
+  // (`resolveSimilarFilterIds`) rather than a second, hand-rolled one here.
+  const filter: IIssueFilter = { project: project.uid };
+  const candidateIds = await resolveSimilarFilterIds(graph, filter);
+  // `resolveSimilarFilterIds` only ever returns `undefined` when NO filter
+  // dimension was given at all — unreachable here since `project` always is
+  // (§6.3.2: `project` is REQUIRED). A resolved-but-empty set (a brand new
+  // project with no prior issues) short-circuits — see this module's own
+  // "empty ids means unfiltered, never match-nothing" hazard doc comment in
+  // `query/views/semantic.ts`, which this guard exists specifically to avoid
+  // tripping.
+  if (!candidateIds || candidateIds.size === 0) return [];
+
+  const text = `${title}\n${body}`.trim();
+  const canEmbed = typeof search.embedQuery === 'function';
+  const vec = canEmbed ? await search.embedQuery!(text) : undefined;
+
+  const signals: SignalSpec[] = vec ? [{ kind: 'text' }, { kind: 'vec' }] : [{ kind: 'text' }];
+  const query: SearchQuery = {
+    text,
+    vec,
+    signals,
+    filters: { ids: [...candidateIds] },
+  };
+  // A small, fixed fetch window: the gate only ever needs to know whether
+  // ANY candidate clears threshold (all three `duplicateAction`s act on the
+  // full returned/filtered list, never a single arbitrary "top match" beyond
+  // `'comment'`'s own top-1 use, §6.4 point 3) — unbounded would cost an
+  // unnecessary full-table rank on every single `createIssue` call.
+  const SCAN_LIMIT = 5;
+  const results = await search.backend.searchRanked(query, SCAN_LIMIT);
+  if (results.length === 0) return [];
+
+  const theoreticalMax = signals.reduce((sum, s) => sum + (s.weight ?? 1) / (RRF_K + 1), 0);
+  if (theoreticalMax <= 0) return [];
+
+  const nodes = await graph.getNodesByIds(results.map((r) => r.id));
+  const byId = new Map(nodes.map((n) => [n.id, n] as const));
+
+  const candidates: IDuplicateCandidate[] = [];
+  for (const r of results) {
+    const node = byId.get(r.id);
+    if (!node) continue; // raced away (invalidated) between search and this lookup — never surfaced as a candidate
+    const score = r.score / theoreticalMax;
+    if (score >= policy.dedupeThreshold) {
+      candidates.push({ uid: node.uid, title: node.name ?? '', score });
+    }
+  }
+  // `searchRanked` returns best-first (`StoreSearchBackend.searchRanked`'s
+  // own doc comment: "Returns fused SearchResult[]s, best-first") — the
+  // threshold filter above is order-preserving, so `candidates[0]` remains
+  // the top-scoring match `duplicateAction:'comment'` (§6.4 point 3) attaches
+  // its note to.
+  return candidates;
+}
+
+/**
  * Create a new issue (§4, §6.3.2). One `immediate` transaction; `skipDedupe:
  * true` on every entity write (§1) via `writeNodeTx`.
  *
@@ -205,11 +407,15 @@ function enforceRequiredFields(required: readonly string[], resolvedValues: Reco
  * 'kind'|'status'|'priority'|'agent', ref)` (`'component'` fires only when a
  * name/uid was GIVEN and did not resolve — omitting `component` never throws
  * it), `CitationUnverifiableError(file)` (policy-gated via
- * `project_policy.citation_requires_sha`), `WriteContentionError`/
+ * `project_policy.citation_requires_sha`), `InvalidArgumentError('duplicateAction', ...)`
+ * (an unrecognized value — §6.4), `WriteContentionError`/
  * `WriteIOError` (§4c — an exhausted driver-level retry on the underlying
  * `immediate` transaction).
  */
-export async function createIssue(handle: IWriteStoreHandle, input: ICreateIssueInput): Promise<ICreateIssueResult> {
+export async function createIssue(
+  handle: IWriteStoreHandle & IDuplicateScanHandle,
+  input: ICreateIssueInput,
+): Promise<ICreateIssueResult> {
   // §6.3's opening rule + §6.3.2's own required-field list — validated
   // before any driver call runs (E_VALIDATION, never retried, §4c).
   assertNonBlank('title', input.title);
@@ -218,6 +424,14 @@ export async function createIssue(handle: IWriteStoreHandle, input: ICreateIssue
   assertNonBlank('by', input.by);
   const citations = input.citations ?? [];
   citations.forEach((citation, i) => assertNonBlank(`citations[${i}].file`, citation.file));
+
+  const duplicateAction: DuplicateAction = input.duplicateAction ?? 'abort';
+  if (input.duplicateAction !== undefined && !DUPLICATE_ACTIONS.includes(input.duplicateAction)) {
+    throw new InvalidArgumentError(
+      'duplicateAction',
+      `must be one of ${DUPLICATE_ACTIONS.map((a) => `'${a}'`).join('|')}, got "${input.duplicateAction}"`,
+    );
+  }
 
   // BUG blind-review finding 2: every citation's `sha` is computed HERE,
   // before `executeWriteTransaction` ever opens the `immediate`-mode
@@ -259,6 +473,22 @@ export async function createIssue(handle: IWriteStoreHandle, input: ICreateIssue
     citationShas.push(sha);
   }
 
+  // §6.4 point 1: the scan runs BEFORE the `immediate` transaction opens —
+  // `searchRanked` is an external, potentially network-backed round-trip
+  // (an embedding-service call), and holding the RESERVED lock across it
+  // would stall every other concurrent writer for its duration. Deliberately
+  // NOT a CAS (§6.4 point 1's own accepted-gap framing) — see
+  // `scanForDuplicates`'s doc comment.
+  const duplicateCandidates = await scanForDuplicates(handle, preResolvedProject, preResolvedPolicy, input.title, input.body);
+
+  // §6.4 point 3: `'abort'` (default) with ≥1 candidate at/above threshold —
+  // nothing is written, not even inside a transaction that immediately rolls
+  // back. This is the ONLY branch that returns before `executeWriteTransaction`
+  // is ever called.
+  if (duplicateCandidates.length > 0 && duplicateAction === 'abort') {
+    return { created: false, reason: 'duplicate-suppressed', duplicateCandidates };
+  }
+
   return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
     // ONE timestamp for every row this logical write produces — the catalog
     // mints, the issue node, each citation node, and every edge. Captured here
@@ -267,6 +497,35 @@ export async function createIssue(handle: IWriteStoreHandle, input: ICreateIssue
     // `nowISO()` is what made a single `createIssue` write rows with differing
     // `t_created`, drifting from both the returned `createdAt` and the audit's `at`.
     const now = nowISO();
+
+    // §6.4 point 3: `'comment'` with ≥1 candidate at/above threshold — no
+    // issue node, no catalog resolution/minting, no edges beyond `has_note`.
+    // Still inside the SAME `immediate` transaction every write verb opens
+    // exactly once per invocation (§4c) — never a second, nested call.
+    if (duplicateCandidates.length > 0 && duplicateAction === 'comment') {
+      const [topCandidate] = duplicateCandidates;
+      const targetIssue = await resolveLiveIssueTx(tx, topCandidate.uid);
+      const noteText = `${input.title}\n\n${input.body}`;
+      const noteNode = await writeNodeTx(tx, {
+        kind: 'note',
+        content: noteText,
+        metadata: { author: input.by, text: noteText, at: now },
+        at: now,
+      });
+      const hasNoteRule = await resolveEdgeKindTx(tx, 'has_note');
+      await writeEdgeTx(tx, {
+        at: now,
+        srcRowid: targetIssue.rowid, srcUid: targetIssue.uid, srcKind: 'issue',
+        dstRowid: noteNode.rowid, dstUid: noteNode.uid, dstKind: 'note',
+        rel: 'has_note', rule: hasNoteRule, typePolicy: handle.typePolicy,
+      });
+      return {
+        created: false,
+        commentedOn: { uid: targetIssue.uid, noteId: noteNode.uid },
+        duplicateCandidates,
+      };
+    }
+
     const project = await resolveProjectTx(tx, input.project);
     const policy = resolveProjectPolicy(project);
 
@@ -401,7 +660,7 @@ export async function createIssue(handle: IWriteStoreHandle, input: ICreateIssue
     });
 
     return {
-      created: true as const,
+      created: true,
       uid: issue.uid,
       item: {
         uid: issue.uid,
@@ -415,6 +674,11 @@ export async function createIssue(handle: IWriteStoreHandle, input: ICreateIssue
         assignee: input.assignee,
         author: authorRow.name,
       },
+      // §6.4 point 3: present on `'force'` when the scan found ≥1 candidate
+      // (reported for the caller's own audit trail even though the write
+      // proceeded) — absent on a zero-candidate scan, per this file's own
+      // `ICreateIssueResult` doc comment.
+      ...(duplicateCandidates.length > 0 ? { duplicateCandidates } : {}),
     };
   });
 }
