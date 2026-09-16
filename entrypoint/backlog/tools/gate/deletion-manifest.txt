@@ -17,10 +17,44 @@ PRESERVE store/serve-lock.spec.ts
 PRESERVE store/signal-cleanup.ts
 PRESERVE store/signal-cleanup.spec.ts
 
+# --- G2-G5 corrections: the store factory the NEW layer opens through, and its
+# --- transitive deps. Found by computing survivor->doomed import edges; the
+# --- earlier containment check only looked for importers OUTSIDE the package.
+PRESERVE store/graph-backlog-store.ts
+PRESERVE store/semantic-search.ts
+PRESERVE store/immediate-retry.ts
+PRESERVE store/embed-queue.ts
+PRESERVE store/mutate-metadata.ts
+
+# --- specs of the newly-preserved modules. Preserving a module while deleting
+# --- its spec silently drops coverage while the suite stays green.
+# --- graph-backlog-store.spec + rag-optional-deps.spec need ZERO rework;
+# --- semantic-search.spec needs one import repoint (model.js -> envelope.js).
+PRESERVE store/graph-backlog-store.spec.ts
+PRESERVE store/semantic-search.spec.ts
+PRESERVE store/rag-optional-deps.spec.ts
+
+# --- RESEED-REQUIRED: these two are the only behavioural coverage of the
+# --- preserved embedding path, but they seed through the doomed store/crud.ts
+# --- (createItemNode/updateItemNode/softDeleteItemNode). They are preserved and
+# --- reseeded onto write/create-issue.ts IN the cutover commit, never deleted.
+PRESERVE store/rag-e2e.spec.ts
+PRESERVE store/embed-write-path.spec.ts
+
+# --- G4: apigen mount wiring (cliPlugin), NOT hand-rolled v1 argv. Zero
+# --- occurrences of humanId/markdown/ops-v1/idOverride/repoKey. SPEC 6.7
+# --- mandates the CLI keep the "unchanged mechanism, new operation list".
+# --- Deleting it strands cli.spec.ts, which this manifest already preserves.
+PRESERVE cli.ts
+
 # --- whole directory: the v2 namespace collapses into the flat layer ---
 DELETE_GLOB v2/*.ts
 
 # --- store/: everything except the five PRESERVE paths above ---
+# store/mapping.ts stays DELETE: embed-queue needs only `stripContentMarker`
+# (a one-line regex, rehomed into embed-queue.ts) and mutate-metadata needs
+# only `BacklogNodeMeta` as a DEFAULT TYPE PARAM (retyped Record<string,unknown>).
+# Its five v1 model types (BacklogItem/BacklogStatus/Citation/Note/Priority) die with it.
 DELETE_GLOB store/*.ts
 
 # --- top-level modules ---
@@ -28,7 +62,6 @@ DELETE model.ts
 DELETE client.ts
 DELETE ops-v1.ts
 DELETE markdown.ts
-DELETE cli.ts
 DELETE migration-admin.ts
 DELETE migration-phase.ts
 
