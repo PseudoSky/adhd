@@ -885,21 +885,11 @@ describe('backlog search — natural-language shortcut (real spawned bin)', () =
     return res.stdout.trim().split('\n').pop() ?? '';
   }
 
-  // SKIPPED — a real, currently-shipping bug, NOT a limitation of this test.
-  // `search-shortcut.ts`'s positional-query translation still compiles the
-  // text form onto a top-level `text` key (`input['text'] = text`), but the
-  // real, currently-mounted `query` operation's input schema (derived from
-  // `IIssueQueryInput`, `query/types.ts`) has NO top-level `text` field —
-  // free text now lives at `filter.grep`/`filter.semantic`. Confirmed
-  // empirically against the real built bin: `search "<text>"` (no `--anchor`)
-  // always fails schema validation with `invalid_argument` /
-  // "must NOT have additional properties" on `text`, so the positional
-  // (non-anchor) form of `search` is unreachable end-to-end today.
-  // `search-shortcut.ts` is not this file's assigned scope to fix, so this is
-  // filed rather than patched around; see the report for the citation. Only
-  // the two POSITIONAL-TEXT tests are affected — `--anchor` (no `text`) still
-  // passes and is proven above.
-  it.skip('finds a real seeded item by natural-language text and returns the standard envelope', () => {
+  // `text` is now a first-class `IIssueQueryInput` field (query/types.ts),
+  // routed to `filter.semantic`/`filter.grep` once, in `queryIssues`
+  // (query/query.ts's `resolveTextInput`) — so the positional (non-`--anchor`)
+  // form of `search` is reachable end-to-end again.
+  it('finds a real seeded item by natural-language text and returns the standard envelope', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-search-'));
     const uid = seed(adhdRoot, 'Publish gate trips intermittently under machine load', 'The release publish gate reports a spurious failure.');
     seed(adhdRoot, 'Unrelated: storybook theme tokens drift between builds', 'Nothing to do with publishing.');
@@ -912,11 +902,7 @@ describe('backlog search — natural-language shortcut (real spawned bin)', () =
     expect(body.data.items.map((i) => i.uid)).toContain(uid);
   });
 
-  // SKIPPED — same root cause as the test above: the positional-text
-  // translation emits an invalid top-level `text` key against the current
-  // `query` schema, so both sides of this parity check fail validation
-  // before there is anything to compare byte-for-byte.
-  it.skip('PARITY: `search "<text>" --limit N --status open` is byte-identical to the equivalent `query --input`', () => {
+  it('PARITY: `search "<text>" --limit N --status open` is byte-identical to the equivalent `query --input`', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-search-parity-'));
     seed(adhdRoot, 'Publish gate trips intermittently under machine load', 'The release publish gate reports a spurious failure.');
     seed(adhdRoot, 'Second publish gate observation from a different run', 'Also about the publish gate.');

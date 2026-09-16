@@ -34,6 +34,7 @@ import {
   MAX_QUERY_LIMIT,
 } from './types.js';
 import { querySimilarView } from './views/semantic.js';
+import { isSemanticSearchReadable } from '../store/semantic-search.js';
 
 /**
  * The dependencies `query`/the view helpers need. `search` is OPTIONAL —
@@ -522,8 +523,8 @@ async function queryOrder(handle: IQueryStoreHandle, input: IIssueQueryInput): P
 }
 
 /**
- * `view:'overlap'` (SPEC.md §6.2: v1's `overlapBy`/`humanIds` renamed
- * `axis`/`uids`) — groups `overlapUids` by the requested `axis`'s value,
+ * `view:'overlap'` (SPEC.md §6.2: selected via `axis`/`uids`) — groups
+ * `overlapUids` by the requested `axis`'s value,
  * surfacing every group with ≥2 members (a genuine overlap; a singleton
  * group is not a shared axis value by definition). **Interpretation
  * decision** (SPEC.md leaves the exact output shape unspecified beyond
@@ -585,8 +586,59 @@ async function queryOverlap(handle: IQueryStoreHandle, input: IIssueQueryInput):
     .map(([axisValue, members]) => ({ axisValue, uids: [...members] }));
 }
 
+/**
+ * Normalises `input.text` (the natural-language query shared by every mount —
+ * CLI `search`, MCP, HTTP) into `filter.semantic` or `filter.grep`, exactly
+ * ONCE, so every caller gets identical routing rather than each transport
+ * reimplementing it. Routes to `semantic` when {@link isSemanticSearchReadable}
+ * is true AND the store handle actually carries a `search` backend (a
+ * readable-but-handle-less combination cannot happen in practice, but the
+ * grep fallback keeps this total rather than throwing on it); otherwise
+ * routes to `grep`. The matching default `sort` (`'relevance'` /
+ * `'textMatch'`) is only applied when the caller did not pass `sort`
+ * explicitly — an explicit `sort` always wins.
+ *
+ * Exported (in addition to being called internally by {@link queryIssues})
+ * so the sort-precedence rule above can be unit-tested directly: the ranked
+ * grep/semantic branch of `queryList` never echoes the resolved `sort` value
+ * back in its output (it only gates on relevance/textMatch requiring
+ * grep/semantic, then ignores `sort` entirely when ordering ranked results),
+ * so there is no way to observe "explicit sort survived" from `queryIssues`'s
+ * return value alone — `text-routing.spec.ts` asserts on this function's
+ * return value for that one property, and drives every other behaviour
+ * through the real `queryIssues`/real store end-to-end.
+ */
+export function resolveTextInput(handle: IQueryStoreHandle, input: IIssueQueryInput): IIssueQueryInput {
+  if (input.text === undefined) return input;
+
+  if (input.filter?.semantic !== undefined || input.filter?.grep !== undefined) {
+    throw new InvalidArgumentError(
+      'text',
+      'text is mutually exclusive with filter.semantic/filter.grep — pick one: the free-text positional (text), or an explicit filter.semantic/filter.grep',
+    );
+  }
+
+  if (input.text.trim().length === 0) {
+    throw new InvalidArgumentError('text', 'must not be blank');
+  }
+
+  const useSemantic = isSemanticSearchReadable() && handle.search !== undefined;
+  const { text, ...rest } = input;
+
+  return {
+    ...rest,
+    sort: rest.sort ?? (useSemantic ? 'relevance' : 'textMatch'),
+    filter: {
+      ...rest.filter,
+      ...(useSemantic ? { semantic: text } : { grep: text }),
+    },
+  };
+}
+
 /** The `query` verb (SPEC.md §5, §6.5) — dispatches on `input.view`, default `'list'`. */
-export async function queryIssues(handle: IQueryStoreHandle, input: IIssueQueryInput = {}): Promise<IIssueQueryResult> {
+export async function queryIssues(handle: IQueryStoreHandle, rawInput: IIssueQueryInput = {}): Promise<IIssueQueryResult> {
+  const input = resolveTextInput(handle, rawInput);
+
   if (input.format === 'markdown') {
     // Rendering (headers + `[target sha:…]` citations, §6.5/§6.6) is the markdown-projection
     // layer's job, not this read layer's — out of scope for this slice (documented, not silently
