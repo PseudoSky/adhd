@@ -97,3 +97,62 @@ Full AC-by-AC audit: **[HANDOFF.md](./HANDOFF.md)**.
       (4, 8, 13, 19, 20). Two of the ABSENT are FEATURE gaps — the code does not
       exist — not test gaps: AC-19's duplicate gate and AC-4's embedding observer.
 - [ ] Public package blind-tested after publish
+
+---
+
+## F. Advisor review findings (opus, session resume)
+
+### F1 — BLOCKER: production handle wires neither `search` nor `embedding`
+Verified firsthand, not taken on report:
+- `api.ts:147` `queryHandle(ctx)` returns `{graph}` only — `search` deliberately
+  omitted, with a comment (`api.ts:130-146`) explaining that nothing in the
+  package constructs a `StoreSearchBackend` outside `query/views/semantic.spec.ts`.
+- `api.ts:123` `writeHandle(ctx)` returns `{adapter, typePolicy}` only — no
+  `embedding`, no `search`.
+
+Consequence: `scanForDuplicates` returns `[]` (no backend) and
+`scheduleIssueEmbedding` no-ops with no audit row, in production, always.
+**AC-4 and AC-19 are proven in unit tests and FALSE at the CLI** — every passing
+test builds its own wired handle. This is exactly the pattern AGENTS.md §7 was
+written about, and it must be fixed BEFORE the wipe, not debugged inside it.
+
+Fix: `src/write/bootstrap.ts` — the store-bootstrap module that
+`test/helpers/open-test-issue-store.ts`'s header already anticipates. Dispatched.
+
+### F2 — the wipe is contained (swept, was never checked)
+`rg -l "@adhd/backlog"` outside `entrypoint/backlog/**`: every hit is prose —
+docs, RELEASE/CHANGELOG/BACKLOG markdown, and comment text inside
+`tools/nx-plugins/**` recounting past publish incidents. **Zero external source
+importers.** The wipe cannot break another package.
+
+### F3 — `index.ts` IS the 1.0.0 public API, and nearly all of it dies
+`src/index.ts` today re-exports: 37 v1 ops from `./ops-v1.js`, the six v2 verbs
+from `./client.js`, `startBacklogServer`/`runBacklogCli`/`runServeCommand`,
+`openGraphBacklogStore`, 9 markdown functions, and `export * from './model.js'`
+(line 104). `ops-v1.ts`, `client.ts`, `markdown.ts`, `model.ts`, and
+`store/graph-backlog-store.ts` are all on the deletion list. Deciding the
+surviving surface is an API DECISION to make before deleting, not a
+compile-error to fix after.
+
+### F4 — keep the black-box safety net green through the remount
+`install.e2e.spec.ts`, `serve.spec.ts`, `serve.singleton.spec.ts`,
+`serve.telemetry-role.spec.ts`, `server.published-layout.spec.ts` drive the built
+artifact as a black box and are NOT on the doomed list. They catch what
+`api.surface.spec.ts` cannot (it proves the mount descriptor, not that a host can
+invoke it). Keep them green across the remount.
+
+### F5 — run `nx affected -t verify-dist-load`
+Never run this session, and the published surface has changed twice.
+
+### F6 — vocabulary gate scope: DECIDED = shipped code
+Gate runs over `src/`. SPEC.md and README get rewritten to describe what backlog
+IS (not what it replaced). The frozen ETL corpus JSONL fixtures and
+`tools/etl/corpus-types.ts`'s literal `humanId` fixture key are EXEMPT: they are
+the ETL parity gate's own reference data, `run-etl.spec.ts` already asserts
+`humanId` never leaks past the boundary, and regenerating them would churn the
+very fixtures that prove the ETL correct. Asked the user; no response in 60s;
+proceeding on this reading and flagging it at the acceptance gate.
+
+### F7 — DROPPED from Phase A
+Old item 8 (collapse the three duplicate traversals in `resolve.ts`) is cleanup,
+not acceptance, and `resolve.ts` largely dies in the wipe. Not gating 1.0.0.
