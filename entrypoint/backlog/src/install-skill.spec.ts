@@ -1,5 +1,5 @@
 /**
- * install-skill.spec.ts — MIGRATION.md §4.2. `installSkill`'s `homeOverride`
+ * install-skill.spec.ts — SPEC.md §6.6's host-command carve-out. `installSkill`'s `homeOverride`
  * parameter is a TEST-ISOLATION ESCAPE HATCH ONLY (mirrors
  * `BacklogCtx.adhdRoot` elsewhere in this package) — every test here passes
  * one, so NOTHING in this file ever touches the real machine's
@@ -25,7 +25,7 @@ import { installSkill } from './install-skill.js';
 // regardless of the caller's cwd.
 const REAL_SKILL_MD = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'skill', 'SKILL.md'), 'utf8');
 
-describe('installSkill (MIGRATION.md §4.2)', () => {
+describe('installSkill (SPEC.md §6.6 host-command carve-out)', () => {
   let tmp: string;
 
   beforeEach(() => {

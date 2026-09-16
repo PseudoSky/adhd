@@ -161,11 +161,11 @@ export function resolveMountNamespaces(
 
 /**
  * Prepends `prefix` (the real, namespace-qualified command path segments
- * every `client.ts` export shares — see {@link resolveCommandPrefix}) to a
- * user-typed argv, so `backlog get-item --repo … --human-id …` (what a
- * consumer actually types — the bin's own name is never part of `argv`)
- * resolves against the cli-output plugin's command table, which is keyed by
- * the FULL internal path (`['backlog', 'get-item']`).
+ * every `api.ts` export shares — see {@link resolveCommandPrefix}) to a
+ * user-typed argv, so `backlog get --input '{"uid":"…"}'` (what a consumer
+ * actually types — the bin's own name is never part of `argv`) resolves
+ * against the cli-output plugin's command table, which is keyed by the FULL
+ * internal path (`['backlog', 'get']`).
  *
  * Idempotent / defensive:
  *  - Empty argv is returned unchanged — `run()` treats `argv.length === 0`
