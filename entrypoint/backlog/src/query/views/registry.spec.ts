@@ -429,4 +429,83 @@ describe('registry views + lookup (SPEC.md §3a)', () => {
       expect(result.hint).toMatch(/data integrity/);
     });
   });
+
+  /**
+   * The suffix/prefix path fallback used to run `graph.queryNodes({kind:
+   * 'location', liveOnly: true, metadata: {locType: {eq: 'path'}}})` with NO
+   * `limit` — a full scan of every live path location in the store on every
+   * miss (blind performance review finding). It is now bounded at
+   * `MAX_QUERY_LIMIT` (§types.ts), fetching one row past the cap to detect
+   * truncation without a second round trip. These tests prove: (1) the bound
+   * really is applied (a large candidate set does not balloon the query),
+   * and (2) a truncated scan that misses its match reports THAT — a
+   * distinct, honest outcome from an exhaustive "not found" — rather than
+   * silently returning the same not-found error an exhaustive miss would.
+   *
+   * `MAX_QUERY_LIMIT` rows is a lot to seed per test; this suite seeds them
+   * once in its own `beforeEach` (not the shared fixture above) so the other
+   * `lookup`/`getRegistryDetail`/list* suites stay fast.
+   */
+  describe('lookup — path fallback scan is bounded (MAX_QUERY_LIMIT)', () => {
+    it('a match that lands beyond the cap is reported as an honest truncated-scan miss, not a bare not-found', async () => {
+      const needleValue = '/some/very/long/absolute/prefix/that/is/not/queried/directly/entrypoint/backlog/src/deep/needle.ts';
+      const needleQuery = 'entrypoint/backlog/src/deep/needle.ts';
+
+      await executeWriteTransaction(store, async (tx) => {
+        const now = nowISO();
+        // MAX_QUERY_LIMIT (1000) non-matching path locations, inserted FIRST so
+        // they occupy the capped scan window ahead of the real match.
+        for (let i = 0; i < 1000; i++) {
+          await writeNodeTx(tx, {
+            kind: 'location',
+            name: `noise-${i}`,
+            metadata: { locType: 'path', value: `/noise/does-not-match-${i}.ts`, componentUid: fx.componentBacklog },
+            at: now,
+          });
+        }
+        // The 1001st path location — the one the query actually wants — is
+        // seeded LAST, so it falls outside the first-MAX_QUERY_LIMIT slice.
+        await writeNodeTx(tx, {
+          kind: 'location',
+          name: 'needle',
+          metadata: { locType: 'path', value: needleValue, componentUid: fx.componentBacklog },
+          at: now,
+        });
+      });
+
+      const rejection = await lookup(store.graph, needleQuery).then(
+        () => { throw new Error('expected lookup to reject, it resolved instead'); },
+        (e: unknown) => e,
+      );
+      expect(rejection).toBeInstanceOf(CatalogNotFoundError);
+      expect((rejection as CatalogNotFoundError).message).toMatch(/scanned only the first \d+/);
+    });
+
+    it('a match within the cap still resolves normally even with many noise rows ahead of it', async () => {
+      const needleValue = '/prefix/entrypoint/backlog/src/shallow/needle.ts';
+      const needleQuery = 'entrypoint/backlog/src/shallow/needle.ts';
+
+      await executeWriteTransaction(store, async (tx) => {
+        const now = nowISO();
+        for (let i = 0; i < 50; i++) {
+          await writeNodeTx(tx, {
+            kind: 'location',
+            name: `noise-${i}`,
+            metadata: { locType: 'path', value: `/noise/does-not-match-${i}.ts`, componentUid: fx.componentBacklog },
+            at: now,
+          });
+        }
+        await writeNodeTx(tx, {
+          kind: 'location',
+          name: 'needle',
+          metadata: { locType: 'path', value: needleValue, componentUid: fx.componentBacklog },
+          at: now,
+        });
+      });
+
+      const result = await lookup(store.graph, needleQuery);
+      expect(result.location?.value).toBe(needleValue);
+      expect(result.hint).toMatch(/suffix/);
+    });
+  });
 });

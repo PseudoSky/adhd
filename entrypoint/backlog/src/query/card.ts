@@ -151,15 +151,24 @@ export async function resolveRelated(graph: GraphBackend, issueId: number, outgo
   return others.map((n) => ({ uid: n.uid, title: n.name ?? '', status: statuses.get(n.id)?.name ?? '' }));
 }
 
-/** Batch-resolve `has_status` targets for a set of issue nodes — one `getEdges` + one `getNodesByIds`, never N round trips. */
+/**
+ * Batch-resolve `has_status` targets for a set of issue nodes — one
+ * `getEdges({rel:'has_status'})` covering every `has_status` edge in the
+ * store, filtered down to `issues` in memory, plus one `getNodesByIds` for
+ * the distinct status targets. `getEdges` only accepts a single `src`/`dst`
+ * (see `queryReady` in `query.ts` for the same relation-wide-fetch pattern),
+ * so a per-issue `getEdges({src, rel})` call — even fired concurrently via
+ * `Promise.all` — is still N round trips to the backend, not the constant
+ * number this function promises its callers.
+ */
 async function resolveStatusesFor(graph: GraphBackend, issues: NodeRecord[]): Promise<Map<number, NodeRecord>> {
   if (issues.length === 0) return new Map();
-  const edges = await Promise.all(issues.map((i) => graph.getEdges({ src: i.id, rel: 'has_status' })));
+  const issueIds = new Set(issues.map((i) => i.id));
+  const edges = await graph.getEdges({ rel: 'has_status' });
   const statusEdgeByIssue = new Map<number, number>();
-  edges.forEach((es, i) => {
-    const e = es[0];
-    if (e) statusEdgeByIssue.set(issues[i].id, e.dst);
-  });
+  for (const e of edges) {
+    if (issueIds.has(e.src) && !statusEdgeByIssue.has(e.src)) statusEdgeByIssue.set(e.src, e.dst);
+  }
   const statusIds = [...new Set(statusEdgeByIssue.values())];
   if (statusIds.length === 0) return new Map();
   const statusNodes = await graph.getNodesByIds(statusIds);

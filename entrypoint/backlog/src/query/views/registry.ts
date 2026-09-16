@@ -17,16 +17,17 @@
 import type { GraphBackend, NodeRecord } from '@adhd/sox-graph-store';
 import { CatalogNotFoundError, InvalidArgumentError } from '../../write/errors.js';
 import { isUidShaped, tryResolveComponentRef, tryResolveRef } from '../resolve.js';
-import type {
-  IComponentDetail,
-  IComponentSummary,
-  ILocationDetail,
-  ILocationSummary,
-  ILocationType,
-  ILookupResult,
-  IProjectDetail,
-  IProjectSummary,
-  IRegistryQueryFilter,
+import {
+  type IComponentDetail,
+  type IComponentSummary,
+  type ILocationDetail,
+  type ILocationSummary,
+  type ILocationType,
+  type ILookupResult,
+  type IProjectDetail,
+  type IProjectSummary,
+  type IRegistryQueryFilter,
+  MAX_QUERY_LIMIT,
 } from '../types.js';
 
 function toProjectSummary(n: NodeRecord): IProjectSummary {
@@ -222,20 +223,47 @@ export async function lookup(graph: GraphBackend, q: string): Promise<ILookupRes
   let location = (await graph.queryNodes({ kind: 'location', liveOnly: true, metadata: { locType: { eq: locType }, value: { eq: q } }, limit: 1 }))[0];
 
   let hint: string | undefined;
+  let pathFallbackTruncated = false;
   if (!location && locType === 'path') {
-    // suffix/prefix fallback for repo-relative paths (§3a step 2)
-    const candidates = await graph.queryNodes({ kind: 'location', liveOnly: true, metadata: { locType: { eq: 'path' } } });
-    const match = candidates.find((c) => {
+    // Suffix/prefix fallback for repo-relative paths (§3a step 2). `MetadataFilter`
+    // has no suffix/prefix/LIKE operator (see `sox-graph-store`'s `MetadataFilter`),
+    // so the `value.endsWith(q) || q.endsWith(value)` scan below cannot be pushed
+    // into `queryNodes` — it must run in memory. What CAN move server-side is the
+    // row count: bound the fetch at `MAX_QUERY_LIMIT` (the same ceiling every other
+    // view in this module enforces) instead of pulling every live path location in
+    // the store on every miss. Request one row past the cap so truncation is
+    // detectable without a second round trip.
+    const candidates = await graph.queryNodes({
+      kind: 'location',
+      liveOnly: true,
+      metadata: { locType: { eq: 'path' } },
+      limit: MAX_QUERY_LIMIT + 1,
+    });
+    pathFallbackTruncated = candidates.length > MAX_QUERY_LIMIT;
+    const scanned = pathFallbackTruncated ? candidates.slice(0, MAX_QUERY_LIMIT) : candidates;
+    const match = scanned.find((c) => {
       const value = typeof c.metadata?.value === 'string' ? c.metadata.value : '';
       return value.endsWith(q) || q.endsWith(value);
     });
     if (match) {
       location = match;
+      // A truncated scan that still found a match within the first MAX_QUERY_LIMIT
+      // candidates is a genuine match, not a false positive — no extra caveat needed.
       hint = `matched by path suffix/prefix fallback, not an exact value match`;
     }
   }
 
-  if (!location) throw new CatalogNotFoundError('location', q);
+  if (!location) {
+    // A truncated fallback scan that found nothing is NOT the same claim as an
+    // exhaustive "not found" — surface that distinction rather than silently
+    // reporting a false negative as though every path location had been checked.
+    throw new CatalogNotFoundError(
+      'location',
+      pathFallbackTruncated
+        ? `${q} (path suffix/prefix fallback scanned only the first ${MAX_QUERY_LIMIT} live path locations; a match may exist beyond this cap)`
+        : q,
+    );
+  }
 
   const componentUid = typeof location.metadata?.componentUid === 'string' ? location.metadata.componentUid : undefined;
   // A tombstoned component must resolve the same as a missing one — `lookup`
