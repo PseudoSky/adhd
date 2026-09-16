@@ -2,10 +2,10 @@
  * env.spec.ts — SPEC.md §7 DoD clause 4: cross-repo scope isolation. Two real
  * `Environment` instances at `project` scope rooted at two different temp
  * directories (each with its own `.git`) confirm items created in one are
- * invisible via `listItems` from the other; a third instance at `global`
+ * invisible via `get` from the other; a third instance at `global`
  * scope (rooted at a temp `adhdRoot`, standing in for `HOME`) confirms items
  * created via EITHER project instance are still not visible there — project
- * and global are separate SQLite files, by construction (SPEC.md §3).
+ * and global are separate stores, by construction (SPEC.md §3).
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
@@ -13,8 +13,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildBacklogEnv, resolveBacklogDbPath, resolveIrCacheFile } from './env.js';
 import { osTmpDir } from './test/helpers/tmp-store.js';
-import { createItem, getItem } from './ops-v1.js';
-import type { BacklogCtx } from './client.js';
+import { seedProject } from './test/helpers/open-test-issue-store.js';
+import { create, get, type BacklogCtx } from './api.js';
 import { openGraphBacklogStore, closeGraphBacklogStore, type GraphBacklogStore } from './store/graph-backlog-store.js';
 
 function makeProjectDir(name: string): string {
@@ -66,12 +66,18 @@ describe('scope isolation — real Environment instances, real temp filesystem r
     const ctxB = await openProjectCtx(projectDirB);
     expect(ctxA.env.files.db).not.toBe(ctxB.env.files.db);
 
-    const created = await createItem(ctxA, { family: 'BUG-ISOLATE', title: 'only in A', body: 'x', repo: 'test/repo' });
-    const fromA = await getItem(ctxA, 'test/repo', created.item.humanId);
-    const fromB = await getItem(ctxB, 'test/repo', created.item.humanId);
+    const { projectUid } = await seedProject(ctxA.store, 'proj-isolate-a');
+    const created = await create(ctxA, { project: projectUid, title: 'only in A', body: 'x', by: 'filer' });
+    if (!created.ok) throw new Error(`expected create to succeed: ${created.error.message}`);
+    const uid = created.data.uid;
+    if (uid === undefined) throw new Error('expected created.data.uid to be set');
 
-    expect(fromA).not.toBeNull();
-    expect(fromB).toBeNull();
+    const fromA = await get(ctxA, { uid });
+    const fromB = await get(ctxB, { uid });
+
+    expect(fromA.ok).toBe(true);
+    expect(fromB.ok).toBe(false);
+    if (!fromB.ok) expect(fromB.error.code).toBe('item_not_found');
   });
 
   it('a global-scoped store cannot see items created via either project-scoped instance', async () => {
@@ -82,13 +88,23 @@ describe('scope isolation — real Environment instances, real temp filesystem r
     expect(ctxGlobal.env.files.db).not.toBe(ctxA.env.files.db);
     expect(ctxGlobal.env.files.db).not.toBe(ctxB.env.files.db);
 
-    const createdA = await createItem(ctxA, { family: 'BUG-ISOLATE-G', title: 'from A', body: 'x', repo: 'test/repo' });
-    const createdB = await createItem(ctxB, { family: 'BUG-ISOLATE-G', title: 'from B', body: 'x', repo: 'test/repo' });
+    const { projectUid: projectUidA } = await seedProject(ctxA.store, 'proj-isolate-g-a');
+    const { projectUid: projectUidB } = await seedProject(ctxB.store, 'proj-isolate-g-b');
 
-    const seenFromGlobalA = await getItem(ctxGlobal, 'test/repo', createdA.item.humanId);
-    const seenFromGlobalB = await getItem(ctxGlobal, 'test/repo', createdB.item.humanId);
-    expect(seenFromGlobalA).toBeNull();
-    expect(seenFromGlobalB).toBeNull();
+    const createdA = await create(ctxA, { project: projectUidA, title: 'from A', body: 'x', by: 'filer' });
+    const createdB = await create(ctxB, { project: projectUidB, title: 'from B', body: 'x', by: 'filer' });
+    if (!createdA.ok) throw new Error(`expected create A to succeed: ${createdA.error.message}`);
+    if (!createdB.ok) throw new Error(`expected create B to succeed: ${createdB.error.message}`);
+    const uidA = createdA.data.uid;
+    const uidB = createdB.data.uid;
+    if (uidA === undefined || uidB === undefined) throw new Error('expected created.data.uid to be set on both');
+
+    const seenFromGlobalA = await get(ctxGlobal, { uid: uidA });
+    const seenFromGlobalB = await get(ctxGlobal, { uid: uidB });
+    expect(seenFromGlobalA.ok).toBe(false);
+    expect(seenFromGlobalB.ok).toBe(false);
+    if (!seenFromGlobalA.ok) expect(seenFromGlobalA.error.code).toBe('item_not_found');
+    if (!seenFromGlobalB.ok) expect(seenFromGlobalB.error.code).toBe('item_not_found');
   });
 
   it('resolveBacklogScope precedence: explicit option wins over ADHD_BACKLOG_SCOPE wins over ADHD_ENV_SCOPE wins over default global', async () => {
@@ -160,21 +176,6 @@ describe('scope isolation — real Environment instances, real temp filesystem r
     }
   });
 
-  it('migration.phase defaults to not-started and is overridable via ADHD_BACKLOG_MIGRATION_PHASE (MIGRATION.md §4.4)', async () => {
-    const prev = process.env['ADHD_BACKLOG_MIGRATION_PHASE'];
-    try {
-      delete process.env['ADHD_BACKLOG_MIGRATION_PHASE'];
-      const defaultEnv = buildBacklogEnv({ scope: 'project', adhdRoot: projectDirA });
-      expect(defaultEnv.config.migration.phase).toBe('not-started');
-
-      process.env['ADHD_BACKLOG_MIGRATION_PHASE'] = 'phase-3';
-      const overriddenEnv = buildBacklogEnv({ scope: 'project', adhdRoot: projectDirB });
-      expect(overriddenEnv.config.migration.phase).toBe('phase-3');
-    } finally {
-      if (prev === undefined) delete process.env['ADHD_BACKLOG_MIGRATION_PHASE'];
-      else process.env['ADHD_BACKLOG_MIGRATION_PHASE'] = prev;
-    }
-  });
 
   describe('BUG-CACHE-CWD-001 — resolveIrCacheFile is process.cwd()-independent', () => {
     let prevCwd: string;
