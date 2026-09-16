@@ -219,3 +219,31 @@ list."
 It lists 6 verbs (`get, query, create, update, relate, admin`); `api.ts` exports
 14. It is asserted against by `server.v2.spec.ts` on both the CLI and MCP sides,
 so it is the split-brain guard and must be re-pinned to the real 14, renamed.
+
+## Section H — ETL disposition (resolves the zero-references tension)
+
+The §8 ETL reads the live store through its public API and writes every record
+into a fresh file via the new write layer. It is inherently about moving data
+between two shapes, so its own source unavoidably names both.
+
+That does NOT conflict with the zero-references acceptance criterion, because
+the ETL must not ship. This repo's own scaffolding rule is explicit: "One-shot
+migrations / ETL -> a temporary, uncommitted throwaway script." `tools/etl/` is
+outside the published package root (`dist/` is packed as the package root), so
+it never reaches a consumer — but it is currently tracked in git, which is the
+part that must change.
+
+Disposition, in order:
+  1. Run the ETL against the live store; capture counts.
+  2. Prove §9 AC-6 parity: issue count, terminal-closed count, per-issue
+     citation sets (100 sampled), and getSubgraph(project) counts must all
+     match the source.
+  3. THEN remove `tools/etl/` from the tree in its own commit, citing the
+     parity evidence in the message so the run is reproducible from history
+     even though the script is gone.
+  4. The vocabulary gate scans `src/` only today. After step 3 it should scan
+     the whole package so the criterion is enforced, not merely satisfied.
+
+Until step 3 lands, `tools/etl/` is the one place in this package where the
+old vocabulary legitimately appears, and the gate's src/-only scope is what
+keeps that from being a contradiction rather than an oversight.
