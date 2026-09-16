@@ -49,6 +49,10 @@ const EXPECTED = [
   { id: 'backlog/relate', mcp: 'backlog_relate', cli: 'backlog relate' },
   { id: 'backlog/move', mcp: 'backlog_move', cli: 'backlog move' },
   { id: 'backlog/delete', mcp: 'backlog_delete', cli: 'backlog delete' },
+  { id: 'backlog/upsert-project', mcp: 'backlog_upsert_project', cli: 'backlog upsert-project' },
+  { id: 'backlog/upsert-component', mcp: 'backlog_upsert_component', cli: 'backlog upsert-component' },
+  { id: 'backlog/upsert-location', mcp: 'backlog_upsert_location', cli: 'backlog upsert-location' },
+  { id: 'backlog/rm-location', mcp: 'backlog_rm_location', cli: 'backlog rm-location' },
 ] as const;
 
 async function mountedSurface(): Promise<{ id: string; mcp: string; cli: string }[]> {
