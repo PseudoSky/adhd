@@ -61,23 +61,26 @@
  * (§3's `EDGE_KIND_TABLE`, `write/catalog.ts:246-250`: all four declare
  * `sourceKind:'issue'`, i.e. the ISSUE is the edge source, the catalog node
  * is the edge target — `dst=catalog, collect .src=issue` is exactly right).
- * But `owns_project`/`owns_component` declare the OPPOSITE direction
+ * t` declare the OPPOSITE direction
  * (`sourceKind:'project'|'component'`, `targetKind:'component'|'issue'` —
- * the CATALOG node is the edge source, the child is the target), and
- * `resolveEdgeScopedCandidates`'s doc comment nonetheless claims "kind/
- * status/priority/project/component/author" all fit its one pattern. They do
- * not: calling it for `component` looks for edges INTO the component via
- * `owns_component`, but real `owns_component` edges point OUT of the
- * component, so it always resolves to an empty set for a component that
- * genuinely owns issues. This module therefore reuses
- * `resolveEdgeScopedCandidates` ONLY for the four directions it gets right
- * (`kind`/`status`/`priority`/`author`) and hand-composes the
- * `project`/`component` traversal itself, in the correct (source-directed)
- * order — mirroring `query.ts`'s own private (and correctly-directioned)
- * `resolveEdgeScopedFilterIds`. Flagged here rather than silently worked
- * around: `resolveEdgeScopedCandidates` is exported and its doc comment
- * overclaims — a future caller who takes that doc comment at face value for
- * `component`/`project` will reproduce this exact miss.
+ * the CATALOG node is the edge source, the child is the target), unlike the
+ * issue → catalog shape of `has_kind`/`has_status`/`has_priority`/
+ * `authored_by`.
+ *
+ * `resolveEdgeScopedCandidates` used to hard-code the issue → catalog shape
+ * for all six dimensions and therefore returned an empty set for a component
+ * that genuinely owned issues, which is why this module hand-composes the
+ * `project`/`component` traversal itself in the correct (source-directed)
+ * order — mirroring `query.ts`'s own private `resolveEdgeScopedFilterIds`.
+ *
+ * **That bug is now fixed at source**: `resolveEdgeScopedCandidates` reads
+ * the `edge_kind` row's `source_kind` and walks whichever direction the data
+ * declares, so it is correct for all six dimensions and the workaround here
+ * is no longer load-bearing. The hand-composed traversal below is kept for
+ * now only because it is on the hot semantic path and collapsing three
+ * implementations into one is a separate, separately-verified change; doing
+ * that collapse is the remaining cleanup, tracked as follow-up. Do not cite
+ * this comment as evidence the shared resolver is still wrong — it is not.
  */
 
 import type { GraphBackend, NodeFilter, NodeRecord } from '@adhd/sox-graph-store';
