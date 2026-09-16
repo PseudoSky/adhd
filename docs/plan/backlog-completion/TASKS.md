@@ -156,3 +156,66 @@ proceeding on this reading and flagging it at the acceptance gate.
 ### F7 — DROPPED from Phase A
 Old item 8 (collapse the three duplicate traversals in `resolve.ts`) is cleanup,
 not acceptance, and `resolve.ts` largely dies in the wipe. Not gating 1.0.0.
+
+## Section G — deletion-manifest corrections (measured, not assumed)
+
+The manifest as committed (`d72b736f`, 72 files / 31,905 lines) deletes files the
+NEW layer imports. Found by computing survivor→doomed import edges, which the
+earlier containment check missed: that check looked for importers OUTSIDE the
+package and correctly found none, but never checked survivors INSIDE it.
+
+**G1 — 10 survivors import 20 doomed edges.** Full list in the audit below. Two
+are genuine manifest errors; the rest are resolved by planned rework.
+
+**G2 — `store/graph-backlog-store.ts` must be PRESERVE, not DELETE.** It is the
+store factory `api.ts` (the new public surface) and `test/helpers/tmp-store.ts`
+open every store through. Seven survivors import it. Its only v1-vocabulary hit
+is a COMMENT (line 40, `dimensionGraph`). C-1's whole premise — flipping this
+file's `typePolicy`/`createGraphBackend` to `OPEN_TYPE_POLICY` — is incoherent
+against a file scheduled for deletion.
+
+**G3 — `store/semantic-search.ts` must be PRESERVE.** `write/bootstrap.ts`'s
+"SINGLE REPOINT SEAM" calls its `bootstrapSemanticBackend`, and `server.ts`
+imports it. Its only v1 hit is likewise a COMMENT (line 44).
+
+**G4 — `src/cli.ts` must be PRESERVE, not DELETE.** It is apigen mount wiring
+(`cliPlugin`), not hand-rolled v1 argv — SPEC §6.7 mandates the CLI keep the
+"unchanged mechanism, new operation list". It contains ZERO occurrences of
+humanId / markdown / ops-v1 / idOverride / repoKey / importedFrom. Its only
+doomed coupling is `migration` (21 hits, one `runMigrationPhaseCommand` +
+`SET_MIGRATION_PHASE_FLAG`) plus two imports to repoint (`client.js`→`api.js`,
+`model.js`→`envelope.js`). Deleting it destroys ~600 working lines and strands
+`cli.spec.ts`, which the manifest already lists as a survivor — an internal
+inconsistency: the manifest deletes the module but keeps its spec.
+
+**G5 — store closure.** With seeds {graph-backlog-store, semantic-search}, the
+transitive doomed closure is 6 files: + `immediate-retry.ts`, `embed-queue.ts`,
+`mapping.ts`, `mutate-metadata.ts`. `flushEmbeds` is part of the
+`GraphBacklogStore` interface (`:62`, wired `:118`) and `closeGraphBacklogStore`
+drains through it, so `embed-queue` is load-bearing, not vestigial.
+OPEN QUESTION: the new layer has its own `write/embedding-observer.ts`. Whether
+that supersedes `embed-queue` or complements it decides 4 of these 6 files.
+
+**G6 — a blind transitive closure is the WRONG tool here** and was rejected:
+seeded with `cli.ts` it preserves 28 files / 17,534 lines, because `cli.ts`
+currently imports `client.ts` which pulls the entire v1 store back in. The
+closure must be computed against the POST-rework import graph, not the current
+one. Recorded so this is not re-derived incorrectly later.
+
+**G7 — `server.v2.spec.ts` survives with banned vocabulary in its FILENAME.**
+The zero-v1/v2-reference acceptance criterion covers paths, not just contents.
+Needs rename as part of the cutover.
+
+**G8 — extraction source settled (was blocking `client.ts`'s deletion).**
+`server.ts:565` extracts `dist/client.d.ts`. `dist/api.d.ts` is already emitted
+by the existing vite build (verified — `dist/*.d.ts` lists it), so the repoint
+is one path change plus `backlogDistDir()`'s probe filename. SPEC §6.7 confirms
+the mechanism itself is unchanged: "CLI/MCP/HTTP each mount ... through the same
+one-descriptor→four-projection mechanism `server.ts` already uses
+(`describeMountedSurface`/`project(op)`) — unchanged mechanism, new operation
+list."
+
+**G9 — `BACKLOG_V2_VERBS` (`server.ts:162`) is both stale and banned vocabulary.**
+It lists 6 verbs (`get, query, create, update, relate, admin`); `api.ts` exports
+14. It is asserted against by `server.v2.spec.ts` on both the CLI and MCP sides,
+so it is the split-brain guard and must be re-pinned to the real 14, renamed.
