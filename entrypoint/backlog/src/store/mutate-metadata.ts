@@ -10,8 +10,8 @@
  * pattern).
  *
  * `.immediate()` (not the default deferred `BEGIN`) is load-bearing: a
- * deferred transaction only acquires SQLite's write lock at the moment its
- * FIRST write statement executes, leaving a window where two processes can
+ * deferred transaction only acquires the store adapter's write lock at the
+ * moment its FIRST write statement executes, leaving a window where two processes can
  * both pass a read-check under their own deferred transaction before either
  * escalates to a write lock. `BEGIN IMMEDIATE` acquires the RESERVED lock at
  * transaction start, so a second process's own `.immediate()` call blocks

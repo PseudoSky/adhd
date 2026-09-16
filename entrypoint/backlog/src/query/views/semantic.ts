@@ -24,9 +24,10 @@
  *
  * `@adhd/sox-vector-store`'s `VecFilter` contract is PURELY `{ids}` (its own
  * DEBT-011 doc comment: "it knows nothing about the graph's node table") —
- * confirmed empirically against the installed dist: `SqliteVectorBackend.knn`
- * (via its `BruteForceBackend.search`) and `.iter` both only apply an `ids`
- * restriction when `filter.ids.length > 0`; the SAME empty-array-means-
+ * confirmed empirically against the installed dist: the store adapter's
+ * synchronous vector backend's `.knn` (via its `BruteForceBackend.search`)
+ * and `.iter` both only apply an `ids` restriction when
+ * `filter.ids.length > 0`; the SAME empty-array-means-
  * unfiltered convention exists one layer up too, in
  * `@adhd/sox-graph-store`'s OWN `buildNodeFilterClause`
  * (`if (filter.ids !== undefined && filter.ids.length > 0)`). So `filters:

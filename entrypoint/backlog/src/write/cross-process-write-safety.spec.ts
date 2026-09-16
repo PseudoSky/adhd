@@ -1,23 +1,22 @@
 /**
  * cross-process-write-safety.spec.ts — BUG-039's fix-verification gate,
- * relocated onto the v2 write/read surface (SPEC.md §10.4, AC-22).
+ * living on the write/read surface (SPEC.md §10.4, AC-22).
  *
- * **History.** Under the OLD identity model (free-string `family`/`repo` +
- * an in-band allocated `humanId`), two real OS processes writing to the SAME
- * store silently LOST writes — both reported `ok:true` for every create, yet
- * a fresh reopen found only a fraction of the rows (manual repro: 160/250 and
- * 246/250 across distinct families, 440-446/500 for the SAME family). That
- * harness lived at `src/store/concurrency-scale.spec.ts` behind
- * `describe.skip` — the exact "silent gating" AGENTS.md's live-testing rule
- * forbids, which is why the defect went unproven for so long. `src/store/`
- * is scheduled for deletion; this file is the harness's new, permanent,
- * unflagged home so the proof doesn't get deleted along with the code it was
- * written to gate.
+ * **The hazard this guards against.** Free-string `family`/`repo` identity
+ * plus an in-band allocated counter-style id lets two real OS processes
+ * writing to the SAME store silently LOSE writes — both report `ok:true`
+ * for every create, yet a fresh reopen finds only a fraction of the rows
+ * (manual repro: 160/250 and 246/250 across distinct families, 440-446/500
+ * for the SAME family). A harness that reproduces this must never sit
+ * behind `describe.skip` — that is the exact "silent gating" AGENTS.md's
+ * live-testing rule forbids, which is how a defect like this can go
+ * unproven for a long time. This file is the harness's permanent, unflagged
+ * home so the proof can't get lost.
  *
- * **What changed under test.** Identity is now a DB-generated `uid`
+ * **What this proves.** Identity is a DB-generated `uid`
  * (`crypto.randomUUID()`, `write/tx.ts`'s `writeNodeTx`) — there is no
- * `humanId`, no shared counter, no free-string `family`/`repo` to collide on
- * — and every write runs inside one `BEGIN IMMEDIATE` transaction
+ * in-band allocated id, no shared counter, no free-string `family`/`repo` to
+ * collide on — and every write runs inside one `BEGIN IMMEDIATE` transaction
  * (`write/tx.ts`'s `executeWriteTransaction`). SPEC.md:29-33 marks "this
  * fixes cross-process write loss" as HYPOTHESIZED, not proven; this file is
  * §10.4's proof.

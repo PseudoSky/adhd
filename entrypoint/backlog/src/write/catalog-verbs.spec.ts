@@ -192,7 +192,7 @@ describe('registry CRUD — upsertProject/upsertComponent/upsertLocation/rmLocat
      * negative-control use only) to strip the `BEGIN IMMEDIATE`
      * compare-and-swap guarantee `upsertProject`'s find-then-create rests on.
      * Under `deferred` this test's own single-live-row assertion is not
-     * deterministically red on every run (SQLite's `deferred` mode can still
+     * deterministically red on every run (the store adapter's `deferred` mode can still
      * happen to serialize on a small in-process race — the SAME caveat
      * `claim.spec.ts`'s own negative control documents), but it reproduced a
      * duplicate live `project` row on repeated runs, which is IMPOSSIBLE

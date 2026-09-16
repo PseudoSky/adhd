@@ -13,7 +13,7 @@
  * `getNodesByIds`/`getEdges`/`getNodeByUid`/`searchNodes`/`countBy` are the
  * library's OWN read surface (`GraphBackend`, `@adhd/sox-graph-store`
  * `dist/index.d.ts:279-334`), already committed-state-consistent by
- * definition (SQLite/Turso serve a read against the latest committed
+ * definition (the store adapter serves a read against the latest committed
  * snapshot), and every one of them is written to run standalone. This module
  * therefore calls them directly — never the `tx.ts` hand-composed forms,
  * which exist for a different, transaction-scoped problem this file does not

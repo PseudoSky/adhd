@@ -124,8 +124,8 @@ export async function resolveAuditTrail(graph: GraphBackend, issueId: number, ou
 }
 
 /**
- * `blockers` (SPEC.md §5.2's carried-forward definition, restated onto v2's
- * `blocks` edge, §6.2): the set of issues that `blocks` this one (incoming
+ * `blockers` (SPEC.md §5.2's definition, restated onto the `blocks` edge,
+ * §6.2): the set of issues that `blocks` this one (incoming
  * `blocks` edges — `e.dst === issueId`) and are NOT YET terminal — "what's
  * actually blocking it right now," never the full historical blocker set.
  */

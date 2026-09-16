@@ -89,7 +89,7 @@ export interface IMoveIssueInput {
    * `upsertProject` (§3/§9 AC-23) — never minted here either.
    */
   toComponent?: string;
-  /** The acting agent/human identity (§6.3's opening rule). REQUIRED. */
+  /** The acting agent or person performing the move (§6.3's opening rule). REQUIRED. */
   by: string;
 }
 

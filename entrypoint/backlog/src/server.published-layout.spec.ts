@@ -92,11 +92,11 @@ describe('backlog published (rebased-to-root) layout — real npm-install-shape 
     expect(result.stderr).not.toMatch(/cannot mount/);
     expect(result.stderr).not.toMatch(/client\.d\.ts does not exist/);
     // Reaches the cli-output plugin's usage listing (mount + extraction
-    // succeeded) and exits cleanly. INTERFACE_v2 AC-5 collapsed the mount
-    // surface to the SIX `client.ts` verbs (`get`, `query`, `create`,
-    // `update`, `relate`, `admin` — `BACKLOG_V2_TOOLS`, model.ts); the old
-    // v1 verb names (`create-item`, `get-item`, ...) moved to `ops-v1.ts`
-    // and are no longer mounted on any transport. Verified empirically
+    // succeeded) and exits cleanly. The interface spec's AC-5 fixes the
+    // mount surface at exactly the SIX `client.ts` verbs (`get`, `query`,
+    // `create`, `update`, `relate`, `admin`, per model.ts) — no other verb
+    // names (`create-item`, `get-item`, ...) are mounted on any transport.
+    // Verified empirically
     // against the real built bin (`node dist/index.js --help`), which lists
     // exactly `backlog admin`, `backlog create`, `backlog get`, `backlog
     // query`, `backlog relate`, `backlog update` plus `batch action`.

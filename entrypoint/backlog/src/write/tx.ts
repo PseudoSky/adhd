@@ -30,7 +30,7 @@ import { BacklogWriteError, IssueNotFoundError, SingleValuedRelationConflictErro
 
 /**
  * The on-write embedding substrate (§4b, FEAT-021) — the narrow slice of
- * `semanticBackend`/`SemanticBackend` (`store/semantic-search.ts`, v1,
+ * `semanticBackend`/`SemanticBackend` (`store/semantic-search.ts`,
  * reference-only) this write layer actually needs. Deliberately NOT the
  * spec's own `createEmbeddingObserver(semanticBackend)` shape: that observer
  * is constructed from a `GraphWriteObserver` and registered with

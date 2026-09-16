@@ -1,5 +1,5 @@
 /**
- * index.ts — the `@adhd/backlog` v2 read/query layer's public surface
+ * index.ts — the `@adhd/backlog` read/query layer's public surface
  * (SPEC.md §5, §5a, §6.1, §6.3.1, §6.5, §3a).
  *
  * **Layout:**

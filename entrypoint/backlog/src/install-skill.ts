@@ -1,5 +1,5 @@
 /**
- * install-skill.ts — `backlog install-skill` (MIGRATION.md §4.2). A PURE
+ * install-skill.ts — `backlog install-skill`. A PURE
  * filesystem operation: copy the packaged `skill/SKILL.md` (this package's
  * OWN single source of truth for the skill's content, versioned in lockstep
  * with `client.ts` in the exact same publish — see `package.json`'s `files`
@@ -10,12 +10,12 @@
  * building the apigen package, the same way `cliPlugin.run()` itself
  * special-cases `--help`/`-h` before consulting its own route table.
  *
- * No new external dependency (`soxe` et al.) — MIGRATION.md §4.2's explicit
+ * No new external dependency (`soxe` et al.) — this package's explicit
  * design decision: a second published package or a hard dependency on an
  * external installer CLI both need human approval this repo has NOT granted
  * (`AGENTS.md`: "You always get human approval before installing external
- * tools"). This is the zero-new-dependency fallback the plan itself
- * recommends.
+ * tools"). Copying the packaged file directly is the zero-new-dependency
+ * approach the design settles on.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -110,8 +110,8 @@ export class BacklogUsageError extends Error {
 }
 
 /**
- * Prints a usage error the SAME way the apigen-mounted verbs and
- * `runMigrationPhaseCommand` already do — a machine-readable
+ * Prints a usage error the SAME way the apigen-mounted verbs and every
+ * other CLI command's own rejection path already do — a machine-readable
  * `{"code":"invalid_argument","message":…}` as the last stderr line, exit
  * code 2 (`CLI_EXIT_CODE['invalid_argument']`) — plus the human-readable
  * usage text, so a reader gets both the parse and the fix in one screen.
@@ -245,10 +245,11 @@ export function installSkillToHosts(hosts: SkillHost[], scope: SkillScope, cwd: 
  *  dispatch entirely. */
 export async function runInstallSkillCommand(argv: string[]): Promise<void> {
   // `--help`/`-h` ANYWHERE in argv is a usage request, never an unknown
-  // argument — matching `runMigrationPhaseCommand`'s `rest.includes('--help')`
-  // and cli-output's own pre-dispatch check. Previously `--help` fell through
-  // to parseArgs and came back as `unknown argument "--help"` on a stack
-  // trace, which is the exact opposite of what the reader asked for.
+  // argument — matching cli-output's own pre-dispatch check and every other
+  // CLI command's own `rest.includes('--help')` handling. Checking for it
+  // here, ahead of `parseArgs`, keeps a usage request from ever being
+  // misread as an unknown argument and surfaced as a raw stack trace, which
+  // would be the exact opposite of what the reader asked for.
   if (argv.includes('--help') || argv.includes('-h')) {
     console.log(INSTALL_SKILL_HELP_TEXT);
     return;

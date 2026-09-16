@@ -41,7 +41,7 @@ import { type IWriteStoreHandle, executeWriteTransaction, getNodeByRowidTx, getN
 export interface IClaimInput {
   /** The `issue` uid to claim/release/renew (§6.3, an "Issue verb"). */
   uid: string;
-  /** The claimant — the acting agent/human identity. REQUIRED on every action (§6.3's opening rule). */
+  /** The claimant — the acting agent or person. REQUIRED on every action (§6.3's opening rule). */
   by: string;
   action: 'claim' | 'release' | 'renew';
   /** Human-confirmed override of a NON-stale claim (§6.2). Only consulted on `action:'claim'` when the current claimant differs and the lease is not yet stale. */

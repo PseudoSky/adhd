@@ -91,7 +91,7 @@ export interface IRelateInput {
   targetUid: string;
   rel: RelateRel;
   action: 'add' | 'remove';
-  /** The acting agent/human identity (§6.3's opening rule). REQUIRED. */
+  /** The acting agent or person performing the change (§6.3's opening rule). REQUIRED. */
   by: string;
 }
 
