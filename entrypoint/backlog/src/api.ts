@@ -65,6 +65,12 @@ import { claim as claimIssueOp } from './write/claim.js';
 import { relate as relateIssueOp } from './write/relate.js';
 import { move as moveIssueOp } from './write/move.js';
 import { deleteIssue as deleteIssueOp } from './write/delete.js';
+import {
+  upsertProject as upsertProjectOp,
+  upsertComponent as upsertComponentOp,
+  upsertLocation as upsertLocationOp,
+  rmLocation as rmLocationOp,
+} from './write/catalog.js';
 
 import type {
   IIssueCard,
@@ -80,6 +86,16 @@ import type { IClaimInput, IClaimOutcome } from './write/claim.js';
 import type { IRelateInput, IRelateOutcome } from './write/relate.js';
 import type { IMoveIssueInput, IMoveIssueOutcome } from './write/move.js';
 import type { IDeleteIssueInput, IDeleteIssueOutcome } from './write/delete.js';
+import type {
+  IUpsertProjectInput,
+  IUpsertProjectOutcome,
+  IUpsertComponentInput,
+  IUpsertComponentOutcome,
+  IUpsertLocationInput,
+  IUpsertLocationOutcome,
+  IRmLocationInput,
+  IRmLocationOutcome,
+} from './write/catalog.js';
 
 /** The one type apigen special-cases via the `ctx-name-only` invariant. */
 export interface BacklogCtx {
@@ -261,6 +277,40 @@ export async function move(ctx: BacklogCtx, input: IMoveIssueInput): Promise<IOu
  */
 async function remove(ctx: BacklogCtx, input: IDeleteIssueInput): Promise<IOutcomeEnvelope<IDeleteIssueOutcome>> {
   return envelope(() => deleteIssueOp(writeHandle(ctx), input));
+}
+
+// ---------------------------------------------------------------------------
+// Registry CRUD (SPEC §3a) — project/component/location upsert + location removal
+// ---------------------------------------------------------------------------
+
+/**
+ * Create or update a project by `name`.
+ *
+ * On first creation, also mints the project's reserved default component
+ * `(root)`. A repeat call against an existing project is idempotent.
+ */
+export async function upsertProject(ctx: BacklogCtx, input: IUpsertProjectInput): Promise<IOutcomeEnvelope<IUpsertProjectOutcome>> {
+  return envelope(() => upsertProjectOp(writeHandle(ctx), input));
+}
+
+/** Create or update a component by `(project, name)`. */
+export async function upsertComponent(ctx: BacklogCtx, input: IUpsertComponentInput): Promise<IOutcomeEnvelope<IUpsertComponentOutcome>> {
+  return envelope(() => upsertComponentOp(writeHandle(ctx), input));
+}
+
+/**
+ * Create or find a location by `(component, locType, value)`.
+ *
+ * A component referenced by bare name (rather than uid) requires `project`
+ * to disambiguate it.
+ */
+export async function upsertLocation(ctx: BacklogCtx, input: IUpsertLocationInput): Promise<IOutcomeEnvelope<IUpsertLocationOutcome>> {
+  return envelope(() => upsertLocationOp(writeHandle(ctx), input));
+}
+
+/** Soft-remove a location by `uid`. */
+export async function rmLocation(ctx: BacklogCtx, input: IRmLocationInput): Promise<IOutcomeEnvelope<IRmLocationOutcome>> {
+  return envelope(() => rmLocationOp(writeHandle(ctx), input));
 }
 
 /**
