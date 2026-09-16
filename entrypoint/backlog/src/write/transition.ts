@@ -111,6 +111,7 @@ import {
   sha256Hex,
   writeEdgeTx,
   writeNodeTx,
+  resolveLiveIssueTx,
 } from './tx.js';
 
 export interface ITransitionInput {
@@ -304,18 +305,7 @@ export async function transition(handle: IWriteStoreHandle, input: ITransitionIn
   return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
     const now = nowISO();
 
-    const issueRow = await getNodeByUidTx(tx, input.uid);
-    if (!issueRow || issueRow.kind !== 'issue' || issueRow.tInvalid !== null) {
-      throw new IssueNotFoundError(input.uid);
-    }
-    if (issueRow.isSuperseded) {
-      // Same reasoning as `update.ts`'s identical check on its own fetched
-      // row — a superseded uid is no longer the current identity; SPEC.md
-      // does not name this case explicitly, so this reuses the ONE error
-      // class the spec already defines for "this uid's content moved on
-      // under you, re-get and retry" rather than inventing a new one.
-      throw new StaleSupersedeError(input.uid);
-    }
+    const issueRow = await resolveLiveIssueTx(tx, input.uid);
 
     // Re-resolved fresh against THIS transaction's own snapshot — never
     // reusing the pre-transaction read above, which only ever informed the

@@ -40,7 +40,7 @@
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { writeAudit } from './audit.js';
 import { InvalidArgumentError, IssueNotFoundError } from './errors.js';
-import { type IWriteStoreHandle, executeWriteTransaction, getNodeByUidTx, nowISO } from './tx.js';
+import { type IWriteStoreHandle, executeWriteTransaction, getNodeByUidTx, nowISO, resolveLiveIssueTx } from './tx.js';
 
 export interface IDeleteIssueInput {
   uid: string;
@@ -85,10 +85,7 @@ export async function deleteIssue(handle: IWriteStoreHandle, input: IDeleteIssue
 
   return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
     const now = nowISO();
-    const row = await getNodeByUidTx(tx, input.uid);
-    if (!row || row.kind !== 'issue' || row.tInvalid !== null) {
-      throw new IssueNotFoundError(input.uid);
-    }
+    const row = await resolveLiveIssueTx(tx, input.uid);
 
     const mergedMeta = { ...(row.metadata ?? {}), invalidatedReason: input.reason, invalidatedAt: now };
     const result = await tx.executeRun('UPDATE node SET t_invalid = ?, meta = ? WHERE rowid = ?', [now, JSON.stringify(mergedMeta), row.rowid]);

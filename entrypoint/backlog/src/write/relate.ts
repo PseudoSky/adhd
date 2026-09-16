@@ -76,6 +76,7 @@ import {
   invalidateEdgeTx,
   nowISO,
   writeEdgeTx,
+  resolveLiveIssueTx,
 } from './tx.js';
 
 /** The closed `rel` union `relate` accepts (§3/§6.3.6) — issue → issue in every case. */
@@ -170,14 +171,8 @@ export async function relate(handle: IWriteStoreHandle, input: IRelateInput): Pr
   return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
     const now = nowISO();
 
-    const sourceRow = await getNodeByUidTx(tx, input.sourceUid);
-    if (!sourceRow || sourceRow.kind !== 'issue' || sourceRow.tInvalid !== null) {
-      throw new IssueNotFoundError(input.sourceUid);
-    }
-    const targetRow = await getNodeByUidTx(tx, input.targetUid);
-    if (!targetRow || targetRow.kind !== 'issue' || targetRow.tInvalid !== null) {
-      throw new IssueNotFoundError(input.targetUid);
-    }
+    const sourceRow = await resolveLiveIssueTx(tx, input.sourceUid);
+    const targetRow = await resolveLiveIssueTx(tx, input.targetUid);
 
     const existingRowid = await getLiveEdgeRowidTx(tx, sourceRow.rowid, targetRow.rowid, input.rel);
 

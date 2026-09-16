@@ -36,7 +36,7 @@ import {
 } from './catalog.js';
 import { writeAudit } from './audit.js';
 import { ClaimHeldError, InvalidArgumentError, IssueNotFoundError } from './errors.js';
-import { type IWriteStoreHandle, executeWriteTransaction, getNodeByRowidTx, getNodeByUidTx, nowISO } from './tx.js';
+import { type IWriteStoreHandle, executeWriteTransaction, getNodeByRowidTx, getNodeByUidTx, nowISO, resolveLiveIssueTx } from './tx.js';
 
 export interface IClaimInput {
   /** The `issue` uid to claim/release/renew (§6.3, an "Issue verb"). */
@@ -209,10 +209,7 @@ export async function claim(handle: IWriteStoreHandle, input: IClaimInput): Prom
 
   return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
     const now = nowISO();
-    const row = await getNodeByUidTx(tx, input.uid);
-    if (!row || row.kind !== 'issue' || row.tInvalid !== null) {
-      throw new IssueNotFoundError(input.uid);
-    }
+    const row = await resolveLiveIssueTx(tx, input.uid);
 
     const meta = { ...(row.metadata ?? {}) };
     const claimedBy = typeof meta['claimedBy'] === 'string' ? (meta['claimedBy'] as string) : undefined;
