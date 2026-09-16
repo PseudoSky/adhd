@@ -151,3 +151,56 @@ Moving out of `model.ts`: `okEnvelope`, `errorEnvelope`, `IOutcomeEnvelope`,
 `ambiguous` is documented in terms of `(repo, humanId)` — vocabulary that dies
 with the gate. Carrying the full enum across would re-publish dead codes as
 public API.
+
+---
+
+## Measured: the vocabulary gate's real work list
+
+`entrypoint/backlog/tools/gate/vocabulary-gate.mjs` (new) greps `src/` for
+v1/v2/humanId/migration/sqlite and exits non-zero with a per-term, per-file work
+list. Baseline before the wipe: **2244 hits across 104 files.**
+
+That headline number is misleading in the useful direction — the top offenders
+(`model.ts`, `client.ts`, `ops-v1.ts`, `cli.ts`, all of `v2/`, almost all of
+`store/`) are already on the deletion list. Restricting the scan to files that
+SURVIVE the wipe gives the actual work list: **91 hits across 30 files**, and most
+are comments citing SPEC section numbers rather than live code.
+
+### Finding 1 — the black-box safety net does NOT survive unchanged
+
+This corrects the "keep them green through the remount" plan. Four built-artifact
+specs assert on `humanId` **in the response payload**, so they cannot stay green
+once human ids leave the data model — they need reseeding, not preserving:
+
+- `serve.spec.ts:89-99` — `expect(created.data.humanId).toBe('BUG-SERVECLI-001')`
+- `web-ui.spec.ts:150-156` — reads `data.humanId`, asserts `/^BUG-/`, round-trips it through a list
+- `cli-envelope.spec.ts:119-154` — `expect(data?.['humanId']).toBe('BUG-002')`
+- `batch-adoption.spec.ts:46-90` — types the batch payload as `{humanId, item:{humanId,...}}`
+
+`install.e2e.spec.ts`, `serve.singleton.spec.ts`, `serve.telemetry-role.spec.ts`
+and `server.published-layout.spec.ts` are clean of payload-level humanId and DO
+survive as the safety net.
+
+So the doomed-spec count rises from 4 to 8. These four are the most valuable
+tests in the package (they drive the real built artifact as a black box) — they
+must be reseeded onto `uid` identity, never deleted.
+
+### Finding 2 — three worker fixtures call the v1 API directly
+
+`test/fixtures/scale-worker.js`, `busy-retry-worker.js`, and
+`claim-race-worker.js` all call `backlog.claimItem(ctx, repo, humanId, by)` — a
+v1 op on the deletion list, with `(repo, humanId)` in its signature. They are
+spawned by the cross-process concurrency specs, so they die with their callers
+or get reseeded onto `claim(ctx, {uid, by})` alongside them.
+
+### Remaining survivor work after the wipe
+
+`env.ts` (10 — a `migration.phase` config key plus SQLite-worded descriptions),
+`query/types.ts` (6 — SPEC cross-references), `index.ts` (3 — the `ops-v1`
+re-export, which the surface decision already removes), `search-shortcut.{ts,spec.ts}`
+(6 — a `humanId` default field projection, live code), `server.ts` (3),
+`write/create-issue.ts` (3 — one comment citing the §6.2 migration table), plus
+~20 single-hit comment citations.
+
+`env.ts`'s `migration.phase` is the only live CONFIG key in the list: removing it
+is a config-surface change, not a comment edit.
