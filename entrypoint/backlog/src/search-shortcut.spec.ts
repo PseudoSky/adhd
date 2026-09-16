@@ -39,9 +39,9 @@ describe('buildSearchArgv — translation onto the mounted `query` verb', () => 
   });
 
   it('emits NO `sort` and NO `fields` of its own', () => {
-    // `compileTextQuery` derives `relevance` (configured) / `textMatch`
+    // `resolveTextInput` derives `relevance` (configured) / `textMatch`
     // (fallback) itself, and the `text` path already projects the compact
-    // humanId/kind/title/status/priority list. A default invented here would
+    // uid/kind/title/status/priority list. A default invented here would
     // override a correct one — and a hardcoded `sort: "relevance"` would
     // trip AC-12 on an unconfigured store.
     const input = inputOf(buildSearchArgv(['anything']));
@@ -86,8 +86,8 @@ describe('buildSearchArgv — translation onto the mounted `query` verb', () => 
   });
 
   it('--fields is a comma-separated projection list', () => {
-    const input = inputOf(buildSearchArgv(['x', '--fields', 'humanId,title,_score']));
-    expect(input['fields']).toEqual(['humanId', 'title', '_score']);
+    const input = inputOf(buildSearchArgv(['x', '--fields', 'uid,title,_score']));
+    expect(input['fields']).toEqual(['uid', 'title', '_score']);
   });
 
   it('--tag is repeatable AND comma-splittable, and the two forms agree', () => {

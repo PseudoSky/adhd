@@ -4,7 +4,7 @@
  *
  * ## Why a translation and not a seventh operation
  *
- * INTERFACE_v2 §3 fixes the apigen mount surface at exactly six verbs
+ * The apigen mount-surface spec §3 fixes the apigen mount surface at exactly six verbs
  * (`get, query, create, update, relate, admin`) — `index.ts`'s own comment
  * above those exports says "these, and only these". Adding a `search` export
  * to `client.ts` would widen that surface for every transport (CLI, HTTP,
@@ -18,29 +18,29 @@
  *
  * ## Why the positional compiles to `text`, not `filter.semantic`
  *
- * `IBacklogQueryInput.text` is already specified as "the natural-language
+ * `IIssueQueryInput.text` is already specified as "the natural-language
  * query; also the CLI positional form" (§2.1b) — this shortcut is the CLI
- * form that field was written for. `compileTextQuery` (v2/query.ts) routes
- * the whole string into `filter.semantic` when the vector space is readable
- * and into `filter.grep` when it is NOT (RAG-SPEC §3.1 / BUG-045), and picks
- * `sort: "relevance"` or `"textMatch"` to match. Compiling the positional
- * straight to `filter.semantic` instead would hard-fail with
- * `rag_not_configured` on an unconfigured or unbackfilled store, throwing
- * away a working keyword answer — and would ALSO need this module to
- * hardcode a `sort` default that `compileTextQuery` already derives
- * correctly. Neither divergence is worth owning here.
+ * form that field was written for. `resolveTextInput` (query/query.ts, called
+ * once from `queryIssues`) routes the whole string into `filter.semantic`
+ * when the vector space is readable and into `filter.grep` when it is NOT
+ * (RAG-SPEC §3.1 / BUG-045), and picks `sort: "relevance"` or `"textMatch"`
+ * to match. Compiling the positional straight to `filter.semantic` instead
+ * would hard-fail on an unconfigured or unbackfilled store, throwing away a
+ * working keyword answer — and would ALSO need this module to hardcode a
+ * `sort` default that `resolveTextInput` already derives correctly. Neither
+ * divergence is worth owning here.
  *
  * For the same reason there is no `fields` default: the `text` path's own
- * projection is already the compact `humanId/kind/title/status/priority`
- * list, so a default invented here could only make it worse. `--fields`
- * overrides it (add `_score` to see the ranking scores).
+ * projection is already the compact `uid/kind/title/status/priority`
+ * list (`DEFAULT_ISSUE_CARD_FIELDS`, query/types.ts), so a default invented
+ * here could only make it worse. `--fields` overrides it (add `_score` to
+ * see the ranking scores).
  *
  * ## Error parity
  *
  * The flags below are hand-parsed, not schema-derived, so every rejection
  * mirrors `@adhd/apigen-plugin-cli-output`'s `parseArgs`/validate-Layer
- * wording byte-for-byte, exactly as `runMigrationPhaseCommand` (cli.ts)
- * does: `Unknown option: --X. Available: …` (a REAL list, never a placebo),
+ * wording byte-for-byte: `Unknown option: --X. Available: …` (a REAL list, never a placebo),
  * `Missing value for --X`, `Unexpected positional argument: "X"`. The caller
  * prints them as `{"code":"invalid_argument","message":…}` on stderr with
  * `process.exitCode = 2` (`CLI_EXIT_CODE['invalid_argument']`).
@@ -134,7 +134,7 @@ export const SEARCH_HELP = [
   '  --status <s>       open | closed | OPEN,IN_PROGRESS | …',
   '  --priority <p>     CRITICAL | HIGH | MEDIUM | LOW (comma-separated for several)',
   '  --kind <k>         BUG | DEBT | FEAT | …',
-  '  --family <f>       humanId minus the trailing -NNN, e.g. BUG-APIGEN',
+  '  --family <f>       the item\'s family prefix, e.g. BUG-APIGEN',
   '  --repo <r>         repo key',
   '  --project-path <p> package-relative path within the repo',
   '  --plan <slug>      plan slug',
@@ -174,7 +174,7 @@ function pushValue(bag: Record<string, unknown>, key: string, raw: string, isLis
  * has started, and so every branch here is unit-testable on its own.
  */
 export function buildSearchArgv(rest: readonly string[]): SearchShortcutOutcome {
-  // Mirrors cli-output's own pre-dispatch check (and `runMigrationPhaseCommand`'s):
+  // Mirrors cli-output's own pre-dispatch check:
   // `--help` ANYWHERE after the command shows usage, never an error.
   if (rest.includes('--help') || rest.includes('-h')) return { kind: 'help', text: SEARCH_HELP };
 
@@ -252,7 +252,7 @@ export function buildSearchArgv(rest: readonly string[]): SearchShortcutOutcome 
   if (anchor !== undefined && text !== undefined) {
     return {
       kind: 'error',
-      message: 'Validation failed: --anchor and a positional query are mutually exclusive — --anchor ranks by an EXISTING item\'s vector (view:"similar"), so there is no query text to also match (INTERFACE_v2 §2.1)',
+      message: 'Validation failed: --anchor and a positional query are mutually exclusive — --anchor ranks by an EXISTING item\'s vector (view:"similar"), so there is no query text to also match (mount-surface spec §2.1)',
     };
   }
   if (anchor === undefined && text === undefined) {

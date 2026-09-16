@@ -13,7 +13,7 @@
  * top-level doc comment in `index.ts` for the reconciliation note).
  */
 
-/** Identity is `uid` (SPEC.md §6.1) — never `humanId`, never a `(repo, humanId)` composite. */
+/** Identity is the global `uid` (SPEC.md §6.1) — a single scalar, never a composite key. */
 export type IssueUid = string;
 
 /**
@@ -72,7 +72,7 @@ export function isKnownIssueField(name: string): name is IIssueField {
   return ISSUE_FIELD_SET.has(name);
 }
 
-/** SPEC.md §6.5: "Default (`fields` omitted): the exact five-field terse card v1's `DEFAULT_CARD_FIELDS` already established." */
+/** SPEC.md §6.5: "Default (`fields` omitted): the exact five-field terse card established by `DEFAULT_CARD_FIELDS`." */
 export const DEFAULT_ISSUE_CARD_FIELDS: readonly IIssuePlainField[] = ['uid', 'kind', 'title', 'status', 'priority'];
 
 /** A citation, projected for read (mirrors the write layer's `ICitationInput` shape plus the server-computed `sha`). */
@@ -175,10 +175,17 @@ export type IIssueSortDirection = 'asc' | 'desc';
 export type IIssueView = 'list' | 'ready' | 'graph' | 'order' | 'stale' | 'similar' | 'overlap';
 export type IIssueQueryFormat = 'json' | 'markdown';
 
-/** SPEC.md §5, §6.1's `axis` (v1's `overlapBy`, renamed — §6.2). */
+/** SPEC.md §5, §6.1's `axis` — the grouping dimension for `overlapUids` (§6.2). */
 export type IOverlapAxis = 'file' | 'project' | 'component' | 'author';
 
 export interface IIssueQueryInput {
+  /**
+   * The natural-language query — routed by `queryIssues` to `filter.semantic`
+   * when the vector space can return ranked results, or to `filter.grep`
+   * otherwise. Mutually exclusive with setting `filter.semantic` or
+   * `filter.grep` yourself; pick one or the other, never both.
+   */
+  text?: string;
   filter?: IIssueFilter;
   fields?: readonly IIssueField[];
   sort?: IIssueSort;
@@ -193,7 +200,7 @@ export interface IIssueQueryInput {
   format?: IIssueQueryFormat;
   /** `view:'overlap'` only (§6.2) — the axis to group `overlapUids` by. */
   overlapAxis?: IOverlapAxis;
-  /** `view:'overlap'` only (§6.2, v1's `humanIds`, renamed `uids`). */
+  /** `view:'overlap'` only (§6.2) — the set of `uid`s to group by `overlapAxis`. */
   overlapUids?: readonly string[];
   /** `view:'stale'` only — minutes since `claimedAt`; falls back to `project_policy.claim_stale_after_min` (default 30) when omitted. */
   staleAfterMin?: number;
@@ -209,7 +216,7 @@ export interface IIssuePage {
   hasMore: boolean;
 }
 
-/** SPEC.md §5's `DependencyGraph`, remapped onto v2's edge vocabulary (§6.2: `DEPENDS_ON` → `blocks`). */
+/** SPEC.md §5's `DependencyGraph`, using this system's edge vocabulary (§6.2: `blocks`, not `DEPENDS_ON`). */
 export interface IDependencyGraph {
   nodes: Array<{ uid: string; title: string; status: string }>;
   edges: Array<{ from: string; to: string; rel: 'blocks' | 'relates_to' | 'part_of' }>;
