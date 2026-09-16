@@ -94,7 +94,7 @@ describe('BUG-013 — install-written MCP config actually launches a working rea
 
     const tools = await client.listTools();
     // Live-derived (not hardcoded): every `client.ts`-mounted verb
-    // (INTERFACE_v2 AC-0) plus every mount plugin's own tool contribution
+    // (INTERFACE AC-0) plus every mount plugin's own tool contribution
     // (currently `apigen-plugin-batch`'s `batch_action`). See
     // `expectedMcpToolNames()` above / `resolveExpectedMcpToolNames`'s doc
     // comment (server.ts) — this assertion tracks the shipped surface

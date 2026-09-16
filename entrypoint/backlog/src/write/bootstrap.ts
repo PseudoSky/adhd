@@ -17,11 +17,11 @@
  * ## Deliberately NOT built on `store/semantic-search.ts`
  *
  * `store/semantic-search.ts` is on the deletion list for an imminent hard
- * cutover — it is v1-coupled at the TYPE level and cannot survive it:
- * `bootstrapSemanticBackend`'s own signature takes `GraphBacklogStore`
- * (deleted with v1), and the module imports `RagNotConfiguredError` from
- * `../model.js` (also deleted). So this module takes its dependencies the
- * SAME way `test/helpers/open-test-issue-store.ts` and this package's own
+ * cutover — it is coupled at the TYPE level to types outside this data model
+ * and cannot survive it: `bootstrapSemanticBackend`'s own signature takes
+ * `GraphBacklogStore`, and the module imports `RagNotConfiguredError` from
+ * `../model.js` — neither type is part of this data model. So this module
+ * takes its dependencies the SAME way `test/helpers/open-test-issue-store.ts` and this package's own
  * `IWriteStoreHandle`/`IQueryStoreHandle` already do — the bare
  * `StoreAdapter`/`GraphBackend` pair, never a store wrapper — and re-homes
  * the REAL embedding-model construction logic (`createEmbeddingProvider` +

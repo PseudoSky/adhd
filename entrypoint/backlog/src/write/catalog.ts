@@ -460,7 +460,7 @@ export interface IUpsertProjectInput {
   repoUrl?: string;
   monorepo?: boolean;
   description?: string;
-  /** The acting agent/human identity (§6.3's opening rule). REQUIRED. */
+  /** The acting agent's or person's identity (§6.3's opening rule). REQUIRED. */
   by: string;
 }
 
@@ -584,7 +584,7 @@ export interface IUpsertComponentInput {
   name: string;
   path?: string;
   description?: string;
-  /** The acting agent/human identity (§6.3's opening rule). REQUIRED. */
+  /** The acting agent's or person's identity (§6.3's opening rule). REQUIRED. */
   by: string;
 }
 
@@ -712,7 +712,7 @@ export interface IUpsertLocationInput {
   project?: string;
   locType: ILocationType;
   value: string;
-  /** The acting agent/human identity (§6.3's opening rule). REQUIRED. */
+  /** The acting agent's or person's identity (§6.3's opening rule). REQUIRED. */
   by: string;
 }
 
@@ -825,7 +825,7 @@ export async function upsertLocation(handle: IWriteStoreHandle, input: IUpsertLo
 
 export interface IRmLocationInput {
   uid: string;
-  /** The acting agent/human identity (§6.3's opening rule). REQUIRED. */
+  /** The acting agent's or person's identity (§6.3's opening rule). REQUIRED. */
   by: string;
   /** Optional explanation recorded on the invalidation's audit row and merged into the location's own `meta` (mirrors `delete.ts`'s `reason`, which SPEC.md §6.3.7 requires for `issue` — kept optional here since §3a/§4 state no such requirement for `location`). */
   reason?: string;

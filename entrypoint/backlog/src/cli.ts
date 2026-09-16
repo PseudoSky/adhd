@@ -14,7 +14,7 @@
  * but diverges from it on purpose: the store is opened LAZILY, only if a
  * dispatched command actually reaches a real `client.ts` function
  * (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001 — a bare `--help`/no-args/unknown-
- * command invocation used to open a real SQLite store, unconditionally,
+ * command invocation opened a real store through the adapter, unconditionally,
  * before `argv` was ever inspected). `buildBacklogApigenPackage` accepts a
  * lazy `() => BacklogCtx` thunk for exactly this reason — see its own doc
  * comment.
@@ -310,7 +310,7 @@ export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts
     console.log('               into a fresh throwaway store instead of the live production one.');
     console.log('');
   }
-  // `install-skill` (MIGRATION.md §4.2) is a PURE filesystem operation — copy
+  // `install-skill` (SPEC.md §6.6) is a PURE filesystem operation — copy
   // the packaged `skill/SKILL.md` to a per-host path — not an apigen-
   // dispatched `client.ts` export (it needs no store/ctx at all), so it is
   // special-cased here, before ever building the apigen package/command
@@ -330,7 +330,7 @@ export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts
     await runInstallCommand(userArgvEarly.slice(1));
     return;
   }
-  // `serve` (MIGRATION.md §4.5) starts the long-lived HTTP/MCP listener
+  // `serve` (SPEC.md §6.6) starts the long-lived HTTP/MCP listener
   // (`startBacklogServer`) — a different lifecycle shape than every other
   // one-shot `client.ts` op (dispatch, print one JSON result, exit), so it
   // is special-cased the same way `install-skill` is, before ever building
@@ -343,7 +343,7 @@ export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts
   // never touches the graph store. But it is a `hasCtx` action (its signature
   // carries `ctx` for the `ctx-name-only` invariant), so dispatching it
   // through the apigen command table would call `createClient` → `getCtx()`
-  // and open the real SQLite store for no reason
+  // and open the real store through the adapter for no reason
   // (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001 — the exact store-open telemetry
   // this fix eliminates). Short-circuit it here, before the apigen
   // package/command table is built, using the SAME store-free reading path
@@ -362,7 +362,7 @@ export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts
   // accepts, and everything below (lazy store open, signal cleanup,
   // `exitCodeForEnvelope`, output shape) then runs unchanged. See
   // `search-shortcut.ts`'s header for why this is a translation rather than
-  // a new `client.ts` export (INTERFACE_v2 §3's six-verb mount surface).
+  // a new `client.ts` export (SPEC.md §6's issue verb mount surface).
   // `--help` and every rejection resolve HERE, before the store is opened.
   let searchArgv: string[] | undefined;
   if (userArgvEarly[0] === 'search') {
@@ -372,7 +372,7 @@ export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts
       return;
     }
     if (outcome.kind === 'error') {
-      // Same rejection shape `runMigrationPhaseCommand`'s `fail` emits, and
+      // Same rejection shape `install-skill.ts`'s `failUsage` emits, and
       // the same `CLI_EXIT_CODE['invalid_argument']` the apigen path uses.
       console.error(JSON.stringify({ code: 'invalid_argument', message: outcome.message }));
       process.exitCode = 2;
@@ -448,7 +448,7 @@ export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts
       options: {
         argv: prefixCommand(userArgv, prefix, reservedNamespaces),
         usePlugins: [...USE_PLUGINS],
-        // INTERFACE_v2 §7.1 — the six verbs REPORT failure in the envelope
+        // The issue verbs (api.ts's `IOutcomeEnvelope` shape) REPORT failure in the envelope
         // rather than throwing, so without this hook every `{ok:false}` still
         // exited 0 and a scripted caller read a failure as a success
         // (BUG-BACKLOG-GETITEM-NULL-EXIT-ZERO-001). `exitCodeForEnvelope` is

@@ -10,7 +10,7 @@
  * the adapter's own `pragmaSet('busy_timeout', N)` surface. The read-back
  * assertion below verifies THAT path: the adapter must report the value the
  * caller asked for (verified against both substrates — turso returns
- * `[{ busy_timeout: N }]`, sqlite returns the bare number).
+ * `[{ busy_timeout: N }]`, the store adapter's other substrate returns the bare number).
  *
  * `:memory:` is NOT supported by the turso adapter (its multiprocess WAL
  * cannot open an in-memory path), so these tests open real files under

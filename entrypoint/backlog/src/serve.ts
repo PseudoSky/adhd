@@ -1,6 +1,6 @@
 /**
  * serve.ts — `backlog serve [--transport mcp|http|both] [--port N] [--host H]`
- * (MIGRATION.md §4.5). A thin CLI entry point onto the existing
+ * (per the CLI spec §4.5). A thin CLI entry point onto the existing
  * `startBacklogServer` library function (`server.ts`) — the ONLY thing this
  * adds is a process-lifetime wrapper (SIGTERM/SIGINT → `AbortController`,
  * matching `test/fixtures/mcp-stdio-entry.js`'s own proven pattern) so

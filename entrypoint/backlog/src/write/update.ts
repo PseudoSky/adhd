@@ -122,7 +122,7 @@ import {
 export interface IUpdateIssueInput {
   /** The `issue` uid to update (§6.3, an "Issue verb"). */
   uid: string;
-  /** The acting agent/human identity (§6.3's opening rule). REQUIRED. */
+  /** The acting identity — an agent or a person (§6.3's opening rule). REQUIRED. */
   by: string;
   /** → `touch` (metadata/name only). */
   title?: string;

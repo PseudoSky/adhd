@@ -7,7 +7,7 @@
  * `/Users/nix/dev/node/adhd/entrypoint/backlog`; `host-runtime` is
  * sox-ecosystem's own `area:platform` layer and is not published), so the
  * same primitive is reimplemented here, scoped to backlog's own concern:
- * the backing SQLite/turso file, not a sox scope+root.
+ * the backing store-adapter file (turso), not a sox scope+root.
  *
  * Incident this closes: two concurrently-running `backlog serve --transport
  * mcp` processes writing the SAME store corrupted `~/.adhd/backlog/production/

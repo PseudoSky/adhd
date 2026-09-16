@@ -25,7 +25,7 @@
  *
  * **Call-site scope: create + body-changing update, never a pure touch.**
  * §4b names the triggering verbs explicitly — "the write-layer verb
- * (`create`/`update`)" — and §6.2's `awaitEmbed` migration table says the
+ * (`create`/`update`)" — and §6.2's `awaitEmbed` behavior table says the
  * same: "kept verbatim on `create`/`update`". `update.ts` distinguishes a
  * body-changing call (→ `supersede`, a fresh node + fresh content) from a
  * pure `touch` (title/kind/priority/assignee/author — no content change, no
@@ -84,11 +84,11 @@ export function composeEmbedText(title: string, body: string): string {
 type EmbeddingAuditAction = 'embedding_upserted' | 'embedding_deleted' | 'embedding_failed';
 
 interface IScheduleEmbeddingBase {
-  /** The graph node's SQLite `rowid` the vector is keyed on — never `uid` (see {@link import('./tx.js').IEmbeddingBackend}'s own doc comment). */
+  /** The graph node's store-adapter `rowid` the vector is keyed on — never `uid` (see {@link import('./tx.js').IEmbeddingBackend}'s own doc comment). */
   subjectRowid: number;
   /** The issue's `uid` — carried through only for the audit row's `target_uid` and diagnostic logging; never used to key the vector store. */
   subjectUid: string;
-  /** The acting agent/human identity — the SAME `input.by` the verb's own subject-write audit row already recorded. */
+  /** The identity of whoever performed the write — the SAME `input.by` the verb's own subject-write audit row already recorded. */
   actor: string;
 }
 

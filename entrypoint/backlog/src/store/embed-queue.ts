@@ -9,7 +9,7 @@
  * transaction with NO embedding call inside it (Phase A) — the node is
  * immediately FTS-searchable the instant that transaction commits.
  * `scheduleEmbed` is called strictly AFTER that commit, never from inside the
- * mutation updater passed to `allocateHumanIdAndInsert`/`mutateMetadata`: the
+ * mutation updater passed to `mutateMetadata`: the
  * updater callback runs INSIDE `store.adapter.transaction(fn, { mode:
  * 'immediate' })`, which holds the single write lock this whole package
  * serializes every mutation through (mutate-metadata.ts's header doc). A

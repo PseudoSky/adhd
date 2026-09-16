@@ -2,7 +2,7 @@
  * version-info.ts — the STORE-FREE reading path behind `backlog version`.
  * Extracted from `client.ts`'s `version()` so `cli.ts`'s `runBacklogCli` can
  * short-circuit the `version` command BEFORE ever building the apigen
- * package/opening the backing SQLite store
+ * package/opening the backing store adapter
  * (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001): `version` reads `package.json`,
  * never the graph store, so it must not pay the open+close of a real store
  * the way a genuinely store-needing command (e.g. `list-items`) does.

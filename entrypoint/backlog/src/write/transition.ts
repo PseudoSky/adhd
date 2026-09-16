@@ -117,7 +117,7 @@ import {
 export interface ITransitionInput {
   /** The `issue` uid to transition (§6.3, an "Issue verb"). */
   uid: string;
-  /** The acting agent/human identity (§6.3's opening rule). REQUIRED. */
+  /** The identity of the acting agent or person (§6.3's opening rule). REQUIRED. */
   by: string;
   /** catalog name or uid. An unresolved NAME mints a new status row with `terminal:false` (exactly like `create`'s own `status` field, §6.3.2/§6.1); a uid-shaped ref that does not resolve throws `CatalogNotFoundError('status', ref)`. */
   toStatus: string;

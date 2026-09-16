@@ -78,7 +78,7 @@ export interface ICreateIssueInput {
   author?: string;
   /** Plain metadata scalar (§6.2) — no edge. */
   assignee?: string;
-  /** The acting agent/human identity (§6.3's opening rule) — REQUIRED on every mutating verb. A missing/blank value throws `InvalidArgumentError('by', ...)` before any write runs. */
+  /** The acting identity — agent or person (§6.3's opening rule) — REQUIRED on every mutating verb. A missing/blank value throws `InvalidArgumentError('by', ...)` before any write runs. */
   by: string;
   /**
    * The duplicate-gate control (§6.3.2, resolved in full at §6.4). Default
@@ -105,10 +105,10 @@ export interface ICreateIssueInput {
    * background, after this function has already returned to its caller.
    * A `true` value with NO `handle.embedding` configured is a harmless no-op
    * (nothing to await — `scheduleIssueEmbedding` resolves immediately).
-   * Per-call, not per-handle — §6.2's v1→v2 migration table: "kept verbatim
-   * on `create`/`update`" (this field lived, mislabeled, on
-   * `IDuplicateScanHandle` before; moved here to match `update.ts`'s own
-   * already-correct placement on `IUpdateIssueInput`).
+   * Per-call, not per-handle — §6.2 specifies this field as kept verbatim
+   * on `create`/`update`, living on the input type for each verb
+   * (`ICreateIssueInput` here, `IUpdateIssueInput` in `update.ts`), not on
+   * `IDuplicateScanHandle`.
    */
   awaitEmbed?: boolean;
 }
