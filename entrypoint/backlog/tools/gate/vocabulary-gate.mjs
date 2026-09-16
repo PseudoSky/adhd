@@ -31,8 +31,16 @@ const ROOT = new URL('../../src', import.meta.url).pathname;
  * is actually protecting rather than guessing from a bare regex.
  */
 const TERMS = [
-  { name: 'v1',        re: /\bv1\b/i,                      why: 'there is no v1 to contrast against — only backlog' },
-  { name: 'v2',        re: /\bv2\b/i,                      why: 'the replacement IS backlog; calling it v2 implies a v1 still exists' },
+  // The lookbehind is [a-z0-9] rather than \b so `INTERFACE_v2` is CAUGHT --
+  // `_` is a word character, so \b treats `_v2` as mid-word and misses it,
+  // which is how stale spec-document references survived an earlier sweep.
+  // `(?!\.\d)` exempts a THIRD-PARTY version string -- an embedding model id
+  // like `bge-base-en-v1.5` is a real external identifier, not this package
+  // naming its own surface. `server.v2.spec.ts` is NOT exempted: `v2` there is
+  // followed by `.s`, not by a digit, so the two cases separate cleanly
+  // without a hand-maintained allowlist that would rot.
+  { name: 'v1',        re: /(?<![a-z0-9])v1\b(?!\.\d)/i,              why: 'there is no v1 to contrast against — only backlog' },
+  { name: 'v2',        re: /(?<![a-z0-9])v2\b(?!\.\d)/i,              why: 'the replacement IS backlog; calling it v2 implies a v1 still exists' },
   { name: 'humanId',   re: /human[_-]?id/i,                why: 'human ids were removed from the data model entirely' },
   { name: 'migration', re: /\bmigrat(e|ed|ing|ion|ions)\b/i, why: 'a hard replacement has no migration path by construction' },
   { name: 'sqlite',    re: /sqlite|better[_-]?sqlite/i,    why: 'the store adapter is the only DB seam; no direct sqlite dependency, import, or reference' },
