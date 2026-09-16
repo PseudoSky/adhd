@@ -167,16 +167,37 @@ export async function resolveIssuePlacement(
 /**
  * Resolve an edge-scoped filter value (SPEC.md §6.5 rule 3: `kind`/`status`/
  * `priority`/`project`/`component`/`author` live on EDGES, not `NodeFilter`
- * columns) to the set of candidate issue rowids satisfying it — the
- * `getEdges({dst, rel})` + collect-`src` pattern rule 3 specifies. Returns
- * `undefined` (never an empty array) when `ref` does not resolve to any live
- * catalog/registry row — SPEC.md §6.1's read-path rule ("an unresolved name
- * is not an error; it resolves to zero matches") is realized by the CALLER
- * treating `undefined` as "this filter can never match anything," short-
- * circuiting the whole query to an empty page rather than querying with a
- * meaningless empty `ids: []` (which `NodeFilter.ids` would otherwise
- * interpret as "no restriction" on some backends — never rely on that
- * ambiguity here).
+ * columns) to the set of candidate issue rowids satisfying it.
+ *
+ * **Direction is looked up, not assumed.** The six edge-scoped dimensions do
+ * NOT all run the same way: `has_kind`/`has_status`/`has_priority`/
+ * `authored_by` point issue → catalog (the catalog node is the edge TARGET),
+ * while `owns_project`/`owns_component` point catalog → child (the catalog
+ * node is the edge SOURCE). This function previously hard-coded the first
+ * shape — `getEdges({dst: resolved.id, rel})` collecting `src` — for all six,
+ * so calling it for `project`/`component` looked for edges INTO a component
+ * when every real `owns_component` edge points OUT of it, and it silently
+ * returned an EMPTY set for a component that genuinely owned issues. Silent,
+ * because an empty candidate set is indistinguishable from "nothing matched."
+ *
+ * `views/semantic.ts` worked around this by hand-composing its own
+ * source-directed traversal for those two dimensions and reusing this
+ * function only for the four it got right, flagging in its own header that
+ * "a future caller who takes that doc comment at face value for
+ * component/project will reproduce this exact miss." That is now fixed at
+ * source instead: the `edge_kind` row for `rel` carries `source_kind`/
+ * `target_kind` (the same rows `resolveEdgeKindTx` reads on the write path),
+ * so the traversal direction is derived from the data rather than assumed,
+ * and stays correct for any rel added later.
+ *
+ * Returns `undefined` (never an empty array) when `ref` does not resolve to
+ * any live catalog/registry row — SPEC.md §6.1's read-path rule ("an
+ * unresolved name is not an error; it resolves to zero matches") is realized
+ * by the CALLER treating `undefined` as "this filter can never match
+ * anything," short-circuiting the whole query to an empty page rather than
+ * querying with a meaningless empty `ids: []` (which `NodeFilter.ids` would
+ * otherwise interpret as "no restriction" on some backends — never rely on
+ * that ambiguity here).
  */
 export async function resolveEdgeScopedCandidates(
   graph: GraphBackend,
@@ -187,8 +208,31 @@ export async function resolveEdgeScopedCandidates(
     : await tryResolveRef(graph, input.expectedKind, input.ref);
   if (!resolved) return undefined;
 
+  if (await relIsSourceDirected(graph, input.rel, input.expectedKind)) {
+    // Catalog node is the edge SOURCE (`owns_project`/`owns_component`):
+    // walk OUT of it and collect the children.
+    const edges = await graph.getEdges({ src: resolved.id, rel: input.rel });
+    return new Set(edges.map((e) => e.dst));
+  }
   const edges = await graph.getEdges({ dst: resolved.id, rel: input.rel });
   return new Set(edges.map((e) => e.src));
+}
+
+/**
+ * True when `rel`'s declared `source_kind` is `expectedKind` — i.e. the
+ * catalog/registry node sits at the edge's SOURCE and the issues hang off its
+ * target side.
+ *
+ * Reads the `edge_kind` catalog row (`kind:'edge_kind'`, `name: rel`, with
+ * `source_kind`/`target_kind` in its metadata) — the same rows the write
+ * path's `resolveEdgeKindTx` consults, so read and write cannot drift apart
+ * on direction. An absent row falls back to `false`, preserving the
+ * issue→catalog default that the four `has_*`/`authored_by` rels use.
+ */
+async function relIsSourceDirected(graph: GraphBackend, rel: string, expectedKind: string): Promise<boolean> {
+  const rows = await graph.queryNodes({ kind: 'edge_kind', name: rel, liveOnly: true, limit: 1 });
+  const meta = rows[0]?.metadata as Record<string, unknown> | undefined;
+  return typeof meta?.['source_kind'] === 'string' && meta['source_kind'] === expectedKind;
 }
 
 /** Intersect a list of candidate-rowid sets (SPEC.md §6.5 rule 3: "AND semantics — an issue must satisfy every edge-scoped filter given"). An empty input list means "no edge-scoped filter was given" — returns `undefined` (no restriction), never an empty set. */

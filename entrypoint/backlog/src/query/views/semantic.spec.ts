@@ -414,27 +414,44 @@ describe('resolveSimilarFilterIds — edge-scoped filter resolution', () => {
   });
 });
 
-describe("resolve.ts's resolveEdgeScopedCandidates — documented direction bug for project/component", () => {
-  it('returns an empty set for a component that genuinely owns a live issue (confirms the bug this module works around, does not fix)', async () => {
+describe("resolve.ts's resolveEdgeScopedCandidates — traversal direction is data-driven", () => {
+  it('returns the issues a component genuinely owns (source-directed rels are walked OUT, not IN)', async () => {
     const { projectUid } = await seedProject(s.writeHandle, 'proj-a');
     const issue = await s.createIssueFixture({ title: 'x', body: 'y', project: projectUid });
     const issueNode = await s.writeHandle.graph.getNodeByUid(issue.uid);
     const ownsComponentEdges = await s.writeHandle.graph.getEdges({ dst: issueNode!.id, rel: 'owns_component' });
     const componentNode = (await s.writeHandle.graph.getNodesByIds([ownsComponentEdges[0]!.src]))[0]!;
 
-    // `owns_component` is `component → issue` (source-directed): the CORRECT
-    // membership set is non-empty (the issue above). `resolveEdgeScopedCandidates`
-    // instead does `getEdges({dst: component.id, rel:'owns_component'})`, which
-    // looks for edges INTO the component — there are none, since real
-    // `owns_component` edges point OUT of it. This asserts the CURRENT (buggy)
-    // behavior so a future accidental fix is visible here, not silently reverted.
+    // `owns_component` is `component → issue` (source-directed), unlike
+    // `has_kind`/`has_status`/`has_priority`/`authored_by` which are
+    // issue → catalog. `resolveEdgeScopedCandidates` used to hard-code the
+    // latter shape for all six dimensions, so this returned an EMPTY set for
+    // a component that genuinely owned issues — silent, because an empty
+    // candidate set is indistinguishable from "nothing matched." It now reads
+    // the `edge_kind` row's `source_kind` and walks whichever way that says,
+    // so the membership set is real.
     const candidates = await resolveEdgeScopedCandidates(s.writeHandle.graph, {
       rel: 'owns_component',
       expectedKind: 'component',
       ref: componentNode.uid,
     });
     expect(candidates).toBeDefined();
-    expect([...candidates!]).toEqual([]); // BUG: should contain issueNode!.id
+    expect([...candidates!]).toEqual([issueNode!.id]);
+  });
+
+  it('still walks target-directed rels the other way (has_kind: issue → catalog)', async () => {
+    // The negative half: fixing project/component must not invert the four
+    // dimensions that were already correct.
+    const { projectUid } = await seedProject(s.writeHandle, 'proj-b');
+    const issue = await s.createIssueFixture({ title: 'k', body: 'v', project: projectUid, kind: 'BUG' });
+    const issueNode = await s.writeHandle.graph.getNodeByUid(issue.uid);
+    const candidates = await resolveEdgeScopedCandidates(s.writeHandle.graph, {
+      rel: 'has_kind',
+      expectedKind: 'kind',
+      ref: 'BUG',
+    });
+    expect(candidates).toBeDefined();
+    expect([...candidates!]).toContain(issueNode!.id);
   });
 });
 
