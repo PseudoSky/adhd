@@ -1,6 +1,6 @@
 /**
- * serve.spec.ts — MIGRATION.md §4.5: `.mcp.json` wires a `backlog` stdio
- * entry that spawns `node dist/index.js serve --transport mcp` directly (no
+ * serve.spec.ts — `.mcp.json` wires a `backlog` stdio entry that spawns
+ * `node dist/index.js serve --transport mcp` directly (no
  * test-only fixture, no `startBacklogServer` import) — before this command
  * existed, `.mcp.json` would have had nothing real to point at
  * (`startBacklogServer` was only reachable by importing `@adhd/backlog`
@@ -18,6 +18,11 @@ import { dirname, join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { buildBacklogApigenPackage, resolveExpectedMcpToolNames } from './server.js';
+import { buildBacklogEnv, resolveBacklogDbPath } from './env.js';
+import { openTestIssueStore, seedProject } from './test/helpers/open-test-issue-store.js';
+import type { IOutcomeEnvelope } from './envelope.js';
+import type { IIssueCard } from './query/types.js';
+import type { ICreateIssueResult } from './write/create-issue.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
@@ -44,9 +49,20 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
     adhdRoot = undefined;
   });
 
-  it('starts a real MCP stdio server via `serve --transport mcp`; tools/list + a real createItem/getItem round-trip work', async () => {
+  it('starts a real MCP stdio server via `serve --transport mcp`; tools/list + a real create/get round-trip work', async () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-serve-cli-mcp-'));
-    const repo = 'PseudoSky/serve-cli-mcp-test';
+
+    // `project` is resolved-only — `create` never mints one (SPEC.md §1/
+    // §6.1) — so seed it through the real store BEFORE the server subprocess
+    // opens its own connection to the same file. `resolveBacklogDbPath` given
+    // the same scope/`adhdRoot` resolves the identical file the spawned
+    // `serve --transport mcp` process below will open.
+    const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
+    seedEnv.ensureDirs();
+    const dbPath = resolveBacklogDbPath(seedEnv);
+    const seedStore = await openTestIssueStore(dbPath);
+    const { projectUid } = await seedProject(seedStore, 'serve-cli-mcp-test-project');
+    await seedStore.close();
 
     // Exactly the invocation `.mcp.json` itself performs: `node dist/index.js
     // serve --transport mcp`, no other flags — scope/isolation come from
@@ -69,46 +85,42 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
     const expected = await expectedMcpToolNames();
     expect(tools.tools.map((t) => t.name).sort()).toEqual(expected);
 
-    // `create(ctx, input: IBacklogCreateInput)` is a single non-`ctx` param,
-    // so apigen's MCP mount wraps it as `{ data: { input: <the param> } }`
-    // (the "apigen calling convention" — observed directly from
-    // `backlog_create`'s real `tools/list` inputSchema, whose
-    // `description` states it, and from a real `callTool` round-trip against
-    // the spawned server below). `IBacklogCreateInput` itself carries the
-    // create payload under `item` (renamed from the old, confusing
-    // `input.input` double-nesting) plus the required `by` attribution
-    // (INTERFACE_v2 §7.5 — every mutation needs one).
+    // `create(ctx, input: ICreateIssueInput)` is a single non-`ctx` param, so
+    // apigen's MCP mount wraps it as `{ data: { input: <the flat create
+    // payload> } }` (the "apigen calling convention" — observed directly from
+    // `backlog_create`'s real `tools/list` inputSchema and from a real
+    // `callTool` round-trip against the spawned server below). The flat
+    // payload carries `title`/`body`/`project`/`by` directly — no `item`
+    // wrapper, no `family`/`repo` (identity is the global `uid`; there is no
+    // human-readable id in this data model).
     const createResult = await client.callTool({
       name: 'backlog_create',
       arguments: {
-        data: { input: { item: { family: 'BUG-SERVECLI', title: 'created via serve cli', body: 'x', repo }, by: 'serve.spec' } },
+        data: { input: { title: 'created via serve cli', body: 'x', project: projectUid, by: 'serve.spec' } },
       },
     });
     const createContent = createResult.content as Array<{ type: string; text: string }>;
-    // Real observed shape: the §7.1 outcome envelope `{ ok, data }`, where
-    // `data` is `ICreateOutcome` — `humanId` lives at `data.humanId`
-    // directly, never nested under a `data.item.humanId` (BUG-BACKLOG-V2-
-    // ENVELOPE-DATA-STRIPPED-001 / cli-envelope.spec.ts covers the envelope
-    // itself; this asserts the MCP transport carries the same shape).
-    const created = JSON.parse(createContent[0]?.text ?? '{}') as {
-      ok: boolean;
-      data: { created: boolean; humanId: string; item: { humanId: string } };
-    };
+    // Real observed shape: the outcome envelope `{ ok, data }`, where `data`
+    // is `ICreateIssueResult` — the new `uid` lives at `data.uid` directly.
+    const created = JSON.parse(createContent[0]?.text ?? '{}') as IOutcomeEnvelope<ICreateIssueResult>;
     expect(created.ok).toBe(true);
+    if (!created.ok) throw new Error('unreachable — checked above');
     expect(created.data.created).toBe(true);
-    expect(created.data.humanId).toBe('BUG-SERVECLI-001');
+    const createdUid = created.data.uid;
+    expect(createdUid).toBeTruthy();
 
-    // `get(ctx, input: IBacklogGetOptions)`'s single param is also named
-    // `input`, but `IBacklogGetOptions` has no nested `input` field of its
-    // own, so this is a single level of `data.input` wrapping (unlike
-    // `create`'s double nesting above).
+    // `get(ctx, input: IIssueGetInput)`'s single param is also named `input`,
+    // and `IIssueGetInput` has no nested `input` field of its own, so this is
+    // a single level of `data.input` wrapping (unlike `create`'s payload
+    // above, which is itself a flat object).
     const getResult = await client.callTool({
       name: 'backlog_get',
-      arguments: { data: { input: { repo, humanId: created.data.humanId } } },
+      arguments: { data: { input: { uid: createdUid } } },
     });
     const getContent = getResult.content as Array<{ type: string; text: string }>;
-    const got = JSON.parse(getContent[0]?.text ?? '{}') as { ok: boolean; data: { title: string } };
+    const got = JSON.parse(getContent[0]?.text ?? '{}') as IOutcomeEnvelope<IIssueCard>;
     expect(got.ok).toBe(true);
+    if (!got.ok) throw new Error('unreachable — checked above');
     expect(got.data.title).toBe('created via serve cli');
   }, 30_000);
 

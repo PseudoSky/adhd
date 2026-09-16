@@ -3,22 +3,30 @@
  * duplicate gate (SPEC.md §6.4, §9 AC-19) and its live-path sibling
  * criterion (§9 AC-2).
  *
- * **Real components, one intentionally-empty seam.** Every store here is
+ * **Real components, real embeddings, no fakes.** Every store here is
  * genuine: a real `GraphBackend` (`@adhd/sox-graph-store`, via
- * `openTestIssueStore`), a real `TursoVectorBackend`
- * (`@adhd/sox-vector-store`) wired into a real, unmodified
- * `StoreSearchBackend` (`@adhd/sox-hybrid-search`), and real issues written
- * through the real `createIssue` write verb — never a mock of the scan, the
- * store, or `createIssue` itself. The vector backend is real but
- * deliberately left EMPTY (no vectors ever indexed, no `embedQuery`
- * supplied on the test handle's `search`): SPEC.md §6.4 point 1 scopes the
- * scan to `{title, body}` FTS+vec fusion, and `scanForDuplicates`'s own
- * degraded-mode branch (§6.4 point 4, "searchRanked unavailable... degrades
- * to FTS-only") is exactly what fires when no `embedQuery` is configured —
- * so exercising these tests through the TEXT channel alone is exercising a
- * real, spec'd code path, not a shortcut around one. (`semantic.spec.ts`
- * exercises the vec channel; that machinery is proven there, not
- * re-proven here.)
+ * `openTestIssueStore`), the real production embedding wiring
+ * (`bootstrap.ts`'s `bootstrapSemanticStoreMembers`, the same function
+ * `api.ts` calls for a live host) resolving a real `@adhd/sox-embedding-provider`
+ * fastembed model into a real `@adhd/sox-vector-store` Turso vector space,
+ * fused into a real, unmodified `StoreSearchBackend`
+ * (`@adhd/sox-hybrid-search`) — and real issues written through the real
+ * `createIssue` write verb — never a mock of the scan, the store, the
+ * embedding model, or `createIssue` itself.
+ *
+ * `create-issue.ts`'s `scanForDuplicates` reads the vector channel's raw
+ * cosine (`StoreSearchBackend.search`'s `vecScore`) as the ONLY score it
+ * compares against a project's `dedupeThreshold` (see that function's own
+ * doc comment) — a rank-fused score cannot be converted into a similarity,
+ * and falling back to `textScore` would reintroduce a false-positive class.
+ * So a calibrated similarity, and therefore every candidate this suite
+ * asserts on, requires a real vector channel: this file bootstraps one via
+ * the same code path a live host uses, rather than standing up a hand-built
+ * or empty backend. Model load is the slow part of every test here (cold
+ * ONNX init, cached on disk at `~/.cache/sox/models` after the first run) —
+ * that is setup, not a reason to gate or skip (AGENTS.md "Live testing is
+ * mandatory": fastembed is local, free, and reachable with no network, so
+ * none of the narrow env-flag exceptions apply).
  *
  * **The "writes nothing" proof has teeth.** `countIssueNodes`/`countAuditRows`
  * read the real `node`/`edge` tables directly (never trust the return value
@@ -26,8 +34,8 @@
  */
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openTursoVectorStore, type TursoVectorBackend } from '@adhd/sox-vector-store';
-import { StoreSearchBackend } from '@adhd/sox-hybrid-search';
+import type { BacklogConfig } from '../env.js';
+import { bootstrapSemanticStoreMembers } from './bootstrap.js';
 import {
   openTestIssueStore,
   removeTestIssueStoreDir,
@@ -37,18 +45,50 @@ import {
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
 import { createIssue, type ICreateIssueResult, type IDuplicateScanHandle } from './create-issue.js';
 import { InvalidArgumentError } from './errors.js';
+import type { IWriteStoreHandle } from './tx.js';
 
-/** The real store PLUS a real (empty) `StoreSearchBackend` — no `embedQuery`, so every scan here runs the §6.4 point 4 degraded (text-only) path. */
-type DupGateHandle = TestIssueStore & IDuplicateScanHandle;
+/** Model load is the slow part (cold ONNX init); every test in this file shares one budget for it. */
+const DUP_GATE_TIMEOUT = 180_000;
 
-async function openDupGateStore(dir: string): Promise<{ handle: DupGateHandle; store: TestIssueStore; vec: TursoVectorBackend }> {
+const EMBEDDING_CFG: BacklogConfig['embedding'] = { enabled: true, provider: 'fastembed', model: 'bge-base-en-v1.5' };
+
+/**
+ * The real store, with `graph`/`search` derived through the exact same
+ * `bootstrapSemanticStoreMembers` call a live host (`api.ts`) makes on every
+ * verb invocation — a genuine `StoreSearchBackend` fused over a real,
+ * resolved-model vector space, never an empty or hand-assembled stand-in.
+ */
+type DupGateHandle = TestIssueStore & IWriteStoreHandle & IDuplicateScanHandle;
+
+async function openDupGateStore(dir: string): Promise<{ handle: DupGateHandle; store: TestIssueStore }> {
   const store = await openTestIssueStore(join(dir, 'backlog.db'));
-  const vec = await openTursoVectorStore(store.adapter, { dim: 3, modelId: 'dedupe-gate-spec-test-model' });
-  const handle: DupGateHandle = {
-    ...store,
-    search: { backend: new StoreSearchBackend(vec, store.graph) },
-  };
-  return { handle, store, vec };
+  const members = await bootstrapSemanticStoreMembers(store.adapter, store.graph, EMBEDDING_CFG);
+  if (!members.search || !members.embedding) {
+    // Fail LOUDLY with the concrete cause — never silently fall back to a degraded/empty scan.
+    throw new Error(
+      'create-duplicate-gate.spec: real embedding backend unavailable — bootstrapSemanticStoreMembers returned no search/embedding members. ' +
+        'Check that @adhd/sox-embedding-provider and @adhd/sox-vector-store are installed and the fastembed model is reachable.',
+    );
+  }
+  const handle: DupGateHandle = { ...store, graph: store.graph, search: members.search, embedding: members.embedding };
+  return { handle, store };
+}
+
+/**
+ * Files one issue through the real write path, waiting for its embed/
+ * vector-upsert round-trip (`awaitEmbed: true`) so later scans in the same
+ * test see it in the real vector space — mirrors `rag-e2e.spec.ts`'s own
+ * `file` helper.
+ */
+async function file(
+  handle: DupGateHandle,
+  projectUid: string,
+  title: string,
+  body: string,
+  by: string,
+  extra?: Partial<Parameters<typeof createIssue>[1]>,
+): Promise<ICreateIssueResult> {
+  return createIssue(handle, { project: projectUid, title, body, by, awaitEmbed: true, ...extra });
 }
 
 async function countIssueNodes(store: TestIssueStore, projectUid: string): Promise<number> {
@@ -117,15 +157,15 @@ afterEach(async () => {
 
 describe('createIssue — duplicate gate (SPEC.md §6.4, §9 AC-19)', () => {
   it('zero candidates: proceeds to a normal create with NO `duplicateCandidates` field at all, regardless of `duplicateAction`', async () => {
-    const result = await createIssue(handle, {
-      project: projectUid,
-      title: 'a wholly unique title, first of its kind',
-      body: 'a wholly unique body, sharing no tokens with anything else in this store',
-      by: 'filer',
-    });
+    const result = await file(
+      handle, projectUid,
+      'a wholly unique title, first of its kind',
+      'a wholly unique body, sharing no tokens with anything else in this store',
+      'filer',
+    );
     assertCreated(result);
     expect(result.duplicateCandidates).toBeUndefined();
-  });
+  }, DUP_GATE_TIMEOUT);
 
   it('`dedupeScanEnabled:false` skips the scan entirely — an exact re-file with the SAME title/body still creates, no `duplicateCandidates`', async () => {
     await store.adapter.executeRun('UPDATE node SET meta = ? WHERE uid = ?', [
@@ -134,24 +174,24 @@ describe('createIssue — duplicate gate (SPEC.md §6.4, §9 AC-19)', () => {
     ]);
     const title = 'scan disabled duplicate title';
     const body = 'scan disabled duplicate body';
-    const first = await createIssue(handle, { project: projectUid, title, body, by: 'filer' });
+    const first = await file(handle, projectUid, title, body, 'filer');
     assertCreated(first);
-    const second = await createIssue(handle, { project: projectUid, title, body, by: 'filer' });
+    const second = await file(handle, projectUid, title, body, 'filer');
     assertCreated(second);
     expect(second.duplicateCandidates).toBeUndefined();
     expect(second.uid).not.toBe(first.uid);
-  });
+  }, DUP_GATE_TIMEOUT);
 
   it('default (`abort`): an exact title/body re-file returns {created:false, reason:"duplicate-suppressed"} and WRITES NOTHING — no issue node, no audit row', async () => {
     const title = 'abort-path duplicate title, exact match';
     const body = 'abort-path duplicate body, exact match, long enough to fts-match strongly';
-    const first = await createIssue(handle, { project: projectUid, title, body, by: 'filer' });
+    const first = await file(handle, projectUid, title, body, 'filer');
     assertCreated(first);
 
     const issuesBefore = await countIssueNodes(store, projectUid);
     const auditsBefore = await countAuditRows(store);
 
-    const second = await createIssue(handle, { project: projectUid, title, body, by: 'filer' });
+    const second = await file(handle, projectUid, title, body, 'filer');
 
     expect(second.created).toBe(false);
     expect(second.reason).toBe('duplicate-suppressed');
@@ -165,17 +205,17 @@ describe('createIssue — duplicate gate (SPEC.md §6.4, §9 AC-19)', () => {
     const auditsAfter = await countAuditRows(store);
     expect(issuesAfter, 'issue node count must be unchanged by a suppressed create').toBe(issuesBefore);
     expect(auditsAfter, 'audit row count must be unchanged by a suppressed create').toBe(auditsBefore);
-  });
+  }, DUP_GATE_TIMEOUT);
 
   it('`force`: writes a genuinely NEW, distinct uid despite the match, and still reports `duplicateCandidates`', async () => {
     const title = 'force-path duplicate title, exact match';
     const body = 'force-path duplicate body, exact match, long enough to fts-match strongly';
-    const first = await createIssue(handle, { project: projectUid, title, body, by: 'filer' });
+    const first = await file(handle, projectUid, title, body, 'filer');
     assertCreated(first);
 
     const issuesBefore = await countIssueNodes(store, projectUid);
 
-    const second = await createIssue(handle, { project: projectUid, title, body, by: 'filer', duplicateAction: 'force' });
+    const second = await file(handle, projectUid, title, body, 'filer', { duplicateAction: 'force' });
 
     assertCreated(second);
     expect(second.uid).not.toBe(first.uid);
@@ -185,21 +225,19 @@ describe('createIssue — duplicate gate (SPEC.md §6.4, §9 AC-19)', () => {
 
     const issuesAfter = await countIssueNodes(store, projectUid);
     expect(issuesAfter).toBe(issuesBefore + 1);
-  });
+  }, DUP_GATE_TIMEOUT);
 
   it('`comment`: writes ZERO issue rows and attaches a `note` (has_note) to the top-scoring candidate, carrying the would-be title+body verbatim', async () => {
     const title = 'comment-path duplicate title, exact match';
     const body = 'comment-path duplicate body, exact match, long enough to fts-match strongly';
-    const first = await createIssue(handle, { project: projectUid, title, body, by: 'filer' });
+    const first = await file(handle, projectUid, title, body, 'filer');
     assertCreated(first);
 
     const issuesBefore = await countIssueNodes(store, projectUid);
     const notesBefore = await countNoteNodes(store);
 
     const secondBody = 'comment-path duplicate body, exact match, long enough to fts-match strongly (refiled)';
-    const second = await createIssue(handle, {
-      project: projectUid, title, body: secondBody, by: 'commenter', duplicateAction: 'comment',
-    });
+    const second = await file(handle, projectUid, title, secondBody, 'commenter', { duplicateAction: 'comment' });
 
     expect(second.created).toBe(false);
     expect(second.uid).toBeUndefined();
@@ -228,7 +266,7 @@ describe('createIssue — duplicate gate (SPEC.md §6.4, §9 AC-19)', () => {
       [first.uid, second.commentedOn!.noteId],
     );
     expect(edgeRows[0]?.n).toBe(1);
-  });
+  }, DUP_GATE_TIMEOUT);
 
   it('an unrecognized `duplicateAction` throws `InvalidArgumentError` before any write runs', async () => {
     const issuesBefore = await countIssueNodes(store, projectUid);
@@ -243,29 +281,29 @@ describe('createIssue — duplicate gate (SPEC.md §6.4, §9 AC-19)', () => {
       }),
     ).rejects.toBeInstanceOf(InvalidArgumentError);
     expect(await countIssueNodes(store, projectUid)).toBe(issuesBefore);
-  });
+  }, DUP_GATE_TIMEOUT);
 
   it('scoping: an identical title/body in a DIFFERENT project is never a duplicate candidate', async () => {
     const other = await seedProject(store, 'dup-gate-other-project');
     const title = 'cross-project title, exact match';
     const body = 'cross-project body, exact match, long enough to fts-match strongly';
-    const first = await createIssue(handle, { project: projectUid, title, body, by: 'filer' });
+    const first = await file(handle, projectUid, title, body, 'filer');
     assertCreated(first);
 
-    const second = await createIssue(handle, { project: other.projectUid, title, body, by: 'filer' });
+    const second = await file(handle, other.projectUid, title, body, 'filer');
     assertCreated(second);
     expect(second.duplicateCandidates).toBeUndefined();
-  });
+  }, DUP_GATE_TIMEOUT);
 });
 
 describe('createIssue — live-path identical-content, force produces distinct uids (SPEC.md §9 AC-2)', () => {
   it('two createIssue calls with identical {title, body} in the same project, second with duplicateAction:"force", produce two distinct uids', async () => {
     const title = 'AC-2 identical title';
     const body = 'AC-2 identical body, byte for byte';
-    const a = await createIssue(handle, { project: projectUid, title, body, by: 'filer' });
-    const b = await createIssue(handle, { project: projectUid, title, body, by: 'filer', duplicateAction: 'force' });
+    const a = await file(handle, projectUid, title, body, 'filer');
+    const b = await file(handle, projectUid, title, body, 'filer', { duplicateAction: 'force' });
     assertCreated(a);
     assertCreated(b);
     expect(a.uid).not.toBe(b.uid);
-  });
+  }, DUP_GATE_TIMEOUT);
 });
