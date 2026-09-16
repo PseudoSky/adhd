@@ -12,7 +12,53 @@ git config core.hooksPath .githooks
 
 | Hook | What it does |
 |---|---|
-| `pre-commit` | **1.** `nx run @adhd/source:secret-scan --mode=staged` (wraps `check-no-credentials.js --staged`) — blocks credentials from entering the repo. **2.** `nx affected -t lint --files=<staged>` (VERIFY ONLY, never `--fix`, never re-stages) — `lint` `dependsOn: ["sync-deps"]`, which can self-heal stale `@adhd/*` dependency ranges on disk; blocks on any other lint error. |
+| `pre-commit` | **0.** `detect-mass-deletion.js --staged` — blocks a commit whose staged diff is dominated by deletions of already-existing files (BUG-ADHD-EE8D24C8-REVERT-001). **1.** `nx run @adhd/source:secret-scan --mode=staged` (wraps `check-no-credentials.js --staged`) — blocks credentials from entering the repo. **2.** `nx affected -t lint --files=<staged>` (VERIFY ONLY, never `--fix`, never re-stages) — `lint` `dependsOn: ["sync-deps"]`, which can self-heal stale `@adhd/*` dependency ranges on disk; blocks on any other lint error. **3.** a fast, staged-file-scoped `vitest run` (`.githooks/lib/run-staged-tests.mjs`) — runs ONLY spec files directly implicated by what's staged (a staged spec itself, or the co-located same-basename spec of a staged source file); blocks on any failure. |
+| `pre-push` | The full `nx affected -t test` closure that Gate 3 used to run inline in `pre-commit` (DEBT-PROCESS-AFFECTED-TEST-001 Option 2 → Option 3 migration, PERF-PRECOMMIT-STAGED-TEST-SCOPE-001) — scoped by **commit range** (`--base`/`--head` from the pushed ref update), which is what makes it safe to run in a worktree with other agents' concurrent uncommitted edits: a commit range can only ever contain committed history. Blocks the push on any affected-test failure. |
+
+### Why Gate 3 moved off whole-project `nx affected -t test` (PERF-PRECOMMIT-STAGED-TEST-SCOPE-001)
+
+Measured on a real commit (2 files touched under `entrypoint/backlog/src/query/`): the
+prior `nx affected -t test --files=<staged>` gate took **338.15s** and **FAILED** — on a
+spec file belonging to a different, concurrently-editing author, entirely unrelated to
+the 2 staged files.
+
+Two distinct defects, both confirmed:
+
+1. **Too coarse.** `nx affected` resolves to whole *projects*, not files. `backlog`'s own
+   `test` target `dependsOn: ["build", "assets", "^build"]` (its MCP-stdio and
+   published-layout specs spawn the real built `dist/`), so 2 touched files forced a
+   build of 20 dependency tasks plus a run of all 79 of the project's spec files.
+2. **Dishonest scope.** `nx affected --files=<staged>` uses the staged list only to pick
+   the *project*; the project's `test` target then runs vitest against the **working
+   tree on disk**, not the index. Every other agent's in-flight, uncommitted edit inside
+   that same project directory was live during the run and could fail an unrelated
+   commit — this is exactly what happened.
+
+The new Gate 3 (`.githooks/lib/select-staged-specs.mjs` + `run-staged-tests.mjs`) fixes
+(2) structurally: it runs vitest directly, scoped to ONLY the co-located matches of what
+is staged — never an unrelated project spec, regardless of what else is dirty in the
+tree. It fixes (1) as a side effect: the slow path was never the individual spec files
+(typical specs run 1–3s; real-concurrency proof specs required by AGENTS.md §7 — e.g.
+`registry.spec.ts` — legitimately run ~20s on their own, which is proof-with-teeth
+taking real wall time, not a hook inefficiency), it was the forced whole-project build +
+79-file run. Measured after the fix, on the identical kind of commit (2 files,
+1 co-located spec matched): **8.9s total** (secret-scan + lint + staged-spec test),
+~38x faster, and immune to unrelated authors' dirty files.
+
+A staged file with no co-located spec, or belonging to a project whose `test` target
+isn't `@nx/vite:test`, is **not** covered by this fast gate — that gap is closed by
+`pre-push`'s full `nx affected -t test` (commit-range-scoped, so it never runs against
+another agent's uncommitted WIP) and by CI's `nx affected -t test` job on the PR
+(`.github/workflows/pull-request.yml`), which was already running full-affected testing
+on every PR before this change and is unaffected by it.
+
+**Known, deliberately-deferred limitation:** Gate 2 (lint) has the identical
+working-tree-contamination shape as the old Gate 3 — `nx affected -t lint --files=<staged>`
+scopes the *project* honestly from the staged list, but `nx lint <project>` then lints
+every file in that project off disk, including another agent's dirty, unrelated files.
+This was NOT fixed here (lint wasn't the reported failure, and a lint error from a dirty
+neighbor file is a much smaller cost than a 338s test run) — tracked as
+`DEBT-PRECOMMIT-LINT-WORKING-TREE-SCOPE-001` in the backlog graph.
 
 Secrets are checked **first** and are cheap. A leaked credential is *unrecoverable*
 once pushed — the fix is rotation, not reversion — whereas a lint error is not.
