@@ -39,6 +39,7 @@
 
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { writeAudit } from './audit.js';
+import { scheduleIssueEmbedding } from './embedding-observer.js';
 import { InvalidArgumentError, IssueNotFoundError } from './errors.js';
 import { type IWriteStoreHandle, executeWriteTransaction, getNodeByUidTx, nowISO, resolveLiveIssueTx } from './tx.js';
 
@@ -48,6 +49,14 @@ export interface IDeleteIssueInput {
   reason: string;
   /** The acting agent/human identity (§6.3's opening rule). REQUIRED. */
   by: string;
+  /**
+   * §4b/§6.2/§9 AC-4 ("invalidating an issue removes its vector") — waits for
+   * the fire-and-forget vector-deletion round-trip before `deleteIssue`
+   * returns, when `true` and `handle.embedding` is configured. Default
+   * (`false`/omitted): fire-and-forget, matching `create`/`update`'s own
+   * default.
+   */
+  awaitEmbed?: boolean;
 }
 
 export interface IDeleteIssueOutcome {
@@ -83,9 +92,12 @@ export async function deleteIssue(handle: IWriteStoreHandle, input: IDeleteIssue
   assertNonBlank('by', input.by);
   assertNonBlank('reason', input.reason);
 
-  return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  let deletedIssue: { rowid: number; uid: string } | undefined;
+
+  const outcome = await executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
     const now = nowISO();
     const row = await resolveLiveIssueTx(tx, input.uid);
+    deletedIssue = { rowid: row.rowid, uid: row.uid };
 
     const mergedMeta = { ...(row.metadata ?? {}), invalidatedReason: input.reason, invalidatedAt: now };
     const result = await tx.executeRun('UPDATE node SET t_invalid = ?, meta = ? WHERE rowid = ?', [now, JSON.stringify(mergedMeta), row.rowid]);
@@ -107,4 +119,19 @@ export async function deleteIssue(handle: IWriteStoreHandle, input: IDeleteIssue
 
     return { uid: row.uid, invalidated: true as const };
   });
+
+  // §4b/§9 AC-4 ("invalidating removes it") — strictly AFTER the subject
+  // transaction above has committed.
+  if (deletedIssue) {
+    const embedPromise = scheduleIssueEmbedding(handle, {
+      action: 'delete',
+      subjectRowid: deletedIssue.rowid,
+      subjectUid: deletedIssue.uid,
+      actor: input.by,
+    });
+    if (input.awaitEmbed) await embedPromise;
+    else embedPromise.catch(() => { /* scheduleIssueEmbedding never rejects — this catch exists only to silence an unhandled-rejection warning if that contract is ever broken. */ });
+  }
+
+  return outcome;
 }

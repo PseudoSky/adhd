@@ -29,6 +29,42 @@ import { randomUUID, createHash } from 'node:crypto';
 import { BacklogWriteError, IssueNotFoundError, SingleValuedRelationConflictError, StaleSupersedeError, WriteContentionError, WriteIOError, classifyDriverError } from './errors.js';
 
 /**
+ * The on-write embedding substrate (§4b, FEAT-021) — the narrow slice of
+ * `semanticBackend`/`SemanticBackend` (`store/semantic-search.ts`, v1,
+ * reference-only) this write layer actually needs. Deliberately NOT the
+ * spec's own `createEmbeddingObserver(semanticBackend)` shape: that observer
+ * is constructed from a `GraphWriteObserver` and registered with
+ * `createGraphBackend`'s `observers` option, so it only ever fires from
+ * INSIDE the library's own `writeNode`/`writeNodeInTx` (`GraphWriteObserver.
+ * onNodeWritten`, verified against the published `@adhd/sox-graph-store`
+ * dist) — a hook this file's entire premise is that the write layer
+ * structurally never reaches, because every write here goes through the
+ * hand-composed, tx-scoped primitives below instead of the library's own
+ * autocommitting methods (this file's own opening doc comment). So §4b's
+ * "AFTER the write layer's `immediate` transaction has committed" contract is
+ * satisfied here by explicit, write-verb-owned invocation (see
+ * `embedding-observer.ts`'s `scheduleIssueEmbedding`) rather than an
+ * observer callback — the write verb itself IS the thing that knows the
+ * subject transaction just committed, so it is the thing that calls this
+ * interface's methods, once, right after `executeWriteTransaction` resolves.
+ *
+ * `embedDocument`/`upsertVector`/`deleteVector` only — no query-side method
+ * (`knn`/`embedQuery`/`iterVectors`) belongs here: those are `query/**`'s
+ * concern (`IQueryStoreHandle.search`, `query/views/semantic.ts`), out of
+ * this slice's scope to touch.
+ */
+export interface IEmbeddingBackend {
+  /** The embedding model identifier stamped alongside every vector this backend writes/deletes — passed straight through to `upsertVector`/`deleteVector`'s own `modelId` so a caller wiring multiple models never mixes spaces. */
+  readonly modelId: string;
+  /** Embeds `content` (the issue's `${title}\n${body}` text — see `embedding-observer.ts`'s own doc comment on why this MUST be composed identically to `create-issue.ts`'s `scanForDuplicates`). Rejects on a provider failure — never swallowed here; the caller (`scheduleIssueEmbedding`) is what degrades a rejection to a logged `embedding_failed` audit row (§4b). */
+  embedDocument(content: string): Promise<Float32Array>;
+  /** Upserts `vector` for graph node `nodeRowid` (the SAME numeric value `writeNodeTx`/`writeAudit` already track as `.rowid` — never `uid`, per `@adhd/sox-vector-store`'s own `id`-is-rowid convention, confirmed against `query/views/semantic.spec.ts`'s `indexIssue` helper). */
+  upsertVector(nodeRowid: number, vector: Float32Array): Promise<void>;
+  /** Deletes any vector stored for `nodeRowid` under `this.modelId`. A no-op (never throws) when no vector was ever stored for that rowid — mirrors `AsyncVectorBackend.delete`'s own idempotent contract (`@adhd/sox-vector-store`). */
+  deleteVector(nodeRowid: number): Promise<void>;
+}
+
+/**
  * The dependencies a write verb needs to open its own `immediate` transaction
  * and validate the edges it writes. Constructed once at store-open time (out
  * of scope for this slice — see the store-bootstrap file that wires
@@ -45,6 +81,19 @@ export interface IWriteStoreHandle {
    * calls this directly, in-process, never through `writeEdge` (§2).
    */
   readonly typePolicy: TypePolicy;
+  /**
+   * §4b's on-write embedding substrate — OPTIONAL, mirroring
+   * `IDuplicateScanHandle.search`'s own "never silently go dark, but also
+   * never hard-fail when unwired" posture (`create-issue.ts`). Absent →
+   * `scheduleIssueEmbedding` (`embedding-observer.ts`) is a true no-op: no
+   * embed attempt, no `embedding_*` audit row, nothing logged — filing/
+   * updating an issue must never depend on RAG being configured in a given
+   * environment. Present → every genuine create and every body-changing
+   * update schedules a post-commit embed/audit round-trip (see
+   * `embedding-observer.ts`'s own doc comment for the exact verb-by-verb
+   * wiring and the touch-vs-supersede scope decision).
+   */
+  readonly embedding?: IEmbeddingBackend;
 }
 
 /** A node row as read back inside a transaction, mapped onto the fields the write layer needs. */
