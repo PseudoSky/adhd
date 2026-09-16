@@ -1,36 +1,34 @@
 /**
- * open-test-issue-store.ts — a store-open helper for tests exercising the v2
+ * open-test-issue-store.ts — a store-open helper for tests that exercise the
  * write layer (`write/create-issue.ts`) and read layer (`query/query.ts`)
- * DIRECTLY, without going through `src/store/graph-backlog-store.ts`.
+ * DIRECTLY, opening the store itself rather than going through any wrapper.
  *
- * **Why this doesn't reuse `store/graph-backlog-store.ts`.** That module is
- * scheduled for deletion (docs/plan/backlog-sox-rebuild/CONSUMERS.md) along
- * with the rest of `src/store/` — a test harness that imports it would break
- * the moment that deletion lands, which is exactly the trap
- * `cross-process-write-safety.spec.ts` (this helper's one caller today) was
- * relocated OUT of `src/store/` to avoid. This file depends on nothing under
- * `src/store/`: only `@adhd/sox-store-adapter` and `@adhd/sox-graph-store`
- * directly, the same two packages `graph-backlog-store.ts` itself wraps.
+ * **Why this opens the store itself.** The helper depends on nothing but
+ * `@adhd/sox-store-adapter` and `@adhd/sox-graph-store` — the same two
+ * packages any store wrapper in this package wraps. Depending only on those
+ * keeps the harness stable across changes to the application layer above it:
+ * a test harness that reached through a wrapper would break whenever the
+ * wrapper did, which is exactly the coupling
+ * `cross-process-write-safety.spec.ts` was relocated to avoid.
  *
- * **Why the `TypePolicy` here is open, not `DEFAULT_TYPE_POLICY`.** The v2
- * write layer's own kinds (`project`/`component`/`issue`/`kind`/`status`/
+ * **Why the `TypePolicy` here is open, not `DEFAULT_TYPE_POLICY`.** The write
+ * layer's own kinds (`project`/`component`/`issue`/`kind`/`status`/
  * `priority`/`agent`/`citation`/`audit`) and rels (`owns_project`/
  * `owns_component`/`has_kind`/`has_status`/`has_priority`/`authored_by`/
  * `has_citation`/`audits`) are NOT in `@adhd/sox-graph-store`'s closed
- * `DEFAULT_NODE_KINDS`/`DEFAULT_EDGE_RELS` vocabulary (see
- * `store/repo-nodes.ts`'s own doc comment for the measured
- * `ConstraintError` this throws under the default policy). `write/tx.ts`'s
- * own doc comment on {@link IWriteStoreHandle.typePolicy} states a
- * dedicated v2 store-bootstrap module (that would inject an open-schema
- * policy for every write path) is "out of scope for this slice" — so this
- * helper supplies the same shape of policy a real bootstrap module will
- * eventually install: unconditionally permissive, exactly matching the
- * OPEN schema DDL (`NODE_TABLE_DDL_OPEN`/`EDGE_TABLE_DDL_OPEN`,
- * `@adhd/sox-graph-store`) that `applySchema()` already installs on a fresh
- * store (no `kind`/`rel` CHECK constraint at the DB level — verified against
- * the published dist's `applySchema()`/`ensureCheckConstraints()`). Nothing
- * here narrows that vocabulary; a future real bootstrap module can replace
- * this policy without changing the DB schema at all.
+ * `DEFAULT_NODE_KINDS`/`DEFAULT_EDGE_RELS` vocabulary, so writing them under
+ * the default policy raises a `ConstraintError`. `write/tx.ts`'s own doc
+ * comment on {@link IWriteStoreHandle.typePolicy} records that a dedicated
+ * store-bootstrap module — one that would inject an open-schema policy for
+ * every write path — is out of scope for the current slice. So this helper
+ * supplies the same shape of policy such a module will eventually install:
+ * unconditionally permissive, exactly matching the OPEN schema DDL
+ * (`NODE_TABLE_DDL_OPEN`/`EDGE_TABLE_DDL_OPEN`, `@adhd/sox-graph-store`)
+ * that `applySchema()` already installs on a fresh store — no `kind`/`rel`
+ * CHECK constraint at the DB level, verified against the published dist's
+ * `applySchema()`/`ensureCheckConstraints()`. Nothing here narrows that
+ * vocabulary; a real bootstrap module can replace this policy later without
+ * changing the DB schema at all.
  */
 import { mkdirSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
