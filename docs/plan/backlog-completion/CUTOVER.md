@@ -101,3 +101,53 @@ The wipe is one commit — §10 point 2 admits no intermediate state where both
 layers compile. It therefore runs only once every in-flight agent's work is
 committed; there is no stash and no hard reset to recover from a wipe layered on
 top of uncommitted edits.
+
+---
+
+## The 1.0.0 public surface — decided before deletion, not after
+
+`src/index.ts` is the published API. Today it re-exports five things that are all
+on the deletion list, so "repoint it at the new CLI" is not a compile-error fix —
+it is an API decision. Taken here, deliberately.
+
+### Ships in 1.0.0
+
+**The 14 verbs, from `api.ts`** — this is the entire real API, and it is exactly
+the set `api.surface.spec.ts` gates and §6.7 requires every transport to mount:
+
+  get · query · lookup · create · update · transition · claim · relate · move ·
+  delete · upsertProject · upsertComponent · upsertLocation · rmLocation
+
+**The envelope machinery**, rehomed out of `model.ts` (shrink, do not copy — see
+the rehome note below). **`BacklogCtx`.** **The store bootstrap**
+(`write/bootstrap.ts`), which replaces `openGraphBacklogStore` as the supported
+way to open a store. **The host entrypoints** that survive the wipe:
+`startBacklogServer`/`buildBacklogApigenPackage`/`resolveExpectedMcpToolNames`,
+`runServeCommand`, the `env.ts` resolvers, the reseeded CLI runner,
+`installSkill`/`runInstallSkillCommand`, and the search-shortcut helpers.
+
+### Does NOT ship
+
+- **The 37 v1 ops** re-exported from `ops-v1.js`. The whole module dies.
+- **The 9 markdown functions + 3 types.** `markdown.ts` is deleted outright, not
+  re-homed: BACKLOG.md as a projection is the deprecated surface, and shipping
+  its parser/renderer in 1.0.0 would re-publish the thing being retired.
+- **`openGraphBacklogStore`/`closeGraphBacklogStore`/`GraphBacklogStore`** —
+  superseded by the bootstrap.
+- **`export * from './model.js'` (line 104).** This is the widest and least
+  deliberate line in the file: a star-export that publishes whatever `model.ts`
+  happens to contain. It goes, and what survives from `model.ts` is named
+  explicitly.
+
+### Rehome note — shrink, don't copy
+
+Moving out of `model.ts`: `okEnvelope`, `errorEnvelope`, `IOutcomeEnvelope`,
+`IOutcomeSuccess`, `IOutcomeFailure`, `IOutcomeError`, `IOutcomeErrorDetails`,
+`IQueryEnvelopeMeta`, `BACKLOG_ERROR_CODES`, `BacklogErrorCode`, `isOutcomeOk`,
+`isBacklogErrorCode`.
+
+`BACKLOG_ERROR_CODES` shrinks on the way: `duplicate_candidate`,
+`dedupe_suppressed`, and `soft_deleted` have zero uses in the new layer, and
+`ambiguous` is documented in terms of `(repo, humanId)` — vocabulary that dies
+with the gate. Carrying the full enum across would re-publish dead codes as
+public API.
