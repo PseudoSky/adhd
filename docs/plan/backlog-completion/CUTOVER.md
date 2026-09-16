@@ -204,3 +204,61 @@ re-export, which the surface decision already removes), `search-shortcut.{ts,spe
 
 `env.ts`'s `migration.phase` is the only live CONFIG key in the list: removing it
 is a config-surface change, not a comment edit.
+
+---
+
+## BLOCKING cutover items — the wipe commit is not complete without these
+
+### C-1 — flip the store factory to `OPEN_TYPE_POLICY`
+
+`store/graph-backlog-store.ts:117` installs `DEFAULT_TYPE_POLICY` —
+`@adhd/sox-graph-store`'s CLOSED six-kind/ten-rel vocabulary
+(`episode`/`entity`/`claim`/...), which does not contain backlog's own kinds and
+rels (`project`/`issue`/`owns_project`/`has_kind`/...). `write/tx.ts`'s
+`writeEdgeTx` validates every edge write against the store's injected policy.
+
+**So a store opened through the real production factory throws `ConstraintError`
+on the FIRST `owns_project` edge that any `create`/`upsertProject` writes.** The
+production store-open path cannot run the write layer at all — independent of,
+and more fundamental than, the search/embedding gap in F1.
+
+`server.ts:743` and `cli.ts:561` are the two production callers.
+
+Measured, not assumed: flipping both the factory field and the
+`createGraphBackend(adapter)` call on line 104 to `OPEN_TYPE_POLICY` and running
+`src/store src/write src/query` gives **493 passed, 1 failed** — the single
+failure being `repo-nodes.spec.ts`'s deliberate negative control
+("IN_REPO is rejected by the store default policy"), whose own comment says
+"if this ever stops throwing, the scoping claim in repo-nodes.ts's header is
+stale." Widening the policy is exactly what makes it stale.
+
+`repo-nodes.ts` and `repo-nodes.spec.ts` are both on the deletion list, so the
+flip is clean the moment they go — and red before then. That is why it lands in
+the wipe commit and nowhere earlier.
+
+### C-2 — repoint `write/bootstrap.spec.ts` at the real production path
+
+The spec currently builds its own `GraphBacklogStore`-shaped object with
+`OPEN_TYPE_POLICY` (line ~64) precisely because of C-1. That makes it a proof of
+the wiring, NOT a proof of production — the same class of gap that let the
+search/embedding hole survive in the first place. Once C-1 lands, the spec must
+open its store via the real factory. Until it does, nothing in the suite proves
+a consumer can create an issue at all.
+
+### C-3 — reseed the four payload-level `humanId` black-box specs
+
+`serve.spec.ts`, `web-ui.spec.ts`, `cli-envelope.spec.ts`,
+`batch-adoption.spec.ts` — onto `uid` identity. See the measured findings above.
+
+### C-4 — the three worker fixtures
+
+`scale-worker.js`, `busy-retry-worker.js`, `claim-race-worker.js` — off
+`claimItem(ctx, repo, humanId, by)`.
+
+### Mass-deletion guard
+
+The wipe commit trips `.githooks/detect-mass-deletion.js`. Its designed escape
+hatch is `ADHD_CONFIRM_MASS_DELETE=1` on the `git commit` invocation — an
+explicit intentional-deletion confirmation. NOT `--no-verify`, which would skip
+every other gate (secret-scan, lint, staged-spec tests) at exactly the moment
+the diff is largest.
