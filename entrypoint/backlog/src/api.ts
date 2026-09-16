@@ -51,9 +51,21 @@ import type { BacklogConfig } from './env.js';
 import type { GraphBacklogStore } from './store/graph-backlog-store.js';
 import type { IWriteStoreHandle } from './write/tx.js';
 import type { IQueryStoreHandle } from './query/query.js';
-import type { IOutcomeEnvelope, IOutcomeFailure, BacklogErrorCode } from './model.js';
-import { errorEnvelope, okEnvelope } from './model.js';
-import { BacklogWriteError } from './write/errors.js';
+import type { IOutcomeEnvelope, IOutcomeFailure, BacklogErrorCode } from './envelope.js';
+import { errorEnvelope, okEnvelope, RagNotConfiguredError } from './envelope.js';
+import {
+  BacklogWriteError,
+  CatalogNotFoundError,
+  CitationRequiredError,
+  CitationUnverifiableError,
+  ClaimHeldError,
+  InvalidArgumentError,
+  IssueNotFoundError,
+  NoteRequiredError,
+  SingleValuedRelationConflictError,
+  StaleSupersedeError,
+  WriteContentionError,
+} from './write/errors.js';
 import { bootstrapSemanticStoreMembers } from './write/bootstrap.js';
 
 import { getIssue } from './query/get.js';
@@ -173,6 +185,42 @@ async function queryHandle(ctx: BacklogCtx): Promise<IQueryStoreHandle> {
  * (exit 2, a caller error) and `E_CONTENTION`/`E_IO`/`E_CONSTRAINT` (exit 1,
  * a server-side failure the caller cannot fix by re-phrasing the request).
  */
+/**
+ * Maps a thrown error CLASS onto the envelope's error code.
+ *
+ * **Why by class and not by the write layer's `E_*` code.** The write layer
+ * classifies failures into four coarse buckets for its own retry logic, and
+ * nine distinct error classes share `E_VALIDATION`. Keying the envelope off
+ * that bucket collapsed all nine onto `validation`, so a claim held by another
+ * agent, a missing issue, a terminal transition refused for want of a
+ * citation, and a genuinely malformed flag were indistinguishable to a caller
+ * — and, because the CLI derives its process exit code from this code, they
+ * all exited 2 as if the caller had typed something wrong.
+ *
+ * Order matters: the list is walked top-down and the FIRST match wins, so
+ * subclasses must precede their bases. `BacklogWriteError` is deliberately
+ * absent — it is the base every entry here extends, and is handled as the
+ * bucket fallback below.
+ */
+const ERROR_CLASS_TO_ENVELOPE_CODE: ReadonlyArray<readonly [new (...args: never[]) => Error, BacklogErrorCode]> = [
+  [IssueNotFoundError, 'item_not_found'],
+  [CatalogNotFoundError, 'not_found'],
+  [InvalidArgumentError, 'invalid_argument'],
+  [ClaimHeldError, 'conflict'],
+  [SingleValuedRelationConflictError, 'conflict'],
+  [StaleSupersedeError, 'conflict'],
+  [CitationRequiredError, 'precondition_failed'],
+  [NoteRequiredError, 'precondition_failed'],
+  [CitationUnverifiableError, 'precondition_failed'],
+  [WriteContentionError, 'store_busy'],
+  [RagNotConfiguredError, 'rag_not_configured'],
+];
+
+/**
+ * Fallback for a `BacklogWriteError` subclass not named above — keyed off the
+ * write layer's coarse bucket so a newly-added class still produces a sane
+ * code rather than masquerading as `internal`.
+ */
 const WRITE_CODE_TO_ENVELOPE_CODE: Readonly<Record<string, BacklogErrorCode>> = {
   E_VALIDATION: 'validation',
   E_CONTENTION: 'store_busy',
@@ -188,15 +236,26 @@ const WRITE_CODE_TO_ENVELOPE_CODE: Readonly<Record<string, BacklogErrorCode>> = 
  * into the contract.
  */
 function toEnvelope(err: unknown): IOutcomeFailure {
+  for (const [ctor, code] of ERROR_CLASS_TO_ENVELOPE_CODE) {
+    if (err instanceof ctor) {
+      const details =
+        err instanceof BacklogWriteError
+          ? {
+              retryable: err.retryable,
+              ...(err.retry_after_ms === undefined ? {} : { retryAfterMs: err.retry_after_ms }),
+            }
+          : undefined;
+      return errorEnvelope(code, err.message, details);
+    }
+  }
   if (err instanceof BacklogWriteError) {
-    const code = WRITE_CODE_TO_ENVELOPE_CODE[err.code] ?? 'internal';
     // `retryable`/`retry_after_ms` are the write layer's own contract
     // (ADR-0012 §4: `retryable` stays true even on exhaustion) and are
     // forwarded verbatim so a caller can honour the backoff the store
     // already measured. `errorEnvelope` defaults `retryable` for
     // `store_busy`; passing it explicitly keeps the two in agreement rather
     // than relying on that default.
-    return errorEnvelope(code, err.message, {
+    return errorEnvelope(WRITE_CODE_TO_ENVELOPE_CODE[err.code] ?? 'internal', err.message, {
       retryable: err.retryable,
       ...(err.retry_after_ms === undefined ? {} : { retryAfterMs: err.retry_after_ms }),
     });

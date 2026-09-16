@@ -192,7 +192,14 @@ async function deriveMembers(
   // RAG-SPEC.md §1.6: disabled is the default and is completely silent — no
   // package load, no store touch, no log line. Mirrors
   // `enableSemanticSearchFromConfig`'s own point 1.
-  if (!cfg.enabled) return {};
+  // `cfg` itself is optional, not just `cfg.enabled`: a config with no
+  // `embedding` block at all is the ZERO-CONFIG default, and it reaches here
+  // as `undefined`. Dereferencing it threw a TypeError that `api.ts` could
+  // only classify as `internal` -- so a perfectly valid store with no
+  // embedding configured failed EVERY write and query verb with "the server
+  // blew up". Absent config means the semantic members are absent, which is
+  // exactly what an empty bag of members already expresses.
+  if (!cfg?.enabled) return {};
 
   // The vector table lives in backlog's own database, reached through the
   // SAME adapter the graph uses. `nativeVectors` is the blessed capability
