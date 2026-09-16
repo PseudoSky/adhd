@@ -26,6 +26,7 @@ Status: `todo` | `wip` | `blocked` | `done`
 | B8 | sox BUG-030 (turso SIGABRT) | todo | Trigger not yet established |
 | B9 | BUG-011 — `filter.humanId` silently ignored | filed | Violates SPEC §7, one of the five load-bearing query contracts. `{filter:{humanId:X}}` returns the full 622-item set with ok:true. Still to FIX. |
 | B10 | BUG-012 — `duplicate_candidate` returns empty `details` | filed | Refusal names no candidate; both refusals this session were false positives. Still to FIX. |
+| B12 | DEBT-018 — `sox-hybrid-search` re-derives ids it was already handed | filed | `node_modules/@adhd/sox-hybrid-search/dist/index.js:466-468` — when `hasNodeFilter`, it always calls `this.graph.queryNodes(nodeFilter)` to build `matchingIds`, even when the caller already passed a concrete `filters.ids` array (`filter-utils.js` counts `ids` as a node filter). Verified firsthand. Against a different package. |
 | B11 | DEBT-006 (repo `adhd`) — vitest workers never call `initTelemetry()` | filed | Landed in the minority `adhd` repo bucket; collides by humanId with a different DEBT-006 under `PseudoSky/adhd`. Covered by the already-CRITICAL `BUG-BACKLOG-REPO-SPLIT-001` (adhd 52 / PseudoSky/adhd 348). |
 
 ## C. Project completion — the FEAT-017 hard replacement
@@ -46,6 +47,24 @@ Status: `todo` | `wip` | `blocked` | `done`
 | C6 | S12 — vocabulary gate | todo | |
 | C7 | S13 — fresh extract + ETL + parity | todo | |
 | C8 | S14 — publish + blind test of the public package | todo | |
+
+### C-wave 2 (2026-09-16) — new-layer completion before the wipe
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| C9  | `queryReady` — apply `limit`, collapse 3N round trips to ~5 | done (uncommitted) | `src/query/query.ts`. Was the ONLY view never calling `assertQueryLimit`. 7 tests + 4 negative controls in `src/query/query.ready.spec.ts`. Commit blocked by the pre-commit hook, see C13. |
+| C10 | `openCurve` N+1 — `M*(1+4N)` → `4+M` round trips | done (uncommitted) | `src/query/views/stats.ts`. Status + audit trail hoisted out of the instant loop; they don't vary by `at`. Negative control (cross-issue status contamination) proven RED then green. 12/12. |
+| C11 | `resolveStatusesFor` batching + registry `lookup` unbounded scan | done (uncommitted) | `src/query/card.ts` (doc comment had been lying — it was one `getEdges` per issue) and `src/query/views/registry.ts` (bounded at `MAX_QUERY_LIMIT`, truncation surfaced in `CatalogNotFoundError` rather than silently). 35/35. Both negative controls proven. |
+| C12 | semantic filter scan | done — no change | Finding did NOT hold: every `queryNodes` in `semantic.ts` is conditional and bounded, and the common path calls none. The real inefficiency is in the `@adhd/sox-hybrid-search` dependency — filed, see B12. |
+| C13 | Disconnect the slow suite from commits | wip | `hook-architect`. Measured: 338s per commit attempt, and `nx affected` scopes off the DIRTY WORKTREE, so each agent's commit is gated on every other agent's in-flight edits. Blocked commits 3x today. |
+| C14 | 4 registry verbs + `api.ts` mount | wip | `registry-verbs`. `api.surface.spec.ts` currently RED (EXPECTED-length mismatch) — this is what blocks C9-C11 from committing. |
+| C15 | AC-19/AC-2 — `create` duplicate gate | wip | `dup-gate`. FEATURE GAP, not a test gap: `ICreateIssueInput` has no `duplicateAction` field and `create-issue.ts` has zero duplicate-detection code. |
+| C16 | AC-8/AC-13/AC-20 — keyset paging, `get` defaults, sort+after conflict | wip | `query-acs`. Working production code, literally zero coverage — there is no `query.spec.ts` or `get.spec.ts` at all. |
+| C17 | AC-4 + AC-3's embedding clause — on-write embedding observer | todo | FEATURE GAP. `awaitEmbed` "has no effect" and the `embedding_upserted`/`_deleted`/`_failed` audit rows are "NOT implemented here" per the code's own doc comments. Collides with C15 on `create-issue.ts` — dispatch after C15 lands. |
+| C18 | AC-12 — registry upsert idempotency under two real OS processes | todo | `catalog-verbs.spec.ts` proves it with `Promise.allSettled` in ONE process, which only demonstrates JS single-threadedness. The AC demands `spawn` + file barriers, as `cross-process-write-safety.spec.ts` already does correctly. |
+| C19 | AC-1 mechanically pinned | todo | The zero-`humanId` criterion is a shell command, not a test. Holds today; nothing in CI would catch a regression. Needs a real gate. |
+| C20 | Correct the wipe plan's delete list | done | `CUTOVER.md`. `serve-lock.ts` (290 lines) + `signal-cleanup.ts` (114) have ZERO internal imports and are needed by `server.ts`/`cli.ts` — the plan would have deleted working infra. Also closed: the doomed-import inventory (14 files, no dynamic/bare escapes), `immediate-retry.ts` may die, `markdown.ts` is deleted not re-homed. |
+| C21 | Stale `v2` vocabulary in `open-test-issue-store.ts` | todo | Doc comment carries `v2` wording and points at `docs/plan/backlog-sox-rebuild/CONSUMERS.md`. Must clear before the vocabulary criterion. |
 
 | D7 | Test processes never call `initTelemetry()` | todo | Every vitest worker prints the BL-404 `[sox-telemetry] WARNING ... emitting with no initTelemetry()` line. The guard is working as designed (`libs/observability/sox-telemetry/src/runtime.ts`, `service==='unlabeled'` sentinel, deliberately not silenced by the `logSink:'none'` short-circuit). Fix in backlog: call `initTelemetry({service:'backlog',role:'test',logSink:'none'})` from a vitest setup file. |
 | D8 | Comments describing a sqlite adapter as a supported substrate | todo | 11 sites. Most are accurate historical incident notes and stay. `src/store/graph-backlog-store.ts:3` ("turso substrate by default, sqlite via the test-only `STORE_ADAPTER` env") + `immediate-retry.ts:9` / `busy-retry.spec.ts:41` ("the legacy SQLite adapter's codes") imply a support path we do not offer. Zero sqlite deps/imports is ALREADY met — this is wording only. |
@@ -72,5 +91,9 @@ Full AC-by-AC audit: **[HANDOFF.md](./HANDOFF.md)**.
       the store layer's 774 are the real work.
 - [ ] 0 references to `v1`, `v2`, or a migration anywhere in the backlog package — it is only "backlog"
 - [ ] 0 sqlite dependencies, imports, or references in the backlog package
-- [ ] All 23 SPEC §9 acceptance criteria driven — 12 covered, 11 outstanding
+- [ ] All 23 SPEC §9 acceptance criteria driven. Static audit 2026-09-16
+      (**[AC-COVERAGE.md](./AC-COVERAGE.md)**): **7 PROVEN** (5, 7, 9, 10, 14, 16, 17),
+      **11 PARTIAL** (1, 2, 3, 6, 11, 12, 15, 18, 21, 22, 23), **5 ABSENT**
+      (4, 8, 13, 19, 20). Two of the ABSENT are FEATURE gaps — the code does not
+      exist — not test gaps: AC-19's duplicate gate and AC-4's embedding observer.
 - [ ] Public package blind-tested after publish
