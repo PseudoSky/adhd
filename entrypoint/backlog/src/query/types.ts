@@ -232,9 +232,27 @@ export interface IOverlapGroup {
   uids: string[];
 }
 
+/**
+ * `view:'list'`'s result — {@link IIssuePage} plus the discriminator.
+ *
+ * Declared as an interface rather than written inline as
+ * `({ view: 'list' } & IIssuePage)`. That distinction is load-bearing, not
+ * stylistic: the schema extractor that derives every mount's response shape
+ * cannot express a TypeScript intersection, and emitted a bare `{}` for that
+ * branch. The runtime encodes each response against the derived schema, so
+ * with `{}` in the union the list branch was projected onto a sibling member
+ * — and `hasMore` and `nextCursor` were silently dropped from every CLI, MCP
+ * and HTTP response, which made paging unreachable for every consumer while
+ * the in-process return value looked correct. An `extends` clause extracts
+ * into a complete object schema, so the wire shape matches the type.
+ */
+export interface IIssueListResult extends IIssuePage {
+  view: 'list';
+}
+
 /** The one discriminated result shape `query` (§6.3, §5) returns — the `view` field selects which of the following members is populated. */
 export type IIssueQueryResult =
-  | ({ view: 'list' } & IIssuePage)
+  | IIssueListResult
   | { view: 'ready'; items: IIssueCard[] }
   | { view: 'graph'; graph: IDependencyGraph }
   | { view: 'order'; order: ITopoOrderResult }

@@ -41,18 +41,15 @@
  * against a command that doesn't exist. It is not folded into another
  * assertion here.
  *
- * `query`'s success envelope also no longer carries a populated `meta`
- * object: every verb in `api.ts` runs through the same generic `envelope()`
- * helper, which calls `okEnvelope(await run())` with no `meta` argument, so
- * `IOutcomeSuccess.meta` is never set by any live verb today. This file no
- * longer asserts on a `meta.total`/`meta.returned` this build does not
- * produce. It was also observed live, against the real built CLI, that
- * `IIssuePage.hasMore` (declared as a required `boolean` in
- * `query/types.ts`) does not reach the encoded response at all when its
- * value is `false` — a real, distinct gap from the ones this file was
- * written to catch, but out of scope for a test-only file to fix, so this
- * file no longer asserts on `hasMore`'s presence and instead asserts on
- * `data.items` itself (real cards, not a codec envelope, not stripped).
+ * `query`'s success envelope does not carry a populated `meta` object: every
+ * verb in `api.ts` runs through the same generic `envelope()` helper, which
+ * calls `okEnvelope(await run())` with no `meta` argument. This file asserts
+ * on `data.items` itself (real cards, not a codec envelope, not stripped)
+ * rather than on a `meta.total`/`meta.returned` this build does not produce.
+ *
+ * `query`'s pagination fields have their own wire-level coverage in
+ * `query/paging-wire.spec.ts`, which spawns this same built bin. That file
+ * belongs next to the paging contract it proves rather than here.
  */
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
