@@ -22,7 +22,7 @@ import { createServer } from 'node:net';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const RUN_WEB_UI = join(HERE, '..', 'tools', 'run-web-ui.mjs');
-const REPO = 'PseudoSky/web-ui-test';
+const PROJECT_NAME = 'web-ui-test-project';
 
 /**
  * The apigen envelope shape the API returns. Deliberately loose on `data`
@@ -35,11 +35,12 @@ interface ApiEnvelope {
   warnings?: string[];
   data?: {
     created?: boolean;
-    humanId?: string;
+    uid?: string;
     title?: string;
     body?: string;
-    items?: Array<{ humanId: string }>;
-    item?: { humanId: string; title: string; repo: string };
+    items?: Array<{ uid: string }>;
+    item?: { uid: string; title: string };
+    project?: { uid: string; name: string };
   };
 }
 
@@ -73,6 +74,7 @@ describe('backlog web ui (nx serve backlog seam)', () => {
   let apiPort = 0;
   let webPort = 0;
   let storeDir = '';
+  let projectUid = '';
 
   beforeAll(async () => {
     [apiPort, webPort] = await Promise.all([freePort(), freePort()]);
@@ -99,6 +101,17 @@ describe('backlog web ui (nx serve backlog seam)', () => {
       45_000,
       'web ui over the proxy (orchestrator + API + web server boot)',
     );
+
+    // `create` only ever RESOLVES a `project` (SPEC: never mints one), so
+    // seed it through the real proxy — the `upsertProject` verb — before any
+    // test tries to create against it. This is the same HTTP seam every
+    // other assertion in this file drives, not a backdoor into the store.
+    const seeded = await post('/backlog/upsert-project', { name: PROJECT_NAME, by: 'web-ui.spec:seed' });
+    if (seeded.status !== 200 || !seeded.json.ok) {
+      throw new Error(`project seed failed: ${seeded.status} ${JSON.stringify(seeded.json)}`);
+    }
+    projectUid = seeded.json.data?.project?.uid ?? '';
+    if (!projectUid) throw new Error('upsertProject did not return a project uid');
   }, 60_000);
 
   // NOTE: no afterEach killer here — the orchestrator lives for the whole
@@ -133,31 +146,37 @@ describe('backlog web ui (nx serve backlog seam)', () => {
   });
 
   it('round-trips create → query → get through the proxy against an isolated store', async () => {
-    // Fresh isolated store: query is empty.
-    const empty = await post('/backlog/query', { view: 'list', filter: { repo: REPO } });
+    // Fresh isolated store, scoped to the seeded project: query is empty.
+    const empty = await post('/backlog/query', { view: 'list', filter: { project: projectUid } });
     expect(empty.status).toBe(200);
     expect(empty.json.ok).toBe(true);
     expect(empty.json.data.items).toEqual([]);
 
-    // Create through the proxy.
+    // Create through the proxy — the real flat `create` shape: no wrapper,
+    // no family, no repo. `project` is resolved against the uid seeded in
+    // beforeAll (create never mints one).
     const created = await post('/backlog/create', {
-      item: { family: 'BUG', title: 'web ui round trip', body: 'created over the proxy', repo: REPO },
+      title: 'web ui round trip',
+      body: 'created over the proxy',
+      project: projectUid,
       by: 'web-ui.spec:1',
     });
     expect(created.status).toBe(200);
     expect(created.json.ok).toBe(true);
     expect(created.json.data.created).toBe(true);
-    const humanId = created.json.data.humanId as string;
-    expect(humanId).toMatch(/^BUG-/);
+    const uid = created.json.data.uid as string;
+    expect(uid).toBeTruthy();
 
-    // Query sees it.
-    const listed = await post('/backlog/query', { view: 'list', filter: { repo: REPO } });
+    // Query sees exactly the uid `create` returned — identity is a single
+    // opaque global `uid`, so the teeth here are exact-match, not a pattern.
+    const listed = await post('/backlog/query', { view: 'list', filter: { project: projectUid } });
     expect(listed.json.ok).toBe(true);
-    expect(listed.json.data?.items?.map((i) => i.humanId)).toContain(humanId);
+    expect(listed.json.data?.items?.map((i) => i.uid)).toContain(uid);
 
-    // Get returns the full body.
-    const got = await post('/backlog/get', { humanId, repo: REPO, fields: ['body'] });
+    // Get resolves the SAME uid and returns the body that was written.
+    const got = await post('/backlog/get', { uid, fields: ['uid', 'title', 'body'] });
     expect(got.json.ok).toBe(true);
+    expect(got.json.data.uid).toBe(uid);
     expect(got.json.data.title).toBe('web ui round trip');
     expect(got.json.data.body).toBe('created over the proxy');
   });

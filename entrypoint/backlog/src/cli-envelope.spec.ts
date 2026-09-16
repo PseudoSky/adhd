@@ -9,7 +9,7 @@
  * It covers three defects that were invisible to every in-process test,
  * because all three live in the MOUNT, below `client.ts`:
  *
- *  1. BUG-BACKLOG-V2-ENVELOPE-DATA-STRIPPED-001 — `IOutcomeEnvelope<T>` is an
+ *  1. BUG-BACKLOG-ENVELOPE-DATA-STRIPPED-001 — `IOutcomeEnvelope<T>` is an
  *     UNDISCRIMINATED union whose ERROR arm is declared first.
  *     `pickUnionBranch` had no structural matching and returned `oneOf[0]`,
  *     so every success encoded against the error arm and `encodeNode`'s
@@ -26,6 +26,33 @@
  *
  * Each test asserts the CONSUMER-VISIBLE outcome (the payload a caller reads,
  * the code the shell branches on), never an implementation shape.
+ *
+ * ## What is no longer testable here
+ *
+ * The application layer's mounted surface is exactly the 14 verbs `api.ts`
+ * exports (`get, query, lookup, create, update, transition, claim, relate,
+ * move, upsertProject, upsertComponent, upsertLocation, rmLocation, delete`,
+ * projected onto the CLI's kebab-case command names). There is no `admin`
+ * verb anywhere in that surface — it is not exported by `api.ts`, it is not
+ * in `server.ts`'s pinned `BACKLOG_VERBS` list, and `cli.ts` mounts no such
+ * command. The tagged-report-union coverage this file used to carry for a
+ * `backlog admin` command (`reconcile_repo`/`prune`/`doctor` actions) has no
+ * real command left to drive, so it is removed rather than kept green
+ * against a command that doesn't exist. It is not folded into another
+ * assertion here.
+ *
+ * `query`'s success envelope also no longer carries a populated `meta`
+ * object: every verb in `api.ts` runs through the same generic `envelope()`
+ * helper, which calls `okEnvelope(await run())` with no `meta` argument, so
+ * `IOutcomeSuccess.meta` is never set by any live verb today. This file no
+ * longer asserts on a `meta.total`/`meta.returned` this build does not
+ * produce. It was also observed live, against the real built CLI, that
+ * `IIssuePage.hasMore` (declared as a required `boolean` in
+ * `query/types.ts`) does not reach the encoded response at all when its
+ * value is `false` — a real, distinct gap from the ones this file was
+ * written to catch, but out of scope for a test-only file to fix, so this
+ * file no longer asserts on `hasMore`'s presence and instead asserts on
+ * `data.items` itself (real cards, not a codec envelope, not stripped).
  */
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
@@ -45,6 +72,8 @@ interface Run {
 
 let tmpRoot: string;
 let dbPath: string;
+let projectUid: string;
+let seedUid: string;
 
 /** Spawns the REAL built bin. Never imported — an import would skip the mount. */
 function runBin(args: string[]): Run {
@@ -78,22 +107,39 @@ function runJson(args: string[]): { run: Run; body: Record<string, unknown> } {
   return { run, body };
 }
 
-const REPO = 'envelope-spec-repo';
+const PROJECT_NAME = 'envelope-spec-project';
 
 beforeAll(() => {
   tmpRoot = mkdtempSync(join(tmpdir(), 'backlog-envelope-'));
   dbPath = join(tmpRoot, 'envelope.db');
+
+  const seededProject = runJson([
+    'upsert-project',
+    '--input',
+    JSON.stringify({ name: PROJECT_NAME, by: 'cli-envelope.spec' }),
+  ]);
+  expect(seededProject.run.status, `seed upsert-project failed: ${seededProject.run.stderr}`).toBe(0);
+  expect(seededProject.body['ok']).toBe(true);
+  const projectData = seededProject.body['data'] as Record<string, unknown>;
+  projectUid = projectData['uid'] as string;
+  expect(typeof projectUid).toBe('string');
+
   const { run, body } = runJson([
     'create',
     '--input',
     JSON.stringify({
-      item: { family: 'BUG', title: 'envelope seam item', body: 'b', repo: REPO },
+      title: 'envelope seam item',
+      body: 'b',
+      project: projectUid,
       by: 'cli-envelope.spec',
-      duplicateAction: 'file',
+      duplicateAction: 'force',
     }),
   ]);
   expect(run.status, `seed create failed: ${run.stderr}`).toBe(0);
   expect(body['ok']).toBe(true);
+  const seedData = body['data'] as Record<string, unknown>;
+  seedUid = seedData['uid'] as string;
+  expect(typeof seedUid).toBe('string');
 });
 
 afterEach(() => {
@@ -106,9 +152,11 @@ describe('outcome envelope over the real CLI mount', () => {
       'create',
       '--input',
       JSON.stringify({
-        item: { family: 'BUG', title: 'second item', body: 'b', repo: REPO },
+        title: 'second item',
+        body: 'b',
+        project: projectUid,
         by: 'cli-envelope.spec',
-        duplicateAction: 'file',
+        duplicateAction: 'force',
       }),
     ]);
     expect(run.status).toBe(0);
@@ -116,43 +164,48 @@ describe('outcome envelope over the real CLI mount', () => {
     // The whole defect: `data` used to be absent entirely.
     const data = body['data'] as Record<string, unknown> | undefined;
     expect(data, 'envelope `data` was stripped by the mount').toBeDefined();
-    expect(data?.['humanId']).toBe('BUG-002');
+    expect(data?.['created']).toBe(true);
+    expect(typeof data?.['uid']).toBe('string');
+    expect(data?.['uid']).not.toBe(seedUid);
   });
 
   it('a successful get returns a real card — never a codec envelope', () => {
-    const { run, body } = runJson([
-      'get',
-      '--input',
-      JSON.stringify({ humanId: 'BUG-001', repo: REPO }),
-    ]);
+    const { run, body } = runJson(['get', '--input', JSON.stringify({ uid: seedUid })]);
     expect(run.status).toBe(0);
     const data = body['data'] as Record<string, unknown> | undefined;
     expect(data, 'envelope `data` was stripped by the mount').toBeDefined();
     // `get`'s success arm declares `data: {}` — the schemaless path. The card
     // must arrive as a card, NOT wrapped as {$apigen:'int64', v:'[object Object]'}.
     expect(data).not.toHaveProperty('$apigen');
-    expect(data?.['humanId']).toBe('BUG-001');
+    expect(data?.['uid']).toBe(seedUid);
     expect(data?.['title']).toBe('envelope seam item');
   });
 
-  it('a successful query carries its pagination meta', () => {
+  it('a successful query returns its real, un-collapsed items — never a bare {ok:true}', () => {
     const { run, body } = runJson(['query', '--input', JSON.stringify({ view: 'list', limit: 2 })]);
     expect(run.status).toBe(0);
-    // `meta` is declared only on the success arm, so it was stripped too.
-    const meta = body['meta'] as Record<string, unknown> | undefined;
-    expect(meta, 'envelope `meta` was stripped by the mount').toBeDefined();
-    expect(typeof meta?.['total']).toBe('number');
-    expect(typeof meta?.['returned']).toBe('number');
+    const data = body['data'] as Record<string, unknown> | undefined;
+    // The defect this covers: `data` (the whole `view:'list'` page, items
+    // included) was previously stripped to nothing by the mount.
+    expect(data, 'envelope `data` was stripped by the mount').toBeDefined();
+    expect(data?.['view']).toBe('list');
+    const items = data?.['items'] as Array<Record<string, unknown>> | undefined;
+    expect(Array.isArray(items)).toBe(true);
+    expect((items as unknown[]).length).toBeGreaterThan(0);
+    expect((items as unknown[]).length).toBeLessThanOrEqual(2);
+    // Every item card must arrive with real content, not a codec envelope
+    // ({$apigen:'int64', v:'[object Object]'}) or an empty shell.
+    for (const item of items as Array<Record<string, unknown>>) {
+      expect(item).not.toHaveProperty('$apigen');
+      expect(typeof item['uid']).toBe('string');
+      expect(typeof item['title']).toBe('string');
+    }
   });
 });
 
-describe('exit-code contract (INTERFACE_v2 §7.1)', () => {
+describe('exit-code contract (the CLI outcome envelope, §7.1)', () => {
   it('a reported item_not_found exits 1, not 0', () => {
-    const { run, body } = runJson([
-      'get',
-      '--input',
-      JSON.stringify({ humanId: 'BUG-99999', repo: REPO }),
-    ]);
+    const { run, body } = runJson(['get', '--input', JSON.stringify({ uid: 'no-such-uid-at-all' })]);
     expect(body['ok']).toBe(false);
     // The defect: the verb RETURNS this failure rather than throwing, so the
     // process exited 0 and a caller's `&&` chain proceeded on a failure.
@@ -177,91 +230,5 @@ describe('exit-code contract (INTERFACE_v2 §7.1)', () => {
   it('an unknown command exits 4', () => {
     const run = runBin(['no-such-command']);
     expect(run.status).toBe(4);
-  });
-});
-
-// ── BUG-BACKLOG-RECONCILE-REPO-EMPTY-REPORT-001 / BUG-APIGEN-RUNMODE-
-// DISCRIMINATOR-DEREF-001 ──────────────────────────────────────────────────
-//
-// `backlog_admin`'s `IAdminResult` is a DISCRIMINATED union tagged by
-// `action`, with a `discriminator.mapping` naming each branch by `$ref`. But
-// `server.ts`'s `dereferenceSchema` (required so run-mode dispatch can work
-// at all — `apigen-base-logical`'s transcoder throws on any unresolved `$ref`)
-// inlines every `$ref` before the schema reaches the transcoder, so no branch
-// carries a `$ref` any more and the mapping-based match silently no-ops.
-// Falling through to structural scoring then ties every branch sharing the
-// same property NAMES (`action`, `report`) — which is EVERY action here
-// except `export`/`render`/`version` — and the tie-break ("earliest declared
-// branch") always won as `doctor` (`oneOf[0]`), so every OTHER `{action,
-// report}`-shaped action's real report was silently re-encoded as `{}`.
-//
-// This block proves the fix at the real MOUNT boundary (the built CLI
-// subprocess) — never in-process, which cannot see this class of bug at all
-// (`v2/admin.spec.ts`'s in-process `reconcile_repo` test passed throughout).
-describe('backlog_admin tagged report union over the real CLI mount (BUG-BACKLOG-RECONCILE-REPO-EMPTY-REPORT-001)', () => {
-  const RECONCILE_REPO = 'reconcile-spec-legacy-repo';
-
-  beforeAll(() => {
-    const { run, body } = runJson([
-      'create',
-      '--input',
-      JSON.stringify({
-        item: { family: 'BUG', title: 'reconcile seed item', body: 'b', repo: RECONCILE_REPO },
-        by: 'cli-envelope.spec',
-      }),
-    ]);
-    expect(run.status, `reconcile seed create failed: ${run.stderr}`).toBe(0);
-    expect(body['ok']).toBe(true);
-  });
-
-  it("reconcile_repo's report carries fromRepo/toRepo/dryRun/plan — not {}", () => {
-    const { run, body } = runJson([
-      'admin',
-      '--input',
-      JSON.stringify({ action: 'reconcile_repo', params: { from: RECONCILE_REPO, to: REPO } }),
-    ]);
-    expect(run.status).toBe(0);
-    expect(body['ok']).toBe(true);
-    const data = body['data'] as Record<string, unknown> | undefined;
-    expect(data?.['action']).toBe('reconcile_repo');
-    const report = data?.['report'] as Record<string, unknown> | undefined;
-    // The whole defect: `report` used to arrive as `{}`.
-    expect(report, 'reconcile_repo report was collapsed to {} by the mount').toBeDefined();
-    expect(report?.['fromRepo']).toBe(RECONCILE_REPO);
-    expect(report?.['toRepo']).toBe(REPO);
-    expect(report?.['dryRun']).toBe(true);
-    const plan = report?.['plan'] as Record<string, unknown> | undefined;
-    expect(plan, 'reconcile_repo report.plan was dropped by the mount').toBeDefined();
-    expect(plan?.['fromRepo']).toBe(RECONCILE_REPO);
-    expect(plan?.['toRepo']).toBe(REPO);
-    expect(Array.isArray(plan?.['items'])).toBe(true);
-    expect((plan?.['items'] as unknown[]).length).toBeGreaterThan(0);
-  });
-
-  it("a sibling action with the SAME {action,report} shape (prune) is also no longer collapsed", () => {
-    // Proves the fix is general (fixes the discriminator, not a backlog-
-    // specific reconcile_repo special-case) — `prune` shares `doctor`'s exact
-    // property names and was silently re-encoded as `doctor`'s report too.
-    const { run, body } = runJson(['admin', '--input', JSON.stringify({ action: 'prune', params: {} })]);
-    expect(run.status).toBe(0);
-    const data = body['data'] as Record<string, unknown> | undefined;
-    expect(data?.['action']).toBe('prune');
-    const report = data?.['report'] as Record<string, unknown> | undefined;
-    expect(report, 'prune report was collapsed to {} by the mount').toBeDefined();
-    // `IPruneReport` has no `scannedItems`/`checks` (doctor's fields) — a
-    // report silently re-encoded as doctor's would come back as `{}` since
-    // prune's actual value has none of doctor's declared property names.
-    expect(report?.['dryRun']).toBe(true);
-    expect(Array.isArray(report?.['candidates'])).toBe(true);
-  });
-
-  it("doctor's own report (branch 0 — the accidental tie-break winner) is unaffected", () => {
-    const { run, body } = runJson(['admin', '--input', JSON.stringify({ action: 'doctor', params: {} })]);
-    expect(run.status).toBe(0);
-    const data = body['data'] as Record<string, unknown> | undefined;
-    expect(data?.['action']).toBe('doctor');
-    const report = data?.['report'] as Record<string, unknown> | undefined;
-    expect(typeof report?.['scannedItems']).toBe('number');
-    expect(Array.isArray(report?.['checks'])).toBe(true);
   });
 });
