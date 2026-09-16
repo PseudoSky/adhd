@@ -65,6 +65,7 @@ import {
   invalidateEdgeTx,
   nowISO,
   writeEdgeTx,
+  resolveLiveIssueTx,
 } from './tx.js';
 
 export interface IMoveIssueInput {
@@ -222,10 +223,7 @@ export async function move(handle: IWriteStoreHandle, input: IMoveIssueInput): P
   return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
     const now = nowISO();
 
-    const issueRow = await getNodeByUidTx(tx, input.uid);
-    if (!issueRow || issueRow.kind !== 'issue' || issueRow.tInvalid !== null) {
-      throw new IssueNotFoundError(input.uid);
-    }
+    const issueRow = await resolveLiveIssueTx(tx, input.uid);
 
     const currentComponent = await resolveOwningComponentTx(tx, issueRow.rowid);
     const currentProject = await resolveOwningProjectTx(tx, currentComponent.rowid);

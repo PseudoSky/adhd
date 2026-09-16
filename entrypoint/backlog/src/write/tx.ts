@@ -26,7 +26,7 @@
 import type { AdapterTransaction, StoreAdapter } from '@adhd/sox-store-adapter';
 import type { TypePolicy } from '@adhd/sox-graph-store';
 import { randomUUID, createHash } from 'node:crypto';
-import { BacklogWriteError, SingleValuedRelationConflictError, WriteContentionError, WriteIOError, classifyDriverError } from './errors.js';
+import { BacklogWriteError, IssueNotFoundError, SingleValuedRelationConflictError, StaleSupersedeError, WriteContentionError, WriteIOError, classifyDriverError } from './errors.js';
 
 /**
  * The dependencies a write verb needs to open its own `immediate` transaction
@@ -140,6 +140,54 @@ function sortDeep(value: unknown): unknown {
 export async function getNodeByUidTx(tx: AdapterTransaction, uid: string): Promise<ITxNodeRow | null> {
   const row = await tx.executeGet<IRawNodeRow>('SELECT * FROM node WHERE uid = ?', [uid]);
   return row ? mapNodeRow(row) : null;
+}
+
+/**
+ * Resolves `uid` to the CURRENT, live `issue` row, or throws.
+ *
+ * Every issue verb needs exactly this, and the check is in two parts that are
+ * easy to half-implement:
+ *
+ *  - `tInvalid !== null` — the issue was soft-deleted (`delete.ts`).
+ *  - `isSuperseded` — the issue's body was edited, so `update.ts` minted a
+ *    NEW node with a new uid and flipped this row's `is_superseded` flag.
+ *    **The supersede CAS sets `is_superseded` ONLY; it never touches
+ *    `t_invalid`** (update.ts's `UPDATE node SET is_superseded = 1 WHERE
+ *    rowid = ? AND is_superseded = 0`). So a superseded row is still
+ *    `t_invalid IS NULL`, and a `tInvalid`-only guard lets a stale uid
+ *    straight through.
+ *
+ * That second half was missing from `claim`, `relate`, `move` and `delete`
+ * while `update` and `transition` each had their own hand-written copy of it.
+ * The consequences were silent, not loud — this repo is parallel-process
+ * enabled, so a caller holding a uid from before a concurrent body edit is a
+ * real scenario, and it could `claim` a superseded node (two agents each
+ * believing they hold the lease on the same issue), `relate` an edge onto it
+ * (permanently invisible against the issue's real uid, since `card.ts` never
+ * walks SUPERSEDES chains), or `delete` it and be told `invalidated: true`
+ * while the live issue was untouched.
+ *
+ * It exists as ONE function, rather than as a documented convention, because
+ * the convention is exactly what failed: six verbs hand-duplicated the fetch
+ * and four dropped half the guard. A new verb that calls this cannot
+ * reproduce the gap; a new verb that hand-rolls `getNodeByUidTx` can, so
+ * prefer this everywhere an issue uid arrives from a caller.
+ *
+ * @throws IssueNotFoundError when no row carries `uid`, it is not an `issue`,
+ *   or it has been soft-deleted.
+ * @throws StaleSupersedeError when `uid` names a superseded node — the uid was
+ *   valid once and names a real row, so this is deliberately NOT reported as
+ *   "not found": the caller's reference is stale, not wrong.
+ */
+export async function resolveLiveIssueTx(tx: AdapterTransaction, uid: string): Promise<ITxNodeRow> {
+  const row = await getNodeByUidTx(tx, uid);
+  if (!row || row.kind !== 'issue' || row.tInvalid !== null) {
+    throw new IssueNotFoundError(uid);
+  }
+  if (row.isSuperseded) {
+    throw new StaleSupersedeError(uid);
+  }
+  return row;
 }
 
 /** rowid → node, inside a tx (used to resolve an edge endpoint's kind without a redundant round trip when the caller doesn't already know it). */

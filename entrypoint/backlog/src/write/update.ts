@@ -115,6 +115,7 @@ import {
   nowISO,
   writeEdgeTx,
   writeNodeTx,
+  resolveLiveIssueTx,
 } from './tx.js';
 
 export interface IUpdateIssueInput {
@@ -515,13 +516,7 @@ export async function update(handle: IWriteStoreHandle, input: IUpdateIssueInput
   return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
     const now = nowISO();
 
-    const issueRow = await getNodeByUidTx(tx, input.uid);
-    if (!issueRow || issueRow.kind !== 'issue' || issueRow.tInvalid !== null) {
-      throw new IssueNotFoundError(input.uid);
-    }
-    if (issueRow.isSuperseded) {
-      throw new StaleSupersedeError(input.uid);
-    }
+    const issueRow = await resolveLiveIssueTx(tx, input.uid);
 
     // §2's project_kind/project_field_requirement — resolved fresh against
     // THIS transaction's own snapshot, mirroring `transition.ts`'s identical
