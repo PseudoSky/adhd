@@ -313,9 +313,36 @@ async function queryList(handle: IQueryStoreHandle, input: IIssueQueryInput): Pr
   return { items, nextCursor, hasMore };
 }
 
-/** `view:'ready'` — open issues whose every `blocks`-incoming blocker is terminal, and which are not currently claimed (SPEC.md §5.2, remapped onto `blocks`, §6.2). */
+/**
+ * `view:'ready'` — open issues whose every `blocks`-incoming blocker is
+ * terminal, and which are not currently claimed (SPEC.md §5.2, remapped onto
+ * `blocks`, §6.2).
+ *
+ * **Cost is bounded by the relation size, not by the candidate count.** The
+ * obvious shape here — loop the candidates, and per issue fetch its incoming
+ * `blocks` edges, then its blockers, then each blocker's status — is three
+ * sequential round trips per issue, so 5,000 open issues cost ~15,000
+ * serialized queries. That is the exact wrong cost model for this view: it is
+ * the default "what should I work on" query an agent runs constantly, and its
+ * price would scale with how big the store has grown rather than with
+ * anything the caller asked for.
+ *
+ * Instead each relation is fetched ONCE and grouped in memory:
+ * `getEdges({rel})` takes a single `src`/`dst`, never an array, so there is no
+ * way to batch N specific lookups — but there is no need to, because the
+ * whole `blocks` and `has_status` relations are each one query. Five queries
+ * total, independent of candidate count.
+ *
+ * `limit` is validated and applied, matching every sibling view
+ * (`queryList`/`queryGraph`/`queryOrder`). It was previously ignored entirely,
+ * so this view materialized every open issue in the store no matter what the
+ * caller requested. The cap is applied AFTER the readiness filter — taking the
+ * first `limit` candidates and then filtering would silently return fewer
+ * ready issues than exist.
+ */
 async function queryReady(handle: IQueryStoreHandle, input: IIssueQueryInput): Promise<IIssueCard[]> {
   const { graph } = handle;
+  const limit = assertQueryLimit(input.limit);
   const fields = (input.fields ?? DEFAULT_ISSUE_CARD_FIELDS) as readonly IIssueField[];
   const openIds = await resolveOpenClosedCandidates(graph, 'open');
   const candidates = await resolveEdgeScopedFilterIds(graph, input.filter);
@@ -323,21 +350,56 @@ async function queryReady(handle: IQueryStoreHandle, input: IIssueQueryInput): P
   if (scoped.length === 0) return [];
 
   const issues = await graph.getNodesByIds(scoped);
+
+  // One query per relation, grouped in memory — see this function's doc comment.
+  const blocksEdges = await graph.getEdges({ rel: 'blocks' });
+  const blockerSrcsByIssue = new Map<number, number[]>();
+  for (const e of blocksEdges) {
+    const list = blockerSrcsByIssue.get(e.dst);
+    if (list) list.push(e.src);
+    else blockerSrcsByIssue.set(e.dst, [e.src]);
+  }
+
+  // Only blockers that actually EXIST count, exactly as the per-issue
+  // `getNodesByIds(incoming.map(e => e.src))` did: a dangling edge whose src
+  // node is gone was silently dropped there and must stay dropped here, or a
+  // stale edge would wrongly hold an issue back forever.
+  const allBlockerIds = [...new Set(blocksEdges.map((e) => e.src))];
+  const existingBlockerIds = new Set(
+    (allBlockerIds.length > 0 ? await graph.getNodesByIds(allBlockerIds) : []).map((n) => n.id),
+  );
+
+  const statusEdges = await graph.getEdges({ rel: 'has_status' });
+  const statusIdByNode = new Map<number, number>();
+  for (const e of statusEdges) {
+    // At most one live `has_status` edge per issue can exist, so this `if`
+    // is a defensive no-op rather than a tiebreak: `has_status` is declared
+    // `n:1` in the edge-kind catalog (`write/catalog.ts`), and
+    // `checkMultiplicityTx` (`write/tx.ts`) enforces that by capping the
+    // SOURCE's live out-degree at one before any edge write commits.
+    // `getEdges` returns live edges only (`t_invalid IS NULL`), and
+    // `transition` invalidates the old edge in the same transaction that
+    // writes the new one. So replacing the old per-issue `getEdges({src})`
+    // with this global scan cannot change which status is selected — there
+    // is never more than one candidate to choose between.
+    if (!statusIdByNode.has(e.src)) statusIdByNode.set(e.src, e.dst);
+  }
+  const statusNodeIds = [...new Set(statusIdByNode.values())];
+  const statusById = new Map(
+    (statusNodeIds.length > 0 ? await graph.getNodesByIds(statusNodeIds) : []).map((n) => [n.id, n]),
+  );
+
   const ready: NodeRecord[] = [];
   for (const issue of issues) {
+    if (ready.length >= limit) break;
     if (typeof issue.metadata?.claimedBy === 'string') continue; // currently claimed — not ready
-    const incoming = await graph.getEdges({ dst: issue.id, rel: 'blocks' });
-    if (incoming.length === 0) {
+    const blockerIds = (blockerSrcsByIssue.get(issue.id) ?? []).filter((id) => existingBlockerIds.has(id));
+    if (blockerIds.length === 0) {
       ready.push(issue);
       continue;
     }
-    const blockers = await graph.getNodesByIds(incoming.map((e) => e.src));
-    const statusEdges = await Promise.all(blockers.map((b) => graph.getEdges({ src: b.id, rel: 'has_status' })));
-    const statusIds = statusEdges.map((es) => es[0]?.dst).filter((id): id is number => id !== undefined);
-    const statuses = statusIds.length > 0 ? await graph.getNodesByIds(statusIds) : [];
-    const statusById = new Map(statuses.map((s) => [s.id, s]));
-    const allBlockersTerminal = statusEdges.every((es) => {
-      const statusId = es[0]?.dst;
+    const allBlockersTerminal = blockerIds.every((id) => {
+      const statusId = statusIdByNode.get(id);
       return statusId !== undefined && isStatusTerminal(statusById.get(statusId));
     });
     if (allBlockersTerminal) ready.push(issue);
