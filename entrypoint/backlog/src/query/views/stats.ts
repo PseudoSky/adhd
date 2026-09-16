@@ -56,7 +56,7 @@
 
 import type { GraphBackend, NodeFilter, NodeRecord } from '@adhd/sox-graph-store';
 import { InvalidArgumentError } from '../../write/errors.js';
-import { isStatusTerminal, resolveAuditTrail } from '../card.js';
+import { isStatusTerminal } from '../card.js';
 import { resolveIssueByUid, tryResolveComponentRef, tryResolveRef } from '../resolve.js';
 import type { IIssueAuditEntry, IIssueFilter } from '../types.js';
 import type { IQueryStoreHandle } from '../query.js';
@@ -389,7 +389,8 @@ const OPEN_CURVE_ALLOWED_KEYS: ReadonlySet<string> = new Set(['project', 'compon
 
 /**
  * Reconstructs the issue's status AS OF `at` from its own audit trail
- * (`resolveAuditTrail` — ascending by `.at` already). Three cases, in order:
+ * (`resolveCurrentStatusAndAuditTrails` below — ascending by `.at` already).
+ * Three cases, in order:
  *
  * 1. **No transition-shaped entry at all** (no audit entry carries a `to` —
  *    every `create`-time audit omits it, §4/`create-issue.ts`): the issue has
@@ -428,7 +429,118 @@ function reconstructStatusAt(auditTrail: readonly IIssueAuditEntry[], at: string
   return transitions[0]?.from;
 }
 
-/** SPEC.md §5's `validAt`-driven cumulative-open curve. */
+/**
+ * Batch-resolves, for EVERY issue that has ever carried either edge (not just
+ * the issues a particular sampled instant's `existing` set happens to
+ * contain — a whole-relation fetch is one query regardless of how many rows
+ * come back, see {@link openCurve}'s own doc comment), two things that
+ * `reconstructStatusAt` needs and that do NOT depend on `at`:
+ *
+ * 1. its CURRENT status name, via the first `has_status` edge for that issue
+ *    — "first edge wins," the exact same rule (and the exact same
+ *    whole-relation-then-group shape) `query.ts`'s `queryReady` already
+ *    applies to this identical relation;
+ * 2. its full `audits`-edge trail (SPEC.md §3: `audits: * → audit (1:n)`,
+ *    subject is the edge SOURCE), sorted oldest-first — the same construction
+ *    `card.ts`'s own `resolveAuditTrail` does per-issue, reproduced here
+ *    because that function's signature is shaped for "I already have one
+ *    issue's outgoing edges," which is exactly the one-round-trip-per-issue
+ *    shape this view must NOT do.
+ *
+ * A `has_status`/`audits` edge whose target node no longer exists is silently
+ * dropped from both maps below — `getNodesByIds` only returns nodes that
+ * still exist, so a vanished target was ALREADY silently excluded by the old
+ * per-issue `getNodesByIds([currentStatusId])`/`resolveAuditTrail` calls this
+ * replaces; the batched form must drop it the same way, not surface it as a
+ * phantom entry.
+ */
+async function resolveCurrentStatusAndAuditTrails(
+  graph: GraphBackend,
+): Promise<{
+  currentStatusNameByIssue: Map<number, string | undefined>;
+  auditTrailByIssue: Map<number, IIssueAuditEntry[]>;
+}> {
+  // --- current status: one `has_status` edge per issue, "first edge wins" ---
+  const statusEdges = await graph.getEdges({ rel: 'has_status' });
+  const statusIdByIssue = new Map<number, number>();
+  for (const e of statusEdges) {
+    if (!statusIdByIssue.has(e.src)) statusIdByIssue.set(e.src, e.dst); // first edge wins, as the old per-issue `edges[0]` did
+  }
+  const statusNodeIds = [...new Set(statusIdByIssue.values())];
+  const statusById = new Map(
+    (statusNodeIds.length > 0 ? await graph.getNodesByIds(statusNodeIds) : []).map((n) => [n.id, n]),
+  );
+  const currentStatusNameByIssue = new Map<number, string | undefined>();
+  for (const [issueId, statusId] of statusIdByIssue) {
+    currentStatusNameByIssue.set(issueId, statusById.get(statusId)?.name);
+  }
+
+  // --- audit trail: every `audits` edge, grouped by its issue-subject src ---
+  const auditEdges = await graph.getEdges({ rel: 'audits' });
+  const auditIdsByIssue = new Map<number, number[]>();
+  for (const e of auditEdges) {
+    const list = auditIdsByIssue.get(e.src);
+    if (list) list.push(e.dst);
+    else auditIdsByIssue.set(e.src, [e.dst]);
+  }
+  const allAuditNodeIds = [...new Set(auditEdges.map((e) => e.dst))];
+  const auditNodesById = new Map(
+    (allAuditNodeIds.length > 0 ? await graph.getNodesByIds(allAuditNodeIds) : []).map((n) => [n.id, n]),
+  );
+  const auditTrailByIssue = new Map<number, IIssueAuditEntry[]>();
+  for (const [issueId, auditIds] of auditIdsByIssue) {
+    const entries: IIssueAuditEntry[] = auditIds
+      .map((id) => auditNodesById.get(id))
+      .filter((n): n is NodeRecord => n !== undefined)
+      .map((n) => ({
+        uid: n.uid,
+        actor: typeof n.metadata?.actor === 'string' ? n.metadata.actor : '',
+        action: typeof n.metadata?.action === 'string' ? n.metadata.action : (n.name ?? ''),
+        from: typeof n.metadata?.from === 'string' ? n.metadata.from : undefined,
+        to: typeof n.metadata?.to === 'string' ? n.metadata.to : undefined,
+        note: typeof n.metadata?.note === 'string' ? n.metadata.note : undefined,
+        sha: typeof n.metadata?.sha === 'string' ? n.metadata.sha : '',
+        at: typeof n.metadata?.at === 'string' ? n.metadata.at : n.tCreated,
+      }))
+      .sort((a, b) => a.at.localeCompare(b.at));
+    auditTrailByIssue.set(issueId, entries);
+  }
+
+  return { currentStatusNameByIssue, auditTrailByIssue };
+}
+
+/**
+ * SPEC.md §5's `validAt`-driven cumulative-open curve.
+ *
+ * **Cost is bounded by the sampled-instant count and the size of the
+ * `has_status`/`audits` relations, never by (instants × existing-issue
+ * count).** The obvious shape — for each sampled instant, fetch the issues
+ * that existed then, per issue, fetch its current-status edge, its
+ * current-status node, and its full audit trail — is up to four sequential
+ * round trips PER ISSUE PER INSTANT. Ten sampled instants over a 5,000-issue
+ * store cost on the order of 200,000 serialized queries under that shape,
+ * even though nothing about "how open was the store on these ten dates"
+ * scales with store size on its own — it should scale with the number of
+ * dates the caller asked about. Worse, an issue's CURRENT status and full
+ * audit trail don't depend on `at` at all (`reconstructStatusAt` only reads
+ * them; it never asks the backend anything itself), so the naive per-instant
+ * loop was refetching the exact same unchanging per-issue data once per
+ * instant for nothing.
+ *
+ * Instead, both relations are fetched ONCE, before the instant loop, and
+ * grouped in memory — the same shape `query.ts`'s `queryReady` already uses
+ * for `blocks`/`has_status`: `getEdges({rel:'has_status'})` and
+ * `getEdges({rel:'audits'})` each take the WHOLE relation in a single call
+ * (there is no batch-by-many-`src` primitive — `getEdges` accepts only one
+ * `src`/`dst` at a time, which is exactly why fetching the whole relation
+ * once is the right move), plus one `getNodesByIds` each to resolve the
+ * status/audit-entry nodes those edges point at — see
+ * {@link resolveCurrentStatusAndAuditTrails}. That's four queries total for
+ * this cost, however many issues or instants are involved; the only
+ * per-instant cost left is the one `queryNodes({validAt})` call SPEC.md's own
+ * existence check requires. Total round trips: `4 + M` for `M` sampled
+ * instants — independent of N, the number of issues in the store.
+ */
 export async function openCurve(handle: IQueryStoreHandle, input: IOpenCurveInput): Promise<IOpenCurveResult> {
   const { graph } = handle;
   assertOnlyAllowedFilterKeys(input.filter, OPEN_CURVE_ALLOWED_KEYS, 'openCurve');
@@ -452,6 +564,11 @@ export async function openCurve(handle: IQueryStoreHandle, input: IOpenCurveInpu
   const statuses = await graph.queryNodes({ kind: 'status', liveOnly: true });
   const terminalByName = new Map(statuses.map((s) => [s.name ?? '', isStatusTerminal(s)]));
 
+  // Per-ISSUE data (never per (issue, instant)) — fetched once for the whole
+  // relation and reused across every sampled instant. See this function's own
+  // doc comment for the cost model.
+  const { currentStatusNameByIssue, auditTrailByIssue } = await resolveCurrentStatusAndAuditTrails(graph);
+
   const points: IOpenCurvePoint[] = [];
   for (const at of instants) {
     const nodeFilter: Record<string, unknown> = {
@@ -474,12 +591,8 @@ export async function openCurve(handle: IQueryStoreHandle, input: IOpenCurveInpu
 
     let open = 0;
     for (const issue of existing) {
-      const currentStatusEdges = await graph.getEdges({ src: issue.id, rel: 'has_status' });
-      const currentStatusId = currentStatusEdges[0]?.dst;
-      const currentStatusName = currentStatusId !== undefined
-        ? (await graph.getNodesByIds([currentStatusId]))[0]?.name
-        : undefined;
-      const trail = await resolveAuditTrail(graph, issue.id);
+      const currentStatusName = currentStatusNameByIssue.get(issue.id);
+      const trail = auditTrailByIssue.get(issue.id) ?? [];
       const statusAt = reconstructStatusAt(trail, at, currentStatusName);
       const terminalAt = statusAt !== undefined ? (terminalByName.get(statusAt) ?? false) : false;
       if (!terminalAt) open += 1;
