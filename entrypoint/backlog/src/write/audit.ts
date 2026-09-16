@@ -20,13 +20,15 @@
  *
  * The ONE structural exception — the embedding audit row
  * (`embedding_upserted`/`embedding_deleted`/`embedding_failed`, §4a/§4b) — is
- * NOT implemented here. It depends on `createEmbeddingObserver`'s post-commit
- * round-trip, which cannot even start until the subject transaction has
- * committed, so it necessarily runs in its OWN follow-up transaction, opened
- * by a caller that still holds a subject `uid` after this module's
- * transaction has already returned. That caller — and the embedding-observer
- * wiring itself — is out of scope for this slice (see create-issue.ts's own
- * `awaitEmbed` doc comment for the specific gap this leaves).
+ * NOT written by any call site in THIS file. It depends on a post-commit
+ * embed/delete round-trip that cannot even start until the subject
+ * transaction has committed, so it necessarily runs in its OWN follow-up
+ * transaction — see `embedding-observer.ts`'s `scheduleIssueEmbedding`,
+ * which every write verb (`create-issue.ts`/`update.ts`/`delete.ts`) calls
+ * exactly once (twice for `update`'s body-change path) strictly AFTER its
+ * own `executeWriteTransaction` call has resolved. That function still calls
+ * THIS `writeAudit` helper, unmodified, for the embedding audit row itself —
+ * just against its own freshly-opened `tx`, never the subject write's.
  */
 
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';

@@ -31,6 +31,7 @@ import {
   resolveProjectTx,
 } from './catalog.js';
 import { writeAudit } from './audit.js';
+import { composeEmbedText, scheduleIssueEmbedding } from './embedding-observer.js';
 import { CitationUnverifiableError, InvalidArgumentError, WriteIOError } from './errors.js';
 import { type IWriteStoreHandle, executeWriteTransaction, nowISO, resolveLiveIssueTx, writeEdgeTx, writeNodeTx } from './tx.js';
 // Read-only reuse of the query layer's own, direction-bug-fixed project/
@@ -95,6 +96,21 @@ export interface ICreateIssueInput {
    *   would-be issue's title+body verbatim.
    */
   duplicateAction?: 'abort' | 'force' | 'comment';
+  /**
+   * §4b/§6.2 — waits for the fire-and-forget on-write embedding round-trip
+   * (`embedding-observer.ts`'s `scheduleIssueEmbedding`) before `createIssue`
+   * returns, when `true` and `handle.embedding` is configured. Default
+   * (`false`/omitted): fire-and-forget — the embed/vector-upsert and its
+   * `embedding_upserted`/`embedding_failed` audit row happen in the
+   * background, after this function has already returned to its caller.
+   * A `true` value with NO `handle.embedding` configured is a harmless no-op
+   * (nothing to await — `scheduleIssueEmbedding` resolves immediately).
+   * Per-call, not per-handle — §6.2's v1→v2 migration table: "kept verbatim
+   * on `create`/`update`" (this field lived, mislabeled, on
+   * `IDuplicateScanHandle` before; moved here to match `update.ts`'s own
+   * already-correct placement on `IUpdateIssueInput`).
+   */
+  awaitEmbed?: boolean;
 }
 
 /** §6.4 point 3 — the SET of legal `duplicateAction` values, checked at runtime (not just the TS type) since this verb is reachable from transports — MCP/HTTP/CLI — with no compile-time guarantee on the JSON they hand in. */
@@ -147,22 +163,6 @@ export interface IDuplicateScanHandle {
     readonly backend: StoreSearchBackend;
     embedQuery?(text: string): Promise<Float32Array>;
   };
-  /**
-   * §4b: waits for the fire-and-forget on-write embedding observer before
-   * returning when `true`. **Not implemented in this slice.** the spec's own
-   * embedding observer (`createEmbeddingObserver`, FEAT-021) fires from
-   * `GraphWriteObserver.onNodeWritten`, which only fires from INSIDE
-   * `GraphBackend.writeNode`/`writeNodeInTx` (verified against the published
-   * `@adhd/sox-graph-store` dist) — a hook this write layer structurally
-   * never calls (§4c's entire premise is that those library methods
-   * autocommit outside our transaction). So today, `awaitEmbed` is accepted
-   * for input-shape parity with §6.3.2 but has no effect; wiring an
-   * embedding round-trip onto a hand-composed `writeNodeTx` insert (a NEW
-   * post-commit hook this write layer would have to invoke itself) is real
-   * work for the store-bootstrap/embedding-observer slice, not silently
-   * faked here.
-   */
-  awaitEmbed?: boolean;
 }
 
 /** The "plain" card fields (§6.5) this verb already has in hand after a create — never field-projected, unlike a `query` response. */
@@ -355,7 +355,12 @@ async function scanForDuplicates(
   // tripping.
   if (!candidateIds || candidateIds.size === 0) return [];
 
-  const text = `${title}\n${body}`.trim();
+  // MUST stay byte-identical to `embedding-observer.ts`'s `composeEmbedText`
+  // — both this scan's query vector and the on-write vector populate/query
+  // the SAME vector space under the SAME `modelId`; see that function's own
+  // doc comment for why the two call sites import one shared composer
+  // instead of each keeping its own copy.
+  const text = composeEmbedText(title, body);
   const canEmbed = typeof search.embedQuery === 'function';
   const vec = canEmbed ? await search.embedQuery!(text) : undefined;
 
@@ -489,7 +494,17 @@ export async function createIssue(
     return { created: false, reason: 'duplicate-suppressed', duplicateCandidates };
   }
 
-  return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  // §4b/§9 AC-4 — captured from INSIDE the transaction closure (the only
+  // place the freshly-minted issue's rowid is ever in scope) but read only
+  // AFTER `executeWriteTransaction` resolves below, never used to trigger an
+  // embed from inside the closure itself (§4b: "AFTER the write layer's
+  // `immediate` transaction has committed... never inside it"). Stays
+  // `undefined` on every branch that writes NO issue node — `'abort'`
+  // (already returned above, before this point) and `'comment'` (writes only
+  // a `note`) — so neither path schedules a spurious embed.
+  let embeddedIssue: { rowid: number; uid: string } | undefined;
+
+  const outcome = await executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
     // ONE timestamp for every row this logical write produces — the catalog
     // mints, the issue node, each citation node, and every edge. Captured here
     // rather than just before the issue INSERT because the kind/status/priority/
@@ -571,6 +586,7 @@ export async function createIssue(
     if (input.assignee !== undefined) issueMetadata.assignee = input.assignee;
 
     const issue = await writeNodeTx(tx, { kind: 'issue', name: input.title, content: input.body, metadata: issueMetadata, at: now });
+    embeddedIssue = { rowid: issue.rowid, uid: issue.uid };
 
     const ownsComponentRule = await resolveEdgeKindTx(tx, 'owns_component');
     await writeEdgeTx(tx, {
@@ -681,4 +697,23 @@ export async function createIssue(
       ...(duplicateCandidates.length > 0 ? { duplicateCandidates } : {}),
     };
   });
+
+  // §4b/§9 AC-4 — strictly AFTER `executeWriteTransaction` above has
+  // resolved, i.e. after the subject transaction committed and released its
+  // RESERVED lock (`embedding-observer.ts`'s own doc comment). `embeddedIssue`
+  // is set only on the genuine-create branch (never `'abort'`/`'comment'`,
+  // see its own declaration above).
+  if (embeddedIssue) {
+    const embedPromise = scheduleIssueEmbedding(handle, {
+      action: 'upsert',
+      subjectRowid: embeddedIssue.rowid,
+      subjectUid: embeddedIssue.uid,
+      actor: input.by,
+      content: composeEmbedText(input.title, input.body),
+    });
+    if (input.awaitEmbed) await embedPromise;
+    else embedPromise.catch(() => { /* scheduleIssueEmbedding never rejects — this catch exists only to silence an unhandled-rejection warning if that contract is ever broken. */ });
+  }
+
+  return outcome;
 }

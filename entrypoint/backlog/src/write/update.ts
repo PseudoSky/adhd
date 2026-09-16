@@ -100,6 +100,7 @@ import {
   resolveProjectPolicy,
 } from './catalog.js';
 import { writeAudit } from './audit.js';
+import { composeEmbedText, scheduleIssueEmbedding } from './embedding-observer.js';
 import {
   BacklogValidationError,
   InvalidArgumentError,
@@ -136,12 +137,15 @@ export interface IUpdateIssueInput {
   /** catalog agent name/uid; → `touch` + `authored_by` edge rewrite. An unresolved NAME mints; a uid-shaped ref that does not resolve throws `CatalogNotFoundError('agent', ref)`. */
   author?: string;
   /**
-   * §4b: waits for the fire-and-forget on-write embedding observer before
-   * returning when `true`. **Not implemented in this slice** — identical gap
-   * to `create-issue.ts`'s own `awaitEmbed` doc comment: the embedding
-   * observer only fires from inside `GraphBackend.writeNode`/`writeNodeInTx`,
-   * a hook this hand-composed write layer structurally never calls. Accepted
-   * for input-shape parity only; has no effect.
+   * §4b/§6.2 — waits for the fire-and-forget on-write embedding round-trip
+   * before `update` returns, when `true` and `handle.embedding` is
+   * configured. Only meaningful on a BODY-changing call (the `supersede`
+   * path) — a pure touch (title/kind/priority/assignee/author only) never
+   * schedules a re-embed at all, so `awaitEmbed:true` on a touch-only patch
+   * is a harmless no-op (see `embedding-observer.ts`'s own doc comment for
+   * why touch is deliberately excluded). On a body change, TWO round-trips
+   * are scheduled (delete the old node's vector, upsert the new node's) —
+   * `awaitEmbed:true` awaits BOTH before returning.
    */
   awaitEmbed?: boolean;
 }
@@ -513,7 +517,14 @@ export async function update(handle: IWriteStoreHandle, input: IUpdateIssueInput
   }
   assertNoSilentlyDiscardedPatchKeys(input, changed);
 
-  return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  // §4b/§9 AC-4 — captured from inside the transaction closure, read only
+  // AFTER `executeWriteTransaction` below resolves (never used to trigger an
+  // embed from inside the closure itself). Stays `undefined` unless this
+  // call's body-change branch actually runs (see `embedding-observer.ts`'s
+  // own doc comment on why a pure touch never re-embeds).
+  let supersedeEmbedding: { oldRowid: number; oldUid: string; newRowid: number; newUid: string; newTitle: string; newBody: string } | undefined;
+
+  const outcome = await executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
     const now = nowISO();
 
     const issueRow = await resolveLiveIssueTx(tx, input.uid);
@@ -610,6 +621,8 @@ export async function update(handle: IWriteStoreHandle, input: IUpdateIssueInput
       // touch-only branch below was fixed for.
       await touchNodeTx(tx, newNode.rowid, {}, now);
 
+      supersedeEmbedding = { oldRowid: issueRow.rowid, oldUid: issueRow.uid, newRowid: newNode.rowid, newUid: newNode.uid, newTitle: newTitle ?? '', newBody: input.body };
+
       currentRowid = newNode.rowid;
       currentUid = newNode.uid;
       bodyChanged = true;
@@ -666,4 +679,27 @@ export async function update(handle: IWriteStoreHandle, input: IUpdateIssueInput
 
     return { uid: currentUid, changed };
   });
+
+  // §4b/§9 AC-4 — strictly AFTER `executeWriteTransaction` above has
+  // resolved (subject transaction committed). `supersedeEmbedding` is set
+  // only on the body-change branch — a pure touch never schedules anything
+  // (see `embedding-observer.ts`'s own doc comment on why touch is excluded,
+  // and on why the OLD node's vector is deleted rather than left stale).
+  if (supersedeEmbedding) {
+    const { oldRowid, oldUid, newRowid, newUid, newTitle, newBody } = supersedeEmbedding;
+    const embedPromise = Promise.all([
+      scheduleIssueEmbedding(handle, { action: 'delete', subjectRowid: oldRowid, subjectUid: oldUid, actor: input.by }),
+      scheduleIssueEmbedding(handle, {
+        action: 'upsert',
+        subjectRowid: newRowid,
+        subjectUid: newUid,
+        actor: input.by,
+        content: composeEmbedText(newTitle, newBody),
+      }),
+    ]);
+    if (input.awaitEmbed) await embedPromise;
+    else embedPromise.catch(() => { /* scheduleIssueEmbedding never rejects — this catch exists only to silence an unhandled-rejection warning if that contract is ever broken. */ });
+  }
+
+  return outcome;
 }
