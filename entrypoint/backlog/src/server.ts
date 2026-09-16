@@ -112,11 +112,11 @@ export function testSilentLogger(): Logger | undefined {
 }
 
 // ---------------------------------------------------------------------------
-// The one-package → four-mount surface (INTERFACE_v2 §10.0, AC-0)
+// The one-package → four-mount surface (SPEC.md §6.7, AC-0)
 // ---------------------------------------------------------------------------
 
 /**
- * INTERFACE_v2 §6 "host-command carve-out" — the commands that are
+ * SPEC.md §6.6's "host-command carve-out" — the commands that are
  * deliberately NOT part of the mounted data surface, pinned as a value so the
  * refusal is enforceable rather than prose.
  *
@@ -129,7 +129,7 @@ export function testSilentLogger(): Logger | undefined {
  * ANY of the four mounts.
  *
  * `assertHostCarveOut` turns AC-0's negative assertion ("`install`/`serve` are
- * NOT among the six") into a mount-time invariant: a future refactor that
+ * NOT among the mounted verbs") into a mount-time invariant: a future refactor that
  * accidentally exports a host command from the mounted client module fails at
  * `buildBacklogApigenPackage()` — in every transport at once — instead of
  * silently shipping a `backlog_serve` MCP tool that would open a second
@@ -139,12 +139,12 @@ export function testSilentLogger(): Logger | undefined {
 export const BACKLOG_HOST_COMMANDS: readonly string[] = ['install', 'install-skill', 'serve'];
 
 /**
- * INTERFACE_v2 §10.0 / AC-0 — the SIX data verbs the whole surface consolidates
- * onto (`backlog_get`, `backlog_query`, `backlog_create`, `backlog_update`,
- * `backlog_relate`, `backlog_admin`). Pinned here, next to the carve-out it is
- * the complement of, because it is the ONE list four separate surfaces are
+ * SPEC.md §6.7 / AC-0 — the data verbs the whole surface consolidates onto:
+ * the nine issue verbs plus `lookup` and §3a's registry CRUD verbs, mounted
+ * as `backlog_<verb>`. Pinned here, next to the carve-out it is the
+ * complement of, because it is the ONE list four separate surfaces are
  * checked against: the three apigen mounts derive their names from the
- * operation descriptors via `describeMountedSurface`, and `cli.ts`'s v2 argv
+ * operation descriptors via `describeMountedSurface`, and `cli.ts`'s argv
  * parser — which is deliberately NOT an apigen mount, because apigen's
  * `parseArgs` cannot express the §2.1b positional form, projects `string[]`
  * as a JSON-valued flag where §7.3 wants comma-separated, and only sets
@@ -153,11 +153,11 @@ export const BACKLOG_HOST_COMMANDS: readonly string[] = ['install', 'install-ski
  * derived from the mount.
  *
  * That asymmetry is exactly how a split brain starts, and this repo already
- * has one open as BUG-BACKLOG-MCP-CLI-SPLIT-BRAIN-001. `server.v2.spec.ts`
+ * has one open as BUG-BACKLOG-MCP-CLI-SPLIT-BRAIN-001. `server.verbs.spec.ts`
  * asserts BOTH sides against this constant so a verb added to one surface and
  * forgotten on the other fails a test instead of shipping.
  *
- * Order is the §1-§6 declaration order, not alphabetical; compare as sets.
+ * Order is the SPEC.md §4/§6 declaration order, not alphabetical; compare as sets.
  */
 export const BACKLOG_VERBS: readonly string[] = [
   'get',
@@ -207,7 +207,7 @@ export interface IMountedOperationSurface {
  * Projects the extracted operation descriptors onto the four transports
  * backlog mounts, returning the single expected surface.
  *
- * This is the mechanical statement of INTERFACE_v2 §10.0: *one* operation
+ * This is the mechanical statement of SPEC.md §6.7: *one* operation
  * definition serves CLI, MCP, REST and OpenAPI. A test (or an operator) can
  * call this once and compare it against what each live transport actually
  * advertises; a divergence means some transport grew its own definition,
@@ -239,7 +239,7 @@ export function describeMountedSurface(operations: readonly Operation[]): IMount
 }
 
 /**
- * INTERFACE_v2 §6 / AC-0 negative assertion, enforced at mount time.
+ * SPEC.md §6.6 / AC-0 negative assertion, enforced at mount time.
  *
  * Throws if any mounted operation's CLI leaf or MCP tool name collides with a
  * host command. Checked against the LEAF segment (`get-item` out of
@@ -256,7 +256,7 @@ function assertHostCarveOut(surface: readonly IMountedOperationSurface[]): void 
   });
   if (offenders.length > 0) {
     throw new Error(
-      `@adhd/backlog: host-command carve-out violated (INTERFACE_v2 §6, AC-0) — ` +
+      `@adhd/backlog: host-command carve-out violated (SPEC.md §6.6, AC-0) — ` +
         `${offenders.map((o) => o.id).join(', ')} was mounted as a data operation. ` +
         `install/install-skill must never open the store (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001) ` +
         `and serve must never be reachable as a tool (a second writer against the same store is ` +
@@ -470,7 +470,7 @@ const CORE_CLIENT_VERSION: string = requirePkg(
  * to"). It is NOT correct along the `--sandbox`/test-isolation axis:
  * `cli.ts`'s `runBacklogCli` and `startBacklogServer` both already thread an
  * `adhdRoot` override through `buildBacklogEnv` for every OTHER path (the
- * real SQLite store, `env.ensureDirs()`), but this cache file's own
+ * real store, `env.ensureDirs()`), but this cache file's own
  * `resolveIrCacheFile({ adhdRoot, instanceId })` parameters were simply never
  * wired to it — so a `--sandbox` invocation, despite reporting (and
  * genuinely using) an isolated store root, would still create
@@ -682,7 +682,7 @@ export async function buildBacklogApigenPackage(
     ),
   };
   const schemas = composeSchemas(generated, []);
-  // AC-0 (INTERFACE_v2 §10.0) — project the ONE descriptor list onto the four
+  // AC-0 (SPEC.md §6.7) — project the ONE descriptor list onto the four
   // transports here, at the single composition point, and enforce the §6
   // host-command carve-out before any transport mounts. Every mount below
   // (and `cli.ts`'s cli-output mount) is handed this same `operations` array,
@@ -789,7 +789,7 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
     const logger = testSilentLogger();
 
     const runs: Promise<void>[] = [];
-    // AC-0 / INTERFACE_v2 §10.0 — BOTH mounts below are handed the SAME
+    // AC-0 / SPEC.md §6.7 — BOTH mounts below are handed the SAME
     // `pkg` and the SAME `operations` array produced by the single
     // `buildBacklogApigenPackage` call above; `cli.ts`'s cli-output mount
     // makes the same call for the same reason. `openapiPlugin` is a
@@ -807,7 +807,7 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
           outputDir: '',
           options: { port: opts.port ?? 3300, host: opts.host ?? '127.0.0.1', usePlugins: [openapiPlugin, batchPlugin] },
           signal: opts.signal,
-          // AC-0 / INTERFACE_v2 §10.0 — the SAME `operations` array the MCP
+          // AC-0 / SPEC.md §6.7 — the SAME `operations` array the MCP
           // mount below receives. A per-transport operation list is exactly
           // what AC-0 forbids, because it lets the REST surface drift from
           // the MCP one silently.

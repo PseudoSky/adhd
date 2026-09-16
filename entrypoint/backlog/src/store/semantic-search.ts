@@ -9,8 +9,8 @@
  * substitute. This module is the SEAM that lets a host opt a real backend
  * IN without backlog ever requiring one:
  *
- * 1. {@link SemanticBackend} — the small interface the store, `v2/query.ts`,
- *    `v2/get.ts` and `v2/admin.ts` consult. Fully injectable
+ * 1. {@link SemanticBackend} — the small interface the store and the read
+ *    layer (`query/query.ts`, `query/get.ts`) consult. Fully injectable
  *    (`configureSemanticBackend`) so tests can prove the "configured" code
  *    paths deterministically with a FAKE backend — no model download, no
  *    native module, no network.
@@ -41,7 +41,7 @@ import type { NodeFilter } from '@adhd/sox-graph-store';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
 import { RagNotConfiguredError } from '../envelope.js';
 
-/** One nearest-neighbour hit: a node id (never a humanId — the caller resolves that) plus a similarity score, HIGHER-IS-BETTER. */
+/** One nearest-neighbour hit: a node id (the caller resolves it to a uid) plus a similarity score, HIGHER-IS-BETTER. */
 export interface SemanticMatch {
   nodeId: number;
   score: number;
@@ -318,9 +318,9 @@ const errText = (err: unknown): string => (err instanceof Error ? err.message : 
 /**
  * (BUG-BACKLOG-VECSTORE-NODEFILTER-IGNORED-001) Resolves a `NodeFilter`
  * (e.g. namespace/repo scoping) into a concrete candidate `ids` set through
- * the graph store's OWN `queryNodes` — the same primitive `query.ts`/
- * `crud.ts`/`repo-migration.ts` already use for identical namespace-scoped
- * reads — BEFORE it ever reaches `@adhd/sox-vector-store`. That package's
+ * the graph store's OWN `queryNodes` — the same primitive the read layer
+ * uses for identical scoped reads — BEFORE it ever reaches
+ * `@adhd/sox-vector-store`. That package's
  * Turso backend's filter contract is pure `{ ids }` (its own DEBT-011 doc
  * comment: "the store knows nothing about the graph's node table"); passing
  * it a `nodeFilter` field was a silent no-op that let cross-namespace items
@@ -385,7 +385,7 @@ export async function bootstrapSemanticBackend(store: GraphBacklogStore, config:
         detail:
           `backlog's RAG layer requires a Turso-backed store (capabilities.nativeVectors === true); ` +
           `this store's adapter reports ${JSON.stringify(adapter?.capabilities?.nativeVectors)}. ` +
-          `Turso is @adhd/sox-store-adapter's default — a sqlite-backed store must be migrated before embeddings can be enabled.`,
+          `Turso is @adhd/sox-store-adapter's default; a store on any other substrate cannot serve embeddings.`,
       },
     };
   }

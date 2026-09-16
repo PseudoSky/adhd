@@ -38,7 +38,7 @@ export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
   },
   files: {
     // Deliberately a DIFFERENT file/dir than agent-mcp's operational db or
-    // memory-server's store (~/.memory/memory.db) — no shared SQLite file
+    // memory-server's store (~/.memory/memory.db) — no shared database file
     // between unrelated servers, ever (DESIGN.md §12).
     db: { in: 'data', name: 'backlog.db' },
   },
@@ -46,14 +46,14 @@ export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
     'db.path': {
       type: 'string',
       env: 'ADHD_BACKLOG_DATABASE_PATH',
-      description: 'SQLite backlog-graph DB path. Unset ⇒ falls back to env.files.db under the resolved scope root.',
+      description: 'Backlog graph DB path. Unset ⇒ falls back to env.files.db under the resolved scope root.',
     },
     'db.busyTimeoutMs': {
       type: 'integer',
       env: 'ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS',
       default: 5000,
       description:
-        'SQLite `busy_timeout` (ms) each write waits for a contended lock before retrying (DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001). ' +
+        'The store adapter\'s `busy_timeout` (ms) each write waits for a contended lock before retrying (DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001). ' +
         'Raise this when scaling toward more concurrent agents writing the same global-scope store.',
     },
     'logging.level': {
@@ -129,7 +129,7 @@ export function buildBacklogEnv(options: BuildBacklogEnvOptions = {}): Environme
 }
 
 /**
- * BUG-002: the effective SQLite backlog-graph DB path. Every store-open site
+ * BUG-002: the effective backlog graph DB path. Every store-open site
  * (`cli.ts`'s `runBacklogCli`, `server.ts`'s `startBacklogServer`) must
  * resolve the path through THIS helper — never `env.files.db` directly —
  * or a consumer setting `ADHD_BACKLOG_DATABASE_PATH` silently hits the

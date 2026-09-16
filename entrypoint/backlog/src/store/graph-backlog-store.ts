@@ -1,30 +1,25 @@
 /**
  * graph-backlog-store.ts — opens the store through `@adhd/sox-store-adapter`'s
- * `createStoreAdapter()` (fully async; turso substrate by default, sqlite via
- * the test-only `STORE_ADAPTER` env) and hands the `StoreAdapter` to
+ * `createStoreAdapter()` (fully async) and hands the `StoreAdapter` to
  * `createGraphBackend()`, keeping the adapter handle for the CAS transaction
  * primitive (DESIGN.md §3). `.transaction(fn, { mode: 'immediate' })` (BEGIN
- * IMMEDIATE) is load-bearing — see mutate-metadata.ts / ids.ts for why.
+ * IMMEDIATE) is load-bearing — see mutate-metadata.ts for why.
  *
- * Auto-migration on adapter-type change is owned by the factory:
- * `createStoreAdapter({ dbPath }, { migrateOnAdapterChange: true })` copies a
- * store stamped with a DIFFERENT adapter type (e.g. the pre-migration
- * SQLite-backed `~/.adhd/.../backlog.db`) into a fresh turso store
- * via an atomic temp-file swap. The gate below (`dbPath !== ':memory:'` and
- * the file already exists) matches the factory's own constraint: it requires
- * a local file db, and a fresh test file has no prior adapter stamp to
- * migrate from.
+ * The adapter substrate is whatever `createStoreAdapter` selects; nothing in
+ * this package names or depends on a particular one. That seam is the only
+ * place a driver is known, which is what lets every write path above it stay
+ * substrate-agnostic.
  */
 import { createStoreAdapter, type StoreAdapter } from '@adhd/sox-store-adapter';
 import { createGraphBackend, type GraphBackend, type TypePolicy } from '@adhd/sox-graph-store';
-import { existsSync, mkdirSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { OPEN_TYPE_POLICY } from './type-policy.js';
 import { withImmediateRetry } from './immediate-retry.js';
 import { flushEmbeds as flushEmbedsFor } from './embed-queue.js';
 
 export interface GraphBacklogStore {
-  /** Store-adapter handle — ONLY for the CAS transaction wrapper (mutate-metadata.ts / ids.ts). */
+  /** Store-adapter handle — ONLY for the CAS transaction wrapper (mutate-metadata.ts). */
   readonly adapter: StoreAdapter;
   /** All non-CAS reads/writes go through this. */
   readonly graph: GraphBackend;
@@ -63,15 +58,13 @@ export interface GraphBacklogStore {
 }
 
 /**
- * @param busyTimeoutMs SQLite `busy_timeout` (ms) — how long a blocked
+ * @param busyTimeoutMs `busy_timeout` (ms) — how long a blocked
  *   `.transaction(fn, { mode: 'immediate' })` waits for a contended lock
- *   before throwing `SQLITE_BUSY` (DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001).
- *   BUG-SOXGRAPH-002 moved busy_timeout ownership OUT of graph-store into the
- *   adapters (SqliteAdapter hardcodes 3000 at connect; graph-store's
- *   `PRAGMAS` no longer touches it), and `AdapterConfig` exposes no
- *   busy_timeout field — so the caller's value is routed through the
- *   adapter's own `pragmaSet('busy_timeout', N)` surface, which both
- *   adapters honor (verified: read-back works on turso and sqlite). Callers
+ *   before it gives up (DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001).
+ *   BUG-SOXGRAPH-002 puts busy_timeout ownership in the adapter layer, and
+ *   `AdapterConfig` exposes no busy_timeout field — so the caller's value is
+ *   routed through the adapter's own `pragmaSet('busy_timeout', N)` surface,
+ *   which every adapter honors (verified by read-back). Callers
  *   reading from `BacklogConfig` should pass `env.config.db.busyTimeoutMs`;
  *   the default here (5000) matches that config field's own default, for
  *   callers (tests, ad-hoc scripts) that open a store directly without going
@@ -86,14 +79,7 @@ export async function openGraphBacklogStore(dbPath: string, busyTimeoutMs = 5000
   if (!Number.isInteger(busyTimeoutMs) || busyTimeoutMs < 0) {
     throw new RangeError(`openGraphBacklogStore: busyTimeoutMs must be a non-negative integer, got ${busyTimeoutMs}`);
   }
-  // Turso is the substrate (`createStoreAdapter` defaults to it; `STORE_ADAPTER`
-  // env is test-only). `migrateOnAdapterChange` requires a local file db — a
-  // `:memory:` path, or a fresh (not-yet-created) test file, has no prior
-  // adapter stamp to migrate, so the flag is gated on both.
-  const adapter = await createStoreAdapter(
-    { dbPath },
-    { migrateOnAdapterChange: dbPath !== ':memory:' && existsSync(dbPath) },
-  );
+  const adapter = await createStoreAdapter({ dbPath });
   // BUG-SOXGRAPH-002: the write-contention contract is adapter-owned —
   // graph-store's applySchema() no longer sets busy_timeout, so applying the
   // caller's value here (after the factory's init) is never clobbered and is
@@ -103,11 +89,11 @@ export async function openGraphBacklogStore(dbPath: string, busyTimeoutMs = 5000
   const graph = createGraphBackend(adapter, { typePolicy: OPEN_TYPE_POLICY });
   // DEBT-BACKLOG-APPLYSCHEMA-UNRETRIED-AT-OPEN-001. `applySchema()` issues DDL,
   // which takes the same write lock as every other write in this package — so
-  // it gets the same bounded busy-retry the other four write paths get
-  // (mutate-metadata.ts, ids.ts, repo-migration.ts, audit-log.ts). Without it,
-  // opening a store while another process holds the write lock could fail
-  // outright: measured with 20 concurrent opens at busy_timeout=150 on a loaded
-  // box, `applySchema` threw "database is locked" from SqliteGraphBackend.
+  // it gets the same bounded busy-retry every other write path gets
+  // (mutate-metadata.ts). Without it, opening a store while another process
+  // holds the write lock could fail outright: measured with 20 concurrent
+  // opens at busy_timeout=150 on a loaded box, `applySchema` threw
+  // "database is locked".
   // Production's 5000ms default left ample headroom, so this closes the gap
   // before it becomes an incident rather than after.
   await withImmediateRetry(() => graph.applySchema());
