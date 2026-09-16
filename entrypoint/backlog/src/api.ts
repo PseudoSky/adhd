@@ -54,11 +54,12 @@ import type { IQueryStoreHandle } from './query/query.js';
 import type { IOutcomeEnvelope, IOutcomeFailure, BacklogErrorCode } from './model.js';
 import { errorEnvelope, okEnvelope } from './model.js';
 import { BacklogWriteError } from './write/errors.js';
+import { bootstrapSemanticStoreMembers } from './write/bootstrap.js';
 
 import { getIssue } from './query/get.js';
 import { queryIssues } from './query/query.js';
 import { lookup as lookupRegistry } from './query/views/registry.js';
-import { createIssue } from './write/create-issue.js';
+import { createIssue, type IDuplicateScanHandle } from './write/create-issue.js';
 import { update as updateIssueOp } from './write/update.js';
 import { transition as transitionIssueOp } from './write/transition.js';
 import { claim as claimIssueOp } from './write/claim.js';
@@ -119,33 +120,46 @@ export interface BacklogCtx {
  * same instance the store's `GraphBackend` was constructed with — importing a
  * second copy is how the ETL/test/production divergence in
  * `store/type-policy.ts`'s header came about.
+ *
+ * `graph`/`search`/`embedding` come from `write/bootstrap.ts`
+ * (`bootstrapSemanticStoreMembers`, memoized per `ctx.store.adapter`
+ * instance — see its own doc comment) so `create-issue.ts`'s duplicate gate
+ * (`IDuplicateScanHandle`) and `embedding-observer.ts`'s post-commit embed
+ * round-trip (`IWriteStoreHandle.embedding`) are both genuinely wired in
+ * production, not silent no-ops. `search`/`embedding` are absent whenever
+ * `embedding.enabled` is off or the real backend could not start — the
+ * honest degrade `bootstrap.ts` documents, never a stub.
  */
-function writeHandle(ctx: BacklogCtx): IWriteStoreHandle {
-  return { adapter: ctx.store.adapter, typePolicy: ctx.store.typePolicy };
+async function writeHandle(ctx: BacklogCtx): Promise<IWriteStoreHandle & IDuplicateScanHandle> {
+  const { search, embedding } = await bootstrapSemanticStoreMembers(ctx.store.adapter, ctx.store.graph, ctx.env.config.embedding);
+  return {
+    adapter: ctx.store.adapter,
+    typePolicy: ctx.store.typePolicy,
+    graph: ctx.store.graph,
+    ...(search !== undefined ? { search } : {}),
+    ...(embedding !== undefined ? { embedding } : {}),
+  };
 }
 
 /**
  * The query layer's handle.
  *
- * `search` is deliberately omitted: the query layer types it as
- * `{backend: StoreSearchBackend, embedQuery}` (`@adhd/sox-hybrid-search`),
- * and NOTHING in this package constructs a `StoreSearchBackend` outside
- * `query/views/semantic.spec.ts`. The production semantic seam
- * (`store/semantic-search.ts`) is a different shape — a module-level
- * `SemanticBackend` singleton with `embedQuery`/`embedDocument`/`vectorFor`,
- * reached through `getSemanticBackend()`, not a hybrid search backend — so
- * there is no production construction path to hand over yet.
- *
- * Omitting it is the honest state and not a degradation: `queryIssues` reads
- * an absent `search` as "semantic filters are unavailable" and SAYS so,
- * rather than silently falling back to a substring scan. That is the same
- * rule BUG-045 settled for the vector space — an unbackfilled/unwired search
- * must report as disabled, never as a working search. Wiring the singleton
- * through to a real `StoreSearchBackend` is the remaining work; until then a
- * `semantic` filter fails loudly instead of quietly returning the wrong rows.
+ * `search` comes from `write/bootstrap.ts` (`bootstrapSemanticStoreMembers`,
+ * memoized per `ctx.store.adapter` instance) — a real `StoreSearchBackend`
+ * (`@adhd/sox-hybrid-search`) built from a real embedding model
+ * (`@adhd/sox-embedding-provider`) resolved directly in `bootstrap.ts`,
+ * opened against `ctx.store`'s own Turso adapter. It is absent whenever
+ * `embedding.enabled` is off or the real backend could not start
+ * (`bootstrap.ts`'s own doc comment) — `queryIssues` reads an absent
+ * `search` as "semantic filters are unavailable" and SAYS so
+ * (`InvalidArgumentError('semantic', ...)`), rather than silently falling
+ * back to a substring scan or serving a stub's empty results. That is the
+ * same rule BUG-045 settled for the vector space: an unwired search must
+ * report as disabled, never as a working-but-empty one.
  */
-function queryHandle(ctx: BacklogCtx): IQueryStoreHandle {
-  return { graph: ctx.store.graph };
+async function queryHandle(ctx: BacklogCtx): Promise<IQueryStoreHandle> {
+  const { search } = await bootstrapSemanticStoreMembers(ctx.store.adapter, ctx.store.graph, ctx.env.config.embedding);
+  return { graph: ctx.store.graph, ...(search !== undefined ? { search } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +236,7 @@ export async function get(ctx: BacklogCtx, input: IIssueGetInput): Promise<IOutc
  * aggregate axes, and `grep`/`semantic` text filters.
  */
 export async function query(ctx: BacklogCtx, input: IIssueQueryInput): Promise<IOutcomeEnvelope<IIssueQueryResult>> {
-  return envelope(() => queryIssues(queryHandle(ctx), input));
+  return envelope(async () => queryIssues(await queryHandle(ctx), input));
 }
 
 /**
@@ -235,7 +249,7 @@ export async function lookup(ctx: BacklogCtx, input: { q: string }): Promise<IOu
 
 /** File a new issue, minting its `uid` and linking it to a project component. */
 export async function create(ctx: BacklogCtx, input: ICreateIssueInput): Promise<IOutcomeEnvelope<ICreateIssueResult>> {
-  return envelope(() => createIssue(writeHandle(ctx), input));
+  return envelope(async () => createIssue(await writeHandle(ctx), input));
 }
 
 /**
@@ -246,27 +260,27 @@ export async function create(ctx: BacklogCtx, input: ICreateIssueInput): Promise
  * use `transition`.
  */
 export async function update(ctx: BacklogCtx, input: IUpdateIssueInput): Promise<IOutcomeEnvelope<IUpdateIssueOutcome>> {
-  return envelope(() => updateIssueOp(writeHandle(ctx), input));
+  return envelope(async () => updateIssueOp(await writeHandle(ctx), input));
 }
 
 /** Move an issue to a new status, recording the transition in its audit trail. */
 export async function transition(ctx: BacklogCtx, input: ITransitionInput): Promise<IOutcomeEnvelope<ITransitionOutcome>> {
-  return envelope(() => transitionIssueOp(writeHandle(ctx), input));
+  return envelope(async () => transitionIssueOp(await writeHandle(ctx), input));
 }
 
 /** Take, renew or release an exclusive working lease on an issue. */
 export async function claim(ctx: BacklogCtx, input: IClaimInput): Promise<IOutcomeEnvelope<IClaimOutcome>> {
-  return envelope(() => claimIssueOp(writeHandle(ctx), input));
+  return envelope(async () => claimIssueOp(await writeHandle(ctx), input));
 }
 
 /** Create or remove a typed relationship between two issues. */
 export async function relate(ctx: BacklogCtx, input: IRelateInput): Promise<IOutcomeEnvelope<IRelateOutcome>> {
-  return envelope(() => relateIssueOp(writeHandle(ctx), input));
+  return envelope(async () => relateIssueOp(await writeHandle(ctx), input));
 }
 
 /** Re-file an issue under a different project component. */
 export async function move(ctx: BacklogCtx, input: IMoveIssueInput): Promise<IOutcomeEnvelope<IMoveIssueOutcome>> {
-  return envelope(() => moveIssueOp(writeHandle(ctx), input));
+  return envelope(async () => moveIssueOp(await writeHandle(ctx), input));
 }
 
 /**
@@ -276,7 +290,7 @@ export async function move(ctx: BacklogCtx, input: IMoveIssueInput): Promise<IOu
  * trail and every edge pointing at it remain readable.
  */
 async function remove(ctx: BacklogCtx, input: IDeleteIssueInput): Promise<IOutcomeEnvelope<IDeleteIssueOutcome>> {
-  return envelope(() => deleteIssueOp(writeHandle(ctx), input));
+  return envelope(async () => deleteIssueOp(await writeHandle(ctx), input));
 }
 
 // ---------------------------------------------------------------------------
@@ -290,12 +304,12 @@ async function remove(ctx: BacklogCtx, input: IDeleteIssueInput): Promise<IOutco
  * `(root)`. A repeat call against an existing project is idempotent.
  */
 export async function upsertProject(ctx: BacklogCtx, input: IUpsertProjectInput): Promise<IOutcomeEnvelope<IUpsertProjectOutcome>> {
-  return envelope(() => upsertProjectOp(writeHandle(ctx), input));
+  return envelope(async () => upsertProjectOp(await writeHandle(ctx), input));
 }
 
 /** Create or update a component by `(project, name)`. */
 export async function upsertComponent(ctx: BacklogCtx, input: IUpsertComponentInput): Promise<IOutcomeEnvelope<IUpsertComponentOutcome>> {
-  return envelope(() => upsertComponentOp(writeHandle(ctx), input));
+  return envelope(async () => upsertComponentOp(await writeHandle(ctx), input));
 }
 
 /**
@@ -305,12 +319,12 @@ export async function upsertComponent(ctx: BacklogCtx, input: IUpsertComponentIn
  * to disambiguate it.
  */
 export async function upsertLocation(ctx: BacklogCtx, input: IUpsertLocationInput): Promise<IOutcomeEnvelope<IUpsertLocationOutcome>> {
-  return envelope(() => upsertLocationOp(writeHandle(ctx), input));
+  return envelope(async () => upsertLocationOp(await writeHandle(ctx), input));
 }
 
 /** Soft-remove a location by `uid`. */
 export async function rmLocation(ctx: BacklogCtx, input: IRmLocationInput): Promise<IOutcomeEnvelope<IRmLocationOutcome>> {
-  return envelope(() => rmLocationOp(writeHandle(ctx), input));
+  return envelope(async () => rmLocationOp(await writeHandle(ctx), input));
 }
 
 /**
