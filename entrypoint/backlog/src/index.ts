@@ -1,15 +1,15 @@
 // Entrypoint: @adhd/backlog
 //
-// Public barrel — re-exports every `client.ts` operation (for a Node
-// consumer, or a test, that wants to call them in-process),
-// `startBacklogServer` (HTTP/MCP host entry), and `runBacklogCli` (the third,
-// CLI transport). All three mount live via apigen — no codegen. See SPEC.md /
+// Public barrel. Re-exports every mounted operation (for a Node consumer, or a
+// test, that wants to call them in-process), `startBacklogServer` (the HTTP/MCP
+// host entry) and `runBacklogCli` (the CLI transport). All three transports
+// mount live via apigen from ONE operation descriptor set -- there is no
+// codegen step and no per-transport operation definition. See SPEC.md /
 // DESIGN.md for the full contract.
 //
 // This file is ALSO the `adhd-backlog` bin (`package.json` `bin: {
-// "adhd-backlog": "./dist/index.js" }` — renamed from the bare `backlog` key,
-// which collided with the unrelated public npm package `backlog@1.4.56`) —
-// see the entry-guard at the bottom.
+// "adhd-backlog": "./dist/index.js" }` -- the bare `backlog` key collided with
+// an unrelated public npm package) -- see the entry-guard at the bottom.
 import { realpathSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,52 +17,31 @@ import { pathToFileURL } from 'node:url';
 import { initTelemetry } from '@adhd/sox-telemetry';
 import { runBacklogCli, stripSandboxFlag } from './cli.js';
 
+// The mounted surface: nine issue verbs (SPEC 6.3), `lookup` (3a), and the
+// four registry CRUD verbs (3a). `server.ts` extracts `dist/api.d.ts`, so THIS
+// list and the mounted tool set are the same list by construction -- a verb
+// cannot be exported here and missing from a transport, or vice versa.
 export {
-  addCitation,
-  addDependency,
-  appendNote,
-  archiveResolved,
-  assignItem,
-  attachToPlan,
-  auditTrail,
-  blockers,
-  claimItem,
-  createItem,
-  dependencyGraph,
-  exportJson,
-  getItem,
-  importFromMarkdown,
-  linkRelated,
-  listItems,
-  mergeItems,
-  migrationStatus,
-  readyItems,
-  releaseClaim,
-  removeDependency,
-  renderToMarkdown,
-  renewClaim,
-  resolveItem,
-  setMigrationPhase,
-  setPriority,
-  softDeleteItem,
-  spotlight,
-  splitItem,
-  staleClaims,
-  startWork,
-  stats,
-  supersedeItem,
-  topoOrder,
-  transitionStatus,
-  updateItem,
-  version,
-} from './ops-v1.js';
+  get,
+  query,
+  lookup,
+  create,
+  update,
+  transition,
+  claim,
+  relate,
+  move,
+  upsertProject,
+  upsertComponent,
+  upsertLocation,
+  rmLocation,
+  delete,
+} from './api.js';
+export type { BacklogCtx } from './api.js';
 
-// INTERFACE_v2 §3 — the six consolidated verbs. These, and only these, are the
-// apigen mount surface (`server.ts` extracts `dist/client.d.ts`); the v1 ops
-// above now live in `ops-v1.ts` and are barrel-only, so re-exporting them here
-// does NOT re-widen the mounted tool set.
-export { get, query, create, update, relate, admin } from './client.js';
-export type { BacklogCtx, BacklogVersionInfo } from './client.js';
+// The response envelope every verb returns, plus its closed error-code union
+// and the exit codes a CLI host keys off.
+export * from './envelope.js';
 
 export { startBacklogServer, buildBacklogApigenPackage, resolveExpectedMcpToolNames } from './server.js';
 export type { StartOpts } from './server.js';
@@ -71,8 +50,8 @@ export { runBacklogCli, resolveCommandPrefix, prefixCommand, stripSandboxFlag } 
 export type { RunBacklogCliOpts } from './cli.js';
 
 // `search`'s argv translation (see search-shortcut.ts). NOT a mount-surface
-// widening: `server.ts` extracts `client.ts`, never this barrel, so exporting
-// it here keeps it unit-testable without adding a seventh apigen operation.
+// widening: `server.ts` extracts `api.ts`, never this barrel, so exporting it
+// here keeps it unit-testable without adding an extra apigen operation.
 export { buildSearchArgv, SEARCH_FLAGS, SEARCH_HELP } from './search-shortcut.js';
 export type { SearchShortcutOutcome } from './search-shortcut.js';
 
@@ -88,20 +67,7 @@ export type { BacklogConfig, BuildBacklogEnvOptions } from './env.js';
 export { openGraphBacklogStore, closeGraphBacklogStore } from './store/graph-backlog-store.js';
 export type { GraphBacklogStore } from './store/graph-backlog-store.js';
 
-export {
-  buildChangelogSection,
-  classifyStatus,
-  detectPriority,
-  detectStatus,
-  normalizeLegacyStatus,
-  parseBacklogMarkdown,
-  parseBacklogMarkdownWithDiagnostics,
-  renderItemsToMarkdown,
-  toImportItems,
-} from './markdown.js';
-export type { ParsedImportItem, ParsedMarkdownItem, ParseWithDiagnosticsResult } from './markdown.js';
-
-export * from './model.js';
+export { readBacklogVersionInfo } from './version-info.js';
 
 // ---------------------------------------------------------------------------
 // `bin` entry-guard — replicates `entrypoint/apigen-cli/src/index.ts`'s

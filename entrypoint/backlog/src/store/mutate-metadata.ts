@@ -24,7 +24,6 @@
  * one-shot CLI process, or an MCP/HTTP request) sees a crash.
  */
 import type { GraphBacklogStore } from './graph-backlog-store.js';
-import type { BacklogNodeMeta } from './mapping.js';
 import { withImmediateRetry } from './immediate-retry.js';
 
 export class NotFoundError extends Error {
@@ -34,7 +33,7 @@ export class NotFoundError extends Error {
   }
 }
 
-export async function mutateMetadata<M = BacklogNodeMeta>(
+export async function mutateMetadata<M = Record<string, unknown>>(
   store: GraphBacklogStore,
   nodeId: number,
   updater: (current: M) => M

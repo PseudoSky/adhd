@@ -31,8 +31,26 @@
  * sweep (§7) is the designated repair path.
  */
 import { getSemanticBackend, markSemanticVectorSpacePopulated } from './semantic-search.js';
-import { stripContentMarker } from './mapping.js';
+
 import { mutateMetadata } from './mutate-metadata.js';
+
+/**
+ * Marker prefix for the trailing provenance comment appended to stored bodies.
+ * Rehomed here from the deleted mapping module: this and `stripContentMarker`
+ * below were that module's only surviving consumers, and a 275-line module is
+ * not worth keeping alive for one regex.
+ */
+const CONTENT_MARKER_PREFIX = 'adhd-backlog:';
+
+/**
+ * Strips the trailing `<!-- adhd-backlog:... -->` provenance comment so the
+ * text handed to the embedder is the author's prose and nothing else --
+ * otherwise every item carries an identical marker suffix that pulls their
+ * vectors toward each other.
+ */
+function stripContentMarker(content: string): string {
+  return content.replace(new RegExp(`\\n\\n<!--\\s*${CONTENT_MARKER_PREFIX}[^>]*-->\\s*$`), '');
+}
 import type { GraphBacklogStore } from './graph-backlog-store.js';
 
 /**

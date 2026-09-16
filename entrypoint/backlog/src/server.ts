@@ -13,8 +13,8 @@
  * DEVIATION from the README's illustrative pattern (which points BOTH
  * `extract()` and the live `import()` at the same file path): `extract()`
  * needs real TYPE INFORMATION (ts-morph parses declarations + JSDoc) to
- * derive JSON Schemas, but a shipped npm package's `dist/client.js` is
- * stripped JavaScript with none. `dist/client.d.ts` (emitted by
+ * derive JSON Schemas, but a shipped npm package's `dist/api.js` is
+ * stripped JavaScript with none. `dist/api.d.ts` (emitted by
  * vite-plugin-dts, mirroring `src/`) carries the SAME type graph as the
  * `.ts` source via ambient `declare function` nodes — a documented,
  * anticipated extraction path (`@adhd/apigen-core-client`'s
@@ -23,11 +23,11 @@
  * targets the built `.d.ts` (always present once `nx build backlog` has run
  * — nothing here needs the raw `.ts` source shipped in the npm package),
  * while the live function references come from a plain STATIC import of
- * `client.js` (resolved by the bundler/module loader at build/load time, not
+ * `api.js` (resolved by the bundler/module loader at build/load time, not
  * a runtime dynamic `import()` of a computed path) — avoiding the runtime
  * dynamic-import-of-a-string entirely. `import.meta.url` resolves to the
  * OUTPUT chunk's own URL once bundled (rollup's documented behavior), so
- * `<packageRoot>/dist/client.d.ts` is reachable the same way whether this
+ * `<packageRoot>/dist/api.d.ts` is reachable the same way whether this
  * module is executing from `dist/index.{js,mjs}` (production) or from
  * `src/server.ts` under vitest's transform (tests) — either way `dist/`
  * has already been built by the time this runs (nx `dependsOn`).
@@ -53,8 +53,8 @@ import { apiFastifyPlugin } from '@adhd/apigen-plugin-api-fastify';
 import { openapiPlugin } from '@adhd/apigen-plugin-openapi';
 import { mcpPlugin } from '@adhd/apigen-plugin-mcp';
 import { batchPlugin } from '@adhd/apigen-plugin-batch';
-import * as clientMod from './client.js';
-import type { BacklogCtx } from './client.js';
+import * as clientMod from './api.js';
+import type { BacklogCtx } from './api.js';
 import { openGraphBacklogStore, closeGraphBacklogStoreSafe, type GraphBacklogStore } from './store/graph-backlog-store.js';
 import { enableSemanticSearchFromConfig } from './store/semantic-search.js';
 import { hasExternalSignalHandling, installSignalCleanup } from './store/signal-cleanup.js';
@@ -159,7 +159,22 @@ export const BACKLOG_HOST_COMMANDS: readonly string[] = ['install', 'install-ski
  *
  * Order is the §1-§6 declaration order, not alphabetical; compare as sets.
  */
-export const BACKLOG_V2_VERBS: readonly string[] = ['get', 'query', 'create', 'update', 'relate', 'admin'];
+export const BACKLOG_VERBS: readonly string[] = [
+  'get',
+  'query',
+  'lookup',
+  'create',
+  'update',
+  'transition',
+  'claim',
+  'relate',
+  'move',
+  'upsert-project',
+  'upsert-component',
+  'upsert-location',
+  'rm-location',
+  'delete',
+];
 
 /**
  * One mounted operation, projected to all four transports backlog serves.
@@ -298,39 +313,39 @@ export interface StartOpts {
 }
 
 /**
- * Resolves the directory that actually contains the built `client.d.ts` /
- * `client.js` artifacts, by PROBING for `client.d.ts` rather than assuming a
+ * Resolves the directory that actually contains the built `api.d.ts` /
+ * `api.js` artifacts, by PROBING for `api.d.ts` rather than assuming a
  * fixed relative path — because this module executes from THREE genuinely
  * different layouts and a single `../dist` computation cannot satisfy all
  * three (BUG confirmed live via `npm install @adhd/backlog@0.1.0`: it
- * crashed at mount with `.../node_modules/@adhd/dist/client.d.ts does not
+ * crashed at mount with `.../node_modules/@adhd/dist/api.d.ts does not
  * exist`):
  *
  *  1. PUBLISHED (`node_modules/@adhd/backlog/…`): `@adhd/nx-build`'s
  *     `dist-manifest`/`publish` executors run `npm publish <distDir>` —
  *     `dist/` IS packed as the package root, so the shipped tarball has
- *     `index.js` and `client.d.ts` as SIBLINGS at the package root (there is
+ *     `index.js` and `api.d.ts` as SIBLINGS at the package root (there is
  *     no `dist/` subdirectory at all once installed). `dirname(import.meta.url)`
  *     here is already that root, so the OLD `join(here, '..', 'dist')` escaped
  *     one level too far, past the package root into
  *     `node_modules/@adhd/dist` — nonexistent.
  *  2. DEV-BUILT (`entrypoint/backlog/dist/index.{js,mjs}`, e.g. this repo's
- *     own `nx build backlog` output before packing): `client.d.ts` is ALSO a
+ *     own `nx build backlog` output before packing): `api.d.ts` is ALSO a
  *     sibling of `index.js`, both living directly under `dist/`.
- *  3. VITEST (`src/server.ts` transformed and run in place): `client.d.ts`
+ *  3. VITEST (`src/server.ts` transformed and run in place): `api.d.ts`
  *     has not moved next to `src/` — it's still only in the built `dist/`,
  *     one level up and back down from `src/`.
  *
- * Layouts 1 and 2 are identical in shape (client.d.ts is a sibling of the
+ * Layouts 1 and 2 are identical in shape (api.d.ts is a sibling of the
  * running module) and differ from layout 3 only in WHERE that sibling lives
- * relative to the module — so probing "is client.d.ts sitting right next to
+ * relative to the module — so probing "is api.d.ts sitting right next to
  * me?" before falling back to the vitest-only `../dist` shape correctly
  * covers all three without needing to distinguish "published" from
  * "dev-built" explicitly.
  */
 function backlogDistDir(): string {
   const here = dirname(fileURLToPath(import.meta.url));
-  if (existsSync(join(here, 'client.d.ts'))) return here;
+  if (existsSync(join(here, 'api.d.ts'))) return here;
   return join(here, '..', 'dist');
 }
 
@@ -560,10 +575,10 @@ function getExtractInvoke(opts: { adhdRoot?: string; instanceId?: string } = {})
   return extractInvoke;
 }
 
-async function extractClientOperations(
+async function extractApiOperations(
   opts: { adhdRoot?: string; instanceId?: string } = {}
 ): Promise<Operation[]> {
-  const clientDts = join(backlogDistDir(), 'client.d.ts');
+  const clientDts = join(backlogDistDir(), 'api.d.ts');
   if (!existsSync(clientDts)) {
     throw new Error(
       `@adhd/backlog: cannot mount — ${clientDts} does not exist. ` +
@@ -572,7 +587,7 @@ async function extractClientOperations(
   }
   // `dropFileSegment: true` (`ExtractOptions`, `@adhd/apigen-core-client`):
   // without it every op's `path` would unconditionally start with the
-  // `client.d.ts` extraction FILENAME artifact (`normalizeFileName` →
+  // `api.d.ts` extraction FILENAME artifact (`normalizeFileName` →
   // `'client-d'`), leaking into every transport's name — `backlog client-d
   // create-item` / `backlog_client_d_create_item` instead of the intended
   // `backlog create-item` / `backlog_create_item`. Safe here because every
@@ -604,12 +619,12 @@ async function extractClientOperations(
  * when a dispatched command actually reaches the real function, which never
  * happens for `--help`/no-args/an unknown command. This is what closes
  * DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001: `operations`/`schemas` below are
- * computed purely from the built `client.d.ts` (via `extractClientOperations`)
+ * computed purely from the built `api.d.ts` (via `extractApiOperations`)
  * and never touch `ctx` at all, so a lazy caller can defer opening the real
  * backing store until a command that actually needs it is dispatched.
  *
  * @param opts.adhdRoot/instanceId BUG-BACKLOG-SANDBOX-IRCACHE-001 — forwarded
- *   verbatim to `extractClientOperations`/the IR-cache plugin, so a caller
+ *   verbatim to `extractApiOperations`/the IR-cache plugin, so a caller
  *   already isolating its real store via `adhdRoot` (`--sandbox`, or any
  *   other test-isolation caller of `buildBacklogEnv`) gets the extract-stage
  *   IR cache isolated the SAME way, instead of it silently falling through
@@ -639,7 +654,7 @@ export async function buildBacklogApigenPackage(
   operations: Operation[];
 }> {
   const getCtx: () => BacklogCtx | Promise<BacklogCtx> = typeof ctx === 'function' ? ctx : () => ctx;
-  const operations = await extractClientOperations(opts);
+  const operations = await extractApiOperations(opts);
   const generated = {
     metadata: { namespace: 'backlog', phase: '' },
     schemas: Object.fromEntries(
@@ -685,7 +700,7 @@ export async function buildBacklogApigenPackage(
       id: 'backlog',
       version,
       schemas,
-      importPath: join(backlogDistDir(), 'client.js'),
+      importPath: join(backlogDistDir(), 'api.js'),
       fns: clientMod as unknown as Record<string, (...args: unknown[]) => unknown>,
       createClient: async () => getCtx(),
     },
@@ -760,7 +775,7 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
   // Everything from here on runs inside the try/finally below, NOT just the
   // `Promise.all(runs)` it originally wrapped. `buildBacklogApigenPackage`
   // can genuinely throw at mount-composition time — a missing built
-  // `client.d.ts` (`extractClientOperations`), an extraction failure, or the
+  // `api.d.ts` (`extractApiOperations`), an extraction failure, or the
   // §6 host-carve-out violation `assertHostCarveOut` now raises — and every
   // one of those happens AFTER the serve lock is held and the store is open.
   // With the narrower scope, such a failure propagated without ever calling

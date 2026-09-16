@@ -1,500 +1,226 @@
 # @adhd/backlog
 
-A structured, queryable, multi-agent-safe **graph store** for backlog items (bugs,
-debt, features, investigations, plans) — a replacement for ad-hoc `BACKLOG.md`
-editing that stays compatible with the existing markdown convention this repo
-already uses.
+A structured, queryable, multi-agent-safe backlog for bugs, debt, features, and
+investigations. Every item is a node in a shared graph store — not a row in a
+flat markdown file — so it can be filed, searched, claimed, and transitioned by
+many agents and humans working concurrently without stepping on each other's
+edits or losing an audit trail.
 
-**In practice this is a CLI (`adhd-backlog`) and an MCP server** — that's how
-this repo and the agents working in it actually use it, day to day. It's
-published as an npm package because the CLI and MCP server need to ship
-*something*, and the same package happens to export a programmatic TypeScript
-API for the rarer case of embedding the store directly in another Node
-process — but reaching for that API is the exception, not the norm. If you're
-a human or an agent working with backlog items, start at the CLI section
-below or "Setting up for agent use"; skip straight to "Library usage" only if
-you're embedding the store inside your own service.
+The problem this solves: a plain `BACKLOG.md` file has no way to represent
+"someone is already working on this," no way to enforce that a closed item
+cites the fix that closed it, no structured way to ask "what's open in this
+component," and no safe way for two agents to edit it at once. `@adhd/backlog`
+replaces that file with a real store: issues are addressed by a stable `uid`,
+every mutation is audited, claims are leases with staleness detection, and
+queries are structured filters instead of `grep`.
 
-Built on `@adhd/sox-graph-store` (bi-temporal nodes/edges over SQLite) and mounted
-live via `@adhd/apigen-core-client` (no code generation — `extract()` →
-`composeSchemas()` → `plugin.run()`) — the same live mount serves the CLI, the
-MCP server, and the HTTP API, so all three are always in lockstep.
-
-See `SPEC.md` (functional spec: personas, data model, status vocabulary,
-operation surface) and `DESIGN.md` (technical design: graph mapping, claim
-protocol, env/apigen wiring) in this package for the full contract.
+## Install
 
 ```bash
-npm install -g @adhd/backlog   # or: pnpm add -g @adhd/backlog / yarn global add @adhd/backlog
-                                 # installs the `adhd-backlog` bin (renamed from the bare
-                                 # `backlog` bin, which collided with the unrelated public
-                                 # npm package `backlog@1.4.56`)
+pnpm add -g @adhd/backlog
 adhd-backlog --help
 ```
 
-The six verbs — every one takes a single `--input '<json>'` flag:
+This installs the `adhd-backlog` CLI binary. The same package also runs as an
+MCP server and an HTTP API — see "Transports" below.
+
+## Transports
+
+`adhd-backlog` mounts one set of operation descriptors onto three transports
+at once, using the same live-mount mechanism for each — there is no
+per-transport reimplementation, so a change to a verb's behavior is
+simultaneously true on all three:
+
+- **CLI** — `adhd-backlog <verb> --input '<json>'`
+- **MCP** — tools named `backlog_<verb>` (e.g. `backlog_create`, `backlog_query`)
+- **HTTP** — a REST API generated from the same descriptors, with an OpenAPI document
+
+All three project from the exact same 14 verbs:
+
+| Verb | CLI | MCP tool |
+|---|---|---|
+| `get` | `adhd-backlog get` | `backlog_get` |
+| `query` | `adhd-backlog query` | `backlog_query` |
+| `lookup` | `adhd-backlog lookup` | `backlog_lookup` |
+| `create` | `adhd-backlog create` | `backlog_create` |
+| `update` | `adhd-backlog update` | `backlog_update` |
+| `transition` | `adhd-backlog transition` | `backlog_transition` |
+| `claim` | `adhd-backlog claim` | `backlog_claim` |
+| `relate` | `adhd-backlog relate` | `backlog_relate` |
+| `move` | `adhd-backlog move` | `backlog_move` |
+| `delete` | `adhd-backlog delete` | `backlog_delete` |
+| `upsertProject` | `adhd-backlog upsert-project` | `backlog_upsert_project` |
+| `upsertComponent` | `adhd-backlog upsert-component` | `backlog_upsert_component` |
+| `upsertLocation` | `adhd-backlog upsert-location` | `backlog_upsert_location` |
+| `rmLocation` | `adhd-backlog rm-location` | `backlog_rm_location` |
+
+`get`/`query`/`lookup` are reads. `create`/`update`/`transition`/`claim`/
+`relate`/`move`/`delete` mutate one issue. The four `upsert*`/`rmLocation`
+verbs manage the **registry** — projects, components, and locations — the
+navigation index that answers "where does this live?" (which project, which
+component, which file/URL/tool) without an agent falling back to a filesystem
+search.
+
+Every verb, on every transport, returns the same envelope shape (see
+"Envelope" below) — a mutation never throws a bare stack trace at a caller,
+and a read failure is always structured.
+
+## Worked example: file, query, transition
+
+Issues live under a project and (optionally) a component, both resolved by
+name or `uid`. File a project first if one doesn't already exist:
 
 ```bash
-adhd-backlog get    --input '{"humanId":"BUG-EXAMPLE-001","repo":"org/repo"}'
-adhd-backlog query  --input '{"filter":{"status":"OPEN"}}'
-adhd-backlog create --input '{"item":{"family":"BUG-EXAMPLE","title":"t","body":"b","repo":"org/repo"},"by":"me:1"}'
-adhd-backlog update --input '{"humanId":"BUG-EXAMPLE-001","repo":"org/repo","patch":{"title":"t2"},"by":"me:1"}'
-adhd-backlog relate --input '{"sourceId":"BUG-EXAMPLE-001","targetId":"BUG-EXAMPLE-002","relation":"dependency","action":"add","repo":"org/repo","by":"me:1"}'
-adhd-backlog admin  --input '{"action":"migration_status"}'
-adhd-backlog search "publish gate trips under load" --limit 5 --status open   # shortcut onto query, see below
+adhd-backlog upsert-project --input '{
+  "name": "adhd",
+  "path": "/Users/me/dev/adhd",
+  "by": "agent:worker-1"
+}'
 ```
 
-(This repo's own dev loop — building from source instead of installing the
-published package — is `corepack enable && corepack prepare pnpm@8.15.9
---activate` at the repo root, per its `packageManager` pin; that's a
-repo-development detail, not something a consumer of the published package
-needs.)
+```json
+{"ok":true,"data":{"uid":"9f2c...","created":true,"project":{"uid":"9f2c...","name":"adhd","path":"/Users/me/dev/adhd"}}}
+```
 
-Full CLI reference (the `search` shortcut, exit codes): see "CLI" below.
-Using it from an agent instead of a terminal — MCP tools, the skill file —
-see the next section.
-
-## Setting up for agent use (Claude Code, Codex, OpenCode)
-
-This section is for wiring backlog up so an **agent** (not a human at a
-terminal) can call it — either as `mcp__backlog__*` tools, or via the
-`skill/SKILL.md` (16 KB) that documents the full six-verb contract for an
-agent's own context window. There are three independent pieces: the MCP
-server, the skill file, and (optionally) a one-shot installer that does both.
-None of them require any global Claude Code config beyond what's described
-below.
-
-### The fast path: `adhd-backlog install`
-
-Every published `@adhd/backlog` ships an `install` command (`src/install.ts`,
-verified 2026-09-03 by running `node entrypoint/backlog/dist/index.js install
---scope project` against a scratch directory) that, in one step:
-
-1. Copies the packaged `skill/SKILL.md` into the target host's skill
-   directory (`.claude/skills/backlog/SKILL.md` for Claude Code project
-   scope, `~/.claude/skills/backlog/SKILL.md` for user scope — see the table
-   below for Codex/OpenCode).
-2. Registers the `backlog` MCP server into that host's own config file
-   (`.mcp.json` for Claude Code project scope, `~/.claude.json` for user
-   scope, `opencode.json`/`~/.config/opencode/opencode.json` for OpenCode,
-   `.codex/config.toml`/`$CODEX_HOME/config.toml` for Codex) — a deep-merged
-   upsert of just the `backlog` entry, leaving every other entry in that file
-   untouched.
+File an issue against it:
 
 ```bash
-npx @adhd/backlog@latest install                       # all hosts, user scope (machine-wide)
-npx @adhd/backlog@latest install --host claude --scope project   # this repo only
-npx @adhd/backlog@latest install --skill-only            # skill file only, no MCP config edit
-npx @adhd/backlog@latest install --mcp-only --host opencode
+adhd-backlog create --input '{
+  "title": "Query pagination drops the last page under offset paging",
+  "body": "offset+limit near the end of a result set silently returns fewer rows than `total` implies.",
+  "project": "adhd",
+  "by": "agent:worker-1"
+}'
 ```
-
-Real output from a `--scope project` run against a scratch directory (`node
-entrypoint/backlog/dist/index.js install --scope project`, no repo files
-touched):
-
-```
-[backlog install] skill -> claude (project): /path/.claude/skills/backlog/SKILL.md
-[backlog install] skill -> codex (project): /path/.codex/skills/backlog/SKILL.md
-[backlog install] skill -> opencode (project): /path/.opencode/skills/backlog/SKILL.md
-[backlog install] mcp   -> claude (project) [written]: /path/.mcp.json
-[backlog install] mcp   -> codex (project) [written]: /path/.codex/config.toml
-[backlog install] mcp   -> opencode (project) [written]: /path/opencode.json
-```
-
-The written `.mcp.json` (Claude Code, project scope) looks exactly like this:
 
 ```json
 {
-  "mcpServers": {
-    "backlog": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@adhd/backlog@latest", "serve", "--transport", "mcp"]
+  "ok": true,
+  "data": {
+    "created": true,
+    "uid": "a1b2c3d4-...",
+    "item": {
+      "uid": "a1b2c3d4-...",
+      "title": "Query pagination drops the last page under offset paging",
+      "kind": "issue",
+      "status": "open",
+      "project": "adhd",
+      "component": "(root)",
+      "createdAt": "2026-09-16T12:00:00.000Z"
     }
   }
 }
 ```
 
-`backlog install-skill` remains available as a back-compat alias for
-`install --skill-only` (original `--host`/`--scope` grammar). Both `install`
-and `install-skill` are idempotent — re-running only touches the `backlog`
-skill files / the `backlog` MCP entry, never anything else already in those
-files. Full flag reference: `adhd-backlog install --help`.
+Query for it:
 
-| Host | Skill dir (project) | Skill dir (user) | MCP config (project) | MCP config (user) |
-|---|---|---|---|---|
-| Claude Code | `.claude/skills/backlog/` | `~/.claude/skills/backlog/` | `.mcp.json` | `~/.claude.json` |
-| Codex | `.codex/skills/backlog/` | `$CODEX_HOME/skills/backlog/` (default `~/.codex/skills/backlog/`) | `.codex/config.toml` | `$CODEX_HOME/config.toml` |
-| OpenCode | `.opencode/skills/backlog/` | `~/.config/opencode/skills/backlog/` | `opencode.json` | `~/.config/opencode/opencode.json` |
-
-### The manual path (what `install` does for you)
-
-If you'd rather wire it up by hand instead of running `install`: this repo's
-own root [`.mcp.json`](../../.mcp.json) is a real, working example — it runs
-the locally-built dist rather than `npx` because it's the dev loop for this
-very package:
+```bash
+adhd-backlog query --input '{"filter":{"project":"adhd","status":"open"}}'
+```
 
 ```json
 {
-  "mcpServers": {
-    "backlog": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["entrypoint/backlog/dist/index.js", "serve", "--transport", "mcp"]
-    }
+  "ok": true,
+  "data": {
+    "items": [
+      {"uid": "a1b2c3d4-...", "kind": "issue", "title": "Query pagination drops the last page under offset paging", "status": "open", "priority": null}
+    ],
+    "nextCursor": null
+  },
+  "meta": {"total": 1, "returned": 1}
+}
+```
+
+Move it forward — a `transition` records the status change in the issue's
+audit trail and requires a `note` unless the project's policy has disabled
+that requirement:
+
+```bash
+adhd-backlog transition --input '{
+  "uid": "a1b2c3d4-...",
+  "toStatus": "in-progress",
+  "note": "reproduced with limit:10, offset:95 against a 100-row set",
+  "by": "agent:worker-1"
+}'
+```
+
+```json
+{
+  "ok": true,
+  "data": {
+    "uid": "a1b2c3d4-...",
+    "fromStatus": "open",
+    "toStatus": "in-progress",
+    "transitionUid": "e5f6..."
   }
 }
 ```
 
-For a third-party consumer (not developing this package), use the `npx`
-form the `install` command itself writes (shown above) instead of a local
-`dist/index.js` path.
+A failed call returns the same envelope shape with `ok: false` instead of
+throwing — for example, transitioning a `uid` that doesn't exist:
 
-For the skill file, either run `adhd-backlog install-skill` or copy it
-yourself: `entrypoint/backlog/skill/SKILL.md` → `<project>/.claude/skills/backlog/SKILL.md`
-(project scope) or `~/.claude/skills/backlog/SKILL.md` (user scope, applies
-across every project on the machine). There is no other packaging step —
-`SKILL.md` is the entire skill; the `extension.json` the installer also
-writes alongside it (`{name, version, type:"skill", entrypoint:"SKILL.md"}`)
-is additive metadata some hosts consume, never required for Claude Code's
-own description-based auto-surfacing of the skill.
+```json
+{"ok":false,"error":{"code":"item_not_found","message":"..."}}
+```
 
-### Does this need anything in global Claude Code config?
+## Envelope
 
-**No — verified from this repo's own live setup, not asserted.** This very
-project's `.mcp.json` (checked into the repo) plus its `.claude/settings.json`
-(which lists `mcp__backlog__backlog_get_item`,
-`mcp__backlog__backlog_list_items`, etc. in `permissions.allow` — auto-approval
-entries, not a registration requirement) are the *only* backlog-related
-config in this repo, and the `mcp__backlog__*` tools are live and callable in
-every Claude Code session opened against this repo. No marketplace entry, no
-`~/.claude/settings.json` edit, and no plugin registration were needed beyond
-the project-local `.mcp.json` file itself. The `permissions.allow` entries in
-`.claude/settings.json` are optional — they pre-approve specific tools so
-Claude Code doesn't prompt per-call; omitting them means the first call to
-each tool prompts for approval instead, not that the tool is unavailable.
-Skills work the same way: dropping `SKILL.md` under `.claude/skills/<name>/`
-is sufficient for project-local discovery — no separate registration file.
-
-## Library usage (embedding the store directly)
-
-The exception path — most consumers want the CLI or MCP tools above, not this.
-Reach for this only when you're embedding `@adhd/backlog`'s store inside your
-own Node process (e.g. another service that needs direct, in-process access
-rather than shelling out or speaking MCP/HTTP).
+Every verb call returns one of two shapes:
 
 ```ts
-import { createItem, listItems, claimItem, transitionStatus } from '@adhd/backlog';
-import { buildBacklogEnv } from '@adhd/backlog';
-import { openGraphBacklogStore } from '@adhd/backlog';
-
-const env = buildBacklogEnv();
-env.ensureDirs();
-const store = openGraphBacklogStore(env.files.db);
-const ctx = { store, env };
-
-const { item } = await createItem(ctx, {
-  family: 'BUG-EXAMPLE',
-  title: 'Example bug',
-  body: 'Something is broken.',
-  repo: 'PseudoSky/adhd',
-});
-
-await claimItem(ctx, item.repo, item.humanId, 'implementer:abc123');
-await transitionStatus(ctx, item.repo, item.humanId, 'FIXED', {
-  by: 'implementer:abc123',
-  citations: [{ file: 'entrypoint/backlog/src/client.ts' }],
-});
-
-const open = await listItems(ctx, { repo: item.repo, status: 'open' });
+{ ok: true,  data: T, warnings?: string[], meta?: { total, returned, limit?, offset?, truncated? } }
+{ ok: false, error: { code, message, details? }, warnings?: string[] }
 ```
 
-## Running as a live server (no codegen)
+`meta` is present on list-shaped reads (`query`) and its `total` is the true
+match count *before* `limit`/`offset` are applied — a truncated result always
+says so rather than silently looking complete.
 
-```ts
-import { startBacklogServer } from '@adhd/backlog';
+### Error codes
 
-const abort = new AbortController();
-await startBacklogServer({ transport: 'both', port: 3400, signal: abort.signal });
-```
+| Code | Meaning | CLI exit code |
+|---|---|---|
+| `not_found` | A referenced catalog entry (project/component/kind/status/priority) doesn't exist | 4 |
+| `item_not_found` | The addressed issue doesn't exist | 1 |
+| `invalid_argument` | Malformed flag or parameter shape | 2 |
+| `validation` | Schema rejection — unknown filter key, unknown projection field, over-limit | 2 |
+| `store_busy` | Store contention (a lease or a write conflict); `details.retryable` and `details.retryAfterMs` indicate whether/how to retry | 1 |
+| `rag_not_configured` | A semantic/similarity read was requested but no embedding backend is configured, or the vector space is empty | 1 |
+| `conflict` | Someone else holds the claim, a single-valued relation is already taken, or a supersede raced | 1 |
+| `precondition_failed` | A gate refused the write — a terminal transition missing its required citation or note, or a citation that couldn't be verified | 1 |
+| `internal` | Unclassified server-side failure | 1 |
 
-- `POST /backlog/create`, `GET /backlog/get`, ... — one route per verb of the
-  six-verb INTERFACE_v2 surface (`get`/`query`/`create`/`update`/`relate`/`admin`),
-  mounted live via `@adhd/apigen-plugin-api-fastify`. (`extractClientOperations()`
-  passes `dropFileSegment: true` specifically so no `client-d` artifact segment
-  leaks into the route — see `server.ts`'s `extractClientOperations`.)
-- Every verb is also available as an MCP tool (`backlog_get`, `backlog_query`,
-  `backlog_create`, `backlog_update`, `backlog_relate`, `backlog_admin`) via
-  `@adhd/apigen-plugin-mcp` (stdio transport by default).
+Success always exits 0. `item_not_found` and `internal` are deliberately
+distinct codes even though they share exit code 1 — a caller distinguishes
+"this uid doesn't exist" from "something broke" by `error.code`, not by exit
+code alone.
 
-## Web UI prototype (`nx serve backlog`)
+## Configuration
 
-A zero-build browser UI over the REST API, wired as the backlog project's
-`serve` Nx target:
+Configuration cascades (environment variable → config file → default) via
+`@adhd/environment`, prefixed `ADHD_BACKLOG_`. The store defaults to a single
+shared **global** scope — one backlog spanning every project on the machine,
+not one per repository — so an agent working across repos sees the same
+graph everywhere unless it explicitly opts into a narrower scope.
 
-```bash
-nx serve backlog            # then open http://127.0.0.1:4173/
-nx serve backlog -- --sandbox   # isolated throwaway store (never the real graph)
-```
-
-`nx serve backlog` runs `tools/run-web-ui.mjs`, which spawns the REAL built CLI
-(`serve --transport http`, the same binary a consumer installs from npm) plus a
-static + same-origin proxy web server (`tools/web-ui-server.mjs`). The browser
-talks to one origin (`/backlog/*`, `/_batch/*`, `/_meta/*` are proxied to the
-API) — the fastify mount registers no CORS, so the proxy is what makes the page
-work from a browser at all.
-
-The UI (`tools/web-ui/index.html`, single file, no build step) browses items
-(query list with repo/status/family/text filters + sort), opens a deep detail
-panel (every `BacklogItem` field, with dedicated containers for citations,
-notes, audit trail, related, rollup and blockers) and creates items with every
-`CreateItemInput` field exposed as a dropdown or input. Two third-party
-libraries load from the jsDelivr CDN at runtime — **marked@12** for markdown
-rendering (bodies/notes) and **DOMPurify@3.1.5** to sanitize marked's HTML
-output — so the page needs network access to the CDN (no vendored copies; no
-build). The status filter follows the API's "one closedness knob" model: the
-list defaults to `open` (non-terminal) — the API has no all-statuses list
-mode — and `closed` (terminal) is one click away; exact-status options are
-grouped separately. The repo filter is a dropdown populated from distinct
-repos in the store (default: all repos); text and family search auto-apply
-with a 300ms debounce.
-
-The list supports **multi-select** (⌘/Ctrl-click a card, per-card checkboxes,
-select-all) and a **batch bar** at the bottom of the side panel that appears
-only when ≥2 items are selected, fanning out through the real `_batch/action`
-mount: **set status** (adds an inline `backlog-web-ui` citation so terminal
-transitions satisfy the no-citation-no-claim rule) and **delete** (soft-delete
-tombstone, confirm-gated). **Move** is intentionally disabled — per-item repo
-moves do not exist in the API (only whole-repo `reconcile_repo`); filed as
-FEAT-008. List and detail scroll independently.
-
-Filters (status/family/repo) are **multi-select** checkboxes on separate rows
-(label left, control right). The API's filter keys are single-valued, so
-multi-select fan-out runs one query per selected combination (capped at 32)
-and merges + re-sorts client-side. Status offers the lifecycle knob (`open` /
-`closed`) plus every exact status. Cards are three lines: id + status +
-priority chips, a one-line truncated title, and repo chip + right-aligned
-relative age.
-
-The detail panel has an **edit** button that opens the create tab in **save
-mode**: every editable field pre-filled, title/body/tags/projectPath saved via
-`patch`, status/priority transitions with inline citations, **citations as a
-multi-input** (add/remove rows; attached via `addCitation` when status is
-unchanged). Identity fields (family/repo/id) and non-editable ones (plan,
-author, reporter, importedFrom, force) are locked or hidden in edit mode;
-required fields (title, family, by) are validated.
-
-A **stats tab** (rendered with ECharts from the jsDelivr CDN) provides
-Overview (KPI row, family composition, priority × lifecycle matrix, status
-distribution, repo breakdown, aging histogram), Timelines (daily transitions
-from the backend summary + client-side created/week), a client-side **slice
-& dice pivot** (any dimension × dimension with a measure), Analytics cards
-(critical-aging, rot, quality gates, drain forecast), and a **citation
-heatmap** (family × lifecycle coverage, from per-item batched `get`s). Every
-stat carries a **backend-support badge**: numbers the API doesn't expose
-(historical closed-per-week, state-at-date, citation aggregates, scope-scoped
-quality gates) are flagged in the UI with the reason instead of being faked.
-Clicking a cell/bar drills into the search view with the filters applied.
-
-Coverage: `src/web-ui.spec.ts` drives the full seam end-to-end (spawns the
-orchestrator → real dist CLI → real HTTP → isolated store, asserts create →
-query → get round-trip, error passthrough, and clean SIGTERM shutdown). Batch
-shapes are verified live against the sandboxed API (`_batch/action` takes the
-raw mount body — no `{data:{…}}` envelope — with items wrapped as
-`{input: <op payload>}`).
-
-## CLI (`adhd-backlog`, live apigen mount — no codegen)
-
-Install and the six verbs are shown at the top of this file already — this
-section covers the rest of the CLI's contract: the `search` shortcut, exit
-codes, and scope.
-
-### `search` — the one shortcut
-
-`query`'s natural-language form is common enough to type that it gets a
-shortcut. `adhd-backlog search "<query>" [flags]` takes the query as a
-positional argument and the rest of the options as ordinary flags:
-
-```bash
-adhd-backlog search "connections leak under load"
-adhd-backlog search "flaky publish gate" --limit 5 --status open --priority HIGH
-adhd-backlog search "stale claims" --repo PseudoSky/adhd --kind BUG \
-  --fields humanId,title,status,_score      # _score shows the ranking scores
-adhd-backlog search --anchor BUG-BACKLOG-001 --limit 5   # more like this item
-adhd-backlog search --help                               # the full flag list
-```
-
-- It is **not a seventh verb** — it is an argv translation onto `query`, so
-  it produces the identical JSON envelope and the identical exit codes.
-  `search "x" --limit 2` is exactly `query --input '{"text":"x","limit":2}'`.
-- The query text is matched **semantically** when the embedding space is
-  populated and by **keyword (FTS)** when it is not, so it works on every
-  build — see Semantic search below.
-- Flags: `--limit`, `--offset`, `--sort`, `--direction`, `--fields`,
-  `--status`, `--priority`, `--kind`, `--family`, `--repo`, `--project-path`,
-  `--plan`, `--assignee`, `--claimed-by`, `--tag` (repeatable), `--grep`,
-  `--anchor`.
-- `--grep` composes with the query text only once the embedding space is
-  populated. Without one the query text *is* the keyword query, so passing
-  both is rejected rather than silently dropping one of them.
-
-- Same architecture as the HTTP/MCP transports above — `entrypoint/backlog/src/cli.ts`'s
-  `runBacklogCli()` reuses `buildBacklogApigenPackage()` and hands it straight
-  to `@adhd/apigen-plugin-cli-output`'s `run()`. No `apigen generate`, no
-  bespoke argument parsing — routing, flag parsing, validation, dispatch, and
-  exit codes all come from that plugin.
-- **INTERFACE_v2 collapsed the CLI to six verbs, one calling convention.**
-  Every verb takes a single `--input '<json>'` flag carrying one JSON object —
-  there are no per-field flags any more (the old `--repo`/`--human-id`/`--filter`
-  style is retired; a v1 command name like `create-item`/`get-item`/`list-items`
-  now exits `4`, unknown command). See `skill/SKILL.md` §2 for the full input
-  shape of each verb.
-- Exit codes follow `@adhd/apigen-base-errors`'s `CLI_EXIT_CODE` table: `0`
-  success, `2` invalid argument (bad/unknown flag, failed validation), `4`
-  unknown command, etc. Result is printed as JSON to stdout; errors as JSON to
-  stderr.
-- Honors the same `ADHD_BACKLOG_SCOPE`/`ADHD_ENV_SCOPE` scope env vars as the
-  library API (see Scope below) — there is no separate CLI-only config.
-- `runBacklogCli(argv?, opts?)` is also exported for in-process programmatic
-  use (e.g. a test harness), symmetric with `startBacklogServer`.
-
-## Scope
-
-Resolved via `@adhd/environment` (see `env.ts`): `global` (default —
-`~/.adhd/backlog/<namespace>/data/backlog.db`, spans every repo on the
-machine), `project` (`<projectRoot>/.adhd/backlog/<namespace>/data/backlog.db`,
-one repo), or `system`. See `SPEC.md` §3 for the full resolution order.
-
-## Semantic search (RAG) — opt-in
-
-Backlog can find items by **meaning** rather than keywords: a paraphrased
-duplicate that shares no words with the original still matches. This is
-**off by default** and has no hard dependency — with it disabled, backlog
-behaves exactly as it always has.
-
-### Enabling it
-
-Install the two optional peers, then turn it on **in the `@adhd/environment`
-config file** — not with an environment variable. Backlog resolves to `global`
-scope by default (`SPEC.md` §3), so the one file below switches semantic search
-on for every backlog process on the machine: every CLI invocation, every MCP
-server registration, and every agent session, with nothing to remember to
-export and nothing to add to a `.mcp.json` `env` block.
-
-```bash
-pnpm add @adhd/sox-embedding-provider @adhd/sox-vector-store
-```
-
-`~/.adhd/backlog/production/config.yaml`:
-
-```yaml
-embedding:
-  enabled: true
-```
-
-Then populate the vector space once — until you do, semantic reads answer
-`rag_not_configured` rather than ranking against an empty index:
-
-```bash
-# count first — a dry run never calls the model
-adhd-backlog admin --input '{"action":"embedding_backfill","params":{"dryRun":true}}'
-# then embed (`by` is required as soon as the sweep actually writes)
-adhd-backlog admin --input '{"action":"embedding_backfill","params":{"dryRun":false},"by":"you"}'
-# expect ok:true
-adhd-backlog admin --input '{"action":"embedding_health"}'
-```
-
-The backfill embeds **non-terminal items only** and reports what it left out as
-`skippedTerminal`. That is deliberate: `run_dedup_sweep` iterates every vector
-with no status predicate of its own, so embedded closed items would pull live
-items into advisory `SAME_AS` edges with already-finished work. Pass
-`"includeTerminal": true` when you specifically want to search closed history
-("has this been fixed before?").
-
-| Setting | Config key | Env override | Default |
+| Setting | Env var | Default | Notes |
 |---|---|---|---|
-| Enable RAG | `embedding.enabled` | `ADHD_BACKLOG_EMBEDDING_ENABLED` | `false` |
-| Provider | `embedding.provider` | `ADHD_BACKLOG_EMBEDDING_PROVIDER` | `fastembed` |
-| Model | `embedding.model` | `ADHD_BACKLOG_EMBEDDING_MODEL` | `bge-base-en-v1.5` (768-dim) |
+| Database path | `ADHD_BACKLOG_DATABASE_PATH` | resolved under the scope root | Where the graph store's data file lives |
+| Write busy timeout | `ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS` | `5000` | How long a write waits on a contended lock before giving up |
+| Log level | `ADHD_BACKLOG_LOG_LEVEL` | `info` | `trace`\|`debug`\|`info`\|`warn`\|`error`\|`fatal`\|`silent` |
+| Scope | `ADHD_BACKLOG_SCOPE` (falls back to `ADHD_ENV_SCOPE`) | `global` | Which store root to resolve against |
+| Semantic search | `ADHD_BACKLOG_EMBEDDING_ENABLED` | `false` | See below |
+| Embedding provider | `ADHD_BACKLOG_EMBEDDING_PROVIDER` | `fastembed` | Only consulted when embedding is enabled |
+| Embedding model | `ADHD_BACKLOG_EMBEDDING_MODEL` | a 768-dimension general-purpose embedding model | Only consulted when embedding is enabled |
 
-The env vars still work and still win — they are the highest-precedence layer
-of the cascade (code default → system → **global** → project → local → env
-var), which makes them right for a one-off override in a single shell:
-
-```bash
-ADHD_BACKLOG_EMBEDDING_ENABLED=false adhd-backlog query --input '{"filter":{"grep":"leak"}}'
-```
-
-They are the wrong place for the standing setting, because an exported variable
-only reaches the processes that inherit it — a `.mcp.json`-launched server, a
-cron job, or another agent's shell would each silently fall back to `false`, and
-you would get `rag_not_configured` from one caller and results from another
-against the same store. Scope it narrower by writing the same two lines to
-`<repo>/.adhd/backlog/production/config.yaml` and running with
-`ADHD_BACKLOG_SCOPE=project`.
-
-Embedding runs **locally** (ONNX via fastembed) — no API key, no network
-after the model is cached, no per-query cost.
-
-**Requirements.** The store must be on a substrate with native vectors
-(the default turso adapter). Enabling it without the optional packages, on a
-non-vector adapter, or with a provider that fails to construct logs a typed
-reason and leaves semantic search off — it never crashes startup, and never
-silently pretends to work.
-
-### What it gives you
-
-```bash
-# find by meaning, not keywords — the `search` shortcut is the short way to type this
-adhd-backlog search "connections leak under load"
-adhd-backlog query --input '{"filter":{"semantic":"connections leak under load"}}'
-
-# items similar to a known one
-adhd-backlog search --anchor BUG-BACKLOG-001
-adhd-backlog query --input '{"view":"similar","filter":{"anchor":"BUG-BACKLOG-001"}}'
-```
-
-- `filter.semantic` — free-text meaning search
-- `view:"similar"` + `filter.anchor` — neighbours of a given item, plus
-  `suggestedRelated` / `suggestedDependencies`
-- `sort:"relevance"` — rank by similarity
-- `fields:["_vector"]` — the raw embedding
-- **Semantic dedupe on create** — filing an item that restates an existing
-  one is caught even when the wording is entirely different
-
-> **This one changes existing behaviour, so know it before you enable
-> globally.** Once the vector space is populated, a `create` that previously
-> succeeded can come back as the `duplicate_candidate` error arm, because the
-> filing gate now compares *meaning* and not just keywords. That is the
-> feature working — but it means scripts, fixtures, and agents that mint
-> similarly-worded items need to say so explicitly:
->
-> ```json
-> {"item": {...}, "by": "you", "duplicateAction": "file"}
-> ```
->
-> `duplicateAction` defaults to `"abort"` (refuse and return the candidates);
-> `"file"` is the confirmed re-file that mints anyway.
-- `admin` actions: `embedding_health`, `embedding_backfill`,
-  `list_near_duplicates`, `run_dedup_sweep`, `cluster_into_plans`,
-  `promote_cluster_to_plan`
-
-### With it disabled
-
-Every semantic input fails **loudly** with `rag_not_configured` rather than
-quietly falling back to a keyword search that would return plausible-looking
-but wrong results. `filter.grep` is always pure full-text search and is
-never affected by this setting either way.
-
-### Notes
-
-- Embedding happens **after** the write commits, so creates never block on
-  the model and an embedding failure can never fail a write — the item stays
-  fully readable and full-text searchable, and `admin(embedding_backfill)`
-  repairs it. Pass `awaitEmbed: true` when you need the vector durable before
-  you return (tests, scripts).
-- The model id is recorded per item from the provider's **resolved** model,
-  so you can always tell what actually embedded a given row.
-- Changing `embedding.model` does not silently reinterpret existing vectors:
-  dimensions are a structural contract. Re-embed with
-  `admin(embedding_backfill)`.
+**Embedding (semantic search) is entirely optional.** With it left at its
+default (`false`), `@adhd/backlog` works fully — every verb, keyword filtering
+(`filter.grep`), and exact/registry lookup all function with no embedding
+backend at all. Turning `filter.semantic`, `filter.anchor`, `view:"similar"`,
+`sort:"relevance"`, or `fields:["_vector"]` on without an embedding backend
+configured doesn't crash anything — it returns a `rag_not_configured` error
+that says exactly that, so a caller can tell "not available" apart from "no
+matches." Enabling embedding requires two optional dependencies to be
+installed alongside the package and a store backend that supports native
+vector storage; if either is missing, backlog logs the reason and leaves
+semantic search unconfigured rather than failing to start.

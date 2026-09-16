@@ -18,7 +18,7 @@ import {
   type SemanticBackend,
   type SemanticMatch,
 } from './semantic-search.js';
-import { RagNotConfiguredError } from '../model.js';
+import { RagNotConfiguredError } from '../envelope.js';
 import { openTmpStore } from '../test/helpers/tmp-store.js';
 
 /** A deterministic stand-in: two indexed nodes, cosine-ish scoring, no I/O. */

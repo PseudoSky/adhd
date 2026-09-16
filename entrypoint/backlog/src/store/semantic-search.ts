@@ -39,7 +39,7 @@
  */
 import type { NodeFilter } from '@adhd/sox-graph-store';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
-import { RagNotConfiguredError } from '../model.js';
+import { RagNotConfiguredError } from '../envelope.js';
 
 /** One nearest-neighbour hit: a node id (never a humanId — the caller resolves that) plus a similarity score, HIGHER-IS-BETTER. */
 export interface SemanticMatch {

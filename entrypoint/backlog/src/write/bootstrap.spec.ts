@@ -3,32 +3,16 @@
  * `embedding` through the REAL `api.ts` surface in production shape, not a
  * hand-built handle.
  *
- * Every component here is real: a real Turso-backed `GraphBacklogStore`
- * (open-schema `TypePolicy` — see the header comment below for why),
- * `api.ts`'s own `create`/`query`/`upsertProject` verbs (never `createIssue`/
- * `queryIssues` called directly), and the real fastembed embedding stack
+ * Every component here is real: a real store opened through the same
+ * `openGraphBacklogStore` factory production uses, `api.ts`'s own
+ * `create`/`query`/`upsertProject` verbs (never the write-layer internals
+ * called directly), and the real fastembed embedding stack
  * (`@adhd/sox-embedding-provider` + `@adhd/sox-vector-store`) via
  * `write/bootstrap.ts`'s `bootstrapSemanticStoreMembers`. Nothing here is
  * mocked. Per AGENTS.md's "Live testing is mandatory": fastembed is local
  * ONNX inference over a model already cached on disk
  * (`~/.cache/sox/models`), never a paid/external service, so this runs
  * unflagged like `rag-e2e.spec.ts` does — no env gate, no skip.
- *
- * **Why the store is NOT opened via `openGraphBacklogStore`/`openTmpStore`.**
- * Both install `DEFAULT_TYPE_POLICY` — `@adhd/sox-graph-store`'s CLOSED
- * six-kind/ten-rel vocabulary (`episode`/`entity`/`claim`/…), which does not
- * include backlog's OWN kinds/rels (`project`/`component`/`issue`/
- * `owns_project`/`has_kind`/…). `write/tx.ts`'s `writeEdgeTx` validates every
- * edge write against the injected `TypePolicy`, so a store opened that way
- * throws `ConstraintError` on the very first `owns_project`/`has_kind` edge
- * `createIssue`/`upsertProject` write — this is a genuine, already-documented
- * gap in `store/graph-backlog-store.ts` (its own doc comment: "Currently
- * `DEFAULT_TYPE_POLICY`... both flip to `OPEN_TYPE_POLICY` together when the
- * §7 wipe removes `repo-nodes.ts`"), tracked there and out of this file's
- * scope to fix. So — exactly like `test/helpers/open-test-issue-store.ts` —
- * this file builds its own `GraphBacklogStore`-shaped object with
- * `OPEN_TYPE_POLICY` injected, the same shape a real store-bootstrap module
- * for `openGraphBacklogStore` itself will eventually install.
  *
  * **Why `ADHD_BACKLOG_EMBEDDING_ENABLED` is set explicitly.** `env.ts`
  * declares `embedding.enabled`'s CODE default as `false`, but `cli.spec.ts`'s
@@ -41,41 +25,25 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { createStoreAdapter, type StoreAdapter } from '@adhd/sox-store-adapter';
-import { createGraphBackend, type GraphBackend } from '@adhd/sox-graph-store';
-import { OPEN_TYPE_POLICY } from '../store/type-policy.js';
+import type { StoreAdapter } from '@adhd/sox-store-adapter';
+import { openGraphBacklogStore, type GraphBacklogStore } from '../store/graph-backlog-store.js';
 import { buildBacklogEnv } from '../env.js';
-import type { GraphBacklogStore } from '../store/graph-backlog-store.js';
 import { create, query, upsertProject, type BacklogCtx } from '../api.js';
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
-import { isOutcomeOk } from '../model.js';
+import { isOutcomeOk } from '../envelope.js';
 
 /** Cold ONNX model init is the slow part — matches `rag-e2e.spec.ts`'s own shared budget. */
 const EMBED_TIMEOUT = 180_000;
 
 const ENV_VAR = 'ADHD_BACKLOG_EMBEDDING_ENABLED';
 
-/** Opens a real `GraphBacklogStore` (OPEN_TYPE_POLICY — see file header) plus a real `BacklogCtx.env` with embeddings pinned on. */
-async function openBootstrapTestCtx(name: string): Promise<{ ctx: BacklogCtx; dir: string; adapter: StoreAdapter; graph: GraphBackend }> {
+/** Opens a real `GraphBacklogStore` through the production factory plus a real `BacklogCtx.env` with embeddings pinned on. */
+async function openBootstrapTestCtx(name: string): Promise<{ ctx: BacklogCtx; dir: string; store: GraphBacklogStore }> {
   const dir = freshTmpDir(name);
   const dbPath = join(dir, 'backlog.db');
-  const adapter = await createStoreAdapter({ dbPath });
-  await adapter.pragmaSet('busy_timeout', 5000);
-  const graph = createGraphBackend(adapter, { typePolicy: OPEN_TYPE_POLICY });
-  await graph.applySchema();
-  const store: GraphBacklogStore = {
-    adapter,
-    graph,
-    typePolicy: OPEN_TYPE_POLICY,
-    // No-op: this spec asserts the POST-COMMIT embed round-trip completed on
-    // its own (bootstrap.ts awaits it when `awaitEmbed` is set), so a flush
-    // here would mask a bootstrap that never scheduled the embed at all.
-    flushEmbeds: async () => {
-      return undefined;
-    },
-  };
+  const store = await openGraphBacklogStore(dbPath);
   const env = buildBacklogEnv({ adhdRoot: dir });
-  return { ctx: { store, env }, dir, adapter, graph };
+  return { ctx: { store, env }, dir, store };
 }
 
 describe('write/bootstrap.ts — search/embedding wired through the real api.ts surface', () => {
@@ -102,7 +70,7 @@ describe('write/bootstrap.ts — search/embedding wired through the real api.ts 
 
       const opened = await openBootstrapTestCtx('bootstrap-spec');
       dir = opened.dir;
-      adapter = opened.adapter;
+      adapter = opened.store.adapter;
       const ctx = opened.ctx;
 
       const projectResult = await upsertProject(ctx, { name: 'BOOTSTRAP-WIRING-TEST', by: 'bootstrap.spec' });

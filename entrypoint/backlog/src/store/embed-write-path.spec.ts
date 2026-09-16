@@ -1,31 +1,54 @@
 /**
- * embed-write-path.spec.ts — proves RAG-SPEC.md §2's embedding write path:
- * `scheduleEmbed` (embed-queue.ts), the `awaitEmbed`/`flushEmbeds`/async-close
- * durability trio (§2.2), re-embed-on-edit (§2.3), provenance stamping (§2.4),
- * and never-throws failure handling (§2.5) — wired through `crud.ts`'s real
- * `createItemNode`/`updateItemNode`/`softDeleteItemNode` against a REAL Turso
- * store (`openTmpStore`/`openGraphBacklogStore`), never a mock of the store
- * itself (AGENTS.md §7.1).
+ * embed-write-path.spec.ts — proves the write layer's on-write embedding
+ * hook (`write/embedding-observer.ts`'s `scheduleIssueEmbedding`, wired into
+ * `write/create-issue.ts`, `write/update.ts`, and `write/delete.ts`): the
+ * `awaitEmbed` synchronous-vs-fire-and-forget knob, re-embed-on-body-change
+ * (never on an unrelated field), and never-throws failure handling — driven
+ * through the REAL write verbs against a REAL store
+ * (`openTestIssueStore`/`seedProject`), never a mock of the store itself
+ * (AGENTS.md §7.1).
  *
- * The `SemanticBackend` is a FAKE (deterministic, no model download, no
- * network) injected via `configureSemanticBackend` — that keeps this suite
- * fast and immune to flakiness; the real-fastembed end-to-end proofs are a
- * separate workstream's job (RAG-SPEC.md §8's real-model suite). Determinism
- * for the concurrency-shaped assertions (§8 DoD #9) comes from an explicit
+ * **Architecture note — no store-level embed queue exists anymore.** Each
+ * write verb schedules AT MOST one (two, for a body-changing update) direct
+ * `scheduleIssueEmbedding` call per invocation; there is no queue and no
+ * store-close/flush hook that drains outstanding fire-and-forget embeds
+ * (`TestIssueStore.close()` is a bare `adapter.close()`, nothing more — see
+ * `test/helpers/open-test-issue-store.ts`). Consequently a fire-and-forget
+ * embed (`awaitEmbed` omitted/`false`) is NOT guaranteed to survive the
+ * process/store closing before it settles — the durability boundary here is
+ * `awaitEmbed:true` itself, not any store-level drain. Two tests below prove
+ * both edges of that boundary by reopening a fresh store handle on the SAME
+ * file (never a sleep, never wall-clock): `awaitEmbed:true` followed by a
+ * close/reopen shows the `embedding_upserted` audit row survived, because by
+ * the time `createIssue` resolves that row is ordinary committed graph
+ * state, independent of the handle that wrote it; a fire-and-forget embed
+ * whose store is closed out from under it — deterministically, via a gate
+ * that is never released — shows nothing survived, because its own
+ * follow-up `executeWriteTransaction` never had the chance to run. The
+ * absent drain is a real, documented gap, not a bug this suite papers over.
+ *
+ * The `IEmbeddingBackend` here is a FAKE (deterministic, in-memory, no model
+ * download, no network) constructed per-test and passed directly as
+ * `handle.embedding` — that keeps this suite fast and immune to flakiness;
+ * a real-vector-store proof already exists in `write/embedding-observer.spec.ts`
+ * (which layers a real `TursoVectorBackend` underneath). Determinism for the
+ * "fire-and-forget must not block" assertion comes from an explicit
  * `deferred()` gate, never `sleep`/wall-clock (AGENTS.md §7.3): a promise can
  * never settle before every promise it `await`s has settled, so blocking
  * `embedDocument` behind an unresolved gate lets a test prove "this call is
- * DEFINITELY still pending" with zero timing risk.
+ * DEFINITELY still pending" with zero timing risk. Proving the gated embed
+ * later COMPLETES (once nothing blocks it and there is no drain hook to
+ * await directly) uses `vi.waitFor` — a bounded poll, not a blind sleep.
  */
-import { afterEach, describe, expect, it } from 'vitest';
-import { rmSync } from 'node:fs';
-import { join } from 'node:path';
-import { createItemNode, softDeleteItemNode, updateItemNode } from './crud.js';
-import { closeGraphBacklogStore, openGraphBacklogStore } from './graph-backlog-store.js';
-import { configureSemanticBackend, PermanentEmbeddingDimensionError, type SemanticBackend } from './semantic-search.js';
-import { freshTmpDir, openTmpStore } from '../test/helpers/tmp-store.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createIssue } from '../write/create-issue.js';
+import { update } from '../write/update.js';
+import { deleteIssue } from '../write/delete.js';
+import type { IEmbeddingBackend, IWriteStoreHandle } from '../write/tx.js';
+import { openTestIssueStore, removeTestIssueStoreDir, seedProject, type TestIssueStore } from '../test/helpers/open-test-issue-store.js';
+import { freshTmpDir } from '../test/helpers/tmp-store.js';
 
-/** A controllable deferred promise — the deterministic gate used by the §8 DoD #9 tests. */
+/** A controllable deferred promise — the deterministic gate used by the fire-and-forget test. */
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve!: () => void;
   const promise = new Promise<void>((res) => {
@@ -35,401 +58,357 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 }
 
 interface FakeBackendHandle {
-  backend: SemanticBackend;
-  /** In-memory vector store — a stand-in for the real Turso vector table (real persistence is proven separately via `embedModel` node-metadata, which DOES live in the real db file). */
+  backend: IEmbeddingBackend;
+  /** In-memory vector store, keyed by node rowid — a stand-in for the real vector backend `embedding-observer.spec.ts` exercises against a genuine `TursoVectorBackend`. */
   vectors: Map<number, Float32Array>;
-  /** Ticks up SYNCHRONOUSLY the instant `embedDocument` is invoked (before any internal `await`) — safe to assert on immediately after a fire-and-forget `scheduleEmbed` call with no race (see file header). */
   embedDocumentCalls: () => number;
+  upsertCalls: () => number;
+  deleteCalls: () => number;
 }
 
 /**
  * @param opts.gate  When present, `embedDocument` awaits this before
  *   resolving/rejecting — the deterministic "hold this embed open" knob for
- *   the durability tests.
- * @param opts.rejectWith  When present, `embedDocument` throws this instead
- *   of returning a vector — proves §2.5's "never throws into the caller".
- * @param opts.wrongDim  When true, `embedDocument` returns a vector one
- *   element longer than `dim` — mirrors the REAL backend's `checkDim`
- *   behaviour (semantic-search.ts) by having `upsertVector` throw
- *   `PermanentEmbeddingDimensionError` on the mismatch, since a directly
- *   injected fake bypasses `bootstrapSemanticBackend`'s own wrapper.
+ *   the fire-and-forget test.
+ * @param opts.rejectEmbedWith  When present, `embedDocument` throws this
+ *   instead of returning a vector — proves a model-side failure degrades to
+ *   `embedding_failed` and never fails the write.
+ * @param opts.rejectUpsertWith  When present, `upsertVector` throws this
+ *   AFTER a successful embed — proves a vector-STORE failure (distinct from
+ *   a model failure) also degrades to `embedding_failed` and never fails the
+ *   write, and never leaves a false `embedding_upserted` audit row.
  */
 function makeFakeBackend(
-  opts: { modelId?: string; dim?: number; gate?: Promise<void>; rejectWith?: Error; wrongDim?: boolean } = {}
+  opts: { modelId?: string; dim?: number; gate?: Promise<void>; rejectEmbedWith?: Error; rejectUpsertWith?: Error } = {},
 ): FakeBackendHandle {
   const dim = opts.dim ?? 4;
-  const modelId = opts.modelId ?? 'fake-embed-v1';
+  const modelId = opts.modelId ?? 'fake-embed-write-path-model';
   const vectors = new Map<number, Float32Array>();
-  let calls = 0;
+  let embedCalls = 0;
+  let upserts = 0;
+  let deletes = 0;
 
-  const backend: SemanticBackend = {
+  const backend: IEmbeddingBackend = {
     modelId,
-    dim,
-    async embedQuery(): Promise<Float32Array> {
-      return new Float32Array(dim).fill(1);
-    },
     async embedDocument(text: string): Promise<Float32Array> {
-      calls++;
+      embedCalls++;
       if (opts.gate) await opts.gate;
-      if (opts.rejectWith) throw opts.rejectWith;
-      if (opts.wrongDim) return new Float32Array(dim + 1);
+      if (opts.rejectEmbedWith) throw opts.rejectEmbedWith;
       const v = new Float32Array(dim);
       for (let i = 0; i < dim; i++) v[i] = (text.length + i) / 97;
       return v;
     },
-    async vectorFor(nodeId: number): Promise<Float32Array | null> {
-      return vectors.get(nodeId) ?? null;
+    async upsertVector(nodeRowid: number, vector: Float32Array): Promise<void> {
+      upserts++;
+      if (opts.rejectUpsertWith) throw opts.rejectUpsertWith;
+      vectors.set(nodeRowid, vector);
     },
-    async upsertVector(nodeId: number, vec: Float32Array): Promise<void> {
-      if (vec.length !== dim) throw new PermanentEmbeddingDimensionError('upsertVector', modelId, dim, vec.length);
-      vectors.set(nodeId, vec);
-    },
-    async deleteVector(nodeId: number): Promise<void> {
-      vectors.delete(nodeId);
-    },
-    async knn(): Promise<Array<{ nodeId: number; score: number }>> {
-      return [];
-    },
-    async *iterVectors(): AsyncIterable<{ nodeId: number; vec: Float32Array }> {
-      for (const [nodeId, vec] of vectors) yield { nodeId, vec };
-    },
-    async health() {
-      return { configured: modelId, active: modelId, state: 'real' as const, dimensions: dim, last_error: null };
+    async deleteVector(nodeRowid: number): Promise<void> {
+      deletes++;
+      vectors.delete(nodeRowid);
     },
   };
 
-  const handle: FakeBackendHandle = { backend, vectors, embedDocumentCalls: () => calls };
-  fakeHandles.set(backend, handle);
-  return handle;
+  return {
+    backend,
+    vectors,
+    embedDocumentCalls: () => embedCalls,
+    upsertCalls: () => upserts,
+    deleteCalls: () => deletes,
+  };
 }
 
-/** Reads `node.metadata.embedModel` back through the REAL store — the §2.4 provenance stamp. */
-async function embedModelOf(store: Awaited<ReturnType<typeof openGraphBacklogStore>>, nodeId: number): Promise<string | undefined> {
-  const node = await store.graph.getNode(nodeId);
-  return (node?.metadata as { embedModel?: string } | null)?.embedModel;
+/** Builds the handle a write verb is called with — `embedding` is `readonly` on `IWriteStoreHandle` by design, so every test bakes it in at construction time rather than mutating a live handle. */
+function withEmbedding(store: TestIssueStore, embedding?: IEmbeddingBackend): TestIssueStore & IWriteStoreHandle {
+  return { ...store, close: store.close.bind(store), embedding };
 }
 
-describe('embed write path (RAG-SPEC.md §2)', () => {
-  afterEach(() => {
-    configureSemanticBackend(null); // never leak a configured backend into another suite
+/** Reads back the ordered list of `audit.name` values (the action) recorded via a live `audits` edge FROM `subjectRowid` — the real graph read this file's assertions use instead of any spy. */
+async function auditActionsFor(store: TestIssueStore, subjectRowid: number): Promise<string[]> {
+  const { rows } = await store.adapter.executeAll<{ name: string | null }>(
+    `SELECT n.name AS name FROM edge e JOIN node n ON n.rowid = e.dst
+     WHERE e.src = ? AND e.rel = 'audits' AND e.t_invalid IS NULL ORDER BY n.rowid ASC`,
+    [subjectRowid],
+  );
+  return rows.map((r) => r.name ?? '');
+}
+
+async function rowidForUid(store: TestIssueStore, uid: string): Promise<number> {
+  const node = await store.graph.getNodeByUid(uid);
+  if (!node) throw new Error(`rowidForUid: no live node for uid ${uid}`);
+  return node.id;
+}
+
+describe('embed write path (write/embedding-observer.ts, via create/update/delete)', () => {
+  let dir: string;
+  let store: TestIssueStore;
+
+  afterEach(async () => {
+    if (store) await store.close();
+    if (dir) removeTestIssueStoreDir(dir);
   });
 
-  it('awaitEmbed:true on create makes the vector present immediately after createItem returns', async () => {
-    const tmp = await openTmpStore('embed-await-create');
-    try {
-      const { backend, vectors } = makeFakeBackend();
-      configureSemanticBackend(backend);
+  async function openStore(label: string): Promise<{ store: TestIssueStore; projectUid: string }> {
+    dir = freshTmpDir(label);
+    store = await openTestIssueStore(`${dir}/backlog.db`);
+    const { projectUid } = await seedProject(store, 'proj');
+    return { store, projectUid };
+  }
 
-      const outcome = await createItemNode(tmp.store, {
-        family: 'BUG-EMBED',
-        title: 'await embed on create',
-        body: 'the vector must be present the instant createItem resolves',
-        repo: 'test/embed-write-path',
-        awaitEmbed: true,
-      });
+  it('awaitEmbed:true on create makes the vector present immediately after createIssue returns, with exactly one embedding_upserted audit row', async () => {
+    const { store, projectUid } = await openStore('embed-await-create');
+    const { backend, vectors } = makeFakeBackend();
+    const handle = withEmbedding(store, backend);
 
-      expect(outcome.created).toBe(true);
-      expect(vectors.has(outcome.item.nodeId)).toBe(true);
-      expect(await embedModelOf(tmp.store, outcome.item.nodeId)).toBe(backend.modelId);
-    } finally {
-      await tmp.cleanup();
-    }
+    const outcome = await createIssue(handle, {
+      project: projectUid, title: 'await embed on create', body: 'the vector must be present the instant createIssue resolves', by: 'filer',
+      awaitEmbed: true,
+    });
+
+    expect(outcome.created).toBe(true);
+    if (!outcome.created || !outcome.uid) throw new Error('expected created');
+    const rowid = await rowidForUid(store, outcome.uid);
+    expect(vectors.has(rowid)).toBe(true);
+
+    const actions = await auditActionsFor(store, rowid);
+    expect(actions.filter((a) => a === 'embedding_upserted')).toHaveLength(1);
+    expect(actions.filter((a) => a.startsWith('embedding_'))).toHaveLength(1);
   });
 
-  it('§8 DoD #9: an embed scheduled WITHOUT awaitEmbed survives closeGraphBacklogStore — the drain is load-bearing', async () => {
-    const dir = freshTmpDir('embed-durability-positive');
-    const dbPath = join(dir, 'backlog.db');
+  it('an embed scheduled WITHOUT awaitEmbed never blocks createIssue, and still lands correctly once it settles', async () => {
+    const { store, projectUid } = await openStore('embed-fire-and-forget');
     const gate = deferred();
     const { backend, vectors } = makeFakeBackend({ gate: gate.promise });
-    configureSemanticBackend(backend);
+    const handle = withEmbedding(store, backend);
 
-    try {
-      const store = await openGraphBacklogStore(dbPath);
-      const outcome = await createItemNode(store, {
-        family: 'BUG-EMBED',
-        title: 'durability check',
-        body: 'proves the drain is load-bearing, not a fluke of timing',
-        repo: 'test/embed-durability-positive',
-        // awaitEmbed deliberately OMITTED — this is the fire-and-forget path.
-      });
-      expect(outcome.created).toBe(true);
-      const nodeId = outcome.item.nodeId;
+    const outcome = await createIssue(handle, {
+      project: projectUid, title: 'fire and forget', body: 'createIssue must not wait on this', by: 'filer',
+      // awaitEmbed deliberately OMITTED.
+    });
+    expect(outcome.created).toBe(true);
+    if (!outcome.created || !outcome.uid) throw new Error('expected created');
+    const rowid = await rowidForUid(store, outcome.uid);
 
-      // Start the drain WITHOUT releasing the gate.
-      let closed = false;
-      const closePromise = closeGraphBacklogStore(store).then(() => {
-        closed = true;
-      });
+    // Deterministic, not a timing race: createIssue already returned above,
+    // and `gate` has never been resolved — the scheduled embed cannot
+    // possibly have completed yet.
+    expect(vectors.has(rowid)).toBe(false);
+    expect((await auditActionsFor(store, rowid)).filter((a) => a.startsWith('embedding_'))).toHaveLength(0);
 
-      // Flush several microtask turns. `closed` MUST still be false: this is
-      // not a timing race — `flushEmbeds` is awaiting a promise chain rooted
-      // in `gate`, and nothing here has resolved `gate` yet. A promise can
-      // never settle before every promise it `await`s has settled, so this
-      // assertion cannot flake regardless of how many turns are flushed.
-      for (let i = 0; i < 5; i++) await Promise.resolve();
-      expect(closed).toBe(false);
-      expect(vectors.has(nodeId)).toBe(false);
-
-      // Release the gate — NOW the embed can complete, and the already-in-
-      // progress drain can finally finish.
-      gate.resolve();
-      await closePromise;
-      expect(closed).toBe(true);
-      expect(vectors.has(nodeId)).toBe(true);
-
-      // Reopen a FRESH store on the SAME file. `embedModel` is real
-      // persistence (a `mutateMetadata` transaction against this exact db
-      // file) — independent of the fake backend's in-memory `vectors` map —
-      // so this is a genuine "did it survive process exit" proof, not an
-      // artifact of the backend being a process-wide singleton.
-      const store2 = await openGraphBacklogStore(dbPath);
-      try {
-        expect(await embedModelOf(store2, nodeId)).toBe(backend.modelId);
-      } finally {
-        await closeGraphBacklogStore(store2);
-      }
-    } finally {
-      configureSemanticBackend(null);
-      rmSync(dir, { recursive: true, force: true });
-    }
+    // Release the gate and let the fire-and-forget round-trip settle. There
+    // is no store-level drain to await directly (see file header), so this
+    // is a bounded poll rather than a hard synchronization point.
+    gate.resolve();
+    await vi.waitFor(() => {
+      expect(vectors.has(rowid)).toBe(true);
+    });
+    const actions = await auditActionsFor(store, rowid);
+    expect(actions.filter((a) => a === 'embedding_upserted')).toHaveLength(1);
   });
 
-  it('§8 DoD #9 negative control: bypassing the drain (raw adapter.close()) loses the embed — reopened store sees no provenance/vector', async () => {
-    const dir = freshTmpDir('embed-durability-negative');
-    const dbPath = join(dir, 'backlog.db');
-    const gate = deferred(); // deliberately NEVER released in this branch
+  it('an embed completed via awaitEmbed:true survives a store close/reopen — the embedding_upserted audit row is durable, proven by reopening the store', async () => {
+    const { store: store1, projectUid } = await openStore('embed-durability-positive');
+    const { backend, vectors } = makeFakeBackend();
+    const handle = withEmbedding(store1, backend);
+
+    const outcome = await createIssue(handle, {
+      project: projectUid, title: 'durability check', body: 'the embedding outcome must persist across a close/reopen', by: 'filer',
+      awaitEmbed: true,
+    });
+    expect(outcome.created).toBe(true);
+    if (!outcome.created || !outcome.uid) throw new Error('expected created');
+    const rowid = await rowidForUid(store1, outcome.uid);
+    expect(vectors.has(rowid)).toBe(true);
+
+    await store1.close();
+
+    // Reopen a FRESH store handle on the SAME file. The `embedding_upserted`
+    // audit row is real graph state committed by `scheduleIssueEmbedding`'s
+    // own follow-up transaction — independent of the closed handle — so
+    // seeing it here is a genuine "did it survive the store closing" proof,
+    // not an artifact of the same process/handle still being alive.
+    store = await openTestIssueStore(`${dir}/backlog.db`); // reassigned so afterEach closes THIS handle
+    const actions = await auditActionsFor(store, rowid);
+    expect(actions.filter((a) => a === 'embedding_upserted')).toHaveLength(1);
+  });
+
+  it('negative control: a fire-and-forget embed whose store closes before it settles is genuinely lost — reopening shows no audit row and no vector (there is no drain to have waited for it)', async () => {
+    const { store: store1, projectUid } = await openStore('embed-durability-negative');
+    const gate = deferred(); // deliberately NEVER released before the store closes
     const { backend, vectors } = makeFakeBackend({ gate: gate.promise });
-    configureSemanticBackend(backend);
+    const handle = withEmbedding(store1, backend);
 
-    try {
-      const store = await openGraphBacklogStore(dbPath);
-      const outcome = await createItemNode(store, {
-        family: 'BUG-EMBED',
-        title: 'negative control',
-        body: 'bypassing the drain must lose this vector',
-        repo: 'test/embed-durability-negative',
-      });
-      const nodeId = outcome.item.nodeId;
+    const outcome = await createIssue(handle, {
+      project: projectUid, title: 'negative control', body: 'closing before the embed settles must lose it — there is no drain', by: 'filer',
+      // awaitEmbed deliberately OMITTED — fire-and-forget.
+    });
+    expect(outcome.created).toBe(true);
+    if (!outcome.created || !outcome.uid) throw new Error('expected created');
+    const rowid = await rowidForUid(store1, outcome.uid);
 
-      // BYPASS the drain entirely: close the adapter directly, never going
-      // through `closeGraphBacklogStore`/`flushEmbeds`.
-      await store.adapter.close();
+    // Close immediately. Deterministic, not a race: `gate` is never
+    // resolved, so the scheduled embed is still stuck inside
+    // `embedDocument`'s own `await opts.gate` — it cannot possibly have
+    // reached `upsertVector` or its own follow-up audit transaction yet.
+    await store1.close();
 
-      // Deterministic (not racy): the scheduled embed is still stuck behind
-      // `gate`, which nothing here ever resolves — it never got the chance
-      // the drain would have given it.
-      expect(vectors.has(nodeId)).toBe(false);
-
-      const store2 = await openGraphBacklogStore(dbPath);
-      try {
-        expect(await embedModelOf(store2, nodeId)).toBeUndefined();
-      } finally {
-        await closeGraphBacklogStore(store2);
-      }
-    } finally {
-      configureSemanticBackend(null);
-      rmSync(dir, { recursive: true, force: true });
-    }
+    store = await openTestIssueStore(`${dir}/backlog.db`); // reassigned so afterEach closes THIS handle
+    expect(vectors.has(rowid)).toBe(false); // the round trip never got far enough to upsert
+    const actions = await auditActionsFor(store, rowid);
+    expect(actions.filter((a) => a.startsWith('embedding_'))).toHaveLength(0); // lost — no drain exists to have waited for it
   });
 
-  it('flushEmbeds() alone (without closing) drains pending embeds', async () => {
-    const tmp = await openTmpStore('embed-flush-alone');
-    try {
-      const gate = deferred();
-      const { backend, vectors } = makeFakeBackend({ gate: gate.promise });
-      configureSemanticBackend(backend);
+  it('a backend rejecting upsertVector with a dimension-mismatch-shaped error also degrades honestly and never corrupts state', async () => {
+    const { store, projectUid } = await openStore('embed-wrong-dim');
+    const { backend, vectors } = makeFakeBackend({
+      rejectUpsertWith: new Error('embedding dimension mismatch: model produced a 5-dimensional vector but the configured space is 4-dimensional'),
+    });
+    const handle = withEmbedding(store, backend);
 
-      const outcome = await createItemNode(tmp.store, {
-        family: 'BUG-EMBED',
-        title: 'flush alone',
-        body: 'flushEmbeds must drain without needing a close',
-        repo: 'test/embed-flush-alone',
-      });
-      const nodeId = outcome.item.nodeId;
+    const outcome = await createIssue(handle, {
+      project: projectUid, title: 'wrong dimension', body: 'a structural dimension mismatch must never corrupt state', by: 'filer',
+      awaitEmbed: true,
+    });
 
-      let flushed = false;
-      const flushPromise = tmp.store.flushEmbeds().then(() => {
-        flushed = true;
-      });
-      for (let i = 0; i < 5; i++) await Promise.resolve();
-      expect(flushed).toBe(false); // still gated — deterministic, see above
+    expect(outcome.created).toBe(true);
+    if (!outcome.created || !outcome.uid) throw new Error('expected created');
+    const rowid = await rowidForUid(store, outcome.uid);
+    const reread = await store.graph.getNode(rowid);
+    expect(reread).not.toBeNull();
+    expect(vectors.has(rowid)).toBe(false);
 
-      gate.resolve();
-      await flushPromise;
-      expect(flushed).toBe(true);
-      expect(vectors.has(nodeId)).toBe(true);
-      expect(await embedModelOf(tmp.store, nodeId)).toBe(backend.modelId);
-    } finally {
-      await tmp.cleanup();
-    }
+    const actions = await auditActionsFor(store, rowid);
+    expect(actions.filter((a) => a === 'embedding_failed')).toHaveLength(1);
+    expect(actions.filter((a) => a === 'embedding_upserted')).toHaveLength(0);
   });
 
-  it('updating title re-embeds; updating an unrelated field does not', async () => {
-    const tmp = await openTmpStore('embed-reembed-on-edit');
-    try {
-      const { backend } = makeFakeBackend();
-      configureSemanticBackend(backend);
+  it('updating the body re-embeds (deletes the old vector, upserts the new one); updating an unrelated field does not', async () => {
+    const { store, projectUid } = await openStore('embed-reembed-on-body-change');
+    const { backend, vectors, embedDocumentCalls } = makeFakeBackend();
+    const handle = withEmbedding(store, backend);
 
-      const outcome = await createItemNode(tmp.store, {
-        family: 'BUG-EMBED',
-        title: 'original title',
-        body: 'original body',
-        repo: 'test/embed-reembed-on-edit',
-        awaitEmbed: true,
-      });
-      // `embedDocumentCalls` ticks up SYNCHRONOUSLY the instant
-      // `embedDocument` is invoked (see `makeFakeBackend`'s doc comment) — no
-      // race, safe to read immediately after the (possibly fire-and-forget)
-      // call that triggers it returns.
-      const handle = fakeHandleFor(backend);
-      const callsBeforeUpdate = handle.embedDocumentCalls();
+    const created = await createIssue(handle, {
+      project: projectUid, title: 'original title', body: 'original body', by: 'filer', awaitEmbed: true,
+    });
+    expect(created.created).toBe(true);
+    if (!created.created || !created.uid) throw new Error('expected created');
+    const oldUid = created.uid;
+    const oldRowid = await rowidForUid(store, oldUid);
+    const callsAfterCreate = embedDocumentCalls();
+    expect(vectors.has(oldRowid)).toBe(true);
 
-      // Updating an UNRELATED field (projectPath) — `status`/`priority`/etc
-      // are rejected outright by `updateItemNode` (they must go through
-      // `transitionStatus`/`setPriority`; see `IUpdatePatch`'s doc comment),
-      // so `projectPath` is the field that is both (a) legally patchable
-      // through `updateItemNode` and (b) never part of the embedded text
-      // (`${title}\n\n${body}`).
-      await updateItemNode(tmp.store, 'test/embed-reembed-on-edit', outcome.item.humanId, { projectPath: 'packages/foo' });
-      expect(handle.embedDocumentCalls()).toBe(callsBeforeUpdate); // no re-embed
+    // Updating an UNRELATED field (`assignee` — a plain metadata scalar with
+    // no edge, per `IUpdateIssueInput`'s own doc comment) is a pure `touch`:
+    // no new node, no content change, so no re-embed.
+    await update(handle, { uid: oldUid, by: 'filer', assignee: 'someone-else' });
+    expect(embedDocumentCalls()).toBe(callsAfterCreate); // no re-embed
+    expect(vectors.has(oldRowid)).toBe(true); // untouched
 
-      await updateItemNode(tmp.store, 'test/embed-reembed-on-edit', outcome.item.humanId, { title: 'a brand new title' });
-      expect(handle.embedDocumentCalls()).toBe(callsBeforeUpdate + 1); // re-embedded
-    } finally {
-      await tmp.cleanup();
-    }
+    // Updating `body` mints a fresh node (`supersede`) — the OLD node's
+    // vector is deleted and the NEW node's is upserted from the new content.
+    const updated = await update(handle, { uid: oldUid, by: 'filer', body: 'a brand new body', awaitEmbed: true });
+    expect(updated.changed).toContain('body');
+    const newUid = updated.uid;
+    expect(newUid).not.toBe(oldUid);
+    const newRowid = await rowidForUid(store, newUid);
+
+    expect(embedDocumentCalls()).toBe(callsAfterCreate + 1); // exactly one re-embed
+    expect(vectors.has(oldRowid)).toBe(false); // old vector dropped
+    expect(vectors.has(newRowid)).toBe(true); // new vector present
+
+    const oldActions = await auditActionsFor(store, oldRowid);
+    expect(oldActions.filter((a) => a === 'embedding_deleted')).toHaveLength(1);
+    const newActions = await auditActionsFor(store, newRowid);
+    expect(newActions.filter((a) => a === 'embedding_upserted')).toHaveLength(1);
   });
 
-  it('a backend whose embedDocument REJECTS does not fail the create — the item is still created and readable', async () => {
-    const tmp = await openTmpStore('embed-reject');
-    try {
-      const { backend, vectors } = makeFakeBackend({ rejectWith: new Error('fake embedding backend is down') });
-      configureSemanticBackend(backend);
+  it('a backend whose embedDocument REJECTS does not fail the create — the item is still created and readable, and the failure is audited honestly', async () => {
+    const { store, projectUid } = await openStore('embed-reject');
+    const { backend, vectors } = makeFakeBackend({ rejectEmbedWith: new Error('fake embedding backend is down') });
+    const handle = withEmbedding(store, backend);
 
-      const outcome = await createItemNode(tmp.store, {
-        family: 'BUG-EMBED',
-        title: 'embed backend down',
-        body: 'the create must still succeed',
-        repo: 'test/embed-reject',
-        awaitEmbed: true, // deterministic: wait for the (swallowed) failure to settle
-      });
+    const outcome = await createIssue(handle, {
+      project: projectUid, title: 'embed backend down', body: 'the create must still succeed', by: 'filer',
+      awaitEmbed: true, // deterministic: wait for the (swallowed) failure to settle
+    });
 
-      expect(outcome.created).toBe(true);
-      const reread = await tmp.store.graph.getNode(outcome.item.nodeId);
-      expect(reread).not.toBeNull();
-      expect(vectors.has(outcome.item.nodeId)).toBe(false); // embed never landed
-      expect(await embedModelOf(tmp.store, outcome.item.nodeId)).toBeUndefined(); // honest: no stamp on failure
-    } finally {
-      await tmp.cleanup();
-    }
+    expect(outcome.created).toBe(true);
+    if (!outcome.created || !outcome.uid) throw new Error('expected created');
+    const rowid = await rowidForUid(store, outcome.uid);
+    const reread = await store.graph.getNode(rowid);
+    expect(reread).not.toBeNull();
+    expect(vectors.has(rowid)).toBe(false); // embed never landed
+
+    const actions = await auditActionsFor(store, rowid);
+    expect(actions.filter((a) => a === 'embedding_failed')).toHaveLength(1);
+    expect(actions.filter((a) => a === 'embedding_upserted')).toHaveLength(0); // never a false success row
   });
 
-  it('a backend returning a wrong-dimension vector does not corrupt state — PermanentEmbeddingDimensionError is swallowed', async () => {
-    const tmp = await openTmpStore('embed-wrong-dim');
-    try {
-      const { backend, vectors } = makeFakeBackend({ wrongDim: true });
-      configureSemanticBackend(backend);
+  it('a backend whose upsertVector throws (embed succeeded, persist did not) also degrades honestly and never corrupts state', async () => {
+    const { store, projectUid } = await openStore('embed-upsert-fails');
+    const { backend, vectors } = makeFakeBackend({ rejectUpsertWith: new Error('fake vector store is unwritable') });
+    const handle = withEmbedding(store, backend);
 
-      const outcome = await createItemNode(tmp.store, {
-        family: 'BUG-EMBED',
-        title: 'wrong dimension',
-        body: 'a structural dimension mismatch must never corrupt state',
-        repo: 'test/embed-wrong-dim',
-        awaitEmbed: true,
-      });
+    const outcome = await createIssue(handle, {
+      project: projectUid, title: 'vector store down', body: 'a persist failure must never corrupt state', by: 'filer',
+      awaitEmbed: true,
+    });
 
-      expect(outcome.created).toBe(true);
-      const reread = await tmp.store.graph.getNode(outcome.item.nodeId);
-      expect(reread).not.toBeNull();
-      expect(vectors.has(outcome.item.nodeId)).toBe(false);
-      expect(await embedModelOf(tmp.store, outcome.item.nodeId)).toBeUndefined();
-    } finally {
-      await tmp.cleanup();
-    }
+    expect(outcome.created).toBe(true);
+    if (!outcome.created || !outcome.uid) throw new Error('expected created');
+    const rowid = await rowidForUid(store, outcome.uid);
+    const reread = await store.graph.getNode(rowid);
+    expect(reread).not.toBeNull();
+    expect(vectors.has(rowid)).toBe(false);
+
+    const actions = await auditActionsFor(store, rowid);
+    expect(actions.filter((a) => a === 'embedding_failed')).toHaveLength(1);
+    expect(actions.filter((a) => a === 'embedding_upserted')).toHaveLength(0);
   });
 
-  it('soft-delete drops the vector', async () => {
-    const tmp = await openTmpStore('embed-soft-delete');
-    try {
-      const { backend, vectors } = makeFakeBackend();
-      configureSemanticBackend(backend);
+  it('soft-delete drops the vector and records exactly one embedding_deleted audit row', async () => {
+    const { store, projectUid } = await openStore('embed-soft-delete');
+    const { backend, vectors } = makeFakeBackend();
+    const handle = withEmbedding(store, backend);
 
-      const outcome = await createItemNode(tmp.store, {
-        family: 'BUG-EMBED',
-        title: 'to be deleted',
-        body: 'the vector must be dropped on soft-delete',
-        repo: 'test/embed-soft-delete',
-        awaitEmbed: true,
-      });
-      expect(vectors.has(outcome.item.nodeId)).toBe(true);
+    const created = await createIssue(handle, {
+      project: projectUid, title: 'to be deleted', body: 'the vector must be dropped on soft-delete', by: 'filer',
+      awaitEmbed: true,
+    });
+    expect(created.created).toBe(true);
+    if (!created.created || !created.uid) throw new Error('expected created');
+    const rowid = await rowidForUid(store, created.uid);
+    expect(vectors.has(rowid)).toBe(true);
 
-      await softDeleteItemNode(tmp.store, 'test/embed-soft-delete', outcome.item.humanId, 'no longer needed');
-      expect(vectors.has(outcome.item.nodeId)).toBe(false);
-    } finally {
-      await tmp.cleanup();
-    }
+    const outcome = await deleteIssue(handle, { uid: created.uid, by: 'filer', reason: 'no longer needed', awaitEmbed: true });
+    expect(outcome.invalidated).toBe(true);
+    expect(vectors.has(rowid)).toBe(false);
+
+    const actions = await auditActionsFor(store, rowid);
+    expect(actions.filter((a) => a === 'embedding_deleted')).toHaveLength(1);
+    expect(actions.filter((a) => a.startsWith('embedding_'))).toHaveLength(2); // embedding_upserted (create) + embedding_deleted (this delete)
   });
 
-  it('with NO backend configured, create/update work exactly as before and schedule nothing', async () => {
-    const tmp = await openTmpStore('embed-unconfigured');
-    try {
-      configureSemanticBackend(null);
+  it('with NO embedding backend configured, create/update/delete work exactly as before and schedule nothing', async () => {
+    const { store, projectUid } = await openStore('embed-unconfigured');
+    const handle = withEmbedding(store, undefined);
 
-      const outcome = await createItemNode(tmp.store, {
-        family: 'BUG-EMBED',
-        title: 'no rag here',
-        body: 'must work exactly as before RAG existed',
-        repo: 'test/embed-unconfigured',
-        awaitEmbed: true, // even the "await" knob must be a harmless no-op
-      });
-      expect(outcome.created).toBe(true);
+    const created = await createIssue(handle, {
+      project: projectUid, title: 'no rag here', body: 'must work exactly as before RAG existed', by: 'filer',
+      awaitEmbed: true, // even the "await" knob must be a harmless no-op
+    });
+    expect(created.created).toBe(true);
+    if (!created.created || !created.uid) throw new Error('expected created');
+    const rowid = await rowidForUid(store, created.uid);
+    expect((await auditActionsFor(store, rowid)).filter((a) => a.startsWith('embedding_'))).toHaveLength(0);
 
-      const updated = await updateItemNode(tmp.store, 'test/embed-unconfigured', outcome.item.humanId, {
-        title: 'still no rag',
-        awaitEmbed: true,
-      });
-      expect(updated.title).toBe('still no rag');
+    const updated = await update(handle, { uid: created.uid, by: 'filer', body: 'still no rag', awaitEmbed: true });
+    expect(updated.changed).toContain('body');
+    const newRowid = await rowidForUid(store, updated.uid);
+    expect((await auditActionsFor(store, newRowid)).filter((a) => a.startsWith('embedding_'))).toHaveLength(0);
 
-      // flushEmbeds must be a harmless, immediately-resolving no-op — never
-      // an error — when nothing was ever scheduled.
-      await expect(tmp.store.flushEmbeds()).resolves.toBeUndefined();
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  it('provenance: after an embed, the stored embed_model equals the backend modelId', async () => {
-    const tmp = await openTmpStore('embed-provenance');
-    try {
-      const { backend } = makeFakeBackend({ modelId: 'fake-provenance-v7', dim: 3 });
-      configureSemanticBackend(backend);
-
-      const outcome = await createItemNode(tmp.store, {
-        family: 'BUG-EMBED',
-        title: 'provenance check',
-        body: 'embed_model must equal the RESOLVED model id',
-        repo: 'test/embed-provenance',
-        awaitEmbed: true,
-      });
-
-      expect(await embedModelOf(tmp.store, outcome.item.nodeId)).toBe('fake-provenance-v7');
-    } finally {
-      await tmp.cleanup();
-    }
+    const deleted = await deleteIssue(handle, { uid: updated.uid, by: 'filer', reason: 'cleanup', awaitEmbed: true });
+    expect(deleted.invalidated).toBe(true);
+    expect((await auditActionsFor(store, newRowid)).filter((a) => a.startsWith('embedding_'))).toHaveLength(0);
   });
 });
-
-/**
- * Test-only escape hatch: `makeFakeBackend`'s `embedDocumentCalls` counter
- * lives on the `FakeBackendHandle`, not the bare `SemanticBackend` the
- * production code sees. The "re-embed on edit" test above needs the counter
- * without threading the handle through every call site, so this recovers it
- * via the closure `makeFakeBackend` already captured — simplest fix: keep a
- * side-table keyed by the returned `backend` object.
- */
-const fakeHandles = new WeakMap<SemanticBackend, FakeBackendHandle>();
-function fakeHandleFor(backend: SemanticBackend): FakeBackendHandle {
-  const handle = fakeHandles.get(backend);
-  if (!handle) throw new Error('embed-write-path.spec.ts: backend was not created via makeFakeBackend()');
-  return handle;
-}
