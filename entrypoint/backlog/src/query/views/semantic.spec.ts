@@ -94,6 +94,17 @@ async function openSemanticTestStore(dir: string): Promise<SemanticTestStore> {
     },
     async createIssueFixture(input) {
       const result = await createIssue(writeHandle, { by: 'tester', ...input });
+      // `ICreateOutcome` (SPEC §6.3.2) makes `uid`/`item` optional, because
+      // the duplicate gate can return `{created:false}` having written
+      // nothing. These fixtures always intend a real issue, so a suppressed
+      // create is a broken fixture, not a case to handle — fail loudly here
+      // rather than let `undefined` propagate into a ranking assertion and
+      // surface as an unrelated failure further down.
+      if (!result.created || !result.uid || !result.item) {
+        throw new Error(
+          `createIssueFixture: expected a created issue, got ${JSON.stringify(result)}`,
+        );
+      }
       return { uid: result.uid, title: result.item.title };
     },
     async close() {
