@@ -16,9 +16,10 @@
  * migrate from.
  */
 import { createStoreAdapter, type StoreAdapter } from '@adhd/sox-store-adapter';
-import { createGraphBackend, DEFAULT_TYPE_POLICY, type GraphBackend, type TypePolicy } from '@adhd/sox-graph-store';
+import { createGraphBackend, type GraphBackend, type TypePolicy } from '@adhd/sox-graph-store';
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { OPEN_TYPE_POLICY } from './type-policy.js';
 import { withImmediateRetry } from './immediate-retry.js';
 import { flushEmbeds as flushEmbedsFor } from './embed-queue.js';
 
@@ -34,14 +35,13 @@ export interface GraphBacklogStore {
    * the production/ETL/test divergence documented in store/type-policy.ts
    * came about.
    *
-   * Currently `DEFAULT_TYPE_POLICY` (the closed ten-rel vocabulary), because
-   * `createGraphBackend(adapter)` below passes no policy. repo-nodes.ts's
-   * header explains why that is deliberate TODAY — the widened vocabulary is
-   * scoped to `dimensionGraph` so item-level writes stay on the closed
-   * default — and repo-nodes.spec.ts asserts it as a negative control. This
-   * field reports what is actually in force rather than what the new layer
-   * wants; both flip to OPEN_TYPE_POLICY together when the §7 wipe removes
-   * repo-nodes.ts.
+   * `OPEN_TYPE_POLICY` — the single policy, installed on the graph backend and
+   * reported here as one value, so a caller and the backend can never disagree
+   * about what is permitted. The application layer's own node kinds
+   * (`project`/`component`/`issue`/`citation`/`audit`/…) and rels
+   * (`owns_project`/`has_status`/`has_citation`/…) are outside
+   * `@adhd/sox-graph-store`'s closed default vocabulary, so a closed policy
+   * rejects every write this package makes.
    */
   readonly typePolicy: TypePolicy;
   /**
@@ -100,7 +100,7 @@ export async function openGraphBacklogStore(dbPath: string, busyTimeoutMs = 5000
   // the one place it sticks. `pragmaSet` is the adapter surface for it
   // (AdapterConfig has no busy_timeout field — types.ts).
   await adapter.pragmaSet('busy_timeout', busyTimeoutMs);
-  const graph = createGraphBackend(adapter);
+  const graph = createGraphBackend(adapter, { typePolicy: OPEN_TYPE_POLICY });
   // DEBT-BACKLOG-APPLYSCHEMA-UNRETRIED-AT-OPEN-001. `applySchema()` issues DDL,
   // which takes the same write lock as every other write in this package — so
   // it gets the same bounded busy-retry the other four write paths get
@@ -114,7 +114,7 @@ export async function openGraphBacklogStore(dbPath: string, busyTimeoutMs = 5000
   const store: GraphBacklogStore = {
     adapter,
     graph,
-    typePolicy: DEFAULT_TYPE_POLICY,
+    typePolicy: OPEN_TYPE_POLICY,
     flushEmbeds: () => flushEmbedsFor(store),
   };
   return store;

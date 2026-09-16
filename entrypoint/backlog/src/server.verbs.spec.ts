@@ -1,6 +1,5 @@
 /**
- * server.v2.spec.ts — INTERFACE_v2 §10.0 / AC-0: **one apigen package, four
- * mounts**.
+ * server.verbs.spec.ts — AC-0: **one apigen package, four mounts**.
  *
  * The contract this file exists to make falsifiable is a *negative* one:
  * backlog composes exactly ONE `buildBacklogApigenPackage` operation set and
@@ -32,7 +31,7 @@
  * transport still "works".
  *
  * **AC-0's negative half is asserted too:** `install`, `install-skill` and
- * `serve` are host commands (INTERFACE_v2 §6 carve-out, cli.ts:243-265) and
+ * `serve` are host commands (the §6 carve-out, cli.ts:243-265) and
  * must appear on NO mount. `install`/`install-skill` must never open the
  * store (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001) and a reachable `serve`
  * *tool* would let a caller start a second writer against a store that
@@ -43,6 +42,14 @@
  * already `dependsOn: ["build"]` (project.json) — so a source change that
  * alters the operation set and is not rebuilt turns this suite RED rather
  * than quietly comparing stale names.
+ *
+ * **Split-brain guard:** the live surface's CLI leaves are also checked
+ * against `BACKLOG_VERBS` — the pinned 14-verb list every mount is supposed
+ * to consolidate onto. That list exists precisely because `cli.ts`'s own
+ * argv parser is a hand-written surface, not an apigen mount, so it cannot be
+ * derived from the descriptors the way the other three transports are; a
+ * verb added to one surface and forgotten on the other has nowhere else to
+ * be caught but here.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as net from 'node:net';
@@ -55,12 +62,13 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import {
   BACKLOG_HOST_COMMANDS,
+  BACKLOG_VERBS,
   buildBacklogApigenPackage,
   describeMountedSurface,
   startBacklogServer,
   type IMountedOperationSurface,
 } from './server.js';
-import type { BacklogCtx } from './client.js';
+import type { BacklogCtx } from './api.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
@@ -175,7 +183,7 @@ function tempRoot(prefix: string): string {
 beforeAll(async () => {
   // ---- the ONE definition -------------------------------------------------
   // The ctx thunk THROWS. `buildBacklogApigenPackage` composes the operation
-  // set purely from the built `client.d.ts`, so deriving the mounted surface
+  // set purely from the built `api.d.ts`, so deriving the mounted surface
   // must never reach for a store — this doubles as the standing regression
   // assertion for DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001 (a lazy caller must
   // be able to build the whole command table without opening the DB).
@@ -185,7 +193,7 @@ beforeAll(async () => {
   const surface = describeMountedSurface(built.operations);
 
   // ---- REST + OpenAPI (real listener, real fetch) -------------------------
-  const httpRoot = tempRoot('backlog-v2-http-');
+  const httpRoot = tempRoot('backlog-http-');
   const port = await freePort();
   httpAbort = new AbortController();
   httpServer = startBacklogServer({
@@ -212,16 +220,16 @@ beforeAll(async () => {
   const bogusRouteStatus = await probeRoute(port, 'GET', '/backlog/definitely-not-a-mounted-operation');
 
   // ---- MCP (real built server, real JSON-RPC stdio) ----------------------
-  const mcpRoot = tempRoot('backlog-v2-mcp-');
+  const mcpRoot = tempRoot('backlog-mcp-');
   const transport = new StdioClientTransport({ command: 'node', args: [MCP_ENTRY, mcpRoot], cwd: mcpRoot });
-  const client = new Client({ name: 'backlog-v2-parity-client', version: '1.0.0' }, { capabilities: {} });
+  const client = new Client({ name: 'backlog-parity-client', version: '1.0.0' }, { capabilities: {} });
   await client.connect(transport);
   const mcpTools = (await client.listTools()).tools.map((t) => t.name).sort();
   await client.close().catch(() => undefined);
   await transport.close().catch(() => undefined);
 
   // ---- CLI (real built bin) ---------------------------------------------
-  const cliRoot = tempRoot('backlog-v2-cli-');
+  const cliRoot = tempRoot('backlog-cli-');
   const help = spawnSync(process.execPath, [DIST_INDEX, '--help'], {
     cwd: cliRoot,
     env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project' },
@@ -264,7 +272,7 @@ afterAll(async () => {
   // fixed at the source; this only right-sizes the budget.
 }, 180_000);
 
-describe('AC-0 / INTERFACE_v2 §10.0 — one apigen package composed once, mounted to four transports', () => {
+describe('AC-0 — one apigen package composed once, mounted to four transports', () => {
   it('projects a non-empty operation surface from ONE buildBacklogApigenPackage call, without opening the store', () => {
     // If the thunk had been called, `beforeAll` would already have thrown.
     expect(live.surface.length).toBeGreaterThan(0);
@@ -344,6 +352,18 @@ describe('AC-0 / INTERFACE_v2 §10.0 — one apigen package composed once, mount
     for (const route of MOUNT_OP_HTTP_ROUTES) {
       expect(live.openApiPaths).not.toContain(route);
     }
+  });
+
+  it('SPLIT-BRAIN GUARD: the pinned verb list matches the live surface exactly, both ways', () => {
+    // `BACKLOG_VERBS` is checked against the CLI leaves rather than derived
+    // from them, because `cli.ts`'s own argv parser is a hand-written surface
+    // that cannot be projected from the descriptors the other three
+    // transports share — a verb added there (or to the mount) and forgotten
+    // on the other side has no other place to be caught.
+    const liveLeaves = live.surface.map((e) => e.cliPath[e.cliPath.length - 1]).sort();
+    expect(liveLeaves).toEqual([...BACKLOG_VERBS].sort());
+    expect(live.surface.length).toBe(BACKLOG_VERBS.length);
+    expect(BACKLOG_VERBS.length).toBe(14);
   });
 });
 

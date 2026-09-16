@@ -2,33 +2,26 @@
  * server.spec.ts — SPEC.md §7 DoD clause 3 (HTTP variant). Per AGENTS.md
  * "Live testing is mandatory": this default-running (unflagged) test starts
  * the REAL `startBacklogServer({transport:'http'})` against a real temp
- * SQLite file, then issues real `fetch()` HTTP calls — no mocked `fns`, no
+ * store file, then issues real `fetch()` HTTP calls — no mocked `fns`, no
  * bypass. Readiness is a bounded poll (never a `sleep` — AGENTS.md §7 rule 3
  * governs concurrency PROOFS; a bounded readiness poll for "has the process
  * finished binding its port yet" is the accepted pattern already used by
  * `entrypoint/apigen-cli`'s own real-consumer e2e tests).
  *
- * INTERFACE_v2 AC-5 consolidation note: this file predates the six-verb
- * (`get`/`query`/`create`/`update`/`relate`/`admin`) mount and asserted the
- * retired v1 routes (`/backlog/get-item`, `/backlog/create-item`) plus a
- * pre-envelope response shape (`created.item.humanId` rather than
- * `body.ok`/`body.data`). Both facts below were established EMPIRICALLY
- * against the real live-mounted server (never assumed from the CLI/MCP
- * shape), by probing `/_meta/openapi`'s live `paths` map and then a real
- * request/response round trip:
+ * Route/body shapes below were established EMPIRICALLY against the real
+ * live-mounted server (never assumed from the CLI/MCP shape), by probing
+ * `/_meta/openapi`'s live `paths` map and then a real request/response round
+ * trip, and are cross-checked against `api.surface.spec.ts`'s longhand
+ * mounted-surface table:
  *
  *   - Every mounted verb is a POST, including `get`/`query` — there is no
- *     GET-hoisting for this surface today. The route is
- *     `/backlog/<verbName>` (verb names are already single words, so no
- *     kebab-casing is visible here — see the ORIGINAL comment on the
- *     `get`/`create-item` naming history below, still true for the
- *     namespace/segment mechanism even though the verbs changed).
+ *     GET-hoisting for this surface. The route is `/backlog/<verbName>`.
  *   - The request body is `{ data: { input: <VerbInput> } }` — fastify's
  *     composed-schema wrapper (`data`) around the verb's own single
  *     `input` parameter. A body missing the `data` envelope 400s with
  *     `invalid_argument` and a worked example in the message.
  *   - The response body is the RAW `IOutcomeEnvelope` produced by
- *     `client.ts` — `{ ok: true, data: <payload>, warnings?, meta? }` or
+ *     `envelope.ts` — `{ ok: true, data: <payload>, warnings?, meta? }` or
  *     `{ ok: false, error: { code, message, details? } }` — serialized
  *     directly, not unwrapped or reshaped by the fastify mount.
  */
@@ -38,10 +31,12 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startBacklogServer } from './server.js';
-import { createItem } from './ops-v1.js';
-import { openGraphBacklogStore, closeGraphBacklogStore } from './store/graph-backlog-store.js';
-import { buildBacklogEnv } from './env.js';
-import type { IOutcomeEnvelope, IBacklogCard, ICreateOutcome } from './model.js';
+import { openTestIssueStore, seedProject } from './test/helpers/open-test-issue-store.js';
+import { createIssue } from './write/create-issue.js';
+import { buildBacklogEnv, resolveBacklogDbPath } from './env.js';
+import type { IOutcomeEnvelope } from './envelope.js';
+import type { IIssueCard } from './query/types.js';
+import type { ICreateIssueResult } from './write/create-issue.js';
 
 async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -84,50 +79,47 @@ describe('startBacklogServer — live HTTP mount, real fetch, no mocked fns', ()
     adhdRoot = undefined;
   });
 
-  it('a real HTTP POST against the v2 `get` verb returns the real outcome envelope matching what createItem wrote', async () => {
+  it('a real HTTP POST against the `get` verb returns the real outcome envelope matching what createIssue wrote', async () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-server-http-'));
-    const repo = 'PseudoSky/http-test';
 
     // Seed real data through a real store BEFORE the server owns the file —
     // then close it so the server process (in-thread here, but a real
-    // GraphBacklogStore of its own) can open it exclusively.
+    // store of its own) can open it exclusively. `resolveBacklogDbPath`
+    // resolves the exact same file `startBacklogServer` will open below,
+    // given the same `adhdRoot`/scope.
     const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
     seedEnv.ensureDirs();
-    const seedStore = await openGraphBacklogStore(seedEnv.files.db);
-    const seeded = await createItem({ store: seedStore, env: seedEnv }, { family: 'BUG-HTTP', title: 'via http', body: 'x', repo });
-    await closeGraphBacklogStore(seedStore);
+    const dbPath = resolveBacklogDbPath(seedEnv);
+    const seedStore = await openTestIssueStore(dbPath);
+    const { projectUid } = await seedProject(seedStore, 'http-test-project');
+    const seeded = await createIssue(seedStore, { project: projectUid, title: 'via http', body: 'x', by: 'http-spec-seed' });
+    await seedStore.close();
+    if (!seeded.uid) throw new Error('seed createIssue did not return a uid');
+    const seededUid = seeded.uid;
 
     const port = await freePort();
     controller = new AbortController();
     serverPromise = startBacklogServer({ transport: 'http', port, host: '127.0.0.1', scope: 'project', cwd: adhdRoot, adhdRoot, signal: controller.signal });
 
-    // Route is `/backlog/get` — the INTERFACE_v2 AC-5 six-verb mount, not
-    // the retired v1 `/backlog/get-item`. `apigen-plugin-api-fastify`'s
-    // canonical route projection (commit a6e895e2, landed AFTER this
-    // package's original commit 1be78422) routes via `project(op).http.route`,
-    // which is namespace + path segments, kebab-cased.
-    // `extractClientOperations()` (server.ts) extracts with
-    // `dropFileSegment: true`, so the `client.d.ts` extraction-artifact
-    // segment (`normalizeFileName('client.d.ts')` → `'client-d'`, formerly
-    // BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001 / BUG-BACKLOG-CANONICAL-
-    // NAMING-CLIENT-D-SEGMENT-001) no longer leaks into the route.
+    // Route is `/backlog/get` — see this file's header note and
+    // `api.surface.spec.ts`'s longhand mounted-surface table.
     await waitForHttpReady(port, `/_meta/openapi`);
 
     // Every verb is mounted as POST with a `{ data: { input } }` body —
     // confirmed empirically against the live mount's own OpenAPI doc and a
-    // real round trip (see this file's header). `fields:['body']` is
-    // requested explicitly because the default card projection omits the
-    // body text (INTERFACE_v2 §1 progressive disclosure).
+    // real round trip (see this file's header). `fields` REPLACES the
+    // default five-field card projection rather than adding to it, so
+    // `title`/`body` must both be requested explicitly to assert on them.
     const res = await fetch(`http://127.0.0.1:${port}/backlog/get`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ data: { input: { humanId: seeded.item.humanId, repo, fields: ['body'] } } }),
+      body: JSON.stringify({ data: { input: { uid: seededUid, fields: ['uid', 'title', 'body'] } } }),
     });
     expect(res.status).toBe(200);
-    const envelope = (await res.json()) as IOutcomeEnvelope<IBacklogCard>;
+    const envelope = (await res.json()) as IOutcomeEnvelope<IIssueCard>;
     expect(envelope.ok).toBe(true);
     if (!envelope.ok) throw new Error('unreachable — checked above');
-    expect(envelope.data.humanId).toBe(seeded.item.humanId);
+    expect(envelope.data.uid).toBe(seededUid);
     expect(envelope.data.title).toBe('via http');
     expect(envelope.data.body).toBe('x');
 
@@ -137,9 +129,19 @@ describe('startBacklogServer — live HTTP mount, real fetch, no mocked fns', ()
     expect(openapiRes.status).toBe(200);
   }, 30_000);
 
-  it('POST against the v2 `create` verb over real HTTP actually persists — a follow-up `get` sees it', async () => {
+  it('POST against the `create` verb over real HTTP actually persists — a follow-up `get` sees it', async () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-server-http-post-'));
-    const repo = 'PseudoSky/http-post-test';
+
+    // The `project` a real `create` call resolves against must already
+    // exist (SPEC: `project` is resolved-only, never minted by `create`),
+    // so seed it through the same real store path before the server starts.
+    const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
+    seedEnv.ensureDirs();
+    const dbPath = resolveBacklogDbPath(seedEnv);
+    const seedStore = await openTestIssueStore(dbPath);
+    const { projectUid } = await seedProject(seedStore, 'http-post-test-project');
+    await seedStore.close();
+
     const port = await freePort();
     controller = new AbortController();
     serverPromise = startBacklogServer({ transport: 'http', port, host: '127.0.0.1', scope: 'project', cwd: adhdRoot, adhdRoot, signal: controller.signal });
@@ -147,30 +149,30 @@ describe('startBacklogServer — live HTTP mount, real fetch, no mocked fns', ()
     await waitForHttpReady(port, `/_meta/openapi`);
 
     // See the route-segment note in the previous test — routes are
-    // `/backlog/<verbName>` (`create`, not the retired v1 `create-item`),
-    // POST with a `{ data: { input: <CreateInput> } }` body. `by` is
-    // mandatory attribution on every mutation (INTERFACE_v2 §7.5,
-    // `assertAttribution` in client.ts) — omitting it 400s.
+    // `/backlog/<verbName>`, POST with a `{ data: { input: <CreateInput> } }`
+    // body. `by` is mandatory attribution on every mutation — omitting it
+    // 400s.
     const createRes = await fetch(`http://127.0.0.1:${port}/backlog/create`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ data: { input: { item: { family: 'BUG-HTTPPOST', title: 'posted', body: 'x', repo }, by: 'http-spec' } } }),
+      body: JSON.stringify({ data: { input: { title: 'posted', body: 'x', project: projectUid, by: 'http-spec' } } }),
     });
     expect(createRes.status).toBe(200);
-    const createEnvelope = (await createRes.json()) as IOutcomeEnvelope<ICreateOutcome>;
+    const createEnvelope = (await createRes.json()) as IOutcomeEnvelope<ICreateIssueResult>;
     expect(createEnvelope.ok).toBe(true);
     if (!createEnvelope.ok) throw new Error('unreachable — checked above');
     expect(createEnvelope.data.created).toBe(true);
-    expect(createEnvelope.data.humanId).toBe('BUG-HTTPPOST-001');
     expect(createEnvelope.data.item?.title).toBe('posted');
+    const createdUid = createEnvelope.data.uid;
+    expect(createdUid).toBeTruthy();
 
     const getRes = await fetch(`http://127.0.0.1:${port}/backlog/get`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ data: { input: { humanId: createEnvelope.data.humanId, repo } } }),
+      body: JSON.stringify({ data: { input: { uid: createdUid } } }),
     });
     expect(getRes.status).toBe(200);
-    const getEnvelope = (await getRes.json()) as IOutcomeEnvelope<IBacklogCard>;
+    const getEnvelope = (await getRes.json()) as IOutcomeEnvelope<IIssueCard>;
     expect(getEnvelope.ok).toBe(true);
     if (!getEnvelope.ok) throw new Error('unreachable — checked above');
     expect(getEnvelope.data.title).toBe('posted');

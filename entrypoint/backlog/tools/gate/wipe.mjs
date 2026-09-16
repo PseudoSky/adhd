@@ -66,9 +66,22 @@ for (const p of preserve) doomed.delete(p);
 for (const p of [...preserve].sort()) {
   if (!existsSync(join(PKG, p))) errors.push(`MISSING PRESERVE: ${p} does not exist on disk`);
 }
-// 3. Every DELETE path must still exist, or the manifest is stale.
-for (const p of [...doomed].sort()) {
-  if (!existsSync(join(PKG, p))) errors.push(`MISSING DELETE: ${p} does not exist on disk`);
+// 3. Every DELETE path must either still exist (the wipe has not run yet) or be
+//    uniformly gone (the wipe HAS run). A PARTIAL state — some doomed paths
+//    present, some absent — is the real defect: it means the manifest drifted
+//    against the tree, or a wipe was interrupted midway. Checking for
+//    uniformity rather than for presence keeps this gate green in both of the
+//    two legitimate states and red in the one illegitimate one, so it survives
+//    as a standing CI gate instead of going permanently red the moment the
+//    wipe it guards is executed.
+const doomedPresent = [...doomed].filter((p) => existsSync(join(PKG, p))).sort();
+const doomedAbsent = [...doomed].filter((p) => !existsSync(join(PKG, p))).sort();
+const wipeAlreadyRan = doomedPresent.length === 0 && doomedAbsent.length > 0;
+if (doomedPresent.length > 0 && doomedAbsent.length > 0) {
+  errors.push(
+    `PARTIAL WIPE: ${doomedPresent.length} DELETE path(s) still on disk while ${doomedAbsent.length} are already gone — ` +
+      `the manifest has drifted or a wipe was interrupted. Still present: ${doomedPresent.join(', ')}`,
+  );
 }
 
 // 4. THE LOAD-BEARING CHECK: no surviving file may import a doomed one.
@@ -96,7 +109,7 @@ if (dangling.length) {
   );
 }
 
-console.log(`manifest: ${preserve.size} PRESERVE, ${doomed.size} DELETE, ${survivors.length} survivors`);
+console.log(`manifest: ${preserve.size} PRESERVE, ${doomed.size} DELETE, ${survivors.length} survivors${wipeAlreadyRan ? ' (wipe already executed — every DELETE path is gone)' : ''}`);
 
 if (errors.length) {
   console.error(`\n✗ wipe --check FAILED (${errors.length} violation${errors.length === 1 ? '' : 's'}):\n`);

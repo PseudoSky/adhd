@@ -17,7 +17,7 @@ import { isAbsolute, relative, resolve as resolvePath } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import type { GraphBackend } from '@adhd/sox-graph-store';
-import { RRF_K, type SearchQuery, type SignalSpec, type StoreSearchBackend } from '@adhd/sox-hybrid-search';
+import type { SearchQuery, SignalSpec, StoreSearchBackend } from '@adhd/sox-hybrid-search';
 import {
   type IProjectPolicy,
   type IResolvedCatalogRow,
@@ -118,14 +118,15 @@ const DUPLICATE_ACTIONS = ['abort', 'force', 'comment'] as const;
 type DuplicateAction = (typeof DUPLICATE_ACTIONS)[number];
 
 /**
- * A dedupe candidate surfaced at filing time (§6.4), with the NORMALIZED
- * `searchRanked` score that produced it — see {@link scanForDuplicates}'s own
- * doc comment for the normalization derivation.
+ * A dedupe candidate surfaced at filing time (§6.4), carrying the cosine
+ * similarity that produced it — see {@link scanForDuplicates}'s own doc
+ * comment for where that number comes from and why it is the only score
+ * this gate will accept.
  */
 export interface IDuplicateCandidate {
   uid: string;
   title: string;
-  /** Normalized to `[0,1]` — directly comparable to `project_policy.dedupe_threshold`. */
+  /** Cosine similarity in `[0,1]`, straight off the vector channel — directly comparable to `project_policy.dedupe_threshold`. */
   score: number;
 }
 
@@ -146,9 +147,10 @@ export interface IDuplicateCandidate {
  * `IQueryStoreHandle.search.embedQuery`, which is mandatory) specifically to
  * express §6.4 point 4's degraded case: a `StoreSearchBackend` can be wired
  * (FTS/text always available, since it runs off the graph store directly)
- * while no embedding model/vector space is configured — `searchRanked`
+ * while no embedding model/vector space is configured — the search
  * itself stays callable, just scoped to `signals:[{text}]` rather than
- * `signals:[{text},{vec}]`. `search` itself stays OPTIONAL (no backend
+ * `signals:[{text},{vec}]` (and, having no vector channel, surfacing no
+ * duplicate candidates — see {@link scanForDuplicates}). `search` itself stays OPTIONAL (no backend
  * mounted at all) for the same "never silently go dark" posture §6.4 point 4
  * states, but applied one layer further out: `scanForDuplicates` treats a
  * wholly-absent backend as "scan unavailable" (zero candidates, `create`
@@ -301,34 +303,42 @@ function enforceRequiredFields(required: readonly string[], resolvedValues: Reco
 /**
  * §6.4 point 1: `createIssue`'s app-level pre-write similarity scan — never
  * the library's disabled content-hash path (§1's `skipDedupe:true` is
- * untouched by this function). Runs `StoreSearchBackend.searchRanked`
- * scoped to `project` (never cross-project) over `{title, body}`, exactly as
- * §6.4 specifies, with two documented, deliberate departures from a literal
+ * untouched by this function). Runs `StoreSearchBackend.search` scoped to
+ * `project` (never cross-project) over `{title, body}`, exactly as §6.4
+ * specifies, with two documented, deliberate departures from a literal
  * reading:
  *
- * 1. **Score normalization.** `searchRanked`'s own SCALE NOTE
- *    (`@adhd/sox-hybrid-search` dist/index.d.ts: "score here is on the raw
- *    RRF magnitude scale... NOT the [0,1] min-max scale") means a raw score
- *    tops out at `Σ 1/(RRF_K+1)` across the active signals — ~0.033 for two
- *    unit-weight signals, ~0.016 for one — which can never clear
- *    `project_policy.dedupe_threshold`'s documented [0,1] default of `0.8`
- *    (catalog.ts's own `DEFAULT_PROJECT_POLICY`). Dividing by the
- *    theoretical max for the SIGNAL SET ACTUALLY USED (computed from
- *    `signals`, not hardcoded to two) rescales every result into `[0,1]`
- *    without touching `searchRanked`'s call shape or its RRF semantics —
- *    `dedupe_threshold` stays meaningful on the scale its own default was
- *    chosen against.
+ * 1. **The score is a cosine, and only ever a cosine.** §6.4 compares a
+ *    candidate's score against `project_policy.dedupe_threshold`, whose
+ *    documented default is `0.8` on a `[0,1]` similarity scale
+ *    (`catalog.ts`'s `DEFAULT_PROJECT_POLICY`). The only quantity on that
+ *    scale is the vector channel's cosine, so that is what this gate reads —
+ *    `StoreSearchBackend.search`'s raw `vecScore`, which comes straight off
+ *    `vec.knn` (`store/semantic-search.ts`'s `SemanticMatch.score`: "a
+ *    similarity score, HIGHER-IS-BETTER"). It deliberately does NOT use the
+ *    sibling `searchRanked` entry point: that fuses channels by
+ *    reciprocal-rank fusion, which discards magnitude by construction, so no
+ *    rescaling of its output — including dividing by its theoretical rank-1
+ *    maximum, which this function previously did — can recover a similarity
+ *    from it. That rescaling produced a rank ladder (rank 1 → 1.0, rank 2 →
+ *    ~0.984, rank 5 → ~0.938) sitting entirely above the 0.8 default, which
+ *    suppressed every create into a project holding any prior issue.
  * 2. **Degraded (no-embedding) mode.** §6.4 point 4: when the search
  *    substrate cannot embed (`search.embedQuery` absent — see
- *    {@link IDuplicateScanHandle}'s own doc comment), this runs
- *    `signals:[{text}]` alone rather than skipping the scan.
+ *    {@link IDuplicateScanHandle}'s own doc comment), the scan still RUNS
+ *    (`signals:[{text}]`, never skipped) rather than going dark. It simply
+ *    surfaces no candidates, because with no vector channel there is no
+ *    calibrated similarity to compare against the threshold — §6.4's own "a
+ *    missed warning, not a correctness defect" trade, taken in the only
+ *    direction that cannot produce false positives.
  *
  * Returns `[]` (never throws) when: `project_policy.dedupe_scan_enabled` is
  * `false`; no search backend is mounted at all (§6.4's "a missed warning,
  * not a correctness defect" framing, extended one layer further — see
  * {@link IDuplicateScanHandle}); or the project has zero existing issues to
  * compare against. Returns only candidates AT OR ABOVE
- * `project_policy.dedupe_threshold` — never the raw, unfiltered top-N.
+ * `project_policy.dedupe_threshold`, best-first — never the raw, unfiltered
+ * top-N.
  */
 async function scanForDuplicates(
   handle: IDuplicateScanHandle,
@@ -371,17 +381,35 @@ async function scanForDuplicates(
     signals,
     filters: { ids: [...candidateIds] },
   };
-  // A small, fixed fetch window: the gate only ever needs to know whether
-  // ANY candidate clears threshold (all three `duplicateAction`s act on the
-  // full returned/filtered list, never a single arbitrary "top match" beyond
-  // `'comment'`'s own top-1 use, §6.4 point 3) — unbounded would cost an
-  // unnecessary full-table rank on every single `createIssue` call.
+  // The gate only ever needs to know whether ANY candidate clears threshold
+  // (all three `duplicateAction`s act on the full returned/filtered list,
+  // never a single arbitrary "top match" beyond `'comment'`'s own top-1 use,
+  // §6.4 point 3) — unbounded would cost an unnecessary full-table rank on
+  // every single `createIssue` call.
   const SCAN_LIMIT = 5;
-  const results = await search.backend.searchRanked(query, SCAN_LIMIT);
+  // FETCH_LIMIT deliberately over-fetches. `StoreSearchBackend.search`
+  // applies its `.slice(0, limit)` to a merge map in INSERTION order — every
+  // text hit first, vector-only hits after — so slicing at SCAN_LIMIT would
+  // discard exactly the vector-only near-duplicates this gate exists to
+  // catch whenever the text channel alone already returned SCAN_LIMIT rows.
+  // Over-fetch, threshold-filter, sort, then take the top SCAN_LIMIT.
+  const FETCH_LIMIT = SCAN_LIMIT * 4;
+  // NOTE — this calls `backend.search`, NOT `backend.searchRanked`, and that
+  // is load-bearing, not a style choice. `searchRanked` fuses its channels
+  // with reciprocal-rank fusion (`Σ w_i/(RRF_K + rank_i)`), and RRF is a RANK
+  // device: it discards magnitude by construction, so its output cannot be
+  // converted back into a similarity by ANY normalization. Dividing it by its
+  // theoretical rank-1 maximum — which this function used to do — yields a
+  // rank ladder (rank 1 → 1.0, rank 2 → 61/62 ≈ 0.984, rank 5 → 61/65 ≈ 0.938),
+  // every rung of which sits above the default `dedupeThreshold` of 0.8. That
+  // suppressed EVERY create into a project holding at least one prior issue,
+  // no matter how unrelated. `backend.search` instead returns the RAW
+  // per-channel scores, and its `vecScore` is the cosine similarity straight
+  // off `vec.knn` (`store/semantic-search.ts`'s `SemanticMatch.score`:
+  // "a similarity score, HIGHER-IS-BETTER") — a genuinely calibrated [0,1]
+  // quantity that IS comparable to `dedupeThreshold`.
+  const results = await search.backend.search(query, FETCH_LIMIT);
   if (results.length === 0) return [];
-
-  const theoreticalMax = signals.reduce((sum, s) => sum + (s.weight ?? 1) / (RRF_K + 1), 0);
-  if (theoreticalMax <= 0) return [];
 
   const nodes = await graph.getNodesByIds(results.map((r) => r.id));
   const byId = new Map(nodes.map((n) => [n.id, n] as const));
@@ -390,17 +418,33 @@ async function scanForDuplicates(
   for (const r of results) {
     const node = byId.get(r.id);
     if (!node) continue; // raced away (invalidated) between search and this lookup — never surfaced as a candidate
-    const score = r.score / theoreticalMax;
+    // `vecScore` is the ONLY calibrated similarity available. It is absent
+    // when the vector channel did not run at all — §6.4 point 4's degraded
+    // (no `embedQuery`) mode, or no vector space matching the query's
+    // dimension — and when it ran but this row came back from the text
+    // channel only. In every one of those cases there is no similarity to
+    // compare against `dedupeThreshold`, so the row is not a candidate.
+    // Never fall back to `textScore`: BM25 is an uncalibrated, corpus-
+    // relative magnitude, and substituting it here would reintroduce the
+    // exact false-positive class described above under a different name.
+    const score = r.vecScore;
+    if (score === undefined) continue;
+    // Defence in depth on scoping: `filters.ids` IS a first-class
+    // `buildFilterClause` key, so the backend honours it on both channels —
+    // but a duplicate gate that silently widened to the whole store would be
+    // a correctness defect, not a UX one, so the membership is re-asserted
+    // here rather than trusted.
+    if (!candidateIds.has(r.id)) continue;
     if (score >= policy.dedupeThreshold) {
       candidates.push({ uid: node.uid, title: node.name ?? '', score });
     }
   }
-  // `searchRanked` returns best-first (`StoreSearchBackend.searchRanked`'s
-  // own doc comment: "Returns fused SearchResult[]s, best-first") — the
-  // threshold filter above is order-preserving, so `candidates[0]` remains
-  // the top-scoring match `duplicateAction:'comment'` (§6.4 point 3) attaches
-  // its note to.
-  return candidates;
+  // `backend.search` returns merge-map INSERTION order, not best-first (that
+  // is `searchRanked`'s contract, and this no longer calls it) — so the sort
+  // is what makes `candidates[0]` the top-scoring match that
+  // `duplicateAction:'comment'` (§6.4 point 3) attaches its note to.
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates.slice(0, SCAN_LIMIT);
 }
 
 /**
@@ -479,7 +523,7 @@ export async function createIssue(
   }
 
   // §6.4 point 1: the scan runs BEFORE the `immediate` transaction opens —
-  // `searchRanked` is an external, potentially network-backed round-trip
+  // the scan is an external, potentially network-backed round-trip
   // (an embedding-service call), and holding the RESERVED lock across it
   // would stall every other concurrent writer for its duration. Deliberately
   // NOT a CAS (§6.4 point 1's own accepted-gap framing) — see
