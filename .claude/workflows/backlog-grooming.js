@@ -9,8 +9,15 @@
  * This workflow is READ-ONLY ON SOURCE. It never edits, generates, or commits
  * code. It never transitions/resolves/merges/splits/deletes a backlog item.
  * The ONLY writes it performs anywhere are:
- *   (a) backlog_set_priority / backlog_append_note, and ONLY inside the two
- *       "product" phases (Triage-and-Flag, Acceptance-Criteria);
+ *   (a) backlog_update (priority field only), and ONLY inside the two
+ *       "product" phases (Triage-and-Flag, Acceptance-Criteria). The current
+ *       backlog CLI has no standalone note-append verb (its 14 verbs are
+ *       get/query/lookup/create/update/transition/claim/relate/move/
+ *       upsert-project/upsert-component/upsert-location/rm-location/delete,
+ *       plus batch action) — attaching free text without a status change or a
+ *       body-supersede isn't representable, so findings/verdicts/acceptance
+ *       criteria are captured in each phase's own structured JSON return
+ *       only, never written to the graph as a note;
  *   (b) one markdown artifact at tmp/grooming-<runLabel>.md.
  * Every lane (architect/debugger/devops) is READ-ONLY: it investigates and
  * returns a structured verdict/spec, it does not touch the backlog or the repo.
@@ -55,8 +62,7 @@
  *                                   default: all.
  *   dryRun                boolean   default false. When true, the product
  *                                   phases compute what they WOULD write but
- *                                   make no backlog_set_priority /
- *                                   backlog_append_note calls.
+ *                                   make no backlog_update (priority) calls.
  *   runLabel              string    default 'latest'. Artifact path becomes
  *                                   tmp/grooming-<runLabel>.md. Fixed/stable —
  *                                   this script cannot call Date.now().
@@ -78,11 +84,11 @@ export const meta = {
   description: 'Recurring, read-only backlog grooming: product flags each item for debug-triage or architect-spec, three parallel lanes (architect/debugger/devops) investigate, product writes acceptance criteria and a wave-planned markdown report with an explicit re-dispatch verdict.',
   whenToUse: 'Run periodically (see the artifact\'s suggestedIntervalHint) or when the caller already knows the open-item count has moved materially. Never implements or commits — output is a plan for a separate execution workflow.',
   phases: [
-    { title: 'Inventory', detail: 'preflight-gated graph access (mcp or CLI, abort if neither), then a partition-by-kind pull of every open item in adhd + PseudoSky/adhd, reconciled against backlog_stats' },
-    { title: 'Triage & Flag', detail: 'product (WRITE: priority + note only): reprioritize, flag debug-triage vs architect-spec, route to a lane' },
-    { title: 'Lanes', detail: 'parallel, READ-ONLY: items are CONSOLIDATED by overlapping file reservations before architect/devops see them (one architect owns each file), debugger is packed by family; may hand back mis-routed items' },
+    { title: 'Inventory', detail: 'preflight-gated graph access (mcp or CLI, abort if neither), then a partition-by-kind pull of every open item in adhd + PseudoSky/adhd, reconciled against backlog_query meta.total' },
+    { title: 'Triage & Flag', detail: 'product (WRITE: priority only, via backlog_update): reprioritize, flag debug-triage vs architect-spec, route to a lane; findings recorded in the structured return, not as a graph note' },
+    { title: 'Lanes', detail: 'parallel, READ-ONLY: items are CONSOLIDATED by overlapping file reservations before architect/devops/debugger see them (one architect owns each file); may hand back mis-routed items' },
     { title: 'Reroute', detail: 'READ-ONLY: bounded correction dispatch for any items a lane handed back, sent to the lane it actually belongs in' },
-    { title: 'Acceptance Criteria', detail: 'product (WRITE: priority + note only): writes consumer-visible acceptance criteria / verify-or-dead notes onto the backlog items, read-back confirmed' },
+    { title: 'Acceptance Criteria', detail: 'product (WRITE: priority only, via backlog_update): finalizes consumer-visible acceptance criteria / verify-or-dead findings in the structured return, read-back confirmed on the priority field only' },
     { title: 'Report', detail: 'writes exactly one markdown artifact: wave plan, lane summaries, and the machine-readable regroom verdict' },
   ],
 }
@@ -107,7 +113,7 @@ const REPO_ROOT = '/Users/nix/dev/node/adhd'
 const REPOS = ['adhd', 'PseudoSky/adhd'] // sox-ecosystem is a DIFFERENT repository — always out of scope here
 const SCOPE_PRIORITIES = A.priorities && A.priorities.length ? A.priorities : null
 const SCOPE_KINDS = A.kinds && A.kinds.length ? A.kinds : null
-// Test/smoke scoping. `onlyIds` pins the run to an explicit humanId allowlist and
+// Test/smoke scoping. `onlyIds` pins the run to an explicit uid allowlist and
 // `maxItems` truncates after scoping — both exist so the full pipeline (preflight ->
 // inventory -> triage -> lanes -> persistence audit) can be exercised end to end on
 // one real item without a 500-agent fan-out.
@@ -138,10 +144,11 @@ function chunkArray(arr, size) {
   return out
 }
 
-// mechanical id-family derivation: 'BUG-BACKLOG-003' -> 'BUG-BACKLOG', 'TASK-001' -> 'TASK'
-function familyOf(humanId) {
-  return String(humanId).replace(/-\d+$/, '') || String(humanId)
-}
+// Identity is the single global `uid` every backlog verb returns — there is no
+// family-scoped human-readable id to derive a prefix from any more. Clustering
+// affinity below uses `kind` instead: it is in the cheap default `get`/`query`
+// card (`uid, title, kind, status, priority`), so grouping by it costs nothing
+// extra to populate, and it is a real, still-existing field on every item.
 
 // ---------------------------------------------------------------------------
 // FILE RESERVATIONS — derived deterministically from data the item already
@@ -183,7 +190,7 @@ function packByAffinity(items, max, keyOf) {
   const sorted = [...items].sort((a, b) => {
     const ka = keyOf(a); const kb = keyOf(b)
     if (ka !== kb) return ka < kb ? -1 : 1
-    return String(a.humanId) < String(b.humanId) ? -1 : 1
+    return String(a.uid) < String(b.uid) ? -1 : 1
   })
   const out = []
   for (let i = 0; i < sorted.length; i += max) out.push(sorted.slice(i, i + max))
@@ -199,20 +206,19 @@ function packByAffinity(items, max, keyOf) {
 // against 117 singletons on the real corpus. Greedy seed-and-grow with a hard cap
 // keeps packets cohesive AND bounded (measured: 177 items -> 81 packets, max 8).
 //
-// Fully deterministic — seeds by (reservation count, humanId) and breaks overlap
-// ties by humanId. No Date.now()/Math.random() (both unavailable in workflow
+// Fully deterministic — seeds by (reservation count, uid) and breaks overlap
+// ties by uid. No Date.now()/Math.random() (both unavailable in workflow
 // scripts, and either would break resume-by-cache-key).
 function consolidateByReservations(items, max) {
   const files = new Map()          // file -> [item...]
   const reserved = new Map()       // uid -> Set(files)
   const unreserved = []
-  // humanId is NOT unique across the graph — 37 humanIds resolve to more than one repo
-  // (measured over the full corpus; 26 of them are PseudoSky/adhd + sox-ecosystem, and
-  // they cluster on low-entropy ids like BUG-001..BUG-008 that every repo mints for
-  // itself). Keying identity on humanId alone made the second repo's copy collide with
-  // the first and vanish from the packets entirely — 5 of 301 debugger items lost,
-  // silently, with every count still looking healthy. Identity here is (repo, humanId).
-  const uid = (it) => `${it.repo}\u0000${it.humanId}`
+  // Identity is the single global `uid` every backlog verb returns -- it is
+  // unique across the ENTIRE graph, not scoped per repo/project, so no composite
+  // key is needed here. (An earlier human-readable id scheme was NOT globally
+  // unique and required keying on (repo, id) to avoid cross-repo collisions;
+  // that hazard does not exist under uid identity.)
+  const uid = (it) => it.uid
   for (const it of items) {
     const f = reservationsOf(it)
     if (!f.size) { unreserved.push(it); continue }
@@ -278,9 +284,9 @@ function consolidateByReservations(items, max) {
   }
 
   // Items with no extractable reservation cannot be consolidated on file evidence.
-  // They are packed by family affinity and flagged so the lane knows the packet is a
-  // bag of neighbours, not a genuine shared-file unit.
-  for (const chunk of packByAffinity(unreserved, max, (it) => `${it.repo}|${familyOf(it.humanId)}`)) {
+  // They are packed by (repo, kind) affinity and flagged so the lane knows the
+  // packet is a bag of neighbours, not a genuine shared-file unit.
+  for (const chunk of packByAffinity(unreserved, max, (it) => `${it.repo}|${it.kind}`)) {
     packets.push({ items: chunk, files: [], reason: 'no-reservations' })
   }
   if (splitFileGroups) {
@@ -294,7 +300,9 @@ function consolidateByReservations(items, max) {
 // packet of one.
 //
 // Measured on the debugger-eligible corpus: consolidating 166 items purely by file
-// overlap produced 71 packets against family-packing's 21, while saving only 15% of
+// overlap produced 71 packets against the then-affinity-packing's 21 (that measurement
+// predates the switch from family-affinity to (repo, kind)-affinity below; the packet
+// counts are historical, the argument for backfilling is not), while saving only 15% of
 // redundant file opens — i.e. the "better" grouping was ~3x more expensive overall,
 // because non-overlapping items each became a singleton. Backfilling recovers the
 // agent count without breaking any file group.
@@ -316,7 +324,7 @@ function consolidateByReservations(items, max) {
 function backfillPackets(packets, max) {
   const full = packets.filter((p) => p.items.length >= max)
   const partial = packets.filter((p) => p.items.length < max)
-    .sort((a, b) => (b.items.length - a.items.length) || (String(a.items[0].humanId) < String(b.items[0].humanId) ? -1 : 1))
+    .sort((a, b) => (b.items.length - a.items.length) || (String(a.items[0].uid) < String(b.items[0].uid) ? -1 : 1))
   const merged = []
   for (const p of partial) {
     const host = merged.find((m) => m.items.length + p.items.length <= max)
@@ -405,7 +413,7 @@ function auditPersistence(results, label) {
     for (const pr of (r && r.persistence) || []) {
       if (pr.noteAppended) claimed++
       if (pr.readBackConfirmed) confirmed++
-      else failures.push(`${pr.repo || '?'}::${pr.humanId} ${pr.error ? '- ' + pr.error : ''}`)
+      else failures.push(`${pr.repo || '?'}::${pr.uid} ${pr.error ? '- ' + pr.error : ''}`)
     }
   }
   log(`persistence [${label}]: ${confirmed} confirmed / ${claimed} claimed` +
@@ -422,14 +430,14 @@ function passesScope(item) {
   // backlog tools were absent (see TOOL PREFLIGHT). A prompt is not a filter.
   //
   // Exclude CLOSED statuses rather than requiring status==='OPEN'. The graph's own
-  // definition of open is broader: backlog_stats for PseudoSky/adhd reports
-  // open=258 = OPEN(216) + UNKNOWN(23) + MIXED(17) + PARTIAL(1) + DEFERRED(1).
+  // definition of open is broader: backlog_query's meta.total for PseudoSky/adhd
+  // reports open=258 = OPEN(216) + UNKNOWN(23) + MIXED(17) + PARTIAL(1) + DEFERRED(1).
   // Requiring 'OPEN' would silently drop those 42 — the exact class of item most
   // in need of grooming, since UNKNOWN/MIXED/PARTIAL means nobody could tell.
   if (CLOSED_STATUSES.has(String(item.status || 'OPEN').toUpperCase())) return false
   if (SCOPE_PRIORITIES && !SCOPE_PRIORITIES.includes(item.priority)) return false
   if (SCOPE_KINDS && !SCOPE_KINDS.includes(item.kind)) return false
-  if (ONLY_IDS && !ONLY_IDS.has(item.humanId)) return false
+  if (ONLY_IDS && !ONLY_IDS.has(item.uid)) return false
   return true
 }
 
@@ -482,10 +490,10 @@ function needsArchitect(item) {
 const TOOL_GATE = `
 STEP 0 — TOOL SELF-CHECK. DO THIS BEFORE ANYTHING ELSE. NON-NEGOTIABLE.
 Inspect your OWN available tools and confirm you can reach the backlog graph:
-  (a) an mcp__backlog__* tool (e.g. backlog_get_item), OR
-  (b) a Bash tool, through which the global \`backlog\` CLI is reachable.
-Then PROVE it with one real call (backlog_get_item on one of your assigned ids, or
-\`backlog get-item --repo <repo> --human-id <ID>\`).
+  (a) an mcp__backlog__* tool (e.g. backlog_get), OR
+  (b) a Bash tool, through which the global \`adhd-backlog\` CLI is reachable.
+Then PROVE it with one real call (backlog_get on one of your assigned uids, or
+\`adhd-backlog backlog get --input '{"uid":"<UID>"}'\`).
 
 If NEITHER path works, STOP IMMEDIATELY. Do not analyse. Do not infer. Do not answer
 from anything written in this prompt. Return at once with:
@@ -512,17 +520,18 @@ const BACKLOG_MECHANICS = `
 ${TOOL_GATE}
 
 BACKLOG MECHANICS — this is a live, defect-prone system, follow this exactly:
-- The graph (mcp__backlog__* tools) is the ONLY source of truth. BACKLOG.md is a generated projection — NEVER read it, NEVER edit it, NEVER cite it as evidence.
+- The graph (mcp__backlog__* tools / the \`adhd-backlog\` CLI's \`backlog <verb> --input '<json>'\` convention) is the ONLY source of truth. Any BACKLOG.md still on disk is a dead artifact — nothing regenerates it and nothing reads it — so NEVER read it, NEVER edit it, and NEVER cite it as evidence.
+- Identity is the single global \`uid\` every verb returns (from \`create\`, \`query\`, \`get\`, etc.) — it is unique across the ENTIRE graph, not scoped per repo/project. There is no human-readable id to guess or reconstruct; if you don't have an item's uid, you don't have the item.
 - THE REPO KEY IS FORKED. Items live under repo="adhd" (~31 open) or repo="PseudoSky/adhd" (~208 open). "sox-ecosystem" is a DIFFERENT repository and is ALWAYS out of scope for this run — never call it. Pass repo explicitly on every single call; never assume a default.
-- DANGEROUS EXCEPTION: humanId "TASK-001" exists as TWO DISTINCT open items, one in each repo. A wrong-repo lookup on TASK-001 returns the WRONG ITEM with NO error. If you touch TASK-001, double- and triple-check the repo value on every call that mentions it.
-- DO NOT PAGINATE backlog_list_items. It caps at ~145 rows and offset is not honored by the status-filtered index — paging past the cap silently returns a wrong, overlapping, incomplete window (BUG-BACKLOG-003).
-- Every write (backlog_set_priority, backlog_append_note) MUST be READ BACK with backlog_get_item afterward. A success response from the write call is NOT proof it landed — an item here sat OPEN for a full day because a resolution was written as a note and the status field itself never transitioned. Confirm the field you changed actually changed.
+- Use \`backlog_query\`/\`adhd-backlog backlog query --input\` for search and paging; trust \`meta.total\`/\`meta.returned\`/\`meta.truncated\` on every page rather than assuming a page is complete because no error was thrown — do not paginate past what \`meta.truncated\` tells you is there.
+- Every write (backlog_update for a priority change) MUST be READ BACK with backlog_get afterward. A success response from the write call is NOT proof it landed — an item here sat OPEN for a full day because a resolution was written as a note and the status field itself never transitioned. Confirm the field you changed actually changed.
+- THERE IS NO STANDALONE "APPEND A NOTE" VERB. The current backlog surface has exactly 14 verbs (\`get\`, \`query\`, \`lookup\`, \`create\`, \`update\`, \`transition\`, \`claim\`, \`relate\`, \`move\`, \`upsert-project\`, \`upsert-component\`, \`upsert-location\`, \`rm-location\`, \`delete\`) plus \`batch action\` — none of them attach a free-text note to an item without also changing its status (\`transition\`'s optional \`note\`) or its body (\`update\`'s \`body\`, which MINTS A NEW uid and supersedes the item — never do this for a routine finding). This workflow does NOT write findings to the graph as notes any more: record every finding, verdict, and rationale in your OWN structured JSON return only. Set \`noteAppended=false\` and \`readBackConfirmed=false\` on every such entry — that is the honest, correct value now, not a failure.
 
 DECAYED-PREMISE LENS — apply this skeptically to every item, always:
 A large fraction of this backlog was accurate when filed and is FALSE now. Confirmed recent examples: a patch claimed applied that was never applied; a file reported "missing" that existed in another worktree; a directory that had since moved; a gitignore rule added later that already covers the complaint; the single CRITICAL on a triage list where 3 of its 6 claims were already fixed on main; a HIGH item that was a false alarm caused by a diagnostic script that MUTATED the artifact it was inspecting. Default posture: verify against CURRENT code, not against the item's own text. An item's age or prior priority is not evidence of its current truth.
 
 CITATION DISCIPLINE — no citation, no claim:
-Every factual claim you make (in your structured output AND in any backlog note you write) must resolve to a file:line you personally opened, or a command whose real output you personally saw. A grep hit is not "reading" — open the file. If you did not verify something, say "unverified" — do not imply it.
+Every factual claim you make in your structured output must resolve to a file:line you personally opened, or a command whose real output you personally saw. A grep hit is not "reading" — open the file. If you did not verify something, say "unverified" — do not imply it.
 
 READ-ONLY-ON-SOURCE — this entire workflow only grooms, specs, and plans:
 You MUST NOT edit, create, or delete any repository file. You MUST NOT run \`git commit\`, \`git add\`, \`git push\`, or any mutating git command. You MUST NOT run \`git stash\`, \`git reset --hard\`, \`git checkout -- .\`/whole-tree restore, or \`git clean -f\`. Read-only investigation only: \`git log\`, \`git diff\`, \`git show\`, \`grep\`, reading files, \`npx nx graph\`, and — ONLY where genuinely needed to reproduce a bug for the debugger lane — a read-only \`npx nx build/test\` run is fine (build output is gitignored). Never \`--skip-nx-cache\`, never invoke \`tsc\` directly.
@@ -539,34 +548,33 @@ const PREFLIGHT_SCHEMA = {
   },
 }
 
-// The CLI's real flag shapes, discovered the hard way. The printed usage line shows
-// camelCase field names (`humanId`) but the parser only accepts kebab-case flags
-// (`--human-id`), and object arguments must go behind a NAMED flag — a bare
-// positional JSON blob is rejected. Stating this here saves every agent from
+// The CLI's real calling convention: the bin is \`adhd-backlog\` (NOT \`backlog\` — that
+// bare name collides with an unrelated public npm package), and EVERY verb takes a
+// single \`--input '<json>'\` flag carrying one JSON object — there are no per-field
+// flags and no kebab-case flag names. Stating this here saves every agent from
 // rediscovering it, and from concluding the CLI is unusable when it is not.
 const CLI_CRIBSHEET = `
-\`backlog\` CLI (global, on PATH) — the authoritative fallback when mcp__backlog__* is absent:
-  backlog export-json --filter '{"status":"OPEN"}'     # NOT positional; --filter is required
-  backlog list-items  --filter '{"repo":"adhd"}'       # there is no --grep; filter only
-  backlog stats
-  backlog get-item     --repo <repo> --human-id <ID>   # --human-id, NOT --humanId
-  backlog append-note  --repo <repo> --human-id <ID> --by <who> --text <text>
-  backlog set-priority --repo <repo> --human-id <ID> --priority <ENUM>
+\`adhd-backlog\` CLI (global, on PATH) — the authoritative fallback when mcp__backlog__* is absent. Every verb takes ONE \`--input '<json>'\` flag, no per-field flags:
+  adhd-backlog backlog query  --input '{"filter":{"repo":"<repo>","status":"open"},"limit":50}'
+  adhd-backlog backlog get    --input '{"uid":"<UID>"}'
+  adhd-backlog backlog get    --input '{"uid":"<UID>","fields":["body","citations","auditTrail","notes","blockers"]}'
+  adhd-backlog backlog update --input '{"uid":"<UID>","by":"<who>","priority":"<ENUM>"}'
 Gotchas that WILL bite you:
-- filter.status takes a SCALAR string ("OPEN"), not an array (["OPEN"] fails validation).
-- Flags are kebab-case even though the usage line prints camelCase field names.
+- \`query\`'s \`filter\` is an object, not a flat set of flags — e.g. \`{"repo":"<repo>","status":"open"}\`.
+- \`get\`'s default return is a terse five-field card (uid/kind/title/status/priority) — ask for \`body\`/\`citations\`/\`notes\`/\`auditTrail\`/\`blockers\` explicitly via \`fields\` when you need them; each opt-in field costs a genuine extra read.
 - Output is JSON on stdout mixed with pino log lines on stderr — parse stdout only.
+- Every response is the envelope \`{ok, data, warnings, meta}\` or \`{ok:false, error:{code, message, details}}\` — never assume an unwrapped payload.
 - The repo key is FORKED: items live under "adhd" OR "PseudoSky/adhd". Never guess
   which; if a write reports "did you mean repo X?", the item is in X.
 `.trim()
 
 const TOOL_PREFLIGHT_PROMPT = `Determine whether this session can actually reach the backlog graph. Do not groom anything; this is a capability check only.
 
-1. Look at your OWN available tools. Is any mcp__backlog__* tool present (e.g. backlog_stats)?
-   - If yes, CALL backlog_stats once. If it returns a count, answer path="mcp", ok=true.
+1. Look at your OWN available tools. Is any mcp__backlog__* tool present (e.g. backlog_query)?
+   - If yes, CALL backlog_query with a small limit (e.g. \`{"filter":{"status":"open"},"limit":1}\`). If it returns meta.total, answer path="mcp", ok=true.
 2. If no mcp__backlog__* tool exists, or the call fails, try the CLI — but only if you have Bash:
    ${CLI_CRIBSHEET}
-   Run \`backlog stats\`. If it returns JSON with a total/open count, answer path="cli", ok=true.
+   Run \`adhd-backlog backlog query --input '{"filter":{"status":"open"},"limit":1}'\`. If it returns JSON with an \`ok:true\` envelope and a meta.total count, answer path="cli", ok=true.
 3. If NEITHER works — no mcp__backlog__* tools AND no Bash (or the CLI errors) — answer
    ok=false, path="none".
 
@@ -576,13 +584,13 @@ exactly which tools you could see and what the call returned.`
 
 const INVENTORY_METHOD = `
 INVENTORY METHOD for THIS ONE repo (do not skip any step):
-1. Discover the kinds present by calling backlog_list_items with no kind filter and a small limit first, noting every distinct "kind" value you see; also check backlog_spotlight for anything you might have missed.
-2. For EACH kind value you discovered, call backlog_list_items again filtered to (repo=<this repo>, kind=<that kind>, status open / excludeArchived) and collect every row returned.
-3. If a single kind's result count sits at or near the ~145-row cap, that kind is under-counted — further partition IT by priority (CRITICAL/HIGH/MEDIUM/LOW) and union those sub-results. NEVER use offset to page past the cap — it silently returns a wrong overlapping window (BUG-BACKLOG-003).
-4. Union all partition results, de-duplicate by humanId (should not be necessary if partitions were disjoint by kind — if you find a duplicate, that itself is a signal your kind partition wasn't clean; report it).
-5. Call backlog_stats scoped to this repo and read its "open" count.
-6. RECONCILE: your unioned, de-duplicated item count MUST equal backlog_stats.open for this repo. If it does not match, do NOT silently proceed — report the exact discrepancy (which is bigger, by how much) in discrepancyNotes, and still return your best-effort item list.
-For every item, also record: humanId, kind, title, current priority, tags, and a rough count of how many citations/notes it already carries (from what backlog_list_items/backlog_get_item shows you) — do not open every item's full detail, that is too expensive at this scale; a light pass is correct here, deep reading happens in later phases.
+1. Discover the kinds present by calling backlog_query (\`adhd-backlog backlog query --input '{"filter":{"repo":"<this repo>","status":"open"},"limit":50}'\`) with no kind filter first, noting every distinct "kind" value across data.items; watch meta.total vs meta.returned to see if you are seeing everything.
+2. For EACH kind value you discovered, call backlog_query again with \`filter:{"repo":"<this repo>","kind":"<that kind>","status":"open"}\` and collect every row in data.items across as many pages as meta.truncated/meta.total say you need (page with \`offset\`, trusting the returned meta fields — never assume a page is complete just because no error was thrown).
+3. If a single kind's meta.total is large, further partition it by priority (CRITICAL/HIGH/MEDIUM/LOW) and union those sub-results rather than trusting a single deep page.
+4. Union all partition results, de-duplicate by uid (should not be necessary if partitions were disjoint by kind — if you find a duplicate, that itself is a signal your kind partition wasn't clean; report it).
+5. Call backlog_query scoped to this repo with no kind/priority filter (\`filter:{"repo":"<this repo>","status":"open"}\`, \`limit:1\`) and read \`meta.total\` as the repo's authoritative open count.
+6. RECONCILE: your unioned, de-duplicated item count MUST equal that meta.total for this repo. If it does not match, do NOT silently proceed — report the exact discrepancy (which is bigger, by how much) in discrepancyNotes, and still return your best-effort item list.
+For every item, also record: uid, kind, title, current priority, tags, and a rough count of how many citations/notes it already carries (from what backlog_query/backlog_get shows you) — do not open every item's full detail, that is too expensive at this scale; a light pass is correct here, deep reading happens in later phases.
 `.trim()
 
 // ============================================================================
@@ -597,9 +605,9 @@ const INVENTORY_SCHEMA = {
       type: 'array',
       items: {
         type: 'object',
-        required: ['humanId', 'kind', 'title', 'priority'],
+        required: ['uid', 'kind', 'title', 'priority'],
         properties: {
-          humanId: { type: 'string' },
+          uid: { type: 'string' },
           kind: { type: 'string' },
           title: { type: 'string' },
           priority: { type: 'string' },
@@ -607,7 +615,7 @@ const INVENTORY_SCHEMA = {
         },
       },
     },
-    openCountReported: { type: 'number', description: 'backlog_stats.open for this repo' },
+    openCountReported: { type: 'number', description: "backlog_query's meta.total (status=open, scoped to this repo) for this repo" },
     unionCount: { type: 'number', description: 'your de-duplicated unioned item count' },
     reconciled: { type: 'boolean' },
     discrepancyNotes: { type: 'string' },
@@ -616,9 +624,9 @@ const INVENTORY_SCHEMA = {
 
 const TRIAGE_DECISION = {
   type: 'object',
-  required: ['humanId', 'repo', 'flag', 'route', 'routeReason'],
+  required: ['uid', 'repo', 'flag', 'route', 'routeReason'],
   properties: {
-    humanId: { type: 'string' },
+    uid: { type: 'string' },
     repo: { type: 'string' },
     kind: { type: 'string' },
     title: { type: 'string' },
@@ -645,17 +653,17 @@ const ACCOUNTABILITY_PROPS = {
     type: 'array',
     items: {
       type: 'object',
-      required: ['humanId', 'error'],
-      properties: { humanId: { type: 'string' }, repo: { type: 'string' }, error: { type: 'string' } },
+      required: ['uid', 'error'],
+      properties: { uid: { type: 'string' }, repo: { type: 'string' }, error: { type: 'string' } },
     },
   },
   persistence: {
     type: 'array',
     items: {
       type: 'object',
-      required: ['humanId', 'noteAppended', 'readBackConfirmed'],
+      required: ['uid', 'noteAppended', 'readBackConfirmed'],
       properties: {
-        humanId: { type: 'string' }, repo: { type: 'string' },
+        uid: { type: 'string' }, repo: { type: 'string' },
         noteAppended: { type: 'boolean' }, readBackConfirmed: { type: 'boolean' },
         error: { type: 'string' },
       },
@@ -680,7 +688,7 @@ const SPEC_PACKET = {
   required: ['packetId', 'items', 'filesTouched', 'rootCause', 'spec', 'whatNotToDo', 'risks', 'acceptanceCriteriaDraft'],
   properties: {
     packetId: { type: 'string' },
-    items: { type: 'array', items: { type: 'string' }, description: 'humanIds this packet closes' },
+    items: { type: 'array', items: { type: 'string' }, description: 'uids this packet closes' },
     filesTouched: { type: 'array', items: { type: 'string' }, description: 'concrete, repo-root-relative paths derived from the items\' own citations/audit trail — never a subsystem name' },
     rootCause: { type: 'string' },
     spec: { type: 'string', description: 'precise enough that an implementer makes no architectural choices' },
@@ -707,9 +715,9 @@ const LANE_SPEC_SCHEMA = {
       type: 'array',
       items: {
         type: 'object',
-        required: ['humanId', 'repo', 'suggestedRoute', 'reason'],
+        required: ['uid', 'repo', 'suggestedRoute', 'reason'],
         properties: {
-          humanId: { type: 'string' }, repo: { type: 'string' },
+          uid: { type: 'string' }, repo: { type: 'string' },
           suggestedRoute: { enum: ['debugger', 'architect', 'devops'] },
           reason: { type: 'string' },
         },
@@ -720,9 +728,9 @@ const LANE_SPEC_SCHEMA = {
 
 const DEBUG_VERDICT = {
   type: 'object',
-  required: ['humanId', 'repo', 'verdict', 'evidence'],
+  required: ['uid', 'repo', 'verdict', 'evidence'],
   properties: {
-    humanId: { type: 'string' }, repo: { type: 'string' },
+    uid: { type: 'string' }, repo: { type: 'string' },
     verdict: { enum: ['VERIFIED_LIVE', 'DEAD', 'PARTIALLY_LIVE', 'NEEDS_HUMAN'] },
     evidence: { type: 'string', description: 'real command output or file:line you personally opened — the thing that kills or confirms it' },
     filesInspected: { type: 'array', items: { type: 'string' } },
@@ -741,9 +749,9 @@ const LANE_DEBUG_SCHEMA = {
       type: 'array',
       items: {
         type: 'object',
-        required: ['humanId', 'repo', 'suggestedRoute', 'reason'],
+        required: ['uid', 'repo', 'suggestedRoute', 'reason'],
         properties: {
-          humanId: { type: 'string' }, repo: { type: 'string' },
+          uid: { type: 'string' }, repo: { type: 'string' },
           suggestedRoute: { enum: ['debugger', 'architect', 'devops'] },
           reason: { type: 'string' },
         },
@@ -761,9 +769,9 @@ const AC_WRITE_SCHEMA = {
       type: 'array',
       items: {
         type: 'object',
-        required: ['humanId', 'repo', 'noteAppended', 'readBackConfirmed'],
+        required: ['uid', 'repo', 'noteAppended', 'readBackConfirmed'],
         properties: {
-          humanId: { type: 'string' }, repo: { type: 'string' },
+          uid: { type: 'string' }, repo: { type: 'string' },
           acceptanceCriteria: { type: 'array', items: { type: 'string' } },
           noteAppended: { type: 'boolean' },
           readBackConfirmed: { type: 'boolean' },
@@ -783,9 +791,9 @@ const DEBUG_NOTE_WRITE_SCHEMA = {
       type: 'array',
       items: {
         type: 'object',
-        required: ['humanId', 'repo', 'noteAppended', 'readBackConfirmed'],
+        required: ['uid', 'repo', 'noteAppended', 'readBackConfirmed'],
         properties: {
-          humanId: { type: 'string' }, repo: { type: 'string' },
+          uid: { type: 'string' }, repo: { type: 'string' },
           verdict: { type: 'string' },
           noteAppended: { type: 'boolean' },
           readBackConfirmed: { type: 'boolean' },
@@ -824,7 +832,7 @@ ${BACKLOG_MECHANICS}
 
 ${INVENTORY_METHOD}
 
-Return the structured object: your unioned item list, backlog_stats.open for "${repo}", your own union count, and whether they reconcile.`
+Return the structured object: your unioned item list, backlog_query's meta.total (status=open, scoped to "${repo}") for "${repo}", your own union count, and whether they reconcile.`
 }
 
 function targetedFetchPrompt(repo, ids, accessPath) {
@@ -837,36 +845,36 @@ ${accessPath === 'cli' ? CLI_CRIBSHEET : ''}
 
 ${TOOL_GATE}
 
-Fetch EXACTLY these humanIds, and only from repo "${repo}":
+Fetch EXACTLY these uids, and only from repo "${repo}":
 ${JSON.stringify(ids, null, 1)}
 
-For each id, call backlog_get_item (or \`backlog get-item --repo "${repo}" --human-id <ID>\`).
-- If it resolves in THIS repo, include it in items with its real humanId, kind, title, priority, status and tags as the graph returned them.
+For each id, call backlog_get (or \`adhd-backlog backlog get --input '{"uid":"<UID>"}'\`).
+- If it resolves in THIS repo, include it in items with its real uid, kind, title, priority, status and tags as the graph returned them.
 - If it does NOT exist in this repo, simply OMIT it. That is expected: the repo key is
   forked, so an id living in the other fork will legitimately miss here. Do not guess,
   do not substitute a similar id, and do not report a miss as an error.
 
 Set openCountReported to the number you actually fetched, unionCount to the same, and
 reconciled=true. This is a targeted pull, not a census — the usual reconcile-against-
-backlog_stats rule does NOT apply.
+backlog_query meta.total rule does NOT apply.
 
 Return the structured object.`
 }
 
 // ============================================================================
-// phase 2 — product triage & flag (WRITE: priority + note ONLY)
+// phase 2 — product triage & flag (WRITE: priority ONLY)
 // ============================================================================
 function triagePrompt(clusterLabel, items) {
-  return `You are the PRODUCT phase of a backlog-grooming run, working ONE cluster of related items. This is a WRITE-PERMITTED phase but ONLY for two specific calls: backlog_set_priority and backlog_append_note. You MUST NOT call backlog_resolve_item, backlog_transition_status, backlog_merge_items, backlog_split_item, backlog_soft_delete_item, backlog_claim_item, or any other mutating tool. ${DRY_RUN ? 'DRY RUN IS ON: compute what you WOULD write (priorityAfter, priorityChanged, note text) but DO NOT actually call the write tools; set noteAppended=false and readBackConfirmed=false and explain in clusterNotes what you would have done.' : ''}
+  return `You are the PRODUCT phase of a backlog-grooming run, working ONE cluster of related items. This is a WRITE-PERMITTED phase but ONLY for one call: backlog_update, and ONLY to change the \`priority\` field. You MUST NOT call backlog_transition, backlog_delete, backlog_relate, backlog_move, backlog_claim, backlog_create, or any other mutating verb — and you MUST NOT pass \`body\`/\`title\`/\`kind\`/\`assignee\`/\`author\` to backlog_update either, only \`priority\`. ${DRY_RUN ? 'DRY RUN IS ON: compute what you WOULD write (priorityAfter, priorityChanged) but DO NOT actually call the write tools; set noteAppended=false and readBackConfirmed=false and explain in clusterNotes what you would have done.' : ''}
 
 ${BACKLOG_MECHANICS}
 
 CLUSTER "${clusterLabel}" — you are assigned EXACTLY these items, by ID ONLY:
-${JSON.stringify(items.map((i) => ({ repo: i.repo, humanId: i.humanId })), null, 1)}
+${JSON.stringify(items.map((i) => ({ repo: i.repo, uid: i.uid })), null, 1)}
 
-STEP 1 — FETCH. You are deliberately given NOTHING but repo+humanId. Titles, kinds,
-bodies, priorities and tags are NOT in this prompt, by design. Call backlog_get_item
-(or \`backlog get-item --repo <repo> --human-id <ID>\`) for EVERY id above and work
+STEP 1 — FETCH. You are deliberately given NOTHING but repo+uid. Titles, kinds,
+bodies, priorities and tags are NOT in this prompt, by design. Call backlog_get
+(or \`adhd-backlog backlog get --input '{"uid":"<UID>"}'\`) for EVERY id above and work
 only from what the graph returns.
 
 If an id does not resolve, that is a REAL FINDING, not an obstacle to route around:
@@ -879,15 +887,15 @@ orchestrator, not echoed by an agent. If a write reports "did you mean repo X?",
 and record it; do not retry against a different repo on your own initiative.
 
 FOR EACH ITEM YOU SUCCESSFULLY FETCHED, do the following:
-1. REPRIORITIZE: form your own view of CRITICAL/HIGH/MEDIUM/LOW from the title/kind/tags and a quick backlog_get_item read (do not do deep code verification here — that is the lane's job downstream). If it should change, ${DRY_RUN ? 'record what you would call' : 'call backlog_set_priority'} and set priorityChanged=true with priorityReason.
+1. REPRIORITIZE: form your own view of CRITICAL/HIGH/MEDIUM/LOW from the title/kind/tags and a quick backlog_get read (do not do deep code verification here — that is the lane's job downstream). If it should change, ${DRY_RUN ? 'record what you would call' : "call backlog_update with only {uid, by, priority}"} and set priorityChanged=true with priorityReason.
 2. FLAG: decide "debug-triage" (the item's premise or root cause is genuinely uncertain — you cannot tell if it is still real from the text alone) vs "architect-spec" (the item is plausibly real, but the fix shape/files/approach are not specified).
 3. ROUTE, from the flag:
    - flag=debug-triage -> route=debugger, always.
    - flag=architect-spec -> route=devops if this is fundamentally a build/release/CI/tooling item (touches nx.json/package.json/pnpm-lock/CI config/tools/nx-plugins/publish workflow, or its kind/tags say so) — otherwise route=architect.
    Write a one-line routeReason for every item; a lane is allowed to hand the item back to you if your routing was wrong, so be honest about your uncertainty rather than guessing confidently.
 4. QUICK PLAUSIBILITY CHECK ONLY (not a full verify): if something about the item smells stale on its face (references a path/tool/file you have reason to doubt still exists, claims a fix that seems too easy to still be open, etc.) set possiblyDecayed=true — this is a HINT for the debugger lane, not your own conclusion.
-5. ${DRY_RUN ? 'Skip the note call.' : `Append a note (backlog_append_note) recording your flag, route, routeReason, and priority decision — cite whatever you actually looked at (do not overclaim; a title-only read is fine to say so).`}
-6. ${DRY_RUN ? '' : 'READ BACK every item you wrote to with backlog_get_item and confirm the priority/note field actually changed — set readBackConfirmed accordingly. If a write did not land, say so in clusterNotes; do not silently mark it confirmed.'}
+5. RECORD your flag, route, routeReason, and priority decision in this cluster's structured return — cite whatever you actually looked at (do not overclaim; a title-only read is fine to say so). There is no standalone note-append verb in the current backlog CLI, so this is not also written to the graph as a note; always set noteAppended=false.
+6. ${DRY_RUN ? '' : 'READ BACK every item whose priority you wrote to with backlog_get and confirm the priority field actually changed — set readBackConfirmed accordingly. If a write did not land, say so in clusterNotes; do not silently mark it confirmed.'}
 
 Return the structured object.`
 }
@@ -916,51 +924,57 @@ failure this consolidation exists to prevent.
 - Where two items imply CONFLICTING edits to the same file, say so explicitly and
   resolve it in ONE spec — do not emit two packets that both rewrite the same lines.
 - Where two items are really the same underlying defect seen from two angles, MERGE
-  them into a single packet and name both humanIds.
+  them into a single packet and name both uids.
 - The list above is DERIVED, not authoritative. Verify against the real code and
   correct filesTouched if it is wrong or incomplete.
 `
     : `
 UNCONSOLIDATED PACKET: no file reservations could be derived from these items'
 citations or bodies (reason=${consolidationReason || 'no-reservations'}), so they were
-grouped by humanId family and may be unrelated. Establish what each one actually
-touches BEFORE forming packets, and split them apart if they do not belong together.
+grouped by (repo, kind) affinity only and may be unrelated. Establish what each one
+actually touches BEFORE forming packets, and split them apart if they do not belong together.
 `
   return `${LANE_ROLE[lane]}
 ${reserved}
 
 You MUST NOT edit or commit any repository file, and you MUST NOT change any item's
-status or priority (no resolve, no transition, no set_priority). Investigate with real
-reads: open files, run \`git log\`/\`git diff\`/\`grep\`, check backlog_audit_trail/
-backlog_blockers for the item's history.
+status or priority (no delete, no transition, no update). Investigate with real
+reads: open files, run \`git log\`/\`git diff\`/\`grep\`, call backlog_get with
+\`fields:["auditTrail","blockers"]\` for the item's history.
 
-FINAL STEP — PERSIST YOUR FINDINGS TO THE GRAPH. This is mandatory and it is the last
-thing you do. For EVERY item you reached a conclusion about, call backlog_append_note
-(or \`backlog append-note --repo <repo> --human-id <ID> --by <you> --text <text>\`)
-with your finding and its evidence. Then READ IT BACK with backlog_get_item and confirm
-the note is actually present. Record one entry per item in \`persistence\` with
-noteAppended and readBackConfirmed set from what you OBSERVED, not what you intended.
+FINAL STEP — RECORD YOUR FINDINGS IN THE STRUCTURED RETURN. This is mandatory and it
+is the last thing you do. The current backlog CLI has no standalone note-append verb
+(its 14 verbs are get/query/lookup/create/update/transition/claim/relate/move/
+upsert-project/upsert-component/upsert-location/rm-location/delete, plus batch
+action) — none of them attach free text to an item without also changing its status
+(\`transition\`'s optional \`note\`) or superseding its body (\`update\`'s \`body\`, which
+MINTS A NEW uid). Neither fits "record a finding," so this workflow does NOT write
+findings to the graph. For EVERY item you reached a conclusion about, put your finding
+and its evidence directly in this cluster's structured return. Set \`noteAppended=false\`
+and \`readBackConfirmed=false\` in \`persistence\` for every item — that is the honest,
+correct value, not a failure to report.
 
-Your structured return value is a RECEIPT, not the deliverable. The graph is the
-deliverable. The previous run returned 19.3M tokens of good analysis purely in its
+Your structured return value IS the deliverable now — there is no separate graph write
+to fall back on. The previous run returned 19.3M tokens of good analysis purely in its
 transcript, was killed before a separate write phase could run, and every finding had
-to be manually excavated from a cache file afterwards. If your note is not in the
-graph, your work does not exist. Persist as you go — do not batch it all to the very
-end where a single interruption loses everything.
+to be manually excavated from a cache file afterwards; treat that as the standing
+argument for keeping every finding IN the structured object, not for writing it
+somewhere else. Return your structured object promptly rather than batching investigation
+past what you can still summarize faithfully.
 
 ${BACKLOG_MECHANICS}
 
 CLUSTER "${clusterLabel}" (lane=${lane}) — you are assigned EXACTLY these items, by ID ONLY:
-${JSON.stringify(items.map((i) => ({ repo: i.repo, humanId: i.humanId, routeReason: i.routeReason })), null, 1)}
+${JSON.stringify(items.map((i) => ({ repo: i.repo, uid: i.uid, routeReason: i.routeReason })), null, 1)}
 
-FETCH FIRST. Only repo+humanId (and why you were routed) are given. Call
-backlog_get_item on EVERY id before analysing — title, body, citations, tags and
+FETCH FIRST. Only repo+uid (and why you were routed) are given. Call
+backlog_get on EVERY id before analysing — title, body, citations, tags and
 priority must come from the graph, never from this prompt. An id that does not
 resolve goes in unresolvedIds with its exact error and is EXCLUDED from your output;
 never substitute a similar id or reconstruct the item from its name.
 
 FOR EACH PACKET YOU FORM:
-- filesTouched MUST be concrete, repo-root-relative paths (e.g. "packages/apigen/apigen-core-client/src/lib/schema.ts") derived from the item's own citations, backlog_audit_trail, or your own \`git log --follow\`/grep of the actual code — never a vague area like "the apigen package".
+- filesTouched MUST be concrete, repo-root-relative paths (e.g. "packages/apigen/apigen-core-client/src/lib/schema.ts") derived from the item's own citations, its \`auditTrail\` (via backlog_get with fields:["auditTrail"]), or your own \`git log --follow\`/grep of the actual code — never a vague area like "the apigen package".
 - Two packets in this cluster that would write the same path must be merged into one packet, or you must sequence them (say so in the spec) — never leave them as two co-equal packets on the same file.
 - If a packet touches package.json/project.json/nx.json/pnpm-lock.yaml/.gitignore AT THE REPO ROOT, set soloRequired=true and say why — nx treats a root-config change as affecting the ENTIRE workspace graph, forcing its pre-commit gate to run the full task graph alone; this has already cost three package publishes in this repo.
 - acceptanceCriteriaDraft must be CONSUMER-VISIBLE outcomes provable by a runnable command (e.g. "an agent gets N results back from X, verified by running Y") — never an implementation-shape claim like "Promise.all is present". A future implementer of your spec is held to: real components not mocks (mock only a paid external boundary), tests that FAIL if reverted (a negative control), determinism without sleeps, trusting exit codes not stdout greps. Write your draft ACs so that bar is achievable.
@@ -981,11 +995,11 @@ ${BACKLOG_MECHANICS}
 
 CLUSTER "${clusterLabel}" — items routed to you:
 ${JSON.stringify(items, null, 1)}
-${items.some((i) => !i.title) ? '\nSome of the above entries only carry humanId/repo — call backlog_get_item on each to pull its full title/body/tags/citations before you start.' : ''}
+${items.some((i) => !i.title) ? '\nSome of the above entries only carry uid/repo — call backlog_get on each to pull its full title/body/tags/citations before you start.' : ''}
 
 FOR EACH ITEM, actually verify against CURRENT code/state (never trust the item's own text):
 - Open the cited file(s) at the cited line(s). If a citation is stale (moved/renamed/deleted), say so — that itself may be the whole story.
-- Check backlog_audit_trail for prior work/notes on this item; a "fixed" claim in a note is not proof — verify it yourself.
+- Call backlog_get with \`fields:["auditTrail"]\` for prior work/notes on this item; a "fixed" claim in a note is not proof — verify it yourself.
 - Reproduce the defect if it is reproducible (run the real command/test, read the real exit code) rather than reasoning about whether it "should" still fail.
 - Watch specifically for the five decay shapes: a partial fix presented as full; source fixed but the built artifact/dist not; a type/signature hardened but the call site left stale; docs updated but behavior not (or the reverse); something that holds in source but not through the real consumer seam (built artifact, loaded MCP tool, CLI entry).
 - evidence must be the literal command output or file:line that kills or confirms it — not a summary of what you expect.
@@ -996,10 +1010,10 @@ Return the structured object.`
 }
 
 // ============================================================================
-// phase 4 — product acceptance criteria + notes (WRITE: priority + note ONLY)
+// phase 4 — product acceptance criteria + notes (WRITE: priority ONLY)
 // ============================================================================
 function acWritePrompt(groupId, packets) {
-  return `You are the PRODUCT phase finalizing acceptance criteria for a set of architect/devops SPEC packets. WRITE-PERMITTED for backlog_append_note and backlog_set_priority ONLY — nothing else mutating. ${DRY_RUN ? 'DRY RUN IS ON: compute the finalized acceptanceCriteria and finalPriority but do NOT actually call the write tools; set noteAppended=false and readBackConfirmed=false.' : ''}
+  return `You are the PRODUCT phase finalizing acceptance criteria for a set of architect/devops SPEC packets. WRITE-PERMITTED for backlog_update (priority field only) — nothing else mutating. ${DRY_RUN ? 'DRY RUN IS ON: compute the finalized acceptanceCriteria and finalPriority but do NOT actually call the write tools; set noteAppended=false and readBackConfirmed=false.' : ''}
 
 ${BACKLOG_MECHANICS}
 
@@ -1008,15 +1022,15 @@ ${JSON.stringify(packets, null, 1)}
 
 FOR EVERY backlog item named in every packet's "items" array:
 1. Take the packet's acceptanceCriteriaDraft and FINALIZE it: each criterion must be a consumer-visible outcome provable by a runnable command, phrased so a reviewer could verify it by literally running something and checking output/exit code — tighten any criterion that is really describing an implementation shape rather than an outcome.
-2. Set finalPriority — normally the item's current priority unless the packet's risk/blocked status clearly argues otherwise (a blocked packet's items should usually stay at their current priority or be flagged, not silently downgraded).
-3. ${DRY_RUN ? 'Skip the note call.' : `Append a note (backlog_append_note) on the item recording: which packet it's in (packetId), the finalized acceptance criteria, filesTouched, and — if the packet is blocked — the blockedReason, so a human/executor knows exactly what is needed next. Do NOT resolve or transition the item's status — that is not this workflow's job.`}
-4. ${DRY_RUN ? '' : 'READ BACK with backlog_get_item and confirm the note actually landed; set readBackConfirmed accordingly.'}
+2. Set finalPriority — normally the item's current priority unless the packet's risk/blocked status clearly argues otherwise (a blocked packet's items should usually stay at their current priority or be flagged, not silently downgraded). ${DRY_RUN ? 'Record what you would call.' : 'If it changed, call backlog_update with only {uid, by, priority}.'}
+3. RECORD which packet the item is in (packetId), the finalized acceptance criteria, filesTouched, and — if the packet is blocked — the blockedReason, directly in this group's structured return, so a human/executor knows exactly what is needed next. There is no standalone note-append verb in the current backlog CLI, so this is NOT also written to the graph as a note; always set noteAppended=false. Do NOT transition the item's status — that is not this workflow's job.
+4. ${DRY_RUN ? '' : 'READ BACK with backlog_get and confirm the priority field actually changed (when you changed it); set readBackConfirmed accordingly.'}
 
 Return the structured object.`
 }
 
 function debugNoteWritePrompt(groupId, verdicts) {
-  return `You are the PRODUCT phase recording DEBUGGER-LANE verdicts onto the backlog. WRITE-PERMITTED for backlog_append_note and backlog_set_priority ONLY. ${DRY_RUN ? 'DRY RUN IS ON: compute what you would write but do NOT call the write tools; set noteAppended=false and readBackConfirmed=false.' : ''}
+  return `You are the PRODUCT phase recording DEBUGGER-LANE verdicts. WRITE-PERMITTED for backlog_update (priority field only). ${DRY_RUN ? 'DRY RUN IS ON: compute what you would write but do NOT call the write tools; set noteAppended=false and readBackConfirmed=false.' : ''}
 
 ${BACKLOG_MECHANICS}
 
@@ -1024,9 +1038,9 @@ DEBUGGER VERDICTS to record (group "${groupId}"):
 ${JSON.stringify(verdicts, null, 1)}
 
 FOR EVERY item:
-- ${DRY_RUN ? 'Skip the note call.' : `Append a note (backlog_append_note) recording the verdict (VERIFIED_LIVE / DEAD / PARTIALLY_LIVE / NEEDS_HUMAN) and its evidence verbatim, so the reasoning survives even though you are not changing status. For DEAD, recommend the item be closed by a human/executor with the cited evidence — you do NOT resolve/transition it yourself, that is out of scope for this workflow. For VERIFIED_LIVE, recommend it proceed to the architect/devops lane on the NEXT grooming pass (or note if it is now ready for direct spec work).`}
-- If the verdict argues for a priority change (e.g. DEAD items are typically not worth CRITICAL/HIGH churn, a confirmed-live item with fresh evidence of severity might deserve raising), ${DRY_RUN ? 'record what you would set' : 'call backlog_set_priority'} and note why.
-- ${DRY_RUN ? '' : 'READ BACK with backlog_get_item and confirm the note landed; set readBackConfirmed accordingly.'}
+- RECORD the verdict (VERIFIED_LIVE / DEAD / PARTIALLY_LIVE / NEEDS_HUMAN) and its evidence verbatim in this group's structured return, so the reasoning survives even though you are not changing status and there is no standalone note-append verb in the current backlog CLI to write it to the graph — always set noteAppended=false. For DEAD, recommend the item be closed by a human/executor with the cited evidence — you do NOT transition it yourself, that is out of scope for this workflow. For VERIFIED_LIVE, recommend it proceed to the architect/devops lane on the NEXT grooming pass (or note if it is now ready for direct spec work).
+- If the verdict argues for a priority change (e.g. DEAD items are typically not worth CRITICAL/HIGH churn, a confirmed-live item with fresh evidence of severity might deserve raising), ${DRY_RUN ? 'record what you would set' : 'call backlog_update with only {uid, by, priority}'} and note why.
+- ${DRY_RUN ? '' : 'READ BACK with backlog_get and confirm the priority field actually changed (when you changed it); set readBackConfirmed accordingly.'}
 
 Return the structured object.`
 }
@@ -1042,7 +1056,7 @@ function reportPrompt(payload) {
 Render the following pre-computed JSON data as clear, well-organized markdown (headings, tables where it helps). Do not invent numbers not present in the data. Sections, in order:
 1. Summary — total open items (adhd + PseudoSky/adhd), how many were triaged this run, how many packets/verdicts each lane produced, how many handbacks/reroutes occurred.
 2. Wave Plan — one subsection per wave, in order; for each packet in the wave show packetId, lane, items, filesTouched, and whether it is soloRequired (with reason). State explicitly: packets in the same wave are file-disjoint by construction; solo waves run alone.
-3. Debugger Lane — table of humanId/repo/verdict/evidence-summary/recommendedAction. Call out DEAD items distinctly (these are recommended for human closure).
+3. Debugger Lane — table of uid/repo/verdict/evidence-summary/recommendedAction. Call out DEAD items distinctly (these are recommended for human closure).
 4. Architect + Devops Lanes — per packet: title/rootCause/spec-summary/risks/whatNotToDo/finalized acceptance criteria/releaseImplications (devops)/blocked status.
 0. BANNERS FIRST, before anything else. If payload.dryRun is true, open the artifact with a bold **DRY RUN — NO BACKLOG WRITES WERE MADE THIS RUN** banner. If payload.incompleteInventory is true, open with a bold **INCOMPLETE CORPUS** banner naming payload.reposCovered vs payload.reposExpected and stating that every count in this report is a LOWER BOUND and the drift signal must not be trusted against it. A reader who misses either of these will draw wrong conclusions from correct-looking numbers.
 
@@ -1066,7 +1080,7 @@ log(`backlog-grooming starting: repos=${REPOS.join(',')} dryRun=${DRY_RUN} scope
 // back to the `backlog` CLI either — agentType 'product-manager' has no Bash — and
 // this prompt never named the CLI as an alternative. The agents did the only thing
 // left: they answered from the item payload inlined in the prompt, which is how 22
-// nonexistent humanIds and 12 wrong repo tags entered the results.
+// nonexistent uids and 12 wrong repo tags entered the results.
 //
 // So: prove graph access BEFORE dispatching anything, and abort loudly if absent.
 // The inventory agentType MUST be one that has Bash so the CLI is a genuine fallback.
@@ -1101,13 +1115,14 @@ const invRaw = ONLY_IDS
 // trusting the `repo` string the subagent echoed back. parallel() preserves input
 // order (Promise.all semantics), so invRaw[i] corresponds to REPOS[i].
 //
-// This matters more here than it looks. The repo key in this backlog is FORKED
-// (`adhd` vs `PseudoSky/adhd`), and a mis-tagged item is not a loud failure — it
-// is a SILENT wrong-item write for the rest of the pipeline (triage, lanes,
-// notes). `TASK-001` in particular exists as two DISTINCT open items, one per
-// repo value, so a wrong repo tag resolves to a real-but-wrong ticket with no
-// error at all. Trusting the echoed value reproduced, inside this tool, exactly
-// the hazard this tool's own preamble warns about.
+// Identity is the single global `uid` every backlog verb returns, so a mis-tagged
+// `repo` field can no longer resolve a lookup to the WRONG ITEM — every uid-keyed
+// call (get/update/etc.) reaches the one item that uid actually names, regardless
+// of what repo string an agent attaches to it. What a mis-tagged repo still breaks
+// is everything downstream that GROUPS or SCOPES by repo (wave-plan labels, the
+// per-repo reconcile check, the final report's per-repo counts) — silently wrong
+// bookkeeping, not a silently wrong write. Re-tagging from the dispatch index
+// rather than the echo is still the right defense against that.
 const inventories = REPOS
   .map((repo, i) => (invRaw[i] ? { ...invRaw[i], repo } : null))
   .filter(Boolean)
@@ -1136,7 +1151,7 @@ for (const inv of unreconciled) {
   log(`INVENTORY RECONCILIATION MISMATCH for ${inv.repo}: reported open=${inv.openCountReported}, collected=${(inv.items || []).length}. ${inv.discrepancyNotes || '(no notes given)'}`)
 }
 if (unreconciled.length && !ONLY_IDS && !A.allowIncompleteInventory) {
-  log('ABORT: inventory did not reconcile against backlog_stats. Grooming a partial corpus silently produces a confident, wrong report.')
+  log('ABORT: inventory did not reconcile against backlog_query\'s meta.total. Grooming a partial corpus silently produces a confident, wrong report.')
   log('Re-run with allowIncompleteInventory:true to proceed anyway (every count will be a LOWER BOUND).')
   return {
     aborted: true,
@@ -1165,19 +1180,24 @@ if ((SCOPE_PRIORITIES || SCOPE_KINDS) && fullItems.length > 0 && scopedItems.len
   )
 }
 const excludedHighPriority = fullItems.filter((it) => !passesScope(it) && (it.priority === 'CRITICAL' || it.priority === 'HIGH'))
-log(`inventory: ${fullItems.length} open total (${totalOpen} per backlog_stats), ${scopedItems.length} in scope for this run, ${excludedHighPriority.length} high/critical excluded by scoping`)
+log(`inventory: ${fullItems.length} open total (${totalOpen} per backlog_query meta.total), ${scopedItems.length} in scope for this run, ${excludedHighPriority.length} high/critical excluded by scoping`)
 
 // --------------------------------------------------------------------------
-// phase 2 — product triage & flag, one agent per family cluster
+// phase 2 — product triage & flag, one agent per (repo, kind) cluster
 // --------------------------------------------------------------------------
 phase('Triage & Flag')
 const MAX_TRIAGE_CLUSTER = 15
-// PACK to MAX_TRIAGE_CLUSTER using family only as an affinity/sort key. The old
-// code emitted one cluster per distinct family and then chunked, which on this
-// corpus (long descriptive humanIds -> 85% singleton families) produced 234
-// clusters for 354 items instead of 24.
-const triageClusters = packByAffinity(scopedItems, MAX_TRIAGE_CLUSTER, (it) => `${it.repo}|${familyOf(it.humanId)}`)
-  .map((chunk, i) => ({ clusterLabel: `T${i + 1}:${chunk[0].repo}|${familyOf(chunk[0].humanId)}`, items: chunk }))
+// PACK to MAX_TRIAGE_CLUSTER using (repo, kind) only as an affinity/sort key — `kind`
+// is chosen because it is part of the cheap default get/query card (uid, title, kind,
+// status, priority), so this costs no extra read to populate. (Under the earlier
+// human-readable id scheme, clustering was keyed on a family prefix derived from the
+// id itself; that concept does not exist under global uid identity — there is no
+// prefix to derive it from. Under the old scheme, one cluster per distinct family and
+// then chunking produced 234 clusters for 354 items instead of 24: 85% of families
+// were singletons on that corpus, so packByAffinity's PACKING — not merely the
+// affinity key — is what keeps cluster counts sane.)
+const triageClusters = packByAffinity(scopedItems, MAX_TRIAGE_CLUSTER, (it) => `${it.repo}|${it.kind}`)
+  .map((chunk, i) => ({ clusterLabel: `T${i + 1}:${chunk[0].repo}|${chunk[0].kind}`, items: chunk }))
 log(`triage: ${scopedItems.length} items -> ${triageClusters.length} clusters (avg ${(scopedItems.length / Math.max(1, triageClusters.length)).toFixed(1)} items/cluster, cap ${MAX_TRIAGE_CLUSTER})`)
 
 const triageRaw = await pipeline(triageClusters, (cluster) => agent(triagePrompt(cluster.clusterLabel, cluster.items), {
@@ -1204,7 +1224,7 @@ if (!triageResults.length) {
 const triageUnresolved = collectUnresolved(triageResults)
 if (triageUnresolved.length) {
   log(`FABRICATION TRIPWIRE: ${triageUnresolved.length} assigned id(s) did not resolve in the graph — excluded from routing.`)
-  for (const u of triageUnresolved.slice(0, 8)) log(`   unresolved: ${u.repo || '?'}::${u.humanId} — ${String(u.error).slice(0, 120)}`)
+  for (const u of triageUnresolved.slice(0, 8)) log(`   unresolved: ${u.repo || '?'}::${u.uid} — ${String(u.error).slice(0, 120)}`)
 }
 auditPersistence(triageResults, 'triage')
 if (triageResults.length !== triageClusters.length) {
@@ -1219,26 +1239,27 @@ log(`triage complete: ${allDecisions.length} decisions (${allDecisions.filter((d
 phase('Lanes')
 const MAX_LANE_CLUSTER = 8
 
-// Index the full inventory rows by humanId so a lane packet can be built from the
+// Index the full inventory rows by uid so a lane packet can be built from the
 // item's OWN data (citations, body) rather than the thin triage decision. File
 // reservations are derived from that data — a decision object has no body to read.
-const itemByKey = new Map(scopedItems.map((it) => [`${it.repo}||${it.humanId}`, it]))
+const itemByKey = new Map(scopedItems.map((it) => [it.uid, it]))
 
 // CONSOLIDATION — group by overlapping file reservations BEFORE the architect
 // sees them, so one architect owns every item touching a given file and writes one
-// coherent spec. Previously the architect lane clustered by humanId family, which
-// is orthogonal to what the work touches: two items editing the same file landed
-// with two different architects, who then produced independent (and potentially
-// contradictory) specs for the same lines. Wave planning caught the file collision
-// only afterwards, at scheduling time — far too late to merge the specs.
-//
-// The debugger lane is NOT consolidated this way: "is this premise still true?" is
-// a per-item question with no cross-item coupling, so family affinity is fine there.
+// coherent spec. Previously the architect lane clustered by a family prefix derived
+// from the old human-readable id scheme (no longer possible under global uid
+// identity, which has no prefix to derive), which was orthogonal to what the work
+// touches anyway: two items editing the same file landed with two different
+// architects, who then produced independent (and potentially contradictory) specs
+// for the same lines. Wave planning caught the file collision only afterwards, at
+// scheduling time — far too late to merge the specs. Both the architect and debugger
+// lanes below use the same file-reservation consolidation (see the debugger-specific
+// rationale a few lines down) — neither is clustered by a bare affinity key alone.
 function buildLaneClusters(route) {
   const all = allDecisions.filter((d) => d.route === route)
   // Disqualify on markers the items ALREADY carry, before paying an agent to look.
   const decisions = all.filter((d) => {
-    const item = itemByKey.get(`${d.repo}||${d.humanId}`)
+    const item = itemByKey.get(d.uid)
     if (!item) return true // unknown to inventory: let the lane decide, don't silently drop
     if (route === 'debugger') return needsDebugger(item)
     return needsArchitect(item)
@@ -1249,9 +1270,9 @@ function buildLaneClusters(route) {
       (route === 'debugger' ? 'kind has no verifiable premise' : 'already attached to a plan') + `)`)
   }
   const enriched = decisions.map((d) => {
-    const item = itemByKey.get(`${d.repo}||${d.humanId}`) || {}
+    const item = itemByKey.get(d.uid) || {}
     return {
-      humanId: d.humanId, repo: d.repo, kind: d.kind, title: d.title,
+      uid: d.uid, repo: d.repo, kind: d.kind, title: d.title,
       possiblyDecayed: d.possiblyDecayed, routeReason: d.routeReason,
       body: item.body, citations: item.citations, plan: item.plan, priority: item.priority,
     }
@@ -1267,7 +1288,7 @@ function buildLaneClusters(route) {
   // the same commit — which is invisible when they are scattered across agents.
   if (route === 'debugger') {
     return consolidateByReservations(enriched, MAX_LANE_CLUSTER).map((pk, i) => ({
-      clusterLabel: `D${i + 1}:${pk.reason}:${pk.items[0].repo}|${familyOf(pk.items[0].humanId)}`,
+      clusterLabel: `D${i + 1}:${pk.reason}:${pk.items[0].repo}|${pk.items[0].kind}`,
       items: pk.items,
       reservedFiles: pk.files,
       consolidationReason: pk.reason,
@@ -1276,7 +1297,7 @@ function buildLaneClusters(route) {
 
   const prefix = route === 'devops' ? 'V' : 'A'
   return consolidateByReservations(enriched, MAX_LANE_CLUSTER).map((pk, i) => ({
-    clusterLabel: `${prefix}${i + 1}:${pk.reason}:${pk.items[0].repo}|${familyOf(pk.items[0].humanId)}`,
+    clusterLabel: `${prefix}${i + 1}:${pk.reason}:${pk.items[0].repo}|${pk.items[0].kind}`,
     items: pk.items.map(({ body, citations, ...rest }) => rest),
     reservedFiles: pk.files,
     consolidationReason: pk.reason,
@@ -1345,7 +1366,7 @@ if (rawHandbacks.length) {
     chunkArray(hs, MAX_CORRECTION_CHUNK).forEach((chunk, i) => {
       correctionJobs.push({
         route, clusterLabel: `REROUTE-${route}#${i + 1}`,
-        items: chunk.map((h) => ({ humanId: h.humanId, repo: h.repo, handbackReason: h.reason })),
+        items: chunk.map((h) => ({ uid: h.uid, repo: h.repo, handbackReason: h.reason })),
       })
     })
   }
@@ -1374,7 +1395,7 @@ if (rawHandbacks.length) {
   // unbounded reroute loop is worse than an unrouted item. Surface and count it.
   secondRoundHandbacks = correctionResults.flatMap((r) => (r && r.handbacks) || [])
   if (secondRoundHandbacks.length) {
-    log(`WARNING: ${secondRoundHandbacks.length} item(s) were handed back a SECOND time after rerouting — two lanes disagree on who owns them. Not re-dispatching again; these are counted as unresolved and need a human routing call: ${secondRoundHandbacks.map((h) => h.humanId || '(unknown id)').join(', ')}`)
+    log(`WARNING: ${secondRoundHandbacks.length} item(s) were handed back a SECOND time after rerouting — two lanes disagree on who owns them. Not re-dispatching again; these are counted as unresolved and need a human routing call: ${secondRoundHandbacks.map((h) => h.uid || '(unknown id)').join(', ')}`)
   }
   debugResultsCorrection = correctionResults.filter((r) => r && r.verdicts)
   architectResultsCorrection = correctionResults.filter((r) => r && r.lane === 'architect')
