@@ -528,6 +528,9 @@ importers:
 
   entrypoint/backlog:
     dependencies:
+      '@adhd/apigen-base-logical':
+        specifier: ^0.1.1
+        version: link:../../packages/apigen/apigen-base-logical
       '@adhd/apigen-core-client':
         specifier: ^0.3.0
         version: link:../../packages/apigen/apigen-core-client
