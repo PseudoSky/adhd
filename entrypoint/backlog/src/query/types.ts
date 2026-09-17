@@ -141,7 +141,14 @@ export interface IIssueCard {
   _vector?: number[];
 }
 
-export interface IIssueGetInput {
+/**
+ * `get`'s uid-addressed shape (SPEC.md §6.3.1/§6.5/AC-13) — the implementation
+ * layer's {@link getIssue} (`get.ts`) takes exactly this, never the mounted
+ * union below. Named `...ByUidInput` (rather than reusing the bare
+ * `IIssueGetInput` name) because the MOUNTED `get` verb (`api.ts`) also
+ * accepts the registry-detail shape (§3a/AC-11) — see {@link IIssueGetInput}.
+ */
+export interface IIssueGetByUidInput {
   uid: IssueUid;
   fields?: readonly IIssueField[];
 }
@@ -165,6 +172,17 @@ export interface IIssueFilter {
   semantic?: string;
   /** Item-anchored similarity/traversal seed (§6.1) — uid of the reference item. */
   anchor?: string;
+  /**
+   * uid or name of the parent `issue` this one is filed under via the `part_of`
+   * edge (SPEC.md §1052/§1471: a plan is itself an `issue` row, not a
+   * dedicated node kind — attaching an item to it is
+   * `relate(childUid, planUid, 'part_of', 'add')`). Resolves candidate issues
+   * by the incoming `part_of` edge into the resolved plan node, exactly like
+   * the `project`/`component` edge-scoped filters.
+   */
+  plan?: string;
+  /** `component.meta.path` (repo-relative package path, SPEC.md §3) — exact match against every live `component` row, unioned across matches. Distinct from `component`, which takes a uid/name rather than a filesystem path. */
+  projectPath?: string;
   closedAt?: { since?: string; until?: string };
   createdAt?: { since?: string; until?: string };
   updatedAt?: { since?: string; until?: string };
@@ -172,7 +190,15 @@ export interface IIssueFilter {
 
 export type IIssueSort = 'priority' | 'updated' | 'created' | 'relevance' | 'textMatch';
 export type IIssueSortDirection = 'asc' | 'desc';
-export type IIssueView = 'list' | 'ready' | 'graph' | 'order' | 'stale' | 'similar' | 'overlap';
+/**
+ * `projects`/`components`/`locations` (SPEC.md §3a/§9 AC-9) are the registry
+ * LIST views — every live `project`/`component`/`location` row, optionally
+ * narrowed by `filter.project` (and, for `locations`, `filter.component`) —
+ * routed to `views/registry.ts`'s `listProjects`/`listComponents`/
+ * `listLocations`, distinct from the issue-search views above (§6.1:
+ * "conflating the two would be wrong").
+ */
+export type IIssueView = 'list' | 'ready' | 'graph' | 'order' | 'stale' | 'similar' | 'overlap' | 'projects' | 'components' | 'locations';
 export type IIssueQueryFormat = 'json' | 'markdown';
 
 /** SPEC.md §5, §6.1's `axis` — the grouping dimension for `overlapUids` (§6.2). */
@@ -258,7 +284,10 @@ export type IIssueQueryResult =
   | { view: 'order'; order: ITopoOrderResult }
   | { view: 'stale'; items: IIssueCard[] }
   | { view: 'similar'; items: IIssueCard[] }
-  | { view: 'overlap'; groups: IOverlapGroup[] };
+  | { view: 'overlap'; groups: IOverlapGroup[] }
+  | { view: 'projects'; items: IProjectSummary[] }
+  | { view: 'components'; items: IComponentSummary[] }
+  | { view: 'locations'; items: ILocationSummary[] };
 
 // ---------------------------------------------------------------------------
 // §3a registry read surface (project / component / location)
@@ -317,3 +346,62 @@ export interface ILookupResult {
   /** Present when only a partial (project-level, or path-prefix) match was found — never a silent null (§3a). */
   hint?: string;
 }
+
+/**
+ * `get`'s registry-detail shape (SPEC.md §3a/§9 AC-11) — `get --input
+ * '{"registry":"project"|"component"|"location","name":...}'`, routed to
+ * `views/registry.ts`'s `getRegistryDetail`. `filter` is honoured ONLY for
+ * `registry:'component'` (SPEC.md §6.1's project-scoping rule — `name` alone
+ * is ambiguous across projects, e.g. every project's reserved `(root)`
+ * component shares the same name, §9 AC-23) and is ignored for `project`/
+ * `location` (a location has no independent name at all — it is always
+ * resolved by uid, §3a).
+ */
+export interface IIssueGetRegistryInput {
+  registry: 'project' | 'component' | 'location';
+  name: string;
+  filter?: IRegistryQueryFilter;
+}
+
+/**
+ * The MOUNTED `get` verb's input (`api.ts`) — either the uid-addressed issue
+ * card ({@link IIssueGetByUidInput}, SPEC.md §6.3.1/AC-13, UNCHANGED) or the
+ * registry-detail lookup ({@link IIssueGetRegistryInput}, §3a/AC-11). The two
+ * shapes are structurally disjoint (`uid` vs. `registry`+`name`), which is
+ * what lets `api.ts`'s `get` narrow on `'registry' in input` and is also what
+ * keeps apigen's undiscriminated-union structural encoder
+ * (`pickUnionBranch`/`scoreUnionBranch`, `@adhd/apigen-base-logical`) from
+ * ever conflating the two: each branch's OWN required-key set immediately
+ * disqualifies the other (a uid-input has no `registry`/`name`; a
+ * registry-input has no `uid`).
+ */
+export type IIssueGetInput = IIssueGetByUidInput | IIssueGetRegistryInput;
+
+/**
+ * The MOUNTED `get` verb's result — the plain issue card ({@link IIssueCard},
+ * exactly the five-field default per AC-13 when `uid` was given) or one of
+ * the three registry detail shapes (§3a/AC-11). Same structural-disjointness
+ * reasoning as {@link IIssueGetInput} above: `IIssueCard` requires only
+ * `uid`, while every registry detail type requires several fields NONE of
+ * the others (nor `IIssueCard`) declare (`IProjectDetail`:
+ * `components`+`locations`; `IComponentDetail`: `projectUid`+`project`;
+ * `ILocationDetail`: `locType`+`value`+`componentUid`+`component`+`project`)
+ * — a missing required key disqualifies a branch outright in
+ * `scoreUnionBranch`, so the four branches can never tie.
+ *
+ * NOTE (BUG-APIGEN-CORE-CLIENT-BARE-NAME-COLLISION-001, now fixed at the
+ * source): putting `query/types.ts`'s `IIssueCard` at a top-level
+ * operation-return position here (for the first time) exposed a real
+ * apigen-core-client extraction defect — `write/create-issue.ts` ALSO
+ * exported an interface bare-named `IIssueCard` (differently shaped:
+ * `title`/`kind`/`status`/`project`/`component`/`createdAt` required there,
+ * vs. only `uid` here), and the extractor's declaration resolution collided
+ * on the bare name across the whole extracted program, non-deterministically
+ * substituting the wrong shape into `query`'s `items` schema (confirmed
+ * empirically: `dist/index.js` resolved it to the wrong, stricter shape;
+ * `dist/index.mjs`, built from the identical source in the same pass, failed
+ * to resolve it at all). Fixed by renaming `write/create-issue.ts`'s
+ * interface to `ICreateIssueCard` — see that file's doc comment for the full
+ * repro — so no workaround is needed here; this type is plain `IIssueCard`.
+ */
+export type IIssueGetResult = IIssueCard | IProjectDetail | IComponentDetail | ILocationDetail;

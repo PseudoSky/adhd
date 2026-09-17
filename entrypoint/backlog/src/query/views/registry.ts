@@ -103,7 +103,13 @@ export async function listLocations(graph: GraphBackend, filter?: IRegistryQuery
  * `get --input '{"registry":"project"|"component"|"location", "name":...}'`
  * (§3a) — expanded detail. `name` accepts a uid or a name (project/component)
  * per SPEC.md §6.1's shape-disambiguation rule; a location has no independent
- * `name`, so it is looked up by uid only.
+ * `name`, so it is looked up by uid only. `filter.project` scopes the
+ * `component` case (SPEC.md §6.1/§9 AC-23: a bare component NAME is
+ * ambiguous across projects — every project's reserved `(root)` component
+ * shares the same name — so `filter.project` disambiguates exactly like
+ * `listComponents`' own `filter.project`); omitted, `component` resolves
+ * against the first live component matching `name` in ANY project, same as
+ * before this parameter existed.
  */
 export async function getRegistryDetail(
   graph: GraphBackend,
@@ -111,7 +117,7 @@ export async function getRegistryDetail(
 ): Promise<IProjectDetail>;
 export async function getRegistryDetail(
   graph: GraphBackend,
-  input: { registry: 'component'; name: string },
+  input: { registry: 'component'; name: string; filter?: IRegistryQueryFilter },
 ): Promise<IComponentDetail>;
 export async function getRegistryDetail(
   graph: GraphBackend,
@@ -119,7 +125,7 @@ export async function getRegistryDetail(
 ): Promise<ILocationDetail>;
 export async function getRegistryDetail(
   graph: GraphBackend,
-  input: { registry: 'project' | 'component' | 'location'; name: string },
+  input: { registry: 'project' | 'component' | 'location'; name: string; filter?: IRegistryQueryFilter },
 ): Promise<IProjectDetail | IComponentDetail | ILocationDetail> {
   if (input.registry === 'project') {
     const project = await tryResolveRef(graph, 'project', input.name);
@@ -145,7 +151,19 @@ export async function getRegistryDetail(
   }
 
   if (input.registry === 'component') {
-    const component = await tryResolveRef(graph, 'component', input.name);
+    // `filter.project` disambiguates a bare NAME across projects (§6.1/§9
+    // AC-23 — e.g. every project's reserved `(root)` component shares the
+    // same name); a uid-shaped `name` is already unambiguous and does not
+    // need it, but `tryResolveComponentRef` handles that case identically to
+    // `tryResolveRef` (both check-then-return, same shape).
+    const scopeProjectRef = input.filter?.project;
+    const component = scopeProjectRef !== undefined
+      ? await (async () => {
+        const scopeProject = await tryResolveRef(graph, 'project', scopeProjectRef);
+        if (!scopeProject) throw new CatalogNotFoundError('project', scopeProjectRef);
+        return tryResolveComponentRef(graph, scopeProject.uid, input.name);
+      })()
+      : await tryResolveRef(graph, 'component', input.name);
     if (!component) throw new CatalogNotFoundError('component', input.name);
     const projectUid = typeof component.record.metadata?.projectUid === 'string' ? component.record.metadata.projectUid : undefined;
     // `getNodeByUid` has no `liveOnly` filter (unlike `getNodesByIds`), so an

@@ -53,11 +53,26 @@
 /** Top-level `IBacklogQueryInput` keys this shortcut exposes as flags. */
 const SCALAR_TOP_LEVEL_FLAGS = ['limit', 'offset', 'sort', 'direction'] as const;
 
-/** `IBacklogFilter` keys exposed as single-valued flags. */
+/**
+ * `IBacklogFilter` keys exposed as single-valued flags.
+ *
+ * `repo`, `family`, and `tag` (formerly here) were removed, not wired: none
+ * of the three has a persisted, filterable datum anywhere in this package's
+ * write layer. SPEC.md is explicit on all three — `repo` was superseded by
+ * `project` and is "not part of the surface as an addressing key" (§ "repo
+ * as an addressing key on every verb"); `family` is "not part of the
+ * surface... there is no id to parse a prefix from" (same table); `tags`
+ * has "no field in this spec... folded into the audit note" (§ field
+ * mapping table). Advertising a flag whose filter key `IIssueFilter` (query/types.ts) does
+ * not declare made the apigen-derived schema reject it before any query
+ * ran — see this repo's search-shortcut defect report. `plan` and
+ * `project-path` stayed: both resolve to a real, persisted, filterable
+ * datum (`part_of` edge to a plan issue; `component.meta.path`
+ * respectively) and are now wired in `IIssueFilter`/`buildMetadataFilter`'s
+ * sibling `resolveEdgeScopedFilterIds`.
+ */
 const SCALAR_FILTER_FLAGS = [
-  'repo',
   'kind',
-  'family',
   'plan',
   'assignee',
   'claimed-by',
@@ -68,15 +83,15 @@ const SCALAR_FILTER_FLAGS = [
 
 /**
  * `IBacklogFilter` keys that accept a LIST. Each is comma-splittable in one
- * token AND repeatable across tokens (`--tag a --tag b` ≡ `--tag a,b`), which
- * is the union of the two conventions a caller might reach for.
+ * token AND repeatable across tokens, which is the union of the two
+ * conventions a caller might reach for.
  *
  * `status` and `priority` collapse to a bare string when exactly one value is
  * given: `IStatusSelector` is `IStatusClosedness | BacklogStatus |
  * BacklogStatus[]`, so `--status open` must stay the scalar closedness word
  * `"open"` rather than becoming `["open"]` (which is not a `BacklogStatus`).
  */
-const LIST_FILTER_FLAGS = ['status', 'priority', 'tag'] as const;
+const LIST_FILTER_FLAGS = ['status', 'priority'] as const;
 
 /** Flags whose single value is a comma-separated projection list (`IProjection.fields`). */
 const LIST_TOP_LEVEL_FLAGS = ['fields'] as const;
@@ -85,7 +100,6 @@ const LIST_TOP_LEVEL_FLAGS = ['fields'] as const;
 const FILTER_KEY_ALIASES: Readonly<Record<string, string>> = {
   'claimed-by': 'claimedBy',
   'project-path': 'projectPath',
-  tag: 'tags',
 };
 
 /**
@@ -134,13 +148,10 @@ export const SEARCH_HELP = [
   '  --status <s>       open | closed | OPEN,IN_PROGRESS | …',
   '  --priority <p>     CRITICAL | HIGH | MEDIUM | LOW (comma-separated for several)',
   '  --kind <k>         BUG | DEBT | FEAT | …',
-  '  --family <f>       the item\'s family prefix, e.g. BUG-APIGEN',
-  '  --repo <r>         repo key',
-  '  --project-path <p> package-relative path within the repo',
-  '  --plan <slug>      plan slug',
+  '  --project-path <p> component\'s repo-relative path (component.meta.path)',
+  '  --plan <uid|title> the parent plan issue this item is filed under (part_of)',
   '  --assignee <a>     durable owner',
   '  --claimed-by <c>   ephemeral claim holder',
-  '  --tag <t>          repeatable, or comma-separated',
   '  --grep <q>         extra keyword predicate. Composes with the query text ONLY',
   '                     once the embedding space is populated — without it the query',
   '                     text IS the keyword query and the two collide (§2.1b step 1).',

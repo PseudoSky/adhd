@@ -52,7 +52,7 @@ describe('buildSearchArgv — translation onto the mounted `query` verb', () => 
 
   it('routes top-level flags to the top level and filter flags into `filter`', () => {
     const input = inputOf(
-      buildSearchArgv(['stale claims', '--limit', '5', '--offset', '10', '--sort', 'priority', '--direction', 'asc', '--repo', 'PseudoSky/adhd', '--kind', 'BUG'])
+      buildSearchArgv(['stale claims', '--limit', '5', '--offset', '10', '--sort', 'priority', '--direction', 'asc', '--plan', 'PLAN-9', '--kind', 'BUG'])
     );
     expect(input).toEqual({
       limit: 5,
@@ -60,7 +60,7 @@ describe('buildSearchArgv — translation onto the mounted `query` verb', () => 
       sort: 'priority',
       direction: 'asc',
       text: 'stale claims',
-      filter: { repo: 'PseudoSky/adhd', kind: 'BUG' },
+      filter: { plan: 'PLAN-9', kind: 'BUG' },
     });
   });
 
@@ -88,13 +88,6 @@ describe('buildSearchArgv — translation onto the mounted `query` verb', () => 
   it('--fields is a comma-separated projection list', () => {
     const input = inputOf(buildSearchArgv(['x', '--fields', 'uid,title,_score']));
     expect(input['fields']).toEqual(['uid', 'title', '_score']);
-  });
-
-  it('--tag is repeatable AND comma-splittable, and the two forms agree', () => {
-    const repeated = inputOf(buildSearchArgv(['x', '--tag', 'a', '--tag', 'b']));
-    const commaJoined = inputOf(buildSearchArgv(['x', '--tag', 'a,b']));
-    expect((repeated['filter'] as Record<string, unknown>)['tags']).toEqual(['a', 'b']);
-    expect(commaJoined).toEqual(repeated);
   });
 
   it('a LONE --status stays a scalar (IStatusSelector closedness), several become an array', () => {

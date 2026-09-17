@@ -34,6 +34,19 @@ import { openTestIssueStore } from '../helpers/open-test-issue-store.js';
 const [, , dbPath, tag, nRaw, projectUid, root] = process.argv;
 const n = Number(nRaw);
 
+/**
+ * `ADHD_TEST_CROSS_PROCESS_BODY_MODE` — negative/positive-control switch,
+ * test-only. `'same'` (default, unset) is the DELIBERATE, deterministic
+ * collision documented below: every one of the `2*n` calls across BOTH
+ * processes writes the identical `body`, exercising the harder same-target
+ * case. `'distinct'` gives every call its OWN unique body (per `tag`+`i`,
+ * already-unique the same way `title` is below) — a genuine no-forced-
+ * collision case proving the write path is safe when there is no shared
+ * content-hash target to even theoretically collide on, per SPEC.md §9
+ * AC-22's "both the same-target and distinct-target cases" wording.
+ */
+const bodyMode = process.env['ADHD_TEST_CROSS_PROCESS_BODY_MODE'] === 'distinct' ? 'distinct' : 'same';
+
 async function waitForGo(): Promise<void> {
   const go = join(root, 'GO');
   const deadline = Date.now() + 30000;
@@ -60,19 +73,23 @@ async function main(): Promise<void> {
         // content-hash dedupe key (`content_hash` hashes `content`/`body`
         // only, `write/tx.ts`'s `writeNodeTx`).
         title: `${tag}-${i}`,
-        // DELIBERATE, deterministic collision — never per-index, never
-        // per-tag. Every one of the 2*n calls across BOTH processes writes
-        // this EXACT SAME body, so every issue node's content hashes
-        // IDENTICALLY. Under the production default (dedupe off,
-        // `ADHD_BACKLOG_UNSAFE_DEDUPE_MODE` unset), that collision is inert —
-        // `skipDedupe: true` makes every call insert its own fresh row
-        // regardless of content, which is exactly what the CONTROL test
-        // proves (2*n distinct rows persist). Under the dedupe negative
-        // control (`ADHD_BACKLOG_UNSAFE_DEDUPE_MODE=on`), this SAME
+        // `bodyMode === 'same'` (the default): a DELIBERATE, deterministic
+        // collision — never per-index, never per-tag. Every one of the 2*n
+        // calls across BOTH processes writes this EXACT SAME body, so every
+        // issue node's content hashes IDENTICALLY. Under the production
+        // default (dedupe off, `ADHD_BACKLOG_UNSAFE_DEDUPE_MODE` unset), that
+        // collision is inert — `skipDedupe: true` makes every call insert its
+        // own fresh row regardless of content, which is exactly what the
+        // CONTROL test proves (2*n distinct rows persist). Under the dedupe
+        // negative control (`ADHD_BACKLOG_UNSAFE_DEDUPE_MODE=on`), this SAME
         // collision is what the test exists to exploit: it collapses every
         // call — across BOTH processes — onto the ONE row whichever call
         // happens to insert first, while every caller still gets `ok:true`.
-        body: 'cross-process-write-safety probe',
+        // `bodyMode === 'distinct'`: every call's body is unique — no forced
+        // collision at all, proving the write path persists exactly 2*n rows
+        // even with zero shared content-hash target (SPEC.md §9 AC-22's
+        // "distinct-target" case).
+        body: bodyMode === 'distinct' ? `cross-process-write-safety probe ${tag}-${i}` : 'cross-process-write-safety probe',
         // A SHARED identity across BOTH writers, not `writer:${tag}` — this
         // is a fixture-correctness requirement of the dedupe negative
         // control, not a stylistic choice. `authored_by` is declared `n:1`

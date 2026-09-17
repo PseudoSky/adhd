@@ -127,7 +127,10 @@ async function seedFixture(handle: Pick<IWriteStoreHandle, 'adapter' | 'typePoli
     const locUrlBacklog = await location('url', 'https://github.com/acme/adhd/blob/main/entrypoint/backlog', componentBacklog.uid);
     await hasLocation(componentBacklog, locUrlBacklog);
 
-    const projectB = await project('sox-ecosystem', { path: '/repo/sox-ecosystem' });
+    const projectB = await project('sox-ecosystem', {
+      path: '/repo/sox-ecosystem',
+      repoUrl: 'git@github.com:acme/sox-ecosystem.git',
+    });
     const componentRootB = await component('(root)', projectB.uid, { path: '.' });
     await ownsProject(projectB, componentRootB);
     const componentMemoryServer = await component('memory-server', projectB.uid, {
@@ -344,6 +347,8 @@ describe('registry views + lookup (SPEC.md §3a)', () => {
     it('resolves a tool query to its full chain', async () => {
       const result = await lookup(store.graph, 'memory_ping');
       expect(result.project.name).toBe('sox-ecosystem');
+      expect(result.project.path).toBe('/repo/sox-ecosystem');
+      expect(result.project.repoUrl).toBe('git@github.com:acme/sox-ecosystem.git');
       expect(result.component?.name).toBe('memory-server');
       expect(result.location?.locType).toBe('tool');
       expect(result.location?.value).toBe('memory_ping');

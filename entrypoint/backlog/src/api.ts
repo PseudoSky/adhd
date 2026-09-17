@@ -70,7 +70,7 @@ import {
 import { bootstrapSemanticStoreMembers } from './write/bootstrap.js';
 
 import { getIssue } from './query/get.js';
-import { lookup as lookupRegistry } from './query/views/registry.js';
+import { getRegistryDetail, lookup as lookupRegistry } from './query/views/registry.js';
 import { createIssue, type IDuplicateScanHandle } from './write/create-issue.js';
 import { update as updateIssueOp } from './write/update.js';
 import { transition as transitionIssueOp } from './write/transition.js';
@@ -88,6 +88,7 @@ import {
 import type {
   IIssueCard,
   IIssueGetInput,
+  IIssueGetResult,
   IIssueQueryInput,
   IIssueQueryResult,
   ILookupResult,
@@ -284,8 +285,19 @@ async function envelope<T>(run: () => Promise<T>): Promise<IOutcomeEnvelope<T>> 
  * Defaults to the same five-field card `query` returns
  * (`uid`, `kind`, `title`, `status`, `priority`).
  */
-export async function get(ctx: BacklogCtx, input: IIssueGetInput): Promise<IOutcomeEnvelope<IIssueCard>> {
-  return envelope(() => getIssue(ctx.store.graph, input));
+export async function get(ctx: BacklogCtx, input: IIssueGetInput): Promise<IOutcomeEnvelope<IIssueGetResult>> {
+  return envelope<IIssueGetResult>(() => {
+    if ('registry' in input) {
+      if (input.registry === 'project') {
+        return getRegistryDetail(ctx.store.graph, { registry: 'project', name: input.name });
+      }
+      if (input.registry === 'component') {
+        return getRegistryDetail(ctx.store.graph, { registry: 'component', name: input.name, filter: input.filter });
+      }
+      return getRegistryDetail(ctx.store.graph, { registry: 'location', name: input.name });
+    }
+    return getIssue(ctx.store.graph, input);
+  });
 }
 
 /**
