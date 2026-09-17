@@ -11,13 +11,20 @@
  * SCOPE (decided in TASKS.md F6): `src/` only — the code that ships.
  *
  * Deliberately OUT of scope, and why:
- *  - `tools/etl/**` + the frozen corpus JSONL fixtures. These are the ETL
- *    parity gate's own reference data, captured from the pre-cutover corpus.
- *    `corpus-types.ts` carries a literal `humanId` fixture key because the
- *    source records literally had one; `run-etl.spec.ts` already asserts it
- *    never leaks past the boundary. Regenerating them would churn the very
- *    fixtures that prove the ETL correct.
  *  - `SPEC.md` / docs. Handled by a docs rewrite, not by grep.
+ *  - This file and `scripts/check-vocabulary.mjs`. Both necessarily spell the
+ *    banned terms out, because the terms ARE their regexes. They live under
+ *    `tools/`/`scripts/`, neither of which is scanned or packed.
+ *
+ * The one-shot corpus loader under `tools/etl/**` used to be excluded here,
+ * for its frozen pre-cutover fixtures. It no longer exists — the loader was
+ * retired once parity was proven — so there is nothing left to exempt, and
+ * `src/` is now the whole of what this gate needs to reach.
+ *
+ * Its sibling `scripts/check-vocabulary.mjs` scans the PACKED TARBALL instead,
+ * which is what catches the leak a source-tree gate structurally cannot: a
+ * `.d.ts` reproduces its source doc comments verbatim, so a banned term can
+ * reach a consumer through generated output that never appears in `src/`.
  *
  * Run: node tools/gate/vocabulary-gate.mjs   (exit 0 clean, 1 dirty)
  */
