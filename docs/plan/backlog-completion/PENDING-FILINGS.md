@@ -81,27 +81,40 @@ Citations: [sox-ecosystem, sox:typescript-pro, claude, graph-store isSuperseded 
 1: scripts/cascade-plan.ts (docstring), 2: libs/data/graph/hybrid-search/package.json,
 3: libs/memory/memory-core/package.json]
 
-## 4. `registry/index.json` checksums drift ahead of npm, holding the smoke gate red
+## 4. `build-index` checksums the LOCAL artifact for `npm-package:` sources, so smoke can never pass
 
-`bug` / `medium` / project `sox-ecosystem`
+`bug` / `high` / project `sox-ecosystem`
 
-`node scripts/smoke-test.mjs` is red (4 passed, 9 failed) with root cause
-`CHECKSUM MISMATCH for source "npm-package:@adhd/sox-extension-memory-server@1.3.3"`:
-the working tree records a locally-rebuilt `sha256:803ed04…` while published 1.3.3
-carries `sha256:6a4168d7…`. `registry/index.json` has been uncommitted since
-2026-09-14 17:02 — predating this session's commits — and is the only dirty file.
+`resolveChecksum` always hashes the local built artifact — `manifest.entrypoint`,
+else `dist/index.js`, else `prompt.md`, else `extension.json`[1] — with no branch on
+what kind of `source` the entry emits. But for a published extension the emitted
+source is `npm-package:@adhd/sox-extension-memory-server@1.3.3`, and the installer
+downloads that published tarball and compares it against the locally-derived hash.
+Those agree only if the local build is byte-identical to what was published.
 
-The structural problem: the smoke test installs the **published** tarball, so a
-locally-rebuilt checksum can never match until memory-server is republished at a new
-version — and memory-server sits inside the changesets cascade closure that the
-publish itself would produce. AGENTS.md makes 0 smoke failures a hard pre-merge gate
-for anything touching `libs/data/`, so that gate is only satisfiable *after* the
-irreversible step it is meant to guard. Mirrors the gate-ordering problem PUBLISHING.md
-already documents for `changeset version`.
+It is not, and cannot be relied upon to be. The expected checksum changed from
+`sha256:803ed04…` to `sha256:953cb7b8…` across two `build-index` runs on the same
+day with NO change to memory-server's source — a rebuild alone moved it. So
+republishing memory-server would re-align the two for exactly as long as it takes
+the next rebuild to run; it is not a durable fix. This is why `node
+scripts/smoke-test.mjs` has been red at 4 passed / 9 failed since 2026-09-14, every
+failure descending from the one CHECKSUM MISMATCH at bundle install.
 
-Citations: [sox-ecosystem, sox:typescript-pro, claude, graph-store isSuperseded work,
-1: registry/index.json, 2: dist/smoke/run-2026-09-17T03-20-42/log.json, 3: AGENTS.md
-(smoke-test pre-merge gate)]
+The file's own header already anticipates the right behaviour — "may fetch published
+artifacts to checksum them"[2] — but no code path does. The fix is for an
+`npm-package:` source to take its checksum from the published tarball (npm's own
+`dist.integrity` is authoritative and needs no download), leaving `file://` sources
+on the local-hash path they legitimately use.
+
+Not fixed here: it is release-tooling surgery in a second repo, outside the backlog
+scope this session was asked to finish, and it does not block the backlog work — the
+graph-store publish completed. Worth noting that AGENTS.md makes 0 smoke failures a
+hard pre-merge gate for anything touching `libs/data/`, so this defect currently
+blocks that gate for every such change.
+
+Citations: [sox-ecosystem main, sox:typescript-pro, claude, graph-store isSuperseded
+work, 1: scripts/build-index.ts:332-357, 2: scripts/build-index.ts:12,
+3: dist/smoke/run-2026-09-17T14-26-27/log.json (tests[0].verdict_detail)]
 
 ## 5. The open-curve view double-counts an issue after every body edit
 
