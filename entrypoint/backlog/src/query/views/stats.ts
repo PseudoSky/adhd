@@ -242,6 +242,8 @@ export async function priorityMatrix(handle: IQueryStoreHandle, input: IPriority
     (await graph.queryNodes({
       kind: 'issue',
       liveOnly: true,
+      // Current rows only — see `queryList`'s `baseFilter` (query.ts).
+      isSuperseded: false,
       ...(rawScoped ? { ids: [...rawScoped] } : {}),
     } as NodeFilter)).map((n) => n.id),
   );

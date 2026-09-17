@@ -290,6 +290,13 @@ async function queryList(handle: IQueryStoreHandle, input: IIssueQueryInput): Pr
 
   const baseFilter: Record<string, unknown> = {
     kind: 'issue',
+    // Only the CURRENT row of each issue. A body edit supersedes the old
+    // node and deliberately leaves `t_invalid` NULL (SPEC §4c), so `liveOnly`
+    // alone still returns it and one edit would show the issue twice, forever.
+    // Pushed into SQL, never post-filtered: `countNodes` is computed in SQL and
+    // would keep reporting the inflated total, and keyset paging slices a
+    // `limit + 1` fetch, so dropping rows after the fetch yields SHORT pages.
+    isSuperseded: false,
     ...(candidateIds ? { ids: [...candidateIds] } : {}),
     ...(metadata ? { metadata } : {}),
     ...(input.filter?.createdAt?.since ? { tCreatedAfter: input.filter.createdAt.since } : {}),
@@ -498,6 +505,8 @@ async function queryStale(handle: IQueryStoreHandle, input: IIssueQueryInput): P
   const candidateIds = await resolveEdgeScopedFilterIds(graph, input.filter);
   const nodeFilter: Record<string, unknown> = {
     kind: 'issue',
+    // Current rows only — see `queryList`'s `baseFilter`.
+    isSuperseded: false,
     ...(candidateIds ? { ids: [...candidateIds] } : {}),
     metadata: { claimedBy: { exists: true }, claimedAt: { lt: threshold } },
     limit,
@@ -524,7 +533,8 @@ async function queryGraph(handle: IQueryStoreHandle, input: IIssueQueryInput): P
   const { graph } = handle;
   const limit = assertQueryLimit(input.limit ?? MAX_QUERY_LIMIT);
   const candidateIds = await resolveEdgeScopedFilterIds(graph, input.filter);
-  const nodeFilter: Record<string, unknown> = { kind: 'issue', ...(candidateIds ? { ids: [...candidateIds] } : {}), limit };
+  // Current rows only — see `queryList`'s `baseFilter`.
+  const nodeFilter: Record<string, unknown> = { kind: 'issue', isSuperseded: false, ...(candidateIds ? { ids: [...candidateIds] } : {}), limit };
   const issues = await graph.queryNodes(nodeFilter as unknown as NodeFilter);
   const idSet = new Set(issues.map((i) => i.id));
   const statuses = await resolveStatusMap(graph, issues);
@@ -564,7 +574,8 @@ async function queryOrder(handle: IQueryStoreHandle, input: IIssueQueryInput): P
   const { graph } = handle;
   const limit = assertQueryLimit(input.limit ?? MAX_QUERY_LIMIT);
   const candidateIds = await resolveEdgeScopedFilterIds(graph, input.filter);
-  const nodeFilter: Record<string, unknown> = { kind: 'issue', ...(candidateIds ? { ids: [...candidateIds] } : {}), limit };
+  // Current rows only — see `queryList`'s `baseFilter`.
+  const nodeFilter: Record<string, unknown> = { kind: 'issue', isSuperseded: false, ...(candidateIds ? { ids: [...candidateIds] } : {}), limit };
   const issues = await graph.queryNodes(nodeFilter as unknown as NodeFilter);
   const idSet = new Set(issues.map((i) => i.id));
   const uidById = new Map(issues.map((i) => [i.id, i.uid]));

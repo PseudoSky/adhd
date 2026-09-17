@@ -1,7 +1,7 @@
 // BUG-APIGEN-MCP-DISCOVERABILITY-001 — proves the schema-driven worked-example
 // synthesis (`@adhd/apigen-base-logical`'s `synthesizeExample`) against REAL
 // operation schemas from a real, already-built package in this repo
-// (`entrypoint/backlog`'s `dist/client.d.ts`), not synthetic test-only
+// (`entrypoint/backlog`'s `dist/api.d.ts`), not synthetic test-only
 // fixtures — for both calling conventions apigen produces:
 //   - a normal extracted operation, composed through `composeSchemas`, which
 //     wraps domain params in the `{data:{...}}` envelope (BUG-APIGEN-020), and
@@ -17,31 +17,38 @@
 // that "looks right".
 //
 // `entrypoint/backlog` is read-only here (never modified) — its already-built
-// `dist/client.d.ts` is the input to `extract()`, exactly mirroring
-// `entrypoint/backlog/src/server.ts`'s own `extractClientOperations()`.
+// `dist/api.d.ts` is the input to `extract()`, exactly mirroring
+// `entrypoint/backlog/src/server.ts`, which mounts the very same artifact
+// (`join(backlogDistDir(), 'api.d.ts')`). Reading the file the server itself
+// mounts is the point: a divergence between the two would mean this suite is
+// validating a surface no host ever serves.
 //
 // DELIBERATE DESIGN CHOICE — real package over a pinned fixture: this suite
-// used to hardcode three v1 verb names (`create-item`, `resolve-item`,
-// `get-item`). backlog's INTERFACE_v2 consolidation collapsed its whole
-// mounted surface to six verbs (`get`, `query`, `create`, `update`, `relate`,
-// `admin` — see `entrypoint/backlog/src/client.ts`), `resolve-item` has no v2
-// successor verb at all (resolution is now a mode of `update`), and the
-// hardcoded names broke. The fragile part was never "this test reads a real
-// package" — it was "this test hardcodes verb names owned by a package it
-// doesn't control." Pinning to a synthetic fixture instead would fix that
-// symptom by discarding the whole point of the file (see the header above):
-// it was driving REAL schemas from a REAL already-built package that found a
-// genuine cross-package bug (BUG-APIGEN-BATCH-DANGLING-REF-001, below) that a
-// hand-written fixture would never have exercised. So this suite now
-// iterates over WHATEVER `client.ts` currently exports — selected by
-// property (`operations.map(o => o.id)`), never by name — so a future
-// backlog verb rename/add/remove changes nothing here.
+// used to hardcode three verb names (`create-item`, `resolve-item`,
+// `get-item`). backlog renamed and consolidated its mounted surface, several
+// of those verbs ceased to exist as standalone operations, and the hardcoded
+// names broke. The fragile part was never "this test reads a real package" —
+// it was "this test hardcodes verb names owned by a package it doesn't
+// control." Pinning to a synthetic fixture instead would fix that symptom by
+// discarding the whole point of the file (see the header above): it was
+// driving REAL schemas from a REAL already-built package that found a genuine
+// cross-package bug (BUG-APIGEN-BATCH-DANGLING-REF-001, below) that a
+// hand-written fixture would never have exercised. So this suite now iterates
+// over WHATEVER `api.ts` currently exports — selected by property
+// (`operations.map(o => o.id)`), never by name — so a future backlog verb
+// rename/add/remove changes nothing here.
 import { describe, it, expect } from 'vitest';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
-import { synthesizeExample } from '@adhd/apigen-base-logical';
+import {
+  synthesizeExample,
+  X_APIGEN_LOGICAL,
+  X_APIGEN_CODEC,
+  X_APIGEN_CTOR,
+  X_APIGEN_TOJSON,
+} from '@adhd/apigen-base-logical';
 import { extract } from '../lib/extract';
 import { composeSchemas } from '../lib/compose-schemas';
 import { buildBatchKindSchema, deriveBatchOperationBranch } from '../lib/batch';
@@ -54,23 +61,44 @@ function makeAjv(): Ajv {
   // Mirrors apigen-engine-runtime/src/lib/validate-layer.ts's Ajv setup for
   // apigen's own logical-type formats not shipped by ajv-formats.
   ajv.addFormat('decimal', /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/);
-  // Mirrors validate-layer.ts's advisory-keyword registration — apigen's
-  // schema builders tag same-document union branches with an OpenAPI-style
-  // `discriminator` object (morph-walk.ts's InlineDiscriminator, used by
-  // e.g. buildBatchKindSchema); Ajv 8's strict mode otherwise rejects it as
-  // an unknown keyword at compile time.
-  ajv.addKeyword({ keyword: 'discriminator', valid: true });
+  // Mirrors validate-layer.ts's advisory-keyword registration — ALL FIVE of
+  // them, not just `discriminator`. apigen's schema builders
+  // (`schema-builders/nominal.ts`, `schema-builders/union.ts`) tag
+  // nominal/branded and union `$def`s with the advisory `x-apigen-*` keys, and
+  // tag same-document union branches with an OpenAPI-style `discriminator`
+  // object (morph-walk.ts's InlineDiscriminator, used by e.g.
+  // buildBatchKindSchema). Per DESIGN §4.1 `[inv:hints-advisory]` these are
+  // annotations Ajv never reads, but Ajv 8's default `strict: true` throws
+  // `strict mode: unknown keyword` at COMPILE time for any of them unless
+  // declared — which is precisely what BUG-APIGEN-030 was.
+  //
+  // Registering only `discriminator` made this helper a partial mirror that
+  // happened to compile for as long as the real package it reads exported no
+  // nominal/branded or union-typed parameter. That is a property of the other
+  // package's types, not of this suite, so it was never a safe thing to rely
+  // on: the moment backlog's real surface grew one, every case here failed on
+  // `x-apigen-logical` — an error the production validate-Layer, which
+  // registers all five, would never raise.
+  for (const keyword of [
+    X_APIGEN_LOGICAL,
+    X_APIGEN_CODEC,
+    X_APIGEN_CTOR,
+    X_APIGEN_TOJSON,
+    'discriminator',
+  ]) {
+    ajv.addKeyword({ keyword, valid: true });
+  }
   return ajv;
 }
 
-const BACKLOG_CLIENT_DTS = path.join(
+const BACKLOG_API_DTS = path.join(
   __dirname,
-  '../../../../../entrypoint/backlog/dist/client.d.ts'
+  '../../../../../entrypoint/backlog/dist/api.d.ts'
 );
 
-if (!fs.existsSync(BACKLOG_CLIENT_DTS)) {
+if (!fs.existsSync(BACKLOG_API_DTS)) {
   throw new Error(
-    `[mcp-discoverability.real-ops] ${BACKLOG_CLIENT_DTS} does not exist — ` +
+    `[mcp-discoverability.real-ops] ${BACKLOG_API_DTS} does not exist — ` +
       `run "nx build backlog" first (this test extracts real schemas from the built .d.ts, ` +
       `exactly like entrypoint/backlog/src/server.ts's extractClientOperations()).`
   );
@@ -81,7 +109,7 @@ if (!fs.existsSync(BACKLOG_CLIENT_DTS)) {
 // runs), and selecting by property instead of hardcoded name is the whole
 // point of this rewrite (see header comment).
 const operations: Operation[] = await extract({
-  sourceFile: BACKLOG_CLIENT_DTS,
+  sourceFile: BACKLOG_API_DTS,
   namespace: 'backlog',
   dropFileSegment: true,
 });
@@ -89,21 +117,21 @@ const operations: Operation[] = await extract({
 if (operations.length === 0) {
   throw new Error(
     '[mcp-discoverability.real-ops] extracted zero operations from the real backlog ' +
-      'dist/client.d.ts — nothing for this suite to validate against.'
+      'dist/api.d.ts — nothing for this suite to validate against.'
   );
 }
 
 describe('[mcp-discoverability.real-ops] synthesized examples validate against REAL repo schemas', () => {
-  it('extracted at least the v2 backlog surface (sanity floor, not a name list)', () => {
-    // INTERFACE_v2 collapsed backlog to six mounted verbs; this is a floor,
-    // not an exact-count pin, so a future seventh verb doesn't break it.
+  it('extracted a real backlog surface (sanity floor, not a name list)', () => {
+    // A floor, not an exact-count pin, so adding or removing a backlog verb
+    // doesn't break this suite — only extracting NOTHING should.
     expect(operations.length).toBeGreaterThanOrEqual(6);
   });
 
   // ---------------------------------------------------------------------
   // Real extracted operations, composed through composeSchemas — the
   // `{data:{...}}`-enveloped convention. Runs for EVERY real operation
-  // backlog's client.ts currently exports, selected by id, never hardcoded.
+  // backlog's api.ts currently exports, selected by id, never hardcoded.
   // ---------------------------------------------------------------------
 
   it.each(operations.map((o) => o.id))(
