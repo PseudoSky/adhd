@@ -320,21 +320,25 @@ describe('backlog web ui (nx serve backlog seam)', () => {
 
     await (window.saveItem as () => Promise<unknown>)();
 
-    // A body change mints a FRESH uid, but does NOT invalidate the old one —
-    // `get.ts` never filters on the write layer's `is_superseded` flag, so
-    // the seed uid stays live and gettable forever as a FROZEN pre-edit
-    // snapshot. Prove both halves of that: the old uid still resolves, and
-    // it still carries the OLD body — the patch was never applied to it.
-    const stale = await post('/backlog/get', { uid: seedUid, fields: ['uid', 'body'] });
-    expect(stale.json.ok).toBe(true);
-    expect(stale.json.data?.body).toBe('first body');
-
     // saveItem() re-selects the new item on success — read the new uid off
     // the REAL rendered detail pane, never off internal JS state.
     const idLine = document.querySelector('#detail .id-line')?.textContent ?? '';
     const newUid = idLine.split(' · ')[0]?.trim();
     expect(newUid).toBeTruthy();
     expect(newUid).not.toBe(seedUid);
+
+    // A body change mints a FRESH uid and does NOT invalidate the old row
+    // (`t_invalid` stays NULL, §4c), so the seed uid still names a real node.
+    // `get` rejects it anyway (SPEC §6.3.1): returning the FROZEN pre-edit
+    // snapshot — which is what this path used to do — hands a caller stale
+    // content with no signal that the issue moved. Asserted over the REAL
+    // HTTP surface, so it covers the wire envelope and not just the resolver.
+    const stale = await post('/backlog/get', { uid: seedUid, fields: ['uid', 'body'] });
+    expect(stale.json.ok).toBe(false);
+    // The error is actionable: it names where the issue actually lives now.
+    expect(JSON.stringify(stale.json.error)).toContain(newUid);
+    // And it never silently serves the pre-edit body.
+    expect(stale.json.data?.body).toBeUndefined();
 
     const after = await post('/backlog/get', { uid: newUid, fields: ['uid', 'body', 'status'] });
     expect(after.json.ok).toBe(true);

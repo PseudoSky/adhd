@@ -32,7 +32,7 @@
  */
 
 import type { EdgeRecord, GraphBackend, NodeRecord } from '@adhd/sox-graph-store';
-import { CatalogNotFoundError, IssueNotFoundError } from '../write/errors.js';
+import { CatalogNotFoundError, IssueNotFoundError, StaleSupersedeError } from '../write/errors.js';
 import { isUidShaped } from '../write/catalog.js';
 
 export { isUidShaped };
@@ -57,7 +57,51 @@ export async function resolveIssueByUid(graph: GraphBackend, uid: string): Promi
   if (!record || record.kind !== 'issue' || record.tInvalid) {
     throw new IssueNotFoundError(uid);
   }
+  if (record.isSuperseded) {
+    throw new StaleSupersedeError(uid, await currentUidOf(graph, record));
+  }
   return record;
+}
+
+/**
+ * Walk the `SUPERSEDES` chain forward from a superseded node to the uid the
+ * issue lives under NOW.
+ *
+ * `update`'s body path mints a new node and writes `SUPERSEDES` new→old, so
+ * the successor of a node is the `src` of the edge whose `dst` is that node —
+ * the reverse of the direction the edge reads. Repeated edits build a chain,
+ * and a uid cited before several edits is several hops back, so this follows
+ * the chain to its head rather than stopping at the first hop: a caller
+ * holding a stale citation wants today's issue, not the next-oldest corpse.
+ *
+ * Defensive, because this runs on an error path that must not itself throw:
+ * a cycle (impossible by construction, since each edit mints a fresh node,
+ * but not enforced by a constraint) is bounded by `seen`; a missing or
+ * invalidated successor ends the walk and yields the last good uid, and a
+ * chain that dead-ends immediately yields `undefined` — which
+ * {@link StaleSupersedeError} documents as "not known here".
+ */
+async function currentUidOf(graph: GraphBackend, superseded: NodeRecord): Promise<string | undefined> {
+  const seen = new Set<number>([superseded.id]);
+  let head: NodeRecord | undefined;
+  let cursor = superseded;
+
+  for (;;) {
+    const incoming = await graph.getEdges({ dst: cursor.id, rel: 'SUPERSEDES' });
+    const next = incoming.find((e) => !seen.has(e.src));
+    if (!next) return head?.uid;
+
+    seen.add(next.src);
+    const successor = (await graph.getNodesByIds([next.src]))[0];
+    // A successor that is missing or soft-deleted ends the walk: the last
+    // LIVE node we reached is still the most useful answer we have.
+    if (!successor || successor.tInvalid) return head?.uid;
+
+    head = successor;
+    // The head of the chain is the one node that is not itself superseded.
+    if (!successor.isSuperseded) return successor.uid;
+    cursor = successor;
+  }
 }
 
 /**

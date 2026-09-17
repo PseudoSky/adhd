@@ -1093,7 +1093,32 @@ interface IIssueGetInput {
 ```
 
 Output: `IIssueCard` (§6.5) projected to the requested fields.
-Errors: `IssueNotFoundError(uid)` when no live node carries `uid`.
+Errors: `IssueNotFoundError(uid)` when no live node carries `uid`;
+`StaleSupersedeError(uid, successorUid)` when `uid` names a SUPERSEDED node.
+
+A superseded row is deliberately left `t_invalid IS NULL` (§4c), so it is
+still "live" by the only predicate `get` used to apply — and `get` therefore
+returned the frozen pre-edit card with no signal that the issue had been
+edited or had moved. It now rejects instead, matching the guard the six write
+verbs already share (`resolveLiveIssueTx`): a uid that was valid once and
+names a real row is **stale**, not **wrong**, and the two are reported
+differently on purpose.
+
+Because a body edit mints a NEW uid, the write path's "re-get and retry" is
+not actionable on the read path — re-getting the same uid fails identically,
+forever. `StaleSupersedeError.successorUid` therefore carries the uid the
+issue lives under NOW: the read path walks the `SUPERSEDES` chain to its
+**head**, so a citation written several edits ago resolves to today's issue
+rather than to an intermediate superseded node. It is `undefined` only when
+no successor is reachable (the chain dead-ends, or the successor is itself
+soft-deleted) — absent means "not known here", never "none exists".
+
+The same rule applies wherever a caller names one issue by uid on the read
+path — `view:'similar'`'s `filter.anchor` and the stats/graph root both
+resolve through the same function, and anchoring a search or a dependency
+walk on a superseded node is the same stale-reference error. Listings are
+unaffected: `query` never resolves rows by uid, so a superseded row in the
+corpus never makes a listing throw.
 
 #### 6.3.2 `create`
 
@@ -2258,7 +2283,7 @@ asserted from a remembered count:**
     All three resolve through the edge-scoped uniqueness policy inside the
     write layer's `immediate` transaction (§4c), never a scan; re-running the
     trio concurrently from two real OS processes still yields one row each.
-13. **`get`:** `get({uid})` with no `fields` returns exactly the five-field default card (`uid,kind,title,status,priority`); requesting the pseudo field `body` returns it; `get` on a `uid` that resolves to no live node throws `IssueNotFoundError(uid)`.
+13. **`get`:** `get({uid})` with no `fields` returns exactly the five-field default card (`uid,kind,title,status,priority`); requesting the pseudo field `body` returns it; `get` on a `uid` that resolves to no live node throws `IssueNotFoundError(uid)`; `get` on a SUPERSEDED `uid` throws `StaleSupersedeError` — never the frozen pre-edit card — carrying `successorUid`, and after N successive body edits the uid from before the first edit reports the CURRENT head, not an intermediate node (a single-hop walk fails this).
 14. **`update` touch + no-silent-discard:** `update({uid, by, title:'x'})` returns `changed:['title']`; a zero-field patch throws `InvalidArgumentError`; a call carrying `status` in its input is rejected naming `transition`, never silently applied as a status change (proves DEBT-010 cannot recur through `update`).
 15. **`transition` closedAt stamp:** transitioning an issue to a `terminal` status stamps `issue.meta.metadata.closedAt` and the outcome's `closedAt`, and `filter.closedAt.since` retrieves it via a subsequent `query`; transitioning a currently-terminal issue to a non-terminal status (reopen) CLEARS `issue.meta.metadata.closedAt` in the same `touch` call, and a subsequent `query({filter:{closedAt:{since:<the old closedAt>}}})` no longer matches the reopened issue — proving the stale-timestamp case has teeth, not just an unset-on-first-transition case.
 16. **`claim` CAS lease:** `claim` on an unclaimed issue returns `status:'claimed'`; a second `claim` by a DIFFERENT agent within `claim_stale_after_min` throws `ClaimHeldError`; the same call with `force:true` returns `status:'reclaimed-stale'` with `previousClaimant` set to the ousted agent; two concurrent `claim` calls against the SAME fresh uid, run as real barrier-synchronized OS processes, never both report `status:'claimed'` — exactly one wins (red if the CAS transaction is downgraded off `immediate`).
