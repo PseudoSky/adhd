@@ -66,7 +66,8 @@ describe('every issue verb rejects a superseded uid (real store, real supersede)
   beforeEach(async () => {
     dir = freshTmpDir('superseded-uid-guard');
     store = await openTestIssueStore(join(dir, 'backlog.db'));
-    projectUid = (await seedProject(store, 'superseded-guard-project')).projectUid;
+    projectUid = (await seedProject(store, 'superseded-guard-project'))
+      .projectUid;
 
     const created = await createIssue(store, {
       project: projectUid,
@@ -103,55 +104,77 @@ describe('every issue verb rejects a superseded uid (real store, real supersede)
     // old row were t_invalid-stamped, a tInvalid-only guard would have caught
     // it and there would be no bug to fix — so assert the actual shape.
     expect(liveUid).not.toBe(staleUid);
-    const old = await store.adapter.transaction(async (tx) => getNodeByUidTx(tx, staleUid));
+    const old = await store.adapter.transaction(async (tx) =>
+      getNodeByUidTx(tx, staleUid)
+    );
     expect(old).not.toBeNull();
     expect(old?.isSuperseded).toBe(true);
     expect(old?.tInvalid).toBeNull();
   });
 
   it('claim rejects it — otherwise two agents hold the lease on one issue', async () => {
-    await expect(claim(store, { uid: staleUid, by: 'agent-a', action: 'claim' })).rejects.toBeInstanceOf(
-      StaleSupersedeError,
-    );
+    await expect(
+      claim(store, { uid: staleUid, by: 'agent-a', action: 'claim' })
+    ).rejects.toBeInstanceOf(StaleSupersedeError);
   });
 
   it('relate rejects it as the source — otherwise the edge is invisible forever', async () => {
     await expect(
-      relate(store, { sourceUid: staleUid, targetUid: otherUid, rel: 'blocks', action: 'add', by: 'agent-a' }),
+      relate(store, {
+        sourceUid: staleUid,
+        targetUid: otherUid,
+        rel: 'blocks',
+        action: 'add',
+        by: 'agent-a',
+      })
     ).rejects.toBeInstanceOf(StaleSupersedeError);
   });
 
   it('relate rejects it as the target too', async () => {
     await expect(
-      relate(store, { sourceUid: otherUid, targetUid: staleUid, rel: 'blocks', action: 'add', by: 'agent-a' }),
+      relate(store, {
+        sourceUid: otherUid,
+        targetUid: staleUid,
+        rel: 'blocks',
+        action: 'add',
+        by: 'agent-a',
+      })
     ).rejects.toBeInstanceOf(StaleSupersedeError);
   });
 
   it('delete rejects it — otherwise it reports success while the live issue survives', async () => {
     await expect(
-      deleteIssue(store, { uid: staleUid, by: 'agent-a', reason: 'no longer needed' }),
+      deleteIssue(store, {
+        uid: staleUid,
+        by: 'agent-a',
+        reason: 'no longer needed',
+      })
     ).rejects.toBeInstanceOf(StaleSupersedeError);
   });
 
   it('move rejects it', async () => {
-    await expect(move(store, { uid: staleUid, by: 'agent-a', project: projectUid })).rejects.toBeInstanceOf(
-      StaleSupersedeError,
-    );
+    await expect(
+      move(store, { uid: staleUid, by: 'agent-a', project: projectUid })
+    ).rejects.toBeInstanceOf(StaleSupersedeError);
   });
 
   it('update and transition still reject it (they always did — kept so a refactor cannot regress them)', async () => {
-    await expect(update(store, { uid: staleUid, body: 'another edit', by: 'agent-a' })).rejects.toBeInstanceOf(
-      StaleSupersedeError,
-    );
     await expect(
-      transition(store, { uid: staleUid, toStatus: 'OPEN', by: 'agent-a' }),
+      update(store, { uid: staleUid, body: 'another edit', by: 'agent-a' })
+    ).rejects.toBeInstanceOf(StaleSupersedeError);
+    await expect(
+      transition(store, { uid: staleUid, toStatus: 'OPEN', by: 'agent-a' })
     ).rejects.toBeInstanceOf(StaleSupersedeError);
   });
 
   it('the LIVE uid still works — the guard rejects staleness, not the issue', async () => {
     // Without this, every test above would pass just as well if the verbs
     // were simply broken for all inputs.
-    const claimed = await claim(store, { uid: liveUid, by: 'agent-a', action: 'claim' });
+    const claimed = await claim(store, {
+      uid: liveUid,
+      by: 'agent-a',
+      action: 'claim',
+    });
     expect(claimed.uid).toBe(liveUid);
   });
 });

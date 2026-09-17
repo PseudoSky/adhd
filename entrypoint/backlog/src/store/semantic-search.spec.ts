@@ -31,10 +31,14 @@ function makeFake(overrides: Partial<SemanticBackend> = {}): SemanticBackend {
     modelId: 'fake-cosine',
     dim: 2,
     async embedQuery(text: string) {
-      return text === 'apples' ? new Float32Array([1, 0]) : new Float32Array([0, 1]);
+      return text === 'apples'
+        ? new Float32Array([1, 0])
+        : new Float32Array([0, 1]);
     },
     async embedDocument(text: string) {
-      return text.includes('apple') ? new Float32Array([1, 0]) : new Float32Array([0, 1]);
+      return text.includes('apple')
+        ? new Float32Array([1, 0])
+        : new Float32Array([0, 1]);
     },
     async vectorFor(nodeId: number) {
       return vectors.get(nodeId) ?? null;
@@ -47,7 +51,11 @@ function makeFake(overrides: Partial<SemanticBackend> = {}): SemanticBackend {
     },
     async knn(query: Float32Array, k: number): Promise<SemanticMatch[]> {
       return [...vectors.entries()]
-        .map(([nodeId, vec]) => ({ nodeId, score: (query[0] ?? 0) * (vec[0] ?? 0) + (query[1] ?? 0) * (vec[1] ?? 0) }))
+        .map(([nodeId, vec]) => ({
+          nodeId,
+          score:
+            (query[0] ?? 0) * (vec[0] ?? 0) + (query[1] ?? 0) * (vec[1] ?? 0),
+        }))
         .sort((a, b) => b.score - a.score)
         .slice(0, k);
     },
@@ -55,7 +63,13 @@ function makeFake(overrides: Partial<SemanticBackend> = {}): SemanticBackend {
       for (const [nodeId, vec] of vectors) yield { nodeId, vec };
     },
     async health() {
-      return { configured: 'fake:fake-cosine', active: 'fake-cosine', state: 'real' as const, dimensions: 2, last_error: null };
+      return {
+        configured: 'fake:fake-cosine',
+        active: 'fake-cosine',
+        state: 'real' as const,
+        dimensions: 2,
+        last_error: null,
+      };
     },
     ...overrides,
   };
@@ -87,10 +101,14 @@ describe('the injectable seam', () => {
   });
 
   it('requireSemanticBackend throws RagNotConfiguredError naming the feature when unconfigured', () => {
-    expect(() => requireSemanticBackend('view:"similar"')).toThrow(RagNotConfiguredError);
+    expect(() => requireSemanticBackend('view:"similar"')).toThrow(
+      RagNotConfiguredError
+    );
     try {
       requireSemanticBackend('view:"similar"');
-      expect.unreachable('requireSemanticBackend must throw when no backend is configured');
+      expect.unreachable(
+        'requireSemanticBackend must throw when no backend is configured'
+      );
     } catch (err) {
       // The feature name must survive into the message — that is what makes
       // the §5a degrade actionable rather than a bare "not configured".
@@ -128,7 +146,9 @@ describe('bootstrapSemanticBackend — diagnostics, not a silent null', () => {
   it('reports not_installed (never throws) when the optional packages are absent — the default build', async () => {
     const tmp = await openTmpStore('semantic-bootstrap');
     try {
-      const result = await bootstrapSemanticBackend(tmp.store, { embedding: { type: 'fastembed', model: 'bge-base-en-v1.5' } });
+      const result = await bootstrapSemanticBackend(tmp.store, {
+        embedding: { type: 'fastembed', model: 'bge-base-en-v1.5' },
+      });
       // The default build has neither optional package installed. That is
       // NOT an error — but it MUST be distinguishable from a broken
       // configuration, which is the whole reason this returns a reason

@@ -41,7 +41,13 @@ import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { writeAudit } from './audit.js';
 import { scheduleIssueEmbedding } from './embedding-observer.js';
 import { InvalidArgumentError, IssueNotFoundError } from './errors.js';
-import { type IWriteStoreHandle, executeWriteTransaction, getNodeByUidTx, nowISO, resolveLiveIssueTx } from './tx.js';
+import {
+  type IWriteStoreHandle,
+  executeWriteTransaction,
+  getNodeByUidTx,
+  nowISO,
+  resolveLiveIssueTx,
+} from './tx.js';
 
 export interface IDeleteIssueInput {
   uid: string;
@@ -64,7 +70,10 @@ export interface IDeleteIssueOutcome {
   invalidated: true;
 }
 
-function assertNonBlank(field: string, value: string | undefined): asserts value is string {
+function assertNonBlank(
+  field: string,
+  value: string | undefined
+): asserts value is string {
   if (value === undefined || value.trim().length === 0) {
     throw new InvalidArgumentError(field, 'is required');
   }
@@ -87,38 +96,53 @@ function assertNonBlank(field: string, value: string | undefined): asserts value
  * `WriteContentionError`/`WriteIOError` (§4c — an exhausted driver-level
  * retry on the underlying `immediate` transaction).
  */
-export async function deleteIssue(handle: IWriteStoreHandle, input: IDeleteIssueInput): Promise<IDeleteIssueOutcome> {
+export async function deleteIssue(
+  handle: IWriteStoreHandle,
+  input: IDeleteIssueInput
+): Promise<IDeleteIssueOutcome> {
   assertNonBlank('uid', input.uid);
   assertNonBlank('by', input.by);
   assertNonBlank('reason', input.reason);
 
   let deletedIssue: { rowid: number; uid: string } | undefined;
 
-  const outcome = await executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
-    const now = nowISO();
-    const row = await resolveLiveIssueTx(tx, input.uid);
-    deletedIssue = { rowid: row.rowid, uid: row.uid };
+  const outcome = await executeWriteTransaction(
+    handle,
+    async (tx: AdapterTransaction) => {
+      const now = nowISO();
+      const row = await resolveLiveIssueTx(tx, input.uid);
+      deletedIssue = { rowid: row.rowid, uid: row.uid };
 
-    const mergedMeta = { ...(row.metadata ?? {}), invalidatedReason: input.reason, invalidatedAt: now };
-    const result = await tx.executeRun('UPDATE node SET t_invalid = ?, meta = ? WHERE rowid = ?', [now, JSON.stringify(mergedMeta), row.rowid]);
-    if (result.rowsAffected !== 1) {
-      throw new Error(`deleteIssue: invalidate UPDATE affected ${result.rowsAffected} rows for uid="${input.uid}", expected exactly 1.`);
+      const mergedMeta = {
+        ...(row.metadata ?? {}),
+        invalidatedReason: input.reason,
+        invalidatedAt: now,
+      };
+      const result = await tx.executeRun(
+        'UPDATE node SET t_invalid = ?, meta = ? WHERE rowid = ?',
+        [now, JSON.stringify(mergedMeta), row.rowid]
+      );
+      if (result.rowsAffected !== 1) {
+        throw new Error(
+          `deleteIssue: invalidate UPDATE affected ${result.rowsAffected} rows for uid="${input.uid}", expected exactly 1.`
+        );
+      }
+
+      await writeAudit({
+        tx,
+        typePolicy: handle.typePolicy,
+        subjectRowid: row.rowid,
+        subjectUid: row.uid,
+        subjectKind: 'issue',
+        actor: input.by,
+        action: 'deleted',
+        note: input.reason,
+        at: now,
+      });
+
+      return { uid: row.uid, invalidated: true as const };
     }
-
-    await writeAudit({
-      tx,
-      typePolicy: handle.typePolicy,
-      subjectRowid: row.rowid,
-      subjectUid: row.uid,
-      subjectKind: 'issue',
-      actor: input.by,
-      action: 'deleted',
-      note: input.reason,
-      at: now,
-    });
-
-    return { uid: row.uid, invalidated: true as const };
-  });
+  );
 
   // §4b/§8 AC-4 ("invalidating removes it") — strictly AFTER the subject
   // transaction above has committed.
@@ -130,7 +154,10 @@ export async function deleteIssue(handle: IWriteStoreHandle, input: IDeleteIssue
       actor: input.by,
     });
     if (input.awaitEmbed) await embedPromise;
-    else embedPromise.catch(() => { /* scheduleIssueEmbedding never rejects — this catch exists only to silence an unhandled-rejection warning if that contract is ever broken. */ });
+    else
+      embedPromise.catch(() => {
+        /* scheduleIssueEmbedding never rejects — this catch exists only to silence an unhandled-rejection warning if that contract is ever broken. */
+      });
   }
 
   return outcome;

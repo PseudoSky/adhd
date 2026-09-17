@@ -70,13 +70,13 @@ substrate (`@adhd/sox-store-adapter` is the store's only storage seam).
 Every catalog below is realized as ordinary nodes of a given `kind`, unique by
 `name` among live rows — never a dedicated relational table:
 
-| catalog | node `kind` | unique on | extra fields (in `meta`) |
-|---|---|---|---|
-| node kind | `kind` | `name` | `description` |
-| edge kind | `edge_kind` | `name` | `source_kind`, `target_kind`, `multiplicity` |
-| status | `status` | `name` | `terminal` |
-| priority | `priority` | `name` | `rank` |
-| agent | `agent` | `name` | — |
+| catalog   | node `kind` | unique on | extra fields (in `meta`)                     |
+| --------- | ----------- | --------- | -------------------------------------------- |
+| node kind | `kind`      | `name`    | `description`                                |
+| edge kind | `edge_kind` | `name`    | `source_kind`, `target_kind`, `multiplicity` |
+| status    | `status`    | `name`    | `terminal`                                   |
+| priority  | `priority`  | `name`    | `rank`                                       |
+| agent     | `agent`     | `name`    | —                                            |
 
 `status.terminal` drives closedness. `kind`/`status`/`priority`/`agent` are
 mintable on an unresolved NAME by any issue-mutating verb that accepts them

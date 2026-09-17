@@ -34,7 +34,7 @@ import { IssueNotFoundError } from '../write/errors.js';
 import { getIssue } from './get.js';
 import { DEFAULT_ISSUE_CARD_FIELDS } from './types.js';
 
-describe("the `get` verb — no-`fields` default and pseudo-field projection (real store)", () => {
+describe('the `get` verb — no-`fields` default and pseudo-field projection (real store)', () => {
   let dir: string;
   let store: TestIssueStore;
   let projectUid: string;
@@ -78,7 +78,9 @@ describe("the `get` verb — no-`fields` default and pseudo-field projection (re
     // default fields — no `body`, no `project`, no `component`, no
     // `createdAt`, nothing pseudo-field-shaped leaking through because a
     // future change widened the default projection.
-    expect(new Set(Object.keys(card))).toEqual(new Set(DEFAULT_ISSUE_CARD_FIELDS));
+    expect(new Set(Object.keys(card))).toEqual(
+      new Set(DEFAULT_ISSUE_CARD_FIELDS)
+    );
     expect(card.body).toBeUndefined();
     expect(card.project).toBeUndefined();
     expect(card.component).toBeUndefined();
@@ -94,7 +96,10 @@ describe("the `get` verb — no-`fields` default and pseudo-field projection (re
       by: 'filer',
     });
 
-    const card = await getIssue(store.graph, { uid: created.uid, fields: ['uid', 'body'] });
+    const card = await getIssue(store.graph, {
+      uid: created.uid,
+      fields: ['uid', 'body'],
+    });
 
     expect(card.body).toBe(bodyText);
 
@@ -107,14 +112,17 @@ describe("the `get` verb — no-`fields` default and pseudo-field projection (re
   });
 
   it('an unresolvable uid throws IssueNotFoundError, not a partial/undefined card', async () => {
-    await expect(getIssue(store.graph, { uid: 'issue-does-not-exist-anywhere' })).rejects.toBeInstanceOf(
-      IssueNotFoundError,
-    );
+    await expect(
+      getIssue(store.graph, { uid: 'issue-does-not-exist-anywhere' })
+    ).rejects.toBeInstanceOf(IssueNotFoundError);
   });
 
   it('an unresolvable uid throws IssueNotFoundError even when fields are explicitly requested', async () => {
     await expect(
-      getIssue(store.graph, { uid: 'issue-does-not-exist-anywhere', fields: ['uid', 'body'] }),
+      getIssue(store.graph, {
+        uid: 'issue-does-not-exist-anywhere',
+        fields: ['uid', 'body'],
+      })
     ).rejects.toBeInstanceOf(IssueNotFoundError);
   });
 
@@ -126,8 +134,14 @@ describe("the `get` verb — no-`fields` default and pseudo-field projection (re
       by: 'filer',
     });
     const { deleteIssue } = await import('../write/delete.js');
-    await deleteIssue(store, { uid: created.uid, by: 'filer', reason: 'no longer needed' });
+    await deleteIssue(store, {
+      uid: created.uid,
+      by: 'filer',
+      reason: 'no longer needed',
+    });
 
-    await expect(getIssue(store.graph, { uid: created.uid })).rejects.toBeInstanceOf(IssueNotFoundError);
+    await expect(
+      getIssue(store.graph, { uid: created.uid })
+    ).rejects.toBeInstanceOf(IssueNotFoundError);
   });
 });

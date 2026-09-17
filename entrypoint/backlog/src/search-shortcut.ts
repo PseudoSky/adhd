@@ -51,7 +51,12 @@
  */
 
 /** Top-level `IBacklogQueryInput` keys this shortcut exposes as flags. */
-const SCALAR_TOP_LEVEL_FLAGS = ['limit', 'offset', 'sort', 'direction'] as const;
+const SCALAR_TOP_LEVEL_FLAGS = [
+  'limit',
+  'offset',
+  'sort',
+  'direction',
+] as const;
 
 /**
  * `IBacklogFilter` keys exposed as single-valued flags.
@@ -117,8 +122,14 @@ export const SEARCH_FLAGS: readonly string[] = [
   .map((f) => `--${f}`)
   .sort();
 
-const TOP_LEVEL_FLAGS = new Set<string>([...SCALAR_TOP_LEVEL_FLAGS, ...LIST_TOP_LEVEL_FLAGS]);
-const LIST_FLAGS = new Set<string>([...LIST_FILTER_FLAGS, ...LIST_TOP_LEVEL_FLAGS]);
+const TOP_LEVEL_FLAGS = new Set<string>([
+  ...SCALAR_TOP_LEVEL_FLAGS,
+  ...LIST_TOP_LEVEL_FLAGS,
+]);
+const LIST_FLAGS = new Set<string>([
+  ...LIST_FILTER_FLAGS,
+  ...LIST_TOP_LEVEL_FLAGS,
+]);
 const KNOWN_FLAGS = new Set<string>([
   ...SCALAR_TOP_LEVEL_FLAGS,
   ...LIST_TOP_LEVEL_FLAGS,
@@ -148,7 +159,7 @@ export const SEARCH_HELP = [
   '  --status <s>       open | closed | OPEN,IN_PROGRESS | …',
   '  --priority <p>     CRITICAL | HIGH | MEDIUM | LOW (comma-separated for several)',
   '  --kind <k>         BUG | DEBT | FEAT | …',
-  '  --project-path <p> component\'s repo-relative path (component.meta.path)',
+  "  --project-path <p> component's repo-relative path (component.meta.path)",
   '  --plan <uid|title> the parent plan issue this item is filed under (part_of)',
   '  --assignee <a>     durable owner',
   '  --claimed-by <c>   ephemeral claim holder',
@@ -167,13 +178,24 @@ export type SearchShortcutOutcome =
   | { kind: 'error'; message: string }
   | { kind: 'argv'; argv: string[] };
 
-function pushValue(bag: Record<string, unknown>, key: string, raw: string, isList: boolean): void {
+function pushValue(
+  bag: Record<string, unknown>,
+  key: string,
+  raw: string,
+  isList: boolean
+): void {
   if (!isList) {
     bag[key] = raw;
     return;
   }
   const previous = (bag[key] as string[] | undefined) ?? [];
-  bag[key] = [...previous, ...raw.split(',').map((part) => part.trim()).filter((part) => part.length > 0)];
+  bag[key] = [
+    ...previous,
+    ...raw
+      .split(',')
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0),
+  ];
 }
 
 /**
@@ -184,10 +206,13 @@ function pushValue(bag: Record<string, unknown>, key: string, raw: string, isLis
  * can reject a bad invocation before any of `runBacklogCli`'s store lifecycle
  * has started, and so every branch here is unit-testable on its own.
  */
-export function buildSearchArgv(rest: readonly string[]): SearchShortcutOutcome {
+export function buildSearchArgv(
+  rest: readonly string[]
+): SearchShortcutOutcome {
   // Mirrors cli-output's own pre-dispatch check:
   // `--help` ANYWHERE after the command shows usage, never an error.
-  if (rest.includes('--help') || rest.includes('-h')) return { kind: 'help', text: SEARCH_HELP };
+  if (rest.includes('--help') || rest.includes('-h'))
+    return { kind: 'help', text: SEARCH_HELP };
 
   const topLevel: Record<string, unknown> = {};
   const filter: Record<string, unknown> = {};
@@ -198,7 +223,11 @@ export function buildSearchArgv(rest: readonly string[]): SearchShortcutOutcome 
     const token = rest[i] as string;
 
     if (!token.startsWith('--')) {
-      if (text !== undefined) return { kind: 'error', message: `Unexpected positional argument: "${token}"` };
+      if (text !== undefined)
+        return {
+          kind: 'error',
+          message: `Unexpected positional argument: "${token}"`,
+        };
       text = token;
       i += 1;
       continue;
@@ -218,11 +247,17 @@ export function buildSearchArgv(rest: readonly string[]): SearchShortcutOutcome 
     if (name === 'input') {
       return {
         kind: 'error',
-        message: 'Unknown option: --input. `search` takes the query as a positional argument; for the raw JSON form use `backlog query --input \'{...}\'`',
+        message:
+          "Unknown option: --input. `search` takes the query as a positional argument; for the raw JSON form use `backlog query --input '{...}'`",
       };
     }
     if (!KNOWN_FLAGS.has(name)) {
-      return { kind: 'error', message: `Unknown option: --${name}. Available: ${SEARCH_FLAGS.join(', ')}` };
+      return {
+        kind: 'error',
+        message: `Unknown option: --${name}. Available: ${SEARCH_FLAGS.join(
+          ', '
+        )}`,
+      };
     }
 
     i += 1;
@@ -230,7 +265,8 @@ export function buildSearchArgv(rest: readonly string[]): SearchShortcutOutcome 
     if (inlineValue !== undefined) {
       value = inlineValue;
     } else {
-      if (i >= rest.length) return { kind: 'error', message: `Missing value for --${name}` };
+      if (i >= rest.length)
+        return { kind: 'error', message: `Missing value for --${name}` };
       value = rest[i] as string;
       i += 1;
     }
@@ -256,20 +292,23 @@ export function buildSearchArgv(rest: readonly string[]): SearchShortcutOutcome 
   // module inventing a second, differently-worded one.
   for (const key of NUMERIC_FLAGS) {
     const value = topLevel[key];
-    if (typeof value === 'string' && /^-?\d+$/.test(value)) topLevel[key] = Number(value);
+    if (typeof value === 'string' && /^-?\d+$/.test(value))
+      topLevel[key] = Number(value);
   }
 
   const anchor = filter['anchor'] as string | undefined;
   if (anchor !== undefined && text !== undefined) {
     return {
       kind: 'error',
-      message: 'Validation failed: --anchor and a positional query are mutually exclusive — --anchor ranks by an EXISTING item\'s vector (view:"similar"), so there is no query text to also match (mount-surface spec §2.1)',
+      message:
+        'Validation failed: --anchor and a positional query are mutually exclusive — --anchor ranks by an EXISTING item\'s vector (view:"similar"), so there is no query text to also match (mount-surface spec §2.1)',
     };
   }
   if (anchor === undefined && text === undefined) {
     return {
       kind: 'error',
-      message: 'Validation failed: /data must have required property \'text\' — Example: {"data":{"text":"flaky publish gate"}}',
+      message:
+        'Validation failed: /data must have required property \'text\' — Example: {"data":{"text":"flaky publish gate"}}',
     };
   }
 

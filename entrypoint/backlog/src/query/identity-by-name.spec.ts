@@ -39,7 +39,8 @@ describe('identity is `uid` alone (SPEC.md AC-1; real store)', () => {
   beforeEach(async () => {
     dir = freshTmpDir('identity-by-name');
     store = await openTestIssueStore(join(dir, 'backlog.db'));
-    projectUid = (await seedProject(store, 'identity-by-name-project')).projectUid;
+    projectUid = (await seedProject(store, 'identity-by-name-project'))
+      .projectUid;
   });
 
   afterEach(async () => {
@@ -48,7 +49,8 @@ describe('identity is `uid` alone (SPEC.md AC-1; real store)', () => {
   });
 
   it("a real issue's own title, passed as `uid`, is never silently accepted as an identity token", async () => {
-    const distinctiveTitle = 'zzz-totally-distinctive-issue-title-for-ac-1-identity-proof-9f3c1a';
+    const distinctiveTitle =
+      'zzz-totally-distinctive-issue-title-for-ac-1-identity-proof-9f3c1a';
     const created = await createIssue(store, {
       project: projectUid,
       title: distinctiveTitle,

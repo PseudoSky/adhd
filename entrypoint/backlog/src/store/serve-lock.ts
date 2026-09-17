@@ -34,7 +34,16 @@
  * not yet closed) sees the lock file present with a still-alive holder pid
  * and is refused — exactly the window a start-only guard would miss.
  */
-import { openSync, closeSync, writeSync, unlinkSync, readFileSync, realpathSync, existsSync, constants as fsConstants } from 'node:fs';
+import {
+  openSync,
+  closeSync,
+  writeSync,
+  unlinkSync,
+  readFileSync,
+  realpathSync,
+  existsSync,
+  constants as fsConstants,
+} from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
 /** Thrown when another live process already holds the serve lock for this
@@ -47,11 +56,11 @@ export class ServeLockHeldError extends Error {
   constructor(holderPid: number, lockPath: string) {
     super(
       `backlog serve: refusing to start — another "backlog serve" instance ` +
-      `(pid ${holderPid}) already holds the writer lock for this store ` +
-      `(${lockPath}). Two concurrent servers against the same store is the ` +
-      `exact condition that corrupted this database before (upstream turso ` +
-      `race tursodatabase/turso#7833/#8348). Stop the other instance first, ` +
-      `or if you are certain pid ${holderPid} is gone, remove the stale lock: ${lockPath}`
+        `(pid ${holderPid}) already holds the writer lock for this store ` +
+        `(${lockPath}). Two concurrent servers against the same store is the ` +
+        `exact condition that corrupted this database before (upstream turso ` +
+        `race tursodatabase/turso#7833/#8348). Stop the other instance first, ` +
+        `or if you are certain pid ${holderPid} is gone, remove the stale lock: ${lockPath}`
     );
     this.name = 'ServeLockHeldError';
     this.holderPid = holderPid;
@@ -132,7 +141,11 @@ function isAlive(pid: number): boolean {
 }
 
 function writeLockFile(lockPath: string): void {
-  const fd = openSync(lockPath, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL, 0o600);
+  const fd = openSync(
+    lockPath,
+    fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL,
+    0o600
+  );
   try {
     writeSync(fd, `${process.pid}\n${new Date().toISOString()}\n`);
   } finally {
@@ -233,12 +246,28 @@ export interface ServeLockStatus {
 export function inspectServeLock(dbPath: string): ServeLockStatus {
   const lockPath = serveLockPath(dbPath);
   if (!existsSync(lockPath)) {
-    return { dbPath, lockPath, exists: false, holderPid: null, alive: false, lockedAt: null, stale: false };
+    return {
+      dbPath,
+      lockPath,
+      exists: false,
+      holderPid: null,
+      alive: false,
+      lockedAt: null,
+      stale: false,
+    };
   }
   const holderPid = readLockPid(lockPath);
   const lockedAt = readLockTimestamp(lockPath);
   const alive = holderPid !== null && isAlive(holderPid);
-  return { dbPath, lockPath, exists: true, holderPid, alive, lockedAt, stale: !alive };
+  return {
+    dbPath,
+    lockPath,
+    exists: true,
+    holderPid,
+    alive,
+    lockedAt,
+    stale: !alive,
+  };
 }
 
 /**
@@ -252,9 +281,13 @@ export function inspectServeLock(dbPath: string): ServeLockStatus {
  *
  * @throws {ServeLockHeldError} when the holder is alive and `force` is not `true`.
  */
-export function forceReleaseServeLock(dbPath: string, opts: { force?: boolean } = {}): { released: boolean; wasAlive: boolean; holderPid: number | null } {
+export function forceReleaseServeLock(
+  dbPath: string,
+  opts: { force?: boolean } = {}
+): { released: boolean; wasAlive: boolean; holderPid: number | null } {
   const status = inspectServeLock(dbPath);
-  if (!status.exists) return { released: false, wasAlive: false, holderPid: null };
+  if (!status.exists)
+    return { released: false, wasAlive: false, holderPid: null };
   if (status.alive && opts.force !== true) {
     throw new ServeLockHeldError(status.holderPid as number, status.lockPath);
   }
@@ -265,7 +298,11 @@ export function forceReleaseServeLock(dbPath: string, opts: { force?: boolean } 
     // invariant this call exists to establish ("no lock file remains")
     // already holds, so this is not a failure for the caller.
   }
-  return { released: true, wasAlive: status.alive, holderPid: status.holderPid };
+  return {
+    released: true,
+    wasAlive: status.alive,
+    holderPid: status.holderPid,
+  };
 }
 
 function makeHandle(lockPath: string): ServeLockHandle {

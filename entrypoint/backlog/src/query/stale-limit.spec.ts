@@ -48,8 +48,13 @@ describe('queryIssues — view:"stale" honors limit (real store)', () => {
   async function claimAndAge(uid: string, by: string): Promise<void> {
     await claim(store, { uid, by, action: 'claim' });
     const ancient = new Date(Date.now() - 1_000 * 60_000).toISOString(); // 1000 minutes ago
-    const row = await store.adapter.executeGet<{ meta: string | null }>('SELECT meta FROM node WHERE uid = ?', [uid]);
-    const meta = row?.meta ? (JSON.parse(row.meta) as Record<string, unknown>) : {};
+    const row = await store.adapter.executeGet<{ meta: string | null }>(
+      'SELECT meta FROM node WHERE uid = ?',
+      [uid]
+    );
+    const meta = row?.meta
+      ? (JSON.parse(row.meta) as Record<string, unknown>)
+      : {};
     await store.adapter.executeRun('UPDATE node SET meta = ? WHERE uid = ?', [
       JSON.stringify({ ...meta, claimedAt: ancient }),
       uid,
@@ -60,7 +65,12 @@ describe('queryIssues — view:"stale" honors limit (real store)', () => {
     const N = 5;
     const uids: string[] = [];
     for (let i = 0; i < N; i++) {
-      const created = await createIssue(store, { project: projectUid, title: `stale issue ${i}`, body: 'body', by: 'filer' });
+      const created = await createIssue(store, {
+        project: projectUid,
+        title: `stale issue ${i}`,
+        body: 'body',
+        by: 'filer',
+      });
       uids.push(created.uid);
       await claimAndAge(created.uid, `agent-${i}`);
     }
@@ -68,11 +78,13 @@ describe('queryIssues — view:"stale" honors limit (real store)', () => {
     // Prove the fixture is genuinely 5-stale-wide BEFORE limiting, so a
     // 2-length result below is provably a real cap, not an accidental match.
     const unlimited = await queryIssues(store, { view: 'stale' });
-    if (unlimited.view !== 'stale') throw new Error(`expected view 'stale', got '${unlimited.view}'`);
+    if (unlimited.view !== 'stale')
+      throw new Error(`expected view 'stale', got '${unlimited.view}'`);
     expect(unlimited.items).toHaveLength(N);
 
     const limited = await queryIssues(store, { view: 'stale', limit: 2 });
-    if (limited.view !== 'stale') throw new Error(`expected view 'stale', got '${limited.view}'`);
+    if (limited.view !== 'stale')
+      throw new Error(`expected view 'stale', got '${limited.view}'`);
     expect(limited.items).toHaveLength(2);
     // Every returned item really is one of the stale claims — proves the cap
     // truncated the real set rather than returning unrelated rows.
@@ -80,10 +92,19 @@ describe('queryIssues — view:"stale" honors limit (real store)', () => {
   });
 
   it('an out-of-range limit is REJECTED by the same assertQueryLimit every sibling view uses, not silently clamped', async () => {
-    const created = await createIssue(store, { project: projectUid, title: 'one stale issue', body: 'body', by: 'filer' });
+    const created = await createIssue(store, {
+      project: projectUid,
+      title: 'one stale issue',
+      body: 'body',
+      by: 'filer',
+    });
     await claimAndAge(created.uid, 'agent-0');
 
-    await expect(queryIssues(store, { view: 'stale', limit: 0 })).rejects.toMatchObject({ field: 'limit' });
-    await expect(queryIssues(store, { view: 'stale', limit: 1001 })).rejects.toMatchObject({ field: 'limit' });
+    await expect(
+      queryIssues(store, { view: 'stale', limit: 0 })
+    ).rejects.toMatchObject({ field: 'limit' });
+    await expect(
+      queryIssues(store, { view: 'stale', limit: 1001 })
+    ).rejects.toMatchObject({ field: 'limit' });
   });
 });

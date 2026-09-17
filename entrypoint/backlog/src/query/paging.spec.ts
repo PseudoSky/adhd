@@ -48,7 +48,12 @@ describe('queryIssues — keyset pagination (AC-8, AC-20; real store)', () => {
   });
 
   async function mkIssue(title: string): Promise<string> {
-    const created = await createIssue(store, { project: projectUid, title, body: `${title} body`, by: 'filer' });
+    const created = await createIssue(store, {
+      project: projectUid,
+      title,
+      body: `${title} body`,
+      by: 'filer',
+    });
     return created.uid;
   }
 
@@ -64,8 +69,13 @@ describe('queryIssues — keyset pagination (AC-8, AC-20; real store)', () => {
     let after: string | undefined;
     let pages = 0;
     for (;;) {
-      const result = await queryIssues(store, { view: 'list', limit: k, after });
-      if (result.view !== 'list') throw new Error(`expected view 'list', got '${result.view}'`);
+      const result = await queryIssues(store, {
+        view: 'list',
+        limit: k,
+        after,
+      });
+      if (result.view !== 'list')
+        throw new Error(`expected view 'list', got '${result.view}'`);
       pages++;
       // Every page that reports more to come must be EXACTLY full. This is
       // the assertion with real teeth against an off-by-one truncation:
@@ -86,7 +96,10 @@ describe('queryIssues — keyset pagination (AC-8, AC-20; real store)', () => {
       after = result.nextCursor;
       // Bounded loop — a broken cursor (e.g. one that never advances) must
       // not hang this test; it must fail loudly instead.
-      if (pages > N) throw new Error(`paging did not terminate after ${pages} pages — cursor is not advancing`);
+      if (pages > N)
+        throw new Error(
+          `paging did not terminate after ${pages} pages — cursor is not advancing`
+        );
     }
 
     // No gap: every created uid was returned.
@@ -106,10 +119,15 @@ describe('queryIssues — keyset pagination (AC-8, AC-20; real store)', () => {
   });
 
   it('AC-8: a single page (limit >= N) has no continuation and matches insertion order', async () => {
-    const created = [await mkIssue('solo a'), await mkIssue('solo b'), await mkIssue('solo c')];
+    const created = [
+      await mkIssue('solo a'),
+      await mkIssue('solo b'),
+      await mkIssue('solo c'),
+    ];
 
     const result = await queryIssues(store, { view: 'list', limit: 10 });
-    if (result.view !== 'list') throw new Error(`expected view 'list', got '${result.view}'`);
+    if (result.view !== 'list')
+      throw new Error(`expected view 'list', got '${result.view}'`);
 
     expect(result.hasMore).toBe(false);
     expect(result.nextCursor).toBeUndefined();
@@ -119,25 +137,39 @@ describe('queryIssues — keyset pagination (AC-8, AC-20; real store)', () => {
   it('AC-20: after + sort throws InvalidArgumentError naming "sort"', async () => {
     await mkIssue('any issue');
 
-    const attempt = queryIssues(store, { view: 'list', after: '0', sort: 'created' });
+    const attempt = queryIssues(store, {
+      view: 'list',
+      after: '0',
+      sort: 'created',
+    });
     await expect(attempt).rejects.toBeInstanceOf(InvalidArgumentError);
     await expect(attempt).rejects.toMatchObject({ field: 'sort' });
     await expect(attempt).rejects.toThrow(/sort/i);
   });
 
   it('AC-20: the identical call WITHOUT sort succeeds and pages in insertion order', async () => {
-    const created = [await mkIssue('unsorted a'), await mkIssue('unsorted b'), await mkIssue('unsorted c')];
+    const created = [
+      await mkIssue('unsorted a'),
+      await mkIssue('unsorted b'),
+      await mkIssue('unsorted c'),
+    ];
 
     // First page, no `after`, no `sort` — establishes the cursor.
     const first = await queryIssues(store, { view: 'list', limit: 2 });
-    if (first.view !== 'list') throw new Error(`expected view 'list', got '${first.view}'`);
+    if (first.view !== 'list')
+      throw new Error(`expected view 'list', got '${first.view}'`);
     expect(first.hasMore).toBe(true);
     expect(first.items.map((i) => i.uid)).toEqual(created.slice(0, 2));
 
     // Second page via the SAME shape of call the AC-20 throw-case used
     // (after set, sort omitted) — must succeed, not throw.
-    const second = await queryIssues(store, { view: 'list', limit: 2, after: first.nextCursor });
-    if (second.view !== 'list') throw new Error(`expected view 'list', got '${second.view}'`);
+    const second = await queryIssues(store, {
+      view: 'list',
+      limit: 2,
+      after: first.nextCursor,
+    });
+    if (second.view !== 'list')
+      throw new Error(`expected view 'list', got '${second.view}'`);
     expect(second.hasMore).toBe(false);
     expect(second.items.map((i) => i.uid)).toEqual(created.slice(2));
   });

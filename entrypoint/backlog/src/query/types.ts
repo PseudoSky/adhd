@@ -58,22 +58,48 @@ export type IIssuePseudoField =
 export type IIssueField = IIssuePlainField | IIssuePseudoField;
 
 export const ISSUE_PLAIN_FIELDS: readonly IIssuePlainField[] = [
-  'uid', 'title', 'kind', 'status', 'priority', 'project', 'component',
-  'createdAt', 'updatedAt', 'assignee', 'author', 'closedAt',
+  'uid',
+  'title',
+  'kind',
+  'status',
+  'priority',
+  'project',
+  'component',
+  'createdAt',
+  'updatedAt',
+  'assignee',
+  'author',
+  'closedAt',
 ];
 
 export const ISSUE_PSEUDO_FIELDS: readonly IIssuePseudoField[] = [
-  'body', 'citations', 'notes', 'auditTrail', 'blockers', 'related', '_score', '_vector',
+  'body',
+  'citations',
+  'notes',
+  'auditTrail',
+  'blockers',
+  'related',
+  '_score',
+  '_vector',
 ];
 
-const ISSUE_FIELD_SET: ReadonlySet<string> = new Set<string>([...ISSUE_PLAIN_FIELDS, ...ISSUE_PSEUDO_FIELDS]);
+const ISSUE_FIELD_SET: ReadonlySet<string> = new Set<string>([
+  ...ISSUE_PLAIN_FIELDS,
+  ...ISSUE_PSEUDO_FIELDS,
+]);
 
 export function isKnownIssueField(name: string): name is IIssueField {
   return ISSUE_FIELD_SET.has(name);
 }
 
 /** SPEC.md §6.5: "Default (`fields` omitted): the exact five-field terse card established by `DEFAULT_CARD_FIELDS`." */
-export const DEFAULT_ISSUE_CARD_FIELDS: readonly IIssuePlainField[] = ['uid', 'kind', 'title', 'status', 'priority'];
+export const DEFAULT_ISSUE_CARD_FIELDS: readonly IIssuePlainField[] = [
+  'uid',
+  'kind',
+  'title',
+  'status',
+  'priority',
+];
 
 /** A citation, projected for read (mirrors the write layer's `ICitationInput` shape plus the server-computed `sha`). */
 export interface IIssueCitation {
@@ -188,7 +214,12 @@ export interface IIssueFilter {
   updatedAt?: { since?: string; until?: string };
 }
 
-export type IIssueSort = 'priority' | 'updated' | 'created' | 'relevance' | 'textMatch';
+export type IIssueSort =
+  | 'priority'
+  | 'updated'
+  | 'created'
+  | 'relevance'
+  | 'textMatch';
 export type IIssueSortDirection = 'asc' | 'desc';
 /**
  * `projects`/`components`/`locations` (SPEC.md §3a/§8 AC-9) are the registry
@@ -198,7 +229,17 @@ export type IIssueSortDirection = 'asc' | 'desc';
  * `listLocations`, distinct from the issue-search views above (§6.1:
  * "conflating the two would be wrong").
  */
-export type IIssueView = 'list' | 'ready' | 'graph' | 'order' | 'stale' | 'similar' | 'overlap' | 'projects' | 'components' | 'locations';
+export type IIssueView =
+  | 'list'
+  | 'ready'
+  | 'graph'
+  | 'order'
+  | 'stale'
+  | 'similar'
+  | 'overlap'
+  | 'projects'
+  | 'components'
+  | 'locations';
 export type IIssueQueryFormat = 'json' | 'markdown';
 
 /** SPEC.md §5, §6.1's `axis` — the grouping dimension for `overlapUids` (§6.2). */
@@ -245,7 +286,11 @@ export interface IIssuePage {
 /** SPEC.md §5's `DependencyGraph`, using this system's edge vocabulary (§6.2: `blocks`, not `DEPENDS_ON`). */
 export interface IDependencyGraph {
   nodes: Array<{ uid: string; title: string; status: string }>;
-  edges: Array<{ from: string; to: string; rel: 'blocks' | 'relates_to' | 'part_of' }>;
+  edges: Array<{
+    from: string;
+    to: string;
+    rel: 'blocks' | 'relates_to' | 'part_of';
+  }>;
 }
 
 export type ITopoOrderResult =
@@ -404,4 +449,8 @@ export type IIssueGetInput = IIssueGetByUidInput | IIssueGetRegistryInput;
  * interface to `ICreateIssueCard` — see that file's doc comment for the full
  * repro — so no workaround is needed here; this type is plain `IIssueCard`.
  */
-export type IIssueGetResult = IIssueCard | IProjectDetail | IComponentDetail | ILocationDetail;
+export type IIssueGetResult =
+  | IIssueCard
+  | IProjectDetail
+  | IComponentDetail
+  | ILocationDetail;

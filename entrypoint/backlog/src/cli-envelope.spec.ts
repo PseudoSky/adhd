@@ -89,7 +89,11 @@ function runBin(args: string[]): Run {
   if (result.error) {
     throw new Error(`spawn failed: ${String(result.error)}`);
   }
-  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+  return {
+    status: result.status,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
 }
 
 function runJson(args: string[]): { run: Run; body: Record<string, unknown> } {
@@ -99,7 +103,9 @@ function runJson(args: string[]): { run: Run; body: Record<string, unknown> } {
   try {
     body = JSON.parse(line) as Record<string, unknown>;
   } catch {
-    throw new Error(`non-JSON stdout for ${args.join(' ')}: ${run.stdout}\n${run.stderr}`);
+    throw new Error(
+      `non-JSON stdout for ${args.join(' ')}: ${run.stdout}\n${run.stderr}`
+    );
   }
   return { run, body };
 }
@@ -115,7 +121,10 @@ beforeAll(() => {
     '--input',
     JSON.stringify({ name: PROJECT_NAME, by: 'cli-envelope.spec' }),
   ]);
-  expect(seededProject.run.status, `seed upsert-project failed: ${seededProject.run.stderr}`).toBe(0);
+  expect(
+    seededProject.run.status,
+    `seed upsert-project failed: ${seededProject.run.stderr}`
+  ).toBe(0);
   expect(seededProject.body['ok']).toBe(true);
   const projectData = seededProject.body['data'] as Record<string, unknown>;
   projectUid = projectData['uid'] as string;
@@ -167,7 +176,11 @@ describe('outcome envelope over the real CLI mount', () => {
   });
 
   it('a successful get returns a real card — never a codec envelope', () => {
-    const { run, body } = runJson(['get', '--input', JSON.stringify({ uid: seedUid })]);
+    const { run, body } = runJson([
+      'get',
+      '--input',
+      JSON.stringify({ uid: seedUid }),
+    ]);
     expect(run.status).toBe(0);
     const data = body['data'] as Record<string, unknown> | undefined;
     expect(data, 'envelope `data` was stripped by the mount').toBeDefined();
@@ -179,7 +192,11 @@ describe('outcome envelope over the real CLI mount', () => {
   });
 
   it('a successful query returns its real, un-collapsed items — never a bare {ok:true}', () => {
-    const { run, body } = runJson(['query', '--input', JSON.stringify({ view: 'list', limit: 2 })]);
+    const { run, body } = runJson([
+      'query',
+      '--input',
+      JSON.stringify({ view: 'list', limit: 2 }),
+    ]);
     expect(run.status).toBe(0);
     const data = body['data'] as Record<string, unknown> | undefined;
     // The defect this covers: `data` (the whole `view:'list'` page, items
@@ -202,7 +219,11 @@ describe('outcome envelope over the real CLI mount', () => {
 
 describe('exit-code contract (the CLI outcome envelope, §7.1)', () => {
   it('a reported item_not_found exits 1, not 0', () => {
-    const { run, body } = runJson(['get', '--input', JSON.stringify({ uid: 'no-such-uid-at-all' })]);
+    const { run, body } = runJson([
+      'get',
+      '--input',
+      JSON.stringify({ uid: 'no-such-uid-at-all' }),
+    ]);
     expect(body['ok']).toBe(false);
     // The defect: the verb RETURNS this failure rather than throwing, so the
     // process exited 0 and a caller's `&&` chain proceeded on a failure.
@@ -220,7 +241,11 @@ describe('exit-code contract (the CLI outcome envelope, §7.1)', () => {
   });
 
   it('a successful call still exits 0', () => {
-    const { run } = runJson(['query', '--input', JSON.stringify({ view: 'list', limit: 1 })]);
+    const { run } = runJson([
+      'query',
+      '--input',
+      JSON.stringify({ view: 'list', limit: 1 }),
+    ]);
     expect(run.status).toBe(0);
   });
 

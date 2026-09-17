@@ -30,7 +30,10 @@
  * NEVER rejects; every failure is caught internally, logged, and the backfill
  * sweep (§7) is the designated repair path.
  */
-import { getSemanticBackend, markSemanticVectorSpacePopulated } from './semantic-search.js';
+import {
+  getSemanticBackend,
+  markSemanticVectorSpacePopulated,
+} from './semantic-search.js';
 
 import { mutateMetadata } from './mutate-metadata.js';
 
@@ -49,7 +52,10 @@ const CONTENT_MARKER_PREFIX = 'adhd-backlog:';
  * vectors toward each other.
  */
 function stripContentMarker(content: string): string {
-  return content.replace(new RegExp(`\\n\\n<!--\\s*${CONTENT_MARKER_PREFIX}[^>]*-->\\s*$`), '');
+  return content.replace(
+    new RegExp(`\\n\\n<!--\\s*${CONTENT_MARKER_PREFIX}[^>]*-->\\s*$`),
+    ''
+  );
 }
 import type { GraphBacklogStore } from './graph-backlog-store.js';
 
@@ -142,7 +148,11 @@ export async function flushEmbeds(store: GraphBacklogStore): Promise<void> {
  * directly when a caller passed `awaitEmbed: true` (RAG-SPEC.md §2.2) — it
  * never rejects, so awaiting it is always safe regardless of embed outcome.
  */
-export function scheduleEmbed(store: GraphBacklogStore, nodeId: number, content: string): Promise<void> {
+export function scheduleEmbed(
+  store: GraphBacklogStore,
+  nodeId: number,
+  content: string
+): Promise<void> {
   const backend = getSemanticBackend();
   if (backend === null) return Promise.resolve();
 
@@ -163,7 +173,10 @@ export function scheduleEmbed(store: GraphBacklogStore, nodeId: number, content:
       // graph metadata, so "same transaction" is honoured as tightly as the
       // seam allows: immediately, sequentially, with nothing else touching
       // this node's provenance in between.
-      await mutateMetadata(store, nodeId, (meta) => ({ ...meta, embedModel: backend.modelId }));
+      await mutateMetadata(store, nodeId, (meta) => ({
+        ...meta,
+        embedModel: backend.modelId,
+      }));
     } catch (err) {
       // §2.5 — never propagate. FTS reachability is unaffected; backfill (§7)
       // repairs this node's vector on its next sweep.

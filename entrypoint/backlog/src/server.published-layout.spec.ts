@@ -34,7 +34,14 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import {
+  cpSync,
+  mkdtempSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -70,7 +77,9 @@ describe('backlog published (rebased-to-root) layout — real npm-install-shape 
     // invoked by explicit path (`node <root>/index.js`), not via `require()`
     // of the package name.
     for (const entry of readdirSync(DIST_DIR)) {
-      cpSync(join(DIST_DIR, entry), join(publishedRoot, entry), { recursive: true });
+      cpSync(join(DIST_DIR, entry), join(publishedRoot, entry), {
+        recursive: true,
+      });
     }
 
     const indexJs = join(publishedRoot, 'index.js');
@@ -82,7 +91,9 @@ describe('backlog published (rebased-to-root) layout — real npm-install-shape 
     });
 
     if (result.error) {
-      throw new Error(`spawn failed for ${indexJs} --help: ${String(result.error)}`);
+      throw new Error(
+        `spawn failed for ${indexJs} --help: ${String(result.error)}`
+      );
     }
 
     // The real, reproduced bug: a "cannot mount" error naming the WRONG,
@@ -117,7 +128,9 @@ describe('backlog published (rebased-to-root) layout — real npm-install-shape 
     mkdirSync(TMP_ROOT, { recursive: true });
     publishedRoot = mkdtempSync(join(TMP_ROOT, 'published-layout-version-'));
     for (const entry of readdirSync(DIST_DIR)) {
-      cpSync(join(DIST_DIR, entry), join(publishedRoot, entry), { recursive: true });
+      cpSync(join(DIST_DIR, entry), join(publishedRoot, entry), {
+        recursive: true,
+      });
     }
 
     const indexJs = join(publishedRoot, 'index.js');
@@ -129,12 +142,22 @@ describe('backlog published (rebased-to-root) layout — real npm-install-shape 
     });
 
     if (result.error) {
-      throw new Error(`spawn failed for ${indexJs} version: ${String(result.error)}`);
+      throw new Error(
+        `spawn failed for ${indexJs} version: ${String(result.error)}`
+      );
     }
-    expect(result.status, `stderr:\n${result.stderr}\nstdout:\n${result.stdout}`).toBe(0);
+    expect(
+      result.status,
+      `stderr:\n${result.stderr}\nstdout:\n${result.stdout}`
+    ).toBe(0);
 
-    const realPkg = JSON.parse(readFileSync(join(publishedRoot, 'package.json'), 'utf8')) as { name: string; version: string };
-    const parsed = JSON.parse(result.stdout.trim()) as { name: string; version: string };
+    const realPkg = JSON.parse(
+      readFileSync(join(publishedRoot, 'package.json'), 'utf8')
+    ) as { name: string; version: string };
+    const parsed = JSON.parse(result.stdout.trim()) as {
+      name: string;
+      version: string;
+    };
     expect(parsed).toEqual({ name: realPkg.name, version: realPkg.version });
   }, 30_000);
 });

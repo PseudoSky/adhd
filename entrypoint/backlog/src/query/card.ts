@@ -15,7 +15,11 @@
  * reads.
  */
 
-import type { EdgeRecord, GraphBackend, NodeRecord } from '@adhd/sox-graph-store';
+import type {
+  EdgeRecord,
+  GraphBackend,
+  NodeRecord,
+} from '@adhd/sox-graph-store';
 import {
   type IIssueAuditEntry,
   type IIssueCard,
@@ -31,17 +35,27 @@ import { BacklogValidationError } from '../write/errors.js';
 import { getOutgoingEdges, resolveIssuePlacement } from './resolve.js';
 
 /** SPEC.md §6.5's `assertKnownFields` — unknown name → `BacklogValidationError` naming it, never a silent drop. */
-export function assertKnownIssueFields(fields: readonly string[] | undefined): asserts fields is readonly IIssueField[] | undefined {
+export function assertKnownIssueFields(
+  fields: readonly string[] | undefined
+): asserts fields is readonly IIssueField[] | undefined {
   if (!fields) return;
   for (const f of fields) {
     if (!isKnownIssueField(f)) {
-      throw new BacklogValidationError('fields', `unknown field "${f}" — known fields: ${[...ISSUE_PLAIN_FIELDS, ...ISSUE_PSEUDO_FIELDS].join(', ')}`);
+      throw new BacklogValidationError(
+        'fields',
+        `unknown field "${f}" — known fields: ${[
+          ...ISSUE_PLAIN_FIELDS,
+          ...ISSUE_PSEUDO_FIELDS,
+        ].join(', ')}`
+      );
     }
   }
 }
 
 /** `status.meta.metadata.terminal` — the closedness knob (DATA_MODEL.md §3, SPEC.md §2). Defaults to `false` for a status row written before the field existed, never `true` by omission (a closedness knob that defaults closed would silently exclude items from open-item views). */
-export function isStatusTerminal(statusRecord: NodeRecord | undefined): boolean {
+export function isStatusTerminal(
+  statusRecord: NodeRecord | undefined
+): boolean {
   return statusRecord?.metadata?.terminal === true;
 }
 
@@ -58,15 +72,30 @@ interface IEdgeTargets {
  * `getEdges({src: issueId})` result, batching the target reads into one
  * `getNodesByIds` call.
  */
-async function resolveCatalogTargets(graph: GraphBackend, issueId: number, outgoing: EdgeRecord[]): Promise<IEdgeTargets> {
-  const kindEdge = outgoing.find((e) => e.rel === 'has_kind' && e.src === issueId);
-  const statusEdge = outgoing.find((e) => e.rel === 'has_status' && e.src === issueId);
-  const priorityEdge = outgoing.find((e) => e.rel === 'has_priority' && e.src === issueId);
-  const authorEdge = outgoing.find((e) => e.rel === 'authored_by' && e.src === issueId);
-
-  const ids = [kindEdge?.dst, statusEdge?.dst, priorityEdge?.dst, authorEdge?.dst].filter(
-    (id): id is number => id !== undefined,
+async function resolveCatalogTargets(
+  graph: GraphBackend,
+  issueId: number,
+  outgoing: EdgeRecord[]
+): Promise<IEdgeTargets> {
+  const kindEdge = outgoing.find(
+    (e) => e.rel === 'has_kind' && e.src === issueId
   );
+  const statusEdge = outgoing.find(
+    (e) => e.rel === 'has_status' && e.src === issueId
+  );
+  const priorityEdge = outgoing.find(
+    (e) => e.rel === 'has_priority' && e.src === issueId
+  );
+  const authorEdge = outgoing.find(
+    (e) => e.rel === 'authored_by' && e.src === issueId
+  );
+
+  const ids = [
+    kindEdge?.dst,
+    statusEdge?.dst,
+    priorityEdge?.dst,
+    authorEdge?.dst,
+  ].filter((id): id is number => id !== undefined);
   if (ids.length === 0) return {};
   const nodes = await graph.getNodesByIds(ids);
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -78,23 +107,37 @@ async function resolveCatalogTargets(graph: GraphBackend, issueId: number, outgo
   };
 }
 
-async function resolveCitations(graph: GraphBackend, issueId: number, outgoing: EdgeRecord[]): Promise<IIssueCitation[]> {
-  const edges = outgoing.filter((e) => e.rel === 'has_citation' && e.src === issueId);
+async function resolveCitations(
+  graph: GraphBackend,
+  issueId: number,
+  outgoing: EdgeRecord[]
+): Promise<IIssueCitation[]> {
+  const edges = outgoing.filter(
+    (e) => e.rel === 'has_citation' && e.src === issueId
+  );
   if (edges.length === 0) return [];
   const nodes = await graph.getNodesByIds(edges.map((e) => e.dst));
   return nodes.map((n) => ({
     uid: n.uid,
-    file: typeof n.metadata?.target === 'string' ? n.metadata.target : (n.name ?? ''),
+    file:
+      typeof n.metadata?.target === 'string' ? n.metadata.target : n.name ?? '',
     lines: typeof n.metadata?.line === 'string' ? n.metadata.line : undefined,
     context: n.content || undefined,
-    symbol: typeof n.metadata?.symbol === 'string' ? n.metadata.symbol : undefined,
+    symbol:
+      typeof n.metadata?.symbol === 'string' ? n.metadata.symbol : undefined,
     sha: typeof n.metadata?.sha === 'string' ? n.metadata.sha : 'unverified',
     at: typeof n.metadata?.at === 'string' ? n.metadata.at : n.tCreated,
   }));
 }
 
-async function resolveNotes(graph: GraphBackend, issueId: number, outgoing: EdgeRecord[]): Promise<IIssueNote[]> {
-  const edges = outgoing.filter((e) => e.rel === 'has_note' && e.src === issueId);
+async function resolveNotes(
+  graph: GraphBackend,
+  issueId: number,
+  outgoing: EdgeRecord[]
+): Promise<IIssueNote[]> {
+  const edges = outgoing.filter(
+    (e) => e.rel === 'has_note' && e.src === issueId
+  );
   if (edges.length === 0) return [];
   const nodes = await graph.getNodesByIds(edges.map((e) => e.dst));
   return nodes.map((n) => ({
@@ -106,14 +149,21 @@ async function resolveNotes(graph: GraphBackend, issueId: number, outgoing: Edge
 }
 
 /** The full audit trail for an issue — `audits` edges FROM the issue (SPEC.md §3: `audits: * → audit (1:n)`, the subject is the edge SOURCE), sorted oldest-first. */
-export async function resolveAuditTrail(graph: GraphBackend, issueId: number, outgoing?: EdgeRecord[]): Promise<IIssueAuditEntry[]> {
-  const edges = (outgoing ?? (await getOutgoingEdges(graph, issueId))).filter((e) => e.rel === 'audits' && e.src === issueId);
+export async function resolveAuditTrail(
+  graph: GraphBackend,
+  issueId: number,
+  outgoing?: EdgeRecord[]
+): Promise<IIssueAuditEntry[]> {
+  const edges = (outgoing ?? (await getOutgoingEdges(graph, issueId))).filter(
+    (e) => e.rel === 'audits' && e.src === issueId
+  );
   if (edges.length === 0) return [];
   const nodes = await graph.getNodesByIds(edges.map((e) => e.dst));
   const entries = nodes.map((n) => ({
     uid: n.uid,
     actor: typeof n.metadata?.actor === 'string' ? n.metadata.actor : '',
-    action: typeof n.metadata?.action === 'string' ? n.metadata.action : (n.name ?? ''),
+    action:
+      typeof n.metadata?.action === 'string' ? n.metadata.action : n.name ?? '',
     from: typeof n.metadata?.from === 'string' ? n.metadata.from : undefined,
     to: typeof n.metadata?.to === 'string' ? n.metadata.to : undefined,
     note: typeof n.metadata?.note === 'string' ? n.metadata.note : undefined,
@@ -129,7 +179,10 @@ export async function resolveAuditTrail(graph: GraphBackend, issueId: number, ou
  * `blocks` edges — `e.dst === issueId`) and are NOT YET terminal — "what's
  * actually blocking it right now," never the full historical blocker set.
  */
-export async function resolveBlockers(graph: GraphBackend, issueId: number): Promise<IIssueRef[]> {
+export async function resolveBlockers(
+  graph: GraphBackend,
+  issueId: number
+): Promise<IIssueRef[]> {
   const incoming = await graph.getEdges({ dst: issueId, rel: 'blocks' });
   if (incoming.length === 0) return [];
   const blockerIds = incoming.map((e) => e.src);
@@ -137,18 +190,35 @@ export async function resolveBlockers(graph: GraphBackend, issueId: number): Pro
   const statuses = await resolveStatusesFor(graph, blockers);
   return blockers
     .filter((b) => !isStatusTerminal(statuses.get(b.id)))
-    .map((b) => ({ uid: b.uid, title: b.name ?? '', status: statuses.get(b.id)?.name ?? '' }));
+    .map((b) => ({
+      uid: b.uid,
+      title: b.name ?? '',
+      status: statuses.get(b.id)?.name ?? '',
+    }));
 }
 
 /** `related` — both directions of `relates_to` (an `n:m` symmetric-in-practice rel, §3), deduplicated. */
-export async function resolveRelated(graph: GraphBackend, issueId: number, outgoing?: EdgeRecord[]): Promise<IIssueRef[]> {
-  const out = (outgoing ?? (await getOutgoingEdges(graph, issueId))).filter((e) => e.rel === 'relates_to' && e.src === issueId);
+export async function resolveRelated(
+  graph: GraphBackend,
+  issueId: number,
+  outgoing?: EdgeRecord[]
+): Promise<IIssueRef[]> {
+  const out = (outgoing ?? (await getOutgoingEdges(graph, issueId))).filter(
+    (e) => e.rel === 'relates_to' && e.src === issueId
+  );
   const incoming = await graph.getEdges({ dst: issueId, rel: 'relates_to' });
-  const otherIds = new Set<number>([...out.map((e) => e.dst), ...incoming.map((e) => e.src)]);
+  const otherIds = new Set<number>([
+    ...out.map((e) => e.dst),
+    ...incoming.map((e) => e.src),
+  ]);
   if (otherIds.size === 0) return [];
   const others = await graph.getNodesByIds([...otherIds]);
   const statuses = await resolveStatusesFor(graph, others);
-  return others.map((n) => ({ uid: n.uid, title: n.name ?? '', status: statuses.get(n.id)?.name ?? '' }));
+  return others.map((n) => ({
+    uid: n.uid,
+    title: n.name ?? '',
+    status: statuses.get(n.id)?.name ?? '',
+  }));
 }
 
 /**
@@ -161,13 +231,17 @@ export async function resolveRelated(graph: GraphBackend, issueId: number, outgo
  * `Promise.all` — is still N round trips to the backend, not the constant
  * number this function promises its callers.
  */
-async function resolveStatusesFor(graph: GraphBackend, issues: NodeRecord[]): Promise<Map<number, NodeRecord>> {
+async function resolveStatusesFor(
+  graph: GraphBackend,
+  issues: NodeRecord[]
+): Promise<Map<number, NodeRecord>> {
   if (issues.length === 0) return new Map();
   const issueIds = new Set(issues.map((i) => i.id));
   const edges = await graph.getEdges({ rel: 'has_status' });
   const statusEdgeByIssue = new Map<number, number>();
   for (const e of edges) {
-    if (issueIds.has(e.src) && !statusEdgeByIssue.has(e.src)) statusEdgeByIssue.set(e.src, e.dst);
+    if (issueIds.has(e.src) && !statusEdgeByIssue.has(e.src))
+      statusEdgeByIssue.set(e.src, e.dst);
   }
   const statusIds = [...new Set(statusEdgeByIssue.values())];
   if (statusIds.length === 0) return new Map();
@@ -196,12 +270,13 @@ export async function assembleIssueCard(
   graph: GraphBackend,
   issue: NodeRecord,
   fields: readonly IIssueField[],
-  opts: IAssembleIssueCardOptions = {},
+  opts: IAssembleIssueCardOptions = {}
 ): Promise<IIssueCard> {
   const card: IIssueCard = { uid: issue.uid };
   const want = (f: IIssueField): boolean => fields.includes(f);
 
-  const needsCatalogTargets = want('kind') || want('status') || want('priority') || want('author');
+  const needsCatalogTargets =
+    want('kind') || want('status') || want('priority') || want('author');
   const needsPlacement = want('project') || want('component');
   const needsCitations = want('citations');
   const needsNotes = want('notes');
@@ -209,8 +284,13 @@ export async function assembleIssueCard(
   const needsBlockers = want('blockers');
   const needsRelated = want('related');
 
-  const outgoing = opts.outgoingEdges
-    ?? (needsCatalogTargets || needsCitations || needsNotes || needsAuditTrail || needsRelated
+  const outgoing =
+    opts.outgoingEdges ??
+    (needsCatalogTargets ||
+    needsCitations ||
+    needsNotes ||
+    needsAuditTrail ||
+    needsRelated
       ? await getOutgoingEdges(graph, issue.id)
       : undefined);
 
@@ -230,9 +310,12 @@ export async function assembleIssueCard(
   if (needsCatalogTargets && outgoing) {
     const targets = await resolveCatalogTargets(graph, issue.id, outgoing);
     if (want('kind') && targets.kind) card.kind = targets.kind.name ?? '';
-    if (want('status') && targets.status) card.status = targets.status.name ?? '';
-    if (want('priority') && targets.priority) card.priority = targets.priority.name ?? '';
-    if (want('author') && targets.author) card.author = targets.author.name ?? '';
+    if (want('status') && targets.status)
+      card.status = targets.status.name ?? '';
+    if (want('priority') && targets.priority)
+      card.priority = targets.priority.name ?? '';
+    if (want('author') && targets.author)
+      card.author = targets.author.name ?? '';
   }
 
   if (needsPlacement) {
@@ -241,11 +324,15 @@ export async function assembleIssueCard(
     if (want('component') && component) card.component = component.uid;
   }
 
-  if (needsCitations && outgoing) card.citations = await resolveCitations(graph, issue.id, outgoing);
-  if (needsNotes && outgoing) card.notes = await resolveNotes(graph, issue.id, outgoing);
-  if (needsAuditTrail && outgoing) card.auditTrail = await resolveAuditTrail(graph, issue.id, outgoing);
+  if (needsCitations && outgoing)
+    card.citations = await resolveCitations(graph, issue.id, outgoing);
+  if (needsNotes && outgoing)
+    card.notes = await resolveNotes(graph, issue.id, outgoing);
+  if (needsAuditTrail && outgoing)
+    card.auditTrail = await resolveAuditTrail(graph, issue.id, outgoing);
   if (needsBlockers) card.blockers = await resolveBlockers(graph, issue.id);
-  if (needsRelated && outgoing) card.related = await resolveRelated(graph, issue.id, outgoing);
+  if (needsRelated && outgoing)
+    card.related = await resolveRelated(graph, issue.id, outgoing);
 
   if (want('_score') && opts.score !== undefined) card._score = opts.score;
   // `_vector` (§6.5's pseudo field) only exists on a raw vector-search response, which this
@@ -261,7 +348,13 @@ export async function assembleIssueCards(
   graph: GraphBackend,
   issues: NodeRecord[],
   fields: readonly IIssueField[],
-  scoreByUid?: ReadonlyMap<string, number>,
+  scoreByUid?: ReadonlyMap<string, number>
 ): Promise<IIssueCard[]> {
-  return Promise.all(issues.map((issue) => assembleIssueCard(graph, issue, fields, { score: scoreByUid?.get(issue.uid) })));
+  return Promise.all(
+    issues.map((issue) =>
+      assembleIssueCard(graph, issue, fields, {
+        score: scoreByUid?.get(issue.uid),
+      })
+    )
+  );
 }

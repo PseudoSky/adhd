@@ -31,7 +31,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startBacklogServer } from './server.js';
-import { openTestIssueStore, seedProject } from './test/helpers/open-test-issue-store.js';
+import {
+  openTestIssueStore,
+  seedProject,
+} from './test/helpers/open-test-issue-store.js';
 import { createIssue } from './write/create-issue.js';
 import { buildBacklogEnv, resolveBacklogDbPath } from './env.js';
 import type { IOutcomeEnvelope } from './envelope.js';
@@ -62,7 +65,9 @@ async function waitForHttpReady(port: number, path: string): Promise<void> {
       await new Promise((r) => setTimeout(r, 100));
     }
   }
-  throw new Error(`server never became ready on port ${port}: ${String(lastErr)}`);
+  throw new Error(
+    `server never became ready on port ${port}: ${String(lastErr)}`
+  );
 }
 
 describe('startBacklogServer — live HTTP mount, real fetch, no mocked fns', () => {
@@ -87,19 +92,36 @@ describe('startBacklogServer — live HTTP mount, real fetch, no mocked fns', ()
     // store of its own) can open it exclusively. `resolveBacklogDbPath`
     // resolves the exact same file `startBacklogServer` will open below,
     // given the same `adhdRoot`/scope.
-    const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
+    const seedEnv = buildBacklogEnv({
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+    });
     seedEnv.ensureDirs();
     const dbPath = resolveBacklogDbPath(seedEnv);
     const seedStore = await openTestIssueStore(dbPath);
     const { projectUid } = await seedProject(seedStore, 'http-test-project');
-    const seeded = await createIssue(seedStore, { project: projectUid, title: 'via http', body: 'x', by: 'http-spec-seed' });
+    const seeded = await createIssue(seedStore, {
+      project: projectUid,
+      title: 'via http',
+      body: 'x',
+      by: 'http-spec-seed',
+    });
     await seedStore.close();
     if (!seeded.uid) throw new Error('seed createIssue did not return a uid');
     const seededUid = seeded.uid;
 
     const port = await freePort();
     controller = new AbortController();
-    serverPromise = startBacklogServer({ transport: 'http', port, host: '127.0.0.1', scope: 'project', cwd: adhdRoot, adhdRoot, signal: controller.signal });
+    serverPromise = startBacklogServer({
+      transport: 'http',
+      port,
+      host: '127.0.0.1',
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+      signal: controller.signal,
+    });
 
     // Route is `/backlog/get` — see this file's header note and
     // `api.surface.spec.ts`'s longhand mounted-surface table.
@@ -113,7 +135,9 @@ describe('startBacklogServer — live HTTP mount, real fetch, no mocked fns', ()
     const res = await fetch(`http://127.0.0.1:${port}/backlog/get`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ data: { input: { uid: seededUid, fields: ['uid', 'title', 'body'] } } }),
+      body: JSON.stringify({
+        data: { input: { uid: seededUid, fields: ['uid', 'title', 'body'] } },
+      }),
     });
     expect(res.status).toBe(200);
     const envelope = (await res.json()) as IOutcomeEnvelope<IIssueCard>;
@@ -135,16 +159,31 @@ describe('startBacklogServer — live HTTP mount, real fetch, no mocked fns', ()
     // The `project` a real `create` call resolves against must already
     // exist (SPEC: `project` is resolved-only, never minted by `create`),
     // so seed it through the same real store path before the server starts.
-    const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
+    const seedEnv = buildBacklogEnv({
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+    });
     seedEnv.ensureDirs();
     const dbPath = resolveBacklogDbPath(seedEnv);
     const seedStore = await openTestIssueStore(dbPath);
-    const { projectUid } = await seedProject(seedStore, 'http-post-test-project');
+    const { projectUid } = await seedProject(
+      seedStore,
+      'http-post-test-project'
+    );
     await seedStore.close();
 
     const port = await freePort();
     controller = new AbortController();
-    serverPromise = startBacklogServer({ transport: 'http', port, host: '127.0.0.1', scope: 'project', cwd: adhdRoot, adhdRoot, signal: controller.signal });
+    serverPromise = startBacklogServer({
+      transport: 'http',
+      port,
+      host: '127.0.0.1',
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+      signal: controller.signal,
+    });
 
     await waitForHttpReady(port, `/_meta/openapi`);
 
@@ -155,10 +194,20 @@ describe('startBacklogServer — live HTTP mount, real fetch, no mocked fns', ()
     const createRes = await fetch(`http://127.0.0.1:${port}/backlog/create`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ data: { input: { title: 'posted', body: 'x', project: projectUid, by: 'http-spec' } } }),
+      body: JSON.stringify({
+        data: {
+          input: {
+            title: 'posted',
+            body: 'x',
+            project: projectUid,
+            by: 'http-spec',
+          },
+        },
+      }),
     });
     expect(createRes.status).toBe(200);
-    const createEnvelope = (await createRes.json()) as IOutcomeEnvelope<ICreateIssueResult>;
+    const createEnvelope =
+      (await createRes.json()) as IOutcomeEnvelope<ICreateIssueResult>;
     expect(createEnvelope.ok).toBe(true);
     if (!createEnvelope.ok) throw new Error('unreachable — checked above');
     expect(createEnvelope.data.created).toBe(true);

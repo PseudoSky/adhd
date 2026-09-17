@@ -33,12 +33,19 @@ import {
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
 import { createIssue } from './create-issue.js';
 import { claim, type IClaimOutcome } from './claim.js';
-import { ClaimHeldError, InvalidArgumentError, IssueNotFoundError } from './errors.js';
+import {
+  ClaimHeldError,
+  InvalidArgumentError,
+  IssueNotFoundError,
+} from './errors.js';
 import { getNodeByUidTx, type ITxNodeRow } from './tx.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-async function readNode(store: TestIssueStore, uid: string): Promise<ITxNodeRow | null> {
+async function readNode(
+  store: TestIssueStore,
+  uid: string
+): Promise<ITxNodeRow | null> {
   return store.adapter.transaction(async (tx) => getNodeByUidTx(tx, uid));
 }
 
@@ -50,15 +57,20 @@ interface RawAuditRow {
 }
 
 /** Reads every `audit` node linked to `subjectRowid` via a live `audits` edge, oldest first — a direct, real SQL read, never a mock. */
-async function readAuditTrail(store: TestIssueStore, subjectRowid: number): Promise<RawAuditRow[]> {
+async function readAuditTrail(
+  store: TestIssueStore,
+  subjectRowid: number
+): Promise<RawAuditRow[]> {
   const { rows } = await store.adapter.executeAll<{ meta: string | null }>(
     `SELECT a.meta as meta FROM edge e JOIN node a ON a.rowid = e.dst
      WHERE e.src = ? AND e.rel = 'audits' AND e.t_invalid IS NULL AND a.kind = 'audit'
      ORDER BY a.rowid ASC`,
-    [subjectRowid],
+    [subjectRowid]
   );
   return rows.map((row) => {
-    const meta = row.meta ? (JSON.parse(row.meta) as Record<string, unknown>) : {};
+    const meta = row.meta
+      ? (JSON.parse(row.meta) as Record<string, unknown>)
+      : {};
     return {
       action: String(meta['action'] ?? ''),
       from: (meta['from'] as string | null) ?? null,
@@ -89,7 +101,8 @@ describe('claim — rule-table coverage (SPEC.md §6.3.5, real store, single con
     });
     issueUid = created.uid;
     const row = await readNode(store, issueUid);
-    if (!row) throw new Error('setup: issue not found immediately after createIssue');
+    if (!row)
+      throw new Error('setup: issue not found immediately after createIssue');
     issueRowid = row.rowid;
   });
 
@@ -99,7 +112,11 @@ describe('claim — rule-table coverage (SPEC.md §6.3.5, real store, single con
   });
 
   it('claim on an unclaimed issue: writes {claimedBy, claimedAt}, returns status:"claimed"', async () => {
-    const outcome = await claim(store, { uid: issueUid, by: 'agent-a', action: 'claim' });
+    const outcome = await claim(store, {
+      uid: issueUid,
+      by: 'agent-a',
+      action: 'claim',
+    });
     expect(outcome.status).toBe('claimed');
     expect(outcome.claimedBy).toBe('agent-a');
     expect(typeof outcome.claimedAt).toBe('string');
@@ -113,11 +130,19 @@ describe('claim — rule-table coverage (SPEC.md §6.3.5, real store, single con
   });
 
   it('claim by the SAME claimant again: status:"held", claimedAt bumps (idempotent re-claim)', async () => {
-    const first = await claim(store, { uid: issueUid, by: 'agent-a', action: 'claim' });
+    const first = await claim(store, {
+      uid: issueUid,
+      by: 'agent-a',
+      action: 'claim',
+    });
     // Force a measurable clock delta so a passing test can't be an artifact of two
     // identical Date.now() reads landing in the same millisecond.
     await new Promise((resolve) => setTimeout(resolve, 5));
-    const second = await claim(store, { uid: issueUid, by: 'agent-a', action: 'claim' });
+    const second = await claim(store, {
+      uid: issueUid,
+      by: 'agent-a',
+      action: 'claim',
+    });
 
     expect(second.status).toBe('held');
     expect(second.heldBy).toBe('agent-a');
@@ -129,8 +154,14 @@ describe('claim — rule-table coverage (SPEC.md §6.3.5, real store, single con
   });
 
   it('claim by a DIFFERENT agent while not stale and no force: throws ClaimHeldError(heldBy, heldSince)', async () => {
-    const first = await claim(store, { uid: issueUid, by: 'agent-a', action: 'claim' });
-    await expect(claim(store, { uid: issueUid, by: 'agent-b', action: 'claim' })).rejects.toThrow(ClaimHeldError);
+    const first = await claim(store, {
+      uid: issueUid,
+      by: 'agent-a',
+      action: 'claim',
+    });
+    await expect(
+      claim(store, { uid: issueUid, by: 'agent-b', action: 'claim' })
+    ).rejects.toThrow(ClaimHeldError);
     try {
       await claim(store, { uid: issueUid, by: 'agent-b', action: 'claim' });
       expect.unreachable('expected ClaimHeldError');
@@ -148,7 +179,12 @@ describe('claim — rule-table coverage (SPEC.md §6.3.5, real store, single con
 
   it('claim by a DIFFERENT agent with force:true overrides a non-stale claim: status:"reclaimed-stale", previousClaimant set', async () => {
     await claim(store, { uid: issueUid, by: 'agent-a', action: 'claim' });
-    const outcome = await claim(store, { uid: issueUid, by: 'agent-b', action: 'claim', force: true });
+    const outcome = await claim(store, {
+      uid: issueUid,
+      by: 'agent-b',
+      action: 'claim',
+      force: true,
+    });
 
     expect(outcome.status).toBe('reclaimed-stale');
     expect(outcome.claimedBy).toBe('agent-b');
@@ -169,7 +205,11 @@ describe('claim — rule-table coverage (SPEC.md §6.3.5, real store, single con
     ]);
 
     await claim(store, { uid: issueUid, by: 'agent-a', action: 'claim' });
-    const outcome = await claim(store, { uid: issueUid, by: 'agent-b', action: 'claim' }); // no force
+    const outcome = await claim(store, {
+      uid: issueUid,
+      by: 'agent-b',
+      action: 'claim',
+    }); // no force
 
     expect(outcome.status).toBe('reclaimed-stale');
     expect(outcome.claimedBy).toBe('agent-b');
@@ -178,7 +218,11 @@ describe('claim — rule-table coverage (SPEC.md §6.3.5, real store, single con
 
   it('release by the claimant: clears both fields, status:"released"', async () => {
     await claim(store, { uid: issueUid, by: 'agent-a', action: 'claim' });
-    const outcome = await claim(store, { uid: issueUid, by: 'agent-a', action: 'release' });
+    const outcome = await claim(store, {
+      uid: issueUid,
+      by: 'agent-a',
+      action: 'release',
+    });
     expect(outcome.status).toBe('released');
 
     const row = await readNode(store, issueUid);
@@ -189,12 +233,20 @@ describe('claim — rule-table coverage (SPEC.md §6.3.5, real store, single con
   });
 
   it('release by a non-claimant, or on an unclaimed issue: status:"release-noop", no write, wasClaimedBy echoes the prior value', async () => {
-    const noopUnclaimed = await claim(store, { uid: issueUid, by: 'agent-a', action: 'release' });
+    const noopUnclaimed = await claim(store, {
+      uid: issueUid,
+      by: 'agent-a',
+      action: 'release',
+    });
     expect(noopUnclaimed.status).toBe('release-noop');
     expect(noopUnclaimed.wasClaimedBy).toBeUndefined();
 
     await claim(store, { uid: issueUid, by: 'agent-a', action: 'claim' });
-    const noopOtherAgent = await claim(store, { uid: issueUid, by: 'agent-b', action: 'release' });
+    const noopOtherAgent = await claim(store, {
+      uid: issueUid,
+      by: 'agent-b',
+      action: 'release',
+    });
     expect(noopOtherAgent.status).toBe('release-noop');
     expect(noopOtherAgent.wasClaimedBy).toBe('agent-a');
 
@@ -204,9 +256,17 @@ describe('claim — rule-table coverage (SPEC.md §6.3.5, real store, single con
   });
 
   it('renew by the claimant: bumps claimedAt, status:"renewed"', async () => {
-    const first = await claim(store, { uid: issueUid, by: 'agent-a', action: 'claim' });
+    const first = await claim(store, {
+      uid: issueUid,
+      by: 'agent-a',
+      action: 'claim',
+    });
     await new Promise((resolve) => setTimeout(resolve, 5));
-    const renewed = await claim(store, { uid: issueUid, by: 'agent-a', action: 'renew' });
+    const renewed = await claim(store, {
+      uid: issueUid,
+      by: 'agent-a',
+      action: 'renew',
+    });
 
     expect(renewed.status).toBe('renewed');
     expect(renewed.claimedBy).toBe('agent-a');
@@ -214,8 +274,14 @@ describe('claim — rule-table coverage (SPEC.md §6.3.5, real store, single con
   });
 
   it('renew by a non-claimant: throws ClaimHeldError, never mutates', async () => {
-    const claimed = await claim(store, { uid: issueUid, by: 'agent-a', action: 'claim' });
-    await expect(claim(store, { uid: issueUid, by: 'agent-b', action: 'renew' })).rejects.toThrow(ClaimHeldError);
+    const claimed = await claim(store, {
+      uid: issueUid,
+      by: 'agent-a',
+      action: 'claim',
+    });
+    await expect(
+      claim(store, { uid: issueUid, by: 'agent-b', action: 'renew' })
+    ).rejects.toThrow(ClaimHeldError);
     try {
       await claim(store, { uid: issueUid, by: 'agent-b', action: 'renew' });
     } catch (err) {
@@ -228,23 +294,40 @@ describe('claim — rule-table coverage (SPEC.md §6.3.5, real store, single con
   });
 
   it('renew on an unclaimed issue: throws ClaimHeldError (SPEC.md §6.3.5 assigns this to the same outcome as "held by someone else")', async () => {
-    await expect(claim(store, { uid: issueUid, by: 'agent-a', action: 'renew' })).rejects.toThrow(ClaimHeldError);
+    await expect(
+      claim(store, { uid: issueUid, by: 'agent-a', action: 'renew' })
+    ).rejects.toThrow(ClaimHeldError);
   });
 
   it('IssueNotFoundError for a uid that does not resolve to a live issue', async () => {
-    await expect(claim(store, { uid: 'not-a-real-uid', by: 'agent-a', action: 'claim' })).rejects.toThrow(IssueNotFoundError);
+    await expect(
+      claim(store, { uid: 'not-a-real-uid', by: 'agent-a', action: 'claim' })
+    ).rejects.toThrow(IssueNotFoundError);
   });
 
   it('IssueNotFoundError for a uid whose issue has already been soft-deleted (never re-claimable)', async () => {
-    await store.adapter.executeRun('UPDATE node SET t_invalid = ? WHERE uid = ?', ['2020-01-01T00:00:00.000Z', issueUid]);
-    await expect(claim(store, { uid: issueUid, by: 'agent-a', action: 'claim' })).rejects.toThrow(IssueNotFoundError);
+    await store.adapter.executeRun(
+      'UPDATE node SET t_invalid = ? WHERE uid = ?',
+      ['2020-01-01T00:00:00.000Z', issueUid]
+    );
+    await expect(
+      claim(store, { uid: issueUid, by: 'agent-a', action: 'claim' })
+    ).rejects.toThrow(IssueNotFoundError);
   });
 
   it('InvalidArgumentError on missing/blank uid, by, or an out-of-vocabulary action', async () => {
-    await expect(claim(store, { uid: '', by: 'agent-a', action: 'claim' })).rejects.toThrow(InvalidArgumentError);
-    await expect(claim(store, { uid: issueUid, by: '   ', action: 'claim' })).rejects.toThrow(InvalidArgumentError);
     await expect(
-      claim(store, { uid: issueUid, by: 'agent-a', action: 'bogus' as unknown as 'claim' }),
+      claim(store, { uid: '', by: 'agent-a', action: 'claim' })
+    ).rejects.toThrow(InvalidArgumentError);
+    await expect(
+      claim(store, { uid: issueUid, by: '   ', action: 'claim' })
+    ).rejects.toThrow(InvalidArgumentError);
+    await expect(
+      claim(store, {
+        uid: issueUid,
+        by: 'agent-a',
+        action: 'bogus' as unknown as 'claim',
+      })
     ).rejects.toThrow(InvalidArgumentError);
   });
 
@@ -257,7 +340,13 @@ describe('claim — rule-table coverage (SPEC.md §6.3.5, real store, single con
 
     const trail = await readAuditTrail(store, issueRowid);
     // 'created' (from createIssue itself) + claimed + claimed(held) + renewed + released — release-noop contributes NOTHING.
-    expect(trail.map((r) => r.action)).toEqual(['created', 'claimed', 'claimed', 'renewed', 'released']);
+    expect(trail.map((r) => r.action)).toEqual([
+      'created',
+      'claimed',
+      'claimed',
+      'renewed',
+      'released',
+    ]);
     expect(trail[4].from).toBe('agent-a');
   });
 });
@@ -266,8 +355,23 @@ describe('claim — rule-table coverage (SPEC.md §6.3.5, real store, single con
 // The CAS proof: two REAL OS processes, one barrier, one uid.
 // ---------------------------------------------------------------------------
 
-const WORKER_SCRIPT = join(HERE, '..', 'test', 'fixtures', 'cross-process-claim-worker.ts');
-const TSX_BIN = join(HERE, '..', '..', '..', '..', 'node_modules', '.bin', 'tsx');
+const WORKER_SCRIPT = join(
+  HERE,
+  '..',
+  'test',
+  'fixtures',
+  'cross-process-claim-worker.ts'
+);
+const TSX_BIN = join(
+  HERE,
+  '..',
+  '..',
+  '..',
+  '..',
+  'node_modules',
+  '.bin',
+  'tsx'
+);
 
 interface ClaimWorkerOutcome {
   tag: string;
@@ -278,7 +382,13 @@ interface ClaimWorkerOutcome {
   message?: string;
 }
 
-function spawnClaimWorker(dbPath: string, tag: string, issueUid: string, root: string, env?: Record<string, string>): Promise<ClaimWorkerOutcome> {
+function spawnClaimWorker(
+  dbPath: string,
+  tag: string,
+  issueUid: string,
+  root: string,
+  env?: Record<string, string>
+): Promise<ClaimWorkerOutcome> {
   return new Promise((resolve, reject) => {
     const child = spawn(TSX_BIN, [WORKER_SCRIPT, dbPath, tag, issueUid, root], {
       env: { ...process.env, ...env },
@@ -292,13 +402,25 @@ function spawnClaimWorker(dbPath: string, tag: string, issueUid: string, root: s
     child.on('exit', (code) => {
       const lastLine = out.trim().split('\n').filter(Boolean).pop();
       if (!lastLine) {
-        reject(new Error(`claim worker ${tag} exited ${code} with no JSON outcome line. stderr: ${err.slice(-500)}`));
+        reject(
+          new Error(
+            `claim worker ${tag} exited ${code} with no JSON outcome line. stderr: ${err.slice(
+              -500
+            )}`
+          )
+        );
         return;
       }
       try {
         resolve(JSON.parse(lastLine) as ClaimWorkerOutcome);
       } catch {
-        reject(new Error(`claim worker ${tag} exited ${code}, stdout did not parse as JSON: ${lastLine}. stderr: ${err.slice(-500)}`));
+        reject(
+          new Error(
+            `claim worker ${tag} exited ${code}, stdout did not parse as JSON: ${lastLine}. stderr: ${err.slice(
+              -500
+            )}`
+          )
+        );
       }
     });
   });
@@ -309,7 +431,7 @@ async function runBarrieredClaimPair(
   dbPath: string,
   root: string,
   issueUid: string,
-  env?: Record<string, string>,
+  env?: Record<string, string>
 ): Promise<[ClaimWorkerOutcome, ClaimWorkerOutcome]> {
   const readyA = join(root, 'ready-A');
   const readyB = join(root, 'ready-B');
@@ -333,9 +455,16 @@ async function runBarrieredClaimPair(
   const deadline = Date.now() + 30000;
   while (!(existsSync(readyA) && existsSync(readyB))) {
     if (earlyFailure !== undefined) {
-      throw new Error(`a claim worker failed before reaching the start barrier: ${earlyFailure instanceof Error ? earlyFailure.message : String(earlyFailure)}`);
+      throw new Error(
+        `a claim worker failed before reaching the start barrier: ${
+          earlyFailure instanceof Error
+            ? earlyFailure.message
+            : String(earlyFailure)
+        }`
+      );
     }
-    if (Date.now() > deadline) throw new Error('claim workers never reached the barrier');
+    if (Date.now() > deadline)
+      throw new Error('claim workers never reached the barrier');
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   writeFileSync(go, 'go');
@@ -367,94 +496,112 @@ describe('claim — real concurrent-process CAS proof (BEGIN IMMEDIATE, SPEC.md 
     removeTestIssueStoreDir(dir);
   });
 
-  it(
-    'CONTROL (immediate — the only mode used in production): two real processes claim the SAME uid at the same instant — exactly one wins, the other gets a non-retryable ClaimHeldError',
-    async () => {
-      const [a, b] = await runBarrieredClaimPair(dbPath, dir, issueUid);
-      const results = [a, b];
+  it('CONTROL (immediate — the only mode used in production): two real processes claim the SAME uid at the same instant — exactly one wins, the other gets a non-retryable ClaimHeldError', async () => {
+    const [a, b] = await runBarrieredClaimPair(dbPath, dir, issueUid);
+    const results = [a, b];
 
-      const winners = results.filter((r) => r.outcome === 'success');
-      const losers = results.filter((r) => r.outcome === 'rejected');
-      const unexpected = results.filter((r) => r.outcome === 'error');
+    const winners = results.filter((r) => r.outcome === 'success');
+    const losers = results.filter((r) => r.outcome === 'rejected');
+    const unexpected = results.filter((r) => r.outcome === 'error');
 
-      expect(unexpected, `no unexpected errors: ${JSON.stringify(unexpected)}`).toEqual([]);
-      // THE assertion this test exists to prove: never both winners, never both losers.
-      expect(winners.length, `expected exactly 1 winner, got ${winners.length}: ${JSON.stringify(results)}`).toBe(1);
-      expect(losers.length, `expected exactly 1 rejected loser, got ${losers.length}: ${JSON.stringify(results)}`).toBe(1);
-      expect(winners[0].status).toBe('claimed');
-      // The loser's ClaimHeldError must name the WINNER as the holder — a fresh read of the
-      // winner's already-committed state, never a stale pre-transaction guess.
-      expect(losers[0].heldBy).toBe(`claimant-${winners[0].tag}`);
+    expect(
+      unexpected,
+      `no unexpected errors: ${JSON.stringify(unexpected)}`
+    ).toEqual([]);
+    // THE assertion this test exists to prove: never both winners, never both losers.
+    expect(
+      winners.length,
+      `expected exactly 1 winner, got ${winners.length}: ${JSON.stringify(
+        results
+      )}`
+    ).toBe(1);
+    expect(
+      losers.length,
+      `expected exactly 1 rejected loser, got ${
+        losers.length
+      }: ${JSON.stringify(results)}`
+    ).toBe(1);
+    expect(winners[0].status).toBe('claimed');
+    // The loser's ClaimHeldError must name the WINNER as the holder — a fresh read of the
+    // winner's already-committed state, never a stale pre-transaction guess.
+    expect(losers[0].heldBy).toBe(`claimant-${winners[0].tag}`);
 
-      // Persistence, verified through a FRESH connection — never either worker's own in-memory
-      // view (the exact discipline `cross-process-write-safety.spec.ts` establishes for the
-      // identical reason, BUG-039: a writer's own report is not proof of what actually landed).
-      const freshStore = await openTestIssueStore(dbPath);
-      try {
-        const persisted = await freshStore.adapter.transaction(async (tx) => getNodeByUidTx(tx, issueUid));
-        expect(persisted?.metadata?.['claimedBy']).toBe(`claimant-${winners[0].tag}`);
-      } finally {
-        await freshStore.close();
-      }
-    },
-    60000,
-  );
-
-  it(
-    'NEGATIVE CONTROL: ADHD_BACKLOG_UNSAFE_TX_MODE=deferred strips the BEGIN IMMEDIATE RESERVED-lock guarantee — proves the CONTROL case above is exercising that guarantee, not passing for an unrelated reason',
-    async () => {
-      const [a, b] = await runBarrieredClaimPair(dbPath, dir, issueUid, { ADHD_BACKLOG_UNSAFE_TX_MODE: 'deferred' });
-      const results = [a, b];
-      const winners = results.filter((r) => r.outcome === 'success');
-      const losers = results.filter((r) => r.outcome === 'rejected');
-      const unexpected = results.filter((r) => r.outcome === 'error');
-
-      // The exact 1-winner/1-loser split is exactly the property `immediate` mode exists to
-      // guarantee and `deferred` strips — so unlike the CONTROL case above, the per-run shape is
-      // NOT asserted as a hard pass/fail here (this exact repro is documented as flaky in both
-      // directions under load by this file's sibling, cross-process-write-safety.spec.ts, for the
-      // identical reason: OS scheduling determines how much the two processes' snapshots actually
-      // diverge on a given run — including, empirically observed running this file, an
-      // unclassified `WriteIOError` on the loser's side instead of a clean silent double-win: two
-      // deferred-mode writers racing an unconditional-by-rowid UPDATE with no `WHERE claimedBy=`
-      // guard can ALSO surface as raw driver-level chaos, not only as a silent CAS bypass — both
-      // are the downgrade breaking the guarantee, just via a different failure signature). The
-      // real, observed numbers are logged below for whoever reads this test's output — this is
-      // where "exactly 1 winner, 1 clean rejection" going red is meant to be OBSERVED, proving the
-      // CONTROL test above has teeth.
-      let observationNote: string;
-      if (winners.length > 1) {
-        observationNote =
-          ' — BROKEN CAS REPRODUCED: both processes reported success, exactly the silent double-win BEGIN IMMEDIATE prevents';
-      } else if (winners.length === 1 && losers.length === 1 && unexpected.length === 0) {
-        observationNote = ' — CAS held this run despite the downgrade (not guaranteed under deferred; see comment above)';
-      } else if (unexpected.length > 0) {
-        observationNote =
-          ' — DOWNGRADE MANIFESTED AS DRIVER-LEVEL CHAOS instead of a clean CAS rejection (also a break: the CONTROL case never produces an unclassified error at this concurrency level)';
-      } else {
-        observationNote = '';
-      }
-      // eslint-disable-next-line no-console
-      console.warn(
-        `[claim CAS negative control] winners=${winners.length} losers=${losers.length} unexpected=${unexpected.length} ` +
-          `results=${JSON.stringify(results)}` +
-          observationNote,
+    // Persistence, verified through a FRESH connection — never either worker's own in-memory
+    // view (the exact discipline `cross-process-write-safety.spec.ts` establishes for the
+    // identical reason, BUG-039: a writer's own report is not proof of what actually landed).
+    const freshStore = await openTestIssueStore(dbPath);
+    try {
+      const persisted = await freshStore.adapter.transaction(async (tx) =>
+        getNodeByUidTx(tx, issueUid)
       );
+      expect(persisted?.metadata?.['claimedBy']).toBe(
+        `claimant-${winners[0].tag}`
+      );
+    } finally {
+      await freshStore.close();
+    }
+  }, 60000);
 
-      // The one invariant that must ALWAYS hold regardless of mode or failure signature: the
-      // store itself is never left corrupted — reopened fresh, the persisted `claimedBy` (if any)
-      // is one of the two real candidate claimants, never a third, mangled, or partial value.
-      const freshStore = await openTestIssueStore(dbPath);
-      try {
-        const persisted = await freshStore.adapter.transaction(async (tx) => getNodeByUidTx(tx, issueUid));
-        const persistedClaimedBy = persisted?.metadata?.['claimedBy'];
-        if (persistedClaimedBy !== undefined) {
-          expect(['claimant-A', 'claimant-B']).toContain(persistedClaimedBy);
-        }
-      } finally {
-        await freshStore.close();
+  it('NEGATIVE CONTROL: ADHD_BACKLOG_UNSAFE_TX_MODE=deferred strips the BEGIN IMMEDIATE RESERVED-lock guarantee — proves the CONTROL case above is exercising that guarantee, not passing for an unrelated reason', async () => {
+    const [a, b] = await runBarrieredClaimPair(dbPath, dir, issueUid, {
+      ADHD_BACKLOG_UNSAFE_TX_MODE: 'deferred',
+    });
+    const results = [a, b];
+    const winners = results.filter((r) => r.outcome === 'success');
+    const losers = results.filter((r) => r.outcome === 'rejected');
+    const unexpected = results.filter((r) => r.outcome === 'error');
+
+    // The exact 1-winner/1-loser split is exactly the property `immediate` mode exists to
+    // guarantee and `deferred` strips — so unlike the CONTROL case above, the per-run shape is
+    // NOT asserted as a hard pass/fail here (this exact repro is documented as flaky in both
+    // directions under load by this file's sibling, cross-process-write-safety.spec.ts, for the
+    // identical reason: OS scheduling determines how much the two processes' snapshots actually
+    // diverge on a given run — including, empirically observed running this file, an
+    // unclassified `WriteIOError` on the loser's side instead of a clean silent double-win: two
+    // deferred-mode writers racing an unconditional-by-rowid UPDATE with no `WHERE claimedBy=`
+    // guard can ALSO surface as raw driver-level chaos, not only as a silent CAS bypass — both
+    // are the downgrade breaking the guarantee, just via a different failure signature). The
+    // real, observed numbers are logged below for whoever reads this test's output — this is
+    // where "exactly 1 winner, 1 clean rejection" going red is meant to be OBSERVED, proving the
+    // CONTROL test above has teeth.
+    let observationNote: string;
+    if (winners.length > 1) {
+      observationNote =
+        ' — BROKEN CAS REPRODUCED: both processes reported success, exactly the silent double-win BEGIN IMMEDIATE prevents';
+    } else if (
+      winners.length === 1 &&
+      losers.length === 1 &&
+      unexpected.length === 0
+    ) {
+      observationNote =
+        ' — CAS held this run despite the downgrade (not guaranteed under deferred; see comment above)';
+    } else if (unexpected.length > 0) {
+      observationNote =
+        ' — DOWNGRADE MANIFESTED AS DRIVER-LEVEL CHAOS instead of a clean CAS rejection (also a break: the CONTROL case never produces an unclassified error at this concurrency level)';
+    } else {
+      observationNote = '';
+    }
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[claim CAS negative control] winners=${winners.length} losers=${losers.length} unexpected=${unexpected.length} ` +
+        `results=${JSON.stringify(results)}` +
+        observationNote
+    );
+
+    // The one invariant that must ALWAYS hold regardless of mode or failure signature: the
+    // store itself is never left corrupted — reopened fresh, the persisted `claimedBy` (if any)
+    // is one of the two real candidate claimants, never a third, mangled, or partial value.
+    const freshStore = await openTestIssueStore(dbPath);
+    try {
+      const persisted = await freshStore.adapter.transaction(async (tx) =>
+        getNodeByUidTx(tx, issueUid)
+      );
+      const persistedClaimedBy = persisted?.metadata?.['claimedBy'];
+      if (persistedClaimedBy !== undefined) {
+        expect(['claimant-A', 'claimant-B']).toContain(persistedClaimedBy);
       }
-    },
-    60000,
-  );
+    } finally {
+      await freshStore.close();
+    }
+  }, 60000);
 });

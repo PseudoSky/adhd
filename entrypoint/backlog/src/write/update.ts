@@ -112,7 +112,10 @@ import {
   resolveProjectPolicy,
 } from './catalog.js';
 import { writeAudit } from './audit.js';
-import { composeEmbedText, scheduleIssueEmbedding } from './embedding-observer.js';
+import {
+  composeEmbedText,
+  scheduleIssueEmbedding,
+} from './embedding-observer.js';
 import {
   BacklogValidationError,
   InvalidArgumentError,
@@ -162,7 +165,13 @@ export interface IUpdateIssueInput {
   awaitEmbed?: boolean;
 }
 
-export type IUpdateIssueChangedField = 'title' | 'body' | 'kind' | 'priority' | 'assignee' | 'author';
+export type IUpdateIssueChangedField =
+  | 'title'
+  | 'body'
+  | 'kind'
+  | 'priority'
+  | 'assignee'
+  | 'author';
 
 export interface IUpdateIssueOutcome {
   /**
@@ -185,7 +194,10 @@ export interface IUpdateIssueOutcome {
   changed: IUpdateIssueChangedField[];
 }
 
-function assertNonBlank(field: string, value: string | undefined): asserts value is string {
+function assertNonBlank(
+  field: string,
+  value: string | undefined
+): asserts value is string {
   // `typeof value !== 'string'` (rather than `=== undefined`) also catches an
   // explicit `null` — reachable from an untyped CLI/HTTP/MCP JSON caller even
   // though `IUpdateIssueInput`'s TS type only declares `string | undefined` —
@@ -220,32 +232,39 @@ interface IResolvedEdgeTarget {
  * these small tx-scoped helpers (see `transition.ts`'s own doc comment on
  * its identical function).
  */
-async function resolveIssueProjectTx(tx: AdapterTransaction, issueRowid: number): Promise<IResolvedProjectRow> {
+async function resolveIssueProjectTx(
+  tx: AdapterTransaction,
+  issueRowid: number
+): Promise<IResolvedProjectRow> {
   const componentEdge = await tx.executeGet<IRawEdgeSrcRow>(
     'SELECT src FROM edge WHERE dst = ? AND rel = ? AND t_invalid IS NULL',
-    [issueRowid, 'owns_component'],
+    [issueRowid, 'owns_component']
   );
   if (!componentEdge) {
     throw new Error(
       `update: issue rowid=${issueRowid} has no live "owns_component" edge — graph invariant violation ` +
-        '(every live issue must own exactly one live parent component).',
+        '(every live issue must own exactly one live parent component).'
     );
   }
   const projectEdge = await tx.executeGet<IRawEdgeSrcRow>(
     'SELECT src FROM edge WHERE dst = ? AND rel = ? AND t_invalid IS NULL',
-    [componentEdge.src, 'owns_project'],
+    [componentEdge.src, 'owns_project']
   );
   if (!projectEdge) {
     throw new Error(
       `update: component rowid=${componentEdge.src} has no live "owns_project" edge — graph invariant violation ` +
-        '(every live component must be owned by exactly one live project).',
+        '(every live component must be owned by exactly one live project).'
     );
   }
   const projectRow = await getNodeByRowidTx(tx, projectEdge.src);
-  if (!projectRow || projectRow.kind !== 'project' || projectRow.tInvalid !== null) {
+  if (
+    !projectRow ||
+    projectRow.kind !== 'project' ||
+    projectRow.tInvalid !== null
+  ) {
     throw new Error(
       `update: resolved project rowid=${projectEdge.src} is missing, invalidated, or not a "project" node — ` +
-        'graph invariant violation.',
+        'graph invariant violation.'
     );
   }
   return {
@@ -259,7 +278,10 @@ async function resolveIssueProjectTx(tx: AdapterTransaction, issueRowid: number)
 /** `project_kind` (§2) — mirrors `create-issue.ts`'s own `enforceAllowedSet`, duplicated per this file's own established convention (see {@link resolveIssueProjectTx}'s doc comment). */
 function enforceAllowedKind(allowed: readonly string[], value: string): void {
   if (allowed.length > 0 && !allowed.includes(value)) {
-    throw new InvalidArgumentError('kind', `"${value}" is not in this project's allowed kind set`);
+    throw new InvalidArgumentError(
+      'kind',
+      `"${value}" is not in this project's allowed kind set`
+    );
   }
 }
 
@@ -276,12 +298,22 @@ function enforceAllowedKind(allowed: readonly string[], value: string): void {
  * call DOES touch but resolves to blank/`null` still throws, identically to
  * `create-issue.ts`'s own check.
  */
-function enforceRequiredFields(required: readonly string[], resolvedValues: Record<string, unknown>): void {
+function enforceRequiredFields(
+  required: readonly string[],
+  resolvedValues: Record<string, unknown>
+): void {
   for (const field of required) {
     if (!(field in resolvedValues)) continue;
     const value = resolvedValues[field];
-    if (value === undefined || value === null || (typeof value === 'string' && value.trim().length === 0)) {
-      throw new InvalidArgumentError(field, 'is required by this project\'s field policy');
+    if (
+      value === undefined ||
+      value === null ||
+      (typeof value === 'string' && value.trim().length === 0)
+    ) {
+      throw new InvalidArgumentError(
+        field,
+        "is required by this project's field policy"
+      );
     }
   }
 }
@@ -301,7 +333,7 @@ async function touchNodeTx(
   tx: AdapterTransaction,
   rowid: number,
   patch: { name?: string; metadata?: Record<string, unknown> },
-  at: string,
+  at: string
 ): Promise<void> {
   const sets: string[] = [];
   const params: unknown[] = [];
@@ -321,9 +353,14 @@ async function touchNodeTx(
   // carries the semantic change; this call is what stamps it as a touch).
   sets.push('t_updated = ?');
   params.push(at);
-  const result = await tx.executeRun(`UPDATE node SET ${sets.join(', ')} WHERE rowid = ?`, [...params, rowid]);
+  const result = await tx.executeRun(
+    `UPDATE node SET ${sets.join(', ')} WHERE rowid = ?`,
+    [...params, rowid]
+  );
   if (result.rowsAffected !== 1) {
-    throw new Error(`update: touch UPDATE affected ${result.rowsAffected} rows for rowid=${rowid}, expected exactly 1.`);
+    throw new Error(
+      `update: touch UPDATE affected ${result.rowsAffected} rows for rowid=${rowid}, expected exactly 1.`
+    );
   }
 }
 
@@ -365,40 +402,58 @@ async function rewireOutgoingEdgeTx(
     reason: string;
     at: string;
     required?: boolean;
-  },
+  }
 ): Promise<void> {
   const identityChanged = params.newSrcRowid !== params.oldSrcRowid;
   if (!identityChanged && !params.override) return;
 
   const existing = await tx.executeGet<IRawEdgeDstRow>(
     'SELECT dst FROM edge WHERE src = ? AND rel = ? AND t_invalid IS NULL',
-    [params.oldSrcRowid, params.rel],
+    [params.oldSrcRowid, params.rel]
   );
 
   let target: IResolvedEdgeTarget | undefined = params.override;
   if (!target && existing) {
     const row = await getNodeByRowidTx(tx, existing.dst);
-    if (row && row.tInvalid === null) target = { rowid: row.rowid, uid: row.uid, kind: row.kind, name: row.name ?? '' };
+    if (row && row.tInvalid === null)
+      target = {
+        rowid: row.rowid,
+        uid: row.uid,
+        kind: row.kind,
+        name: row.name ?? '',
+      };
   }
   if (!target) {
     if (params.required) {
       throw new Error(
         `update: issue rowid=${params.oldSrcRowid} has no live "${params.rel}" edge — graph invariant violation ` +
-          `(every live issue must carry exactly one live ${params.rel}).`,
+          `(every live issue must carry exactly one live ${params.rel}).`
       );
     }
     return; // no existing edge and no override — e.g. priority never set, still not being set
   }
 
   if (existing) {
-    await invalidateEdgeTx(tx, { srcRowid: params.oldSrcRowid, dstRowid: existing.dst, rel: params.rel, reason: params.reason, at: params.at });
+    await invalidateEdgeTx(tx, {
+      srcRowid: params.oldSrcRowid,
+      dstRowid: existing.dst,
+      rel: params.rel,
+      reason: params.reason,
+      at: params.at,
+    });
   }
   const rule = await resolveEdgeKindTx(tx, params.rel);
   await writeEdgeTx(tx, {
     at: params.at,
-    srcRowid: params.newSrcRowid, srcUid: params.newSrcUid, srcKind: 'issue',
-    dstRowid: target.rowid, dstUid: target.uid, dstKind: target.kind,
-    rel: params.rel, rule, typePolicy: handle.typePolicy,
+    srcRowid: params.newSrcRowid,
+    srcUid: params.newSrcUid,
+    srcKind: 'issue',
+    dstRowid: target.rowid,
+    dstUid: target.uid,
+    dstKind: target.kind,
+    rel: params.rel,
+    rule,
+    typePolicy: handle.typePolicy,
   });
 }
 
@@ -416,38 +471,56 @@ async function rewireOutgoingEdgeTx(
 async function rewireOwnsComponentTx(
   tx: AdapterTransaction,
   handle: IWriteStoreHandle,
-  params: { oldIssueRowid: number; newIssueRowid: number; newIssueUid: string; at: string },
+  params: {
+    oldIssueRowid: number;
+    newIssueRowid: number;
+    newIssueUid: string;
+    at: string;
+  }
 ): Promise<void> {
   if (params.oldIssueRowid === params.newIssueRowid) return;
 
   const existing = await tx.executeGet<IRawEdgeSrcRow>(
     'SELECT src FROM edge WHERE dst = ? AND rel = ? AND t_invalid IS NULL',
-    [params.oldIssueRowid, 'owns_component'],
+    [params.oldIssueRowid, 'owns_component']
   );
   if (!existing) {
     throw new Error(
       `update: issue rowid=${params.oldIssueRowid} has no live "owns_component" edge — graph invariant violation ` +
-        '(every live issue must own exactly one live parent component).',
+        '(every live issue must own exactly one live parent component).'
     );
   }
   const componentRow = await getNodeByRowidTx(tx, existing.src);
-  if (!componentRow || componentRow.kind !== 'component' || componentRow.tInvalid !== null) {
+  if (
+    !componentRow ||
+    componentRow.kind !== 'component' ||
+    componentRow.tInvalid !== null
+  ) {
     throw new Error(
       `update: resolved component rowid=${existing.src} is missing, invalidated, or not a "component" node — ` +
-        'graph invariant violation.',
+        'graph invariant violation.'
     );
   }
 
   await invalidateEdgeTx(tx, {
-    srcRowid: existing.src, dstRowid: params.oldIssueRowid, rel: 'owns_component',
-    reason: 'superseded — placement carried forward to the new node', at: params.at,
+    srcRowid: existing.src,
+    dstRowid: params.oldIssueRowid,
+    rel: 'owns_component',
+    reason: 'superseded — placement carried forward to the new node',
+    at: params.at,
   });
   const rule = await resolveEdgeKindTx(tx, 'owns_component');
   await writeEdgeTx(tx, {
     at: params.at,
-    srcRowid: existing.src, srcUid: componentRow.uid, srcKind: 'component',
-    dstRowid: params.newIssueRowid, dstUid: params.newIssueUid, dstKind: 'issue',
-    rel: 'owns_component', rule, typePolicy: handle.typePolicy,
+    srcRowid: existing.src,
+    srcUid: componentRow.uid,
+    srcKind: 'component',
+    dstRowid: params.newIssueRowid,
+    dstUid: params.newIssueUid,
+    dstKind: 'issue',
+    rel: 'owns_component',
+    rule,
+    typePolicy: handle.typePolicy,
   });
 }
 
@@ -505,7 +578,7 @@ interface IResidualEdgeRow {
  */
 async function carryForwardResidualEdgesTx(
   tx: AdapterTransaction,
-  params: { oldIssueRowid: number; newIssueRowid: number; at: string },
+  params: { oldIssueRowid: number; newIssueRowid: number; at: string }
 ): Promise<void> {
   if (params.oldIssueRowid === params.newIssueRowid) return;
 
@@ -518,14 +591,18 @@ async function carryForwardResidualEdgesTx(
     const { rows } = await tx.executeAll<IResidualEdgeRow>(
       `SELECT ${otherColumn} AS other, rel, weight, confidence, origin, meta FROM edge ` +
         `WHERE ${anchorColumn} = ? AND t_invalid IS NULL AND rel NOT IN (${excluded})`,
-      [params.oldIssueRowid, ...EDGES_NEVER_SWEPT],
+      [params.oldIssueRowid, ...EDGES_NEVER_SWEPT]
     );
 
     for (const row of rows) {
-      const oldSrc = direction === 'outgoing' ? params.oldIssueRowid : row.other;
-      const oldDst = direction === 'outgoing' ? row.other : params.oldIssueRowid;
-      const newSrc = direction === 'outgoing' ? params.newIssueRowid : row.other;
-      const newDst = direction === 'outgoing' ? row.other : params.newIssueRowid;
+      const oldSrc =
+        direction === 'outgoing' ? params.oldIssueRowid : row.other;
+      const oldDst =
+        direction === 'outgoing' ? row.other : params.oldIssueRowid;
+      const newSrc =
+        direction === 'outgoing' ? params.newIssueRowid : row.other;
+      const newDst =
+        direction === 'outgoing' ? row.other : params.newIssueRowid;
 
       await invalidateEdgeTx(tx, {
         srcRowid: oldSrc,
@@ -542,7 +619,17 @@ async function carryForwardResidualEdgesTx(
            weight = excluded.weight, confidence = excluded.confidence,
            origin = excluded.origin, meta = excluded.meta,
            t_invalid = NULL, t_valid = excluded.t_valid`,
-        [newSrc, newDst, row.rel, row.weight, row.confidence, row.origin, row.meta, params.at, params.at],
+        [
+          newSrc,
+          newDst,
+          row.rel,
+          row.weight,
+          row.confidence,
+          row.origin,
+          row.meta,
+          params.at,
+          params.at,
+        ]
       );
     }
   }
@@ -557,7 +644,9 @@ async function carryForwardResidualEdgesTx(
  * shape without a matching `changed` entry), never a real branch expected to
  * fire today.
  */
-function computeChangedFields(input: IUpdateIssueInput): IUpdateIssueChangedField[] {
+function computeChangedFields(
+  input: IUpdateIssueInput
+): IUpdateIssueChangedField[] {
   const changed: IUpdateIssueChangedField[] = [];
   if (input.title !== undefined) changed.push('title');
   if (input.body !== undefined) changed.push('body');
@@ -568,11 +657,23 @@ function computeChangedFields(input: IUpdateIssueInput): IUpdateIssueChangedFiel
   return changed;
 }
 
-function assertNoSilentlyDiscardedPatchKeys(input: IUpdateIssueInput, changed: readonly IUpdateIssueChangedField[]): void {
-  const patchKeys: IUpdateIssueChangedField[] = ['title', 'body', 'kind', 'priority', 'assignee', 'author'];
+function assertNoSilentlyDiscardedPatchKeys(
+  input: IUpdateIssueInput,
+  changed: readonly IUpdateIssueChangedField[]
+): void {
+  const patchKeys: IUpdateIssueChangedField[] = [
+    'title',
+    'body',
+    'kind',
+    'priority',
+    'assignee',
+    'author',
+  ];
   for (const key of patchKeys) {
     if (input[key] !== undefined && !changed.includes(key)) {
-      throw new Error(`update: patch key "${key}" was given but not recorded in \`changed\` — assertNoSilentlyDiscardedPatchKeys invariant violated (SPEC.md §6.3.3).`);
+      throw new Error(
+        `update: patch key "${key}" was given but not recorded in \`changed\` — assertNoSilentlyDiscardedPatchKeys invariant violated (SPEC.md §6.3.3).`
+      );
     }
   }
 }
@@ -604,7 +705,10 @@ function assertNoSilentlyDiscardedPatchKeys(input: IUpdateIssueInput, changed: r
  * `WriteContentionError`/`WriteIOError` (§4c — an exhausted driver-level
  * retry on the underlying `immediate` transaction).
  */
-export async function update(handle: IWriteStoreHandle, input: IUpdateIssueInput): Promise<IUpdateIssueOutcome> {
+export async function update(
+  handle: IWriteStoreHandle,
+  input: IUpdateIssueInput
+): Promise<IUpdateIssueOutcome> {
   assertNonBlank('uid', input.uid);
   assertNonBlank('by', input.by);
 
@@ -614,7 +718,10 @@ export async function update(handle: IWriteStoreHandle, input: IUpdateIssueInput
   // never silently applied as a status change.
   const rawInput = input as unknown as Record<string, unknown>;
   if (rawInput['status'] !== undefined) {
-    throw new BacklogValidationError('status', 'status changes are not an `update` field — call `transition(uid, toStatus, ...)` instead');
+    throw new BacklogValidationError(
+      'status',
+      'status changes are not an `update` field — call `transition(uid, toStatus, ...)` instead'
+    );
   }
 
   if (input.title !== undefined) assertNonBlank('title', input.title);
@@ -622,7 +729,10 @@ export async function update(handle: IWriteStoreHandle, input: IUpdateIssueInput
 
   const changed = computeChangedFields(input);
   if (changed.length === 0) {
-    throw new InvalidArgumentError('patch', 'update requires at least one of title/body/kind/priority/assignee/author');
+    throw new InvalidArgumentError(
+      'patch',
+      'update requires at least one of title/body/kind/priority/assignee/author'
+    );
   }
   assertNoSilentlyDiscardedPatchKeys(input, changed);
 
@@ -631,170 +741,261 @@ export async function update(handle: IWriteStoreHandle, input: IUpdateIssueInput
   // embed from inside the closure itself). Stays `undefined` unless this
   // call's body-change branch actually runs (see `embedding-observer.ts`'s
   // own doc comment on why a pure touch never re-embeds).
-  let supersedeEmbedding: { oldRowid: number; oldUid: string; newRowid: number; newUid: string; newTitle: string; newBody: string } | undefined;
+  let supersedeEmbedding:
+    | {
+        oldRowid: number;
+        oldUid: string;
+        newRowid: number;
+        newUid: string;
+        newTitle: string;
+        newBody: string;
+      }
+    | undefined;
 
-  const outcome = await executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
-    const now = nowISO();
+  const outcome = await executeWriteTransaction(
+    handle,
+    async (tx: AdapterTransaction) => {
+      const now = nowISO();
 
-    const issueRow = await resolveLiveIssueTx(tx, input.uid);
+      const issueRow = await resolveLiveIssueTx(tx, input.uid);
 
-    // §2's project_kind/project_field_requirement — resolved fresh against
-    // THIS transaction's own snapshot, mirroring `transition.ts`'s identical
-    // discipline for its own project/policy resolve.
-    const project = await resolveIssueProjectTx(tx, issueRow.rowid);
-    const policy = resolveProjectPolicy(project);
+      // §2's project_kind/project_field_requirement — resolved fresh against
+      // THIS transaction's own snapshot, mirroring `transition.ts`'s identical
+      // discipline for its own project/policy resolve.
+      const project = await resolveIssueProjectTx(tx, issueRow.rowid);
+      const policy = resolveProjectPolicy(project);
 
-    let kindOverride: IResolvedEdgeTarget | undefined;
-    if (input.kind !== undefined) {
-      const row = await mintOrResolveCatalogTx(tx, { catalogKind: 'kind', ref: input.kind, at: now });
-      enforceAllowedKind(policy.allowedKinds, row.name);
-      kindOverride = { rowid: row.rowid, uid: row.uid, kind: 'kind', name: row.name };
-    }
-
-    let priorityOverride: IResolvedEdgeTarget | undefined;
-    if (input.priority !== undefined) {
-      const row = await mintOrResolveCatalogTx(tx, {
-        catalogKind: 'priority',
-        ref: input.priority,
-        at: now,
-        mintMetadata: async (mintTx) => ({ rank: await nextPriorityRankTx(mintTx) }),
-      });
-      priorityOverride = { rowid: row.rowid, uid: row.uid, kind: 'priority', name: row.name };
-    }
-
-    let authorOverride: IResolvedEdgeTarget | undefined;
-    if (input.author !== undefined) {
-      const row = await mintOrResolveCatalogTx(tx, { catalogKind: 'agent', ref: input.author, at: now });
-      authorOverride = { rowid: row.rowid, uid: row.uid, kind: 'agent', name: row.name };
-    }
-
-    // §2's `requiredFields` — checked against only the fields THIS call
-    // touches (see this file's own doc comment on the composition gap this
-    // resolves), with the catalog-resolved friendly name substituted for
-    // `kind`/`priority`/`author` exactly as `create-issue.ts` substitutes
-    // `component`/`kind`/`status`/`priority` over its own `...input` spread.
-    // Only the KEYS this call actually gives get an entry — see
-    // `enforceRequiredFields`'s own doc comment above: `...input` alone
-    // already omits any field this call didn't set (an absent optional field
-    // has no own key on a real caller-constructed object), and `kind`/
-    // `priority`/`author` are added here ONLY when this call resolved a
-    // fresh catalog row for them, never unconditionally (which would wrongly
-    // make an untouched field's absence "this call's concern").
-    const requiredFieldValues: Record<string, unknown> = { ...input };
-    if (kindOverride) requiredFieldValues.kind = kindOverride.name;
-    if (priorityOverride) requiredFieldValues.priority = priorityOverride.name;
-    if (authorOverride) requiredFieldValues.author = authorOverride.name;
-    enforceRequiredFields(policy.requiredFields, requiredFieldValues);
-
-    let currentRowid = issueRow.rowid;
-    let currentUid = issueRow.uid;
-    let bodyChanged = false;
-
-    if (input.body !== undefined) {
-      const cas = await tx.executeRun('UPDATE node SET is_superseded = 1 WHERE rowid = ? AND is_superseded = 0', [issueRow.rowid]);
-      if (cas.rowsAffected !== 1) {
-        throw new StaleSupersedeError(input.uid);
+      let kindOverride: IResolvedEdgeTarget | undefined;
+      if (input.kind !== undefined) {
+        const row = await mintOrResolveCatalogTx(tx, {
+          catalogKind: 'kind',
+          ref: input.kind,
+          at: now,
+        });
+        enforceAllowedKind(policy.allowedKinds, row.name);
+        kindOverride = {
+          rowid: row.rowid,
+          uid: row.uid,
+          kind: 'kind',
+          name: row.name,
+        };
       }
 
-      const newTitle = input.title ?? issueRow.name ?? undefined;
-      const newMetadata: Record<string, unknown> = { ...(issueRow.metadata ?? {}) };
-      if (input.assignee !== undefined) newMetadata.assignee = input.assignee;
+      let priorityOverride: IResolvedEdgeTarget | undefined;
+      if (input.priority !== undefined) {
+        const row = await mintOrResolveCatalogTx(tx, {
+          catalogKind: 'priority',
+          ref: input.priority,
+          at: now,
+          mintMetadata: async (mintTx) => ({
+            rank: await nextPriorityRankTx(mintTx),
+          }),
+        });
+        priorityOverride = {
+          rowid: row.rowid,
+          uid: row.uid,
+          kind: 'priority',
+          name: row.name,
+        };
+      }
 
-      const newNode = await writeNodeTx(tx, { kind: 'issue', name: newTitle, content: input.body, metadata: newMetadata, at: now });
+      let authorOverride: IResolvedEdgeTarget | undefined;
+      if (input.author !== undefined) {
+        const row = await mintOrResolveCatalogTx(tx, {
+          catalogKind: 'agent',
+          ref: input.author,
+          at: now,
+        });
+        authorOverride = {
+          rowid: row.rowid,
+          uid: row.uid,
+          kind: 'agent',
+          name: row.name,
+        };
+      }
 
-      // The content-mutation `SUPERSEDES` (uppercase) edge — §3/§4c: hand-composed,
-      // NEVER via `writeEdgeTx` (it is deliberately not a row in `EDGE_KIND_TABLE`,
-      // §3's own note distinguishing it from the lowercase catalog `supersedes` rel).
-      // Mirrors `writeEdgeInternal`'s own upsert shape exactly (§4c's worked example).
-      await tx.executeRun(
-        `INSERT INTO edge (src, dst, rel, weight, origin, meta, t_created, t_valid)
+      // §2's `requiredFields` — checked against only the fields THIS call
+      // touches (see this file's own doc comment on the composition gap this
+      // resolves), with the catalog-resolved friendly name substituted for
+      // `kind`/`priority`/`author` exactly as `create-issue.ts` substitutes
+      // `component`/`kind`/`status`/`priority` over its own `...input` spread.
+      // Only the KEYS this call actually gives get an entry — see
+      // `enforceRequiredFields`'s own doc comment above: `...input` alone
+      // already omits any field this call didn't set (an absent optional field
+      // has no own key on a real caller-constructed object), and `kind`/
+      // `priority`/`author` are added here ONLY when this call resolved a
+      // fresh catalog row for them, never unconditionally (which would wrongly
+      // make an untouched field's absence "this call's concern").
+      const requiredFieldValues: Record<string, unknown> = { ...input };
+      if (kindOverride) requiredFieldValues.kind = kindOverride.name;
+      if (priorityOverride)
+        requiredFieldValues.priority = priorityOverride.name;
+      if (authorOverride) requiredFieldValues.author = authorOverride.name;
+      enforceRequiredFields(policy.requiredFields, requiredFieldValues);
+
+      let currentRowid = issueRow.rowid;
+      let currentUid = issueRow.uid;
+      let bodyChanged = false;
+
+      if (input.body !== undefined) {
+        const cas = await tx.executeRun(
+          'UPDATE node SET is_superseded = 1 WHERE rowid = ? AND is_superseded = 0',
+          [issueRow.rowid]
+        );
+        if (cas.rowsAffected !== 1) {
+          throw new StaleSupersedeError(input.uid);
+        }
+
+        const newTitle = input.title ?? issueRow.name ?? undefined;
+        const newMetadata: Record<string, unknown> = {
+          ...(issueRow.metadata ?? {}),
+        };
+        if (input.assignee !== undefined) newMetadata.assignee = input.assignee;
+
+        const newNode = await writeNodeTx(tx, {
+          kind: 'issue',
+          name: newTitle,
+          content: input.body,
+          metadata: newMetadata,
+          at: now,
+        });
+
+        // The content-mutation `SUPERSEDES` (uppercase) edge — §3/§4c: hand-composed,
+        // NEVER via `writeEdgeTx` (it is deliberately not a row in `EDGE_KIND_TABLE`,
+        // §3's own note distinguishing it from the lowercase catalog `supersedes` rel).
+        // Mirrors `writeEdgeInternal`'s own upsert shape exactly (§4c's worked example).
+        await tx.executeRun(
+          `INSERT INTO edge (src, dst, rel, weight, origin, meta, t_created, t_valid)
          VALUES (?, ?, 'SUPERSEDES', 1.0, 'user_asserted', NULL, ?, ?)
          ON CONFLICT(src, dst, rel) DO UPDATE SET
            meta = excluded.meta, weight = excluded.weight,
            t_invalid = NULL, t_valid = excluded.t_valid`,
-        [newNode.rowid, issueRow.rowid, now, now],
-      );
+          [newNode.rowid, issueRow.rowid, now, now]
+        );
 
-      // Stamp `t_updated` on the FRESHLY-MINTED node too. §3's "never touch a
-      // body" is a statement about MECHANISM only (`touchNodeTx` has no
-      // `content` param, so an in-place body edit is structurally impossible
-      // — that's why body changes supersede instead of touch). It says
-      // nothing about `t_updated`: the query layer's `updatedAt` filter
-      // (SPEC.md §6.5 rule 4, `tUpdatedAfter/tUpdatedBefore`) exists to
-      // surface "this issue was modified as of now", and a body edit is the
-      // most substantive modification `update` can make. Without this call
-      // `writeNodeTx`'s INSERT leaves the new row's `t_updated` NULL (it has
-      // no such column in its own INSERT list — see `tx.ts`), so the new
-      // node would be permanently invisible to `WHERE t_updated > X` even
-      // though it was just written — the exact class of bug the sibling
-      // touch-only branch below was fixed for.
-      await touchNodeTx(tx, newNode.rowid, {}, now);
+        // Stamp `t_updated` on the FRESHLY-MINTED node too. §3's "never touch a
+        // body" is a statement about MECHANISM only (`touchNodeTx` has no
+        // `content` param, so an in-place body edit is structurally impossible
+        // — that's why body changes supersede instead of touch). It says
+        // nothing about `t_updated`: the query layer's `updatedAt` filter
+        // (SPEC.md §6.5 rule 4, `tUpdatedAfter/tUpdatedBefore`) exists to
+        // surface "this issue was modified as of now", and a body edit is the
+        // most substantive modification `update` can make. Without this call
+        // `writeNodeTx`'s INSERT leaves the new row's `t_updated` NULL (it has
+        // no such column in its own INSERT list — see `tx.ts`), so the new
+        // node would be permanently invisible to `WHERE t_updated > X` even
+        // though it was just written — the exact class of bug the sibling
+        // touch-only branch below was fixed for.
+        await touchNodeTx(tx, newNode.rowid, {}, now);
 
-      supersedeEmbedding = { oldRowid: issueRow.rowid, oldUid: issueRow.uid, newRowid: newNode.rowid, newUid: newNode.uid, newTitle: newTitle ?? '', newBody: input.body };
+        supersedeEmbedding = {
+          oldRowid: issueRow.rowid,
+          oldUid: issueRow.uid,
+          newRowid: newNode.rowid,
+          newUid: newNode.uid,
+          newTitle: newTitle ?? '',
+          newBody: input.body,
+        };
 
-      currentRowid = newNode.rowid;
-      currentUid = newNode.uid;
-      bodyChanged = true;
-    } else {
-      // No body given — this branch is reached only when `changed.length > 0`
-      // (enforced above), so at least one of title/kind/priority/assignee/
-      // author is present. ALL five are "touch" per SPEC.md §6.3.3 (kind/
-      // priority/author additionally get their edge rewired below), so
-      // `touchNodeTx` always runs here — even when title/assignee are BOTH
-      // absent (a kind/priority/author-only patch) — to advance `t_updated`.
-      const newMetadata = input.assignee !== undefined ? { ...(issueRow.metadata ?? {}), assignee: input.assignee } : undefined;
-      await touchNodeTx(tx, issueRow.rowid, { name: input.title, metadata: newMetadata }, now);
+        currentRowid = newNode.rowid;
+        currentUid = newNode.uid;
+        bodyChanged = true;
+      } else {
+        // No body given — this branch is reached only when `changed.length > 0`
+        // (enforced above), so at least one of title/kind/priority/assignee/
+        // author is present. ALL five are "touch" per SPEC.md §6.3.3 (kind/
+        // priority/author additionally get their edge rewired below), so
+        // `touchNodeTx` always runs here — even when title/assignee are BOTH
+        // absent (a kind/priority/author-only patch) — to advance `t_updated`.
+        const newMetadata =
+          input.assignee !== undefined
+            ? { ...(issueRow.metadata ?? {}), assignee: input.assignee }
+            : undefined;
+        await touchNodeTx(
+          tx,
+          issueRow.rowid,
+          { name: input.title, metadata: newMetadata },
+          now
+        );
+      }
+
+      // Identity-chain edges — see this file's own doc comment ("Identity-chain
+      // carry-forward") for why ALL of these are re-pointed on every supersede,
+      // not just the ones this specific call happens to override. The five NAMED
+      // re-pointers below cover the card; `carryForwardResidualEdgesTx` after them
+      // sweeps everything else the issue owns or is the target of.
+      await rewireOwnsComponentTx(tx, handle, {
+        oldIssueRowid: issueRow.rowid,
+        newIssueRowid: currentRowid,
+        newIssueUid: currentUid,
+        at: now,
+      });
+
+      await rewireOutgoingEdgeTx(tx, handle, {
+        rel: 'has_status',
+        oldSrcRowid: issueRow.rowid,
+        newSrcRowid: currentRowid,
+        newSrcUid: currentUid,
+        reason:
+          'superseded — status carried forward to the new node (update never changes status)',
+        at: now,
+        required: true,
+      });
+
+      await rewireOutgoingEdgeTx(tx, handle, {
+        rel: 'has_kind',
+        oldSrcRowid: issueRow.rowid,
+        newSrcRowid: currentRowid,
+        newSrcUid: currentUid,
+        override: kindOverride,
+        reason: 'kind changed via update',
+        at: now,
+      });
+
+      await rewireOutgoingEdgeTx(tx, handle, {
+        rel: 'has_priority',
+        oldSrcRowid: issueRow.rowid,
+        newSrcRowid: currentRowid,
+        newSrcUid: currentUid,
+        override: priorityOverride,
+        reason: 'priority changed via update',
+        at: now,
+      });
+
+      await rewireOutgoingEdgeTx(tx, handle, {
+        rel: 'authored_by',
+        oldSrcRowid: issueRow.rowid,
+        newSrcRowid: currentRowid,
+        newSrcUid: currentUid,
+        override: authorOverride,
+        reason: 'author changed via update',
+        at: now,
+      });
+
+      // Every OTHER live edge — both directions — off the superseded node.
+      await carryForwardResidualEdgesTx(tx, {
+        oldIssueRowid: issueRow.rowid,
+        newIssueRowid: currentRowid,
+        at: now,
+      });
+
+      await writeAudit({
+        tx,
+        typePolicy: handle.typePolicy,
+        subjectRowid: currentRowid,
+        subjectUid: currentUid,
+        subjectKind: 'issue',
+        actor: input.by,
+        action: 'updated',
+        from: bodyChanged ? issueRow.uid : undefined,
+        to: bodyChanged ? currentUid : undefined,
+        note: `fields changed: ${changed.join(', ')}`,
+        at: now,
+      });
+
+      return { uid: currentUid, changed };
     }
-
-    // Identity-chain edges — see this file's own doc comment ("Identity-chain
-    // carry-forward") for why ALL of these are re-pointed on every supersede,
-    // not just the ones this specific call happens to override. The five NAMED
-    // re-pointers below cover the card; `carryForwardResidualEdgesTx` after them
-    // sweeps everything else the issue owns or is the target of.
-    await rewireOwnsComponentTx(tx, handle, { oldIssueRowid: issueRow.rowid, newIssueRowid: currentRowid, newIssueUid: currentUid, at: now });
-
-    await rewireOutgoingEdgeTx(tx, handle, {
-      rel: 'has_status', oldSrcRowid: issueRow.rowid, newSrcRowid: currentRowid, newSrcUid: currentUid,
-      reason: 'superseded — status carried forward to the new node (update never changes status)', at: now,
-      required: true,
-    });
-
-    await rewireOutgoingEdgeTx(tx, handle, {
-      rel: 'has_kind', oldSrcRowid: issueRow.rowid, newSrcRowid: currentRowid, newSrcUid: currentUid,
-      override: kindOverride, reason: 'kind changed via update', at: now,
-    });
-
-    await rewireOutgoingEdgeTx(tx, handle, {
-      rel: 'has_priority', oldSrcRowid: issueRow.rowid, newSrcRowid: currentRowid, newSrcUid: currentUid,
-      override: priorityOverride, reason: 'priority changed via update', at: now,
-    });
-
-    await rewireOutgoingEdgeTx(tx, handle, {
-      rel: 'authored_by', oldSrcRowid: issueRow.rowid, newSrcRowid: currentRowid, newSrcUid: currentUid,
-      override: authorOverride, reason: 'author changed via update', at: now,
-    });
-
-    // Every OTHER live edge — both directions — off the superseded node.
-    await carryForwardResidualEdgesTx(tx, {
-      oldIssueRowid: issueRow.rowid, newIssueRowid: currentRowid, at: now,
-    });
-
-    await writeAudit({
-      tx,
-      typePolicy: handle.typePolicy,
-      subjectRowid: currentRowid,
-      subjectUid: currentUid,
-      subjectKind: 'issue',
-      actor: input.by,
-      action: 'updated',
-      from: bodyChanged ? issueRow.uid : undefined,
-      to: bodyChanged ? currentUid : undefined,
-      note: `fields changed: ${changed.join(', ')}`,
-      at: now,
-    });
-
-    return { uid: currentUid, changed };
-  });
+  );
 
   // §4b/§8 AC-4 — strictly AFTER `executeWriteTransaction` above has
   // resolved (subject transaction committed). `supersedeEmbedding` is set
@@ -802,9 +1003,15 @@ export async function update(handle: IWriteStoreHandle, input: IUpdateIssueInput
   // (see `embedding-observer.ts`'s own doc comment on why touch is excluded,
   // and on why the OLD node's vector is deleted rather than left stale).
   if (supersedeEmbedding) {
-    const { oldRowid, oldUid, newRowid, newUid, newTitle, newBody } = supersedeEmbedding;
+    const { oldRowid, oldUid, newRowid, newUid, newTitle, newBody } =
+      supersedeEmbedding;
     const embedPromise = Promise.all([
-      scheduleIssueEmbedding(handle, { action: 'delete', subjectRowid: oldRowid, subjectUid: oldUid, actor: input.by }),
+      scheduleIssueEmbedding(handle, {
+        action: 'delete',
+        subjectRowid: oldRowid,
+        subjectUid: oldUid,
+        actor: input.by,
+      }),
       scheduleIssueEmbedding(handle, {
         action: 'upsert',
         subjectRowid: newRowid,
@@ -814,7 +1021,10 @@ export async function update(handle: IWriteStoreHandle, input: IUpdateIssueInput
       }),
     ]);
     if (input.awaitEmbed) await embedPromise;
-    else embedPromise.catch(() => { /* scheduleIssueEmbedding never rejects — this catch exists only to silence an unhandled-rejection warning if that contract is ever broken. */ });
+    else
+      embedPromise.catch(() => {
+        /* scheduleIssueEmbedding never rejects — this catch exists only to silence an unhandled-rejection warning if that contract is ever broken. */
+      });
   }
 
   return outcome;

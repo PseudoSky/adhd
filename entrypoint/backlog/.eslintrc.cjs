@@ -1,5 +1,7 @@
 'use strict';
-const { computeRealDependencyNames } = require('../../tools/nx-plugins/deps/compute-real-deps.js');
+const {
+  computeRealDependencyNames,
+} = require('../../tools/nx-plugins/deps/compute-real-deps.js');
 
 /**
  * `@nx/dependency-checks` (run via `sync-deps`/`lint`) decides a package.json

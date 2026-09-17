@@ -55,13 +55,13 @@ apigen's live `run()` path — no code generation.
 
 The monorepo's release pipeline is now built on 5 custom Nx plugins with 10+ executors:
 
-| Plugin | Executors | Purpose |
-|--------|-----------|---------|
-| `@adhd/nx-build` | `version`, `publish`, `reconcile`, `manifest`, `verify-dist-load`, `hygiene`, `link` | Full release lifecycle |
-| `@adhd/nx-deps` | `sync-deps`, `sync-deps-check` | Dependency range reconciliation |
-| `@adhd/nx-assets` | `copy` | README/CHANGELOG to dist |
-| `@adhd/nx-secret-scan` | `scan` | Credential detection (whole-repo task) |
-| `@adhd/nx-test` | `wiring` | Test configuration verification |
+| Plugin                 | Executors                                                                            | Purpose                                |
+| ---------------------- | ------------------------------------------------------------------------------------ | -------------------------------------- |
+| `@adhd/nx-build`       | `version`, `publish`, `reconcile`, `manifest`, `verify-dist-load`, `hygiene`, `link` | Full release lifecycle                 |
+| `@adhd/nx-deps`        | `sync-deps`, `sync-deps-check`                                                       | Dependency range reconciliation        |
+| `@adhd/nx-assets`      | `copy`                                                                               | README/CHANGELOG to dist               |
+| `@adhd/nx-secret-scan` | `scan`                                                                               | Credential detection (whole-repo task) |
+| `@adhd/nx-test`        | `wiring`                                                                             | Test configuration verification        |
 
 Key capabilities:
 
@@ -95,13 +95,14 @@ The code-first API generation framework reaches a new level of maturity:
 
   **Measured performance (8-file edit+verify task, same model across all conditions):**
 
-  | Condition | Turns | Cost | Wall Time |
-  |-----------|-------|------|-----------|
-  | Agent-tool harness (wildcard tools) | 28 | $0.71 | 90.6s |
-  | Agent-tool harness (scoped tools) | 27 | $0.69 | 71.8s |
+  | Condition                             | Turns | Cost      | Wall Time |
+  | ------------------------------------- | ----- | --------- | --------- |
+  | Agent-tool harness (wildcard tools)   | 28    | $0.71     | 90.6s     |
+  | Agent-tool harness (scoped tools)     | 27    | $0.69     | 71.8s     |
   | **claudecli provider (scoped tools)** | **5** | **$0.21** | **26.2s** |
 
   The claudecli provider completes identical work in **~3.4x fewer turns and at ~3.4x lower cost** than the interactive Agent-tool harness. Root cause: the claudecli provider batches multiple tool calls into single dense turns (833-1335 output tokens/turn) while the Agent-tool harness issues one tool call per round-trip (70-300 tokens/turn). Savings come from turn-count reduction, not per-turn efficiency — the interactive harness's dispatch loop adds overhead between every tool call that headless `claude -p` doesn't incur.
+
 - **Rate cards**: Provider pricing configuration in `@adhd/agent-core-provider` — maps provider type and model to per-unit costs, used by usage accounting for monetary cost computation.
 - **12 packages published** to npm: base-types (2.1.5), core-policy (2.1.6), core-provider (2.1.6), core-env (0.0.4), store-prompts (2.1.4), store-tools (2.1.6), store-runtime (2.1.5), engine-compiler (2.1.5), engine-orchestrator (2.1.5), plugin-budget (0.0.6), plugin-sanitize (0.0.4), generator-plugin (0.0.4).
 
@@ -158,16 +159,16 @@ The code-first API generation framework reaches a new level of maturity:
 
 ## Statistics
 
-| Metric | Value |
-|--------|-------|
-| Published packages | 54 |
-| Shipped capabilities | 42 |
-| Packages with capability docs | 54/54 |
-| Projects (nx targets) | 62 |
-| Test files | 169+ |
-| Git commits since last catalog | 269 |
-| Monorepo domains | 7 (agent, apigen, data, dispatch, environment, ui-react, workspace) |
-| Entrypoints | 5 (backlog, agent-mcp, apigen-cli, dispatch-cli, decompile-cli) |
+| Metric                         | Value                                                               |
+| ------------------------------ | ------------------------------------------------------------------- |
+| Published packages             | 54                                                                  |
+| Shipped capabilities           | 42                                                                  |
+| Packages with capability docs  | 54/54                                                               |
+| Projects (nx targets)          | 62                                                                  |
+| Test files                     | 169+                                                                |
+| Git commits since last catalog | 269                                                                 |
+| Monorepo domains               | 7 (agent, apigen, data, dispatch, environment, ui-react, workspace) |
+| Entrypoints                    | 5 (backlog, agent-mcp, apigen-cli, dispatch-cli, decompile-cli)     |
 
 ---
 
@@ -177,4 +178,4 @@ See [CHANGELOG.md](./CHANGELOG.md) for the full per-entry changelog with commit 
 
 ---
 
-*Prepared by the doc-steward from verified catalog data. Every shipped-capability claim resolves to a `status: shipped` entry in [capabilities.json](./docs/marketing/.catalog/capabilities.json). 42 shipped, 1 roadmap, 1 deprecated — see [CHANGELOG.md](./CHANGELOG.md) for the full per-entry changelog.*
+_Prepared by the doc-steward from verified catalog data. Every shipped-capability claim resolves to a `status: shipped` entry in [capabilities.json](./docs/marketing/.catalog/capabilities.json). 42 shipped, 1 roadmap, 1 deprecated — see [CHANGELOG.md](./CHANGELOG.md) for the full per-entry changelog._

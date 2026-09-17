@@ -48,7 +48,13 @@ describe('queryIssues — filter.plan (real store)', () => {
   });
 
   async function mkIssue(title: string, kind?: string): Promise<string> {
-    const created = await createIssue(store, { project: projectUid, title, body: `${title} body`, by: 'filer', ...(kind ? { kind } : {}) });
+    const created = await createIssue(store, {
+      project: projectUid,
+      title,
+      body: `${title} body`,
+      by: 'filer',
+      ...(kind ? { kind } : {}),
+    });
     return created.uid;
   }
 
@@ -58,11 +64,27 @@ describe('queryIssues — filter.plan (real store)', () => {
     const memberB = await mkIssue('member b');
     const outsider = await mkIssue('unrelated issue');
 
-    await relate(store, { sourceUid: memberA, targetUid: planUid, rel: 'part_of', action: 'add', by: 'filer' });
-    await relate(store, { sourceUid: memberB, targetUid: planUid, rel: 'part_of', action: 'add', by: 'filer' });
+    await relate(store, {
+      sourceUid: memberA,
+      targetUid: planUid,
+      rel: 'part_of',
+      action: 'add',
+      by: 'filer',
+    });
+    await relate(store, {
+      sourceUid: memberB,
+      targetUid: planUid,
+      rel: 'part_of',
+      action: 'add',
+      by: 'filer',
+    });
 
-    const result = await queryIssues(store, { view: 'list', filter: { plan: planUid } });
-    if (result.view !== 'list') throw new Error(`expected view 'list', got '${result.view}'`);
+    const result = await queryIssues(store, {
+      view: 'list',
+      filter: { plan: planUid },
+    });
+    if (result.view !== 'list')
+      throw new Error(`expected view 'list', got '${result.view}'`);
 
     const uids = result.items.map((i) => i.uid);
     expect(new Set(uids)).toEqual(new Set([memberA, memberB]));
@@ -72,8 +94,12 @@ describe('queryIssues — filter.plan (real store)', () => {
 
   it('an unresolved plan reference resolves to zero matches, not an error (§6.1 read-path rule)', async () => {
     await mkIssue('some issue');
-    const result = await queryIssues(store, { view: 'list', filter: { plan: 'no-such-plan-title' } });
-    if (result.view !== 'list') throw new Error(`expected view 'list', got '${result.view}'`);
+    const result = await queryIssues(store, {
+      view: 'list',
+      filter: { plan: 'no-such-plan-title' },
+    });
+    if (result.view !== 'list')
+      throw new Error(`expected view 'list', got '${result.view}'`);
     expect(result.items).toEqual([]);
   });
 
@@ -81,8 +107,12 @@ describe('queryIssues — filter.plan (real store)', () => {
     const planUid = await mkIssue('plan with no members', 'plan');
     await mkIssue('never attached');
 
-    const result = await queryIssues(store, { view: 'list', filter: { plan: planUid } });
-    if (result.view !== 'list') throw new Error(`expected view 'list', got '${result.view}'`);
+    const result = await queryIssues(store, {
+      view: 'list',
+      filter: { plan: planUid },
+    });
+    if (result.view !== 'list')
+      throw new Error(`expected view 'list', got '${result.view}'`);
     expect(result.items).toEqual([]);
   });
 });
@@ -117,11 +147,27 @@ describe('queryIssues — filter.projectPath (real store)', () => {
       by: 'filer',
     });
 
-    const inTarget = await createIssue(store, { project: projectUid, component: target.uid, title: 'in target', body: 'b', by: 'filer' });
-    const inSibling = await createIssue(store, { project: projectUid, component: sibling.uid, title: 'in sibling', body: 'b', by: 'filer' });
+    const inTarget = await createIssue(store, {
+      project: projectUid,
+      component: target.uid,
+      title: 'in target',
+      body: 'b',
+      by: 'filer',
+    });
+    const inSibling = await createIssue(store, {
+      project: projectUid,
+      component: sibling.uid,
+      title: 'in sibling',
+      body: 'b',
+      by: 'filer',
+    });
 
-    const result = await queryIssues(store, { view: 'list', filter: { projectPath: 'packages/apigen/apigen-core-client' } });
-    if (result.view !== 'list') throw new Error(`expected view 'list', got '${result.view}'`);
+    const result = await queryIssues(store, {
+      view: 'list',
+      filter: { projectPath: 'packages/apigen/apigen-core-client' },
+    });
+    if (result.view !== 'list')
+      throw new Error(`expected view 'list', got '${result.view}'`);
 
     const uids = result.items.map((i) => i.uid);
     expect(uids).toEqual([inTarget.uid]);
@@ -129,9 +175,18 @@ describe('queryIssues — filter.projectPath (real store)', () => {
   });
 
   it('an unresolved path resolves to zero matches, not an error (§6.1 read-path rule)', async () => {
-    await createIssue(store, { project: projectUid, title: 'any issue', body: 'b', by: 'filer' });
-    const result = await queryIssues(store, { view: 'list', filter: { projectPath: 'packages/nonexistent/nowhere' } });
-    if (result.view !== 'list') throw new Error(`expected view 'list', got '${result.view}'`);
+    await createIssue(store, {
+      project: projectUid,
+      title: 'any issue',
+      body: 'b',
+      by: 'filer',
+    });
+    const result = await queryIssues(store, {
+      view: 'list',
+      filter: { projectPath: 'packages/nonexistent/nowhere' },
+    });
+    if (result.view !== 'list')
+      throw new Error(`expected view 'list', got '${result.view}'`);
     expect(result.items).toEqual([]);
   });
 
@@ -142,10 +197,20 @@ describe('queryIssues — filter.projectPath (real store)', () => {
       path: 'packages/only/component',
       by: 'filer',
     });
-    await createIssue(store, { project: projectUid, component: component.uid, title: 'in only component', body: 'b', by: 'filer' });
+    await createIssue(store, {
+      project: projectUid,
+      component: component.uid,
+      title: 'in only component',
+      body: 'b',
+      by: 'filer',
+    });
 
-    const result = await queryIssues(store, { view: 'list', filter: { projectPath: 'packages/only/component-typo' } });
-    if (result.view !== 'list') throw new Error(`expected view 'list', got '${result.view}'`);
+    const result = await queryIssues(store, {
+      view: 'list',
+      filter: { projectPath: 'packages/only/component-typo' },
+    });
+    if (result.view !== 'list')
+      throw new Error(`expected view 'list', got '${result.view}'`);
     expect(result.items).toEqual([]);
   });
 });

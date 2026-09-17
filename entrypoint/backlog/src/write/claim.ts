@@ -35,8 +35,19 @@ import {
   resolveProjectPolicy,
 } from './catalog.js';
 import { writeAudit } from './audit.js';
-import { ClaimHeldError, InvalidArgumentError, IssueNotFoundError } from './errors.js';
-import { type IWriteStoreHandle, executeWriteTransaction, getNodeByRowidTx, getNodeByUidTx, nowISO, resolveLiveIssueTx } from './tx.js';
+import {
+  ClaimHeldError,
+  InvalidArgumentError,
+  IssueNotFoundError,
+} from './errors.js';
+import {
+  type IWriteStoreHandle,
+  executeWriteTransaction,
+  getNodeByRowidTx,
+  getNodeByUidTx,
+  nowISO,
+  resolveLiveIssueTx,
+} from './tx.js';
 
 export interface IClaimInput {
   /** The `issue` uid to claim/release/renew (§6.3, an "Issue verb"). */
@@ -50,7 +61,13 @@ export interface IClaimInput {
 
 export interface IClaimOutcome {
   uid: string;
-  status: 'claimed' | 'held' | 'reclaimed-stale' | 'renewed' | 'released' | 'release-noop';
+  status:
+    | 'claimed'
+    | 'held'
+    | 'reclaimed-stale'
+    | 'renewed'
+    | 'released'
+    | 'release-noop';
   claimedBy?: string;
   claimedAt?: string;
   heldBy?: string;
@@ -59,7 +76,10 @@ export interface IClaimOutcome {
   wasClaimedBy?: string;
 }
 
-function assertNonBlank(field: string, value: string | undefined): asserts value is string {
+function assertNonBlank(
+  field: string,
+  value: string | undefined
+): asserts value is string {
   if (value === undefined || value.trim().length === 0) {
     throw new InvalidArgumentError(field, 'is required');
   }
@@ -84,34 +104,41 @@ interface IRawEdgeSrcRow {
  * `BacklogWriteError` subclass) so it is never mistaken for one of this
  * verb's own validation outcomes.
  */
-async function resolveIssueProjectPolicyTx(tx: AdapterTransaction, issueRowid: number): Promise<IProjectPolicy> {
+async function resolveIssueProjectPolicyTx(
+  tx: AdapterTransaction,
+  issueRowid: number
+): Promise<IProjectPolicy> {
   const componentEdge = await tx.executeGet<IRawEdgeSrcRow>(
     'SELECT src FROM edge WHERE dst = ? AND rel = ? AND t_invalid IS NULL',
-    [issueRowid, 'owns_component'],
+    [issueRowid, 'owns_component']
   );
   if (!componentEdge) {
     throw new Error(
       `claim: issue rowid=${issueRowid} has no live "owns_component" edge — graph invariant violation ` +
-        '(every live issue must own exactly one live parent component).',
+        '(every live issue must own exactly one live parent component).'
     );
   }
 
   const projectEdge = await tx.executeGet<IRawEdgeSrcRow>(
     'SELECT src FROM edge WHERE dst = ? AND rel = ? AND t_invalid IS NULL',
-    [componentEdge.src, 'owns_project'],
+    [componentEdge.src, 'owns_project']
   );
   if (!projectEdge) {
     throw new Error(
       `claim: component rowid=${componentEdge.src} has no live "owns_project" edge — graph invariant violation ` +
-        '(every live component must be owned by exactly one live project).',
+        '(every live component must be owned by exactly one live project).'
     );
   }
 
   const projectRow = await getNodeByRowidTx(tx, projectEdge.src);
-  if (!projectRow || projectRow.kind !== 'project' || projectRow.tInvalid !== null) {
+  if (
+    !projectRow ||
+    projectRow.kind !== 'project' ||
+    projectRow.tInvalid !== null
+  ) {
     throw new Error(
       `claim: resolved project rowid=${projectEdge.src} is missing, invalidated, or not a "project" node — ` +
-        'graph invariant violation.',
+        'graph invariant violation.'
     );
   }
 
@@ -137,10 +164,20 @@ async function resolveIssueProjectPolicyTx(tx: AdapterTransaction, issueRowid: n
  * removes the claim-lease keys, so this function never needs to know which
  * keys are "claim" keys — it is a pure, generic wholesale-replace primitive.
  */
-async function touchMetadataTx(tx: AdapterTransaction, rowid: number, newMetadata: Record<string, unknown>, at: string): Promise<void> {
-  const result = await tx.executeRun('UPDATE node SET meta = ?, t_updated = ? WHERE rowid = ?', [JSON.stringify(newMetadata), at, rowid]);
+async function touchMetadataTx(
+  tx: AdapterTransaction,
+  rowid: number,
+  newMetadata: Record<string, unknown>,
+  at: string
+): Promise<void> {
+  const result = await tx.executeRun(
+    'UPDATE node SET meta = ?, t_updated = ? WHERE rowid = ?',
+    [JSON.stringify(newMetadata), at, rowid]
+  );
   if (result.rowsAffected !== 1) {
-    throw new Error(`claim: touch UPDATE affected ${result.rowsAffected} rows for rowid=${rowid}, expected exactly 1.`);
+    throw new Error(
+      `claim: touch UPDATE affected ${result.rowsAffected} rows for rowid=${rowid}, expected exactly 1.`
+    );
   }
 }
 
@@ -199,11 +236,23 @@ async function touchMetadataTx(tx: AdapterTransaction, rowid: number, newMetadat
  * `WriteContentionError`/`WriteIOError` (§4c — an exhausted driver-level
  * retry on the underlying `immediate` transaction).
  */
-export async function claim(handle: IWriteStoreHandle, input: IClaimInput): Promise<IClaimOutcome> {
+export async function claim(
+  handle: IWriteStoreHandle,
+  input: IClaimInput
+): Promise<IClaimOutcome> {
   assertNonBlank('uid', input.uid);
   assertNonBlank('by', input.by);
-  if (input.action !== 'claim' && input.action !== 'release' && input.action !== 'renew') {
-    throw new InvalidArgumentError('action', `must be "claim", "release", or "renew" (got ${JSON.stringify(input.action)})`);
+  if (
+    input.action !== 'claim' &&
+    input.action !== 'release' &&
+    input.action !== 'renew'
+  ) {
+    throw new InvalidArgumentError(
+      'action',
+      `must be "claim", "release", or "renew" (got ${JSON.stringify(
+        input.action
+      )})`
+    );
   }
   const force = input.force === true;
 
@@ -212,19 +261,36 @@ export async function claim(handle: IWriteStoreHandle, input: IClaimInput): Prom
     const row = await resolveLiveIssueTx(tx, input.uid);
 
     const meta = { ...(row.metadata ?? {}) };
-    const claimedBy = typeof meta['claimedBy'] === 'string' ? (meta['claimedBy'] as string) : undefined;
-    const claimedAt = typeof meta['claimedAt'] === 'string' ? (meta['claimedAt'] as string) : undefined;
+    const claimedBy =
+      typeof meta['claimedBy'] === 'string'
+        ? (meta['claimedBy'] as string)
+        : undefined;
+    const claimedAt =
+      typeof meta['claimedAt'] === 'string'
+        ? (meta['claimedAt'] as string)
+        : undefined;
 
     if (input.action === 'claim') {
       if (claimedBy === undefined) {
         const newMeta = { ...meta, claimedBy: input.by, claimedAt: now };
         await touchMetadataTx(tx, row.rowid, newMeta, now);
         await writeAudit({
-          tx, typePolicy: handle.typePolicy,
-          subjectRowid: row.rowid, subjectUid: row.uid, subjectKind: 'issue',
-          actor: input.by, action: 'claimed', to: input.by, at: now,
+          tx,
+          typePolicy: handle.typePolicy,
+          subjectRowid: row.rowid,
+          subjectUid: row.uid,
+          subjectKind: 'issue',
+          actor: input.by,
+          action: 'claimed',
+          to: input.by,
+          at: now,
         });
-        return { uid: row.uid, status: 'claimed', claimedBy: input.by, claimedAt: now };
+        return {
+          uid: row.uid,
+          status: 'claimed',
+          claimedBy: input.by,
+          claimedAt: now,
+        };
       }
 
       if (claimedBy === input.by) {
@@ -233,31 +299,69 @@ export async function claim(handle: IWriteStoreHandle, input: IClaimInput): Prom
         const newMeta = { ...meta, claimedAt: now };
         await touchMetadataTx(tx, row.rowid, newMeta, now);
         await writeAudit({
-          tx, typePolicy: handle.typePolicy,
-          subjectRowid: row.rowid, subjectUid: row.uid, subjectKind: 'issue',
-          actor: input.by, action: 'claimed', from: input.by, to: input.by, note: 're-affirmed (held)', at: now,
+          tx,
+          typePolicy: handle.typePolicy,
+          subjectRowid: row.rowid,
+          subjectUid: row.uid,
+          subjectKind: 'issue',
+          actor: input.by,
+          action: 'claimed',
+          from: input.by,
+          to: input.by,
+          note: 're-affirmed (held)',
+          at: now,
         });
-        return { uid: row.uid, status: 'held', heldBy: input.by, claimedBy: input.by, claimedAt: now };
+        return {
+          uid: row.uid,
+          status: 'held',
+          heldBy: input.by,
+          claimedBy: input.by,
+          claimedAt: now,
+        };
       }
 
       // claimedBy !== undefined && claimedBy !== input.by — someone else holds it.
-      const ageMin = claimedAt !== undefined ? (Date.parse(now) - Date.parse(claimedAt)) / 60_000 : Number.POSITIVE_INFINITY;
+      const ageMin =
+        claimedAt !== undefined
+          ? (Date.parse(now) - Date.parse(claimedAt)) / 60_000
+          : Number.POSITIVE_INFINITY;
       const policy = await resolveIssueProjectPolicyTx(tx, row.rowid);
       const stale = ageMin >= policy.claimStaleAfterMin;
       if (!stale && !force) {
         throw new ClaimHeldError(claimedBy, claimedAt ?? now);
       }
 
-      const newMeta = { ...meta, claimedBy: input.by, claimedAt: now, previousClaimant: claimedBy };
+      const newMeta = {
+        ...meta,
+        claimedBy: input.by,
+        claimedAt: now,
+        previousClaimant: claimedBy,
+      };
       await touchMetadataTx(tx, row.rowid, newMeta, now);
       await writeAudit({
-        tx, typePolicy: handle.typePolicy,
-        subjectRowid: row.rowid, subjectUid: row.uid, subjectKind: 'issue',
-        actor: input.by, action: 'reclaimed-stale', from: claimedBy, to: input.by,
-        note: stale ? `stale claim reclaimed after ~${Math.floor(ageMin)}min (threshold ${policy.claimStaleAfterMin}min)` : 'force override of a non-stale claim',
+        tx,
+        typePolicy: handle.typePolicy,
+        subjectRowid: row.rowid,
+        subjectUid: row.uid,
+        subjectKind: 'issue',
+        actor: input.by,
+        action: 'reclaimed-stale',
+        from: claimedBy,
+        to: input.by,
+        note: stale
+          ? `stale claim reclaimed after ~${Math.floor(ageMin)}min (threshold ${
+              policy.claimStaleAfterMin
+            }min)`
+          : 'force override of a non-stale claim',
         at: now,
       });
-      return { uid: row.uid, status: 'reclaimed-stale', claimedBy: input.by, claimedAt: now, previousClaimant: claimedBy };
+      return {
+        uid: row.uid,
+        status: 'reclaimed-stale',
+        claimedBy: input.by,
+        claimedAt: now,
+        previousClaimant: claimedBy,
+      };
     }
 
     if (input.action === 'release') {
@@ -267,9 +371,15 @@ export async function claim(handle: IWriteStoreHandle, input: IClaimInput): Prom
         delete newMeta['claimedAt'];
         await touchMetadataTx(tx, row.rowid, newMeta, now);
         await writeAudit({
-          tx, typePolicy: handle.typePolicy,
-          subjectRowid: row.rowid, subjectUid: row.uid, subjectKind: 'issue',
-          actor: input.by, action: 'released', from: input.by, at: now,
+          tx,
+          typePolicy: handle.typePolicy,
+          subjectRowid: row.rowid,
+          subjectUid: row.uid,
+          subjectKind: 'issue',
+          actor: input.by,
+          action: 'released',
+          from: input.by,
+          at: now,
         });
         return { uid: row.uid, status: 'released' };
       }
@@ -282,11 +392,23 @@ export async function claim(handle: IWriteStoreHandle, input: IClaimInput): Prom
       const newMeta = { ...meta, claimedAt: now };
       await touchMetadataTx(tx, row.rowid, newMeta, now);
       await writeAudit({
-        tx, typePolicy: handle.typePolicy,
-        subjectRowid: row.rowid, subjectUid: row.uid, subjectKind: 'issue',
-        actor: input.by, action: 'renewed', from: input.by, to: input.by, at: now,
+        tx,
+        typePolicy: handle.typePolicy,
+        subjectRowid: row.rowid,
+        subjectUid: row.uid,
+        subjectKind: 'issue',
+        actor: input.by,
+        action: 'renewed',
+        from: input.by,
+        to: input.by,
+        at: now,
       });
-      return { uid: row.uid, status: 'renewed', claimedBy: input.by, claimedAt: now };
+      return {
+        uid: row.uid,
+        status: 'renewed',
+        claimedBy: input.by,
+        claimedAt: now,
+      };
     }
     // != by or unset — "renew is not a claim attempt" (SPEC.md §6.3.5) — throws unconditionally.
     // See this function's own doc comment ("renew against an unclaimed issue") for the

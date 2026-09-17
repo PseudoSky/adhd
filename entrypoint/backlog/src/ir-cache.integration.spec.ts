@@ -87,24 +87,26 @@ describe('FEAT-002 — extract-stage IR cache on the REAL backlog hot path', () 
     // Fail loudly if the built artifact this test drives is missing (the
     // project's test target dependsOn build, but a missing dist must turn
     // this suite red, never silently skip — AGENTS.md §7).
-    expect(DIST_INDEX, `built bin missing — run "nx build backlog" first: ${DIST_INDEX}`).toSatisfy(
-      (p: string) => {
-        try {
-          return statSync(p).isFile();
-        } catch {
-          return false;
-        }
+    expect(
+      DIST_INDEX,
+      `built bin missing — run "nx build backlog" first: ${DIST_INDEX}`
+    ).toSatisfy((p: string) => {
+      try {
+        return statSync(p).isFile();
+      } catch {
+        return false;
       }
-    );
-    expect(API_DTS, `built api.d.ts missing — run "nx build backlog" first: ${API_DTS}`).toSatisfy(
-      (p: string) => {
-        try {
-          return statSync(p).isFile();
-        } catch {
-          return false;
-        }
+    });
+    expect(
+      API_DTS,
+      `built api.d.ts missing — run "nx build backlog" first: ${API_DTS}`
+    ).toSatisfy((p: string) => {
+      try {
+        return statSync(p).isFile();
+      } catch {
+        return false;
       }
-    );
+    });
 
     // Run 1: extraction MISS — the invoker's single ExtractCall writes one entry.
     expect(runHelp(cacheFile, cwd).status).toBe(0);
@@ -150,7 +152,10 @@ describe('FEAT-002 — extract-stage IR cache on the REAL backlog hot path', () 
     const originalApiDts = readFileSync(API_DTS, 'utf8');
     const mtimeBeforeRun4 = statSync(cacheFile).mtimeMs;
     try {
-      writeFileSync(API_DTS, `${originalApiDts}\n// FEAT-002 content-invalidation probe\n`);
+      writeFileSync(
+        API_DTS,
+        `${originalApiDts}\n// FEAT-002 content-invalidation probe\n`
+      );
       expect(runHelp(cacheFile, cwd).status).toBe(0);
       expect(statSync(cacheFile).mtimeMs).not.toBe(mtimeBeforeRun4);
     } finally {
@@ -161,16 +166,22 @@ describe('FEAT-002 — extract-stage IR cache on the REAL backlog hot path', () 
   });
 
   it('APIGEN_IR_CACHE_ENABLED=0 disables caching entirely — no cache file is ever created', () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), 'apigen-ir-cache-backlog-disabled-'));
+    const cacheDir = mkdtempSync(
+      join(tmpdir(), 'apigen-ir-cache-backlog-disabled-')
+    );
     cacheFile = join(cacheDir, 'backlog-client.ir.json');
     cwd = mkdtempSync(join(tmpdir(), 'apigen-ir-cache-cwd-disabled-'));
 
-    expect(runHelp(cacheFile, cwd, { APIGEN_IR_CACHE_ENABLED: '0' }).status).toBe(0);
+    expect(
+      runHelp(cacheFile, cwd, { APIGEN_IR_CACHE_ENABLED: '0' }).status
+    ).toBe(0);
     expect(existsSync(cacheFile)).toBe(false);
 
     // A second run also succeeds — real extraction every time, no cache
     // involvement at all (the opt-out's behavioral proof).
-    expect(runHelp(cacheFile, cwd, { APIGEN_IR_CACHE_ENABLED: '0' }).status).toBe(0);
+    expect(
+      runHelp(cacheFile, cwd, { APIGEN_IR_CACHE_ENABLED: '0' }).status
+    ).toBe(0);
     expect(existsSync(cacheFile)).toBe(false);
   });
 });

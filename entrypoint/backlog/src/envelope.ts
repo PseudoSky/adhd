@@ -57,7 +57,9 @@ export const BACKLOG_ERROR_CODES = [
 /** The closed union of envelope error codes. See {@link BACKLOG_ERROR_CODES}. */
 export type BacklogErrorCode = (typeof BACKLOG_ERROR_CODES)[number];
 
-const BACKLOG_ERROR_CODE_SET: ReadonlySet<string> = new Set<string>(BACKLOG_ERROR_CODES);
+const BACKLOG_ERROR_CODE_SET: ReadonlySet<string> = new Set<string>(
+  BACKLOG_ERROR_CODES
+);
 
 /**
  * Runtime membership test for the closed union. The union is only genuinely
@@ -170,7 +172,9 @@ export interface IOutcomeFailure {
 export type IOutcomeEnvelope<T> = IOutcomeSuccess<T> | IOutcomeFailure;
 
 /** Narrow an envelope to its success arm. */
-export function isOutcomeOk<T>(env: IOutcomeEnvelope<T>): env is IOutcomeSuccess<T> {
+export function isOutcomeOk<T>(
+  env: IOutcomeEnvelope<T>
+): env is IOutcomeSuccess<T> {
   return env.ok === true;
 }
 
@@ -181,23 +185,39 @@ export function isOutcomeOk<T>(env: IOutcomeEnvelope<T>): env is IOutcomeSuccess
  * malformed half-envelope is neither ok nor a usable error, and callers must
  * not treat it as success by accident.
  */
-export function isOutcomeError<T>(env: IOutcomeEnvelope<T>): env is IOutcomeFailure {
-  return env.ok === false && typeof env.error === 'object' && env.error !== null && isBacklogErrorCode(env.error.code);
+export function isOutcomeError<T>(
+  env: IOutcomeEnvelope<T>
+): env is IOutcomeFailure {
+  return (
+    env.ok === false &&
+    typeof env.error === 'object' &&
+    env.error !== null &&
+    isBacklogErrorCode(env.error.code)
+  );
 }
 
 /** Build a success envelope. */
-export function okEnvelope<T>(data: T, extra?: { warnings?: string[]; meta?: IQueryEnvelopeMeta }): IOutcomeSuccess<T> {
+export function okEnvelope<T>(
+  data: T,
+  extra?: { warnings?: string[]; meta?: IQueryEnvelopeMeta }
+): IOutcomeSuccess<T> {
   const env: IOutcomeSuccess<T> = { ok: true, data };
-  if (extra?.warnings && extra.warnings.length > 0) env.warnings = extra.warnings;
+  if (extra?.warnings && extra.warnings.length > 0)
+    env.warnings = extra.warnings;
   if (extra?.meta) env.meta = extra.meta;
   return env;
 }
 
 /** Build a failure envelope. `store_busy` is stamped retryable by default. */
-export function errorEnvelope(code: BacklogErrorCode, message: string, details?: IOutcomeErrorDetails): IOutcomeFailure {
+export function errorEnvelope(
+  code: BacklogErrorCode,
+  message: string,
+  details?: IOutcomeErrorDetails
+): IOutcomeFailure {
   const error: IOutcomeError = { code, message };
   const merged: IOutcomeErrorDetails = { ...(details ?? {}) };
-  if (code === 'store_busy' && merged.retryable === undefined) merged.retryable = true;
+  if (code === 'store_busy' && merged.retryable === undefined)
+    merged.retryable = true;
   if (Object.keys(merged).length > 0) error.details = merged;
   return { ok: false, error };
 }
@@ -215,7 +235,9 @@ export function exitCodeForEnvelope<T>(env: IOutcomeEnvelope<T>): number {
  * mount, a plugin's own synthetic op) must fall through to apigen's default
  * exit-0-on-return, never be mapped by this table.
  */
-export function isOutcomeEnvelope(value: unknown): value is IOutcomeEnvelope<unknown> {
+export function isOutcomeEnvelope(
+  value: unknown
+): value is IOutcomeEnvelope<unknown> {
   if (value === null || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
   if (typeof v['ok'] !== 'boolean') return false;

@@ -12,18 +12,32 @@
  * where spawning ~20 subprocesses would buy nothing but wall-clock.
  */
 import { describe, expect, it } from 'vitest';
-import { buildSearchArgv, SEARCH_FLAGS, type SearchShortcutOutcome } from './search-shortcut.js';
+import {
+  buildSearchArgv,
+  SEARCH_FLAGS,
+  type SearchShortcutOutcome,
+} from './search-shortcut.js';
 
 /** The parsed `--input` JSON of a successful translation. Fails loudly on any other outcome. */
 function inputOf(outcome: SearchShortcutOutcome): Record<string, unknown> {
-  if (outcome.kind !== 'argv') throw new Error(`expected an argv outcome, got ${outcome.kind}: ${JSON.stringify(outcome)}`);
+  if (outcome.kind !== 'argv')
+    throw new Error(
+      `expected an argv outcome, got ${outcome.kind}: ${JSON.stringify(
+        outcome
+      )}`
+    );
   expect(outcome.argv[0]).toBe('query');
   expect(outcome.argv[1]).toBe('--input');
   return JSON.parse(outcome.argv[2] as string) as Record<string, unknown>;
 }
 
 function messageOf(outcome: SearchShortcutOutcome): string {
-  if (outcome.kind !== 'error') throw new Error(`expected an error outcome, got ${outcome.kind}: ${JSON.stringify(outcome)}`);
+  if (outcome.kind !== 'error')
+    throw new Error(
+      `expected an error outcome, got ${outcome.kind}: ${JSON.stringify(
+        outcome
+      )}`
+    );
   return outcome.message;
 }
 
@@ -52,7 +66,21 @@ describe('buildSearchArgv — translation onto the mounted `query` verb', () => 
 
   it('routes top-level flags to the top level and filter flags into `filter`', () => {
     const input = inputOf(
-      buildSearchArgv(['stale claims', '--limit', '5', '--offset', '10', '--sort', 'priority', '--direction', 'asc', '--plan', 'PLAN-9', '--kind', 'BUG'])
+      buildSearchArgv([
+        'stale claims',
+        '--limit',
+        '5',
+        '--offset',
+        '10',
+        '--sort',
+        'priority',
+        '--direction',
+        'asc',
+        '--plan',
+        'PLAN-9',
+        '--kind',
+        'BUG',
+      ])
     );
     expect(input).toEqual({
       limit: 5,
@@ -65,7 +93,9 @@ describe('buildSearchArgv — translation onto the mounted `query` verb', () => 
   });
 
   it('coerces --limit/--offset to numbers, and ONLY those two', () => {
-    const input = inputOf(buildSearchArgv(['x', '--limit', '3', '--offset', '0', '--kind', '42']));
+    const input = inputOf(
+      buildSearchArgv(['x', '--limit', '3', '--offset', '0', '--kind', '42'])
+    );
     expect(input['limit']).toBe(3);
     expect(input['offset']).toBe(0);
     // A numeric-looking string on a string-typed flag stays a string.
@@ -86,37 +116,69 @@ describe('buildSearchArgv — translation onto the mounted `query` verb', () => 
   });
 
   it('--fields is a comma-separated projection list', () => {
-    const input = inputOf(buildSearchArgv(['x', '--fields', 'uid,title,_score']));
+    const input = inputOf(
+      buildSearchArgv(['x', '--fields', 'uid,title,_score'])
+    );
     expect(input['fields']).toEqual(['uid', 'title', '_score']);
   });
 
   it('a LONE --status stays a scalar (IStatusSelector closedness), several become an array', () => {
     // `--status open` must NOT become `["open"]`: `open` is an
     // `IStatusClosedness` word, and `["open"]` is not a `BacklogStatus[]`.
-    expect(inputOf(buildSearchArgv(['x', '--status', 'open']))['filter']).toEqual({ status: 'open' });
-    expect(inputOf(buildSearchArgv(['x', '--status', 'OPEN,IN_PROGRESS']))['filter']).toEqual({ status: ['OPEN', 'IN_PROGRESS'] });
+    expect(
+      inputOf(buildSearchArgv(['x', '--status', 'open']))['filter']
+    ).toEqual({ status: 'open' });
+    expect(
+      inputOf(buildSearchArgv(['x', '--status', 'OPEN,IN_PROGRESS']))['filter']
+    ).toEqual({ status: ['OPEN', 'IN_PROGRESS'] });
   });
 
   it('a LONE --priority stays a scalar, several become an array (Priority | readonly Priority[])', () => {
-    expect(inputOf(buildSearchArgv(['x', '--priority', 'HIGH']))['filter']).toEqual({ priority: 'HIGH' });
-    expect(inputOf(buildSearchArgv(['x', '--priority', 'HIGH,CRITICAL']))['filter']).toEqual({ priority: ['HIGH', 'CRITICAL'] });
+    expect(
+      inputOf(buildSearchArgv(['x', '--priority', 'HIGH']))['filter']
+    ).toEqual({ priority: 'HIGH' });
+    expect(
+      inputOf(buildSearchArgv(['x', '--priority', 'HIGH,CRITICAL']))['filter']
+    ).toEqual({ priority: ['HIGH', 'CRITICAL'] });
   });
 
   it('kebab flags map onto their camelCase IBacklogFilter keys', () => {
-    const input = inputOf(buildSearchArgv(['x', '--claimed-by', 'agent-7', '--project-path', 'packages/apigen/apigen-core-client']));
-    expect(input['filter']).toEqual({ claimedBy: 'agent-7', projectPath: 'packages/apigen/apigen-core-client' });
+    const input = inputOf(
+      buildSearchArgv([
+        'x',
+        '--claimed-by',
+        'agent-7',
+        '--project-path',
+        'packages/apigen/apigen-core-client',
+      ])
+    );
+    expect(input['filter']).toEqual({
+      claimedBy: 'agent-7',
+      projectPath: 'packages/apigen/apigen-core-client',
+    });
   });
 
   it('--anchor switches to view:"similar" and carries the seed in filter.anchor', () => {
-    const input = inputOf(buildSearchArgv(['--anchor', 'DEBT-015', '--limit', '3']));
-    expect(input).toEqual({ limit: 3, view: 'similar', filter: { anchor: 'DEBT-015' } });
+    const input = inputOf(
+      buildSearchArgv(['--anchor', 'DEBT-015', '--limit', '3'])
+    );
+    expect(input).toEqual({
+      limit: 3,
+      view: 'similar',
+      filter: { anchor: 'DEBT-015' },
+    });
     expect(input).not.toHaveProperty('text');
   });
 });
 
 describe('buildSearchArgv — rejection grammar (apigen parseArgs parity)', () => {
   it('--help renders usage rather than an error, from ANY position', () => {
-    for (const argv of [['--help'], ['x', '--help'], ['-h'], ['x', '--limit', '2', '-h']]) {
+    for (const argv of [
+      ['--help'],
+      ['x', '--help'],
+      ['-h'],
+      ['x', '--limit', '2', '-h'],
+    ]) {
       const outcome = buildSearchArgv(argv);
       expect(outcome.kind, `for argv ${JSON.stringify(argv)}`).toBe('help');
     }
@@ -124,27 +186,40 @@ describe('buildSearchArgv — rejection grammar (apigen parseArgs parity)', () =
 
   it('an unknown option prints the REAL available list, never a placebo', () => {
     const message = messageOf(buildSearchArgv(['x', '--limitt', '5']));
-    expect(message).toBe(`Unknown option: --limitt. Available: ${SEARCH_FLAGS.join(', ')}`);
+    expect(message).toBe(
+      `Unknown option: --limitt. Available: ${SEARCH_FLAGS.join(', ')}`
+    );
     // "Real" means every listed flag is genuinely accepted — the list is
     // derived from the same arrays the parser consults, and this proves it.
     for (const flag of SEARCH_FLAGS) {
       // `--anchor` REPLACES the positional rather than refining it, so it is
       // probed in its own legal shape — not as an exception to the rule.
-      const probe = buildSearchArgv(flag === '--anchor' ? [flag, 'BUG-1'] : ['x', flag, 'value']);
-      expect(probe.kind, `${flag} is advertised as available but was rejected`).not.toBe('error');
+      const probe = buildSearchArgv(
+        flag === '--anchor' ? [flag, 'BUG-1'] : ['x', flag, 'value']
+      );
+      expect(
+        probe.kind,
+        `${flag} is advertised as available but was rejected`
+      ).not.toBe('error');
     }
   });
 
   it('a flag with no value is "Missing value for --X"', () => {
-    expect(messageOf(buildSearchArgv(['x', '--limit']))).toBe('Missing value for --limit');
+    expect(messageOf(buildSearchArgv(['x', '--limit']))).toBe(
+      'Missing value for --limit'
+    );
   });
 
   it('a SECOND positional is "Unexpected positional argument"', () => {
-    expect(messageOf(buildSearchArgv(['first', 'second']))).toBe('Unexpected positional argument: "second"');
+    expect(messageOf(buildSearchArgv(['first', 'second']))).toBe(
+      'Unexpected positional argument: "second"'
+    );
   });
 
   it('no query at all reports the missing-required-property shape validate-Layer would', () => {
-    expect(messageOf(buildSearchArgv([]))).toContain("must have required property 'text'");
+    expect(messageOf(buildSearchArgv([]))).toContain(
+      "must have required property 'text'"
+    );
   });
 
   it('--input is rejected by NAME, pointing at `query --input`', () => {
@@ -156,7 +231,11 @@ describe('buildSearchArgv — rejection grammar (apigen parseArgs parity)', () =
   });
 
   it('--anchor and a positional query are mutually exclusive, in EITHER order', () => {
-    expect(messageOf(buildSearchArgv(['--anchor', 'BUG-1', 'some text']))).toContain('mutually exclusive');
-    expect(messageOf(buildSearchArgv(['some text', '--anchor', 'BUG-1']))).toContain('mutually exclusive');
+    expect(
+      messageOf(buildSearchArgv(['--anchor', 'BUG-1', 'some text']))
+    ).toContain('mutually exclusive');
+    expect(
+      messageOf(buildSearchArgv(['some text', '--anchor', 'BUG-1']))
+    ).toContain('mutually exclusive');
   });
 });

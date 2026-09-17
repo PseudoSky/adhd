@@ -10,10 +10,10 @@ git config core.hooksPath .githooks
 
 ## Hooks
 
-| Hook | What it does |
-|---|---|
+| Hook         | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `pre-commit` | **0.** `detect-mass-deletion.js --staged` — blocks a commit whose staged diff is dominated by deletions of already-existing files (BUG-ADHD-EE8D24C8-REVERT-001). **1.** `nx run @adhd/source:secret-scan --mode=staged` (wraps `check-no-credentials.js --staged`) — blocks credentials from entering the repo. **2.** `nx affected -t lint --files=<staged>` (VERIFY ONLY, never `--fix`, never re-stages) — `lint` `dependsOn: ["sync-deps"]`, which can self-heal stale `@adhd/*` dependency ranges on disk; blocks on any other lint error. **3.** a fast, staged-file-scoped `vitest run` (`.githooks/lib/run-staged-tests.mjs`) — runs ONLY spec files directly implicated by what's staged (a staged spec itself, or the co-located same-basename spec of a staged source file); blocks on any failure. |
-| `pre-push` | The full `nx affected -t test` closure that Gate 3 used to run inline in `pre-commit` (DEBT-PROCESS-AFFECTED-TEST-001 Option 2 → Option 3 migration, PERF-PRECOMMIT-STAGED-TEST-SCOPE-001) — scoped by **commit range** (`--base`/`--head` from the pushed ref update), which is what makes it safe to run in a worktree with other agents' concurrent uncommitted edits: a commit range can only ever contain committed history. Blocks the push on any affected-test failure. |
+| `pre-push`   | The full `nx affected -t test` closure that Gate 3 used to run inline in `pre-commit` (DEBT-PROCESS-AFFECTED-TEST-001 Option 2 → Option 3 migration, PERF-PRECOMMIT-STAGED-TEST-SCOPE-001) — scoped by **commit range** (`--base`/`--head` from the pushed ref update), which is what makes it safe to run in a worktree with other agents' concurrent uncommitted edits: a commit range can only ever contain committed history. Blocks the push on any affected-test failure.                                                                                                                                                                                                                                                                                                                                 |
 
 ### Why Gate 3 moved off whole-project `nx affected -t test` (PERF-PRECOMMIT-STAGED-TEST-SCOPE-001)
 
@@ -24,12 +24,12 @@ the 2 staged files.
 
 Two distinct defects, both confirmed:
 
-1. **Too coarse.** `nx affected` resolves to whole *projects*, not files. `backlog`'s own
+1. **Too coarse.** `nx affected` resolves to whole _projects_, not files. `backlog`'s own
    `test` target `dependsOn: ["build", "assets", "^build"]` (its MCP-stdio and
    published-layout specs spawn the real built `dist/`), so 2 touched files forced a
    build of 20 dependency tasks plus a run of all 79 of the project's spec files.
 2. **Dishonest scope.** `nx affected --files=<staged>` uses the staged list only to pick
-   the *project*; the project's `test` target then runs vitest against the **working
+   the _project_; the project's `test` target then runs vitest against the **working
    tree on disk**, not the index. Every other agent's in-flight, uncommitted edit inside
    that same project directory was live during the run and could fail an unrelated
    commit — this is exactly what happened.
@@ -54,13 +54,13 @@ on every PR before this change and is unaffected by it.
 
 **Known, deliberately-deferred limitation:** Gate 2 (lint) has the identical
 working-tree-contamination shape as the old Gate 3 — `nx affected -t lint --files=<staged>`
-scopes the *project* honestly from the staged list, but `nx lint <project>` then lints
+scopes the _project_ honestly from the staged list, but `nx lint <project>` then lints
 every file in that project off disk, including another agent's dirty, unrelated files.
 This was NOT fixed here (lint wasn't the reported failure, and a lint error from a dirty
 neighbor file is a much smaller cost than a 338s test run) — tracked as
 `DEBT-PRECOMMIT-LINT-WORKING-TREE-SCOPE-001` in the backlog graph.
 
-Secrets are checked **first** and are cheap. A leaked credential is *unrecoverable*
+Secrets are checked **first** and are cheap. A leaked credential is _unrecoverable_
 once pushed — the fix is rotation, not reversion — whereas a lint error is not.
 Do not reorder these gates.
 
@@ -81,7 +81,7 @@ the WORKING-TREE copy (all 7 hunks, since only the index was partial) and then b
 `git add`'d the file WHOLESALE, silently overwriting the deliberately-partial index —
 the resulting commit shipped another agent's untested WIP under the wrong message.
 `git commit -- <paths>` alone does NOT protect against this: the hook re-stages
-*after* the pathspec commit builds its index.
+_after_ the pathspec commit builds its index.
 
 **`BUG-REPO-PRECOMMIT-DEPCHECK-STRIPS-USED-DEPS-001`** — `@nx/dependency-checks` in
 this repo resolves each npm dependency via Nx's yarn-lockfile parser (`yarn.lock`
@@ -182,11 +182,11 @@ brew install gitleaks
 
 **Exit codes**
 
-| Code | Meaning |
-|---|---|
-| `0` | clean |
-| `1` | credential detected — blocked |
-| `2` | the scan itself could not run (unreadable git state, gitleaks errored, or `SECRET_SCAN_REQUIRE_GITLEAKS=1` with gitleaks absent) |
+| Code | Meaning                                                                                                                          |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `0`  | clean                                                                                                                            |
+| `1`  | credential detected — blocked                                                                                                    |
+| `2`  | the scan itself could not run (unreadable git state, gitleaks errored, or `SECRET_SCAN_REQUIRE_GITLEAKS=1` with gitleaks absent) |
 
 Exit `2` exists because **a scanner that errored is not a scanner that found nothing.**
 Locally, a missing gitleaks degrades to pattern-only with a loud warning. In CI,

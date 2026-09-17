@@ -50,6 +50,9 @@ function resolveOwnPackageJsonPath(): string {
  */
 export function readBacklogVersionInfo(): { name: string; version: string } {
   const pkgJsonPath = resolveOwnPackageJsonPath();
-  const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8')) as { name: string; version: string };
+  const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8')) as {
+    name: string;
+    version: string;
+  };
   return { name: pkg.name, version: pkg.version };
 }

@@ -46,7 +46,10 @@
  *    than imported from the dying module.
  */
 import { StoreSearchBackend } from '@adhd/sox-hybrid-search';
-import { openTursoVectorStore, type AsyncVectorBackend } from '@adhd/sox-vector-store';
+import {
+  openTursoVectorStore,
+  type AsyncVectorBackend,
+} from '@adhd/sox-vector-store';
 import type { GraphBackend } from '@adhd/sox-graph-store';
 import type { StoreAdapter } from '@adhd/sox-store-adapter';
 import type { BacklogConfig } from '../env.js';
@@ -96,11 +99,11 @@ export class PermanentEmbeddingDimensionError extends Error {
     readonly operation: string,
     readonly modelId: string,
     readonly expected: number,
-    readonly actual: number,
+    readonly actual: number
   ) {
     super(
       `backlog embedding: ${operation} produced a ${actual}-dimensional vector but space "${modelId}" is ${expected}-dimensional. ` +
-        `The dimensional contract is structural and is never silently truncated — the configured provider does not match this vector space.`,
+        `The dimensional contract is structural and is never silently truncated — the configured provider does not match this vector space.`
     );
     this.name = 'PermanentEmbeddingDimensionError';
   }
@@ -115,7 +118,11 @@ interface OptEmbeddingProvider {
   embedSingle(text: string, role?: 'document' | 'query'): Promise<Float32Array>;
 }
 interface OptEmbeddingModule {
-  createEmbeddingProvider(config: { type: string; model: string; options?: Record<string, unknown> }): Promise<OptEmbeddingProvider>;
+  createEmbeddingProvider(config: {
+    type: string;
+    model: string;
+    options?: Record<string, unknown>;
+  }): Promise<OptEmbeddingProvider>;
 }
 
 /**
@@ -133,7 +140,9 @@ interface OptEmbeddingModule {
  * try/catch. (Carried over verbatim from `store/semantic-search.ts`'s own
  * `loadOptional`, which documents the same rationale.)
  */
-async function loadOptional<T>(specifier: string): Promise<{ mod: T } | { err: unknown }> {
+async function loadOptional<T>(
+  specifier: string
+): Promise<{ mod: T } | { err: unknown }> {
   try {
     const dynamicSpecifier = specifier;
     return { mod: (await import(/* @vite-ignore */ dynamicSpecifier)) as T };
@@ -142,7 +151,8 @@ async function loadOptional<T>(specifier: string): Promise<{ mod: T } | { err: u
   }
 }
 
-const errText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+const errText = (err: unknown): string =>
+  err instanceof Error ? err.message : String(err);
 
 /**
  * Per-adapter memoization. `writeHandle`/`queryHandle` (`api.ts`) call this
@@ -174,7 +184,7 @@ export async function bootstrapSemanticStoreMembers(
   adapter: StoreAdapter,
   graph: GraphBackend,
   cfg: BacklogConfig['embedding'],
-  log: (message: string) => void = (m) => console.error(m),
+  log: (message: string) => void = (m) => console.error(m)
 ): Promise<SemanticStoreMembers> {
   const cached = membersCache.get(adapter);
   if (cached) return cached;
@@ -187,7 +197,7 @@ async function deriveMembers(
   adapter: StoreAdapter,
   graph: GraphBackend,
   cfg: BacklogConfig['embedding'],
-  log: (message: string) => void,
+  log: (message: string) => void
 ): Promise<SemanticStoreMembers> {
   // RAG-SPEC.md §1.6: disabled is the default and is completely silent — no
   // package load, no store touch, no log line. Mirrors
@@ -209,53 +219,91 @@ async function deriveMembers(
   if (adapter.capabilities.nativeVectors !== true) {
     log(
       `backlog: embedding.enabled is set but this store's adapter does not report capabilities.nativeVectors ` +
-        `(got ${JSON.stringify(adapter.capabilities.nativeVectors)}) — backlog's RAG layer requires a Turso-backed store. ` +
-        `create()'s duplicate gate and query()'s/view:"similar"'s semantic filters will report as unconfigured.`,
+        `(got ${JSON.stringify(
+          adapter.capabilities.nativeVectors
+        )}) — backlog's RAG layer requires a Turso-backed store. ` +
+        `create()'s duplicate gate and query()'s/view:"similar"'s semantic filters will report as unconfigured.`
     );
     return {};
   }
 
   const [vectorStoreLoad, embeddingLoad] = await Promise.all([
-    loadOptional<{ openTursoVectorStore: typeof openTursoVectorStore }>('@adhd/sox-vector-store'),
+    loadOptional<{ openTursoVectorStore: typeof openTursoVectorStore }>(
+      '@adhd/sox-vector-store'
+    ),
     loadOptional<OptEmbeddingModule>('@adhd/sox-embedding-provider'),
   ]);
   if ('err' in vectorStoreLoad || 'err' in embeddingLoad) {
     const missing = [
-      ...('err' in vectorStoreLoad ? [`@adhd/sox-vector-store (${errText(vectorStoreLoad.err)})`] : []),
-      ...('err' in embeddingLoad ? [`@adhd/sox-embedding-provider (${errText(embeddingLoad.err)})`] : []),
+      ...('err' in vectorStoreLoad
+        ? [`@adhd/sox-vector-store (${errText(vectorStoreLoad.err)})`]
+        : []),
+      ...('err' in embeddingLoad
+        ? [`@adhd/sox-embedding-provider (${errText(embeddingLoad.err)})`]
+        : []),
     ];
     // NOT an error: this is the default build (both packages are
     // `optionalDependencies`). Absent members is exactly the correct
     // behaviour from here on.
-    log(`backlog: embedding.enabled is set but optional embedding packages are unavailable: ${missing.join('; ')}. Continuing WITHOUT semantic search.`);
+    log(
+      `backlog: embedding.enabled is set but optional embedding packages are unavailable: ${missing.join(
+        '; '
+      )}. Continuing WITHOUT semantic search.`
+    );
     return {};
   }
 
   let provider: OptEmbeddingProvider;
   try {
-    provider = await embeddingLoad.mod.createEmbeddingProvider({ type: cfg.provider, model: cfg.model });
+    provider = await embeddingLoad.mod.createEmbeddingProvider({
+      type: cfg.provider,
+      model: cfg.model,
+    });
   } catch (err) {
-    log(`backlog: embedding.enabled is set but createEmbeddingProvider(${cfg.provider}:${cfg.model}) failed: ${errText(err)}. Continuing WITHOUT semantic search.`);
+    log(
+      `backlog: embedding.enabled is set but createEmbeddingProvider(${
+        cfg.provider
+      }:${cfg.model}) failed: ${errText(
+        err
+      )}. Continuing WITHOUT semantic search.`
+    );
     return {};
   }
 
   // §2.4 (RAG-SPEC.md) — provenance comes from the provider's RESOLVED
   // metadata, never from config.
-  const space = { modelId: provider.metadata.modelId, dim: provider.metadata.dimensions };
+  const space = {
+    modelId: provider.metadata.modelId,
+    dim: provider.metadata.dimensions,
+  };
 
   let vectorBackend: AsyncVectorBackend;
   try {
-    vectorBackend = await vectorStoreLoad.mod.openTursoVectorStore(adapter, { dim: space.dim, modelId: space.modelId });
+    vectorBackend = await vectorStoreLoad.mod.openTursoVectorStore(adapter, {
+      dim: space.dim,
+      modelId: space.modelId,
+    });
     await vectorBackend.ensureSpace(space);
   } catch (err) {
-    log(`backlog: embedding.enabled is set but openTursoVectorStore(dim=${space.dim}, modelId=${space.modelId}) failed: ${errText(err)}. Continuing WITHOUT semantic search.`);
+    log(
+      `backlog: embedding.enabled is set but openTursoVectorStore(dim=${
+        space.dim
+      }, modelId=${space.modelId}) failed: ${errText(
+        err
+      )}. Continuing WITHOUT semantic search.`
+    );
     return {};
   }
 
   // §2.5 — the dimensional contract is STRUCTURAL, never silently truncated.
   const checkDim = (vec: Float32Array, what: string): Float32Array => {
     if (vec.length !== space.dim) {
-      throw new PermanentEmbeddingDimensionError(what, space.modelId, space.dim, vec.length);
+      throw new PermanentEmbeddingDimensionError(
+        what,
+        space.modelId,
+        space.dim,
+        vec.length
+      );
     }
     return vec;
   };
@@ -263,10 +311,17 @@ async function deriveMembers(
   const embedding: IEmbeddingBackend = {
     modelId: space.modelId,
     async embedDocument(content: string): Promise<Float32Array> {
-      return checkDim(await provider.embedSingle(content, 'document'), 'embedDocument');
+      return checkDim(
+        await provider.embedSingle(content, 'document'),
+        'embedDocument'
+      );
     },
     async upsertVector(nodeRowid: number, vec: Float32Array): Promise<void> {
-      await vectorBackend.upsert(nodeRowid, checkDim(vec, 'upsertVector'), space);
+      await vectorBackend.upsert(
+        nodeRowid,
+        checkDim(vec, 'upsertVector'),
+        space
+      );
     },
     async deleteVector(nodeRowid: number): Promise<void> {
       await vectorBackend.delete(nodeRowid, space.modelId);

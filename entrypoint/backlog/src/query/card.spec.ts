@@ -46,8 +46,17 @@ describe('resolveStatusesFor (via resolveBlockers/resolveRelated) — constant r
     removeTestIssueStoreDir(dir);
   });
 
-  async function mkIssue(title: string, status?: string): Promise<{ uid: string; id: number }> {
-    const created = await createIssue(store, { project: projectUid, title, body: `${title} body`, by: 'filer', status });
+  async function mkIssue(
+    title: string,
+    status?: string
+  ): Promise<{ uid: string; id: number }> {
+    const created = await createIssue(store, {
+      project: projectUid,
+      title,
+      body: `${title} body`,
+      by: 'filer',
+      status,
+    });
     const record = await resolveIssueByUid(store.graph, created.uid);
     return { uid: created.uid, id: record.id };
   }
@@ -58,7 +67,13 @@ describe('resolveStatusesFor (via resolveBlockers/resolveRelated) — constant r
     const blockers: { uid: string; id: number }[] = [];
     for (let i = 0; i < blockerCount; i++) {
       const b = await mkIssue(`blocker ${i}`, 'in-progress');
-      await relate(store, { sourceUid: b.uid, targetUid: blocked.uid, rel: 'blocks', action: 'add', by: 'filer' });
+      await relate(store, {
+        sourceUid: b.uid,
+        targetUid: blocked.uid,
+        rel: 'blocks',
+        action: 'add',
+        by: 'filer',
+      });
       blockers.push(b);
     }
 
@@ -71,7 +86,9 @@ describe('resolveStatusesFor (via resolveBlockers/resolveRelated) — constant r
     // trip, this call count grows with `blockerCount` and the assertion below
     // goes red.
     expect(getEdgesSpy).toHaveBeenCalledTimes(2);
-    expect(result.map((r) => r.uid).sort()).toEqual(blockers.map((b) => b.uid).sort());
+    expect(result.map((r) => r.uid).sort()).toEqual(
+      blockers.map((b) => b.uid).sort()
+    );
     for (const r of result) {
       expect(r.status).toBe('in-progress');
     }
@@ -84,7 +101,13 @@ describe('resolveStatusesFor (via resolveBlockers/resolveRelated) — constant r
     const related: { uid: string; id: number }[] = [];
     for (let i = 0; i < relatedCount; i++) {
       const r = await mkIssue(`related ${i}`, 'open');
-      await relate(store, { sourceUid: anchor.uid, targetUid: r.uid, rel: 'relates_to', action: 'add', by: 'filer' });
+      await relate(store, {
+        sourceUid: anchor.uid,
+        targetUid: r.uid,
+        rel: 'relates_to',
+        action: 'add',
+        by: 'filer',
+      });
       related.push(r);
     }
 
@@ -94,7 +117,9 @@ describe('resolveStatusesFor (via resolveBlockers/resolveRelated) — constant r
     // `relates_to`) plus `resolveStatusesFor`'s one whole-relation
     // `has_status` fetch — three total, never growing with `relatedCount`.
     expect(getEdgesSpy).toHaveBeenCalledTimes(3);
-    expect(result.map((r) => r.uid).sort()).toEqual(related.map((r) => r.uid).sort());
+    expect(result.map((r) => r.uid).sort()).toEqual(
+      related.map((r) => r.uid).sort()
+    );
     for (const r of result) {
       expect(r.status).toBe('open');
     }

@@ -18,13 +18,22 @@
  * real state read).
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openTursoVectorStore, type TursoVectorBackend, type VectorSpace } from '@adhd/sox-vector-store';
+import {
+  openTursoVectorStore,
+  type TursoVectorBackend,
+  type VectorSpace,
+} from '@adhd/sox-vector-store';
 import { StoreSearchBackend } from '@adhd/sox-hybrid-search';
 import { createIssue, type IDuplicateScanHandle } from './create-issue.js';
 import { update } from './update.js';
 import { deleteIssue } from './delete.js';
 import type { IEmbeddingBackend } from './tx.js';
-import { openTestIssueStore, removeTestIssueStoreDir, seedProject, type TestIssueStore } from '../test/helpers/open-test-issue-store.js';
+import {
+  openTestIssueStore,
+  removeTestIssueStoreDir,
+  seedProject,
+  type TestIssueStore,
+} from '../test/helpers/open-test-issue-store.js';
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
 
 const DIM = 3;
@@ -38,7 +47,7 @@ function makeVec(seed: number): Float32Array {
 /** A real `TursoVectorBackend`-backed `IEmbeddingBackend`, with an optional forced embed failure and call counters for the negative "nothing extra happened" assertions below. */
 function makeEmbeddingBackend(
   vec: TursoVectorBackend,
-  opts?: { failEmbedFor?: (content: string) => boolean; failUpsert?: boolean },
+  opts?: { failEmbedFor?: (content: string) => boolean; failUpsert?: boolean }
 ) {
   const backend = {
     modelId: MODEL_ID,
@@ -46,7 +55,11 @@ function makeEmbeddingBackend(
     deleteCount: 0,
     async embedDocument(content: string): Promise<Float32Array> {
       if (opts?.failEmbedFor?.(content)) {
-        throw new Error(`makeEmbeddingBackend: forced failure for content ${JSON.stringify(content)}`);
+        throw new Error(
+          `makeEmbeddingBackend: forced failure for content ${JSON.stringify(
+            content
+          )}`
+        );
       }
       // Deterministic, content-derived vector — no randomness, so re-embedding
       // identical content always yields an identical vector.
@@ -59,7 +72,8 @@ function makeEmbeddingBackend(
       // A vector STORE that rejects is a distinct failure from an embedding
       // MODEL that rejects: the embed already succeeded, so the degrade path
       // is reached with a valid vector in hand and nothing to persist it to.
-      if (opts?.failUpsert) throw new Error('makeEmbeddingBackend: forced vector-store failure');
+      if (opts?.failUpsert)
+        throw new Error('makeEmbeddingBackend: forced vector-store failure');
       await vec.upsert(nodeRowid, vector, SPACE);
     },
     async deleteVector(nodeRowid: number): Promise<void> {
@@ -67,13 +81,21 @@ function makeEmbeddingBackend(
       await vec.delete(nodeRowid, MODEL_ID);
     },
   };
-  return backend satisfies IEmbeddingBackend & { upsertCount: number; deleteCount: number };
+  return backend satisfies IEmbeddingBackend & {
+    upsertCount: number;
+    deleteCount: number;
+  };
 }
 
 /** Opens a real store + a real `TursoVectorBackend` sharing its adapter — no `embedding`/`search` wiring yet, since building an `IEmbeddingBackend` needs `vec` first (see {@link withEmbedding}). */
-async function openWriteAndVec(dir: string): Promise<{ writeHandle: TestIssueStore; vec: TursoVectorBackend }> {
+async function openWriteAndVec(
+  dir: string
+): Promise<{ writeHandle: TestIssueStore; vec: TursoVectorBackend }> {
   const writeHandle = await openTestIssueStore(`${dir}/issues.db`);
-  const vec = await openTursoVectorStore(writeHandle.adapter, { dim: SPACE.dim, modelId: SPACE.modelId });
+  const vec = await openTursoVectorStore(writeHandle.adapter, {
+    dim: SPACE.dim,
+    modelId: SPACE.modelId,
+  });
   return { writeHandle, vec };
 }
 
@@ -87,7 +109,10 @@ async function openWriteAndVec(dir: string): Promise<{ writeHandle: TestIssueSto
  */
 function withEmbedding(
   writeHandle: TestIssueStore,
-  opts?: { embedding?: IEmbeddingBackend; search?: IDuplicateScanHandle['search'] },
+  opts?: {
+    embedding?: IEmbeddingBackend;
+    search?: IDuplicateScanHandle['search'];
+  }
 ): TestIssueStore & IDuplicateScanHandle {
   return {
     ...writeHandle,
@@ -98,16 +123,22 @@ function withEmbedding(
 }
 
 /** Reads back the ordered list of `audit.name` values (the action) recorded via a live `audits` edge FROM `subjectRowid` — the real graph read this file's assertions use instead of any spy. */
-async function auditActionsFor(handle: TestIssueStore, subjectRowid: number): Promise<string[]> {
+async function auditActionsFor(
+  handle: TestIssueStore,
+  subjectRowid: number
+): Promise<string[]> {
   const { rows } = await handle.adapter.executeAll<{ name: string | null }>(
     `SELECT n.name AS name FROM edge e JOIN node n ON n.rowid = e.dst
      WHERE e.src = ? AND e.rel = 'audits' AND e.t_invalid IS NULL ORDER BY n.rowid ASC`,
-    [subjectRowid],
+    [subjectRowid]
   );
   return rows.map((r) => r.name ?? '');
 }
 
-async function rowidForUid(handle: TestIssueStore, uid: string): Promise<number> {
+async function rowidForUid(
+  handle: TestIssueStore,
+  uid: string
+): Promise<number> {
   const node = await handle.graph.getNodeByUid(uid);
   if (!node) throw new Error(`rowidForUid: no live node for uid ${uid}`);
   return node.id;
@@ -131,7 +162,11 @@ describe('createIssue — on-write embedding (§4b, §8 AC-4)', () => {
     const { projectUid } = await seedProject(handle, 'proj-a');
 
     const result = await createIssue(handle, {
-      by: 'tester', project: projectUid, title: 'title-a', body: 'body-a', awaitEmbed: true,
+      by: 'tester',
+      project: projectUid,
+      title: 'title-a',
+      body: 'body-a',
+      awaitEmbed: true,
     });
     expect(result.created).toBe(true);
     if (!result.created || !result.uid) throw new Error('expected created');
@@ -139,7 +174,9 @@ describe('createIssue — on-write embedding (§4b, §8 AC-4)', () => {
     const rowid = await rowidForUid(handle, result.uid);
     const stored = await vec.get(rowid, MODEL_ID);
     expect(stored).not.toBeNull();
-    expect(Array.from(stored!)).toEqual(Array.from(await backend.embedDocument('title-a\nbody-a')));
+    expect(Array.from(stored!)).toEqual(
+      Array.from(await backend.embedDocument('title-a\nbody-a'))
+    );
 
     const actions = await auditActionsFor(handle, rowid);
     expect(actions.filter((a) => a === 'embedding_upserted')).toHaveLength(1);
@@ -153,7 +190,13 @@ describe('createIssue — on-write embedding (§4b, §8 AC-4)', () => {
     const handle = withEmbedding(writeHandle); // no embedding backend at all
     const { projectUid } = await seedProject(handle, 'proj-a');
 
-    const result = await createIssue(handle, { by: 'tester', project: projectUid, title: 't', body: 'b', awaitEmbed: true });
+    const result = await createIssue(handle, {
+      by: 'tester',
+      project: projectUid,
+      title: 't',
+      body: 'b',
+      awaitEmbed: true,
+    });
     expect(result.created).toBe(true);
     if (!result.created || !result.uid) throw new Error('expected created');
 
@@ -170,7 +213,13 @@ describe('createIssue — on-write embedding (§4b, §8 AC-4)', () => {
     const handle = withEmbedding(writeHandle, { embedding: backend }); // no `search` mounted — scanForDuplicates always returns [] regardless, isolating this test to the abort branch's own embedding behavior.
     const { projectUid } = await seedProject(handle, 'proj-a');
 
-    const first = await createIssue(handle, { by: 'tester', project: projectUid, title: 'dup', body: 'dup-body', awaitEmbed: true });
+    const first = await createIssue(handle, {
+      by: 'tester',
+      project: projectUid,
+      title: 'dup',
+      body: 'dup-body',
+      awaitEmbed: true,
+    });
     expect(first.created).toBe(true);
 
     // Exactly the one genuine create's upsert — no phantom second call.
@@ -182,10 +231,18 @@ describe('createIssue — on-write embedding (§4b, §8 AC-4)', () => {
     const { writeHandle, vec } = await openWriteAndVec(dir);
     const backend = makeEmbeddingBackend(vec);
     const search = new StoreSearchBackend(vec, writeHandle.graph);
-    const handle = withEmbedding(writeHandle, { embedding: backend, search: { backend: search, embedQuery: async () => makeVec(5) } });
+    const handle = withEmbedding(writeHandle, {
+      embedding: backend,
+      search: { backend: search, embedQuery: async () => makeVec(5) },
+    });
     const { projectUid } = await seedProject(handle, 'proj-a');
 
-    const target = await createIssue(handle, { by: 'tester', project: projectUid, title: 'orig', body: 'orig-body' });
+    const target = await createIssue(handle, {
+      by: 'tester',
+      project: projectUid,
+      title: 'orig',
+      body: 'orig-body',
+    });
     expect(target.created).toBe(true);
     if (!target.created || !target.uid) throw new Error('expected created');
     const targetRowid = await rowidForUid(handle, target.uid);
@@ -194,7 +251,12 @@ describe('createIssue — on-write embedding (§4b, §8 AC-4)', () => {
 
     const beforeUpserts = backend.upsertCount;
     const commentResult = await createIssue(handle, {
-      by: 'tester', project: projectUid, title: 'orig', body: 'orig-body', duplicateAction: 'comment', awaitEmbed: true,
+      by: 'tester',
+      project: projectUid,
+      title: 'orig',
+      body: 'orig-body',
+      duplicateAction: 'comment',
+      awaitEmbed: true,
     });
     expect(commentResult.created).toBe(false);
     expect(commentResult.commentedOn).toBeDefined();
@@ -211,7 +273,13 @@ describe('createIssue — on-write embedding (§4b, §8 AC-4)', () => {
     const handle = withEmbedding(writeHandle, { embedding: backend });
     const { projectUid } = await seedProject(handle, 'proj-a');
 
-    const result = await createIssue(handle, { by: 'tester', project: projectUid, title: 't', body: 'b', awaitEmbed: true });
+    const result = await createIssue(handle, {
+      by: 'tester',
+      project: projectUid,
+      title: 't',
+      body: 'b',
+      awaitEmbed: true,
+    });
     expect(result.created).toBe(true);
     if (!result.created || !result.uid) throw new Error('expected created');
 
@@ -237,7 +305,11 @@ describe('createIssue — on-write embedding (§4b, §8 AC-4)', () => {
     const { projectUid } = await seedProject(handle, 'proj-a');
 
     const result = await createIssue(handle, {
-      by: 'tester', project: projectUid, title: 't', body: 'b', awaitEmbed: true,
+      by: 'tester',
+      project: projectUid,
+      title: 't',
+      body: 'b',
+      awaitEmbed: true,
     });
 
     // The issue is fully committed and readable even though its vector is not.
@@ -263,14 +335,27 @@ describe('update — on-write re-embedding (§4b, §8 AC-4)', () => {
     const handle = withEmbedding(writeHandle, { embedding: backend });
     const { projectUid } = await seedProject(handle, 'proj-a');
 
-    const created = await createIssue(handle, { by: 'tester', project: projectUid, title: 'orig-title', body: 'orig-body', awaitEmbed: true });
+    const created = await createIssue(handle, {
+      by: 'tester',
+      project: projectUid,
+      title: 'orig-title',
+      body: 'orig-body',
+      awaitEmbed: true,
+    });
     if (!created.created || !created.uid) throw new Error('expected created');
     const oldUid = created.uid;
     const oldRowid = await rowidForUid(handle, oldUid);
     expect(await vec.get(oldRowid, MODEL_ID)).not.toBeNull();
 
-    const upsertsBefore = (await auditActionsFor(handle, oldRowid)).filter((a) => a === 'embedding_upserted').length;
-    const outcome = await update(handle, { uid: oldUid, by: 'tester', body: 'new-body', awaitEmbed: true });
+    const upsertsBefore = (await auditActionsFor(handle, oldRowid)).filter(
+      (a) => a === 'embedding_upserted'
+    ).length;
+    const outcome = await update(handle, {
+      uid: oldUid,
+      by: 'tester',
+      body: 'new-body',
+      awaitEmbed: true,
+    });
     expect(outcome.changed).toContain('body');
     const newUid = outcome.uid;
     expect(newUid).not.toBe(oldUid);
@@ -283,7 +368,9 @@ describe('update — on-write re-embedding (§4b, §8 AC-4)', () => {
     // NEW node's vector is present, composed from the NEW title+body.
     const newVec = await vec.get(newRowid, MODEL_ID);
     expect(newVec).not.toBeNull();
-    expect(Array.from(newVec!)).toEqual(Array.from(await backend.embedDocument('orig-title\nnew-body')));
+    expect(Array.from(newVec!)).toEqual(
+      Array.from(await backend.embedDocument('orig-title\nnew-body'))
+    );
 
     const oldActions = await auditActionsFor(handle, oldRowid);
     expect(oldActions.filter((a) => a === 'embedding_deleted')).toHaveLength(1);
@@ -294,7 +381,9 @@ describe('update — on-write re-embedding (§4b, §8 AC-4)', () => {
     // present too. Asserting `upsertsBefore + 1` keeps both teeth — it goes
     // red if the carry-forward stops, and red if one write emits two audits.
     const newActions = await auditActionsFor(handle, newRowid);
-    expect(newActions.filter((a) => a === 'embedding_upserted')).toHaveLength(upsertsBefore + 1);
+    expect(newActions.filter((a) => a === 'embedding_upserted')).toHaveLength(
+      upsertsBefore + 1
+    );
 
     await writeHandle.close();
   });
@@ -305,12 +394,23 @@ describe('update — on-write re-embedding (§4b, §8 AC-4)', () => {
     const handle = withEmbedding(writeHandle, { embedding: backend });
     const { projectUid } = await seedProject(handle, 'proj-a');
 
-    const created = await createIssue(handle, { by: 'tester', project: projectUid, title: 'orig-title', body: 'orig-body', awaitEmbed: true });
+    const created = await createIssue(handle, {
+      by: 'tester',
+      project: projectUid,
+      title: 'orig-title',
+      body: 'orig-body',
+      awaitEmbed: true,
+    });
     if (!created.created || !created.uid) throw new Error('expected created');
     const rowid = await rowidForUid(handle, created.uid);
     const upsertsAfterCreate = backend.upsertCount;
 
-    const outcome = await update(handle, { uid: created.uid, by: 'tester', title: 'new-title', awaitEmbed: true });
+    const outcome = await update(handle, {
+      uid: created.uid,
+      by: 'tester',
+      title: 'new-title',
+      awaitEmbed: true,
+    });
     expect(outcome.changed).toEqual(['title']);
     expect(outcome.uid).toBe(created.uid); // no supersede — identity unchanged
 
@@ -332,12 +432,23 @@ describe('deleteIssue — vector removal on invalidate (§8 AC-4)', () => {
     const handle = withEmbedding(writeHandle, { embedding: backend });
     const { projectUid } = await seedProject(handle, 'proj-a');
 
-    const created = await createIssue(handle, { by: 'tester', project: projectUid, title: 't', body: 'b', awaitEmbed: true });
+    const created = await createIssue(handle, {
+      by: 'tester',
+      project: projectUid,
+      title: 't',
+      body: 'b',
+      awaitEmbed: true,
+    });
     if (!created.created || !created.uid) throw new Error('expected created');
     const rowid = await rowidForUid(handle, created.uid);
     expect(await vec.get(rowid, MODEL_ID)).not.toBeNull();
 
-    const outcome = await deleteIssue(handle, { uid: created.uid, by: 'tester', reason: 'no longer needed', awaitEmbed: true });
+    const outcome = await deleteIssue(handle, {
+      uid: created.uid,
+      by: 'tester',
+      reason: 'no longer needed',
+      awaitEmbed: true,
+    });
     expect(outcome.invalidated).toBe(true);
 
     expect(await vec.get(rowid, MODEL_ID)).toBeNull();

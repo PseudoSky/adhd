@@ -42,9 +42,9 @@ the `experimental.multiprocessWal:false` opt-out §4c requires be absent — see
 
 - **Identity = `uid` (UUID), now a first-class library surface.** `graph-store`
   ≥0.9.1 exposes `NodeRecord.uid` and `GraphBackend.getNodeByUid(uid)`, so the
-  app layer keys the *consumer-facing* identity on the stable, exportable UUID
+  app layer keys the _consumer-facing_ identity on the stable, exportable UUID
   and resolves an external `uid` → node with one call. `rowid` (`NodeRecord.id`)
-  remains the *internal* edge identity (`writeEdge`/`getEdges` are
+  remains the _internal_ edge identity (`writeEdge`/`getEdges` are
   `src`/`dst` rowids) — it is per-store and is NOT stable across a store
   rebuild, so it must never escape as an external reference.
 - **Content is NEVER identity.** The library's global content-hash dedup
@@ -83,10 +83,10 @@ the `experimental.multiprocessWal:false` opt-out §4c requires be absent — see
     never the open `tx` (§4c) — then checks `owns_project` edges for an
     existing same-name component under that project via the SAME `tx` handle
     (`tx.executeAll('SELECT ... FROM edge WHERE dst = ? AND rel = ?
-    AND t_invalid IS NULL', [projectRowid, 'owns_project'])`, never
+AND t_invalid IS NULL', [projectRowid, 'owns_project'])`, never
     `getEdges()`, which is equally bare-adapter-only, §4c). This is
     implementable because the parent is threaded into `meta` — the check
-    runs BEFORE the component's own INSERT, against *other* components, not itself.
+    runs BEFORE the component's own INSERT, against _other_ components, not itself.
 - The policy is tx-threaded, and therefore genuinely atomic with the check,
   ONLY because it runs inside the write layer's own `immediate` transaction
   (§4c) — `writeNode` called standalone runs against the bare adapter (no
@@ -95,13 +95,13 @@ the `experimental.multiprocessWal:false` opt-out §4c requires be absent — see
 
 ## 2. Catalogs (first-class data) + project policy
 
-| catalog | kind | uniqueness | extra (metadata) |
-|---|---|---|---|
-| node kind | `kind` | name | `description` |
-| edge kind | `edge_kind` | name | `source_kind`, `target_kind`, `multiplicity` |
-| status | `status` | name | `terminal` |
-| priority | `priority` | name | `rank` |
-| agent | `agent` | name | — |
+| catalog   | kind        | uniqueness | extra (metadata)                             |
+| --------- | ----------- | ---------- | -------------------------------------------- |
+| node kind | `kind`      | name       | `description`                                |
+| edge kind | `edge_kind` | name       | `source_kind`, `target_kind`, `multiplicity` |
+| status    | `status`    | name       | `terminal`                                   |
+| priority  | `priority`  | name       | `rank`                                       |
+| agent     | `agent`     | name       | —                                            |
 
 `status.terminal` drives closedness. Per-project policy is DATA (rows), the home
 of the hardcoded terminal/citation/reason knobs:
@@ -297,7 +297,7 @@ the chain:
    matches the `location` whose value is that suffix of an absolute path).
 3. **Walk** `has_location` → component → `owns_project` → project.
 4. **Return** `{ project: {uid,name,path,repoUrl}, component: {uid,name,path?},
-   location: {uid,locType,value} }` — plus a `hint` when only a project-level (or
+location: {uid,locType,value} }` — plus a `hint` when only a project-level (or
    only a path-prefix) match exists. Never a silent null.
 
 Example: an agent sees `memory_ping` fail in the adhd repo → `lookup("memory_ping")`
@@ -362,15 +362,15 @@ raw adapter directly. **All entity writes pass `skipDedupe: true`.**
 - `transition(uid, toStatus, { agent, note })`: writes a `transition` node +
   `has_transition` edge + stamps `closed_at` when terminal.
 - **Registry CRUD** (§3a): `upsertProject({ name, path, repoUrl, monorepo?,
-  description? })` (create-or-update by `name` — on first creation ONLY,
+description? })` (create-or-update by `name` — on first creation ONLY,
   also writes the reserved default `component` row named `(root)` + its
   `owns_project` edge, in the SAME transaction, so every project owns at
   least one component before any issue can be filed under it, §3/§6.3.2; a
   repeat `upsertProject` against an existing project finds `(root)` already
   live and writes nothing further for it — idempotent, never a second row),
   `upsertComponent({ project, name,
-  path? })` (upsert by `(project, name)`), `upsertLocation({ component, locType,
-  value })` (upsert by `(component, locType, value)`), `rmLocation(uid)`
+path? })` (upsert by `(project, name)`), `upsertLocation({ component, locType,
+value })` (upsert by `(component, locType, value)`), `rmLocation(uid)`
   (invalidate). Each is ONE `store.adapter.transaction(fn, {mode:'immediate'})`
   (§4c) over a hand-composed node write + hand-composed `owns_project`/
   `has_location` edge write + audit, all against the SAME `tx` handle (§4c's
@@ -490,25 +490,25 @@ threads (ADR-0012 §1); `single-writer` mode gives the same serialization for fr
 in-process, via the FIFO write queue (ADR-0007's original mechanism, still correct
 for that adapter — ADR-0012 §1 note two).
 
-| Write-layer verb (§4) | Mode | Why |
-|---|---|---|
-| `createIssue` | `immediate` | resolves `kind`/`status`/`priority` (and `project`/`component` if not already `uid`-resolved) by business key before the issue INSERT — a check-then-act composite |
-| `updateIssue` (body → supersede path) | `immediate` | must CAS the "not already superseded" check against the write (see below) — the library's own `supersede()` does not |
-| `updateIssue` (title/metadata → touch path) | `immediate` | `touch`'s own pre-check (`index.ts:1964-1968`, "not found or invalidated") is a check-then-act read outside any transaction when called standalone; composing it inside the write layer's own `immediate` transaction closes the same window |
-| `moveIssue` | `immediate` | must find the specific live `owns_component` edge before invalidating it and writing the replacement — a specific-edge check-then-act |
-| `relate` | `immediate` | single-valued rels (`supersedes`, `duplicate_of`) must read "does a target already exist" before deciding `noop` vs `changed` vs reject |
-| `transition` | `immediate` | reads current status to validate the `from_status`/terminal transition and decide `closed_at` stamping |
-| `claim` | `immediate` | CAS-merges the `claimedBy`/`claimedAt` pair against a fresh read of the same uid, taken on the transaction handle — a specific-node check-then-act, identical shape to `transition`'s current-state read |
-| `upsertProject` / `upsertComponent` / `upsertLocation` | `immediate` | create-or-update by business key — the exact `findOrCreateNode` shape, composed by hand (below) |
-| `rmLocation` | `immediate` | invalidate-by-uid after confirming the row is live, for uniformity with every other verb above (one mode, one decision, never re-litigated per verb) |
+| Write-layer verb (§4)                                  | Mode        | Why                                                                                                                                                                                                                                          |
+| ------------------------------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createIssue`                                          | `immediate` | resolves `kind`/`status`/`priority` (and `project`/`component` if not already `uid`-resolved) by business key before the issue INSERT — a check-then-act composite                                                                           |
+| `updateIssue` (body → supersede path)                  | `immediate` | must CAS the "not already superseded" check against the write (see below) — the library's own `supersede()` does not                                                                                                                         |
+| `updateIssue` (title/metadata → touch path)            | `immediate` | `touch`'s own pre-check (`index.ts:1964-1968`, "not found or invalidated") is a check-then-act read outside any transaction when called standalone; composing it inside the write layer's own `immediate` transaction closes the same window |
+| `moveIssue`                                            | `immediate` | must find the specific live `owns_component` edge before invalidating it and writing the replacement — a specific-edge check-then-act                                                                                                        |
+| `relate`                                               | `immediate` | single-valued rels (`supersedes`, `duplicate_of`) must read "does a target already exist" before deciding `noop` vs `changed` vs reject                                                                                                      |
+| `transition`                                           | `immediate` | reads current status to validate the `from_status`/terminal transition and decide `closed_at` stamping                                                                                                                                       |
+| `claim`                                                | `immediate` | CAS-merges the `claimedBy`/`claimedAt` pair against a fresh read of the same uid, taken on the transaction handle — a specific-node check-then-act, identical shape to `transition`'s current-state read                                     |
+| `upsertProject` / `upsertComponent` / `upsertLocation` | `immediate` | create-or-update by business key — the exact `findOrCreateNode` shape, composed by hand (below)                                                                                                                                              |
+| `rmLocation`                                           | `immediate` | invalidate-by-uid after confirming the row is live, for uniformity with every other verb above (one mode, one decision, never re-litigated per verb)                                                                                         |
 
 #### `findOrCreateNode` is not race-free — the write layer does not call it
 
 `findOrCreateNode` (`index.ts:1907-1917`) runs
 `this.adapter.executeGet(...)` (a SELECT against the base adapter) and then, only if
 nothing was found, `this.writeNode(...)` — **two separate autocommit statements, no
-transaction at all.** Its own doc comment says so explicitly: *"under multi-writer the
-caller must wrap check+INSERT in one transaction or add a DDL backstop"*
+transaction at all.** Its own doc comment says so explicitly: _"under multi-writer the
+caller must wrap check+INSERT in one transaction or add a DDL backstop"_
 (`index.ts:1896-1902`). The DDL-backstop half of that offer does not currently exist
 to take: the unique `(kind, name)` index was reverted (FEAT-023, "too broad per
 BUG-042"), and edge-scoped uniqueness (component-in-project) is, in the same comment's
@@ -524,7 +524,7 @@ value)` for `upsertLocation`, `(project, name)` for `upsertComponent`], and only
 miss, an INSERT against the same `tx` handle, mirroring `writeNodeInTx`'s INSERT shape
 (`index.ts:1869-1883`) with `skipDedupe: true`. The same reasoning governs
 `NodeUniquenessPolicy` (§1): it is tx-threaded, and therefore genuinely atomic with
-the check, only when `writeNode` is *composed* inside a transaction the app already
+the check, only when `writeNode` is _composed_ inside a transaction the app already
 owns. Called standalone, `writeNode` always passes `this.adapter` (`index.ts:1825`),
 i.e. runs inside nothing — the policy is atomic with the check only because the
 write layer's own `immediate` transaction is what the hand-composed INSERT above
@@ -540,7 +540,7 @@ in the class reroutes `this.adapter` to the open `tx` for the duration of a
 transaction callback. Verified against the same published dist:
 
 - `writeEdge(src,dst,rel,meta)` (`dist/index.d.ts:303`) is `async writeEdge(...){
-  await this.writeEdgeInternal(...); }` (`dist/index.js:1835-1837`), whose body
+await this.writeEdgeInternal(...); }` (`dist/index.js:1835-1837`), whose body
   resolves endpoint kinds via `this.adapter.executeAll(...)` and inserts via
   `this.adapter.executeRun(...)` (`dist/index.js:1865-1899`) — `this.adapter`,
   always.
@@ -553,7 +553,7 @@ transaction callback. Verified against the same published dist:
   (`dist/index.js:1573-1576`).
 - `transaction(fn)` itself — the method that would need to reroute
   `this.adapter` for any of the above to work from inside it — is `return
-  this.adapter.transaction(fn)` (`dist/index.js:1584-1586`): no context swap,
+this.adapter.transaction(fn)` (`dist/index.js:1584-1586`): no context swap,
   `this.adapter` is never reassigned.
 
 So a `writeEdge`/`invalidateEdge`/`getNodeByUid` call made from **inside** a
@@ -573,7 +573,7 @@ transaction already opened — never a call to `writeEdge`/`invalidateEdge`/
 `getNodeByUid` themselves:
 
 - **uid → node, inside a tx:** `tx.executeGet('SELECT * FROM node WHERE uid =
-  ?', [uid])`, mapped onto the fields the caller needs (`rowid`, `kind`,
+?', [uid])`, mapped onto the fields the caller needs (`rowid`, `kind`,
   `meta`, `is_superseded`, …) — exactly what `getNodeByUid` does at
   `dist/index.js:1573-1576`, just issued against `tx`. This is what `claim`'s
   CAS (§6.3.5) and `NodeUniquenessPolicy`'s component-parent resolution (§1)
@@ -586,7 +586,7 @@ transaction already opened — never a call to `writeEdge`/`invalidateEdge`/
   excluded.t_valid`, [...])` (`dist/index.js:1894-1898`). This is also why a
   hand-composed edge write re-lives an invalidated edge exactly as the
   library's `writeEdge` does: same `ON CONFLICT` clause, same `t_invalid =
-  NULL`, just issued against `tx` instead of `this.adapter`.
+NULL`, just issued against `tx` instead of `this.adapter`.
   Endpoint-existence (`writeEdgeInternal`'s `NodeNotFoundError` guard,
   `dist/index.js:1881-1884`) is preserved via the SAME tx-scoped uid/rowid
   lookup above; edge-kind vocabulary validation
@@ -598,8 +598,8 @@ transaction already opened — never a call to `writeEdge`/`invalidateEdge`/
   that check at all.
 - **Edge invalidate, inside a tx:** mirror `invalidateEdge` exactly —
   `tx.executeGet('SELECT rowid, meta FROM edge WHERE src = ? AND dst = ? AND
-  rel = ? AND t_invalid IS NULL', [...])`, then on a hit, `tx.executeRun(
-  'UPDATE edge SET t_invalid = ?, meta = ? WHERE rowid = ?', [...])`
+rel = ? AND t_invalid IS NULL', [...])`, then on a hit, `tx.executeRun(
+'UPDATE edge SET t_invalid = ?, meta = ? WHERE rowid = ?', [...])`
   (`dist/index.js:1846-1855`) — same idempotent "already invalidated or
   absent → no-op" behavior, same `tx`.
 
@@ -679,12 +679,12 @@ interface WriteError {
 }
 ```
 
-| Class | `code` | Detected via | `retryable` |
-|---|---|---|---|
-| Lock/commit contention | `E_CONTENTION` | `isBusyError` / `isConcurrentConflict` | `true` |
-| Uniqueness/FK violation | `E_CONSTRAINT` | `isUniqueConstraintError` / `isForeignKeyError` (includes the hand-composed CAS conflict above) | `false` |
-| App-level validation | `E_VALIDATION` | thrown before any driver call — missing `agent`/`note`/`sha` on a transition, a `kind`/`rel` outside the injected `TypePolicy`, a multiplicity violation (§2) | `false` |
-| Unclassified driver/connection failure | `E_IO` | `isDatabaseError` catch-all | `true` |
+| Class                                  | `code`         | Detected via                                                                                                                                                  | `retryable` |
+| -------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| Lock/commit contention                 | `E_CONTENTION` | `isBusyError` / `isConcurrentConflict`                                                                                                                        | `true`      |
+| Uniqueness/FK violation                | `E_CONSTRAINT` | `isUniqueConstraintError` / `isForeignKeyError` (includes the hand-composed CAS conflict above)                                                               | `false`     |
+| App-level validation                   | `E_VALIDATION` | thrown before any driver call — missing `agent`/`note`/`sha` on a transition, a `kind`/`rel` outside the injected `TypePolicy`, a multiplicity violation (§2) | `false`     |
+| Unclassified driver/connection failure | `E_IO`         | `isDatabaseError` catch-all                                                                                                                                   | `true`      |
 
 A caller distinguishes RETRYABLE from TERMINAL from the **returned value alone** —
 the `retryable` boolean field, never a message-text match, never a `code` allow-list
@@ -794,7 +794,7 @@ row, §4a):
   the "found existing" branch rather than re-inserting — this is the exact
   hand-composed find-then-create + `NodeUniquenessPolicy` guard §1 describes,
   the write layer's own composition, never the library's `findOrCreateNode()`
-  primitive itself. That guard makes the *subject* node safe to retry under
+  primitive itself. That guard makes the _subject_ node safe to retry under
   either `E_CONTENTION` or `E_IO`. But the transaction is not only the subject
   node: `writeAudit` (§4a) runs inside the SAME callback, against the SAME
   `tx`, and it is itself a keyless-content-node INSERT with no business key
@@ -820,16 +820,16 @@ row, §4a):
 - **Touch-based CAS writes** (`claim`/`release`/`renew`, `moveIssue`'s
   `invalidateEdge` + `writeEdge` pair, `update`'s title/metadata `touch`
   path, `rmLocation`): none of these ever INSERT a fresh, business-keyless
-  row for their *subject* — `touch` is a blind `UPDATE node SET … WHERE
-  rowid = ?` recomputed from a fresh in-transaction read on every attempt
+  row for their _subject_ — `touch` is a blind `UPDATE node SET … WHERE
+rowid = ?` recomputed from a fresh in-transaction read on every attempt
   (verified, `@adhd/sox-graph-store@0.9.1` package dist, `dist/index.js:1482`
   — no re-insert risk: re-running it lands on the same row state whether or
   not a prior attempt already committed); `invalidateEdge` is documented
   idempotent — "an edge that is already invalidated (or absent) is a no-op"
   (`dist/index.js:1839-1840`, same package); `writeEdge` is an `INSERT ...
-  ON CONFLICT(src, dst, rel) DO UPDATE` upsert keyed on the edge's own
+ON CONFLICT(src, dst, rel) DO UPDATE` upsert keyed on the edge's own
   `(src, dst, rel)` business key, not a bare INSERT (`dist/index.js:1894-
-  1898`, same package). None of the three can produce a duplicate row on a
+1898`, same package). None of the three can produce a duplicate row on a
   second run, so every subject write in this bucket — `claim`'s CAS-merged
   metadata, `moveIssue`'s edge swap, `update`'s touch path, `rmLocation`'s
   invalidate — is exactly as retry-safe as the business-keyed node case
@@ -882,7 +882,7 @@ independent retry loop. A subject write
 whose audit insert fails must roll back the subject write too (the single transaction
 already guarantees this — there is no separate step to get wrong once the audit
 INSERT lives inside the same `fn`). This closes off the exact race the postmortem
-found: an audit write can no longer fail *after* its subject has already durably
+found: an audit write can no longer fail _after_ its subject has already durably
 committed, because there is no "after" — they commit or roll back together, as one
 statement sequence inside one `BEGIN IMMEDIATE`.
 
@@ -920,7 +920,7 @@ Primitives: `queryNodes`, `countNodes`, `countBy`, `getNodesByIds`, `getEdges`
   `'kind'` argument groups by the generic `node.kind` STRUCTURAL-type column
   (verified, `NODE_TABLE_DDL_OPEN`, package dist, `dist/index.d.ts:58`:
   `'issue'|'project'|'component'|'status'|'priority'|'kind'|'agent'|
-  'citation'|'note'|'transition'|'audit'`), never the domain `kind` catalog
+'citation'|'note'|'transition'|'audit'`), never the domain `kind` catalog
   (BUG/DEBT/FEAT), which — like status/priority — is a catalog reference
   living on the `has_kind` EDGE (§3, §6.1), not a `NodeFilter`/`countBy`
   column. So domain-kind counts are EDGE-SCOPED exactly like status/priority
@@ -973,7 +973,7 @@ silently.
 - **`repo` is replaced by `project`.** A prior surface required `repo: string`
   on every verb because its per-repo string id was only unique within a repo;
   `uid` is globally unique,
-  so no verb *requires* a scoping key any more. `project` survives as an
+  so no verb _requires_ a scoping key any more. `project` survives as an
   optional **filter/creation** input, not an addressing key: `create` takes
   `project` to place the new issue under `owns_component`'s chain (§3, §4) —
   under the named `component` when one is given, or under `project`'s
@@ -982,10 +982,11 @@ silently.
   AC-23) — and `query`'s `filter.project` narrows a listing. Every place that accepts
   an entity reference to a catalog/registry node (`project`, `component`,
   `kind`, `status`, `priority`, `agent`) accepts **either**:
+
   - the entity's `uid` (exact, always valid if it exists), **or**
   - its catalog `name` (`project`/`component`) — resolved server-side the
     same way §1/§4c's hand-composed find-then-create and §3a's registry
-  resolve it.
+    resolve it.
 
   Disambiguation is by shape, not a second field: a 36-character
   `xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx` UUID-formatted string is treated as
@@ -1010,13 +1011,15 @@ silently.
   **read** paths (`query` filters), an unresolved `name` is not an error —
   it resolves to zero matches, same as any other filter that matches
   nothing.
+
 - **How a human or agent gets a `uid` at all — the two-step pattern.**
   §3a's `lookup` is registry-only (project/component/location — "where does
   this live"); it does **not** resolve issues, and conflating the two would
   be wrong: `lookup` answers a structural question with one correct answer
-  per input, while resolving "the issue about X" is inherently a *search*
+  per input, while resolving "the issue about X" is inherently a _search_
   with zero, one, or many matches. So issue addressing is **discover, then
   act** — the same shape a coding agent already uses for `rg` before `Edit`:
+
   1. `query({filter:{grep:"..."} , fields:["uid","title"]})` (or
      `filter.semantic`, §5a) returns a small card list, each carrying `uid`.
   2. The caller picks the right card's `uid` and passes it to
@@ -1035,36 +1038,36 @@ consolidated six-verb successor once carried, resolving each into exactly one
 of: kept as-is, folded into a new shape with a stated mapping, or excluded
 from the surface with a stated reason. Nothing here is silently dropped.
 
-| Concept | Disposition |
-|---|---|
-| A composite `(repo, id)` identifier | Not part of the surface. Identity is `uid`, DB-generated, with no allocator and no per-repo numbering (§1, §6.1). |
-| `repo` as an addressing key on every verb | Not part of the surface as an addressing key — a per-repo string id needed repo-scoping to disambiguate; `uid` never does. `project` survives only as an optional filter/creation field (§6.1). |
-| `family` as a parsed classifier prefix | Not part of the surface — there is no id to parse a prefix from. `kind` (catalog ref) is the open-vocabulary classifier; a project that wants finer-grained families files them as distinct `kind` catalog rows (§2 — extensible by row, no code change). |
-| A caller-supplied id override at creation time | Not part of the surface — every `create` mints a fresh `uid` unconditionally, never caller-chosen (§0 anti-antipattern 1). |
-| An import-provenance/ownership field on the issue | Not part of the surface as a mutable field — provenance is the `audit` node's `actor`/`action`/`sha` (§4a), not a field on the issue. |
-| An opt-in symbol/path/errorText dedupe-scan input | Subsumed into `create`'s always-on duplicate gate (§6.4); `symbol`/`path`/`errorText` become the ranking hints passed as `filter.files`/`filter.grep`-equivalent terms to the same `searchRanked` call §6.4 already makes. |
-| A bare boolean bypass-dedupe flag | `duplicateAction: 'force'` (§6.4) — same effect, sitting in the same enum as `abort`/`comment` rather than a bare boolean. |
-| `citations` at creation time | Kept, unchanged in spirit: `create`'s input carries `citations?: Citation[]`, written as `citation` nodes + `has_citation` edges in the same transaction (§3, §4). |
-| `awaitEmbed` on `create`/`update` | Kept verbatim (RAG-SPEC durability for short-lived processes) — §4b's on-write embedding observer is fire-and-forget by default; `awaitEmbed:true` waits for it, same contract. |
-| Two separate accountability roles (`author`/`reporter`) | **Collapsed to one**: §3 line 136 declares exactly one edge, `authored_by` (issue→agent, n:1) — no `reported_by` edge exists in the edge table. `author` is the sole accountability edge. |
-| A plan-slug string plus a dedicated membership edge | Folded into the existing `part_of` edge (§3): a plan is itself an `issue` (kind catalog row, e.g. `kind:"plan"` — no new node type, matching this spec's own "the plan parent IS an item" doctrine); attaching an item to a plan is `relate(childUid, planUid, 'part_of', 'add')`. The plan-native resume view (`view:"plan"`'s rollup/ready/blocked/delta/myClaims/asOf aggregate) is **out of scope for this section** — it is a §5 query-layer concern once `part_of` traversal is queryable, not an issue-verb input shape. |
-| Durable `assignee` ownership, distinct from an ephemeral claim | Kept: `issue.meta.metadata.assignee` (plain scalar, no edge — see §6.3 `claim`'s rationale for why this and `claimedBy`/`claimedAt` are metadata, not edges), mutated via `update`'s `assignee` field, filterable via `NodeFilter.metadata.assignee` (`{eq: "..."}`, verified operator: `@adhd/sox-graph-store@0.9.1 dist/index.d.ts:157-170`). |
-| The ephemeral claim-lease system (`claimedBy`/`claimedAt`, a stale-after threshold, a force override, a held-error) | Kept in full, designed onto the graph model as its own `claim` write-layer verb (§6.3.5) — `claimedBy`/`claimedAt` live in `issue.meta.metadata` (mutated via `touch`, CAS-checked inside the write transaction); the stale-after threshold lives as **data**: `project_policy.claim_stale_after_min` (default `30`), consistent with DATA_MODEL.md §2's "policy about actions is data, not code" pattern already applied to `citation_required`/`transition_requires_note`; per-call `force` (human-confirmed override of a non-stale claim) survives as a literal argument, since that is a caller decision, not project policy. |
-| A terminal-dismissed-only free-text field, distinct from a general note, driven by a three-way status categorization | **Collapsed into `note`** — DATA_MODEL.md §3's `transition` node has exactly one free-text field, `note`, and §2's `project_policy` has one boolean, `citation_required` (not three status-category-specific rules). `status.terminal` (a single bool) plus `project_policy.citation_required` (a single bool, project-tunable) is the entire evidence gate. |
-| Evidence (`citations`/`reason`) bundled onto a generic `update` alongside a status change | Superseded by `transition`'s own input shape (§6.3.4), which HAS the `citations`/`note` fields directly — there is no separate generic `update` path into a status change any more (§6.3.3 `update` explicitly rejects `status`), so evidence attached to the wrong verb cannot recur structurally (fixes DEBT-010). |
-| `duplicateAction` on `create` | Kept, redesigned in full in §6.4 with the enum `'abort'\|'force'\|'comment'`. |
-| Splitting a freshly-minted parent into N children | Kept: `create`'s `children?: ICreateIssueInput[]` field (§6.3.2) creates each child then `relate`s it `part_of` the freshly-created parent, atomically, in the same write transaction. |
-| Splitting an EXISTING, already-live parent into N children | **No dedicated field — composed from two already-specified primitives, not dropped:** `create`'s `children` only fires alongside a freshly-minted parent (§6.3.2); splitting into an EXISTING parent is instead one `create` per child (no `children`, no `supersedes`) followed by `relate(childUid, existingParentUid, 'part_of', 'add')` (§6.3.6) for each — reaching the identical outcome (N children, each with one live `part_of` edge to the same parent) without a third verb. |
-| Content-mutation supersession at create time | Kept: `create`'s `supersedes?: uid` field (§6.3.2) is sugar for `updateIssue(uid, {body: ...})`'s `supersede` path (§4) run against an EXISTING issue rather than minting via `create` — see §6.3.2 for the exact composition. |
-| Cross-repo disambiguation on a relate/dependency input | Not part of the surface — `uid` is globally unique across every project in the store, so a `relate` between two issues in different projects needs no repo parameter at all; `relate(sourceUid, targetUid, rel, action)` just works. |
-| A dedicated repo-string-collision-repair operation | Not part of the surface — folded into first-class `project`/`component`/`location` nodes (§3a). |
-| An issue-to-issue dependency edge, with its own blockers/ready/graph/order reads | **Mapped to `blocks`** (§3: `blocks issue → issue (n:m), inverse = blocked_by, derived`) — `relate(blockerUid, blockedUid, 'blocks', 'add')` records "X blocks Y" subject-first; `blockers`/`readyItems`/`dependencyGraph`/`topoOrder` all become `query` views over `blocks`/`blocked_by` traversal (view names `ready`/`graph`/`order`). §3's edge table has no issue-to-issue `depends_on` — only `depends_on: component → component`. |
-| Merging two issues (keep one, drop the other) | 1:1 mapping onto existing primitives, no new mechanism needed: `relate(dropUid, keepUid, 'duplicate_of', 'add')` then `delete(dropUid, reason)` (§6.3.7's `invalidate`). |
-| The pairwise-intersection axis selector and its item-set input | Kept as query-layer concerns, **not** an issue-verb input: the axis selector renames to `axis` (vocabulary `file`\|`project`\|`component`\|`author` — `package` renamed `component`) and the item-set input renames to `uids: string[]`; both are `query`'s `view:"overlap"` parameters (§5), out of scope for the write-facing verbs this section specifies. |
-| A mutating "hide terminal items from the default projection" action | **No replacement as a mutation** — `status.terminal` (already stamped by the terminal `transition`, §4a) is itself the exclusion signal; the default `render`/`query` projection already excludes terminal items unless `filter.status` explicitly asks for them. A markdown changelog section is produced by rendering `filter.status:['terminal set']` through the same `render` output, never a second code path. |
-| A single grab-bag mutation verb carrying an open-ended `action` string (render/export/merge/embedding maintenance/one-shot maintenance ops/host introspection/batch fan-out, among others) | Not part of the surface at all — disposition per action, §6.6. |
-| `limit`/`offset`, a fixed max query limit | Kept, redesigned onto keyset in §6.5. |
-| A closed field-projection vocabulary with an unknown-field guard (context-blow defense) | Kept, redesigned in §6.5. |
+| Concept                                                                                                                                                                                    | Disposition                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A composite `(repo, id)` identifier                                                                                                                                                        | Not part of the surface. Identity is `uid`, DB-generated, with no allocator and no per-repo numbering (§1, §6.1).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `repo` as an addressing key on every verb                                                                                                                                                  | Not part of the surface as an addressing key — a per-repo string id needed repo-scoping to disambiguate; `uid` never does. `project` survives only as an optional filter/creation field (§6.1).                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `family` as a parsed classifier prefix                                                                                                                                                     | Not part of the surface — there is no id to parse a prefix from. `kind` (catalog ref) is the open-vocabulary classifier; a project that wants finer-grained families files them as distinct `kind` catalog rows (§2 — extensible by row, no code change).                                                                                                                                                                                                                                                                                                                                                                          |
+| A caller-supplied id override at creation time                                                                                                                                             | Not part of the surface — every `create` mints a fresh `uid` unconditionally, never caller-chosen (§0 anti-antipattern 1).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| An import-provenance/ownership field on the issue                                                                                                                                          | Not part of the surface as a mutable field — provenance is the `audit` node's `actor`/`action`/`sha` (§4a), not a field on the issue.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| An opt-in symbol/path/errorText dedupe-scan input                                                                                                                                          | Subsumed into `create`'s always-on duplicate gate (§6.4); `symbol`/`path`/`errorText` become the ranking hints passed as `filter.files`/`filter.grep`-equivalent terms to the same `searchRanked` call §6.4 already makes.                                                                                                                                                                                                                                                                                                                                                                                                         |
+| A bare boolean bypass-dedupe flag                                                                                                                                                          | `duplicateAction: 'force'` (§6.4) — same effect, sitting in the same enum as `abort`/`comment` rather than a bare boolean.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `citations` at creation time                                                                                                                                                               | Kept, unchanged in spirit: `create`'s input carries `citations?: Citation[]`, written as `citation` nodes + `has_citation` edges in the same transaction (§3, §4).                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `awaitEmbed` on `create`/`update`                                                                                                                                                          | Kept verbatim (RAG-SPEC durability for short-lived processes) — §4b's on-write embedding observer is fire-and-forget by default; `awaitEmbed:true` waits for it, same contract.                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Two separate accountability roles (`author`/`reporter`)                                                                                                                                    | **Collapsed to one**: §3 line 136 declares exactly one edge, `authored_by` (issue→agent, n:1) — no `reported_by` edge exists in the edge table. `author` is the sole accountability edge.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| A plan-slug string plus a dedicated membership edge                                                                                                                                        | Folded into the existing `part_of` edge (§3): a plan is itself an `issue` (kind catalog row, e.g. `kind:"plan"` — no new node type, matching this spec's own "the plan parent IS an item" doctrine); attaching an item to a plan is `relate(childUid, planUid, 'part_of', 'add')`. The plan-native resume view (`view:"plan"`'s rollup/ready/blocked/delta/myClaims/asOf aggregate) is **out of scope for this section** — it is a §5 query-layer concern once `part_of` traversal is queryable, not an issue-verb input shape.                                                                                                    |
+| Durable `assignee` ownership, distinct from an ephemeral claim                                                                                                                             | Kept: `issue.meta.metadata.assignee` (plain scalar, no edge — see §6.3 `claim`'s rationale for why this and `claimedBy`/`claimedAt` are metadata, not edges), mutated via `update`'s `assignee` field, filterable via `NodeFilter.metadata.assignee` (`{eq: "..."}`, verified operator: `@adhd/sox-graph-store@0.9.1 dist/index.d.ts:157-170`).                                                                                                                                                                                                                                                                                    |
+| The ephemeral claim-lease system (`claimedBy`/`claimedAt`, a stale-after threshold, a force override, a held-error)                                                                        | Kept in full, designed onto the graph model as its own `claim` write-layer verb (§6.3.5) — `claimedBy`/`claimedAt` live in `issue.meta.metadata` (mutated via `touch`, CAS-checked inside the write transaction); the stale-after threshold lives as **data**: `project_policy.claim_stale_after_min` (default `30`), consistent with DATA_MODEL.md §2's "policy about actions is data, not code" pattern already applied to `citation_required`/`transition_requires_note`; per-call `force` (human-confirmed override of a non-stale claim) survives as a literal argument, since that is a caller decision, not project policy. |
+| A terminal-dismissed-only free-text field, distinct from a general note, driven by a three-way status categorization                                                                       | **Collapsed into `note`** — DATA_MODEL.md §3's `transition` node has exactly one free-text field, `note`, and §2's `project_policy` has one boolean, `citation_required` (not three status-category-specific rules). `status.terminal` (a single bool) plus `project_policy.citation_required` (a single bool, project-tunable) is the entire evidence gate.                                                                                                                                                                                                                                                                       |
+| Evidence (`citations`/`reason`) bundled onto a generic `update` alongside a status change                                                                                                  | Superseded by `transition`'s own input shape (§6.3.4), which HAS the `citations`/`note` fields directly — there is no separate generic `update` path into a status change any more (§6.3.3 `update` explicitly rejects `status`), so evidence attached to the wrong verb cannot recur structurally (fixes DEBT-010).                                                                                                                                                                                                                                                                                                               |
+| `duplicateAction` on `create`                                                                                                                                                              | Kept, redesigned in full in §6.4 with the enum `'abort'\|'force'\|'comment'`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Splitting a freshly-minted parent into N children                                                                                                                                          | Kept: `create`'s `children?: ICreateIssueInput[]` field (§6.3.2) creates each child then `relate`s it `part_of` the freshly-created parent, atomically, in the same write transaction.                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Splitting an EXISTING, already-live parent into N children                                                                                                                                 | **No dedicated field — composed from two already-specified primitives, not dropped:** `create`'s `children` only fires alongside a freshly-minted parent (§6.3.2); splitting into an EXISTING parent is instead one `create` per child (no `children`, no `supersedes`) followed by `relate(childUid, existingParentUid, 'part_of', 'add')` (§6.3.6) for each — reaching the identical outcome (N children, each with one live `part_of` edge to the same parent) without a third verb.                                                                                                                                            |
+| Content-mutation supersession at create time                                                                                                                                               | Kept: `create`'s `supersedes?: uid` field (§6.3.2) is sugar for `updateIssue(uid, {body: ...})`'s `supersede` path (§4) run against an EXISTING issue rather than minting via `create` — see §6.3.2 for the exact composition.                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Cross-repo disambiguation on a relate/dependency input                                                                                                                                     | Not part of the surface — `uid` is globally unique across every project in the store, so a `relate` between two issues in different projects needs no repo parameter at all; `relate(sourceUid, targetUid, rel, action)` just works.                                                                                                                                                                                                                                                                                                                                                                                               |
+| A dedicated repo-string-collision-repair operation                                                                                                                                         | Not part of the surface — folded into first-class `project`/`component`/`location` nodes (§3a).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| An issue-to-issue dependency edge, with its own blockers/ready/graph/order reads                                                                                                           | **Mapped to `blocks`** (§3: `blocks issue → issue (n:m), inverse = blocked_by, derived`) — `relate(blockerUid, blockedUid, 'blocks', 'add')` records "X blocks Y" subject-first; `blockers`/`readyItems`/`dependencyGraph`/`topoOrder` all become `query` views over `blocks`/`blocked_by` traversal (view names `ready`/`graph`/`order`). §3's edge table has no issue-to-issue `depends_on` — only `depends_on: component → component`.                                                                                                                                                                                          |
+| Merging two issues (keep one, drop the other)                                                                                                                                              | 1:1 mapping onto existing primitives, no new mechanism needed: `relate(dropUid, keepUid, 'duplicate_of', 'add')` then `delete(dropUid, reason)` (§6.3.7's `invalidate`).                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| The pairwise-intersection axis selector and its item-set input                                                                                                                             | Kept as query-layer concerns, **not** an issue-verb input: the axis selector renames to `axis` (vocabulary `file`\|`project`\|`component`\|`author` — `package` renamed `component`) and the item-set input renames to `uids: string[]`; both are `query`'s `view:"overlap"` parameters (§5), out of scope for the write-facing verbs this section specifies.                                                                                                                                                                                                                                                                      |
+| A mutating "hide terminal items from the default projection" action                                                                                                                        | **No replacement as a mutation** — `status.terminal` (already stamped by the terminal `transition`, §4a) is itself the exclusion signal; the default `render`/`query` projection already excludes terminal items unless `filter.status` explicitly asks for them. A markdown changelog section is produced by rendering `filter.status:['terminal set']` through the same `render` output, never a second code path.                                                                                                                                                                                                               |
+| A single grab-bag mutation verb carrying an open-ended `action` string (render/export/merge/embedding maintenance/one-shot maintenance ops/host introspection/batch fan-out, among others) | Not part of the surface at all — disposition per action, §6.6.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `limit`/`offset`, a fixed max query limit                                                                                                                                                  | Kept, redesigned onto keyset in §6.5.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| A closed field-projection vocabulary with an unknown-field guard (context-blow defense)                                                                                                    | Kept, redesigned in §6.5.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 ### 6.3 Issue verbs
 
@@ -1124,20 +1127,20 @@ corpus never makes a listing throw.
 interface ICreateIssueInput {
   title: string;
   body: string;
-  project: string;   // uid or name — resolved per §6.1; REQUIRED (every issue has a component chain)
+  project: string; // uid or name — resolved per §6.1; REQUIRED (every issue has a component chain)
   component?: string; // uid or name, scoped within `project`; RESOLVED ONLY, never created — the write layer's hand-composed find-then-create (§4c) runs its find-half alone here: a name that resolves to an existing component under `project` is used as-is, and an unresolved name throws CatalogNotFoundError('component', name) rather than silently forking a new component (see §6.1's project-vs-component asymmetry: components are NOT auto-vivified by createIssue, use upsertComponent first). OMITTED (undefined) is a distinct third case, never an error: it resolves to `project`'s reserved default component `(root)`, already guaranteed live by `upsertProject` (§3/§4/§6.1) — every issue gets exactly one `owns_component` edge whether or not the caller names a component (§8 AC-23).
-  kind?: string;      // catalog name or uid; default catalog row "issue" if the project defines no default; an unresolved NAME mints a new kind catalog row (§2/§6.1's general rule — kind is open vocabulary, no allowlist) with no extra metadata beyond `name`; a uid-shaped `kind` that does not resolve instead throws CatalogNotFoundError('kind', ref) — minting never applies to a uid (§6.1)
-  status?: string;    // catalog name or uid; default is the project's configured initial status (project_policy — falls back to a global default "OPEN"-equivalent catalog row); an unresolved name MINTS a new status catalog row (§2, unlike `component` above) with terminal:false — a novel status name is presumed non-terminal until an operator deliberately reconciles it, so a typo can never silently close or exclude items under an unrecognized status; a uid-shaped `status` that does not resolve instead throws CatalogNotFoundError('status', ref) — minting never applies to a uid (§6.1)
-  priority?: string;  // catalog name or uid; optional; an unresolved name mints a new priority catalog row (§2) with rank set to one past the current max rank (i.e. lowest urgency) — a novel priority can never silently outrank an existing one; a uid-shaped `priority` that does not resolve instead throws CatalogNotFoundError('priority', ref) — minting never applies to a uid (§6.1)
+  kind?: string; // catalog name or uid; default catalog row "issue" if the project defines no default; an unresolved NAME mints a new kind catalog row (§2/§6.1's general rule — kind is open vocabulary, no allowlist) with no extra metadata beyond `name`; a uid-shaped `kind` that does not resolve instead throws CatalogNotFoundError('kind', ref) — minting never applies to a uid (§6.1)
+  status?: string; // catalog name or uid; default is the project's configured initial status (project_policy — falls back to a global default "OPEN"-equivalent catalog row); an unresolved name MINTS a new status catalog row (§2, unlike `component` above) with terminal:false — a novel status name is presumed non-terminal until an operator deliberately reconciles it, so a typo can never silently close or exclude items under an unrecognized status; a uid-shaped `status` that does not resolve instead throws CatalogNotFoundError('status', ref) — minting never applies to a uid (§6.1)
+  priority?: string; // catalog name or uid; optional; an unresolved name mints a new priority catalog row (§2) with rank set to one past the current max rank (i.e. lowest urgency) — a novel priority can never silently outrank an existing one; a uid-shaped `priority` that does not resolve instead throws CatalogNotFoundError('priority', ref) — minting never applies to a uid (§6.1)
   citations?: Citation[];
-  author?: string;    // catalog agent name/uid; defaults to `by`; an unresolved NAME mints a new `agent` catalog row (§6.1's general rule), exactly like `kind`/`status`/`priority` above; a uid-shaped `author` that does not resolve instead throws CatalogNotFoundError('agent', ref) — minting never applies to a uid (§6.1)
-  assignee?: string;  // plain metadata scalar (§6.2)
+  author?: string; // catalog agent name/uid; defaults to `by`; an unresolved NAME mints a new `agent` catalog row (§6.1's general rule), exactly like `kind`/`status`/`priority` above; a uid-shaped `author` that does not resolve instead throws CatalogNotFoundError('agent', ref) — minting never applies to a uid (§6.1)
+  assignee?: string; // plain metadata scalar (§6.2)
   awaitEmbed?: boolean;
   // duplicate-gate controls — §6.4
   duplicateAction?: 'abort' | 'force' | 'comment'; // default 'abort'
   // structural sugar — §6.2
   children?: ICreateIssueInput[]; // each created, then `part_of` the freshly-minted parent, one transaction — see composition below
-  supersedes?: string;            // uid of an existing issue this create supersedes — see composition below
+  supersedes?: string; // uid of an existing issue this create supersedes — see composition below
 }
 
 interface Citation {
@@ -1234,7 +1237,7 @@ Output:
 ```ts
 interface ICreateOutcome {
   created: boolean; // false ⇒ nothing written; see duplicateCandidates/reason
-  uid?: string;      // present iff created
+  uid?: string; // present iff created
   item?: IIssueCard; // present iff created
   duplicateCandidates?: IDuplicateCandidate[]; // present when the gate fired (§6.4) or on comment
   reason?: 'duplicate-suppressed'; // present iff !created — only one suppression class survives (§6.4)
@@ -1266,12 +1269,12 @@ flag, never a try/catch, because "no write happened" is not exceptional.
 interface IUpdateIssueInput {
   uid: string;
   by: string;
-  title?: string;       // → touch (metadata/name only)
-  body?: string;         // → supersede (§3: "body change → supersede... never touch a body")
-  kind?: string;         // → touch + has_kind edge rewrite (hand-composed edge invalidate-old + upsert-new, same tx — §4c)
-  priority?: string;     // → touch + has_priority edge rewrite
-  assignee?: string;     // → touch (metadata scalar, §6.2)
-  author?: string;       // → touch + authored_by edge rewrite
+  title?: string; // → touch (metadata/name only)
+  body?: string; // → supersede (§3: "body change → supersede... never touch a body")
+  kind?: string; // → touch + has_kind edge rewrite (hand-composed edge invalidate-old + upsert-new, same tx — §4c)
+  priority?: string; // → touch + has_priority edge rewrite
+  assignee?: string; // → touch (metadata scalar, §6.2)
+  author?: string; // → touch + authored_by edge rewrite
   awaitEmbed?: boolean;
 }
 ```
@@ -1320,8 +1323,8 @@ verb).
 interface ITransitionInput {
   uid: string;
   by: string;
-  toStatus: string;       // catalog name or uid
-  note?: string;          // REQUIRED unless project_policy.transition_requires_note is false (default true) — optional in the type; the write layer enforces the policy-gated requirement at runtime, never at the TS level (see `NoteRequiredError` below)
+  toStatus: string; // catalog name or uid
+  note?: string; // REQUIRED unless project_policy.transition_requires_note is false (default true) — optional in the type; the write layer enforces the policy-gated requirement at runtime, never at the TS level (see `NoteRequiredError` below)
   citations?: Citation[]; // REQUIRED (≥1) when project_policy.citation_required is true AND toStatus resolves to a terminal status
 }
 ```
@@ -1426,16 +1429,16 @@ serialize through the transaction, and the loser sees a fresh
 
 Rule table (metadata-only shape):
 
-| action | current `claimedBy` | outcome |
-|---|---|---|
-| `claim` | unset | write `{claimedBy: by, claimedAt: now}`; `status: 'claimed'` |
-| `claim` | == `by` | no-op write of `claimedAt: now`; `status: 'held'`, `heldBy: by` (idempotent re-claim by the same agent) |
-| `claim` | != `by`, age < `project_policy.claim_stale_after_min` (default 30), `!force` | **throws** `ClaimHeldError(heldBy, heldSince)` |
-| `claim` | != `by`, age ≥ threshold, OR `force:true` | write `{claimedBy: by, claimedAt: now}`; `status: 'reclaimed-stale'`, `previousClaimant`: the old value |
-| `release` | == `by` | clear both fields; `status: 'released'` |
-| `release` | != `by` or unset | no write; `status: 'release-noop'`, `wasClaimedBy` echoes the prior value if any |
-| `renew` | == `by` | bump `claimedAt: now`; `status: 'renewed'` (same-claimant renewal always succeeds) |
-| `renew` | != `by` or unset | **throws** `ClaimHeldError` (renew is not a claim attempt) |
+| action    | current `claimedBy`                                                          | outcome                                                                                                 |
+| --------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `claim`   | unset                                                                        | write `{claimedBy: by, claimedAt: now}`; `status: 'claimed'`                                            |
+| `claim`   | == `by`                                                                      | no-op write of `claimedAt: now`; `status: 'held'`, `heldBy: by` (idempotent re-claim by the same agent) |
+| `claim`   | != `by`, age < `project_policy.claim_stale_after_min` (default 30), `!force` | **throws** `ClaimHeldError(heldBy, heldSince)`                                                          |
+| `claim`   | != `by`, age ≥ threshold, OR `force:true`                                    | write `{claimedBy: by, claimedAt: now}`; `status: 'reclaimed-stale'`, `previousClaimant`: the old value |
+| `release` | == `by`                                                                      | clear both fields; `status: 'released'`                                                                 |
+| `release` | != `by` or unset                                                             | no write; `status: 'release-noop'`, `wasClaimedBy` echoes the prior value if any                        |
+| `renew`   | == `by`                                                                      | bump `claimedAt: now`; `status: 'renewed'` (same-claimant renewal always succeeds)                      |
+| `renew`   | != `by` or unset                                                             | **throws** `ClaimHeldError` (renew is not a claim attempt)                                              |
 
 Every branch also carries `WriteContentionError`/`WriteIOError` (§4c) — an
 exhausted driver-level retry on the CAS transaction above surfaces as one of
@@ -1590,7 +1593,7 @@ product-feature half, which stays real:
    `dedupe_threshold` is not a branch of `duplicateAction` at all: whichever
    action was requested (`'abort'`/`'force'`/`'comment'`), a scan that
    finds nothing proceeds straight to a normal create (`{created:true,
-   uid}`, no `duplicateCandidates` field) — there is nothing for `'abort'`
+uid}`, no `duplicateCandidates` field) — there is nothing for `'abort'`
    to suppress, `'force'` to write past, or `'comment'` to attach to. With
    ≥1 candidate:
    - `'abort'` (default) — nothing is written. Response:
@@ -1625,15 +1628,15 @@ interface IIssueQueryInput {
   fields?: readonly IIssueField[];
   sort?: 'priority' | 'updated' | 'created' | 'relevance' | 'textMatch';
   direction?: 'asc' | 'desc';
-  limit?: number;   // default 50, max 1000 (MAX_QUERY_LIMIT) — see composition rule 6 below
-  offset?: number;  // offset-based paging when `after` is absent — see rule 6; mutually exclusive with `after` (rule 5), unstable under concurrent writes by design
-  after?: string;   // opaque keyset cursor from a prior page's `nextCursor` — see rule 5
+  limit?: number; // default 50, max 1000 (MAX_QUERY_LIMIT) — see composition rule 6 below
+  offset?: number; // offset-based paging when `after` is absent — see rule 6; mutually exclusive with `after` (rule 5), unstable under concurrent writes by design
+  after?: string; // opaque keyset cursor from a prior page's `nextCursor` — see rule 5
   view?: 'list' | 'ready' | 'graph' | 'order' | 'stale' | 'similar' | 'overlap'; // §5's existing view union, carried forward
   format?: 'json' | 'markdown'; // default 'json'; 'markdown' renders this same page as issue-titled headers + `[target sha:…]` citations, never a second code path (§6.6)
 }
 
 interface IIssueFilter {
-  project?: string;   // uid or name
+  project?: string; // uid or name
   component?: string; // uid or name, scoped within project
   kind?: string | string[];
   status?: string | string[] | 'open' | 'closed' | 'all'; // IStatusSelector
@@ -1641,9 +1644,9 @@ interface IIssueFilter {
   assignee?: string;
   claimedBy?: string;
   author?: string; // resolves via authored_by edge traversal
-  grep?: string;      // FTS keyword, title+body — stays keyword-only, never hybrid (unchanged rule)
-  semantic?: string;  // routes to searchRanked (§5a) — composes with grep, neither swallows the other
-  anchor?: string;    // item-anchored similarity seed (§6.1) — uid of the reference item
+  grep?: string; // FTS keyword, title+body — stays keyword-only, never hybrid (unchanged rule)
+  semantic?: string; // routes to searchRanked (§5a) — composes with grep, neither swallows the other
+  anchor?: string; // item-anchored similarity seed (§6.1) — uid of the reference item
   closedAt?: { since?: string; until?: string };
   createdAt?: { since?: string; until?: string };
   updatedAt?: { since?: string; until?: string };
@@ -1707,12 +1710,12 @@ Default (`fields` omitted): `['uid', 'kind', 'title', 'status', 'priority']`
    every edge-scoped filter given).
 4. **Composing the final query.** Build one `NodeFilter`:
    `{ kind:'issue', ids: <the intersected candidate set, when any
-   edge-scoped filter was given — omitted entirely when none was>,
-   tCreatedAfter/tCreatedBefore (from filter.createdAt),
-   tUpdatedAfter/tUpdatedBefore (from filter.updatedAt),
-   metadata: { assignee, claimedBy, closedAt: {...} } (from the
-   corresponding filter fields, using the verified operator set),
-   after, limit: limit+1, orderBy, orderDir }`. `grep`/`semantic` route
+edge-scoped filter was given — omitted entirely when none was>,
+tCreatedAfter/tCreatedBefore (from filter.createdAt),
+tUpdatedAfter/tUpdatedBefore (from filter.updatedAt),
+metadata: { assignee, claimedBy, closedAt: {...} } (from the
+corresponding filter fields, using the verified operator set),
+after, limit: limit+1, orderBy, orderDir }`. `grep`/`semantic` route
    through `searchNodes`/`searchRanked` INSTEAD of `queryNodes`, passing the
    SAME `ids` restriction as their own `filter` argument (both accept one,
    verified: `searchNodes(query, {limit?, offset?, filter?: NodeFilter})`)
@@ -1723,7 +1726,7 @@ Default (`fields` omitted): `['uid', 'kind', 'title', 'status', 'priority']`
    is: run them as two INDEPENDENT scans over that same edge-restricted
    candidate set — `searchNodes(grepQuery, {filter})` (FTS-only, per
    `grep`'s keyword-only rule) and `searchRanked({vec: embed(semanticQuery),
-   signals:[{vec}]}, limit)` (the embedding-only path, §5a; verified,
+signals:[{vec}]}, limit)` (the embedding-only path, §5a; verified,
    `@adhd/sox-hybrid-search@0.4.2 dist/index.d.ts:29-34` — `SearchQuery`
    takes one `text`/`vec` pair, never two independently-scored query
    strings, so `grep` and `semantic` cannot be fused into one `searchRanked`
@@ -1736,12 +1739,12 @@ Default (`fields` omitted): `['uid', 'kind', 'title', 'status', 'priority']`
    semantic's ranking decides where it sorts.
 5. **Keyset stability (`after` given).** Per the verified library contract
    (`dist/index.d.ts:206-212`): `after` compiles to `WHERE rowid > ?
-   ORDER BY rowid ASC`, **ignoring** `orderBy`/`offset` entirely. So: a
+ORDER BY rowid ASC`, **ignoring** `orderBy`/`offset` entirely. So: a
    caller that supplies `after` gets rows in insertion order and MAY NOT
    also supply `sort` — `query({after, sort:'priority'})` throws
    `InvalidArgumentError('sort', 'sort is incompatible with keyset
-   pagination (after) — request the first page unsorted, or page by
-   offset if a non-insertion order is required')`. The SAME incompatibility
+pagination (after) — request the first page unsorted, or page by
+offset if a non-insertion order is required')`. The SAME incompatibility
    holds against `filter.grep`/`filter.semantic`: both route through
    `searchNodes`/`searchRanked` (rule 4), which order by FTS/fusion score,
    never by rowid — `searchRanked(query, limit)` (verified,
@@ -1750,9 +1753,9 @@ Default (`fields` omitted): `['uid', 'kind', 'title', 'status', 'priority']`
    `@adhd/sox-graph-store@0.9.1 dist/index.d.ts:293-296`) exposes `offset`,
    never `after`, at its top level — so `query({after, filter:{grep:...}})`
    (or `semantic`) throws the same `InvalidArgumentError('after', 'after
-   (keyset) is incompatible with grep/semantic search — these route through
-   the ranked search primitives, which have no rowid-ordered keyset
-   contract; page a searched result set by sort + offset (rule 6) instead')`.
+(keyset) is incompatible with grep/semantic search — these route through
+the ranked search primitives, which have no rowid-ordered keyset
+contract; page a searched result set by sort + offset (rule 6) instead')`.
    This ordering is
    provably stable and gapless under concurrent writes: every page's
    cursor is a strictly-increasing rowid boundary, a concurrent INSERT
@@ -1790,17 +1793,17 @@ Default (`fields` omitted): `['uid', 'kind', 'title', 'status', 'priority']`
 There is no `admin` verb — it is one of six verbs this application layer does
 not carry (§7). Every action once carried under `admin` is accounted for:
 
-| Admin action | Disposition |
-|---|---|
-| `import`, the phase-status/phase-setting actions, `reconcile_repo`, and the model-transform action | none of these have any surface here at all — this application layer carries no markdown `import`, no phase-tracking machinery, and no repo-reconciliation module |
-| `render`, `export` | folded into `query`'s output: `format:'markdown'` (new) alongside the existing `format:'json'` — a plain read, not an admin mutation. Markdown headers render the issue **title** (never `uid`); citations render `[target sha:…]` (unchanged from the current surface's stated projection rule) |
-| `archive` | no longer a mutation at all — see §6.2's `ArchiveOpts` row: `status.terminal` is the only exclusion signal the default projection needs |
-| `merge` | 1:1 mapping onto `relate('duplicate_of')` + `delete` — §6.2 |
-| `embedding_backfill` | already specified: §4b's `reembed` (batch, backfill-only) |
-| `embedding_health`, `list_near_duplicates` | fold into `query`'s `view:"similar"` (§5a) — a health/near-duplicate report is exactly "run the similarity view over the whole corpus," not a distinct admin code path |
-| `doctor`, `prune`, `run_dedup_sweep`, `cluster_into_plans`, `promote_cluster_to_plan` | **not part of this consumer surface.** These are one-shot/periodic maintenance operations, not a product feature a caller addresses by `uid`. Per this repo's own package-scaffolding rule (reusable tooling belongs in a script or plugin; a one-shot data transform is a throwaway script — never a mounted verb), if any of these are still needed operationally they are scripts run directly against `src/write/`/`src/query/`, never re-admitted as a 20th grab-bag `admin` action — that grab-bag shape is precisely what the named, individually-typed verb surface (§4, §6.3) replaces. |
-| `skill`, `version` | both are host-adjacent, store-free introspection — same carve-out class as `install`/`install-skill`/`serve` (server.ts:139's `BACKLOG_HOST_COMMANDS`), extended to include them, rather than mounted as data verbs. Neither opens the store (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001's whole point), so nothing changes about how they run — only that they are formally carved out instead of living inside `admin`. |
-| `batch` | not backlog-specific code — `apigen-plugin-batch`'s generic `batch_action` fan-out is inherited automatically the moment this application layer's nine verbs mount through the same apigen plugin surface (`usePlugins:[batchPlugin]`, unchanged from server.ts's current wiring). Nothing to design here. |
+| Admin action                                                                                       | Disposition                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `import`, the phase-status/phase-setting actions, `reconcile_repo`, and the model-transform action | none of these have any surface here at all — this application layer carries no markdown `import`, no phase-tracking machinery, and no repo-reconciliation module                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `render`, `export`                                                                                 | folded into `query`'s output: `format:'markdown'` (new) alongside the existing `format:'json'` — a plain read, not an admin mutation. Markdown headers render the issue **title** (never `uid`); citations render `[target sha:…]` (unchanged from the current surface's stated projection rule)                                                                                                                                                                                                                                                                                                 |
+| `archive`                                                                                          | no longer a mutation at all — see §6.2's `ArchiveOpts` row: `status.terminal` is the only exclusion signal the default projection needs                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `merge`                                                                                            | 1:1 mapping onto `relate('duplicate_of')` + `delete` — §6.2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `embedding_backfill`                                                                               | already specified: §4b's `reembed` (batch, backfill-only)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `embedding_health`, `list_near_duplicates`                                                         | fold into `query`'s `view:"similar"` (§5a) — a health/near-duplicate report is exactly "run the similarity view over the whole corpus," not a distinct admin code path                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `doctor`, `prune`, `run_dedup_sweep`, `cluster_into_plans`, `promote_cluster_to_plan`              | **not part of this consumer surface.** These are one-shot/periodic maintenance operations, not a product feature a caller addresses by `uid`. Per this repo's own package-scaffolding rule (reusable tooling belongs in a script or plugin; a one-shot data transform is a throwaway script — never a mounted verb), if any of these are still needed operationally they are scripts run directly against `src/write/`/`src/query/`, never re-admitted as a 20th grab-bag `admin` action — that grab-bag shape is precisely what the named, individually-typed verb surface (§4, §6.3) replaces. |
+| `skill`, `version`                                                                                 | both are host-adjacent, store-free introspection — same carve-out class as `install`/`install-skill`/`serve` (server.ts:139's `BACKLOG_HOST_COMMANDS`), extended to include them, rather than mounted as data verbs. Neither opens the store (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001's whole point), so nothing changes about how they run — only that they are formally carved out instead of living inside `admin`.                                                                                                                                                                             |
+| `batch`                                                                                            | not backlog-specific code — `apigen-plugin-batch`'s generic `batch_action` fan-out is inherited automatically the moment this application layer's nine verbs mount through the same apigen plugin surface (`usePlugins:[batchPlugin]`, unchanged from server.ts's current wiring). Nothing to design here.                                                                                                                                                                                                                                                                                       |
 
 ### 6.7 Transport surfaces
 
@@ -1876,7 +1879,7 @@ surface, and identifiers other than `uid` do not resolve, by design.
    components.
 10. **Registry lookup:** `lookup("memory_ping")` resolves to
     `project: sox-ecosystem` + `component: memory-server` + `location: tool
-    memory_ping` with the project `path` and `repoUrl` — one call, no search.
+memory_ping` with the project `path` and `repoUrl` — one call, no search.
 11. **Registry detail:** `get {registry:"project",name:"adhd"}` returns `path`,
     `repoUrl`, and its linked `locations[]` + `components[]`; a worktree dir under
     the project resolves to the SAME project (no phantom row).
@@ -1901,6 +1904,7 @@ surface, and identifiers other than `uid` do not resolve, by design.
 22. **Concurrent write safety (BUG-039 gate):** the un-skipped, repointed cross-process harness (§4c/§9.1) run against `createIssue` reports a fresh-reopen stored count exactly equal to the number of `ok`-reporting creates, for both the same-target and distinct-target cases, over two real OS processes with no serve-lock coordination. **Negative control:** the identical run with `skipDedupe: true` stripped (`ADHD_BACKLOG_UNSAFE_DEDUPE_MODE=on`) reports a stored count BELOW the expected total — deterministically one row where two were reported `ok` — proving the exact-count assertion has teeth.
 
     The control targets the dedupe guard rather than the transaction-mode guard, deliberately and not as a weakening. Stripping `immediate` mode alone has **no deterministic observable on this path**, because §1 makes every live entity write `crypto.randomUUID()`-keyed with `skipDedupe: true` unconditional: two concurrent `createIssue` inserts have no unique constraint and no content hash to collide on, with or without `BEGIN IMMEDIATE`, so there is nothing for a lost-update to lose. An assertion that went red only when the OS scheduler cooperated would be a flaky proof, which §9.1 is explicit is not a proof at all. The transaction-mode guard is load-bearing on the OTHER write shape — the business-key find-then-create behind `upsertProject`/`upsertComponent`/`upsertLocation` (§4c), where a read-miss on both sides genuinely does mint two rows — and `write/catalog-verbs.spec.ts`'s cross-process control exercises that lever directly.
+
 23. **`create` with no `component` defaults to `(root)`, never orphaned:** `createIssue({title, body, project:'adhd'})` — `component` omitted entirely — writes exactly one `owns_component` edge, to `project`'s reserved default component `(root)` (§3/§6.3.2), and never throws `CatalogNotFoundError('component', ...)`; a subsequent `query({filter:{project:'adhd'}})` (§6.5 rule 3) returns the new `uid` in its results, proving the issue is reachable through the project filter rather than orphaned; two separate no-`component` `createIssue` calls against the same project resolve to the SAME `(root)` component row (`get({registry:'component', name:'(root)', filter:{project:'adhd'}})` returns one row, not two) — proving the fallback is a resolve of an already-guaranteed row, never a per-call mint.
 
 ## 9. Dependencies & sequencing

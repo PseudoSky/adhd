@@ -10,7 +10,10 @@
  * (`embedQuery`) test-pinned. `searchRanked` itself is never mocked.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openTursoVectorStore, type TursoVectorBackend } from '@adhd/sox-vector-store';
+import {
+  openTursoVectorStore,
+  type TursoVectorBackend,
+} from '@adhd/sox-vector-store';
 import { StoreSearchBackend } from '@adhd/sox-hybrid-search';
 import {
   openTestIssueStore,
@@ -39,16 +42,25 @@ describe('queryIssuesWithMeta — view:list meta (real store)', () => {
   });
 
   async function mkIssue(title: string): Promise<string> {
-    const created = await createIssue(store, { project: projectUid, title, body: `${title} body`, by: 'filer' });
+    const created = await createIssue(store, {
+      project: projectUid,
+      title,
+      body: `${title} body`,
+      by: 'filer',
+    });
     return created.uid;
   }
 
   it('total is the TRUE pre-limit count, not items.length — returned is data.length', async () => {
     const N = 9;
     const k = 4; // k < N: proves total isn't just echoing what came back
-    for (let i = 0; i < N; i++) await mkIssue(`meta issue ${String(i).padStart(2, '0')}`);
+    for (let i = 0; i < N; i++)
+      await mkIssue(`meta issue ${String(i).padStart(2, '0')}`);
 
-    const { meta } = await queryIssuesWithMeta(store, { view: 'list', limit: k });
+    const { meta } = await queryIssuesWithMeta(store, {
+      view: 'list',
+      limit: k,
+    });
 
     expect(meta).toBeDefined();
     expect(meta!.total).toBe(N);
@@ -56,10 +68,13 @@ describe('queryIssuesWithMeta — view:list meta (real store)', () => {
     expect(meta!.limit).toBe(k);
   });
 
-  it('an ordinary limited read (caller asked for k of N>k) is NOT truncated — that is the caller\'s own limit', async () => {
+  it("an ordinary limited read (caller asked for k of N>k) is NOT truncated — that is the caller's own limit", async () => {
     for (let i = 0; i < 6; i++) await mkIssue(`ordinary issue ${i}`);
 
-    const { meta } = await queryIssuesWithMeta(store, { view: 'list', limit: 2 });
+    const { meta } = await queryIssuesWithMeta(store, {
+      view: 'list',
+      limit: 2,
+    });
 
     expect(meta!.total).toBe(6);
     expect(meta!.returned).toBe(2);
@@ -69,7 +84,11 @@ describe('queryIssuesWithMeta — view:list meta (real store)', () => {
   it('meta.offset echoes the effective offset actually applied', async () => {
     for (let i = 0; i < 5; i++) await mkIssue(`offset issue ${i}`);
 
-    const { meta } = await queryIssuesWithMeta(store, { view: 'list', limit: 2, offset: 3 });
+    const { meta } = await queryIssuesWithMeta(store, {
+      view: 'list',
+      limit: 2,
+      offset: 3,
+    });
     expect(meta!.offset).toBe(3);
     expect(meta!.total).toBe(5);
     expect(meta!.returned).toBe(2);
@@ -89,9 +108,19 @@ describe('queryIssuesWithMeta — view:list meta (real store)', () => {
 const DIM = 3;
 
 /** Opens the same real-search topology `views/semantic.spec.ts` uses: real graph, real vector store, real `StoreSearchBackend`, only `embedQuery` pinned. */
-async function openSearchableStore(dir: string): Promise<{ writeHandle: TestIssueStore; handle: IQueryStoreHandle; vec: TursoVectorBackend; pinEmbedding(text: string, v: number[]): void; indexIssue(uid: string, v: number[]): Promise<void>; close(): Promise<void> }> {
+async function openSearchableStore(dir: string): Promise<{
+  writeHandle: TestIssueStore;
+  handle: IQueryStoreHandle;
+  vec: TursoVectorBackend;
+  pinEmbedding(text: string, v: number[]): void;
+  indexIssue(uid: string, v: number[]): Promise<void>;
+  close(): Promise<void>;
+}> {
   const writeHandle = await openTestIssueStore(`${dir}/issues.db`);
-  const vec = await openTursoVectorStore(writeHandle.adapter, { dim: DIM, modelId: 'meta-spec-test-model' });
+  const vec = await openTursoVectorStore(writeHandle.adapter, {
+    dim: DIM,
+    modelId: 'meta-spec-test-model',
+  });
   const embedMap = new Map<string, Float32Array>();
 
   const handle: IQueryStoreHandle = {
@@ -100,7 +129,12 @@ async function openSearchableStore(dir: string): Promise<{ writeHandle: TestIssu
       backend: new StoreSearchBackend(vec, writeHandle.graph),
       embedQuery: async (text: string): Promise<Float32Array> => {
         const v = embedMap.get(text);
-        if (!v) throw new Error(`openSearchableStore: no pinned embedding for ${JSON.stringify(text)}`);
+        if (!v)
+          throw new Error(
+            `openSearchableStore: no pinned embedding for ${JSON.stringify(
+              text
+            )}`
+          );
         return v;
       },
     },
@@ -116,7 +150,10 @@ async function openSearchableStore(dir: string): Promise<{ writeHandle: TestIssu
     async indexIssue(uid, v) {
       const node = await writeHandle.graph.getNodeByUid(uid);
       if (!node) throw new Error(`indexIssue: no live node for uid ${uid}`);
-      await vec.upsert(node.id, Float32Array.from(v), { modelId: 'meta-spec-test-model', dim: DIM });
+      await vec.upsert(node.id, Float32Array.from(v), {
+        modelId: 'meta-spec-test-model',
+        dim: DIM,
+      });
     },
     async close() {
       await writeHandle.close();
@@ -132,7 +169,8 @@ describe('queryIssuesWithMeta — view:list, filter.grep + filter.semantic toget
   beforeEach(async () => {
     dir = freshTmpDir('query-meta-truncated');
     s = await openSearchableStore(dir);
-    projectUid = (await seedProject(s.writeHandle, 'meta-truncated-project')).projectUid;
+    projectUid = (await seedProject(s.writeHandle, 'meta-truncated-project'))
+      .projectUid;
   });
 
   afterEach(async () => {
@@ -147,9 +185,24 @@ describe('queryIssuesWithMeta — view:list, filter.grep + filter.semantic toget
     // that one id, however generous `limit` is. The intersection therefore
     // drops the other two REAL grep matches — not because the caller's
     // `limit` (10) was reached, but because of how the two channels compose.
-    const indexed = await createIssue(s.writeHandle, { project: projectUid, title: 'zzgizmoterm alpha', body: 'zzgizmoterm alpha body', by: 'filer' });
-    const unindexedB = await createIssue(s.writeHandle, { project: projectUid, title: 'zzgizmoterm beta', body: 'zzgizmoterm beta body', by: 'filer' });
-    const unindexedC = await createIssue(s.writeHandle, { project: projectUid, title: 'zzgizmoterm gamma', body: 'zzgizmoterm gamma body', by: 'filer' });
+    const indexed = await createIssue(s.writeHandle, {
+      project: projectUid,
+      title: 'zzgizmoterm alpha',
+      body: 'zzgizmoterm alpha body',
+      by: 'filer',
+    });
+    const unindexedB = await createIssue(s.writeHandle, {
+      project: projectUid,
+      title: 'zzgizmoterm beta',
+      body: 'zzgizmoterm beta body',
+      by: 'filer',
+    });
+    const unindexedC = await createIssue(s.writeHandle, {
+      project: projectUid,
+      title: 'zzgizmoterm gamma',
+      body: 'zzgizmoterm gamma body',
+      by: 'filer',
+    });
     expect(indexed.uid).not.toBe(unindexedB.uid);
     expect(indexed.uid).not.toBe(unindexedC.uid);
 
@@ -162,7 +215,8 @@ describe('queryIssuesWithMeta — view:list, filter.grep + filter.semantic toget
       limit: 10,
     });
 
-    if (result.view !== 'list') throw new Error(`expected view 'list', got '${result.view}'`);
+    if (result.view !== 'list')
+      throw new Error(`expected view 'list', got '${result.view}'`);
 
     // The true count of issues matching the grep condition (semantic never
     // narrows — see query.ts's own doc comment on this branch).
@@ -175,7 +229,12 @@ describe('queryIssuesWithMeta — view:list, filter.grep + filter.semantic toget
   });
 
   it('truncated is absent when the grep+semantic intersection recovers every true match', async () => {
-    const only = await createIssue(s.writeHandle, { project: projectUid, title: 'zzsoloterm only', body: 'zzsoloterm only body', by: 'filer' });
+    const only = await createIssue(s.writeHandle, {
+      project: projectUid,
+      title: 'zzsoloterm only',
+      body: 'zzsoloterm only body',
+      by: 'filer',
+    });
     await s.indexIssue(only.uid!, [1, 0, 0]);
     s.pinEmbedding('zzsoloterm query', [1, 0, 0]);
 
@@ -185,7 +244,8 @@ describe('queryIssuesWithMeta — view:list, filter.grep + filter.semantic toget
       limit: 10,
     });
 
-    if (result.view !== 'list') throw new Error(`expected view 'list', got '${result.view}'`);
+    if (result.view !== 'list')
+      throw new Error(`expected view 'list', got '${result.view}'`);
     expect(meta!.total).toBe(1);
     expect(meta!.returned).toBe(1);
     expect(meta!.truncated).toBeUndefined();

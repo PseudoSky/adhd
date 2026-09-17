@@ -82,10 +82,23 @@ describe('backlog web ui (nx serve backlog seam)', () => {
   beforeAll(async () => {
     [apiPort, webPort] = await Promise.all([freePort(), freePort()]);
     storeDir = mkdtempSync(join(tmpdir(), 'backlog-web-ui-'));
-    proc = spawn(process.execPath, [RUN_WEB_UI, '--api-port', String(apiPort), '--web-port', String(webPort)], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, ADHD_BACKLOG_DATABASE_PATH: join(storeDir, 'backlog.db') },
-    });
+    proc = spawn(
+      process.execPath,
+      [
+        RUN_WEB_UI,
+        '--api-port',
+        String(apiPort),
+        '--web-port',
+        String(webPort),
+      ],
+      {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          ADHD_BACKLOG_DATABASE_PATH: join(storeDir, 'backlog.db'),
+        },
+      }
+    );
     let bootLog = '';
     proc.stderr?.on('data', (d) => (bootLog += String(d)));
     proc.stdout?.on('data', (d) => (bootLog += String(d)));
@@ -94,27 +107,36 @@ describe('backlog web ui (nx serve backlog seam)', () => {
     await waitFor(
       async () => {
         try {
-          const res = await fetch(`http://127.0.0.1:${webPort}/`, { signal: AbortSignal.timeout(1500) });
-          if (res.ok) return (await res.text()).includes('<title>backlog web ui');
+          const res = await fetch(`http://127.0.0.1:${webPort}/`, {
+            signal: AbortSignal.timeout(1500),
+          });
+          if (res.ok)
+            return (await res.text()).includes('<title>backlog web ui');
           return false;
         } catch {
           return false;
         }
       },
       45_000,
-      'web ui over the proxy (orchestrator + API + web server boot)',
+      'web ui over the proxy (orchestrator + API + web server boot)'
     );
 
     // `create` only ever RESOLVES a `project` (SPEC: never mints one), so
     // seed it through the real proxy — the `upsertProject` verb — before any
     // test tries to create against it. This is the same HTTP seam every
     // other assertion in this file drives, not a backdoor into the store.
-    const seeded = await post('/backlog/upsert-project', { name: PROJECT_NAME, by: 'web-ui.spec:seed' });
+    const seeded = await post('/backlog/upsert-project', {
+      name: PROJECT_NAME,
+      by: 'web-ui.spec:seed',
+    });
     if (seeded.status !== 200 || !seeded.json.ok) {
-      throw new Error(`project seed failed: ${seeded.status} ${JSON.stringify(seeded.json)}`);
+      throw new Error(
+        `project seed failed: ${seeded.status} ${JSON.stringify(seeded.json)}`
+      );
     }
     projectUid = seeded.json.data?.project?.uid ?? '';
-    if (!projectUid) throw new Error('upsertProject did not return a project uid');
+    if (!projectUid)
+      throw new Error('upsertProject did not return a project uid');
   }, 60_000);
 
   // NOTE: no afterEach killer here — the orchestrator lives for the whole
@@ -128,12 +150,18 @@ describe('backlog web ui (nx serve backlog seam)', () => {
     if (storeDir) rmSync(storeDir, { recursive: true, force: true });
   });
 
-  function post(path: string, input: unknown): Promise<{ status: number; json: ApiEnvelope }> {
+  function post(
+    path: string,
+    input: unknown
+  ): Promise<{ status: number; json: ApiEnvelope }> {
     return fetch(`http://127.0.0.1:${webPort}${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: { input } }),
-    }).then(async (res) => ({ status: res.status, json: (await res.json()) as ApiEnvelope }));
+    }).then(async (res) => ({
+      status: res.status,
+      json: (await res.json()) as ApiEnvelope,
+    }));
   }
 
   it('serves the UI at / (static file, same origin as the API)', async () => {
@@ -150,7 +178,10 @@ describe('backlog web ui (nx serve backlog seam)', () => {
 
   it('round-trips create → query → get through the proxy against an isolated store', async () => {
     // Fresh isolated store, scoped to the seeded project: query is empty.
-    const empty = await post('/backlog/query', { view: 'list', filter: { project: projectUid } });
+    const empty = await post('/backlog/query', {
+      view: 'list',
+      filter: { project: projectUid },
+    });
     expect(empty.status).toBe(200);
     expect(empty.json.ok).toBe(true);
     expect(empty.json.data.items).toEqual([]);
@@ -172,12 +203,18 @@ describe('backlog web ui (nx serve backlog seam)', () => {
 
     // Query sees exactly the uid `create` returned — identity is a single
     // opaque global `uid`, so the teeth here are exact-match, not a pattern.
-    const listed = await post('/backlog/query', { view: 'list', filter: { project: projectUid } });
+    const listed = await post('/backlog/query', {
+      view: 'list',
+      filter: { project: projectUid },
+    });
     expect(listed.json.ok).toBe(true);
     expect(listed.json.data?.items?.map((i) => i.uid)).toContain(uid);
 
     // Get resolves the SAME uid and returns the body that was written.
-    const got = await post('/backlog/get', { uid, fields: ['uid', 'title', 'body'] });
+    const got = await post('/backlog/get', {
+      uid,
+      fields: ['uid', 'title', 'body'],
+    });
     expect(got.json.ok).toBe(true);
     expect(got.json.data.uid).toBe(uid);
     expect(got.json.data.title).toBe('web ui round trip');
@@ -188,11 +225,16 @@ describe('backlog web ui (nx serve backlog seam)', () => {
     // A malformed input is rejected by the API's validate layer with a 400
     // error envelope — the proxy must pass BOTH the status and the JSON
     // through so the browser can render the message instead of hanging.
-    const res = await post('/backlog/query', { view: 'list', bogus: true } as never);
+    const res = await post('/backlog/query', {
+      view: 'list',
+      bogus: true,
+    } as never);
     expect(res.status).toBe(400);
     // validate-layer error envelope: { code, message } with the offending key named.
     expect(res.json.code).toBe('invalid_argument');
-    expect(String(res.json.message ?? '')).toContain('must NOT have additional properties');
+    expect(String(res.json.message ?? '')).toContain(
+      'must NOT have additional properties'
+    );
   });
 
   /**
@@ -219,14 +261,20 @@ describe('backlog web ui (nx serve backlog seam)', () => {
   async function loadUiDom(): Promise<InstanceType<typeof JSDOM>> {
     const res = await fetch(`http://127.0.0.1:${webPort}/`);
     const html = await res.text();
-    const stripped = html.replace(/<script src="https:\/\/cdn\.jsdelivr\.net[^"]*"><\/script>\s*/g, '');
+    const stripped = html.replace(
+      /<script src="https:\/\/cdn\.jsdelivr\.net[^"]*"><\/script>\s*/g,
+      ''
+    );
     const dom = new JSDOM(stripped, {
       runScripts: 'dangerously',
       url: `http://127.0.0.1:${webPort}/`,
       pretendToBeVisual: true,
       beforeParse(window) {
         window.fetch = ((input: string, init?: RequestInit) =>
-          fetch(new URL(input, window.location.href).toString(), init)) as typeof fetch;
+          fetch(
+            new URL(input, window.location.href).toString(),
+            init
+          )) as typeof fetch;
         window.prompt = () => 'deleted via jsdom-driven web-ui.spec';
         window.confirm = () => true;
       },
@@ -240,10 +288,12 @@ describe('backlog web ui (nx serve backlog seam)', () => {
    *  a user's ⌘/Ctrl-click multi-select. */
   function ctrlClickCard(win: Window, uid: string): void {
     const card = [...win.document.querySelectorAll('.card')].find(
-      (c) => c.querySelector('.id')?.textContent === uid,
+      (c) => c.querySelector('.id')?.textContent === uid
     );
     if (!card) throw new Error(`no rendered card found for uid ${uid}`);
-    card.dispatchEvent(new win.MouseEvent('click', { bubbles: true, ctrlKey: true }));
+    card.dispatchEvent(
+      new win.MouseEvent('click', { bubbles: true, ctrlKey: true })
+    );
   }
 
   it("every verb this UI's own script calls resolves to a real mounted endpoint — no admin, no dead verbs", async () => {
@@ -253,17 +303,21 @@ describe('backlog web ui (nx serve backlog seam)', () => {
     // every `apiCall('<verb>', …)` and every batch `operation: 'backlog/<verb>'`
     // literally present in the shipped script.
     const calledVerbs = new Set<string>();
-    for (const m of html.matchAll(/apiCall\('([a-z-]+)'/g)) calledVerbs.add(m[1]);
-    for (const m of html.matchAll(/operation:\s*'backlog\/([a-z-]+)'/g)) calledVerbs.add(m[1]);
+    for (const m of html.matchAll(/apiCall\('([a-z-]+)'/g))
+      calledVerbs.add(m[1]);
+    for (const m of html.matchAll(/operation:\s*'backlog\/([a-z-]+)'/g))
+      calledVerbs.add(m[1]);
     expect(calledVerbs.size).toBeGreaterThan(0);
 
     const openapiRes = await fetch(`http://127.0.0.1:${apiPort}/_meta/openapi`);
     expect(openapiRes.status).toBe(200);
-    const openapi = (await openapiRes.json()) as { paths?: Record<string, unknown> };
+    const openapi = (await openapiRes.json()) as {
+      paths?: Record<string, unknown>;
+    };
     const mountedVerbs = new Set(
       Object.keys(openapi.paths ?? {})
         .map((p) => p.match(/^\/backlog\/([a-z-]+)/)?.[1])
-        .filter((v): v is string => Boolean(v)),
+        .filter((v): v is string => Boolean(v))
     );
     for (const verb of calledVerbs) {
       expect(mountedVerbs.has(verb)).toBe(true);
@@ -272,12 +326,19 @@ describe('backlog web ui (nx serve backlog seam)', () => {
 
   it("the create form's real payload-construction logic (createItem()) creates an issue through the proxy", async () => {
     const dom = await loadUiDom();
-    const { document, window } = dom.window as unknown as { document: Document; window: Record<string, (...a: unknown[]) => unknown> };
-    (document.getElementById('c-project') as HTMLInputElement).value = projectUid;
-    (document.getElementById('c-title') as HTMLInputElement).value = 'jsdom-driven create';
-    (document.getElementById('c-body') as HTMLTextAreaElement).value = 'built by the real createItem() in index.html';
+    const { document, window } = dom.window as unknown as {
+      document: Document;
+      window: Record<string, (...a: unknown[]) => unknown>;
+    };
+    (document.getElementById('c-project') as HTMLInputElement).value =
+      projectUid;
+    (document.getElementById('c-title') as HTMLInputElement).value =
+      'jsdom-driven create';
+    (document.getElementById('c-body') as HTMLTextAreaElement).value =
+      'built by the real createItem() in index.html';
     (document.getElementById('c-kind') as HTMLInputElement).value = 'bug';
-    (document.getElementById('c-by') as HTMLInputElement).value = 'web-ui.spec:jsdom';
+    (document.getElementById('c-by') as HTMLInputElement).value =
+      'web-ui.spec:jsdom';
 
     await (window.createItem as () => Promise<unknown>)();
 
@@ -286,7 +347,10 @@ describe('backlog web ui (nx serve backlog seam)', () => {
     const uid = hint.replace('created ', '').trim();
     expect(uid).toBeTruthy();
 
-    const got = await post('/backlog/get', { uid, fields: ['uid', 'title', 'kind'] });
+    const got = await post('/backlog/get', {
+      uid,
+      fields: ['uid', 'title', 'kind'],
+    });
     expect(got.json.ok).toBe(true);
     expect(got.json.data?.title).toBe('jsdom-driven create');
     expect(got.json.data?.kind).toBe('bug');
@@ -295,34 +359,52 @@ describe('backlog web ui (nx serve backlog seam)', () => {
 
   it("the edit form's real payload-construction logic (selectItem()+startEdit()+saveItem()) updates+transitions an issue through the proxy, following the minted uid", async () => {
     const dom = await loadUiDom();
-    const { document, window } = dom.window as unknown as { document: Document; window: Record<string, (...a: unknown[]) => unknown> };
+    const { document, window } = dom.window as unknown as {
+      document: Document;
+      window: Record<string, (...a: unknown[]) => unknown>;
+    };
 
     // Seed through the real proxy directly (not the UI) so this test is
     // scoped to proving selectItem()/startEdit()/saveItem()'s OWN payload
     // construction, not `create`'s.
     const seeded = await post('/backlog/create', {
-      title: 'edit target', body: 'first body', project: projectUid, by: 'web-ui.spec:seed2',
+      title: 'edit target',
+      body: 'first body',
+      project: projectUid,
+      by: 'web-ui.spec:seed2',
     });
     const seedUid = seeded.json.data?.uid as string;
 
     // Real click-equivalent: selectItem() is the same function a card click
     // invokes — it performs the real `get` and populates the detail pane +
     // internal `state.lastDetail` that startEdit() reads.
-    await (window.selectItem as (uid: string, skip: boolean) => Promise<void>)(seedUid, true);
-    expect(document.getElementById('detail')?.textContent).toContain('edit target');
+    await (window.selectItem as (uid: string, skip: boolean) => Promise<void>)(
+      seedUid,
+      true
+    );
+    expect(document.getElementById('detail')?.textContent).toContain(
+      'edit target'
+    );
 
     (window.startEdit as () => void)();
-    expect((document.getElementById('c-project') as HTMLInputElement).value).toBe(projectUid);
-    (document.getElementById('c-body') as HTMLTextAreaElement).value = 'second body — triggers a supersede';
-    (document.getElementById('c-status') as HTMLInputElement).value = 'closed-by-webui-spec';
-    (document.getElementById('c-note') as HTMLInputElement).value = 'closed via jsdom-driven saveItem()';
-    (document.getElementById('c-by') as HTMLInputElement).value = 'web-ui.spec:jsdom';
+    expect(
+      (document.getElementById('c-project') as HTMLInputElement).value
+    ).toBe(projectUid);
+    (document.getElementById('c-body') as HTMLTextAreaElement).value =
+      'second body — triggers a supersede';
+    (document.getElementById('c-status') as HTMLInputElement).value =
+      'closed-by-webui-spec';
+    (document.getElementById('c-note') as HTMLInputElement).value =
+      'closed via jsdom-driven saveItem()';
+    (document.getElementById('c-by') as HTMLInputElement).value =
+      'web-ui.spec:jsdom';
 
     await (window.saveItem as () => Promise<unknown>)();
 
     // saveItem() re-selects the new item on success — read the new uid off
     // the REAL rendered detail pane, never off internal JS state.
-    const idLine = document.querySelector('#detail .id-line')?.textContent ?? '';
+    const idLine =
+      document.querySelector('#detail .id-line')?.textContent ?? '';
     const newUid = idLine.split(' · ')[0]?.trim();
     expect(newUid).toBeTruthy();
     expect(newUid).not.toBe(seedUid);
@@ -333,14 +415,20 @@ describe('backlog web ui (nx serve backlog seam)', () => {
     // snapshot — which is what this path used to do — hands a caller stale
     // content with no signal that the issue moved. Asserted over the REAL
     // HTTP surface, so it covers the wire envelope and not just the resolver.
-    const stale = await post('/backlog/get', { uid: seedUid, fields: ['uid', 'body'] });
+    const stale = await post('/backlog/get', {
+      uid: seedUid,
+      fields: ['uid', 'body'],
+    });
     expect(stale.json.ok).toBe(false);
     // The error is actionable: it names where the issue actually lives now.
     expect(JSON.stringify(stale.json.error)).toContain(newUid);
     // And it never silently serves the pre-edit body.
     expect(stale.json.data?.body).toBeUndefined();
 
-    const after = await post('/backlog/get', { uid: newUid, fields: ['uid', 'body', 'status'] });
+    const after = await post('/backlog/get', {
+      uid: newUid,
+      fields: ['uid', 'body', 'status'],
+    });
     expect(after.json.ok).toBe(true);
     expect(after.json.data?.body).toBe('second body — triggers a supersede');
     expect(after.json.data?.status).toBe('closed-by-webui-spec');
@@ -349,18 +437,27 @@ describe('backlog web ui (nx serve backlog seam)', () => {
 
   it("the batch bar's real payload-construction logic (batchSetStatus()/batchDelete()) drives _batch/action through the proxy", async () => {
     const dom = await loadUiDom();
-    const { document, window } = dom.window as unknown as { document: Document; window: Record<string, (...a: unknown[]) => unknown> };
+    const { document, window } = dom.window as unknown as {
+      document: Document;
+      window: Record<string, (...a: unknown[]) => unknown>;
+    };
 
     // Distinct titles/bodies (and duplicateAction:'force') — two near-identical
     // creates back-to-back would otherwise trip the real dedupe gate and the
     // second `create` would return `created:false` with no uid.
     const a = await post('/backlog/create', {
-      title: 'batch item alpha', body: 'first distinct batch payload for web-ui.spec', project: projectUid,
-      by: 'web-ui.spec:batch', duplicateAction: 'force',
+      title: 'batch item alpha',
+      body: 'first distinct batch payload for web-ui.spec',
+      project: projectUid,
+      by: 'web-ui.spec:batch',
+      duplicateAction: 'force',
     });
     const b = await post('/backlog/create', {
-      title: 'batch item bravo', body: 'second distinct batch payload for web-ui.spec', project: projectUid,
-      by: 'web-ui.spec:batch', duplicateAction: 'force',
+      title: 'batch item bravo',
+      body: 'second distinct batch payload for web-ui.spec',
+      project: projectUid,
+      by: 'web-ui.spec:batch',
+      duplicateAction: 'force',
     });
     const uidA = a.json.data?.uid as string;
     const uidB = b.json.data?.uid as string;
@@ -370,10 +467,14 @@ describe('backlog web ui (nx serve backlog seam)', () => {
     await (window.loadItems as () => Promise<void>)();
     ctrlClickCard(window as unknown as Window, uidA);
     ctrlClickCard(window as unknown as Window, uidB);
-    expect(document.getElementById('batch-bar')?.classList.contains('show')).toBe(true);
+    expect(
+      document.getElementById('batch-bar')?.classList.contains('show')
+    ).toBe(true);
 
-    (document.getElementById('b-status') as HTMLInputElement).value = 'batch-closed-by-webui-spec';
-    (document.getElementById('b-note') as HTMLInputElement).value = 'batch transition via jsdom';
+    (document.getElementById('b-status') as HTMLInputElement).value =
+      'batch-closed-by-webui-spec';
+    (document.getElementById('b-note') as HTMLInputElement).value =
+      'batch transition via jsdom';
     await (window.batchSetStatus as () => Promise<unknown>)();
 
     const gotA = await post('/backlog/get', { uid: uidA, fields: ['status'] });
@@ -399,11 +500,18 @@ describe('backlog web ui (nx serve backlog seam)', () => {
   it('shuts down cleanly on SIGTERM: orchestrator exits 0 and the API port refuses connections', async () => {
     const p = proc;
     if (!p) throw new Error('orchestrator was not started (beforeAll failed?)');
-    const exited = new Promise<number | null>((resolve) => p.on('exit', (code) => resolve(code)));
+    const exited = new Promise<number | null>((resolve) =>
+      p.on('exit', (code) => resolve(code))
+    );
     p.kill('SIGTERM');
     const code = await Promise.race([
       exited,
-      new Promise<number | null>((_, reject) => setTimeout(() => reject(new Error('orchestrator did not exit after SIGTERM')), 20_000)),
+      new Promise<number | null>((_, reject) =>
+        setTimeout(
+          () => reject(new Error('orchestrator did not exit after SIGTERM')),
+          20_000
+        )
+      ),
     ]);
     expect(code).toBe(0);
 
@@ -411,14 +519,16 @@ describe('backlog web ui (nx serve backlog seam)', () => {
     await waitFor(
       async () => {
         try {
-          await fetch(`http://127.0.0.1:${apiPort}/_meta/openapi`, { signal: AbortSignal.timeout(1000) });
+          await fetch(`http://127.0.0.1:${apiPort}/_meta/openapi`, {
+            signal: AbortSignal.timeout(1000),
+          });
           return false;
         } catch {
           return true;
         }
       },
       10_000,
-      'api port to refuse connections after shutdown',
+      'api port to refuse connections after shutdown'
     );
     proc = undefined;
   });

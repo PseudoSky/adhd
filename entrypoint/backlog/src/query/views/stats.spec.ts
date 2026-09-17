@@ -29,12 +29,23 @@ import {
   invalidateEdgeTx,
   type IWriteStoreHandle,
 } from '../../write/tx.js';
-import { mintOrResolveCatalogTx, resolveEdgeKindTx } from '../../write/catalog.js';
+import {
+  mintOrResolveCatalogTx,
+  resolveEdgeKindTx,
+} from '../../write/catalog.js';
 import { writeAudit } from '../../write/audit.js';
-import { InvalidArgumentError, IssueNotFoundError } from '../../write/errors.js';
+import {
+  InvalidArgumentError,
+  IssueNotFoundError,
+} from '../../write/errors.js';
 import { createIssue } from '../../write/create-issue.js';
 import { deleteIssue } from '../../write/delete.js';
-import { openTestIssueStore, removeTestIssueStoreDir, seedProject, type TestIssueStore } from '../../test/helpers/open-test-issue-store.js';
+import {
+  openTestIssueStore,
+  removeTestIssueStoreDir,
+  seedProject,
+  type TestIssueStore,
+} from '../../test/helpers/open-test-issue-store.js';
 import { freshTmpDir } from '../../test/helpers/tmp-store.js';
 import { openCurve, partOfRollup, priorityMatrix } from './stats.js';
 
@@ -51,7 +62,9 @@ afterEach(async () => {
   }
 });
 
-async function setupStore(name: string): Promise<{ store: TestIssueStore; projectUid: string }> {
+async function setupStore(
+  name: string
+): Promise<{ store: TestIssueStore; projectUid: string }> {
   const dir = freshTmpDir(name);
   tmpDirs.push(dir);
   const store = await openTestIssueStore(`${dir}/backlog.db`);
@@ -63,13 +76,25 @@ async function setupStore(name: string): Promise<{ store: TestIssueStore; projec
 /** Simulates the not-yet-built `transition` write verb using the SAME frozen `tx.ts`/`catalog.ts`/`audit.ts` primitives it will itself call. */
 async function simulateTransition(
   store: IWriteStoreHandle & { graph: TestIssueStore['graph'] },
-  input: { uid: string; toStatusName: string; toTerminal: boolean; actor: string; at?: string },
+  input: {
+    uid: string;
+    toStatusName: string;
+    toTerminal: boolean;
+    actor: string;
+    at?: string;
+  }
 ): Promise<{ from: string; to: string; at: string }> {
   const issueBefore = await store.graph.getNodeByUid(input.uid);
   if (!issueBefore) throw new Error(`test setup: no such issue ${input.uid}`);
-  const currentStatusEdges = await store.graph.getEdges({ src: issueBefore.id, rel: 'has_status' });
+  const currentStatusEdges = await store.graph.getEdges({
+    src: issueBefore.id,
+    rel: 'has_status',
+  });
   const oldStatusId = currentStatusEdges[0]?.dst;
-  if (oldStatusId === undefined) throw new Error(`test setup: issue ${input.uid} carries no has_status edge`);
+  if (oldStatusId === undefined)
+    throw new Error(
+      `test setup: issue ${input.uid} carries no has_status edge`
+    );
   const [oldStatus] = await store.graph.getNodesByIds([oldStatusId]);
   const fromName = oldStatus?.name ?? '';
 
@@ -78,7 +103,12 @@ async function simulateTransition(
     const issueRow = await getNodeByUidTx(tx, input.uid);
     if (!issueRow) throw new Error('test setup: issue vanished mid-transition');
 
-    await invalidateEdgeTx(tx, { srcRowid: issueRow.rowid, dstRowid: oldStatusId, rel: 'has_status', at: now });
+    await invalidateEdgeTx(tx, {
+      srcRowid: issueRow.rowid,
+      dstRowid: oldStatusId,
+      rel: 'has_status',
+      at: now,
+    });
 
     const newStatus = await mintOrResolveCatalogTx(tx, {
       catalogKind: 'status',
@@ -90,9 +120,15 @@ async function simulateTransition(
     const hasStatusRule = await resolveEdgeKindTx(tx, 'has_status');
     await writeEdgeTx(tx, {
       at: now,
-      srcRowid: issueRow.rowid, srcUid: issueRow.uid, srcKind: 'issue',
-      dstRowid: newStatus.rowid, dstUid: newStatus.uid, dstKind: 'status',
-      rel: 'has_status', rule: hasStatusRule, typePolicy: store.typePolicy,
+      srcRowid: issueRow.rowid,
+      srcUid: issueRow.uid,
+      srcKind: 'issue',
+      dstRowid: newStatus.rowid,
+      dstUid: newStatus.uid,
+      dstKind: 'status',
+      rel: 'has_status',
+      rule: hasStatusRule,
+      typePolicy: store.typePolicy,
     });
 
     await writeAudit({
@@ -113,18 +149,28 @@ async function simulateTransition(
 }
 
 /** Simulates the not-yet-built `relate` write verb's `part_of` composition — a bare `writeEdgeTx` against the frozen `edge_kind` rule, exactly what `relate` will itself do. */
-async function writePartOfEdge(store: TestIssueStore, input: { childUid: string; parentUid: string }): Promise<void> {
+async function writePartOfEdge(
+  store: TestIssueStore,
+  input: { childUid: string; parentUid: string }
+): Promise<void> {
   await executeWriteTransaction(store, async (tx) => {
     const now = nowISO();
     const child = await getNodeByUidTx(tx, input.childUid);
     const parent = await getNodeByUidTx(tx, input.parentUid);
-    if (!child || !parent) throw new Error('test setup: part_of endpoint missing');
+    if (!child || !parent)
+      throw new Error('test setup: part_of endpoint missing');
     const rule = await resolveEdgeKindTx(tx, 'part_of');
     await writeEdgeTx(tx, {
       at: now,
-      srcRowid: child.rowid, srcUid: child.uid, srcKind: 'issue',
-      dstRowid: parent.rowid, dstUid: parent.uid, dstKind: 'issue',
-      rel: 'part_of', rule, typePolicy: store.typePolicy,
+      srcRowid: child.rowid,
+      srcUid: child.uid,
+      srcKind: 'issue',
+      dstRowid: parent.rowid,
+      dstUid: parent.uid,
+      dstKind: 'issue',
+      rel: 'part_of',
+      rule,
+      typePolicy: store.typePolicy,
     });
   });
 }
@@ -133,13 +179,47 @@ describe('priorityMatrix — status-aware (BUG-023)', () => {
   it('defaults to OPEN-only counts, and an explicit terminal filter is required to see closed items', async () => {
     const { store, projectUid } = await setupStore('priority-matrix-status');
 
-    await createIssue(store, { title: 'high open 1', body: 'b', project: projectUid, priority: 'HIGH', by: 'agent:t' });
-    await createIssue(store, { title: 'high open 2', body: 'b', project: projectUid, priority: 'HIGH', by: 'agent:t' });
-    const highClosed = await createIssue(store, { title: 'high closed', body: 'b', project: projectUid, priority: 'HIGH', by: 'agent:t' });
-    await createIssue(store, { title: 'low open', body: 'b', project: projectUid, priority: 'LOW', by: 'agent:t' });
-    await createIssue(store, { title: 'no priority', body: 'b', project: projectUid, by: 'agent:t' }); // unassigned
+    await createIssue(store, {
+      title: 'high open 1',
+      body: 'b',
+      project: projectUid,
+      priority: 'HIGH',
+      by: 'agent:t',
+    });
+    await createIssue(store, {
+      title: 'high open 2',
+      body: 'b',
+      project: projectUid,
+      priority: 'HIGH',
+      by: 'agent:t',
+    });
+    const highClosed = await createIssue(store, {
+      title: 'high closed',
+      body: 'b',
+      project: projectUid,
+      priority: 'HIGH',
+      by: 'agent:t',
+    });
+    await createIssue(store, {
+      title: 'low open',
+      body: 'b',
+      project: projectUid,
+      priority: 'LOW',
+      by: 'agent:t',
+    });
+    await createIssue(store, {
+      title: 'no priority',
+      body: 'b',
+      project: projectUid,
+      by: 'agent:t',
+    }); // unassigned
 
-    await simulateTransition(store, { uid: highClosed.uid, toStatusName: 'done', toTerminal: true, actor: 'agent:t' });
+    await simulateTransition(store, {
+      uid: highClosed.uid,
+      toStatusName: 'done',
+      toTerminal: true,
+      actor: 'agent:t',
+    });
 
     // DEFAULT (no filter.status at all) — SPEC.md §5: "counts non-terminal (open) items by default."
     const defaultResult = await priorityMatrix(store);
@@ -156,23 +236,41 @@ describe('priorityMatrix — status-aware (BUG-023)', () => {
     // and this assertion would be vacuous; asserting the two numbers DIFFER
     // is what proves the default is actually status-scoped, not accidentally
     // equal to the unscoped total.
-    const allResult = await priorityMatrix(store, { filter: { status: 'all' } });
+    const allResult = await priorityMatrix(store, {
+      filter: { status: 'all' },
+    });
     const highAll = allResult.rows.find((r) => r.priority === 'HIGH');
     expect(highAll?.count).toBe(3);
     expect(highAll?.count).not.toBe(high?.count);
 
     // Explicit terminal filter surfaces the closed item.
-    const closedResult = await priorityMatrix(store, { filter: { status: 'closed' } });
+    const closedResult = await priorityMatrix(store, {
+      filter: { status: 'closed' },
+    });
     const highClosedRow = closedResult.rows.find((r) => r.priority === 'HIGH');
     expect(highClosedRow?.count).toBe(1);
     expect(closedResult.statusScope).toBe('closed');
   });
 
   it('rows are ordered by rank ascending, and scoping (project/component/kind) narrows the matrix', async () => {
-    const { store, projectUid } = await setupStore('priority-matrix-scope-rank');
+    const { store, projectUid } = await setupStore(
+      'priority-matrix-scope-rank'
+    );
     // Priority mint order determines rank (nextPriorityRankTx: one past current max) — LOW minted first gets rank 0, HIGH minted second gets rank 1.
-    await createIssue(store, { title: 'a', body: 'b', project: projectUid, priority: 'LOW', by: 'agent:t' });
-    await createIssue(store, { title: 'b', body: 'b', project: projectUid, priority: 'HIGH', by: 'agent:t' });
+    await createIssue(store, {
+      title: 'a',
+      body: 'b',
+      project: projectUid,
+      priority: 'LOW',
+      by: 'agent:t',
+    });
+    await createIssue(store, {
+      title: 'b',
+      body: 'b',
+      project: projectUid,
+      priority: 'HIGH',
+      by: 'agent:t',
+    });
 
     const result = await priorityMatrix(store, { filter: { status: 'all' } });
     expect(result.rows.map((r) => r.priority)).toEqual(['LOW', 'HIGH']);
@@ -181,16 +279,40 @@ describe('priorityMatrix — status-aware (BUG-023)', () => {
 
   it('rejects a filter dimension it does not compose with, naming the field', async () => {
     const { store, projectUid } = await setupStore('priority-matrix-reject');
-    await createIssue(store, { title: 'x', body: 'b', project: projectUid, by: 'agent:t' });
-    await expect(priorityMatrix(store, { filter: { grep: 'x' } })).rejects.toBeInstanceOf(InvalidArgumentError);
+    await createIssue(store, {
+      title: 'x',
+      body: 'b',
+      project: projectUid,
+      by: 'agent:t',
+    });
+    await expect(
+      priorityMatrix(store, { filter: { grep: 'x' } })
+    ).rejects.toBeInstanceOf(InvalidArgumentError);
   });
 
   it('never counts a soft-deleted issue in a priority row, nor lets it inflate "unassigned" — deleteIssue invalidates only the node, never its edges', async () => {
     const { store, projectUid } = await setupStore('priority-matrix-deleted');
 
-    const withPriority = await createIssue(store, { title: 'has priority, will be deleted', body: 'b', project: projectUid, priority: 'HIGH', by: 'agent:t' });
-    const withoutPriority = await createIssue(store, { title: 'no priority, will be deleted', body: 'b', project: projectUid, by: 'agent:t' });
-    await createIssue(store, { title: 'survives', body: 'b', project: projectUid, priority: 'HIGH', by: 'agent:t' });
+    const withPriority = await createIssue(store, {
+      title: 'has priority, will be deleted',
+      body: 'b',
+      project: projectUid,
+      priority: 'HIGH',
+      by: 'agent:t',
+    });
+    const withoutPriority = await createIssue(store, {
+      title: 'no priority, will be deleted',
+      body: 'b',
+      project: projectUid,
+      by: 'agent:t',
+    });
+    await createIssue(store, {
+      title: 'survives',
+      body: 'b',
+      project: projectUid,
+      priority: 'HIGH',
+      by: 'agent:t',
+    });
 
     const before = await priorityMatrix(store);
     expect(before.rows.find((r) => r.priority === 'HIGH')?.count).toBe(2); // withPriority + survives
@@ -200,8 +322,16 @@ describe('priorityMatrix — status-aware (BUG-023)', () => {
     // `invalidate` bypass. `deleteIssue` (write/delete.ts) stamps ONLY the
     // issue's own node row; it never invalidates `has_status`/`has_priority`
     // edges, so both deleted issues' edges remain live on disk after this.
-    await deleteIssue(store, { uid: withPriority.uid, reason: 'test: delete after has_priority edge written', by: 'closer' });
-    await deleteIssue(store, { uid: withoutPriority.uid, reason: 'test: delete an unassigned open issue', by: 'closer' });
+    await deleteIssue(store, {
+      uid: withPriority.uid,
+      reason: 'test: delete after has_priority edge written',
+      by: 'closer',
+    });
+    await deleteIssue(store, {
+      uid: withoutPriority.uid,
+      reason: 'test: delete an unassigned open issue',
+      by: 'closer',
+    });
 
     const after = await priorityMatrix(store);
     const highAfter = after.rows.find((r) => r.priority === 'HIGH');
@@ -214,8 +344,13 @@ describe('priorityMatrix — status-aware (BUG-023)', () => {
     // against the real store, not a remembered number. Confirms the edge
     // genuinely DOES outlive the deleted node (the root cause), and that the
     // fixed `priorityMatrix` result diverges from that naive scan.
-    const highPriorityNode = (await store.graph.queryNodes({ kind: 'priority', liveOnly: true })).find((p) => p.name === 'HIGH')!;
-    const naiveHighEdges = await store.graph.getEdges({ dst: highPriorityNode.id, rel: 'has_priority' });
+    const highPriorityNode = (
+      await store.graph.queryNodes({ kind: 'priority', liveOnly: true })
+    ).find((p) => p.name === 'HIGH')!;
+    const naiveHighEdges = await store.graph.getEdges({
+      dst: highPriorityNode.id,
+      rel: 'has_priority',
+    });
     expect(naiveHighEdges.length).toBe(2); // withPriority's (dead) edge + survives — the edge outlives the node
     expect(naiveHighEdges.length).not.toBe(highAfter?.count);
   });
@@ -224,16 +359,44 @@ describe('priorityMatrix — status-aware (BUG-023)', () => {
 describe('partOfRollup — transitive, not one-level (FEAT-005)', () => {
   it('counts every transitive descendant exactly once, deeper than one level', async () => {
     const { store, projectUid } = await setupStore('part-of-rollup-depth');
-    const root = await createIssue(store, { title: 'root', body: 'b', project: projectUid, by: 'agent:t' });
-    const child1 = await createIssue(store, { title: 'child1 (open)', body: 'b', project: projectUid, by: 'agent:t' });
-    const child2 = await createIssue(store, { title: 'child2 (closed)', body: 'b', project: projectUid, by: 'agent:t' });
-    const grandchild = await createIssue(store, { title: 'grandchild (open)', body: 'b', project: projectUid, by: 'agent:t' });
+    const root = await createIssue(store, {
+      title: 'root',
+      body: 'b',
+      project: projectUid,
+      by: 'agent:t',
+    });
+    const child1 = await createIssue(store, {
+      title: 'child1 (open)',
+      body: 'b',
+      project: projectUid,
+      by: 'agent:t',
+    });
+    const child2 = await createIssue(store, {
+      title: 'child2 (closed)',
+      body: 'b',
+      project: projectUid,
+      by: 'agent:t',
+    });
+    const grandchild = await createIssue(store, {
+      title: 'grandchild (open)',
+      body: 'b',
+      project: projectUid,
+      by: 'agent:t',
+    });
 
     await writePartOfEdge(store, { childUid: child1.uid, parentUid: root.uid });
     await writePartOfEdge(store, { childUid: child2.uid, parentUid: root.uid });
-    await writePartOfEdge(store, { childUid: grandchild.uid, parentUid: child1.uid }); // TWO levels deep from root
+    await writePartOfEdge(store, {
+      childUid: grandchild.uid,
+      parentUid: child1.uid,
+    }); // TWO levels deep from root
 
-    await simulateTransition(store, { uid: child2.uid, toStatusName: 'done', toTerminal: true, actor: 'agent:t' });
+    await simulateTransition(store, {
+      uid: child2.uid,
+      toStatusName: 'done',
+      toTerminal: true,
+      actor: 'agent:t',
+    });
 
     const rollup = await partOfRollup(store, { uid: root.uid });
 
@@ -241,20 +404,35 @@ describe('partOfRollup — transitive, not one-level (FEAT-005)', () => {
     // `computeRollup`) would see exactly `directChildEdges.length` — compute
     // that number independently here and assert it is LESS than
     // `childrenTotal`, proving the grandchild was actually reached.
-    const directChildEdges = await store.graph.getEdges({ dst: (await store.graph.getNodeByUid(root.uid))!.id, rel: 'part_of' });
+    const directChildEdges = await store.graph.getEdges({
+      dst: (await store.graph.getNodeByUid(root.uid))!.id,
+      rel: 'part_of',
+    });
     expect(directChildEdges.length).toBe(2);
     expect(rollup.childrenTotal).toBe(3);
     expect(rollup.childrenTotal).toBeGreaterThan(directChildEdges.length);
 
     expect(rollup.childrenOpen).toBe(2); // child1 + grandchild
     expect(rollup.childrenClosed).toBe(1); // child2
-    expect(new Set(rollup.childrenOpenUids)).toEqual(new Set([child1.uid, grandchild.uid]));
+    expect(new Set(rollup.childrenOpenUids)).toEqual(
+      new Set([child1.uid, grandchild.uid])
+    );
   });
 
   it('excludes a soft-deleted descendant — neither open nor closed work, it is gone', async () => {
     const { store, projectUid } = await setupStore('part-of-rollup-deleted');
-    const root = await createIssue(store, { title: 'root', body: 'b', project: projectUid, by: 'agent:t' });
-    const child = await createIssue(store, { title: 'child', body: 'b', project: projectUid, by: 'agent:t' });
+    const root = await createIssue(store, {
+      title: 'root',
+      body: 'b',
+      project: projectUid,
+      by: 'agent:t',
+    });
+    const child = await createIssue(store, {
+      title: 'child',
+      body: 'b',
+      project: projectUid,
+      by: 'agent:t',
+    });
     await writePartOfEdge(store, { childUid: child.uid, parentUid: root.uid });
 
     const before = await partOfRollup(store, { uid: root.uid });
@@ -269,7 +447,9 @@ describe('partOfRollup — transitive, not one-level (FEAT-005)', () => {
 
   it('throws IssueNotFoundError for an unresolved uid', async () => {
     const { store } = await setupStore('part-of-rollup-missing');
-    await expect(partOfRollup(store, { uid: '00000000-0000-4000-8000-000000000000' })).rejects.toBeInstanceOf(IssueNotFoundError);
+    await expect(
+      partOfRollup(store, { uid: '00000000-0000-4000-8000-000000000000' })
+    ).rejects.toBeInstanceOf(IssueNotFoundError);
   });
 });
 
@@ -277,7 +457,12 @@ describe('openCurve — validAt point-in-time reconstruction', () => {
   it('reconstructs status-at-instant from the audit trail, never the current status', async () => {
     const { store, projectUid } = await setupStore('open-curve-reconstruct');
 
-    const a = await createIssue(store, { title: 'a', body: 'b', project: projectUid, by: 'agent:t' });
+    const a = await createIssue(store, {
+      title: 'a',
+      body: 'b',
+      project: projectUid,
+      by: 'agent:t',
+    });
     // Anchor every sample instant to `a`'s OWN reported `createdAt` (a real
     // value, whatever it is) with large, fixed offsets — deterministic
     // regardless of real wall-clock speed; never a narrow real-time race.
@@ -287,7 +472,13 @@ describe('openCurve — validAt point-in-time reconstruction', () => {
     const transitionAt = new Date(createdAtMs + 120_000).toISOString();
     const afterTransition = new Date(createdAtMs + 180_000).toISOString();
 
-    const transition = await simulateTransition(store, { uid: a.uid, toStatusName: 'done', toTerminal: true, actor: 'agent:t', at: transitionAt });
+    const transition = await simulateTransition(store, {
+      uid: a.uid,
+      toStatusName: 'done',
+      toTerminal: true,
+      actor: 'agent:t',
+      at: transitionAt,
+    });
     expect(transition.to).toBe('done');
 
     // Sample strictly between creation and the transition: the issue's CURRENT
@@ -315,41 +506,88 @@ describe('openCurve — validAt point-in-time reconstruction', () => {
 
   it('rejects filter.status (openness is computed, never filtered) and an unparsable instant', async () => {
     const { store, projectUid } = await setupStore('open-curve-reject');
-    await createIssue(store, { title: 'x', body: 'b', project: projectUid, by: 'agent:t' });
-    await expect(openCurve(store, { filter: { status: 'open' }, at: [nowISO()] })).rejects.toBeInstanceOf(InvalidArgumentError);
-    await expect(openCurve(store, { at: ['not-a-date'] })).rejects.toBeInstanceOf(InvalidArgumentError);
-    await expect(openCurve(store, { at: [] })).rejects.toBeInstanceOf(InvalidArgumentError);
+    await createIssue(store, {
+      title: 'x',
+      body: 'b',
+      project: projectUid,
+      by: 'agent:t',
+    });
+    await expect(
+      openCurve(store, { filter: { status: 'open' }, at: [nowISO()] })
+    ).rejects.toBeInstanceOf(InvalidArgumentError);
+    await expect(
+      openCurve(store, { at: ['not-a-date'] })
+    ).rejects.toBeInstanceOf(InvalidArgumentError);
+    await expect(openCurve(store, { at: [] })).rejects.toBeInstanceOf(
+      InvalidArgumentError
+    );
   });
 
   it('samples multiple instants in order and scopes by project', async () => {
     const { store, projectUid } = await setupStore('open-curve-multi');
     const other = await setupStore('open-curve-multi-other');
 
-    const a = await createIssue(store, { title: 'a', body: 'b', project: projectUid, by: 'agent:t' });
-    const b = await createIssue(store, { title: 'b', body: 'b', project: projectUid, by: 'agent:t' });
-    await createIssue(other.store, { title: 'other-project issue', body: 'b', project: other.projectUid, by: 'agent:t' });
+    const a = await createIssue(store, {
+      title: 'a',
+      body: 'b',
+      project: projectUid,
+      by: 'agent:t',
+    });
+    const b = await createIssue(store, {
+      title: 'b',
+      body: 'b',
+      project: projectUid,
+      by: 'agent:t',
+    });
+    await createIssue(other.store, {
+      title: 'other-project issue',
+      body: 'b',
+      project: other.projectUid,
+      by: 'agent:t',
+    });
 
     // Anchor to the two real reported `createdAt`s with a full-day margin on
     // each side — deterministic regardless of whether `a`/`b` landed in the
     // same millisecond (real I/O timing is never relied on for ordering
     // here, only for "did these exist by a instant a day away").
-    const earliestMs = Math.min(new Date(a.item.createdAt).getTime(), new Date(b.item.createdAt).getTime());
-    const latestMs = Math.max(new Date(a.item.createdAt).getTime(), new Date(b.item.createdAt).getTime());
+    const earliestMs = Math.min(
+      new Date(a.item.createdAt).getTime(),
+      new Date(b.item.createdAt).getTime()
+    );
+    const latestMs = Math.max(
+      new Date(a.item.createdAt).getTime(),
+      new Date(b.item.createdAt).getTime()
+    );
     const before = new Date(earliestMs - 86_400_000).toISOString();
     const after = new Date(latestMs + 86_400_000).toISOString();
 
-    const result = await openCurve(store, { filter: { project: projectUid }, at: [before, after] });
+    const result = await openCurve(store, {
+      filter: { project: projectUid },
+      at: [before, after],
+    });
     expect(result.points.map((p) => p.at)).toEqual([before, after]);
     expect(result.points[0].existed).toBe(0);
     expect(result.points[1].existed).toBe(2); // scoped to `projectUid` — the other project's issue never counted
     expect(result.points[1].open).toBe(2);
   });
 
-  it('resolves each issue\'s current status and audit trail independently — the batched has_status/audits fetch must never mix issues up', async () => {
-    const { store, projectUid } = await setupStore('open-curve-batched-per-issue');
+  it("resolves each issue's current status and audit trail independently — the batched has_status/audits fetch must never mix issues up", async () => {
+    const { store, projectUid } = await setupStore(
+      'open-curve-batched-per-issue'
+    );
 
-    const a = await createIssue(store, { title: 'a (will close)', body: 'b', project: projectUid, by: 'agent:t' });
-    const b = await createIssue(store, { title: 'b (stays open)', body: 'b', project: projectUid, by: 'agent:t' });
+    const a = await createIssue(store, {
+      title: 'a (will close)',
+      body: 'b',
+      project: projectUid,
+      by: 'agent:t',
+    });
+    const b = await createIssue(store, {
+      title: 'b (stays open)',
+      body: 'b',
+      project: projectUid,
+      by: 'agent:t',
+    });
 
     // Anchor to `a`'s own reported `createdAt` — deterministic regardless of
     // real wall-clock speed.
@@ -360,10 +598,19 @@ describe('openCurve — validAt point-in-time reconstruction', () => {
     // Only `a` transitions (to a terminal status); `b` never does — its trail
     // has no `to`-carrying entry at all (reconstructStatusAt case 1), so its
     // reconstructed status is just its unchanged CURRENT status ("open").
-    const transition = await simulateTransition(store, { uid: a.uid, toStatusName: 'done', toTerminal: true, actor: 'agent:t', at: transitionAt });
+    const transition = await simulateTransition(store, {
+      uid: a.uid,
+      toStatusName: 'done',
+      toTerminal: true,
+      actor: 'agent:t',
+      at: transitionAt,
+    });
     expect(transition.to).toBe('done');
 
-    const result = await openCurve(store, { filter: { project: projectUid }, at: [sampleAt] });
+    const result = await openCurve(store, {
+      filter: { project: projectUid },
+      at: [sampleAt],
+    });
     expect(result.points[0].existed).toBe(2);
     // TEETH: if the batched `has_status`/`audits` fetch this test targets ever
     // mixed the two issues' data up (e.g. assigning one issue's current status
@@ -377,29 +624,46 @@ describe('openCurve — validAt point-in-time reconstruction', () => {
 
   it('counts an issue at an instant it truly existed, even though it has SINCE been soft-deleted', async () => {
     const { store, projectUid } = await setupStore('open-curve-deleted');
-    const a = await createIssue(store, { title: 'a', body: 'b', project: projectUid, by: 'agent:t' });
+    const a = await createIssue(store, {
+      title: 'a',
+      body: 'b',
+      project: projectUid,
+      by: 'agent:t',
+    });
 
     // Real delete, through the real write verb.
-    await deleteIssue(store, { uid: a.uid, reason: 'test: soft-delete after existing', by: 'closer' });
+    await deleteIssue(store, {
+      uid: a.uid,
+      reason: 'test: soft-delete after existing',
+      by: 'closer',
+    });
 
     // Read the real, persisted bi-temporal columns back (liveOnly:false — the
     // node is gone from every default query now) rather than assuming an
     // offset: `tValid` is the real reported creation instant, `tInvalid` the
     // real reported deletion instant.
-    const deadNode = (await store.graph.queryNodes({ kind: 'issue', liveOnly: false })).find((n) => n.uid === a.uid);
+    const deadNode = (
+      await store.graph.queryNodes({ kind: 'issue', liveOnly: false })
+    ).find((n) => n.uid === a.uid);
     expect(deadNode).toBeDefined();
     expect(deadNode!.tInvalid).toBeDefined();
     // Self-check the environmental precondition this test leans on — a real
     // deletion instant strictly after the real creation instant. If this ever
     // fails, the test's own setup assumption is broken, not the behavior
     // under test (never asserted blind).
-    expect(new Date(deadNode!.tInvalid!).getTime()).toBeGreaterThan(new Date(deadNode!.tValid).getTime());
+    expect(new Date(deadNode!.tInvalid!).getTime()).toBeGreaterThan(
+      new Date(deadNode!.tValid).getTime()
+    );
 
     const at = deadNode!.tValid; // the exact instant the issue came into existence — still strictly before its deletion
 
     // TEETH: the naive `liveOnly` DEFAULT (true) — what this exact query
     // looked like before the fix — computed directly against the real store.
-    const naiveLiveOnlyDefault = await store.graph.queryNodes({ kind: 'issue', validAt: at, ids: [deadNode!.id] });
+    const naiveLiveOnlyDefault = await store.graph.queryNodes({
+      kind: 'issue',
+      validAt: at,
+      ids: [deadNode!.id],
+    });
     expect(naiveLiveOnlyDefault.length).toBe(0); // the bug: silently excludes a since-deleted issue at an instant it demonstrably existed
 
     const result = await openCurve(store, { at: [at] });

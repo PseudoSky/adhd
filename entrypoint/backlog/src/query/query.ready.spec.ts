@@ -54,18 +54,33 @@ import { BacklogValidationError } from '../write/errors.js';
  * created through a verb — it has to be seeded, exactly as a real project's
  * catalog seeding would.
  */
-async function seedTerminalStatus(store: TestIssueStore, name: string): Promise<void> {
+async function seedTerminalStatus(
+  store: TestIssueStore,
+  name: string
+): Promise<void> {
   await store.adapter.transaction(
     async (tx) => {
-      await writeNodeTx(tx, { kind: 'status', name, metadata: { terminal: true }, at: nowISO() });
+      await writeNodeTx(tx, {
+        kind: 'status',
+        name,
+        metadata: { terminal: true },
+        at: nowISO(),
+      });
     },
-    { mode: 'immediate' },
+    { mode: 'immediate' }
   );
 }
 
-async function readyUids(store: TestIssueStore, limit?: number): Promise<string[]> {
-  const result = await queryIssues(store, limit === undefined ? { view: 'ready' } : { view: 'ready', limit });
-  if (result.view !== 'ready') throw new Error(`expected view 'ready', got '${result.view}'`);
+async function readyUids(
+  store: TestIssueStore,
+  limit?: number
+): Promise<string[]> {
+  const result = await queryIssues(
+    store,
+    limit === undefined ? { view: 'ready' } : { view: 'ready', limit }
+  );
+  if (result.view !== 'ready')
+    throw new Error(`expected view 'ready', got '${result.view}'`);
   return result.items.map((card) => card.uid);
 }
 
@@ -86,7 +101,12 @@ describe("view:'ready' — limit is validated and applied (real store)", () => {
   });
 
   async function mkIssue(title: string): Promise<string> {
-    const created = await createIssue(store, { project: projectUid, title, body: `${title} body`, by: 'filer' });
+    const created = await createIssue(store, {
+      project: projectUid,
+      title,
+      body: `${title} body`,
+      by: 'filer',
+    });
     return created.uid;
   }
 
@@ -102,10 +122,18 @@ describe("view:'ready' — limit is validated and applied (real store)", () => {
   it('rejects an invalid limit exactly as the other views do', async () => {
     await mkIssue('any open issue');
 
-    await expect(readyUids(store, 0)).rejects.toBeInstanceOf(BacklogValidationError);
-    await expect(readyUids(store, -1)).rejects.toBeInstanceOf(BacklogValidationError);
-    await expect(readyUids(store, 1.5)).rejects.toBeInstanceOf(BacklogValidationError);
-    await expect(readyUids(store, 1001)).rejects.toBeInstanceOf(BacklogValidationError);
+    await expect(readyUids(store, 0)).rejects.toBeInstanceOf(
+      BacklogValidationError
+    );
+    await expect(readyUids(store, -1)).rejects.toBeInstanceOf(
+      BacklogValidationError
+    );
+    await expect(readyUids(store, 1.5)).rejects.toBeInstanceOf(
+      BacklogValidationError
+    );
+    await expect(readyUids(store, 1001)).rejects.toBeInstanceOf(
+      BacklogValidationError
+    );
   });
 
   it('applies the cap AFTER the readiness filter, not before it', async () => {
@@ -120,7 +148,9 @@ describe("view:'ready' — limit is validated and applied (real store)", () => {
     const readyA = await mkIssue('genuinely ready a');
     const readyB = await mkIssue('genuinely ready b');
 
-    expect(new Set(await readyUids(store, 2))).toEqual(new Set([readyA, readyB]));
+    expect(new Set(await readyUids(store, 2))).toEqual(
+      new Set([readyA, readyB])
+    );
   });
 });
 
@@ -132,7 +162,8 @@ describe("view:'ready' — readiness semantics survive the batched traversal (re
   beforeEach(async () => {
     dir = freshTmpDir('query-ready-semantics');
     store = await openTestIssueStore(join(dir, 'backlog.db'));
-    projectUid = (await seedProject(store, 'ready-semantics-project')).projectUid;
+    projectUid = (await seedProject(store, 'ready-semantics-project'))
+      .projectUid;
     await seedTerminalStatus(store, 'done');
   });
 
@@ -142,7 +173,12 @@ describe("view:'ready' — readiness semantics survive the batched traversal (re
   });
 
   async function mkIssue(title: string): Promise<string> {
-    const created = await createIssue(store, { project: projectUid, title, body: `${title} body`, by: 'filer' });
+    const created = await createIssue(store, {
+      project: projectUid,
+      title,
+      body: `${title} body`,
+      by: 'filer',
+    });
     return created.uid;
   }
 
@@ -162,7 +198,13 @@ describe("view:'ready' — readiness semantics survive the batched traversal (re
   it('an issue with a non-terminal blocker is not ready', async () => {
     const blocked = await mkIssue('waiting on work');
     const blocker = await mkIssue('the work');
-    await relate(store, { sourceUid: blocker, targetUid: blocked, rel: 'blocks', action: 'add', by: 'filer' });
+    await relate(store, {
+      sourceUid: blocker,
+      targetUid: blocked,
+      rel: 'blocks',
+      action: 'add',
+      by: 'filer',
+    });
 
     expect(await readyUids(store)).not.toContain(blocked);
     expect(await readyUids(store)).toContain(blocker);
@@ -172,17 +214,39 @@ describe("view:'ready' — readiness semantics survive the batched traversal (re
     const blocked = await mkIssue('waiting on two things');
     const first = await mkIssue('first blocker');
     const second = await mkIssue('second blocker');
-    await relate(store, { sourceUid: first, targetUid: blocked, rel: 'blocks', action: 'add', by: 'filer' });
-    await relate(store, { sourceUid: second, targetUid: blocked, rel: 'blocks', action: 'add', by: 'filer' });
+    await relate(store, {
+      sourceUid: first,
+      targetUid: blocked,
+      rel: 'blocks',
+      action: 'add',
+      by: 'filer',
+    });
+    await relate(store, {
+      sourceUid: second,
+      targetUid: blocked,
+      rel: 'blocks',
+      action: 'add',
+      by: 'filer',
+    });
 
     expect(await readyUids(store)).not.toContain(blocked);
 
     // One down, one to go — still blocked. This is the half that a naive
     // "any blocker terminal" rewrite would get wrong.
-    await transition(store, { uid: first, by: 'worker', toStatus: 'done', note: 'finished the first' });
+    await transition(store, {
+      uid: first,
+      by: 'worker',
+      toStatus: 'done',
+      note: 'finished the first',
+    });
     expect(await readyUids(store)).not.toContain(blocked);
 
-    await transition(store, { uid: second, by: 'worker', toStatus: 'done', note: 'finished the second' });
+    await transition(store, {
+      uid: second,
+      by: 'worker',
+      toStatus: 'done',
+      note: 'finished the second',
+    });
     expect(await readyUids(store)).toContain(blocked);
   });
 });

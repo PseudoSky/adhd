@@ -16,7 +16,10 @@ import { dirname, join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { createIssue } from './write/create-issue.js';
-import { openTestIssueStore, seedProject } from './test/helpers/open-test-issue-store.js';
+import {
+  openTestIssueStore,
+  seedProject,
+} from './test/helpers/open-test-issue-store.js';
 import { buildBacklogEnv, resolveBacklogDbPath } from './env.js';
 import type { IOutcomeEnvelope } from './envelope.js';
 import type { IIssueCard, IIssueQueryResult } from './query/types.js';
@@ -46,18 +49,34 @@ describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotoco
     // its own exclusive connection to the same file). `resolveBacklogDbPath`
     // resolves the exact same file `startBacklogServer` will open below,
     // given the same `adhdRoot`/scope.
-    const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
+    const seedEnv = buildBacklogEnv({
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+    });
     seedEnv.ensureDirs();
     const dbPath = resolveBacklogDbPath(seedEnv);
     const seedStore = await openTestIssueStore(dbPath);
     const { projectUid } = await seedProject(seedStore, 'mcp-test-project');
-    const seeded = await createIssue(seedStore, { project: projectUid, title: 'via mcp', body: 'x', by: 'mcp-spec-seed' });
+    const seeded = await createIssue(seedStore, {
+      project: projectUid,
+      title: 'via mcp',
+      body: 'x',
+      by: 'mcp-spec-seed',
+    });
     await seedStore.close();
     if (!seeded.uid) throw new Error('seed createIssue did not return a uid');
     const seededUid = seeded.uid;
 
-    transport = new StdioClientTransport({ command: 'node', args: [ENTRY_SCRIPT, adhdRoot], cwd: adhdRoot });
-    client = new Client({ name: 'backlog-mcp-test-client', version: '1.0.0' }, { capabilities: {} });
+    transport = new StdioClientTransport({
+      command: 'node',
+      args: [ENTRY_SCRIPT, adhdRoot],
+      cwd: adhdRoot,
+    });
+    client = new Client(
+      { name: 'backlog-mcp-test-client', version: '1.0.0' },
+      { capabilities: {} }
+    );
     await client.connect(transport);
 
     const tools = await client.listTools();
@@ -66,7 +85,13 @@ describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotoco
     // in server.ts), each projected to `backlog_<verb>` by `apigen-plugin-mcp`'s
     // canonical tool-name projection (namespace + path segment, snake_cased).
     expect(toolNames).toEqual(
-      expect.arrayContaining(['backlog_get', 'backlog_query', 'backlog_create', 'backlog_update', 'backlog_relate'])
+      expect.arrayContaining([
+        'backlog_get',
+        'backlog_query',
+        'backlog_create',
+        'backlog_update',
+        'backlog_relate',
+      ])
     );
 
     // `backlog_query`'s content block carries the outcome envelope
@@ -79,7 +104,9 @@ describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotoco
       arguments: { data: { input: { filter: { project: projectUid } } } },
     });
     const content = result.content as Array<{ type: string; text: string }>;
-    const parsed = JSON.parse(content[0]?.text ?? '{}') as IOutcomeEnvelope<IIssueQueryResult>;
+    const parsed = JSON.parse(
+      content[0]?.text ?? '{}'
+    ) as IOutcomeEnvelope<IIssueQueryResult>;
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) throw new Error('unreachable — checked above');
     if (parsed.data.view !== 'list') throw new Error('expected view:"list"');
@@ -94,15 +121,29 @@ describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotoco
     // The `project` a real `create` call resolves against must already
     // exist (SPEC: `project` is resolved-only, never minted by `create`),
     // so seed it through the same real store path before the server starts.
-    const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
+    const seedEnv = buildBacklogEnv({
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+    });
     seedEnv.ensureDirs();
     const dbPath = resolveBacklogDbPath(seedEnv);
     const seedStore = await openTestIssueStore(dbPath);
-    const { projectUid } = await seedProject(seedStore, 'mcp-create-test-project');
+    const { projectUid } = await seedProject(
+      seedStore,
+      'mcp-create-test-project'
+    );
     await seedStore.close();
 
-    transport = new StdioClientTransport({ command: 'node', args: [ENTRY_SCRIPT, adhdRoot], cwd: adhdRoot });
-    client = new Client({ name: 'backlog-mcp-test-client', version: '1.0.0' }, { capabilities: {} });
+    transport = new StdioClientTransport({
+      command: 'node',
+      args: [ENTRY_SCRIPT, adhdRoot],
+      cwd: adhdRoot,
+    });
+    client = new Client(
+      { name: 'backlog-mcp-test-client', version: '1.0.0' },
+      { capabilities: {} }
+    );
     await client.connect(transport);
 
     // Real tool names are `backlog_<verb>`, not bare/flat `createItem`/
@@ -111,11 +152,23 @@ describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotoco
     const createResult = await client.callTool({
       name: 'backlog_create',
       arguments: {
-        data: { input: { title: 'created via mcp', body: 'x', project: projectUid, by: 'mcp-test-client' } },
+        data: {
+          input: {
+            title: 'created via mcp',
+            body: 'x',
+            project: projectUid,
+            by: 'mcp-test-client',
+          },
+        },
       },
     });
-    const createContent = createResult.content as Array<{ type: string; text: string }>;
-    const created = JSON.parse(createContent[0]?.text ?? '{}') as IOutcomeEnvelope<ICreateIssueResult>;
+    const createContent = createResult.content as Array<{
+      type: string;
+      text: string;
+    }>;
+    const created = JSON.parse(
+      createContent[0]?.text ?? '{}'
+    ) as IOutcomeEnvelope<ICreateIssueResult>;
     expect(created.ok).toBe(true);
     if (!created.ok) throw new Error('unreachable — checked above');
     expect(created.data.created).toBe(true);
@@ -126,8 +179,13 @@ describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotoco
       name: 'backlog_get',
       arguments: { data: { input: { uid: createdUid } } },
     });
-    const getContent = getResult.content as Array<{ type: string; text: string }>;
-    const got = JSON.parse(getContent[0]?.text ?? '{}') as IOutcomeEnvelope<IIssueCard>;
+    const getContent = getResult.content as Array<{
+      type: string;
+      text: string;
+    }>;
+    const got = JSON.parse(
+      getContent[0]?.text ?? '{}'
+    ) as IOutcomeEnvelope<IIssueCard>;
     expect(got.ok).toBe(true);
     if (!got.ok) throw new Error('unreachable — checked above');
     expect(got.data.title).toBe('created via mcp');

@@ -22,7 +22,11 @@ import {
   type TestIssueStore,
 } from '../test/helpers/open-test-issue-store.js';
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
-import { upsertComponent, upsertLocation, rmLocation } from '../write/catalog.js';
+import {
+  upsertComponent,
+  upsertLocation,
+  rmLocation,
+} from '../write/catalog.js';
 import { CatalogNotFoundError } from '../write/errors.js';
 import { lookup } from './views/registry.js';
 
@@ -37,7 +41,11 @@ describe('lookup + rmLocation composition (SPEC.md §8 AC-21, real store)', () =
     store = await openTestIssueStore(join(dir, 'backlog.db'));
     const seeded = await seedProject(store, 'lookup-rm-location-project');
     projectUid = seeded.projectUid;
-    const component = await upsertComponent(store, { project: projectUid, name: 'lookup-rm-location-component', by: 'filer' });
+    const component = await upsertComponent(store, {
+      project: projectUid,
+      name: 'lookup-rm-location-component',
+      by: 'filer',
+    });
     componentUid = component.uid;
   });
 
@@ -52,7 +60,12 @@ describe('lookup + rmLocation composition (SPEC.md §8 AC-21, real store)', () =
     // upsert writes, so `lookup` and `upsertLocation` genuinely agree on
     // classification rather than accidentally colliding.
     const value = 'mytool';
-    const created = await upsertLocation(store, { component: componentUid, locType: 'tool', value, by: 'filer' });
+    const created = await upsertLocation(store, {
+      component: componentUid,
+      locType: 'tool',
+      value,
+      by: 'filer',
+    });
 
     // Real `lookup` resolves the live location, walking location -> component -> project.
     const found = await lookup(store.graph, value);
@@ -60,13 +73,19 @@ describe('lookup + rmLocation composition (SPEC.md §8 AC-21, real store)', () =
     expect(found.component.uid).toBe(componentUid);
     expect(found.project.uid).toBe(projectUid);
 
-    await rmLocation(store, { uid: created.uid, by: 'remover', reason: 'no longer maintained' });
+    await rmLocation(store, {
+      uid: created.uid,
+      by: 'remover',
+      reason: 'no longer maintained',
+    });
 
     // The IDENTICAL lookup call now resolves nothing — `lookup` throws
     // CatalogNotFoundError('location', ...) on a miss (registry.ts's own
     // documented "never a silent null" contract), never an empty/undefined
     // result.
-    await expect(lookup(store.graph, value)).rejects.toThrow(CatalogNotFoundError);
+    await expect(lookup(store.graph, value)).rejects.toThrow(
+      CatalogNotFoundError
+    );
 
     // The location's own record remains addressable by uid — a soft
     // invalidate, never a hard row deletion.

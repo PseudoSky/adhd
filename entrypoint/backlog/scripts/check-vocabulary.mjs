@@ -14,7 +14,13 @@
  * could not run (pack/extract failure) — a hard failure, never a silent pass.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import {
+  mkdtempSync,
+  rmSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, extname } from 'node:path';
 
@@ -36,9 +42,9 @@ import { join, relative, extname } from 'node:path';
  * would have caught a real leak (verified: both bundles contain zero).
  */
 const BANNED = [
-  { name: 'humanId', re: /humanid/i,  minifiable: false },
-  { name: 'migrat',  re: /migrat/i,   minifiable: false },
-  { name: 'sqlite',  re: /sqlite/i,   minifiable: false },
+  { name: 'humanId', re: /humanid/i, minifiable: false },
+  { name: 'migrat', re: /migrat/i, minifiable: false },
+  { name: 'sqlite', re: /sqlite/i, minifiable: false },
   { name: 'v1', re: /\bv1\b(?!\.\d)/i, minifiable: true },
   { name: 'v2', re: /\bv2\b(?!\.\d)/i, minifiable: true },
 ];
@@ -84,9 +90,13 @@ function main() {
       return 2;
     }
     try {
-      execFileSync('tar', ['-xzf', join(work, tarball), '-C', work], { stdio: 'ignore' });
+      execFileSync('tar', ['-xzf', join(work, tarball), '-C', work], {
+        stdio: 'ignore',
+      });
     } catch (err) {
-      console.error(`check-vocabulary: could not extract ${tarball}: ${err.message}`);
+      console.error(
+        `check-vocabulary: could not extract ${tarball}: ${err.message}`
+      );
       return 2;
     }
 
@@ -111,30 +121,57 @@ function main() {
           if (!re.test(line)) continue;
           // A minifiable term inside a generated bundle is the tool's own
           // identifier, not this package's vocabulary. Counted, never silent.
-          if (generated && minifiable) { minifiedHits++; continue; }
+          if (generated && minifiable) {
+            minifiedHits++;
+            continue;
+          }
           if (excluded) excludedHits++;
-          else violations.push({ file: rel, line: i + 1, token: name, text: line.trim().slice(0, 160) });
+          else
+            violations.push({
+              file: rel,
+              line: i + 1,
+              token: name,
+              text: line.trim().slice(0, 160),
+            });
           break;
         }
       });
     }
 
     if (violations.length) {
-      console.error('VOCABULARY GATE FAIL — banned tokens in the shipped artifact:\n');
-      for (const v of violations) console.error(`  ${v.file}:${v.line}  [${v.token}]  ${v.text}`);
+      console.error(
+        'VOCABULARY GATE FAIL — banned tokens in the shipped artifact:\n'
+      );
+      for (const v of violations)
+        console.error(`  ${v.file}:${v.line}  [${v.token}]  ${v.text}`);
       const byToken = {};
-      for (const v of violations) byToken[v.token] = (byToken[v.token] ?? 0) + 1;
-      console.error(`\ntotal: ${violations.length} line(s) across ${new Set(violations.map((v) => v.file)).size} file(s)`);
-      console.error(`by token: ${Object.entries(byToken).map(([k, n]) => `${k}=${n}`).join(' ')}`);
+      for (const v of violations)
+        byToken[v.token] = (byToken[v.token] ?? 0) + 1;
+      console.error(
+        `\ntotal: ${violations.length} line(s) across ${
+          new Set(violations.map((v) => v.file)).size
+        } file(s)`
+      );
+      console.error(
+        `by token: ${Object.entries(byToken)
+          .map(([k, n]) => `${k}=${n}`)
+          .join(' ')}`
+      );
       return 1;
     }
 
-    console.log('VOCABULARY GATE PASS — zero banned tokens in the shipped artifact.');
+    console.log(
+      'VOCABULARY GATE PASS — zero banned tokens in the shipped artifact.'
+    );
     console.log(`  tarball: ${tarball}`);
     console.log(`  files scanned: ${files.length}`);
     console.log(`  .map hits (excluded, informational): ${excludedHits}`);
-    console.log(`  minifier-identifier v1/v2 hits in generated bundles (excluded, informational): ${minifiedHits}`);
-    console.log('  humanId/migrat/sqlite were enforced everywhere, generated bundles included.');
+    console.log(
+      `  minifier-identifier v1/v2 hits in generated bundles (excluded, informational): ${minifiedHits}`
+    );
+    console.log(
+      '  humanId/migrat/sqlite were enforced everywhere, generated bundles included.'
+    );
     return 0;
   } finally {
     rmSync(work, { recursive: true, force: true });

@@ -30,7 +30,12 @@ import { existsSync } from 'node:fs';
 import { extract } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
 
-const API_DTS = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'api.d.ts');
+const API_DTS = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'dist',
+  'api.d.ts'
+);
 
 /**
  * SPEC §6.7's nine issue verbs plus §3a's `lookup`, with the exact MCP tool
@@ -44,19 +49,45 @@ const EXPECTED = [
   { id: 'backlog/lookup', mcp: 'backlog_lookup', cli: 'backlog lookup' },
   { id: 'backlog/create', mcp: 'backlog_create', cli: 'backlog create' },
   { id: 'backlog/update', mcp: 'backlog_update', cli: 'backlog update' },
-  { id: 'backlog/transition', mcp: 'backlog_transition', cli: 'backlog transition' },
+  {
+    id: 'backlog/transition',
+    mcp: 'backlog_transition',
+    cli: 'backlog transition',
+  },
   { id: 'backlog/claim', mcp: 'backlog_claim', cli: 'backlog claim' },
   { id: 'backlog/relate', mcp: 'backlog_relate', cli: 'backlog relate' },
   { id: 'backlog/move', mcp: 'backlog_move', cli: 'backlog move' },
   { id: 'backlog/delete', mcp: 'backlog_delete', cli: 'backlog delete' },
-  { id: 'backlog/upsert-project', mcp: 'backlog_upsert_project', cli: 'backlog upsert-project' },
-  { id: 'backlog/upsert-component', mcp: 'backlog_upsert_component', cli: 'backlog upsert-component' },
-  { id: 'backlog/upsert-location', mcp: 'backlog_upsert_location', cli: 'backlog upsert-location' },
-  { id: 'backlog/rm-location', mcp: 'backlog_rm_location', cli: 'backlog rm-location' },
+  {
+    id: 'backlog/upsert-project',
+    mcp: 'backlog_upsert_project',
+    cli: 'backlog upsert-project',
+  },
+  {
+    id: 'backlog/upsert-component',
+    mcp: 'backlog_upsert_component',
+    cli: 'backlog upsert-component',
+  },
+  {
+    id: 'backlog/upsert-location',
+    mcp: 'backlog_upsert_location',
+    cli: 'backlog upsert-location',
+  },
+  {
+    id: 'backlog/rm-location',
+    mcp: 'backlog_rm_location',
+    cli: 'backlog rm-location',
+  },
 ] as const;
 
-async function mountedSurface(): Promise<{ id: string; mcp: string; cli: string }[]> {
-  const ops = await extract({ sourceFile: API_DTS, namespace: 'backlog', dropFileSegment: true });
+async function mountedSurface(): Promise<
+  { id: string; mcp: string; cli: string }[]
+> {
+  const ops = await extract({
+    sourceFile: API_DTS,
+    namespace: 'backlog',
+    dropFileSegment: true,
+  });
   return ops
     .filter((op) => op.kind === 'action')
     .map((op) => {
@@ -70,16 +101,21 @@ describe('api.ts — the mounted surface (SPEC §6.7)', () => {
   it('has a built api.d.ts to extract from', () => {
     // Fails loudly rather than skipping: an absent .d.ts means the mount
     // itself would throw at startup, which is the bug, not a reason to pass.
-    expect(existsSync(API_DTS), `${API_DTS} missing — nx build backlog must run first`).toBe(true);
+    expect(
+      existsSync(API_DTS),
+      `${API_DTS} missing — nx build backlog must run first`
+    ).toBe(true);
   });
 
   it('mounts exactly the verbs SPEC §6.7 names, under the names it names', async () => {
     const surface = await mountedSurface();
     const expected = [...EXPECTED].sort((a, b) => a.id.localeCompare(b.id));
-    expect(surface).toEqual(expected.map((e) => ({ id: e.id, mcp: e.mcp, cli: e.cli })));
+    expect(surface).toEqual(
+      expected.map((e) => ({ id: e.id, mcp: e.mcp, cli: e.cli }))
+    );
   });
 
-  it('mounts `delete` under its spec\'d name — the export alias is load-bearing', async () => {
+  it("mounts `delete` under its spec'd name — the export alias is load-bearing", async () => {
     const surface = await mountedSurface();
     const names = surface.map((s) => s.mcp);
     expect(names).toContain('backlog_delete');

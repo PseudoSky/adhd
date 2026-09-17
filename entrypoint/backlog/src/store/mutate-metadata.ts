@@ -45,7 +45,9 @@ export async function mutateMetadata<M = Record<string, unknown>>(
         if (!node || node.tInvalid) throw new NotFoundError(nodeId);
         const current = (node.metadata ?? {}) as M;
         const next = updater(current);
-        await store.graph.touch(nodeId, { metadata: next as Record<string, unknown> });
+        await store.graph.touch(nodeId, {
+          metadata: next as Record<string, unknown>,
+        });
         return next;
       },
       { mode: 'immediate' }
