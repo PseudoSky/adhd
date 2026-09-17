@@ -8,18 +8,23 @@
  * surviving mention is either dead code or a stale comment describing a
  * world that no longer exists. Both are defects.
  *
- * SCOPE (decided in TASKS.md F6): `src/` only — the code that ships.
+ * SCOPE: `src/` — the code that ships — AND the package's own top-level
+ * markdown (`SPEC.md`, `DESIGN.md`, `DATA_MODEL.md`, `RAG-SPEC.md`,
+ * `README.md`, `CHANGELOG.md`). The docs were once excluded here with the
+ * note "handled by a docs rewrite, not by grep", and that is precisely how a
+ * whole `## 8. Data load (ETL)` section, and a dozen references to it,
+ * survived in `SPEC.md` long after the loader itself was deleted. A rewrite
+ * is a one-time act; a gate is what keeps it true. They are in scope now.
  *
- * Deliberately OUT of scope, and why:
- *  - `SPEC.md` / docs. Handled by a docs rewrite, not by grep.
- *  - This file and `scripts/check-vocabulary.mjs`. Both necessarily spell the
- *    banned terms out, because the terms ARE their regexes. They live under
- *    `tools/`/`scripts/`, neither of which is scanned or packed.
+ * `CHANGELOG.md` is scanned like the rest, deliberately. Describing a removal
+ * without naming the removed thing is awkward but possible ("the one-time
+ * corpus load and its section"), and the alternative — one exempt file — is
+ * the seam every banned term would eventually be written through.
  *
- * The one-shot corpus loader under `tools/etl/**` used to be excluded here,
- * for its frozen pre-cutover fixtures. It no longer exists — the loader was
- * retired once parity was proven — so there is nothing left to exempt, and
- * `src/` is now the whole of what this gate needs to reach.
+ * Deliberately OUT of scope: this file and `scripts/check-vocabulary.mjs`.
+ * Both necessarily spell the banned terms out, because the terms ARE their
+ * regexes. They live under `tools/`/`scripts/`, neither of which is scanned
+ * or packed.
  *
  * Its sibling `scripts/check-vocabulary.mjs` scans the PACKED TARBALL instead,
  * which is what catches the leak a source-tree gate structurally cannot: a
@@ -31,16 +36,18 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
-const ROOT = new URL('../../src', import.meta.url).pathname;
+const PKG = new URL('../..', import.meta.url).pathname;
+const ROOT = join(PKG, 'src');
 
 /**
  * Each term carries its own rationale, so a future reader knows what the gate
  * is actually protecting rather than guessing from a bare regex.
  */
 const TERMS = [
-  // The lookbehind is [a-z0-9] rather than \b so `INTERFACE_v2` is CAUGHT --
-  // `_` is a word character, so \b treats `_v2` as mid-word and misses it,
-  // which is how stale spec-document references survived an earlier sweep.
+  // The lookbehind is [a-z0-9] rather than \b so an `UNDERSCORE_v2`-shaped
+  // document name is CAUGHT -- `_` is a word character, so \b treats `_v2` as
+  // mid-word and misses it, which is how a whole set of stale spec-document
+  // references survived an earlier sweep.
   // `(?!\.\d)` exempts a THIRD-PARTY version string -- an embedding model id
   // like `bge-base-en-v1.5` is a real external identifier, not this package
   // naming its own surface. `server.v2.spec.ts` is NOT exempted: `v2` there is
@@ -63,15 +70,23 @@ function walk(dir) {
   return out;
 }
 
+/** The package's own top-level markdown — its spec surface, scanned alongside `src/`. */
+function packageDocs() {
+  return readdirSync(PKG)
+    .filter((entry) => entry.endsWith('.md'))
+    .map((entry) => join(PKG, entry))
+    .filter((full) => statSync(full).isFile());
+}
+
 const hits = [];
-for (const file of walk(ROOT)) {
+for (const file of [...walk(ROOT), ...packageDocs()]) {
   // PATHS are scanned before contents. The zero-v1/v2-reference criterion
   // covers the tree, not just what is inside the files: `server.v2.spec.ts`
   // satisfies a contents-only gate while still shipping banned vocabulary in
   // its own name, where every consumer, stack trace and test report shows it.
   // A contents-only gate goes green on that file and defers the finding to the
   // acceptance step, which is exactly too late.
-  const rel = relative(ROOT, file);
+  const rel = relative(PKG, file);
   for (const term of TERMS) {
     if (term.re.test(rel)) {
       hits.push({ file: rel, line: 0, term: term.name, text: `[FILENAME] ${rel}` });
@@ -81,14 +96,14 @@ for (const file of walk(ROOT)) {
   lines.forEach((line, i) => {
     for (const term of TERMS) {
       if (term.re.test(line)) {
-        hits.push({ file: relative(ROOT, file), line: i + 1, term: term.name, text: line.trim().slice(0, 120) });
+        hits.push({ file: relative(PKG, file), line: i + 1, term: term.name, text: line.trim().slice(0, 120) });
       }
     }
   });
 }
 
 if (hits.length === 0) {
-  console.log('vocabulary-gate: CLEAN — src/ contains no v1/v2/humanId/migration/sqlite reference.');
+  console.log('vocabulary-gate: CLEAN — src/ and the package docs contain no v1/v2/humanId/migration/sqlite reference.');
   process.exit(0);
 }
 
@@ -99,7 +114,7 @@ for (const h of hits) {
   byTerm.get(h.term).push(h);
 }
 
-console.log(`vocabulary-gate: DIRTY — ${hits.length} reference(s) across ${new Set(hits.map((h) => h.file)).size} file(s) in src/.\n`);
+console.log(`vocabulary-gate: DIRTY — ${hits.length} reference(s) across ${new Set(hits.map((h) => h.file)).size} file(s).\n`);
 for (const term of TERMS) {
   const termHits = byTerm.get(term.name);
   if (!termHits) continue;

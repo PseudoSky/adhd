@@ -1,4 +1,4 @@
-# Pending filings — four findings awaiting a writable store
+# Pending filings — findings awaiting a writable store
 
 These are filed here rather than in the graph because the live store at
 `~/.adhd/backlog/production/data/backlog.db` currently **rejects every write**:
@@ -17,38 +17,6 @@ consistent with processes that died holding the store. Reads work; only writes f
 
 ---
 
-## 1. A body edit mints a fresh uid, breaking every citation to the issue
-
-`bug` / `high` / project `backlog`
-
-`update` does not mutate in place. Given `input.body` it CASes `is_superseded = 1`
-on the old row, mints a NEW node, points an uppercase `SUPERSEDES` edge new→old, and
-reassigns `currentUid = newNode.uid`[1]; `update` returns that new uid[2].
-
-So an issue's uid is not stable across a description edit. Every citation, doc
-reference and `[[ref]]` naming the old uid now names a superseded row, not the live
-issue. That is load-bearing here: the disclosure protocol cites items *by uid*, so
-the citation format assumes a stability the write layer does not provide.
-
-Filed rather than fixed because the write path is otherwise deliberate and coherent:
-every identity-chain edge (`owns_component`, `has_status`, `has_kind`, `has_priority`,
-`authored_by`) is re-pointed onto the new node on each supersede[3], and a shared
-`resolveLiveIssueTx` guard makes all six write verbs reject a stale uid loudly rather
-than acting on the zombie[4]. Whether an issue is a versioned fact or a mutable record
-is a SPEC-level identity decision, not a local fix.
-
-Two candidate resolutions: (a) carry the uid forward onto the replacement, so identity
-is stable and the old row becomes pure history; (b) keep uid churn but make it
-non-silent — resolve a superseded uid to its successor on read, so an old citation
-still lands on the live issue.
-
-Citations: [worktree .worktrees/backlog-v2, sox:typescript-pro, claude,
-docs/plan/backlog-completion, 1: entrypoint/backlog/src/write/update.ts:583-628,
-2: entrypoint/backlog/src/write/update.ts:680,
-3: entrypoint/backlog/src/write/update.ts:641-665,
-4: entrypoint/backlog/src/write/superseded-uid-guard.spec.ts:1-34,
-5: entrypoint/backlog/src/query/resolve.ts:55-62]
-
 ## 2. The production store rejects all writes while reads succeed
 
 `bug` / `high` / project `backlog`
@@ -60,9 +28,24 @@ fresh application-layer graph). The abandoned `-shm`/`-tshm` files suggest the r
 path for a dead connection-holder does not reclaim the store. Needs a reproduction and
 a decision on whether recovery should be automatic.
 
+**Cause identified 2026-09-17.** The stale files are not the residue of dead
+connection-holders; they are produced by the store's OWN repair path, once per open.
+Every single CLI invocation against the production store emits
+`store.integrity.repaired` — "[BUG-026] foreign -shm sidecar reconciled BEFORE the
+open: moved aside to …/backlog.db-shm.stale-<timestamp>" — so each open renames the
+current `-shm` to a new dated file and none is ever reclaimed. That is a leak, not a
+recovery: ~30 files had accumulated. Something recreates `backlog.db-shm` between
+opens, and the repair treats it as foreign every time. The repair lives in the sox
+store adapter, not in `entrypoint/backlog`.
+
+Reads are healthy as of this probe (`query` returns `ok:true`, 0 issues — expected
+for the fresh application-layer graph). A write probe against the production store
+was not run: it is the user's real data and the action was declined.
+
 Citations: [worktree .worktrees/backlog-v2, sox:typescript-pro, claude,
 docs/plan/backlog-completion, 1: ~/.adhd/backlog/production/data/ (directory listing,
-stale shm files dated 2026-09-16/17)]
+~30 stale shm/tshm files dated 2026-09-16/17), 2: `node dist/index.js query` stderr,
+`store.integrity.repaired` event naming BUG-026]
 
 ## 3. `cascade-plan` cannot validate a minor bump through a `workspace:^` edge
 
@@ -116,31 +99,9 @@ Citations: [sox-ecosystem main, sox:typescript-pro, claude, graph-store isSupers
 work, 1: scripts/build-index.ts:332-357, 2: scripts/build-index.ts:12,
 3: dist/smoke/run-2026-09-17T14-26-27/log.json (tests[0].verdict_detail)]
 
-## 5. The open-curve view double-counts an issue after every body edit
+## 6. The fused-relevance ranking path cannot express the current-row predicate — FIXED
 
-`bug` / `medium` / project `backlog`
-
-`openCurveView` counts `existed` per sampled instant with `liveOnly: false` and
-`validAt: at`[1]. A body edit mints a new node and leaves the old one with
-`t_invalid` NULL forever, so at any instant AFTER an edit BOTH rows satisfy
-`validAt` and the same logical issue is counted twice — three times after two
-edits, and so on. The burndown silently inflates.
-
-This site is deliberately excluded from the `isSuperseded: false` fix applied to
-the current-view read paths, because that predicate is wrong here in the other
-direction: at an instant BEFORE the edit, the replacement did not yet exist and
-the original would also be filtered out, so the issue would count as never having
-existed. A point-in-time view needs "the row that was current AT that instant" —
-i.e. dedup by logical issue identity along the `SUPERSEDES` chain — which is the
-same identity decision as item 1 and should be resolved with it.
-
-Citations: [worktree .worktrees/backlog-v2, sox:typescript-pro, claude,
-docs/plan/backlog-completion, 1: entrypoint/backlog/src/query/views/stats.ts:573-590,
-2: entrypoint/backlog/src/write/update.ts:583-628]
-
-## 6. The fused-relevance ranking path cannot express the current-row predicate
-
-`bug` / `medium` / project `backlog`
+`bug` / `medium` / project `backlog` — **resolved in this branch.**
 
 `rankByFusedRelevance` builds `filters` for `handle.search.backend.searchRanked`
 (a `StoreSearchBackend` from `@adhd/sox-hybrid-search`), not for
@@ -150,9 +111,20 @@ semantic search can return both a stale row and its replacement. The
 `isSuperseded` predicate added to `NodeFilter` does not reach this path, because
 it is a different filter type owned by another package.
 
-Not fixed here: it needs the equivalent predicate in hybrid-search's own filter
-contract. The `candidateIds` path is already safe, since those ids come from a
-prior filtered `queryNodes`.
+Fixed by post-filtering inside `rankByFusedRelevance`: it over-fetches, drops the
+superseded rows via one bounded `queryNodes`, and repeats (doubling, four rounds)
+until `limit` live rows are in hand or the ranking backend is exhausted. A predicate
+on `query.filters` remains impossible — that filter belongs to hybrid-search's own
+contract — so the drop happens on the results. Proven by
+`src/query/superseded-ranking.spec.ts` against real fastembed and a real Turso vector
+space: an edited issue appears exactly once, as its successor. Run as a negative
+control, a pass-through `dropSupersededResults` turns it red with `expected [ …(2) ]
+to have a length of 1 but got 2`. The test drives `view:'similar'` with a bare
+`filter.semantic` deliberately — that is the only caller shape for which
+`resolveSimilarFilterIds` returns `undefined` and `rankByFusedRelevance` takes its
+un-narrowed `{kind:'issue'}` branch. Driving `{text}` instead proves nothing: it
+routes to the keyword path, which already filters on `isSuperseded`, and the first
+version of this test did exactly that and stayed green with the fix removed.
 
 Citations: [worktree .worktrees/backlog-v2, sox:typescript-pro, claude,
 docs/plan/backlog-completion, 1: entrypoint/backlog/src/query/views/semantic.ts:341-355]

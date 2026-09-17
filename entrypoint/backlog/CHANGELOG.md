@@ -1,6 +1,6 @@
-## 0.2.0 (Unreleased)
+## 1.0.0 (Unreleased)
 
-`@adhd/backlog` is a self-contained backlog system: one store, mounted live to a CLI, an MCP server, and an HTTP surface with zero duplicated logic across hosts. Every operation returns an outcome envelope — `{ok:true, data}` or `{ok:false, error:{code,message,details}}` — so a caller never has to guess whether a call succeeded from a thrown exception.
+The first stable release. `@adhd/backlog` is a self-contained backlog system: one store, mounted live to a CLI, an MCP server, and an HTTP surface with zero duplicated logic across hosts. Every operation returns an outcome envelope — `{ok:true, data}` or `{ok:false, error:{code,message,details}}` — so a caller never has to guess whether a call succeeded from a thrown exception.
 
 ### 🚀 Features
 
@@ -12,12 +12,21 @@
 
 ### 🩹 Fixes
 
+- **backlog:** editing an issue's body no longer discards the rest of its graph. The supersede path carried exactly five edges onto the successor — the set the issue CARD reads — so a single body edit silently detached the issue's blockers, dependencies, notes, citations, transitions and entire audit trail. Every remaining edge is now carried forward in both directions, since an issue is the source of some relations and the target of others.
+- **backlog:** a burndown no longer inflates after an edit. The open-curve view counted every row alive at a sampled instant, so one logical issue appeared twice after one edit and three times after two; it now resolves each identity chain to its head per instant.
+- **backlog:** a ranked or semantic result no longer returns an issue alongside its own stale copy. The relevance path hands its filter to a search backend whose contract cannot express the current-row predicate, so superseded rows stayed rankable — and outranked the live row, since their text is what the query resembled. Those rows are now dropped from the ranked page, with over-fetch so the page stays full.
 - **backlog:** the outcome envelope and its error codes now live in one module, mapped by error class rather than by retry bucket.
 - **backlog:** id collisions on concurrent `create` are hardened, alongside repo-lookup UX and install/skill packaging.
 - **backlog:** superseded ids are rejected on `claim`/`relate`/`move`/`delete` instead of silently operating on a stale record.
 - **backlog:** avoid opening the graph store for status-only CLI paths (`--help`, no-args) (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001, DEBT-BACKLOG-CLI-STORE-OPEN-001).
 - **backlog:** a failed audit write must not fail an already-committed claim.
 
+### 📖 Documentation & tests
+
+- **backlog:** `SPEC.md` describes one surface and nothing else. The data-load section and every reference to it are gone, along with the superseded interface and graph-model documents the package's own source still cited.
+- **backlog:** two acceptance criteria were corrected against the shipped design rather than left contradicting it — uniqueness now states the edge-scoped resolve-then-create the write layer performs (it never rejected a duplicate name), and the concurrency gate now names a negative control that is deterministically reachable.
+- **backlog:** the audit contract is proven end to end: `actor`, `action` and a **recomputed** `sha` are read off the raw audit node for all six write verbs.
+- **backlog:** the banned-terms gate now scans the package's own documents, not just `src/`. Scoping it to source is how a whole stale spec section survived an earlier sweep.
 
 ### ❤️  Thank You
 

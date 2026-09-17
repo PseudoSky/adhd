@@ -1,10 +1,11 @@
 {
   "name": "@adhd/backlog",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "bin": {
     "adhd-backlog": "./dist/index.js"
   },
   "dependencies": {
+    "@adhd/apigen-base-logical": "^0.1.1",
     "@adhd/apigen-core-client": "^0.3.0",
     "@adhd/apigen-engine-naming": "^0.2.2",
     "@adhd/apigen-plugin-api-fastify": "^0.2.3",

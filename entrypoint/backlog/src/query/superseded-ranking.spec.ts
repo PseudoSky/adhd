@@ -100,10 +100,19 @@ describe('a body edit leaves nothing superseded in a ranked result (real fastemb
       });
       expect(edited.uid).not.toBe(supersededUid); // the supersede actually happened
 
+      // `view:'similar'` with a BARE `filter.semantic` is the path under test.
+      // `resolveSimilarFilterIds` returns `undefined` for a filter carrying no
+      // edge-scoped or scalar member, so `rankByFusedRelevance` takes its
+      // `{kind:'issue'}` branch — the one with no candidate-id narrowing, where
+      // `searchRanked` is free to rank every issue row in the space including
+      // the superseded one. Driving `{text}` instead proves nothing here: that
+      // routes to the keyword path, which filters on `graph.queryNodes`'s own
+      // `isSuperseded` and would stay green with this fix removed.
       const queried = await queryIssues(handle, {
-        text: 'the embedding length does not match the configured dimension',
+        view: 'similar',
+        filter: { semantic: 'the embedding length does not match the configured dimension' },
       });
-      if (queried.view !== 'list') throw new Error(`expected view 'list', got '${queried.view}'`);
+      if (queried.view !== 'similar') throw new Error(`expected view 'similar', got '${queried.view}'`);
       const uids = queried.items.map((i) => i.uid);
 
       // One logical issue exists, so the ranked page holds exactly one row.
