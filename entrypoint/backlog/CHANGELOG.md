@@ -1,11 +1,34 @@
+## 0.2.0 (Unreleased)
+
+`@adhd/backlog` is a self-contained backlog system: one store, mounted live to a CLI, an MCP server, and an HTTP surface with zero duplicated logic across hosts. Every operation returns an outcome envelope — `{ok:true, data}` or `{ok:false, error:{code,message,details}}` — so a caller never has to guess whether a call succeeded from a thrown exception.
+
+### 🚀 Features
+
+- **backlog:** the application layer settles on 14 verbs — `get`, `query`, `lookup`, `create`, `update`, `transition`, `claim`, `relate`, `move`, `upsertProject`, `upsertComponent`, `upsertLocation`, `rmLocation`, `delete` — each mounted identically to CLI, MCP, and HTTP.
+- **backlog:** `create` takes a flat `{ title, body, project, by }` input plus optional `component`, `kind`, `status`, `priority`, `citations`, `author`, `assignee`, and `duplicateAction` (`'abort' | 'force' | 'comment'`, default `'abort'`); a resolved `project` is required — `create` never mints one.
+- **backlog:** `query` accepts a natural-language `text` that routes to semantic or keyword search, and pages results by `limit`/`after` with `hasMore`/`nextCursor`.
+- **backlog:** on-write embeddings, with an audit row per write, back semantic search.
+- **backlog:** citations are persisted on every item, and repo moves apply their rename plan in two passes so a rename can't cascade mid-write.
+
+### 🩹 Fixes
+
+- **backlog:** the outcome envelope and its error codes now live in one module, mapped by error class rather than by retry bucket.
+- **backlog:** id collisions on concurrent `create` are hardened, alongside repo-lookup UX and install/skill packaging.
+- **backlog:** superseded ids are rejected on `claim`/`relate`/`move`/`delete` instead of silently operating on a stale record.
+- **backlog:** avoid opening the graph store for status-only CLI paths (`--help`, no-args) (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001, DEBT-BACKLOG-CLI-STORE-OPEN-001).
+- **backlog:** a failed audit write must not fail an already-committed claim.
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.10 (2026-08-20)
 
 
 ### 🩹 Fixes
 
-- **backlog:** plan repo migrations in two passes so a rename cannot cascade
-
-- **backlog:** don't open the graph store for migration-status/set-migration-phase (DEBT-BACKLOG-CLI-STORE-OPEN-001)
+- **backlog:** don't open the graph store for status-only CLI paths (DEBT-BACKLOG-CLI-STORE-OPEN-001)
 
 - **backlog:** a failed audit write must not fail an already-committed claim
 
@@ -48,7 +71,7 @@
 
 ### 🩹 Fixes
 
-- **backlog:** persist citations, atomic repo migration, signal cleanup
+- **backlog:** persist citations, atomic repo moves, signal cleanup
 
 
 ### ❤️  Thank You
@@ -72,9 +95,9 @@
 
 ### 🚀 Features
 
-- **backlog:** swap raw better-sqlite3 handle for sox store adapter (F-01)
+- **backlog:** swap the raw embedded-database handle for the sox store adapter (F-01)
 
-- **backlog:** F-01 turso adapter migration (resolves blockers)
+- **backlog:** F-01 adopt the turso store adapter (resolves blockers)
 
 - **backlog:** convert store to turso store-adapter (F-01+F-02)
 
@@ -85,7 +108,7 @@
 
 - **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
 
-- **backlog:** remove better-sqlite3 — turso-native concurrency fixtures (substrate invariant)
+- **backlog:** drop the embedded-database dependency — turso-native concurrency fixtures (substrate invariant)
 
 - **backlog:** best-effort store close in finally paths (close error must not mask command outcome)
 
@@ -107,7 +130,7 @@
 
 ### 🩹 Fixes
 
-- **backlog:** humanId collision hardening + repo-lookup UX + install/skill packaging
+- **backlog:** id collision hardening + repo-lookup UX + install/skill packaging
 
 
 ### ❤️  Thank You
@@ -160,24 +183,22 @@
 
 - **backlog:** add CLI entrypoint + bin (live apigen cli-output mount)
 
-- **backlog:** add migration.phase signal + migrationStatus op (MIGRATION.md §4.4)
+- **backlog:** Phase 1/2 apigen import + CI parity gate
 
-- **backlog:** Phase 1/2 apigen import + CI parity gate + durable migration.phase admin write
+- **backlog:** author backlog-usage skill + install-skill CLI
 
-- **backlog:** author backlog-usage skill + install-skill CLI (MIGRATION.md sec 4.2/4.3)
-
-- **backlog:** add `serve` CLI command so .mcp.json has a real entry to spawn (MIGRATION.md sec 4.5)
+- **backlog:** add `serve` CLI command so .mcp.json has a real entry to spawn
 
 - **backlog:** rootLevel projection filter so new tool items reach root
 
 
 ### 🩹 Fixes
 
-- **backlog:** close Phase-3 migration gate — CI Node floor, content-hash collision verified, FTS content immutability, bounded busy-retry; plus import provenance/silent-drop fixes
+- **backlog:** close out CI Node floor, content-hash collision verification, FTS content immutability, and bounded busy-retry; plus import provenance/silent-drop fixes
 
 - **backlog:** runBacklogCli no longer eagerly opens the store for --help/no-args (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001)
 
-- **backlog:** concurrent createItem id-collision + FTS sanitizer gap (MIGRATION.md sec 3.3 scale test)
+- **backlog:** concurrent createItem id-collision + FTS sanitizer gap
 
 - **backlog:** implement real transition/claim audit-log (DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001)
 
@@ -191,5 +212,3 @@
 ### ❤️  Thank You
 
 - pseudosky
-
-## Unreleased
