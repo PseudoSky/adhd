@@ -51,6 +51,7 @@ import type { BacklogConfig } from './env.js';
 import type { GraphBacklogStore } from './store/graph-backlog-store.js';
 import type { IWriteStoreHandle } from './write/tx.js';
 import type { IQueryStoreHandle } from './query/query.js';
+import { queryIssuesWithMeta } from './query/query.js';
 import type { IOutcomeEnvelope, IOutcomeFailure, BacklogErrorCode } from './envelope.js';
 import { errorEnvelope, okEnvelope, RagNotConfiguredError } from './envelope.js';
 import {
@@ -69,7 +70,6 @@ import {
 import { bootstrapSemanticStoreMembers } from './write/bootstrap.js';
 
 import { getIssue } from './query/get.js';
-import { queryIssues } from './query/query.js';
 import { lookup as lookupRegistry } from './query/views/registry.js';
 import { createIssue, type IDuplicateScanHandle } from './write/create-issue.js';
 import { update as updateIssueOp } from './write/update.js';
@@ -295,7 +295,17 @@ export async function get(ctx: BacklogCtx, input: IIssueGetInput): Promise<IOutc
  * aggregate axes, and `grep`/`semantic` text filters.
  */
 export async function query(ctx: BacklogCtx, input: IIssueQueryInput): Promise<IOutcomeEnvelope<IIssueQueryResult>> {
-  return envelope(async () => queryIssues(await queryHandle(ctx), input));
+  // Not routed through the generic `envelope()` helper: `query` is the one
+  // verb whose success arm carries `meta` (SPEC.md's pagination-truth
+  // contract, `envelope.ts`'s `IQueryEnvelopeMeta`) — `okEnvelope`'s `meta`
+  // parameter is populated here, directly, rather than widening `envelope()`
+  // for a field every other verb would leave meaningless.
+  try {
+    const { result, meta } = await queryIssuesWithMeta(await queryHandle(ctx), input);
+    return okEnvelope(result, meta ? { meta } : undefined);
+  } catch (err) {
+    return toEnvelope(err);
+  }
 }
 
 /**
