@@ -1,5 +1,5 @@
 /**
- * delete-listing.spec.ts — closes SPEC.md §9 AC-18's un-proven half:
+ * delete-listing.spec.ts — closes SPEC.md §8 AC-18's un-proven half:
  * "...the issue disappears from a default `query` listing but
  * `getNodeByUid(uid)` still resolves it (bi-temporal, never a hard
  * delete)."
@@ -28,7 +28,7 @@ import { createIssue } from './create-issue.js';
 import { deleteIssue } from './delete.js';
 import { queryIssues } from '../query/query.js';
 
-describe('deleteIssue + queryIssues default listing (SPEC.md §9 AC-18, real store)', () => {
+describe('deleteIssue + queryIssues default listing (SPEC.md §8 AC-18, real store)', () => {
   let dir: string;
   let store: TestIssueStore;
   let projectUid: string;

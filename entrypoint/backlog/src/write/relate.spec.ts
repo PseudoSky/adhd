@@ -1,5 +1,5 @@
 /**
- * relate.spec.ts — behavioral proof for `relate` (SPEC.md §6.3.6, §9 AC-17).
+ * relate.spec.ts — behavioral proof for `relate` (SPEC.md §6.3.6, §8 AC-17).
  *
  * Every test drives `relate` against a REAL store (`openTestIssueStore` —
  * never a mock of `relate` itself, never a mock of the store) through real
@@ -64,7 +64,7 @@ async function readAuditTrail(store: TestIssueStore, subjectUid: string): Promis
   });
 }
 
-describe('relate — §6.3.6 / §9 AC-17 (real store)', () => {
+describe('relate — §6.3.6 / §8 AC-17 (real store)', () => {
   let dir: string;
   let store: TestIssueStore;
   let projectUid: string;

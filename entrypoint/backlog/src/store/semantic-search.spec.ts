@@ -1,7 +1,7 @@
 /**
  * semantic-search.spec.ts — proves the RAG seam itself: the default
  * unconfigured degrade, the injectable configure/clear cycle, the
- * `requireSemanticBackend` accessor every AC-12 gate funnels through, and
+ * `requireSemanticBackend` accessor every §5a gate funnels through, and
  * `bootstrapSemanticBackend`'s DIAGNOSTIC failure reporting.
  *
  * All deterministic: a FAKE backend, no model download, no native module,
@@ -66,7 +66,7 @@ describe('the injectable seam', () => {
     configureSemanticBackend(null); // never leak a configured backend into another suite
   });
 
-  it('defaults to unconfigured — the AC-12 default degrade', () => {
+  it('defaults to unconfigured — the §5a default degrade', () => {
     expect(isSemanticSearchConfigured()).toBe(false);
     expect(getSemanticBackend()).toBeNull();
   });
@@ -93,7 +93,7 @@ describe('the injectable seam', () => {
       expect.unreachable('requireSemanticBackend must throw when no backend is configured');
     } catch (err) {
       // The feature name must survive into the message — that is what makes
-      // the AC-12 degrade actionable rather than a bare "not configured".
+      // the §5a degrade actionable rather than a bare "not configured".
       expect((err as Error).message).toContain('view:"similar"');
     }
   });

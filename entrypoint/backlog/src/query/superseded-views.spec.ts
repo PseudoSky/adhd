@@ -1,5 +1,6 @@
 /**
- * superseded-views.spec.ts — teeth for the five `isSuperseded: false` read
+ * superseded-views.spec.ts — SPEC.md §8 AC-6's read half: teeth for the five
+ * `isSuperseded: false` read
  * sites `superseded-listing.spec.ts` does not cover, plus a pin on the one
  * site that deliberately omits the filter.
  *

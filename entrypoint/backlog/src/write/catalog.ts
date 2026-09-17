@@ -171,7 +171,7 @@ export async function resolveComponentTx(
 
 /**
  * `project`'s reserved default component, `(root)` (§3, §6.1, §6.3.2,
- * §9 AC-23): what `createIssue` resolves to when `component` is omitted.
+ * §8 AC-23): what `createIssue` resolves to when `component` is omitted.
  * A row `upsertProject` already guarantees is live for every project — NEVER
  * minted here, in either case (§1). Resolved via `owns_project` (the SAME
  * traversal §3a's registry uses), not a bare name lookup, so a `(root)` row

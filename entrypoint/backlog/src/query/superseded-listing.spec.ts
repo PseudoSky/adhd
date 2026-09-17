@@ -1,6 +1,6 @@
 /**
- * superseded-listing.spec.ts — a body edit must not duplicate the issue in a
- * listing, and must not inflate the reported total.
+ * superseded-listing.spec.ts — SPEC.md §8 AC-6: a body edit must not
+ * duplicate the issue in a listing, and must not inflate the reported total.
  *
  * ## The defect
  *

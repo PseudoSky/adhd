@@ -985,7 +985,7 @@ describe('backlog search — natural-language shortcut (real spawned bin)', () =
     expect(help.stdout).toContain('search "<query>" [flags]');
   });
 
-  it('AC-5 guard: adding `search` did NOT widen the mounted command surface', () => {
+  it('§6.6 guard: adding `search` did NOT widen the mounted command surface', () => {
     // The whole reason `search` is an argv translation and not an `api.ts`
     // export. A `search` line in the live table means the translation was
     // quietly replaced by an operation.

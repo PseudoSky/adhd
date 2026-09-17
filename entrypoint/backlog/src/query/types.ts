@@ -191,7 +191,7 @@ export interface IIssueFilter {
 export type IIssueSort = 'priority' | 'updated' | 'created' | 'relevance' | 'textMatch';
 export type IIssueSortDirection = 'asc' | 'desc';
 /**
- * `projects`/`components`/`locations` (SPEC.md §3a/§9 AC-9) are the registry
+ * `projects`/`components`/`locations` (SPEC.md §3a/§8 AC-9) are the registry
  * LIST views — every live `project`/`component`/`location` row, optionally
  * narrowed by `filter.project` (and, for `locations`, `filter.component`) —
  * routed to `views/registry.ts`'s `listProjects`/`listComponents`/
@@ -348,12 +348,12 @@ export interface ILookupResult {
 }
 
 /**
- * `get`'s registry-detail shape (SPEC.md §3a/§9 AC-11) — `get --input
+ * `get`'s registry-detail shape (SPEC.md §3a/§8 AC-11) — `get --input
  * '{"registry":"project"|"component"|"location","name":...}'`, routed to
  * `views/registry.ts`'s `getRegistryDetail`. `filter` is honoured ONLY for
  * `registry:'component'` (SPEC.md §6.1's project-scoping rule — `name` alone
  * is ambiguous across projects, e.g. every project's reserved `(root)`
- * component shares the same name, §9 AC-23) and is ignored for `project`/
+ * component shares the same name, §8 AC-23) and is ignored for `project`/
  * `location` (a location has no independent name at all — it is always
  * resolved by uid, §3a).
  */

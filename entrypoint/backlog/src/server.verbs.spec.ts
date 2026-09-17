@@ -1,5 +1,5 @@
 /**
- * server.verbs.spec.ts — AC-0: **one apigen package, four mounts**.
+ * server.verbs.spec.ts — SPEC.md §6.7: **one apigen package, four mounts**.
  *
  * The contract this file exists to make falsifiable is a *negative* one:
  * backlog composes exactly ONE `buildBacklogApigenPackage` operation set and
@@ -30,7 +30,7 @@
  * transport that grew its own definition fails here even if every individual
  * transport still "works".
  *
- * **AC-0's negative half is asserted too:** `install`, `install-skill` and
+ * **§6.6's negative half is asserted too:** `install`, `install-skill` and
  * `serve` are host commands (the §6 carve-out, cli.ts:243-265) and
  * must appear on NO mount. `install`/`install-skill` must never open the
  * store (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001) and a reachable `serve`
@@ -272,7 +272,7 @@ afterAll(async () => {
   // fixed at the source; this only right-sizes the budget.
 }, 180_000);
 
-describe('AC-0 — one apigen package composed once, mounted to four transports', () => {
+describe('SPEC.md §6.7 — one apigen package composed once, mounted to four transports', () => {
   it('projects a non-empty operation surface from ONE buildBacklogApigenPackage call, without opening the store', () => {
     // If the thunk had been called, `beforeAll` would already have thrown.
     expect(live.surface.length).toBeGreaterThan(0);
@@ -367,7 +367,7 @@ describe('AC-0 — one apigen package composed once, mounted to four transports'
   });
 });
 
-describe('AC-0 negative control — the §6 host-command carve-out is pinned on every mount', () => {
+describe('§6.6 negative control — the host-command carve-out is pinned on every mount', () => {
   it('install / install-skill / serve are not projected as operations', () => {
     for (const cmd of BACKLOG_HOST_COMMANDS) {
       expect(live.surface.map((e) => e.cliPath[e.cliPath.length - 1])).not.toContain(cmd);

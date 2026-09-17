@@ -182,7 +182,7 @@ async function queryHandle(ctx: BacklogCtx): Promise<IQueryStoreHandle> {
 /**
  * Maps the write layer's `E_*` code onto the envelope's `BacklogErrorCode`
  * vocabulary, which is what `BACKLOG_EXIT_CODE` (model.ts) keys the CLI's
- * process exit code off. The four rows AC-6 depends on are `E_VALIDATION`
+ * process exit code off. The four rows that contract rests on are `E_VALIDATION`
  * (exit 2, a caller error) and `E_CONTENTION`/`E_IO`/`E_CONSTRAINT` (exit 1,
  * a server-side failure the caller cannot fix by re-phrasing the request).
  */

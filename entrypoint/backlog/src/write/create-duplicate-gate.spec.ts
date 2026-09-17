@@ -1,7 +1,7 @@
 /**
  * create-duplicate-gate.spec.ts — behavioral proof for `createIssue`'s
- * duplicate gate (SPEC.md §6.4, §9 AC-19) and its live-path sibling
- * criterion (§9 AC-2).
+ * duplicate gate (SPEC.md §6.4, §8 AC-19) and its live-path sibling
+ * criterion (§8 AC-2).
  *
  * **Real components, real embeddings, no fakes.** Every store here is
  * genuine: a real `GraphBackend` (`@adhd/sox-graph-store`, via
@@ -155,7 +155,7 @@ afterEach(async () => {
   removeTestIssueStoreDir(dir);
 });
 
-describe('createIssue — duplicate gate (SPEC.md §6.4, §9 AC-19)', () => {
+describe('createIssue — duplicate gate (SPEC.md §6.4, §8 AC-19)', () => {
   it('zero candidates: proceeds to a normal create with NO `duplicateCandidates` field at all, regardless of `duplicateAction`', async () => {
     const result = await file(
       handle, projectUid,
@@ -296,7 +296,7 @@ describe('createIssue — duplicate gate (SPEC.md §6.4, §9 AC-19)', () => {
   }, DUP_GATE_TIMEOUT);
 });
 
-describe('createIssue — live-path identical-content, force produces distinct uids (SPEC.md §9 AC-2)', () => {
+describe('createIssue — live-path identical-content, force produces distinct uids (SPEC.md §8 AC-2)', () => {
   it('two createIssue calls with identical {title, body} in the same project, second with duplicateAction:"force", produce two distinct uids', async () => {
     const title = 'AC-2 identical title';
     const body = 'AC-2 identical body, byte for byte';

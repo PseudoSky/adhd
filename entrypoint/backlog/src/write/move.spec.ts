@@ -1,6 +1,6 @@
 /**
- * move.spec.ts — behavioral proof for `move` (SPEC.md §6.3.6, §9 AC-17,
- * this file's own move.ts doc comment on the `(root)` default mirroring §9
+ * move.spec.ts — behavioral proof for `move` (SPEC.md §6.3.6, §8 AC-17,
+ * this file's own move.ts doc comment on the `(root)` default mirroring §8
  * AC-23).
  *
  * `move` reparents an issue's ONE live `owns_component` edge onto a
@@ -105,7 +105,7 @@ async function addComponent(
   );
 }
 
-describe('move — reparent an issue between projects/components (SPEC.md §6.3.6, §9 AC-17, real store)', () => {
+describe('move — reparent an issue between projects/components (SPEC.md §6.3.6, §8 AC-17, real store)', () => {
   let dir: string;
   let store: TestIssueStore;
   let projectAUid: string;

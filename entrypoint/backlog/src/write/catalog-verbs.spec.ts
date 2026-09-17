@@ -3,6 +3,13 @@
  * SPEC.md §3a/§4/§4c name: `upsertProject`, `upsertComponent`,
  * `upsertLocation`, `rmLocation` (`write/catalog.ts`).
  *
+ * This file is what SPEC.md §8 AC-5 (edge-scoped uniqueness) and §8 AC-12
+ * (registry CRUD idempotent on its OWN key and nothing wider) are proven by:
+ * one row for a repeated `upsertProject` name, one row for a repeated
+ * `(project, name)` component, and two genuinely distinct rows for the same
+ * component name under different projects — the half a global `name` key
+ * would silently collapse.
+ *
  * Every assertion here drives the REAL verb against a REAL store opened via
  * `openTestIssueStore` — never a mock of the verb, never a mock of the store.
  * Direct SQL reads against `node`/`edge` back every load-bearing assertion;
@@ -14,7 +21,7 @@
  * raise. See this file's own inline comments at each `NEGATIVE CONTROL` test
  * for the exact break/confirm-red/restore proof run for that assertion.
  *
- * **SPEC.md §9 AC-12 — the in-process races above are NOT this proof.** A
+ * **SPEC.md §8 AC-12 — the in-process races above are NOT this proof.** A
  * `Promise.allSettled` race against ONE shared `store`/adapter instance
  * exercises `executeWriteTransaction`'s retry loop and the `ON CONFLICT`
  * upsert SQL, but it never proves the `BEGIN IMMEDIATE` RESERVED-lock
@@ -489,7 +496,7 @@ describe('registry CRUD — upsertProject/upsertComponent/upsertLocation/rmLocat
     });
   });
 
-  describe('AC-12 cross-process proof — two REAL OS processes racing the SAME upsert (SPEC.md §9 AC-12)', () => {
+  describe('AC-12 cross-process proof — two REAL OS processes racing the SAME upsert (SPEC.md §8 AC-12)', () => {
     const HERE = dirname(fileURLToPath(import.meta.url));
     // Absolute source paths — the generated writer script (below) imports
     // these directly via `tsx`, exactly like `cross-process-write-safety

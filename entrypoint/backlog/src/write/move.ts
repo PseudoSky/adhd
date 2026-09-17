@@ -1,5 +1,5 @@
 /**
- * move.ts — `move` (SPEC.md §4, §4c, §6.3.6, §9 AC-17).
+ * move.ts — `move` (SPEC.md §4, §4c, §6.3.6, §8 AC-17).
  *
  * Reparents an issue onto a (possibly different) project's (possibly
  * different) component: a hand-composed edge-invalidate (the OLD live
@@ -23,7 +23,7 @@
  * `owns_component`→`owns_project` walk, hand-composed against `tx` (never
  * `getEdges()`, which is bare-adapter-only, §4c).
  *
- * **The `(root)` default, both ends (§9 AC-23, mirrored here).** `toProject`
+ * **The `(root)` default, both ends (§8 AC-23, mirrored here).** `toProject`
  * omitted resolves to the issue's OWN CURRENT project — this is a
  * component-only move, the identical project. `toComponent` omitted resolves
  * to the DESTINATION project's reserved `(root)` component (whichever project
@@ -86,7 +86,7 @@ export interface IMoveIssueInput {
    * use `upsertComponent` first if the component does not yet exist).
    * Omitted (undefined) resolves instead to the destination project's
    * reserved default component `(root)`, already guaranteed live by
-   * `upsertProject` (§3/§9 AC-23) — never minted here either.
+   * `upsertProject` (§3/§8 AC-23) — never minted here either.
    */
   toComponent?: string;
   /** The acting agent or person performing the move (§6.3's opening rule). REQUIRED. */
@@ -124,7 +124,7 @@ interface IResolvedPlacementRow {
  * (1:n)`), hand-composed against `tx` (never `getEdges()`, §4c). Every live
  * issue is guaranteed exactly one live `owns_component` edge from the moment
  * it is created (`createIssue` writes it unconditionally; this verb's own
- * invalidate+write sequence below preserves the SAME invariant, §9 AC-17) —
+ * invalidate+write sequence below preserves the SAME invariant, §8 AC-17) —
  * so a missing edge here is a genuine graph invariant violation, never a
  * caller error. Throws a PLAIN `Error` (never a `BacklogWriteError`
  * subclass), mirroring `claim.ts`'s identical `resolveIssueProjectPolicyTx`
@@ -184,11 +184,11 @@ async function resolveOwningProjectTx(tx: AdapterTransaction, componentRowid: nu
 
 /**
  * Reparent an issue onto a (possibly different) project's (possibly
- * different) component (§6.3.6, §9 AC-17). One `immediate` transaction:
+ * different) component (§6.3.6, §8 AC-17). One `immediate` transaction:
  * resolve `uid` → live `issue` node (tx-scoped, §4c) → walk its CURRENT
  * `owns_component`/`owns_project` edges → resolve the DESTINATION project
  * (given, or the current one) → resolve the DESTINATION component within
- * that project (given, or that project's reserved `(root)`, §9 AC-23) → if
+ * that project (given, or that project's reserved `(root)`, §8 AC-23) → if
  * the destination component is the SAME live component the issue already
  * occupies, return a no-op outcome (nothing invalidated, nothing written, no
  * audit — see this file's own doc comment); otherwise hand-composed

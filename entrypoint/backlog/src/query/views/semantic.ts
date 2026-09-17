@@ -331,6 +331,46 @@ export interface IRelevanceRankOptions {
 }
 
 /**
+ * How many times {@link rankByFusedRelevance} doubles its fetch window looking
+ * for live rows before giving the caller a short page. Four rounds reaches
+ * 8x the requested `limit`; a corpus where 7 of every 8 ranked hits are
+ * superseded is pathological, and returning a short page there beats an
+ * unbounded scan of the ranking backend.
+ */
+const MAX_SUPERSEDE_OVERFETCH_ROUNDS = 4;
+
+/**
+ * Drops the superseded rows from a ranked result page.
+ *
+ * **Why this is a post-filter and not a predicate on the query.** Every other
+ * read path pushes `isSuperseded: false` into `graph.queryNodes`'s own
+ * `NodeFilter` (`query.ts`). This path cannot: `searchRanked` belongs to
+ * `@adhd/sox-hybrid-search`'s `StoreSearchBackend`, whose filter contract is a
+ * different type owned by a different package and has no `isSuperseded`
+ * member. Without this, a body edit leaves the stale row eligible for ranking
+ * forever, and `view:'similar'` returns BOTH an issue and its replacement —
+ * the same logical issue twice, with the superseded copy often scoring higher
+ * because its text is what the anchor was embedded against.
+ *
+ * The `candidateIds` path is already safe (those ids come from a prior
+ * filtered `queryNodes`), but the filter is applied uniformly anyway: a second
+ * bounded `queryNodes` over ids the caller already narrowed is cheap, and a
+ * predicate that holds on only one of two branches is how the branch without
+ * it rots.
+ */
+async function dropSupersededResults(graph: GraphBackend, results: readonly SearchResult[]): Promise<SearchResult[]> {
+  if (results.length === 0) return [];
+  const ids = results.map((r) => r.id);
+  // Same `as unknown as NodeFilter` shape every other `isSuperseded` read site
+  // in this package uses — the installed `NodeFilter` type does not yet name
+  // the member the store's own query layer honours.
+  const nodeFilter: Record<string, unknown> = { ids, isSuperseded: false, limit: ids.length };
+  const live = await graph.queryNodes(nodeFilter as unknown as NodeFilter);
+  const liveIds = new Set(live.map((n) => n.id));
+  return results.filter((r) => liveIds.has(r.id));
+}
+
+/**
  * The one `searchRanked` call shape SPEC.md §5a specifies for `view:'similar'`
  * / `sort:'relevance'` / `sort:'textMatch'` / `_score`: fused text+vec (RRF)
  * plus a temporal-recency rescore. Exported standalone (not only reachable
@@ -354,7 +394,22 @@ export async function rankByFusedRelevance(handle: IQueryStoreHandle, opts: IRel
     rescore: [{ kind: 'temporal', decay: opts.decayPerHour ?? DEFAULT_TEMPORAL_DECAY_PER_HOUR }],
     filters,
   };
-  return handle.search.backend.searchRanked(query, opts.limit);
+
+  // Over-fetch, drop the superseded rows, and keep going until `limit` LIVE
+  // results are in hand or the backend is exhausted. See
+  // {@link dropSupersededResults} for why this cannot be expressed as a
+  // filter on `query` itself.
+  const kept: SearchResult[] = [];
+  let fetch = opts.limit;
+  for (let round = 0; round < MAX_SUPERSEDE_OVERFETCH_ROUNDS; round++) {
+    const raw = await handle.search.backend.searchRanked(query, fetch);
+    kept.length = 0;
+    kept.push(...(await dropSupersededResults(handle.graph, raw)));
+    // Enough live rows, or the backend has nothing more to give.
+    if (kept.length >= opts.limit || raw.length < fetch) break;
+    fetch *= 2;
+  }
+  return kept.slice(0, opts.limit);
 }
 
 /**

@@ -1,5 +1,5 @@
 /**
- * update.spec.ts — behavioral proof for `update` (SPEC.md §4, §6.3.3, §9 AC-14).
+ * update.spec.ts — behavioral proof for `update` (SPEC.md §4, §6.3.3, §8 AC-14).
  *
  * Real store, real reads, never mocks: a `title`/`assignee`-only patch is a
  * pure touch (same uid, node content untouched); a `kind`/`priority`/`author`
@@ -144,7 +144,7 @@ describe('update — touch/supersede/edge-rewrite (SPEC.md §6.3.3, real store)'
     await expect(update(store, { uid: issueUid, by: 'editor' })).rejects.toThrow(InvalidArgumentError);
   });
 
-  it('§9 AC-14: a `status` field on the raw (untyped) input is REJECTED naming `transition`, never silently applied', async () => {
+  it('§8 AC-14: a `status` field on the raw (untyped) input is REJECTED naming `transition`, never silently applied', async () => {
     const before = await liveEdges(store, 'has_status', { src: issueRowid });
     expect(before).toHaveLength(1);
 
@@ -276,7 +276,7 @@ describe('update — touch/supersede/edge-rewrite (SPEC.md §6.3.3, real store)'
     });
   });
 
-  describe('body change — the supersede path (§4c\'s CAS, §9 AC-14/identity-chain carry-forward)', () => {
+  describe('body change — the supersede path (§4c\'s CAS, §8 AC-14/identity-chain carry-forward)', () => {
     it('mints a FRESH uid, flags the OLD node is_superseded, writes a SUPERSEDES edge new→old, moves the content', async () => {
       const outcome = await update(store, { uid: issueUid, by: 'editor', body: 'revised body' });
       expect(outcome.changed).toEqual(['body']);

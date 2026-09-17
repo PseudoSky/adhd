@@ -1,12 +1,12 @@
 /**
  * transition.spec.ts — behavioral proof for `transition` (SPEC.md §4a,
- * §6.3.4, §9 AC-15).
+ * §6.3.4, §8 AC-15).
  *
  * Real store, real reads, never mocks: a transition swaps the LIVE
  * `has_status` edge, writes a fresh `transition` node whose `sha` is
  * recomputed and compared byte-for-byte (never "some sha exists"), stamps
  * `closedAt` on a terminal transition and CLEARS it on a reopen (the
- * stale-timestamp case §9 AC-15 calls out by name, not just the
+ * stale-timestamp case §8 AC-15 calls out by name, not just the
  * never-set-yet case), and gates on `note`/`citations` exactly per
  * `project_policy`. Citation verification is proven against a REAL file on
  * disk (a real sha256, never a stubbed one) alongside the unverifiable case.
@@ -156,12 +156,12 @@ describe('transition — status change (SPEC.md §6.3.4, real store)', () => {
     expect(row?.metadata?.['closedAt']).toBe(outcome.closedAt);
   });
 
-  it('§9 AC-15: reopening a terminal issue CLEARS closedAt — the stale-timestamp case, not just never-set', async () => {
+  it('§8 AC-15: reopening a terminal issue CLEARS closedAt — the stale-timestamp case, not just never-set', async () => {
     await seedStatus(store, 'done', true);
     const closeOutcome = await transition(store, { uid: issueUid, by: 'closer', toStatus: 'done', note: 'shipped' });
     expect(closeOutcome.closedAt).toBeDefined();
 
-    // §9 AC-15's actual named entrypoint: `queryIssues` with
+    // §8 AC-15's actual named entrypoint: `queryIssues` with
     // `filter:{closedAt:{since:...}}}`, not a raw row read. While closed,
     // the query MUST match.
     const whileClosedResult = await queryIssues(store, { filter: { closedAt: { since: closeOutcome.closedAt } } });

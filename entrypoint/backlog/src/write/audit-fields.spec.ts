@@ -1,5 +1,5 @@
 /**
- * audit-fields.spec.ts — SPEC.md §9 AC-3, the half no other suite reads.
+ * audit-fields.spec.ts — SPEC.md §8 AC-3, the half no other suite reads.
  *
  * AC-3: "every transition/update/move/invalidate/embedding write produces one
  * audit node (`actor`+`action`+`sha`)".

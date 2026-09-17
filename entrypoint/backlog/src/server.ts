@@ -112,7 +112,7 @@ export function testSilentLogger(): Logger | undefined {
 }
 
 // ---------------------------------------------------------------------------
-// The one-package → four-mount surface (SPEC.md §6.7, AC-0)
+// The one-package → four-mount surface (SPEC.md §6.7)
 // ---------------------------------------------------------------------------
 
 /**
@@ -128,7 +128,7 @@ export function testSilentLogger(): Logger | undefined {
  * Neither is a data op, so neither may ever appear as an apigen operation on
  * ANY of the four mounts.
  *
- * `assertHostCarveOut` turns AC-0's negative assertion ("`install`/`serve` are
+ * `assertHostCarveOut` turns §6.6's negative assertion ("`install`/`serve` are
  * NOT among the mounted verbs") into a mount-time invariant: a future refactor that
  * accidentally exports a host command from the mounted client module fails at
  * `buildBacklogApigenPackage()` — in every transport at once — instead of
@@ -139,7 +139,7 @@ export function testSilentLogger(): Logger | undefined {
 export const BACKLOG_HOST_COMMANDS: readonly string[] = ['install', 'install-skill', 'serve'];
 
 /**
- * SPEC.md §6.7 / AC-0 — the data verbs the whole surface consolidates onto:
+ * SPEC.md §6.7 — the data verbs the whole surface consolidates onto:
  * the nine issue verbs plus `lookup` and §3a's registry CRUD verbs, mounted
  * as `backlog_<verb>`. Pinned here, next to the carve-out it is the
  * complement of, because it is the ONE list four separate surfaces are
@@ -149,7 +149,7 @@ export const BACKLOG_HOST_COMMANDS: readonly string[] = ['install', 'install-ski
  * `parseArgs` cannot express the §2.1b positional form, projects `string[]`
  * as a JSON-valued flag where §7.3 wants comma-separated, and only sets
  * `process.exitCode` on a thrown `ApiError` (so an `ok:false` envelope would
- * exit 0 and fail AC-6) — has to be checked against this list rather than
+ * exit 0, contradicting `BACKLOG_EXIT_CODE`) — has to be checked against this list rather than
  * derived from the mount.
  *
  * That asymmetry is exactly how a split brain starts, and this repo already
@@ -211,7 +211,7 @@ export interface IMountedOperationSurface {
  * definition serves CLI, MCP, REST and OpenAPI. A test (or an operator) can
  * call this once and compare it against what each live transport actually
  * advertises; a divergence means some transport grew its own definition,
- * which is precisely what AC-0 forbids.
+ * which is precisely what §6.7 forbids.
  *
  * Only `kind: 'action'` operations are mounted — the same filter
  * `buildBacklogApigenPackage` applies when it builds `generated.schemas`, so
@@ -239,7 +239,7 @@ export function describeMountedSurface(operations: readonly Operation[]): IMount
 }
 
 /**
- * SPEC.md §6.6 / AC-0 negative assertion, enforced at mount time.
+ * SPEC.md §6.6's negative assertion, enforced at mount time.
  *
  * Throws if any mounted operation's CLI leaf or MCP tool name collides with a
  * host command. Checked against the LEAF segment (`get-item` out of
@@ -256,7 +256,7 @@ function assertHostCarveOut(surface: readonly IMountedOperationSurface[]): void 
   });
   if (offenders.length > 0) {
     throw new Error(
-      `@adhd/backlog: host-command carve-out violated (SPEC.md §6.6, AC-0) — ` +
+      `@adhd/backlog: host-command carve-out violated (SPEC.md §6.6) — ` +
         `${offenders.map((o) => o.id).join(', ')} was mounted as a data operation. ` +
         `install/install-skill must never open the store (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001) ` +
         `and serve must never be reachable as a tool (a second writer against the same store is ` +
@@ -645,7 +645,7 @@ export async function buildBacklogApigenPackage(
     createClient: () => Promise<BacklogCtx>;
   };
   /**
-   * AC-0: the four-transport projection of `operations`, computed once here
+   * §6.7: the four-transport projection of `operations`, computed once here
    * so CLI, MCP, REST and OpenAPI are provably reading ONE definition. Callers
    * that need to know "what is mounted" must read this rather than
    * re-deriving names per transport.
@@ -682,7 +682,7 @@ export async function buildBacklogApigenPackage(
     ),
   };
   const schemas = composeSchemas(generated, []);
-  // AC-0 (SPEC.md §6.7) — project the ONE descriptor list onto the four
+  // SPEC.md §6.7 — project the ONE descriptor list onto the four
   // transports here, at the single composition point, and enforce the §6
   // host-command carve-out before any transport mounts. Every mount below
   // (and `cli.ts`'s cli-output mount) is handed this same `operations` array,
@@ -789,7 +789,7 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
     const logger = testSilentLogger();
 
     const runs: Promise<void>[] = [];
-    // AC-0 / SPEC.md §6.7 — BOTH mounts below are handed the SAME
+    // SPEC.md §6.7 — BOTH mounts below are handed the SAME
     // `pkg` and the SAME `operations` array produced by the single
     // `buildBacklogApigenPackage` call above; `cli.ts`'s cli-output mount
     // makes the same call for the same reason. `openapiPlugin` is a
@@ -807,14 +807,14 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
           outputDir: '',
           options: { port: opts.port ?? 3300, host: opts.host ?? '127.0.0.1', usePlugins: [openapiPlugin, batchPlugin] },
           signal: opts.signal,
-          // AC-0 / SPEC.md §6.7 — the SAME `operations` array the MCP
+          // SPEC.md §6.7 — the SAME `operations` array the MCP
           // mount below receives. A per-transport operation list is exactly
-          // what AC-0 forbids, because it lets the REST surface drift from
+          // what §6.7 forbids, because it lets the REST surface drift from
           // the MCP one silently.
           //
           // This line previously read
           // `operations.filter((op) => !op.id.endsWith('get-item'))`, labelled
-          // "NEGATIVE CONTROL (temporary)" — a deliberate AC-0 violation
+          // "NEGATIVE CONTROL (temporary)" — a deliberate §6.7 violation
           // inserted to prove a parity assertion had teeth, which was never
           // reverted and shipped on main in 0cb37400. The published server's
           // REST/OpenAPI surface was therefore missing `get-item` entirely.

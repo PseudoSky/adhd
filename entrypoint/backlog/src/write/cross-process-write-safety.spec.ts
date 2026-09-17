@@ -1,6 +1,6 @@
 /**
  * cross-process-write-safety.spec.ts — BUG-039's fix-verification gate,
- * living on the write/read surface (SPEC.md §10.4, AC-22).
+ * living on the write/read surface (SPEC.md §9.1, AC-22).
  *
  * **The hazard this guards against.** Free-string `family`/`repo` identity
  * plus an in-band allocated counter-style id lets two real OS processes
@@ -19,7 +19,7 @@
  * collide on — and every write runs inside one `BEGIN IMMEDIATE` transaction
  * (`write/tx.ts`'s `executeWriteTransaction`). SPEC.md:29-33 marks "this
  * fixes cross-process write loss" as HYPOTHESIZED, not proven; this file is
- * §10.4's proof.
+ * §9.1's proof.
  *
  * **Two negative controls, two distinct criteria.** The `deferred` tx-mode
  * control proves the `BEGIN IMMEDIATE` RESERVED-lock compare-and-swap
@@ -177,7 +177,7 @@ async function storedCount(dbPath: string, projectUid: string): Promise<number> 
   }
 }
 
-describe('cross-process write safety — BUG-039 fix verification (SPEC.md §10.4, AC-22)', () => {
+describe('cross-process write safety — BUG-039 fix verification (SPEC.md §9.1, AC-22)', () => {
   let dir: string;
   let dbPath: string;
   let seedStore: TestIssueStore;
@@ -225,7 +225,7 @@ describe('cross-process write safety — BUG-039 fix verification (SPEC.md §10.
   );
 
   it(
-    `CONTROL (distinct-target — no forced collision): two REAL OS processes each createIssue ${N} times into the SAME project, each call carrying a UNIQUE body, persist exactly ${2 * N} issues (SPEC.md §9 AC-22's "distinct-target" case, alongside the same-target case above)`,
+    `CONTROL (distinct-target — no forced collision): two REAL OS processes each createIssue ${N} times into the SAME project, each call carrying a UNIQUE body, persist exactly ${2 * N} issues (SPEC.md §8 AC-22's "distinct-target" case, alongside the same-target case above)`,
     async () => {
       const [a, b] = await runBarrieredPair(dbPath, dir, projectUid, N, { ADHD_TEST_CROSS_PROCESS_BODY_MODE: 'distinct' });
 

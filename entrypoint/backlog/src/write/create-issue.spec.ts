@@ -1,5 +1,5 @@
 /**
- * create-issue.spec.ts — `createIssue`'s no-`component` default (SPEC.md §9
+ * create-issue.spec.ts — `createIssue`'s no-`component` default (SPEC.md §8
  * AC-23; the verb itself lives at `write/create-issue.ts`, §4/§6.3.2).
  *
  * AC-23's literal text: omitting `component` entirely resolves to `project`'s
@@ -51,7 +51,7 @@ async function countLiveRootComponents(store: TestIssueStore, projectUid: string
   return rows[0]?.n ?? 0;
 }
 
-describe('createIssue — component-omitted defaults to (root), never orphaned (SPEC.md §9 AC-23)', () => {
+describe('createIssue — component-omitted defaults to (root), never orphaned (SPEC.md §8 AC-23)', () => {
   let dir: string;
   let store: TestIssueStore;
 

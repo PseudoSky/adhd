@@ -43,7 +43,7 @@ describe('buildSearchArgv — translation onto the mounted `query` verb', () => 
     // (fallback) itself, and the `text` path already projects the compact
     // uid/kind/title/status/priority list. A default invented here would
     // override a correct one — and a hardcoded `sort: "relevance"` would
-    // trip AC-12 on an unconfigured store.
+    // trip §5a's RagNotConfiguredError on an unconfigured store.
     const input = inputOf(buildSearchArgv(['anything']));
     expect(input).not.toHaveProperty('sort');
     expect(input).not.toHaveProperty('fields');
