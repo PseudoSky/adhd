@@ -1,6 +1,6 @@
 ---
 name: backlog-usage
-description: "Use whenever filing, reading, claiming, transitioning, relating, or resolving a backlog issue — or registering a project/component/location — in ANY repo on this machine, via the `adhd-backlog` CLI / `mcp__backlog__*` tools, never by hand-editing a `BACKLOG.md` file. Examples: \"log this bug\", \"file a debt item for the flaky test\", \"claim BUG-042\", \"what's still open in this repo\", \"where does this tool live\"."
+description: "Use whenever filing, reading, claiming, transitioning, relating, or resolving a backlog issue — or registering a project/component/location — in ANY repo on this machine, via the `adhd-backlog` CLI / `mcp__backlog__*` tools, never by hand-editing a `BACKLOG.md` file. Examples: \"log this bug\", \"file a debt item for the flaky test\", \"claim that issue\", \"what's still open in this repo\", \"where does this tool live\"."
 ---
 
 # `@adhd/backlog` usage
