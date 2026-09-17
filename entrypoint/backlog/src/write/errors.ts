@@ -134,8 +134,25 @@ export class StaleSupersedeError extends BacklogWriteError {
   readonly code = 'E_CONSTRAINT' as const;
   readonly retryable = false;
 
-  constructor(public readonly uid: string) {
-    super(`Issue "${uid}" was already superseded by a concurrent write; re-get and retry`);
+  /**
+   * @param uid The stale uid the caller passed in.
+   * @param successorUid The uid this issue lives under NOW, when it is known —
+   *   the head of the `SUPERSEDES` chain starting at `uid`. Supplied by the
+   *   READ path (`resolveIssueByUid`), which can walk the chain against
+   *   committed state. The WRITE-path CAS deliberately omits it: it loses the
+   *   race *inside* its own transaction, so any successor it read would be a
+   *   uid another in-flight writer may still supersede before this caller
+   *   acts on it. Absent means "not known here", never "none exists".
+   */
+  constructor(
+    public readonly uid: string,
+    public readonly successorUid?: string,
+  ) {
+    super(
+      successorUid === undefined
+        ? `Issue "${uid}" was already superseded by a concurrent write; re-get and retry`
+        : `Issue "${uid}" was superseded by a body edit and is no longer the live issue; it now lives under "${successorUid}"`,
+    );
   }
 }
 
