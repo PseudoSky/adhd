@@ -269,6 +269,7 @@ describe('update — on-write re-embedding (§4b, §9 AC-4)', () => {
     const oldRowid = await rowidForUid(handle, oldUid);
     expect(await vec.get(oldRowid, MODEL_ID)).not.toBeNull();
 
+    const upsertsBefore = (await auditActionsFor(handle, oldRowid)).filter((a) => a === 'embedding_upserted').length;
     const outcome = await update(handle, { uid: oldUid, by: 'tester', body: 'new-body', awaitEmbed: true });
     expect(outcome.changed).toContain('body');
     const newUid = outcome.uid;
@@ -286,8 +287,14 @@ describe('update — on-write re-embedding (§4b, §9 AC-4)', () => {
 
     const oldActions = await auditActionsFor(handle, oldRowid);
     expect(oldActions.filter((a) => a === 'embedding_deleted')).toHaveLength(1);
+    // Exactly ONE new `embedding_upserted` for this write. The count is a
+    // DELTA, not an absolute: a supersede carries the pre-edit audit trail
+    // forward onto the successor (otherwise the issue's history stays bound
+    // to a node no listing returns and vanishes), so the inherited rows are
+    // present too. Asserting `upsertsBefore + 1` keeps both teeth — it goes
+    // red if the carry-forward stops, and red if one write emits two audits.
     const newActions = await auditActionsFor(handle, newRowid);
-    expect(newActions.filter((a) => a === 'embedding_upserted')).toHaveLength(1);
+    expect(newActions.filter((a) => a === 'embedding_upserted')).toHaveLength(upsertsBefore + 1);
 
     await writeHandle.close();
   });

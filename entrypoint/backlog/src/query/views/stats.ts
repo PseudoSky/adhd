@@ -571,6 +571,24 @@ export async function openCurve(handle: IQueryStoreHandle, input: IOpenCurveInpu
   // doc comment for the cost model.
   const { currentStatusNameByIssue, auditTrailByIssue } = await resolveCurrentStatusAndAuditTrails(graph);
 
+  // Per-ISSUE as well: the instant each node stopped being the head of its
+  // identity chain. A body edit supersedes the old node and deliberately leaves
+  // its `t_invalid` NULL (SPEC.md §4c), so `validAt` — correctly — still matches
+  // it at every later instant, alongside its successor. Without this, ONE issue
+  // counts as TWO from the edit onward, and N edits count it N+1 times.
+  //
+  // The discriminator is the `SUPERSEDES` edge's own `tCreated`, written in the
+  // same transaction as the supersede: the old node is `dst`, so `dst` was the
+  // chain head strictly BEFORE that instant and its successor is the head from
+  // that instant on. Filtering here rather than in the node filter is exact —
+  // unlike a listing, this function computes `existed`/`open` in JS from the
+  // returned array, with no SQL `COUNT` behind it and no keyset page to shorten.
+  const supersededAtByNode = new Map<number, string>();
+  for (const e of await graph.getEdges({ rel: 'SUPERSEDES' })) {
+    const previous = supersededAtByNode.get(e.dst);
+    if (previous === undefined || e.tCreated < previous) supersededAtByNode.set(e.dst, e.tCreated);
+  }
+
   const points: IOpenCurvePoint[] = [];
   for (const at of instants) {
     const nodeFilter: Record<string, unknown> = {
@@ -592,7 +610,12 @@ export async function openCurve(handle: IQueryStoreHandle, input: IOpenCurveInpu
     const existing = await graph.queryNodes(nodeFilter as unknown as NodeFilter);
 
     let open = 0;
+    let existedCount = 0;
     for (const issue of existing) {
+      // One row per identity CHAIN at this instant, never one per node.
+      const supersededAt = supersededAtByNode.get(issue.id);
+      if (supersededAt !== undefined && supersededAt <= at) continue;
+      existedCount += 1;
       const currentStatusName = currentStatusNameByIssue.get(issue.id);
       const trail = auditTrailByIssue.get(issue.id) ?? [];
       const statusAt = reconstructStatusAt(trail, at, currentStatusName);
@@ -600,7 +623,7 @@ export async function openCurve(handle: IQueryStoreHandle, input: IOpenCurveInpu
       if (!terminalAt) open += 1;
     }
 
-    points.push({ at, existed: existing.length, open, closed: existing.length - open });
+    points.push({ at, existed: existedCount, open, closed: existedCount - open });
   }
 
   return { points };
