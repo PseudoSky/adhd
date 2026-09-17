@@ -143,3 +143,30 @@ prior filtered `queryNodes`.
 
 Citations: [worktree .worktrees/backlog-v2, sox:typescript-pro, claude,
 docs/plan/backlog-completion, 1: entrypoint/backlog/src/query/views/semantic.ts:341-355]
+
+## 7. `release:prepared` does not run `changeset version`, but PUBLISHING.md says it does
+
+`bug` / `high` / project `sox-ecosystem`
+
+PUBLISHING.md states, in bold, "**Never run `changeset version` by hand as a separate
+step.** `release:prepared` runs `version` and `publish` together."[1] The script does
+not: `"release:prepared": "node tools/release-consumers.mjs && npm run
+build-index:publish && nx build sox && changeset publish"`[2] — there is no `version`
+step anywhere in it.
+
+The consequence lands on a one-way door. With a pending changeset for
+`@adhd/sox-graph-store` (minor) the on-disk version is still `0.9.2` and npm already
+serves `0.9.2`[3], so following the documented procedure runs `changeset publish`
+against unbumped versions. Best case it fails with "cannot publish over previously
+published versions"; worse, it publishes the four cascade packages from whatever
+state their `dist/` is in. And the doc forbids the only step that would bump them, so
+there is no documented path forward — the operator is told to do something the
+tooling cannot do.
+
+Either the script should gain `changeset version` (matching the doc and the CI
+workflow's "Version Packages" PR model), or the doc should be corrected to name the
+real sequence. A release was NOT attempted against this ambiguity.
+
+Citations: [sox-ecosystem main, sox:typescript-pro, claude, graph-store isSuperseded
+work, 1: PUBLISHING.md:50-52, 2: package.json:27, 3: libs/data/graph/graph-store/package.json:3
+vs `npm view @adhd/sox-graph-store version` = 0.9.2]
