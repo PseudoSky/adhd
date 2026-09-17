@@ -395,3 +395,47 @@ export function classifyDriverError(err: unknown): IWriteError {
   // driver at all) — deliberately NOT retryable. See doc comment above.
   return { code: 'E_IO', retryable: false, message, cause: err };
 }
+
+/**
+ * BUG-BACKLOG-BY-BARE-ROLE-001: SPEC.md/SKILL.md have always documented that
+ * `by` "must always be `${agentName}:${instanceId}`, never a bare role
+ * literal like `"agent"`", and that this is rejected before any write runs —
+ * but no code ever enforced the second half. Every mutating verb's own
+ * `assertNonBlank('by', ...)` only checked for missing/whitespace-only, so
+ * `by:"agent"` (the doc's own forbidden example) was accepted everywhere:
+ * `claim`, `update`, `upsert-project`, `create`, all landed it verbatim into
+ * `claimedBy`/`author`/audit rows, defeating the guard's stated purpose of
+ * keeping every write attributable to a real identity under concurrent
+ * multi-agent use.
+ *
+ * A small, closed list — not a shape regex — because the doc's own examples
+ * are specific bare nouns, not "anything without a colon" (a human's plain
+ * name like `"dana"` is a legitimate identity and must keep working).
+ */
+const BARE_ROLE_LITERALS = new Set([
+  'agent',
+  'user',
+  'system',
+  'human',
+  'unknown',
+  'anonymous',
+  'admin',
+  'bot',
+  'claude',
+  'assistant',
+]);
+
+/**
+ * Rejects the specific bare-role literals SPEC.md calls out by name, on top
+ * of whatever blank/missing check the call site already runs. Call this
+ * immediately after `assertNonBlank('by', input.by)` at every mutating verb.
+ */
+export function assertNotBareRoleLiteral(field: string, value: string): void {
+  if (BARE_ROLE_LITERALS.has(value.trim().toLowerCase())) {
+    throw new InvalidArgumentError(
+      field,
+      `"${value}" is a bare role literal, not a real identity — use ` +
+        '"${agentName}:${instanceId}" (e.g. "claude:1"), never a bare role word'
+    );
+  }
+}

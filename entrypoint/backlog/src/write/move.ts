@@ -56,7 +56,11 @@ import {
   resolveProjectTx,
 } from './catalog.js';
 import { writeAudit } from './audit.js';
-import { InvalidArgumentError, IssueNotFoundError } from './errors.js';
+import {
+  InvalidArgumentError,
+  IssueNotFoundError,
+  assertNotBareRoleLiteral,
+} from './errors.js';
 import {
   type IWriteStoreHandle,
   executeWriteTransaction,
@@ -231,6 +235,7 @@ export async function move(
 ): Promise<IMoveIssueOutcome> {
   assertNonBlank('uid', input.uid);
   assertNonBlank('by', input.by);
+  assertNotBareRoleLiteral('by', input.by);
 
   return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
     const now = nowISO();

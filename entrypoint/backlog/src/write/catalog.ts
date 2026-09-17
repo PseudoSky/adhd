@@ -23,7 +23,11 @@
  */
 
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
-import { CatalogNotFoundError, InvalidArgumentError } from './errors.js';
+import {
+  CatalogNotFoundError,
+  InvalidArgumentError,
+  assertNotBareRoleLiteral,
+} from './errors.js';
 import {
   type IEdgeKindRule,
   type IWriteStoreHandle,
@@ -665,6 +669,7 @@ export async function upsertProject(
 ): Promise<IUpsertProjectOutcome> {
   assertNonBlank('name', input.name);
   assertNonBlank('by', input.by);
+  assertNotBareRoleLiteral('by', input.by);
 
   return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
     const now = nowISO();
@@ -822,6 +827,7 @@ export async function upsertComponent(
   assertNonBlank('project', input.project);
   assertNonBlank('name', input.name);
   assertNonBlank('by', input.by);
+  assertNotBareRoleLiteral('by', input.by);
 
   return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
     const now = nowISO();
@@ -973,6 +979,7 @@ export async function upsertLocation(
   assertNonBlank('component', input.component);
   assertNonBlank('value', input.value);
   assertNonBlank('by', input.by);
+  assertNotBareRoleLiteral('by', input.by);
   if (!VALID_LOCATION_TYPES.includes(input.locType)) {
     throw new InvalidArgumentError(
       'locType',
@@ -1118,6 +1125,7 @@ export async function rmLocation(
 ): Promise<IRmLocationOutcome> {
   assertNonBlank('uid', input.uid);
   assertNonBlank('by', input.by);
+  assertNotBareRoleLiteral('by', input.by);
 
   return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
     const now = nowISO();
