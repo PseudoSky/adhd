@@ -1,8 +1,8 @@
 /**
- * transition.ts — `transition` (SPEC.md §4a, §6.3.4, §9 AC-15).
+ * transition.ts — `transition` (SPEC.md §4a, §6.3.4, §8 AC-15).
  *
  * The ONE path into a status change (§6.2/§6.3.3's DEBT-010 fix: `update`
- * structurally cannot carry a `status` field, §9 AC-14 — see `update.ts`,
+ * structurally cannot carry a `status` field, §8 AC-14 — see `update.ts`,
  * this file's own sibling, deliberately owned by the same agent for exactly
  * that boundary). Writes a fresh `transition` node (`{from_status,
  * to_status, agent, note, sha, at}`, §3) + a `has_transition` edge, swaps the
@@ -25,7 +25,7 @@
  * is a resolved SPEC ambiguity, not an invented scheme; see the package's own
  * write-verb report for the full citation.
  *
- * **`closedAt` clearing (§9 AC-15).** `touch(nodeId, meta)` REPLACES the
+ * **`closedAt` clearing (§8 AC-15).** `touch(nodeId, meta)` REPLACES the
  * entire `meta` column wholesale, never merges (verified against the
  * published dist — see `claim.ts`'s identical citation) — so the new
  * metadata object this file builds explicitly OMITS `closedAt` whenever

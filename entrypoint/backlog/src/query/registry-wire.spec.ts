@@ -1,5 +1,5 @@
 /**
- * registry-wire.spec.ts — SPEC.md §9 AC-9 ("Registry list") and AC-11
+ * registry-wire.spec.ts — SPEC.md §8 AC-9 ("Registry list") and AC-11
  * ("Registry detail") AT THE WIRE, driven through the REAL BUILT
  * `dist/index.js` as a child process — mirroring `paging-wire.spec.ts`'s
  * pattern exactly (see that file's own header for why an in-process
@@ -311,7 +311,7 @@ describe('AC-11 — registry DETAIL via `get` at the wire (real built bin)', () 
         // `priority` is genuinely optional on `createIssue` — an omitted
         // priority mints no `has_priority` edge, so the card would never
         // populate the `priority` key regardless of the default-fields set
-        // (SPEC.md §9 AC-13 claims the DEFAULT FIELD SET includes `priority`,
+        // (SPEC.md §8 AC-13 claims the DEFAULT FIELD SET includes `priority`,
         // not merely that an unset priority happens to also be absent —
         // `get.spec.ts`'s own in-process test makes the identical call).
         priority: 'p1',
@@ -329,7 +329,7 @@ describe('AC-11 — registry DETAIL via `get` at the wire (real built bin)', () 
     // `upsertProject` is the write path a caller operating from a worktree
     // checkout of the SAME repo would hit again (SPEC.md §3: "A worktree
     // directory under the project resolves to the SAME project row — never
-    // a phantom row"); its uniqueness key is `name` alone (§9 AC-12), so a
+    // a phantom row"); its uniqueness key is `name` alone (§8 AC-12), so a
     // second call naming a DIFFERENT absolute `path` (a worktree root, e.g.
     // `.worktrees/<id>` under the same checkout) must still resolve to the
     // SAME row — not mint a second one.

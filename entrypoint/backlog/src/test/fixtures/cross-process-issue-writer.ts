@@ -1,6 +1,6 @@
 /**
  * cross-process-issue-writer.ts — a REAL separate-process writer for
- * `write/cross-process-write-safety.spec.ts` (BUG-039 / SPEC.md §10.4,
+ * `write/cross-process-write-safety.spec.ts` (BUG-039 / SPEC.md §9.1,
  * AC-22).
  *
  * Run directly from SOURCE via `tsx` (never through the built `dist/` —
@@ -42,7 +42,7 @@ const n = Number(nRaw);
  * case. `'distinct'` gives every call its OWN unique body (per `tag`+`i`,
  * already-unique the same way `title` is below) — a genuine no-forced-
  * collision case proving the write path is safe when there is no shared
- * content-hash target to even theoretically collide on, per SPEC.md §9
+ * content-hash target to even theoretically collide on, per SPEC.md §8
  * AC-22's "both the same-target and distinct-target cases" wording.
  */
 const bodyMode = process.env['ADHD_TEST_CROSS_PROCESS_BODY_MODE'] === 'distinct' ? 'distinct' : 'same';
@@ -87,7 +87,7 @@ async function main(): Promise<void> {
         // happens to insert first, while every caller still gets `ok:true`.
         // `bodyMode === 'distinct'`: every call's body is unique — no forced
         // collision at all, proving the write path persists exactly 2*n rows
-        // even with zero shared content-hash target (SPEC.md §9 AC-22's
+        // even with zero shared content-hash target (SPEC.md §8 AC-22's
         // "distinct-target" case).
         body: bodyMode === 'distinct' ? `cross-process-write-safety probe ${tag}-${i}` : 'cross-process-write-safety probe',
         // A SHARED identity across BOTH writers, not `writer:${tag}` — this

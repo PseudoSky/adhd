@@ -1,5 +1,5 @@
 /**
- * update.ts — `update` (SPEC.md §4, §6.3.3, §9 AC-14).
+ * update.ts — `update` (SPEC.md §4, §6.3.3, §8 AC-14).
  *
  * `updateIssue(uid, patch)` per §4: **body change → `supersede`** (a fresh
  * `issue` node + a hand-composed `SUPERSEDES` edge, §4c — the only content
@@ -10,7 +10,7 @@
  * upsert-new, same `tx`, mirroring `move.ts`'s own `owns_component`
  * invalidate-then-write sequencing exactly). `status` is a compile-time
  * absent field (§6.3.3) and, for an untyped (CLI/HTTP/MCP JSON) caller that
- * sends one anyway, a runtime-rejected one (§9 AC-14) — this file and
+ * sends one anyway, a runtime-rejected one (§8 AC-14) — this file and
  * `transition.ts` are deliberately one agent's slice for exactly this
  * reason: the DEBT-010 bundling bug this design fixes was two evidence
  * fields landing on the wrong verb, and only an agent that owns BOTH verbs
@@ -584,7 +584,7 @@ function assertNoSilentlyDiscardedPatchKeys(input: IUpdateIssueInput, changed: r
  * `body` when given; no fields at all in the patch — a zero-field call is a
  * client error, not a silent no-op success, since the caller almost
  * certainly meant a different verb), `BacklogValidationError('status', ...)`
- * (an untyped caller sent a `status` field — §9 AC-14, this is the ONE
+ * (an untyped caller sent a `status` field — §8 AC-14, this is the ONE
  * runtime rejection this whole file exists to guarantee, and it names
  * `transition` in its message), `IssueNotFoundError` (no live `issue` node
  * carries `uid`, including an already-superseded one — this file's own doc
@@ -608,7 +608,7 @@ export async function update(handle: IWriteStoreHandle, input: IUpdateIssueInput
   assertNonBlank('uid', input.uid);
   assertNonBlank('by', input.by);
 
-  // §9 AC-14: `IUpdateIssueInput`'s TS type has no `status` field at all
+  // §8 AC-14: `IUpdateIssueInput`'s TS type has no `status` field at all
   // (compile-time rejection for a typed caller), but an untyped CLI/HTTP/MCP
   // JSON caller can still send one — checked against the raw input object,
   // never silently applied as a status change.
@@ -626,7 +626,7 @@ export async function update(handle: IWriteStoreHandle, input: IUpdateIssueInput
   }
   assertNoSilentlyDiscardedPatchKeys(input, changed);
 
-  // §4b/§9 AC-4 — captured from inside the transaction closure, read only
+  // §4b/§8 AC-4 — captured from inside the transaction closure, read only
   // AFTER `executeWriteTransaction` below resolves (never used to trigger an
   // embed from inside the closure itself). Stays `undefined` unless this
   // call's body-change branch actually runs (see `embedding-observer.ts`'s
@@ -796,7 +796,7 @@ export async function update(handle: IWriteStoreHandle, input: IUpdateIssueInput
     return { uid: currentUid, changed };
   });
 
-  // §4b/§9 AC-4 — strictly AFTER `executeWriteTransaction` above has
+  // §4b/§8 AC-4 — strictly AFTER `executeWriteTransaction` above has
   // resolved (subject transaction committed). `supersedeEmbedding` is set
   // only on the body-change branch — a pure touch never schedules anything
   // (see `embedding-observer.ts`'s own doc comment on why touch is excluded,

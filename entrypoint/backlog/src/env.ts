@@ -14,7 +14,7 @@ export interface BacklogConfig {
   /**
    * RAG-SPEC.md §1.6 — the opt-in embedding/vector stack. `enabled` defaults
    * to FALSE: an unconfigured build must behave exactly as it did before RAG
-   * existed (every semantic input answers `RagNotConfiguredError`, AC-12), so
+   * existed (every semantic input answers `RagNotConfiguredError`, §5a), so
    * a host opts IN deliberately and nothing is ever switched on implicitly.
    */
   readonly embedding: { readonly enabled: boolean; readonly provider: string; readonly model: string };
@@ -68,7 +68,7 @@ export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
       default: false,
       description:
         'RAG-SPEC.md §1.6 — opt IN to the semantic/RAG stack. Default FALSE: semantic inputs (filter.semantic, filter.anchor, ' +
-        'view:"similar", sort:"relevance", fields:["_vector"]) answer RagNotConfiguredError (AC-12) until this is set. ' +
+        'view:"similar", sort:"relevance", fields:["_vector"]) answer RagNotConfiguredError (§5a) until this is set. ' +
         'Requires the optionalDependencies @adhd/sox-embedding-provider + @adhd/sox-vector-store to be installed, and a ' +
         'store whose adapter reports capabilities.nativeVectors (turso). Enabling it with any of those missing logs a ' +
         'typed reason and leaves RAG unconfigured — it never crashes startup.',

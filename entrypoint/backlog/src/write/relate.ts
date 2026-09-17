@@ -1,5 +1,5 @@
 /**
- * relate.ts — `relate` (SPEC.md §4, §6.3.6, §9 AC-17; carries forward
+ * relate.ts — `relate` (SPEC.md §4, §6.3.6, §8 AC-17; carries forward
  * BUG-025/BUG-044's "never silently pick one" rule).
  *
  * A pure composition over this file's own tx-scoped node lookup
@@ -27,7 +27,7 @@
  * against the bare adapter and would read outside this file's own
  * `immediate` transaction (§4c).
  *
- * **`noop` semantics, precisely (§6.3.6, §9 AC-17).** `add`: if a LIVE edge
+ * **`noop` semantics, precisely (§6.3.6, §8 AC-17).** `add`: if a LIVE edge
  * already connects `(sourceUid, targetUid, rel)` exactly, the call is a
  * no-op — nothing invalidated, nothing (re-)written, no audit — mirroring
  * `move.ts`'s own "same-placement calls are a no-op" convention exactly (a

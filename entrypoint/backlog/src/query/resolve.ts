@@ -188,7 +188,7 @@ export function getIncomingEdges(graph: GraphBackend, nodeId: number): Promise<E
  * The component that owns `issueId` (SPEC.md §3: `owns_component: component →
  * issue (1:n)`) and, one hop further, the project that owns that component
  * (`owns_project: project → component (1:n)`). Every live issue has exactly
- * one of each (§9 AC-23), so this returns `undefined` only for a
+ * one of each (§8 AC-23), so this returns `undefined` only for a
  * pre-invariant / corrupted row, never as an expected steady-state case.
  */
 export async function resolveIssuePlacement(

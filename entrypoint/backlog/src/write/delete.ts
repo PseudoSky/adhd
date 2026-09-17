@@ -50,7 +50,7 @@ export interface IDeleteIssueInput {
   /** The acting agent or person, as a name (§6.3's opening rule). REQUIRED. */
   by: string;
   /**
-   * §4b/§6.2/§9 AC-4 ("invalidating an issue removes its vector") — waits for
+   * §4b/§6.2/§8 AC-4 ("invalidating an issue removes its vector") — waits for
    * the fire-and-forget vector-deletion round-trip before `deleteIssue`
    * returns, when `true` and `handle.embedding` is configured. Default
    * (`false`/omitted): fire-and-forget, matching `create`/`update`'s own
@@ -120,7 +120,7 @@ export async function deleteIssue(handle: IWriteStoreHandle, input: IDeleteIssue
     return { uid: row.uid, invalidated: true as const };
   });
 
-  // §4b/§9 AC-4 ("invalidating removes it") — strictly AFTER the subject
+  // §4b/§8 AC-4 ("invalidating removes it") — strictly AFTER the subject
   // transaction above has committed.
   if (deletedIssue) {
     const embedPromise = scheduleIssueEmbedding(handle, {

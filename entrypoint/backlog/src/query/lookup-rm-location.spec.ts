@@ -1,5 +1,5 @@
 /**
- * lookup-rm-location.spec.ts — closes SPEC.md §9 AC-21: "`rmLocation(uid)`
+ * lookup-rm-location.spec.ts — closes SPEC.md §8 AC-21: "`rmLocation(uid)`
  * invalidates the location; a subsequent `lookup` on that `(locType,value)`
  * no longer resolves it; the location's own record remains addressable by
  * uid."
@@ -26,7 +26,7 @@ import { upsertComponent, upsertLocation, rmLocation } from '../write/catalog.js
 import { CatalogNotFoundError } from '../write/errors.js';
 import { lookup } from './views/registry.js';
 
-describe('lookup + rmLocation composition (SPEC.md §9 AC-21, real store)', () => {
+describe('lookup + rmLocation composition (SPEC.md §8 AC-21, real store)', () => {
   let dir: string;
   let store: TestIssueStore;
   let projectUid: string;

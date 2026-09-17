@@ -3,7 +3,7 @@
  *
  * One `store.adapter.transaction(fn, {mode:'immediate'})` (§4c) over: resolve
  * `project` (find-only, §1/§6.1) → resolve `component` (find-only when given;
- * `project`'s reserved `(root)` default when omitted, §3/§6.1/§9 AC-23) →
+ * `project`'s reserved `(root)` default when omitted, §3/§6.1/§8 AC-23) →
  * find-or-mint `kind`/`status`/`priority`/`agent` (§1/§4c's hand-composed
  * find-then-create) → write the `issue` node → write `owns_component` +
  * `has_kind` + `has_status` (+ `has_priority` when resolved) + `authored_by`
@@ -65,7 +65,7 @@ export interface ICreateIssueInput {
   body: string;
   /** uid or name — resolved per §6.1; REQUIRED (every issue has a component chain). NEVER minted by this verb (§1/§6.1). */
   project: string;
-  /** uid or name, scoped within `project` — RESOLVED ONLY, never created. Omitted (undefined) resolves to `project`'s reserved default component `(root)` (§3/§6.1/§9 AC-23) — a THIRD case, distinct from a resolved or an unresolved name. */
+  /** uid or name, scoped within `project` — RESOLVED ONLY, never created. Omitted (undefined) resolves to `project`'s reserved default component `(root)` (§3/§6.1/§8 AC-23) — a THIRD case, distinct from a resolved or an unresolved name. */
   component?: string;
   /** catalog name or uid; default is the project's configured `policy.defaultKind`, falling back to the global `"issue"` row. An unresolved NAME mints; a uid-shaped ref that does not resolve throws (§6.1). */
   kind?: string;
@@ -322,7 +322,7 @@ function enforceAllowedSet(allowed: readonly string[], field: 'kind' | 'status',
  * (§2) — it has no awareness of this verb's own find-or-mint/resolve-only
  * distinctions. Run it against the RESOLVED values (`component`/`kind`/
  * `status` are always a non-blank name by the time this runs — resolved
- * from a given ref, or minted, or defaulted, §6.1/§9 AC-23), never the raw
+ * from a given ref, or minted, or defaulted, §6.1/§8 AC-23), never the raw
  * caller input (BUG blind-review finding 4): AC-23's own guarantee is that
  * omitting `component` NEVER throws, and a raw-input check would make an
  * operator-configured `requiredFields: ['component']` violate that
@@ -580,7 +580,7 @@ export async function createIssue(
     return { created: false, reason: 'duplicate-suppressed', duplicateCandidates };
   }
 
-  // §4b/§9 AC-4 — captured from INSIDE the transaction closure (the only
+  // §4b/§8 AC-4 — captured from INSIDE the transaction closure (the only
   // place the freshly-minted issue's rowid is ever in scope) but read only
   // AFTER `executeWriteTransaction` resolves below, never used to trigger an
   // embed from inside the closure itself (§4b: "AFTER the write layer's
@@ -784,7 +784,7 @@ export async function createIssue(
     };
   });
 
-  // §4b/§9 AC-4 — strictly AFTER `executeWriteTransaction` above has
+  // §4b/§8 AC-4 — strictly AFTER `executeWriteTransaction` above has
   // resolved, i.e. after the subject transaction committed and released its
   // RESERVED lock (`embedding-observer.ts`'s own doc comment). `embeddedIssue`
   // is set only on the genuine-create branch (never `'abort'`/`'comment'`,

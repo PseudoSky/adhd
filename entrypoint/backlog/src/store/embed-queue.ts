@@ -152,7 +152,7 @@ export function scheduleEmbed(store: GraphBacklogStore, nodeId: number, content:
       const vec = await backend.embedDocument(text);
       await backend.upsertVector(nodeId, vec);
       // BUG-045 — the space is provably non-empty from here on, so the
-      // read-side AC-12 gates open without needing a process restart. This
+      // read-side §5a gates open without needing a process restart. This
       // is the ONE place a vector reaches the space (the write path and the
       // §7 backfill both funnel through here), so it is the only place the
       // flag needs flipping.

@@ -680,7 +680,7 @@ async function queryOverlap(handle: IQueryStoreHandle, input: IIssueQueryInput):
 }
 
 /**
- * `view:'projects'`/`'components'`/`'locations'` (SPEC.md §3a/§9 AC-9) — the
+ * `view:'projects'`/`'components'`/`'locations'` (SPEC.md §3a/§8 AC-9) — the
  * registry LIST views, thin adapters over `views/registry.ts`'s own
  * `listProjects`/`listComponents`/`listLocations`. `input.filter` is
  * `IIssueFilter`, a structural superset of `views/registry.ts`'s own

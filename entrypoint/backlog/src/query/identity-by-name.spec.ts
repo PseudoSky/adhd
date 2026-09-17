@@ -3,8 +3,7 @@
  * layer is `uid` alone; no field or code path resolves an issue by a
  * human-readable name of any kind.
  *
- * `docs/plan/backlog-completion/AC-AUDIT-CURRENT.md`'s AC-1 detail section
- * found this claim entirely unproven: `get.spec.ts`'s existing
+ * The claim was previously unproven: `get.spec.ts`'s existing
  * "unresolvable uid" tests pass a synthetic string
  * (`'issue-does-not-exist-anywhere'`) that never was a real issue's title —
  * so they prove "an arbitrary string is not a uid", not "a REAL issue's

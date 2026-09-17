@@ -349,7 +349,7 @@ describe('querySimilarView — vector-store-filter-purity (the "resolve to ids f
 
   it('a component filter excludes a strictly-closer out-of-component issue', async () => {
     const { projectUid } = await seedProject(s.writeHandle, 'proj-a');
-    // `component` omitted ⇒ falls back to project's reserved `(root)` component (§6.1/§9 AC-23).
+    // `component` omitted ⇒ falls back to project's reserved `(root)` component (§6.1/§8 AC-23).
     const rootComponentIssue = await s.createIssueFixture({ title: 'root-comp', body: 'aaarootbody', project: projectUid });
     const otherProject = await seedProject(s.writeHandle, 'proj-b');
     const otherComponentIssue = await s.createIssueFixture({ title: 'other-comp', body: 'aaaotherbody', project: otherProject.projectUid });

@@ -1,8 +1,7 @@
 /**
  * vocabulary-gate.spec.ts — SPEC.md AC-1's vocabulary-invariant half: the
  * banned-terms gates enforce the invariant only when a human remembers to
- * type the command. `docs/plan/backlog-completion/AC-AUDIT-CURRENT.md`'s
- * AC-1 detail section calls this out explicitly — neither
+ * type the command — and neither
  * `tools/gate/vocabulary-gate.mjs` (source-tree scan) nor
  * `scripts/check-vocabulary.mjs` (packed-tarball scan) runs as part of the
  * test suite, so a regression can land and stay green until someone

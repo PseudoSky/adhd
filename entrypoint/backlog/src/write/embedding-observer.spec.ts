@@ -1,7 +1,7 @@
 /**
  * embedding-observer.spec.ts — real-component tests for the write layer's
  * post-commit embedding hook (SPEC.md §4a's embedding-audit exception, §4b
- * FEAT-021, §9 AC-3's embedding clause, §9 AC-4).
+ * FEAT-021, §8 AC-3's embedding clause, §8 AC-4).
  *
  * **Real components, one faked seam.** A real `GraphBackend` + real
  * `StoreAdapter` (`openTestIssueStore`, Turso), a real `TursoVectorBackend`
@@ -123,7 +123,7 @@ afterEach(() => {
   removeTestIssueStoreDir(dir);
 });
 
-describe('createIssue — on-write embedding (§4b, §9 AC-4)', () => {
+describe('createIssue — on-write embedding (§4b, §8 AC-4)', () => {
   it('a genuine create produces the vector via the embedding backend, and exactly one embedding_upserted audit row', async () => {
     const { writeHandle, vec } = await openWriteAndVec(dir);
     const backend = makeEmbeddingBackend(vec);
@@ -256,7 +256,7 @@ describe('createIssue — on-write embedding (§4b, §9 AC-4)', () => {
   });
 });
 
-describe('update — on-write re-embedding (§4b, §9 AC-4)', () => {
+describe('update — on-write re-embedding (§4b, §8 AC-4)', () => {
   it("a body-changing update (supersede) deletes the OLD node's vector and upserts the NEW node's, each with its own audit row", async () => {
     const { writeHandle, vec } = await openWriteAndVec(dir);
     const backend = makeEmbeddingBackend(vec);
@@ -325,7 +325,7 @@ describe('update — on-write re-embedding (§4b, §9 AC-4)', () => {
   });
 });
 
-describe('deleteIssue — vector removal on invalidate (§9 AC-4)', () => {
+describe('deleteIssue — vector removal on invalidate (§8 AC-4)', () => {
   it('invalidating an issue removes its vector and records exactly one embedding_deleted audit row', async () => {
     const { writeHandle, vec } = await openWriteAndVec(dir);
     const backend = makeEmbeddingBackend(vec);

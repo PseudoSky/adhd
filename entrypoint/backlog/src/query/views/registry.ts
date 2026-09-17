@@ -104,7 +104,7 @@ export async function listLocations(graph: GraphBackend, filter?: IRegistryQuery
  * (§3a) — expanded detail. `name` accepts a uid or a name (project/component)
  * per SPEC.md §6.1's shape-disambiguation rule; a location has no independent
  * `name`, so it is looked up by uid only. `filter.project` scopes the
- * `component` case (SPEC.md §6.1/§9 AC-23: a bare component NAME is
+ * `component` case (SPEC.md §6.1/§8 AC-23: a bare component NAME is
  * ambiguous across projects — every project's reserved `(root)` component
  * shares the same name — so `filter.project` disambiguates exactly like
  * `listComponents`' own `filter.project`); omitted, `component` resolves
@@ -151,7 +151,7 @@ export async function getRegistryDetail(
   }
 
   if (input.registry === 'component') {
-    // `filter.project` disambiguates a bare NAME across projects (§6.1/§9
+    // `filter.project` disambiguates a bare NAME across projects (§6.1/§8
     // AC-23 — e.g. every project's reserved `(root)` component shares the
     // same name); a uid-shaped `name` is already unambiguous and does not
     // need it, but `tryResolveComponentRef` handles that case identically to

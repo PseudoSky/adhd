@@ -5,7 +5,7 @@
  * — the default, unconfigured build answers every semantic input
  * (`filter.semantic`, `filter.anchor`, `view:"similar"`, `sort:"relevance"`,
  * `fields:["_vector"]`, and the six EPIC-G admin actions) with
- * `RagNotConfiguredError` (AC-12), never a silently-wrong keyword
+ * `RagNotConfiguredError` (§5a), never a silently-wrong keyword
  * substitute. This module is the SEAM that lets a host opt a real backend
  * IN without backlog ever requiring one:
  *
@@ -128,7 +128,7 @@ let injectedBackend: SemanticBackend | null = null;
 let vectorSpacePopulated = false;
 
 /**
- * Installs (or clears, with `null`) the backend every AC-12 gate consults.
+ * Installs (or clears, with `null`) the backend every §5a gate consults.
  * Never called automatically — see this file's header.
  *
  * ## Why the second argument exists (BUG-045)
@@ -171,7 +171,7 @@ export function isSemanticSearchConfigured(): boolean {
 /**
  * `true` iff a similarity query can actually be ANSWERED — a backend is
  * installed AND its vector space holds at least one vector. The predicate
- * every READ-side AC-12 gate checks (`filter.semantic`, `filter.anchor`,
+ * every READ-side §5a gate checks (`filter.semantic`, `filter.anchor`,
  * `view:"similar"`, `sort:"relevance"`, `_score`, `_vector`, and the
  * neighbour-ranking admin actions).
  */
@@ -197,7 +197,7 @@ export function markSemanticVectorSpacePopulated(): void {
 /**
  * The configured backend, or a thrown `RagNotConfiguredError` — the accessor
  * every WRITE-side semantic path uses, so "configured?" is asked exactly one
- * way and the AC-12 message always names the feature that needed it.
+ * way and the §5a message always names the feature that needed it.
  */
 export function requireSemanticBackend(feature: string): SemanticBackend {
   if (injectedBackend === null) throw new RagNotConfiguredError(feature);
@@ -208,7 +208,7 @@ export function requireSemanticBackend(feature: string): SemanticBackend {
  * The backend, or a thrown `RagNotConfiguredError`, for a path that must
  * RANK against existing vectors. Distinguishes the two unavailable causes in
  * its message (`not_configured` vs `empty_vector_space`) while keeping the
- * single `rag_not_configured` outcome code the AC-12 contract promises.
+ * single `rag_not_configured` outcome code the §5a contract promises.
  */
 export function requireReadableSemanticBackend(feature: string): SemanticBackend {
   if (injectedBackend === null) throw new RagNotConfiguredError(feature, 'not_configured');
@@ -518,7 +518,7 @@ export async function bootstrapSemanticBackend(store: GraphBacklogStore, config:
  *    `cfg.enabled === false` this returns `null` without loading a package,
  *    touching the store, or logging anything — a build that never opts in
  *    behaves exactly as it did before RAG existed, and every semantic input
- *    keeps answering `RagNotConfiguredError` (AC-12).
+ *    keeps answering `RagNotConfiguredError` (§5a).
  * 2. **Enabling is best-effort and NEVER fatal.** If the optional packages
  *    are missing, the adapter has no native vectors, or the provider fails
  *    to construct, this logs the TYPED reason from
