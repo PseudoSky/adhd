@@ -37,7 +37,7 @@ const { computeRealDependencyNames } = require('../../tools/nx-plugins/deps/comp
  * runtime, including everything reachable transitively through bundled
  * `@adhd/*` source — so it's exactly the set `@nx/dependency-checks`
  * structurally cannot compute on its own. Any dependency it can already see
- * correctly (`better-sqlite3`, `yaml`, `@adhd/sox-graph-store`, …) is a
+ * correctly (`fastify`, `yaml`, `@adhd/sox-graph-store`, …) is a
  * harmless no-op to also list here. Add a new npm dependency to any bundled
  * `@adhd/*` package and this list grows with it automatically — no manual
  * edit, no drift, and this file must stay `.cjs` (not `.json`) specifically

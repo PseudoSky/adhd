@@ -1,277 +1,300 @@
-# Backlog Data Model v2 — Proposed Specification
+# Backlog Data Model
 
-Status: PROPOSED v2. Supersedes the identity spine, entity, and relation model
-of SPEC.md §3 / DESIGN.md §2.1-2.2. All design decisions closed (§10).
+Status: the model this package writes to and reads from, as implemented in
+`src/write/*` and `src/store/type-policy.ts`, over the shared `@adhd/sox-graph-store`
+substrate (`@adhd/sox-store-adapter` is the store's only storage seam).
 
 ## 0. Design principles
 
-1. **One identity, system-owned.** Every entity has a UUID primary key. No
-   user-specifiable, composite, or derived identifiers anywhere. No legacy ids,
-   no aliases, no mapping tables.
-2. **Everything first-class is a catalog.** Node kinds, edge kinds, statuses,
-   priorities, agents — all data, extensible without code, filterable in queries.
-3. **Relationships are graph edges with typed kinds.** Membership, ownership,
-   dependency, and issue relations live in the graph — never as string columns
-   or FKs pretending to be structure.
-4. **Every mutation is documented and content-addressed.** Transitions require
-   agent + note + SHA; citations require SHA.
-5. **First-class node and edge kinds are a designed capability of the store.**
-   `@adhd/sox-graph-store` 0.9.x ships an open-schema vocabulary: fresh-store
-   `node.kind` / `edge.rel` are plain `TEXT` with an injectable application-level
-   `TypePolicy` (`validateKind`/`validateRel`) enforcing the vocabulary on write.
-   The stable node UUID is surfaced as `NodeRecord.uid` + `getNodeByUid(uid)` as of
-   0.9.1. Older stores migrate via the operator-invoked,
-   offline, verified-and-reversible `migrateToOpenSchema` path (PKT-61/BL-442,
-   ADR-0010 D3). This model adopts that capability directly.
+1. **One identity, system-owned.** Every entity is a graph node carrying a
+   library-minted `uid` (UUID). `uid` is the only identifier this package ever
+   accepts as external input or returns to a caller — never a business key,
+   never a composite, never an alias. `rowid` (the node table's internal
+   numeric id) is used only for in-transaction edge wiring; it is per-store
+   and not stable across a rebuild, so it never escapes as a consumer-facing
+   reference.
+2. **The graph store has no arbitrary tables — a "first-class record" is a
+   node.** There is one `node` table and one `edge` table. Every entity this
+   document describes — `project`, `component`, `location`, `issue`, every
+   catalog row (`kind`, `status`, `priority`, `agent`, `edge_kind`), and every
+   event/evidence row (`note`, `citation`, `transition`, `audit`) — is a row
+   in the SAME `node` table, distinguished by its `kind` column. Structure
+   (membership, ownership, dependency, catalog membership, issue relations)
+   lives as typed rows in the SAME `edge` table, distinguished by `rel` —
+   never as a string column pretending to be a foreign key.
+3. **`kind` and `rel` are open, string-valued vocabularies.** The `TypePolicy`
+   this package injects into every `GraphBackend` it opens
+   (`src/store/type-policy.ts`'s `OPEN_TYPE_POLICY`) accepts every kind, every
+   rel, and every `(sourceKind, rel, targetKind)` triple unconditionally —
+   `validateKind`/`validateRel`/`validateEdge` are all no-ops. Real schema
+   enforcement (which kinds exist, which rels connect which kinds, and at
+   what cardinality) is a write-layer responsibility, described in §2 and §5
+   below, never smuggled into that pure three-string predicate.
+4. **Content is never identity.** Every write-layer node write passes
+   `skipDedupe: true` — two identical-body issues are two distinct nodes with
+   two distinct `uid`s, never collapsed into one row by the library's global
+   content-hash dedup.
+5. **Every mutation is documented and content-addressed.** A `transition`
+   requires an agent, a note, and a `sha`; a `citation` requires a `sha`
+   computed by re-hashing the cited content; every state-changing write emits
+   an `audit` node whose own `sha` hashes its own canonical serialization.
+   See §4 and §6.
 
 ## 1. Graph substrate
 
-- **Node kinds** and **edge kinds** are both catalog-backed, first-class,
-  extensible-by-row values — the same support class.
-- The domain `kind` and `edge_kind` catalogs (§2) are enforced by a
-  `TypePolicy` injected at the write boundary, replacing the old closed-enum
-  rejection behavior. Absent an injected policy the store's
-  `DEFAULT_TYPE_POLICY` applies (the legacy six-kind / ten-rel vocabulary); the
-  remodel injects its own catalog-backed policy.
-- Existing stores that still carry the legacy SQL `CHECK (kind IN (...))` /
-  `CHECK (rel IN (...))` enums are migrated once via `migrateToOpenSchema`
-  (backup → rebuild → verify → rollback-on-failure; the skipDrop-interleaved
-  sequencing reused from `ensureCheckConstraints()`).
-- `migrateToOpenSchema` is a **one-time legacy-debt repayment** for the 0.5.x
-  DDL that baked closed enums in; the remodel invokes it exactly once at
-  migration time and it is then retired — fresh stores are open by default and
-  never touch it. It is NOT part of the ongoing model.
+- **Nodes** carry `rowid` (internal), `uid` (external identity), `kind`,
+  `name`, `content`, a `meta` JSON blob, and the bi-temporal columns
+  `t_created`/`t_valid`/`t_invalid`. Every domain field beyond `name`/`content`
+  lives inside `meta` — there is no per-kind column set.
+- **Edges** carry `src`/`dst` (node `rowid`s), `rel`, and their own
+  `t_valid`/`t_invalid`. `invalidateEdge` (bi-temporal edge retirement) is how
+  a relation is dropped; `invalidate` (on a node) is how an entity is
+  soft-deleted. Both are hand-composed against the write layer's own open
+  transaction handle — never the library's bare-adapter primitives, which
+  autocommit outside that transaction.
+- **Uniqueness** is a hand-composed find-then-create: the write layer runs its
+  own `SELECT ... WHERE kind = ? AND name = ? AND t_invalid IS NULL` against
+  the SAME `immediate`-mode transaction the calling verb already opened, and
+  only on a miss issues the INSERT against that same transaction handle —
+  never the library's own `findOrCreateNode()`, which is two separate,
+  non-transactional autocommit statements with no race-safety across
+  concurrent writers.
+- **`supersede`** (the library's own content-mutation primitive) is the only
+  path that changes a node's `content` — `touch` cannot. It writes a
+  hardcoded, uppercase `SUPERSEDES` rel; this is the content-versioning
+  mechanism, distinct from the catalog's own lowercase `supersedes` issue
+  relation (§5). The injected `TypePolicy` accepts both.
 
-## 2. Catalogs (extensible data, not code)
+## 2. Catalogs (nodes, not separate tables)
 
-```
-kind         (id uuid pk, name text unique, description text)
-  -- node kinds: 'project', 'component', 'location', 'issue', 'agent'
-  -- extensible: add a row, no code change
+Every catalog below is realized as ordinary nodes of a given `kind`, unique by
+`name` among live rows — never a dedicated relational table:
 
-edge_kind    (id uuid pk, name text unique,
-              source_kind_id fk -> kind.id, target_kind_id fk -> kind.id,
-              multiplicity text,          -- '1:1' | '1:n' | 'n:m'
-              description text)
-  -- the edge-type catalog: queryable, filterable, extensible by row insert —
-  -- the same first-class support as node kinds.
+| catalog | node `kind` | unique on | extra fields (in `meta`) |
+|---|---|---|---|
+| node kind | `kind` | `name` | `description` |
+| edge kind | `edge_kind` | `name` | `source_kind`, `target_kind`, `multiplicity` |
+| status | `status` | `name` | `terminal` |
+| priority | `priority` | `name` | `rank` |
+| agent | `agent` | `name` | — |
 
-status       (id uuid pk, name text unique, terminal bool not null)
-  -- terminal drives the closedness knob (open = non-terminal). No
-  -- requires_reason / requires_citation columns: those were policy about
-  -- actions, subsumed by the transition-documentation rule (§4).
+`status.terminal` drives closedness. `kind`/`status`/`priority`/`agent` are
+mintable on an unresolved NAME by any issue-mutating verb that accepts them
+(`create`, `update`, `transition`) — a uid-shaped ref that does not resolve
+throws instead; minting never applies to a uid. `priority`'s mint rule sets a
+fresh row's `rank` to one past the current max live rank, so a novel priority
+can never silently outrank an existing one.
 
-priority     (id uuid pk, name text unique, rank int not null unique)
-  -- a ranked table, not a bare number: extensible AND ordered.
+`edge_kind` is never caller-mintable. Every row is seeded once from the fixed
+edge table in §5 (`EDGE_KIND_TABLE` in `src/write/catalog.ts`) — the write
+layer self-heals a missing or malformed row from that same fixed table, but
+there is no path for a caller-supplied `rel` name to mint a new row.
 
-agent        (id uuid pk, name text unique)
-  -- who/what performed work: a human role, a tool, an agent id
+### Per-project policy
 
--- per-project policy (projects are configurable; the defaults are the
--- global catalogs, and a project may narrow or tighten them):
-project_field_requirement (project_id fk -> project.id, field text, required bool)
-  -- which fields a project REQUIRES on its issues (e.g. body, priority,
-  -- citation, plan). Default: none beyond title.
-project_status   (project_id fk -> project.id, status_id fk -> status.id)
-  -- the status vocabulary a project may use (empty = global default set).
-project_kind     (project_id fk -> project.id, kind_id fk -> kind.id)
-  -- the kinds a project may file (empty = global default set).
-project_policy   (project_id fk -> project.id,
-                  transition_requires_note bool,  -- default true
-                  transition_requires_sha bool,   -- default true
-                  citation_required bool,         -- default false
-                  citation_requires_sha bool)     -- default true
-  -- per-project tightening of the global integrity rules (§6). This is the
-  -- configurable home of what used to be hardcoded terminal/citation/reason
-  -- policy (BUG-037: a project can make DEFERRED terminal by adding it to
-  -- its status vocabulary with terminal=true — data, not code).
-```
+Per-project policy is DATA, not code — but it is not a separate relational
+table either: it lives inside the owning `project` node's own `meta.metadata.policy`
+object (§3), since it is 1:1 with a project, never many-to-many. Every field
+defaults exactly as below when a project carries no `policy` object at all:
+
+- `transitionRequiresNote` (default `true`)
+- `citationRequired` (default `false`)
+- `citationRequiresSha` (default `true` — gates acceptance of an unverified
+  citation with `CitationUnverifiableError`)
+- `defaultStatus` (catalog ref; falls back to the global default when unset)
+- `defaultKind` (catalog ref; falls back to `'issue'` when unset)
+- `dedupeScanEnabled` (default `true`), `dedupeThreshold` (default `0.8`)
+- `claimStaleAfterMin` (default `30`)
+- `allowedStatuses` — the status-name set a project may use; empty means "no
+  restriction, anything in the global catalog is allowed"
+- `allowedKinds` — the kind-name set a project may file; empty means the same
+- `requiredFields` — field names a project requires present on every
+  mutating write that touches them (enforced identically to the `by` check,
+  at the top of `create`/`update`/`transition`)
+
+There is no `transition_requires_sha` field: a `transition` or `audit` node's
+`sha` hashes its OWN canonical serialization (never external content), so it
+is always computable — §4's "agent + note + sha REQUIRED" is a hard
+invariant, never policy-tunable. Only a `citation`'s `sha` (which hashes
+external file content) can legitimately fail to resolve, which is what
+`citationRequiresSha` gates.
 
 ## 3. Entities (graph nodes)
 
 ```
-project      (id uuid pk, name text not null unique, created_at)
-  -- was 'repo'. ONE canonical row per logical project; the old adhd /
-  -- PseudoSky/adhd fork is reconciled to a single row at ETL time,
-  -- permanently (no alias table).
+project      kind='project', name unique
+  meta: { path, repoUrl, monorepo?, description?, policy? }
+  -- the navigation spine: `path` is the absolute local root, `repoUrl` the
+  -- canonical git remote. A worktree directory under the project resolves
+  -- to the SAME project row. Minted only via the explicit upsertProject
+  -- verb — never implicitly by createIssue or any other issue verb.
 
-component    (id uuid pk, name text not null)
-  -- was projectPath / sub-area. Ownership is the OWNS edge from project
-  -- (§5) — no project_id string column.
+component    kind='component', name unique within project
+  meta: { projectUid, path?, description? }
+  -- ownership is the owns_project edge (§5), never a project-id column.
+  -- Every project carries exactly one reserved default component named
+  -- `(root)`, written atomically by upsertProject alongside the project
+  -- node itself — never minted lazily at issue-creation time. `(root)` is
+  -- what createIssue resolves to when its optional `component` input is
+  -- omitted, so every issue always gets exactly one live owns_component edge.
 
-location     (id uuid pk, locType text not null, value text not null)
-  -- 0..n per component via the HAS_LOCATION edge. locType ∈ {path, url, tool};
-  -- the VALUE's interpretation is determined by locType (path = filesystem path,
-  -- url = full URL, tool = MCP tool / CLI command / symbol name).
+location     kind='location'
+  meta: { locType, value, componentUid }
+  -- locType ∈ 'path' | 'url' | 'tool'; value's interpretation follows
+  -- locType (path = filesystem path, url = full URL, tool = MCP tool / CLI
+  -- command / symbol name). Unique per (component, locType, value).
+  -- Belongs to exactly one component via has_location (§5).
 
-issue        (id uuid pk,
-              kind_id fk -> kind.id,
-              status_id fk -> status.id,
-              priority_id fk -> priority.id,
-              title text not null,
-              body text,
-              created_at, updated_at)
-  -- NO humanId. NO repo string. NO idOverride. NO importedFrom.
-  -- Membership in a component is the OWNS edge, not a column.
-  -- closed_at is NOT a relational column: the real @adhd/sox-graph-store
-  -- node table has a fixed column set with no such field (every domain
-  -- field beyond content/name lives in the JSON meta blob) — realized as
-  -- `meta.metadata.closedAt`, stamped by the transition that moves status
-  -- to terminal (SPEC-v2 §6.3.4). NodeFilter.metadata's gt/lt/between
-  -- operators make it range-queryable exactly as a real column would.
+issue        kind='issue', name=title, content=body
+  meta: { assignee?, closedAt? }
+  -- kind/status/priority are catalog refs reached via has_kind/has_status/
+  -- has_priority edges (§5), never inline columns. closedAt is stamped, as
+  -- meta.metadata.closedAt, by the transition that moves status to
+  -- terminal, and cleared (never carried forward stale) by a transition
+  -- that moves it back off terminal.
 ```
 
-## 4. Event/evidence tables (first-class rows, all content-addressed)
+## 4. Event/evidence nodes (first-class rows, content-addressed)
+
+These are the graph-native realization of "first-class event rows" — the
+store has no dedicated event tables, so each is an ordinary node of its own
+`kind`, linked to its subject issue by a dedicated edge:
 
 ```
-note         (id uuid pk, issue_id fk -> issue.id,
-              author fk -> agent.id, text text not null, at)
+note         kind='note'
+  meta: { author, text, at }
 
-citation     (id uuid pk, issue_id fk -> issue.id,
-              target text not null, target_type text not null,  -- path | url
-              sha text not null,        -- sha256 of the cited content at citation time
-              line int, at)
-  -- citations are content-addressed: verify by re-hashing the target and
-  -- comparing. A changed file fails verification loudly.
+citation     kind='citation'
+  meta: { target, target_type, sha, line, at }
+  -- content-addressed: sha is sha256 of the cited content at citation time.
+  -- Verification = re-hash the target and compare. When no path is known
+  -- for the owning project, or the target no longer resolves, sha is the
+  -- fixed sentinel string "unverified" — never a fabricated hash, never a
+  -- missing field.
 
-transition   (id uuid pk, issue_id fk -> issue.id,
-              from_status_id fk -> status.id, to_status_id fk -> status.id,
-              agent_id fk -> agent.id,   -- REQUIRED
-              note text not null,        -- REQUIRED: the agent + all action details
-              sha text not null,         -- sha256 over the canonical transition record
-              at)
-  -- THE universal mutation rule: no transition exists without agent + note
-  -- + sha. Enforced at the write path; there is no bare transition.
+transition   kind='transition'
+  meta: { from_status, to_status, agent, note, sha, at }
+  -- sha = sha256 over the canonical (sorted-key) JSON serialization of
+  -- { issue_id: target_uid, from, to, agent_id: agent, note, at } — the
+  -- same convention and helper (canonicalJSONStringify + sha256Hex) the
+  -- audit sha below uses, applied identically rather than inventing a
+  -- second scheme.
+
+audit        kind='audit'
+  meta: { actor, action, target_uid, from, to, note, sha, at }
+  -- THE universal mutation record: every state-changing write emits exactly
+  -- one audit node, inside the SAME transaction as the write it records.
+  -- sha = sha256 over the canonical JSON serialization of
+  -- { actor, action, target_uid, from, to, note, at }. action is a short verb
+  -- like 'created' | 'claimed' | 'released' | 'renewed' | 'reclaimed-stale' |
+  -- 'transitioned' | 'moved' | 'related' | 'unrelated' | 'deleted'.
 ```
 
-## 5. Edge kinds (the typed catalog — first-class, same as node kinds)
+## 5. Edge kinds (the fixed table)
 
 ```
-owns          project     → component     (1:n)   -- project owns its components
-owns          component   → issue         (1:n)   -- component owns its issues
-depends_on    component   → component     (n:m)   -- cross-project: proj1.cmp → proj2.cmp
-has_location  component   → location      (1:n)
-relates_to    issue       → issue         (n:m)
-supersedes    issue       → issue         (1:n)
-blocks        issue       → issue         (n:m)   -- traversable inverse: blocked_by
-duplicate_of  issue       → issue         (1:n)
-part_of       issue       → issue         (1:n)   -- split/rollup hierarchy
+owns_project    project    → component  (1:n)   -- project owns its components
+owns_component  component  → issue      (1:n)   -- component owns its issues
+has_kind        issue      → kind       (n:1)
+has_status      issue      → status     (n:1)
+has_priority    issue      → priority   (n:1)
+authored_by     issue      → agent      (n:1)   -- notes/transitions/audits carry
+                                                 -- their own agent in metadata instead
+has_note        issue      → note       (1:n)
+has_citation    issue      → citation   (1:n)
+has_transition  issue      → transition (1:n)
+audits          *          → audit      (1:n)   -- the one declared sentinel:
+                                                 -- source_kind '*' (see below)
+depends_on      component  → component  (n:m)   -- cross-project component dependency
+has_location    component  → location   (1:n)
+relates_to      issue      → issue      (n:m)
+supersedes      issue      → issue      (n:1)   -- issue relation (lowercase);
+                                                 -- distinct from the library's own
+                                                 -- uppercase SUPERSEDES content rel (§1)
+blocks          issue      → issue      (n:m)   -- inverse (blocked_by) is a
+                                                 -- traversal-time derivation, never
+                                                 -- a second stored edge kind
+duplicate_of    issue      → issue      (n:1)
+part_of         issue      → issue      (n:1)   -- split/rollup hierarchy
 ```
 
-All edge kinds are rows in `edge_kind`, so visualization and queries are
-data-driven: `getNeighbors(project) → owns → components → owns → issues`,
-`depends_on` traversal across projects, relation traversal on issues. New edge
-kinds = new rows (plus TypePolicy extension), no code.
+Every row above is a fixed, catalog-backed `edge_kind` entry (`name`,
+`source_kind`, `target_kind`, `multiplicity`) — queryable and traversable
+exactly like any other node, and enforced by the write layer, never by the
+`TypePolicy` seam. `multiplicity` reads verbatim from this table: `n:1` caps
+the SOURCE's out-degree at one for that `rel` (one target per source — e.g.
+`has_kind`: an issue has exactly one `has_kind` edge); `1:n` caps the
+TARGET's in-degree at one (one source per target — e.g. `owns_component`: an
+issue has exactly one owning component); `n:m` is uncapped on both sides. The
+write layer resolves the `edge_kind` row by `rel`, checks the resolved
+endpoints and cardinality against it, and only then calls the injected
+`TypePolicy` — a pure three-string predicate with no I/O.
+
+`audits` is the one declared exception to "no polymorphic edge": its row
+carries the sentinel `source_kind: '*'`, so the source-match step is skipped
+for it alone — `target_kind` (`audit`) and `multiplicity` (`1:n`) are still
+checked exactly like every other row. An audit's subject is identified by its
+own `target_uid` metadata field, never by the edge's source kind; the edge
+exists purely for traversal.
+
+`relate`'s five closed rel values (`relates_to`, `supersedes`, `blocks`,
+`duplicate_of`, `part_of`) hand-roll no multiplicity logic of their own — the
+single-valued-rel rejection for `supersedes`/`duplicate_of`/`part_of` (all
+three `n:1`) is this same generic `edge_kind.multiplicity` gate, applied to
+those three rows.
 
 ## 6. Integrity rules (hard requirements)
 
-1. **Every transition requires** `agent_id` + `note` (documenting the agent and
-   all details of the actions performed) + `sha`. No exceptions; the write path
-   rejects a transition missing any of the three.
-2. **Every citation requires** `sha` (sha256 of the cited content at citation
-   time). Verification = re-hash and compare.
-3. **No humanId** anywhere — UUID is the only identifier; no legacy ids, no
-   `legacy_ref`, no `repo_alias`, no `importedFrom`, no `idOverride`.
-4. **Closedness knob** = `status.terminal`; `issue.meta.metadata.closedAt`
-   (§3 — not a relational column) is stamped by the terminal transition.
-5. **Edge kinds are first-class data** — extensible and filterable exactly like
-   node kinds.
+1. **Every transition requires** an agent, a `note` (unless the owning
+   project's policy sets `transitionRequiresNote: false`), and a `sha` — the
+   write path rejects a transition missing the required fields.
+2. **Every citation requires** a `sha` — sha256 of the cited content at
+   citation time, or the fixed sentinel `"unverified"` when the content
+   cannot be resolved. Verification = re-hash and compare.
+3. **`uid` is the only identifier** — no legacy ids, no aliases, no mapping
+   tables, no id derived from a string prefix or a repo/name composite.
+4. **Closedness knob = `status.terminal`**; `issue.meta.metadata.closedAt` is
+   stamped by the transition that moves status onto a terminal row, and
+   cleared by a transition that moves it back off.
+5. **Every state-changing write emits exactly one `audit` node**, in the same
+   transaction as the write it records — automatic, never a call site's
+   choice to skip it. A no-op call (e.g. `relate`'s `add` on an already-live
+   edge, or `move` onto the issue's current placement) writes nothing and
+   emits no audit, since nothing changed.
+6. **Edge kinds are first-class, fixed catalog data** — extensible only by
+   extending the fixed table in §5 (which requires a code change, since
+   `relate`'s `rel` parameter is a closed union), never by an unvalidated
+   caller-supplied rel name.
 
-## 7. Projection & consumers
+## 7. Registry (project / component / location)
 
-- `BACKLOG.md` / markdown: a pure view. Headers = issue **title** (a readable
-  view, not an identity map); UUIDs are not rendered. Parity gate re-derived
-  from the new model.
-- Citations render as `[target sha:…]` — the SHA is part of the citation,
-  visible and verifiable.
-- CLI / MCP / HTTP: identity = UUID; filters by kind, status (incl. lifecycle
-  via terminal), priority rank, component, project, and graph traversal
-  (dependencies, relations).
-- Web UI: list/detail/stats keyed by UUID; the stats views (priority matrix,
-  citation heatmap, timelines) read the catalogs and edges directly.
+`project` / `component` / `location` are a first-class, queryable navigation
+index, not merely write-layer resolution targets — an agent's go-to for
+"where does this live?" before it ever touches the filesystem or a search
+index.
 
-## 8. Debt eliminated (the remap)
+- **Resolution (`lookup`)** classifies a query string into one `locType`
+  (`tool` when it has no `/` or scheme and matches a known MCP/CLI/symbol
+  name; `url` when it parses as one; `path` otherwise, normalized to
+  absolute via the project's own `path` when repo-relative), matches a
+  `location` node by `(locType, normalized value)` — exact first, then a
+  suffix/prefix fallback for repo-relative paths — and walks
+  `has_location` → component → `owns_project` → project. The result is
+  `{ project, component, location }`, plus a `hint` when only a
+  project-level or path-prefix match exists — never a silent null.
+- **CRUD** goes through the write layer's dedicated registry verbs:
+  `upsertProject` (by `name`), `upsertComponent` (by `(project, name)`),
+  `upsertLocation` (by `(component, locType, value)`), and `rmLocation` —
+  never a hand-rolled scan or an implicit mint from an issue verb.
 
-| Today | v2 |
-|---|---|
-| humanId + `(repo, humanId)` composite | UUID PK — DB-generated in the insert transaction |
-| BUG-039 allocator race / silent write loss | DB-generated ids remove the ENTIRE provisioning machinery (no scan, no dedupe-scan-in-transaction, no collision) |
-| dual-stored repo (`namespace` + metadata) + fork | single `project` row; ETL reconciles once |
-| `importedFrom` / `idOverride` / `legacy-repo` / BL- ids | deleted; provenance = audit event; no legacy ids at all |
-| kind derived from id prefix | `kind_id` column |
-| `computeNextHumanId` / `allocateHumanIdAndInsert` / id-uniqueness machinery | deleted — the DB owns identity |
-| terminal + requires_reason/citation in code | `status.terminal` + `project_policy` (data) |
-| `reconcile_repo` / `migrateRepoItemNode` / `planRepoMigration` (repo-migration module) | deleted — edges + ETL; nothing to reconcile |
-| MIGRATION.md phase-1..5 + `migration.phase` + `set_migration_phase` | retired — the ETL replaces the phase machinery |
-| `repoWarning` ("repo X is new to this store") | deleted — projects are created via the project table, not implied by a string |
-| markdown `import` admin action (the import lineage path) | retired — the ETL is the one-time import; export/render remain as projection |
-| closedness knob special filter values (`filter.status: 'open'/'closed'`) | `status.terminal` — a real column, not magic filter words |
-| `firstTerminalTransitionAt` / closedAt-from-audit reconstruction | stored `closed_at`; reconstruction used exactly once by the ETL, then deleted |
-| `migrateToOpenSchema` | one-time legacy repayment for the 0.5.x closed-CHECK DDL, then retired |
-| closedness knob in query code | `status.terminal` |
+## 8. Projection & consumers
 
-## 9. Migration path — FRESH WRITE (the same db file is never migrated)
-
-**Directive:** the existing store file is NEVER modified, migrated in place, or
-schema-surgeried. The data is READ from it (read-only, via its public API) and
-WRITTEN FRESH into a brand-new db file with the v2 open schema. `migrateToOpenSchema`
-is never invoked — a fresh file is open by default and the legacy closed-CHECK
-DDL never exists in it. The old file is retained, untouched, as a read-only
-legacy artifact (and the pre-migration backup).
-
-0. **GATE — BUG-039 write-safety proof.** The distinct-family cross-process
-   loss (observed 160/250, 246/250) was never root-caused; the hypothesis is
-   that it is ALSO id-provisioning machinery (allocator + dedupe scans inside
-   the write transaction under stale cross-process snapshots). DB-generated ids
-   must PROVE it resolves: the v2 write path runs the cross-process harness
-   (same-family AND distinct-family controls) clean before any migration
-   proceeds. If it does not, the write/transaction path is fixed first —
-   never write onto an unsafe write path.
-1. **Backup** the old store (existing backup-manifest discipline), from a fully
-   quiesced store.
-2. **Create the fresh v2 file** with the open-schema DDL (§2-§5): catalogs
-   (kind, edge_kind, status, priority, agent) seeded, project policy tables
-   seeded from current defaults. No legacy CHECKs — they never exist here.
-3. **ETL (read-old → write-fresh):** `repo`→`project` (fork reconciled;
-   non-project repo strings like `global`/`scratch`/`legacy-repo` get an
-   explicit decision — unmanaged bucket or project — never silently merged or
-   dropped), `projectPath`→`component` (edge-wired), items→`issue`
-   (kind/status/priority mapped to catalog rows, DB-generated id, `closed_at`
-   derived once from audit), citations→rows with **sha computed from target
-   content**, audit history→`transition`/`note` rows (agent + note + sha;
-   historical transitions WITHOUT notes are recorded with the audit detail
-   verbatim and flagged `note_synthesized` — never fabricated), project
-   policies seeded, owns edges written (project→component→issue), old strings
-   discarded.
-4. **Parallel validation**: the fresh v2 store runs read-only beside the old
-   store; parity checks (counts, closedness, citation sets, edge endpoints)
-   must match before cutover.
-5. **Consumers** (CLI/MCP/HTTP/web UI) switch to the v2 surface; old id-based
-   references stop resolving by design. The old file remains as a read-only
-   legacy artifact until a later, deliberate retirement.
-
-## 10. Design decisions (closed)
-
-1. **Citation sha on migration**: resolved — SPEC-v2 §8.5 (Citation repair).
-   Re-hash *current* content at the citation's `target`, scoped to the
-   issue's owning project's known filesystem `path`; when no path is known
-   or the target no longer resolves, `sha` is the fixed sentinel string
-   `"unverified"` — never a fabricated hash, never a missing field.
-2. **Transition sha semantics**: sha256 over the canonical JSON serialization
-   of `{issue_id, from, to, agent_id, note, at}` with stable (sorted) key
-   order — the same convention SPEC-v2 §4a already states for the audit `sha`,
-   applied identically here rather than inventing a second scheme.
-3. **Location typing**: `locType ∈ {path, url, tool}` as a string enum (not a
-   catalog table); the three values cover the agent's three lookups
-   (file / url / tool), and a `location_type` catalog would add indirection with
-   no extensibility payoff.
-4. **`blocks` inverse traversal**: derived from `blocks`, never a second
-   first-class edge kind (`blocked_by`) — a traversal-time inversion, no
-   second row to keep in sync.
-5. **TypePolicy injection point**: a constructor-time option,
-   `openGraphBacklogStore({typePolicy})`, never a post-open setter — a
-   settable-after-open policy would let early bootstrap writes (catalog
-   seeding, SPEC-v2 §8.6 step 2) run under the wrong default six-kind/ten-rel
-   policy (`DEFAULT_TYPE_POLICY`, §1) if the store were opened before the
-   setter fired. Absent an injected policy the store's default applies (§1);
-   the remodel always supplies its own catalog-backed policy at construction.
+- `BACKLOG.md` / markdown is a pure, generated view: headers render the
+  issue **title** (a readable label, not an identity map) — `uid`s are not
+  rendered inline. A hand edit to the rendered file is overwritten on the
+  next render.
+- Citations render as `[target sha:…]` — the `sha` is part of the citation,
+  visible and independently verifiable.
+- CLI / MCP / HTTP address every entity by `uid` and filter by kind, status
+  (including lifecycle via `terminal`), priority rank, component, project,
+  and graph traversal (dependencies, relations, the registry chain in §7).

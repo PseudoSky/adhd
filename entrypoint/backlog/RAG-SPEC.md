@@ -1,10 +1,10 @@
 # `@adhd/backlog` — RAG-Enabled Intelligent Plan-Graph System
 
-**Version:** v0.3.0
+**Version:** 0.3.0
 **Date:** 2026-08-08
-**Status:** Design basis for EPIC-G. Builds on the plugin architecture (`docs/spec/backlog/PLUGIN_ARCHITECTURE.md`) and the dimensional graph model v2 (`docs/spec/backlog/GRAPH_MODEL_v2.md`). Targets `@adhd/sox-graph-store` 0.6.0 (adapter-based, async), `@adhd/sox-store-adapter` (Turso substrate), `@adhd/sox-embedding-provider` 0.2.0, `@adhd/sox-service-proxy`.
+**Status:** Design basis for EPIC-G. Builds on the plugin architecture (`DESIGN.md` §9, "The RAG seam") and the dimensional graph node/edge model (`DATA_MODEL.md`). Targets `@adhd/sox-graph-store` 0.6.0 (adapter-based, async), `@adhd/sox-store-adapter` (Turso substrate), `@adhd/sox-embedding-provider` 0.2.0, `@adhd/sox-service-proxy`.
 
-**Companion reading:** `SPEC.md` (operation surface, personas, status vocabulary), `DESIGN.md` (graph mapping, claim protocol), `PLUGIN_ARCHITECTURE.md` (how the embedding capability plugs into backlog), `GRAPH_MODEL_v2.md` (the dimensional node/edge model this layer's vectors attach to).
+**Companion reading:** `SPEC.md` (operation surface, personas, status vocabulary), `DESIGN.md` (graph mapping, claim protocol, the RAG seam), `DATA_MODEL.md` (the dimensional node/edge model this layer's vectors attach to).
 
 ---
 
@@ -16,7 +16,7 @@
 - **Embedding provider:** `@adhd/sox-embedding-provider` 0.2.0 — `EmbeddingProvider` interface (`embedSingle(text, role?)` / `embedBatch`), fastembed `bge-base-en-v1.5` (768-dim), shared ONNX/fastembed child singleton, cache-hit/cache-miss warmup budgets (a cache hit is single-digit seconds; a cache miss is the model-download budget).
 - **Service transport:** `@adhd/sox-service-proxy` — `serveBackend` (generic JSON-RPC dispatcher over a UDS socket), `dialBackend`, `ensureBackend` (O_EXCL singleton spawn-lock). The embedding daemon is a sox-owned bundled service; backlog is a client via the `embedding-remote` plugin (PLUGIN_ARCHITECTURE.md §3, §6).
 
-Backlog never touches a raw SQLite handle. Every escape-hatch SQL path goes through the adapter; the raw-handle construction sites are gone.
+Backlog never touches a raw database driver handle. Every escape-hatch SQL path goes through the adapter; there is no direct-driver construction site anywhere in the package.
 
 ## 1. Design principles
 
@@ -25,7 +25,7 @@ Backlog never touches a raw SQLite handle. Every escape-hatch SQL path goes thro
 3. **Vectors attach to items by `node_id`.** The vector table is keyed by the graph node's rowid — a direct 1:1 join key, unchanged by the dimensional model (repo/author/reporter are edge-connected nodes, not item payload).
 4. **Correct-by-construction reads.** Dimensional filters push into the SQL predicate (via `buildNodeFilterClause` + the dialect's filter seam) before any limit — pagination is never a post-filter.
 5. **Truthful health and provenance.** A provider is never reported healthy without a resolved backend; the `embed_model` stamp comes from the resolved model, never from config.
-6. **RAG is opt-in.** Absent embedding configuration, the v1 surface is unchanged: `listItems({ grep })` stays FTS-only, semantic operations throw `RagNotConfiguredError` — never a silent no-op.
+6. **RAG is opt-in.** Absent embedding configuration, the keyword-search surface is unchanged: `listItems({ grep })` stays FTS-only, semantic operations throw `RagNotConfiguredError` — never a silent no-op.
 
 ## 2. Embedding on write — the two-phase pattern
 
@@ -35,7 +35,7 @@ Backlog never touches a raw SQLite handle. Every escape-hatch SQL path goes thro
 
 **Phase B (after commit, off the write lock):** `scheduleEmbed(store, nodeId, content)` embeds `${title}\n\n${body}` (never the raw stored `content` column — the uniqueness marker is stripped first) via `store.embedding.provider.embedSingle(content, 'document')`, then upserts the vector in its own small transaction. The upsert is idempotent per `(nodeId, modelId)`.
 
-`scheduleEmbed` is never called from inside the mutation updater — always after the transaction has committed and released the write lock. ONNX inference runs on the service's child process, so the call never blocks the SQLite/Turso write path.
+`scheduleEmbed` is never called from inside the mutation updater — always after the transaction has committed and released the write lock. ONNX inference runs on the service's child process, so the call never blocks the Turso write path.
 
 ### 2.2 Durability for short-lived processes
 
@@ -63,11 +63,11 @@ The `embed_model` stamp is written in the same transaction as the vector upsert,
 
 ### 3.1 Hybrid search behind `semanticSearch`
 
-`grep` is **pure FTS, always** — keyword search keeps its exact-match semantics and never changes shape when the semantic layer lands (INTERFACE_v2 §7.6 / AC-11: `grep` and `semantic` compose additively; a user can always tell which channel returned a hit). The vector channel lives exclusively behind `semantic` / `view:"similar"` / `sort:"relevance"`.
+`grep` is **pure FTS, always** — keyword search keeps its exact-match semantics and never changes shape when the semantic layer lands (SPEC.md §5a: `grep` and `semantic` compose additively; a user can always tell which channel returned a hit). The vector channel lives exclusively behind `semantic` / `view:"similar"` / `sort:"relevance"`.
 
-`semanticSearch(ctx, query, opts?)` is the explicit vector-recall surface: it returns a documented `RagNotConfiguredError` when no embedding is configured — a caller relying on vector recall is never quietly downgraded to keyword search. It is also the **primary channel of the natural-language query form** (INTERFACE_v2 §2.1b): the positional `backlog query "nx bugs and apigen"` sends the *entire string* through `semanticSearch` (paraphrase-aware recall), **unscoped across all repos by default** — the query planner's dimensional extraction (kind/package/repo) runs alongside only as ranking boosts and surfaced suggestions, and never narrows semantic recall; explicit `--repo`/`--package` flags are the only way to scope.
+`semanticSearch(ctx, query, opts?)` is the explicit vector-recall surface: it returns a documented `RagNotConfiguredError` when no embedding is configured — a caller relying on vector recall is never quietly downgraded to keyword search. It is also the **primary channel of the natural-language query form** (SPEC.md §6.5): the `text` argument to `query` sends the *entire string* through `semanticSearch` (paraphrase-aware recall), **unscoped across all repos by default** — the query planner's dimensional extraction (kind/package/repo) runs alongside only as ranking boosts and surfaced suggestions, and never narrows semantic recall; explicit `--repo`/`--package` flags are the only way to scope.
 
-The `BacklogFilter` / `listItems` signature does not change; only what runs inside does. Dimensional filters (repo/author/reporter/project/package from GRAPH_MODEL_v2) push into the vector channel's candidate selection via `buildNodeFilterClause` through the dialect's filter seam — a repo-scoped semantic search never returns another repo's items.
+The `BacklogFilter` / `listItems` signature does not change; only what runs inside does. Dimensional filters (repo/author/reporter/project/package, per `DATA_MODEL.md` §5) push into the vector channel's candidate selection via `buildNodeFilterClause` through the dialect's filter seam — a repo-scoped semantic search never returns another repo's items.
 
 ### 3.2 `relatedItems(id)` — nearest neighbor
 
@@ -83,7 +83,9 @@ Vectors travel as compact blobs in the service RPC payloads (base64 of the raw `
 
 ## 4. Semantic dedup
 
-`dedupeScan` gains a semantic candidate source alongside the existing FTS/metadata sources: embed the incoming `${title}\n\n${body}`, KNN within the repo scope, and surface candidates above the near-dup threshold band as `duplicateCandidates`. `createItem`'s result contract reports suppression explicitly — `{ ok, created: boolean, humanId?, duplicateCandidates?, reason? }` — a silent drop is never possible (GRAPH_MODEL_v2 §5.1).
+The duplicate gate (`scanForDuplicates`, invoked from `createItem`'s write path, SPEC.md §6.4) scores candidates on **the vector channel's raw cosine similarity, and only ever a cosine** — the same `[0,1]` scale `project_policy.dedupe_threshold` is calibrated against. It reads `StoreSearchBackend.search`'s `vecScore` straight off `vec.knn`, never `searchRanked`'s fused score: `searchRanked` combines the text and vector channels by reciprocal-rank fusion (`Σ w_i/(RRF_K + rank_i)`), and rank fusion discards each channel's magnitude by construction — no rescaling of a rank-fused number, including dividing by its theoretical rank-1 maximum, can recover a similarity from it. A prior implementation that tried exactly that rescaling produced a rank ladder (rank 1 → 1.0, rank 2 → ~0.984, rank 5 → ~0.938) sitting entirely above the default threshold, which suppressed every create into a project holding any prior issue. The scan embeds the incoming `${title}\n${body}`, restricts candidates to the same project, and surfaces every candidate at or above `dedupe_threshold` as `duplicateCandidates`, best-first. `createItem`'s result contract reports suppression explicitly — `{ created: boolean, uid?, duplicateCandidates?, reason? }` — a silent drop is never possible.
+
+When the search substrate cannot embed (no vector channel configured), the scan still runs on the text channel alone rather than going dark; it simply surfaces no candidates, since with no vector channel there is no calibrated similarity to compare against the threshold.
 
 A periodic `runDedupSweep` runs pairwise near-dup detection over a scope's vectors and writes `SAME_AS` edges for confirmed pairs (soft, non-blocking) — review-then-merge, never auto-merge.
 
@@ -100,11 +102,11 @@ These operations are substrate-independent (pure graph traversal over `DEPENDS_O
 
 ## 6. Operation surface
 
-All RAG operations land inside the 6-tool surface (INTERFACE_v2): read side as `backlog_query` views (`view: "similar"` + `sort: "relevance"`, plan-graph ops as compositions of `view: "plan"` / `view: "order"`), write/ops side as `backlog_admin` actions (`run_dedup_sweep`, `cluster_into_plans` / `promote_cluster_to_plan`, `backfill_embeddings`, `list_near_duplicates`, `embedding_health` — snake_case throughout, INTERFACE_v2 §6).
+RAG operations land on the existing 14-verb surface (`src/api.ts`; `get, query, lookup, create, update, transition, claim, relate, move, upsertProject, upsertComponent, upsertLocation, rmLocation, delete` — there is no `admin` verb). Read-side RAG operations are `query` views (`view: "similar"` + `sort: "relevance"`, plan-graph ops as compositions of `view: "plan"` / `view: "order"`). `run_dedup_sweep`, `cluster_into_plans` / `promote_cluster_to_plan`, and `backfill_embeddings` are one-shot/periodic maintenance operations, not verbs a caller addresses by `uid` — per SPEC.md §6.6, that is precisely why they are not mounted as a grab-bag admin action: they run as scripts directly against `src/write/`/`src/query/`, never as a 15th consumer-facing verb. `embedding_health` and `list_near_duplicates` fold into `query`'s `view:"similar"` (SPEC.md §5a) — a health/near-duplicate report is exactly "run the similarity view over the whole corpus," not a distinct code path.
 
 ## 7. Backfill and ops
 
-`backfillEmbeddings` iterates every live, **non-terminal** item lacking a vector and schedules embeds, batched to bound concurrent inference (via the task-queue substrate). `dryRun` reports the count without calling the provider. A **re-embed-on-content-change sweep** ships with the graph-model migration: any item whose `content_hash` changed (e.g. canonical repo-string re-stamp) gets its embedding regenerated — a stale vector is a correctness defect, and the backfill's "only if null" predicate alone would never repair it. The sweep reuses the same batching and dry-run discipline. Terminal items (`isTerminalStatus`) are excluded by default and counted in the report as `skippedTerminal` — `run_dedup_sweep` iterates every vector with no status predicate of its own, so an embedded closed item would otherwise pull live items into advisory `SAME_AS` edges with already-closed work (`cluster_into_plans` already filters terminal items at its own candidate step). `includeTerminal: true` opts closed history back in.
+`backfillEmbeddings` iterates every live, **non-terminal** item lacking a vector and schedules embeds, batched to bound concurrent inference (via the task-queue substrate). `dryRun` reports the count without calling the provider. A **re-embed-on-content-change sweep** ships alongside it: any item whose `content_hash` changed (e.g. canonical repo-string re-stamp) gets its embedding regenerated — a stale vector is a correctness defect, and the backfill's "only if null" predicate alone would never repair it. The sweep reuses the same batching and dry-run discipline. Terminal items (`isTerminalStatus`) are excluded by default and counted in the report as `skippedTerminal` — `run_dedup_sweep` iterates every vector with no status predicate of its own, so an embedded closed item would otherwise pull live items into advisory `SAME_AS` edges with already-closed work (`cluster_into_plans` already filters terminal items at its own candidate step). `includeTerminal: true` opts closed history back in.
 
 ## 8. Testing / DoD (real components, teeth, no proxies)
 

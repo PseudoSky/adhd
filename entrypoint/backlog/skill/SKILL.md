@@ -1,324 +1,380 @@
 ---
 name: backlog-usage
-description: "Use whenever filing, claiming, transitioning, or resolving a backlog item (bug/debt/feature/investigation) in ANY repo on this machine — via the `adhd-backlog` CLI/MCP, never by hand-editing a BACKLOG.md file. Also use to check current migration status before assuming markdown vs. the tool is authoritative. Examples: \"log this bug\", \"file a debt item for the flaky test\", \"claim BUG-042\", \"what's still open in this repo\", \"is BACKLOG.md still the source of truth here\"."
+description: "Use whenever filing, reading, claiming, transitioning, relating, or resolving a backlog issue — or registering a project/component/location — in ANY repo on this machine, via the `adhd-backlog` CLI / `mcp__backlog__*` tools, never by hand-editing a `BACKLOG.md` file. Examples: \"log this bug\", \"file a debt item for the flaky test\", \"claim BUG-042\", \"what's still open in this repo\", \"where does this tool live\"."
 ---
 
 # `@adhd/backlog` usage
 
-`@adhd/backlog` is a graph-backed, multi-agent, cross-repo backlog tool. It is
-migrating every repo on this machine off hand-edited `BACKLOG.md` files onto
-itself as the source of truth, with `BACKLOG.md` demoted to a generated,
-git-visible *projection* of the graph. This skill is the ONLY place the
-command surface, protocol, and migration-state mechanism are documented —
-the global `CLAUDE.md`/`AGENTS.md` carry just one pointer line to this file.
+`backlog` is a graph-backed, multi-agent backlog tool: issues, a project/
+component/location registry, and the relationships between them, all served
+from one store over four transports (CLI, MCP, HTTP, and in-process). This
+skill is the ONLY place the command surface and calling convention are
+documented — `AGENTS.md`/`CLAUDE.md` carry just a pointer to it.
 
-> **INTERFACE_v2.** The surface below is the six-verb consolidation. The ~36
-> flat v1 verbs (`create-item`, `get-item`, `list-items`, `transition-status`,
-> …) are **retired and no longer mounted** — they survive only as in-process
-> library exports. A v1 command name now exits `4` (unknown command). Every
-> example in this file was verified against the real built binary.
+Identity is the global `uid` returned by `create`/`upsertProject`/etc. —
+never a family-scoped human-readable id. Every example below was run against
+the real built binary (`dist/index.js`) and its exact output is what is
+shown.
 
-## Registry first — resolve "where does this live?" before searching
+## 1. Command surface — 14 verbs, one calling convention
 
-The registry (`project` / `component` / `location` nodes) is the fastest way to
-answer **"which project/component owns this tool, file, or URL?"** — use it
-BEFORE `rg`/`gx`/websearch. It resolves in ONE call and returns the project's
-filesystem `path` + git `repoUrl` + the linked locations, so an agent learns both
-*where to fix something* and *which project to log the bug against* without
-searching.
-
-**Resolve a tool, file, or URL** (the go-to — try this first):
+**Every verb takes a single `--input` flag carrying one JSON object.** There
+are no per-field flags.
 
 ```
-adhd-backlog query --input '{"view":"lookup","lookup":"memory_ping"}'
-# → data: { project:{name:"sox-ecosystem",path:"/Users/nix/dev/ai/sox-ecosystem",
-#            repoUrl:"git@github.com:…/sox-ecosystem.git"},
-#           component:{name:"memory-server",path:"extensions/bundles/sox-memory-bundle/members/memory-server"},
-#           location:{locType:"tool",value:"memory_ping"} }
+adhd-backlog backlog get                --input '<IIssueGetInput json>'
+adhd-backlog backlog query              --input '<IIssueQueryInput json>'
+adhd-backlog backlog lookup             --input '{"q": "<tool, file path, or URL>"}'
+adhd-backlog backlog create             --input '<ICreateIssueInput json>'
+adhd-backlog backlog update             --input '<IUpdateIssueInput json>'
+adhd-backlog backlog transition         --input '<ITransitionInput json>'
+adhd-backlog backlog claim              --input '<IClaimInput json>'
+adhd-backlog backlog relate             --input '<IRelateInput json>'
+adhd-backlog backlog move               --input '<IMoveIssueInput json>'
+adhd-backlog backlog upsert-project     --input '<IUpsertProjectInput json>'
+adhd-backlog backlog upsert-component   --input '<IUpsertComponentInput json>'
+adhd-backlog backlog upsert-location    --input '<IUpsertLocationInput json>'
+adhd-backlog backlog rm-location        --input '<IRmLocationInput json>'
+adhd-backlog backlog delete             --input '<IDeleteIssueInput json>'
+adhd-backlog batch action               --input '<IBatchActionInput json>'
 ```
 
-`lookup` accepts a **tool** name (`memory_ping`, `backlog_query`), a **file**
-path (`extensions/.../index.ts`, absolute or repo-relative), or a **URL** — and
-classifies automatically. It returns a `hint` when it can only resolve to a
-project or a path prefix; it never silently returns nothing.
-
-**List known nodes:**
+The `backlog` segment in front of every verb (and `batch` in front of
+`action`) is a real, required part of the command — it is the CLI namespace
+each operation is mounted under, not decoration. Running `adhd-backlog
+--help` (or an unknown command) prints the exact live shape of every input:
 
 ```
-adhd-backlog query --input '{"view":"projects"}'
-adhd-backlog query --input '{"view":"components","filter":{"project":"adhd"}}'
-adhd-backlog query --input '{"view":"locations","filter":{"component":"memory-server"}}'
+$ adhd-backlog --help
+Available commands:
+
+  backlog claim  { input: { uid: string, by: string, action: enum, force?: boolean } }
+  backlog create  { input: { title: string, body: string, project: string, component?: string, kind?: string, status?: string, priority?: string, citations?: object[], author?: string, assignee?: string, by: string, duplicateAction?: enum, awaitEmbed?: boolean } }
+  backlog delete  { input: { uid: string, reason: string, by: string, awaitEmbed?: boolean } }
+  backlog get  { input: { uid: string, fields?: union[] } }
+  backlog lookup  { input: { q: string } }
+  backlog move  { input: { uid: string, toProject?: string, toComponent?: string, by: string } }
+  backlog query  { input: { text?: string, filter?: object, fields?: union[], sort?: enum, direction?: enum, limit?: number, offset?: number, after?: string, view?: enum, format?: enum, overlapAxis?: enum, overlapUids?: string[], staleAfterMin?: number } }
+  backlog relate  { input: { sourceUid: string, targetUid: string, rel: enum, action: enum, by: string } }
+  backlog rm-location  { input: { uid: string, by: string, reason?: string } }
+  backlog transition  { input: { uid: string, by: string, toStatus: string, note?: string, citations?: object[] } }
+  backlog update  { input: { uid: string, by: string, title?: string, body?: string, kind?: string, priority?: string, assignee?: string, author?: string, awaitEmbed?: boolean } }
+  backlog upsert-component  { input: { project: string, name: string, path?: string, description?: string, by: string } }
+  backlog upsert-location  { input: { component: string, project?: string, locType: enum, value: string, by: string } }
+  backlog upsert-project  { input: { name: string, path?: string, repoUrl?: string, monorepo?: boolean, description?: string, by: string } }
+  batch action  { input: { operation: enum, items: object[], concurrency?: number, mode?: enum, onItemError?: enum, itemTimeoutMs?: number } }
 ```
 
-**Get full details on a project** (path + repo URL + linked locations + components):
+Trust that output over anything hardcoded here — it is the live schema, not
+a stale copy of it.
+
+### Special commands — no `--input`, and not verbs
+
+`serve`, `install-skill` (alias `install`), `search`, and `sandbox-path` are
+handled before the command table:
 
 ```
-adhd-backlog get --input '{"registry":"project","name":"adhd"}'
-adhd-backlog get --input '{"registry":"component","name":"memory-server","project":"sox-ecosystem"}'
+adhd-backlog serve [--transport mcp|http|both] [--port N] [--host H]
+adhd-backlog install-skill [--host claude|codex|opencode|all] [--scope user|project]
+adhd-backlog search "<query text>" [--limit n]
+adhd-backlog sandbox-path
 ```
 
-**Register or update a project / component / location** (create-or-update by key,
-never a duplicate row — a worktree dir under a project resolves to the SAME project):
+`search "x" --limit 2` is the argv-flag shortcut for `backlog query --input
+'{"text":"x","limit":2}'` — same envelope, same exit codes, verified:
 
 ```
-adhd-backlog create --input '{"registry":{"node":"project","name":"sox-ecosystem","path":"/Users/nix/dev/ai/sox-ecosystem","repoUrl":"git@github.com:…/sox-ecosystem.git"}}'
-adhd-backlog create --input '{"registry":{"node":"component","name":"memory-server","project":"sox-ecosystem","path":"extensions/bundles/sox-memory-bundle/members/memory-server"}}'
-adhd-backlog create --input '{"registry":{"node":"location","locType":"tool","value":"memory_ping","component":"memory-server"}}'
+$ adhd-backlog search "auth module" --limit 5
+{"ok":true,"data":{"view":"list","items":[{"uid":"…","title":"Flaky test in auth module","kind":"issue","status":"closed","priority":"CRITICAL"}],"hasMore":false},"meta":{"total":1,"returned":1,"limit":5}}
 ```
 
-**When to use it:** hitting a failure in tool X → `lookup` X to get the owning
-project (where the code lives) AND the correct project to log the bug against, in
-one step. "Which repo is the memory server in?" → `lookup memory_ping`. "Where is
-component Y on disk?" → `get --input '{"registry":"component","name":"Y",…}'`.
-If you find yourself searching for where code lives, the registry (or a
-one-line `create --input '{"registry":{…}}'` to add the missing entry) is the
-answer, not a search.
-
-## 1. Check migration status FIRST, every time
-
-Never trust a hardcoded phase number in this document — it goes stale the
-moment a phase advances. Before deciding whether `BACKLOG.md` or the tool is
-authoritative for the CURRENT repo, run:
+`--sandbox` is a global flag valid before ANY command — it diverts the
+invocation into a fresh throwaway store (`mkdtemp` + its own DB) instead of
+the real one, and prints the path so you can pass `ADHD_ROOT=<path>` to reuse
+it across calls. Use it whenever you want to try a command without touching
+production data — verified:
 
 ```
-adhd-backlog admin --input '{"action":"migration_status"}'
+$ adhd-backlog --sandbox backlog upsert-project --input '{"name":"sandbox-demo","by":"claude:1"}'
+[backlog] --sandbox: isolated store at /var/folders/.../backlog-sandbox-AL1cJH (not auto-deleted — pass ADHD_ROOT=... to reuse it, or remove it yourself when done)
+{"ok":true,"data":{"uid":"3ec19363-cd8c-4479-8d7f-c8e4e9f0948b","created":true,"project":{"uid":"3ec19363-cd8c-4479-8d7f-c8e4e9f0948b","name":"sandbox-demo"}}}
 ```
 
-It reports `{ phase, description, toolIsAuthoritative }`. While
-`toolIsAuthoritative` is `false` (phases `not-started`/`phase-1`/`phase-2`),
-`BACKLOG.md` (root, per-plan, per-package) is still the real source of truth
-in this repo — read/file there by hand as usual, but still prefer `adhd-backlog
-query`/`adhd-backlog create` for querying and filing so items are visible
-cross-repo and get FTS/symbol dedup for free. Once `toolIsAuthoritative` is
-`true` (`phase-3` and later), **never hand-edit a `BACKLOG.md` file** — every
-one is a generated projection at that point, and a hand-edit will be silently
-overwritten (or, once the parity gate is blocking, rejected in CI).
+## 2. The outcome envelope — every verb, every transport
 
-## 2. Command surface — six verbs, one calling convention
-
-There are exactly six verbs plus one batch mount. **Every verb takes a single
-`--input` flag carrying one JSON object** — there are no per-field flags any
-more (`--repo`, `--human-id`, `--by`, … are all gone; passing one exits `2`).
-
-```
-adhd-backlog get     --input '<IBacklogGetOptions json>'
-adhd-backlog query   --input '<IBacklogQueryOptions json>'
-adhd-backlog create  --input '<IBacklogCreateInput json>'
-adhd-backlog update  --input '<IBacklogUpdateInput json>'
-adhd-backlog relate  --input '<IBacklogRelateInput json>'
-adhd-backlog admin   --input '<IBacklogAdminInput json>'
-batch action         --operation <op> --items '<json[]>' [--concurrency <n>]
-```
-
-Special commands are handled before the command table and do NOT take
-`--input`: `adhd-backlog serve [--transport http|mcp|both]`,
-`adhd-backlog install-skill` (alias `install`), and `adhd-backlog search`.
-
-`search` is the one flag-shaped shortcut, and it is **not a seventh verb** —
-it is an argv translation onto `query`'s natural-language `text` form
-(INTERFACE_v2 §2.1b), so it returns the identical envelope and exit codes:
-
-```
-adhd-backlog search "<query text>" [--limit n] [--offset n] [--sort s] [--direction asc|desc]
-                                   [--fields a,b,c] [--status s] [--priority p] [--kind k]
-                                   [--family f] [--repo r] [--project-path p] [--plan s]
-                                   [--assignee a] [--claimed-by c] [--tag t] [--grep q]
-adhd-backlog search --anchor <ID> [flags]      # nearest neighbours of an existing item
-```
-
-`search "x" --limit 2` is exactly `query --input '{"text":"x","limit":2}'`.
-The text matches semantically when the embedding space is populated and by
-keyword (FTS) when it is not. Run `adhd-backlog search --help` for the list.
-
-### The outcome envelope — every call, every transport
-
-Every verb returns the same envelope on stdout as one JSON line:
+Every verb returns one of exactly two shapes, always the same envelope
+regardless of transport:
 
 ```jsonc
 { "ok": true,  "data": { /* verb-specific payload */ }, "warnings": [], "meta": {} }
 { "ok": false, "error": { "code": "item_not_found", "message": "…", "details": {} } }
 ```
 
-Never assume an unwrapped payload — always read `envelope.data`. Exit codes
-are derived from `error.code`:
+Never assume an unwrapped payload — always read `envelope.data`. There are
+exactly nine error codes, and the CLI's process exit code is derived from
+`error.code`:
 
-| exit | codes |
-|---|---|
-| `0` | success (`ok: true`) |
-| `1` | `item_not_found`, `ambiguous`, `duplicate_candidate`, `dedupe_suppressed`, `store_busy`, `soft_deleted`, `conflict`, `precondition_failed`, `internal` |
-| `2` | `invalid_argument`, `validation`, `unsupported` |
-| `4` | `not_found` (unknown command) |
+| code | exit | meaning |
+|---|---|---|
+| `not_found` | 4 | a referenced catalog entry (project/component/kind/status/priority) does not exist |
+| `item_not_found` | 1 | the addressed issue `uid` does not exist |
+| `invalid_argument` | 2 | malformed flag or parameter shape |
+| `validation` | 2 | schema rejection — unknown filter key, unknown projection field, over-limit |
+| `store_busy` | 1 | store contention (busy/lease) — `details.retryable`/`retryAfterMs` say whether and how to retry; never hot-loop |
+| `rag_not_configured` | 1 | a semantic/similarity read with no embedding backend, or an empty vector space |
+| `conflict` | 1 | someone else holds the claim, a single-valued relation is taken, or a supersede raced |
+| `precondition_failed` | 1 | a gate refused the write — a terminal transition missing its required citation/note, or an unverifiable citation |
+| `internal` | 1 | unclassified server-side failure |
 
-`error.details.retryable`/`retryAfterMs` tell you whether to retry a
-`store_busy` and with what backoff — never hot-loop.
+Success is always exit `0`.
 
 ### MCP tool names
 
-Each verb is also an MCP tool once `.mcp.json` wires the server:
-`backlog_get`, `backlog_query`, `backlog_create`, `backlog_update`,
-`backlog_relate`, `backlog_admin`, plus the un-namespaced `batch_action`.
-MCP wraps the single non-`ctx` parameter under `data`, and that parameter is
-itself named `input` — so the argument path is `data.input.<field>` (and
-`create` nests one level further, `data.input.item`, because
-`IBacklogCreateInput.item` carries the item payload).
+Each verb is also an MCP tool once `.mcp.json` wires the server, named
+`backlog_<verb>` with the verb's own words snake_cased: `backlog_get`,
+`backlog_query`, `backlog_lookup`, `backlog_create`, `backlog_update`,
+`backlog_transition`, `backlog_claim`, `backlog_relate`, `backlog_move`,
+`backlog_upsert_project`, `backlog_upsert_component`,
+`backlog_upsert_location`, `backlog_rm_location`, `backlog_delete`, plus the
+un-namespaced `batch_action`.
 
-### Verb inputs
+## 3. Issue verbs — worked examples
 
-| verb | required | common optional |
-|---|---|---|
-| `get` | `humanId` | `repo`, `fields[]`, `includeDeleted` |
-| `query` | — | `view`, `filter`, `sort`, `direction`, `limit`, `offset`, `groupBy`, `humanIds[]`, `text`, `format` |
-| `create` | `item{family,title,body,repo}`, `by` | `item.priority`, `item.projectPath`, `item.author`, `item.reporter`, `duplicateAction`, `supersedes`, `splitFrom`, `children[]`, `reason` |
-| `update` | `humanId`, `repo`, `by` | `patch`, `status`, `priority`, `citations[]`, `reason`, `claim`, `claimOpts`, `assignedTo`, `addNote`, `addCitation`, `softDeleteReason` |
-| `relate` | `sourceId`, `targetId`, `relation`, `action`, `repo`, `by` | `sourceRepo`, `targetRepo` |
-| `admin` | `action` | `params`, `by` |
+Every mutating verb requires `by` — the acting identity, always
+`${agentName}:${instanceId}`, never a bare role literal like `"agent"`. A
+missing/blank `by` is rejected with `invalid_argument` before any write
+runs.
 
-- `query.view`: `list` (default) · `ready` · `order` · `graph` · `stale` ·
-  `summary` · `grouped`. The v1 ops `ready-items`, `topo-order`,
-  `dependency-graph`, `stale-claims`, and `stats` are all views now.
-- `relate.relation`: `dependency` · `related` · `plan`;
-  `relate.action`: `add` · `remove`. This one verb replaces
-  `add-dependency`, `remove-dependency`, `link-related`, and `attach-to-plan`.
-  `sourceId` resolves in `repo` unless `sourceRepo` overrides it; `targetId`
-  resolves in `repo` unless `targetRepo` overrides it — pass both to link two
-  items that live in different repos. The response's `noop` is `true` when
-  the edge already existed (`add`) or already didn't exist (`remove`) —
-  never assume every call was a fresh write.
-- `update.claim`: `claim` · `release` · `renew` — replaces `claim-item`,
-  `renew-claim`, `release-claim`.
-- `admin.action`: `archive` · `export` · `import` · `render` · `merge` ·
-  `migration_status` · `set_migration_phase` · `version` · `skill` · `batch` ·
-  `doctor` · `prune` · `reconcile_repo` · `run_dedup_sweep` ·
-  `cluster_into_plans` · `promote_cluster_to_plan` · `embedding_backfill` ·
-  `embedding_health` · `list_near_duplicates`.
-
-Every `<repo>` value is this machine's stable git-remote-derived slug (e.g.
-`PseudoSky/adhd`) — never a bare directory name. A worktree agent
-(`<repo>/.worktrees/*`) resolves to the SAME main-repo `repo` slug, not a
-phantom per-worktree repo.
-
-**`get` returns a terse card by default** (`humanId`/`kind`/`title`/`status`/
-`priority`). Ask for more explicitly: `{"humanId":"BUG-001","fields":["body","repo","citations"]}`.
-The full field vocabulary includes `related` (BUG-025 read side — the
-humanIds of every OTHER live item linked via `relate`, in either direction)
-and every other pseudo-field the response reports back as `omittedFields`
-when you didn't ask for it — so `card.body === undefined` never has to mean
-"actually empty," you can check whether `"body"` is in `omittedFields`
-instead. Looking up a humanId that was **renamed** (a data-repair action, not
-part of normal use) still resolves: `get` redirects to the current item and
-says so in `warnings`, rather than 404ing on an id an old citation still
-names.
-
-## 3. Claim/renew/release protocol (multi-agent use)
-
-- Identity (`by`) is always `${agentName}:${instanceId}` — NEVER a bare role
-  literal like `"agent"`. Two concurrent agents both claiming as
-  `"implementer"` defeats the CAS protocol entirely. `by` is required on
-  every mutating verb and a blank value is rejected with `invalid_argument`.
-- Claiming is idempotent for the SAME claimant — always `renewed`, no
-  contention check.
-- A long-running task must renew periodically (default staleness: 30 min):
-  `adhd-backlog update --input '{"humanId":"BUG-042","by":"me:1","claim":"renew"}'`
-- Every exit path (done/error/abandoned) releases unconditionally — it is a
-  no-op on an already-unclaimed item, never an error. Never leave an item
-  claimed after you stop working on it.
-
-## 4. Citations — via tool calls, never hand-typed markdown
-
-The `Citation` type (`{ file, lines?, context? }`) is the structured form of
-one bracketed citation entry in the old hand-edited convention. Instead of
-typing a `Citations: [...]` line by hand, pass `citations` on the `update`
-that moves an item into any terminal-done/terminal-workaround status — this
-is REQUIRED and enforced (such a transition without citations is rejected):
+**File a new issue.** `project` is RESOLVE-ONLY — `create` never mints one;
+register it first with `upsert-project` (§4). `component` defaults to the
+project's reserved `(root)` component when omitted:
 
 ```
-adhd-backlog update --input '{
-  "humanId": "BUG-MYAREA-001",
+$ adhd-backlog backlog create --input '{
+  "title": "Flaky test in auth module",
+  "body": "The auth integration test times out intermittently.",
+  "project": "demo-project",
   "by": "claude:1",
-  "status": "RESOLVED",
-  "reason": "fixed in <commit sha>",
-  "citations": [{ "file": "packages/x/src/y.ts", "lines": "40-58" }]
+  "priority": "HIGH"
 }'
+{"ok":true,"data":{"created":true,"uid":"a61ff0b6-a0f1-4189-9923-671f6cbacd4e","item":{"uid":"a61ff0b6-a0f1-4189-9923-671f6cbacd4e","title":"Flaky test in auth module","kind":"issue","status":"open","priority":"HIGH","project":"020e87f2-…","component":"dcf134ab-…","createdAt":"2026-09-17T01:22:56.056Z","author":"claude:1"}}}
 ```
 
-Use `addCitation` on an `update` to attach evidence without a status change.
+`create` runs a dedupe scan (FTS + semantic, when embeddings are configured)
+BEFORE writing. `duplicateAction` (default `'abort'`) controls what happens
+when the scan surfaces a candidate at/above the project's dedupe threshold:
+`'abort'` — nothing is written, `{created:false, reason:'duplicate-suppressed',
+duplicateCandidates}`; `'force'` — writes a genuinely new issue anyway,
+still reporting `duplicateCandidates`; `'comment'` — no new issue is
+written, a note is attached to the top-scoring candidate instead. A
+zero-candidate scan proceeds to a normal create regardless of
+`duplicateAction`. **Always inspect `duplicateCandidates` before forcing.**
 
-Optionally name the symbol a citation is about (`{ file, lines?, context?,
-symbol? }`) to get best-effort blast-radius enrichment for free — the store
-shells out to `gitnexus impact <symbol>` at write time (bounded timeout,
-never blocks or fails the write) and stamps the citation's `blastRadius`
-(`risk`/`impactedCount`/`direction`) if gitnexus is installed and the repo is
-indexed. Absence of `blastRadius` on a citation that named a `symbol` means
-"not enriched" (gitnexus unavailable, unindexed, timed out, symbol not
-found) — never "confirmed zero blast radius."
-
-## 5. Dedupe before filing — via the tool, not eyeballing
-
-`create` runs a dedupe scan (FTS over title+body, plus exact symbol/path/
-errorText metadata match) BEFORE writing, and returns `duplicateCandidates`
-alongside `created: false` when a likely match exists. **Always inspect
-`duplicateCandidates` first.** Only set `duplicateAction` to force a write
-after confirming the candidates are genuinely a distinct issue — never as a
-way to skip reading them.
-
-## 6. Worked examples
-
-File a new item:
+**Read one issue.** `get` returns a terse five-field card
+(`uid`/`kind`/`title`/`status`/`priority`) by default — ask for more
+explicitly:
 
 ```
-adhd-backlog create --input '{
-  "item": {
-    "family": "BUG-MYAREA",
-    "title": "Short, specific summary",
-    "body": "Full description, root cause if known, evidence.",
-    "repo": "PseudoSky/adhd",
-    "projectPath": "packages/domain/my-package",
-    "priority": "HIGH"
-  },
-  "by": "claude:1"
+$ adhd-backlog backlog get --input '{"uid":"a61ff0b6-…"}'
+{"ok":true,"data":{"uid":"a61ff0b6-…","title":"Flaky test in auth module","kind":"issue","status":"open","priority":"HIGH"}}
+
+$ adhd-backlog backlog get --input '{"uid":"a61ff0b6-…","fields":["body","citations"]}'
+{"ok":true,"data":{"uid":"a61ff0b6-…","body":"The auth integration test times out intermittently.","citations":[]}}
+```
+
+The full field vocabulary is `uid, title, kind, status, priority, project,
+component, createdAt, updatedAt, assignee, author, closedAt` (cheap/plain)
+plus `body, citations, notes, auditTrail, blockers, related, _score,
+_vector` (opt-in only — each costs a genuine extra read, so none is in the
+default card).
+
+**Search/filter/page issues:**
+
+```
+$ adhd-backlog backlog query --input '{"filter":{"project":"demo-project","status":"open"},"limit":10}'
+{"ok":true,"data":{"view":"list","items":[{"uid":"a61ff0b6-…","title":"Flaky test in auth module","kind":"issue","status":"open","priority":"HIGH"}],"hasMore":false},"meta":{"total":1,"returned":1,"limit":10}}
+```
+
+`query.view` (default `'list'`) selects the result shape: `list` · `ready` ·
+`graph` · `order` · `stale` · `similar` · `overlap`. `text` is the
+natural-language form — routed to `filter.semantic` when a populated vector
+space can rank it, or `filter.grep` (keyword FTS) otherwise; never set
+`text` alongside `filter.semantic`/`filter.grep` yourself. Pagination is
+truthful: `meta.total` is the count before `limit`/`offset`, `meta.returned`
+is `data.items.length`, and a page cut short for any reason other than your
+own `limit` sets `meta.truncated`.
+
+**Edit an existing issue.** A `body` change supersedes the issue (mints a
+fresh `uid`); every other field edits in place. `status` is not editable
+here — use `transition`:
+
+```
+$ adhd-backlog backlog update --input '{"uid":"a61ff0b6-…","by":"claude:1","priority":"CRITICAL"}'
+{"ok":true,"data":{"uid":"a61ff0b6-…","changed":["priority"]}}
+```
+
+**Move an issue to a new status.** A terminal `toStatus` REQUIRES `citations`
+when the project's policy demands it (the default), and citations must be
+verifiable against the project's own filesystem path — an unverifiable
+citation is rejected with `precondition_failed`:
+
+```
+$ adhd-backlog backlog transition --input '{
+  "uid": "a61ff0b6-…", "by": "claude:1", "toStatus": "closed",
+  "note": "fixed",
+  "citations": [{ "file": "packages/auth/src/index.ts", "lines": "1-1" }]
 }'
+{"ok":true,"data":{"uid":"a61ff0b6-…","fromStatus":"open","toStatus":"closed","transitionUid":"8b802b1b-…"}}
 ```
 
-Response: `{"ok":true,"data":{"created":true,"humanId":"BUG-MYAREA-001","item":{…}}}`.
-If `created` is `false` with non-empty `duplicateCandidates`, read them before
-deciding whether to force or to enrich the existing item instead. `item.author`
-defaults to the caller identity (`by`, canonicalised) when omitted, and
-`item.reporter` defaults to `item.author` when omitted.
-
-What's still open in this repo:
+**Claim / renew / release protocol (multi-agent use).** Claiming is
+idempotent for the SAME claimant (always `renewed`, no contention check). A
+long-running task renews periodically; every exit path releases
+unconditionally (a no-op if already unclaimed):
 
 ```
-adhd-backlog query --input '{"filter":{"repo":"PseudoSky/adhd","status":"OPEN"},"limit":50}'
+$ adhd-backlog backlog claim --input '{"uid":"a61ff0b6-…","by":"claude:1","action":"claim"}'
+{"ok":true,"data":{"uid":"a61ff0b6-…","status":"claimed","claimedBy":"claude:1","claimedAt":"2026-09-17T01:24:31.896Z"}}
+
+$ adhd-backlog backlog claim --input '{"uid":"a61ff0b6-…","by":"claude:1","action":"renew"}'
+{"ok":true,"data":{"uid":"a61ff0b6-…","status":"renewed","claimedBy":"claude:1","claimedAt":"2026-09-17T01:24:33.468Z"}}
+
+$ adhd-backlog backlog claim --input '{"uid":"a61ff0b6-…","by":"claude:1","action":"release"}'
+{"ok":true,"data":{"uid":"a61ff0b6-…","status":"released"}}
 ```
 
-Read one item in full:
+**Link two issues.** `rel` is one of `relates_to`, `supersedes`, `blocks`,
+`duplicate_of`, `part_of` — NOT the bare word `"related"`:
 
 ```
-adhd-backlog get --input '{"humanId":"BUG-MYAREA-001","repo":"PseudoSky/adhd","fields":["body","citations","notes"]}'
+$ adhd-backlog backlog relate --input '{"sourceUid":"777c5e33-…","targetUid":"a61ff0b6-…","rel":"relates_to","action":"add","by":"claude:1"}'
+{"ok":true,"data":{"sourceUid":"777c5e33-…","targetUid":"a61ff0b6-…","rel":"relates_to","action":"add","noop":false}}
 ```
 
-Reprioritize an item:
+`noop:true` means `add` found an already-live matching edge, or `remove`
+found none — no edge was written and no audit row produced; never assume
+every call was a fresh write. `targetUid` may belong to a different project
+than `sourceUid`.
+
+**Move an issue to a different project/component.** `toProject`/
+`toComponent` are RESOLVE-ONLY, never minted — register the destination
+first with `upsert-project`/`upsert-component` if it doesn't exist yet:
 
 ```
-adhd-backlog update --input '{"humanId":"BUG-MYAREA-001","repo":"PseudoSky/adhd","by":"claude:1","priority":"CRITICAL"}'
+$ adhd-backlog backlog move --input '{"uid":"777c5e33-…","toProject":"demo-project","by":"claude:1"}'
+{"ok":true,"data":{"uid":"777c5e33-…","noop":false,"fromProject":"38b9af5d-…","toProject":"020e87f2-…","fromComponent":"22113591-…","toComponent":"dcf134ab-…"}}
 ```
 
-Link two items in the SAME repo:
+**Soft-delete an issue.** `reason` is REQUIRED. The node is closed off
+bi-temporally, never physically removed — its audit trail and every edge
+pointing at it remain readable:
 
 ```
-adhd-backlog relate --input '{"sourceId":"BUG-A-001","targetId":"BUG-B-002","relation":"related","action":"add","repo":"PseudoSky/adhd","by":"claude:1"}'
+$ adhd-backlog backlog delete --input '{"uid":"777c5e33-…","reason":"duplicate of tracked work","by":"claude:1"}'
+{"ok":true,"data":{"uid":"777c5e33-…","invalidated":true}}
 ```
 
-Link two items across DIFFERENT repos:
+## 4. Registry — project / component / location
+
+The registry answers **"where does this live, and what do I file the bug
+against?"** in one call, before you `rg`/search for it.
+
+**Register or update a project** (create-or-update by `name`; also mints the
+project's reserved default component `(root)` on first creation):
 
 ```
-adhd-backlog relate --input '{"sourceId":"BUG-A-001","targetId":"BUG-B-002","relation":"dependency","action":"add","repo":"PseudoSky/adhd","targetRepo":"PseudoSky/other-repo","by":"claude:1"}'
+$ adhd-backlog backlog upsert-project --input '{"name":"demo-project","path":"/tmp/demo","by":"claude:1"}'
+{"ok":true,"data":{"uid":"020e87f2-…","created":true,"project":{"uid":"020e87f2-…","name":"demo-project","path":"/tmp/demo"}}}
 ```
+
+**Register or update a component** (create-or-update by `(project, name)`;
+`project` is resolve-only):
+
+```
+$ adhd-backlog backlog upsert-component --input '{"project":"demo-project","name":"auth-service","path":"packages/auth","by":"claude:1"}'
+{"ok":true,"data":{"uid":"41a61c6d-…","created":true,"component":{"uid":"41a61c6d-…","name":"auth-service","projectUid":"020e87f2-…","path":"packages/auth"}}}
+```
+
+**Register a location** — a tool name, file path, or URL owned by a
+component. A bare component NAME requires `project` to disambiguate it (a
+`uid` never does):
+
+```
+$ adhd-backlog backlog upsert-location --input '{"component":"auth-service","project":"demo-project","locType":"path","value":"packages/auth/src/index.ts","by":"claude:1"}'
+{"ok":true,"data":{"uid":"a4b0dd6b-…","created":true,"location":{"uid":"a4b0dd6b-…","locType":"path","value":"packages/auth/src/index.ts","componentUid":"41a61c6d-…"}}}
+```
+
+**Resolve a tool, file, or URL to its owning project/component** — the
+go-to before searching for "which repo owns this?":
+
+```
+$ adhd-backlog backlog lookup --input '{"q":"packages/auth/src/index.ts"}'
+{"ok":true,"data":{"project":{"uid":"020e87f2-…","name":"demo-project","path":"/tmp/demo"},"component":{"uid":"41a61c6d-…","name":"auth-service","path":"packages/auth"},"location":{"uid":"a4b0dd6b-…","locType":"path","value":"packages/auth/src/index.ts"}}}
+```
+
+`lookup` classifies `q` automatically as a tool name, file path, or URL —
+it only resolves against LOCATIONS already registered via `upsert-location`,
+never against a bare project/component name. An unregistered value returns
+`not_found` (exit 4); a path miss falls back to a suffix/prefix scan before
+giving up, and reports a `hint` when only a partial match was found — never
+a silent empty result.
+
+**Remove a location** (soft-invalidate by `uid`):
+
+```
+$ adhd-backlog backlog rm-location --input '{"uid":"a4b0dd6b-…","by":"claude:1","reason":"tool renamed"}'
+{"ok":true,"data":{"uid":"a4b0dd6b-…","invalidated":true}}
+```
+
+## 5. Batch — N-way fan-out over one operation
+
+`batch action` runs the SAME operation over many items. `operation` is the
+mounted operation id, namespaced as `backlog/<verb>` (not the bare verb
+name), and each entry in `items` wraps its payload under `input`:
+
+```
+$ adhd-backlog batch action --input '{
+  "operation": "backlog/create",
+  "items": [
+    { "input": { "title": "Batch item one", "body": "first",  "project": "demo-project", "by": "claude:1" } },
+    { "input": { "title": "Batch item two", "body": "second", "project": "demo-project", "by": "claude:1" } }
+  ]
+}'
+[{"index":0,"status":"fulfilled","value":{"ok":true,"data":{"created":true,"uid":"874dfa26-…", …}}},
+ {"index":1,"status":"fulfilled","value":{"ok":true,"data":{"created":true,"uid":"e071b0b8-…", …}}}]
+```
+
+Each result is `{index, status:'fulfilled', value}` or `{index,
+status:'rejected', reason}` — `value`/`reason` is the SAME outcome envelope
+`backlog/<verb>` would return standalone, so a batched item's own `ok`/
+`error.code` still applies. `mode` (`'parallel'` default · `'serial'` ·
+`'chained'`), `onItemError` (`'continue'` default · `'abort'`), and
+`concurrency`/`itemTimeoutMs` govern how the fan-out runs. The valid
+`operation` values are exactly the 14 issue/registry verbs above, each
+prefixed `backlog/` — passing a bare verb name (`"create"`) is rejected with
+`invalid_argument` naming the full list.
+
+## 6. Citations — structured, not hand-typed markdown
+
+A citation is `{ file, lines?, context?, symbol? }`. Pass `citations` on
+`create` or on the `transition` that moves an issue into a terminal status —
+required and enforced whenever the project's policy demands it (the
+default): a terminal transition with no citations, or with an unverifiable
+one, is rejected with `precondition_failed`. "Unverifiable" means the file
+could not be confirmed to exist under the project's own registered path —
+never resolved outside it.
+
+Name a `symbol` on a citation to get best-effort blast-radius enrichment for
+free — the store shells out to `gitnexus impact <symbol>` at write time
+(bounded timeout, never blocks or fails the write) and stamps the citation's
+`blastRadius` when gitnexus is installed and the repo is indexed. Absence of
+`blastRadius` on a citation that named a `symbol` means "not enriched," never
+"confirmed zero blast radius."
 
 ## 7. Verify writes from a NEW process
 
-An MCP `backlog_get` is answered by the same long-lived server process that
-did the write, out of its own uncheckpointed WAL — so it can confirm rows
-that will never exist on disk. After any write you care about, verify by
-running the `adhd-backlog` CLI in a shell (a fresh process), not by re-reading
-through the same MCP session.
+An MCP `backlog_get` served by a long-lived `serve` process can answer out
+of that process's own in-memory/uncheckpointed state. After a write you
+care about, verify by running the `adhd-backlog` CLI in a fresh shell — a
+genuinely new process — rather than re-reading through the same live MCP
+session.
