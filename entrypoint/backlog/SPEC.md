@@ -1818,6 +1818,23 @@ created store file; the file it is read from is never mutated in place.
 
 ## 8. Data load (ETL)
 
+> **This load has been executed, and its tooling is retired.** The section
+> below is kept as the authoritative record of the field mapping, edge
+> mapping, identity remapping, write ordering and acceptance gate that the
+> load actually used — not as instructions for something still to be run.
+> Parity was verified four ways against a real production-store copy driven
+> through the real write and query layers: issue counts 1763/1511/252 on both
+> sides, terminal-closed 922 on both sides, and 100 of 100 sampled per-issue
+> citation sets matching exactly. The fourth comparison, `getSubgraph` counts
+> per project, diverged; it was root-caused to the loader itself, which did
+> not write the `owns_project` edge that production's `upsertComponent`
+> writes, leaving components unparented. The shipped package never had that
+> defect — verified behaviourally against the packed artifact installed into
+> a clean consumer project, which shows zero orphaned components and resolves
+> a two-hop walk from project to issue. The loader was removed in commit
+> `7c76c115`, which carries that evidence in its message. Nothing here is
+> runnable today, and nothing in the published package depends on it.
+
 **Direction, once, never in place.** The store's existing data
 (`entrypoint/backlog/dist`, 603 open / 1476 total items at last count —
 `backlog query --input '{"limit":1,"filter":{}}'`, run 2026-09-04) is read
