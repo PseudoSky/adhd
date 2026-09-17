@@ -16,7 +16,7 @@ never a family-scoped human-readable id. Every example below was run against
 the real built binary (`dist/index.js`) and its exact output is what is
 shown.
 
-## 1. Command surface — 14 verbs, one calling convention
+## 1. Command surface — 14 verbs (plus `batch`), one calling convention
 
 **Every verb takes a single `--input` flag carrying one JSON object.** There
 are no per-field flags.
@@ -79,6 +79,19 @@ adhd-backlog install-skill [--host claude|codex|opencode|all] [--scope user|proj
 adhd-backlog search "<query text>" [--limit n]
 adhd-backlog sandbox-path
 ```
+
+`sandbox-path` prints the resolved store location and exits without opening
+it — `{"sandbox":bool,"adhdRoot":"…","dbPath":"…"}`. Use it to confirm WHICH
+store a command would touch before running a write. Combined with the global
+`--sandbox` flag (valid before any command) it reports the throwaway store
+that flag would mint, so you can check isolation without creating anything.
+
+Two conventions apply to every transcript below. **Uids are truncated with
+`…` for readability** — always pass the FULL value the previous call
+returned, never the ellipsis form. And **every invocation prints warnings on
+stderr** (telemetry, the embedding backend, onnxruntime) whether or not it
+succeeded; stdout carries the JSON envelope alone. Parse stdout, key on the
+exit code, and ignore stderr — it is noise, not a failure signal.
 
 `search "x" --limit 2` is the argv-flag shortcut for `backlog query --input
 '{"text":"x","limit":2}'` — same envelope, same exit codes, verified:
@@ -182,6 +195,9 @@ $ adhd-backlog backlog get --input '{"uid":"a61ff0b6-…","fields":["body","cita
 {"ok":true,"data":{"uid":"a61ff0b6-…","body":"The auth integration test times out intermittently.","citations":[]}}
 ```
 
+(`backlog get`'s own `--help` line prints `{ input: union }` — the one verb
+whose live schema is vaguer than this page. Use the shape above.)
+
 The full field vocabulary is `uid, title, kind, status, priority, project,
 component, createdAt, updatedAt, assignee, author, closedAt` (cheap/plain)
 plus `body, citations, notes, auditTrail, blockers, related, _score,
@@ -227,8 +243,25 @@ $ adhd-backlog backlog transition --input '{
 {"ok":true,"data":{"uid":"a61ff0b6-…","fromStatus":"open","toStatus":"closed","transitionUid":"8b802b1b-…"}}
 ```
 
+**`toStatus` is an open catalog, not a fixed enum.** `open`/`claimed`/
+`closed` are the conventional names, not the permitted set. An unresolved
+NAME is not an error — it MINTS a new status (`terminal:false`) and the
+transition succeeds, exactly as `create`'s own `status` field behaves. Only a
+uid-SHAPED reference resolving to nothing is rejected, with `not_found`:
+
+```
+$ adhd-backlog backlog transition --input '{"uid":"a61ff0b6-…","by":"claude:1","toStatus":"awaiting-review","note":"n"}'
+{"ok":true,"data":{"uid":"a61ff0b6-…","fromStatus":"open","toStatus":"awaiting-review","transitionUid":"f52b0f50-…"}}
+```
+
+So a typo becomes a real status rather than an error, and the issue silently
+leaves the set `filter.status:"open"` returns. Treat the status name as
+load-bearing input: pass one you can spell, or read the catalog first.
+
 **Claim / renew / release protocol (multi-agent use).** Claiming is
-idempotent for the SAME claimant (always `renewed`, no contention check). A
+idempotent for the SAME claimant — a second `action:"claim"` from the same
+`by` returns `status:"renewed"` rather than a contention error, so retrying
+after a lost response is always safe. A
 long-running task renews periodically; every exit path releases
 unconditionally (a no-op if already unclaimed):
 
