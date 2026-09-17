@@ -7,10 +7,9 @@ npm packages.
 ## 0. Context & non-negotiable principles
 
 **This is the application layer, built fresh against the sox library tier** —
-there is no coexistence with anything else, no dual-write bridge, no gradual
-deprecation window. Prior backlog data is carried forward by the one-time ETL
-(§8), landed once into this schema; nothing about this build is staged against,
-or constrained by, an earlier surface.
+there is no coexistence with anything else, no dual-write bridge, and no
+gradual deprecation window. Nothing about this build is staged against, or
+constrained by, an earlier surface.
 
 Library versions (verified on npm): `@adhd/sox-graph-store@0.9.1` (the 0.9.1
 patch surfaces `NodeRecord.uid` + `getNodeByUid` — the stable-identity correction,
@@ -28,7 +27,7 @@ the `experimental.multiprocessWal:false` opt-out §4c requires be absent — see
    (UUID) exposed to consumers; `rowid` is internal. No allocator, no
    dedupe-scan, no id override, no import-provenance field, no repo-string identity.
    **BUG-039 (cross-process write loss) is HYPOTHESIZED to disappear with
-   DB-generated ids** — §10.4 keeps the write-safety proof as the gate that
+   DB-generated ids** — §9.1 keeps the write-safety proof as the gate that
    CONFIRMS it, not as a foregone conclusion.
 2. **No kind-derived-from-prefix.** `kind` is a catalog-backed reference.
 3. **No closed `CHECK` on `kind`/`rel`.** Open schema + injected `TypePolicy`.
@@ -46,14 +45,14 @@ the `experimental.multiprocessWal:false` opt-out §4c requires be absent — see
   app layer keys the *consumer-facing* identity on the stable, exportable UUID
   and resolves an external `uid` → node with one call. `rowid` (`NodeRecord.id`)
   remains the *internal* edge identity (`writeEdge`/`getEdges` are
-  `src`/`dst` rowids) — it is per-store and is NOT stable across the ETL or a
+  `src`/`dst` rowids) — it is per-store and is NOT stable across a store
   rebuild, so it must never escape as an external reference.
 - **Content is NEVER identity.** The library's global content-hash dedup
   (`skipDedupe` default `false`) is a content-idempotency convenience, not
   identity. **Every live write-layer entity write passes `skipDedupe: true`:**
   `createIssue`, and `supersede`-backed body edits — so two identical-body
-  issues are two rows (two `uid`s), never one collapsed row. The ETL already
-  passes it (§8); the live path must too. (This was the blind review's blocker.)
+  issues are two rows (two `uid`s), never one collapsed row. (This was the
+  blind review's blocker.)
 - **Uniqueness = a hand-composed find-then-create inside the write layer's own
   `immediate` transaction (§4c) + `NodeUniquenessPolicy` (edge-scoped) — never
   the library's `findOrCreateNode()`, which is two separate, non-transactional
@@ -126,12 +125,12 @@ so there is no `transition_requires_sha` column: a `transition`/`audit`
 node's `sha` hashes its own canonical serialization (never an external
 file), so it is always computable and §4a's "agent + note + sha REQUIRED"
 is a genuine hard invariant, never policy-tunable. A `citation`'s `sha`, by
-contrast, hashes EXTERNAL file content (§6.3.2/§8.5) and can legitimately
+contrast, hashes EXTERNAL file content (§6.3.2) and can legitimately
 fail to resolve to a real hash — `citation_requires_sha` is what that
 failure composes with: `true` (default) rejects a citation write that would
 resolve to the `"unverified"` sentinel with `CitationUnverifiableError`;
-`false` accepts it verbatim, matching the ETL's own default posture for a
-project with no known `path` (§8.4/§8.5).
+`false` accepts it verbatim — the posture for a project whose `path` is
+unknown, so its citation targets cannot be hashed at all.
 
 `project_status`/`project_kind` are enforced by the SAME write-layer step
 that resolves the `status`/`kind` catalog row (§4c's hand-composed
@@ -208,8 +207,7 @@ write runs — the identical mechanism §6.3's `by` check already uses (line
   project node itself, never created lazily at issue-creation time. `(root)`
   is what `createIssue` (§6.3.2/§6.1) resolves to when its optional
   `component` field is omitted, guaranteeing every issue always gets exactly
-  one live `owns_component` edge (§8.1 carries every repo-level, no-`projectPath`
-  source item onto this identical row — not an ETL-only invention).
+  one live `owns_component` edge.
 - `location` — a concrete reference that **resolves** to a component/project:
   `meta.locType` ∈ `path` | `url` | `tool` + `meta.value` (the reference string).
   `path` = filesystem path (absolute or repo-relative); `url` = full URL;
@@ -980,7 +978,7 @@ silently.
   `project` to place the new issue under `owns_component`'s chain (§3, §4) —
   under the named `component` when one is given, or under `project`'s
   reserved default component `(root)` when `component` is omitted, so a new
-  issue is never left without a live `owns_component` edge (§3/§8.1/§9
+  issue is never left without a live `owns_component` edge (§3/§8
   AC-23) — and `query`'s `filter.project` narrows a listing. Every place that accepts
   an entity reference to a catalog/registry node (`project`, `component`,
   `kind`, `status`, `priority`, `agent`) accepts **either**:
@@ -1071,7 +1069,7 @@ from the surface with a stated reason. Nothing here is silently dropped.
 ### 6.3 Issue verbs
 
 Nine verbs, one mounted operation each (same one-descriptor→four-transport
-projection server.ts already uses, §10): `get`, `query`, `create`, `update`,
+projection server.ts already uses, §9): `get`, `query`, `create`, `update`,
 `transition`, `claim`, `relate`, `move`, `delete`. (Registry verbs — `lookup`,
 `upsertProject`/`upsertComponent`/`upsertLocation`/`rmLocation` — are §3a's,
 not restated here.)
@@ -1127,8 +1125,8 @@ interface ICreateIssueInput {
   title: string;
   body: string;
   project: string;   // uid or name — resolved per §6.1; REQUIRED (every issue has a component chain)
-  component?: string; // uid or name, scoped within `project`; RESOLVED ONLY, never created — the write layer's hand-composed find-then-create (§4c) runs its find-half alone here: a name that resolves to an existing component under `project` is used as-is, and an unresolved name throws CatalogNotFoundError('component', name) rather than silently forking a new component (see §6.1's project-vs-component asymmetry: components are NOT auto-vivified by createIssue, use upsertComponent first). OMITTED (undefined) is a distinct third case, never an error: it resolves to `project`'s reserved default component `(root)`, already guaranteed live by `upsertProject` (§3/§4/§6.1) — every issue gets exactly one `owns_component` edge whether or not the caller names a component (§9 AC-23).
-  kind?: string;      // catalog name or uid; default catalog row "issue" if the project defines no default; an unresolved NAME mints a new kind catalog row (§2/§6.1's general rule — kind is open vocabulary, no allowlist, §8.1's `kind` field-mapping row) with no extra metadata beyond `name`; a uid-shaped `kind` that does not resolve instead throws CatalogNotFoundError('kind', ref) — minting never applies to a uid (§6.1)
+  component?: string; // uid or name, scoped within `project`; RESOLVED ONLY, never created — the write layer's hand-composed find-then-create (§4c) runs its find-half alone here: a name that resolves to an existing component under `project` is used as-is, and an unresolved name throws CatalogNotFoundError('component', name) rather than silently forking a new component (see §6.1's project-vs-component asymmetry: components are NOT auto-vivified by createIssue, use upsertComponent first). OMITTED (undefined) is a distinct third case, never an error: it resolves to `project`'s reserved default component `(root)`, already guaranteed live by `upsertProject` (§3/§4/§6.1) — every issue gets exactly one `owns_component` edge whether or not the caller names a component (§8 AC-23).
+  kind?: string;      // catalog name or uid; default catalog row "issue" if the project defines no default; an unresolved NAME mints a new kind catalog row (§2/§6.1's general rule — kind is open vocabulary, no allowlist) with no extra metadata beyond `name`; a uid-shaped `kind` that does not resolve instead throws CatalogNotFoundError('kind', ref) — minting never applies to a uid (§6.1)
   status?: string;    // catalog name or uid; default is the project's configured initial status (project_policy — falls back to a global default "OPEN"-equivalent catalog row); an unresolved name MINTS a new status catalog row (§2, unlike `component` above) with terminal:false — a novel status name is presumed non-terminal until an operator deliberately reconciles it, so a typo can never silently close or exclude items under an unrecognized status; a uid-shaped `status` that does not resolve instead throws CatalogNotFoundError('status', ref) — minting never applies to a uid (§6.1)
   priority?: string;  // catalog name or uid; optional; an unresolved name mints a new priority catalog row (§2) with rank set to one past the current max rank (i.e. lowest urgency) — a novel priority can never silently outrank an existing one; a uid-shaped `priority` that does not resolve instead throws CatalogNotFoundError('priority', ref) — minting never applies to a uid (§6.1)
   citations?: Citation[];
@@ -1248,14 +1246,14 @@ interface ICreateOutcome {
 Errors: `CatalogNotFoundError('project'|'component'|'kind'|'status'|'priority', ref)`
 (`'component'` fires only when a name/uid was GIVEN and did not resolve —
 omitting `component` entirely never throws it, resolving instead to
-`project`'s reserved `(root)` default, §6.3.2's `component` comment/§9
+`project`'s reserved `(root)` default, §6.3.2's `component` comment/§8
 AC-23),
 `InvalidArgumentError` (missing `title`/`body`/`project`, or `citations[i].file`
 empty), `StaleSupersedeError(uid)` (only when `supersedes` is given — the
 body-change CAS (§4c) lost a race to a concurrent edit of the same target;
 nothing was written, re-`get` and retry), `CitationUnverifiableError(target)`
 (policy-gated via `project_policy.citation_requires_sha`, §2 — a given
-citation's `file` did not resolve to a real, hashable file (§8.5) and the
+citation's `file` did not resolve to a real, hashable file and the
 project requires one), `WriteContentionError`/`WriteIOError`
 (§4c — an exhausted driver-level retry on the underlying `immediate`
 transaction). `DuplicateSuppressedError` is NOT thrown — a suppressed create is a
@@ -1382,7 +1380,7 @@ terminal-only) — together they resolve the three-way
 terminal-done-vs-terminal-dismissed distinction to error on.
 `CitationUnverifiableError(target)` (policy-gated via
 `project_policy.citation_requires_sha`, §2 — a given citation's `sha`
-resolved to the `"unverified"` sentinel, §8.5, and the project requires a
+resolved to the `"unverified"` sentinel, and the project requires a
 real hash).
 `WriteContentionError`/`WriteIOError` (§4c) surface an exhausted
 driver-level retry on the underlying `immediate` transaction.
@@ -1763,7 +1761,7 @@ Default (`fields` omitted): `['uid', 'kind', 'title', 'status', 'priority']`
    split one already returned), and a concurrent `invalidate` merely
    removes a row from a future page's `liveOnly` filter — it can never
    re-order or duplicate an already-returned row. This composition IS
-   what acceptance criterion 8 (§9) tests.
+   what acceptance criterion 8 (§8) tests.
 6. **Offset-based paging (`after` absent, `offset` may be given via a
    second call incrementing a running total) supports arbitrary `sort`**
    (`priority`/`updated`/`created`/`relevance`/`textMatch`) but is
@@ -1783,7 +1781,7 @@ Default (`fields` omitted): `['uid', 'kind', 'title', 'status', 'priority']`
    dropped from `items`, `hasMore:true`, and `nextCursor` is set to the
    LAST **returned** row's internal rowid, opaquely stringified (a decimal
    string — a consumer must never parse or otherwise interpret it, and
-   must never persist it across an ETL rebuild, since rowids are
+   must never persist it across a store rebuild, since rowids are
    per-store per §1). If `limit` or fewer rows come back, `hasMore:false`
    and `nextCursor` is absent.
 
@@ -1837,420 +1835,16 @@ of that is provided instead by first-class `project`/`component`/`location`
 nodes plus `lookup`.
 
 There is no coexistence shim and no legacy-id fallback: this is the only
-surface, and identifiers other than `uid` do not resolve, by design. The
-store's existing data is loaded once, via the ETL (§8), into a freshly
-created store file; the file it is read from is never mutated in place.
+surface, and identifiers other than `uid` do not resolve, by design.
 
-## 8. Data load (ETL)
-
-> **This load has been executed, and its tooling is retired.** The section
-> below is kept as the authoritative record of the field mapping, edge
-> mapping, identity remapping, write ordering and acceptance gate that the
-> load actually used — not as instructions for something still to be run.
-> Parity was verified four ways against a real production-store copy driven
-> through the real write and query layers: issue counts 1763/1511/252 on both
-> sides, terminal-closed 922 on both sides, and 100 of 100 sampled per-issue
-> citation sets matching exactly. The fourth comparison, `getSubgraph` counts
-> per project, diverged; it was root-caused to the loader itself, which did
-> not write the `owns_project` edge that production's `upsertComponent`
-> writes, leaving components unparented. The shipped package never had that
-> defect — verified behaviourally against the packed artifact installed into
-> a clean consumer project, which shows zero orphaned components and resolves
-> a two-hop walk from project to issue. The loader was removed in commit
-> `7c76c115`, which carries that evidence in its message. Nothing here is
-> runnable today, and nothing in the published package depends on it.
-
-**Direction, once, never in place.** The store's existing data
-(`entrypoint/backlog/dist`, 603 open / 1476 total items at last count —
-`backlog query --input '{"limit":1,"filter":{}}'`, run 2026-09-04) is read
-through its existing public API only; a brand-new file is created with the
-open schema and every live record is written into it fresh via the write
-layer (§4), `skipDedupe: true`. The file being read from is never opened for
-write and is retained untouched as the pre-load backup (DATA_MODEL.md §9).
-"Re-run" means: re-run this same script against the same target file,
-runnable only once `graph-store@0.9.1` (§0) is the published dependency the
-write layer builds against — §8.7 makes a re-run safe whether the target is
-empty or half-populated.
-
-**Gate.** The ETL does not start until the BUG-039 write-safety proof
-(DATA_MODEL.md §9 point 0, §10.4) is green on the exact write path
-it will use — never write real data onto an unproven write path.
-
-### 8.1 Field mapping — `issue`
-
-Source: `BacklogItem` (model.ts:128-170) as materialized by `toBacklogItem`
-(store/mapping.ts:245-275) from `BacklogNodeMeta` (store/mapping.ts:111-185).
-
-| Source field | Destination | Transform |
-|---|---|---|
-| `nodeId` | — (no identity meaning here) | Used only as the ETL's own join key (§8.3); never written to the store. |
-| the source item's human-readable identifier | — (no field here) | Not an identity. Recorded verbatim in the crosswalk (§8.3) and in the per-issue ETL `audit` note (§8.2a) so it stays human-searchable. |
-| `kind` | `kind` catalog row + `has_kind` edge | The write layer's hand-composed find-then-create (§4c: a `tx.executeGet` SELECT by `(kind:'kind', name:value)` against the SAME `immediate`-mode transaction, INSERT on a miss) — never a call to `findOrCreateNode()` itself, which §4c proves is two non-transactional autocommit statements. `kind` is open vocabulary on both sides — source-side taken from the human-readable identifier's prefix (model.ts:134), here per §0.2 — every distinct string observed (`BUG`, `DEBT`, `FEAT`, … through outliers like `nx`, `zz`, `docs` — confirmed live via `query --input '{"view":"summary"}'`'s `byKindAllStatuses`) becomes its own catalog row, no allowlist. |
-| `family` | — (no field here) | `family` is derived entirely from the human-readable identifier (store/mapping.ts:191-193) and has no meaning once that identifier is gone. Folded into the audit note (§8.2a). |
-| `title` | `issue.title` | Verbatim. |
-| `body` | `issue.body` | Verbatim, untouched — including any identifier-shaped text inside it (§8.3's "free text is not rewritten"). |
-| `status` | `status` catalog row + `has_status` edge | The write layer's hand-composed find-then-create (§4c), scoped to `(kind:'status', name:value)`. Catalog seeded once, up front (§8.6 step 2) with `terminal` taken directly from `TERMINAL_STATUSES` (model.ts:56-68) — not re-derived per item. |
-| `priority` | `priority` catalog row + `has_priority` edge, iff present | The write layer's hand-composed find-then-create (§4c), scoped to `(kind:'priority', name:value)`; `rank` seeded from the already-existing `PRIORITY_RANK` constant (store/query.ts:32: `CRITICAL:0, HIGH:1, MEDIUM:2, LOW:3`) — reused verbatim so every sort-by-urgency comparator ports unchanged. No edge written when `priority` is absent — `byPriorityAllStatuses` sums to 937 of 1476 items WITH a priority present, leaving 539 absent (~36% of the corpus) — never defaulted to a fabricated value. |
-| `repo` | `project` catalog row (the write layer's hand-composed find-then-create, or `upsertProject` — §4c/§3a) | Normalized per §8.3, then an issue is never linked to a project directly — see `projectPath` below for the required `owns_component` hop. |
-| `projectPath` | `component` row (`upsertComponent`) + `owns_component` edge | The write layer's hand-composed find-then-create (§4c) scoped by project `uid` (§1's edge-scoped uniqueness policy) — the same composition `upsertComponent` (§3a/§4) uses, never a call to `findOrCreateNode()`. This spec's edge table has no direct project→issue edge — every issue must hang off a `component`. A source item with no `projectPath` (repo-level item) is filed under `project`'s reserved default component `(root)` (§3) — the SAME row `upsertProject` (§4) already guarantees exists for every project, and the SAME fallback `createIssue` (§6.3.2/§6.1) resolves to live when a caller omits `component` — this is that identical guarantee, exercised by the ETL, not an ETL-only invention. |
-| `plan` | — (no field here) | No plan catalog in this spec (§11: data-model changes beyond it are out of scope). Folded into the audit note (§8.2a). The source `MEMBER_OF` edge to the synthetic plan node (store/structure.ts:351-359) collapses into the same note — it is the graph realization of this same string, nothing more. |
-| `importedFrom` | — (no field here) | This application layer carries no markdown-import subsystem (§7). Folded into the audit note. |
-| `assignee` | — (no field/edge here) | this spec defines no assignment concept (§3/§4 have no assign verb or edge). Folded into the audit note — a real capability gap, flagged for the reader, not silently absorbed. |
-| `claimedBy` / `claimedAt` | — (not loaded) | An ephemeral lease (model.ts:152-154) from a decommissioned process is not actionable in this store. Every issue starts unclaimed. The fact of the lease (who, when) is still recorded in the audit note — discarding the STATE is a decision; discarding the FACT would be a silent drop. |
-| `citations` | `citation` nodes + `has_citation` edges | §8.2 below. |
-| `notes` | `note` nodes + `has_note` edges | §8.2 below — MINUS any note consumed as a transition's `note` (§8.2 transition reconstruction), which is not loaded twice. |
-| `tags` (user tags only; reserved tags already stripped by `toBacklogItem`, mapping.ts:269) | — (no field here) | Folded into the audit note. |
-| `createdAt` | `issue.created_at` | Verbatim. |
-| `updatedAt` | `issue.updated_at` | Verbatim. |
-| `author` | `agent` catalog row + `authored_by` edge, iff present | The write layer's hand-composed find-then-create (§4c), scoped to `(kind:'agent', name: canonicalIdentityKey(author))` — `canonicalIdentityKey` (model.ts:2306-2315) is reused verbatim so `researcher:a1b2c3` and `researcher:xyz` collapse to one `agent` row, exactly as AC-14 already requires live. |
-| `reporter` | — (no edge here) | §3's edge table has `authored_by` only — no `reported_by` (the `REPORTED_BY` member on the source `IEdgeOutcome.rel` union, model.ts:2569, never shipped as a real edge kind here). Folded into the audit note. |
-| `closed_at` (not a source column; realized as `issue.meta.metadata.closedAt` — §6.3.4) | `issue.meta.metadata.closedAt` | Reconstructed using the same rule §6.3.4's write-time `meta.metadata.closedAt` stamp applies: first real persisted `transition` audit event whose `to` is terminal. For the 621-of-1476 items with no persisted transition history (§8.2's transition-reconstruction gap; live `coverage.itemsWithHistory: 855` of `itemsTotal: 1476`, `query --input '{"view":"summary"}'`), no genuine timestamp exists — `closed_at` falls back to `updatedAt` for a currently-terminal item, and this fallback is called out by name in that issue's synthesized transition note (§8.2) so it is never mistaken for a real reconstruction. |
-
-### 8.2 Field mapping — events (citations, notes, transitions)
-
-**Citations → `citation` node + `has_citation` edge**, one per source `Citation`
-(model.ts:85-108):
-
-| Source field | Destination field | Transform |
-|---|---|---|
-| `file` | `target` | Verbatim (already repo-relative per the file's own doc comment, model.ts:86). |
-| — (derived) | `target_type` | `'url'` if `file` parses as an absolute URL, else `'path'`. |
-| — (none on the source) | `at` | The source `Citation` carries no timestamp of its own — even `auditTrail()` admits this and reuses `item.updatedAt` as its own best-effort proxy (store/query.ts:942-943). The ETL reuses the same existing proxy rather than inventing a second convention, and records "at is a proxy, not a genuine citation timestamp" in the audit note. |
-| `lines` | folded into `target` string is NOT done (see below) | Not truncated. |
-| — | `sha` | **DATA_MODEL.md §10 open point 1, resolved:** re-hash the *current* content at `target`, scoped to the issue's project `path` (only the `adhd` project has a known filesystem `path` per §8.3 — every citation belonging to any other project is therefore automatically unverifiable, for the same honest reason as a missing file). See §8.5 (Citation repair) for the full rule and the failure case. |
-| `lines`, `context`, `symbol`, `blastRadius` | — (no citation field here) | None of these exist on this store's `citation` shape (§3: `{target, target_type, sha, line, at}`). Folded verbatim, per citation index, into the issue's ETL audit note (§8.2a) — the exact line-range and blast-radius enrichment is never silently truncated to `line`'s single int, it just isn't a first-class column anymore. |
-| — (parsed from `lines`) | `line` | Best-effort parse of the START line out of `lines` (e.g. `"42-58"` → `42`; bare `"42"` → `42`; absent → omitted). The full range lives in the audit note as above. |
-
-**Notes → `note` node + `has_note` edge**, one per source `Note` (model.ts:122-126) —
-the cleanest 1:1 mapping in this load: `by`→`author`, `text`→`text`,
-`at`→`at`, all verbatim, all real (source notes, unlike citations, always carry a
-genuine timestamp). Exactly one exclusion: a note consumed by the transition
-reconstruction below is loaded as that transition's `note`, not duplicated as
-a separate `note` node.
-
-**Transitions → `transition` node + `has_transition` edge.** The source's
-real, persisted transition history lives in `audit-log.ts`'s events
-(`writeAuditEvent`, store/audit-log.ts:66-99), written only for a `'transition'`
-kind with `detail = {from, to, by, reason?}` (store/lifecycle.ts:104) — **note
-that this detail object has no `note` field of its own.** The free-text note
-(`opts.note`), when the caller supplied one, was pushed as a separate `Note`
-entry in the SAME `mutateMetadata` call, stamped with the identical `by` and
-the identical `nowIso` string (store/lifecycle.ts:88-93) — not merely close,
-byte-identical, because both come from one JS statement. Reconstruction:
-
-1. **Reason-carrying transitions** (terminal-dismissed statuses): `detail.reason`
-   already holds the bare reason text (store/lifecycle.ts:104) — use it
-   directly as `transition.note`. No join needed.
-2. **Note-carrying transitions**: join the audit event to the `Note` whose
-   `(by, at)` exactly matches `(detail.by, event.at)`. When found, that note's
-   `text` becomes `transition.note`, and the note is EXCLUDED from the separate
-   `note`-node load above (it is not loaded twice).
-3. **Bare transitions** (no reason, no matching note — `opts.note` was
-   optional and simply omitted): synthesize `transition.note =
-   "[note_synthesized] <from> → <to> by <by>, no note recorded"` — reusing
-   DATA_MODEL.md §9 point 3's own term verbatim. Never fabricate content that
-   wasn't there.
-4. **Items with zero persisted transition history** (the 621-of-1476 gap
-   above — every item last touched before the audit-log fix landed, live
-   `coverage.auditWindowStart: 2026-07-24T15:44:39.159Z`): the ETL writes
-   exactly **one** synthetic `transition` node per such issue: `from_status =
-   null` (genuinely unknown — never guess a plausible prior status),
-   `to_status` = the item's current status, `agent` = the item's `author` (or
-   the literal string `unknown` if even that is absent), `at` = `createdAt`,
-   `note = "[note_synthesized] pre-audit-log history unrecoverable; status at
-   load time: <status>"`, extended — only when the item's current status
-   is terminal — with `"; closedAt reconstructed from updatedAt, not a
-   genuine closing timestamp"` (this is the exact call-out the `closed_at`
-   row of §8.1 promises; a non-terminal item's synthesized note needs no such
-   suffix, since §8.1's fallback only ever fires for a currently-terminal
-   item). `sha` is computed the normal way (§4a) over
-   whatever was actually written — a hash of the record, not a truth claim
-   about history. This is what makes the hard "no bare transition" rule
-   (agent+note+sha always present) hold for every loaded issue without
-   inventing a false narrative.
-5. **`claim`/`renew`/`release` events** are not status transitions and have no
-   destination as `transition` nodes here (this store has no lease concept,
-   per §8.1's `claimedBy` row). Folded verbatim into the audit note.
-
-**The ETL audit node (§8.2a).** Every loaded issue gets exactly one
-extra `audit` node (§3's shape: `{actor, action, target_uid, from, to, note,
-sha, at}`), `actor: 'etl'`, `action: 'imported'`, linked by `audits` — this is
-where every field above marked "folded into the audit note" actually lands, as
-one JSON blob in `note`: `{sourceProject, sourceRef, sourceFamily, sourcePlan,
-sourceImportedFrom, sourceAssignee, sourceTags, sourceReporter, sourceClaimState?, sourceRenamedFrom?
-(the node's `renamedFrom` history, store/mapping.ts:142-151, when non-empty),
-citationExtras: [{index, lines, context, symbol, blastRadius}]}`. This same
-blob is what the crosswalk (§8.4) and the restart resume-set (§8.7) are
-rebuilt from — there is no separate stamp on the issue's own metadata. Nothing
-is ever silently dropped; it is either a first-class field/edge here, or it
-is here, verbatim, once, per issue — never both silently discarded and
-unmentioned.
-
-### 8.3 Edges
-
-| Source edge (direction) | Destination edge (direction) | Notes |
-|---|---|---|
-| `RELATES_TO` (issue→issue, one directed edge standing in for a symmetric relation — model.ts:2592-2599, store/link-related.spec.ts:68) | `relates_to` (issue→issue, n:m) | Same direction, copied once. |
-| `SUPERSEDES` (new→old, store/structure.ts:267 via `graph.supersede()`) | `supersedes` (issue→issue, lowercase, catalog relation — §3) | Same direction (new→old). §3 explicitly keeps the two vocabularies (uppercase content-mutation vs. lowercase catalog relation) distinct; the ETL writes the catalog form since it is not performing a live content edit. |
-| `SAME_AS` (drop→keep, store/structure.ts:334) | `duplicate_of` (issue→issue, n:1) | The source has no edge named `duplicate_of` at all — `SAME_AS` is `mergeItems`' actual mechanism and is the only source of duplicate-relation data. Same direction (dropped/duplicate → kept/canonical). |
-| `PART_OF` (child→parent, store/structure.ts:300) | `part_of` (issue→issue, n:1) | Same direction; matches §3's own framing ("hierarchical items, FEAT-005") exactly. |
-| `DEPENDS_ON` (dependent→dependency, i.e. `src` can't proceed until `dst` is done — store/structure.ts:66, confirmed by `blockers()`'s own semantics at store/query.ts:806-813: it returns the non-terminal targets of `src`'s own `DEPENDS_ON` edges) | `blocks` (blocker→blocked, §3: "inverse = blocked_by, derived") | **Direction is REVERSED, not copied.** Source `A DEPENDS_ON B` means B blocks A; this store's `blocks` edge is written `B → A`. §3's own edge table defines `depends_on` as `component → component` — a different, component-scoped relation with no source data at all (this ETL writes zero rows into it; it is seeded, empty, for future component-dependency work). The issue-level blocking relation the source actually has lives entirely in `blocks`. Getting this backwards silently inverts `topoOrder`/readiness semantics. |
-| `MEMBER_OF` (item→plan node, store/structure.ts:351-386) | — | No destination here (§8.1's `plan` row). |
-| `IN_REPO` / `IN_PACKAGE` / `PROJECT_OF` / `DERIVED_FROM` (repo-dimension scaffolding, store/repo-nodes.ts:130-148, store/audit-log.ts:99) | — (not loaded as data) | This machinery is not present here; the registry (§7/§3a) provides this instead. It is not copied as data. Its INFORMATION seeds the repo normalization decision below instead. |
-
-### 8.4 Identity remapping
-
-**uid assignment.** The ETL never mints or chooses a `uid`. Each `writeNode`
-call (§4, `skipDedupe: true`) returns a DB-generated `uid` (§1); the ETL reads
-it off the just-written `NodeRecord` and records it.
-
-**The crosswalk.** Keyed on `${normalizedRepo}::${legacyId}` → `uid`
-(`legacyId` being the source item's human-readable identifier), held
-in-process as an in-memory `Map` while Pass 1 (§8.6) runs, appended to as each
-issue's transaction commits — never durable by stamping the issue's own
-metadata. Durability instead rides on the ETL `audit` node §8.2a already
-writes, in the SAME transaction, for every loaded issue
-(`actor:'etl', action: 'imported'`, linked by `audits`): its `note` JSON already
-carries `sourceProject`/`sourceRef` (and `sourceRenamedFrom` when the node was renamed,
-§8.2a). On a fresh start this in-memory `Map` is simply empty; after a crash
-the crosswalk is REBUILT by scanning those `audit` nodes and reading
-`target_uid` + `sourceProject`/`sourceRef`/`sourceRenamedFrom` back out of each one's
-`note` (never by a query against the issue nodes themselves) — the same scan
-§8.7 uses to compute the resume-set. This keeps the crosswalk fully
-restart-safe with zero permanent legacy-identity residue on the
-live issue's own `meta.metadata` — an on-issue stamp would put `repo`/the
-human-readable identifier back onto the very node §0 anti-antipatterns 1 and 5
-forbid them from, and would be a second, redundant copy of data the ETL
-`audit` node already holds durably.
-
-Every entry in a loaded issue's `renamedFrom` (store/mapping.ts:142-151 —
-append-only history of prior `(repo, legacyId)` identities the node carried
-before a rename) is added to the crosswalk as an ADDITIONAL alias for the same
-`uid`. This store never resolves by an old identifier at runtime (§7:
-"identifiers other than `uid` do not resolve, by design"), but the ETL's OWN
-edge-rewriting pass (below) must still resolve a source edge recorded against
-a pre-rename identifier to the correct, current node.
-
-**Repo-key normalization.** The live corpus's ALL-STATUSES breakdown
-(`byRepoAllStatuses`, `query --input '{"view":"summary"}'`, run 2026-09-04 —
-distinct from the OPEN-only `byRepo` key, which reports a much smaller slice
-since only 605 of 1482 items are open) confirms both `"adhd"` (15 items) and
-`"PseudoSky/adhd"` (658 items) are live today, plus 21 other distinct repo
-strings (`sox-ecosystem` 678, `claude-tools` 43, `claude-agents` 19,
-`reverse-apis` 18, `scratch` 9, `global` 4, `QuSecure/claude-tools` 5,
-`qusecure/ceo-report` 2, `id8/dot` 2, `legacy-repo` 1, `refuter-test-repo` 1,
-six `zz-*-scratch-*` probes, and four `PseudoSky/*` test repos — 23 distinct
-repo strings total, 1482 items). Resolution:
-
-- `adhd` / `PseudoSky/adhd` reconcile to **one** `project` row, name `"adhd"`
-  — the bare form the source's own existing `normalizeRepoKey` (model.ts:2219-2226:
-  strip `.git`, take the last path segment) already treats as canonical, and
-  the exact name §3's own worked example uses. `repoUrl` is seeded
-  `git@github.com:PseudoSky/adhd.git` (§3's own example value) — the
-  owner-qualified form is not lost, it moves to the field that means "git
-  remote," not "display/slug name." `path` is seeded from the ETL process's
-  own cwd (`/Users/nix/dev/node/adhd`), the one project this ETL can verify
-  directly.
-- **Every other distinct repo string becomes its own `project` row, 1:1,
-  never merged into a shared bucket and never dropped** — this is the
-  explicit decision DATA_MODEL.md §9 point 3 asks for regarding
-  `global`/`scratch`/`legacy-repo`-shaped strings. Rationale: each already
-  carries real, distinct issues (1 to 678 of them); silently merging
-  unrelated repos to "unmanaged" would be a second instance of exactly the
-  `adhd`/`PseudoSky/adhd` collapse-by-string-drift bug this ETL exists to
-  fix, just aimed at genuinely different projects. `path`/`repoUrl` are left
-  unset for all of these (the ETL has no reliable way to know another
-  machine's checkout path) — a real registry gap (§3a), filled later by an
-  operator's own `upsertProject`/`upsertLocation`, never fabricated here.
-  This does not block issue loading: `owns_component`/`owns_project`
-  wiring only needs the `project` row to exist, not its registry fields.
-
-**Structural reference rewriting.** Every edge in §8.3 is rewritten through
-the crosswalk ((repo, legacyId) → `uid`) before being written — this is
-the only rewriting this ETL performs. **Free text (`body`, `note.text`,
-citation `context`) is never rewritten.** §7 already states the governing
-rule: "identifiers other than `uid` do not resolve, by design" — a
-human-readable identifier mentioned in prose is expected to go dark once this
-layer is the only surface, and mangling historical prose to keep it
-"resolving" would corrupt the record for a guarantee the spec explicitly does
-not make. The ~320 items whose structured `Citation.file` entries point at
-now-deleted `BACKLOG.md` files (a different case — a real column, not prose)
-are handled by Citation repair below, not by rewriting.
-
-**Dangling-reference detection.** Scoped to the five structural edge kinds in
-§8.3 (a closed, enumerable set — not an open-ended free-text scan). After Pass
-1 completes and the crosswalk is final, every source edge endpoint referenced by
-`relates_to`/`blocks`/`supersedes`/`duplicate_of`/`part_of` is checked against
-the crosswalk. Any endpoint that fails to resolve — the referenced source node was
-itself skipped or failed (§8.7) — is logged as a `danglingReference` (source
-identifier, target identifier, edge kind) and the edge is not written. **A non-empty
-`danglingReference` list is a hard fail of the acceptance gate (§8.7)** — it
-means some other item's load failed silently, not that the reference was
-ever meant to dangle.
-
-### 8.5 Citation repair (~320 items, `Citation.file` → now-deleted `BACKLOG.md` paths)
-
-Resolves DATA_MODEL.md §10 point 1. **This is also the canonical rule for
-computing `citation.sha` on the LIVE write path** (§6.3.2's `create`,
-§6.3.4's `transition`) — the ETL is simply the first, bulk caller of the
-same two-branch procedure the write layer runs for every citation, at
-creation time, forever after. For every citation:
-
-1. Resolve the issue's owning project's `path` (only `adhd` has one — §8.4).
-   No known project path ⇒ go to step 3 directly.
-2. If `target` resolves to a real, readable file under that `path`: compute
-   `sha256` of its CURRENT content and write it as `citation.sha` — a
-   verified-at-load-time hash, not the (nonexistent, per §8.2) original
-   filing-time hash. `target` is carried verbatim, unrewritten (it was already
-   correct, repo-relative — nothing to fix).
-3. If `target` does not resolve (the file was deleted, moved, or belongs to a
-   project with no known `path`): `citation.sha = "unverified"` — a fixed,
-   non-hex sentinel string, deliberately never a plausible-looking fake hash,
-   so a caller can tell "genuinely re-hashed" from "we could not verify" by
-   checking `sha === "unverified"` without a new schema column. `target` is
-   still carried verbatim — there is no correct replacement path to rewrite it
-   to (the content moved into the graph itself when `BACKLOG.md` stopped being
-   authoritative; it did not move to a new file). Never invent one.
-
-The ETL run report counts citations landing in step 3 (`citationsUnverified`)
-so an operator can see the true scope, separately from the acceptance gate
-(§8.7), which does not require citations to verify — only that every citation
-was loaded with a real `sha` value of one of the two kinds above, never a
-missing or fabricated one.
-
-### 8.6 Write ordering
-
-1. **Preflight gate** (BUG-039 write-safety proof, §10.4) — must be green
-   against this exact store file before step 2 runs.
-2. **Seed the closed, statically-known catalogs**: `status` (from
-   `BacklogStatus`'s full union, model.ts:11-34, `terminal` from
-   `TERMINAL_STATUSES`) and `priority` (from `Priority`'s union, `rank` from
-   `PRIORITY_RANK`, store/query.ts:32). These need no data scan — the vocabulary
-   is a TypeScript union, known before any item is read.
-3. **Seed `project` rows**, one per normalized repo string (§8.4).
-4. **Seed the default `(root)` component per project** (§8.1) — the SAME
-   reserved component `upsertProject` (§3/§4) guarantees for every
-   live-created project; seeded explicitly here because step 3 above writes
-   `project` rows via the hand-composed find-then-create directly (§8.1's
-   `repo` mapping), not through the `upsertProject` verb itself, so this
-   step restores the identical guarantee for ETL-created projects — needed
-   before any repo-level issue can be filed.
-5. **Pass 1 — issues + their own events, one issue per transaction**: for each
-   live source item (`isLiveBacklogItemNode`, mapping.ts:241-243) AND every
-   historically superseded/dropped-duplicate node the store still holds a
-   record of (invalidated immediately below, in this same step): resolve/lazily-create its `kind`/`agent`/`component`
-   catalog rows (`kind` and `agent` are open vocabulary, populated on first
-   sight rather than pre-seeded — §8.1), write the `issue` node, `has_kind`/
-   `has_status`/`has_priority`/`authored_by`/`owns_component` edges, its
-   `citation`/`note`/`transition` children and their `has_*` edges, its one
-   ETL `audit` node (whose `note` carries `sourceProject`/`sourceRef` — §8.2a/§8.4),
-   record the `uid` in the crosswalk —
-   ALL in one `store.adapter.transaction(fn, {mode:'immediate'})` (mirrors §4c's
-   own convention exactly — the ETL's own catalog lookups by business key
-   inside this same transaction are the identical check-then-act shape §4c
-   requires `immediate` mode for, so the ETL needs the same guard the live
-   write path does). If the
-   source node was not live (a superseded ancestor or a dropped duplicate),
-   immediately `invalidate(uid, reason)` using that node's own recorded reason
-   (the `"[superseded by X] …"` / `"[merged into Y] …"` note text,
-   store/structure.ts:280/326) — so this store's bi-temporal validity mirrors
-   the source's liveness exactly, and the live-query surface hides it exactly
-   as the source did.
-6. **Pass 2 — cross-issue edges**: now that the crosswalk is complete for
-   every issue this ETL will ever write (Pass 1 does not depend on edge
-   targets existing yet), write every `relates_to`/`blocks`/`supersedes`/
-   `duplicate_of`/`part_of` edge (§8.3), rewritten through the crosswalk
-   (§8.4). A single pass, no ordering constraint within it, because nothing in
-   it can be a forward reference anymore — this is *why* edges are a separate
-   pass from issues rather than interleaved: an issue created before a later
-   item it `relates_to` would otherwise need a second pass anyway, so every
-   edge just goes there uniformly.
-7. **Reconciliation** (§8.7) — the acceptance gate. Nothing is considered
-   loaded until this passes.
-
-Rationale for this order: catalogs must exist before any row references them
-(`has_status` needs a `status` row to point at); projects/components must
-exist before any issue (`owns_component` needs a target); issues must exist
-before their own events (an event edge points at its issue) and before Pass
-2's cross-issue edges (which point at OTHER issues, hence the two-pass split
-above rather than a fragile creation-order dependency).
-
-### 8.7 Idempotency & restart
-
-**The target may be a fresh empty file or a partially-populated one from an
-interrupted prior run — the same logic handles both**, because "resume"
-degrades to "start fresh" when there is nothing to resume from. Concretely:
-
-- Catalog seeding (the write layer's hand-composed find-then-create, §4c —
-  `upsertProject`/`upsertComponent` for registry rows, the same composition for
-  the closed catalogs, step 2-4) is already idempotent by construction (§1) —
-  re-running it on a partially-populated store is always safe, no
-  special-casing needed.
-- **Reconciling with §4's `skipDedupe: true`**: that flag exists precisely so
-  the live write path never collapses two genuinely-distinct, identical-body
-  issues (§1) — which means it CANNOT double as the ETL's own restart-safety
-  net. A blind re-run would mint a second, content-identical `issue` row for
-  every item already loaded. The ETL `audit` node (§8.2a/§8.4) is what
-  provides the needed backstop, scoped correctly (against the true
-  `(repo, legacyId)` identity, not content): before Pass 1 begins, the ETL
-  scans every `audit` node with `actor:'etl', action: 'imported'` already
-  written by a prior run, reads `sourceProject`/`sourceRef` back out of each one's
-  `note` (§8.4 — this is also how the in-memory crosswalk is rebuilt after a
-  crash), builds the resume-set, and processes only the source items not already
-  in it.
-- Pass 2 (edges) is always safe to re-run in full, on every invocation,
-  including a resume — each edge write is preceded by an existence check
-  (the same `hasLiveEdge`-shaped pattern the source already uses for exactly this
-  reason, store/structure.ts:37-40, 65) so writing an edge that already exists
-  is a no-op, not a duplicate. There is no separate edge-level progress marker
-  to maintain; re-deriving and idempotently re-checking every edge on every
-  run is cheap enough (bounded by the corpus's own edge count) that tracking
-  partial edge progress would add complexity for no measurable benefit.
-- A half-finished run is therefore detected the same way a fresh run is
-  scoped: by the ETL `audit`-node scan above, every time, not by a
-  separate "was this run interrupted" flag.
-
-### 8.8 Failure handling & the acceptance gate
-
-**Transaction granularity is per-issue** (§8.6 step 5): one source item's full
-bundle (issue + catalog edges + citations + notes + transitions + ETL
-audit + invalidate-if-not-live) is one `store.adapter.transaction(fn, {mode:'immediate'})` (§4c). A failure
-anywhere in that bundle rolls back the WHOLE bundle — never a partially-written
-issue — and is recorded in a `failed: [{repo, legacyId, error}]` list. **The run
-continues to the next item** rather than aborting the batch (mirrors
-`audit-log.ts`'s own "contained, never silent" discipline, store/audit-log.ts:
-90-99) — one malformed record must never block the other 1475.
-
-**The acceptance gate — this load is not complete until ALL of the
-following hold, checked by a live query against the freshly loaded store, never
-asserted from a remembered count:**
-
-1. `failed` is empty. Any entry is a hard fail, surfaced loudly, never
-   swallowed as a partial success.
-2. Per entity kind, the source count equals the written count: live issues,
-   citations, notes, transitions, and each catalog (`kind`, `status`,
-   `priority`, `agent`, `project`, `component`) — "live issue count" measured
-   through the ordinary default (non-invalidated) view on both sides, so
-   historically-superseded/duplicate ancestors loaded-and-immediately-
-   invalidated per §8.6 step 5 do not inflate this number on the destination
-   side any more than they do on the source side (`isLiveBacklogItemNode`
-   already excludes them there too).
-3. `danglingReference` (§8.4) is empty.
-4. Every loaded `transition` node has a non-empty `agent`, `note`, and `sha`
-   — the same hard invariant §4a states for the live write path, checked here
-   for the historical import too.
-5. This item-level gate composes with, and does not replace, the corpus-level
-   parity checks already in §9 clause 6 (citation-set sampling, per-project
-   `getSubgraph` counts) — both must pass before cutover.
-
-## 9. Acceptance (negative-control teeth)
+## 8. Acceptance (negative-control teeth)
 
 1. Identity in this application layer is `uid` alone; no field or code path
    resolves it by a human-readable name of any kind.
 2. **Live-path identical-content:** two `createIssue` calls with
    byte-identical `{title, body}` in the same project, the second passed
    `duplicateAction:'force'`, produce two distinct `uid`s (skipDedupe:true
-   on the live path, not just the ETL — `force` is the one `duplicateAction`
+   on the live path — `force` is the one `duplicateAction`
    §6.4 point 3 guarantees this for; the default `'abort'` suppressing that
    same identical pair instead is AC-19's assertion, not this one).
 3. **Automatic audit:** every transition/update/move/invalidate/embedding write
@@ -2258,11 +1852,23 @@ asserted from a remembered count:**
    `agent`/`note`/`sha` is rejected (red without the check).
 4. **On-write embedding:** writing an issue produces its vector via the
    observer; invalidating removes it.
-5. **Uniqueness:** duplicate `project.name` rejects; duplicate `component.name`
-   in different projects accepts (edge-scoped policy), same project rejects.
-6. **Parity** (ETL): issue count, terminal-closed count, per-issue citation
-   sets (100 sampled), `getSubgraph(project)` counts all match the source
-   corpus; every transition has `agent`+`note`+`sha`.
+5. **Uniqueness is edge-scoped, enforced inside the write transaction:** two
+   `upsertProject` calls with the same `name` resolve to ONE row — the second
+   is a resolve, never a second row and never an error. Two `upsertComponent`
+   calls with the same `name` under DIFFERENT projects are two genuinely
+   distinct rows, while the same `name` under the SAME project is one — the
+   half a global `name` key would silently collapse. Red if the policy is
+   widened to a global name scan (`src/write/catalog-verbs.spec.ts`).
+6. **A body edit carries the issue's WHOLE graph onto its successor:** after
+   `update({uid, body})` the superseded node is absent from every listing and
+   its successor holds every edge the issue had — `blocks`, `depends_on`,
+   `relates_to`, `part_of`, `duplicate_of`, the lowercase `supersedes`,
+   `has_note`, `has_citation`, `has_transition` and `audits` — swept in BOTH
+   directions, since an issue is the SOURCE of `has_note` but the TARGET of
+   `blocks`; and `openCurve` counts each identity CHAIN once per instant,
+   never once per node. Removing the carry-forward sweep, or the chain-head
+   resolution, turns these red (`src/query/superseded-views.spec.ts`,
+   `src/query/superseded-listing.spec.ts`, `src/write/update.spec.ts`).
 7. **Semantic:** `searchRanked` over this store returns text+vec fused results.
 8. **Keyset:** `queryNodes({after, limit})` pages stably, no gaps/dupes.
 9. **Registry list:** `view:projects`/`components`/`locations` return the seeded
@@ -2292,10 +1898,10 @@ asserted from a remembered count:**
 19. **`create`'s duplicate gate:** filing a near-duplicate title/body in the same project with default `duplicateAction` returns `{created:false, reason:'duplicate-suppressed'}` and writes nothing; `duplicateAction:'force'` writes a genuinely new, distinct `uid` despite the match (and still reports `duplicateCandidates`); `duplicateAction:'comment'` writes zero issue rows and attaches a `note` to the top-scoring candidate instead.
 20. **`query` sort/keyset conflict:** `query({after:<cursor>, sort:'priority'})` throws `InvalidArgumentError('sort', ...)` naming the incompatibility; the identical call without `sort` succeeds and pages in insertion order.
 21. **Registry `rmLocation`:** `rmLocation(uid)` invalidates the location; a subsequent `lookup` on that `(locType,value)` no longer resolves it; the location's own record remains addressable by uid (bi-temporal, never hard-deleted).
-22. **Concurrent write safety (BUG-039 gate):** the un-skipped, repointed cross-process harness (§4c/§10.4) run against `createIssue` reports a fresh-reopen stored count exactly equal to the number of `ok`-reporting creates, for both the same-target and distinct-target cases, over two real OS processes with no serve-lock coordination; the identical run with the `immediate`-mode guard removed reports a stored count BELOW the expected total (the negative control proving the assertion has teeth).
+22. **Concurrent write safety (BUG-039 gate):** the un-skipped, repointed cross-process harness (§4c/§9.1) run against `createIssue` reports a fresh-reopen stored count exactly equal to the number of `ok`-reporting creates, for both the same-target and distinct-target cases, over two real OS processes with no serve-lock coordination; the identical run with the `immediate`-mode guard removed reports a stored count BELOW the expected total (the negative control proving the assertion has teeth).
 23. **`create` with no `component` defaults to `(root)`, never orphaned:** `createIssue({title, body, project:'adhd'})` — `component` omitted entirely — writes exactly one `owns_component` edge, to `project`'s reserved default component `(root)` (§3/§6.3.2), and never throws `CatalogNotFoundError('component', ...)`; a subsequent `query({filter:{project:'adhd'}})` (§6.5 rule 3) returns the new `uid` in its results, proving the issue is reachable through the project filter rather than orphaned; two separate no-`component` `createIssue` calls against the same project resolve to the SAME `(root)` component row (`get({registry:'component', name:'(root)', filter:{project:'adhd'}})` returns one row, not two) — proving the fallback is a resolve of an already-guaranteed row, never a per-call mint.
 
-## 10. Dependencies & sequencing
+## 9. Dependencies & sequencing
 
 1. Library tier — published (FEAT-010..024, DEBT-011, BUG-040), plus the
    `graph-store` 0.9.1 patch that surfaces `NodeRecord.uid` + `getNodeByUid`
@@ -2308,25 +1914,17 @@ asserted from a remembered count:**
    `src/write/` → `src/query/` → consumers. This is the entire application
    layer, written in the same change; there is no intermediate state where
    two implementations compile side by side.
-3. **Gate before any data is written: BUG-039 write-safety proof against the
-   UUID write path — confirmed, not assumed, by the procedure in §10.4.** Per
-   §8's own opening rule ("the ETL does not start until the BUG-039
-   write-safety proof ... is green — never write real data onto an unproven
-   write path"), this step MUST be green before step 4 runs; it is not a
-   second, independent check that merely happens to be listed last.
-4. **Run the full §8 data load** (§8.1-8.8, every live source item — 603 open
-   / 1476 total at last count) against the now write-safety-proven store.
-   This single run is what resolves BUG-040 in practice: the 1339 transitions
-   and 7 issues the library's global content-hash dedup had collapsed
-   (BUG-040, already fixed at the library tier in step 1) land correctly for
-   the first time, confirmed by §8.8's acceptance-gate parity check (clause 2:
-   source count equals written count per entity kind, transitions
-   included) — there is no separate "BUG-040 re-run" distinct from this
-   one corpus-wide run.
+3. **Gate before the store takes its first live write: the BUG-039
+   write-safety proof against the UUID write path — confirmed, not assumed,
+   by the procedure in §9.1.** Never write real data onto an unproven write
+   path. This is also what resolves BUG-040 in practice: the library's global
+   content-hash dedup no longer collapses distinct transitions and issues,
+   because every live write-layer entity write passes `skipDedupe: true`
+   (§1).
 
-### 10.4 Gate procedure
+### 9.1 Gate procedure
 
-The BUG-039 write-safety proof (§10 point 4) is confirmed — never assumed — by
+The BUG-039 write-safety proof (§9 point 3) is confirmed — never assumed — by
 this procedure, run against the harness that already exists at
 `entrypoint/backlog/src/store/concurrency-scale.spec.ts:346-451`
 (`cross-process-writer.cjs` fixture).
@@ -2385,7 +1983,7 @@ below the expected total, i.e. detected silent loss). A harness that stays green
 against both the guarded and the deliberately-broken build proves nothing; this
 control is what proves it is actually measuring the thing it claims to.
 
-## 11. Out of scope
+## 10. Out of scope
 
 Library-tier changes beyond the `graph-store` 0.9.1 uid-surfacing patch (already
 committed); data-model
