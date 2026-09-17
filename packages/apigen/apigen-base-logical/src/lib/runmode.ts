@@ -293,8 +293,8 @@ function decodeNode(
  * `properties`, every field absent from that arbitrary first branch was
  * SILENTLY DROPPED from the wire.
  *
- * That is not a theoretical hazard: it shipped. `@adhd/backlog`'s six
- * INTERFACE_v2 verbs return `IOutcomeEnvelope<T>` — an undiscriminated union
+ * That is not a theoretical hazard: it shipped. Every `@adhd/backlog` verb
+ * returns `IOutcomeEnvelope<T>` — an undiscriminated union
  * of an error arm `{ok, error, warnings}` and a success arm `{ok, data,
  * warnings, meta}`. `oneOf[0]` is the ERROR arm, so every successful call
  * over every transport (CLI, MCP, HTTP, OpenAPI) serialized to exactly

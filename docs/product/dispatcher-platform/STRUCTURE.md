@@ -115,7 +115,7 @@ a fiction.
 Plan *definition* stays a file — authored upstream (ruling D-E puts authoring in sox's
 `workflow:plan-builder`, not here), reviewable in a diff, and already what `--dag-path`
 consumes. Execution *state and observations* move into backlog's store, as a scheduling
-capability slot on the plugin host that `PLUGIN_ARCHITECTURE.md` §2.1 already types and
+capability slot on the plugin host that `entrypoint/backlog/PLUGIN_ARCHITECTURE.md` §2.1 already types and
 whose §2.2 says slots are added "when a real second consumer exists."
 Satisfies I2 and I3. Blocked on the I1 ruling.
 
