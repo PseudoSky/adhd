@@ -1,8 +1,7 @@
 # `@adhd/backlog` — Plugin Architecture & Embedding Service
 
-**Version:** v1.0
 **Date:** 2026-08-08
-**Status:** Design basis for EPIC-G (plugin host + embedding-remote + sox embedding bundle). Targets `@adhd/sox-graph-store` 0.6.0 / `@adhd/sox-store-adapter` (Turso) / `@adhd/sox-embedding-provider` 0.2.0 / `@adhd/sox-service-proxy`.
+**Status:** The shipped design of the plugin host, the `embedding-remote` plugin, and the sox embedding bundle. Targets `@adhd/sox-graph-store` 0.6.0 / `@adhd/sox-store-adapter` (Turso) / `@adhd/sox-embedding-provider` 0.2.0 / `@adhd/sox-service-proxy`.
 
 ---
 
@@ -93,7 +92,7 @@ export async function openGraphBacklogStore(
 
 - Substrate: `createStoreAdapter({ dbPath })` (defaults to `turso`), `createGraphBackend(adapter)` (0.6.0), vector via `createVectorDialect(adapter.config.type)` → `TursoVectorDialect` — `F32_BLOB(dim)` columns, index via `CREATE INDEX` (DiskANN inferred), `vector_distance_cos/l2/dot`, and a `topKQuery` that emits a `WHERE` filter seam for predicate pushdown.
 - `opts.embedding`: host resolves the plugin id via the registry, validates `options`, calls `capabilities.embedding.createProvider(options, ctx)`. Backlog never owns an in-process embedding provider — the embedding capability is always a plugin.
-- Absent `opts.embedding`: `store.embedding` stays `undefined`; semantic operations throw `RagNotConfiguredError`; `listItems({ grep })` stays FTS-only — the v1 surface never regresses.
+- Absent `opts.embedding`: `store.embedding` stays `undefined`; semantic operations throw `RagNotConfiguredError`; `listItems({ grep })` stays FTS-only — keyword retrieval never regresses.
 - `GraphBacklogStore` gains `flushEmbeds(): Promise<void>` and the embed pipeline (`src/store/embed-pipeline.ts`) keeps a per-store tracked in-flight set (drain-until-empty), plus `closeGraphBacklogStore` becoming async and draining before close.
 
 ## 5. Embed pipeline — `src/store/embed-pipeline.ts`
@@ -126,12 +125,12 @@ export async function openGraphBacklogStore(
 
 The embedding service is a sox-owned shared daemon. memory-server may adopt it as a client via the same UDS dial path, behind an opt-in configuration flag; the in-process fastembed path remains the default until adoption is proven. The shared implementation lives in `@adhd/sox-embedding-provider` itself as a provider type routing through the UDS client, so backlog's plugin and memory-server share one implementation through the existing factory. Consequence: `terminateEmbedWorkers()` becomes a no-op for the shared child (the service owns it); per-record `embed_model` stamps keep mixed-model stores correct; the stamp site is fixed to stamp from `modelInfo`.
 
-## 8. Interface surface (INTERFACE_v2 alignment)
+## 8. Interface surface
 
 The RAG operations land inside the existing 6-tool surface, not beside it:
 
 - Read side → `backlog_query` views: `semanticSearch` → `view: "similar"` + `sort: "relevance"` (+ `filter.semantic`); plan-graph ops are compositions of `view: "plan"` / `view: "order"` (`criticalPath`, `blockerImpact`, `planReadiness`, `recommendNextWork`).
-- Write/ops side → `backlog_admin` actions: `run_dedup_sweep`, `cluster_into_plans` / `promote_cluster_to_plan`, `backfill_embeddings`, `list_near_duplicates`. Plus `embedding_health`. (snake_case throughout — the admin action union is one documented vocabulary, INTERFACE_v2 §6.)
+- Write/ops side → `backlog_admin` actions: `run_dedup_sweep`, `cluster_into_plans` / `promote_cluster_to_plan`, `backfill_embeddings`, `list_near_duplicates`. Plus `embedding_health`. (snake_case throughout — the admin action union is one documented vocabulary, SPEC.md §6.6.)
 - The `backlog_admin.action` union is versioned and documented; the growth rule — if the union approaches ~25 actions, split a `backlog_system` tool — keeps the "6 tools" claim honest.
 
 ## 9. Test cases (real Turso adapter + real fastembed, default-running, negative controls)
@@ -148,5 +147,5 @@ The RAG operations land inside the existing 6-tool surface, not beside it:
 
 - No in-process embedding path for backlog (the embedding capability is always a plugin — the service owns the model).
 - No general plugin framework, no third-party plugin packaging/versioning.
-- memory-server migration is opt-in and non-breaking; its implementation is a separate sox-ecosystem item.
+- memory-server adopting the shared embedding service is opt-in and non-breaking; its implementation is a separate sox-ecosystem item.
 - The service's OS-unit supervision / doctor integration is the sox team's implementation surface; this spec defines the bundle shape and RPC contract.

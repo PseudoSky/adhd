@@ -43,7 +43,21 @@ const { computeRealDependencyNames } = require('../../tools/nx-plugins/deps/comp
  * edit, no drift, and this file must stay `.cjs` (not `.json`) specifically
  * so it can compute that list instead of hand-listing it.
  */
-const ignoredDependencies = Array.from(computeRealDependencyNames(__dirname));
+const ignoredDependencies = [
+  ...computeRealDependencyNames(__dirname),
+  // `@adhd/apigen-base-logical` is the same structural blind spot as the
+  // pino/pino-pretty case above, one level up: `findNpmDependencies` (which
+  // backs `@nx/dependency-checks`) walks only the `build` target's own file
+  // graph (`vite.config.ts`'s `main: src/index.ts`), which never reaches a
+  // `*.spec.ts` file — so a dependency imported ONLY by a spec (here,
+  // `src/mcp-discoverability-real-ops.spec.ts`'s `synthesizeExample` /
+  // `X_APIGEN_*` imports, proving apigen's schema-driven worked-example
+  // synthesis against backlog's own real, already-built `dist/api.d.ts`) is
+  // permanently invisible to the rule and gets reported/stripped as
+  // "obsolete" no matter what the source does. Declared here so
+  // `sync-deps`/`lint` stop deleting the real, needed `package.json` entry.
+  '@adhd/apigen-base-logical',
+];
 
 module.exports = {
   extends: ['../../.eslintrc.base.json'],
