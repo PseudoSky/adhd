@@ -167,8 +167,50 @@ export interface IDuplicateScanHandle {
   };
 }
 
-/** The "plain" card fields (§6.5) this verb already has in hand after a create — never field-projected, unlike a `query` response. */
-export interface IIssueCard {
+/**
+ * The "plain" card fields (§6.5) this verb already has in hand after a
+ * create — never field-projected, unlike a `query` response.
+ *
+ * BUG-APIGEN-CORE-CLIENT-BARE-NAME-COLLISION-001: named `ICreateIssueCard`,
+ * not `IIssueCard`, deliberately. `query/types.ts` also exports an
+ * `IIssueCard` (the fields-projected card `query`/`get` return, every field
+ * but `uid` optional) — both interfaces were reachable from `api.d.ts`'s
+ * type graph, and apigen's extraction (`ts-json-schema-generator`, invoked
+ * per-operation but apparently resolving/caching declarations by bare name
+ * across the whole extracted program) non-deterministically resolved the
+ * `IIssueCard` bare name to EITHER declaration depending on extraction
+ * order — confirmed empirically: `dist/index.js` (CJS) resolved `query`'s
+ * own `items: IIssueCard[]` to THIS file's stricter shape (wrongly requiring
+ * `project`/`component`/`createdAt`), while `dist/index.mjs` (ESM) failed to
+ * resolve it at all (`items: {}`, unconstrained) — from the exact same
+ * source, built in the same pass. This is what broke `backlog_query`'s MCP
+ * `oneOf` output-schema validation the moment `get()`'s return type union
+ * (AC-11) made the extractor visit both `IIssueCard` declarations. The
+ * correct, permanent fix is what's below: give the two interfaces distinct
+ * bare names so extraction can never conflate them, not a workaround in the
+ * `get()`/`query()` call sites. Filed as
+ * BUG-APIGEN-CORE-CLIENT-BARE-NAME-COLLISION-001 (apigen-core-client, out of
+ * this package's ownership) — this rename is the local mitigation; the
+ * extractor itself should also stop keying declarations by bare name.
+ *
+ * This rename fixes the CJS path (`dist/index.js`, the only bundle any real
+ * transport here — CLI, MCP-stdio, HTTP serve — ever spawns/requires;
+ * confirmed empirically, `dist/index.mjs` is loaded by none of them). It does
+ * NOT fix a second, DISTINCT defect also present in `dist/index.mjs`: every
+ * `$ref` to a NAMED exported interface (`ICreateIssueCard` here,
+ * `IDuplicateCandidate`, `IIssueCard`, …) dereferences to `{}` (empty/
+ * unconstrained) in the ESM build specifically, while inline/anonymous
+ * object types on the SAME operation (e.g. `ICreateIssueResult.commentedOn`)
+ * resolve correctly in both builds — ruling out a general extraction
+ * failure and pointing at `dereferenceSchema`'s named-`$ref` resolution
+ * specifically misbehaving under ESM. Reproduced on `create`'s `item`/
+ * `duplicateCandidates` fields, which this file's own diff never touched,
+ * so it predates and is independent of the collision above. Filed
+ * separately as BUG-APIGEN-CORE-CLIENT-ESM-DEREF-EMPTY-001 — not fixed
+ * here (out of this package's ownership, and no real consumer loads
+ * `dist/index.mjs` today), but must not be silently dropped.
+ */
+export interface ICreateIssueCard {
   uid: string;
   title: string;
   kind: string;
@@ -204,7 +246,7 @@ export interface IIssueCard {
 export interface ICreateIssueResult {
   created: boolean;
   uid?: string;
-  item?: IIssueCard;
+  item?: ICreateIssueCard;
   duplicateCandidates?: IDuplicateCandidate[];
   reason?: 'duplicate-suppressed';
   supersededUid?: string;

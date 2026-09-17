@@ -23,6 +23,7 @@ import type { IQueryEnvelopeMeta } from '../envelope.js';
 import {
   DEFAULT_ISSUE_CARD_FIELDS,
   DEFAULT_QUERY_LIMIT,
+  type IComponentSummary,
   type IDependencyGraph,
   type IIssueCard,
   type IIssueField,
@@ -30,11 +31,14 @@ import {
   type IIssuePage,
   type IIssueQueryInput,
   type IIssueQueryResult,
+  type ILocationSummary,
   type IOverlapGroup,
+  type IProjectSummary,
   type ITopoOrderResult,
   MAX_QUERY_LIMIT,
 } from './types.js';
 import { querySimilarView } from './views/semantic.js';
+import { listComponents, listLocations, listProjects } from './views/registry.js';
 import { isSemanticSearchReadable } from '../store/semantic-search.js';
 
 /**
@@ -156,6 +160,40 @@ async function resolveEdgeScopedFilterIds(graph: GraphBackend, filter: IIssueFil
 
   if (filter.author !== undefined) {
     perDimension.push(await resolveMultiValuedEdgeScoped(graph, { rel: 'authored_by', expectedKind: 'agent', refs: [filter.author] }));
+  }
+
+  if (filter.plan !== undefined) {
+    // `part_of` is declared `issue -> issue` (both endpoints the SAME kind),
+    // so the generic `relIsSourceDirected` direction lookup cannot disambiguate
+    // it (source_kind === target_kind === 'issue'). Hand-roll the traversal
+    // instead of routing through `resolveEdgeScopedCandidates`: a plan is the
+    // edge TARGET, its members are `getEdges({dst: plan.id, rel:'part_of'})`'s
+    // `src`s — the same dst-directed shape `resolveMultiValuedEdgeScoped`
+    // already uses for `kind`/`status`/`priority`/`author`.
+    const plan = await tryResolveRef(graph, 'issue', filter.plan);
+    if (!plan) return new Set(); // unresolved plan ⇒ zero matches (§6.1 read-path rule)
+    const edges = await graph.getEdges({ dst: plan.id, rel: 'part_of' });
+    perDimension.push(new Set(edges.map((e) => e.src)));
+  }
+
+  if (filter.projectPath !== undefined) {
+    // `projectPath` matches `component.meta.path` (repo-relative, SPEC.md §3)
+    // exactly — distinct from `filter.component`'s uid/name lookup. Multiple
+    // live components CAN share a path across different projects, so every
+    // match's owned issues are unioned, mirroring the permissive multi-match
+    // handling every other edge-scoped dimension already uses.
+    const components = await graph.queryNodes({
+      kind: 'component',
+      liveOnly: true,
+      metadata: { path: { eq: filter.projectPath } },
+    } as unknown as NodeFilter);
+    if (components.length === 0) return new Set(); // unresolved path ⇒ zero matches (§6.1 read-path rule)
+    const union = new Set<number>();
+    for (const component of components) {
+      const edges = await graph.getEdges({ src: component.id, rel: 'owns_component' });
+      for (const e of edges) union.add(e.dst);
+    }
+    perDimension.push(union);
   }
 
   return intersectCandidateSets(perDimension);
@@ -450,9 +488,10 @@ async function queryReady(handle: IQueryStoreHandle, input: IIssueQueryInput): P
   return assembleIssueCards(graph, ready, fields);
 }
 
-/** `view:'stale'` — SPEC.md §6.3.5: `staleClaims` becomes `query`'s `view:'stale'`, `NodeFilter.metadata: {claimedAt:{lt:...}, claimedBy:{exists:true}}`. `staleAfterMin` defaults to 30 (`project_policy.claim_stale_after_min`'s own default — this read path has no per-project policy row threaded through it, so it uses the GLOBAL default; a caller that knows the project's configured threshold passes `staleAfterMin` explicitly). */
+/** `view:'stale'` — SPEC.md §6.3.5: `staleClaims` becomes `query`'s `view:'stale'`, `NodeFilter.metadata: {claimedAt:{lt:...}, claimedBy:{exists:true}}`. `staleAfterMin` defaults to 30 (`project_policy.claim_stale_after_min`'s own default — this read path has no per-project policy row threaded through it, so it uses the GLOBAL default; a caller that knows the project's configured threshold passes `staleAfterMin` explicitly). `limit` is validated and applied via `assertQueryLimit`/`DEFAULT_QUERY_LIMIT`, matching every sibling view (`queryList`/`queryReady`/`queryGraph`/`queryOrder`) — it was previously ignored entirely, so this view returned every stale claim in the store regardless of what the caller asked for. */
 async function queryStale(handle: IQueryStoreHandle, input: IIssueQueryInput): Promise<IIssueCard[]> {
   const { graph } = handle;
+  const limit = assertQueryLimit(input.limit);
   const fields = (input.fields ?? DEFAULT_ISSUE_CARD_FIELDS) as readonly IIssueField[];
   const staleAfterMin = input.staleAfterMin ?? 30;
   const threshold = new Date(Date.now() - staleAfterMin * 60_000).toISOString();
@@ -461,6 +500,7 @@ async function queryStale(handle: IQueryStoreHandle, input: IIssueQueryInput): P
     kind: 'issue',
     ...(candidateIds ? { ids: [...candidateIds] } : {}),
     metadata: { claimedBy: { exists: true }, claimedAt: { lt: threshold } },
+    limit,
   };
   const nodes = await graph.queryNodes(nodeFilter as unknown as NodeFilter);
   return assembleIssueCards(graph, nodes, fields);
@@ -629,6 +669,27 @@ async function queryOverlap(handle: IQueryStoreHandle, input: IIssueQueryInput):
 }
 
 /**
+ * `view:'projects'`/`'components'`/`'locations'` (SPEC.md §3a/§9 AC-9) — the
+ * registry LIST views, thin adapters over `views/registry.ts`'s own
+ * `listProjects`/`listComponents`/`listLocations`. `input.filter` is
+ * `IIssueFilter`, a structural superset of `views/registry.ts`'s own
+ * `IRegistryQueryFilter` (`{project?, component?}`) — passed through as-is,
+ * never re-shaped, so a caller's `filter.project`/`filter.component` scopes
+ * these exactly like it scopes `view:'list'`.
+ */
+async function queryProjects(handle: IQueryStoreHandle, input: IIssueQueryInput): Promise<IProjectSummary[]> {
+  return listProjects(handle.graph, input.filter);
+}
+
+async function queryComponents(handle: IQueryStoreHandle, input: IIssueQueryInput): Promise<IComponentSummary[]> {
+  return listComponents(handle.graph, input.filter);
+}
+
+async function queryLocations(handle: IQueryStoreHandle, input: IIssueQueryInput): Promise<ILocationSummary[]> {
+  return listLocations(handle.graph, input.filter);
+}
+
+/**
  * Normalises `input.text` (the natural-language query shared by every mount —
  * CLI `search`, MCP, HTTP) into `filter.semantic` or `filter.grep`, exactly
  * ONCE, so every caller gets identical routing rather than each transport
@@ -732,6 +793,12 @@ export async function queryIssuesWithMeta(handle: IQueryStoreHandle, rawInput: I
       return { result: { view: 'similar', items: await querySimilarView(handle, input) } };
     case 'overlap':
       return { result: { view: 'overlap', groups: await queryOverlap(handle, input) } };
+    case 'projects':
+      return { result: { view: 'projects', items: await queryProjects(handle, input) } };
+    case 'components':
+      return { result: { view: 'components', items: await queryComponents(handle, input) } };
+    case 'locations':
+      return { result: { view: 'locations', items: await queryLocations(handle, input) } };
     default: {
       const exhaustive: never = view;
       throw new BacklogValidationError('view', `unknown view "${exhaustive as string}"`);

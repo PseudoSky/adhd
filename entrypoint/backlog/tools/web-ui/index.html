@@ -520,7 +520,7 @@ async function loadItems() {
     const sa = document.getElementById('select-all');
     if (sa) { sa.checked = allSel; sa.indeterminate = state.sel.size > 0 && !allSel; }
     updateBatchBar();
-    if (state.selected) selectItem(state.selected.uid, true);
+    if (state.selected) await selectItem(state.selected.uid, true);
   } catch (err) {
     list.innerHTML = '';
     list.appendChild(Object.assign(document.createElement('div'), { className: 'error', textContent: err.message }));
@@ -885,7 +885,7 @@ async function createItem() {
     switchTab('list');
     await populateOptions();
     await loadItems();
-    if (data.uid) selectItem(data.uid, true);
+    if (data.uid) await selectItem(data.uid, true);
   } catch (err) {
     hint.textContent = '';
     showFormError(err);
@@ -894,8 +894,11 @@ async function createItem() {
 }
 
 /** Save (edit mode) — `title`/`body`/`kind`/`priority`/`author` go through
- *  `update` (a `body` change mints a FRESH uid — `outcome.uid` is followed,
- *  never the stale input uid); a status change is a SEPARATE `transition`
+ *  `update` (a `body` change mints a FRESH uid — `outcome.uid` is followed
+ *  for the rest of this save and for re-selecting afterwards; the OLD uid is
+ *  NOT invalidated by a supersede — it stays a live, gettable, frozen
+ *  pre-edit snapshot, so this UI must never keep addressing it after a body
+ *  edit); a status change is a SEPARATE `transition`
  *  call, carrying its own optional note + citations. `update` has no status
  *  or citations field at all, so those two concerns can never be merged into
  *  one call the way the old, dead-model UI attempted. */
@@ -938,7 +941,7 @@ async function saveItem() {
     resetFormToCreate();
     switchTab('list');
     await loadItems();
-    selectItem(currentUid, true);
+    await selectItem(currentUid, true);
   } catch (err) {
     hint.textContent = '';
     showFormError(err);
@@ -1419,7 +1422,7 @@ function renderPivot() {
   for (const it of pop) {
     const rv = dimValue(it, rowDim), cv = dimValue(it, colDim);
     rowSet.add(rv); colSet.add(cv);
-    const k = rv + ' ' + cv;
+    const k = rv + ' ' + cv;
     if (!cells.has(k)) cells.set(k, []);
     cells.get(k).push(it);
   }
@@ -1445,7 +1448,7 @@ function renderPivot() {
     html += `<tr><td class="rowh">${escapeHtml(rv)}</td>`;
     let rowTotal = [];
     for (let ci = 0; ci < cols.length; ci++) {
-      const items = cells.get(rv + ' ' + cols[ci]) || [];
+      const items = cells.get(rv + ' ' + cols[ci]) || [];
       const v = cellMeasure(items);
       rowTotal = rowTotal.concat(items);
       colTotals[ci] = colTotals[ci].concat(items);
@@ -1469,7 +1472,7 @@ function renderCitationHeatmap(d) {
   const kindCount = {}, kindHas = {};
   for (const it of d.population) {
     const k = it.kind || '(none)', lc = isClosed(it) ? 'closed' : 'open';
-    const key = k + ' ' + lc;
+    const key = k + ' ' + lc;
     kindCount[key] = (kindCount[key] || 0) + 1;
     if (d.citationData.get(it.uid)?.citations > 0) kindHas[key] = (kindHas[key] || 0) + 1;
   }
@@ -1478,7 +1481,7 @@ function renderCitationHeatmap(d) {
   const data = [];
   for (let yi = 0; yi < ys.length; yi++) {
     for (let xi = 0; xi < kinds.length; xi++) {
-      const key = kinds[xi] + ' ' + ys[yi];
+      const key = kinds[xi] + ' ' + ys[yi];
       const total = kindCount[key] || 0;
       const has = kindHas[key] || 0;
       data.push([xi, yi, total ? Math.round((has / total) * 100) : null]);

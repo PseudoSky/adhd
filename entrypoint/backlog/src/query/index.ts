@@ -36,17 +36,21 @@
  *   embedding-only `view:'similar'` implementation left in `query.ts`.
  *
  * **Reconciliation note for the write layer.** `write/create-issue.ts`
- * declares its OWN `IIssueCard` (a narrower, always-fully-populated shape it
- * builds inline from data it already has after a fresh insert — it never
- * needs a field-projected read). This module's {@link IIssueCard} (from
- * `types.ts`) is the FIELDS-PROJECTED read-layer shape every OTHER verb
- * should use — the two are intentionally not unified in this slice (unifying
- * them means either widening `create-issue.ts`'s always-populated shape to
- * all-optional, or teaching this module's card assembler to skip a
- * post-insert read entirely; both are a `create-issue.ts` edit, out of scope
- * for a read-layer-only task). A future consolidation should re-export
- * `create-issue.ts`'s result through THIS module's `IIssueCard` instead of
- * maintaining two card shapes.
+ * declares its OWN `ICreateIssueCard` (a narrower, always-fully-populated
+ * shape it builds inline from data it already has after a fresh insert — it
+ * never needs a field-projected read; named distinctly from this module's
+ * `IIssueCard` on purpose — see that file's doc comment for
+ * BUG-APIGEN-CORE-CLIENT-BARE-NAME-COLLISION-001, a real apigen-core-client
+ * extraction defect the original shared bare name `IIssueCard` triggered
+ * once both types became simultaneously reachable from `api.d.ts`). This
+ * module's {@link IIssueCard} (from `types.ts`) is the FIELDS-PROJECTED
+ * read-layer shape every OTHER verb should use — the two are intentionally
+ * not unified in this slice (unifying them means either widening
+ * `create-issue.ts`'s always-populated shape to all-optional, or teaching
+ * this module's card assembler to skip a post-insert read entirely; both are
+ * a `create-issue.ts` edit, out of scope for a read-layer-only task). A
+ * future consolidation should re-export `create-issue.ts`'s result through
+ * THIS module's `IIssueCard` instead of maintaining two card shapes.
  */
 
 export * from './types.js';

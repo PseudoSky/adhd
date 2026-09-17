@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
+import { JSDOM } from 'jsdom';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const RUN_WEB_UI = join(HERE, '..', 'tools', 'run-web-ui.mjs');
@@ -38,6 +39,8 @@ interface ApiEnvelope {
     uid?: string;
     title?: string;
     body?: string;
+    kind?: string;
+    status?: string;
     items?: Array<{ uid: string }>;
     item?: { uid: string; title: string };
     project?: { uid: string; name: string };
@@ -190,6 +193,203 @@ describe('backlog web ui (nx serve backlog seam)', () => {
     // validate-layer error envelope: { code, message } with the offending key named.
     expect(res.json.code).toBe('invalid_argument');
     expect(String(res.json.message ?? '')).toContain('must NOT have additional properties');
+  });
+
+  /**
+   * Loads the REAL served HTML (same GET / a browser gets) into jsdom with
+   * `runScripts: 'dangerously'`, so the page's own inline script — its
+   * literal `apiCall`/`batchCall`/`createItem`/`saveItem`/`batchSetStatus`/
+   * `batchDelete`/`selectItem`/`startEdit` functions — executes for real.
+   * `window.fetch` is wired to this process's real `fetch` (resolving
+   * relative URLs against the page's own origin, exactly as a browser's
+   * `fetch('/backlog/…')` would), so every request that code makes goes out
+   * over real HTTP through the real proxy to the real API/store. Only the
+   * three CDN <script src> tags are stripped (markdown/chart rendering,
+   * irrelevant to payload construction, and pulling live network resources
+   * into a test would make it non-hermetic); nothing else about the shipped
+   * file is altered.
+   *
+   * Top-level `const`/`let` bindings (e.g. the page's own `state`) are NOT
+   * properties of `window` — that's true in a real browser too, not a jsdom
+   * quirk — so these tests never reach into internal state. They only call
+   * the page's exposed global FUNCTIONS (real `function` declarations do
+   * become `window` properties) and dispatch real DOM events, then observe
+   * outcomes either through the rendered DOM or through the real proxy.
+   */
+  async function loadUiDom(): Promise<InstanceType<typeof JSDOM>> {
+    const res = await fetch(`http://127.0.0.1:${webPort}/`);
+    const html = await res.text();
+    const stripped = html.replace(/<script src="https:\/\/cdn\.jsdelivr\.net[^"]*"><\/script>\s*/g, '');
+    const dom = new JSDOM(stripped, {
+      runScripts: 'dangerously',
+      url: `http://127.0.0.1:${webPort}/`,
+      pretendToBeVisual: true,
+      beforeParse(window) {
+        window.fetch = ((input: string, init?: RequestInit) =>
+          fetch(new URL(input, window.location.href).toString(), init)) as typeof fetch;
+        window.prompt = () => 'deleted via jsdom-driven web-ui.spec';
+        window.confirm = () => true;
+      },
+    });
+    return dom;
+  }
+
+  /** Finds the rendered card for `uid` (by its `.id` element's text — the
+   *  same lookup a human would do by eye) and dispatches a REAL ctrl-click
+   *  DOM event on it, driving the page's own `onclick` handler exactly like
+   *  a user's ⌘/Ctrl-click multi-select. */
+  function ctrlClickCard(win: Window, uid: string): void {
+    const card = [...win.document.querySelectorAll('.card')].find(
+      (c) => c.querySelector('.id')?.textContent === uid,
+    );
+    if (!card) throw new Error(`no rendered card found for uid ${uid}`);
+    card.dispatchEvent(new win.MouseEvent('click', { bubbles: true, ctrlKey: true }));
+  }
+
+  it("every verb this UI's own script calls resolves to a real mounted endpoint — no admin, no dead verbs", async () => {
+    const htmlRes = await fetch(`http://127.0.0.1:${webPort}/`);
+    const html = await htmlRes.text();
+    // Derived from the HTML itself, never a hand-maintained duplicate list:
+    // every `apiCall('<verb>', …)` and every batch `operation: 'backlog/<verb>'`
+    // literally present in the shipped script.
+    const calledVerbs = new Set<string>();
+    for (const m of html.matchAll(/apiCall\('([a-z-]+)'/g)) calledVerbs.add(m[1]);
+    for (const m of html.matchAll(/operation:\s*'backlog\/([a-z-]+)'/g)) calledVerbs.add(m[1]);
+    expect(calledVerbs.size).toBeGreaterThan(0);
+
+    const openapiRes = await fetch(`http://127.0.0.1:${apiPort}/_meta/openapi`);
+    expect(openapiRes.status).toBe(200);
+    const openapi = (await openapiRes.json()) as { paths?: Record<string, unknown> };
+    const mountedVerbs = new Set(
+      Object.keys(openapi.paths ?? {})
+        .map((p) => p.match(/^\/backlog\/([a-z-]+)/)?.[1])
+        .filter((v): v is string => Boolean(v)),
+    );
+    for (const verb of calledVerbs) {
+      expect(mountedVerbs.has(verb)).toBe(true);
+    }
+  });
+
+  it("the create form's real payload-construction logic (createItem()) creates an issue through the proxy", async () => {
+    const dom = await loadUiDom();
+    const { document, window } = dom.window as unknown as { document: Document; window: Record<string, (...a: unknown[]) => unknown> };
+    (document.getElementById('c-project') as HTMLInputElement).value = projectUid;
+    (document.getElementById('c-title') as HTMLInputElement).value = 'jsdom-driven create';
+    (document.getElementById('c-body') as HTMLTextAreaElement).value = 'built by the real createItem() in index.html';
+    (document.getElementById('c-kind') as HTMLInputElement).value = 'bug';
+    (document.getElementById('c-by') as HTMLInputElement).value = 'web-ui.spec:jsdom';
+
+    await (window.createItem as () => Promise<unknown>)();
+
+    const hint = document.getElementById('create-hint')?.textContent ?? '';
+    expect(hint).toMatch(/^created /);
+    const uid = hint.replace('created ', '').trim();
+    expect(uid).toBeTruthy();
+
+    const got = await post('/backlog/get', { uid, fields: ['uid', 'title', 'kind'] });
+    expect(got.json.ok).toBe(true);
+    expect(got.json.data?.title).toBe('jsdom-driven create');
+    expect(got.json.data?.kind).toBe('bug');
+    dom.window.close();
+  });
+
+  it("the edit form's real payload-construction logic (selectItem()+startEdit()+saveItem()) updates+transitions an issue through the proxy, following the minted uid", async () => {
+    const dom = await loadUiDom();
+    const { document, window } = dom.window as unknown as { document: Document; window: Record<string, (...a: unknown[]) => unknown> };
+
+    // Seed through the real proxy directly (not the UI) so this test is
+    // scoped to proving selectItem()/startEdit()/saveItem()'s OWN payload
+    // construction, not `create`'s.
+    const seeded = await post('/backlog/create', {
+      title: 'edit target', body: 'first body', project: projectUid, by: 'web-ui.spec:seed2',
+    });
+    const seedUid = seeded.json.data?.uid as string;
+
+    // Real click-equivalent: selectItem() is the same function a card click
+    // invokes — it performs the real `get` and populates the detail pane +
+    // internal `state.lastDetail` that startEdit() reads.
+    await (window.selectItem as (uid: string, skip: boolean) => Promise<void>)(seedUid, true);
+    expect(document.getElementById('detail')?.textContent).toContain('edit target');
+
+    (window.startEdit as () => void)();
+    expect((document.getElementById('c-project') as HTMLInputElement).value).toBe(projectUid);
+    (document.getElementById('c-body') as HTMLTextAreaElement).value = 'second body — triggers a supersede';
+    (document.getElementById('c-status') as HTMLInputElement).value = 'closed-by-webui-spec';
+    (document.getElementById('c-note') as HTMLInputElement).value = 'closed via jsdom-driven saveItem()';
+    (document.getElementById('c-by') as HTMLInputElement).value = 'web-ui.spec:jsdom';
+
+    await (window.saveItem as () => Promise<unknown>)();
+
+    // A body change mints a FRESH uid, but does NOT invalidate the old one —
+    // `get.ts` never filters on the write layer's `is_superseded` flag, so
+    // the seed uid stays live and gettable forever as a FROZEN pre-edit
+    // snapshot. Prove both halves of that: the old uid still resolves, and
+    // it still carries the OLD body — the patch was never applied to it.
+    const stale = await post('/backlog/get', { uid: seedUid, fields: ['uid', 'body'] });
+    expect(stale.json.ok).toBe(true);
+    expect(stale.json.data?.body).toBe('first body');
+
+    // saveItem() re-selects the new item on success — read the new uid off
+    // the REAL rendered detail pane, never off internal JS state.
+    const idLine = document.querySelector('#detail .id-line')?.textContent ?? '';
+    const newUid = idLine.split(' · ')[0]?.trim();
+    expect(newUid).toBeTruthy();
+    expect(newUid).not.toBe(seedUid);
+
+    const after = await post('/backlog/get', { uid: newUid, fields: ['uid', 'body', 'status'] });
+    expect(after.json.ok).toBe(true);
+    expect(after.json.data?.body).toBe('second body — triggers a supersede');
+    expect(after.json.data?.status).toBe('closed-by-webui-spec');
+    dom.window.close();
+  });
+
+  it("the batch bar's real payload-construction logic (batchSetStatus()/batchDelete()) drives _batch/action through the proxy", async () => {
+    const dom = await loadUiDom();
+    const { document, window } = dom.window as unknown as { document: Document; window: Record<string, (...a: unknown[]) => unknown> };
+
+    // Distinct titles/bodies (and duplicateAction:'force') — two near-identical
+    // creates back-to-back would otherwise trip the real dedupe gate and the
+    // second `create` would return `created:false` with no uid.
+    const a = await post('/backlog/create', {
+      title: 'batch item alpha', body: 'first distinct batch payload for web-ui.spec', project: projectUid,
+      by: 'web-ui.spec:batch', duplicateAction: 'force',
+    });
+    const b = await post('/backlog/create', {
+      title: 'batch item bravo', body: 'second distinct batch payload for web-ui.spec', project: projectUid,
+      by: 'web-ui.spec:batch', duplicateAction: 'force',
+    });
+    const uidA = a.json.data?.uid as string;
+    const uidB = b.json.data?.uid as string;
+
+    // loadItems() is the same function `refresh` invokes — renders real
+    // cards for the two seeded items (both open, default filter).
+    await (window.loadItems as () => Promise<void>)();
+    ctrlClickCard(window as unknown as Window, uidA);
+    ctrlClickCard(window as unknown as Window, uidB);
+    expect(document.getElementById('batch-bar')?.classList.contains('show')).toBe(true);
+
+    (document.getElementById('b-status') as HTMLInputElement).value = 'batch-closed-by-webui-spec';
+    (document.getElementById('b-note') as HTMLInputElement).value = 'batch transition via jsdom';
+    await (window.batchSetStatus as () => Promise<unknown>)();
+
+    const gotA = await post('/backlog/get', { uid: uidA, fields: ['status'] });
+    expect(gotA.json.data?.status).toBe('batch-closed-by-webui-spec');
+    const gotB = await post('/backlog/get', { uid: uidB, fields: ['status'] });
+    expect(gotB.json.data?.status).toBe('batch-closed-by-webui-spec');
+
+    // batchSetStatus's own runBatch() already cleared the selection and
+    // re-rendered the list (the minted status is terminal:false, so both
+    // items still satisfy the default 'open' filter) — re-select off that
+    // real re-render for the delete pass.
+    ctrlClickCard(window as unknown as Window, uidA);
+    ctrlClickCard(window as unknown as Window, uidB);
+    await (window.batchDelete as () => Promise<unknown>)(); // window.prompt is stubbed to return a reason
+
+    const delA = await post('/backlog/get', { uid: uidA, fields: ['uid'] });
+    expect(delA.json.ok).toBe(false);
+    const delB = await post('/backlog/get', { uid: uidB, fields: ['uid'] });
+    expect(delB.json.ok).toBe(false);
+    dom.window.close();
   });
 
   it('shuts down cleanly on SIGTERM: orchestrator exits 0 and the API port refuses connections', async () => {

@@ -24,6 +24,7 @@ import { freshTmpDir } from '../test/helpers/tmp-store.js';
 import { createIssue } from './create-issue.js';
 import { update } from './update.js';
 import { transition } from './transition.js';
+import { queryIssues } from '../query/query.js';
 import {
   CatalogNotFoundError,
   CitationRequiredError,
@@ -160,11 +161,25 @@ describe('transition — status change (SPEC.md §6.3.4, real store)', () => {
     const closeOutcome = await transition(store, { uid: issueUid, by: 'closer', toStatus: 'done', note: 'shipped' });
     expect(closeOutcome.closedAt).toBeDefined();
 
+    // §9 AC-15's actual named entrypoint: `queryIssues` with
+    // `filter:{closedAt:{since:...}}}`, not a raw row read. While closed,
+    // the query MUST match.
+    const whileClosedResult = await queryIssues(store, { filter: { closedAt: { since: closeOutcome.closedAt } } });
+    if (whileClosedResult.view !== 'list') throw new Error(`expected view 'list', got '${whileClosedResult.view}'`);
+    expect(whileClosedResult.items.map((i) => i.uid)).toContain(issueUid);
+
     const reopenOutcome = await transition(store, { uid: issueUid, by: 'reopener', toStatus: 'open', note: 'regression found' });
     expect(reopenOutcome.closedAt).toBeUndefined();
 
     const row = await readNode(store, issueUid);
     expect(row?.metadata?.['closedAt']).toBeUndefined(); // cleared, never carrying the OLD closing timestamp forward
+
+    // The IDENTICAL query, after reopening, MUST NOT match — proving the
+    // stale-timestamp case has teeth through the real query path (not just
+    // the raw-row read above).
+    const afterReopenResult = await queryIssues(store, { filter: { closedAt: { since: closeOutcome.closedAt } } });
+    if (afterReopenResult.view !== 'list') throw new Error(`expected view 'list', got '${afterReopenResult.view}'`);
+    expect(afterReopenResult.items.map((i) => i.uid)).not.toContain(issueUid);
   });
 
   it('CitationRequiredError: citation_required:true + a terminal toStatus + zero citations', async () => {
