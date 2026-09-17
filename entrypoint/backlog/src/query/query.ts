@@ -19,6 +19,7 @@ import {
   tryResolveComponentRef,
   tryResolveRef,
 } from './resolve.js';
+import type { IQueryEnvelopeMeta } from '../envelope.js';
 import {
   DEFAULT_ISSUE_CARD_FIELDS,
   DEFAULT_QUERY_LIMIT,
@@ -216,8 +217,17 @@ async function sortByPriorityRank(graph: GraphBackend, issues: NodeRecord[], dir
   return direction === 'desc' ? sorted.reverse() : sorted;
 }
 
-/** `view:'list'` (default) — SPEC.md §6.5's full pagination/composition algorithm. */
-async function queryList(handle: IQueryStoreHandle, input: IIssueQueryInput): Promise<IIssuePage> {
+/**
+ * `view:'list'` (default) — SPEC.md §6.5's full pagination/composition
+ * algorithm, plus `meta` (`envelope.ts`'s {@link IQueryEnvelopeMeta}), the
+ * pre-limit truth the transport envelope exposes alongside the page.
+ *
+ * `meta.total`/`meta.truncated` are computed against `baseFilter` below — the
+ * exact match condition (kind/ids/metadata/date-range) the real fetch runs,
+ * built ONCE and shared by both, so the two can never disagree with each
+ * other about what "matches."
+ */
+async function queryList(handle: IQueryStoreHandle, input: IIssueQueryInput): Promise<{ page: IIssuePage; meta: IQueryEnvelopeMeta }> {
   const { graph } = handle;
   assertKeysetCompatibility(input);
   assertKnownIssueFields(input.fields);
@@ -232,26 +242,26 @@ async function queryList(handle: IQueryStoreHandle, input: IIssueQueryInput): Pr
 
   const candidateIds = await resolveEdgeScopedFilterIds(graph, input.filter);
   if (candidateIds && candidateIds.size === 0) {
-    return { items: [], hasMore: false }; // an edge-scoped filter resolved to nothing — zero matches, not an error (§6.1)
+    // An edge-scoped filter resolved to nothing — zero matches, not an error (§6.1).
+    return { page: { items: [], hasMore: false }, meta: { total: 0, returned: 0, limit } };
   }
 
   const metadata = buildMetadataFilter(input.filter);
   const grep = input.filter?.grep;
   const semantic = input.filter?.semantic;
 
-  let ranked: SearchResult[] | undefined;
+  const baseFilter: Record<string, unknown> = {
+    kind: 'issue',
+    ...(candidateIds ? { ids: [...candidateIds] } : {}),
+    ...(metadata ? { metadata } : {}),
+    ...(input.filter?.createdAt?.since ? { tCreatedAfter: input.filter.createdAt.since } : {}),
+    ...(input.filter?.createdAt?.until ? { tCreatedBefore: input.filter.createdAt.until } : {}),
+    ...(input.filter?.updatedAt?.since ? { tUpdatedAfter: input.filter.updatedAt.since } : {}),
+    ...(input.filter?.updatedAt?.until ? { tUpdatedBefore: input.filter.updatedAt.until } : {}),
+  };
 
   if (grep !== undefined || semantic !== undefined) {
-    const baseFilter: Record<string, unknown> = {
-      kind: 'issue',
-      ...(candidateIds ? { ids: [...candidateIds] } : {}),
-      ...(metadata ? { metadata } : {}),
-      ...(input.filter?.createdAt?.since ? { tCreatedAfter: input.filter.createdAt.since } : {}),
-      ...(input.filter?.createdAt?.until ? { tCreatedBefore: input.filter.createdAt.until } : {}),
-      ...(input.filter?.updatedAt?.since ? { tUpdatedAfter: input.filter.updatedAt.since } : {}),
-      ...(input.filter?.updatedAt?.until ? { tUpdatedBefore: input.filter.updatedAt.until } : {}),
-    };
-
+    let ranked: SearchResult[] | undefined;
     let grepIds: Set<number> | undefined;
     if (grep !== undefined) {
       const grepResults = await graph.searchNodes(grep, { limit, filter: baseFilter as unknown as NodeFilter });
@@ -280,27 +290,48 @@ async function queryList(handle: IQueryStoreHandle, input: IIssueQueryInput): Pr
     const ordered = rankedIds.map((id) => byId.get(id)).filter((n): n is NodeRecord => n !== undefined);
     const scoreByUid = new Map((ranked ?? []).map((r) => [byId.get(r.id)?.uid, r.score] as const).filter((e): e is [string, number] => e[0] !== undefined));
     const items = await assembleIssueCards(graph, ordered, fields, scoreByUid);
+
+    // `grep` is a genuine boolean match condition, so it narrows the
+    // countable set (`countNodesFts`, run against the SAME `baseFilter` the
+    // real fetch used). `semantic` never filters — `searchRanked` reranks
+    // whatever `baseFilter` already matches (`views/semantic.ts`'s own top
+    // doc comment: filters are resolved to concrete ids/columns BEFORE the
+    // vector channel runs) — so a semantic-only read's true count is
+    // `baseFilter` alone, exactly what the plain branch below counts too.
+    const total = grep !== undefined
+      ? await graph.countNodesFts(grep, baseFilter as unknown as NodeFilter)
+      : await graph.countNodes(baseFilter as unknown as NodeFilter);
+
+    // `grep` and `semantic` each independently pre-cap their own channel at
+    // `limit` BEFORE `ranked = semanticResults.filter(r => grepIds.has(r.id))`
+    // intersects them — a real loss `hasMore`/`nextCursor` cannot express
+    // (rule 5 bans keyset pagination for a ranked read, so this branch always
+    // reports `hasMore:false`) and one that has nothing to do with the
+    // caller's own `limit`: `returned` can fall short of `min(total, limit)`
+    // purely because the intersection dropped rows neither channel's own
+    // top-`limit` window happened to include. That gap — not the caller's
+    // limit — is exactly what `truncated` exists to name.
+    const returned = items.length;
+    const truncated = returned < Math.min(total, limit);
+
     // grep/semantic route through the ranked search primitives, which expose no rowid-ordered
     // keyset contract (rule 5) — a searched result set pages by sort+offset only, never `after`.
-    return { items, hasMore: false };
+    return {
+      page: { items, hasMore: false },
+      meta: { total, returned, limit, ...(truncated ? { truncated: true } : {}) },
+    };
   }
 
   const orderBy = sortToOrderBy(input.sort);
-  const nodeFilter: Record<string, unknown> = {
-    kind: 'issue',
-    ...(candidateIds ? { ids: [...candidateIds] } : {}),
-    ...(metadata ? { metadata } : {}),
-    ...(input.filter?.createdAt?.since ? { tCreatedAfter: input.filter.createdAt.since } : {}),
-    ...(input.filter?.createdAt?.until ? { tCreatedBefore: input.filter.createdAt.until } : {}),
-    ...(input.filter?.updatedAt?.since ? { tUpdatedAfter: input.filter.updatedAt.since } : {}),
-    ...(input.filter?.updatedAt?.until ? { tUpdatedBefore: input.filter.updatedAt.until } : {}),
+  const pagingFilter: Record<string, unknown> = {
+    ...baseFilter,
     limit: limit + 1,
     ...(input.after !== undefined ? { after: Number(input.after) } : {}),
     ...(orderBy && input.after === undefined ? { orderBy, orderDir: input.direction ?? 'desc' } : {}),
     ...(input.after === undefined && input.offset !== undefined ? { offset: input.offset } : {}),
   };
 
-  let nodes = await graph.queryNodes(nodeFilter as unknown as NodeFilter);
+  let nodes = await graph.queryNodes(pagingFilter as unknown as NodeFilter);
 
   if (input.sort === 'priority' && input.after === undefined) {
     nodes = await sortByPriorityRank(graph, nodes, input.direction ?? 'asc');
@@ -311,7 +342,18 @@ async function queryList(handle: IQueryStoreHandle, input: IIssueQueryInput): Pr
   const nextCursor = hasMore ? String(page[page.length - 1].id) : undefined;
 
   const items = await assembleIssueCards(graph, page, fields);
-  return { items, nextCursor, hasMore };
+
+  // `assertQueryLimit` REJECTS (never clamps) a `limit` above
+  // `MAX_QUERY_LIMIT` — there is no system-imposed cut on this path distinct
+  // from what the caller asked for, so `truncated` is never set here; the
+  // plain path's own `hasMore`/`nextCursor` already report completeness
+  // truthfully for every reachable case.
+  const total = await graph.countNodes(baseFilter as unknown as NodeFilter);
+  const effectiveOffset = input.after === undefined ? input.offset : undefined;
+  return {
+    page: { items, nextCursor, hasMore },
+    meta: { total, returned: items.length, limit, ...(effectiveOffset !== undefined ? { offset: effectiveOffset } : {}) },
+  };
 }
 
 /**
@@ -635,8 +677,34 @@ export function resolveTextInput(handle: IQueryStoreHandle, input: IIssueQueryIn
   };
 }
 
-/** The `query` verb (SPEC.md §5, §6.5) — dispatches on `input.view`, default `'list'`. */
-export async function queryIssues(handle: IQueryStoreHandle, rawInput: IIssueQueryInput = {}): Promise<IIssueQueryResult> {
+/** {@link queryIssuesWithMeta}'s return shape. */
+export interface IQueryIssuesOutcome {
+  result: IIssueQueryResult;
+  /**
+   * Present only for `view:'list'` — the only view whose result is a
+   * filtered/paginated row set with an honestly countable pre-limit total
+   * (`envelope.ts`'s {@link IQueryEnvelopeMeta}). `view:'ready'` computes
+   * readiness in-memory and stops enumerating once `limit` candidates are
+   * found (`queryReady`'s own doc comment: removing that early exit to count
+   * a true pre-limit total would reintroduce the O(candidates) cost its
+   * grouped-relation-fetch design exists to avoid), `view:'stale'` applies no
+   * limit at all so every row it returns already IS the total, and
+   * `view:'similar'`/`'graph'`/`'order'`/`'overlap'` are a ranking, a graph
+   * projection, a topological order, and an axis grouping respectively — none
+   * of them a filtered row set with a "how many matched" count. Adding a
+   * `meta` to any of those would mean inventing a number this module cannot
+   * stand behind.
+   */
+  meta?: IQueryEnvelopeMeta;
+}
+
+/**
+ * `queryIssues` (below) plus the transport-facing `meta` the envelope
+ * exposes for a list-shaped read (`api.ts`'s `query` mount is the one caller
+ * that needs it). Every other in-process caller keeps calling `queryIssues`
+ * itself, which discards `meta` and returns exactly the shape it always has.
+ */
+export async function queryIssuesWithMeta(handle: IQueryStoreHandle, rawInput: IIssueQueryInput = {}): Promise<IQueryIssuesOutcome> {
   const input = resolveTextInput(handle, rawInput);
 
   if (input.format === 'markdown') {
@@ -648,23 +716,30 @@ export async function queryIssues(handle: IQueryStoreHandle, rawInput: IIssueQue
 
   const view = input.view ?? 'list';
   switch (view) {
-    case 'list':
-      return { view: 'list', ...(await queryList(handle, input)) };
+    case 'list': {
+      const { page, meta } = await queryList(handle, input);
+      return { result: { view: 'list', ...page }, meta };
+    }
     case 'ready':
-      return { view: 'ready', items: await queryReady(handle, input) };
+      return { result: { view: 'ready', items: await queryReady(handle, input) } };
     case 'graph':
-      return { view: 'graph', graph: await queryGraph(handle, input) };
+      return { result: { view: 'graph', graph: await queryGraph(handle, input) } };
     case 'order':
-      return { view: 'order', order: await queryOrder(handle, input) };
+      return { result: { view: 'order', order: await queryOrder(handle, input) } };
     case 'stale':
-      return { view: 'stale', items: await queryStale(handle, input) };
+      return { result: { view: 'stale', items: await queryStale(handle, input) } };
     case 'similar':
-      return { view: 'similar', items: await querySimilarView(handle, input) };
+      return { result: { view: 'similar', items: await querySimilarView(handle, input) } };
     case 'overlap':
-      return { view: 'overlap', groups: await queryOverlap(handle, input) };
+      return { result: { view: 'overlap', groups: await queryOverlap(handle, input) } };
     default: {
       const exhaustive: never = view;
       throw new BacklogValidationError('view', `unknown view "${exhaustive as string}"`);
     }
   }
+}
+
+/** The `query` verb (SPEC.md §5, §6.5) — dispatches on `input.view`, default `'list'`. */
+export async function queryIssues(handle: IQueryStoreHandle, rawInput: IIssueQueryInput = {}): Promise<IIssueQueryResult> {
+  return (await queryIssuesWithMeta(handle, rawInput)).result;
 }
