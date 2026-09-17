@@ -121,6 +121,7 @@ import {
   InvalidArgumentError,
   IssueNotFoundError,
   StaleSupersedeError,
+  assertNotBareRoleLiteral,
 } from './errors.js';
 import {
   type IWriteStoreHandle,
@@ -711,6 +712,7 @@ export async function update(
 ): Promise<IUpdateIssueOutcome> {
   assertNonBlank('uid', input.uid);
   assertNonBlank('by', input.by);
+  assertNotBareRoleLiteral('by', input.by);
 
   // §8 AC-14: `IUpdateIssueInput`'s TS type has no `status` field at all
   // (compile-time rejection for a typed caller), but an untyped CLI/HTTP/MCP

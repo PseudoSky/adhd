@@ -40,7 +40,11 @@
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { writeAudit } from './audit.js';
 import { scheduleIssueEmbedding } from './embedding-observer.js';
-import { InvalidArgumentError, IssueNotFoundError } from './errors.js';
+import {
+  InvalidArgumentError,
+  IssueNotFoundError,
+  assertNotBareRoleLiteral,
+} from './errors.js';
 import {
   type IWriteStoreHandle,
   executeWriteTransaction,
@@ -102,6 +106,7 @@ export async function deleteIssue(
 ): Promise<IDeleteIssueOutcome> {
   assertNonBlank('uid', input.uid);
   assertNonBlank('by', input.by);
+  assertNotBareRoleLiteral('by', input.by);
   assertNonBlank('reason', input.reason);
 
   let deletedIssue: { rowid: number; uid: string } | undefined;

@@ -99,6 +99,7 @@ import {
   NoteRequiredError,
   StaleSupersedeError,
   WriteIOError,
+  assertNotBareRoleLiteral,
 } from './errors.js';
 import {
   type IWriteStoreHandle,
@@ -312,6 +313,7 @@ export async function transition(
 ): Promise<ITransitionOutcome> {
   assertNonBlank('uid', input.uid);
   assertNonBlank('by', input.by);
+  assertNotBareRoleLiteral('by', input.by);
   assertNonBlank('toStatus', input.toStatus);
 
   const citations = input.citations ?? [];

@@ -21,7 +21,7 @@
  */
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import type { Scope } from '@adhd/environment-base-spec';
 import { cliPlugin } from '@adhd/apigen-plugin-cli-output';
 import { batchPlugin } from '@adhd/apigen-plugin-batch';
@@ -281,11 +281,42 @@ export async function runBacklogCli(
   if (opts.adhdRoot === undefined && process.env['ADHD_ROOT']) {
     opts.adhdRoot = process.env['ADHD_ROOT'];
   }
-  if (sandbox && opts.adhdRoot === undefined) {
-    opts.adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-sandbox-'));
-    console.error(
-      `[backlog] --sandbox: isolated store at ${opts.adhdRoot} (not auto-deleted — pass ADHD_ROOT=${opts.adhdRoot} to reuse it, or remove it yourself when done)`
-    );
+  // BUG-BACKLOG-SANDBOX-SILENT-BYPASS-001: `--sandbox` is an explicit,
+  // deliberate ask for isolation from the live production store. The reuse
+  // path above (an ambient `ADHD_ROOT` wins when `opts.adhdRoot` is still
+  // unset) previously ran unconditionally, so ANY `ADHD_ROOT` already set —
+  // which is the tool's own documented normal way to invoke it — silently
+  // defeated `--sandbox`: no banner, no warning, exit 0, and the write landed
+  // in that ADHD_ROOT store exactly as if `--sandbox` had never been passed.
+  // Confirmed: `ADHD_ROOT=<real> backlog --sandbox upsert-project ...`
+  // followed by a second non-sandboxed call against the same `ADHD_ROOT`
+  // returned the identical uid with `created:false` — proof the "isolated"
+  // write was never isolated.
+  //
+  // `--sandbox` must always win UNLESS the already-set `ADHD_ROOT` is
+  // recognizably one of this tool's own sandbox tmpdirs (the caller resuming
+  // a specific sandbox they were handed earlier, per this function's own
+  // printed instruction). Anything else — including a real production root —
+  // gets overridden with a freshly minted sandbox and a loud warning, never a
+  // silent write into whatever ADHD_ROOT happened to be set.
+  const looksLikeOwnSandboxDir = (p: string): boolean =>
+    p.includes(`${sep}backlog-sandbox-`);
+  if (sandbox) {
+    if (opts.adhdRoot !== undefined && !looksLikeOwnSandboxDir(opts.adhdRoot)) {
+      console.error(
+        `[backlog] --sandbox: ADHD_ROOT=${opts.adhdRoot} is set but is not a ` +
+          `sandbox this tool created — ignoring it and minting a fresh ` +
+          `isolated store instead, so --sandbox never writes into an ` +
+          `unrecognized (possibly production) location.`
+      );
+      opts.adhdRoot = undefined;
+    }
+    if (opts.adhdRoot === undefined) {
+      opts.adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-sandbox-'));
+      console.error(
+        `[backlog] --sandbox: isolated store at ${opts.adhdRoot} (not auto-deleted — pass ADHD_ROOT=${opts.adhdRoot} to reuse it, or remove it yourself when done)`
+      );
+    }
   }
   // BUG-BACKLOG-SANDBOX-IRCACHE-LEAK-001: `--sandbox`'s promise is "diverts
   // the store away from the (fake) production HOME entirely, and never

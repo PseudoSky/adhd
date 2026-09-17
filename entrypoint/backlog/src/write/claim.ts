@@ -39,6 +39,7 @@ import {
   ClaimHeldError,
   InvalidArgumentError,
   IssueNotFoundError,
+  assertNotBareRoleLiteral,
 } from './errors.js';
 import {
   type IWriteStoreHandle,
@@ -242,6 +243,7 @@ export async function claim(
 ): Promise<IClaimOutcome> {
   assertNonBlank('uid', input.uid);
   assertNonBlank('by', input.by);
+  assertNotBareRoleLiteral('by', input.by);
   if (
     input.action !== 'claim' &&
     input.action !== 'release' &&

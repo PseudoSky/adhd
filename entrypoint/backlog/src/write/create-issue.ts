@@ -43,6 +43,7 @@ import {
   CitationUnverifiableError,
   InvalidArgumentError,
   WriteIOError,
+  assertNotBareRoleLiteral,
 } from './errors.js';
 import {
   type IWriteStoreHandle,
@@ -563,6 +564,7 @@ export async function createIssue(
   assertNonBlank('body', input.body);
   assertNonBlank('project', input.project);
   assertNonBlank('by', input.by);
+  assertNotBareRoleLiteral('by', input.by);
   const citations = input.citations ?? [];
   citations.forEach((citation, i) =>
     assertNonBlank(`citations[${i}].file`, citation.file)

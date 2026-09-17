@@ -123,9 +123,22 @@ regardless of transport:
 { "ok": false, "error": { "code": "item_not_found", "message": "…", "details": {} } }
 ```
 
-Never assume an unwrapped payload — always read `envelope.data`. There are
-exactly nine error codes, and the CLI's process exit code is derived from
-`error.code`:
+Never assume an unwrapped payload — always read `envelope.data`. **This holds
+for every error a VERB itself reports** — a validation failure the operation's
+own logic detects (bad `limit`, unknown filter key, a terminal transition
+missing its citation) always comes back as `{"ok":false,"error":{...}}` on
+stdout, exit non-zero.
+
+It does NOT hold for a malformed `--input` on the CLI: a request that fails
+the outer ajv schema check — missing a required field, an unknown property,
+invalid JSON — never reaches a verb's own logic at all. That class prints an
+UNWRAPPED `{"code":"invalid_argument","message":"…","details":[...]}` (no
+`ok` key) to **stderr**, not stdout, still with the matching `invalid_argument`
+exit code below. A caller that only reads stdout per the envelope contract
+gets nothing at all for this — the single most common error shape a bad
+caller hits — so read stderr too whenever stdout is empty and the exit code
+is non-zero. There are exactly nine error codes for a verb's own reported
+failures, and the CLI's process exit code is derived from `error.code`:
 
 | code                  | exit | meaning                                                                                                          |
 | --------------------- | ---- | ---------------------------------------------------------------------------------------------------------------- |
@@ -230,9 +243,10 @@ $ adhd-backlog backlog update --input '{"uid":"a61ff0b6-…","by":"claude:1","pr
 ```
 
 **Move an issue to a new status.** A terminal `toStatus` REQUIRES `citations`
-when the project's policy demands it (the default), and citations must be
-verifiable against the project's own filesystem path — an unverifiable
-citation is rejected with `precondition_failed`:
+only when the project's policy turns citation enforcement ON — `citationRequired`
+defaults to `false`, so out of the box no citation is required. When a project
+HAS turned it on, citations must be verifiable against the project's own
+filesystem path — an unverifiable citation is rejected with `precondition_failed`:
 
 ```
 $ adhd-backlog backlog transition --input '{

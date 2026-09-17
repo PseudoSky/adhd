@@ -68,7 +68,11 @@
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { resolveEdgeKindTx } from './catalog.js';
 import { writeAudit } from './audit.js';
-import { InvalidArgumentError, IssueNotFoundError } from './errors.js';
+import {
+  InvalidArgumentError,
+  IssueNotFoundError,
+  assertNotBareRoleLiteral,
+} from './errors.js';
 import {
   type IWriteStoreHandle,
   executeWriteTransaction,
@@ -180,6 +184,7 @@ export async function relate(
   assertNonBlank('sourceUid', input.sourceUid);
   assertNonBlank('targetUid', input.targetUid);
   assertNonBlank('by', input.by);
+  assertNotBareRoleLiteral('by', input.by);
   if (!RELATE_RELS.includes(input.rel)) {
     throw new InvalidArgumentError(
       'rel',
