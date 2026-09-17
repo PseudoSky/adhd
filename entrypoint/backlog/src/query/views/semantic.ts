@@ -301,6 +301,8 @@ export async function resolveSimilarFilterIds(graph: GraphBackend, filter: IIssu
   const nodeFilter: Record<string, unknown> = {
     kind: 'issue',
     liveOnly: true,
+    // Current rows only — see `queryList`'s `baseFilter` (query.ts).
+    isSuperseded: false,
     ...(edgeIntersected ? { ids: [...edgeIntersected] } : {}),
     ...scalarFilter,
   };
