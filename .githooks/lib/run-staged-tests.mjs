@@ -35,10 +35,7 @@ function readStdin() {
 }
 
 function main() {
-  const staged = readStdin()
-    .trim()
-    .split('\n')
-    .filter(Boolean);
+  const staged = readStdin().trim().split('\n').filter(Boolean);
 
   const plan = computePlan(staged);
 
@@ -47,7 +44,9 @@ function main() {
 
   for (const proj of plan.projects) {
     const args = ['vitest', 'run', '--config', proj.configFile, ...proj.specs];
-    console.log(`→ pre-commit: vitest run (project '${proj.name}', ${proj.specs.length} spec file(s))`);
+    console.log(
+      `→ pre-commit: vitest run (project '${proj.name}', ${proj.specs.length} spec file(s))`
+    );
     const result = spawnSync('npx', args, {
       stdio: 'inherit',
       env: { ...process.env, CI: 'true' },
@@ -55,8 +54,14 @@ function main() {
     if (result.status !== 0) {
       failed = true;
       console.error('');
-      console.error(`✖ pre-commit: staged-spec test failed in project '${proj.name}'.`);
-      console.error(`  Reproduce: npx vitest run --config ${proj.configFile} ${proj.specs.join(' ')}`);
+      console.error(
+        `✖ pre-commit: staged-spec test failed in project '${proj.name}'.`
+      );
+      console.error(
+        `  Reproduce: npx vitest run --config ${
+          proj.configFile
+        } ${proj.specs.join(' ')}`
+      );
     }
   }
 
@@ -65,15 +70,19 @@ function main() {
     console.log(
       `ℹ pre-commit: ${skipped} staged file(s) have no directly-runnable spec in this ` +
         `fast gate (no co-located spec, or the project's test target isn't @nx/vite:test). ` +
-        `Full coverage for these runs at 'git push' (pre-push hook) and in CI — expected, not an error.`,
+        `Full coverage for these runs at 'git push' (pre-push hook) and in CI — expected, not an error.`
     );
-    for (const f of plan.unsupported) console.log(`    · unsupported project: ${f}`);
-    for (const f of plan.unmatched) console.log(`    · no co-located spec: ${f}`);
+    for (const f of plan.unsupported)
+      console.log(`    · unsupported project: ${f}`);
+    for (const f of plan.unmatched)
+      console.log(`    · no co-located spec: ${f}`);
   }
 
   const elapsedS = ((Date.now() - start) / 1000).toFixed(1);
   if (plan.projects.length === 0) {
-    console.log(`✓ pre-commit: no directly-runnable staged specs (${elapsedS}s).`);
+    console.log(
+      `✓ pre-commit: no directly-runnable staged specs (${elapsedS}s).`
+    );
   } else if (!failed) {
     console.log(`✓ pre-commit: staged-spec test clean (${elapsedS}s).`);
   }

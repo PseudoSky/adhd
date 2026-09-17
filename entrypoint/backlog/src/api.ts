@@ -52,8 +52,16 @@ import type { GraphBacklogStore } from './store/graph-backlog-store.js';
 import type { IWriteStoreHandle } from './write/tx.js';
 import type { IQueryStoreHandle } from './query/query.js';
 import { queryIssuesWithMeta } from './query/query.js';
-import type { IOutcomeEnvelope, IOutcomeFailure, BacklogErrorCode } from './envelope.js';
-import { errorEnvelope, okEnvelope, RagNotConfiguredError } from './envelope.js';
+import type {
+  IOutcomeEnvelope,
+  IOutcomeFailure,
+  BacklogErrorCode,
+} from './envelope.js';
+import {
+  errorEnvelope,
+  okEnvelope,
+  RagNotConfiguredError,
+} from './envelope.js';
 import {
   BacklogWriteError,
   CatalogNotFoundError,
@@ -70,8 +78,14 @@ import {
 import { bootstrapSemanticStoreMembers } from './write/bootstrap.js';
 
 import { getIssue } from './query/get.js';
-import { getRegistryDetail, lookup as lookupRegistry } from './query/views/registry.js';
-import { createIssue, type IDuplicateScanHandle } from './write/create-issue.js';
+import {
+  getRegistryDetail,
+  lookup as lookupRegistry,
+} from './query/views/registry.js';
+import {
+  createIssue,
+  type IDuplicateScanHandle,
+} from './write/create-issue.js';
 import { update as updateIssueOp } from './write/update.js';
 import { transition as transitionIssueOp } from './write/transition.js';
 import { claim as claimIssueOp } from './write/claim.js';
@@ -93,9 +107,15 @@ import type {
   IIssueQueryResult,
   ILookupResult,
 } from './query/types.js';
-import type { ICreateIssueInput, ICreateIssueResult } from './write/create-issue.js';
+import type {
+  ICreateIssueInput,
+  ICreateIssueResult,
+} from './write/create-issue.js';
 import type { IUpdateIssueInput, IUpdateIssueOutcome } from './write/update.js';
-import type { ITransitionInput, ITransitionOutcome } from './write/transition.js';
+import type {
+  ITransitionInput,
+  ITransitionOutcome,
+} from './write/transition.js';
 import type { IClaimInput, IClaimOutcome } from './write/claim.js';
 import type { IRelateInput, IRelateOutcome } from './write/relate.js';
 import type { IMoveIssueInput, IMoveIssueOutcome } from './write/move.js';
@@ -143,8 +163,14 @@ export interface BacklogCtx {
  * `embedding.enabled` is off or the real backend could not start — the
  * honest degrade `bootstrap.ts` documents, never a stub.
  */
-async function writeHandle(ctx: BacklogCtx): Promise<IWriteStoreHandle & IDuplicateScanHandle> {
-  const { search, embedding } = await bootstrapSemanticStoreMembers(ctx.store.adapter, ctx.store.graph, ctx.env.config.embedding);
+async function writeHandle(
+  ctx: BacklogCtx
+): Promise<IWriteStoreHandle & IDuplicateScanHandle> {
+  const { search, embedding } = await bootstrapSemanticStoreMembers(
+    ctx.store.adapter,
+    ctx.store.graph,
+    ctx.env.config.embedding
+  );
   return {
     adapter: ctx.store.adapter,
     typePolicy: ctx.store.typePolicy,
@@ -171,8 +197,15 @@ async function writeHandle(ctx: BacklogCtx): Promise<IWriteStoreHandle & IDuplic
  * report as disabled, never as a working-but-empty one.
  */
 async function queryHandle(ctx: BacklogCtx): Promise<IQueryStoreHandle> {
-  const { search } = await bootstrapSemanticStoreMembers(ctx.store.adapter, ctx.store.graph, ctx.env.config.embedding);
-  return { graph: ctx.store.graph, ...(search !== undefined ? { search } : {}) };
+  const { search } = await bootstrapSemanticStoreMembers(
+    ctx.store.adapter,
+    ctx.store.graph,
+    ctx.env.config.embedding
+  );
+  return {
+    graph: ctx.store.graph,
+    ...(search !== undefined ? { search } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -203,7 +236,9 @@ async function queryHandle(ctx: BacklogCtx): Promise<IQueryStoreHandle> {
  * absent — it is the base every entry here extends, and is handled as the
  * bucket fallback below.
  */
-const ERROR_CLASS_TO_ENVELOPE_CODE: ReadonlyArray<readonly [new (...args: never[]) => Error, BacklogErrorCode]> = [
+const ERROR_CLASS_TO_ENVELOPE_CODE: ReadonlyArray<
+  readonly [new (...args: never[]) => Error, BacklogErrorCode]
+> = [
   [IssueNotFoundError, 'item_not_found'],
   [CatalogNotFoundError, 'not_found'],
   [InvalidArgumentError, 'invalid_argument'],
@@ -222,12 +257,13 @@ const ERROR_CLASS_TO_ENVELOPE_CODE: ReadonlyArray<readonly [new (...args: never[
  * write layer's coarse bucket so a newly-added class still produces a sane
  * code rather than masquerading as `internal`.
  */
-const WRITE_CODE_TO_ENVELOPE_CODE: Readonly<Record<string, BacklogErrorCode>> = {
-  E_VALIDATION: 'validation',
-  E_CONTENTION: 'store_busy',
-  E_IO: 'internal',
-  E_CONSTRAINT: 'conflict',
-};
+const WRITE_CODE_TO_ENVELOPE_CODE: Readonly<Record<string, BacklogErrorCode>> =
+  {
+    E_VALIDATION: 'validation',
+    E_CONTENTION: 'store_busy',
+    E_IO: 'internal',
+    E_CONSTRAINT: 'conflict',
+  };
 
 /**
  * Translates a thrown implementation-layer error into the transport-facing
@@ -243,7 +279,9 @@ function toEnvelope(err: unknown): IOutcomeFailure {
         err instanceof BacklogWriteError
           ? {
               retryable: err.retryable,
-              ...(err.retry_after_ms === undefined ? {} : { retryAfterMs: err.retry_after_ms }),
+              ...(err.retry_after_ms === undefined
+                ? {}
+                : { retryAfterMs: err.retry_after_ms }),
             }
           : undefined;
       return errorEnvelope(code, err.message, details);
@@ -256,18 +294,29 @@ function toEnvelope(err: unknown): IOutcomeFailure {
     // already measured. `errorEnvelope` defaults `retryable` for
     // `store_busy`; passing it explicitly keeps the two in agreement rather
     // than relying on that default.
-    return errorEnvelope(WRITE_CODE_TO_ENVELOPE_CODE[err.code] ?? 'internal', err.message, {
-      retryable: err.retryable,
-      ...(err.retry_after_ms === undefined ? {} : { retryAfterMs: err.retry_after_ms }),
-    });
+    return errorEnvelope(
+      WRITE_CODE_TO_ENVELOPE_CODE[err.code] ?? 'internal',
+      err.message,
+      {
+        retryable: err.retryable,
+        ...(err.retry_after_ms === undefined
+          ? {}
+          : { retryAfterMs: err.retry_after_ms }),
+      }
+    );
   }
   // Not a classified failure: a bug in this package, not something the caller
   // can fix by re-phrasing the request.
-  return errorEnvelope('internal', err instanceof Error ? err.message : String(err));
+  return errorEnvelope(
+    'internal',
+    err instanceof Error ? err.message : String(err)
+  );
 }
 
 /** Runs one verb body, mapping a throw onto the failure arm of the envelope. */
-async function envelope<T>(run: () => Promise<T>): Promise<IOutcomeEnvelope<T>> {
+async function envelope<T>(
+  run: () => Promise<T>
+): Promise<IOutcomeEnvelope<T>> {
   try {
     return okEnvelope(await run());
   } catch (err) {
@@ -285,16 +334,29 @@ async function envelope<T>(run: () => Promise<T>): Promise<IOutcomeEnvelope<T>> 
  * Defaults to the same five-field card `query` returns
  * (`uid`, `kind`, `title`, `status`, `priority`).
  */
-export async function get(ctx: BacklogCtx, input: IIssueGetInput): Promise<IOutcomeEnvelope<IIssueGetResult>> {
+export async function get(
+  ctx: BacklogCtx,
+  input: IIssueGetInput
+): Promise<IOutcomeEnvelope<IIssueGetResult>> {
   return envelope<IIssueGetResult>(() => {
     if ('registry' in input) {
       if (input.registry === 'project') {
-        return getRegistryDetail(ctx.store.graph, { registry: 'project', name: input.name });
+        return getRegistryDetail(ctx.store.graph, {
+          registry: 'project',
+          name: input.name,
+        });
       }
       if (input.registry === 'component') {
-        return getRegistryDetail(ctx.store.graph, { registry: 'component', name: input.name, filter: input.filter });
+        return getRegistryDetail(ctx.store.graph, {
+          registry: 'component',
+          name: input.name,
+          filter: input.filter,
+        });
       }
-      return getRegistryDetail(ctx.store.graph, { registry: 'location', name: input.name });
+      return getRegistryDetail(ctx.store.graph, {
+        registry: 'location',
+        name: input.name,
+      });
     }
     return getIssue(ctx.store.graph, input);
   });
@@ -306,14 +368,20 @@ export async function get(ctx: BacklogCtx, input: IIssueGetInput): Promise<IOutc
  * Supports field projection, keyset and offset pagination, the `view`/`groupBy`
  * aggregate axes, and `grep`/`semantic` text filters.
  */
-export async function query(ctx: BacklogCtx, input: IIssueQueryInput): Promise<IOutcomeEnvelope<IIssueQueryResult>> {
+export async function query(
+  ctx: BacklogCtx,
+  input: IIssueQueryInput
+): Promise<IOutcomeEnvelope<IIssueQueryResult>> {
   // Not routed through the generic `envelope()` helper: `query` is the one
   // verb whose success arm carries `meta` (SPEC.md's pagination-truth
   // contract, `envelope.ts`'s `IQueryEnvelopeMeta`) — `okEnvelope`'s `meta`
   // parameter is populated here, directly, rather than widening `envelope()`
   // for a field every other verb would leave meaningless.
   try {
-    const { result, meta } = await queryIssuesWithMeta(await queryHandle(ctx), input);
+    const { result, meta } = await queryIssuesWithMeta(
+      await queryHandle(ctx),
+      input
+    );
     return okEnvelope(result, meta ? { meta } : undefined);
   } catch (err) {
     return toEnvelope(err);
@@ -324,12 +392,18 @@ export async function query(ctx: BacklogCtx, input: IIssueQueryInput): Promise<I
  * Resolve a free-text reference to a project, component or location in the
  * registry.
  */
-export async function lookup(ctx: BacklogCtx, input: { q: string }): Promise<IOutcomeEnvelope<ILookupResult>> {
+export async function lookup(
+  ctx: BacklogCtx,
+  input: { q: string }
+): Promise<IOutcomeEnvelope<ILookupResult>> {
   return envelope(() => lookupRegistry(ctx.store.graph, input.q));
 }
 
 /** File a new issue, minting its `uid` and linking it to a project component. */
-export async function create(ctx: BacklogCtx, input: ICreateIssueInput): Promise<IOutcomeEnvelope<ICreateIssueResult>> {
+export async function create(
+  ctx: BacklogCtx,
+  input: ICreateIssueInput
+): Promise<IOutcomeEnvelope<ICreateIssueResult>> {
   return envelope(async () => createIssue(await writeHandle(ctx), input));
 }
 
@@ -340,27 +414,42 @@ export async function create(ctx: BacklogCtx, input: ICreateIssueInput): Promise
  * change edits the existing node in place. `status` is not editable here —
  * use `transition`.
  */
-export async function update(ctx: BacklogCtx, input: IUpdateIssueInput): Promise<IOutcomeEnvelope<IUpdateIssueOutcome>> {
+export async function update(
+  ctx: BacklogCtx,
+  input: IUpdateIssueInput
+): Promise<IOutcomeEnvelope<IUpdateIssueOutcome>> {
   return envelope(async () => updateIssueOp(await writeHandle(ctx), input));
 }
 
 /** Move an issue to a new status, recording the transition in its audit trail. */
-export async function transition(ctx: BacklogCtx, input: ITransitionInput): Promise<IOutcomeEnvelope<ITransitionOutcome>> {
+export async function transition(
+  ctx: BacklogCtx,
+  input: ITransitionInput
+): Promise<IOutcomeEnvelope<ITransitionOutcome>> {
   return envelope(async () => transitionIssueOp(await writeHandle(ctx), input));
 }
 
 /** Take, renew or release an exclusive working lease on an issue. */
-export async function claim(ctx: BacklogCtx, input: IClaimInput): Promise<IOutcomeEnvelope<IClaimOutcome>> {
+export async function claim(
+  ctx: BacklogCtx,
+  input: IClaimInput
+): Promise<IOutcomeEnvelope<IClaimOutcome>> {
   return envelope(async () => claimIssueOp(await writeHandle(ctx), input));
 }
 
 /** Create or remove a typed relationship between two issues. */
-export async function relate(ctx: BacklogCtx, input: IRelateInput): Promise<IOutcomeEnvelope<IRelateOutcome>> {
+export async function relate(
+  ctx: BacklogCtx,
+  input: IRelateInput
+): Promise<IOutcomeEnvelope<IRelateOutcome>> {
   return envelope(async () => relateIssueOp(await writeHandle(ctx), input));
 }
 
 /** Re-file an issue under a different project component. */
-export async function move(ctx: BacklogCtx, input: IMoveIssueInput): Promise<IOutcomeEnvelope<IMoveIssueOutcome>> {
+export async function move(
+  ctx: BacklogCtx,
+  input: IMoveIssueInput
+): Promise<IOutcomeEnvelope<IMoveIssueOutcome>> {
   return envelope(async () => moveIssueOp(await writeHandle(ctx), input));
 }
 
@@ -370,7 +459,10 @@ export async function move(ctx: BacklogCtx, input: IMoveIssueInput): Promise<IOu
  * The node is closed off bi-temporally, never physically removed — its audit
  * trail and every edge pointing at it remain readable.
  */
-async function remove(ctx: BacklogCtx, input: IDeleteIssueInput): Promise<IOutcomeEnvelope<IDeleteIssueOutcome>> {
+async function remove(
+  ctx: BacklogCtx,
+  input: IDeleteIssueInput
+): Promise<IOutcomeEnvelope<IDeleteIssueOutcome>> {
   return envelope(async () => deleteIssueOp(await writeHandle(ctx), input));
 }
 
@@ -384,12 +476,18 @@ async function remove(ctx: BacklogCtx, input: IDeleteIssueInput): Promise<IOutco
  * On first creation, also mints the project's reserved default component
  * `(root)`. A repeat call against an existing project is idempotent.
  */
-export async function upsertProject(ctx: BacklogCtx, input: IUpsertProjectInput): Promise<IOutcomeEnvelope<IUpsertProjectOutcome>> {
+export async function upsertProject(
+  ctx: BacklogCtx,
+  input: IUpsertProjectInput
+): Promise<IOutcomeEnvelope<IUpsertProjectOutcome>> {
   return envelope(async () => upsertProjectOp(await writeHandle(ctx), input));
 }
 
 /** Create or update a component by `(project, name)`. */
-export async function upsertComponent(ctx: BacklogCtx, input: IUpsertComponentInput): Promise<IOutcomeEnvelope<IUpsertComponentOutcome>> {
+export async function upsertComponent(
+  ctx: BacklogCtx,
+  input: IUpsertComponentInput
+): Promise<IOutcomeEnvelope<IUpsertComponentOutcome>> {
   return envelope(async () => upsertComponentOp(await writeHandle(ctx), input));
 }
 
@@ -399,12 +497,18 @@ export async function upsertComponent(ctx: BacklogCtx, input: IUpsertComponentIn
  * A component referenced by bare name (rather than uid) requires `project`
  * to disambiguate it.
  */
-export async function upsertLocation(ctx: BacklogCtx, input: IUpsertLocationInput): Promise<IOutcomeEnvelope<IUpsertLocationOutcome>> {
+export async function upsertLocation(
+  ctx: BacklogCtx,
+  input: IUpsertLocationInput
+): Promise<IOutcomeEnvelope<IUpsertLocationOutcome>> {
   return envelope(async () => upsertLocationOp(await writeHandle(ctx), input));
 }
 
 /** Soft-remove a location by `uid`. */
-export async function rmLocation(ctx: BacklogCtx, input: IRmLocationInput): Promise<IOutcomeEnvelope<IRmLocationOutcome>> {
+export async function rmLocation(
+  ctx: BacklogCtx,
+  input: IRmLocationInput
+): Promise<IOutcomeEnvelope<IRmLocationOutcome>> {
   return envelope(async () => rmLocationOp(await writeHandle(ctx), input));
 }
 

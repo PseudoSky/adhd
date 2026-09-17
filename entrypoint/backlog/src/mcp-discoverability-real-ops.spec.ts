@@ -138,7 +138,9 @@ describe('[mcp-discoverability.real-ops] synthesized examples validate against R
     (opId) => {
       const op = operations.find((o) => o.id === opId);
       if (!op) {
-        throw new Error(`operation "${opId}" must exist in the real extracted set`);
+        throw new Error(
+          `operation "${opId}" must exist in the real extracted set`
+        );
       }
       // composeSchemas keys its map by bare function name, not the
       // namespaced op id (e.g. "backlog/create" -> "create").
@@ -163,8 +165,12 @@ describe('[mcp-discoverability.real-ops] synthesized examples validate against R
 
       expect(
         valid,
-        `synthesized example ${JSON.stringify(example)} must validate against the real ` +
-          `${opId} composed schema; ajv errors: ${JSON.stringify(validate.errors)}`
+        `synthesized example ${JSON.stringify(
+          example
+        )} must validate against the real ` +
+          `${opId} composed schema; ajv errors: ${JSON.stringify(
+            validate.errors
+          )}`
       ).toBe(true);
 
       // BUG-APIGEN-020: domain params land under "data" — but composeSchemas
@@ -173,7 +179,8 @@ describe('[mcp-discoverability.real-ops] synthesized examples validate against R
       // zero-required-domain-param op's synthesized example can legitimately
       // omit the optional "data" wrapper, so the assertion tracks the
       // schema's own required-ness rather than blanket-asserting the field.
-      const outerRequired = (inputSchema as { required?: string[] }).required ?? [];
+      const outerRequired =
+        (inputSchema as { required?: string[] }).required ?? [];
       if (outerRequired.includes('data')) {
         expect(
           example,
@@ -202,7 +209,9 @@ describe('[mcp-discoverability.real-ops] synthesized examples validate against R
 
     expect(
       valid,
-      `synthesized batch example ${JSON.stringify(example)} must validate against the real ` +
+      `synthesized batch example ${JSON.stringify(
+        example
+      )} must validate against the real ` +
         `_batch/action schema (derived from ${actionOps.length} real backlog operations); ` +
         `ajv errors: ${JSON.stringify(validate.errors)}`
     ).toBe(true);
@@ -240,11 +249,15 @@ describe('[mcp-discoverability.real-ops] synthesized examples validate against R
     const actionOps = operations.filter((o) => o.kind === 'action');
     const queryOp = actionOps.find((o) => o.id === 'backlog/query');
     if (!queryOp) {
-      throw new Error('operation "backlog/query" must exist in the real extracted set');
+      throw new Error(
+        'operation "backlog/query" must exist in the real extracted set'
+      );
     }
     expect(
-      Object.keys((queryOp.input as { definitions?: Record<string, unknown> }).definitions ?? {})
-        .length
+      Object.keys(
+        (queryOp.input as { definitions?: Record<string, unknown> })
+          .definitions ?? {}
+      ).length
     ).toBeGreaterThan(0);
 
     const branches = actionOps.map(deriveBatchOperationBranch);

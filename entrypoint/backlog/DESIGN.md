@@ -68,7 +68,7 @@ depends on the external `@adhd/sox-graph-store` and `@adhd/sox-store-adapter`;
 nothing depends upward. This mirrors dispatch-cli's own split (a thin extraction
 surface calling into an implementation layer, `entrypoint/dispatch-cli/src/api.ts`)
 generalized to a real persistence layer instead of just DAG I/O — `@adhd/backlog`
-has no internal store *package* (nothing else in the monorepo imports it — see the
+has no internal store _package_ (nothing else in the monorepo imports it — see the
 "should this be a package at all?" checklist, `AGENTS.md` §1) so the store, query,
 and write layers live as internal module trees inside the one entrypoint, not
 separate `packages/` libraries.
@@ -87,19 +87,19 @@ this policy exists and is injected at every `openGraphBacklogStore` call.
 
 The kinds the write layer actually mints (`write/*.ts`):
 
-| Node kind | Minted by | Purpose |
-|---|---|---|
-| `issue` | `createIssue` / `updateIssue` (on a body-changing supersede) | The backlog item itself — `content` = `${title}\n\n${body}` for FTS/embedding, `name` = title. |
-| `project` | `upsertProject` | Top-level scope container. |
-| `component` | `upsertComponent` / `upsertProject`'s root-component bootstrap | Package/module grouping under a project. |
-| `location` | `upsertLocation` | A citation target scope (repo path, doc, etc). |
-| `citation` | `createIssue` / `update` | One verified evidence pointer attached to an issue. |
-| `note` | `createIssue` and other verb-attached freeform notes | Freeform commentary attached to an issue. |
-| `audit` | `write/audit.ts`'s `writeAudit`, called by every mutating verb | The audit-trail entry for one mutation. |
-| `transition` | `transitionStatus` | One recorded status change, carrying its citation evidence. |
-| `status` / `priority` / `kind` | `upsertProject` policy bootstrap / first observed value | Per-project catalog rows for the open status/priority/kind vocabularies. |
-| `edge_kind` | catalog bootstrap | Metadata row for a relation type (e.g. `SUPERSEDES`), consulted by `resolve.ts`. |
-| `agent` | first-seen `by`/`assignee` identity | The claimant/author/assignee identity a `has_*`/`authored_by`/`assigned_to`-style edge points at. |
+| Node kind                      | Minted by                                                      | Purpose                                                                                           |
+| ------------------------------ | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `issue`                        | `createIssue` / `updateIssue` (on a body-changing supersede)   | The backlog item itself — `content` = `${title}\n\n${body}` for FTS/embedding, `name` = title.    |
+| `project`                      | `upsertProject`                                                | Top-level scope container.                                                                        |
+| `component`                    | `upsertComponent` / `upsertProject`'s root-component bootstrap | Package/module grouping under a project.                                                          |
+| `location`                     | `upsertLocation`                                               | A citation target scope (repo path, doc, etc).                                                    |
+| `citation`                     | `createIssue` / `update`                                       | One verified evidence pointer attached to an issue.                                               |
+| `note`                         | `createIssue` and other verb-attached freeform notes           | Freeform commentary attached to an issue.                                                         |
+| `audit`                        | `write/audit.ts`'s `writeAudit`, called by every mutating verb | The audit-trail entry for one mutation.                                                           |
+| `transition`                   | `transitionStatus`                                             | One recorded status change, carrying its citation evidence.                                       |
+| `status` / `priority` / `kind` | `upsertProject` policy bootstrap / first observed value        | Per-project catalog rows for the open status/priority/kind vocabularies.                          |
+| `edge_kind`                    | catalog bootstrap                                              | Metadata row for a relation type (e.g. `SUPERSEDES`), consulted by `resolve.ts`.                  |
+| `agent`                        | first-seen `by`/`assignee` identity                            | The claimant/author/assignee identity a `has_*`/`authored_by`/`assigned_to`-style edge points at. |
 
 ### 2.2 `content` / `metadata` field placement
 
@@ -115,23 +115,23 @@ The write layer's relation vocabulary (`query/card.ts`, `query/query.ts`,
 `write/relate.ts`, `write/catalog.ts`) uses lower-case, verb-phrase relation
 names, each resolved against an `edge_kind` catalog row:
 
-| Relationship | `rel` | Direction (`src → dst`) | Written by |
-|---|---|---|---|
-| Blocking dependency | `blocks` | blocker → blocked issue | `relate` |
-| Non-blocking relation | `relates_to` | itemA → itemB (queried both directions) | `relate` |
-| Duplicate merge | `duplicate_of` | dropped item → kept item | `createIssue`'s duplicate handling |
-| Split / part relation | `part_of` | child item → parent item | (catalog/relate surface) |
-| Replacement | `supersedes` | new issue → superseded issue | `updateIssue`'s body-change CAS |
-| Status assignment | `has_status` | issue → status catalog row | `createIssue` / `transitionStatus` |
-| Priority assignment | `has_priority` | issue → priority catalog row | `createIssue` / `update` |
-| Kind assignment | `has_kind` | issue → kind catalog row | `createIssue` / `update` |
-| Authorship | `authored_by` | issue → agent entity | `createIssue` |
-| Citation attachment | `has_citation` | issue → citation node | `createIssue` / `update` |
-| Note attachment | `has_note` | issue → note node | `createIssue` |
-| Transition history | `has_transition` | issue → transition node | `transitionStatus` |
-| Audit trail | `audits` | audit node → issue | every mutating verb, via `write/audit.ts` |
-| Project → component | `owns_project` | component → project | `upsertComponent` / project bootstrap |
-| Component → issue | `owns_component` | issue → component | `createIssue` / `move` |
+| Relationship          | `rel`            | Direction (`src → dst`)                 | Written by                                |
+| --------------------- | ---------------- | --------------------------------------- | ----------------------------------------- |
+| Blocking dependency   | `blocks`         | blocker → blocked issue                 | `relate`                                  |
+| Non-blocking relation | `relates_to`     | itemA → itemB (queried both directions) | `relate`                                  |
+| Duplicate merge       | `duplicate_of`   | dropped item → kept item                | `createIssue`'s duplicate handling        |
+| Split / part relation | `part_of`        | child item → parent item                | (catalog/relate surface)                  |
+| Replacement           | `supersedes`     | new issue → superseded issue            | `updateIssue`'s body-change CAS           |
+| Status assignment     | `has_status`     | issue → status catalog row              | `createIssue` / `transitionStatus`        |
+| Priority assignment   | `has_priority`   | issue → priority catalog row            | `createIssue` / `update`                  |
+| Kind assignment       | `has_kind`       | issue → kind catalog row                | `createIssue` / `update`                  |
+| Authorship            | `authored_by`    | issue → agent entity                    | `createIssue`                             |
+| Citation attachment   | `has_citation`   | issue → citation node                   | `createIssue` / `update`                  |
+| Note attachment       | `has_note`       | issue → note node                       | `createIssue`                             |
+| Transition history    | `has_transition` | issue → transition node                 | `transitionStatus`                        |
+| Audit trail           | `audits`         | audit node → issue                      | every mutating verb, via `write/audit.ts` |
+| Project → component   | `owns_project`   | component → project                     | `upsertComponent` / project bootstrap     |
+| Component → issue     | `owns_component` | issue → component                       | `createIssue` / `move`                    |
 
 **Why the claim lease (`claimedBy`/`claimedAt`) is metadata-only, not an edge:**
 the lease is high-churn (rewritten on every renewal) and the graph contract's edge
@@ -179,10 +179,10 @@ import { createGraphBackend, type GraphBackend, type TypePolicy } from '@adhd/so
 import { OPEN_TYPE_POLICY } from './type-policy.js';
 
 export interface GraphBacklogStore {
-  readonly adapter: StoreAdapter;   // ONLY for the CAS transaction wrapper
-  readonly graph: GraphBackend;     // all non-CAS reads/writes go through this
-  readonly typePolicy: TypePolicy;  // the SAME instance graph was constructed with
-  flushEmbeds(): Promise<void>;     // RAG durability backstop (§9)
+  readonly adapter: StoreAdapter; // ONLY for the CAS transaction wrapper
+  readonly graph: GraphBackend; // all non-CAS reads/writes go through this
+  readonly typePolicy: TypePolicy; // the SAME instance graph was constructed with
+  flushEmbeds(): Promise<void>; // RAG durability backstop (§9)
 }
 
 export async function openGraphBacklogStore(dbPath: string, busyTimeoutMs = 5000): Promise<GraphBacklogStore> {
@@ -211,19 +211,19 @@ The ephemeral multi-agent lease against a live `issue` node's
 
 ```ts
 interface ClaimMeta {
-  claimedBy?: string;   // absent ⇒ unclaimed
-  claimedAt?: string;   // ISO — set/bumped on every claim/renewal
+  claimedBy?: string; // absent ⇒ unclaimed
+  claimedAt?: string; // ISO — set/bumped on every claim/renewal
 }
 ```
 
 ### 4.2 Semantics
 
-| Caller `by` vs current `claimedBy` | Staleness | Result |
-|---|---|---|
-| unclaimed | — | `claimed` |
-| `by === claimedBy` | — | `renewed` — no contention check, ever (you can always renew your own lease) |
-| `by !== claimedBy` | not stale | refused — the response carries the current holder and since-when, no write |
-| `by !== claimedBy` | stale, or `opts.force: true` | proceeds, and the response names the previous claimant for audit — never a silent takeover |
+| Caller `by` vs current `claimedBy` | Staleness                    | Result                                                                                     |
+| ---------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------ |
+| unclaimed                          | —                            | `claimed`                                                                                  |
+| `by === claimedBy`                 | —                            | `renewed` — no contention check, ever (you can always renew your own lease)                |
+| `by !== claimedBy`                 | not stale                    | refused — the response carries the current holder and since-when, no write                 |
+| `by !== claimedBy`                 | stale, or `opts.force: true` | proceeds, and the response names the previous claimant for audit — never a silent takeover |
 
 `release` on an already-unclaimed issue is a no-op, never an error — every exit
 path (done/error/abandon) should be able to call it unconditionally. Releasing
@@ -249,7 +249,7 @@ Two distinct primitives now cover this, not one:
    where a caller does not need the hand-composed `tx.ts` machinery (e.g. the
    embedding pipeline's post-commit `embedModel` bookkeeping, §9). It exists
    because of an unresolved-by-contract ambiguity: whether `touch(id,
-   Partial<NodeMeta>)` merges into the existing `metadata` JSON blob or replaces
+Partial<NodeMeta>)` merges into the existing `metadata` JSON blob or replaces
    it wholesale. It is confirmed (by reading `@adhd/sox-graph-store`'s published
    `dist/`) to be a wholesale REPLACE, not a merge — so every caller of `touch`
    must read the CURRENT full node, compute a full new metadata object, and pass
@@ -487,7 +487,7 @@ back the RAG seam (§9) and are never installed unless a host opts in.
 - **Every store in this ecosystem is parallel-process enabled** — multiple
   processes hold concurrent write connections to the same store, serialized
   through the store adapter's own locking (WAL + `busy_timeout` + `BEGIN
-  IMMEDIATE`), which is exactly what makes the CAS design in §3/§4 correct. This
+IMMEDIATE`), which is exactly what makes the CAS design in §3/§4 correct. This
   package additionally enforces one singleton constraint at a narrower scope:
   **`backlog serve`** (the long-running HTTP/MCP host) takes an
   `[inv:singleton]` PID-file lock (`store/serve-lock.ts`), keyed on the
@@ -510,17 +510,17 @@ back the RAG seam (§9) and are never installed unless a host opts in.
 
 ## 13. Testing strategy (implements SPEC.md's DoD)
 
-| DoD clause | Test location | Real components exercised |
-|---|---|---|
-| CAS claim race | `src/write/claim.spec.ts` | Concurrent `claim` calls against one real store, driven through a barrier so both are in-flight before either commits — never a `sleep`. |
-| Cross-process write safety | `src/write/cross-process-write-safety.spec.ts`, `src/test/fixtures/cross-process-*.ts` | Real separate Node processes writing/claiming against one shared temp store file. |
-| Live HTTP mount | `src/server.spec.ts` | `startBacklogServer({transport:'http', signal})` against a real temp store file, then a real `fetch()` call — unflagged/default-running per `AGENTS.md`'s "Live testing is mandatory" (no paid third party involved). |
-| Live MCP mount | `src/server.mcp.spec.ts` | `startBacklogServer({transport:'mcp', signal})`, driven by a real MCP SDK client over stdio. |
-| Scope isolation | `src/env.spec.ts` | Real `Environment` instances at `project` scope over temp `.git` dirs and at `global` scope over a temp `HOME`. |
-| Ready/blocked view | `src/query/query.ready.spec.ts` | Real `blocks` edges written via `relate`, `view:'ready'` asserted against the real store. |
-| RAG opt-in / opt-out | `src/store/rag-optional-deps.spec.ts`, `src/store/rag-e2e.spec.ts`, `src/store/semantic-search.spec.ts` | The default-disabled path answers the typed "not configured" error; the opted-in path drives a real (or injected fake, per test) `SemanticBackend` end to end. |
-| Singleton serve lock | `src/serve.singleton.spec.ts` | Two real `backlog serve` invocations against one store file — the second is refused the lock, never silently corrupting the first. |
-| Dist-load | `nx run backlog:verify-dist-load` | Builds real `dist/`, imports it, calls a real verb against a real temp store — not source resolution. |
+| DoD clause                 | Test location                                                                                           | Real components exercised                                                                                                                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CAS claim race             | `src/write/claim.spec.ts`                                                                               | Concurrent `claim` calls against one real store, driven through a barrier so both are in-flight before either commits — never a `sleep`.                                                                              |
+| Cross-process write safety | `src/write/cross-process-write-safety.spec.ts`, `src/test/fixtures/cross-process-*.ts`                  | Real separate Node processes writing/claiming against one shared temp store file.                                                                                                                                     |
+| Live HTTP mount            | `src/server.spec.ts`                                                                                    | `startBacklogServer({transport:'http', signal})` against a real temp store file, then a real `fetch()` call — unflagged/default-running per `AGENTS.md`'s "Live testing is mandatory" (no paid third party involved). |
+| Live MCP mount             | `src/server.mcp.spec.ts`                                                                                | `startBacklogServer({transport:'mcp', signal})`, driven by a real MCP SDK client over stdio.                                                                                                                          |
+| Scope isolation            | `src/env.spec.ts`                                                                                       | Real `Environment` instances at `project` scope over temp `.git` dirs and at `global` scope over a temp `HOME`.                                                                                                       |
+| Ready/blocked view         | `src/query/query.ready.spec.ts`                                                                         | Real `blocks` edges written via `relate`, `view:'ready'` asserted against the real store.                                                                                                                             |
+| RAG opt-in / opt-out       | `src/store/rag-optional-deps.spec.ts`, `src/store/rag-e2e.spec.ts`, `src/store/semantic-search.spec.ts` | The default-disabled path answers the typed "not configured" error; the opted-in path drives a real (or injected fake, per test) `SemanticBackend` end to end.                                                        |
+| Singleton serve lock       | `src/serve.singleton.spec.ts`                                                                           | Two real `backlog serve` invocations against one store file — the second is refused the lock, never silently corrupting the first.                                                                                    |
+| Dist-load                  | `nx run backlog:verify-dist-load`                                                                       | Builds real `dist/`, imports it, calls a real verb against a real temp store — not source resolution.                                                                                                                 |
 
 Every test above uses a real store under `tmp/backlog/<test-name>/` per
 `AGENTS.md` §10, removed on teardown.

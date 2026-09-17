@@ -60,7 +60,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startBacklogServer } from './server.js';
-import { openTestIssueStore, seedProject } from './test/helpers/open-test-issue-store.js';
+import {
+  openTestIssueStore,
+  seedProject,
+} from './test/helpers/open-test-issue-store.js';
 import { buildBacklogEnv, resolveBacklogDbPath } from './env.js';
 
 async function freePort(): Promise<number> {
@@ -87,7 +90,9 @@ async function waitForHttpReady(port: number, path: string): Promise<void> {
       await new Promise((r) => setTimeout(r, 100));
     }
   }
-  throw new Error(`server never became ready on port ${port}: ${String(lastErr)}`);
+  throw new Error(
+    `server never became ready on port ${port}: ${String(lastErr)}`
+  );
 }
 
 interface CreateOutcomeData {
@@ -125,11 +130,18 @@ describe('backlog batch adoption — real POST /_batch/action fans out to the re
     // `project` is resolved-only — never minted by `create` — so seed it
     // through the same real store path `server.spec.ts` uses, before the
     // server process owns the file.
-    const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
+    const seedEnv = buildBacklogEnv({
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+    });
     seedEnv.ensureDirs();
     const dbPath = resolveBacklogDbPath(seedEnv);
     const seedStore = await openTestIssueStore(dbPath);
-    const { projectUid } = await seedProject(seedStore, 'batch-adoption-project');
+    const { projectUid } = await seedProject(
+      seedStore,
+      'batch-adoption-project'
+    );
     await seedStore.close();
 
     const port = await freePort();
@@ -170,9 +182,25 @@ describe('backlog batch adoption — real POST /_batch/action fans out to the re
         input: {
           operation: 'backlog/create',
           items: [
-            { input: { title: 'first item', body: 'x', project: projectUid, by, duplicateAction: 'force' } },
+            {
+              input: {
+                title: 'first item',
+                body: 'x',
+                project: projectUid,
+                by,
+                duplicateAction: 'force',
+              },
+            },
             { input: { title: 'bad item', body: 'x', project: projectUid } },
-            { input: { title: 'third item', body: 'x', project: projectUid, by, duplicateAction: 'force' } },
+            {
+              input: {
+                title: 'third item',
+                body: 'x',
+                project: projectUid,
+                by,
+                duplicateAction: 'force',
+              },
+            },
           ],
           concurrency: 2,
           onItemError: 'continue',
@@ -199,7 +227,9 @@ describe('backlog batch adoption — real POST /_batch/action fans out to the re
     // (2) rejected — the REAL validate-Layer's AJV schema rejection surfaced
     // as a per-item failure, WITHOUT aborting the batch.
     expect(results[1]?.status).toBe('rejected');
-    const reason = results[1]?.reason as { code?: string; message?: string } | undefined;
+    const reason = results[1]?.reason as
+      | { code?: string; message?: string }
+      | undefined;
     expect(reason?.code).toBe('invalid_argument');
     expect(reason?.message).toContain('required');
     expect(reason?.message).toContain('by');
@@ -225,7 +255,10 @@ describe('backlog batch adoption — real POST /_batch/action fans out to the re
       body: JSON.stringify({ data: { input: { uid: firstUid } } }),
     });
     expect(getRes.status).toBe(200);
-    const got = (await getRes.json()) as { ok: boolean; data: { title: string } };
+    const got = (await getRes.json()) as {
+      ok: boolean;
+      data: { title: string };
+    };
     expect(got.ok).toBe(true);
     expect(got.data.title).toBe('first item');
   }, 30_000);

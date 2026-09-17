@@ -36,7 +36,12 @@ import {
   writeNodeTx,
 } from './tx.js';
 import { writeAudit } from './audit.js';
-import type { IComponentSummary, ILocationSummary, ILocationType, IProjectSummary } from '../query/types.js';
+import type {
+  IComponentSummary,
+  ILocationSummary,
+  ILocationType,
+  IProjectSummary,
+} from '../query/types.js';
 
 /**
  * Guarded `JSON.parse` for a `node.meta` column value — the SAME
@@ -49,11 +54,15 @@ import type { IComponentSummary, ILocationSummary, ILocationType, IProjectSummar
  * here would surface as `E_IO`/`retryable: true` at the `executeWriteTransaction`
  * boundary, retrying a deterministic corrupt-row failure forever).
  */
-function parseMetaObject(raw: string | null): Record<string, unknown> | undefined {
+function parseMetaObject(
+  raw: string | null
+): Record<string, unknown> | undefined {
   if (raw === null) return undefined;
   try {
     const parsed: unknown = JSON.parse(raw);
-    return parsed !== null && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : undefined;
+    return parsed !== null && typeof parsed === 'object'
+      ? (parsed as Record<string, unknown>)
+      : undefined;
   } catch {
     return undefined;
   }
@@ -63,7 +72,8 @@ function parseMetaObject(raw: string | null): Record<string, unknown> | undefine
  * Disambiguation by SHAPE, not a second field (§6.1): a 36-character
  * version-4-UUID-formatted string is a `uid`; anything else is a `name`.
  */
-const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_V4_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** Whether `ref` should be treated as a `uid` (exact resolve-or-throw) rather than a business `name` (find, and for the flat catalogs, find-then-mint). */
 export function isUidShaped(ref: string): boolean {
@@ -103,7 +113,11 @@ interface IResolvedTxNodeRow extends Omit<ITxNodeRow, 'name'> {
  * signalled via the SAME `CatalogNotFoundError` §4c's taxonomy already uses
  * for "did not resolve," not a new error class.
  */
-async function resolveByUidTx(tx: AdapterTransaction, expectedKind: string, uid: string): Promise<IResolvedTxNodeRow> {
+async function resolveByUidTx(
+  tx: AdapterTransaction,
+  expectedKind: string,
+  uid: string
+): Promise<IResolvedTxNodeRow> {
   const row = await getNodeByUidTx(tx, uid);
   if (!row || row.tInvalid !== null || row.kind !== expectedKind) {
     throw new CatalogNotFoundError(expectedKind, uid);
@@ -120,14 +134,27 @@ async function resolveByUidTx(tx: AdapterTransaction, expectedKind: string, uid:
  * issue verb — minting a project is the explicit `upsertProject` registry
  * verb's job alone (§3a), out of scope for this slice.
  */
-export async function resolveProjectTx(tx: AdapterTransaction, ref: string): Promise<IResolvedProjectRow> {
+export async function resolveProjectTx(
+  tx: AdapterTransaction,
+  ref: string
+): Promise<IResolvedProjectRow> {
   if (isUidShaped(ref)) {
     const row = await resolveByUidTx(tx, 'project', ref);
-    return { rowid: row.rowid, uid: row.uid, name: row.name, metadata: row.metadata };
+    return {
+      rowid: row.rowid,
+      uid: row.uid,
+      name: row.name,
+      metadata: row.metadata,
+    };
   }
-  const row = await tx.executeGet<{ rowid: number; uid: string; name: string | null; meta: string | null }>(
+  const row = await tx.executeGet<{
+    rowid: number;
+    uid: string;
+    name: string | null;
+    meta: string | null;
+  }>(
     "SELECT rowid, uid, name, meta FROM node WHERE kind = 'project' AND name = ? AND t_invalid IS NULL LIMIT 1",
-    [ref],
+    [ref]
   );
   if (!row) throw new CatalogNotFoundError('project', ref);
   let metadata: Record<string, unknown> | undefined;
@@ -148,7 +175,7 @@ export async function resolveProjectTx(tx: AdapterTransaction, ref: string): Pro
  */
 export async function resolveComponentTx(
   tx: AdapterTransaction,
-  input: { projectUid: string; ref: string },
+  input: { projectUid: string; ref: string }
 ): Promise<IResolvedCatalogRow> {
   if (isUidShaped(input.ref)) {
     const row = await resolveByUidTx(tx, 'component', input.ref);
@@ -158,12 +185,16 @@ export async function resolveComponentTx(
     }
     return { rowid: row.rowid, uid: row.uid, name: row.name };
   }
-  const row = await tx.executeGet<{ rowid: number; uid: string; name: string | null }>(
+  const row = await tx.executeGet<{
+    rowid: number;
+    uid: string;
+    name: string | null;
+  }>(
     `SELECT rowid, uid, name FROM node
      WHERE kind = 'component' AND name = ? AND t_invalid IS NULL
        AND json_extract(meta, '$.projectUid') = ?
      LIMIT 1`,
-    [input.ref, input.projectUid],
+    [input.ref, input.projectUid]
   );
   if (!row) throw new CatalogNotFoundError('component', input.ref);
   return { rowid: row.rowid, uid: row.uid, name: row.name ?? input.ref };
@@ -179,15 +210,19 @@ export async function resolveComponentTx(
  */
 export async function resolveDefaultComponentTx(
   tx: AdapterTransaction,
-  input: { projectRowid: number },
+  input: { projectRowid: number }
 ): Promise<IResolvedCatalogRow> {
-  const row = await tx.executeGet<{ rowid: number; uid: string; name: string | null }>(
+  const row = await tx.executeGet<{
+    rowid: number;
+    uid: string;
+    name: string | null;
+  }>(
     `SELECT c.rowid AS rowid, c.uid AS uid, c.name AS name
      FROM edge e JOIN node c ON c.rowid = e.dst
      WHERE e.src = ? AND e.rel = 'owns_project' AND e.t_invalid IS NULL
        AND c.name = '(root)' AND c.t_invalid IS NULL
      LIMIT 1`,
-    [input.projectRowid],
+    [input.projectRowid]
   );
   if (!row) throw new CatalogNotFoundError('component', '(root)');
   return { rowid: row.rowid, uid: row.uid, name: row.name ?? '(root)' };
@@ -220,30 +255,45 @@ export interface IMintOrResolveInput {
  */
 export async function mintOrResolveCatalogTx(
   tx: AdapterTransaction,
-  input: IMintOrResolveInput,
+  input: IMintOrResolveInput
 ): Promise<IResolvedCatalogRow> {
   if (isUidShaped(input.ref)) {
     const row = await resolveByUidTx(tx, input.catalogKind, input.ref);
     return { rowid: row.rowid, uid: row.uid, name: row.name };
   }
 
-  const existing = await tx.executeGet<{ rowid: number; uid: string; name: string | null }>(
+  const existing = await tx.executeGet<{
+    rowid: number;
+    uid: string;
+    name: string | null;
+  }>(
     'SELECT rowid, uid, name FROM node WHERE kind = ? AND name = ? AND t_invalid IS NULL LIMIT 1',
-    [input.catalogKind, input.ref],
+    [input.catalogKind, input.ref]
   );
   if (existing) {
-    return { rowid: existing.rowid, uid: existing.uid, name: existing.name ?? input.ref };
+    return {
+      rowid: existing.rowid,
+      uid: existing.uid,
+      name: existing.name ?? input.ref,
+    };
   }
 
   const metadata = input.mintMetadata ? await input.mintMetadata(tx) : {};
-  const minted = await writeNodeTx(tx, { kind: input.catalogKind, name: input.ref, metadata, at: input.at });
+  const minted = await writeNodeTx(tx, {
+    kind: input.catalogKind,
+    name: input.ref,
+    metadata,
+    at: input.at,
+  });
   return { rowid: minted.rowid, uid: minted.uid, name: input.ref };
 }
 
 /** `priority`'s mint rule (§6.3.2): "rank set to one past the current max rank (i.e. lowest urgency) — a novel priority can never silently outrank an existing one." */
-export async function nextPriorityRankTx(tx: AdapterTransaction): Promise<number> {
+export async function nextPriorityRankTx(
+  tx: AdapterTransaction
+): Promise<number> {
   const row = await tx.executeGet<{ maxRank: number | null }>(
-    "SELECT MAX(CAST(json_extract(meta, '$.rank') AS INTEGER)) AS maxRank FROM node WHERE kind = 'priority' AND t_invalid IS NULL",
+    "SELECT MAX(CAST(json_extract(meta, '$.rank') AS INTEGER)) AS maxRank FROM node WHERE kind = 'priority' AND t_invalid IS NULL"
   );
   const maxRank = row?.maxRank ?? null;
   return maxRank === null ? 0 : maxRank + 1;
@@ -255,26 +305,108 @@ export async function nextPriorityRankTx(tx: AdapterTransaction): Promise<number
  * checks"). `audits`' `source_kind: '*'` is the one declared sentinel (§2).
  */
 export const EDGE_KIND_TABLE: readonly IEdgeKindRule[] = [
-  { rel: 'owns_project', sourceKind: 'project', targetKind: 'component', multiplicity: '1:n' },
-  { rel: 'owns_component', sourceKind: 'component', targetKind: 'issue', multiplicity: '1:n' },
-  { rel: 'has_kind', sourceKind: 'issue', targetKind: 'kind', multiplicity: 'n:1' },
-  { rel: 'has_status', sourceKind: 'issue', targetKind: 'status', multiplicity: 'n:1' },
-  { rel: 'has_priority', sourceKind: 'issue', targetKind: 'priority', multiplicity: 'n:1' },
-  { rel: 'authored_by', sourceKind: 'issue', targetKind: 'agent', multiplicity: 'n:1' },
-  { rel: 'has_note', sourceKind: 'issue', targetKind: 'note', multiplicity: '1:n' },
-  { rel: 'has_citation', sourceKind: 'issue', targetKind: 'citation', multiplicity: '1:n' },
-  { rel: 'has_transition', sourceKind: 'issue', targetKind: 'transition', multiplicity: '1:n' },
+  {
+    rel: 'owns_project',
+    sourceKind: 'project',
+    targetKind: 'component',
+    multiplicity: '1:n',
+  },
+  {
+    rel: 'owns_component',
+    sourceKind: 'component',
+    targetKind: 'issue',
+    multiplicity: '1:n',
+  },
+  {
+    rel: 'has_kind',
+    sourceKind: 'issue',
+    targetKind: 'kind',
+    multiplicity: 'n:1',
+  },
+  {
+    rel: 'has_status',
+    sourceKind: 'issue',
+    targetKind: 'status',
+    multiplicity: 'n:1',
+  },
+  {
+    rel: 'has_priority',
+    sourceKind: 'issue',
+    targetKind: 'priority',
+    multiplicity: 'n:1',
+  },
+  {
+    rel: 'authored_by',
+    sourceKind: 'issue',
+    targetKind: 'agent',
+    multiplicity: 'n:1',
+  },
+  {
+    rel: 'has_note',
+    sourceKind: 'issue',
+    targetKind: 'note',
+    multiplicity: '1:n',
+  },
+  {
+    rel: 'has_citation',
+    sourceKind: 'issue',
+    targetKind: 'citation',
+    multiplicity: '1:n',
+  },
+  {
+    rel: 'has_transition',
+    sourceKind: 'issue',
+    targetKind: 'transition',
+    multiplicity: '1:n',
+  },
   { rel: 'audits', sourceKind: '*', targetKind: 'audit', multiplicity: '1:n' },
-  { rel: 'depends_on', sourceKind: 'component', targetKind: 'component', multiplicity: 'n:m' },
-  { rel: 'has_location', sourceKind: 'component', targetKind: 'location', multiplicity: '1:n' },
-  { rel: 'relates_to', sourceKind: 'issue', targetKind: 'issue', multiplicity: 'n:m' },
-  { rel: 'supersedes', sourceKind: 'issue', targetKind: 'issue', multiplicity: 'n:1' },
-  { rel: 'blocks', sourceKind: 'issue', targetKind: 'issue', multiplicity: 'n:m' },
-  { rel: 'duplicate_of', sourceKind: 'issue', targetKind: 'issue', multiplicity: 'n:1' },
-  { rel: 'part_of', sourceKind: 'issue', targetKind: 'issue', multiplicity: 'n:1' },
+  {
+    rel: 'depends_on',
+    sourceKind: 'component',
+    targetKind: 'component',
+    multiplicity: 'n:m',
+  },
+  {
+    rel: 'has_location',
+    sourceKind: 'component',
+    targetKind: 'location',
+    multiplicity: '1:n',
+  },
+  {
+    rel: 'relates_to',
+    sourceKind: 'issue',
+    targetKind: 'issue',
+    multiplicity: 'n:m',
+  },
+  {
+    rel: 'supersedes',
+    sourceKind: 'issue',
+    targetKind: 'issue',
+    multiplicity: 'n:1',
+  },
+  {
+    rel: 'blocks',
+    sourceKind: 'issue',
+    targetKind: 'issue',
+    multiplicity: 'n:m',
+  },
+  {
+    rel: 'duplicate_of',
+    sourceKind: 'issue',
+    targetKind: 'issue',
+    multiplicity: 'n:1',
+  },
+  {
+    rel: 'part_of',
+    sourceKind: 'issue',
+    targetKind: 'issue',
+    multiplicity: 'n:1',
+  },
 ] as const;
 
-const EDGE_KIND_BY_REL: ReadonlyMap<string, IEdgeKindRule> = new Map(EDGE_KIND_TABLE.map((rule) => [rule.rel, rule]));
+const EDGE_KIND_BY_REL: ReadonlyMap<string, IEdgeKindRule> = new Map(
+  EDGE_KIND_TABLE.map((rule) => [rule.rel, rule])
+);
 
 /**
  * Resolve the `edge_kind` catalog row for `rel`, inside `tx` — the SAME
@@ -313,16 +445,23 @@ const EDGE_KIND_BY_REL: ReadonlyMap<string, IEdgeKindRule> = new Map(EDGE_KIND_T
  * The store converges to exactly one live `edge_kind` row per `rel` after
  * this call, rather than growing an unbounded set of malformed duplicates.
  */
-export async function resolveEdgeKindTx(tx: AdapterTransaction, rel: string): Promise<IEdgeKindRule> {
+export async function resolveEdgeKindTx(
+  tx: AdapterTransaction,
+  rel: string
+): Promise<IEdgeKindRule> {
   const row = await tx.executeGet<{ rowid: number; meta: string | null }>(
     "SELECT rowid, meta FROM node WHERE kind = 'edge_kind' AND name = ? AND t_invalid IS NULL ORDER BY rowid ASC LIMIT 1",
-    [rel],
+    [rel]
   );
   if (row) {
     const meta = parseMetaObject(row.meta) ?? {};
-    const sourceKind = typeof meta.source_kind === 'string' ? meta.source_kind : undefined;
-    const targetKind = typeof meta.target_kind === 'string' ? meta.target_kind : undefined;
-    const multiplicity = meta.multiplicity as IEdgeKindRule['multiplicity'] | undefined;
+    const sourceKind =
+      typeof meta.source_kind === 'string' ? meta.source_kind : undefined;
+    const targetKind =
+      typeof meta.target_kind === 'string' ? meta.target_kind : undefined;
+    const multiplicity = meta.multiplicity as
+      | IEdgeKindRule['multiplicity']
+      | undefined;
     if (sourceKind && targetKind && multiplicity) {
       return { rel, sourceKind, targetKind, multiplicity };
     }
@@ -334,11 +473,18 @@ export async function resolveEdgeKindTx(tx: AdapterTransaction, rel: string): Pr
     // the SAME tx as minting its replacement, using the SAME
     // `t_invalid IS NULL` live-row predicate this module uses everywhere
     // else, so the row can never be re-selected by a future call.
-    await tx.executeRun('UPDATE node SET t_invalid = ? WHERE rowid = ? AND t_invalid IS NULL', [nowISO(), row.rowid]);
+    await tx.executeRun(
+      'UPDATE node SET t_invalid = ? WHERE rowid = ? AND t_invalid IS NULL',
+      [nowISO(), row.rowid]
+    );
     await writeNodeTx(tx, {
       kind: 'edge_kind',
       name: rel,
-      metadata: { source_kind: fixed.sourceKind, target_kind: fixed.targetKind, multiplicity: fixed.multiplicity },
+      metadata: {
+        source_kind: fixed.sourceKind,
+        target_kind: fixed.targetKind,
+        multiplicity: fixed.multiplicity,
+      },
     });
     return fixed;
   }
@@ -349,7 +495,11 @@ export async function resolveEdgeKindTx(tx: AdapterTransaction, rel: string): Pr
   await writeNodeTx(tx, {
     kind: 'edge_kind',
     name: rel,
-    metadata: { source_kind: fixed.sourceKind, target_kind: fixed.targetKind, multiplicity: fixed.multiplicity },
+    metadata: {
+      source_kind: fixed.sourceKind,
+      target_kind: fixed.targetKind,
+      multiplicity: fixed.multiplicity,
+    },
   });
   return fixed;
 }
@@ -404,28 +554,43 @@ const DEFAULT_PROJECT_POLICY: IProjectPolicy = Object.freeze({
   requiredFields: [],
 });
 
-function assertNonBlank(field: string, value: string | undefined): asserts value is string {
+function assertNonBlank(
+  field: string,
+  value: string | undefined
+): asserts value is string {
   if (value === undefined || value.trim().length === 0) {
     throw new InvalidArgumentError(field, 'is required');
   }
 }
 
-export function resolveProjectPolicy(project: IResolvedProjectRow): IProjectPolicy {
+export function resolveProjectPolicy(
+  project: IResolvedProjectRow
+): IProjectPolicy {
   const raw = project.metadata?.policy;
-  if (raw === null || typeof raw !== 'object') return { ...DEFAULT_PROJECT_POLICY };
+  if (raw === null || typeof raw !== 'object')
+    return { ...DEFAULT_PROJECT_POLICY };
   const policy = raw as Partial<IProjectPolicy>;
   return {
-    transitionRequiresNote: policy.transitionRequiresNote ?? DEFAULT_PROJECT_POLICY.transitionRequiresNote,
-    citationRequired: policy.citationRequired ?? DEFAULT_PROJECT_POLICY.citationRequired,
-    citationRequiresSha: policy.citationRequiresSha ?? DEFAULT_PROJECT_POLICY.citationRequiresSha,
+    transitionRequiresNote:
+      policy.transitionRequiresNote ??
+      DEFAULT_PROJECT_POLICY.transitionRequiresNote,
+    citationRequired:
+      policy.citationRequired ?? DEFAULT_PROJECT_POLICY.citationRequired,
+    citationRequiresSha:
+      policy.citationRequiresSha ?? DEFAULT_PROJECT_POLICY.citationRequiresSha,
     defaultStatus: policy.defaultStatus,
     defaultKind: policy.defaultKind,
-    dedupeScanEnabled: policy.dedupeScanEnabled ?? DEFAULT_PROJECT_POLICY.dedupeScanEnabled,
-    dedupeThreshold: policy.dedupeThreshold ?? DEFAULT_PROJECT_POLICY.dedupeThreshold,
-    claimStaleAfterMin: policy.claimStaleAfterMin ?? DEFAULT_PROJECT_POLICY.claimStaleAfterMin,
-    allowedStatuses: policy.allowedStatuses ?? DEFAULT_PROJECT_POLICY.allowedStatuses,
+    dedupeScanEnabled:
+      policy.dedupeScanEnabled ?? DEFAULT_PROJECT_POLICY.dedupeScanEnabled,
+    dedupeThreshold:
+      policy.dedupeThreshold ?? DEFAULT_PROJECT_POLICY.dedupeThreshold,
+    claimStaleAfterMin:
+      policy.claimStaleAfterMin ?? DEFAULT_PROJECT_POLICY.claimStaleAfterMin,
+    allowedStatuses:
+      policy.allowedStatuses ?? DEFAULT_PROJECT_POLICY.allowedStatuses,
     allowedKinds: policy.allowedKinds ?? DEFAULT_PROJECT_POLICY.allowedKinds,
-    requiredFields: policy.requiredFields ?? DEFAULT_PROJECT_POLICY.requiredFields,
+    requiredFields:
+      policy.requiredFields ?? DEFAULT_PROJECT_POLICY.requiredFields,
   };
 }
 
@@ -444,7 +609,7 @@ export function resolveProjectPolicy(project: IResolvedProjectRow): IProjectPoli
 /** Whether a `project`/`component` `meta` blob's business fields changed under an upsert (merge-not-replace, never a wholesale overwrite — §4a's own merge rule, applied identically to `delete.ts`'s `t_invalid` stamp). */
 function mergeBusinessFields(
   priorMeta: Record<string, unknown>,
-  patch: Record<string, unknown | undefined>,
+  patch: Record<string, unknown | undefined>
 ): Record<string, unknown> {
   const merged = { ...priorMeta };
   for (const [key, value] of Object.entries(patch)) {
@@ -494,22 +659,41 @@ export interface IUpsertProjectOutcome {
  * `WriteContentionError`/`WriteIOError` (§4c, an exhausted or unclassified
  * driver-level failure on the underlying `immediate` transaction).
  */
-export async function upsertProject(handle: IWriteStoreHandle, input: IUpsertProjectInput): Promise<IUpsertProjectOutcome> {
+export async function upsertProject(
+  handle: IWriteStoreHandle,
+  input: IUpsertProjectInput
+): Promise<IUpsertProjectOutcome> {
   assertNonBlank('name', input.name);
   assertNonBlank('by', input.by);
 
   return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
     const now = nowISO();
-    const existing = await tx.executeGet<{ rowid: number; uid: string; name: string | null; meta: string | null }>(
+    const existing = await tx.executeGet<{
+      rowid: number;
+      uid: string;
+      name: string | null;
+      meta: string | null;
+    }>(
       "SELECT rowid, uid, name, meta FROM node WHERE kind = 'project' AND name = ? AND t_invalid IS NULL LIMIT 1",
-      [input.name],
+      [input.name]
     );
 
-    const patch = { path: input.path, repoUrl: input.repoUrl, monorepo: input.monorepo, description: input.description };
+    const patch = {
+      path: input.path,
+      repoUrl: input.repoUrl,
+      monorepo: input.monorepo,
+      description: input.description,
+    };
 
     if (existing) {
-      const mergedMeta = mergeBusinessFields(parseMetaObject(existing.meta) ?? {}, patch);
-      await tx.executeRun('UPDATE node SET meta = ? WHERE rowid = ?', [JSON.stringify(mergedMeta), existing.rowid]);
+      const mergedMeta = mergeBusinessFields(
+        parseMetaObject(existing.meta) ?? {},
+        patch
+      );
+      await tx.executeRun('UPDATE node SET meta = ? WHERE rowid = ?', [
+        JSON.stringify(mergedMeta),
+        existing.rowid,
+      ]);
 
       await writeAudit({
         tx,
@@ -537,13 +721,23 @@ export async function upsertProject(handle: IWriteStoreHandle, input: IUpsertPro
     }
 
     const metadata = mergeBusinessFields({}, patch);
-    const project = await writeNodeTx(tx, { kind: 'project', name: input.name, metadata, at: now });
+    const project = await writeNodeTx(tx, {
+      kind: 'project',
+      name: input.name,
+      metadata,
+      at: now,
+    });
 
     // First creation ONLY: the reserved default component `(root)` + its
     // `owns_project` edge, in the SAME transaction (§4, §6.1's mint-vs-throw
     // rule's own dependency — `resolveDefaultComponentTx` never mints this
     // itself, it only traverses `owns_project` to find what THIS call wrote).
-    const root = await writeNodeTx(tx, { kind: 'component', name: '(root)', metadata: { projectUid: project.uid }, at: now });
+    const root = await writeNodeTx(tx, {
+      kind: 'component',
+      name: '(root)',
+      metadata: { projectUid: project.uid },
+      at: now,
+    });
     const ownsProjectRule = await resolveEdgeKindTx(tx, 'owns_project');
     await writeEdgeTx(tx, {
       at: now,
@@ -572,7 +766,14 @@ export async function upsertProject(handle: IWriteStoreHandle, input: IUpsertPro
     return {
       uid: project.uid,
       created: true,
-      project: { uid: project.uid, name: input.name, path: input.path, repoUrl: input.repoUrl, monorepo: input.monorepo, description: input.description },
+      project: {
+        uid: project.uid,
+        name: input.name,
+        path: input.path,
+        repoUrl: input.repoUrl,
+        monorepo: input.monorepo,
+        description: input.description,
+      },
     };
   });
 }
@@ -614,7 +815,10 @@ export interface IUpsertComponentOutcome {
  * `CatalogNotFoundError` (`project` does not resolve),
  * `WriteContentionError`/`WriteIOError` (§4c).
  */
-export async function upsertComponent(handle: IWriteStoreHandle, input: IUpsertComponentInput): Promise<IUpsertComponentOutcome> {
+export async function upsertComponent(
+  handle: IWriteStoreHandle,
+  input: IUpsertComponentInput
+): Promise<IUpsertComponentOutcome> {
   assertNonBlank('project', input.project);
   assertNonBlank('name', input.name);
   assertNonBlank('by', input.by);
@@ -623,12 +827,17 @@ export async function upsertComponent(handle: IWriteStoreHandle, input: IUpsertC
     const now = nowISO();
     const project = await resolveProjectTx(tx, input.project);
 
-    const existing = await tx.executeGet<{ rowid: number; uid: string; name: string | null; meta: string | null }>(
+    const existing = await tx.executeGet<{
+      rowid: number;
+      uid: string;
+      name: string | null;
+      meta: string | null;
+    }>(
       `SELECT rowid, uid, name, meta FROM node
        WHERE kind = 'component' AND name = ? AND t_invalid IS NULL
          AND json_extract(meta, '$.projectUid') = ?
        LIMIT 1`,
-      [input.name, project.uid],
+      [input.name, project.uid]
     );
 
     const patch = { path: input.path, description: input.description };
@@ -639,15 +848,26 @@ export async function upsertComponent(handle: IWriteStoreHandle, input: IUpsertC
     let resultMeta: Record<string, unknown>;
 
     if (existing) {
-      resultMeta = mergeBusinessFields({ ...(parseMetaObject(existing.meta) ?? {}), projectUid: project.uid }, patch);
-      await tx.executeRun('UPDATE node SET meta = ? WHERE rowid = ?', [JSON.stringify(resultMeta), existing.rowid]);
+      resultMeta = mergeBusinessFields(
+        { ...(parseMetaObject(existing.meta) ?? {}), projectUid: project.uid },
+        patch
+      );
+      await tx.executeRun('UPDATE node SET meta = ? WHERE rowid = ?', [
+        JSON.stringify(resultMeta),
+        existing.rowid,
+      ]);
       componentRowid = existing.rowid;
       componentUid = existing.uid;
       componentName = existing.name ?? input.name;
       created = false;
     } else {
       resultMeta = mergeBusinessFields({ projectUid: project.uid }, patch);
-      const minted = await writeNodeTx(tx, { kind: 'component', name: input.name, metadata: resultMeta, at: now });
+      const minted = await writeNodeTx(tx, {
+        kind: 'component',
+        name: input.name,
+        metadata: resultMeta,
+        at: now,
+      });
       componentRowid = minted.rowid;
       componentUid = minted.uid;
       componentName = input.name;
@@ -746,12 +966,18 @@ export interface IUpsertLocationOutcome {
  * without `project`), `CatalogNotFoundError` (`project`/`component` does not
  * resolve), `WriteContentionError`/`WriteIOError` (§4c).
  */
-export async function upsertLocation(handle: IWriteStoreHandle, input: IUpsertLocationInput): Promise<IUpsertLocationOutcome> {
+export async function upsertLocation(
+  handle: IWriteStoreHandle,
+  input: IUpsertLocationInput
+): Promise<IUpsertLocationOutcome> {
   assertNonBlank('component', input.component);
   assertNonBlank('value', input.value);
   assertNonBlank('by', input.by);
   if (!VALID_LOCATION_TYPES.includes(input.locType)) {
-    throw new InvalidArgumentError('locType', `must be one of ${VALID_LOCATION_TYPES.join(', ')}`);
+    throw new InvalidArgumentError(
+      'locType',
+      `must be one of ${VALID_LOCATION_TYPES.join(', ')}`
+    );
   }
 
   return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
@@ -763,10 +989,16 @@ export async function upsertLocation(handle: IWriteStoreHandle, input: IUpsertLo
       component = { rowid: row.rowid, uid: row.uid, name: row.name };
     } else {
       if (input.project === undefined || input.project.trim().length === 0) {
-        throw new InvalidArgumentError('component', 'a bare component name requires "project" to disambiguate — pass a component uid instead if unavailable');
+        throw new InvalidArgumentError(
+          'component',
+          'a bare component name requires "project" to disambiguate — pass a component uid instead if unavailable'
+        );
       }
       const project = await resolveProjectTx(tx, input.project);
-      component = await resolveComponentTx(tx, { projectUid: project.uid, ref: input.component });
+      component = await resolveComponentTx(tx, {
+        projectUid: project.uid,
+        ref: input.component,
+      });
     }
 
     const existing = await tx.executeGet<{ rowid: number; uid: string }>(
@@ -776,19 +1008,33 @@ export async function upsertLocation(handle: IWriteStoreHandle, input: IUpsertLo
          AND json_extract(meta, '$.locType') = ?
          AND json_extract(meta, '$.value') = ?
        LIMIT 1`,
-      [component.uid, input.locType, input.value],
+      [component.uid, input.locType, input.value]
     );
 
     if (existing) {
       return {
         uid: existing.uid,
         created: false,
-        location: { uid: existing.uid, locType: input.locType, value: input.value, componentUid: component.uid },
+        location: {
+          uid: existing.uid,
+          locType: input.locType,
+          value: input.value,
+          componentUid: component.uid,
+        },
       };
     }
 
-    const metadata = { componentUid: component.uid, locType: input.locType, value: input.value };
-    const location = await writeNodeTx(tx, { kind: 'location', name: input.value, metadata, at: now });
+    const metadata = {
+      componentUid: component.uid,
+      locType: input.locType,
+      value: input.value,
+    };
+    const location = await writeNodeTx(tx, {
+      kind: 'location',
+      name: input.value,
+      metadata,
+      at: now,
+    });
 
     const hasLocationRule = await resolveEdgeKindTx(tx, 'has_location');
     await writeEdgeTx(tx, {
@@ -818,7 +1064,12 @@ export async function upsertLocation(handle: IWriteStoreHandle, input: IUpsertLo
     return {
       uid: location.uid,
       created: true,
-      location: { uid: location.uid, locType: input.locType, value: input.value, componentUid: component.uid },
+      location: {
+        uid: location.uid,
+        locType: input.locType,
+        value: input.value,
+        componentUid: component.uid,
+      },
     };
   });
 }
@@ -861,7 +1112,10 @@ export interface IRmLocationOutcome {
  * {@link IUpsertLocationOutcome}'s doc comment describes),
  * `WriteContentionError`/`WriteIOError` (§4c).
  */
-export async function rmLocation(handle: IWriteStoreHandle, input: IRmLocationInput): Promise<IRmLocationOutcome> {
+export async function rmLocation(
+  handle: IWriteStoreHandle,
+  input: IRmLocationInput
+): Promise<IRmLocationOutcome> {
   assertNonBlank('uid', input.uid);
   assertNonBlank('by', input.by);
 
@@ -871,23 +1125,35 @@ export async function rmLocation(handle: IWriteStoreHandle, input: IRmLocationIn
 
     const mergedMeta = {
       ...(row.metadata ?? {}),
-      ...(input.reason !== undefined ? { invalidatedReason: input.reason } : {}),
+      ...(input.reason !== undefined
+        ? { invalidatedReason: input.reason }
+        : {}),
       invalidatedAt: now,
     };
-    const result = await tx.executeRun('UPDATE node SET t_invalid = ?, meta = ? WHERE rowid = ? AND t_invalid IS NULL', [
-      now,
-      JSON.stringify(mergedMeta),
-      row.rowid,
-    ]);
+    const result = await tx.executeRun(
+      'UPDATE node SET t_invalid = ?, meta = ? WHERE rowid = ? AND t_invalid IS NULL',
+      [now, JSON.stringify(mergedMeta), row.rowid]
+    );
     if (result.rowsAffected !== 1) {
-      throw new Error(`rmLocation: invalidate UPDATE affected ${result.rowsAffected} rows for uid="${input.uid}", expected exactly 1.`);
+      throw new Error(
+        `rmLocation: invalidate UPDATE affected ${result.rowsAffected} rows for uid="${input.uid}", expected exactly 1.`
+      );
     }
 
-    const componentUid = typeof row.metadata?.componentUid === 'string' ? row.metadata.componentUid : undefined;
+    const componentUid =
+      typeof row.metadata?.componentUid === 'string'
+        ? row.metadata.componentUid
+        : undefined;
     if (componentUid !== undefined) {
       const component = await getNodeByUidTx(tx, componentUid);
       if (component && component.tInvalid === null) {
-        await invalidateEdgeTx(tx, { srcRowid: component.rowid, dstRowid: row.rowid, rel: 'has_location', reason: input.reason, at: now });
+        await invalidateEdgeTx(tx, {
+          srcRowid: component.rowid,
+          dstRowid: row.rowid,
+          rel: 'has_location',
+          reason: input.reason,
+          at: now,
+        });
       }
     }
 

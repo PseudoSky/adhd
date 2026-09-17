@@ -1,6 +1,6 @@
 ---
 name: backlog-usage
-description: "Use whenever filing, reading, claiming, transitioning, relating, or resolving a backlog issue — or registering a project/component/location — in ANY repo on this machine, via the `adhd-backlog` CLI / `mcp__backlog__*` tools, never by hand-editing a `BACKLOG.md` file. Examples: \"log this bug\", \"file a debt item for the flaky test\", \"claim that issue\", \"what's still open in this repo\", \"where does this tool live\"."
+description: 'Use whenever filing, reading, claiming, transitioning, relating, or resolving a backlog issue — or registering a project/component/location — in ANY repo on this machine, via the `adhd-backlog` CLI / `mcp__backlog__*` tools, never by hand-editing a `BACKLOG.md` file. Examples: "log this bug", "file a debt item for the flaky test", "claim that issue", "what''s still open in this repo", "where does this tool live".'
 ---
 
 # `@adhd/backlog` usage
@@ -127,17 +127,17 @@ Never assume an unwrapped payload — always read `envelope.data`. There are
 exactly nine error codes, and the CLI's process exit code is derived from
 `error.code`:
 
-| code | exit | meaning |
-|---|---|---|
-| `not_found` | 4 | a referenced catalog entry (project/component/kind/status/priority) does not exist |
-| `item_not_found` | 1 | the addressed issue `uid` does not exist |
-| `invalid_argument` | 2 | malformed flag or parameter shape |
-| `validation` | 2 | schema rejection — unknown filter key, unknown projection field, over-limit |
-| `store_busy` | 1 | store contention (busy/lease) — `details.retryable`/`retryAfterMs` say whether and how to retry; never hot-loop |
-| `rag_not_configured` | 1 | a semantic/similarity read with no embedding backend, or an empty vector space |
-| `conflict` | 1 | someone else holds the claim, a single-valued relation is taken, or a supersede raced |
-| `precondition_failed` | 1 | a gate refused the write — a terminal transition missing its required citation/note, or an unverifiable citation |
-| `internal` | 1 | unclassified server-side failure |
+| code                  | exit | meaning                                                                                                          |
+| --------------------- | ---- | ---------------------------------------------------------------------------------------------------------------- |
+| `not_found`           | 4    | a referenced catalog entry (project/component/kind/status/priority) does not exist                               |
+| `item_not_found`      | 1    | the addressed issue `uid` does not exist                                                                         |
+| `invalid_argument`    | 2    | malformed flag or parameter shape                                                                                |
+| `validation`          | 2    | schema rejection — unknown filter key, unknown projection field, over-limit                                      |
+| `store_busy`          | 1    | store contention (busy/lease) — `details.retryable`/`retryAfterMs` say whether and how to retry; never hot-loop  |
+| `rag_not_configured`  | 1    | a semantic/similarity read with no embedding backend, or an empty vector space                                   |
+| `conflict`            | 1    | someone else holds the claim, a single-valued relation is taken, or a supersede raced                            |
+| `precondition_failed` | 1    | a gate refused the write — a terminal transition missing its required citation/note, or an unverifiable citation |
+| `internal`            | 1    | unclassified server-side failure                                                                                 |
 
 Success is always exit `0`.
 

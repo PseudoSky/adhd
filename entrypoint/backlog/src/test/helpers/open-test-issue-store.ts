@@ -33,13 +33,21 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createStoreAdapter, type StoreAdapter } from '@adhd/sox-store-adapter';
-import { createGraphBackend, type GraphBackend, type TypePolicy } from '@adhd/sox-graph-store';
-import { type IWriteStoreHandle, writeNodeTx, writeEdgeTx, nowISO } from '../../write/tx.js';
+import {
+  createGraphBackend,
+  type GraphBackend,
+  type TypePolicy,
+} from '@adhd/sox-graph-store';
+import {
+  type IWriteStoreHandle,
+  writeNodeTx,
+  writeEdgeTx,
+  nowISO,
+} from '../../write/tx.js';
 import { resolveEdgeKindTx } from '../../write/catalog.js';
 export { OPEN_TYPE_POLICY } from '../../store/type-policy.js';
 import { OPEN_TYPE_POLICY } from '../../store/type-policy.js';
 import type { IQueryStoreHandle } from '../../query/query.js';
-
 
 export interface TestIssueStore extends IWriteStoreHandle, IQueryStoreHandle {
   readonly adapter: StoreAdapter;
@@ -56,7 +64,10 @@ export interface TestIssueStore extends IWriteStoreHandle, IQueryStoreHandle {
  * from a child process spawned against the SAME `dbPath` — each call opens
  * its own genuine adapter connection.
  */
-export async function openTestIssueStore(dbPath: string, busyTimeoutMs = 5000): Promise<TestIssueStore> {
+export async function openTestIssueStore(
+  dbPath: string,
+  busyTimeoutMs = 5000
+): Promise<TestIssueStore> {
   if (dbPath !== ':memory:') mkdirSync(dirname(dbPath), { recursive: true });
   const adapter = await createStoreAdapter({ dbPath });
   await adapter.pragmaSet('busy_timeout', busyTimeoutMs);
@@ -92,22 +103,41 @@ export function removeTestIssueStoreDir(dir: string): void {
  * (a uid or name both resolve; the uid is unambiguous and never collides with
  * a later-run's project name).
  */
-export async function seedProject(handle: Pick<TestIssueStore, 'adapter' | 'typePolicy'>, name: string): Promise<{ projectUid: string }> {
+export async function seedProject(
+  handle: Pick<TestIssueStore, 'adapter' | 'typePolicy'>,
+  name: string
+): Promise<{ projectUid: string }> {
   const projectUid = await handle.adapter.transaction(
     async (tx) => {
       const now = nowISO();
-      const project = await writeNodeTx(tx, { kind: 'project', name, metadata: {}, at: now });
-      const component = await writeNodeTx(tx, { kind: 'component', name: '(root)', metadata: { projectUid: project.uid }, at: now });
+      const project = await writeNodeTx(tx, {
+        kind: 'project',
+        name,
+        metadata: {},
+        at: now,
+      });
+      const component = await writeNodeTx(tx, {
+        kind: 'component',
+        name: '(root)',
+        metadata: { projectUid: project.uid },
+        at: now,
+      });
       const rule = await resolveEdgeKindTx(tx, 'owns_project');
       await writeEdgeTx(tx, {
         at: now,
-        srcRowid: project.rowid, srcUid: project.uid, srcKind: 'project',
-        dstRowid: component.rowid, dstUid: component.uid, dstKind: 'component',
-        rel: 'owns_project', rule, typePolicy: handle.typePolicy,
+        srcRowid: project.rowid,
+        srcUid: project.uid,
+        srcKind: 'project',
+        dstRowid: component.rowid,
+        dstUid: component.uid,
+        dstKind: 'component',
+        rel: 'owns_project',
+        rule,
+        typePolicy: handle.typePolicy,
       });
       return project.uid;
     },
-    { mode: 'immediate' },
+    { mode: 'immediate' }
   );
   return { projectUid };
 }

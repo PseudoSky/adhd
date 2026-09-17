@@ -36,7 +36,11 @@ import {
 } from '@adhd/sox-store-adapter';
 
 /** The closed code union every {@link IWriteError} carries (SPEC.md §4c). */
-export type WriteErrorCode = 'E_CONTENTION' | 'E_CONSTRAINT' | 'E_VALIDATION' | 'E_IO';
+export type WriteErrorCode =
+  | 'E_CONTENTION'
+  | 'E_CONSTRAINT'
+  | 'E_VALIDATION'
+  | 'E_IO';
 
 /**
  * The write layer's internal envelope for a caught driver-level failure
@@ -68,7 +72,11 @@ export abstract class BacklogWriteError extends Error implements IWriteError {
   readonly retry_after_ms?: number;
   readonly cause: unknown;
 
-  protected constructor(message: string, cause: unknown = undefined, retryAfterMs?: number) {
+  protected constructor(
+    message: string,
+    cause: unknown = undefined,
+    retryAfterMs?: number
+  ) {
     super(message);
     this.name = new.target.name;
     this.cause = cause;
@@ -92,7 +100,7 @@ export class WriteContentionError extends BacklogWriteError {
     super(
       `Write contention: exhausted the retry budget (last backoff ${retryAfterMs}ms)`,
       cause,
-      retryAfterMs,
+      retryAfterMs
     );
   }
 }
@@ -118,7 +126,10 @@ export class WriteIOError extends BacklogWriteError {
   readonly retryable = true;
 
   constructor(cause: unknown) {
-    super('Write I/O failure: an unclassified driver/connection error surfaced from the underlying transaction', cause);
+    super(
+      'Write I/O failure: an unclassified driver/connection error surfaced from the underlying transaction',
+      cause
+    );
   }
 }
 
@@ -146,12 +157,12 @@ export class StaleSupersedeError extends BacklogWriteError {
    */
   constructor(
     public readonly uid: string,
-    public readonly successorUid?: string,
+    public readonly successorUid?: string
   ) {
     super(
       successorUid === undefined
         ? `Issue "${uid}" was already superseded by a concurrent write; re-get and retry`
-        : `Issue "${uid}" was superseded by a body edit and is no longer the live issue; it now lives under "${successorUid}"`,
+        : `Issue "${uid}" was superseded by a body edit and is no longer the live issue; it now lives under "${successorUid}"`
     );
   }
 }
@@ -167,7 +178,10 @@ export class CatalogNotFoundError extends BacklogWriteError {
   readonly code = 'E_VALIDATION' as const;
   readonly retryable = false;
 
-  constructor(public readonly catalogKind: string, public readonly ref: string) {
+  constructor(
+    public readonly catalogKind: string,
+    public readonly ref: string
+  ) {
     super(`${catalogKind} "${ref}" was not found`);
   }
 }
@@ -178,7 +192,11 @@ export class InvalidArgumentError extends BacklogWriteError {
   readonly retryable = false;
 
   constructor(public readonly field: string, detail?: string) {
-    super(detail ? `Invalid argument "${field}": ${detail}` : `Invalid argument "${field}"`);
+    super(
+      detail
+        ? `Invalid argument "${field}": ${detail}`
+        : `Invalid argument "${field}"`
+    );
   }
 }
 
@@ -200,7 +218,10 @@ export class ClaimHeldError extends BacklogWriteError {
   readonly code = 'E_VALIDATION' as const;
   readonly retryable = false;
 
-  constructor(public readonly heldBy: string, public readonly heldSince: string) {
+  constructor(
+    public readonly heldBy: string,
+    public readonly heldSince: string
+  ) {
     super(`Claim already held by "${heldBy}" since ${heldSince}`);
   }
 }
@@ -240,10 +261,16 @@ export class SingleValuedRelationConflictError extends BacklogWriteError {
   /** The uid of the pre-existing OTHER endpoint already occupying the capped side's one slot. */
   public readonly conflictingUid: string;
 
-  constructor(input: { side: 'source' | 'target'; cappedUid: string; rel: string; conflictingUid: string }) {
-    const message = input.side === 'source'
-      ? `"${input.rel}" already has a single target (${input.conflictingUid}) for source "${input.cappedUid}"`
-      : `"${input.rel}" already has a single source (${input.conflictingUid}) for target "${input.cappedUid}"`;
+  constructor(input: {
+    side: 'source' | 'target';
+    cappedUid: string;
+    rel: string;
+    conflictingUid: string;
+  }) {
+    const message =
+      input.side === 'source'
+        ? `"${input.rel}" already has a single target (${input.conflictingUid}) for source "${input.cappedUid}"`
+        : `"${input.rel}" already has a single source (${input.conflictingUid}) for target "${input.cappedUid}"`;
     super(message);
     this.side = input.side;
     this.cappedUid = input.cappedUid;
@@ -263,7 +290,9 @@ export class CitationUnverifiableError extends BacklogWriteError {
   readonly retryable = false;
 
   constructor(public readonly target: string) {
-    super(`Citation target "${target}" could not be verified and this project requires a real sha`);
+    super(
+      `Citation target "${target}" could not be verified and this project requires a real sha`
+    );
   }
 }
 
@@ -273,7 +302,9 @@ export class NoteRequiredError extends BacklogWriteError {
   readonly retryable = false;
 
   constructor(public readonly uid: string) {
-    super(`A note is required to transition issue "${uid}" (project_policy.transition_requires_note)`);
+    super(
+      `A note is required to transition issue "${uid}" (project_policy.transition_requires_note)`
+    );
   }
 }
 
@@ -283,7 +314,9 @@ export class CitationRequiredError extends BacklogWriteError {
   readonly retryable = false;
 
   constructor(public readonly uid: string) {
-    super(`At least one citation is required to close issue "${uid}" (project_policy.citation_required)`);
+    super(
+      `At least one citation is required to close issue "${uid}" (project_policy.citation_required)`
+    );
   }
 }
 

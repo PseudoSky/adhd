@@ -31,8 +31,16 @@
  * `query.ts` use for the read verbs proper.
  */
 
-import type { EdgeRecord, GraphBackend, NodeRecord } from '@adhd/sox-graph-store';
-import { CatalogNotFoundError, IssueNotFoundError, StaleSupersedeError } from '../write/errors.js';
+import type {
+  EdgeRecord,
+  GraphBackend,
+  NodeRecord,
+} from '@adhd/sox-graph-store';
+import {
+  CatalogNotFoundError,
+  IssueNotFoundError,
+  StaleSupersedeError,
+} from '../write/errors.js';
 import { isUidShaped } from '../write/catalog.js';
 
 export { isUidShaped };
@@ -52,7 +60,10 @@ export interface IResolvedRef {
  * `write/tx.ts`'s `getNodeByUidTx` — safe to call standalone because it is
  * not composing a check-then-act write around the result.
  */
-export async function resolveIssueByUid(graph: GraphBackend, uid: string): Promise<NodeRecord> {
+export async function resolveIssueByUid(
+  graph: GraphBackend,
+  uid: string
+): Promise<NodeRecord> {
   const record = await graph.getNodeByUid(uid);
   if (!record || record.kind !== 'issue' || record.tInvalid) {
     throw new IssueNotFoundError(uid);
@@ -81,13 +92,19 @@ export async function resolveIssueByUid(graph: GraphBackend, uid: string): Promi
  * chain that dead-ends immediately yields `undefined` — which
  * {@link StaleSupersedeError} documents as "not known here".
  */
-async function currentUidOf(graph: GraphBackend, superseded: NodeRecord): Promise<string | undefined> {
+async function currentUidOf(
+  graph: GraphBackend,
+  superseded: NodeRecord
+): Promise<string | undefined> {
   const seen = new Set<number>([superseded.id]);
   let head: NodeRecord | undefined;
   let cursor = superseded;
 
   for (;;) {
-    const incoming = await graph.getEdges({ dst: cursor.id, rel: 'SUPERSEDES' });
+    const incoming = await graph.getEdges({
+      dst: cursor.id,
+      rel: 'SUPERSEDES',
+    });
     const next = incoming.find((e) => !seen.has(e.src));
     if (!next) return head?.uid;
 
@@ -116,14 +133,19 @@ async function currentUidOf(graph: GraphBackend, superseded: NodeRecord): Promis
 export async function tryResolveRef(
   graph: GraphBackend,
   expectedKind: string,
-  ref: string,
+  ref: string
 ): Promise<IResolvedRef | null> {
   if (isUidShaped(ref)) {
     const record = await graph.getNodeByUid(ref);
     if (!record || record.kind !== expectedKind || record.tInvalid) return null;
     return { id: record.id, uid: record.uid, name: record.name ?? ref, record };
   }
-  const matches = await graph.queryNodes({ kind: expectedKind, name: ref, liveOnly: true, limit: 1 });
+  const matches = await graph.queryNodes({
+    kind: expectedKind,
+    name: ref,
+    liveOnly: true,
+    limit: 1,
+  });
   const record = matches[0];
   if (!record) return null;
   return { id: record.id, uid: record.uid, name: record.name ?? ref, record };
@@ -133,7 +155,7 @@ export async function tryResolveRef(
 export async function resolveRefOrThrow(
   graph: GraphBackend,
   expectedKind: string,
-  ref: string,
+  ref: string
 ): Promise<IResolvedRef> {
   const resolved = await tryResolveRef(graph, expectedKind, ref);
   if (!resolved) throw new CatalogNotFoundError(expectedKind, ref);
@@ -144,11 +166,12 @@ export async function resolveRefOrThrow(
 export async function tryResolveComponentRef(
   graph: GraphBackend,
   projectUid: string,
-  ref: string,
+  ref: string
 ): Promise<IResolvedRef | null> {
   if (isUidShaped(ref)) {
     const resolved = await tryResolveRef(graph, 'component', ref);
-    if (!resolved || resolved.record.metadata?.projectUid !== projectUid) return null;
+    if (!resolved || resolved.record.metadata?.projectUid !== projectUid)
+      return null;
     return resolved;
   }
   const matches = await graph.queryNodes({
@@ -164,7 +187,11 @@ export async function tryResolveComponentRef(
 }
 
 /** The single live edge of `rel` FROM `srcId` (SPEC.md §3's `n:1` rels — `has_kind`/`has_status`/`has_priority`/`authored_by`), or `null` when none exists. */
-export function pickSingleEdge(edges: EdgeRecord[], rel: string, srcId: number): EdgeRecord | undefined {
+export function pickSingleEdge(
+  edges: EdgeRecord[],
+  rel: string,
+  srcId: number
+): EdgeRecord | undefined {
   return edges.find((e) => e.rel === rel && e.src === srcId);
 }
 
@@ -175,12 +202,18 @@ export function pickSingleEdge(edges: EdgeRecord[], rel: string, srcId: number):
  * `audits`/`relates_to`/`supersedes`/`duplicate_of`/`part_of`/`blocks`) —
  * cheaper than one `getEdges` call per rel.
  */
-export function getOutgoingEdges(graph: GraphBackend, nodeId: number): Promise<EdgeRecord[]> {
+export function getOutgoingEdges(
+  graph: GraphBackend,
+  nodeId: number
+): Promise<EdgeRecord[]> {
   return graph.getEdges({ src: nodeId });
 }
 
 /** All edges TARGETING `nodeId` — used for the reverse traversals (`owns_component`'s issue→component lookup, `blocks`'s incoming-blocker lookup, `duplicate_of`'s incoming lookup). */
-export function getIncomingEdges(graph: GraphBackend, nodeId: number): Promise<EdgeRecord[]> {
+export function getIncomingEdges(
+  graph: GraphBackend,
+  nodeId: number
+): Promise<EdgeRecord[]> {
   return graph.getEdges({ dst: nodeId });
 }
 
@@ -193,15 +226,21 @@ export function getIncomingEdges(graph: GraphBackend, nodeId: number): Promise<E
  */
 export async function resolveIssuePlacement(
   graph: GraphBackend,
-  issueId: number,
+  issueId: number
 ): Promise<{ component?: NodeRecord; project?: NodeRecord }> {
-  const ownsComponentEdges = await graph.getEdges({ dst: issueId, rel: 'owns_component' });
+  const ownsComponentEdges = await graph.getEdges({
+    dst: issueId,
+    rel: 'owns_component',
+  });
   const componentId = ownsComponentEdges[0]?.src;
   if (componentId === undefined) return {};
   const [component] = await graph.getNodesByIds([componentId]);
   if (!component) return {};
 
-  const ownsProjectEdges = await graph.getEdges({ dst: componentId, rel: 'owns_project' });
+  const ownsProjectEdges = await graph.getEdges({
+    dst: componentId,
+    rel: 'owns_project',
+  });
   const projectId = ownsProjectEdges[0]?.src;
   if (projectId === undefined) return { component };
   const [project] = await graph.getNodesByIds([projectId]);
@@ -245,11 +284,12 @@ export async function resolveIssuePlacement(
  */
 export async function resolveEdgeScopedCandidates(
   graph: GraphBackend,
-  input: { rel: string; expectedKind: string; ref: string; projectUid?: string },
+  input: { rel: string; expectedKind: string; ref: string; projectUid?: string }
 ): Promise<Set<number> | undefined> {
-  const resolved = input.expectedKind === 'component' && input.projectUid !== undefined
-    ? await tryResolveComponentRef(graph, input.projectUid, input.ref)
-    : await tryResolveRef(graph, input.expectedKind, input.ref);
+  const resolved =
+    input.expectedKind === 'component' && input.projectUid !== undefined
+      ? await tryResolveComponentRef(graph, input.projectUid, input.ref)
+      : await tryResolveRef(graph, input.expectedKind, input.ref);
   if (!resolved) return undefined;
 
   if (await relIsSourceDirected(graph, input.rel, input.expectedKind)) {
@@ -273,14 +313,28 @@ export async function resolveEdgeScopedCandidates(
  * on direction. An absent row falls back to `false`, preserving the
  * issue→catalog default that the four `has_*`/`authored_by` rels use.
  */
-async function relIsSourceDirected(graph: GraphBackend, rel: string, expectedKind: string): Promise<boolean> {
-  const rows = await graph.queryNodes({ kind: 'edge_kind', name: rel, liveOnly: true, limit: 1 });
+async function relIsSourceDirected(
+  graph: GraphBackend,
+  rel: string,
+  expectedKind: string
+): Promise<boolean> {
+  const rows = await graph.queryNodes({
+    kind: 'edge_kind',
+    name: rel,
+    liveOnly: true,
+    limit: 1,
+  });
   const meta = rows[0]?.metadata as Record<string, unknown> | undefined;
-  return typeof meta?.['source_kind'] === 'string' && meta['source_kind'] === expectedKind;
+  return (
+    typeof meta?.['source_kind'] === 'string' &&
+    meta['source_kind'] === expectedKind
+  );
 }
 
 /** Intersect a list of candidate-rowid sets (SPEC.md §6.5 rule 3: "AND semantics — an issue must satisfy every edge-scoped filter given"). An empty input list means "no edge-scoped filter was given" — returns `undefined` (no restriction), never an empty set. */
-export function intersectCandidateSets(sets: ReadonlyArray<Set<number>>): Set<number> | undefined {
+export function intersectCandidateSets(
+  sets: ReadonlyArray<Set<number>>
+): Set<number> | undefined {
   if (sets.length === 0) return undefined;
   let [acc] = sets;
   for (const s of sets.slice(1)) {

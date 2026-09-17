@@ -53,11 +53,31 @@ const TERMS = [
   // naming its own surface. `server.v2.spec.ts` is NOT exempted: `v2` there is
   // followed by `.s`, not by a digit, so the two cases separate cleanly
   // without a hand-maintained allowlist that would rot.
-  { name: 'v1',        re: /(?<![a-z0-9])v1\b(?!\.\d)/i,              why: 'there is no v1 to contrast against — only backlog' },
-  { name: 'v2',        re: /(?<![a-z0-9])v2\b(?!\.\d)/i,              why: 'the replacement IS backlog; calling it v2 implies a v1 still exists' },
-  { name: 'humanId',   re: /human[_-]?id/i,                why: 'human ids were removed from the data model entirely' },
-  { name: 'migration', re: /\bmigrat(e|ed|ing|ion|ions)\b/i, why: 'a hard replacement has no migration path by construction' },
-  { name: 'sqlite',    re: /sqlite|better[_-]?sqlite/i,    why: 'the store adapter is the only DB seam; no direct sqlite dependency, import, or reference' },
+  {
+    name: 'v1',
+    re: /(?<![a-z0-9])v1\b(?!\.\d)/i,
+    why: 'there is no v1 to contrast against — only backlog',
+  },
+  {
+    name: 'v2',
+    re: /(?<![a-z0-9])v2\b(?!\.\d)/i,
+    why: 'the replacement IS backlog; calling it v2 implies a v1 still exists',
+  },
+  {
+    name: 'humanId',
+    re: /human[_-]?id/i,
+    why: 'human ids were removed from the data model entirely',
+  },
+  {
+    name: 'migration',
+    re: /\bmigrat(e|ed|ing|ion|ions)\b/i,
+    why: 'a hard replacement has no migration path by construction',
+  },
+  {
+    name: 'sqlite',
+    re: /sqlite|better[_-]?sqlite/i,
+    why: 'the store adapter is the only DB seam; no direct sqlite dependency, import, or reference',
+  },
 ];
 
 function walk(dir) {
@@ -89,21 +109,33 @@ for (const file of [...walk(ROOT), ...packageDocs()]) {
   const rel = relative(PKG, file);
   for (const term of TERMS) {
     if (term.re.test(rel)) {
-      hits.push({ file: rel, line: 0, term: term.name, text: `[FILENAME] ${rel}` });
+      hits.push({
+        file: rel,
+        line: 0,
+        term: term.name,
+        text: `[FILENAME] ${rel}`,
+      });
     }
   }
   const lines = readFileSync(file, 'utf8').split('\n');
   lines.forEach((line, i) => {
     for (const term of TERMS) {
       if (term.re.test(line)) {
-        hits.push({ file: relative(PKG, file), line: i + 1, term: term.name, text: line.trim().slice(0, 120) });
+        hits.push({
+          file: relative(PKG, file),
+          line: i + 1,
+          term: term.name,
+          text: line.trim().slice(0, 120),
+        });
       }
     }
   });
 }
 
 if (hits.length === 0) {
-  console.log('vocabulary-gate: CLEAN — src/ and the package docs contain no v1/v2/humanId/migration/sqlite reference.');
+  console.log(
+    'vocabulary-gate: CLEAN — src/ and the package docs contain no v1/v2/humanId/migration/sqlite reference.'
+  );
   process.exit(0);
 }
 
@@ -114,17 +146,26 @@ for (const h of hits) {
   byTerm.get(h.term).push(h);
 }
 
-console.log(`vocabulary-gate: DIRTY — ${hits.length} reference(s) across ${new Set(hits.map((h) => h.file)).size} file(s).\n`);
+console.log(
+  `vocabulary-gate: DIRTY — ${hits.length} reference(s) across ${
+    new Set(hits.map((h) => h.file)).size
+  } file(s).\n`
+);
 for (const term of TERMS) {
   const termHits = byTerm.get(term.name);
   if (!termHits) continue;
   const files = new Map();
   for (const h of termHits) files.set(h.file, (files.get(h.file) ?? 0) + 1);
-  console.log(`  ${term.name} — ${termHits.length} hit(s) in ${files.size} file(s); ${term.why}`);
-  for (const [file, count] of [...files].sort((a, b) => b[1] - a[1]).slice(0, 12)) {
+  console.log(
+    `  ${term.name} — ${termHits.length} hit(s) in ${files.size} file(s); ${term.why}`
+  );
+  for (const [file, count] of [...files]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12)) {
     console.log(`      ${String(count).padStart(4)}  ${file}`);
   }
-  if (files.size > 12) console.log(`      ... and ${files.size - 12} more file(s)`);
+  if (files.size > 12)
+    console.log(`      ... and ${files.size - 12} more file(s)`);
   console.log();
 }
 process.exit(1);

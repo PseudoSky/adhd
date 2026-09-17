@@ -26,7 +26,10 @@ import { deleteIssue } from './delete.js';
 import { InvalidArgumentError, IssueNotFoundError } from './errors.js';
 import { getNodeByUidTx, type ITxNodeRow } from './tx.js';
 
-async function readNode(store: TestIssueStore, uid: string): Promise<ITxNodeRow | null> {
+async function readNode(
+  store: TestIssueStore,
+  uid: string
+): Promise<ITxNodeRow | null> {
   return store.adapter.transaction(async (tx) => getNodeByUidTx(tx, uid));
 }
 
@@ -35,16 +38,24 @@ interface RawAuditRow {
   note: string | null;
 }
 
-async function readAuditTrail(store: TestIssueStore, subjectRowid: number): Promise<RawAuditRow[]> {
+async function readAuditTrail(
+  store: TestIssueStore,
+  subjectRowid: number
+): Promise<RawAuditRow[]> {
   const { rows } = await store.adapter.executeAll<{ meta: string | null }>(
     `SELECT a.meta as meta FROM edge e JOIN node a ON a.rowid = e.dst
      WHERE e.src = ? AND e.rel = 'audits' AND e.t_invalid IS NULL AND a.kind = 'audit'
      ORDER BY a.rowid ASC`,
-    [subjectRowid],
+    [subjectRowid]
   );
   return rows.map((row) => {
-    const meta = row.meta ? (JSON.parse(row.meta) as Record<string, unknown>) : {};
-    return { action: String(meta['action'] ?? ''), note: (meta['note'] as string | null) ?? null };
+    const meta = row.meta
+      ? (JSON.parse(row.meta) as Record<string, unknown>)
+      : {};
+    return {
+      action: String(meta['action'] ?? ''),
+      note: (meta['note'] as string | null) ?? null,
+    };
   });
 }
 
@@ -69,7 +80,8 @@ describe('delete — bi-temporal soft-invalidate (SPEC.md §6.3.7, real store)',
     });
     issueUid = created.uid;
     const row = await readNode(store, issueUid);
-    if (!row) throw new Error('setup: issue not found immediately after createIssue');
+    if (!row)
+      throw new Error('setup: issue not found immediately after createIssue');
     issueRowid = row.rowid;
   });
 
@@ -82,7 +94,11 @@ describe('delete — bi-temporal soft-invalidate (SPEC.md §6.3.7, real store)',
     const before = await readNode(store, issueUid);
     expect(before?.tInvalid).toBeNull();
 
-    const outcome = await deleteIssue(store, { uid: issueUid, reason: 'duplicate of ISSUE-123', by: 'closer' });
+    const outcome = await deleteIssue(store, {
+      uid: issueUid,
+      reason: 'duplicate of ISSUE-123',
+      by: 'closer',
+    });
     expect(outcome).toEqual({ uid: issueUid, invalidated: true });
 
     const after = await readNode(store, issueUid);
@@ -94,7 +110,11 @@ describe('delete — bi-temporal soft-invalidate (SPEC.md §6.3.7, real store)',
   });
 
   it('merges invalidatedReason/invalidatedAt into the EXISTING meta — never a wholesale replace (unlike touch)', async () => {
-    await deleteIssue(store, { uid: issueUid, reason: 'stale duplicate', by: 'closer' });
+    await deleteIssue(store, {
+      uid: issueUid,
+      reason: 'stale duplicate',
+      by: 'closer',
+    });
     const row = await readNode(store, issueUid);
     expect(row?.metadata?.['invalidatedReason']).toBe('stale duplicate');
     expect(typeof row?.metadata?.['invalidatedAt']).toBe('string');
@@ -103,23 +123,41 @@ describe('delete — bi-temporal soft-invalidate (SPEC.md §6.3.7, real store)',
   });
 
   it('the row stops appearing among LIVE nodes (tInvalid !== null is the liveOnly exclusion signal every other verb checks)', async () => {
-    await deleteIssue(store, { uid: issueUid, reason: 'no longer relevant', by: 'closer' });
+    await deleteIssue(store, {
+      uid: issueUid,
+      reason: 'no longer relevant',
+      by: 'closer',
+    });
     const row = await readNode(store, issueUid);
     expect(row?.tInvalid).not.toBeNull();
   });
 
   it('writes exactly one audit row (action:"deleted", note = reason) alongside the "created" row already there — the audit trail stays intact', async () => {
-    await deleteIssue(store, { uid: issueUid, reason: 'superseded elsewhere', by: 'closer' });
+    await deleteIssue(store, {
+      uid: issueUid,
+      reason: 'superseded elsewhere',
+      by: 'closer',
+    });
     const trail = await readAuditTrail(store, issueRowid);
     expect(trail.map((r) => r.action)).toEqual(['created', 'deleted']);
     expect(trail[1].note).toBe('superseded elsewhere');
   });
 
   it('a SECOND delete against the same (now dead) uid throws IssueNotFoundError — never silently re-stamps over the first deletion', async () => {
-    await deleteIssue(store, { uid: issueUid, reason: 'first reason', by: 'closer-1' });
+    await deleteIssue(store, {
+      uid: issueUid,
+      reason: 'first reason',
+      by: 'closer-1',
+    });
     const firstStamp = await readNode(store, issueUid);
 
-    await expect(deleteIssue(store, { uid: issueUid, reason: 'second reason', by: 'closer-2' })).rejects.toThrow(IssueNotFoundError);
+    await expect(
+      deleteIssue(store, {
+        uid: issueUid,
+        reason: 'second reason',
+        by: 'closer-2',
+      })
+    ).rejects.toThrow(IssueNotFoundError);
 
     const stillFirst = await readNode(store, issueUid);
     expect(stillFirst?.metadata?.['invalidatedReason']).toBe('first reason');
@@ -130,13 +168,25 @@ describe('delete — bi-temporal soft-invalidate (SPEC.md §6.3.7, real store)',
   });
 
   it('IssueNotFoundError for a uid that never resolved to a live issue at all', async () => {
-    await expect(deleteIssue(store, { uid: 'not-a-real-uid', reason: 'whatever', by: 'closer' })).rejects.toThrow(IssueNotFoundError);
+    await expect(
+      deleteIssue(store, {
+        uid: 'not-a-real-uid',
+        reason: 'whatever',
+        by: 'closer',
+      })
+    ).rejects.toThrow(IssueNotFoundError);
   });
 
   it('InvalidArgumentError on missing/blank uid, by, or reason — before any write runs', async () => {
-    await expect(deleteIssue(store, { uid: '', reason: 'x', by: 'closer' })).rejects.toThrow(InvalidArgumentError);
-    await expect(deleteIssue(store, { uid: issueUid, reason: 'x', by: '   ' })).rejects.toThrow(InvalidArgumentError);
-    await expect(deleteIssue(store, { uid: issueUid, reason: '', by: 'closer' })).rejects.toThrow(InvalidArgumentError);
+    await expect(
+      deleteIssue(store, { uid: '', reason: 'x', by: 'closer' })
+    ).rejects.toThrow(InvalidArgumentError);
+    await expect(
+      deleteIssue(store, { uid: issueUid, reason: 'x', by: '   ' })
+    ).rejects.toThrow(InvalidArgumentError);
+    await expect(
+      deleteIssue(store, { uid: issueUid, reason: '', by: 'closer' })
+    ).rejects.toThrow(InvalidArgumentError);
 
     // None of the rejected calls above may have mutated the row.
     const row = await readNode(store, issueUid);
@@ -146,6 +196,8 @@ describe('delete — bi-temporal soft-invalidate (SPEC.md §6.3.7, real store)',
   it('rejects a blank reason WITHOUT resolving the uid first, still a genuine E_VALIDATION-before-any-driver-call', async () => {
     // Even an otherwise-nonexistent uid must fail on the blank `reason` check, never on
     // IssueNotFoundError — validation runs before any driver call (§4c).
-    await expect(deleteIssue(store, { uid: 'does-not-exist', reason: '  ', by: 'closer' })).rejects.toThrow(InvalidArgumentError);
+    await expect(
+      deleteIssue(store, { uid: 'does-not-exist', reason: '  ', by: 'closer' })
+    ).rejects.toThrow(InvalidArgumentError);
   });
 });

@@ -96,7 +96,9 @@ Examples:
   backlog serve --transport both --host 0.0.0.0
 `;
 
-function parseArgs(argv: string[]): Pick<StartOpts, 'transport' | 'port' | 'host'> {
+function parseArgs(
+  argv: string[]
+): Pick<StartOpts, 'transport' | 'port' | 'host'> {
   let transport: StartOpts['transport'] = 'mcp';
   let port: number | undefined;
   let host: string | undefined;
@@ -105,10 +107,15 @@ function parseArgs(argv: string[]): Pick<StartOpts, 'transport' | 'port' | 'host
     if (arg === '--transport') transport = argv[++i] as StartOpts['transport'];
     else if (arg === '--port') port = Number(argv[++i]);
     else if (arg === '--host') host = argv[++i];
-    else throw new BacklogUsageError(`backlog serve: unknown argument "${arg}" (expected --transport/--port/--host)`);
+    else
+      throw new BacklogUsageError(
+        `backlog serve: unknown argument "${arg}" (expected --transport/--port/--host)`
+      );
   }
   if (transport !== 'mcp' && transport !== 'http' && transport !== 'both') {
-    throw new BacklogUsageError(`backlog serve: --transport must be mcp|http|both, got "${transport}"`);
+    throw new BacklogUsageError(
+      `backlog serve: --transport must be mcp|http|both, got "${transport}"`
+    );
   }
   const opts: Pick<StartOpts, 'transport' | 'port' | 'host'> = { transport };
   if (port !== undefined) opts.port = port;
@@ -119,7 +126,10 @@ function parseArgs(argv: string[]): Pick<StartOpts, 'transport' | 'port' | 'host
 /** Runs until the process receives SIGTERM/SIGINT (the normal way a host
  *  process manager — or `.mcp.json`'s own stdio transport lifecycle — stops
  *  a long-lived MCP/HTTP server), then resolves cleanly. */
-export async function runServeCommand(argv: string[], opts: RunServeCommandOpts = {}): Promise<void> {
+export async function runServeCommand(
+  argv: string[],
+  opts: RunServeCommandOpts = {}
+): Promise<void> {
   if (argv.includes('--help') || argv.includes('-h')) {
     console.log(SERVE_HELP_TEXT);
     return;
@@ -128,7 +138,8 @@ export async function runServeCommand(argv: string[], opts: RunServeCommandOpts 
   try {
     parsed = parseArgs(argv);
   } catch (err) {
-    if (err instanceof BacklogUsageError) return failUsage(err, SERVE_HELP_TEXT);
+    if (err instanceof BacklogUsageError)
+      return failUsage(err, SERVE_HELP_TEXT);
     throw err;
   }
   const controller = new AbortController();
@@ -140,18 +151,26 @@ export async function runServeCommand(argv: string[], opts: RunServeCommandOpts 
   // `await`) runs to completion in THIS tick, before this function ever
   // reaches the `initTelemetry` call below — so telemetry's file I/O can
   // never precede lock acquisition. See the file-level doc comment.
-  const serverPromise = startBacklogServer({ ...parsed, ...opts, signal: controller.signal });
+  const serverPromise = startBacklogServer({
+    ...parsed,
+    ...opts,
+    signal: controller.signal,
+  });
   // BUG-014: re-stamp this process as the live-service population before
   // any request handling starts — see the file-level doc comment above.
   // Non-fatal by design, matching the bin-entry guard's own contract:
   // telemetry must never take the server down.
   try {
-    initTelemetry({ service: 'backlog', role: 'live-service', logSink: 'file' });
+    initTelemetry({
+      service: 'backlog',
+      role: 'live-service',
+      logSink: 'file',
+    });
   } catch (err) {
     console.error(
       `[sox-telemetry] WARNING: initTelemetry failed for serve (${
         err instanceof Error ? err.message : String(err)
-      }); telemetry records will be silently dropped this process`,
+      }); telemetry records will be silently dropped this process`
     );
   }
   await serverPromise;

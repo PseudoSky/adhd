@@ -137,7 +137,10 @@ export interface ITransitionOutcome {
   transitionUid: string;
 }
 
-function assertNonBlank(field: string, value: string | undefined): asserts value is string {
+function assertNonBlank(
+  field: string,
+  value: string | undefined
+): asserts value is string {
   // `typeof value !== 'string'` (rather than `=== undefined`) also catches an
   // explicit `null` — reachable from an untyped CLI/HTTP/MCP JSON caller even
   // though `ITransitionInput`'s TS type only declares `string | undefined` —
@@ -169,32 +172,39 @@ interface IRawEdgeDstRow {
  * citation-sha resolve (no lock held) and the authoritative in-transaction
  * resolve (the transaction's own snapshot).
  */
-async function resolveIssueProjectTx(tx: AdapterTransaction, issueRowid: number): Promise<IResolvedProjectRow> {
+async function resolveIssueProjectTx(
+  tx: AdapterTransaction,
+  issueRowid: number
+): Promise<IResolvedProjectRow> {
   const componentEdge = await tx.executeGet<IRawEdgeSrcRow>(
     'SELECT src FROM edge WHERE dst = ? AND rel = ? AND t_invalid IS NULL',
-    [issueRowid, 'owns_component'],
+    [issueRowid, 'owns_component']
   );
   if (!componentEdge) {
     throw new Error(
       `transition: issue rowid=${issueRowid} has no live "owns_component" edge — graph invariant violation ` +
-        '(every live issue must own exactly one live parent component).',
+        '(every live issue must own exactly one live parent component).'
     );
   }
   const projectEdge = await tx.executeGet<IRawEdgeSrcRow>(
     'SELECT src FROM edge WHERE dst = ? AND rel = ? AND t_invalid IS NULL',
-    [componentEdge.src, 'owns_project'],
+    [componentEdge.src, 'owns_project']
   );
   if (!projectEdge) {
     throw new Error(
       `transition: component rowid=${componentEdge.src} has no live "owns_project" edge — graph invariant violation ` +
-        '(every live component must be owned by exactly one live project).',
+        '(every live component must be owned by exactly one live project).'
     );
   }
   const projectRow = await getNodeByRowidTx(tx, projectEdge.src);
-  if (!projectRow || projectRow.kind !== 'project' || projectRow.tInvalid !== null) {
+  if (
+    !projectRow ||
+    projectRow.kind !== 'project' ||
+    projectRow.tInvalid !== null
+  ) {
     throw new Error(
       `transition: resolved project rowid=${projectEdge.src} is missing, invalidated, or not a "project" node — ` +
-        'graph invariant violation.',
+        'graph invariant violation.'
     );
   }
   return {
@@ -211,14 +221,24 @@ async function resolveIssueProjectTx(tx: AdapterTransaction, issueRowid: number)
  * package's established per-file convention (see this file's own doc
  * comment on {@link resolveIssueProjectTx}).
  */
-async function computeCitationSha(project: IResolvedProjectRow, file: string): Promise<string> {
+async function computeCitationSha(
+  project: IResolvedProjectRow,
+  file: string
+): Promise<string> {
   const projectPath = project.metadata?.path;
-  if (typeof projectPath !== 'string' || projectPath.length === 0) return 'unverified';
+  if (typeof projectPath !== 'string' || projectPath.length === 0)
+    return 'unverified';
 
   const root = resolvePath(projectPath);
-  const candidate = isAbsolute(file) ? resolvePath(file) : resolvePath(root, file);
+  const candidate = isAbsolute(file)
+    ? resolvePath(file)
+    : resolvePath(root, file);
   const rel = relative(root, candidate);
-  const escapesRoot = rel === '..' || rel.startsWith(`..${'/'}`) || rel.startsWith('..\\') || isAbsolute(rel);
+  const escapesRoot =
+    rel === '..' ||
+    rel.startsWith(`..${'/'}`) ||
+    rel.startsWith('..\\') ||
+    isAbsolute(rel);
   if (escapesRoot) return 'unverified';
 
   try {
@@ -233,7 +253,10 @@ async function computeCitationSha(project: IResolvedProjectRow, file: string): P
 
 function enforceAllowedStatus(allowed: readonly string[], value: string): void {
   if (allowed.length > 0 && !allowed.includes(value)) {
-    throw new InvalidArgumentError('toStatus', `"${value}" is not in this project's allowed status set`);
+    throw new InvalidArgumentError(
+      'toStatus',
+      `"${value}" is not in this project's allowed status set`
+    );
   }
 }
 
@@ -243,12 +266,22 @@ function enforceAllowedStatus(allowed: readonly string[], value: string): void {
  * `transition`'s static `{status, note}` input surface) is skipped rather
  * than treated as missing.
  */
-function enforceRequiredFields(required: readonly string[], resolvedValues: Record<string, unknown>): void {
+function enforceRequiredFields(
+  required: readonly string[],
+  resolvedValues: Record<string, unknown>
+): void {
   for (const field of required) {
     if (!(field in resolvedValues)) continue;
     const value = resolvedValues[field];
-    if (value === undefined || value === null || (typeof value === 'string' && value.trim().length === 0)) {
-      throw new InvalidArgumentError(field, 'is required by this project\'s field policy');
+    if (
+      value === undefined ||
+      value === null ||
+      (typeof value === 'string' && value.trim().length === 0)
+    ) {
+      throw new InvalidArgumentError(
+        field,
+        "is required by this project's field policy"
+      );
     }
   }
 }
@@ -273,7 +306,10 @@ function enforceRequiredFields(required: readonly string[], resolvedValues: Reco
  * requires a real hash), `WriteContentionError`/`WriteIOError` (§4c — an
  * exhausted driver-level retry on the underlying `immediate` transaction).
  */
-export async function transition(handle: IWriteStoreHandle, input: ITransitionInput): Promise<ITransitionOutcome> {
+export async function transition(
+  handle: IWriteStoreHandle,
+  input: ITransitionInput
+): Promise<ITransitionOutcome> {
   assertNonBlank('uid', input.uid);
   assertNonBlank('by', input.by);
   assertNonBlank('toStatus', input.toStatus);
@@ -288,10 +324,17 @@ export async function transition(handle: IWriteStoreHandle, input: ITransitionIn
   const citationShas: string[] = [];
   if (citations.length > 0) {
     const preIssueRow = await getNodeByUidTx(handle.adapter, input.uid);
-    if (!preIssueRow || preIssueRow.kind !== 'issue' || preIssueRow.tInvalid !== null) {
+    if (
+      !preIssueRow ||
+      preIssueRow.kind !== 'issue' ||
+      preIssueRow.tInvalid !== null
+    ) {
       throw new IssueNotFoundError(input.uid);
     }
-    const preProject = await resolveIssueProjectTx(handle.adapter, preIssueRow.rowid);
+    const preProject = await resolveIssueProjectTx(
+      handle.adapter,
+      preIssueRow.rowid
+    );
     const prePolicy = resolveProjectPolicy(preProject);
     for (const citation of citations) {
       const sha = await computeCitationSha(preProject, citation.file);
@@ -317,19 +360,23 @@ export async function transition(handle: IWriteStoreHandle, input: ITransitionIn
 
     const currentStatusEdge = await tx.executeGet<IRawEdgeDstRow>(
       'SELECT dst FROM edge WHERE src = ? AND rel = ? AND t_invalid IS NULL',
-      [issueRow.rowid, 'has_status'],
+      [issueRow.rowid, 'has_status']
     );
     if (!currentStatusEdge) {
       throw new Error(
         `transition: issue rowid=${issueRow.rowid} has no live "has_status" edge — graph invariant violation ` +
-          '(every live issue must carry exactly one live status).',
+          '(every live issue must carry exactly one live status).'
       );
     }
     const currentStatusRow = await getNodeByRowidTx(tx, currentStatusEdge.dst);
-    if (!currentStatusRow || currentStatusRow.kind !== 'status' || currentStatusRow.tInvalid !== null) {
+    if (
+      !currentStatusRow ||
+      currentStatusRow.kind !== 'status' ||
+      currentStatusRow.tInvalid !== null
+    ) {
       throw new Error(
         `transition: resolved status rowid=${currentStatusEdge.dst} is missing, invalidated, or not a "status" node — ` +
-          'graph invariant violation.',
+          'graph invariant violation.'
       );
     }
     const fromStatusName = currentStatusRow.name ?? '';
@@ -341,11 +388,15 @@ export async function transition(handle: IWriteStoreHandle, input: ITransitionIn
       mintMetadata: async () => ({ terminal: false }),
     });
     enforceAllowedStatus(policy.allowedStatuses, toStatusRow.name);
-    enforceRequiredFields(policy.requiredFields, { status: toStatusRow.name, note: input.note });
+    enforceRequiredFields(policy.requiredFields, {
+      status: toStatusRow.name,
+      note: input.note,
+    });
     const toStatusFullRow = await getNodeByRowidTx(tx, toStatusRow.rowid);
     const toTerminal = toStatusFullRow?.metadata?.['terminal'] === true;
 
-    const hasNote = typeof input.note === 'string' && input.note.trim().length > 0;
+    const hasNote =
+      typeof input.note === 'string' && input.note.trim().length > 0;
     if (!hasNote && policy.transitionRequiresNote) {
       throw new NoteRequiredError(issueRow.uid);
     }
@@ -366,7 +417,9 @@ export async function transition(handle: IWriteStoreHandle, input: ITransitionIn
       note: input.note ?? null,
       at: now,
     };
-    const transitionSha = sha256Hex(canonicalJSONStringify(canonicalTransitionFields));
+    const transitionSha = sha256Hex(
+      canonicalJSONStringify(canonicalTransitionFields)
+    );
 
     const transitionNode = await writeNodeTx(tx, {
       kind: 'transition',
@@ -385,9 +438,15 @@ export async function transition(handle: IWriteStoreHandle, input: ITransitionIn
     const hasTransitionRule = await resolveEdgeKindTx(tx, 'has_transition');
     await writeEdgeTx(tx, {
       at: now,
-      srcRowid: issueRow.rowid, srcUid: issueRow.uid, srcKind: 'issue',
-      dstRowid: transitionNode.rowid, dstUid: transitionNode.uid, dstKind: 'transition',
-      rel: 'has_transition', rule: hasTransitionRule, typePolicy: handle.typePolicy,
+      srcRowid: issueRow.rowid,
+      srcUid: issueRow.uid,
+      srcKind: 'issue',
+      dstRowid: transitionNode.rowid,
+      dstUid: transitionNode.uid,
+      dstKind: 'transition',
+      rel: 'has_transition',
+      rule: hasTransitionRule,
+      typePolicy: handle.typePolicy,
     });
 
     // The actual status change: invalidate the OLD `has_status` edge, write
@@ -398,15 +457,24 @@ export async function transition(handle: IWriteStoreHandle, input: ITransitionIn
     // `move`'s explicit same-placement no-op, §6.3.6) — this invalidates and
     // re-writes the SAME edge, harmlessly refreshing its timestamps.
     await invalidateEdgeTx(tx, {
-      srcRowid: issueRow.rowid, dstRowid: currentStatusEdge.dst, rel: 'has_status',
-      reason: `transitioned to "${toStatusRow.name}"`, at: now,
+      srcRowid: issueRow.rowid,
+      dstRowid: currentStatusEdge.dst,
+      rel: 'has_status',
+      reason: `transitioned to "${toStatusRow.name}"`,
+      at: now,
     });
     const hasStatusRule = await resolveEdgeKindTx(tx, 'has_status');
     await writeEdgeTx(tx, {
       at: now,
-      srcRowid: issueRow.rowid, srcUid: issueRow.uid, srcKind: 'issue',
-      dstRowid: toStatusRow.rowid, dstUid: toStatusRow.uid, dstKind: 'status',
-      rel: 'has_status', rule: hasStatusRule, typePolicy: handle.typePolicy,
+      srcRowid: issueRow.rowid,
+      srcUid: issueRow.uid,
+      srcKind: 'issue',
+      dstRowid: toStatusRow.rowid,
+      dstUid: toStatusRow.uid,
+      dstKind: 'status',
+      rel: 'has_status',
+      rule: hasStatusRule,
+      typePolicy: handle.typePolicy,
     });
 
     if (citations.length > 0) {
@@ -431,25 +499,36 @@ export async function transition(handle: IWriteStoreHandle, input: ITransitionIn
         });
         await writeEdgeTx(tx, {
           at: now,
-          srcRowid: issueRow.rowid, srcUid: issueRow.uid, srcKind: 'issue',
-          dstRowid: citationNode.rowid, dstUid: citationNode.uid, dstKind: 'citation',
-          rel: 'has_citation', rule: hasCitationRule, typePolicy: handle.typePolicy,
+          srcRowid: issueRow.rowid,
+          srcUid: issueRow.uid,
+          srcKind: 'issue',
+          dstRowid: citationNode.rowid,
+          dstUid: citationNode.uid,
+          dstKind: 'citation',
+          rel: 'has_citation',
+          rule: hasCitationRule,
+          typePolicy: handle.typePolicy,
         });
       }
     }
 
     // §6.3.4's closedAt stamp/clear — see this file's own doc comment.
-    const newIssueMetadata: Record<string, unknown> = { ...(issueRow.metadata ?? {}) };
+    const newIssueMetadata: Record<string, unknown> = {
+      ...(issueRow.metadata ?? {}),
+    };
     if (toTerminal) {
       newIssueMetadata.closedAt = now;
     } else {
       delete newIssueMetadata.closedAt;
     }
-    const touchResult = await tx.executeRun('UPDATE node SET meta = ?, t_updated = ? WHERE rowid = ?', [
-      JSON.stringify(newIssueMetadata), now, issueRow.rowid,
-    ]);
+    const touchResult = await tx.executeRun(
+      'UPDATE node SET meta = ?, t_updated = ? WHERE rowid = ?',
+      [JSON.stringify(newIssueMetadata), now, issueRow.rowid]
+    );
     if (touchResult.rowsAffected !== 1) {
-      throw new Error(`transition: closedAt touch UPDATE affected ${touchResult.rowsAffected} rows for rowid=${issueRow.rowid}, expected exactly 1.`);
+      throw new Error(
+        `transition: closedAt touch UPDATE affected ${touchResult.rowsAffected} rows for rowid=${issueRow.rowid}, expected exactly 1.`
+      );
     }
 
     await writeAudit({

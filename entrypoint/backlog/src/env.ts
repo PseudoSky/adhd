@@ -6,10 +6,17 @@
  */
 import { join } from 'node:path';
 import { Environment } from '@adhd/environment';
-import type { EnvironmentOptions, EnvironmentSpec, Scope } from '@adhd/environment-base-spec';
+import type {
+  EnvironmentOptions,
+  EnvironmentSpec,
+  Scope,
+} from '@adhd/environment-base-spec';
 
 export interface BacklogConfig {
-  readonly db: { readonly path: string | undefined; readonly busyTimeoutMs: number };
+  readonly db: {
+    readonly path: string | undefined;
+    readonly busyTimeoutMs: number;
+  };
   readonly logging: { readonly level: string };
   /**
    * RAG-SPEC.md §1.6 — the opt-in embedding/vector stack. `enabled` defaults
@@ -17,7 +24,11 @@ export interface BacklogConfig {
    * existed (every semantic input answers `RagNotConfiguredError`, §5a), so
    * a host opts IN deliberately and nothing is ever switched on implicitly.
    */
-  readonly embedding: { readonly enabled: boolean; readonly provider: string; readonly model: string };
+  readonly embedding: {
+    readonly enabled: boolean;
+    readonly provider: string;
+    readonly model: string;
+  };
 }
 
 export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
@@ -46,14 +57,15 @@ export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
     'db.path': {
       type: 'string',
       env: 'ADHD_BACKLOG_DATABASE_PATH',
-      description: 'Backlog graph DB path. Unset ⇒ falls back to env.files.db under the resolved scope root.',
+      description:
+        'Backlog graph DB path. Unset ⇒ falls back to env.files.db under the resolved scope root.',
     },
     'db.busyTimeoutMs': {
       type: 'integer',
       env: 'ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS',
       default: 5000,
       description:
-        'The store adapter\'s `busy_timeout` (ms) each write waits for a contended lock before retrying (DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001). ' +
+        "The store adapter's `busy_timeout` (ms) each write waits for a contended lock before retrying (DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001). " +
         'Raise this when scaling toward more concurrent agents writing the same global-scope store.',
     },
     'logging.level': {
@@ -77,7 +89,8 @@ export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
       type: 'string',
       env: 'ADHD_BACKLOG_EMBEDDING_PROVIDER',
       default: 'fastembed',
-      description: "Embedding provider type, forwarded verbatim to @adhd/sox-embedding-provider's createEmbeddingProvider ('fastembed' | 'remote').",
+      description:
+        "Embedding provider type, forwarded verbatim to @adhd/sox-embedding-provider's createEmbeddingProvider ('fastembed' | 'remote').",
     },
     'embedding.model': {
       type: 'string',
@@ -117,15 +130,22 @@ export interface BuildBacklogEnvOptions {
   instanceId?: string;
 }
 
-export function buildBacklogEnv(options: BuildBacklogEnvOptions = {}): Environment<BacklogConfig> {
+export function buildBacklogEnv(
+  options: BuildBacklogEnvOptions = {}
+): Environment<BacklogConfig> {
   const envOptions: EnvironmentOptions = {
     namespace: 'production',
     scope: resolveBacklogScope(options.scope),
   };
   if (options.adhdRoot !== undefined) envOptions.adhdRoot = options.adhdRoot;
   if (options.cwd !== undefined) envOptions.cwd = options.cwd;
-  if (options.instanceId !== undefined) envOptions.instanceId = options.instanceId;
-  return new Environment<BacklogConfig>('backlog', backlogEnvironmentSpec, envOptions);
+  if (options.instanceId !== undefined)
+    envOptions.instanceId = options.instanceId;
+  return new Environment<BacklogConfig>(
+    'backlog',
+    backlogEnvironmentSpec,
+    envOptions
+  );
 }
 
 /**
@@ -159,7 +179,10 @@ export function resolveBacklogDbPath(env: Environment<BacklogConfig>): string {
  * `${agentName}:${instanceId}`. Exposed as a plain helper, never baked into
  * `claimItem` itself.
  */
-export function suggestClaimantIdentity(agentName: string, instanceId: string): string {
+export function suggestClaimantIdentity(
+  agentName: string,
+  instanceId: string
+): string {
   return `${agentName}:${instanceId}`;
 }
 
@@ -192,12 +215,27 @@ export function suggestClaimantIdentity(agentName: string, instanceId: string): 
  * `buildBacklogEnv`'s own test-isolation fields) — production callers never
  * pass them.
  */
-export function resolveIrCacheFile(options: { adhdRoot?: string; instanceId?: string } = {}): string {
+export function resolveIrCacheFile(
+  options: { adhdRoot?: string; instanceId?: string } = {}
+): string {
   const fromEnv = process.env['APIGEN_IR_CACHE_FILE'];
   if (fromEnv) return fromEnv;
-  const envOptions: EnvironmentOptions = { namespace: 'production', scope: 'global' };
+  const envOptions: EnvironmentOptions = {
+    namespace: 'production',
+    scope: 'global',
+  };
   if (options.adhdRoot !== undefined) envOptions.adhdRoot = options.adhdRoot;
-  if (options.instanceId !== undefined) envOptions.instanceId = options.instanceId;
-  const env = new Environment<BacklogConfig>('backlog', backlogEnvironmentSpec, envOptions);
-  return join(env.paths['cache'] as string, 'apigen', 'ir-cache', 'backlog-client.ir.json');
+  if (options.instanceId !== undefined)
+    envOptions.instanceId = options.instanceId;
+  const env = new Environment<BacklogConfig>(
+    'backlog',
+    backlogEnvironmentSpec,
+    envOptions
+  );
+  return join(
+    env.paths['cache'] as string,
+    'apigen',
+    'ir-cache',
+    'backlog-client.ir.json'
+  );
 }

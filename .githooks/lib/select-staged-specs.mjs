@@ -74,7 +74,9 @@ function findProjectRoot(fileAbsDir) {
 }
 
 function loadProjectMeta(projectRoot) {
-  const pj = JSON.parse(readFileSync(path.join(projectRoot, 'project.json'), 'utf8'));
+  const pj = JSON.parse(
+    readFileSync(path.join(projectRoot, 'project.json'), 'utf8')
+  );
   const testTarget = pj.targets?.test;
   return {
     name: pj.name ?? path.basename(projectRoot),

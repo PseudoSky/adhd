@@ -29,7 +29,11 @@ import {
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
 import { createIssue } from '../write/create-issue.js';
 import { InvalidArgumentError } from '../write/errors.js';
-import { queryIssues, resolveTextInput, type IQueryStoreHandle } from './query.js';
+import {
+  queryIssues,
+  resolveTextInput,
+  type IQueryStoreHandle,
+} from './query.js';
 import {
   bootstrapSemanticBackend,
   configureSemanticBackend,
@@ -51,7 +55,8 @@ describe('IIssueQueryInput.text — grep route (real store, no semantic backend 
     expect(isSemanticSearchConfigured()).toBe(false);
     dir = freshTmpDir('query-text-routing-grep');
     store = await openTestIssueStore(join(dir, 'backlog.db'));
-    projectUid = (await seedProject(store, 'text-routing-grep-project')).projectUid;
+    projectUid = (await seedProject(store, 'text-routing-grep-project'))
+      .projectUid;
   });
 
   afterEach(async () => {
@@ -74,20 +79,27 @@ describe('IIssueQueryInput.text — grep route (real store, no semantic backend 
     });
 
     const result = await queryIssues(store, { text: 'publish gate' });
-    if (result.view !== 'list') throw new Error(`expected view 'list', got '${result.view}'`);
+    if (result.view !== 'list')
+      throw new Error(`expected view 'list', got '${result.view}'`);
     const uids = result.items.map((i) => i.uid);
     expect(uids).toContain(target.uid);
     expect(uids).not.toContain(unrelated.uid);
   });
 
   it('throws InvalidArgumentError naming "text" when filter.grep is also explicitly set', async () => {
-    const attempt = queryIssues(store, { text: 'publish gate', filter: { grep: 'publish' } });
+    const attempt = queryIssues(store, {
+      text: 'publish gate',
+      filter: { grep: 'publish' },
+    });
     await expect(attempt).rejects.toBeInstanceOf(InvalidArgumentError);
     await expect(attempt).rejects.toMatchObject({ field: 'text' });
   });
 
   it('throws InvalidArgumentError naming "text" when filter.semantic is also explicitly set', async () => {
-    const attempt = queryIssues(store, { text: 'publish gate', filter: { semantic: 'publish' } });
+    const attempt = queryIssues(store, {
+      text: 'publish gate',
+      filter: { semantic: 'publish' },
+    });
     await expect(attempt).rejects.toBeInstanceOf(InvalidArgumentError);
     await expect(attempt).rejects.toMatchObject({ field: 'text' });
   });
@@ -112,7 +124,10 @@ describe('resolveTextInput — sort precedence (direct unit test; see file heade
   });
 
   it('an explicit sort is NOT overwritten by the derived default', () => {
-    const resolved = resolveTextInput(bareHandle, { text: 'publish gate', sort: 'created' });
+    const resolved = resolveTextInput(bareHandle, {
+      text: 'publish gate',
+      sort: 'created',
+    });
     expect(resolved.sort).toBe('created');
   });
 
@@ -147,23 +162,40 @@ describe('IIssueQueryInput.text — semantic route (real fastembed + real Turso 
       expect(isSemanticSearchConfigured()).toBe(false);
       dir = freshTmpDir('query-text-routing-semantic');
       const bareStore = await openTestIssueStore(join(dir, 'backlog.db'));
-      const result = await bootstrapSemanticBackend(bareStore as unknown as GraphBacklogStore, { embedding: EMBEDDING });
+      const result = await bootstrapSemanticBackend(
+        bareStore as unknown as GraphBacklogStore,
+        { embedding: EMBEDDING }
+      );
       if (!result.ok) {
-        throw new Error(`real semantic backend unavailable (${result.failure.reason}): ${result.failure.detail}`);
+        throw new Error(
+          `real semantic backend unavailable (${result.failure.reason}): ${result.failure.detail}`
+        );
       }
       const backend = result.backend;
       configureSemanticBackend(backend);
 
-      const vec = await openTursoVectorStore(bareStore.adapter, { dim: backend.dim, modelId: backend.modelId });
-      const search = { backend: new StoreSearchBackend(vec, bareStore.graph), embedQuery: (text: string) => backend.embedQuery(text) };
-      const handle: TestIssueStore & { embedding: typeof backend; search: typeof search } = {
+      const vec = await openTursoVectorStore(bareStore.adapter, {
+        dim: backend.dim,
+        modelId: backend.modelId,
+      });
+      const search = {
+        backend: new StoreSearchBackend(vec, bareStore.graph),
+        embedQuery: (text: string) => backend.embedQuery(text),
+      };
+      const handle: TestIssueStore & {
+        embedding: typeof backend;
+        search: typeof search;
+      } = {
         ...bareStore,
         embedding: backend,
         search,
       };
       store = bareStore;
 
-      const { projectUid } = await seedProject(bareStore, 'text-routing-semantic-project');
+      const { projectUid } = await seedProject(
+        bareStore,
+        'text-routing-semantic-project'
+      );
 
       // Deliberately shares no meaningful token with the target title/body —
       // only a real semantic (not keyword/FTS) match can find it.
@@ -174,7 +206,12 @@ describe('IIssueQueryInput.text — semantic route (real fastembed + real Turso 
         by: 'filer',
         awaitEmbed: true,
       });
-      if (!target.created || !target.uid) throw new Error(`expected the target issue to be created, got ${JSON.stringify(target)}`);
+      if (!target.created || !target.uid)
+        throw new Error(
+          `expected the target issue to be created, got ${JSON.stringify(
+            target
+          )}`
+        );
       const unrelated = await createIssue(handle, {
         project: projectUid,
         title: 'Storybook theme tokens drift between builds',
@@ -182,10 +219,18 @@ describe('IIssueQueryInput.text — semantic route (real fastembed + real Turso 
         by: 'filer',
         awaitEmbed: true,
       });
-      if (!unrelated.created || !unrelated.uid) throw new Error(`expected the unrelated issue to be created, got ${JSON.stringify(unrelated)}`);
+      if (!unrelated.created || !unrelated.uid)
+        throw new Error(
+          `expected the unrelated issue to be created, got ${JSON.stringify(
+            unrelated
+          )}`
+        );
 
-      const queried = await queryIssues(handle, { text: 'the embedding length does not match the configured dimension' });
-      if (queried.view !== 'list') throw new Error(`expected view 'list', got '${queried.view}'`);
+      const queried = await queryIssues(handle, {
+        text: 'the embedding length does not match the configured dimension',
+      });
+      if (queried.view !== 'list')
+        throw new Error(`expected view 'list', got '${queried.view}'`);
       const uids = queried.items.map((i) => i.uid);
       // Only two issues exist in this store, so BOTH are returned by a
       // ranked search over the whole corpus (there is no relevance-threshold
@@ -195,8 +240,10 @@ describe('IIssueQueryInput.text — semantic route (real fastembed + real Turso 
       // fell through to grep) would not, since neither title/body shares any
       // token with the query text.
       expect(uids[0]).toBe(target.uid);
-      expect(uids.indexOf(target.uid)).toBeLessThan(uids.indexOf(unrelated.uid));
+      expect(uids.indexOf(target.uid)).toBeLessThan(
+        uids.indexOf(unrelated.uid)
+      );
     },
-    E2E_TIMEOUT,
+    E2E_TIMEOUT
   );
 });

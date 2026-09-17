@@ -23,7 +23,15 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,9 +40,17 @@ import { getIssue } from './query/get.js';
 import { seedProject } from './test/helpers/open-test-issue-store.js';
 import type { BacklogCtx } from './api.js';
 import { buildBacklogEnv } from './env.js';
-import { openGraphBacklogStore, closeGraphBacklogStore } from './store/graph-backlog-store.js';
+import {
+  openGraphBacklogStore,
+  closeGraphBacklogStore,
+} from './store/graph-backlog-store.js';
 import { buildBacklogApigenPackage } from './server.js';
-import { resolveCommandPrefix, prefixCommand, resolveMountNamespaces, USE_PLUGINS } from './cli.js';
+import {
+  resolveCommandPrefix,
+  prefixCommand,
+  resolveMountNamespaces,
+  USE_PLUGINS,
+} from './cli.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
@@ -46,7 +62,11 @@ interface SpawnResult {
 }
 
 /** Spawns the REAL built `backlog` bin as a genuine child process. Never imported. */
-function runBin(args: string[], cwd: string, extraEnv: Record<string, string> = {}): SpawnResult {
+function runBin(
+  args: string[],
+  cwd: string,
+  extraEnv: Record<string, string> = {}
+): SpawnResult {
   const result = spawnSync(process.execPath, [DIST_INDEX, ...args], {
     cwd,
     // `ADHD_BACKLOG_SCOPE=project` + a fresh, empty `cwd` with no ancestor
@@ -62,9 +82,17 @@ function runBin(args: string[], cwd: string, extraEnv: Record<string, string> = 
     timeout: 30_000,
   });
   if (result.error) {
-    throw new Error(`spawn failed for ${DIST_INDEX} ${JSON.stringify(args)}: ${String(result.error)}`);
+    throw new Error(
+      `spawn failed for ${DIST_INDEX} ${JSON.stringify(args)}: ${String(
+        result.error
+      )}`
+    );
   }
-  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+  return {
+    status: result.status,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
 }
 
 /**
@@ -114,7 +142,13 @@ async function seedIssue(
     // several tests, which can otherwise trip the scan's own dedupe
     // threshold against an unrelated sibling item and suppress the write
     // entirely (`{created:false, reason:'duplicate-suppressed'}`).
-    const created = await createIssue(store, { project: projectUid, title, body, by: 'cli.spec', duplicateAction: 'force' });
+    const created = await createIssue(store, {
+      project: projectUid,
+      title,
+      body,
+      by: 'cli.spec',
+      duplicateAction: 'force',
+    });
     if (!created.uid) throw new Error('createIssue did not mint a uid');
     return { uid: created.uid, projectUid };
   } finally {
@@ -162,12 +196,9 @@ describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (
   });
 
   it('prefixCommand prepends the real prefix to a BARE user command (what a human actually types)', () => {
-    expect(prefixCommand(['get', '--input', '{}'], ['backlog'], new Set())).toEqual([
-      'backlog',
-      'get',
-      '--input',
-      '{}',
-    ]);
+    expect(
+      prefixCommand(['get', '--input', '{}'], ['backlog'], new Set())
+    ).toEqual(['backlog', 'get', '--input', '{}']);
   });
 
   it('prefixCommand is idempotent — an already-fully-prefixed argv is NEVER double-prefixed', () => {
@@ -177,8 +208,10 @@ describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (
     ]);
   });
 
-  it('prefixCommand leaves a leading --help/-h flag untouched (never shadows run()\'s own top-level --help short-circuit)', () => {
-    expect(prefixCommand(['--help'], ['backlog'], new Set())).toEqual(['--help']);
+  it("prefixCommand leaves a leading --help/-h flag untouched (never shadows run()'s own top-level --help short-circuit)", () => {
+    expect(prefixCommand(['--help'], ['backlog'], new Set())).toEqual([
+      '--help',
+    ]);
     expect(prefixCommand(['-h'], ['backlog'], new Set())).toEqual(['-h']);
   });
 
@@ -220,19 +253,27 @@ describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (
     const reserved = resolveMountNamespaces(USE_PLUGINS, operations, 'backlog');
     expect(reserved.has('batch')).toBe(true);
     expect(
-      prefixCommand(['batch', 'action', '--operation', 'backlog/create', '--items', '[]'], ['backlog'], reserved)
-    ).toEqual(['batch', 'action', '--operation', 'backlog/create', '--items', '[]']);
+      prefixCommand(
+        ['batch', 'action', '--operation', 'backlog/create', '--items', '[]'],
+        ['backlog'],
+        reserved
+      )
+    ).toEqual([
+      'batch',
+      'action',
+      '--operation',
+      'backlog/create',
+      '--items',
+      '[]',
+    ]);
   });
 
   it('prefixCommand still prefixes an ordinary bare api.ts command whose name happens to differ from any reserved namespace', async () => {
     const { operations } = await buildBacklogApigenPackage({} as BacklogCtx);
     const reserved = resolveMountNamespaces(USE_PLUGINS, operations, 'backlog');
-    expect(prefixCommand(['get', '--input', '{}'], ['backlog'], reserved)).toEqual([
-      'backlog',
-      'get',
-      '--input',
-      '{}',
-    ]);
+    expect(
+      prefixCommand(['get', '--input', '{}'], ['backlog'], reserved)
+    ).toEqual(['backlog', 'get', '--input', '{}']);
   });
 });
 
@@ -252,7 +293,9 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
   it('no args exits 0 and prints the live, namespace-prefixed command listing', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-noargs-'));
     const res = runBin([], adhdRoot);
-    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
+      0
+    );
     // The mounted command table lists every one of api.ts's live verbs —
     // not a hand-maintained subset.
     expect(res.stdout).toContain('backlog get');
@@ -263,20 +306,28 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
   it('--help exits 0 with the identical usage listing', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-help-'));
     const res = runBin(['--help'], adhdRoot);
-    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
+      0
+    );
     expect(res.stdout).toContain('backlog get');
   });
 
   it('BUG-BACKLOG-001: --help and no-args surface the special-cased commands (install-skill/install/serve) that never enter the apigen command table', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-help-special-'));
     const help = runBin(['--help'], adhdRoot);
-    expect(help.status, `stderr:\n${help.stderr}\nstdout:\n${help.stdout}`).toBe(0);
+    expect(
+      help.status,
+      `stderr:\n${help.stderr}\nstdout:\n${help.stdout}`
+    ).toBe(0);
     expect(help.stdout).toContain('Special commands');
     expect(help.stdout).toContain('install-skill');
     expect(help.stdout).toContain('serve');
 
     const noArgs = runBin([], adhdRoot);
-    expect(noArgs.status, `stderr:\n${noArgs.stderr}\nstdout:\n${noArgs.stdout}`).toBe(0);
+    expect(
+      noArgs.status,
+      `stderr:\n${noArgs.stderr}\nstdout:\n${noArgs.stdout}`
+    ).toBe(0);
     expect(noArgs.stdout).toContain('Special commands');
     expect(noArgs.stdout).toContain('install-skill');
   });
@@ -287,20 +338,36 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     // identical scope/cwd/adhdRoot triple `runBin`'s spawned process sees via
     // ADHD_BACKLOG_SCOPE=project + cwd=adhdRoot) — never opened directly here.
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-eager-open-'));
-    const expectedDbPath = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot }).files.db;
-    expect(existsSync(expectedDbPath), 'sanity: no store should exist before the CLI ever runs').toBe(false);
+    const expectedDbPath = buildBacklogEnv({
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+    }).files.db;
+    expect(
+      existsSync(expectedDbPath),
+      'sanity: no store should exist before the CLI ever runs'
+    ).toBe(false);
 
     const noArgs = runBin([], adhdRoot);
     expect(noArgs.status, `stderr:\n${noArgs.stderr}`).toBe(0);
-    expect(existsSync(expectedDbPath), 'a bare no-args invocation must not create the store').toBe(false);
+    expect(
+      existsSync(expectedDbPath),
+      'a bare no-args invocation must not create the store'
+    ).toBe(false);
 
     const help = runBin(['--help'], adhdRoot);
     expect(help.status, `stderr:\n${help.stderr}`).toBe(0);
-    expect(existsSync(expectedDbPath), 'a --help invocation must not create the store').toBe(false);
+    expect(
+      existsSync(expectedDbPath),
+      'a --help invocation must not create the store'
+    ).toBe(false);
 
     const unknown = runBin(['totally-bogus-command'], adhdRoot);
     expect(unknown.status).not.toBe(0);
-    expect(existsSync(expectedDbPath), 'an unrecognized command must not create the store either — it never reaches a real function').toBe(false);
+    expect(
+      existsSync(expectedDbPath),
+      'an unrecognized command must not create the store either — it never reaches a real function'
+    ).toBe(false);
 
     // Sanity check the assertion itself has teeth: a command that DOES reach
     // a real function (`query`, on an empty/nonexistent store) MUST create
@@ -308,7 +375,10 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     // just trivially false for an unrelated reason.
     const real = runBin(['query', '--input', '{}'], adhdRoot);
     expect(real.status, `stderr:\n${real.stderr}`).toBe(0);
-    expect(existsSync(expectedDbPath), 'a real dispatched command must still open the store as before').toBe(true);
+    expect(
+      existsSync(expectedDbPath),
+      'a real dispatched command must still open the store as before'
+    ).toBe(true);
   });
 
   // DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001 (re-opened 2026-08-20): the July
@@ -323,8 +393,15 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
   it('version, --help, no-args, and install-skill --help emit ZERO store-open telemetry records and never create the DB', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-no-store-open-'));
     const soxHome = join(adhdRoot, 'sox-ecosystem');
-    const expectedDbPath = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot }).files.db;
-    expect(existsSync(expectedDbPath), 'sanity: no store should exist before the CLI ever runs').toBe(false);
+    const expectedDbPath = buildBacklogEnv({
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+    }).files.db;
+    expect(
+      existsSync(expectedDbPath),
+      'sanity: no store should exist before the CLI ever runs'
+    ).toBe(false);
 
     // `version`/`--help`/bare/`install-skill --help` must all exit 0 AND stay
     // store-free. `install-skill --help` used to exit 1 (its parser rejected
@@ -340,17 +417,30 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     for (const args of zeroExit) {
       const res = runBin([...args], adhdRoot, { SOX_ECOSYSTEM_HOME: soxHome });
       const label = args.length === 0 ? '(no args)' : args.join(' ');
-      expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
-      expect(readTelemetryEvents(soxHome), `"${label}" must emit zero store-open telemetry records`).toHaveLength(0);
-      expect(existsSync(expectedDbPath), `"${label}" must not create the store`).toBe(false);
+      expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
+        0
+      );
+      expect(
+        readTelemetryEvents(soxHome),
+        `"${label}" must emit zero store-open telemetry records`
+      ).toHaveLength(0);
+      expect(
+        existsSync(expectedDbPath),
+        `"${label}" must not create the store`
+      ).toBe(false);
     }
 
     // Negative control / teeth: a real store command MUST emit store-open
     // telemetry records AND create the DB — proving the assertions above are
     // not trivially green because the telemetry sink or DB path never fires.
-    const real = runBin(['query', '--input', '{}'], adhdRoot, { SOX_ECOSYSTEM_HOME: soxHome });
+    const real = runBin(['query', '--input', '{}'], adhdRoot, {
+      SOX_ECOSYSTEM_HOME: soxHome,
+    });
     expect(real.status, `stderr:\n${real.stderr}`).toBe(0);
-    expect(existsSync(expectedDbPath), 'a real dispatched command must open the store').toBe(true);
+    expect(
+      existsSync(expectedDbPath),
+      'a real dispatched command must open the store'
+    ).toBe(true);
     const allEvents = readTelemetryEvents(soxHome);
     const storeEvents = allEvents.filter((e) => e.startsWith('store_adapter'));
     // DEBT-BACKLOG-CLI-STORE-OPEN-001 postmortem: this exact assertion once
@@ -366,10 +456,12 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
       storeEvents.length > 0
         ? 'a real store command must emit store-open telemetry records'
         : `a real store command must emit store-open telemetry records — got zero. ` +
-          `All ${allEvents.length} captured event(s): ${JSON.stringify(allEvents)}. ` +
-          `If this is unexpectedly zero, first suspect node_modules/dist drift ` +
-          `(stale worktree install vs pnpm-lock.yaml's pinned @adhd/sox-store-adapter) ` +
-          `before assuming a source regression.`,
+            `All ${allEvents.length} captured event(s): ${JSON.stringify(
+              allEvents
+            )}. ` +
+            `If this is unexpectedly zero, first suspect node_modules/dist drift ` +
+            `(stale worktree install vs pnpm-lock.yaml's pinned @adhd/sox-store-adapter) ` +
+            `before assuming a source regression.`
     ).toBeGreaterThan(0);
   });
 
@@ -377,25 +469,51 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-dbpath-'));
     const redirectDb = join(adhdRoot, 'redirect', 'backlog.db');
 
-    const res = runBin(['query', '--input', '{}'], adhdRoot, { ADHD_BACKLOG_DATABASE_PATH: redirectDb });
-    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
+    const res = runBin(['query', '--input', '{}'], adhdRoot, {
+      ADHD_BACKLOG_DATABASE_PATH: redirectDb,
+    });
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
+      0
+    );
 
     // The env-var path is the store the CLI actually opened…
-    expect(existsSync(redirectDb), 'the ADHD_BACKLOG_DATABASE_PATH target must be the opened store').toBe(true);
+    expect(
+      existsSync(redirectDb),
+      'the ADHD_BACKLOG_DATABASE_PATH target must be the opened store'
+    ).toBe(true);
     // …and the scope-root fallback must NOT have been created (pre-fix, this
     // test went red: the bin opened env.files.db and ignored the env var).
-    const fallback = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot }).files.db;
-    expect(existsSync(fallback), 'the scope-root fallback must not be created when the env var is set').toBe(false);
+    const fallback = buildBacklogEnv({
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+    }).files.db;
+    expect(
+      existsSync(fallback),
+      'the scope-root fallback must not be created when the env var is set'
+    ).toBe(false);
   });
 
   it('BUG-002 regression guard: with ADHD_BACKLOG_DATABASE_PATH unset, the bin still opens the scope-root fallback as before', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-dbpath-default-'));
-    const fallback = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot }).files.db;
-    expect(existsSync(fallback), 'sanity: no store should exist before the CLI runs').toBe(false);
+    const fallback = buildBacklogEnv({
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+    }).files.db;
+    expect(
+      existsSync(fallback),
+      'sanity: no store should exist before the CLI runs'
+    ).toBe(false);
 
     const res = runBin(['query', '--input', '{}'], adhdRoot);
-    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
-    expect(existsSync(fallback), 'unset env var ⇒ the scope-root fallback store is created, exactly as before BUG-002').toBe(true);
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
+      0
+    );
+    expect(
+      existsSync(fallback),
+      'unset env var ⇒ the scope-root fallback store is created, exactly as before BUG-002'
+    ).toBe(true);
   });
 
   it('a PLAIN "get --input …" (bare, no manual namespace prefix) resolves — proves runBacklogCli prepends the namespace itself', async () => {
@@ -405,18 +523,35 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     // file — then close it so the subprocess's own GraphBacklogStore can
     // open it exclusively (identical pattern to server.spec.ts/
     // server.mcp.spec.ts's seeding).
-    const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
+    const seedEnv = buildBacklogEnv({
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+    });
     seedEnv.ensureDirs();
-    const seeded = await seedIssue(seedEnv.files.db, 'PseudoSky/cli-test', 'via cli', 'x');
+    const seeded = await seedIssue(
+      seedEnv.files.db,
+      'PseudoSky/cli-test',
+      'via cli',
+      'x'
+    );
 
     // Deliberately BARE — no `backlog` prefix typed by the "user" here,
     // exactly like a real `backlog get …` invocation arrives at this
     // process as `process.argv.slice(2)`. The default card projection
     // already includes `uid`/`title`, so no explicit `fields` is needed to
     // assert on either.
-    const res = runBin(['get', '--input', JSON.stringify({ uid: seeded.uid })], adhdRoot);
-    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
-    const body = JSON.parse(res.stdout.trim()) as { ok: boolean; data: { uid: string; title: string } };
+    const res = runBin(
+      ['get', '--input', JSON.stringify({ uid: seeded.uid })],
+      adhdRoot
+    );
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
+      0
+    );
+    const body = JSON.parse(res.stdout.trim()) as {
+      ok: boolean;
+      data: { uid: string; title: string };
+    };
     expect(body.ok).toBe(true);
     expect(body.data.uid).toBe(seeded.uid);
     expect(body.data.title).toBe('via cli');
@@ -425,13 +560,30 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
   it('a fully-prefixed "backlog get …" ALSO resolves — proves prefixCommand is idempotent at the real dispatch, not just in the unit test', async () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-getitem-prefixed-'));
 
-    const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
+    const seedEnv = buildBacklogEnv({
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+    });
     seedEnv.ensureDirs();
-    const seeded = await seedIssue(seedEnv.files.db, 'PseudoSky/cli-test-prefixed', 'via cli prefixed', 'x');
+    const seeded = await seedIssue(
+      seedEnv.files.db,
+      'PseudoSky/cli-test-prefixed',
+      'via cli prefixed',
+      'x'
+    );
 
-    const res = runBin(['backlog', 'get', '--input', JSON.stringify({ uid: seeded.uid })], adhdRoot);
-    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
-    const body = JSON.parse(res.stdout.trim()) as { ok: boolean; data: { uid: string } };
+    const res = runBin(
+      ['backlog', 'get', '--input', JSON.stringify({ uid: seeded.uid })],
+      adhdRoot
+    );
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
+      0
+    );
+    const body = JSON.parse(res.stdout.trim()) as {
+      ok: boolean;
+      data: { uid: string };
+    };
     expect(body.ok).toBe(true);
     expect(body.data.uid).toBe(seeded.uid);
   });
@@ -440,21 +592,55 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-roundtrip-'));
     const project = 'PseudoSky/cli-roundtrip';
 
-    const upsert = runBin(['upsert-project', '--input', JSON.stringify({ name: project, by: 'cli.spec' })], adhdRoot);
-    expect(upsert.status, `stderr:\n${upsert.stderr}\nstdout:\n${upsert.stdout}`).toBe(0);
-
-    const createRes = runBin(
-      ['create', '--input', JSON.stringify({ title: 'roundtrip', body: 'x', project, by: 'cli.spec' })],
+    const upsert = runBin(
+      [
+        'upsert-project',
+        '--input',
+        JSON.stringify({ name: project, by: 'cli.spec' }),
+      ],
       adhdRoot
     );
-    expect(createRes.status, `stderr:\n${createRes.stderr}\nstdout:\n${createRes.stdout}`).toBe(0);
-    const created = JSON.parse(createRes.stdout.trim()) as { ok: boolean; data: { uid: string } };
+    expect(
+      upsert.status,
+      `stderr:\n${upsert.stderr}\nstdout:\n${upsert.stdout}`
+    ).toBe(0);
+
+    const createRes = runBin(
+      [
+        'create',
+        '--input',
+        JSON.stringify({
+          title: 'roundtrip',
+          body: 'x',
+          project,
+          by: 'cli.spec',
+        }),
+      ],
+      adhdRoot
+    );
+    expect(
+      createRes.status,
+      `stderr:\n${createRes.stderr}\nstdout:\n${createRes.stdout}`
+    ).toBe(0);
+    const created = JSON.parse(createRes.stdout.trim()) as {
+      ok: boolean;
+      data: { uid: string };
+    };
     expect(created.ok).toBe(true);
     expect(created.data.uid).toBeTruthy();
 
-    const getRes = runBin(['get', '--input', JSON.stringify({ uid: created.data.uid })], adhdRoot);
-    expect(getRes.status, `stderr:\n${getRes.stderr}\nstdout:\n${getRes.stdout}`).toBe(0);
-    const got = JSON.parse(getRes.stdout.trim()) as { ok: boolean; data: { uid: string; title: string } };
+    const getRes = runBin(
+      ['get', '--input', JSON.stringify({ uid: created.data.uid })],
+      adhdRoot
+    );
+    expect(
+      getRes.status,
+      `stderr:\n${getRes.stderr}\nstdout:\n${getRes.stdout}`
+    ).toBe(0);
+    const got = JSON.parse(getRes.stdout.trim()) as {
+      ok: boolean;
+      data: { uid: string; title: string };
+    };
     expect(got.ok).toBe(true);
     expect(got.data.uid).toBe(created.data.uid);
     expect(got.data.title).toBe('roundtrip');
@@ -463,12 +649,30 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
   it('"query" (view:list) returns the seeded item, filtered by project', async () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-list-'));
 
-    const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
+    const seedEnv = buildBacklogEnv({
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+    });
     seedEnv.ensureDirs();
-    const seeded = await seedIssue(seedEnv.files.db, 'PseudoSky/cli-list-test', 'listed via cli', 'x');
+    const seeded = await seedIssue(
+      seedEnv.files.db,
+      'PseudoSky/cli-list-test',
+      'listed via cli',
+      'x'
+    );
 
-    const res = runBin(['query', '--input', JSON.stringify({ filter: { project: seeded.projectUid } })], adhdRoot);
-    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
+    const res = runBin(
+      [
+        'query',
+        '--input',
+        JSON.stringify({ filter: { project: seeded.projectUid } }),
+      ],
+      adhdRoot
+    );
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
+      0
+    );
     const body = JSON.parse(res.stdout.trim()) as {
       ok: boolean;
       data: { view: string; items: Array<{ uid: string; title: string }> };
@@ -483,7 +687,9 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
   it('an unknown command exits with CLI_EXIT_CODE.not_found (4), never 0', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-unknown-'));
     const res = runBin(['totally-bogus-command'], adhdRoot);
-    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(4);
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
+      4
+    );
     // `reportFailure`'s final error JSON is always the LAST stderr line — a
     // failed command may also have a preceding pino log line (see the
     // bad-flag case below), so never assume stderr is a single JSON blob.
@@ -495,7 +701,9 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
   it('an unknown flag exits with CLI_EXIT_CODE.invalid_argument (2), never 0', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-badflag-'));
     const res = runBin(['get', '--this-flag-does-not-exist', 'x'], adhdRoot);
-    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(2);
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
+      2
+    );
     const lastLine = res.stderr.trim().split('\n').pop() ?? '';
     const body = JSON.parse(lastLine) as { code: string; message: string };
     expect(body.code).toBe('invalid_argument');
@@ -530,7 +738,14 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-batch-'));
     const project = 'PseudoSky/cli-batch-test';
 
-    const upsert = runBin(['upsert-project', '--input', JSON.stringify({ name: project, by: 'cli.spec' })], adhdRoot);
+    const upsert = runBin(
+      [
+        'upsert-project',
+        '--input',
+        JSON.stringify({ name: project, by: 'cli.spec' }),
+      ],
+      adhdRoot
+    );
     expect(upsert.status, `stderr:\n${upsert.stderr}`).toBe(0);
 
     // BUG-APIGEN-CLI-002: a `_batch/<kind>` mount presents to every transport
@@ -557,8 +772,24 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
         JSON.stringify({
           operation: 'backlog/create',
           items: [
-            { input: { title: 'batch one', body: 'x', project, by: 'cli.spec', duplicateAction: 'force' } },
-            { input: { title: 'batch two', body: 'y', project, by: 'cli.spec', duplicateAction: 'force' } },
+            {
+              input: {
+                title: 'batch one',
+                body: 'x',
+                project,
+                by: 'cli.spec',
+                duplicateAction: 'force',
+              },
+            },
+            {
+              input: {
+                title: 'batch two',
+                body: 'y',
+                project,
+                by: 'cli.spec',
+                duplicateAction: 'force',
+              },
+            },
           ],
           concurrency: 2,
           onItemError: 'continue',
@@ -566,7 +797,9 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
       ],
       adhdRoot
     );
-    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
+      0
+    );
 
     // Each batch item's `.value` is the WHOLE outcome envelope the real
     // `create()` returned (`create` reports failure in the envelope rather
@@ -575,7 +808,10 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     interface BatchItemResult {
       index: number;
       status: 'fulfilled' | 'rejected';
-      value?: { ok: boolean; data?: { item?: { uid: string; title: string }; created: boolean } };
+      value?: {
+        ok: boolean;
+        data?: { item?: { uid: string; title: string }; created: boolean };
+      };
       reason?: { message?: string; code?: string };
     }
     const results = JSON.parse(res.stdout.trim()) as BatchItemResult[];
@@ -600,22 +836,40 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     // ordinary `backlog`-prefixed command path) proves both batch-created
     // items are genuinely persisted in the store — not just echoed back in
     // the batch response.
-    const get1 = runBin(['get', '--input', JSON.stringify({ uid: firstUid })], adhdRoot);
+    const get1 = runBin(
+      ['get', '--input', JSON.stringify({ uid: firstUid })],
+      adhdRoot
+    );
     expect(get1.status, `stderr:\n${get1.stderr}`).toBe(0);
-    expect((JSON.parse(get1.stdout.trim()) as { data: { title: string } }).data.title).toBe('batch one');
+    expect(
+      (JSON.parse(get1.stdout.trim()) as { data: { title: string } }).data.title
+    ).toBe('batch one');
 
-    const get2 = runBin(['get', '--input', JSON.stringify({ uid: secondUid })], adhdRoot);
+    const get2 = runBin(
+      ['get', '--input', JSON.stringify({ uid: secondUid })],
+      adhdRoot
+    );
     expect(get2.status, `stderr:\n${get2.stderr}`).toBe(0);
-    expect((JSON.parse(get2.stdout.trim()) as { data: { title: string } }).data.title).toBe('batch two');
+    expect(
+      (JSON.parse(get2.stdout.trim()) as { data: { title: string } }).data.title
+    ).toBe('batch two');
   });
 
   it('an "operation" not in this mount\'s batchable set is rejected by the batch handler\'s own validation (proves the CLI mount is bound to the real backlog descriptor, not a stub)', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-batch-badop-'));
     const res = runBin(
-      ['batch', 'action', '--input', JSON.stringify({ operation: 'backlog/not-a-real-op', items: [] })],
+      [
+        'batch',
+        'action',
+        '--input',
+        JSON.stringify({ operation: 'backlog/not-a-real-op', items: [] }),
+      ],
       adhdRoot
     );
-    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).not.toBe(0);
+    expect(
+      res.status,
+      `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`
+    ).not.toBe(0);
     const lastLine = res.stderr.trim().split('\n').pop() ?? '';
     const body = JSON.parse(lastLine) as { code: string; message: string };
     expect(body.code).toBe('invalid_argument');
@@ -631,17 +885,31 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
   it('"version" reports the REAL, currently-built package.json name/version — dev-dist layout (spawned dist/index.js bin)', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-version-'));
     const res = runBin(['version'], adhdRoot);
-    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
-    const parsed = JSON.parse(res.stdout.trim()) as { name: string; version: string };
-    const realPkg = JSON.parse(readFileSync(join(HERE, '..', 'package.json'), 'utf8')) as { name: string; version: string };
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
+      0
+    );
+    const parsed = JSON.parse(res.stdout.trim()) as {
+      name: string;
+      version: string;
+    };
+    const realPkg = JSON.parse(
+      readFileSync(join(HERE, '..', 'package.json'), 'utf8')
+    ) as { name: string; version: string };
     expect(parsed).toEqual({ name: realPkg.name, version: realPkg.version });
   });
 
   it('install-skill --host claude --scope project drops the packaged, currently-built SKILL.md under the given cwd — content-hash matches', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-install-skill-'));
-    const res = runBin(['install-skill', '--host', 'claude', '--scope', 'project'], adhdRoot);
-    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
-    const body = JSON.parse(res.stdout.trim()) as { installed: Array<{ host: string; scope: string; path: string }> };
+    const res = runBin(
+      ['install-skill', '--host', 'claude', '--scope', 'project'],
+      adhdRoot
+    );
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
+      0
+    );
+    const body = JSON.parse(res.stdout.trim()) as {
+      installed: Array<{ host: string; scope: string; path: string }>;
+    };
     expect(body.installed).toHaveLength(1);
     const installedPath = body.installed[0].path;
     // `realpathSync` on both sides — on macOS, `/tmp`-family paths resolve
@@ -650,9 +918,14 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     // returns the FULLY RESOLVED path, while `adhdRoot` here is the
     // unresolved `mkdtempSync` path passed as `cwd` — a benign platform
     // quirk, not a real divergence (both point at the identical directory).
-    expect(realpathSync(installedPath)).toBe(join(realpathSync(adhdRoot), '.claude', 'skills', 'backlog', 'SKILL.md'));
+    expect(realpathSync(installedPath)).toBe(
+      join(realpathSync(adhdRoot), '.claude', 'skills', 'backlog', 'SKILL.md')
+    );
     expect(existsSync(installedPath)).toBe(true);
-    const packagedSkillMd = readFileSync(join(HERE, '..', 'skill', 'SKILL.md'), 'utf8');
+    const packagedSkillMd = readFileSync(
+      join(HERE, '..', 'skill', 'SKILL.md'),
+      'utf8'
+    );
     expect(readFileSync(installedPath, 'utf8')).toBe(packagedSkillMd);
     // Never opened a real backlog store for this command (no `.adhd/backlog`
     // data dir created) — proving the special-case truly bypasses
@@ -688,15 +961,29 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     // it exclusively (identical pattern to the get-item tests above). Seeding
     // at least one issue ensures the schema (and some WAL activity) already
     // exists, so the truncation assertion below is meaningful.
-    const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
+    const seedEnv = buildBacklogEnv({
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+    });
     seedEnv.ensureDirs();
     const dbPath = seedEnv.files.db;
-    const seeded = await seedIssue(dbPath, 'PseudoSky/cli-close-on-error', 'close on error', 'x');
+    const seeded = await seedIssue(
+      dbPath,
+      'PseudoSky/cli-close-on-error',
+      'close on error',
+      'x'
+    );
 
     // A uid that does not exist: `IssueNotFoundError` → `item_not_found`
     // (exit 1) AFTER the store opened.
-    const res = runBin(['get', '--input', JSON.stringify({ uid: 'sox_issue_does_not_exist' })], adhdRoot);
-    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(1);
+    const res = runBin(
+      ['get', '--input', JSON.stringify({ uid: 'sox_issue_does_not_exist' })],
+      adhdRoot
+    );
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
+      1
+    );
 
     // BL-512 TRUNCATE guarantee on the ERROR path: a proper close checkpoints
     // and truncates the -wal to ~0 bytes (absent or < 4096). A skipped close
@@ -728,7 +1015,8 @@ describe('--sandbox / sandbox-path — P5-cli-serve-transport: the CLI must neve
   afterEach(() => {
     if (fakeProdHome) rmSync(fakeProdHome, { recursive: true, force: true });
     fakeProdHome = undefined;
-    for (const dir of sandboxDirs) rmSync(dir, { recursive: true, force: true });
+    for (const dir of sandboxDirs)
+      rmSync(dir, { recursive: true, force: true });
     sandboxDirs = [];
   });
 
@@ -737,7 +1025,11 @@ describe('--sandbox / sandbox-path — P5-cli-serve-transport: the CLI must neve
    *  — with `HOME` redirected to a throwaway dir standing in for "the real
    *  machine's home", so this test can prove `--sandbox` diverts away from
    *  it without ever touching the real `~/.adhd`. */
-  function runGlobalScoped(args: string[], home: string, extraEnv: Record<string, string> = {}): SpawnResult {
+  function runGlobalScoped(
+    args: string[],
+    home: string,
+    extraEnv: Record<string, string> = {}
+  ): SpawnResult {
     const result = spawnSync(process.execPath, [DIST_INDEX, ...args], {
       cwd: home,
       env: { ...process.env, HOME: home, ...extraEnv },
@@ -745,7 +1037,11 @@ describe('--sandbox / sandbox-path — P5-cli-serve-transport: the CLI must neve
       timeout: 30_000,
     });
     if (result.error) throw new Error(`spawn failed: ${String(result.error)}`);
-    return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+    return {
+      status: result.status,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    };
   }
 
   it('sandbox-path (no --sandbox) reports the real, un-isolated production path — store-free, exits 0', () => {
@@ -757,28 +1053,42 @@ describe('--sandbox / sandbox-path — P5-cli-serve-transport: the CLI must neve
       dbPath: string;
     };
     expect(body.sandbox).toBe(false);
-    expect(body.dbPath.startsWith(fakeProdHome), `expected the real prod path to live under ${fakeProdHome}, got ${body.dbPath}`).toBe(true);
+    expect(
+      body.dbPath.startsWith(fakeProdHome),
+      `expected the real prod path to live under ${fakeProdHome}, got ${body.dbPath}`
+    ).toBe(true);
     // Store-free: reporting the path must never actually open/create it.
     expect(existsSync(body.dbPath)).toBe(false);
   });
 
   it('--sandbox diverts the store away from the (fake) production HOME entirely, and never creates anything under it', () => {
     fakeProdHome = mkdtempSync(join(tmpdir(), 'backlog-sandbox-prodhome-'));
-    const pathRes = runGlobalScoped(['--sandbox', 'sandbox-path'], fakeProdHome);
+    const pathRes = runGlobalScoped(
+      ['--sandbox', 'sandbox-path'],
+      fakeProdHome
+    );
     expect(pathRes.status, `stderr:\n${pathRes.stderr}`).toBe(0);
-    const body = JSON.parse(pathRes.stdout.trim().split('\n').pop() ?? '{}') as {
+    const body = JSON.parse(
+      pathRes.stdout.trim().split('\n').pop() ?? '{}'
+    ) as {
       sandbox: boolean;
       adhdRoot: string;
       dbPath: string;
     };
     expect(body.sandbox).toBe(true);
-    expect(body.adhdRoot, '--sandbox must report where it isolated to').toBeTruthy();
+    expect(
+      body.adhdRoot,
+      '--sandbox must report where it isolated to'
+    ).toBeTruthy();
     sandboxDirs.push(body.adhdRoot);
     expect(
       body.dbPath.startsWith(fakeProdHome),
       `--sandbox must NEVER resolve into the (fake) production HOME — got ${body.dbPath}`
     ).toBe(false);
-    expect(body.dbPath.startsWith(body.adhdRoot), 'the sandboxed db path must live under the reported sandbox root').toBe(true);
+    expect(
+      body.dbPath.startsWith(body.adhdRoot),
+      'the sandboxed db path must live under the reported sandbox root'
+    ).toBe(true);
 
     // Drive a REAL write (`create`) under --sandbox, then prove the fake
     // production HOME's `.adhd` tree was never created at all — the
@@ -798,33 +1108,57 @@ describe('--sandbox / sandbox-path — P5-cli-serve-transport: the CLI must neve
     // against the SAME reused sandbox first.
     const project = 'PseudoSky/sandbox-test';
     const upsertRes = runGlobalScoped(
-      ['--sandbox', 'upsert-project', '--input', JSON.stringify({ name: project, by: 'cli.spec' })],
+      [
+        '--sandbox',
+        'upsert-project',
+        '--input',
+        JSON.stringify({ name: project, by: 'cli.spec' }),
+      ],
       fakeProdHome,
       { ADHD_ROOT: body.adhdRoot }
     );
-    expect(upsertRes.status, `stderr:\n${upsertRes.stderr}\nstdout:\n${upsertRes.stdout}`).toBe(0);
+    expect(
+      upsertRes.status,
+      `stderr:\n${upsertRes.stderr}\nstdout:\n${upsertRes.stdout}`
+    ).toBe(0);
 
     const createRes = runGlobalScoped(
       [
         '--sandbox',
         'create',
         '--input',
-        JSON.stringify({ title: 'sandboxed', body: 'x', project, by: 'cli.spec', duplicateAction: 'force' }),
+        JSON.stringify({
+          title: 'sandboxed',
+          body: 'x',
+          project,
+          by: 'cli.spec',
+          duplicateAction: 'force',
+        }),
       ],
       fakeProdHome,
       { ADHD_ROOT: body.adhdRoot }
     );
-    expect(createRes.status, `stderr:\n${createRes.stderr}\nstdout:\n${createRes.stdout}`).toBe(0);
-    const created = JSON.parse(createRes.stdout.trim().split('\n').pop() ?? '{}') as { ok: boolean; data: { uid: string } };
+    expect(
+      createRes.status,
+      `stderr:\n${createRes.stderr}\nstdout:\n${createRes.stdout}`
+    ).toBe(0);
+    const created = JSON.parse(
+      createRes.stdout.trim().split('\n').pop() ?? '{}'
+    ) as { ok: boolean; data: { uid: string } };
     expect(created.ok).toBe(true);
 
     const prodAdhdDir = join(fakeProdHome, '.adhd');
-    expect(existsSync(prodAdhdDir), `--sandbox wrote into the (fake) production HOME at ${prodAdhdDir} — isolation failed`).toBe(false);
+    expect(
+      existsSync(prodAdhdDir),
+      `--sandbox wrote into the (fake) production HOME at ${prodAdhdDir} — isolation failed`
+    ).toBe(false);
     // And the write really did land in the sandbox: the sandboxed db file exists.
-    expect(existsSync(body.dbPath), 'the sandboxed db must actually have been created by the create above').toBe(true);
+    expect(
+      existsSync(body.dbPath),
+      'the sandboxed db must actually have been created by the create above'
+    ).toBe(true);
   });
 });
-
 
 // ---------------------------------------------------------------------------
 // `backlog search "<text>" [flags]` — the argv translation onto the mounted
@@ -859,23 +1193,42 @@ describe('backlog search — natural-language shortcut (real spawned bin)', () =
    */
   function seed(root: string, title: string, body: string): string {
     const upsert = runBin(
-      ['upsert-project', '--input', JSON.stringify({ name: SEARCH_PROJECT, by: 'cli.spec' })],
+      [
+        'upsert-project',
+        '--input',
+        JSON.stringify({ name: SEARCH_PROJECT, by: 'cli.spec' }),
+      ],
       root,
       NO_EMBED
     );
-    expect(upsert.status, `project seed failed\nstderr:\n${upsert.stderr}`).toBe(0);
+    expect(
+      upsert.status,
+      `project seed failed\nstderr:\n${upsert.stderr}`
+    ).toBe(0);
 
     const res = runBin(
       [
         'create',
         '--input',
-        JSON.stringify({ title, body, project: SEARCH_PROJECT, by: 'cli.spec', duplicateAction: 'force' }),
+        JSON.stringify({
+          title,
+          body,
+          project: SEARCH_PROJECT,
+          by: 'cli.spec',
+          duplicateAction: 'force',
+        }),
       ],
       root,
       NO_EMBED
     );
-    expect(res.status, `seed failed\nstderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
-    const created = JSON.parse(res.stdout.trim().split('\n').pop() ?? '{}') as { ok: boolean; data: { uid: string } };
+    expect(
+      res.status,
+      `seed failed\nstderr:\n${res.stderr}\nstdout:\n${res.stdout}`
+    ).toBe(0);
+    const created = JSON.parse(res.stdout.trim().split('\n').pop() ?? '{}') as {
+      ok: boolean;
+      data: { uid: string };
+    };
     expect(created.ok).toBe(true);
     return created.data.uid;
   }
@@ -891,12 +1244,29 @@ describe('backlog search — natural-language shortcut (real spawned bin)', () =
   // form of `search` is reachable end-to-end again.
   it('finds a real seeded item by natural-language text and returns the standard envelope', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-search-'));
-    const uid = seed(adhdRoot, 'Publish gate trips intermittently under machine load', 'The release publish gate reports a spurious failure.');
-    seed(adhdRoot, 'Unrelated: storybook theme tokens drift between builds', 'Nothing to do with publishing.');
+    const uid = seed(
+      adhdRoot,
+      'Publish gate trips intermittently under machine load',
+      'The release publish gate reports a spurious failure.'
+    );
+    seed(
+      adhdRoot,
+      'Unrelated: storybook theme tokens drift between builds',
+      'Nothing to do with publishing.'
+    );
 
-    const res = runBin(['search', 'publish gate', '--limit', '5'], adhdRoot, NO_EMBED);
-    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
-    const body = JSON.parse(envelope(res)) as { ok: boolean; data: { view: string; items: { uid: string }[] } };
+    const res = runBin(
+      ['search', 'publish gate', '--limit', '5'],
+      adhdRoot,
+      NO_EMBED
+    );
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
+      0
+    );
+    const body = JSON.parse(envelope(res)) as {
+      ok: boolean;
+      data: { view: string; items: { uid: string }[] };
+    };
     expect(body.ok).toBe(true);
     expect(body.data.view).toBe('list');
     expect(body.data.items.map((i) => i.uid)).toContain(uid);
@@ -904,12 +1274,32 @@ describe('backlog search — natural-language shortcut (real spawned bin)', () =
 
   it('PARITY: `search "<text>" --limit N --status open` is byte-identical to the equivalent `query --input`', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-search-parity-'));
-    seed(adhdRoot, 'Publish gate trips intermittently under machine load', 'The release publish gate reports a spurious failure.');
-    seed(adhdRoot, 'Second publish gate observation from a different run', 'Also about the publish gate.');
+    seed(
+      adhdRoot,
+      'Publish gate trips intermittently under machine load',
+      'The release publish gate reports a spurious failure.'
+    );
+    seed(
+      adhdRoot,
+      'Second publish gate observation from a different run',
+      'Also about the publish gate.'
+    );
 
-    const viaShortcut = runBin(['search', 'publish gate', '--limit', '2', '--status', 'open'], adhdRoot, NO_EMBED);
+    const viaShortcut = runBin(
+      ['search', 'publish gate', '--limit', '2', '--status', 'open'],
+      adhdRoot,
+      NO_EMBED
+    );
     const viaQuery = runBin(
-      ['query', '--input', JSON.stringify({ limit: 2, text: 'publish gate', filter: { status: 'open' } })],
+      [
+        'query',
+        '--input',
+        JSON.stringify({
+          limit: 2,
+          text: 'publish gate',
+          filter: { status: 'open' },
+        }),
+      ],
       adhdRoot,
       NO_EMBED
     );
@@ -918,17 +1308,31 @@ describe('backlog search — natural-language shortcut (real spawned bin)', () =
     expect(envelope(viaShortcut)).toBe(envelope(viaQuery));
     // Teeth: the parity assertion is only meaningful if the envelope actually
     // carries results — two identical empty answers would prove nothing.
-    const body = JSON.parse(envelope(viaShortcut)) as { data: { items: unknown[] } };
+    const body = JSON.parse(envelope(viaShortcut)) as {
+      data: { items: unknown[] };
+    };
     expect(body.data.items.length).toBeGreaterThan(0);
   });
 
   it('PARITY: `--anchor` reaches view:"similar" — identical envelope AND the identical refusal on a store with no embedding backend', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-search-anchor-'));
-    const uid = seed(adhdRoot, 'Anchor seed item for similarity', 'Body text for the anchor probe.');
+    const uid = seed(
+      adhdRoot,
+      'Anchor seed item for similarity',
+      'Body text for the anchor probe.'
+    );
 
-    const viaShortcut = runBin(['search', '--anchor', uid, '--limit', '3'], adhdRoot, NO_EMBED);
+    const viaShortcut = runBin(
+      ['search', '--anchor', uid, '--limit', '3'],
+      adhdRoot,
+      NO_EMBED
+    );
     const viaQuery = runBin(
-      ['query', '--input', JSON.stringify({ limit: 3, view: 'similar', filter: { anchor: uid } })],
+      [
+        'query',
+        '--input',
+        JSON.stringify({ limit: 3, view: 'similar', filter: { anchor: uid } }),
+      ],
       adhdRoot,
       NO_EMBED
     );
@@ -945,7 +1349,10 @@ describe('backlog search — natural-language shortcut (real spawned bin)', () =
     // backend at all, the refusal is a validation-level `invalid_argument`
     // ("semantic search is not configured for this store"), not the
     // configured-but-empty-vector-space `rag_not_configured` case.
-    const body = JSON.parse(envelope(viaShortcut)) as { ok: boolean; error?: { code: string } };
+    const body = JSON.parse(envelope(viaShortcut)) as {
+      ok: boolean;
+      error?: { code: string };
+    };
     expect(body.ok).toBe(false);
     expect(body.error?.code).toBe('invalid_argument');
     expect(viaShortcut.status).not.toBe(0);
@@ -953,27 +1360,47 @@ describe('backlog search — natural-language shortcut (real spawned bin)', () =
 
   it('a rejected invocation exits 2 with the invalid_argument envelope on STDERR, and never opens the store', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-search-reject-'));
-    const expectedDbPath = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot }).files.db;
-    expect(existsSync(expectedDbPath), 'sanity: no store should exist before the CLI ever runs').toBe(false);
+    const expectedDbPath = buildBacklogEnv({
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+    }).files.db;
+    expect(
+      existsSync(expectedDbPath),
+      'sanity: no store should exist before the CLI ever runs'
+    ).toBe(false);
 
     const res = runBin(['search', 'x', '--limitt', '5'], adhdRoot, NO_EMBED);
     // CLI_EXIT_CODE['invalid_argument'] — the same code the apigen path uses.
     expect(res.status).toBe(2);
-    const err = JSON.parse(res.stderr.trim().split('\n').pop() ?? '{}') as { code: string; message: string };
+    const err = JSON.parse(res.stderr.trim().split('\n').pop() ?? '{}') as {
+      code: string;
+      message: string;
+    };
     expect(err.code).toBe('invalid_argument');
     expect(err.message).toContain('Unknown option: --limitt');
-    expect(existsSync(expectedDbPath), 'a rejected search must be resolved before the store is ever opened').toBe(false);
+    expect(
+      existsSync(expectedDbPath),
+      'a rejected search must be resolved before the store is ever opened'
+    ).toBe(false);
   });
 
   it('`search --help` exits 0, prints usage, and never opens the store', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-search-help-'));
-    const expectedDbPath = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot }).files.db;
+    const expectedDbPath = buildBacklogEnv({
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+    }).files.db;
 
     const res = runBin(['search', '--help'], adhdRoot, NO_EMBED);
     expect(res.status, `stderr:\n${res.stderr}`).toBe(0);
     expect(res.stdout).toContain('backlog search');
     expect(res.stdout).toContain('--anchor');
-    expect(existsSync(expectedDbPath), 'search --help must not create the store').toBe(false);
+    expect(
+      existsSync(expectedDbPath),
+      'search --help must not create the store'
+    ).toBe(false);
   });
 
   it('the top-level --help advertises `search` alongside the other special commands', () => {

@@ -63,15 +63,22 @@ interface IRawAudit {
  * read-layer projection, so a projection that fabricates or defaults a field
  * cannot mask its absence in the stored row.
  */
-async function auditsFor(store: TestIssueStore, issueUid: string): Promise<IRawAudit[]> {
-  const { rows } = await store.adapter.executeAll<{ uid: string; meta: string | null; rowid: number }>(
+async function auditsFor(
+  store: TestIssueStore,
+  issueUid: string
+): Promise<IRawAudit[]> {
+  const { rows } = await store.adapter.executeAll<{
+    uid: string;
+    meta: string | null;
+    rowid: number;
+  }>(
     `SELECT a.uid AS uid, a.meta AS meta, a.rowid AS rowid
        FROM node AS subject
        JOIN edge AS e ON e.src = subject.rowid AND e.rel = 'audits' AND e.t_invalid IS NULL
        JOIN node AS a ON a.rowid = e.dst
       WHERE subject.uid = ? AND a.t_invalid IS NULL
       ORDER BY a.rowid ASC`,
-    [issueUid],
+    [issueUid]
   );
   return rows.map((r) => {
     const meta = (JSON.parse(r.meta ?? '{}') ?? {}) as Record<string, unknown>;
@@ -104,12 +111,15 @@ function recomputeSha(audit: IRawAudit): string {
       to: audit.to,
       note: audit.note,
       at: audit.at,
-    }),
+    })
   );
 }
 
 /** Assert AC-3's three required fields on one audit row, digest included. */
-function expectWellFormed(audit: IRawAudit, expected: { actor: string; action: string }): void {
+function expectWellFormed(
+  audit: IRawAudit,
+  expected: { actor: string; action: string }
+): void {
   expect(audit.actor).toBe(expected.actor);
   expect(audit.action).toBe(expected.action);
   expect(typeof audit.sha).toBe('string');
@@ -134,8 +144,14 @@ describe('AC-3 — every write stamps actor + action + a recomputable sha on its
   });
 
   async function seed(title: string, by: string): Promise<string> {
-    const created = await createIssue(store, { project: projectUid, title, body: `${title} body`, by });
-    if (!created.created || !created.uid) throw new Error(`expected ${title} to be created`);
+    const created = await createIssue(store, {
+      project: projectUid,
+      title,
+      body: `${title} body`,
+      by,
+    });
+    if (!created.created || !created.uid)
+      throw new Error(`expected ${title} to be created`);
     return created.uid;
   }
 
@@ -145,7 +161,12 @@ describe('AC-3 — every write stamps actor + action + a recomputable sha on its
     const trail = await auditsFor(store, uid);
     expect(trail.length).toBeGreaterThanOrEqual(1);
     const created = trail.find((a) => a.action === 'created');
-    if (!created) throw new Error(`no "created" audit; got: ${trail.map((a) => String(a.action)).join(', ')}`);
+    if (!created)
+      throw new Error(
+        `no "created" audit; got: ${trail
+          .map((a) => String(a.action))
+          .join(', ')}`
+      );
 
     expectWellFormed(created, { actor: 'the-filer', action: 'created' });
     expect(created.target_uid).toBe(uid);
@@ -153,9 +174,15 @@ describe('AC-3 — every write stamps actor + action + a recomputable sha on its
 
   it('update stamps its OWN actor — never the actor of the write before it', async () => {
     const uid = await seed('an edited issue', 'the-filer');
-    const { uid: liveUid } = await update(store, { uid, body: 'a revised body', by: 'the-editor' });
+    const { uid: liveUid } = await update(store, {
+      uid,
+      body: 'a revised body',
+      by: 'the-editor',
+    });
 
-    const own = (await auditsFor(store, liveUid)).find((a) => a.action === 'updated');
+    const own = (await auditsFor(store, liveUid)).find(
+      (a) => a.action === 'updated'
+    );
     if (!own) throw new Error('no "updated" audit on the successor node');
 
     expectWellFormed(own, { actor: 'the-editor', action: 'updated' });
@@ -169,11 +196,20 @@ describe('AC-3 — every write stamps actor + action + a recomputable sha on its
 
   it('transition stamps actor + note, and the note is inside the digest', async () => {
     const uid = await seed('a transitioned issue', 'the-filer');
-    await transition(store, { uid, by: 'the-mover', toStatus: 'in-progress', note: 'picked this up' });
+    await transition(store, {
+      uid,
+      by: 'the-mover',
+      toStatus: 'in-progress',
+      note: 'picked this up',
+    });
 
-    const own = (await auditsFor(store, uid)).find((a) => a.action === 'transitioned');
+    const own = (await auditsFor(store, uid)).find(
+      (a) => a.action === 'transitioned'
+    );
     if (!own) {
-      const seen = (await auditsFor(store, uid)).map((a) => String(a.action)).join(', ');
+      const seen = (await auditsFor(store, uid))
+        .map((a) => String(a.action))
+        .join(', ');
       throw new Error(`no "transitioned" audit; got: ${seen}`);
     }
 
@@ -182,29 +218,56 @@ describe('AC-3 — every write stamps actor + action + a recomputable sha on its
     // `note` is a recorded field, so tampering with it must invalidate the
     // digest — this is what makes the sha an integrity check rather than a
     // decoration.
-    expect(recomputeSha({ ...own, note: 'a different note' })).not.toBe(own.sha);
+    expect(recomputeSha({ ...own, note: 'a different note' })).not.toBe(
+      own.sha
+    );
   });
 
   it('move stamps the caller as actor on its own audit node', async () => {
     const uid = await seed('a moved issue', 'the-filer');
-    await upsertComponent(store, { project: projectUid, name: 'somewhere-else', by: 'the-filer' });
-    await move(store, { uid, toComponent: 'somewhere-else', by: 'the-relocator' });
+    await upsertComponent(store, {
+      project: projectUid,
+      name: 'somewhere-else',
+      by: 'the-filer',
+    });
+    await move(store, {
+      uid,
+      toComponent: 'somewhere-else',
+      by: 'the-relocator',
+    });
 
     const trail = await auditsFor(store, uid);
     const own = trail.find((a) => a.actor === 'the-relocator');
-    if (!own) throw new Error(`no audit attributed to the mover; got: ${trail.map((a) => `${String(a.action)}/${String(a.actor)}`).join(', ')}`);
+    if (!own)
+      throw new Error(
+        `no audit attributed to the mover; got: ${trail
+          .map((a) => `${String(a.action)}/${String(a.actor)}`)
+          .join(', ')}`
+      );
 
-    expectWellFormed(own, { actor: 'the-relocator', action: String(own.action) });
+    expectWellFormed(own, {
+      actor: 'the-relocator',
+      action: String(own.action),
+    });
     expect(own.sha).toBe(recomputeSha(own));
   });
 
   it('invalidate stamps the caller as actor and carries the reason as its note', async () => {
     const uid = await seed('a deleted issue', 'the-filer');
-    await deleteIssue(store, { uid, reason: 'filed against the wrong project', by: 'the-remover' });
+    await deleteIssue(store, {
+      uid,
+      reason: 'filed against the wrong project',
+      by: 'the-remover',
+    });
 
     const trail = await auditsFor(store, uid);
     const own = trail.find((a) => a.actor === 'the-remover');
-    if (!own) throw new Error(`no audit attributed to the remover; got: ${trail.map((a) => `${String(a.action)}/${String(a.actor)}`).join(', ')}`);
+    if (!own)
+      throw new Error(
+        `no audit attributed to the remover; got: ${trail
+          .map((a) => `${String(a.action)}/${String(a.actor)}`)
+          .join(', ')}`
+      );
 
     expectWellFormed(own, { actor: 'the-remover', action: String(own.action) });
     expect(own.note).toBe('filed against the wrong project');
@@ -215,8 +278,17 @@ describe('AC-3 — every write stamps actor + action + a recomputable sha on its
     // each carrying its own actor and its own valid digest, all reachable
     // from the issue's CURRENT uid after a supersede.
     const uid = await seed('a long-lived issue', 'the-filer');
-    await transition(store, { uid, by: 'the-mover', toStatus: 'in-progress', note: 'starting' });
-    const { uid: liveUid } = await update(store, { uid, body: 'a revised body', by: 'the-editor' });
+    await transition(store, {
+      uid,
+      by: 'the-mover',
+      toStatus: 'in-progress',
+      note: 'starting',
+    });
+    const { uid: liveUid } = await update(store, {
+      uid,
+      body: 'a revised body',
+      by: 'the-editor',
+    });
 
     const trail = await auditsFor(store, liveUid);
     expect(trail.length).toBeGreaterThanOrEqual(3);

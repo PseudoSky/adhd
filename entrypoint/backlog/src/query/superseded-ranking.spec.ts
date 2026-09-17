@@ -39,7 +39,10 @@ import { freshTmpDir } from '../test/helpers/tmp-store.js';
 import { createIssue } from '../write/create-issue.js';
 import { update } from '../write/update.js';
 import { queryIssues } from './query.js';
-import { bootstrapSemanticBackend, configureSemanticBackend } from '../store/semantic-search.js';
+import {
+  bootstrapSemanticBackend,
+  configureSemanticBackend,
+} from '../store/semantic-search.js';
 import type { GraphBacklogStore } from '../store/graph-backlog-store.js';
 
 const E2E_TIMEOUT = 180_000;
@@ -66,19 +69,33 @@ describe('a body edit leaves nothing superseded in a ranked result (real fastemb
     async () => {
       dir = freshTmpDir('superseded-ranking');
       const bareStore = await openTestIssueStore(join(dir, 'backlog.db'));
-      const result = await bootstrapSemanticBackend(bareStore as unknown as GraphBacklogStore, { embedding: EMBEDDING });
+      const result = await bootstrapSemanticBackend(
+        bareStore as unknown as GraphBacklogStore,
+        { embedding: EMBEDDING }
+      );
       if (!result.ok) {
-        throw new Error(`real semantic backend unavailable (${result.failure.reason}): ${result.failure.detail}`);
+        throw new Error(
+          `real semantic backend unavailable (${result.failure.reason}): ${result.failure.detail}`
+        );
       }
       const backend = result.backend;
       configureSemanticBackend(backend);
 
-      const vec = await openTursoVectorStore(bareStore.adapter, { dim: backend.dim, modelId: backend.modelId });
-      const search = { backend: new StoreSearchBackend(vec, bareStore.graph), embedQuery: (text: string) => backend.embedQuery(text) };
+      const vec = await openTursoVectorStore(bareStore.adapter, {
+        dim: backend.dim,
+        modelId: backend.modelId,
+      });
+      const search = {
+        backend: new StoreSearchBackend(vec, bareStore.graph),
+        embedQuery: (text: string) => backend.embedQuery(text),
+      };
       const handle = { ...bareStore, embedding: backend, search };
       store = bareStore;
 
-      const { projectUid } = await seedProject(bareStore, 'superseded-ranking-project');
+      const { projectUid } = await seedProject(
+        bareStore,
+        'superseded-ranking-project'
+      );
 
       const filed = await createIssue(handle, {
         project: projectUid,
@@ -87,7 +104,10 @@ describe('a body edit leaves nothing superseded in a ranked result (real fastemb
         by: 'filer',
         awaitEmbed: true,
       });
-      if (!filed.created || !filed.uid) throw new Error(`expected the issue to be created, got ${JSON.stringify(filed)}`);
+      if (!filed.created || !filed.uid)
+        throw new Error(
+          `expected the issue to be created, got ${JSON.stringify(filed)}`
+        );
       const supersededUid = filed.uid;
 
       // One body edit: mints the successor, leaves the original live by
@@ -110,9 +130,13 @@ describe('a body edit leaves nothing superseded in a ranked result (real fastemb
       // `isSuperseded` and would stay green with this fix removed.
       const queried = await queryIssues(handle, {
         view: 'similar',
-        filter: { semantic: 'the embedding length does not match the configured dimension' },
+        filter: {
+          semantic:
+            'the embedding length does not match the configured dimension',
+        },
       });
-      if (queried.view !== 'similar') throw new Error(`expected view 'similar', got '${queried.view}'`);
+      if (queried.view !== 'similar')
+        throw new Error(`expected view 'similar', got '${queried.view}'`);
       const uids = queried.items.map((i) => i.uid);
 
       // One logical issue exists, so the ranked page holds exactly one row.
@@ -122,6 +146,6 @@ describe('a body edit leaves nothing superseded in a ranked result (real fastemb
       // length check alone would pass if the two rows were swapped.
       expect(uids).not.toContain(supersededUid);
     },
-    E2E_TIMEOUT,
+    E2E_TIMEOUT
   );
 });

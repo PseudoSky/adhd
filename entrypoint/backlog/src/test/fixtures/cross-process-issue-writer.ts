@@ -45,13 +45,17 @@ const n = Number(nRaw);
  * content-hash target to even theoretically collide on, per SPEC.md §8
  * AC-22's "both the same-target and distinct-target cases" wording.
  */
-const bodyMode = process.env['ADHD_TEST_CROSS_PROCESS_BODY_MODE'] === 'distinct' ? 'distinct' : 'same';
+const bodyMode =
+  process.env['ADHD_TEST_CROSS_PROCESS_BODY_MODE'] === 'distinct'
+    ? 'distinct'
+    : 'same';
 
 async function waitForGo(): Promise<void> {
   const go = join(root, 'GO');
   const deadline = Date.now() + 30000;
   while (!existsSync(go)) {
-    if (Date.now() > deadline) throw new Error(`${tag}: GO barrier never appeared`);
+    if (Date.now() > deadline)
+      throw new Error(`${tag}: GO barrier never appeared`);
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
 }
@@ -89,7 +93,10 @@ async function main(): Promise<void> {
         // collision at all, proving the write path persists exactly 2*n rows
         // even with zero shared content-hash target (SPEC.md §8 AC-22's
         // "distinct-target" case).
-        body: bodyMode === 'distinct' ? `cross-process-write-safety probe ${tag}-${i}` : 'cross-process-write-safety probe',
+        body:
+          bodyMode === 'distinct'
+            ? `cross-process-write-safety probe ${tag}-${i}`
+            : 'cross-process-write-safety probe',
         // A SHARED identity across BOTH writers, not `writer:${tag}` — this
         // is a fixture-correctness requirement of the dedupe negative
         // control, not a stylistic choice. `authored_by` is declared `n:1`
@@ -109,7 +116,11 @@ async function main(): Promise<void> {
       ok += 1;
     } catch (err) {
       threw += 1;
-      if (firstError === undefined) firstError = String(err instanceof Error ? err.message : err).slice(0, 200);
+      if (firstError === undefined)
+        firstError = String(err instanceof Error ? err.message : err).slice(
+          0,
+          200
+        );
     }
   }
   await store.close();
@@ -125,6 +136,9 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error(`${tag}: FATAL:`, err instanceof Error ? (err.stack ?? err.message) : String(err));
+  console.error(
+    `${tag}: FATAL:`,
+    err instanceof Error ? err.stack ?? err.message : String(err)
+  );
   process.exit(1);
 });

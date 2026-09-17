@@ -43,7 +43,9 @@ function isBusyContention(err: unknown): boolean {
  * very machinery the retry is waiting on.
  */
 function sleepAsync(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.round(ms))));
+  return new Promise((resolve) =>
+    setTimeout(resolve, Math.max(0, Math.round(ms)))
+  );
 }
 
 /**
@@ -56,7 +58,10 @@ function sleepAsync(ms: number): Promise<void> {
  * is still a real failure — this bounds the wait, it doesn't hide contention
  * forever).
  */
-export async function withImmediateRetry<T>(attempt: () => Promise<T>, opts: ImmediateRetryOpts = {}): Promise<T> {
+export async function withImmediateRetry<T>(
+  attempt: () => Promise<T>,
+  opts: ImmediateRetryOpts = {}
+): Promise<T> {
   const maxAttempts = opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   for (let i = 0; ; i++) {
     try {

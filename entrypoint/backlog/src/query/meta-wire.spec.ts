@@ -52,7 +52,11 @@ function runBin(args: string[]): Run {
     timeout: 60_000,
   });
   if (result.error) throw new Error(`spawn failed: ${String(result.error)}`);
-  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+  return {
+    status: result.status,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
 }
 
 function runJson(args: string[]): { run: Run; body: Record<string, unknown> } {
@@ -62,7 +66,9 @@ function runJson(args: string[]): { run: Run; body: Record<string, unknown> } {
   try {
     body = JSON.parse(line) as Record<string, unknown>;
   } catch {
-    throw new Error(`non-JSON stdout for ${args.join(' ')}: ${run.stdout}\n${run.stderr}`);
+    throw new Error(
+      `non-JSON stdout for ${args.join(' ')}: ${run.stdout}\n${run.stderr}`
+    );
   }
   return { run, body };
 }
@@ -70,8 +76,14 @@ function runJson(args: string[]): { run: Run; body: Record<string, unknown> } {
 /** Returns the WHOLE envelope body — `meta` sits beside `data`, so a helper that only returns `data` (like `paging-wire.spec.ts`'s `okData`) cannot see it. */
 function okEnvelopeBody(args: string[]): Record<string, unknown> {
   const { run, body } = runJson(args);
-  expect(run.status, `${args.join(' ')} exited ${String(run.status)}: ${run.stderr}`).toBe(0);
-  expect(body['ok'], `${args.join(' ')} returned an error arm: ${JSON.stringify(body)}`).toBe(true);
+  expect(
+    run.status,
+    `${args.join(' ')} exited ${String(run.status)}: ${run.stderr}`
+  ).toBe(0);
+  expect(
+    body['ok'],
+    `${args.join(' ')} returned an error arm: ${JSON.stringify(body)}`
+  ).toBe(true);
   return body;
 }
 
@@ -79,7 +91,11 @@ beforeAll(() => {
   tmpRoot = mkdtempSync(join(tmpdir(), 'backlog-meta-wire-'));
   dbPath = join(tmpRoot, 'meta-wire.db');
 
-  const projectBody = okEnvelopeBody(['upsert-project', '--input', JSON.stringify({ name: PROJECT_NAME, by: 'meta-wire.spec' })]);
+  const projectBody = okEnvelopeBody([
+    'upsert-project',
+    '--input',
+    JSON.stringify({ name: PROJECT_NAME, by: 'meta-wire.spec' }),
+  ]);
   expect(projectBody['ok']).toBe(true);
 
   for (let i = 0; i < ISSUE_COUNT; i++) {
@@ -104,7 +120,11 @@ afterAll(() => {
 
 describe('query meta at the wire (real built bin)', () => {
   it('a list-shaped read ENCODES meta as a sibling of data, with every field present', () => {
-    const body = okEnvelopeBody(['query', '--input', JSON.stringify({ view: 'list', limit: ISSUE_COUNT - 2 })]);
+    const body = okEnvelopeBody([
+      'query',
+      '--input',
+      JSON.stringify({ view: 'list', limit: ISSUE_COUNT - 2 }),
+    ]);
 
     // Presence FIRST, one key at a time — the whole defect class this file
     // exists for is an ABSENT key (the response encoder deletes a field it
@@ -132,7 +152,11 @@ describe('query meta at the wire (real built bin)', () => {
   });
 
   it('meta.offset key is present and correct when the caller pages by offset', () => {
-    const body = okEnvelopeBody(['query', '--input', JSON.stringify({ view: 'list', limit: 2, offset: 3 })]);
+    const body = okEnvelopeBody([
+      'query',
+      '--input',
+      JSON.stringify({ view: 'list', limit: 2, offset: 3 }),
+    ]);
 
     expect(Object.keys(body)).toContain('meta');
     const meta = body['meta'] as Record<string, unknown>;
@@ -144,7 +168,11 @@ describe('query meta at the wire (real built bin)', () => {
   });
 
   it('a non-list-shaped view (view:"graph") ENCODES no meta key at all', () => {
-    const body = okEnvelopeBody(['query', '--input', JSON.stringify({ view: 'graph' })]);
+    const body = okEnvelopeBody([
+      'query',
+      '--input',
+      JSON.stringify({ view: 'graph' }),
+    ]);
     expect(Object.keys(body)).not.toContain('meta');
   });
 });

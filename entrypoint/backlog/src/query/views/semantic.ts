@@ -84,10 +84,21 @@
  * this comment as evidence the shared resolver is still wrong — it is not.
  */
 
-import type { GraphBackend, NodeFilter, NodeRecord } from '@adhd/sox-graph-store';
+import type {
+  GraphBackend,
+  NodeFilter,
+  NodeRecord,
+} from '@adhd/sox-graph-store';
 import type { SearchQuery, SearchResult } from '@adhd/sox-hybrid-search';
-import { BacklogValidationError, InvalidArgumentError } from '../../write/errors.js';
-import { assembleIssueCards, assertKnownIssueFields, isStatusTerminal } from '../card.js';
+import {
+  BacklogValidationError,
+  InvalidArgumentError,
+} from '../../write/errors.js';
+import {
+  assembleIssueCards,
+  assertKnownIssueFields,
+  isStatusTerminal,
+} from '../card.js';
 import {
   resolveEdgeScopedCandidates,
   resolveIssueByUid,
@@ -129,7 +140,10 @@ export const DEFAULT_TEMPORAL_DECAY_PER_HOUR = 0.0050125;
 function assertSimilarLimit(limit: number | undefined): number {
   if (limit === undefined) return DEFAULT_QUERY_LIMIT;
   if (!Number.isInteger(limit) || limit <= 0 || limit > MAX_QUERY_LIMIT) {
-    throw new BacklogValidationError('limit', `must be a positive integer ≤ ${MAX_QUERY_LIMIT}, got ${limit}`);
+    throw new BacklogValidationError(
+      'limit',
+      `must be a positive integer ≤ ${MAX_QUERY_LIMIT}, got ${limit}`
+    );
   }
   return limit;
 }
@@ -137,20 +151,29 @@ function assertSimilarLimit(limit: number | undefined): number {
 /** OR-union a multi-valued catalog-edge filter dimension (`kind`/`status`/`priority`/`author`) across its refs — reuses `resolve.ts`'s `resolveEdgeScopedCandidates`, which IS correctly directioned for these four (see this file's own top doc comment for why NOT `project`/`component`). An unresolved ref contributes nothing (never an error on a read path, SPEC.md §6.1). */
 async function resolveMultiValuedCatalogEdge(
   graph: GraphBackend,
-  input: { rel: string; expectedKind: string; refs: readonly string[] },
+  input: { rel: string; expectedKind: string; refs: readonly string[] }
 ): Promise<Set<number>> {
   const union = new Set<number>();
   for (const ref of input.refs) {
-    const candidates = await resolveEdgeScopedCandidates(graph, { rel: input.rel, expectedKind: input.expectedKind, ref });
+    const candidates = await resolveEdgeScopedCandidates(graph, {
+      rel: input.rel,
+      expectedKind: input.expectedKind,
+      ref,
+    });
     if (candidates) for (const id of candidates) union.add(id);
   }
   return union;
 }
 
 /** `status: 'open' | 'closed'` — scan the `status` catalog for its `terminal` flag, then union `has_status` edges into every matching row (mirrors `query.ts`'s private `resolveOpenClosedCandidates`, reusing `card.ts`'s exported `isStatusTerminal` rather than re-deriving it). */
-async function resolveOpenClosedIds(graph: GraphBackend, want: 'open' | 'closed'): Promise<Set<number>> {
+async function resolveOpenClosedIds(
+  graph: GraphBackend,
+  want: 'open' | 'closed'
+): Promise<Set<number>> {
   const statuses = await graph.queryNodes({ kind: 'status', liveOnly: true });
-  const matching = statuses.filter((s) => isStatusTerminal(s) === (want === 'closed'));
+  const matching = statuses.filter(
+    (s) => isStatusTerminal(s) === (want === 'closed')
+  );
   const union = new Set<number>();
   for (const s of matching) {
     const edges = await graph.getEdges({ dst: s.id, rel: 'has_status' });
@@ -168,8 +191,12 @@ async function resolveOpenClosedIds(graph: GraphBackend, want: 'open' | 'closed'
  * given (no restriction), or a `Set` (possibly empty, meaning "resolves to
  * nothing") otherwise.
  */
-async function resolveOwnershipChainIds(graph: GraphBackend, filter: IIssueFilter): Promise<Set<number> | undefined> {
-  if (filter.project === undefined && filter.component === undefined) return undefined;
+async function resolveOwnershipChainIds(
+  graph: GraphBackend,
+  filter: IIssueFilter
+): Promise<Set<number> | undefined> {
+  if (filter.project === undefined && filter.component === undefined)
+    return undefined;
 
   let projectUid: string | undefined;
   let projectScopedIssueIds: Set<number> | undefined;
@@ -178,10 +205,16 @@ async function resolveOwnershipChainIds(graph: GraphBackend, filter: IIssueFilte
     const project = await tryResolveRef(graph, 'project', filter.project);
     if (!project) return new Set();
     projectUid = project.uid;
-    const ownedComponents = await graph.getEdges({ src: project.id, rel: 'owns_project' });
+    const ownedComponents = await graph.getEdges({
+      src: project.id,
+      rel: 'owns_project',
+    });
     const union = new Set<number>();
     for (const compEdge of ownedComponents) {
-      const issueEdges = await graph.getEdges({ src: compEdge.dst, rel: 'owns_component' });
+      const issueEdges = await graph.getEdges({
+        src: compEdge.dst,
+        rel: 'owns_component',
+      });
       for (const e of issueEdges) union.add(e.dst);
     }
     projectScopedIssueIds = union;
@@ -189,27 +222,38 @@ async function resolveOwnershipChainIds(graph: GraphBackend, filter: IIssueFilte
 
   if (filter.component === undefined) return projectScopedIssueIds;
 
-  const component = projectUid !== undefined
-    ? await tryResolveComponentRef(graph, projectUid, filter.component)
-    : await tryResolveRef(graph, 'component', filter.component);
+  const component =
+    projectUid !== undefined
+      ? await tryResolveComponentRef(graph, projectUid, filter.component)
+      : await tryResolveRef(graph, 'component', filter.component);
   if (!component) return new Set();
-  const edges = await graph.getEdges({ src: component.id, rel: 'owns_component' });
+  const edges = await graph.getEdges({
+    src: component.id,
+    rel: 'owns_component',
+  });
   const componentScopedIssueIds = new Set(edges.map((e) => e.dst));
 
   if (!projectScopedIssueIds) return componentScopedIssueIds;
   const intersected = new Set<number>();
-  for (const id of componentScopedIssueIds) if (projectScopedIssueIds.has(id)) intersected.add(id);
+  for (const id of componentScopedIssueIds)
+    if (projectScopedIssueIds.has(id)) intersected.add(id);
   return intersected;
 }
 
 /** `assignee`/`claimedBy`/`closedAt` (metadata) + `createdAt`/`updatedAt` (node-column range) — the `NodeFilter` shape these compile to. `undefined` when none of these dimensions were given. */
-function buildScalarNodeFilter(filter: IIssueFilter): Record<string, unknown> | undefined {
+function buildScalarNodeFilter(
+  filter: IIssueFilter
+): Record<string, unknown> | undefined {
   const metadata: Record<string, unknown> = {};
-  if (filter.assignee !== undefined) metadata.assignee = { eq: filter.assignee };
-  if (filter.claimedBy !== undefined) metadata.claimedBy = { eq: filter.claimedBy };
+  if (filter.assignee !== undefined)
+    metadata.assignee = { eq: filter.assignee };
+  if (filter.claimedBy !== undefined)
+    metadata.claimedBy = { eq: filter.claimedBy };
   if (filter.closedAt !== undefined) {
     if (filter.closedAt.since && filter.closedAt.until) {
-      metadata.closedAt = { between: [filter.closedAt.since, filter.closedAt.until] };
+      metadata.closedAt = {
+        between: [filter.closedAt.since, filter.closedAt.until],
+      };
     } else if (filter.closedAt.since) {
       metadata.closedAt = { gte: filter.closedAt.since };
     } else if (filter.closedAt.until) {
@@ -244,7 +288,10 @@ function buildScalarNodeFilter(filter: IIssueFilter): Record<string, unknown> | 
  *    `ids: []` (see this file's top doc comment for why that would silently
  *    do the OPPOSITE — an unfiltered scan).
  */
-export async function resolveSimilarFilterIds(graph: GraphBackend, filter: IIssueFilter | undefined): Promise<Set<number> | undefined> {
+export async function resolveSimilarFilterIds(
+  graph: GraphBackend,
+  filter: IIssueFilter | undefined
+): Promise<Set<number> | undefined> {
   if (!filter) return undefined;
 
   const edgeScoped: Array<Set<number>> = [];
@@ -259,25 +306,53 @@ export async function resolveSimilarFilterIds(graph: GraphBackend, filter: IIssu
 
   if (filter.kind !== undefined) {
     const refs = Array.isArray(filter.kind) ? filter.kind : [filter.kind];
-    edgeScoped.push(await resolveMultiValuedCatalogEdge(graph, { rel: 'has_kind', expectedKind: 'kind', refs }));
+    edgeScoped.push(
+      await resolveMultiValuedCatalogEdge(graph, {
+        rel: 'has_kind',
+        expectedKind: 'kind',
+        refs,
+      })
+    );
   }
 
   if (filter.status !== undefined && filter.status !== 'all') {
     if (filter.status === 'open' || filter.status === 'closed') {
       edgeScoped.push(await resolveOpenClosedIds(graph, filter.status));
     } else {
-      const refs = Array.isArray(filter.status) ? filter.status : [filter.status];
-      edgeScoped.push(await resolveMultiValuedCatalogEdge(graph, { rel: 'has_status', expectedKind: 'status', refs }));
+      const refs = Array.isArray(filter.status)
+        ? filter.status
+        : [filter.status];
+      edgeScoped.push(
+        await resolveMultiValuedCatalogEdge(graph, {
+          rel: 'has_status',
+          expectedKind: 'status',
+          refs,
+        })
+      );
     }
   }
 
   if (filter.priority !== undefined) {
-    const refs = Array.isArray(filter.priority) ? filter.priority : [filter.priority];
-    edgeScoped.push(await resolveMultiValuedCatalogEdge(graph, { rel: 'has_priority', expectedKind: 'priority', refs }));
+    const refs = Array.isArray(filter.priority)
+      ? filter.priority
+      : [filter.priority];
+    edgeScoped.push(
+      await resolveMultiValuedCatalogEdge(graph, {
+        rel: 'has_priority',
+        expectedKind: 'priority',
+        refs,
+      })
+    );
   }
 
   if (filter.author !== undefined) {
-    edgeScoped.push(await resolveMultiValuedCatalogEdge(graph, { rel: 'authored_by', expectedKind: 'agent', refs: [filter.author] }));
+    edgeScoped.push(
+      await resolveMultiValuedCatalogEdge(graph, {
+        rel: 'authored_by',
+        expectedKind: 'agent',
+        refs: [filter.author],
+      })
+    );
   }
 
   const scalarFilter = buildScalarNodeFilter(filter);
@@ -358,13 +433,20 @@ const MAX_SUPERSEDE_OVERFETCH_ROUNDS = 4;
  * predicate that holds on only one of two branches is how the branch without
  * it rots.
  */
-async function dropSupersededResults(graph: GraphBackend, results: readonly SearchResult[]): Promise<SearchResult[]> {
+async function dropSupersededResults(
+  graph: GraphBackend,
+  results: readonly SearchResult[]
+): Promise<SearchResult[]> {
   if (results.length === 0) return [];
   const ids = results.map((r) => r.id);
   // Same `as unknown as NodeFilter` shape every other `isSuperseded` read site
   // in this package uses — the installed `NodeFilter` type does not yet name
   // the member the store's own query layer honours.
-  const nodeFilter: Record<string, unknown> = { ids, isSuperseded: false, limit: ids.length };
+  const nodeFilter: Record<string, unknown> = {
+    ids,
+    isSuperseded: false,
+    limit: ids.length,
+  };
   const live = await graph.queryNodes(nodeFilter as unknown as NodeFilter);
   const liveIds = new Set(live.map((n) => n.id));
   return results.filter((r) => liveIds.has(r.id));
@@ -380,18 +462,31 @@ async function dropSupersededResults(graph: GraphBackend, results: readonly Sear
  * "relevance ordering" half of this module's brief, distinct from
  * `view:'similar'` itself.
  */
-export async function rankByFusedRelevance(handle: IQueryStoreHandle, opts: IRelevanceRankOptions): Promise<SearchResult[]> {
+export async function rankByFusedRelevance(
+  handle: IQueryStoreHandle,
+  opts: IRelevanceRankOptions
+): Promise<SearchResult[]> {
   if (!handle.search) {
-    throw new InvalidArgumentError('semantic', 'semantic search is not configured for this store (no embedding/vector backend injected)');
+    throw new InvalidArgumentError(
+      'semantic',
+      'semantic search is not configured for this store (no embedding/vector backend injected)'
+    );
   }
   if (opts.candidateIds && opts.candidateIds.size === 0) return [];
 
-  const filters: Record<string, unknown> = opts.candidateIds ? { ids: [...opts.candidateIds] } : { kind: 'issue' };
+  const filters: Record<string, unknown> = opts.candidateIds
+    ? { ids: [...opts.candidateIds] }
+    : { kind: 'issue' };
   const query: SearchQuery = {
     text: opts.text,
     vec: opts.vec,
     signals: [{ kind: 'text' }, { kind: 'vec' }],
-    rescore: [{ kind: 'temporal', decay: opts.decayPerHour ?? DEFAULT_TEMPORAL_DECAY_PER_HOUR }],
+    rescore: [
+      {
+        kind: 'temporal',
+        decay: opts.decayPerHour ?? DEFAULT_TEMPORAL_DECAY_PER_HOUR,
+      },
+    ],
     filters,
   };
 
@@ -438,13 +533,20 @@ export async function rankByFusedRelevance(handle: IQueryStoreHandle, opts: IRel
  * `InvalidArgumentError('filter', ...)` (neither `anchor` nor `semantic`
  * given). `BacklogValidationError('limit', ...)` (out-of-range `limit`).
  */
-export async function querySimilarView(handle: IQueryStoreHandle, input: IIssueQueryInput): Promise<IIssueCard[]> {
+export async function querySimilarView(
+  handle: IQueryStoreHandle,
+  input: IIssueQueryInput
+): Promise<IIssueCard[]> {
   const { graph } = handle;
   if (!handle.search) {
-    throw new InvalidArgumentError('semantic', 'semantic search is not configured for this store (no embedding/vector backend injected)');
+    throw new InvalidArgumentError(
+      'semantic',
+      'semantic search is not configured for this store (no embedding/vector backend injected)'
+    );
   }
   assertKnownIssueFields(input.fields);
-  const fields = (input.fields ?? DEFAULT_ISSUE_CARD_FIELDS) as readonly IIssueField[];
+  const fields = (input.fields ??
+    DEFAULT_ISSUE_CARD_FIELDS) as readonly IIssueField[];
   const limit = assertSimilarLimit(input.limit);
 
   let text: string;
@@ -455,7 +557,10 @@ export async function querySimilarView(handle: IQueryStoreHandle, input: IIssueQ
   } else if (input.filter?.semantic !== undefined) {
     text = input.filter.semantic;
   } else {
-    throw new InvalidArgumentError('filter', '`view:"similar"` requires `filter.anchor` or `filter.semantic`');
+    throw new InvalidArgumentError(
+      'filter',
+      '`view:"similar"` requires `filter.anchor` or `filter.semantic`'
+    );
   }
 
   const candidateIds = await resolveSimilarFilterIds(graph, input.filter);
@@ -474,15 +579,26 @@ export async function querySimilarView(handle: IQueryStoreHandle, input: IIssueQ
   // the fetched window (verified: `Math.min(1001, 1000) === 1000`, so the
   // anchor's removal left only 999 rows for a caller that asked for 1000).
   const fetchLimit = anchor ? limit + 1 : limit;
-  const results = await rankByFusedRelevance(handle, { text, vec, candidateIds, limit: fetchLimit });
-  const page = (anchor ? results.filter((r) => r.id !== anchor!.id) : results).slice(0, limit);
+  const results = await rankByFusedRelevance(handle, {
+    text,
+    vec,
+    candidateIds,
+    limit: fetchLimit,
+  });
+  const page = (
+    anchor ? results.filter((r) => r.id !== anchor!.id) : results
+  ).slice(0, limit);
   if (page.length === 0) return [];
 
   const nodes = await graph.getNodesByIds(page.map((r) => r.id));
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const ordered = page.map((r) => byId.get(r.id)).filter((n): n is NodeRecord => n !== undefined);
+  const ordered = page
+    .map((r) => byId.get(r.id))
+    .filter((n): n is NodeRecord => n !== undefined);
   const scoreByUid = new Map(
-    page.map((r) => [byId.get(r.id)?.uid, r.score] as const).filter((e): e is [string, number] => e[0] !== undefined),
+    page
+      .map((r) => [byId.get(r.id)?.uid, r.score] as const)
+      .filter((e): e is [string, number] => e[0] !== undefined)
   );
   return assembleIssueCards(graph, ordered, fields, scoreByUid);
 }

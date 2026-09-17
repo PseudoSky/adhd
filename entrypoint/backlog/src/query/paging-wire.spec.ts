@@ -73,7 +73,11 @@ function runBin(args: string[]): Run {
     timeout: 60_000,
   });
   if (result.error) throw new Error(`spawn failed: ${String(result.error)}`);
-  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+  return {
+    status: result.status,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
 }
 
 function runJson(args: string[]): { run: Run; body: Record<string, unknown> } {
@@ -83,7 +87,9 @@ function runJson(args: string[]): { run: Run; body: Record<string, unknown> } {
   try {
     body = JSON.parse(line) as Record<string, unknown>;
   } catch {
-    throw new Error(`non-JSON stdout for ${args.join(' ')}: ${run.stdout}\n${run.stderr}`);
+    throw new Error(
+      `non-JSON stdout for ${args.join(' ')}: ${run.stdout}\n${run.stderr}`
+    );
   }
   return { run, body };
 }
@@ -91,8 +97,14 @@ function runJson(args: string[]): { run: Run; body: Record<string, unknown> } {
 /** Reads the `data` object off a success envelope, failing loudly on an error arm. */
 function okData(args: string[]): Record<string, unknown> {
   const { run, body } = runJson(args);
-  expect(run.status, `${args.join(' ')} exited ${String(run.status)}: ${run.stderr}`).toBe(0);
-  expect(body['ok'], `${args.join(' ')} returned an error arm: ${JSON.stringify(body)}`).toBe(true);
+  expect(
+    run.status,
+    `${args.join(' ')} exited ${String(run.status)}: ${run.stderr}`
+  ).toBe(0);
+  expect(
+    body['ok'],
+    `${args.join(' ')} returned an error arm: ${JSON.stringify(body)}`
+  ).toBe(true);
   return body['data'] as Record<string, unknown>;
 }
 
@@ -100,7 +112,11 @@ beforeAll(() => {
   tmpRoot = mkdtempSync(join(tmpdir(), 'backlog-paging-wire-'));
   dbPath = join(tmpRoot, 'paging-wire.db');
 
-  okData(['upsert-project', '--input', JSON.stringify({ name: PROJECT_NAME, by: 'paging-wire.spec' })]);
+  okData([
+    'upsert-project',
+    '--input',
+    JSON.stringify({ name: PROJECT_NAME, by: 'paging-wire.spec' }),
+  ]);
 
   for (let i = 0; i < ISSUE_COUNT; i++) {
     const n = String(i).padStart(2, '0');
@@ -130,7 +146,11 @@ afterAll(() => {
 
 describe('query pagination at the wire (real built bin)', () => {
   it('a terminal page ENCODES hasMore:false — the field is present, not omitted', () => {
-    const data = okData(['query', '--input', JSON.stringify({ view: 'list', limit: 100 })]);
+    const data = okData([
+      'query',
+      '--input',
+      JSON.stringify({ view: 'list', limit: 100 }),
+    ]);
 
     // The regression this file exists for: `hasMore` is a required boolean on
     // `IIssuePage`, and it vanished from the encoded response entirely. Assert
@@ -145,7 +165,11 @@ describe('query pagination at the wire (real built bin)', () => {
   });
 
   it('a non-terminal page ENCODES hasMore:true and a usable nextCursor', () => {
-    const data = okData(['query', '--input', JSON.stringify({ view: 'list', limit: PAGE_SIZE })]);
+    const data = okData([
+      'query',
+      '--input',
+      JSON.stringify({ view: 'list', limit: PAGE_SIZE }),
+    ]);
 
     expect(Object.keys(data)).toContain('hasMore');
     expect(data['hasMore']).toBe(true);
@@ -183,7 +207,9 @@ describe('query pagination at the wire (real built bin)', () => {
 
       // Bounded: a cursor that never advances must fail loudly, never hang.
       if (pages > ISSUE_COUNT) {
-        throw new Error(`paging did not terminate after ${pages} pages — the cursor is not advancing`);
+        throw new Error(
+          `paging did not terminate after ${pages} pages — the cursor is not advancing`
+        );
       }
     }
 

@@ -34,7 +34,13 @@
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import type { TypePolicy } from '@adhd/sox-graph-store';
 import { resolveEdgeKindTx } from './catalog.js';
-import { canonicalJSONStringify, nowISO, sha256Hex, writeEdgeTx, writeNodeTx } from './tx.js';
+import {
+  canonicalJSONStringify,
+  nowISO,
+  sha256Hex,
+  writeEdgeTx,
+  writeNodeTx,
+} from './tx.js';
 
 export interface IWriteAuditInput {
   tx: AdapterTransaction;
@@ -70,7 +76,9 @@ export interface IAuditWriteResult {
  * `transition.sha` is computed — never hashing external content, unlike a
  * `citation`'s `sha`, §8.5).
  */
-export async function writeAudit(input: IWriteAuditInput): Promise<IAuditWriteResult> {
+export async function writeAudit(
+  input: IWriteAuditInput
+): Promise<IAuditWriteResult> {
   const at = input.at ?? nowISO();
   const canonicalFields: Record<string, unknown> = {
     actor: input.actor,

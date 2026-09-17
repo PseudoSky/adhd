@@ -54,10 +54,18 @@
  * than two small, separately-documented ones.
  */
 
-import type { GraphBackend, NodeFilter, NodeRecord } from '@adhd/sox-graph-store';
+import type {
+  GraphBackend,
+  NodeFilter,
+  NodeRecord,
+} from '@adhd/sox-graph-store';
 import { InvalidArgumentError } from '../../write/errors.js';
 import { isStatusTerminal } from '../card.js';
-import { resolveIssueByUid, tryResolveComponentRef, tryResolveRef } from '../resolve.js';
+import {
+  resolveIssueByUid,
+  tryResolveComponentRef,
+  tryResolveRef,
+} from '../resolve.js';
 import type { IIssueAuditEntry, IIssueFilter } from '../types.js';
 import type { IQueryStoreHandle } from '../query.js';
 
@@ -70,22 +78,45 @@ import type { IQueryStoreHandle } from '../query.js';
 /** The `IIssueFilter` keys every view in this file understands. Anything else is rejected by name (never silently ignored — this repo's own "never accept-and-ignore an input key" convention). */
 type IScopeFilterKey = 'project' | 'component' | 'kind' | 'status';
 
-const SCOPE_FILTER_KEYS: readonly IScopeFilterKey[] = ['project', 'component', 'kind', 'status'];
+const SCOPE_FILTER_KEYS: readonly IScopeFilterKey[] = [
+  'project',
+  'component',
+  'kind',
+  'status',
+];
 
 /** Every `IIssueFilter` key NOT in {@link SCOPE_FILTER_KEYS} — used to build each view's own rejected-key set below without repeating the literal list. */
 const ALL_FILTER_KEYS: readonly (keyof IIssueFilter)[] = [
-  'project', 'component', 'kind', 'status', 'priority', 'assignee', 'claimedBy',
-  'author', 'grep', 'semantic', 'anchor', 'closedAt', 'createdAt', 'updatedAt',
+  'project',
+  'component',
+  'kind',
+  'status',
+  'priority',
+  'assignee',
+  'claimedBy',
+  'author',
+  'grep',
+  'semantic',
+  'anchor',
+  'closedAt',
+  'createdAt',
+  'updatedAt',
 ];
 
 /** Throws `InvalidArgumentError` naming the first key in `filter` that isn't in `allowed` — never a silent drop. */
-function assertOnlyAllowedFilterKeys(filter: IIssueFilter | undefined, allowed: ReadonlySet<string>, viewName: string): void {
+function assertOnlyAllowedFilterKeys(
+  filter: IIssueFilter | undefined,
+  allowed: ReadonlySet<string>,
+  viewName: string
+): void {
   if (!filter) return;
   for (const key of ALL_FILTER_KEYS) {
     if (filter[key] !== undefined && !allowed.has(key)) {
       throw new InvalidArgumentError(
         `filter.${key}`,
-        `not supported by ${viewName} — this view scopes by ${[...allowed].join('/')} only`,
+        `not supported by ${viewName} — this view scopes by ${[...allowed].join(
+          '/'
+        )} only`
       );
     }
   }
@@ -94,7 +125,7 @@ function assertOnlyAllowedFilterKeys(filter: IIssueFilter | undefined, allowed: 
 /** Union the incoming-edge `src` sets for every resolved target of a multi-valued edge-scoped filter value (mirrors `query.ts`'s own helper of the same shape — not importable, see this file's own doc comment). */
 async function unionEdgeScoped(
   graph: GraphBackend,
-  input: { rel: string; expectedKind: string; refs: readonly string[] },
+  input: { rel: string; expectedKind: string; refs: readonly string[] }
 ): Promise<Set<number>> {
   const union = new Set<number>();
   for (const ref of input.refs) {
@@ -107,9 +138,14 @@ async function unionEdgeScoped(
 }
 
 /** `status: 'open' | 'closed'` — scans the `status` catalog for `terminal`, unions `has_status` edges into every matching row (mirrors `query.ts`'s `resolveOpenClosedCandidates`). */
-async function unionOpenClosed(graph: GraphBackend, want: 'open' | 'closed'): Promise<Set<number>> {
+async function unionOpenClosed(
+  graph: GraphBackend,
+  want: 'open' | 'closed'
+): Promise<Set<number>> {
   const statuses = await graph.queryNodes({ kind: 'status', liveOnly: true });
-  const matching = statuses.filter((s) => isStatusTerminal(s) === (want === 'closed'));
+  const matching = statuses.filter(
+    (s) => isStatusTerminal(s) === (want === 'closed')
+  );
   const union = new Set<number>();
   for (const s of matching) {
     const edges = await graph.getEdges({ dst: s.id, rel: 'has_status' });
@@ -138,7 +174,10 @@ function intersect(sets: ReadonlyArray<Set<number>>): Set<number> | undefined {
  * error) — callers must check `.size === 0` and short-circuit to an empty
  * result, exactly as `query.ts`'s own `queryList` does.
  */
-async function resolvePlacementScope(graph: GraphBackend, filter: IIssueFilter | undefined): Promise<Set<number> | undefined> {
+async function resolvePlacementScope(
+  graph: GraphBackend,
+  filter: IIssueFilter | undefined
+): Promise<Set<number> | undefined> {
   if (!filter) return undefined;
   const perDimension: Array<Set<number>> = [];
   let projectUid: string | undefined;
@@ -147,27 +186,43 @@ async function resolvePlacementScope(graph: GraphBackend, filter: IIssueFilter |
     const project = await tryResolveRef(graph, 'project', filter.project);
     if (!project) return new Set();
     projectUid = project.uid;
-    const ownedComponents = await graph.getEdges({ src: project.id, rel: 'owns_project' });
+    const ownedComponents = await graph.getEdges({
+      src: project.id,
+      rel: 'owns_project',
+    });
     const union = new Set<number>();
     for (const compEdge of ownedComponents) {
-      const issueEdges = await graph.getEdges({ src: compEdge.dst, rel: 'owns_component' });
+      const issueEdges = await graph.getEdges({
+        src: compEdge.dst,
+        rel: 'owns_component',
+      });
       for (const e of issueEdges) union.add(e.dst);
     }
     perDimension.push(union);
   }
 
   if (filter.component !== undefined) {
-    const component = projectUid !== undefined
-      ? await tryResolveComponentRef(graph, projectUid, filter.component)
-      : await tryResolveRef(graph, 'component', filter.component);
+    const component =
+      projectUid !== undefined
+        ? await tryResolveComponentRef(graph, projectUid, filter.component)
+        : await tryResolveRef(graph, 'component', filter.component);
     if (!component) return new Set();
-    const edges = await graph.getEdges({ src: component.id, rel: 'owns_component' });
+    const edges = await graph.getEdges({
+      src: component.id,
+      rel: 'owns_component',
+    });
     perDimension.push(new Set(edges.map((e) => e.dst)));
   }
 
   if (filter.kind !== undefined) {
     const refs = Array.isArray(filter.kind) ? filter.kind : [filter.kind];
-    perDimension.push(await unionEdgeScoped(graph, { rel: 'has_kind', expectedKind: 'kind', refs }));
+    perDimension.push(
+      await unionEdgeScoped(graph, {
+        rel: 'has_kind',
+        expectedKind: 'kind',
+        refs,
+      })
+    );
   }
 
   return intersect(perDimension);
@@ -199,33 +254,66 @@ export interface IPriorityMatrixInput {
   filter?: IIssueFilter;
 }
 
-const PRIORITY_MATRIX_ALLOWED_KEYS: ReadonlySet<string> = new Set(['project', 'component', 'kind', 'status']);
+const PRIORITY_MATRIX_ALLOWED_KEYS: ReadonlySet<string> = new Set([
+  'project',
+  'component',
+  'kind',
+  'status',
+]);
 
 /** `priorityMatrix`'s own status-scope resolution — `undefined` defaults to `'open'` (the BUG-023 divergence from `list`'s "no restriction" default), everything else composes exactly like `query.ts`'s own status handling. Returns `undefined` only for the explicit `'all'` scope (no restriction). */
 async function resolvePriorityMatrixStatusScope(
   graph: GraphBackend,
-  status: IIssueFilter['status'],
-): Promise<{ candidates: Set<number> | undefined; scope: NonNullable<IIssueFilter['status']> }> {
+  status: IIssueFilter['status']
+): Promise<{
+  candidates: Set<number> | undefined;
+  scope: NonNullable<IIssueFilter['status']>;
+}> {
   const scope = status ?? 'open';
   if (scope === 'all') return { candidates: undefined, scope };
-  if (scope === 'open' || scope === 'closed') return { candidates: await unionOpenClosed(graph, scope), scope };
+  if (scope === 'open' || scope === 'closed')
+    return { candidates: await unionOpenClosed(graph, scope), scope };
   const refs = Array.isArray(scope) ? scope : [scope];
-  return { candidates: await unionEdgeScoped(graph, { rel: 'has_status', expectedKind: 'status', refs }), scope };
+  return {
+    candidates: await unionEdgeScoped(graph, {
+      rel: 'has_status',
+      expectedKind: 'status',
+      refs,
+    }),
+    scope,
+  };
 }
 
 /** SPEC.md §5's status-aware priority matrix (BUG-023). */
-export async function priorityMatrix(handle: IQueryStoreHandle, input: IPriorityMatrixInput = {}): Promise<IPriorityMatrixResult> {
+export async function priorityMatrix(
+  handle: IQueryStoreHandle,
+  input: IPriorityMatrixInput = {}
+): Promise<IPriorityMatrixResult> {
   const { graph } = handle;
-  assertOnlyAllowedFilterKeys(input.filter, PRIORITY_MATRIX_ALLOWED_KEYS, 'priorityMatrix');
+  assertOnlyAllowedFilterKeys(
+    input.filter,
+    PRIORITY_MATRIX_ALLOWED_KEYS,
+    'priorityMatrix'
+  );
 
   const placementScope = await resolvePlacementScope(graph, input.filter);
   if (placementScope && placementScope.size === 0) {
-    return { rows: [], unassigned: 0, statusScope: input.filter?.status ?? 'open' };
+    return {
+      rows: [],
+      unassigned: 0,
+      statusScope: input.filter?.status ?? 'open',
+    };
   }
 
-  const { candidates: statusScoped, scope: statusScope } = await resolvePriorityMatrixStatusScope(graph, input.filter?.status);
-  const rawScoped = intersect([placementScope, statusScoped].filter((s): s is Set<number> => s !== undefined));
-  if (rawScoped && rawScoped.size === 0) return { rows: [], unassigned: 0, statusScope };
+  const { candidates: statusScoped, scope: statusScope } =
+    await resolvePriorityMatrixStatusScope(graph, input.filter?.status);
+  const rawScoped = intersect(
+    [placementScope, statusScoped].filter(
+      (s): s is Set<number> => s !== undefined
+    )
+  );
+  if (rawScoped && rawScoped.size === 0)
+    return { rows: [], unassigned: 0, statusScope };
 
   // `placementScope`/`statusScoped` are both derived purely from EDGE
   // existence (`owns_component`/`has_kind`/`has_status`), never from the
@@ -239,32 +327,51 @@ export async function priorityMatrix(handle: IQueryStoreHandle, input: IPriority
   // deleted issue is "neither open work nor closed work, it is gone" (the
   // same principle `partOfRollup` above already applies via `!n.tInvalid`).
   const scoped = new Set(
-    (await graph.queryNodes({
-      kind: 'issue',
-      liveOnly: true,
-      // Current rows only — see `queryList`'s `baseFilter` (query.ts).
-      isSuperseded: false,
-      ...(rawScoped ? { ids: [...rawScoped] } : {}),
-    } as NodeFilter)).map((n) => n.id),
+    (
+      await graph.queryNodes({
+        kind: 'issue',
+        liveOnly: true,
+        // Current rows only — see `queryList`'s `baseFilter` (query.ts).
+        isSuperseded: false,
+        ...(rawScoped ? { ids: [...rawScoped] } : {}),
+      } as NodeFilter)
+    ).map((n) => n.id)
   );
 
-  const priorities = await graph.queryNodes({ kind: 'priority', liveOnly: true });
+  const priorities = await graph.queryNodes({
+    kind: 'priority',
+    liveOnly: true,
+  });
   const assigned = new Set<number>();
   const rows: IPriorityMatrixRow[] = [];
 
   for (const priority of priorities) {
-    const edges = await graph.getEdges({ dst: priority.id, rel: 'has_priority' });
+    const edges = await graph.getEdges({
+      dst: priority.id,
+      rel: 'has_priority',
+    });
     let count = 0;
     for (const e of edges) {
       if (!scoped.has(e.src)) continue;
       count += 1;
       assigned.add(e.src);
     }
-    const rank = typeof priority.metadata?.rank === 'number' ? priority.metadata.rank : undefined;
-    rows.push({ priority: priority.name ?? '', priorityUid: priority.uid, rank, count });
+    const rank =
+      typeof priority.metadata?.rank === 'number'
+        ? priority.metadata.rank
+        : undefined;
+    rows.push({
+      priority: priority.name ?? '',
+      priorityUid: priority.uid,
+      rank,
+      count,
+    });
   }
 
-  rows.sort((a, b) => (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER));
+  rows.sort(
+    (a, b) =>
+      (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER)
+  );
 
   // "Unassigned" — in-scope, LIVE issues carrying no live has_priority edge at all.
   let unassigned = 0;
@@ -293,9 +400,14 @@ export interface IPartOfRollupResult {
 }
 
 /** Batch-resolve `has_status` targets for a set of already-fetched issue nodes — one `getEdges` per node (the same N-round-trip shape `card.ts`'s own unexported `resolveStatusesFor` uses; not importable from here, see this file's own doc comment), then one batched `getNodesByIds`. */
-async function resolveStatusesForNodes(graph: GraphBackend, issues: NodeRecord[]): Promise<Map<number, NodeRecord>> {
+async function resolveStatusesForNodes(
+  graph: GraphBackend,
+  issues: NodeRecord[]
+): Promise<Map<number, NodeRecord>> {
   if (issues.length === 0) return new Map();
-  const edgeLists = await Promise.all(issues.map((i) => graph.getEdges({ src: i.id, rel: 'has_status' })));
+  const edgeLists = await Promise.all(
+    issues.map((i) => graph.getEdges({ src: i.id, rel: 'has_status' }))
+  );
   const statusEdgeByIssue = new Map<number, number>();
   edgeLists.forEach((es, i) => {
     const e = es[0];
@@ -333,12 +445,21 @@ async function resolveStatusesForNodes(graph: GraphBackend, issues: NodeRecord[]
  * soft-deleted descendant is explicitly filtered back out below, since a
  * deleted issue is neither open work nor closed work, it is gone.
  */
-export async function partOfRollup(handle: IQueryStoreHandle, input: IPartOfRollupInput): Promise<IPartOfRollupResult> {
+export async function partOfRollup(
+  handle: IQueryStoreHandle,
+  input: IPartOfRollupInput
+): Promise<IPartOfRollupResult> {
   const { graph } = handle;
   const root = await resolveIssueByUid(graph, input.uid);
 
-  const subgraph = await graph.getSubgraph(root.id, { rel: 'part_of', direction: 'in', depth: -1 });
-  const descendants = subgraph.nodes.filter((n) => n.id !== root.id && n.kind === 'issue' && !n.tInvalid);
+  const subgraph = await graph.getSubgraph(root.id, {
+    rel: 'part_of',
+    direction: 'in',
+    depth: -1,
+  });
+  const descendants = subgraph.nodes.filter(
+    (n) => n.id !== root.id && n.kind === 'issue' && !n.tInvalid
+  );
 
   const statuses = await resolveStatusesForNodes(graph, descendants);
   let childrenOpen = 0;
@@ -387,7 +508,11 @@ export interface IOpenCurveResult {
   points: readonly IOpenCurvePoint[];
 }
 
-const OPEN_CURVE_ALLOWED_KEYS: ReadonlySet<string> = new Set(['project', 'component', 'kind']);
+const OPEN_CURVE_ALLOWED_KEYS: ReadonlySet<string> = new Set([
+  'project',
+  'component',
+  'kind',
+]);
 
 /**
  * Reconstructs the issue's status AS OF `at` from its own audit trail
@@ -418,7 +543,11 @@ const OPEN_CURVE_ALLOWED_KEYS: ReadonlySet<string> = new Set(['project', 'compon
  * silently shipped as exact, in the same spirit as `query.ts`'s
  * `sortByPriorityRank` and SPEC.md §8.1's `closedAt` reconstruction.
  */
-function reconstructStatusAt(auditTrail: readonly IIssueAuditEntry[], at: string, currentStatusName: string | undefined): string | undefined {
+function reconstructStatusAt(
+  auditTrail: readonly IIssueAuditEntry[],
+  at: string,
+  currentStatusName: string | undefined
+): string | undefined {
   const transitions = auditTrail.filter((e) => e.to !== undefined);
   if (transitions.length === 0) return currentStatusName;
 
@@ -457,7 +586,7 @@ function reconstructStatusAt(auditTrail: readonly IIssueAuditEntry[], at: string
  * phantom entry.
  */
 async function resolveCurrentStatusAndAuditTrails(
-  graph: GraphBackend,
+  graph: GraphBackend
 ): Promise<{
   currentStatusNameByIssue: Map<number, string | undefined>;
   auditTrailByIssue: Map<number, IIssueAuditEntry[]>;
@@ -470,7 +599,10 @@ async function resolveCurrentStatusAndAuditTrails(
   }
   const statusNodeIds = [...new Set(statusIdByIssue.values())];
   const statusById = new Map(
-    (statusNodeIds.length > 0 ? await graph.getNodesByIds(statusNodeIds) : []).map((n) => [n.id, n]),
+    (statusNodeIds.length > 0
+      ? await graph.getNodesByIds(statusNodeIds)
+      : []
+    ).map((n) => [n.id, n])
   );
   const currentStatusNameByIssue = new Map<number, string | undefined>();
   for (const [issueId, statusId] of statusIdByIssue) {
@@ -487,7 +619,10 @@ async function resolveCurrentStatusAndAuditTrails(
   }
   const allAuditNodeIds = [...new Set(auditEdges.map((e) => e.dst))];
   const auditNodesById = new Map(
-    (allAuditNodeIds.length > 0 ? await graph.getNodesByIds(allAuditNodeIds) : []).map((n) => [n.id, n]),
+    (allAuditNodeIds.length > 0
+      ? await graph.getNodesByIds(allAuditNodeIds)
+      : []
+    ).map((n) => [n.id, n])
   );
   const auditTrailByIssue = new Map<number, IIssueAuditEntry[]>();
   for (const [issueId, auditIds] of auditIdsByIssue) {
@@ -497,10 +632,15 @@ async function resolveCurrentStatusAndAuditTrails(
       .map((n) => ({
         uid: n.uid,
         actor: typeof n.metadata?.actor === 'string' ? n.metadata.actor : '',
-        action: typeof n.metadata?.action === 'string' ? n.metadata.action : (n.name ?? ''),
-        from: typeof n.metadata?.from === 'string' ? n.metadata.from : undefined,
+        action:
+          typeof n.metadata?.action === 'string'
+            ? n.metadata.action
+            : n.name ?? '',
+        from:
+          typeof n.metadata?.from === 'string' ? n.metadata.from : undefined,
         to: typeof n.metadata?.to === 'string' ? n.metadata.to : undefined,
-        note: typeof n.metadata?.note === 'string' ? n.metadata.note : undefined,
+        note:
+          typeof n.metadata?.note === 'string' ? n.metadata.note : undefined,
         sha: typeof n.metadata?.sha === 'string' ? n.metadata.sha : '',
         at: typeof n.metadata?.at === 'string' ? n.metadata.at : n.tCreated,
       }))
@@ -543,33 +683,51 @@ async function resolveCurrentStatusAndAuditTrails(
  * existence check requires. Total round trips: `4 + M` for `M` sampled
  * instants — independent of N, the number of issues in the store.
  */
-export async function openCurve(handle: IQueryStoreHandle, input: IOpenCurveInput): Promise<IOpenCurveResult> {
+export async function openCurve(
+  handle: IQueryStoreHandle,
+  input: IOpenCurveInput
+): Promise<IOpenCurveResult> {
   const { graph } = handle;
-  assertOnlyAllowedFilterKeys(input.filter, OPEN_CURVE_ALLOWED_KEYS, 'openCurve');
+  assertOnlyAllowedFilterKeys(
+    input.filter,
+    OPEN_CURVE_ALLOWED_KEYS,
+    'openCurve'
+  );
 
   if (input.at.length === 0) {
-    throw new InvalidArgumentError('at', 'requires at least one ISO-8601 instant to sample');
+    throw new InvalidArgumentError(
+      'at',
+      'requires at least one ISO-8601 instant to sample'
+    );
   }
   const instants = input.at.map((raw) => {
     const parsed = new Date(raw);
     if (Number.isNaN(parsed.getTime())) {
-      throw new InvalidArgumentError('at', `"${raw}" is not a parsable ISO-8601 instant`);
+      throw new InvalidArgumentError(
+        'at',
+        `"${raw}" is not a parsable ISO-8601 instant`
+      );
     }
     return parsed.toISOString();
   });
 
   const placementScope = await resolvePlacementScope(graph, input.filter);
   if (placementScope && placementScope.size === 0) {
-    return { points: instants.map((at) => ({ at, existed: 0, open: 0, closed: 0 })) };
+    return {
+      points: instants.map((at) => ({ at, existed: 0, open: 0, closed: 0 })),
+    };
   }
 
   const statuses = await graph.queryNodes({ kind: 'status', liveOnly: true });
-  const terminalByName = new Map(statuses.map((s) => [s.name ?? '', isStatusTerminal(s)]));
+  const terminalByName = new Map(
+    statuses.map((s) => [s.name ?? '', isStatusTerminal(s)])
+  );
 
   // Per-ISSUE data (never per (issue, instant)) — fetched once for the whole
   // relation and reused across every sampled instant. See this function's own
   // doc comment for the cost model.
-  const { currentStatusNameByIssue, auditTrailByIssue } = await resolveCurrentStatusAndAuditTrails(graph);
+  const { currentStatusNameByIssue, auditTrailByIssue } =
+    await resolveCurrentStatusAndAuditTrails(graph);
 
   // Per-ISSUE as well: the instant each node stopped being the head of its
   // identity chain. A body edit supersedes the old node and deliberately leaves
@@ -586,7 +744,8 @@ export async function openCurve(handle: IQueryStoreHandle, input: IOpenCurveInpu
   const supersededAtByNode = new Map<number, string>();
   for (const e of await graph.getEdges({ rel: 'SUPERSEDES' })) {
     const previous = supersededAtByNode.get(e.dst);
-    if (previous === undefined || e.tCreated < previous) supersededAtByNode.set(e.dst, e.tCreated);
+    if (previous === undefined || e.tCreated < previous)
+      supersededAtByNode.set(e.dst, e.tCreated);
   }
 
   const points: IOpenCurvePoint[] = [];
@@ -607,7 +766,9 @@ export async function openCurve(handle: IQueryStoreHandle, input: IOpenCurveInpu
       liveOnly: false,
       ...(placementScope ? { ids: [...placementScope] } : {}),
     };
-    const existing = await graph.queryNodes(nodeFilter as unknown as NodeFilter);
+    const existing = await graph.queryNodes(
+      nodeFilter as unknown as NodeFilter
+    );
 
     let open = 0;
     let existedCount = 0;
@@ -619,11 +780,17 @@ export async function openCurve(handle: IQueryStoreHandle, input: IOpenCurveInpu
       const currentStatusName = currentStatusNameByIssue.get(issue.id);
       const trail = auditTrailByIssue.get(issue.id) ?? [];
       const statusAt = reconstructStatusAt(trail, at, currentStatusName);
-      const terminalAt = statusAt !== undefined ? (terminalByName.get(statusAt) ?? false) : false;
+      const terminalAt =
+        statusAt !== undefined ? terminalByName.get(statusAt) ?? false : false;
       if (!terminalAt) open += 1;
     }
 
-    points.push({ at, existed: existedCount, open, closed: existedCount - open });
+    points.push({
+      at,
+      existed: existedCount,
+      open,
+      closed: existedCount - open,
+    });
   }
 
   return { points };

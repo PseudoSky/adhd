@@ -55,11 +55,26 @@ import { mcpPlugin } from '@adhd/apigen-plugin-mcp';
 import { batchPlugin } from '@adhd/apigen-plugin-batch';
 import * as clientMod from './api.js';
 import type { BacklogCtx } from './api.js';
-import { openGraphBacklogStore, closeGraphBacklogStoreSafe, type GraphBacklogStore } from './store/graph-backlog-store.js';
+import {
+  openGraphBacklogStore,
+  closeGraphBacklogStoreSafe,
+  type GraphBacklogStore,
+} from './store/graph-backlog-store.js';
 import { enableSemanticSearchFromConfig } from './store/semantic-search.js';
-import { hasExternalSignalHandling, installSignalCleanup } from './store/signal-cleanup.js';
-import { acquireServeLock, isLockableDbPath, type ServeLockHandle } from './store/serve-lock.js';
-import { buildBacklogEnv, resolveBacklogDbPath, resolveIrCacheFile } from './env.js';
+import {
+  hasExternalSignalHandling,
+  installSignalCleanup,
+} from './store/signal-cleanup.js';
+import {
+  acquireServeLock,
+  isLockableDbPath,
+  type ServeLockHandle,
+} from './store/serve-lock.js';
+import {
+  buildBacklogEnv,
+  resolveBacklogDbPath,
+  resolveIrCacheFile,
+} from './env.js';
 import { readBacklogVersionInfo } from './version-info.js';
 import type { Logger, OutputPlugin, RunInput } from '@adhd/apigen-core-client';
 
@@ -73,8 +88,13 @@ import type { Logger, OutputPlugin, RunInput } from '@adhd/apigen-core-client';
  * ACROSS packages, not an in-package private helper), so it's shared via a
  * plain re-export instead.
  */
-export function requireRun(plugin: OutputPlugin): (input: RunInput) => Promise<void> {
-  if (!plugin.run) throw new Error(`@adhd/backlog: apigen plugin "${plugin.id}" declares no run() — cannot mount live`);
+export function requireRun(
+  plugin: OutputPlugin
+): (input: RunInput) => Promise<void> {
+  if (!plugin.run)
+    throw new Error(
+      `@adhd/backlog: apigen plugin "${plugin.id}" declares no run() — cannot mount live`
+    );
   return plugin.run;
 }
 
@@ -106,7 +126,14 @@ export function testSilentLogger(): Logger | undefined {
   const noop = (): void => {
     /* silenced under vitest — see doc comment above */
   };
-  const silent: Record<string, unknown> = { info: noop, error: noop, debug: noop, fatal: noop, warn: noop, trace: noop };
+  const silent: Record<string, unknown> = {
+    info: noop,
+    error: noop,
+    debug: noop,
+    fatal: noop,
+    warn: noop,
+    trace: noop,
+  };
   silent['child'] = () => silent;
   return silent as unknown as Logger;
 }
@@ -136,7 +163,11 @@ export function testSilentLogger(): Logger | undefined {
  * writer against the store (the exact condition serve-lock.ts exists to make
  * impossible).
  */
-export const BACKLOG_HOST_COMMANDS: readonly string[] = ['install', 'install-skill', 'serve'];
+export const BACKLOG_HOST_COMMANDS: readonly string[] = [
+  'install',
+  'install-skill',
+  'serve',
+];
 
 /**
  * SPEC.md §6.7 — the data verbs the whole surface consolidates onto:
@@ -221,7 +252,9 @@ export interface IMountedOperationSurface {
  * @returns one entry per mounted operation, sorted by canonical id for stable
  *   comparison
  */
-export function describeMountedSurface(operations: readonly Operation[]): IMountedOperationSurface[] {
+export function describeMountedSurface(
+  operations: readonly Operation[]
+): IMountedOperationSurface[] {
   return operations
     .filter((op) => op.kind === 'action')
     .map((op) => {
@@ -246,18 +279,24 @@ export function describeMountedSurface(operations: readonly Operation[]): IMount
  * `backlog get-item`) and against the full MCP tool name, because a host
  * command could be absorbed under either spelling.
  */
-function assertHostCarveOut(surface: readonly IMountedOperationSurface[]): void {
+function assertHostCarveOut(
+  surface: readonly IMountedOperationSurface[]
+): void {
   const offenders = surface.filter((entry) => {
     const leaf = entry.cliPath[entry.cliPath.length - 1] ?? '';
     return (
       BACKLOG_HOST_COMMANDS.includes(leaf) ||
-      BACKLOG_HOST_COMMANDS.some((cmd) => entry.mcpTool.endsWith(`_${cmd.replace(/-/g, '_')}`))
+      BACKLOG_HOST_COMMANDS.some((cmd) =>
+        entry.mcpTool.endsWith(`_${cmd.replace(/-/g, '_')}`)
+      )
     );
   });
   if (offenders.length > 0) {
     throw new Error(
       `@adhd/backlog: host-command carve-out violated (SPEC.md §6.6) — ` +
-        `${offenders.map((o) => o.id).join(', ')} was mounted as a data operation. ` +
+        `${offenders
+          .map((o) => o.id)
+          .join(', ')} was mounted as a data operation. ` +
         `install/install-skill must never open the store (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001) ` +
         `and serve must never be reachable as a tool (a second writer against the same store is ` +
         `the condition serve-lock.ts exists to prevent). Keep them host commands in cli.ts.`
@@ -290,7 +329,10 @@ export function resolveExpectedMcpToolNames(
 ): string[] {
   const surface = describeMountedSurface(operations);
   const names = new Set<string>(surface.map((entry) => entry.mcpTool));
-  const descriptor: Descriptor = { host: 'backlog', operations: operations as Operation[] };
+  const descriptor: Descriptor = {
+    host: 'backlog',
+    operations: operations as Operation[],
+  };
   for (const plugin of usePlugins) {
     const mount = plugin.capabilities.mount;
     if (!mount) continue;
@@ -399,7 +441,9 @@ function dereferenceSchema(schema: unknown): unknown {
     for (const key of ['definitions', '$defs']) {
       const defs = obj[key];
       if (defs && typeof defs === 'object' && !Array.isArray(defs)) {
-        for (const [name, def] of Object.entries(defs as Record<string, unknown>)) {
+        for (const [name, def] of Object.entries(
+          defs as Record<string, unknown>
+        )) {
           if (!(name in definitions)) definitions[name] = def;
         }
       }
@@ -483,7 +527,9 @@ const CORE_CLIENT_VERSION: string = requirePkg(
  * Now accepts the same `{ adhdRoot, instanceId }` test-isolation pair every
  * other resolver in this file already takes, and forwards it verbatim.
  */
-function irCacheFile(opts: { adhdRoot?: string; instanceId?: string } = {}): string {
+function irCacheFile(
+  opts: { adhdRoot?: string; instanceId?: string } = {}
+): string {
   return resolveIrCacheFile(opts);
 }
 
@@ -516,10 +562,13 @@ function irCacheEnabled(): boolean {
  * instead — exactly the escape hatch that module doc describes for a caller
  * wanting non-default configuration in the same process.
  */
-function backlogIrCachePlugin(opts: { adhdRoot?: string; instanceId?: string } = {}): Plugin {
+function backlogIrCachePlugin(
+  opts: { adhdRoot?: string; instanceId?: string } = {}
+): Plugin {
   return {
     id: 'ir-cache',
-    description: 'Extract-stage IR cache, configured for the backlog hot path (BUG-019).',
+    description:
+      'Extract-stage IR cache, configured for the backlog hot path (BUG-019).',
     language: 'ts',
     capabilities: {
       extractLayer: {
@@ -558,7 +607,9 @@ function backlogIrCachePlugin(opts: { adhdRoot?: string; instanceId?: string } =
  * such caller exists today.
  */
 let extractInvoke: ((call: ExtractCall) => Promise<Operation[]>) | undefined;
-function getExtractInvoke(opts: { adhdRoot?: string; instanceId?: string } = {}): (call: ExtractCall) => Promise<Operation[]> {
+function getExtractInvoke(
+  opts: { adhdRoot?: string; instanceId?: string } = {}
+): (call: ExtractCall) => Promise<Operation[]> {
   extractInvoke ??= createExtractInvokerFromPlugins(
     irCacheEnabled() ? [backlogIrCachePlugin(opts)] : [],
     (call: ExtractCall) =>
@@ -653,7 +704,8 @@ export async function buildBacklogApigenPackage(
   surface: IMountedOperationSurface[];
   operations: Operation[];
 }> {
-  const getCtx: () => BacklogCtx | Promise<BacklogCtx> = typeof ctx === 'function' ? ctx : () => ctx;
+  const getCtx: () => BacklogCtx | Promise<BacklogCtx> =
+    typeof ctx === 'function' ? ctx : () => ctx;
   const operations = await extractApiOperations(opts);
   const generated = {
     metadata: { namespace: 'backlog', phase: '' },
@@ -701,7 +753,10 @@ export async function buildBacklogApigenPackage(
       version,
       schemas,
       importPath: join(backlogDistDir(), 'api.js'),
-      fns: clientMod as unknown as Record<string, (...args: unknown[]) => unknown>,
+      fns: clientMod as unknown as Record<
+        string,
+        (...args: unknown[]) => unknown
+      >,
       createClient: async () => getCtx(),
     },
     operations,
@@ -715,7 +770,11 @@ export async function buildBacklogApigenPackage(
  * — no code generation.
  */
 export async function startBacklogServer(opts: StartOpts): Promise<void> {
-  const env = buildBacklogEnv({ scope: opts.scope, adhdRoot: opts.adhdRoot, cwd: opts.cwd });
+  const env = buildBacklogEnv({
+    scope: opts.scope,
+    adhdRoot: opts.adhdRoot,
+    cwd: opts.cwd,
+  });
   env.ensureDirs();
 
   // BUG-BACKLOG-NO-SIGNAL-HANDLERS-001: `serve.ts`'s `runServeCommand`
@@ -742,14 +801,20 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
   // receipt), so a second `serve` attempted while THIS one is mid-shutdown
   // is refused, not raced.
   const dbPath = resolveBacklogDbPath(env);
-  const serveLock: ServeLockHandle | undefined = isLockableDbPath(dbPath) ? acquireServeLock(dbPath) : undefined;
+  const serveLock: ServeLockHandle | undefined = isLockableDbPath(dbPath)
+    ? acquireServeLock(dbPath)
+    : undefined;
   const closeStoreOnce = (): Promise<void> => {
     if (!closePromise) {
-      closePromise = closeGraphBacklogStoreSafe(store).finally(() => serveLock?.release());
+      closePromise = closeGraphBacklogStoreSafe(store).finally(() =>
+        serveLock?.release()
+      );
     }
     return closePromise;
   };
-  const signalCleanup = hasExternalSignalHandling() ? undefined : installSignalCleanup(closeStoreOnce);
+  const signalCleanup = hasExternalSignalHandling()
+    ? undefined
+    : installSignalCleanup(closeStoreOnce);
 
   // BUG-002: open through `resolveBacklogDbPath` so ADHD_BACKLOG_DATABASE_PATH
   // (→ config.db.path) actually redirects the store; `env.files.db` is only
@@ -785,7 +850,9 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
   // already guards against, one step later in the sequence. Widening the
   // scope cannot regress the success path: the `finally` already ran there.
   try {
-    const { pkg, operations } = await buildBacklogApigenPackage(ctx, { adhdRoot: opts.adhdRoot });
+    const { pkg, operations } = await buildBacklogApigenPackage(ctx, {
+      adhdRoot: opts.adhdRoot,
+    });
     const logger = testSilentLogger();
 
     const runs: Promise<void>[] = [];
@@ -805,7 +872,11 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
         requireRun(apiFastifyPlugin)({
           packages: [pkg],
           outputDir: '',
-          options: { port: opts.port ?? 3300, host: opts.host ?? '127.0.0.1', usePlugins: [openapiPlugin, batchPlugin] },
+          options: {
+            port: opts.port ?? 3300,
+            host: opts.host ?? '127.0.0.1',
+            usePlugins: [openapiPlugin, batchPlugin],
+          },
           signal: opts.signal,
           // SPEC.md §6.7 — the SAME `operations` array the MCP
           // mount below receives. A per-transport operation list is exactly

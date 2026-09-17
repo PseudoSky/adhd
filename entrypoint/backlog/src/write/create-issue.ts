@@ -17,7 +17,11 @@ import { isAbsolute, relative, resolve as resolvePath } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import type { GraphBackend } from '@adhd/sox-graph-store';
-import type { SearchQuery, SignalSpec, StoreSearchBackend } from '@adhd/sox-hybrid-search';
+import type {
+  SearchQuery,
+  SignalSpec,
+  StoreSearchBackend,
+} from '@adhd/sox-hybrid-search';
 import {
   type IProjectPolicy,
   type IResolvedCatalogRow,
@@ -31,9 +35,23 @@ import {
   resolveProjectTx,
 } from './catalog.js';
 import { writeAudit } from './audit.js';
-import { composeEmbedText, scheduleIssueEmbedding } from './embedding-observer.js';
-import { CitationUnverifiableError, InvalidArgumentError, WriteIOError } from './errors.js';
-import { type IWriteStoreHandle, executeWriteTransaction, nowISO, resolveLiveIssueTx, writeEdgeTx, writeNodeTx } from './tx.js';
+import {
+  composeEmbedText,
+  scheduleIssueEmbedding,
+} from './embedding-observer.js';
+import {
+  CitationUnverifiableError,
+  InvalidArgumentError,
+  WriteIOError,
+} from './errors.js';
+import {
+  type IWriteStoreHandle,
+  executeWriteTransaction,
+  nowISO,
+  resolveLiveIssueTx,
+  writeEdgeTx,
+  writeNodeTx,
+} from './tx.js';
 // Read-only reuse of the query layer's own, direction-bug-fixed project/
 // component ownership-chain resolver (SPEC.md §6.4 point 1: the duplicate
 // scan is scoped to `filter.project`, "the target project only" — never a
@@ -253,7 +271,10 @@ export interface ICreateIssueResult {
   commentedOn?: { uid: string; noteId: string };
 }
 
-function assertNonBlank(field: string, value: string | undefined): asserts value is string {
+function assertNonBlank(
+  field: string,
+  value: string | undefined
+): asserts value is string {
   if (value === undefined || value.trim().length === 0) {
     throw new InvalidArgumentError(field, 'is required');
   }
@@ -282,14 +303,24 @@ function assertNonBlank(field: string, value: string | undefined): asserts value
  * string `startsWith` on `projectPath`, which a sibling directory sharing a
  * name prefix — e.g. `/repo` vs `/repo-evil` — would defeat).
  */
-async function computeCitationSha(project: IResolvedProjectRow, file: string): Promise<string> {
+async function computeCitationSha(
+  project: IResolvedProjectRow,
+  file: string
+): Promise<string> {
   const projectPath = project.metadata?.path;
-  if (typeof projectPath !== 'string' || projectPath.length === 0) return 'unverified';
+  if (typeof projectPath !== 'string' || projectPath.length === 0)
+    return 'unverified';
 
   const root = resolvePath(projectPath);
-  const candidate = isAbsolute(file) ? resolvePath(file) : resolvePath(root, file);
+  const candidate = isAbsolute(file)
+    ? resolvePath(file)
+    : resolvePath(root, file);
   const rel = relative(root, candidate);
-  const escapesRoot = rel === '..' || rel.startsWith(`..${'/'}`) || rel.startsWith('..\\') || isAbsolute(rel);
+  const escapesRoot =
+    rel === '..' ||
+    rel.startsWith(`..${'/'}`) ||
+    rel.startsWith('..\\') ||
+    isAbsolute(rel);
   if (escapesRoot) return 'unverified';
 
   try {
@@ -311,9 +342,16 @@ async function computeCitationSha(project: IResolvedProjectRow, file: string): P
   }
 }
 
-function enforceAllowedSet(allowed: readonly string[], field: 'kind' | 'status', value: string): void {
+function enforceAllowedSet(
+  allowed: readonly string[],
+  field: 'kind' | 'status',
+  value: string
+): void {
   if (allowed.length > 0 && !allowed.includes(value)) {
-    throw new InvalidArgumentError(field, `"${value}" is not in this project's allowed ${field} set`);
+    throw new InvalidArgumentError(
+      field,
+      `"${value}" is not in this project's allowed ${field} set`
+    );
   }
 }
 
@@ -333,11 +371,21 @@ function enforceAllowedSet(allowed: readonly string[], field: 'kind' | 'status',
  * omitted it, `resolvedValues.priority` is `undefined` and this correctly
  * throws; that is the field's documented no-fallback behavior, not a bug.
  */
-function enforceRequiredFields(required: readonly string[], resolvedValues: Record<string, unknown>): void {
+function enforceRequiredFields(
+  required: readonly string[],
+  resolvedValues: Record<string, unknown>
+): void {
   for (const field of required) {
     const value = resolvedValues[field];
-    if (value === undefined || value === null || (typeof value === 'string' && value.trim().length === 0)) {
-      throw new InvalidArgumentError(field, 'is required by this project\'s field policy');
+    if (
+      value === undefined ||
+      value === null ||
+      (typeof value === 'string' && value.trim().length === 0)
+    ) {
+      throw new InvalidArgumentError(
+        field,
+        "is required by this project's field policy"
+      );
     }
   }
 }
@@ -387,7 +435,7 @@ async function scanForDuplicates(
   project: IResolvedProjectRow,
   policy: IProjectPolicy,
   title: string,
-  body: string,
+  body: string
 ): Promise<IDuplicateCandidate[]> {
   if (!policy.dedupeScanEnabled) return [];
   const { search, graph } = handle;
@@ -416,7 +464,9 @@ async function scanForDuplicates(
   const canEmbed = typeof search.embedQuery === 'function';
   const vec = canEmbed ? await search.embedQuery!(text) : undefined;
 
-  const signals: SignalSpec[] = vec ? [{ kind: 'text' }, { kind: 'vec' }] : [{ kind: 'text' }];
+  const signals: SignalSpec[] = vec
+    ? [{ kind: 'text' }, { kind: 'vec' }]
+    : [{ kind: 'text' }];
   const query: SearchQuery = {
     text,
     vec,
@@ -505,7 +555,7 @@ async function scanForDuplicates(
  */
 export async function createIssue(
   handle: IWriteStoreHandle & IDuplicateScanHandle,
-  input: ICreateIssueInput,
+  input: ICreateIssueInput
 ): Promise<ICreateIssueResult> {
   // §6.3's opening rule + §6.3.2's own required-field list — validated
   // before any driver call runs (E_VALIDATION, never retried, §4c).
@@ -514,13 +564,20 @@ export async function createIssue(
   assertNonBlank('project', input.project);
   assertNonBlank('by', input.by);
   const citations = input.citations ?? [];
-  citations.forEach((citation, i) => assertNonBlank(`citations[${i}].file`, citation.file));
+  citations.forEach((citation, i) =>
+    assertNonBlank(`citations[${i}].file`, citation.file)
+  );
 
   const duplicateAction: DuplicateAction = input.duplicateAction ?? 'abort';
-  if (input.duplicateAction !== undefined && !DUPLICATE_ACTIONS.includes(input.duplicateAction)) {
+  if (
+    input.duplicateAction !== undefined &&
+    !DUPLICATE_ACTIONS.includes(input.duplicateAction)
+  ) {
     throw new InvalidArgumentError(
       'duplicateAction',
-      `must be one of ${DUPLICATE_ACTIONS.map((a) => `'${a}'`).join('|')}, got "${input.duplicateAction}"`,
+      `must be one of ${DUPLICATE_ACTIONS.map((a) => `'${a}'`).join(
+        '|'
+      )}, got "${input.duplicateAction}"`
     );
   }
 
@@ -553,7 +610,10 @@ export async function createIssue(
   // retry (a strictly WIDER, per-retry re-open window on the same file),
   // where this fix reads each file exactly once no matter how many times
   // the surrounding transaction retries.
-  const preResolvedProject = await resolveProjectTx(handle.adapter, input.project);
+  const preResolvedProject = await resolveProjectTx(
+    handle.adapter,
+    input.project
+  );
   const preResolvedPolicy = resolveProjectPolicy(preResolvedProject);
   const citationShas: string[] = [];
   for (const citation of citations) {
@@ -570,14 +630,24 @@ export async function createIssue(
   // would stall every other concurrent writer for its duration. Deliberately
   // NOT a CAS (§6.4 point 1's own accepted-gap framing) — see
   // `scanForDuplicates`'s doc comment.
-  const duplicateCandidates = await scanForDuplicates(handle, preResolvedProject, preResolvedPolicy, input.title, input.body);
+  const duplicateCandidates = await scanForDuplicates(
+    handle,
+    preResolvedProject,
+    preResolvedPolicy,
+    input.title,
+    input.body
+  );
 
   // §6.4 point 3: `'abort'` (default) with ≥1 candidate at/above threshold —
   // nothing is written, not even inside a transaction that immediately rolls
   // back. This is the ONLY branch that returns before `executeWriteTransaction`
   // is ever called.
   if (duplicateCandidates.length > 0 && duplicateAction === 'abort') {
-    return { created: false, reason: 'duplicate-suppressed', duplicateCandidates };
+    return {
+      created: false,
+      reason: 'duplicate-suppressed',
+      duplicateCandidates,
+    };
   }
 
   // §4b/§8 AC-4 — captured from INSIDE the transaction closure (the only
@@ -590,199 +660,266 @@ export async function createIssue(
   // a `note`) — so neither path schedules a spurious embed.
   let embeddedIssue: { rowid: number; uid: string } | undefined;
 
-  const outcome = await executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
-    // ONE timestamp for every row this logical write produces — the catalog
-    // mints, the issue node, each citation node, and every edge. Captured here
-    // rather than just before the issue INSERT because the kind/status/priority/
-    // agent mints happen first, and letting each `writeNodeTx` stamp its own
-    // `nowISO()` is what made a single `createIssue` write rows with differing
-    // `t_created`, drifting from both the returned `createdAt` and the audit's `at`.
-    const now = nowISO();
+  const outcome = await executeWriteTransaction(
+    handle,
+    async (tx: AdapterTransaction) => {
+      // ONE timestamp for every row this logical write produces — the catalog
+      // mints, the issue node, each citation node, and every edge. Captured here
+      // rather than just before the issue INSERT because the kind/status/priority/
+      // agent mints happen first, and letting each `writeNodeTx` stamp its own
+      // `nowISO()` is what made a single `createIssue` write rows with differing
+      // `t_created`, drifting from both the returned `createdAt` and the audit's `at`.
+      const now = nowISO();
 
-    // §6.4 point 3: `'comment'` with ≥1 candidate at/above threshold — no
-    // issue node, no catalog resolution/minting, no edges beyond `has_note`.
-    // Still inside the SAME `immediate` transaction every write verb opens
-    // exactly once per invocation (§4c) — never a second, nested call.
-    if (duplicateCandidates.length > 0 && duplicateAction === 'comment') {
-      const [topCandidate] = duplicateCandidates;
-      const targetIssue = await resolveLiveIssueTx(tx, topCandidate.uid);
-      const noteText = `${input.title}\n\n${input.body}`;
-      const noteNode = await writeNodeTx(tx, {
-        kind: 'note',
-        content: noteText,
-        metadata: { author: input.by, text: noteText, at: now },
-        at: now,
-      });
-      const hasNoteRule = await resolveEdgeKindTx(tx, 'has_note');
-      await writeEdgeTx(tx, {
-        at: now,
-        srcRowid: targetIssue.rowid, srcUid: targetIssue.uid, srcKind: 'issue',
-        dstRowid: noteNode.rowid, dstUid: noteNode.uid, dstKind: 'note',
-        rel: 'has_note', rule: hasNoteRule, typePolicy: handle.typePolicy,
-      });
-      return {
-        created: false,
-        commentedOn: { uid: targetIssue.uid, noteId: noteNode.uid },
-        duplicateCandidates,
-      };
-    }
-
-    const project = await resolveProjectTx(tx, input.project);
-    const policy = resolveProjectPolicy(project);
-
-    const component: IResolvedCatalogRow = input.component !== undefined
-      ? await resolveComponentTx(tx, { projectUid: project.uid, ref: input.component })
-      : await resolveDefaultComponentTx(tx, { projectRowid: project.rowid });
-
-    const kindName = input.kind ?? policy.defaultKind ?? 'issue';
-    const kindRow = await mintOrResolveCatalogTx(tx, { catalogKind: 'kind', ref: kindName, at: now });
-    enforceAllowedSet(policy.allowedKinds, 'kind', kindRow.name);
-
-    const statusName = input.status ?? policy.defaultStatus ?? 'open';
-    const statusRow = await mintOrResolveCatalogTx(tx, {
-      catalogKind: 'status',
-      ref: statusName,
-      at: now,
-      mintMetadata: async () => ({ terminal: false }),
-    });
-    enforceAllowedSet(policy.allowedStatuses, 'status', statusRow.name);
-
-    let priorityRow: IResolvedCatalogRow | undefined;
-    if (input.priority !== undefined) {
-      priorityRow = await mintOrResolveCatalogTx(tx, {
-        catalogKind: 'priority',
-        ref: input.priority,
-        at: now,
-        mintMetadata: async (mintTx) => ({ rank: await nextPriorityRankTx(mintTx) }),
-      });
-    }
-
-    const authorName = input.author ?? input.by;
-    const authorRow = await mintOrResolveCatalogTx(tx, { catalogKind: 'agent', ref: authorName, at: now });
-
-    enforceRequiredFields(policy.requiredFields, {
-      ...input,
-      component: component.name,
-      kind: kindRow.name,
-      status: statusRow.name,
-      priority: priorityRow?.name,
-    });
-
-    const issueMetadata: Record<string, unknown> = {};
-    if (input.assignee !== undefined) issueMetadata.assignee = input.assignee;
-
-    const issue = await writeNodeTx(tx, { kind: 'issue', name: input.title, content: input.body, metadata: issueMetadata, at: now });
-    embeddedIssue = { rowid: issue.rowid, uid: issue.uid };
-
-    const ownsComponentRule = await resolveEdgeKindTx(tx, 'owns_component');
-    await writeEdgeTx(tx, {
-      at: now,
-      srcRowid: component.rowid, srcUid: component.uid, srcKind: 'component',
-      dstRowid: issue.rowid, dstUid: issue.uid, dstKind: 'issue',
-      rel: 'owns_component', rule: ownsComponentRule, typePolicy: handle.typePolicy,
-    });
-
-    const hasKindRule = await resolveEdgeKindTx(tx, 'has_kind');
-    await writeEdgeTx(tx, {
-      at: now,
-      srcRowid: issue.rowid, srcUid: issue.uid, srcKind: 'issue',
-      dstRowid: kindRow.rowid, dstUid: kindRow.uid, dstKind: 'kind',
-      rel: 'has_kind', rule: hasKindRule, typePolicy: handle.typePolicy,
-    });
-
-    const hasStatusRule = await resolveEdgeKindTx(tx, 'has_status');
-    await writeEdgeTx(tx, {
-      at: now,
-      srcRowid: issue.rowid, srcUid: issue.uid, srcKind: 'issue',
-      dstRowid: statusRow.rowid, dstUid: statusRow.uid, dstKind: 'status',
-      rel: 'has_status', rule: hasStatusRule, typePolicy: handle.typePolicy,
-    });
-
-    if (priorityRow) {
-      const hasPriorityRule = await resolveEdgeKindTx(tx, 'has_priority');
-      await writeEdgeTx(tx, {
-      at: now,
-        srcRowid: issue.rowid, srcUid: issue.uid, srcKind: 'issue',
-        dstRowid: priorityRow.rowid, dstUid: priorityRow.uid, dstKind: 'priority',
-        rel: 'has_priority', rule: hasPriorityRule, typePolicy: handle.typePolicy,
-      });
-    }
-
-    const authoredByRule = await resolveEdgeKindTx(tx, 'authored_by');
-    await writeEdgeTx(tx, {
-      at: now,
-      srcRowid: issue.rowid, srcUid: issue.uid, srcKind: 'issue',
-      dstRowid: authorRow.rowid, dstUid: authorRow.uid, dstKind: 'agent',
-      rel: 'authored_by', rule: authoredByRule, typePolicy: handle.typePolicy,
-    });
-
-    if (citations.length > 0) {
-      const hasCitationRule = await resolveEdgeKindTx(tx, 'has_citation');
-      for (let i = 0; i < citations.length; i += 1) {
-        const citation = citations[i];
-        // §8.5's sha is already computed (and policy-gated) BEFORE this
-        // transaction opened, above — see the `preResolvedProject`/
-        // `citationShas` block. This loop only writes the already-decided
-        // value; it never re-reads the filesystem inside the write lock
-        // (BUG blind-review finding 2).
-        const sha = citationShas[i];
-        const citationNode = await writeNodeTx(tx, {
+      // §6.4 point 3: `'comment'` with ≥1 candidate at/above threshold — no
+      // issue node, no catalog resolution/minting, no edges beyond `has_note`.
+      // Still inside the SAME `immediate` transaction every write verb opens
+      // exactly once per invocation (§4c) — never a second, nested call.
+      if (duplicateCandidates.length > 0 && duplicateAction === 'comment') {
+        const [topCandidate] = duplicateCandidates;
+        const targetIssue = await resolveLiveIssueTx(tx, topCandidate.uid);
+        const noteText = `${input.title}\n\n${input.body}`;
+        const noteNode = await writeNodeTx(tx, {
+          kind: 'note',
+          content: noteText,
+          metadata: { author: input.by, text: noteText, at: now },
           at: now,
-          kind: 'citation',
-          name: citation.file,
-          content: citation.context ?? citation.file,
-          metadata: {
-            target: citation.file,
-            target_type: 'path',
-            sha,
-            line: citation.lines ?? null,
-            at: now,
-            symbol: citation.symbol ?? null,
-            blastRadius: citation.blastRadius ?? null,
-          },
         });
+        const hasNoteRule = await resolveEdgeKindTx(tx, 'has_note');
         await writeEdgeTx(tx, {
-      at: now,
-          srcRowid: issue.rowid, srcUid: issue.uid, srcKind: 'issue',
-          dstRowid: citationNode.rowid, dstUid: citationNode.uid, dstKind: 'citation',
-          rel: 'has_citation', rule: hasCitationRule, typePolicy: handle.typePolicy,
+          at: now,
+          srcRowid: targetIssue.rowid,
+          srcUid: targetIssue.uid,
+          srcKind: 'issue',
+          dstRowid: noteNode.rowid,
+          dstUid: noteNode.uid,
+          dstKind: 'note',
+          rel: 'has_note',
+          rule: hasNoteRule,
+          typePolicy: handle.typePolicy,
+        });
+        return {
+          created: false,
+          commentedOn: { uid: targetIssue.uid, noteId: noteNode.uid },
+          duplicateCandidates,
+        };
+      }
+
+      const project = await resolveProjectTx(tx, input.project);
+      const policy = resolveProjectPolicy(project);
+
+      const component: IResolvedCatalogRow =
+        input.component !== undefined
+          ? await resolveComponentTx(tx, {
+              projectUid: project.uid,
+              ref: input.component,
+            })
+          : await resolveDefaultComponentTx(tx, {
+              projectRowid: project.rowid,
+            });
+
+      const kindName = input.kind ?? policy.defaultKind ?? 'issue';
+      const kindRow = await mintOrResolveCatalogTx(tx, {
+        catalogKind: 'kind',
+        ref: kindName,
+        at: now,
+      });
+      enforceAllowedSet(policy.allowedKinds, 'kind', kindRow.name);
+
+      const statusName = input.status ?? policy.defaultStatus ?? 'open';
+      const statusRow = await mintOrResolveCatalogTx(tx, {
+        catalogKind: 'status',
+        ref: statusName,
+        at: now,
+        mintMetadata: async () => ({ terminal: false }),
+      });
+      enforceAllowedSet(policy.allowedStatuses, 'status', statusRow.name);
+
+      let priorityRow: IResolvedCatalogRow | undefined;
+      if (input.priority !== undefined) {
+        priorityRow = await mintOrResolveCatalogTx(tx, {
+          catalogKind: 'priority',
+          ref: input.priority,
+          at: now,
+          mintMetadata: async (mintTx) => ({
+            rank: await nextPriorityRankTx(mintTx),
+          }),
         });
       }
-    }
 
-    await writeAudit({
-      tx,
-      typePolicy: handle.typePolicy,
-      subjectRowid: issue.rowid,
-      subjectUid: issue.uid,
-      subjectKind: 'issue',
-      actor: input.by,
-      action: 'created',
-      at: now,
-    });
+      const authorName = input.author ?? input.by;
+      const authorRow = await mintOrResolveCatalogTx(tx, {
+        catalogKind: 'agent',
+        ref: authorName,
+        at: now,
+      });
 
-    return {
-      created: true,
-      uid: issue.uid,
-      item: {
-        uid: issue.uid,
-        title: input.title,
+      enforceRequiredFields(policy.requiredFields, {
+        ...input,
+        component: component.name,
         kind: kindRow.name,
         status: statusRow.name,
         priority: priorityRow?.name,
-        project: project.uid,
-        component: component.uid,
-        createdAt: now,
-        assignee: input.assignee,
-        author: authorRow.name,
-      },
-      // §6.4 point 3: present on `'force'` when the scan found ≥1 candidate
-      // (reported for the caller's own audit trail even though the write
-      // proceeded) — absent on a zero-candidate scan, per this file's own
-      // `ICreateIssueResult` doc comment.
-      ...(duplicateCandidates.length > 0 ? { duplicateCandidates } : {}),
-    };
-  });
+      });
+
+      const issueMetadata: Record<string, unknown> = {};
+      if (input.assignee !== undefined) issueMetadata.assignee = input.assignee;
+
+      const issue = await writeNodeTx(tx, {
+        kind: 'issue',
+        name: input.title,
+        content: input.body,
+        metadata: issueMetadata,
+        at: now,
+      });
+      embeddedIssue = { rowid: issue.rowid, uid: issue.uid };
+
+      const ownsComponentRule = await resolveEdgeKindTx(tx, 'owns_component');
+      await writeEdgeTx(tx, {
+        at: now,
+        srcRowid: component.rowid,
+        srcUid: component.uid,
+        srcKind: 'component',
+        dstRowid: issue.rowid,
+        dstUid: issue.uid,
+        dstKind: 'issue',
+        rel: 'owns_component',
+        rule: ownsComponentRule,
+        typePolicy: handle.typePolicy,
+      });
+
+      const hasKindRule = await resolveEdgeKindTx(tx, 'has_kind');
+      await writeEdgeTx(tx, {
+        at: now,
+        srcRowid: issue.rowid,
+        srcUid: issue.uid,
+        srcKind: 'issue',
+        dstRowid: kindRow.rowid,
+        dstUid: kindRow.uid,
+        dstKind: 'kind',
+        rel: 'has_kind',
+        rule: hasKindRule,
+        typePolicy: handle.typePolicy,
+      });
+
+      const hasStatusRule = await resolveEdgeKindTx(tx, 'has_status');
+      await writeEdgeTx(tx, {
+        at: now,
+        srcRowid: issue.rowid,
+        srcUid: issue.uid,
+        srcKind: 'issue',
+        dstRowid: statusRow.rowid,
+        dstUid: statusRow.uid,
+        dstKind: 'status',
+        rel: 'has_status',
+        rule: hasStatusRule,
+        typePolicy: handle.typePolicy,
+      });
+
+      if (priorityRow) {
+        const hasPriorityRule = await resolveEdgeKindTx(tx, 'has_priority');
+        await writeEdgeTx(tx, {
+          at: now,
+          srcRowid: issue.rowid,
+          srcUid: issue.uid,
+          srcKind: 'issue',
+          dstRowid: priorityRow.rowid,
+          dstUid: priorityRow.uid,
+          dstKind: 'priority',
+          rel: 'has_priority',
+          rule: hasPriorityRule,
+          typePolicy: handle.typePolicy,
+        });
+      }
+
+      const authoredByRule = await resolveEdgeKindTx(tx, 'authored_by');
+      await writeEdgeTx(tx, {
+        at: now,
+        srcRowid: issue.rowid,
+        srcUid: issue.uid,
+        srcKind: 'issue',
+        dstRowid: authorRow.rowid,
+        dstUid: authorRow.uid,
+        dstKind: 'agent',
+        rel: 'authored_by',
+        rule: authoredByRule,
+        typePolicy: handle.typePolicy,
+      });
+
+      if (citations.length > 0) {
+        const hasCitationRule = await resolveEdgeKindTx(tx, 'has_citation');
+        for (let i = 0; i < citations.length; i += 1) {
+          const citation = citations[i];
+          // §8.5's sha is already computed (and policy-gated) BEFORE this
+          // transaction opened, above — see the `preResolvedProject`/
+          // `citationShas` block. This loop only writes the already-decided
+          // value; it never re-reads the filesystem inside the write lock
+          // (BUG blind-review finding 2).
+          const sha = citationShas[i];
+          const citationNode = await writeNodeTx(tx, {
+            at: now,
+            kind: 'citation',
+            name: citation.file,
+            content: citation.context ?? citation.file,
+            metadata: {
+              target: citation.file,
+              target_type: 'path',
+              sha,
+              line: citation.lines ?? null,
+              at: now,
+              symbol: citation.symbol ?? null,
+              blastRadius: citation.blastRadius ?? null,
+            },
+          });
+          await writeEdgeTx(tx, {
+            at: now,
+            srcRowid: issue.rowid,
+            srcUid: issue.uid,
+            srcKind: 'issue',
+            dstRowid: citationNode.rowid,
+            dstUid: citationNode.uid,
+            dstKind: 'citation',
+            rel: 'has_citation',
+            rule: hasCitationRule,
+            typePolicy: handle.typePolicy,
+          });
+        }
+      }
+
+      await writeAudit({
+        tx,
+        typePolicy: handle.typePolicy,
+        subjectRowid: issue.rowid,
+        subjectUid: issue.uid,
+        subjectKind: 'issue',
+        actor: input.by,
+        action: 'created',
+        at: now,
+      });
+
+      return {
+        created: true,
+        uid: issue.uid,
+        item: {
+          uid: issue.uid,
+          title: input.title,
+          kind: kindRow.name,
+          status: statusRow.name,
+          priority: priorityRow?.name,
+          project: project.uid,
+          component: component.uid,
+          createdAt: now,
+          assignee: input.assignee,
+          author: authorRow.name,
+        },
+        // §6.4 point 3: present on `'force'` when the scan found ≥1 candidate
+        // (reported for the caller's own audit trail even though the write
+        // proceeded) — absent on a zero-candidate scan, per this file's own
+        // `ICreateIssueResult` doc comment.
+        ...(duplicateCandidates.length > 0 ? { duplicateCandidates } : {}),
+      };
+    }
+  );
 
   // §4b/§8 AC-4 — strictly AFTER `executeWriteTransaction` above has
   // resolved, i.e. after the subject transaction committed and released its
@@ -798,7 +935,10 @@ export async function createIssue(
       content: composeEmbedText(input.title, input.body),
     });
     if (input.awaitEmbed) await embedPromise;
-    else embedPromise.catch(() => { /* scheduleIssueEmbedding never rejects — this catch exists only to silence an unhandled-rejection warning if that contract is ever broken. */ });
+    else
+      embedPromise.catch(() => {
+        /* scheduleIssueEmbedding never rejects — this catch exists only to silence an unhandled-rejection warning if that contract is ever broken. */
+      });
   }
 
   return outcome;

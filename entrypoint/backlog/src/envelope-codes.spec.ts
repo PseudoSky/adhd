@@ -15,12 +15,26 @@
  */
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openTestIssueStore, removeTestIssueStoreDir, seedProject, type TestIssueStore } from './test/helpers/open-test-issue-store.js';
+import {
+  openTestIssueStore,
+  removeTestIssueStoreDir,
+  seedProject,
+  type TestIssueStore,
+} from './test/helpers/open-test-issue-store.js';
 import { freshTmpDir } from './test/helpers/tmp-store.js';
-import { BACKLOG_ERROR_CODES, BACKLOG_EXIT_CODE, exitCodeForEnvelope, isOutcomeError } from './envelope.js';
+import {
+  BACKLOG_ERROR_CODES,
+  BACKLOG_EXIT_CODE,
+  exitCodeForEnvelope,
+  isOutcomeError,
+} from './envelope.js';
 import { createIssue } from './write/create-issue.js';
 import { queryIssues } from './query/query.js';
-import { IssueNotFoundError, InvalidArgumentError, CatalogNotFoundError } from './write/errors.js';
+import {
+  IssueNotFoundError,
+  InvalidArgumentError,
+  CatalogNotFoundError,
+} from './write/errors.js';
 
 describe('envelope error codes — distinct failures stay distinguishable', () => {
   let dir: string;
@@ -42,13 +56,17 @@ describe('envelope error codes — distinct failures stay distinguishable', () =
     // A code with no exit-code row would throw `undefined` into a process
     // exit at runtime; a stale row for a deleted code is dead weight that
     // makes the union look larger than it is. Both directions are asserted.
-    expect(Object.keys(BACKLOG_EXIT_CODE).sort()).toEqual([...BACKLOG_ERROR_CODES].sort());
+    expect(Object.keys(BACKLOG_EXIT_CODE).sort()).toEqual(
+      [...BACKLOG_ERROR_CODES].sort()
+    );
   });
 
   it('item_not_found and internal are DISTINCT codes despite sharing exit code 1', () => {
     // This is the pairing most likely to be "simplified" away by someone
     // reading only the exit-code table: they look identical there.
-    expect(BACKLOG_EXIT_CODE['item_not_found']).toBe(BACKLOG_EXIT_CODE['internal']);
+    expect(BACKLOG_EXIT_CODE['item_not_found']).toBe(
+      BACKLOG_EXIT_CODE['internal']
+    );
     expect('item_not_found').not.toBe('internal');
     expect(BACKLOG_ERROR_CODES).toContain('item_not_found');
     expect(BACKLOG_ERROR_CODES).toContain('internal');
@@ -60,8 +78,14 @@ describe('envelope error codes — distinct failures stay distinguishable', () =
     // negative control: it goes red the moment the mapping regresses to the
     // coarse bucket.
     const missing = new IssueNotFoundError('no-such-uid');
-    const malformed = new InvalidArgumentError('limit', 'must be a positive integer');
-    const absentCatalog = new CatalogNotFoundError('project', 'no-such-project');
+    const malformed = new InvalidArgumentError(
+      'limit',
+      'must be a positive integer'
+    );
+    const absentCatalog = new CatalogNotFoundError(
+      'project',
+      'no-such-project'
+    );
     expect(missing.code).toBe('E_VALIDATION');
     expect(malformed.code).toBe('E_VALIDATION');
     expect(absentCatalog.code).toBe('E_VALIDATION');
@@ -88,7 +112,12 @@ describe('envelope error codes — distinct failures stay distinguishable', () =
     expect(exitCodeForEnvelope(malformedEnv)).toBe(2);
 
     // And a real issue still succeeds, so the above is not "everything fails".
-    const ok = await create(ctx, { project: projectUid, title: 'a real issue', body: 'body', by: 'filer' });
+    const ok = await create(ctx, {
+      project: projectUid,
+      title: 'a real issue',
+      body: 'body',
+      by: 'filer',
+    });
     expect(ok.ok).toBe(true);
   });
 
@@ -100,21 +129,34 @@ describe('envelope error codes — distinct failures stay distinguishable', () =
     const { create, query, get } = await import('./api.js');
     const ctx = { store, env: { config: {} } } as never;
 
-    const created = await create(ctx, { project: projectUid, title: 'zero config', body: 'b', by: 'filer' });
+    const created = await create(ctx, {
+      project: projectUid,
+      title: 'zero config',
+      body: 'b',
+      by: 'filer',
+    });
     expect(created.ok).toBe(true);
     if (!created.ok) return;
 
     const listed = await query(ctx, { view: 'list', limit: 10 });
     expect(listed.ok).toBe(true);
 
-    const fetched = await get(ctx, { uid: (created.data as { uid: string }).uid });
+    const fetched = await get(ctx, {
+      uid: (created.data as { uid: string }).uid,
+    });
     expect(fetched.ok).toBe(true);
   });
 
   it('a live issue round-trips, proving the store wiring under these failures is real', async () => {
-    const created = await createIssue(store, { project: projectUid, title: 'round trip', body: 'b', by: 'filer' });
+    const created = await createIssue(store, {
+      project: projectUid,
+      title: 'round trip',
+      body: 'b',
+      by: 'filer',
+    });
     const listed = await queryIssues(store, { view: 'list', limit: 10 });
-    if (listed.view !== 'list') throw new Error(`expected list view, got ${listed.view}`);
+    if (listed.view !== 'list')
+      throw new Error(`expected list view, got ${listed.view}`);
     expect(listed.items.map((i) => i.uid)).toContain(created.uid);
   });
 });

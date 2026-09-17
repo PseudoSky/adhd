@@ -6,7 +6,11 @@ import type { GraphBackend } from '@adhd/sox-graph-store';
 import { assertKnownIssueFields } from './card.js';
 import { assembleIssueCard } from './card.js';
 import { resolveIssueByUid } from './resolve.js';
-import { DEFAULT_ISSUE_CARD_FIELDS, type IIssueCard, type IIssueGetByUidInput } from './types.js';
+import {
+  DEFAULT_ISSUE_CARD_FIELDS,
+  type IIssueCard,
+  type IIssueGetByUidInput,
+} from './types.js';
 
 /**
  * Fetch one issue by `uid`, projected to the requested `fields` (default:
@@ -15,7 +19,10 @@ import { DEFAULT_ISSUE_CARD_FIELDS, type IIssueCard, type IIssueGetByUidInput } 
  * Errors: `IssueNotFoundError(uid)` (no live node carries `uid`),
  * `BacklogValidationError('fields', ...)` (an unknown field name).
  */
-export async function getIssue(graph: GraphBackend, input: IIssueGetByUidInput): Promise<IIssueCard> {
+export async function getIssue(
+  graph: GraphBackend,
+  input: IIssueGetByUidInput
+): Promise<IIssueCard> {
   assertKnownIssueFields(input.fields);
   const fields = input.fields ?? DEFAULT_ISSUE_CARD_FIELDS;
   const issue = await resolveIssueByUid(graph, input.uid);

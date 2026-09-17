@@ -103,7 +103,10 @@ export interface IMoveIssueOutcome {
   toComponent: string;
 }
 
-function assertNonBlank(field: string, value: string | undefined): asserts value is string {
+function assertNonBlank(
+  field: string,
+  value: string | undefined
+): asserts value is string {
   if (value === undefined || value.trim().length === 0) {
     throw new InvalidArgumentError(field, 'is required');
   }
@@ -131,22 +134,25 @@ interface IResolvedPlacementRow {
  * convention exactly, so it is never mistaken for one of this verb's own
  * validation outcomes.
  */
-async function resolveOwningComponentTx(tx: AdapterTransaction, issueRowid: number): Promise<IResolvedPlacementRow> {
+async function resolveOwningComponentTx(
+  tx: AdapterTransaction,
+  issueRowid: number
+): Promise<IResolvedPlacementRow> {
   const edge = await tx.executeGet<IRawEdgeSrcRow>(
     'SELECT src FROM edge WHERE dst = ? AND rel = ? AND t_invalid IS NULL',
-    [issueRowid, 'owns_component'],
+    [issueRowid, 'owns_component']
   );
   if (!edge) {
     throw new Error(
       `move: issue rowid=${issueRowid} has no live "owns_component" edge — graph invariant violation ` +
-        '(every live issue must own exactly one live parent component).',
+        '(every live issue must own exactly one live parent component).'
     );
   }
   const row = await getNodeByRowidTx(tx, edge.src);
   if (!row || row.kind !== 'component' || row.tInvalid !== null) {
     throw new Error(
       `move: resolved component rowid=${edge.src} is missing, invalidated, or not a "component" node — ` +
-        'graph invariant violation.',
+        'graph invariant violation.'
     );
   }
   // A live `component` row's `name` is never null in practice (§1/§6.1 — component
@@ -161,22 +167,25 @@ async function resolveOwningComponentTx(tx: AdapterTransaction, issueRowid: numb
  * `claim.ts`'s `resolveIssueProjectPolicyTx` runs, one hop further. Same
  * invariant/error convention as {@link resolveOwningComponentTx}.
  */
-async function resolveOwningProjectTx(tx: AdapterTransaction, componentRowid: number): Promise<IResolvedPlacementRow> {
+async function resolveOwningProjectTx(
+  tx: AdapterTransaction,
+  componentRowid: number
+): Promise<IResolvedPlacementRow> {
   const edge = await tx.executeGet<IRawEdgeSrcRow>(
     'SELECT src FROM edge WHERE dst = ? AND rel = ? AND t_invalid IS NULL',
-    [componentRowid, 'owns_project'],
+    [componentRowid, 'owns_project']
   );
   if (!edge) {
     throw new Error(
       `move: component rowid=${componentRowid} has no live "owns_project" edge — graph invariant violation ` +
-        '(every live component must be owned by exactly one live project).',
+        '(every live component must be owned by exactly one live project).'
     );
   }
   const row = await getNodeByRowidTx(tx, edge.src);
   if (!row || row.kind !== 'project' || row.tInvalid !== null) {
     throw new Error(
       `move: resolved project rowid=${edge.src} is missing, invalidated, or not a "project" node — ` +
-        'graph invariant violation.',
+        'graph invariant violation.'
     );
   }
   return { rowid: row.rowid, uid: row.uid, name: row.name ?? '' };
@@ -216,7 +225,10 @@ async function resolveOwningProjectTx(tx: AdapterTransaction, componentRowid: nu
  * `WriteContentionError`/`WriteIOError` (§4c — an exhausted driver-level
  * retry on the underlying `immediate` transaction).
  */
-export async function move(handle: IWriteStoreHandle, input: IMoveIssueInput): Promise<IMoveIssueOutcome> {
+export async function move(
+  handle: IWriteStoreHandle,
+  input: IMoveIssueInput
+): Promise<IMoveIssueOutcome> {
   assertNonBlank('uid', input.uid);
   assertNonBlank('by', input.by);
 
@@ -226,21 +238,33 @@ export async function move(handle: IWriteStoreHandle, input: IMoveIssueInput): P
     const issueRow = await resolveLiveIssueTx(tx, input.uid);
 
     const currentComponent = await resolveOwningComponentTx(tx, issueRow.rowid);
-    const currentProject = await resolveOwningProjectTx(tx, currentComponent.rowid);
+    const currentProject = await resolveOwningProjectTx(
+      tx,
+      currentComponent.rowid
+    );
 
     let destProject: IResolvedPlacementRow;
     if (input.toProject !== undefined) {
       const resolved = await resolveProjectTx(tx, input.toProject);
-      destProject = { rowid: resolved.rowid, uid: resolved.uid, name: resolved.name };
+      destProject = {
+        rowid: resolved.rowid,
+        uid: resolved.uid,
+        name: resolved.name,
+      };
     } else {
       destProject = currentProject;
     }
 
     let destComponent: IResolvedCatalogRow;
     if (input.toComponent !== undefined) {
-      destComponent = await resolveComponentTx(tx, { projectUid: destProject.uid, ref: input.toComponent });
+      destComponent = await resolveComponentTx(tx, {
+        projectUid: destProject.uid,
+        ref: input.toComponent,
+      });
     } else {
-      destComponent = await resolveDefaultComponentTx(tx, { projectRowid: destProject.rowid });
+      destComponent = await resolveDefaultComponentTx(tx, {
+        projectRowid: destProject.rowid,
+      });
     }
 
     if (destComponent.rowid === currentComponent.rowid) {
@@ -270,9 +294,15 @@ export async function move(handle: IWriteStoreHandle, input: IMoveIssueInput): P
     const ownsComponentRule = await resolveEdgeKindTx(tx, 'owns_component');
     await writeEdgeTx(tx, {
       at: now,
-      srcRowid: destComponent.rowid, srcUid: destComponent.uid, srcKind: 'component',
-      dstRowid: issueRow.rowid, dstUid: issueRow.uid, dstKind: 'issue',
-      rel: 'owns_component', rule: ownsComponentRule, typePolicy: handle.typePolicy,
+      srcRowid: destComponent.rowid,
+      srcUid: destComponent.uid,
+      srcKind: 'component',
+      dstRowid: issueRow.rowid,
+      dstUid: issueRow.uid,
+      dstKind: 'issue',
+      rel: 'owns_component',
+      rule: ownsComponentRule,
+      typePolicy: handle.typePolicy,
     });
 
     await writeAudit({

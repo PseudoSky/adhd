@@ -32,7 +32,8 @@ async function waitForGo(): Promise<void> {
   const go = join(root, 'GO');
   const deadline = Date.now() + 30000;
   while (!existsSync(go)) {
-    if (Date.now() > deadline) throw new Error(`${tag}: GO barrier never appeared`);
+    if (Date.now() > deadline)
+      throw new Error(`${tag}: GO barrier never appeared`);
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
 }
@@ -54,13 +55,26 @@ async function main(): Promise<void> {
 
   let result: Outcome;
   try {
-    const outcome = await claim(handle, { uid: issueUid, by: `claimant-${tag}`, action: 'claim' });
+    const outcome = await claim(handle, {
+      uid: issueUid,
+      by: `claimant-${tag}`,
+      action: 'claim',
+    });
     result = { tag, outcome: 'success', status: outcome.status };
   } catch (err) {
     if (err instanceof ClaimHeldError) {
-      result = { tag, outcome: 'rejected', heldBy: err.heldBy, heldSince: err.heldSince };
+      result = {
+        tag,
+        outcome: 'rejected',
+        heldBy: err.heldBy,
+        heldSince: err.heldSince,
+      };
     } else {
-      result = { tag, outcome: 'error', message: String(err instanceof Error ? err.message : err).slice(0, 300) };
+      result = {
+        tag,
+        outcome: 'error',
+        message: String(err instanceof Error ? err.message : err).slice(0, 300),
+      };
     }
   }
   await store.close();
@@ -69,6 +83,9 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error(`${tag}: FATAL:`, err instanceof Error ? (err.stack ?? err.message) : String(err));
+  console.error(
+    `${tag}: FATAL:`,
+    err instanceof Error ? err.stack ?? err.message : String(err)
+  );
   process.exit(1);
 });

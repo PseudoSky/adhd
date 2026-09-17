@@ -15,8 +15,15 @@
  */
 
 import type { GraphBackend, NodeRecord } from '@adhd/sox-graph-store';
-import { CatalogNotFoundError, InvalidArgumentError } from '../../write/errors.js';
-import { isUidShaped, tryResolveComponentRef, tryResolveRef } from '../resolve.js';
+import {
+  CatalogNotFoundError,
+  InvalidArgumentError,
+} from '../../write/errors.js';
+import {
+  isUidShaped,
+  tryResolveComponentRef,
+  tryResolveRef,
+} from '../resolve.js';
 import {
   type IComponentDetail,
   type IComponentSummary,
@@ -35,9 +42,16 @@ function toProjectSummary(n: NodeRecord): IProjectSummary {
     uid: n.uid,
     name: n.name ?? '',
     path: typeof n.metadata?.path === 'string' ? n.metadata.path : undefined,
-    repoUrl: typeof n.metadata?.repoUrl === 'string' ? n.metadata.repoUrl : undefined,
-    monorepo: typeof n.metadata?.monorepo === 'boolean' ? n.metadata.monorepo : undefined,
-    description: typeof n.metadata?.description === 'string' ? n.metadata.description : undefined,
+    repoUrl:
+      typeof n.metadata?.repoUrl === 'string' ? n.metadata.repoUrl : undefined,
+    monorepo:
+      typeof n.metadata?.monorepo === 'boolean'
+        ? n.metadata.monorepo
+        : undefined,
+    description:
+      typeof n.metadata?.description === 'string'
+        ? n.metadata.description
+        : undefined,
   };
 }
 
@@ -45,23 +59,36 @@ function toComponentSummary(n: NodeRecord): IComponentSummary {
   return {
     uid: n.uid,
     name: n.name ?? '',
-    projectUid: typeof n.metadata?.projectUid === 'string' ? n.metadata.projectUid : '',
+    projectUid:
+      typeof n.metadata?.projectUid === 'string' ? n.metadata.projectUid : '',
     path: typeof n.metadata?.path === 'string' ? n.metadata.path : undefined,
-    description: typeof n.metadata?.description === 'string' ? n.metadata.description : undefined,
+    description:
+      typeof n.metadata?.description === 'string'
+        ? n.metadata.description
+        : undefined,
   };
 }
 
 function toLocationSummary(n: NodeRecord): ILocationSummary {
   return {
     uid: n.uid,
-    locType: (typeof n.metadata?.locType === 'string' ? n.metadata.locType : 'path') as ILocationType,
-    value: typeof n.metadata?.value === 'string' ? n.metadata.value : (n.name ?? ''),
-    componentUid: typeof n.metadata?.componentUid === 'string' ? n.metadata.componentUid : '',
+    locType: (typeof n.metadata?.locType === 'string'
+      ? n.metadata.locType
+      : 'path') as ILocationType,
+    value:
+      typeof n.metadata?.value === 'string' ? n.metadata.value : n.name ?? '',
+    componentUid:
+      typeof n.metadata?.componentUid === 'string'
+        ? n.metadata.componentUid
+        : '',
   };
 }
 
 /** `query --input '{"view":"projects"}'` (§3a) — every live `project` row, optionally narrowed by `filter.project` (name/uid substring is NOT supported here; pass the exact ref — this is a listing view, not a search). */
-export async function listProjects(graph: GraphBackend, filter?: IRegistryQueryFilter): Promise<IProjectSummary[]> {
+export async function listProjects(
+  graph: GraphBackend,
+  filter?: IRegistryQueryFilter
+): Promise<IProjectSummary[]> {
   if (filter?.project !== undefined) {
     const resolved = await tryResolveRef(graph, 'project', filter.project);
     return resolved ? [toProjectSummary(resolved.record)] : [];
@@ -71,11 +98,18 @@ export async function listProjects(graph: GraphBackend, filter?: IRegistryQueryF
 }
 
 /** `query --input '{"view":"components"}'` (§3a) — every live `component` row, optionally narrowed by `filter.project`. */
-export async function listComponents(graph: GraphBackend, filter?: IRegistryQueryFilter): Promise<IComponentSummary[]> {
+export async function listComponents(
+  graph: GraphBackend,
+  filter?: IRegistryQueryFilter
+): Promise<IComponentSummary[]> {
   if (filter?.project !== undefined) {
     const project = await tryResolveRef(graph, 'project', filter.project);
     if (!project) return [];
-    const nodes = await graph.queryNodes({ kind: 'component', liveOnly: true, metadata: { projectUid: { eq: project.uid } } });
+    const nodes = await graph.queryNodes({
+      kind: 'component',
+      liveOnly: true,
+      metadata: { projectUid: { eq: project.uid } },
+    });
     return nodes.map(toComponentSummary);
   }
   const nodes = await graph.queryNodes({ kind: 'component', liveOnly: true });
@@ -83,16 +117,30 @@ export async function listComponents(graph: GraphBackend, filter?: IRegistryQuer
 }
 
 /** `query --input '{"view":"locations"}'` (§3a) — every live `location` row, optionally narrowed by `filter.component` (scoped within `filter.project` when both are given). */
-export async function listLocations(graph: GraphBackend, filter?: IRegistryQueryFilter): Promise<ILocationSummary[]> {
+export async function listLocations(
+  graph: GraphBackend,
+  filter?: IRegistryQueryFilter
+): Promise<ILocationSummary[]> {
   if (filter?.component !== undefined) {
-    const component = filter.project !== undefined
-      ? await (async () => {
-        const project = await tryResolveRef(graph, 'project', filter.project!);
-        return project ? tryResolveComponentRef(graph, project.uid, filter.component!) : null;
-      })()
-      : await tryResolveRef(graph, 'component', filter.component);
+    const component =
+      filter.project !== undefined
+        ? await (async () => {
+            const project = await tryResolveRef(
+              graph,
+              'project',
+              filter.project!
+            );
+            return project
+              ? tryResolveComponentRef(graph, project.uid, filter.component!)
+              : null;
+          })()
+        : await tryResolveRef(graph, 'component', filter.component);
     if (!component) return [];
-    const nodes = await graph.queryNodes({ kind: 'location', liveOnly: true, metadata: { componentUid: { eq: component.uid } } });
+    const nodes = await graph.queryNodes({
+      kind: 'location',
+      liveOnly: true,
+      metadata: { componentUid: { eq: component.uid } },
+    });
     return nodes.map(toLocationSummary);
   }
   const nodes = await graph.queryNodes({ kind: 'location', liveOnly: true });
@@ -113,39 +161,68 @@ export async function listLocations(graph: GraphBackend, filter?: IRegistryQuery
  */
 export async function getRegistryDetail(
   graph: GraphBackend,
-  input: { registry: 'project'; name: string },
+  input: { registry: 'project'; name: string }
 ): Promise<IProjectDetail>;
 export async function getRegistryDetail(
   graph: GraphBackend,
-  input: { registry: 'component'; name: string; filter?: IRegistryQueryFilter },
+  input: { registry: 'component'; name: string; filter?: IRegistryQueryFilter }
 ): Promise<IComponentDetail>;
 export async function getRegistryDetail(
   graph: GraphBackend,
-  input: { registry: 'location'; name: string },
+  input: { registry: 'location'; name: string }
 ): Promise<ILocationDetail>;
 export async function getRegistryDetail(
   graph: GraphBackend,
-  input: { registry: 'project' | 'component' | 'location'; name: string; filter?: IRegistryQueryFilter },
+  input: {
+    registry: 'project' | 'component' | 'location';
+    name: string;
+    filter?: IRegistryQueryFilter;
+  }
 ): Promise<IProjectDetail | IComponentDetail | ILocationDetail> {
   if (input.registry === 'project') {
     const project = await tryResolveRef(graph, 'project', input.name);
     if (!project) throw new CatalogNotFoundError('project', input.name);
-    const componentEdges = await graph.getEdges({ src: project.id, rel: 'owns_project' });
+    const componentEdges = await graph.getEdges({
+      src: project.id,
+      rel: 'owns_project',
+    });
     // `getNodesByIds` already defaults `liveOnly` to `true` (verified against
     // `@adhd/sox-graph-store` — an edge surviving past its endpoint's own
     // invalidation cannot leak a tombstoned component here even without this);
     // made explicit for readability/self-documentation of the chain-integrity
     // invariant, not because the default is unsafe.
-    const components = componentEdges.length > 0 ? await graph.getNodesByIds(componentEdges.map((e) => e.dst), { liveOnly: true }) : [];
-    const locationEdgesByComponent = await Promise.all(components.map((c) => graph.getEdges({ src: c.id, rel: 'has_location' })));
-    const locationIds = locationEdgesByComponent.flatMap((es) => es.map((e) => e.dst));
-    const locations = locationIds.length > 0 ? await graph.getNodesByIds(locationIds, { liveOnly: true }) : [];
+    const components =
+      componentEdges.length > 0
+        ? await graph.getNodesByIds(
+            componentEdges.map((e) => e.dst),
+            { liveOnly: true }
+          )
+        : [];
+    const locationEdgesByComponent = await Promise.all(
+      components.map((c) => graph.getEdges({ src: c.id, rel: 'has_location' }))
+    );
+    const locationIds = locationEdgesByComponent.flatMap((es) =>
+      es.map((e) => e.dst)
+    );
+    const locations =
+      locationIds.length > 0
+        ? await graph.getNodesByIds(locationIds, { liveOnly: true })
+        : [];
     return {
       ...toProjectSummary(project.record),
-      components: components.map((c) => ({ name: c.name ?? '', path: typeof c.metadata?.path === 'string' ? c.metadata.path : undefined })),
+      components: components.map((c) => ({
+        name: c.name ?? '',
+        path:
+          typeof c.metadata?.path === 'string' ? c.metadata.path : undefined,
+      })),
       locations: locations.map((l) => ({
-        locType: (typeof l.metadata?.locType === 'string' ? l.metadata.locType : 'path') as ILocationType,
-        value: typeof l.metadata?.value === 'string' ? l.metadata.value : (l.name ?? ''),
+        locType: (typeof l.metadata?.locType === 'string'
+          ? l.metadata.locType
+          : 'path') as ILocationType,
+        value:
+          typeof l.metadata?.value === 'string'
+            ? l.metadata.value
+            : l.name ?? '',
       })),
     };
   }
@@ -157,56 +234,116 @@ export async function getRegistryDetail(
     // need it, but `tryResolveComponentRef` handles that case identically to
     // `tryResolveRef` (both check-then-return, same shape).
     const scopeProjectRef = input.filter?.project;
-    const component = scopeProjectRef !== undefined
-      ? await (async () => {
-        const scopeProject = await tryResolveRef(graph, 'project', scopeProjectRef);
-        if (!scopeProject) throw new CatalogNotFoundError('project', scopeProjectRef);
-        return tryResolveComponentRef(graph, scopeProject.uid, input.name);
-      })()
-      : await tryResolveRef(graph, 'component', input.name);
+    const component =
+      scopeProjectRef !== undefined
+        ? await (async () => {
+            const scopeProject = await tryResolveRef(
+              graph,
+              'project',
+              scopeProjectRef
+            );
+            if (!scopeProject)
+              throw new CatalogNotFoundError('project', scopeProjectRef);
+            return tryResolveComponentRef(graph, scopeProject.uid, input.name);
+          })()
+        : await tryResolveRef(graph, 'component', input.name);
     if (!component) throw new CatalogNotFoundError('component', input.name);
-    const projectUid = typeof component.record.metadata?.projectUid === 'string' ? component.record.metadata.projectUid : undefined;
+    const projectUid =
+      typeof component.record.metadata?.projectUid === 'string'
+        ? component.record.metadata.projectUid
+        : undefined;
     // `getNodeByUid` has no `liveOnly` filter (unlike `getNodesByIds`), so an
     // invalidated project row must be rejected explicitly — a tombstoned
     // secondary chase must degrade the same as an unresolved one (§3a chain
     // integrity), never surface a soft-deleted project's data as live.
-    const projectNode = projectUid ? await graph.getNodeByUid(projectUid) : null;
+    const projectNode = projectUid
+      ? await graph.getNodeByUid(projectUid)
+      : null;
     const project = projectNode && !projectNode.tInvalid ? projectNode : null;
-    const locationEdges = await graph.getEdges({ src: component.id, rel: 'has_location' });
-    const locations = locationEdges.length > 0 ? await graph.getNodesByIds(locationEdges.map((e) => e.dst), { liveOnly: true }) : [];
+    const locationEdges = await graph.getEdges({
+      src: component.id,
+      rel: 'has_location',
+    });
+    const locations =
+      locationEdges.length > 0
+        ? await graph.getNodesByIds(
+            locationEdges.map((e) => e.dst),
+            { liveOnly: true }
+          )
+        : [];
     return {
       ...toComponentSummary(component.record),
       project: {
         name: project?.name ?? '',
-        path: typeof project?.metadata?.path === 'string' ? project.metadata.path : undefined,
-        repoUrl: typeof project?.metadata?.repoUrl === 'string' ? project.metadata.repoUrl : undefined,
+        path:
+          typeof project?.metadata?.path === 'string'
+            ? project.metadata.path
+            : undefined,
+        repoUrl:
+          typeof project?.metadata?.repoUrl === 'string'
+            ? project.metadata.repoUrl
+            : undefined,
       },
       locations: locations.map((l) => ({
-        locType: (typeof l.metadata?.locType === 'string' ? l.metadata.locType : 'path') as ILocationType,
-        value: typeof l.metadata?.value === 'string' ? l.metadata.value : (l.name ?? ''),
+        locType: (typeof l.metadata?.locType === 'string'
+          ? l.metadata.locType
+          : 'path') as ILocationType,
+        value:
+          typeof l.metadata?.value === 'string'
+            ? l.metadata.value
+            : l.name ?? '',
       })),
     };
   }
 
   // location — uid only (no independent business name, §3a)
-  if (!isUidShaped(input.name)) throw new InvalidArgumentError('name', 'a location has no name — pass its uid');
+  if (!isUidShaped(input.name))
+    throw new InvalidArgumentError(
+      'name',
+      'a location has no name — pass its uid'
+    );
   const location = await graph.getNodeByUid(input.name);
-  if (!location || location.kind !== 'location' || location.tInvalid) throw new CatalogNotFoundError('location', input.name);
-  const componentUid = typeof location.metadata?.componentUid === 'string' ? location.metadata.componentUid : undefined;
+  if (!location || location.kind !== 'location' || location.tInvalid)
+    throw new CatalogNotFoundError('location', input.name);
+  const componentUid =
+    typeof location.metadata?.componentUid === 'string'
+      ? location.metadata.componentUid
+      : undefined;
   // Same tombstone-rejection as the `component` branch above — a soft-deleted
   // component/project must not resurface via a location's secondary chase.
-  const componentNodeRaw = componentUid ? await graph.getNodeByUid(componentUid) : null;
-  const component = componentNodeRaw && !componentNodeRaw.tInvalid ? componentNodeRaw : null;
-  const projectUid = typeof component?.metadata?.projectUid === 'string' ? component.metadata.projectUid : undefined;
-  const projectNodeRaw = projectUid ? await graph.getNodeByUid(projectUid) : null;
-  const project = projectNodeRaw && !projectNodeRaw.tInvalid ? projectNodeRaw : null;
+  const componentNodeRaw = componentUid
+    ? await graph.getNodeByUid(componentUid)
+    : null;
+  const component =
+    componentNodeRaw && !componentNodeRaw.tInvalid ? componentNodeRaw : null;
+  const projectUid =
+    typeof component?.metadata?.projectUid === 'string'
+      ? component.metadata.projectUid
+      : undefined;
+  const projectNodeRaw = projectUid
+    ? await graph.getNodeByUid(projectUid)
+    : null;
+  const project =
+    projectNodeRaw && !projectNodeRaw.tInvalid ? projectNodeRaw : null;
   return {
     ...toLocationSummary(location),
-    component: { name: component?.name ?? '', path: typeof component?.metadata?.path === 'string' ? component.metadata.path : undefined },
+    component: {
+      name: component?.name ?? '',
+      path:
+        typeof component?.metadata?.path === 'string'
+          ? component.metadata.path
+          : undefined,
+    },
     project: {
       name: project?.name ?? '',
-      path: typeof project?.metadata?.path === 'string' ? project.metadata.path : undefined,
-      repoUrl: typeof project?.metadata?.repoUrl === 'string' ? project.metadata.repoUrl : undefined,
+      path:
+        typeof project?.metadata?.path === 'string'
+          ? project.metadata.path
+          : undefined,
+      repoUrl:
+        typeof project?.metadata?.repoUrl === 'string'
+          ? project.metadata.repoUrl
+          : undefined,
     },
   };
 }
@@ -235,10 +372,20 @@ function classifyLookupQuery(q: string): ILocationType {
  * distinct, actionable outcome from "found, but only a hint" (the `hint`
  * field below).
  */
-export async function lookup(graph: GraphBackend, q: string): Promise<ILookupResult> {
+export async function lookup(
+  graph: GraphBackend,
+  q: string
+): Promise<ILookupResult> {
   const locType = classifyLookupQuery(q);
 
-  let location = (await graph.queryNodes({ kind: 'location', liveOnly: true, metadata: { locType: { eq: locType }, value: { eq: q } }, limit: 1 }))[0];
+  let location = (
+    await graph.queryNodes({
+      kind: 'location',
+      liveOnly: true,
+      metadata: { locType: { eq: locType }, value: { eq: q } },
+      limit: 1,
+    })
+  )[0];
 
   let hint: string | undefined;
   let pathFallbackTruncated = false;
@@ -258,9 +405,12 @@ export async function lookup(graph: GraphBackend, q: string): Promise<ILookupRes
       limit: MAX_QUERY_LIMIT + 1,
     });
     pathFallbackTruncated = candidates.length > MAX_QUERY_LIMIT;
-    const scanned = pathFallbackTruncated ? candidates.slice(0, MAX_QUERY_LIMIT) : candidates;
+    const scanned = pathFallbackTruncated
+      ? candidates.slice(0, MAX_QUERY_LIMIT)
+      : candidates;
     const match = scanned.find((c) => {
-      const value = typeof c.metadata?.value === 'string' ? c.metadata.value : '';
+      const value =
+        typeof c.metadata?.value === 'string' ? c.metadata.value : '';
       return value.endsWith(q) || q.endsWith(value);
     });
     if (match) {
@@ -279,21 +429,30 @@ export async function lookup(graph: GraphBackend, q: string): Promise<ILookupRes
       'location',
       pathFallbackTruncated
         ? `${q} (path suffix/prefix fallback scanned only the first ${MAX_QUERY_LIMIT} live path locations; a match may exist beyond this cap)`
-        : q,
+        : q
     );
   }
 
-  const componentUid = typeof location.metadata?.componentUid === 'string' ? location.metadata.componentUid : undefined;
+  const componentUid =
+    typeof location.metadata?.componentUid === 'string'
+      ? location.metadata.componentUid
+      : undefined;
   // A tombstoned component must resolve the same as a missing one — `lookup`
   // never surfaces a soft-deleted row as though it were live (§3a chain
   // integrity; `getNodeByUid` has no `liveOnly` filter, so this must be
   // checked explicitly).
-  const componentRaw = componentUid ? await graph.getNodeByUid(componentUid) : null;
-  const component = componentRaw && !componentRaw.tInvalid ? componentRaw : null;
+  const componentRaw = componentUid
+    ? await graph.getNodeByUid(componentUid)
+    : null;
+  const component =
+    componentRaw && !componentRaw.tInvalid ? componentRaw : null;
   if (!component) {
     throw new CatalogNotFoundError('component', componentUid ?? '(unresolved)');
   }
-  const projectUid = typeof component.metadata?.projectUid === 'string' ? component.metadata.projectUid : undefined;
+  const projectUid =
+    typeof component.metadata?.projectUid === 'string'
+      ? component.metadata.projectUid
+      : undefined;
   const projectRaw = projectUid ? await graph.getNodeByUid(projectUid) : null;
   const project = projectRaw && !projectRaw.tInvalid ? projectRaw : null;
   if (!project) {
@@ -309,11 +468,31 @@ export async function lookup(graph: GraphBackend, q: string): Promise<ILookupRes
     project: {
       uid: project.uid,
       name: project.name ?? '',
-      path: typeof project.metadata?.path === 'string' ? project.metadata.path : undefined,
-      repoUrl: typeof project.metadata?.repoUrl === 'string' ? project.metadata.repoUrl : undefined,
+      path:
+        typeof project.metadata?.path === 'string'
+          ? project.metadata.path
+          : undefined,
+      repoUrl:
+        typeof project.metadata?.repoUrl === 'string'
+          ? project.metadata.repoUrl
+          : undefined,
     },
-    component: { uid: component.uid, name: component.name ?? '', path: typeof component.metadata?.path === 'string' ? component.metadata.path : undefined },
-    location: { uid: location.uid, locType, value: typeof location.metadata?.value === 'string' ? location.metadata.value : q },
+    component: {
+      uid: component.uid,
+      name: component.name ?? '',
+      path:
+        typeof component.metadata?.path === 'string'
+          ? component.metadata.path
+          : undefined,
+    },
+    location: {
+      uid: location.uid,
+      locType,
+      value:
+        typeof location.metadata?.value === 'string'
+          ? location.metadata.value
+          : q,
+    },
     hint,
   };
 }

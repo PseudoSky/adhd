@@ -43,28 +43,54 @@ export type { BacklogCtx } from './api.js';
 // and the exit codes a CLI host keys off.
 export * from './envelope.js';
 
-export { startBacklogServer, buildBacklogApigenPackage, resolveExpectedMcpToolNames } from './server.js';
+export {
+  startBacklogServer,
+  buildBacklogApigenPackage,
+  resolveExpectedMcpToolNames,
+} from './server.js';
 export type { StartOpts } from './server.js';
 
-export { runBacklogCli, resolveCommandPrefix, prefixCommand, stripSandboxFlag } from './cli.js';
+export {
+  runBacklogCli,
+  resolveCommandPrefix,
+  prefixCommand,
+  stripSandboxFlag,
+} from './cli.js';
 export type { RunBacklogCliOpts } from './cli.js';
 
 // `search`'s argv translation (see search-shortcut.ts). NOT a mount-surface
 // widening: `server.ts` extracts `api.ts`, never this barrel, so exporting it
 // here keeps it unit-testable without adding an extra apigen operation.
-export { buildSearchArgv, SEARCH_FLAGS, SEARCH_HELP } from './search-shortcut.js';
+export {
+  buildSearchArgv,
+  SEARCH_FLAGS,
+  SEARCH_HELP,
+} from './search-shortcut.js';
 export type { SearchShortcutOutcome } from './search-shortcut.js';
 
 export { installSkill, runInstallSkillCommand } from './install-skill.js';
-export type { InstallSkillResult, SkillHost, SkillScope } from './install-skill.js';
+export type {
+  InstallSkillResult,
+  SkillHost,
+  SkillScope,
+} from './install-skill.js';
 
 export { runServeCommand } from './serve.js';
 export type { RunServeCommandOpts } from './serve.js';
 
-export { buildBacklogEnv, resolveBacklogScope, resolveBacklogDbPath, suggestClaimantIdentity, backlogEnvironmentSpec } from './env.js';
+export {
+  buildBacklogEnv,
+  resolveBacklogScope,
+  resolveBacklogDbPath,
+  suggestClaimantIdentity,
+  backlogEnvironmentSpec,
+} from './env.js';
 export type { BacklogConfig, BuildBacklogEnvOptions } from './env.js';
 
-export { openGraphBacklogStore, closeGraphBacklogStore } from './store/graph-backlog-store.js';
+export {
+  openGraphBacklogStore,
+  closeGraphBacklogStore,
+} from './store/graph-backlog-store.js';
 export type { GraphBacklogStore } from './store/graph-backlog-store.js';
 
 export { readBacklogVersionInfo } from './version-info.js';
@@ -100,7 +126,10 @@ export { readBacklogVersionInfo } from './version-info.js';
 // same file's `server.ts`, which already relies on `import.meta.url`
 // resolving correctly from both `dist/index.js`, the rollup CJS output where
 // it's shimmed as `pathToFileURL(__filename).href`, and `dist/index.mjs`.)
-if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href
+) {
   // Telemetry composition root — the ONLY initTelemetry() call in this process.
   // Every telemetry record emitted by the store substrate (@adhd/sox-store-
   // adapter + @adhd/sox-graph-store dist emitters: retry, engine-guard, turso
@@ -150,11 +179,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
     console.error(
       `[sox-telemetry] WARNING: initTelemetry failed (${
         err instanceof Error ? err.message : String(err)
-      }); telemetry records will be silently dropped this process`,
+      }); telemetry records will be silently dropped this process`
     );
   }
   runBacklogCli().catch((err) => {
-    console.error(err instanceof Error ? (err.stack ?? err.message) : String(err));
+    console.error(
+      err instanceof Error ? err.stack ?? err.message : String(err)
+    );
     process.exitCode = 1;
   });
 }

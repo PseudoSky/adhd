@@ -26,7 +26,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { StoreAdapter } from '@adhd/sox-store-adapter';
-import { openGraphBacklogStore, type GraphBacklogStore } from '../store/graph-backlog-store.js';
+import {
+  openGraphBacklogStore,
+  type GraphBacklogStore,
+} from '../store/graph-backlog-store.js';
 import { buildBacklogEnv } from '../env.js';
 import { create, query, upsertProject, type BacklogCtx } from '../api.js';
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
@@ -38,7 +41,9 @@ const EMBED_TIMEOUT = 180_000;
 const ENV_VAR = 'ADHD_BACKLOG_EMBEDDING_ENABLED';
 
 /** Opens a real `GraphBacklogStore` through the production factory plus a real `BacklogCtx.env` with embeddings pinned on. */
-async function openBootstrapTestCtx(name: string): Promise<{ ctx: BacklogCtx; dir: string; store: GraphBacklogStore }> {
+async function openBootstrapTestCtx(
+  name: string
+): Promise<{ ctx: BacklogCtx; dir: string; store: GraphBacklogStore }> {
   const dir = freshTmpDir(name);
   const dbPath = join(dir, 'backlog.db');
   const store = await openGraphBacklogStore(dbPath);
@@ -73,16 +78,28 @@ describe('write/bootstrap.ts — search/embedding wired through the real api.ts 
       adapter = opened.store.adapter;
       const ctx = opened.ctx;
 
-      const projectResult = await upsertProject(ctx, { name: 'BOOTSTRAP-WIRING-TEST', by: 'bootstrap.spec' });
-      expect(isOutcomeOk(projectResult), JSON.stringify(projectResult)).toBe(true);
+      const projectResult = await upsertProject(ctx, {
+        name: 'BOOTSTRAP-WIRING-TEST',
+        by: 'bootstrap.spec',
+      });
+      expect(isOutcomeOk(projectResult), JSON.stringify(projectResult)).toBe(
+        true
+      );
 
       const title = 'Publish gate trips intermittently under machine load';
-      const body = 'The release publish gate reports a spurious failure with no code change to explain it.';
+      const body =
+        'The release publish gate reports a spurious failure with no code change to explain it.';
 
       // First create: `awaitEmbed:true` so its on-write vector is durably
       // indexed before the second create's duplicate scan runs — otherwise
       // the fire-and-forget default would make the scan's outcome racy.
-      const first = await create(ctx, { title, body, project: 'BOOTSTRAP-WIRING-TEST', by: 'bootstrap.spec', awaitEmbed: true });
+      const first = await create(ctx, {
+        title,
+        body,
+        project: 'BOOTSTRAP-WIRING-TEST',
+        by: 'bootstrap.spec',
+        awaitEmbed: true,
+      });
       expect(isOutcomeOk(first), JSON.stringify(first)).toBe(true);
       if (!isOutcomeOk(first)) throw new Error('unreachable');
       expect(first.data.created).toBe(true);
@@ -94,7 +111,12 @@ describe('write/bootstrap.ts — search/embedding wired through the real api.ts 
       // `writeHandle(ctx)` handed `createIssue` a real, wired `search`.
       // Before this module existed, `scanForDuplicates` always saw
       // `handle.search === undefined` and returned `[]` unconditionally.
-      const second = await create(ctx, { title, body, project: 'BOOTSTRAP-WIRING-TEST', by: 'bootstrap.spec' });
+      const second = await create(ctx, {
+        title,
+        body,
+        project: 'BOOTSTRAP-WIRING-TEST',
+        by: 'bootstrap.spec',
+      });
       expect(isOutcomeOk(second), JSON.stringify(second)).toBe(true);
       if (!isOutcomeOk(second)) throw new Error('unreachable');
       expect(second.data.created).toBe(false);
@@ -111,9 +133,10 @@ describe('write/bootstrap.ts — search/embedding wired through the real api.ts 
       const found = await query(ctx, { filter: { semantic: title } });
       expect(isOutcomeOk(found), JSON.stringify(found)).toBe(true);
       if (!isOutcomeOk(found)) throw new Error('unreachable');
-      if (found.data.view !== 'list') throw new Error(`expected view:'list', got view:'${found.data.view}'`);
+      if (found.data.view !== 'list')
+        throw new Error(`expected view:'list', got view:'${found.data.view}'`);
       expect(found.data.items.map((i) => i.uid)).toContain(firstUid);
     },
-    EMBED_TIMEOUT,
+    EMBED_TIMEOUT
   );
 });

@@ -47,7 +47,8 @@ describe('a body edit does not duplicate the issue in a listing', () => {
   beforeEach(async () => {
     dir = freshTmpDir('superseded-listing');
     store = await openTestIssueStore(join(dir, 'backlog.db'));
-    projectUid = (await seedProject(store, 'superseded-listing-project')).projectUid;
+    projectUid = (await seedProject(store, 'superseded-listing-project'))
+      .projectUid;
   });
 
   afterEach(async () => {
@@ -56,14 +57,27 @@ describe('a body edit does not duplicate the issue in a listing', () => {
   });
 
   async function seed(title: string, body: string): Promise<string> {
-    return (await createIssue(store, { project: projectUid, title, body, by: 'filer' })).uid;
+    return (
+      await createIssue(store, {
+        project: projectUid,
+        title,
+        body,
+        by: 'filer',
+      })
+    ).uid;
   }
 
   it('one issue edited once is ONE row, and meta.total agrees', async () => {
     const uid = await seed('the only issue', 'the original body');
-    const { uid: liveUid } = await update(store, { uid, body: 'the edited body', by: 'editor' });
+    const { uid: liveUid } = await update(store, {
+      uid,
+      body: 'the edited body',
+      by: 'editor',
+    });
 
-    const { result, meta } = await queryIssuesWithMeta(store, { fields: ['uid', 'title'] });
+    const { result, meta } = await queryIssuesWithMeta(store, {
+      fields: ['uid', 'title'],
+    });
 
     expect(result.items).toHaveLength(1);
     expect(result.items[0]?.uid).toBe(liveUid);
@@ -73,11 +87,17 @@ describe('a body edit does not duplicate the issue in a listing', () => {
 
   it('repeated edits do not accumulate rows', async () => {
     let uid = await seed('edited repeatedly', 'the original body');
-    for (const body of ['the first revision', 'the second revision', 'the third revision']) {
+    for (const body of [
+      'the first revision',
+      'the second revision',
+      'the third revision',
+    ]) {
       uid = (await update(store, { uid, body, by: 'editor' })).uid;
     }
 
-    const { result, meta } = await queryIssuesWithMeta(store, { fields: ['uid', 'title'] });
+    const { result, meta } = await queryIssuesWithMeta(store, {
+      fields: ['uid', 'title'],
+    });
     expect(result.items).toHaveLength(1);
     expect(result.items[0]?.uid).toBe(uid);
     expect(meta.total).toBe(1);
@@ -89,7 +109,17 @@ describe('a body edit does not duplicate the issue in a listing', () => {
     const current: string[] = [];
     for (let i = 0; i < 6; i++) {
       const uid = await seed(`issue ${i}`, `body ${i}`);
-      current.push(i % 2 === 0 ? (await update(store, { uid, body: `edited body ${i}`, by: 'editor' })).uid : uid);
+      current.push(
+        i % 2 === 0
+          ? (
+              await update(store, {
+                uid,
+                body: `edited body ${i}`,
+                by: 'editor',
+              })
+            ).uid
+          : uid
+      );
     }
 
     const PAGE = 2;
@@ -108,7 +138,8 @@ describe('a body edit does not duplicate the issue in a listing', () => {
       if (!page.hasMore) break;
       after = page.nextCursor;
       expect(after).toBeTruthy();
-      if (pages > 6) throw new Error(`paging did not terminate after ${pages} pages`);
+      if (pages > 6)
+        throw new Error(`paging did not terminate after ${pages} pages`);
     }
 
     expect(seen).toHaveLength(current.length);
@@ -120,7 +151,9 @@ describe('a body edit does not duplicate the issue in a listing', () => {
     await seed('first', 'body one');
     await seed('second', 'body two');
 
-    const { result, meta } = await queryIssuesWithMeta(store, { fields: ['uid'] });
+    const { result, meta } = await queryIssuesWithMeta(store, {
+      fields: ['uid'],
+    });
     expect(result.items).toHaveLength(2);
     expect(meta.total).toBe(2);
   });

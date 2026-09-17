@@ -22,7 +22,7 @@ import type { BacklogConfig } from '../env.js';
 import type { Logger } from 'pino';
 
 export interface BacklogPluginContext {
-  logger?: Logger;                                  // pino, stderr-only — never stdout (MCP channel stays clean)
+  logger?: Logger; // pino, stderr-only — never stdout (MCP channel stays clean)
   env: Environment<BacklogConfig>;
 }
 
@@ -34,9 +34,9 @@ export interface EmbeddingCapability<Opts = Record<string, unknown>> {
 }
 
 export interface BacklogPlugin<Opts = Record<string, unknown>> {
-  id: string;                    // 'embedding-remote' | package specifier
+  id: string; // 'embedding-remote' | package specifier
   description?: string;
-  optionsSchema?: Record<string, unknown>;          // host-validated before createProvider
+  optionsSchema?: Record<string, unknown>; // host-validated before createProvider
   capabilities: {
     embedding?: EmbeddingCapability<Opts>;
     // Future capability slots are added when a real consumer exists.
@@ -58,17 +58,14 @@ Backlog does **not** adopt a general hook-registry loop — one `embedding` capa
 
 ```typescript
 export interface RemoteEmbeddingConfig {
-  socketPath: string;            // UDS path (backendSocketPath(socketDir, singletonKey))
-  singletonKey: string;          // '(embedding-server, model)' — shared with the service
-  model?: string;                // default 'bge-base-en-v1.5'
-  dim?: number;                  // default 768 — must equal modelInfo().dimensions
+  socketPath: string; // UDS path (backendSocketPath(socketDir, singletonKey))
+  singletonKey: string; // '(embedding-server, model)' — shared with the service
+  model?: string; // default 'bge-base-en-v1.5'
+  dim?: number; // default 768 — must equal modelInfo().dimensions
   spawn?: { command: string; args: string[]; env?: NodeJS.ProcessEnv; stderrLogPath?: string };
-  backoff?: BackoffOptions;      // dialBackend re-dial bounds
+  backoff?: BackoffOptions; // dialBackend re-dial bounds
 }
-export function createRemoteEmbeddingProvider(
-  cfg: RemoteEmbeddingConfig,
-  ctx?: BacklogPluginContext,
-): Promise<EmbeddingProvider>;
+export function createRemoteEmbeddingProvider(cfg: RemoteEmbeddingConfig, ctx?: BacklogPluginContext): Promise<EmbeddingProvider>;
 ```
 
 Construction: `ensureBackend` (probe-then-spawn, O_EXCL singleton spawn-lock — many consumer processes collapse to ONE daemon) then `dialBackend` (re-dial + fast-fail on backend-down). If the backend cannot be resolved, construction throws `ResolutionError` — **a healthy provider is never reported without a resolved backend**.
@@ -84,10 +81,7 @@ Exports the `BacklogPlugin` with `id: 'embedding-remote'`, `optionsSchema`, and 
 ## 4. Store wiring — `openGraphBacklogStore`
 
 ```typescript
-export async function openGraphBacklogStore(
-  dbPath: string,
-  opts?: { embedding?: { plugin: string; options?: Record<string, unknown> } },
-): Promise<GraphBacklogStore>
+export async function openGraphBacklogStore(dbPath: string, opts?: { embedding?: { plugin: string; options?: Record<string, unknown> } }): Promise<GraphBacklogStore>;
 ```
 
 - Substrate: `createStoreAdapter({ dbPath })` (defaults to `turso`), `createGraphBackend(adapter)` (0.6.0), vector via `createVectorDialect(adapter.config.type)` → `TursoVectorDialect` — `F32_BLOB(dim)` columns, index via `CREATE INDEX` (DiskANN inferred), `vector_distance_cos/l2/dot`, and a `topKQuery` that emits a `WHERE` filter seam for predicate pushdown.

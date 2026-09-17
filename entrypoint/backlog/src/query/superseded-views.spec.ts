@@ -68,7 +68,8 @@ describe('a body edit does not duplicate the issue across every other view', () 
   beforeEach(async () => {
     dir = freshTmpDir('superseded-views');
     store = await openTestIssueStore(join(dir, 'backlog.db'));
-    projectUid = (await seedProject(store, 'superseded-views-project')).projectUid;
+    projectUid = (await seedProject(store, 'superseded-views-project'))
+      .projectUid;
   });
 
   afterEach(async () => {
@@ -77,7 +78,14 @@ describe('a body edit does not duplicate the issue across every other view', () 
   });
 
   async function seed(title: string, body: string): Promise<string> {
-    return (await createIssue(store, { project: projectUid, title, body, by: 'filer' })).uid;
+    return (
+      await createIssue(store, {
+        project: projectUid,
+        title,
+        body,
+        by: 'filer',
+      })
+    ).uid;
   }
 
   // ---------------------------------------------------------------------
@@ -96,13 +104,21 @@ describe('a body edit does not duplicate the issue across every other view', () 
     // `queryStale` must return exactly the CURRENT one.
     const uid = await seed('claimed then edited', 'the original body');
     await claim(store, { uid, by: 'claimant', action: 'claim' });
-    const { uid: liveUid } = await update(store, { uid, body: 'the edited body', by: 'editor' });
+    const { uid: liveUid } = await update(store, {
+      uid,
+      body: 'the edited body',
+      by: 'editor',
+    });
 
     // staleAfterMin: 0 makes every existing claim immediately stale — no
     // sleep, no wall-clock race: `threshold = Date.now() - 0`, and the claim
     // was written strictly before this call started.
-    const { result } = await queryIssuesWithMeta(store, { view: 'stale', staleAfterMin: 0 });
-    if (result.view !== 'stale') throw new Error(`expected view:'stale', got ${result.view}`);
+    const { result } = await queryIssuesWithMeta(store, {
+      view: 'stale',
+      staleAfterMin: 0,
+    });
+    if (result.view !== 'stale')
+      throw new Error(`expected view:'stale', got ${result.view}`);
 
     expect(result.items).toHaveLength(1);
     expect(result.items[0]?.uid).toBe(liveUid);
@@ -126,14 +142,27 @@ describe('a body edit does not duplicate the issue across every other view', () 
     // directions; without that sweep this returns ZERO `blocks` edges.
     const blockerUid = await seed('the blocker', 'blocker body');
     const blockedUid = await seed('the blocked issue', 'blocked body');
-    await relate(store, { sourceUid: blockerUid, targetUid: blockedUid, rel: 'blocks', action: 'add', by: 'editor' });
-    const { uid: liveBlockedUid } = await update(store, { uid: blockedUid, body: 'edited blocked body', by: 'editor' });
+    await relate(store, {
+      sourceUid: blockerUid,
+      targetUid: blockedUid,
+      rel: 'blocks',
+      action: 'add',
+      by: 'editor',
+    });
+    const { uid: liveBlockedUid } = await update(store, {
+      uid: blockedUid,
+      body: 'edited blocked body',
+      by: 'editor',
+    });
 
     const { result } = await queryIssuesWithMeta(store, { view: 'graph' });
-    if (result.view !== 'graph') throw new Error(`expected view:'graph', got ${result.view}`);
+    if (result.view !== 'graph')
+      throw new Error(`expected view:'graph', got ${result.view}`);
 
     expect(result.graph.nodes).toHaveLength(2);
-    expect(result.graph.nodes.map((n) => n.uid).sort()).toEqual([blockerUid, liveBlockedUid].sort());
+    expect(result.graph.nodes.map((n) => n.uid).sort()).toEqual(
+      [blockerUid, liveBlockedUid].sort()
+    );
 
     const blocksEdges = result.graph.edges.filter((e) => e.rel === 'blocks');
     expect(blocksEdges).toHaveLength(1);
@@ -149,12 +178,28 @@ describe('a body edit does not duplicate the issue across every other view', () 
   it('a topo order lists the edited issue exactly once', async () => {
     const blockerUid = await seed('order blocker', 'blocker body');
     const blockedUid = await seed('order blocked', 'blocked body');
-    await relate(store, { sourceUid: blockerUid, targetUid: blockedUid, rel: 'blocks', action: 'add', by: 'editor' });
-    const { uid: liveBlockerUid } = await update(store, { uid: blockerUid, body: 'edited blocker body', by: 'editor' });
+    await relate(store, {
+      sourceUid: blockerUid,
+      targetUid: blockedUid,
+      rel: 'blocks',
+      action: 'add',
+      by: 'editor',
+    });
+    const { uid: liveBlockerUid } = await update(store, {
+      uid: blockerUid,
+      body: 'edited blocker body',
+      by: 'editor',
+    });
 
     const { result } = await queryIssuesWithMeta(store, { view: 'order' });
-    if (result.view !== 'order') throw new Error(`expected view:'order', got ${result.view}`);
-    if (!result.order.ok) throw new Error(`expected a resolvable order, got a cycle: ${result.order.cycle.join(', ')}`);
+    if (result.view !== 'order')
+      throw new Error(`expected view:'order', got ${result.view}`);
+    if (!result.order.ok)
+      throw new Error(
+        `expected a resolvable order, got a cycle: ${result.order.cycle.join(
+          ', '
+        )}`
+      );
 
     expect(result.order.order).toHaveLength(2);
     expect(new Set(result.order.order).size).toBe(2);
@@ -169,15 +214,24 @@ describe('a body edit does not duplicate the issue across every other view', () 
 
   it('resolveSimilarFilterIds resolves the edited issue to exactly one candidate id', async () => {
     const uid = await seed('similar candidate', 'the original body');
-    const { uid: liveUid } = await update(store, { uid, body: 'the edited body', by: 'editor' });
+    const { uid: liveUid } = await update(store, {
+      uid,
+      body: 'the edited body',
+      by: 'editor',
+    });
 
     // A scalar (non-embedding) filter dimension is enough to exercise the
     // `scalarFilter` branch — `createdAt.since` far in the past matches
     // every issue in this store without touching `filter.semantic`/`grep`.
-    const ids = await resolveSimilarFilterIds(store.graph, { createdAt: { since: '2000-01-01T00:00:00.000Z' } });
-    if (!ids) throw new Error('expected a concrete candidate id set, got undefined');
+    const ids = await resolveSimilarFilterIds(store.graph, {
+      createdAt: { since: '2000-01-01T00:00:00.000Z' },
+    });
+    if (!ids)
+      throw new Error('expected a concrete candidate id set, got undefined');
 
-    const liveNode = (await store.graph.getNodesByIds([...ids])).find((n) => n.uid === liveUid);
+    const liveNode = (await store.graph.getNodesByIds([...ids])).find(
+      (n) => n.uid === liveUid
+    );
     expect(ids.size).toBe(1);
     expect(liveNode).toBeDefined();
   });
@@ -191,9 +245,16 @@ describe('a body edit does not duplicate the issue across every other view', () 
     await update(store, { uid, priority: 'urgent', by: 'editor' });
     await update(store, { uid, body: 'the edited body', by: 'editor' });
 
-    const { rows, unassigned } = await priorityMatrix(store, { filter: { status: 'all' } });
+    const { rows, unassigned } = await priorityMatrix(store, {
+      filter: { status: 'all' },
+    });
     const urgentRow = rows.find((r) => r.priority === 'urgent');
-    if (!urgentRow) throw new Error(`expected an "urgent" row, got: ${rows.map((r) => r.priority).join(', ')}`);
+    if (!urgentRow)
+      throw new Error(
+        `expected an "urgent" row, got: ${rows
+          .map((r) => r.priority)
+          .join(', ')}`
+      );
 
     expect(urgentRow.count).toBe(1);
     const totalCounted = rows.reduce((sum, r) => sum + r.count, 0) + unassigned;
@@ -230,11 +291,17 @@ describe('a body edit does not duplicate the issue across every other view', () 
     const uid = await seed('curve issue', 'the original body');
     const created = await store.graph.getNodeByUid(uid);
     if (!created) throw new Error('created node not found');
-    const { uid: liveUid } = await update(store, { uid, body: 'the edited body', by: 'editor' });
+    const { uid: liveUid } = await update(store, {
+      uid,
+      body: 'the edited body',
+      by: 'editor',
+    });
     const edited = await store.graph.getNodeByUid(liveUid);
     if (!edited) throw new Error('edited node not found');
 
-    const { points } = await openCurve(store, { at: [beforeEdit, created.tValid, edited.tValid] });
+    const { points } = await openCurve(store, {
+      at: [beforeEdit, created.tValid, edited.tValid],
+    });
 
     expect(points[0]?.existed).toBe(0); // strictly before the issue was created
     expect(points[1]?.existed).toBe(1); // after creation, before the edit — the issue, as it existed then (the deliberate design this test pins)

@@ -28,11 +28,19 @@ import { batchPlugin } from '@adhd/apigen-plugin-batch';
 import type { Descriptor, Operation, Plugin } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
 import type { BacklogCtx } from './api.js';
-import { openGraphBacklogStore, closeGraphBacklogStoreSafe, type GraphBacklogStore } from './store/graph-backlog-store.js';
+import {
+  openGraphBacklogStore,
+  closeGraphBacklogStoreSafe,
+  type GraphBacklogStore,
+} from './store/graph-backlog-store.js';
 import { enableSemanticSearchFromConfig } from './store/semantic-search.js';
 import { installSignalCleanup } from './store/signal-cleanup.js';
 import { buildBacklogEnv, resolveBacklogDbPath } from './env.js';
-import { buildBacklogApigenPackage, requireRun, testSilentLogger } from './server.js';
+import {
+  buildBacklogApigenPackage,
+  requireRun,
+  testSilentLogger,
+} from './server.js';
 import { runInstallSkillCommand } from './install-skill.js';
 import { runInstallCommand } from './install.js';
 import { runServeCommand } from './serve.js';
@@ -64,7 +72,9 @@ import { buildSearchArgv } from './search-shortcut.js';
  * second source file) can never silently desync this from the real command
  * table the way a hardcoded `['backlog']` constant would.
  */
-export function resolveCommandPrefix(operations: readonly Operation[]): string[] {
+export function resolveCommandPrefix(
+  operations: readonly Operation[]
+): string[] {
   const first = operations.find((op) => op.kind === 'action');
   if (!first) {
     throw new Error(
@@ -145,7 +155,10 @@ export function resolveMountNamespaces(
   operations: readonly Operation[],
   host: string
 ): Set<string> {
-  const descriptor: Descriptor = { host, operations: operations as Operation[] };
+  const descriptor: Descriptor = {
+    host,
+    operations: operations as Operation[],
+  };
   const namespaces = new Set<string>();
   for (const plugin of usePlugins) {
     const mount = plugin.capabilities.mount;
@@ -197,8 +210,10 @@ export function prefixCommand(
 ): string[] {
   if (userArgv.length === 0) return [...userArgv];
   if (userArgv[0]?.startsWith('-')) return [...userArgv];
-  if (userArgv[0] !== undefined && reservedNamespaces.has(userArgv[0])) return [...userArgv];
-  const alreadyPrefixed = prefix.length > 0 && prefix.every((seg, i) => userArgv[i] === seg);
+  if (userArgv[0] !== undefined && reservedNamespaces.has(userArgv[0]))
+    return [...userArgv];
+  const alreadyPrefixed =
+    prefix.length > 0 && prefix.every((seg, i) => userArgv[i] === seg);
   if (alreadyPrefixed) return [...userArgv];
   return [...prefix, ...userArgv];
 }
@@ -233,13 +248,24 @@ export interface RunBacklogCliOpts {
 // which happens before `runBacklogCli` is ever invoked — and redirect the
 // telemetry file sink away from the real production `~/.adhd` tree too. See
 // that call site's own comment for the full rationale.
-export function stripSandboxFlag(argv: readonly string[]): { argv: string[]; sandbox: boolean } {
+export function stripSandboxFlag(argv: readonly string[]): {
+  argv: string[];
+  sandbox: boolean;
+} {
   const sandbox = argv.includes('--sandbox');
-  return { argv: sandbox ? argv.filter((a) => a !== '--sandbox') : [...argv], sandbox };
+  return {
+    argv: sandbox ? argv.filter((a) => a !== '--sandbox') : [...argv],
+    sandbox,
+  };
 }
 
-export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts = {}): Promise<void> {
-  const { argv: userArgvEarly, sandbox } = stripSandboxFlag(argvIn ?? process.argv.slice(2));
+export async function runBacklogCli(
+  argvIn?: string[],
+  optsIn: RunBacklogCliOpts = {}
+): Promise<void> {
+  const { argv: userArgvEarly, sandbox } = stripSandboxFlag(
+    argvIn ?? process.argv.slice(2)
+  );
   const opts: RunBacklogCliOpts = { ...optsIn };
   // BUG-BACKLOG-SANDBOX-ADHDROOT-UNWIRED-001: the very message printed two
   // lines below has always told the caller to "pass ADHD_ROOT=<path> to
@@ -257,7 +283,9 @@ export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts
   }
   if (sandbox && opts.adhdRoot === undefined) {
     opts.adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-sandbox-'));
-    console.error(`[backlog] --sandbox: isolated store at ${opts.adhdRoot} (not auto-deleted — pass ADHD_ROOT=${opts.adhdRoot} to reuse it, or remove it yourself when done)`);
+    console.error(
+      `[backlog] --sandbox: isolated store at ${opts.adhdRoot} (not auto-deleted — pass ADHD_ROOT=${opts.adhdRoot} to reuse it, or remove it yourself when done)`
+    );
   }
   // BUG-BACKLOG-SANDBOX-IRCACHE-LEAK-001: `--sandbox`'s promise is "diverts
   // the store away from the (fake) production HOME entirely, and never
@@ -276,8 +304,15 @@ export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts
   // isolation `--sandbox` gets on the CLI. Never overrides an
   // already-set `APIGEN_IR_CACHE_FILE` — an explicit caller override (e.g.
   // an integration test pointing at its own throwaway file) always wins.
-  if (opts.adhdRoot !== undefined && process.env['APIGEN_IR_CACHE_FILE'] === undefined) {
-    process.env['APIGEN_IR_CACHE_FILE'] = join(opts.adhdRoot, 'ir-cache', 'backlog-client.ir.json');
+  if (
+    opts.adhdRoot !== undefined &&
+    process.env['APIGEN_IR_CACHE_FILE'] === undefined
+  ) {
+    process.env['APIGEN_IR_CACHE_FILE'] = join(
+      opts.adhdRoot,
+      'ir-cache',
+      'backlog-client.ir.json'
+    );
   }
   // `sandbox-path` (store-free diagnostic — DEBT-BACKLOG-001's narrower real
   // instance / P5-cli-serve-transport's sandbox finding) reports the
@@ -287,8 +322,18 @@ export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts
   // destructive. Uses the SAME `buildBacklogEnv`/`resolveBacklogDbPath`
   // path every store-open site resolves through (BUG-002 parity).
   if (userArgvEarly[0] === 'sandbox-path') {
-    const env = buildBacklogEnv({ scope: opts.scope, adhdRoot: opts.adhdRoot, cwd: opts.cwd });
-    console.log(JSON.stringify({ sandbox, adhdRoot: opts.adhdRoot, dbPath: resolveBacklogDbPath(env) }));
+    const env = buildBacklogEnv({
+      scope: opts.scope,
+      adhdRoot: opts.adhdRoot,
+      cwd: opts.cwd,
+    });
+    console.log(
+      JSON.stringify({
+        sandbox,
+        adhdRoot: opts.adhdRoot,
+        dbPath: resolveBacklogDbPath(env),
+      })
+    );
     return;
   }
   // BUG-BACKLOG-001: `install-skill`/`install`/`serve` are intercepted below,
@@ -298,16 +343,30 @@ export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts
   // help/no-args, opens no store (see DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001),
   // and falls through to the apigen program for the full command listing.
   const helpRequested =
-    userArgvEarly.length === 0 || userArgvEarly[0] === '--help' || userArgvEarly[0] === '-h';
+    userArgvEarly.length === 0 ||
+    userArgvEarly[0] === '--help' ||
+    userArgvEarly[0] === '-h';
   if (helpRequested) {
     console.log('Special commands (handled before the apigen command table):');
-    console.log('  install-skill [options]  Install the backlog skill for a host (alias: install)');
-    console.log('  serve [options]          Start the long-lived HTTP/MCP server (--transport http|mcp|both)');
-    console.log('  search "<query>" [flags]  Natural-language search — `query --input` with the options as flags');
-    console.log('  sandbox-path             Report the resolved store path (store-free) — see --sandbox below');
+    console.log(
+      '  install-skill [options]  Install the backlog skill for a host (alias: install)'
+    );
+    console.log(
+      '  serve [options]          Start the long-lived HTTP/MCP server (--transport http|mcp|both)'
+    );
+    console.log(
+      '  search "<query>" [flags]  Natural-language search — `query --input` with the options as flags'
+    );
+    console.log(
+      '  sandbox-path             Report the resolved store path (store-free) — see --sandbox below'
+    );
     console.log('');
-    console.log('  --sandbox    Global flag, valid before ANY command: isolates this invocation');
-    console.log('               into a fresh throwaway store instead of the live production one.');
+    console.log(
+      '  --sandbox    Global flag, valid before ANY command: isolates this invocation'
+    );
+    console.log(
+      '               into a fresh throwaway store instead of the live production one.'
+    );
     console.log('');
   }
   // `install-skill` (SPEC.md §6.6) is a PURE filesystem operation — copy
@@ -374,7 +433,9 @@ export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts
     if (outcome.kind === 'error') {
       // Same rejection shape `install-skill.ts`'s `failUsage` emits, and
       // the same `CLI_EXIT_CODE['invalid_argument']` the apigen path uses.
-      console.error(JSON.stringify({ code: 'invalid_argument', message: outcome.message }));
+      console.error(
+        JSON.stringify({ code: 'invalid_argument', message: outcome.message })
+      );
       process.exitCode = 2;
       return;
     }
@@ -388,12 +449,19 @@ export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts
   let opened: { store: GraphBacklogStore; ctx: BacklogCtx } | undefined;
   const getCtx = async (): Promise<BacklogCtx> => {
     if (!opened) {
-      const env = buildBacklogEnv({ scope: opts.scope, adhdRoot: opts.adhdRoot, cwd: opts.cwd });
+      const env = buildBacklogEnv({
+        scope: opts.scope,
+        adhdRoot: opts.adhdRoot,
+        cwd: opts.cwd,
+      });
       env.ensureDirs();
       // BUG-002: open through `resolveBacklogDbPath` so ADHD_BACKLOG_DATABASE_PATH
       // (→ config.db.path) actually redirects the store; `env.files.db` is only
       // the fallback.
-      const store = await openGraphBacklogStore(resolveBacklogDbPath(env), env.config.db.busyTimeoutMs);
+      const store = await openGraphBacklogStore(
+        resolveBacklogDbPath(env),
+        env.config.db.busyTimeoutMs
+      );
       // RAG-SPEC.md §1.6 — opt-in semantic search. A no-op (and silent) unless
       // `embedding.enabled`; never throws, so a missing/broken embedding stack
       // can never stop the CLI from running. See
@@ -426,13 +494,19 @@ export async function runBacklogCli(argvIn?: string[], optsIn: RunBacklogCliOpts
   const signalCleanup = installSignalCleanup(closeStoreOnce);
 
   try {
-    const { pkg, operations } = await buildBacklogApigenPackage(getCtx, { adhdRoot: opts.adhdRoot });
+    const { pkg, operations } = await buildBacklogApigenPackage(getCtx, {
+      adhdRoot: opts.adhdRoot,
+    });
     const userArgv = searchArgv ?? userArgvEarly;
     const prefix = resolveCommandPrefix(operations);
     // Derived from the SAME `USE_PLUGINS` array passed to `options.usePlugins`
     // below — see {@link resolveMountNamespaces}'s doc comment — never a
     // separately hand-maintained list.
-    const reservedNamespaces = resolveMountNamespaces(USE_PLUGINS, operations, pkg.id);
+    const reservedNamespaces = resolveMountNamespaces(
+      USE_PLUGINS,
+      operations,
+      pkg.id
+    );
 
     await requireRun(cliPlugin)({
       packages: [pkg],

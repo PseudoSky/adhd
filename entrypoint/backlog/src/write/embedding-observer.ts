@@ -81,7 +81,10 @@ export function composeEmbedText(title: string, body: string): string {
   return `${title}\n${body}`.trim();
 }
 
-type EmbeddingAuditAction = 'embedding_upserted' | 'embedding_deleted' | 'embedding_failed';
+type EmbeddingAuditAction =
+  | 'embedding_upserted'
+  | 'embedding_deleted'
+  | 'embedding_failed';
 
 interface IScheduleEmbeddingBase {
   /** The graph node's store-adapter `rowid` the vector is keyed on — never `uid` (see {@link import('./tx.js').IEmbeddingBackend}'s own doc comment). */
@@ -122,7 +125,10 @@ export type IScheduleEmbeddingInput =
  * callback, and either await the returned promise (`awaitEmbed:true`) or
  * let it run fire-and-forget (the default).
  */
-export async function scheduleIssueEmbedding(handle: IWriteStoreHandle, input: IScheduleEmbeddingInput): Promise<void> {
+export async function scheduleIssueEmbedding(
+  handle: IWriteStoreHandle,
+  input: IScheduleEmbeddingInput
+): Promise<void> {
   const backend = handle.embedding;
   if (!backend) return; // unconfigured — true no-op, no audit row (IWriteStoreHandle.embedding's own contract)
 
@@ -144,7 +150,7 @@ export async function scheduleIssueEmbedding(handle: IWriteStoreHandle, input: I
     // eslint-disable-next-line no-console -- §4b: "the observer logs the error for operator visibility" — this IS that log, there being no separate observer process.
     console.error(
       `scheduleIssueEmbedding: embed round-trip failed for issue uid="${input.subjectUid}" (action="${input.action}") — degrading to an "embedding_failed" audit row.`,
-      err,
+      err
     );
   }
 
@@ -171,7 +177,7 @@ export async function scheduleIssueEmbedding(handle: IWriteStoreHandle, input: I
     // eslint-disable-next-line no-console
     console.error(
       `scheduleIssueEmbedding: failed to persist "${auditAction}" audit row for issue uid="${input.subjectUid}" — the embedding outcome itself is unrecorded.`,
-      auditErr,
+      auditErr
     );
   }
 }

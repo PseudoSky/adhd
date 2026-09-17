@@ -94,9 +94,15 @@ export interface SemanticBackend {
   /** Drops a node's vector (soft-delete / prune). Absent vector is a no-op, never an error. */
   deleteVector(nodeId: number): Promise<void>;
   /** Top-`k` nearest neighbours, scoped by `filter` (pushed into SQL BEFORE the limit — never a post-filter, §3.1) or an explicit candidate `ids` set. */
-  knn(query: Float32Array, k: number, opts?: { filter?: NodeFilter; ids?: number[] }): Promise<SemanticMatch[]>;
+  knn(
+    query: Float32Array,
+    k: number,
+    opts?: { filter?: NodeFilter; ids?: number[] }
+  ): Promise<SemanticMatch[]>;
   /** Every indexed vector in this space — the input to `cluster_into_plans` (DBSCAN) and `run_dedup_sweep` (§4, §5). */
-  iterVectors(opts?: { filter?: NodeFilter }): AsyncIterable<{ nodeId: number; vec: Float32Array }>;
+  iterVectors(opts?: {
+    filter?: NodeFilter;
+  }): AsyncIterable<{ nodeId: number; vec: Float32Array }>;
   /** §1.5 — truthful health, resolved from the provider, never echoed from config. */
   health(): Promise<SemanticHealth>;
 }
@@ -146,9 +152,13 @@ let vectorSpacePopulated = false;
  * ({@link enableSemanticSearchFromConfig}) probes the space and passes the
  * measured value.
  */
-export function configureSemanticBackend(backend: SemanticBackend | null, opts?: { vectorSpacePopulated?: boolean }): void {
+export function configureSemanticBackend(
+  backend: SemanticBackend | null,
+  opts?: { vectorSpacePopulated?: boolean }
+): void {
   injectedBackend = backend;
-  vectorSpacePopulated = backend === null ? false : (opts?.vectorSpacePopulated ?? true);
+  vectorSpacePopulated =
+    backend === null ? false : opts?.vectorSpacePopulated ?? true;
 }
 
 /** The currently-configured backend, or `null` if none is (the default, unconfigured build). */
@@ -210,9 +220,13 @@ export function requireSemanticBackend(feature: string): SemanticBackend {
  * its message (`not_configured` vs `empty_vector_space`) while keeping the
  * single `rag_not_configured` outcome code the §5a contract promises.
  */
-export function requireReadableSemanticBackend(feature: string): SemanticBackend {
-  if (injectedBackend === null) throw new RagNotConfiguredError(feature, 'not_configured');
-  if (!vectorSpacePopulated) throw new RagNotConfiguredError(feature, 'empty_vector_space');
+export function requireReadableSemanticBackend(
+  feature: string
+): SemanticBackend {
+  if (injectedBackend === null)
+    throw new RagNotConfiguredError(feature, 'not_configured');
+  if (!vectorSpacePopulated)
+    throw new RagNotConfiguredError(feature, 'empty_vector_space');
   return injectedBackend;
 }
 
@@ -258,7 +272,13 @@ export type SemanticBootstrapResult =
 interface OptEmbeddingProvider {
   readonly metadata: { modelId: string; dimensions: number };
   embedSingle(text: string, role?: 'document' | 'query'): Promise<Float32Array>;
-  health?(): { configured: string; active: string | null; state: 'uninitialized' | 'warming' | 'real' | 'error'; dimensions: number | null; last_error: string | null };
+  health?(): {
+    configured: string;
+    active: string | null;
+    state: 'uninitialized' | 'warming' | 'real' | 'error';
+    dimensions: number | null;
+    last_error: string | null;
+  };
 }
 /**
  * (BUG-BACKLOG-VECSTORE-NODEFILTER-IGNORED-001) `@adhd/sox-vector-store`'s
@@ -281,14 +301,29 @@ interface OptAsyncVectorBackend {
   upsert(id: number, vec: Float32Array, space: OptVectorSpace): Promise<void>;
   delete(id: number, modelId: string): Promise<void>;
   get(id: number, modelId: string): Promise<Float32Array | null>;
-  knn(query: Float32Array, space: OptVectorSpace, k: number, filter?: OptVecFilter): Promise<Array<{ id: number; score: number }>>;
-  iter(modelId: string, opts?: { filter?: OptVecFilter }): AsyncIterable<{ id: number; vec: Float32Array }>;
+  knn(
+    query: Float32Array,
+    space: OptVectorSpace,
+    k: number,
+    filter?: OptVecFilter
+  ): Promise<Array<{ id: number; score: number }>>;
+  iter(
+    modelId: string,
+    opts?: { filter?: OptVecFilter }
+  ): AsyncIterable<{ id: number; vec: Float32Array }>;
 }
 interface OptVectorStoreModule {
-  openTursoVectorStore(adapter: unknown, opts: { dim: number; modelId: string }): Promise<OptAsyncVectorBackend>;
+  openTursoVectorStore(
+    adapter: unknown,
+    opts: { dim: number; modelId: string }
+  ): Promise<OptAsyncVectorBackend>;
 }
 interface OptEmbeddingModule {
-  createEmbeddingProvider(config: { type: string; model: string; options?: Record<string, unknown> }): Promise<OptEmbeddingProvider>;
+  createEmbeddingProvider(config: {
+    type: string;
+    model: string;
+    options?: Record<string, unknown>;
+  }): Promise<OptEmbeddingProvider>;
 }
 
 /**
@@ -304,7 +339,9 @@ interface OptEmbeddingModule {
  * Routing the specifier through a `const` defeats both static analyses, so
  * resolution happens only at RUNTIME, inside this function's try/catch.
  */
-async function loadOptional<T>(specifier: string): Promise<{ mod: T } | { err: unknown }> {
+async function loadOptional<T>(
+  specifier: string
+): Promise<{ mod: T } | { err: unknown }> {
   try {
     const dynamicSpecifier = specifier;
     return { mod: (await import(/* @vite-ignore */ dynamicSpecifier)) as T };
@@ -313,7 +350,8 @@ async function loadOptional<T>(specifier: string): Promise<{ mod: T } | { err: u
   }
 }
 
-const errText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+const errText = (err: unknown): string =>
+  err instanceof Error ? err.message : String(err);
 
 /**
  * (BUG-BACKLOG-VECSTORE-NODEFILTER-IGNORED-001) Resolves a `NodeFilter`
@@ -340,14 +378,17 @@ const errText = (err: unknown): string => (err instanceof Error ? err.message : 
  */
 async function resolveVecFilter(
   store: GraphBacklogStore,
-  opts: { filter?: NodeFilter; ids?: number[] } | undefined,
+  opts: { filter?: NodeFilter; ids?: number[] } | undefined
 ): Promise<OptVecFilter | undefined | null> {
   if (opts?.filter === undefined && opts?.ids === undefined) return undefined;
   let ids = opts?.ids;
   if (opts?.filter !== undefined) {
     const matches = await store.graph.queryNodes(opts.filter);
     const filterIds = new Set(matches.map((n) => n.id));
-    ids = ids !== undefined ? ids.filter((id) => filterIds.has(id)) : [...filterIds];
+    ids =
+      ids !== undefined
+        ? ids.filter((id) => filterIds.has(id))
+        : [...filterIds];
   }
   // `ids` is always defined by this point: either passed in directly, or
   // just populated from `filter` above — the early return handles "neither".
@@ -369,14 +410,19 @@ async function resolveVecFilter(
  * Never called automatically — a host calls this explicitly and then
  * `configureSemanticBackend(result.backend)`.
  */
-export async function bootstrapSemanticBackend(store: GraphBacklogStore, config: SemanticBootstrapConfig): Promise<SemanticBootstrapResult> {
+export async function bootstrapSemanticBackend(
+  store: GraphBacklogStore,
+  config: SemanticBootstrapConfig
+): Promise<SemanticBootstrapResult> {
   // RAG-SPEC §0: the vector table lives in backlog's own database, reached
   // through the SAME adapter the graph uses. `nativeVectors` is the blessed
   // capability probe (never `config.type`): true => Turso, whose vector
   // support is async; false => a substrate this async seam does not serve
   // (its backend is synchronous and lives behind `openVectorStore`).
   // Refuse loudly rather than half-work.
-  const adapter = store.adapter as unknown as { capabilities?: { nativeVectors?: boolean } };
+  const adapter = store.adapter as unknown as {
+    capabilities?: { nativeVectors?: boolean };
+  };
   if (adapter?.capabilities?.nativeVectors !== true) {
     return {
       ok: false,
@@ -384,7 +430,9 @@ export async function bootstrapSemanticBackend(store: GraphBacklogStore, config:
         reason: 'unsupported_adapter',
         detail:
           `backlog's RAG layer requires a Turso-backed store (capabilities.nativeVectors === true); ` +
-          `this store's adapter reports ${JSON.stringify(adapter?.capabilities?.nativeVectors)}. ` +
+          `this store's adapter reports ${JSON.stringify(
+            adapter?.capabilities?.nativeVectors
+          )}. ` +
           `Turso is @adhd/sox-store-adapter's default; a store on any other substrate cannot serve embeddings.`,
       },
     };
@@ -396,32 +444,68 @@ export async function bootstrapSemanticBackend(store: GraphBacklogStore, config:
   ]);
   if ('err' in vectorStoreLoad || 'err' in embeddingLoad) {
     const missing = [
-      ...('err' in vectorStoreLoad ? [`@adhd/sox-vector-store (${errText(vectorStoreLoad.err)})`] : []),
-      ...('err' in embeddingLoad ? [`@adhd/sox-embedding-provider (${errText(embeddingLoad.err)})`] : []),
+      ...('err' in vectorStoreLoad
+        ? [`@adhd/sox-vector-store (${errText(vectorStoreLoad.err)})`]
+        : []),
+      ...('err' in embeddingLoad
+        ? [`@adhd/sox-embedding-provider (${errText(embeddingLoad.err)})`]
+        : []),
     ];
     // NOT an error: this is the default build. `RagNotConfiguredError` on
     // every semantic input is exactly the correct behaviour from here on.
-    return { ok: false, failure: { reason: 'not_installed', detail: `optional embedding packages unavailable: ${missing.join('; ')}` } };
+    return {
+      ok: false,
+      failure: {
+        reason: 'not_installed',
+        detail: `optional embedding packages unavailable: ${missing.join(
+          '; '
+        )}`,
+      },
+    };
   }
 
   let provider: OptEmbeddingProvider;
   try {
-    provider = await embeddingLoad.mod.createEmbeddingProvider(config.embedding);
+    provider = await embeddingLoad.mod.createEmbeddingProvider(
+      config.embedding
+    );
   } catch (err) {
-    return { ok: false, failure: { reason: 'provider_failed', detail: `createEmbeddingProvider(${config.embedding.type}:${config.embedding.model}) failed: ${errText(err)}` } };
+    return {
+      ok: false,
+      failure: {
+        reason: 'provider_failed',
+        detail: `createEmbeddingProvider(${config.embedding.type}:${
+          config.embedding.model
+        }) failed: ${errText(err)}`,
+      },
+    };
   }
 
   // §2.4 — provenance comes from the provider's RESOLVED metadata, never
   // from `config`. An explicit `config.space` override is honoured, but it
   // is the caller's deliberate act, not a default.
-  const space: OptVectorSpace = config.space ?? { modelId: provider.metadata.modelId, dim: provider.metadata.dimensions };
+  const space: OptVectorSpace = config.space ?? {
+    modelId: provider.metadata.modelId,
+    dim: provider.metadata.dimensions,
+  };
 
   let vectorBackend: OptAsyncVectorBackend;
   try {
-    vectorBackend = await vectorStoreLoad.mod.openTursoVectorStore(store.adapter, { dim: space.dim, modelId: space.modelId });
+    vectorBackend = await vectorStoreLoad.mod.openTursoVectorStore(
+      store.adapter,
+      { dim: space.dim, modelId: space.modelId }
+    );
     await vectorBackend.ensureSpace(space);
   } catch (err) {
-    return { ok: false, failure: { reason: 'vector_store_failed', detail: `openTursoVectorStore(dim=${space.dim}, modelId=${space.modelId}) failed: ${errText(err)}` } };
+    return {
+      ok: false,
+      failure: {
+        reason: 'vector_store_failed',
+        detail: `openTursoVectorStore(dim=${space.dim}, modelId=${
+          space.modelId
+        }) failed: ${errText(err)}`,
+      },
+    };
   }
 
   /**
@@ -432,7 +516,12 @@ export async function bootstrapSemanticBackend(store: GraphBacklogStore, config:
    */
   const checkDim = (vec: Float32Array, what: string): Float32Array => {
     if (vec.length !== space.dim) {
-      throw new PermanentEmbeddingDimensionError(what, space.modelId, space.dim, vec.length);
+      throw new PermanentEmbeddingDimensionError(
+        what,
+        space.modelId,
+        space.dim,
+        vec.length
+      );
     }
     return vec;
   };
@@ -444,7 +533,10 @@ export async function bootstrapSemanticBackend(store: GraphBacklogStore, config:
       return checkDim(await provider.embedSingle(text, 'query'), 'embedQuery');
     },
     async embedDocument(text: string): Promise<Float32Array> {
-      return checkDim(await provider.embedSingle(text, 'document'), 'embedDocument');
+      return checkDim(
+        await provider.embedSingle(text, 'document'),
+        'embedDocument'
+      );
     },
     async vectorFor(nodeId: number): Promise<Float32Array | null> {
       return vectorBackend.get(nodeId, space.modelId);
@@ -455,7 +547,11 @@ export async function bootstrapSemanticBackend(store: GraphBacklogStore, config:
     async deleteVector(nodeId: number): Promise<void> {
       await vectorBackend.delete(nodeId, space.modelId);
     },
-    async knn(query: Float32Array, k: number, opts?: { filter?: NodeFilter; ids?: number[] }): Promise<SemanticMatch[]> {
+    async knn(
+      query: Float32Array,
+      k: number,
+      opts?: { filter?: NodeFilter; ids?: number[] }
+    ): Promise<SemanticMatch[]> {
       const vecFilter = await resolveVecFilter(store, opts);
       // (BUG-BACKLOG-VECSTORE-NODEFILTER-IGNORED-001) `vecFilter === null` means
       // a `filter`/`ids` was requested but resolved to ZERO candidate node ids —
@@ -464,13 +560,23 @@ export async function bootstrapSemanticBackend(store: GraphBacklogStore, config:
       // `@adhd/sox-vector-store` (its `ids.length > 0` guard falls through to
       // `1=1` on empty), so this short-circuits to "no results" here instead.
       if (vecFilter === null) return [];
-      const hits = await vectorBackend.knn(checkDim(query, 'knn'), space, k, vecFilter);
+      const hits = await vectorBackend.knn(
+        checkDim(query, 'knn'),
+        space,
+        k,
+        vecFilter
+      );
       return hits.map((m) => ({ nodeId: m.id, score: m.score }));
     },
-    async *iterVectors(opts?: { filter?: NodeFilter }): AsyncIterable<{ nodeId: number; vec: Float32Array }> {
+    async *iterVectors(opts?: {
+      filter?: NodeFilter;
+    }): AsyncIterable<{ nodeId: number; vec: Float32Array }> {
       const vecFilter = await resolveVecFilter(store, opts);
       if (vecFilter === null) return;
-      const inner = vectorBackend.iter(space.modelId, vecFilter !== undefined ? { filter: vecFilter } : undefined);
+      const inner = vectorBackend.iter(
+        space.modelId,
+        vecFilter !== undefined ? { filter: vecFilter } : undefined
+      );
       for await (const row of inner) yield { nodeId: row.id, vec: row.vec };
     },
     async health(): Promise<SemanticHealth> {
@@ -501,7 +607,15 @@ export async function bootstrapSemanticBackend(store: GraphBacklogStore, config:
       break;
     }
   } catch (err) {
-    return { ok: false, failure: { reason: 'vector_store_failed', detail: `probing vector space "${space.modelId}" for existing vectors failed: ${errText(err)}` } };
+    return {
+      ok: false,
+      failure: {
+        reason: 'vector_store_failed',
+        detail: `probing vector space "${
+          space.modelId
+        }" for existing vectors failed: ${errText(err)}`,
+      },
+    };
   }
 
   return { ok: true, backend, vectorSpacePopulated };
@@ -539,7 +653,7 @@ export async function bootstrapSemanticBackend(store: GraphBacklogStore, config:
 export async function enableSemanticSearchFromConfig(
   store: GraphBacklogStore,
   cfg: { enabled: boolean; provider: string; model: string },
-  log: (message: string) => void = (m) => console.error(m),
+  log: (message: string) => void = (m) => console.error(m)
 ): Promise<SemanticBackend | null> {
   if (!cfg.enabled) return null;
 
@@ -551,7 +665,7 @@ export async function enableSemanticSearchFromConfig(
     log(
       `backlog: embedding.enabled is set but the semantic backend could not start ` +
         `(${result.failure.reason}): ${result.failure.detail}. ` +
-        `Continuing WITHOUT semantic search — every semantic input will answer rag_not_configured.`,
+        `Continuing WITHOUT semantic search — every semantic input will answer rag_not_configured.`
     );
     return null;
   }
@@ -563,10 +677,12 @@ export async function enableSemanticSearchFromConfig(
       `backlog: embedding.enabled is set and the semantic backend started, but its vector space ` +
         `("${result.backend.modelId}", ${result.backend.dim}d) is EMPTY — zero items have been embedded. ` +
         `Semantic reads will answer rag_not_configured rather than returning unranked results; ` +
-        `run \`backlog_admin(embedding_backfill)\` to populate it.`,
+        `run \`backlog_admin(embedding_backfill)\` to populate it.`
     );
   }
 
-  configureSemanticBackend(result.backend, { vectorSpacePopulated: result.vectorSpacePopulated });
+  configureSemanticBackend(result.backend, {
+    vectorSpacePopulated: result.vectorSpacePopulated,
+  });
   return result.backend;
 }

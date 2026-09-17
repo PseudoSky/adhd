@@ -36,7 +36,8 @@ describe('deleteIssue + queryIssues default listing (SPEC.md §8 AC-18, real sto
   beforeEach(async () => {
     dir = freshTmpDir('delete-listing-spec');
     store = await openTestIssueStore(join(dir, 'backlog.db'));
-    projectUid = (await seedProject(store, 'delete-listing-project')).projectUid;
+    projectUid = (await seedProject(store, 'delete-listing-project'))
+      .projectUid;
   });
 
   afterEach(async () => {
@@ -46,24 +47,33 @@ describe('deleteIssue + queryIssues default listing (SPEC.md §8 AC-18, real sto
 
   it('AC-18: a deleted issue drops out of a default list query, while getNodeByUid still resolves the (invalidated) row', async () => {
     const created = await createIssue(store, {
-      project: projectUid, title: 'listed then deleted', body: 'body', by: 'filer',
+      project: projectUid,
+      title: 'listed then deleted',
+      body: 'body',
+      by: 'filer',
     });
     const uid = created.uid;
 
     const before = await queryIssues(store, { view: 'list' });
-    if (before.view !== 'list') throw new Error(`expected view 'list', got '${before.view}'`);
+    if (before.view !== 'list')
+      throw new Error(`expected view 'list', got '${before.view}'`);
     expect(before.items.map((i) => i.uid)).toContain(uid);
 
     const beforeNode = await store.graph.getNodeByUid(uid);
     expect(beforeNode).not.toBeNull();
     expect(beforeNode?.tInvalid ?? null).toBeNull();
 
-    const outcome = await deleteIssue(store, { uid, reason: 'no longer relevant', by: 'closer' });
+    const outcome = await deleteIssue(store, {
+      uid,
+      reason: 'no longer relevant',
+      by: 'closer',
+    });
     expect(outcome.invalidated).toBe(true);
 
     // Half one: the deleted uid is ABSENT from the default listing.
     const after = await queryIssues(store, { view: 'list' });
-    if (after.view !== 'list') throw new Error(`expected view 'list', got '${after.view}'`);
+    if (after.view !== 'list')
+      throw new Error(`expected view 'list', got '${after.view}'`);
     expect(after.items.map((i) => i.uid)).not.toContain(uid);
 
     // Half two: the row is STILL addressable by uid, with tInvalid set —

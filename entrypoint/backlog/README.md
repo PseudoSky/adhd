@@ -37,22 +37,22 @@ simultaneously true on all three:
 
 All three project from the exact same 14 verbs:
 
-| Verb | CLI | MCP tool |
-|---|---|---|
-| `get` | `adhd-backlog get` | `backlog_get` |
-| `query` | `adhd-backlog query` | `backlog_query` |
-| `lookup` | `adhd-backlog lookup` | `backlog_lookup` |
-| `create` | `adhd-backlog create` | `backlog_create` |
-| `update` | `adhd-backlog update` | `backlog_update` |
-| `transition` | `adhd-backlog transition` | `backlog_transition` |
-| `claim` | `adhd-backlog claim` | `backlog_claim` |
-| `relate` | `adhd-backlog relate` | `backlog_relate` |
-| `move` | `adhd-backlog move` | `backlog_move` |
-| `delete` | `adhd-backlog delete` | `backlog_delete` |
-| `upsertProject` | `adhd-backlog upsert-project` | `backlog_upsert_project` |
+| Verb              | CLI                             | MCP tool                   |
+| ----------------- | ------------------------------- | -------------------------- |
+| `get`             | `adhd-backlog get`              | `backlog_get`              |
+| `query`           | `adhd-backlog query`            | `backlog_query`            |
+| `lookup`          | `adhd-backlog lookup`           | `backlog_lookup`           |
+| `create`          | `adhd-backlog create`           | `backlog_create`           |
+| `update`          | `adhd-backlog update`           | `backlog_update`           |
+| `transition`      | `adhd-backlog transition`       | `backlog_transition`       |
+| `claim`           | `adhd-backlog claim`            | `backlog_claim`            |
+| `relate`          | `adhd-backlog relate`           | `backlog_relate`           |
+| `move`            | `adhd-backlog move`             | `backlog_move`             |
+| `delete`          | `adhd-backlog delete`           | `backlog_delete`           |
+| `upsertProject`   | `adhd-backlog upsert-project`   | `backlog_upsert_project`   |
 | `upsertComponent` | `adhd-backlog upsert-component` | `backlog_upsert_component` |
-| `upsertLocation` | `adhd-backlog upsert-location` | `backlog_upsert_location` |
-| `rmLocation` | `adhd-backlog rm-location` | `backlog_rm_location` |
+| `upsertLocation`  | `adhd-backlog upsert-location`  | `backlog_upsert_location`  |
+| `rmLocation`      | `adhd-backlog rm-location`      | `backlog_rm_location`      |
 
 `get`/`query`/`lookup` are reads. `create`/`update`/`transition`/`claim`/
 `relate`/`move`/`delete` mutate one issue. The four `upsert*`/`rmLocation`
@@ -79,7 +79,7 @@ adhd-backlog upsert-project --input '{
 ```
 
 ```json
-{"ok":true,"data":{"uid":"9f2c...","created":true,"project":{"uid":"9f2c...","name":"adhd","path":"/Users/me/dev/adhd"}}}
+{ "ok": true, "data": { "uid": "9f2c...", "created": true, "project": { "uid": "9f2c...", "name": "adhd", "path": "/Users/me/dev/adhd" } } }
 ```
 
 File an issue against it:
@@ -122,12 +122,10 @@ adhd-backlog query --input '{"filter":{"project":"adhd","status":"open"}}'
 {
   "ok": true,
   "data": {
-    "items": [
-      {"uid": "a1b2c3d4-...", "kind": "issue", "title": "Query pagination drops the last page under offset paging", "status": "open", "priority": null}
-    ],
+    "items": [{ "uid": "a1b2c3d4-...", "kind": "issue", "title": "Query pagination drops the last page under offset paging", "status": "open", "priority": null }],
     "nextCursor": null
   },
-  "meta": {"total": 1, "returned": 1}
+  "meta": { "total": 1, "returned": 1 }
 }
 ```
 
@@ -160,7 +158,7 @@ A failed call returns the same envelope shape with `ok: false` instead of
 throwing — for example, transitioning a `uid` that doesn't exist:
 
 ```json
-{"ok":false,"error":{"code":"item_not_found","message":"..."}}
+{ "ok": false, "error": { "code": "item_not_found", "message": "..." } }
 ```
 
 ## Envelope
@@ -173,22 +171,22 @@ Every verb call returns one of two shapes:
 ```
 
 `meta` is present on list-shaped reads (`query`) and its `total` is the true
-match count *before* `limit`/`offset` are applied — a truncated result always
+match count _before_ `limit`/`offset` are applied — a truncated result always
 says so rather than silently looking complete.
 
 ### Error codes
 
-| Code | Meaning | CLI exit code |
-|---|---|---|
-| `not_found` | A referenced catalog entry (project/component/kind/status/priority) doesn't exist | 4 |
-| `item_not_found` | The addressed issue doesn't exist | 1 |
-| `invalid_argument` | Malformed flag or parameter shape | 2 |
-| `validation` | Schema rejection — unknown filter key, unknown projection field, over-limit | 2 |
-| `store_busy` | Store contention (a lease or a write conflict); `details.retryable` and `details.retryAfterMs` indicate whether/how to retry | 1 |
-| `rag_not_configured` | A semantic/similarity read was requested but no embedding backend is configured, or the vector space is empty | 1 |
-| `conflict` | Someone else holds the claim, a single-valued relation is already taken, or a supersede raced | 1 |
-| `precondition_failed` | A gate refused the write — a terminal transition missing its required citation or note, or a citation that couldn't be verified | 1 |
-| `internal` | Unclassified server-side failure | 1 |
+| Code                  | Meaning                                                                                                                         | CLI exit code |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| `not_found`           | A referenced catalog entry (project/component/kind/status/priority) doesn't exist                                               | 4             |
+| `item_not_found`      | The addressed issue doesn't exist                                                                                               | 1             |
+| `invalid_argument`    | Malformed flag or parameter shape                                                                                               | 2             |
+| `validation`          | Schema rejection — unknown filter key, unknown projection field, over-limit                                                     | 2             |
+| `store_busy`          | Store contention (a lease or a write conflict); `details.retryable` and `details.retryAfterMs` indicate whether/how to retry    | 1             |
+| `rag_not_configured`  | A semantic/similarity read was requested but no embedding backend is configured, or the vector space is empty                   | 1             |
+| `conflict`            | Someone else holds the claim, a single-valued relation is already taken, or a supersede raced                                   | 1             |
+| `precondition_failed` | A gate refused the write — a terminal transition missing its required citation or note, or a citation that couldn't be verified | 1             |
+| `internal`            | Unclassified server-side failure                                                                                                | 1             |
 
 Success always exits 0. `item_not_found` and `internal` are deliberately
 distinct codes even though they share exit code 1 — a caller distinguishes
@@ -203,15 +201,15 @@ shared **global** scope — one backlog spanning every project on the machine,
 not one per repository — so an agent working across repos sees the same
 graph everywhere unless it explicitly opts into a narrower scope.
 
-| Setting | Env var | Default | Notes |
-|---|---|---|---|
-| Database path | `ADHD_BACKLOG_DATABASE_PATH` | resolved under the scope root | Where the graph store's data file lives |
-| Write busy timeout | `ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS` | `5000` | How long a write waits on a contended lock before giving up |
-| Log level | `ADHD_BACKLOG_LOG_LEVEL` | `info` | `trace`\|`debug`\|`info`\|`warn`\|`error`\|`fatal`\|`silent` |
-| Scope | `ADHD_BACKLOG_SCOPE` (falls back to `ADHD_ENV_SCOPE`) | `global` | Which store root to resolve against |
-| Semantic search | `ADHD_BACKLOG_EMBEDDING_ENABLED` | `false` | See below |
-| Embedding provider | `ADHD_BACKLOG_EMBEDDING_PROVIDER` | `fastembed` | Only consulted when embedding is enabled |
-| Embedding model | `ADHD_BACKLOG_EMBEDDING_MODEL` | a 768-dimension general-purpose embedding model | Only consulted when embedding is enabled |
+| Setting            | Env var                                               | Default                                         | Notes                                                        |
+| ------------------ | ----------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------ |
+| Database path      | `ADHD_BACKLOG_DATABASE_PATH`                          | resolved under the scope root                   | Where the graph store's data file lives                      |
+| Write busy timeout | `ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS`               | `5000`                                          | How long a write waits on a contended lock before giving up  |
+| Log level          | `ADHD_BACKLOG_LOG_LEVEL`                              | `info`                                          | `trace`\|`debug`\|`info`\|`warn`\|`error`\|`fatal`\|`silent` |
+| Scope              | `ADHD_BACKLOG_SCOPE` (falls back to `ADHD_ENV_SCOPE`) | `global`                                        | Which store root to resolve against                          |
+| Semantic search    | `ADHD_BACKLOG_EMBEDDING_ENABLED`                      | `false`                                         | See below                                                    |
+| Embedding provider | `ADHD_BACKLOG_EMBEDDING_PROVIDER`                     | `fastembed`                                     | Only consulted when embedding is enabled                     |
+| Embedding model    | `ADHD_BACKLOG_EMBEDDING_MODEL`                        | a 768-dimension general-purpose embedding model | Only consulted when embedding is enabled                     |
 
 **Embedding (semantic search) is entirely optional.** With it left at its
 default (`false`), `@adhd/backlog` works fully — every verb, keyword filtering

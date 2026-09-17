@@ -71,7 +71,11 @@ function runBin(args: string[]): Run {
     timeout: 60_000,
   });
   if (result.error) throw new Error(`spawn failed: ${String(result.error)}`);
-  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+  return {
+    status: result.status,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
 }
 
 function runJson(args: string[]): { run: Run; body: Record<string, unknown> } {
@@ -81,7 +85,9 @@ function runJson(args: string[]): { run: Run; body: Record<string, unknown> } {
   try {
     body = JSON.parse(line) as Record<string, unknown>;
   } catch {
-    throw new Error(`non-JSON stdout for ${args.join(' ')}: ${run.stdout}\n${run.stderr}`);
+    throw new Error(
+      `non-JSON stdout for ${args.join(' ')}: ${run.stdout}\n${run.stderr}`
+    );
   }
   return { run, body };
 }
@@ -89,15 +95,24 @@ function runJson(args: string[]): { run: Run; body: Record<string, unknown> } {
 /** Reads the `data` object off a success envelope, failing loudly on an error arm. */
 function okData(args: string[]): Record<string, unknown> {
   const { run, body } = runJson(args);
-  expect(run.status, `${args.join(' ')} exited ${String(run.status)}: ${run.stderr}`).toBe(0);
-  expect(body['ok'], `${args.join(' ')} returned an error arm: ${JSON.stringify(body)}`).toBe(true);
+  expect(
+    run.status,
+    `${args.join(' ')} exited ${String(run.status)}: ${run.stderr}`
+  ).toBe(0);
+  expect(
+    body['ok'],
+    `${args.join(' ')} returned an error arm: ${JSON.stringify(body)}`
+  ).toBe(true);
   return body['data'] as Record<string, unknown>;
 }
 
 /** Reads the `error` object off a failure envelope, failing loudly on a success arm. */
 function errData(args: string[]): Record<string, unknown> {
   const { run, body } = runJson(args);
-  expect(body['ok'], `${args.join(' ')} unexpectedly succeeded: ${JSON.stringify(body)}`).toBe(false);
+  expect(
+    body['ok'],
+    `${args.join(' ')} unexpectedly succeeded: ${JSON.stringify(body)}`
+  ).toBe(false);
   return body['error'] as Record<string, unknown>;
 }
 
@@ -120,44 +135,79 @@ beforeAll(() => {
   const projectA = okData([
     'upsert-project',
     '--input',
-    JSON.stringify({ name: PROJECT_A, path: '/repo/registry-wire-a', repoUrl: 'git@github.com:acme/registry-wire-a.git', by: 'registry-wire.spec' }),
+    JSON.stringify({
+      name: PROJECT_A,
+      path: '/repo/registry-wire-a',
+      repoUrl: 'git@github.com:acme/registry-wire-a.git',
+      by: 'registry-wire.spec',
+    }),
   ]);
   projectAUid = projectA['uid'] as string;
 
   const projectB = okData([
     'upsert-project',
     '--input',
-    JSON.stringify({ name: PROJECT_B, path: '/repo/registry-wire-b', repoUrl: 'git@github.com:acme/registry-wire-b.git', by: 'registry-wire.spec' }),
+    JSON.stringify({
+      name: PROJECT_B,
+      path: '/repo/registry-wire-b',
+      repoUrl: 'git@github.com:acme/registry-wire-b.git',
+      by: 'registry-wire.spec',
+    }),
   ]);
   projectBUid = projectB['uid'] as string;
 
   // `upsertProject` mints the reserved `(root)` component atomically
   // (SPEC.md §3/§3a) — resolve its uid via `query view:'components'` itself
   // (the same mount AC-9 proves below), rather than re-deriving it.
-  const projectAComponents = okData(['query', '--input', JSON.stringify({ view: 'components', filter: { project: PROJECT_A } })])['items'] as Array<{ uid: string; name: string }>;
+  const projectAComponents = okData([
+    'query',
+    '--input',
+    JSON.stringify({ view: 'components', filter: { project: PROJECT_A } }),
+  ])['items'] as Array<{ uid: string; name: string }>;
   componentRootAUid = projectAComponents.find((c) => c.name === '(root)')!.uid;
 
-  const projectBComponents = okData(['query', '--input', JSON.stringify({ view: 'components', filter: { project: PROJECT_B } })])['items'] as Array<{ uid: string; name: string }>;
+  const projectBComponents = okData([
+    'query',
+    '--input',
+    JSON.stringify({ view: 'components', filter: { project: PROJECT_B } }),
+  ])['items'] as Array<{ uid: string; name: string }>;
   componentRootBUid = projectBComponents.find((c) => c.name === '(root)')!.uid;
 
   const backend = okData([
     'upsert-component',
     '--input',
-    JSON.stringify({ project: PROJECT_A, name: 'registry-wire-backend', path: 'packages/registry-wire-backend', description: 'the backend component', by: 'registry-wire.spec' }),
+    JSON.stringify({
+      project: PROJECT_A,
+      name: 'registry-wire-backend',
+      path: 'packages/registry-wire-backend',
+      description: 'the backend component',
+      by: 'registry-wire.spec',
+    }),
   ]);
   componentBackendUid = backend['uid'] as string;
 
   const locTool = okData([
     'upsert-location',
     '--input',
-    JSON.stringify({ component: componentBackendUid, locType: 'tool', value: 'registry_wire_tool', by: 'registry-wire.spec' }),
+    JSON.stringify({
+      component: componentBackendUid,
+      locType: 'tool',
+      value: 'registry_wire_tool',
+      by: 'registry-wire.spec',
+    }),
   ]);
   locationToolUid = locTool['uid'] as string;
 
   const locPath = okData([
     'upsert-location',
     '--input',
-    JSON.stringify({ component: componentBackendUid, locType: 'path', value: '/repo/registry-wire-a/packages/registry-wire-backend/src/index.ts', by: 'registry-wire.spec' }),
+    JSON.stringify({
+      component: componentBackendUid,
+      locType: 'path',
+      value:
+        '/repo/registry-wire-a/packages/registry-wire-backend/src/index.ts',
+      by: 'registry-wire.spec',
+    }),
   ]);
   locationPathUid = locPath['uid'] as string;
 }, 180_000);
@@ -168,7 +218,11 @@ afterAll(() => {
 
 describe('AC-9 — registry LIST views at the wire (real built bin)', () => {
   it('view:"projects" returns the seeded projects, full field set survives encoding', () => {
-    const data = okData(['query', '--input', JSON.stringify({ view: 'projects' })]);
+    const data = okData([
+      'query',
+      '--input',
+      JSON.stringify({ view: 'projects' }),
+    ]);
 
     expect(Object.keys(data)).toContain('view');
     expect(data['view']).toBe('projects');
@@ -190,16 +244,26 @@ describe('AC-9 — registry LIST views at the wire (real built bin)', () => {
   });
 
   it('view:"components" UNFILTERED returns components from BOTH seeded projects', () => {
-    const data = okData(['query', '--input', JSON.stringify({ view: 'components' })]);
+    const data = okData([
+      'query',
+      '--input',
+      JSON.stringify({ view: 'components' }),
+    ]);
     const items = data['items'] as Array<Record<string, unknown>>;
     const names = items.map((c) => c['name']);
     expect(names).toContain('registry-wire-backend');
     // Every project's reserved `(root)` component is present, unfiltered.
-    expect(items.filter((c) => c['name'] === '(root)').length).toBeGreaterThanOrEqual(2);
+    expect(
+      items.filter((c) => c['name'] === '(root)').length
+    ).toBeGreaterThanOrEqual(2);
   });
 
   it('view:"components" scoped by filter.project returns ONLY that project\'s components', () => {
-    const data = okData(['query', '--input', JSON.stringify({ view: 'components', filter: { project: PROJECT_A } })]);
+    const data = okData([
+      'query',
+      '--input',
+      JSON.stringify({ view: 'components', filter: { project: PROJECT_A } }),
+    ]);
     const items = data['items'] as Array<Record<string, unknown>>;
     const names = items.map((c) => c['name']).sort();
     expect(names).toEqual(['(root)', 'registry-wire-backend']);
@@ -209,18 +273,33 @@ describe('AC-9 — registry LIST views at the wire (real built bin)', () => {
     }
 
     // The sibling project's components must NOT leak in.
-    const scopedB = okData(['query', '--input', JSON.stringify({ view: 'components', filter: { project: PROJECT_B } })])['items'] as Array<Record<string, unknown>>;
+    const scopedB = okData([
+      'query',
+      '--input',
+      JSON.stringify({ view: 'components', filter: { project: PROJECT_B } }),
+    ])['items'] as Array<Record<string, unknown>>;
     expect(scopedB.map((c) => c['name'])).toEqual(['(root)']);
     expect(scopedB.some((c) => c['uid'] === componentBackendUid)).toBe(false);
   });
 
   it('view:"locations" returns the seeded tool + path locations, scoped by filter.component', () => {
-    const unfiltered = okData(['query', '--input', JSON.stringify({ view: 'locations' })])['items'] as Array<Record<string, unknown>>;
+    const unfiltered = okData([
+      'query',
+      '--input',
+      JSON.stringify({ view: 'locations' }),
+    ])['items'] as Array<Record<string, unknown>>;
     const uids = unfiltered.map((l) => l['uid']);
     expect(uids).toContain(locationToolUid);
     expect(uids).toContain(locationPathUid);
 
-    const scoped = okData(['query', '--input', JSON.stringify({ view: 'locations', filter: { component: componentBackendUid } })])['items'] as Array<Record<string, unknown>>;
+    const scoped = okData([
+      'query',
+      '--input',
+      JSON.stringify({
+        view: 'locations',
+        filter: { component: componentBackendUid },
+      }),
+    ])['items'] as Array<Record<string, unknown>>;
     expect(scoped).toHaveLength(2);
     for (const l of scoped) {
       expect(Object.keys(l)).toContain('locType');
@@ -233,20 +312,40 @@ describe('AC-9 — registry LIST views at the wire (real built bin)', () => {
 
 describe('AC-11 — registry DETAIL via `get` at the wire (real built bin)', () => {
   it('get{registry:"project",...} returns path, repoUrl, and its linked locations[]+components[] — full field set survives encoding', () => {
-    const data = okData(['get', '--input', JSON.stringify({ registry: 'project', name: PROJECT_A })]);
+    const data = okData([
+      'get',
+      '--input',
+      JSON.stringify({ registry: 'project', name: PROJECT_A }),
+    ]);
 
     // Presence first (the absent-key defect class), then value.
-    for (const key of ['uid', 'name', 'path', 'repoUrl', 'components', 'locations']) {
-      expect(Object.keys(data), `missing key "${key}": ${JSON.stringify(data)}`).toContain(key);
+    for (const key of [
+      'uid',
+      'name',
+      'path',
+      'repoUrl',
+      'components',
+      'locations',
+    ]) {
+      expect(
+        Object.keys(data),
+        `missing key "${key}": ${JSON.stringify(data)}`
+      ).toContain(key);
     }
     expect(data['name']).toBe(PROJECT_A);
     expect(data['path']).toBe('/repo/registry-wire-a');
     expect(data['repoUrl']).toBe('git@github.com:acme/registry-wire-a.git');
 
     const components = data['components'] as Array<{ name: string }>;
-    expect(components.map((c) => c.name).sort()).toEqual(['(root)', 'registry-wire-backend']);
+    expect(components.map((c) => c.name).sort()).toEqual([
+      '(root)',
+      'registry-wire-backend',
+    ]);
 
-    const locations = data['locations'] as Array<{ locType: string; value: string }>;
+    const locations = data['locations'] as Array<{
+      locType: string;
+      value: string;
+    }>;
     expect(locations.map((l) => l.value).sort()).toEqual([
       '/repo/registry-wire-a/packages/registry-wire-backend/src/index.ts',
       'registry_wire_tool',
@@ -254,10 +353,17 @@ describe('AC-11 — registry DETAIL via `get` at the wire (real built bin)', () 
   });
 
   it('get{registry:"component",...} returns its owning project object and locations[]', () => {
-    const data = okData(['get', '--input', JSON.stringify({ registry: 'component', name: 'registry-wire-backend' })]);
+    const data = okData([
+      'get',
+      '--input',
+      JSON.stringify({ registry: 'component', name: 'registry-wire-backend' }),
+    ]);
 
     for (const key of ['uid', 'name', 'projectUid', 'project', 'locations']) {
-      expect(Object.keys(data), `missing key "${key}": ${JSON.stringify(data)}`).toContain(key);
+      expect(
+        Object.keys(data),
+        `missing key "${key}": ${JSON.stringify(data)}`
+      ).toContain(key);
     }
     expect(data['name']).toBe('registry-wire-backend');
     expect(data['projectUid']).toBe(projectAUid);
@@ -272,31 +378,76 @@ describe('AC-11 — registry DETAIL via `get` at the wire (real built bin)', () 
   });
 
   it('get{registry:"component", name:"(root)", filter:{project:...}} resolves to the SAME project\'s (root) — not the other project\'s namesake (AC-23 collision, AC-11 scoping)', () => {
-    const dataA = okData(['get', '--input', JSON.stringify({ registry: 'component', name: '(root)', filter: { project: PROJECT_A } })]);
+    const dataA = okData([
+      'get',
+      '--input',
+      JSON.stringify({
+        registry: 'component',
+        name: '(root)',
+        filter: { project: PROJECT_A },
+      }),
+    ]);
     expect(dataA['uid']).toBe(componentRootAUid);
-    expect((dataA['project'] as Record<string, unknown>)['name']).toBe(PROJECT_A);
+    expect((dataA['project'] as Record<string, unknown>)['name']).toBe(
+      PROJECT_A
+    );
 
-    const dataB = okData(['get', '--input', JSON.stringify({ registry: 'component', name: '(root)', filter: { project: PROJECT_B } })]);
+    const dataB = okData([
+      'get',
+      '--input',
+      JSON.stringify({
+        registry: 'component',
+        name: '(root)',
+        filter: { project: PROJECT_B },
+      }),
+    ]);
     expect(dataB['uid']).toBe(componentRootBUid);
-    expect((dataB['project'] as Record<string, unknown>)['name']).toBe(PROJECT_B);
+    expect((dataB['project'] as Record<string, unknown>)['name']).toBe(
+      PROJECT_B
+    );
 
     // The two `(root)` rows are genuinely distinct nodes sharing a name.
     expect(dataA['uid']).not.toBe(dataB['uid']);
   });
 
   it('get{registry:"location",...} resolves by uid, returning its component AND project', () => {
-    const data = okData(['get', '--input', JSON.stringify({ registry: 'location', name: locationToolUid })]);
+    const data = okData([
+      'get',
+      '--input',
+      JSON.stringify({ registry: 'location', name: locationToolUid }),
+    ]);
 
-    for (const key of ['uid', 'locType', 'value', 'componentUid', 'component', 'project']) {
-      expect(Object.keys(data), `missing key "${key}": ${JSON.stringify(data)}`).toContain(key);
+    for (const key of [
+      'uid',
+      'locType',
+      'value',
+      'componentUid',
+      'component',
+      'project',
+    ]) {
+      expect(
+        Object.keys(data),
+        `missing key "${key}": ${JSON.stringify(data)}`
+      ).toContain(key);
     }
     expect(data['value']).toBe('registry_wire_tool');
-    expect((data['component'] as Record<string, unknown>)['name']).toBe('registry-wire-backend');
-    expect((data['project'] as Record<string, unknown>)['name']).toBe(PROJECT_A);
+    expect((data['component'] as Record<string, unknown>)['name']).toBe(
+      'registry-wire-backend'
+    );
+    expect((data['project'] as Record<string, unknown>)['name']).toBe(
+      PROJECT_A
+    );
   });
 
   it('get{registry:"project",...} for an unresolved name throws a wire-visible not_found error, never a phantom detail', () => {
-    const error = errData(['get', '--input', JSON.stringify({ registry: 'project', name: 'registry-wire-does-not-exist' })]);
+    const error = errData([
+      'get',
+      '--input',
+      JSON.stringify({
+        registry: 'project',
+        name: 'registry-wire-does-not-exist',
+      }),
+    ]);
     expect(error['code']).toBe('not_found');
   });
 
@@ -322,7 +473,9 @@ describe('AC-11 — registry DETAIL via `get` at the wire (real built bin)', () 
     const uid = created['uid'] as string;
 
     const data = okData(['get', '--input', JSON.stringify({ uid })]);
-    expect(Object.keys(data).sort()).toEqual(['kind', 'priority', 'status', 'title', 'uid'].sort());
+    expect(Object.keys(data).sort()).toEqual(
+      ['kind', 'priority', 'status', 'title', 'uid'].sort()
+    );
   });
 
   it('a worktree directory under the project resolves to the SAME project row — never a phantom row', () => {
@@ -337,16 +490,29 @@ describe('AC-11 — registry DETAIL via `get` at the wire (real built bin)', () 
     const second = okData([
       'upsert-project',
       '--input',
-      JSON.stringify({ name: PROJECT_A, path: worktreePath, repoUrl: 'git@github.com:acme/registry-wire-a.git', by: 'registry-wire.spec' }),
+      JSON.stringify({
+        name: PROJECT_A,
+        path: worktreePath,
+        repoUrl: 'git@github.com:acme/registry-wire-a.git',
+        by: 'registry-wire.spec',
+      }),
     ]);
     expect(second['uid']).toBe(projectAUid);
 
     // `get{registry:'project',...}` still resolves the ONE row — no phantom
     // second project appeared under any name.
-    const detail = okData(['get', '--input', JSON.stringify({ registry: 'project', name: PROJECT_A })]);
+    const detail = okData([
+      'get',
+      '--input',
+      JSON.stringify({ registry: 'project', name: PROJECT_A }),
+    ]);
     expect(detail['uid']).toBe(projectAUid);
 
-    const projects = okData(['query', '--input', JSON.stringify({ view: 'projects' })])['items'] as Array<Record<string, unknown>>;
+    const projects = okData([
+      'query',
+      '--input',
+      JSON.stringify({ view: 'projects' }),
+    ])['items'] as Array<Record<string, unknown>>;
     expect(projects.filter((p) => p['name'] === PROJECT_A)).toHaveLength(1);
   });
 });

@@ -80,9 +80,20 @@ import {
 } from './tx.js';
 
 /** The closed `rel` union `relate` accepts (§3/§6.3.6) — issue → issue in every case. */
-export type RelateRel = 'relates_to' | 'supersedes' | 'blocks' | 'duplicate_of' | 'part_of';
+export type RelateRel =
+  | 'relates_to'
+  | 'supersedes'
+  | 'blocks'
+  | 'duplicate_of'
+  | 'part_of';
 
-const RELATE_RELS: readonly RelateRel[] = ['relates_to', 'supersedes', 'blocks', 'duplicate_of', 'part_of'];
+const RELATE_RELS: readonly RelateRel[] = [
+  'relates_to',
+  'supersedes',
+  'blocks',
+  'duplicate_of',
+  'part_of',
+];
 
 export interface IRelateInput {
   /** The relation's SOURCE `issue` uid (§1: uid is the only identifier — never a name, never repo-scoped). */
@@ -104,7 +115,10 @@ export interface IRelateOutcome {
   noop: boolean;
 }
 
-function assertNonBlank(field: string, value: string | undefined): asserts value is string {
+function assertNonBlank(
+  field: string,
+  value: string | undefined
+): asserts value is string {
   if (value === undefined || value.trim().length === 0) {
     throw new InvalidArgumentError(field, 'is required');
   }
@@ -117,10 +131,15 @@ function assertNonBlank(field: string, value: string | undefined): asserts value
  * `resolveOwningComponentTx` use for a live-edge existence check, scoped to
  * the exact `(src, dst)` pair rather than "any edge off this rel."
  */
-async function getLiveEdgeRowidTx(tx: AdapterTransaction, srcRowid: number, dstRowid: number, rel: string): Promise<number | null> {
+async function getLiveEdgeRowidTx(
+  tx: AdapterTransaction,
+  srcRowid: number,
+  dstRowid: number,
+  rel: string
+): Promise<number | null> {
   const row = await tx.executeGet<{ rowid: number }>(
     'SELECT rowid FROM edge WHERE src = ? AND dst = ? AND rel = ? AND t_invalid IS NULL',
-    [srcRowid, dstRowid, rel],
+    [srcRowid, dstRowid, rel]
   );
   return row ? row.rowid : null;
 }
@@ -154,18 +173,32 @@ async function getLiveEdgeRowidTx(tx: AdapterTransaction, srcRowid: number, dstR
  * an exhausted driver-level retry on the underlying `immediate`
  * transaction).
  */
-export async function relate(handle: IWriteStoreHandle, input: IRelateInput): Promise<IRelateOutcome> {
+export async function relate(
+  handle: IWriteStoreHandle,
+  input: IRelateInput
+): Promise<IRelateOutcome> {
   assertNonBlank('sourceUid', input.sourceUid);
   assertNonBlank('targetUid', input.targetUid);
   assertNonBlank('by', input.by);
   if (!RELATE_RELS.includes(input.rel)) {
-    throw new InvalidArgumentError('rel', `must be one of ${RELATE_RELS.map((r) => `"${r}"`).join(', ')} (got ${JSON.stringify(input.rel)})`);
+    throw new InvalidArgumentError(
+      'rel',
+      `must be one of ${RELATE_RELS.map((r) => `"${r}"`).join(
+        ', '
+      )} (got ${JSON.stringify(input.rel)})`
+    );
   }
   if (input.action !== 'add' && input.action !== 'remove') {
-    throw new InvalidArgumentError('action', `must be "add" or "remove" (got ${JSON.stringify(input.action)})`);
+    throw new InvalidArgumentError(
+      'action',
+      `must be "add" or "remove" (got ${JSON.stringify(input.action)})`
+    );
   }
   if (input.sourceUid === input.targetUid) {
-    throw new InvalidArgumentError('targetUid', 'a self-relation (sourceUid === targetUid) is never allowed');
+    throw new InvalidArgumentError(
+      'targetUid',
+      'a self-relation (sourceUid === targetUid) is never allowed'
+    );
   }
 
   return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
@@ -174,14 +207,25 @@ export async function relate(handle: IWriteStoreHandle, input: IRelateInput): Pr
     const sourceRow = await resolveLiveIssueTx(tx, input.sourceUid);
     const targetRow = await resolveLiveIssueTx(tx, input.targetUid);
 
-    const existingRowid = await getLiveEdgeRowidTx(tx, sourceRow.rowid, targetRow.rowid, input.rel);
+    const existingRowid = await getLiveEdgeRowidTx(
+      tx,
+      sourceRow.rowid,
+      targetRow.rowid,
+      input.rel
+    );
 
     if (input.action === 'add') {
       if (existingRowid !== null) {
         // Already live, same source/target/rel — a stated idempotent no-op
         // (§6.3.6's "same target returns noop:true"), never a disguised
         // re-write: nothing invalidated, nothing (re-)written, no audit.
-        return { sourceUid: sourceRow.uid, targetUid: targetRow.uid, rel: input.rel, action: 'add' as const, noop: true };
+        return {
+          sourceUid: sourceRow.uid,
+          targetUid: targetRow.uid,
+          rel: input.rel,
+          action: 'add' as const,
+          noop: true,
+        };
       }
 
       const rule = await resolveEdgeKindTx(tx, input.rel);
@@ -190,9 +234,15 @@ export async function relate(handle: IWriteStoreHandle, input: IRelateInput): Pr
       // checkMultiplicityTx (tx.ts) — this file hand-rolls nothing (§2).
       await writeEdgeTx(tx, {
         at: now,
-        srcRowid: sourceRow.rowid, srcUid: sourceRow.uid, srcKind: 'issue',
-        dstRowid: targetRow.rowid, dstUid: targetRow.uid, dstKind: 'issue',
-        rel: input.rel, rule, typePolicy: handle.typePolicy,
+        srcRowid: sourceRow.rowid,
+        srcUid: sourceRow.uid,
+        srcKind: 'issue',
+        dstRowid: targetRow.rowid,
+        dstUid: targetRow.uid,
+        dstKind: 'issue',
+        rel: input.rel,
+        rule,
+        typePolicy: handle.typePolicy,
       });
 
       await writeAudit({
@@ -208,14 +258,26 @@ export async function relate(handle: IWriteStoreHandle, input: IRelateInput): Pr
         at: now,
       });
 
-      return { sourceUid: sourceRow.uid, targetUid: targetRow.uid, rel: input.rel, action: 'add' as const, noop: false };
+      return {
+        sourceUid: sourceRow.uid,
+        targetUid: targetRow.uid,
+        rel: input.rel,
+        action: 'add' as const,
+        noop: false,
+      };
     }
 
     // input.action === 'remove'
     if (existingRowid === null) {
       // Already invalidated, or never existed — a stated idempotent no-op,
       // never a disguised invalidate-of-nothing: nothing written, no audit.
-      return { sourceUid: sourceRow.uid, targetUid: targetRow.uid, rel: input.rel, action: 'remove' as const, noop: true };
+      return {
+        sourceUid: sourceRow.uid,
+        targetUid: targetRow.uid,
+        rel: input.rel,
+        action: 'remove' as const,
+        noop: true,
+      };
     }
 
     await invalidateEdgeTx(tx, {
@@ -239,6 +301,12 @@ export async function relate(handle: IWriteStoreHandle, input: IRelateInput): Pr
       at: now,
     });
 
-    return { sourceUid: sourceRow.uid, targetUid: targetRow.uid, rel: input.rel, action: 'remove' as const, noop: false };
+    return {
+      sourceUid: sourceRow.uid,
+      targetUid: targetRow.uid,
+      rel: input.rel,
+      action: 'remove' as const,
+      noop: false,
+    };
   });
 }

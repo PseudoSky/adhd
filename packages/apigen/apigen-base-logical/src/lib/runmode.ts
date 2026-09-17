@@ -496,9 +496,7 @@ function scoreUnionBranch(
     }
   }
 
-  const props = branch['properties'] as
-    | Record<string, SchemaNode>
-    | undefined;
+  const props = branch['properties'] as Record<string, SchemaNode> | undefined;
   if (props) {
     for (const key of Object.keys(props)) {
       if (bag[key] !== undefined) score += 1;
@@ -548,7 +546,10 @@ function encodeSchemaless(
   for (const id of ctx.registry.ids()) {
     const codec = ctx.registry.get(id);
     if (!codec?.ownsValue?.(value)) continue;
-    return { [ENVELOPE_KEY]: id, v: codec.encode(value as never, codec.schema, ctx) };
+    return {
+      [ENVELOPE_KEY]: id,
+      v: codec.encode(value as never, codec.schema, ctx),
+    };
   }
 
   // Not owned by any codec: recurse, so a non-JSON-native value NESTED inside
@@ -576,7 +577,8 @@ function encodeSchemaless(
  * `encodePassthrough`, never to a structural walk.
  */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  if (value === null || typeof value !== 'object' || Array.isArray(value))
+    return false;
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
 }
@@ -711,9 +713,7 @@ export function validateSchemaRefs(
     }
 
     // object properties
-    const props = node['properties'] as
-      | Record<string, SchemaNode>
-      | undefined;
+    const props = node['properties'] as Record<string, SchemaNode> | undefined;
     if (props) {
       for (const v of Object.values(props)) stack.push(v);
     }
@@ -722,8 +722,7 @@ export function validateSchemaRefs(
     const items = node['items'];
     if (Array.isArray(items)) {
       for (const it of items) {
-        if (typeof it === 'object' && it !== null)
-          stack.push(it as SchemaNode);
+        if (typeof it === 'object' && it !== null) stack.push(it as SchemaNode);
       }
     } else if (typeof items === 'object' && items !== null) {
       stack.push(items as SchemaNode);

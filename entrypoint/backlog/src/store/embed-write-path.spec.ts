@@ -45,7 +45,12 @@ import { createIssue } from '../write/create-issue.js';
 import { update } from '../write/update.js';
 import { deleteIssue } from '../write/delete.js';
 import type { IEmbeddingBackend, IWriteStoreHandle } from '../write/tx.js';
-import { openTestIssueStore, removeTestIssueStoreDir, seedProject, type TestIssueStore } from '../test/helpers/open-test-issue-store.js';
+import {
+  openTestIssueStore,
+  removeTestIssueStoreDir,
+  seedProject,
+  type TestIssueStore,
+} from '../test/helpers/open-test-issue-store.js';
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
 
 /** A controllable deferred promise — the deterministic gate used by the fire-and-forget test. */
@@ -79,7 +84,13 @@ interface FakeBackendHandle {
  *   write, and never leaves a false `embedding_upserted` audit row.
  */
 function makeFakeBackend(
-  opts: { modelId?: string; dim?: number; gate?: Promise<void>; rejectEmbedWith?: Error; rejectUpsertWith?: Error } = {},
+  opts: {
+    modelId?: string;
+    dim?: number;
+    gate?: Promise<void>;
+    rejectEmbedWith?: Error;
+    rejectUpsertWith?: Error;
+  } = {}
 ): FakeBackendHandle {
   const dim = opts.dim ?? 4;
   const modelId = opts.modelId ?? 'fake-embed-write-path-model';
@@ -119,21 +130,30 @@ function makeFakeBackend(
 }
 
 /** Builds the handle a write verb is called with — `embedding` is `readonly` on `IWriteStoreHandle` by design, so every test bakes it in at construction time rather than mutating a live handle. */
-function withEmbedding(store: TestIssueStore, embedding?: IEmbeddingBackend): TestIssueStore & IWriteStoreHandle {
+function withEmbedding(
+  store: TestIssueStore,
+  embedding?: IEmbeddingBackend
+): TestIssueStore & IWriteStoreHandle {
   return { ...store, close: store.close.bind(store), embedding };
 }
 
 /** Reads back the ordered list of `audit.name` values (the action) recorded via a live `audits` edge FROM `subjectRowid` — the real graph read this file's assertions use instead of any spy. */
-async function auditActionsFor(store: TestIssueStore, subjectRowid: number): Promise<string[]> {
+async function auditActionsFor(
+  store: TestIssueStore,
+  subjectRowid: number
+): Promise<string[]> {
   const { rows } = await store.adapter.executeAll<{ name: string | null }>(
     `SELECT n.name AS name FROM edge e JOIN node n ON n.rowid = e.dst
      WHERE e.src = ? AND e.rel = 'audits' AND e.t_invalid IS NULL ORDER BY n.rowid ASC`,
-    [subjectRowid],
+    [subjectRowid]
   );
   return rows.map((r) => r.name ?? '');
 }
 
-async function rowidForUid(store: TestIssueStore, uid: string): Promise<number> {
+async function rowidForUid(
+  store: TestIssueStore,
+  uid: string
+): Promise<number> {
   const node = await store.graph.getNodeByUid(uid);
   if (!node) throw new Error(`rowidForUid: no live node for uid ${uid}`);
   return node.id;
@@ -148,7 +168,9 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
     if (dir) removeTestIssueStoreDir(dir);
   });
 
-  async function openStore(label: string): Promise<{ store: TestIssueStore; projectUid: string }> {
+  async function openStore(
+    label: string
+  ): Promise<{ store: TestIssueStore; projectUid: string }> {
     dir = freshTmpDir(label);
     store = await openTestIssueStore(`${dir}/backlog.db`);
     const { projectUid } = await seedProject(store, 'proj');
@@ -161,7 +183,10 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
     const handle = withEmbedding(store, backend);
 
     const outcome = await createIssue(handle, {
-      project: projectUid, title: 'await embed on create', body: 'the vector must be present the instant createIssue resolves', by: 'filer',
+      project: projectUid,
+      title: 'await embed on create',
+      body: 'the vector must be present the instant createIssue resolves',
+      by: 'filer',
       awaitEmbed: true,
     });
 
@@ -182,7 +207,10 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
     const handle = withEmbedding(store, backend);
 
     const outcome = await createIssue(handle, {
-      project: projectUid, title: 'fire and forget', body: 'createIssue must not wait on this', by: 'filer',
+      project: projectUid,
+      title: 'fire and forget',
+      body: 'createIssue must not wait on this',
+      by: 'filer',
       // awaitEmbed deliberately OMITTED.
     });
     expect(outcome.created).toBe(true);
@@ -193,7 +221,11 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
     // and `gate` has never been resolved — the scheduled embed cannot
     // possibly have completed yet.
     expect(vectors.has(rowid)).toBe(false);
-    expect((await auditActionsFor(store, rowid)).filter((a) => a.startsWith('embedding_'))).toHaveLength(0);
+    expect(
+      (await auditActionsFor(store, rowid)).filter((a) =>
+        a.startsWith('embedding_')
+      )
+    ).toHaveLength(0);
 
     // Release the gate and let the fire-and-forget round-trip settle. There
     // is no store-level drain to await directly (see file header), so this
@@ -207,12 +239,17 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
   });
 
   it('an embed completed via awaitEmbed:true survives a store close/reopen — the embedding_upserted audit row is durable, proven by reopening the store', async () => {
-    const { store: store1, projectUid } = await openStore('embed-durability-positive');
+    const { store: store1, projectUid } = await openStore(
+      'embed-durability-positive'
+    );
     const { backend, vectors } = makeFakeBackend();
     const handle = withEmbedding(store1, backend);
 
     const outcome = await createIssue(handle, {
-      project: projectUid, title: 'durability check', body: 'the embedding outcome must persist across a close/reopen', by: 'filer',
+      project: projectUid,
+      title: 'durability check',
+      body: 'the embedding outcome must persist across a close/reopen',
+      by: 'filer',
       awaitEmbed: true,
     });
     expect(outcome.created).toBe(true);
@@ -233,13 +270,18 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
   });
 
   it('negative control: a fire-and-forget embed whose store closes before it settles is genuinely lost — reopening shows no audit row and no vector (there is no drain to have waited for it)', async () => {
-    const { store: store1, projectUid } = await openStore('embed-durability-negative');
+    const { store: store1, projectUid } = await openStore(
+      'embed-durability-negative'
+    );
     const gate = deferred(); // deliberately NEVER released before the store closes
     const { backend, vectors } = makeFakeBackend({ gate: gate.promise });
     const handle = withEmbedding(store1, backend);
 
     const outcome = await createIssue(handle, {
-      project: projectUid, title: 'negative control', body: 'closing before the embed settles must lose it — there is no drain', by: 'filer',
+      project: projectUid,
+      title: 'negative control',
+      body: 'closing before the embed settles must lose it — there is no drain',
+      by: 'filer',
       // awaitEmbed deliberately OMITTED — fire-and-forget.
     });
     expect(outcome.created).toBe(true);
@@ -261,12 +303,17 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
   it('a backend rejecting upsertVector with a dimension-mismatch-shaped error also degrades honestly and never corrupts state', async () => {
     const { store, projectUid } = await openStore('embed-wrong-dim');
     const { backend, vectors } = makeFakeBackend({
-      rejectUpsertWith: new Error('embedding dimension mismatch: model produced a 5-dimensional vector but the configured space is 4-dimensional'),
+      rejectUpsertWith: new Error(
+        'embedding dimension mismatch: model produced a 5-dimensional vector but the configured space is 4-dimensional'
+      ),
     });
     const handle = withEmbedding(store, backend);
 
     const outcome = await createIssue(handle, {
-      project: projectUid, title: 'wrong dimension', body: 'a structural dimension mismatch must never corrupt state', by: 'filer',
+      project: projectUid,
+      title: 'wrong dimension',
+      body: 'a structural dimension mismatch must never corrupt state',
+      by: 'filer',
       awaitEmbed: true,
     });
 
@@ -283,12 +330,18 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
   });
 
   it('updating the body re-embeds (deletes the old vector, upserts the new one); updating an unrelated field does not', async () => {
-    const { store, projectUid } = await openStore('embed-reembed-on-body-change');
+    const { store, projectUid } = await openStore(
+      'embed-reembed-on-body-change'
+    );
     const { backend, vectors, embedDocumentCalls } = makeFakeBackend();
     const handle = withEmbedding(store, backend);
 
     const created = await createIssue(handle, {
-      project: projectUid, title: 'original title', body: 'original body', by: 'filer', awaitEmbed: true,
+      project: projectUid,
+      title: 'original title',
+      body: 'original body',
+      by: 'filer',
+      awaitEmbed: true,
     });
     expect(created.created).toBe(true);
     if (!created.created || !created.uid) throw new Error('expected created');
@@ -300,14 +353,25 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
     // Updating an UNRELATED field (`assignee` — a plain metadata scalar with
     // no edge, per `IUpdateIssueInput`'s own doc comment) is a pure `touch`:
     // no new node, no content change, so no re-embed.
-    await update(handle, { uid: oldUid, by: 'filer', assignee: 'someone-else' });
+    await update(handle, {
+      uid: oldUid,
+      by: 'filer',
+      assignee: 'someone-else',
+    });
     expect(embedDocumentCalls()).toBe(callsAfterCreate); // no re-embed
     expect(vectors.has(oldRowid)).toBe(true); // untouched
 
     // Updating `body` mints a fresh node (`supersede`) — the OLD node's
     // vector is deleted and the NEW node's is upserted from the new content.
-    const upsertsBefore = (await auditActionsFor(store, oldRowid)).filter((a) => a === 'embedding_upserted').length;
-    const updated = await update(handle, { uid: oldUid, by: 'filer', body: 'a brand new body', awaitEmbed: true });
+    const upsertsBefore = (await auditActionsFor(store, oldRowid)).filter(
+      (a) => a === 'embedding_upserted'
+    ).length;
+    const updated = await update(handle, {
+      uid: oldUid,
+      by: 'filer',
+      body: 'a brand new body',
+      awaitEmbed: true,
+    });
     expect(updated.changed).toContain('body');
     const newUid = updated.uid;
     expect(newUid).not.toBe(oldUid);
@@ -326,16 +390,23 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
     // present too. Asserting `upsertsBefore + 1` keeps both teeth — it goes red
     // if the carry-forward stops, and red if one write emits two audits.
     const newActions = await auditActionsFor(store, newRowid);
-    expect(newActions.filter((a) => a === 'embedding_upserted')).toHaveLength(upsertsBefore + 1);
+    expect(newActions.filter((a) => a === 'embedding_upserted')).toHaveLength(
+      upsertsBefore + 1
+    );
   });
 
   it('a backend whose embedDocument REJECTS does not fail the create — the item is still created and readable, and the failure is audited honestly', async () => {
     const { store, projectUid } = await openStore('embed-reject');
-    const { backend, vectors } = makeFakeBackend({ rejectEmbedWith: new Error('fake embedding backend is down') });
+    const { backend, vectors } = makeFakeBackend({
+      rejectEmbedWith: new Error('fake embedding backend is down'),
+    });
     const handle = withEmbedding(store, backend);
 
     const outcome = await createIssue(handle, {
-      project: projectUid, title: 'embed backend down', body: 'the create must still succeed', by: 'filer',
+      project: projectUid,
+      title: 'embed backend down',
+      body: 'the create must still succeed',
+      by: 'filer',
       awaitEmbed: true, // deterministic: wait for the (swallowed) failure to settle
     });
 
@@ -353,11 +424,16 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
 
   it('a backend whose upsertVector throws (embed succeeded, persist did not) also degrades honestly and never corrupts state', async () => {
     const { store, projectUid } = await openStore('embed-upsert-fails');
-    const { backend, vectors } = makeFakeBackend({ rejectUpsertWith: new Error('fake vector store is unwritable') });
+    const { backend, vectors } = makeFakeBackend({
+      rejectUpsertWith: new Error('fake vector store is unwritable'),
+    });
     const handle = withEmbedding(store, backend);
 
     const outcome = await createIssue(handle, {
-      project: projectUid, title: 'vector store down', body: 'a persist failure must never corrupt state', by: 'filer',
+      project: projectUid,
+      title: 'vector store down',
+      body: 'a persist failure must never corrupt state',
+      by: 'filer',
       awaitEmbed: true,
     });
 
@@ -379,7 +455,10 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
     const handle = withEmbedding(store, backend);
 
     const created = await createIssue(handle, {
-      project: projectUid, title: 'to be deleted', body: 'the vector must be dropped on soft-delete', by: 'filer',
+      project: projectUid,
+      title: 'to be deleted',
+      body: 'the vector must be dropped on soft-delete',
+      by: 'filer',
       awaitEmbed: true,
     });
     expect(created.created).toBe(true);
@@ -387,7 +466,12 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
     const rowid = await rowidForUid(store, created.uid);
     expect(vectors.has(rowid)).toBe(true);
 
-    const outcome = await deleteIssue(handle, { uid: created.uid, by: 'filer', reason: 'no longer needed', awaitEmbed: true });
+    const outcome = await deleteIssue(handle, {
+      uid: created.uid,
+      by: 'filer',
+      reason: 'no longer needed',
+      awaitEmbed: true,
+    });
     expect(outcome.invalidated).toBe(true);
     expect(vectors.has(rowid)).toBe(false);
 
@@ -401,21 +485,46 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
     const handle = withEmbedding(store, undefined);
 
     const created = await createIssue(handle, {
-      project: projectUid, title: 'no rag here', body: 'must work exactly as before RAG existed', by: 'filer',
+      project: projectUid,
+      title: 'no rag here',
+      body: 'must work exactly as before RAG existed',
+      by: 'filer',
       awaitEmbed: true, // even the "await" knob must be a harmless no-op
     });
     expect(created.created).toBe(true);
     if (!created.created || !created.uid) throw new Error('expected created');
     const rowid = await rowidForUid(store, created.uid);
-    expect((await auditActionsFor(store, rowid)).filter((a) => a.startsWith('embedding_'))).toHaveLength(0);
+    expect(
+      (await auditActionsFor(store, rowid)).filter((a) =>
+        a.startsWith('embedding_')
+      )
+    ).toHaveLength(0);
 
-    const updated = await update(handle, { uid: created.uid, by: 'filer', body: 'still no rag', awaitEmbed: true });
+    const updated = await update(handle, {
+      uid: created.uid,
+      by: 'filer',
+      body: 'still no rag',
+      awaitEmbed: true,
+    });
     expect(updated.changed).toContain('body');
     const newRowid = await rowidForUid(store, updated.uid);
-    expect((await auditActionsFor(store, newRowid)).filter((a) => a.startsWith('embedding_'))).toHaveLength(0);
+    expect(
+      (await auditActionsFor(store, newRowid)).filter((a) =>
+        a.startsWith('embedding_')
+      )
+    ).toHaveLength(0);
 
-    const deleted = await deleteIssue(handle, { uid: updated.uid, by: 'filer', reason: 'cleanup', awaitEmbed: true });
+    const deleted = await deleteIssue(handle, {
+      uid: updated.uid,
+      by: 'filer',
+      reason: 'cleanup',
+      awaitEmbed: true,
+    });
     expect(deleted.invalidated).toBe(true);
-    expect((await auditActionsFor(store, newRowid)).filter((a) => a.startsWith('embedding_'))).toHaveLength(0);
+    expect(
+      (await auditActionsFor(store, newRowid)).filter((a) =>
+        a.startsWith('embedding_')
+      )
+    ).toHaveLength(0);
   });
 });

@@ -11,7 +11,11 @@
  * substrate-agnostic.
  */
 import { createStoreAdapter, type StoreAdapter } from '@adhd/sox-store-adapter';
-import { createGraphBackend, type GraphBackend, type TypePolicy } from '@adhd/sox-graph-store';
+import {
+  createGraphBackend,
+  type GraphBackend,
+  type TypePolicy,
+} from '@adhd/sox-graph-store';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { OPEN_TYPE_POLICY } from './type-policy.js';
@@ -70,14 +74,19 @@ export interface GraphBacklogStore {
  *   callers (tests, ad-hoc scripts) that open a store directly without going
  *   through `buildBacklogEnv`.
  */
-export async function openGraphBacklogStore(dbPath: string, busyTimeoutMs = 5000): Promise<GraphBacklogStore> {
+export async function openGraphBacklogStore(
+  dbPath: string,
+  busyTimeoutMs = 5000
+): Promise<GraphBacklogStore> {
   if (dbPath !== ':memory:') mkdirSync(dirname(dbPath), { recursive: true });
   // PRAGMA statements don't accept bound `?` params — `busyTimeoutMs` is
   // validated (`type: 'integer'`, backlogEnvironmentSpec) before it ever
   // reaches here, but this guards any direct caller too (e.g. a test opening
   // a store without going through `buildBacklogEnv`).
   if (!Number.isInteger(busyTimeoutMs) || busyTimeoutMs < 0) {
-    throw new RangeError(`openGraphBacklogStore: busyTimeoutMs must be a non-negative integer, got ${busyTimeoutMs}`);
+    throw new RangeError(
+      `openGraphBacklogStore: busyTimeoutMs must be a non-negative integer, got ${busyTimeoutMs}`
+    );
   }
   const adapter = await createStoreAdapter({ dbPath });
   // BUG-SOXGRAPH-002: the write-contention contract is adapter-owned —
@@ -117,7 +126,9 @@ export async function openGraphBacklogStore(dbPath: string, busyTimeoutMs = 5000
  * guarantee, but a caller that does none of them still cannot lose a vector
  * as long as they close the store before the process exits.
  */
-export async function closeGraphBacklogStore(store: GraphBacklogStore): Promise<void> {
+export async function closeGraphBacklogStore(
+  store: GraphBacklogStore
+): Promise<void> {
   await store.flushEmbeds();
   await store.adapter.close();
 }
@@ -131,7 +142,9 @@ export async function closeGraphBacklogStore(store: GraphBacklogStore): Promise<
  * error or turn a successful command into a failed exit. The adapter's own
  * logs are the durable record; the client never rethrows here.
  */
-export async function closeGraphBacklogStoreSafe(store: GraphBacklogStore | undefined): Promise<void> {
+export async function closeGraphBacklogStoreSafe(
+  store: GraphBacklogStore | undefined
+): Promise<void> {
   if (!store) return;
   try {
     await closeGraphBacklogStore(store);

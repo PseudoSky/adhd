@@ -47,7 +47,7 @@ import { update } from '../write/update.js';
 import { IssueNotFoundError, StaleSupersedeError } from '../write/errors.js';
 import { getIssue } from './get.js';
 
-describe('get rejects a superseded uid and names the issue\'s current uid', () => {
+describe("get rejects a superseded uid and names the issue's current uid", () => {
   let dir: string;
   let store: TestIssueStore;
   let projectUid: string;
@@ -55,7 +55,8 @@ describe('get rejects a superseded uid and names the issue\'s current uid', () =
   beforeEach(async () => {
     dir = freshTmpDir('get-superseded-uid');
     store = await openTestIssueStore(join(dir, 'backlog.db'));
-    projectUid = (await seedProject(store, 'get-superseded-project')).projectUid;
+    projectUid = (await seedProject(store, 'get-superseded-project'))
+      .projectUid;
   });
 
   afterEach(async () => {
@@ -64,7 +65,12 @@ describe('get rejects a superseded uid and names the issue\'s current uid', () =
   });
 
   async function seedIssue(title: string, body: string): Promise<string> {
-    const created = await createIssue(store, { project: projectUid, title, body, by: 'filer' });
+    const created = await createIssue(store, {
+      project: projectUid,
+      title,
+      body,
+      by: 'filer',
+    });
     return created.uid;
   }
 
@@ -80,9 +86,11 @@ describe('get rejects a superseded uid and names the issue\'s current uid', () =
     // Before the fix this RESOLVED, returning the pre-edit card.
     const err = await getIssue(store.graph, { uid: staleUid }).then(
       (card) => {
-        throw new Error(`expected a throw, but get returned a card: ${JSON.stringify(card)}`);
+        throw new Error(
+          `expected a throw, but get returned a card: ${JSON.stringify(card)}`
+        );
       },
-      (e: unknown) => e,
+      (e: unknown) => e
     );
 
     expect(err).toBeInstanceOf(StaleSupersedeError);
@@ -96,27 +104,50 @@ describe('get rejects a superseded uid and names the issue\'s current uid', () =
 
   it('follows a multi-edit chain to the CURRENT head, not the next hop', async () => {
     const firstUid = await seedIssue('edited repeatedly', 'the original body');
-    const secondUid = (await update(store, { uid: firstUid, body: 'the first revision', by: 'editor' })).uid;
-    const thirdUid = (await update(store, { uid: secondUid, body: 'the second revision', by: 'editor' })).uid;
+    const secondUid = (
+      await update(store, {
+        uid: firstUid,
+        body: 'the first revision',
+        by: 'editor',
+      })
+    ).uid;
+    const thirdUid = (
+      await update(store, {
+        uid: secondUid,
+        body: 'the second revision',
+        by: 'editor',
+      })
+    ).uid;
     expect(new Set([firstUid, secondUid, thirdUid]).size).toBe(3);
 
     // The oldest citation is two hops back. A single-hop walk would name
     // `secondUid` — itself superseded, and useless to the caller.
-    const oldest = (await getIssue(store.graph, { uid: firstUid }).catch((e: unknown) => e)) as StaleSupersedeError;
+    const oldest = (await getIssue(store.graph, { uid: firstUid }).catch(
+      (e: unknown) => e
+    )) as StaleSupersedeError;
     expect(oldest).toBeInstanceOf(StaleSupersedeError);
     expect(oldest.successorUid).toBe(thirdUid);
 
     // The middle link resolves to the same head.
-    const middle = (await getIssue(store.graph, { uid: secondUid }).catch((e: unknown) => e)) as StaleSupersedeError;
+    const middle = (await getIssue(store.graph, { uid: secondUid }).catch(
+      (e: unknown) => e
+    )) as StaleSupersedeError;
     expect(middle).toBeInstanceOf(StaleSupersedeError);
     expect(middle.successorUid).toBe(thirdUid);
   });
 
   it('still serves the live uid, and the head carries the edited body', async () => {
     const staleUid = await seedIssue('supersede target', 'the original body');
-    const { uid: liveUid } = await update(store, { uid: staleUid, body: 'the edited body', by: 'editor' });
+    const { uid: liveUid } = await update(store, {
+      uid: staleUid,
+      body: 'the edited body',
+      by: 'editor',
+    });
 
-    const card = await getIssue(store.graph, { uid: liveUid, fields: ['uid', 'title', 'body'] });
+    const card = await getIssue(store.graph, {
+      uid: liveUid,
+      fields: ['uid', 'title', 'body'],
+    });
     expect(card.uid).toBe(liveUid);
     expect(card.body).toBe('the edited body');
   });
@@ -129,9 +160,9 @@ describe('get rejects a superseded uid and names the issue\'s current uid', () =
   });
 
   it('a genuinely unknown uid is still IssueNotFoundError, not StaleSupersedeError', async () => {
-    const err = await getIssue(store.graph, { uid: '00000000-0000-4000-8000-000000000000' }).catch(
-      (e: unknown) => e,
-    );
+    const err = await getIssue(store.graph, {
+      uid: '00000000-0000-4000-8000-000000000000',
+    }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(IssueNotFoundError);
     expect(err).not.toBeInstanceOf(StaleSupersedeError);
   });

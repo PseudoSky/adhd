@@ -26,7 +26,15 @@
 import type { AdapterTransaction, StoreAdapter } from '@adhd/sox-store-adapter';
 import type { TypePolicy } from '@adhd/sox-graph-store';
 import { randomUUID, createHash } from 'node:crypto';
-import { BacklogWriteError, IssueNotFoundError, SingleValuedRelationConflictError, StaleSupersedeError, WriteContentionError, WriteIOError, classifyDriverError } from './errors.js';
+import {
+  BacklogWriteError,
+  IssueNotFoundError,
+  SingleValuedRelationConflictError,
+  StaleSupersedeError,
+  WriteContentionError,
+  WriteIOError,
+  classifyDriverError,
+} from './errors.js';
 
 /**
  * The on-write embedding substrate (§4b, FEAT-021) — the narrow slice of
@@ -119,11 +127,15 @@ interface IRawNodeRow {
   is_superseded: number | null;
 }
 
-function parseJsonObject(raw: string | null): Record<string, unknown> | undefined {
+function parseJsonObject(
+  raw: string | null
+): Record<string, unknown> | undefined {
   if (raw === null || raw === undefined) return undefined;
   try {
     const parsed: unknown = JSON.parse(raw);
-    return parsed !== null && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : undefined;
+    return parsed !== null && typeof parsed === 'object'
+      ? (parsed as Record<string, unknown>)
+      : undefined;
   } catch {
     // A stored meta column that fails to parse is data corruption, not a
     // reason to crash the caller — degrade to "no metadata", matching
@@ -186,8 +198,14 @@ function sortDeep(value: unknown): unknown {
  * issued against `tx` instead of the bare adapter — never a `getNodeByUid`
  * call itself, which always runs against `this.adapter` (§4c).
  */
-export async function getNodeByUidTx(tx: AdapterTransaction, uid: string): Promise<ITxNodeRow | null> {
-  const row = await tx.executeGet<IRawNodeRow>('SELECT * FROM node WHERE uid = ?', [uid]);
+export async function getNodeByUidTx(
+  tx: AdapterTransaction,
+  uid: string
+): Promise<ITxNodeRow | null> {
+  const row = await tx.executeGet<IRawNodeRow>(
+    'SELECT * FROM node WHERE uid = ?',
+    [uid]
+  );
   return row ? mapNodeRow(row) : null;
 }
 
@@ -228,7 +246,10 @@ export async function getNodeByUidTx(tx: AdapterTransaction, uid: string): Promi
  *   valid once and names a real row, so this is deliberately NOT reported as
  *   "not found": the caller's reference is stale, not wrong.
  */
-export async function resolveLiveIssueTx(tx: AdapterTransaction, uid: string): Promise<ITxNodeRow> {
+export async function resolveLiveIssueTx(
+  tx: AdapterTransaction,
+  uid: string
+): Promise<ITxNodeRow> {
   const row = await getNodeByUidTx(tx, uid);
   if (!row || row.kind !== 'issue' || row.tInvalid !== null) {
     throw new IssueNotFoundError(uid);
@@ -240,8 +261,14 @@ export async function resolveLiveIssueTx(tx: AdapterTransaction, uid: string): P
 }
 
 /** rowid → node, inside a tx (used to resolve an edge endpoint's kind without a redundant round trip when the caller doesn't already know it). */
-export async function getNodeByRowidTx(tx: AdapterTransaction, rowid: number): Promise<ITxNodeRow | null> {
-  const row = await tx.executeGet<IRawNodeRow>('SELECT * FROM node WHERE rowid = ?', [rowid]);
+export async function getNodeByRowidTx(
+  tx: AdapterTransaction,
+  rowid: number
+): Promise<ITxNodeRow | null> {
+  const row = await tx.executeGet<IRawNodeRow>(
+    'SELECT * FROM node WHERE rowid = ?',
+    [rowid]
+  );
   return row ? mapNodeRow(row) : null;
 }
 
@@ -347,12 +374,13 @@ type DedupeMode = (typeof DEDUPE_MODES)[number];
 function resolveDedupeMode(): DedupeMode {
   const raw = process.env['ADHD_BACKLOG_UNSAFE_DEDUPE_MODE'];
   if (raw === undefined) return 'off';
-  if ((DEDUPE_MODES as readonly string[]).includes(raw)) return raw as DedupeMode;
+  if ((DEDUPE_MODES as readonly string[]).includes(raw))
+    return raw as DedupeMode;
   throw new Error(
     `ADHD_BACKLOG_UNSAFE_DEDUPE_MODE="${raw}" is not a recognized dedupe mode (expected "off" or "on"). ` +
       'This variable exists solely for negative-control test runs and must never be set in normal operation; ' +
       'an unrecognized value fails loudly rather than silently defaulting to "off" so a mistyped negative ' +
-      'control can never pass for the wrong reason.',
+      'control can never pass for the wrong reason.'
   );
 }
 
@@ -387,7 +415,10 @@ function resolveDedupeMode(): DedupeMode {
  * is {@link resolveDedupeMode}'s env switch, checked below — negative-control
  * test use only, never a per-call toggle.
  */
-export async function writeNodeTx(tx: AdapterTransaction, input: IWriteNodeTxInput): Promise<{ rowid: number; uid: string }> {
+export async function writeNodeTx(
+  tx: AdapterTransaction,
+  input: IWriteNodeTxInput
+): Promise<{ rowid: number; uid: string }> {
   const now = input.at ?? nowISO();
   const content = input.content ?? input.name ?? '';
   // The library's own dedupe hash (trim + lowercase, dist/index.js:642-644)
@@ -406,13 +437,14 @@ export async function writeNodeTx(tx: AdapterTransaction, input: IWriteNodeTxInp
     // SAME matched row, not a second query or a new SQL shape.
     const existing = await tx.executeGet<{ rowid: number; uid: string }>(
       'SELECT rowid, uid FROM node WHERE content_hash = ?',
-      [contentHash],
+      [contentHash]
     );
     if (existing) return { rowid: existing.rowid, uid: existing.uid };
   }
 
   const uid = randomUUID();
-  const metaJson = input.metadata !== undefined ? JSON.stringify(input.metadata) : null;
+  const metaJson =
+    input.metadata !== undefined ? JSON.stringify(input.metadata) : null;
 
   const result = await tx.executeGet<{ rowid: number }>(
     `INSERT INTO node (uid, kind, content, name, summary, topic, tags, importance,
@@ -421,15 +453,34 @@ export async function writeNodeTx(tx: AdapterTransaction, input: IWriteNodeTxInp
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      RETURNING rowid`,
     [
-      uid, input.kind, content,
-      input.name ?? null, null, null, null,
-      1.0, null, contentHash,
-      'global', metaJson,
-      null, null, null,
-      null, now, null, now, now,
-    ],
+      uid,
+      input.kind,
+      content,
+      input.name ?? null,
+      null,
+      null,
+      null,
+      1.0,
+      null,
+      contentHash,
+      'global',
+      metaJson,
+      null,
+      null,
+      null,
+      null,
+      now,
+      null,
+      now,
+      now,
+    ]
   );
-  if (!result) throw new Error(`writeNodeTx: INSERT returned no rowid for kind="${input.kind}" name="${input.name ?? ''}"`);
+  if (!result)
+    throw new Error(
+      `writeNodeTx: INSERT returned no rowid for kind="${input.kind}" name="${
+        input.name ?? ''
+      }"`
+    );
   return { rowid: result.rowid, uid };
 }
 
@@ -487,7 +538,10 @@ export interface IWriteEdgeTxInput {
  * `1:n` rel is enforced identically with no code change (§2's own closing
  * statement).
  */
-async function checkMultiplicityTx(tx: AdapterTransaction, input: IWriteEdgeTxInput): Promise<void> {
+async function checkMultiplicityTx(
+  tx: AdapterTransaction,
+  input: IWriteEdgeTxInput
+): Promise<void> {
   const { multiplicity } = input.rule;
   if (multiplicity === 'n:m') return;
 
@@ -495,10 +549,15 @@ async function checkMultiplicityTx(tx: AdapterTransaction, input: IWriteEdgeTxIn
     const conflict = await tx.executeGet<{ uid: string }>(
       `SELECT n.uid AS uid FROM edge e JOIN node n ON n.rowid = e.dst
        WHERE e.src = ? AND e.rel = ? AND e.dst != ? AND e.t_invalid IS NULL LIMIT 1`,
-      [input.srcRowid, input.rel, input.dstRowid],
+      [input.srcRowid, input.rel, input.dstRowid]
     );
     if (conflict) {
-      throw new SingleValuedRelationConflictError({ side: 'source', cappedUid: input.srcUid, rel: input.rel, conflictingUid: conflict.uid });
+      throw new SingleValuedRelationConflictError({
+        side: 'source',
+        cappedUid: input.srcUid,
+        rel: input.rel,
+        conflictingUid: conflict.uid,
+      });
     }
     return;
   }
@@ -524,10 +583,15 @@ async function checkMultiplicityTx(tx: AdapterTransaction, input: IWriteEdgeTxIn
   const conflict = await tx.executeGet<{ uid: string }>(
     `SELECT n.uid AS uid FROM edge e JOIN node n ON n.rowid = e.src
      WHERE e.dst = ? AND e.rel = ? AND e.src != ? AND e.t_invalid IS NULL LIMIT 1`,
-    [input.dstRowid, input.rel, input.srcRowid],
+    [input.dstRowid, input.rel, input.srcRowid]
   );
   if (conflict) {
-    throw new SingleValuedRelationConflictError({ side: 'target', cappedUid: input.dstUid, rel: input.rel, conflictingUid: conflict.uid });
+    throw new SingleValuedRelationConflictError({
+      side: 'target',
+      cappedUid: input.dstUid,
+      rel: input.rel,
+      conflictingUid: conflict.uid,
+    });
   }
 }
 
@@ -543,13 +607,26 @@ async function checkMultiplicityTx(tx: AdapterTransaction, input: IWriteEdgeTxIn
  * never through `writeEdge`) and multiplicity enforcement both run BEFORE the
  * INSERT, against the SAME `tx` handle.
  */
-export async function writeEdgeTx(tx: AdapterTransaction, input: IWriteEdgeTxInput): Promise<void> {
+export async function writeEdgeTx(
+  tx: AdapterTransaction,
+  input: IWriteEdgeTxInput
+): Promise<void> {
   const { rule } = input;
   if (rule.sourceKind !== '*' && rule.sourceKind !== input.srcKind) {
-    throw new BacklogEdgeKindMismatchError(input.rel, 'source', rule.sourceKind, input.srcKind);
+    throw new BacklogEdgeKindMismatchError(
+      input.rel,
+      'source',
+      rule.sourceKind,
+      input.srcKind
+    );
   }
   if (rule.targetKind !== input.dstKind) {
-    throw new BacklogEdgeKindMismatchError(input.rel, 'target', rule.targetKind, input.dstKind);
+    throw new BacklogEdgeKindMismatchError(
+      input.rel,
+      'target',
+      rule.targetKind,
+      input.dstKind
+    );
   }
 
   await checkMultiplicityTx(tx, input);
@@ -563,14 +640,23 @@ export async function writeEdgeTx(tx: AdapterTransaction, input: IWriteEdgeTxInp
   }
 
   const now = input.at ?? nowISO();
-  const metaJson = input.metadata !== undefined ? JSON.stringify(input.metadata) : null;
+  const metaJson =
+    input.metadata !== undefined ? JSON.stringify(input.metadata) : null;
   await tx.executeRun(
     `INSERT INTO edge (src, dst, rel, weight, origin, meta, t_created, t_valid)
      VALUES (?, ?, ?, ?, 'user_asserted', ?, ?, ?)
      ON CONFLICT(src, dst, rel) DO UPDATE SET
        meta = excluded.meta, weight = excluded.weight,
        t_invalid = NULL, t_valid = excluded.t_valid`,
-    [input.srcRowid, input.dstRowid, input.rel, input.weight ?? 1.0, metaJson, now, now],
+    [
+      input.srcRowid,
+      input.dstRowid,
+      input.rel,
+      input.weight ?? 1.0,
+      metaJson,
+      now,
+      now,
+    ]
   );
 }
 
@@ -588,8 +674,15 @@ export class BacklogEdgeKindMismatchError extends BacklogWriteError {
   readonly code = 'E_VALIDATION' as const;
   readonly retryable = false;
 
-  constructor(rel: string, side: 'source' | 'target', expectedKind: string, actualKind: string) {
-    super(`"${rel}" requires a ${side} of kind "${expectedKind}", got "${actualKind}"`);
+  constructor(
+    rel: string,
+    side: 'source' | 'target',
+    expectedKind: string,
+    actualKind: string
+  ) {
+    super(
+      `"${rel}" requires a ${side} of kind "${expectedKind}", got "${actualKind}"`
+    );
   }
 }
 
@@ -612,10 +705,13 @@ export interface IInvalidateEdgeTxInput {
  * "already invalidated or absent → no-op" behavior — issued against `tx`
  * instead of the bare adapter.
  */
-export async function invalidateEdgeTx(tx: AdapterTransaction, input: IInvalidateEdgeTxInput): Promise<void> {
+export async function invalidateEdgeTx(
+  tx: AdapterTransaction,
+  input: IInvalidateEdgeTxInput
+): Promise<void> {
   const existing = await tx.executeGet<{ rowid: number; meta: string | null }>(
     'SELECT rowid, meta FROM edge WHERE src = ? AND dst = ? AND rel = ? AND t_invalid IS NULL',
-    [input.srcRowid, input.dstRowid, input.rel],
+    [input.srcRowid, input.dstRowid, input.rel]
   );
   if (!existing) return; // already invalidated or absent — idempotent, matches invalidateEdge
 
@@ -625,7 +721,10 @@ export async function invalidateEdgeTx(tx: AdapterTransaction, input: IInvalidat
     invalidatedAt: now,
     ...(input.reason !== undefined ? { invalidatedReason: input.reason } : {}),
   };
-  await tx.executeRun('UPDATE edge SET t_invalid = ?, meta = ? WHERE rowid = ?', [now, JSON.stringify(metaObj), existing.rowid]);
+  await tx.executeRun(
+    'UPDATE edge SET t_invalid = ?, meta = ? WHERE rowid = ?',
+    [now, JSON.stringify(metaObj), existing.rowid]
+  );
 }
 
 /** Linear backoff schedule for `E_CONTENTION` — 250ms, then 500ms (3 total attempts, §4c "Retry semantics"; reuses ADR-0012 §4's own bound rather than a second, differently-tuned schedule). */
@@ -682,7 +781,7 @@ function resolveTransactionMode(): TxMode {
     `ADHD_BACKLOG_UNSAFE_TX_MODE="${raw}" is not a recognized transaction mode (expected "immediate" or "deferred"). ` +
       'This variable exists solely for negative-control test runs and must never be set in normal operation; ' +
       'an unrecognized value fails loudly rather than silently defaulting to "immediate" so a mistyped negative ' +
-      'control can never pass for the wrong reason.',
+      'control can never pass for the wrong reason.'
   );
 }
 
@@ -723,12 +822,14 @@ function resolveTransactionMode(): TxMode {
  */
 export async function executeWriteTransaction<T>(
   handle: IWriteStoreHandle,
-  fn: (tx: AdapterTransaction) => Promise<T>,
+  fn: (tx: AdapterTransaction) => Promise<T>
 ): Promise<T> {
   let attempt = 0;
   for (;;) {
     try {
-      return await handle.adapter.transaction(fn, { mode: resolveTransactionMode() });
+      return await handle.adapter.transaction(fn, {
+        mode: resolveTransactionMode(),
+      });
     } catch (err) {
       if (err instanceof BacklogWriteError) throw err;
 
@@ -741,7 +842,10 @@ export async function executeWriteTransaction<T>(
           await sleep(backoffMs);
           continue;
         }
-        throw new WriteContentionError(CONTENTION_RETRY_BACKOFFS_MS[CONTENTION_RETRY_BACKOFFS_MS.length - 1], err);
+        throw new WriteContentionError(
+          CONTENTION_RETRY_BACKOFFS_MS[CONTENTION_RETRY_BACKOFFS_MS.length - 1],
+          err
+        );
       }
 
       if (classified.code === 'E_IO') {
