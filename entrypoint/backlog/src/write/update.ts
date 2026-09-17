@@ -57,6 +57,18 @@
  * `owns_component`/`has_status` are untouched, since the node itself never
  * changed identity.
  *
+ * **Every OTHER edge carries forward too.** The five above are the set
+ * `card.ts` reads — the CARD's set, not the ISSUE's. An issue also accumulates
+ * `blocks`/`depends_on`/`relates_to`/`part_of`/`duplicate_of` and the
+ * lowercase user-asserted `supersedes` (its dependency graph), `has_note` and
+ * `has_citation` (its evidence), and `has_transition`/`audits` (its entire
+ * history) — none of which `card.ts` reads and none of which a five-edge
+ * carry-forward moved. Bound to a node no listing returns, all of it vanished
+ * from the issue on the first body edit. {@link carryForwardResidualEdgesTx}
+ * sweeps the remainder in BOTH directions (an issue is the SOURCE of
+ * `has_note` but the TARGET of `blocks`), excluding only the uppercase
+ * `SUPERSEDES` chain edge itself.
+ *
  * **An already-superseded `uid` is rejected (a second SPEC gap resolved the
  * same way).** SPEC.md does not say what happens when `update` (or
  * `transition`) is asked to mutate a `uid` a PRIOR `update` already
@@ -440,6 +452,103 @@ async function rewireOwnsComponentTx(
 }
 
 /**
+ * Rels the five named re-pointers above already carry forward by name, plus
+ * the uppercase `SUPERSEDES` chain edge itself. `SUPERSEDES` must NEVER be
+ * swept: it is the only edge whose endpoints ENCODE the chain, so re-pointing
+ * it onto the new node would produce a self-loop and break the successor walk
+ * `get`'s `StaleSupersedeError(successorUid)` resolution depends on.
+ */
+const EDGES_NEVER_SWEPT: readonly string[] = [
+  'SUPERSEDES',
+  'owns_component',
+  'has_status',
+  'has_kind',
+  'has_priority',
+  'authored_by',
+];
+
+interface IResidualEdgeRow {
+  other: number;
+  rel: string;
+  weight: number | null;
+  confidence: number | null;
+  origin: string | null;
+  meta: string | null;
+}
+
+/**
+ * Carry EVERY remaining live edge — in BOTH directions — from the superseded
+ * node onto its successor.
+ *
+ * The five named re-pointers above cover exactly the set `card.ts` reads, and
+ * that set is the CARD's, not the issue's. Everything else an issue accumulates
+ * lives outside it: `blocks`/`depends_on`/`relates_to`/`part_of`/`duplicate_of`
+ * and the lowercase user-asserted `supersedes` (the dependency graph),
+ * `has_note` and `has_citation` (the evidence), and `has_transition`/`audits`
+ * (the entire history). Left behind, all of it stays bound to a node no listing
+ * returns, so one ordinary body edit silently emptied the issue's graph, notes,
+ * citations, and audit trail.
+ *
+ * Both directions matter and neither is optional: `has_note` leaves the issue
+ * (`issue → note`) while `blocks` ARRIVES at it (`blocker → blocked`), so an
+ * outgoing-only sweep would still drop every relation an issue is the target of.
+ *
+ * Hand-composed invalidate-old + INSERT-new, deliberately NOT {@link writeEdgeTx}:
+ * `supersedes` and `duplicate_of` are single-valued, and routing a mechanical
+ * carry-forward through the uniqueness policy would raise
+ * `SingleValuedRelationConflictError` on a re-point that asserts nothing new.
+ * Columns are copied verbatim (`weight`/`confidence`/`origin`/`meta`) so the
+ * carried edge is the same assertion, only re-addressed.
+ *
+ * A no-op when no supersede happened this call — a touch-only `update` never
+ * changes identity, so its edges are already correct.
+ */
+async function carryForwardResidualEdgesTx(
+  tx: AdapterTransaction,
+  params: { oldIssueRowid: number; newIssueRowid: number; at: string },
+): Promise<void> {
+  if (params.oldIssueRowid === params.newIssueRowid) return;
+
+  const excluded = EDGES_NEVER_SWEPT.map(() => '?').join(', ');
+
+  for (const direction of ['outgoing', 'incoming'] as const) {
+    const anchorColumn = direction === 'outgoing' ? 'src' : 'dst';
+    const otherColumn = direction === 'outgoing' ? 'dst' : 'src';
+
+    const { rows } = await tx.executeAll<IResidualEdgeRow>(
+      `SELECT ${otherColumn} AS other, rel, weight, confidence, origin, meta FROM edge ` +
+        `WHERE ${anchorColumn} = ? AND t_invalid IS NULL AND rel NOT IN (${excluded})`,
+      [params.oldIssueRowid, ...EDGES_NEVER_SWEPT],
+    );
+
+    for (const row of rows) {
+      const oldSrc = direction === 'outgoing' ? params.oldIssueRowid : row.other;
+      const oldDst = direction === 'outgoing' ? row.other : params.oldIssueRowid;
+      const newSrc = direction === 'outgoing' ? params.newIssueRowid : row.other;
+      const newDst = direction === 'outgoing' ? row.other : params.newIssueRowid;
+
+      await invalidateEdgeTx(tx, {
+        srcRowid: oldSrc,
+        dstRowid: oldDst,
+        rel: row.rel,
+        reason: `superseded — "${row.rel}" carried forward to the new node`,
+        at: params.at,
+      });
+
+      await tx.executeRun(
+        `INSERT INTO edge (src, dst, rel, weight, confidence, origin, meta, t_created, t_valid)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(src, dst, rel) DO UPDATE SET
+           weight = excluded.weight, confidence = excluded.confidence,
+           origin = excluded.origin, meta = excluded.meta,
+           t_invalid = NULL, t_valid = excluded.t_valid`,
+        [newSrc, newDst, row.rel, row.weight, row.confidence, row.origin, row.meta, params.at, params.at],
+      );
+    }
+  }
+}
+
+/**
  * `assertNoSilentlyDiscardedPatchKeys` (§6.3.3, "carried forward verbatim").
  * Every key of `IUpdateIssueInput`'s six patch fields present with a defined
  * value MUST appear in `changed`. This function builds `changed` from the
@@ -639,7 +748,9 @@ export async function update(handle: IWriteStoreHandle, input: IUpdateIssueInput
 
     // Identity-chain edges — see this file's own doc comment ("Identity-chain
     // carry-forward") for why ALL of these are re-pointed on every supersede,
-    // not just the ones this specific call happens to override.
+    // not just the ones this specific call happens to override. The five NAMED
+    // re-pointers below cover the card; `carryForwardResidualEdgesTx` after them
+    // sweeps everything else the issue owns or is the target of.
     await rewireOwnsComponentTx(tx, handle, { oldIssueRowid: issueRow.rowid, newIssueRowid: currentRowid, newIssueUid: currentUid, at: now });
 
     await rewireOutgoingEdgeTx(tx, handle, {
@@ -661,6 +772,11 @@ export async function update(handle: IWriteStoreHandle, input: IUpdateIssueInput
     await rewireOutgoingEdgeTx(tx, handle, {
       rel: 'authored_by', oldSrcRowid: issueRow.rowid, newSrcRowid: currentRowid, newSrcUid: currentUid,
       override: authorOverride, reason: 'author changed via update', at: now,
+    });
+
+    // Every OTHER live edge — both directions — off the superseded node.
+    await carryForwardResidualEdgesTx(tx, {
+      oldIssueRowid: issueRow.rowid, newIssueRowid: currentRowid, at: now,
     });
 
     await writeAudit({

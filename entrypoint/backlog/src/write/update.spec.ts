@@ -350,17 +350,33 @@ describe('update — touch/supersede/edge-rewrite (SPEC.md §6.3.3, real store)'
       expect(newRow?.metadata?.['assignee']).toBe('new-assignee');
     });
 
-    it('writes exactly one audit row on the NEW node (action:"updated", from/to = old/new uid)', async () => {
+    it('adds exactly one audit row, and the NEW node carries the issue\'s WHOLE trail (action:"updated", from/to = old/new uid)', async () => {
+      const before = await readAuditTrail(store, issueRowid);
       const outcome = await update(store, { uid: issueUid, by: 'editor', body: 'revised body 5' });
       const newRow = await readNode(store, outcome.uid);
       const trail = await readAuditTrail(store, newRow!.rowid);
-      expect(trail).toHaveLength(1);
-      expect(trail[0].action).toBe('updated');
-      expect(trail[0].from).toBe(issueUid);
-      expect(trail[0].to).toBe(outcome.uid);
-      // the OLD node's own trail (from createIssue) is untouched, still there.
+
+      // AC-3's invariant is "one audit NODE per write", not "one audit edge on
+      // the head node". The supersede carries the pre-edit trail forward onto
+      // the successor, so the issue's history survives the edit — reading it
+      // off the current uid returns the WHOLE chain, in order, with this
+      // write's own row appended. Before the carry-forward existed, the
+      // inherited rows stayed bound to a node no listing returns and the
+      // history simply vanished: this asserts `before.length + 1`, so an
+      // implementation that drops the trail again fails here, and so does one
+      // that writes a second audit node for a single call.
+      expect(trail).toHaveLength(before.length + 1);
+      expect(trail.slice(0, before.length).map((r) => r.action)).toEqual(before.map((r) => r.action));
+
+      const own = trail[trail.length - 1];
+      expect(own.action).toBe('updated');
+      expect(own.from).toBe(issueUid);
+      expect(own.to).toBe(outcome.uid);
+
+      // The superseded node keeps no live audit edges — the trail MOVED, it
+      // was not duplicated, so nothing counts the same history twice.
       const oldTrail = await readAuditTrail(store, issueRowid);
-      expect(oldTrail.map((r) => r.action)).toEqual(['created']);
+      expect(oldTrail).toHaveLength(0);
     });
 
     it('a supersede on an issue with NO live has_status edge (a corrupted graph) throws loudly instead of silently minting an unqueryable new node — has_status is NEVER genuinely optional, unlike has_priority', async () => {

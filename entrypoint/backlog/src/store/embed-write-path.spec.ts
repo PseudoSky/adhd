@@ -306,6 +306,7 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
 
     // Updating `body` mints a fresh node (`supersede`) — the OLD node's
     // vector is deleted and the NEW node's is upserted from the new content.
+    const upsertsBefore = (await auditActionsFor(store, oldRowid)).filter((a) => a === 'embedding_upserted').length;
     const updated = await update(handle, { uid: oldUid, by: 'filer', body: 'a brand new body', awaitEmbed: true });
     expect(updated.changed).toContain('body');
     const newUid = updated.uid;
@@ -318,8 +319,14 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
 
     const oldActions = await auditActionsFor(store, oldRowid);
     expect(oldActions.filter((a) => a === 'embedding_deleted')).toHaveLength(1);
+    // Exactly ONE new `embedding_upserted` for this write. The count is a
+    // DELTA, not an absolute: a supersede carries the pre-edit audit trail
+    // forward onto the successor (otherwise the issue's history stays bound to
+    // a node no listing returns and vanishes), so the inherited rows are
+    // present too. Asserting `upsertsBefore + 1` keeps both teeth — it goes red
+    // if the carry-forward stops, and red if one write emits two audits.
     const newActions = await auditActionsFor(store, newRowid);
-    expect(newActions.filter((a) => a === 'embedding_upserted')).toHaveLength(1);
+    expect(newActions.filter((a) => a === 'embedding_upserted')).toHaveLength(upsertsBefore + 1);
   });
 
   it('a backend whose embedDocument REJECTS does not fail the create — the item is still created and readable, and the failure is audited honestly', async () => {
