@@ -102,3 +102,44 @@ already documents for `changeset version`.
 Citations: [sox-ecosystem, sox:typescript-pro, claude, graph-store isSuperseded work,
 1: registry/index.json, 2: dist/smoke/run-2026-09-17T03-20-42/log.json, 3: AGENTS.md
 (smoke-test pre-merge gate)]
+
+## 5. The open-curve view double-counts an issue after every body edit
+
+`bug` / `medium` / project `backlog`
+
+`openCurveView` counts `existed` per sampled instant with `liveOnly: false` and
+`validAt: at`[1]. A body edit mints a new node and leaves the old one with
+`t_invalid` NULL forever, so at any instant AFTER an edit BOTH rows satisfy
+`validAt` and the same logical issue is counted twice — three times after two
+edits, and so on. The burndown silently inflates.
+
+This site is deliberately excluded from the `isSuperseded: false` fix applied to
+the current-view read paths, because that predicate is wrong here in the other
+direction: at an instant BEFORE the edit, the replacement did not yet exist and
+the original would also be filtered out, so the issue would count as never having
+existed. A point-in-time view needs "the row that was current AT that instant" —
+i.e. dedup by logical issue identity along the `SUPERSEDES` chain — which is the
+same identity decision as item 1 and should be resolved with it.
+
+Citations: [worktree .worktrees/backlog-v2, sox:typescript-pro, claude,
+docs/plan/backlog-completion, 1: entrypoint/backlog/src/query/views/stats.ts:573-590,
+2: entrypoint/backlog/src/write/update.ts:583-628]
+
+## 6. The fused-relevance ranking path cannot express the current-row predicate
+
+`bug` / `medium` / project `backlog`
+
+`rankByFusedRelevance` builds `filters` for `handle.search.backend.searchRanked`
+(a `StoreSearchBackend` from `@adhd/sox-hybrid-search`), not for
+`graph.queryNodes`[1]. When no `candidateIds` are supplied it filters on
+`{kind:'issue'}` alone, so superseded rows remain eligible for ranking and a
+semantic search can return both a stale row and its replacement. The
+`isSuperseded` predicate added to `NodeFilter` does not reach this path, because
+it is a different filter type owned by another package.
+
+Not fixed here: it needs the equivalent predicate in hybrid-search's own filter
+contract. The `candidateIds` path is already safe, since those ids come from a
+prior filtered `queryNodes`.
+
+Citations: [worktree .worktrees/backlog-v2, sox:typescript-pro, claude,
+docs/plan/backlog-completion, 1: entrypoint/backlog/src/query/views/semantic.ts:341-355]
