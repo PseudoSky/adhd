@@ -17,8 +17,8 @@
     }
   },
   "scripts": {
-    "build": "nx build agent-provider",
-    "dev": "nx build agent-provider --watch",
+    "build": "nx build agent-core-provider",
+    "dev": "nx build agent-core-provider --watch",
     "typecheck": "tsc -p tsconfig.lib.json --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
