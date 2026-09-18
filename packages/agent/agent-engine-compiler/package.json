@@ -20,7 +20,6 @@
     }
   },
   "scripts": {
-    "build": "nx build agent-engine-compiler",
     "typecheck": "tsc -p tsconfig.lib.json --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
