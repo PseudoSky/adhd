@@ -9,7 +9,7 @@
  * `entrypoint/backlog/dist`) claims. Both targets run in
  * `entrypoint/backlog/project.json`'s `test` dependsOn chain
  * (`["^build", "build", "assets"]`; DEBT-024: the global
- * `targetDefaults.test.dependsOn` is `["^build"]` and never included
+ * `targetDefaults.test.dependsOn` is `["lint", "^build"]` and never included
  * `assets`); when `build`'s inputs change (a
  * cache MISS, fresh rebuild) but `assets`'s inputs don't (its own inputs are
  * only README/CHANGELOG/skill/package.json — a cache HIT), nx's restore for

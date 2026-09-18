@@ -24,7 +24,7 @@
  *      one `test` target that consumes `assets` is
  *      `entrypoint/backlog/project.json`'s, `dependsOn: ["^build", "build",
  *      "assets"]`. (DEBT-024: the global `targetDefaults.test.dependsOn` is
- *      `["^build"]` and never included `assets`, so this is NOT a
+ *      `["lint","^build"]` and never included `assets`, so this is NOT a
  *      "every `test`" propagation.)
  *
  * A second, executable-level proof lives in `executors/chmod-bin/impl.spec.mjs`:

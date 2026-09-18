@@ -25,7 +25,7 @@
  * with no changes needed to any individual project.json. (DEBT-024: the one
  * `test` target that consumes `assets` is `entrypoint/backlog/project.json`'s,
  * `dependsOn: ["^build","build","assets"]`. The global
- * `targetDefaults.test.dependsOn` is `["^build"]` and never included
+ * `targetDefaults.test.dependsOn` is `["lint","^build"]` and never included
  * `assets` — so this propagation is scoped to `assets` consumers, not to
  * "every test".)
  */
