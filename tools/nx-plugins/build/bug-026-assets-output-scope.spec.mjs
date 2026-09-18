@@ -6,8 +6,11 @@
  * — a full directory SWAP, not a merge. `entrypoint/backlog/project.json`'s
  * `assets` target declared `outputs: ["{projectRoot}/dist"]` — the exact same
  * literal directory `build`'s own `outputs` (`{options.outputPath}` ->
- * `entrypoint/backlog/dist`) claims. Both targets run in `test`'s dependsOn
- * chain (`["^build", "build", "assets"]`); when `build`'s inputs change (a
+ * `entrypoint/backlog/dist`) claims. Both targets run in
+ * `entrypoint/backlog/project.json`'s `test` dependsOn chain
+ * (`["^build", "build", "assets"]`; DEBT-024: the global
+ * `targetDefaults.test.dependsOn` is `["^build"]` and never included
+ * `assets`); when `build`'s inputs change (a
  * cache MISS, fresh rebuild) but `assets`'s inputs don't (its own inputs are
  * only README/CHANGELOG/skill/package.json — a cache HIT), nx's restore for
  * `assets` runs `remove('entrypoint/backlog/dist')` then copies back
