@@ -94,6 +94,7 @@ import { writeAudit } from './audit.js';
 import {
   CitationRequiredError,
   CitationUnverifiableError,
+  ClaimHeldError,
   InvalidArgumentError,
   IssueNotFoundError,
   NoteRequiredError,
@@ -114,6 +115,8 @@ import {
   writeNodeTx,
   resolveLiveIssueTx,
 } from './tx.js';
+import { extractClaimMeta, isClaimStale } from './claim-lease.js';
+import { resolveIssueStatusTx } from './issue-status.js';
 
 export interface ITransitionInput {
   /** The `issue` uid to transition (§6.3, an "Issue verb"). */
@@ -154,10 +157,6 @@ function assertNonBlank(
 
 interface IRawEdgeSrcRow {
   src: number;
-}
-
-interface IRawEdgeDstRow {
-  dst: number;
 }
 
 /**
@@ -304,8 +303,11 @@ function enforceRequiredFields(
  * (policy-gated, terminal-only), `CitationUnverifiableError(target)`
  * (policy-gated via `project_policy.citation_requires_sha` — a given
  * citation's `sha` resolved to the `"unverified"` sentinel and the project
- * requires a real hash), `WriteContentionError`/`WriteIOError` (§4c — an
- * exhausted driver-level retry on the underlying `immediate` transaction).
+ * requires a real hash), `ClaimHeldError(heldBy, heldSince)` (§6.3.5 — a
+ * live, non-stale claim held by someone other than `input.by` blocks the
+ * status change; see claim-lease.ts), `WriteContentionError`/`WriteIOError`
+ * (§4c — an exhausted driver-level retry on the underlying `immediate`
+ * transaction).
  */
 export async function transition(
   handle: IWriteStoreHandle,
@@ -360,27 +362,24 @@ export async function transition(
     const project = await resolveIssueProjectTx(tx, issueRow.rowid);
     const policy = resolveProjectPolicy(project);
 
-    const currentStatusEdge = await tx.executeGet<IRawEdgeDstRow>(
-      'SELECT dst FROM edge WHERE src = ? AND rel = ? AND t_invalid IS NULL',
-      [issueRow.rowid, 'has_status']
-    );
-    if (!currentStatusEdge) {
-      throw new Error(
-        `transition: issue rowid=${issueRow.rowid} has no live "has_status" edge — graph invariant violation ` +
-          '(every live issue must carry exactly one live status).'
-      );
-    }
-    const currentStatusRow = await getNodeByRowidTx(tx, currentStatusEdge.dst);
+    // BUG-BACKLOG-CLAIM-TRANSITION-GATE-001 (§6.3.5): a live claim by someone
+    // else blocks a transition, same staleness rule as claim.ts's own gate —
+    // see claim-lease.ts. No `force` bypass (that's claim's own concept) and
+    // no lease refresh here (transition is not a claim action).
+    const { claimedBy, claimedAt } = extractClaimMeta(issueRow.metadata);
     if (
-      !currentStatusRow ||
-      currentStatusRow.kind !== 'status' ||
-      currentStatusRow.tInvalid !== null
+      claimedBy !== undefined &&
+      claimedBy !== input.by &&
+      !isClaimStale(claimedAt, now, policy.claimStaleAfterMin)
     ) {
-      throw new Error(
-        `transition: resolved status rowid=${currentStatusEdge.dst} is missing, invalidated, or not a "status" node — ` +
-          'graph invariant violation.'
-      );
+      throw new ClaimHeldError(claimedBy, claimedAt ?? now);
     }
+
+    const currentStatusRow = await resolveIssueStatusTx(
+      tx,
+      issueRow.rowid,
+      'transition'
+    );
     const fromStatusName = currentStatusRow.name ?? '';
 
     const toStatusRow = await mintOrResolveCatalogTx(tx, {
@@ -460,7 +459,7 @@ export async function transition(
     // re-writes the SAME edge, harmlessly refreshing its timestamps.
     await invalidateEdgeTx(tx, {
       srcRowid: issueRow.rowid,
-      dstRowid: currentStatusEdge.dst,
+      dstRowid: currentStatusRow.rowid,
       rel: 'has_status',
       reason: `transitioned to "${toStatusRow.name}"`,
       at: now,

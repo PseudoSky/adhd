@@ -312,6 +312,23 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     expect(res.stdout).toContain('backlog get');
   });
 
+  it('BUG-BACKLOG-BATCH-DISCOVERABILITY-001: a per-verb --help surfaces `batch action` as a "see also"', () => {
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-help-batch-hint-'));
+    const help = runBin(['backlog', 'create', '--help'], adhdRoot);
+    expect(help.status, `stderr:\n${help.stderr}`).toBe(0);
+    expect(help.stdout).toContain('batch action');
+  });
+
+  it('the batch-action hint does not appear on the bare top-level --help or on `batch action --help` itself', () => {
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-help-batch-hint-neg-'));
+    const topHelp = runBin(['--help'], adhdRoot);
+    // top-level help already lists `batch action` in the command table itself —
+    // assert the SEE-ALSO sentence specifically is absent, not the bare substring.
+    expect(topHelp.stdout).not.toContain('See also: `adhd-backlog batch action`');
+    const batchHelp = runBin(['batch', 'action', '--help'], adhdRoot);
+    expect(batchHelp.stdout).not.toContain('See also: `adhd-backlog batch action`');
+  });
+
   it('BUG-BACKLOG-001: --help and no-args surface the special-cased commands (install-skill/install/serve) that never enter the apigen command table', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-help-special-'));
     const help = runBin(['--help'], adhdRoot);

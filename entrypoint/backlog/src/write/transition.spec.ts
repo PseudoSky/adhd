@@ -24,11 +24,13 @@ import { freshTmpDir } from '../test/helpers/tmp-store.js';
 import { createIssue } from './create-issue.js';
 import { update } from './update.js';
 import { transition } from './transition.js';
+import { claim } from './claim.js';
 import { queryIssues } from '../query/query.js';
 import {
   CatalogNotFoundError,
   CitationRequiredError,
   CitationUnverifiableError,
+  ClaimHeldError,
   InvalidArgumentError,
   IssueNotFoundError,
   NoteRequiredError,
@@ -546,5 +548,59 @@ describe('transition — status change (SPEC.md §6.3.4, real store)', () => {
     // exactly one LIVE has_status edge — the invalidate+re-write cycle never leaves two.
     const edges = await liveEdges(store, 'has_status', { src: issueRowid });
     expect(edges).toHaveLength(1);
+  });
+
+  describe('BUG-BACKLOG-CLAIM-TRANSITION-GATE-001 — a live claim gates transition (SPEC.md §6.3.5)', () => {
+    it('a live claim by a DIFFERENT agent blocks transition with ClaimHeldError', async () => {
+      await claim(store, { uid: issueUid, by: 'agent-a', action: 'claim' });
+
+      await expect(
+        transition(store, {
+          uid: issueUid,
+          by: 'agent-b',
+          toStatus: 'in-progress',
+          note: 'should be blocked',
+        })
+      ).rejects.toThrow(ClaimHeldError);
+
+      // Nothing was written — still exactly the ONE has_status edge from createIssue.
+      const edges = await liveEdges(store, 'has_status', { src: issueRowid });
+      expect(edges).toHaveLength(1);
+    });
+
+    it('the claim holder can transition their own claimed issue', async () => {
+      await claim(store, { uid: issueUid, by: 'agent-a', action: 'claim' });
+
+      const outcome = await transition(store, {
+        uid: issueUid,
+        by: 'agent-a',
+        toStatus: 'in-progress',
+        note: 'working it',
+      });
+      expect(outcome.toStatus).toBe('in-progress');
+    });
+
+    it('a STALE claim by a different agent does not block transition', async () => {
+      await setProjectPolicy(store, projectUid, { claimStaleAfterMin: 0 });
+      await claim(store, { uid: issueUid, by: 'agent-a', action: 'claim' });
+
+      const outcome = await transition(store, {
+        uid: issueUid,
+        by: 'agent-b',
+        toStatus: 'in-progress',
+        note: 'stale claim, should proceed',
+      });
+      expect(outcome.toStatus).toBe('in-progress');
+    });
+
+    it('an UNCLAIMED issue transitions freely by anyone (the documented no-claim-required workflow)', async () => {
+      const outcome = await transition(store, {
+        uid: issueUid,
+        by: 'anyone-at-all',
+        toStatus: 'in-progress',
+        note: 'never claimed',
+      });
+      expect(outcome.toStatus).toBe('in-progress');
+    });
   });
 });

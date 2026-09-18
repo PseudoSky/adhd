@@ -39,8 +39,11 @@ import {
   ClaimHeldError,
   InvalidArgumentError,
   IssueNotFoundError,
+  IssueTerminalError,
   assertNotBareRoleLiteral,
 } from './errors.js';
+import { claimAgeMinutes, extractClaimMeta, isClaimStale } from './claim-lease.js';
+import { resolveIssueStatusTx } from './issue-status.js';
 import {
   type IWriteStoreHandle,
   executeWriteTransaction,
@@ -234,6 +237,9 @@ async function touchMetadataTx(
  * this at compile time but a transport boundary, e.g. CLI/MCP JSON input, can
  * still send an arbitrary string), `IssueNotFoundError` (no live `issue` node
  * carries `uid`), `ClaimHeldError` (per the rule table above),
+ * `IssueTerminalError` (`action:'claim'` only — the issue's current status
+ * is `terminal`; `release`/`renew` are exempt, since cleanup on an issue
+ * that got closed out from under the claimant must still succeed),
  * `WriteContentionError`/`WriteIOError` (§4c — an exhausted driver-level
  * retry on the underlying `immediate` transaction).
  */
@@ -263,16 +269,19 @@ export async function claim(
     const row = await resolveLiveIssueTx(tx, input.uid);
 
     const meta = { ...(row.metadata ?? {}) };
-    const claimedBy =
-      typeof meta['claimedBy'] === 'string'
-        ? (meta['claimedBy'] as string)
-        : undefined;
-    const claimedAt =
-      typeof meta['claimedAt'] === 'string'
-        ? (meta['claimedAt'] as string)
-        : undefined;
+    const { claimedBy, claimedAt } = extractClaimMeta(meta);
 
     if (input.action === 'claim') {
+      // BUG-BACKLOG-CLAIM-TERMINAL-001: reject claiming a terminal-status
+      // issue outright — see IssueTerminalError's doc comment for why this
+      // is not a documented reopen path. Only for 'claim' — release/renew
+      // on an issue that got closed out from under the claimant must still
+      // succeed, since that's cleanup, not a new claim attempt.
+      const statusRow = await resolveIssueStatusTx(tx, row.rowid, 'claim');
+      if (statusRow.metadata?.['terminal'] === true) {
+        throw new IssueTerminalError(row.uid, statusRow.name ?? '');
+      }
+
       if (claimedBy === undefined) {
         const newMeta = { ...meta, claimedBy: input.by, claimedAt: now };
         await touchMetadataTx(tx, row.rowid, newMeta, now);
@@ -323,12 +332,9 @@ export async function claim(
       }
 
       // claimedBy !== undefined && claimedBy !== input.by — someone else holds it.
-      const ageMin =
-        claimedAt !== undefined
-          ? (Date.parse(now) - Date.parse(claimedAt)) / 60_000
-          : Number.POSITIVE_INFINITY;
       const policy = await resolveIssueProjectPolicyTx(tx, row.rowid);
-      const stale = ageMin >= policy.claimStaleAfterMin;
+      const ageMin = claimAgeMinutes(claimedAt, now);
+      const stale = isClaimStale(claimedAt, now, policy.claimStaleAfterMin);
       if (!stale && !force) {
         throw new ClaimHeldError(claimedBy, claimedAt ?? now);
       }

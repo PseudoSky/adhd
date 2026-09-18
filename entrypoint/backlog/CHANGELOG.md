@@ -20,6 +20,9 @@ The first stable release. `@adhd/backlog` is a self-contained backlog system: on
 - **backlog:** superseded ids are rejected on `claim`/`relate`/`move`/`delete` instead of silently operating on a stale record.
 - **backlog:** avoid opening the graph store for status-only CLI paths (`--help`, no-args) (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001, DEBT-BACKLOG-CLI-STORE-OPEN-001).
 - **backlog:** a failed audit write must not fail an already-committed claim.
+- **backlog:** a live claim now actually protects an issue. `transition` previously ignored `claimedBy` entirely, so any agent could change an issue's status out from under a claim someone else was actively holding — `claim` was advisory-only. `transition` now blocks with the same `ClaimHeldError`/`conflict` a competing `claim` call would get, unless the claim is stale or held by the same agent, matching `claim`'s own staleness rule (the shared staleness logic moved into `claim-lease.ts` so both verbs stay in sync).
+- **backlog:** `claim` no longer accepts a claim on an already-closed issue. There was nothing to lease on a terminal issue, so this now rejects with a new `IssueTerminalError` (`precondition_failed`) — release/renew are unaffected, since cleaning up a claim on an issue that closed out from under you must still succeed.
+- **backlog:** a per-verb `--help` (e.g. `backlog create --help`) now points at `batch action` when it exists as a bulk alternative — real usage testing showed agents doing many one-at-a-time calls in a row without ever discovering the batch primitive, because per-verb help had no cross-reference to it.
 
 ### 📖 Documentation & tests
 
