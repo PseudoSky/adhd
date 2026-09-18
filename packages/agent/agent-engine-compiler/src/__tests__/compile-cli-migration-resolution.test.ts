@@ -122,22 +122,43 @@ describe('compile CLI bin — sibling migration folder resolution (regression)',
   let dbPath: string;
 
   beforeAll(() => {
-    // Build the real bin so BIN exists and reflects current source.
-    const build = spawnSync(
-      'npx',
-      ['--yes', 'nx', 'build', 'agent-engine-compiler'],
-      {
-        encoding: 'utf8',
-        cwd: REPO_ROOT,
-        timeout: 120_000,
-        shell: true,
-      }
-    );
-    if (build.status !== 0) {
-      throw new Error(
-        `nx build agent-engine-compiler failed (exit ${build.status ?? '?'}):\n` +
-          `stdout: ${build.stdout}\nstderr: ${build.stderr}`
+    // Ensure the real bin exists at BIN. `project.json` declares
+    // `test.dependsOn: ["build"]`, so under `nx test` it is already built —
+    // and fresh — before this hook runs.
+    //
+    // Do NOT re-invoke nx unconditionally here: a nested `nx build` re-runs
+    // cached DEPENDENCY builds, and nx's cache restore for a HIT is a
+    // destructive `remove(dir); copy(cachedDir, dir)` swap. Executed
+    // concurrently with sibling `test` tasks that read those same `dist/`
+    // dirs (nx runs several `test` targets at once), that swap makes them
+    // transiently unresolvable — this is the DEBT-BUILD-001 race. Measured
+    // directly (deterministic repro, no sleeps): with this hook unguarded,
+    // `packages/agent/agent-core-provider/dist/src/index.js` was absent for
+    // 43,558 consecutive poll samples (~0.4s) while this spec ran, and a
+    // sibling test concurrently resolving it dies with
+    // `Failed to resolve entry for package "@adhd/agent-core-provider"`.
+    //
+    // Fall back to a build ONLY when the bin is absent — i.e. a standalone
+    // `vitest` run outside the nx task graph, which the declared `dependsOn`
+    // never reaches. Under `nx test` this block is a no-op, so the graph's
+    // `build` stays the single writer of `dist/`.
+    if (!fs.existsSync(BIN)) {
+      const build = spawnSync(
+        'npx',
+        ['--yes', 'nx', 'build', 'agent-engine-compiler'],
+        {
+          encoding: 'utf8',
+          cwd: REPO_ROOT,
+          timeout: 120_000,
+          shell: true,
+        }
       );
+      if (build.status !== 0) {
+        throw new Error(
+          `nx build agent-engine-compiler failed (exit ${build.status ?? '?'}):\n` +
+            `stdout: ${build.stdout}\nstderr: ${build.stderr}`
+        );
+      }
     }
     if (!fs.existsSync(BIN)) {
       throw new Error(`Built bin not found at: ${BIN}`);
