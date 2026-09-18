@@ -62,8 +62,8 @@ exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) => {
       // `["^build","build","assets"]` value is `entrypoint/backlog/
       // project.json`'s `test` target specifically — the ONLY `test` target
       // that consumes `assets`. The global `targetDefaults.test.dependsOn` is
-      // `["^build"]` and never included `assets`, so the propagation is not
-      // "every test".)
+      // `["lint","^build"]` and never included `assets`, so the propagation is
+      // not "every test".)
       dependsOn: ['build', 'chmod-bin'],
       cache: true,
       outputs: assetOutputs(ctx.workspaceRoot, projectRoot),
