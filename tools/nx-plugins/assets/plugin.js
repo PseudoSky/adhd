@@ -56,10 +56,14 @@ exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) => {
     assets: {
       executor: '@adhd/nx-assets:copy',
       // BUG-NXASSETS-001: `chmod-bin` in the dependsOn list (not merely
-      // `build`) is what pulls the always-runs chmod into every EXISTING
-      // consumer of `assets` (e.g. `test`'s own `dependsOn: ["^build",
-      // "build", "assets"]`) via nx's transitive task graph — no per-project
-      // `project.json` needs to know chmod-bin exists.
+      // `build`) is what pulls the always-runs chmod into every consumer of
+      // `assets` via nx's transitive task graph — no per-project
+      // `project.json` needs to know chmod-bin exists. (DEBT-024: the
+      // `["^build","build","assets"]` value is `entrypoint/backlog/
+      // project.json`'s `test` target specifically — the ONLY `test` target
+      // that consumes `assets`. The global `targetDefaults.test.dependsOn` is
+      // `["^build"]` and never included `assets`, so the propagation is not
+      // "every test".)
       dependsOn: ['build', 'chmod-bin'],
       cache: true,
       outputs: assetOutputs(ctx.workspaceRoot, projectRoot),
