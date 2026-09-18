@@ -33,12 +33,34 @@ import {
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
 import { createIssue } from './create-issue.js';
 import { claim, type IClaimOutcome } from './claim.js';
+import { transition } from './transition.js';
 import {
   ClaimHeldError,
   InvalidArgumentError,
   IssueNotFoundError,
+  IssueTerminalError,
 } from './errors.js';
-import { getNodeByUidTx, type ITxNodeRow } from './tx.js';
+import { getNodeByUidTx, nowISO, writeNodeTx, type ITxNodeRow } from './tx.js';
+
+/** Seeds a `status` catalog row directly so `transition` RESOLVES it (name already exists) rather than minting a fresh `terminal:false` row — mirrors transition.spec.ts's own helper (per-file-duplication convention). */
+async function seedStatus(
+  store: TestIssueStore,
+  name: string,
+  terminal: boolean
+): Promise<string> {
+  return store.adapter.transaction(
+    async (tx) => {
+      const row = await writeNodeTx(tx, {
+        kind: 'status',
+        name,
+        metadata: { terminal },
+        at: nowISO(),
+      });
+      return row.uid;
+    },
+    { mode: 'immediate' }
+  );
+}
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -348,6 +370,43 @@ describe('claim — rule-table coverage (SPEC.md §6.3.5, real store, single con
       'released',
     ]);
     expect(trail[4].from).toBe('agent-a');
+  });
+
+  describe('BUG-BACKLOG-CLAIM-TERMINAL-001 — claim rejects a terminal-status issue', () => {
+    it('claiming a terminal-status issue throws IssueTerminalError and writes nothing', async () => {
+      await seedStatus(store, 'done', true);
+      await transition(store, {
+        uid: issueUid,
+        by: 'closer',
+        toStatus: 'done',
+        note: 'closing it',
+      });
+
+      await expect(
+        claim(store, { uid: issueUid, by: 'agent-a', action: 'claim' })
+      ).rejects.toThrow(IssueTerminalError);
+
+      const row = await readNode(store, issueUid);
+      expect(row?.metadata?.['claimedBy']).toBeUndefined();
+    });
+
+    it('release/renew on a now-terminal issue still succeed (cleanup is not a new claim attempt)', async () => {
+      await claim(store, { uid: issueUid, by: 'agent-a', action: 'claim' });
+      await seedStatus(store, 'done', true);
+      await transition(store, {
+        uid: issueUid,
+        by: 'agent-a',
+        toStatus: 'done',
+        note: 'closing while still claimed',
+      });
+
+      const released = await claim(store, {
+        uid: issueUid,
+        by: 'agent-a',
+        action: 'release',
+      });
+      expect(released.status).toBe('released');
+    });
   });
 });
 

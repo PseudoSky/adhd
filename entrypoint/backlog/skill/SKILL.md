@@ -186,6 +186,9 @@ $ adhd-backlog backlog create --input '{
 {"ok":true,"data":{"created":true,"uid":"a61ff0b6-a0f1-4189-9923-671f6cbacd4e","item":{"uid":"a61ff0b6-a0f1-4189-9923-671f6cbacd4e","title":"Flaky test in auth module","kind":"issue","status":"open","priority":"HIGH","project":"020e87f2-…","component":"dcf134ab-…","createdAt":"2026-09-17T01:22:56.056Z","author":"claude:1"}}}
 ```
 
+Filing more than a handful of similar issues in a row? Use `batch action`
+(§5) instead of repeating this call.
+
 `create` runs a dedupe scan (FTS + semantic, when embeddings are configured)
 BEFORE writing. `duplicateAction` (default `'abort'`) controls what happens
 when the scan surfaces a candidate at/above the project's dedupe threshold:

@@ -227,6 +227,28 @@ export class ClaimHeldError extends BacklogWriteError {
 }
 
 /**
+ * `claim` (§6.3.5): the target issue's current status is `terminal` — there
+ * is nothing left to lease on an already-closed issue. Re-open via
+ * `transition` to a non-terminal status instead (SPEC.md's own `closedAt`
+ * clearing rule, §6.3.4) — claiming a terminal issue is not a documented or
+ * intended step in that flow.
+ */
+export class IssueTerminalError extends BacklogWriteError {
+  readonly code = 'E_VALIDATION' as const;
+  readonly retryable = false;
+
+  constructor(
+    public readonly uid: string,
+    public readonly status: string
+  ) {
+    super(
+      `Issue "${uid}" is in terminal status "${status}" and cannot be claimed; ` +
+        're-open it via "transition" first'
+    );
+  }
+}
+
+/**
  * `relate` (§6.3.6): a single-valued rel already has a value on the CAPPED
  * side, and it is not the one being added. This is the SAME
  * `edge_kind.multiplicity` gate every edge write runs (§2, `checkMultiplicityTx`

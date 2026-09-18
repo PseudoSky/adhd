@@ -564,6 +564,28 @@ export async function runBacklogCli(
       signal: opts.signal ?? new AbortController().signal,
       logger: testSilentLogger(),
     });
+
+    // BUG-BACKLOG-BATCH-DISCOVERABILITY-001: a per-verb `--help` (e.g.
+    // `backlog create --help`) only ever prints that one command's own
+    // schema (@adhd/apigen-plugin-cli-output's run(), a shared package this
+    // repo's own policy forbids patching for a single-consumer concern) —
+    // it has no "see also" for `batch action`, so an agent that explores
+    // incrementally (per-verb --help only, never the bare top-level --help)
+    // never discovers it. Surfaced here instead, backlog-local, with zero
+    // apigen changes. Excludes `batch` itself (no self-referential hint) and
+    // the bare top-level `--help`/`-h` (userArgv.length === 1), which already
+    // gets the full command table via formatUsage(routes).
+    const isPerVerbHelp =
+      userArgv.length > 1 &&
+      userArgv[0] !== 'batch' &&
+      (userArgv.includes('--help') || userArgv.includes('-h'));
+    if (isPerVerbHelp) {
+      console.log(
+        'See also: `adhd-backlog batch action` — run this SAME operation over ' +
+          'many items in one call instead of N one-at-a-time invocations ' +
+          '(skill/SKILL.md §5).'
+      );
+    }
   } finally {
     // Normal-path completion: dispose the signal handler FIRST so a signal
     // arriving after this point (once we're already closing/closed) is not

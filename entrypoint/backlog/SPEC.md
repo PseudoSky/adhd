@@ -1385,6 +1385,17 @@ terminal-done-vs-terminal-dismissed distinction to error on.
 `project_policy.citation_requires_sha`, §2 — a given citation's `sha`
 resolved to the `"unverified"` sentinel, and the project requires a
 real hash).
+`ClaimHeldError(heldBy, heldSince)`: a live claim (§6.3.5) is a real
+concurrency guard, not advisory metadata — a `transition` targeting an issue
+whose `claimedBy` is set to someone OTHER than `input.by` **throws** unless
+that claim is stale (same `project_policy.claim_stale_after_min` threshold
+§6.3.5's own rule table uses, default 30 minutes). There is no `force`
+override on `transition` the way `claim` has one — `force` is `claim`'s own
+human-confirmed-override concept (§6.2), not a `transition` concern, so a
+caller who genuinely needs to override a live claim must go through `claim`
+itself first. An issue with no live claim at all, or claimed by `input.by`
+itself, transitions exactly as before this rule existed — this is
+additive, never a behavior change on the unclaimed path.
 `WriteContentionError`/`WriteIOError` (§4c) surface an exhausted
 driver-level retry on the underlying `immediate` transaction.
 
@@ -1427,7 +1438,19 @@ commits. Two concurrent `claim` calls against the same `uid` therefore
 serialize through the transaction, and the loser sees a fresh
 `claimedBy`/`claimedAt` rather than racing on a stale one.
 
-Rule table (metadata-only shape):
+**Terminal-status precondition (checked BEFORE the `claimedBy` rule table
+below, `action:'claim'` only):** an issue whose current status resolves to
+`terminal:true` (§6.1) has nothing left to lease — `action:'claim'` **throws**
+`IssueTerminalError(uid, status)` outright, regardless of whether the issue
+is currently claimed by anyone. Re-open it via `transition` (§6.3.4) to a
+non-terminal status first. `release`/`renew` are exempt from this
+precondition: releasing or renewing a lease on an issue that closed out from
+under the claimant is cleanup, not a new claim attempt, and must still
+succeed so a claimant is never stuck holding a phantom lease it can no
+longer clear.
+
+Rule table (metadata-only shape, `action:'claim'` rows apply only once the
+terminal-status precondition above has passed):
 
 | action    | current `claimedBy`                                                          | outcome                                                                                                 |
 | --------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
