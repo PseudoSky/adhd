@@ -5,33 +5,22 @@
   "projectType": "library",
   "release": {
     "version": {
-      "generatorOptions": {
-        "packageRoot": "{projectRoot}",
-        "currentVersionResolver": "git-tag"
-      }
+      "currentVersionResolver": "git-tag",
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": ["{projectRoot}"]
     }
   },
-  "tags": [
-    "platform:shared",
-    "layer:data"
-  ],
+  "tags": ["platform:shared", "layer:data"],
   "targets": {
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": [
-        "{options.outputPath}"
-      ],
-      "dependsOn": [
-        "^build",
-        "lint"
-      ],
+      "outputs": ["{options.outputPath}"],
+      "dependsOn": ["^build"],
       "options": {
         "outputPath": "packages/data/data-query-engine/dist",
         "main": "packages/data/data-query-engine/src/index.ts",
         "tsConfig": "packages/data/data-query-engine/tsconfig.lib.json",
-        "assets": [
-          "packages/data/data-query-engine/*.md"
-        ]
+        "assets": ["packages/data/data-query-engine/*.md"]
       }
     },
     "nx-release-publish": {
@@ -46,20 +35,16 @@
       }
     },
     "test": {
-      "executor": "@nx/vite:test",
+      "executor": "@nx/vitest:test",
       "cache": true,
       "inputs": [
         "default",
         "^production",
         {
-          "externalDependencies": [
-            "vitest"
-          ]
+          "externalDependencies": ["vitest"]
         }
       ],
-      "outputs": [
-        "{workspaceRoot}/coverage/packages/data/data-query-engine"
-      ],
+      "outputs": ["{workspaceRoot}/coverage/packages/data/data-query-engine"],
       "options": {
         "vitestConfig": "packages/data/data-query-engine/vite.config.ts"
       }

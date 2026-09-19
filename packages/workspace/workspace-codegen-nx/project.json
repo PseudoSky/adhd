@@ -3,7 +3,13 @@
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/workspace/workspace-codegen-nx/src",
   "projectType": "library",
-  "implicitDependencies": ["!workspace-base-vite-paths"],
+  "release": {
+    "version": {
+      "currentVersionResolver": "git-tag",
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": ["{projectRoot}"]
+    }
+  },
   "tags": [
     "domain:workspace",
     "pkg-kind:generator",
@@ -12,23 +18,20 @@
     "platform:node",
     "access:domain"
   ],
+  "implicitDependencies": ["!workspace-base-vite-paths"],
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "packages/workspace/workspace-codegen-nx/dist",
         "main": "packages/workspace/workspace-codegen-nx/src/index.ts",
         "tsConfig": "packages/workspace/workspace-codegen-nx/tsconfig.lib.json",
-        "assets": [
-          "packages/workspace/workspace-codegen-nx/*.md"
-        ]
+        "assets": ["packages/workspace/workspace-codegen-nx/*.md"]
       }
     },
     "test": {
-      "executor": "@nx/vite:test",
+      "executor": "@nx/vitest:test",
       "outputs": [
         "{workspaceRoot}/coverage/packages/workspace/workspace-codegen-nx"
       ],
@@ -46,14 +49,6 @@
       ],
       "options": {
         "packageRoot": "{projectRoot}/dist"
-      }
-    }
-  },
-  "release": {
-    "version": {
-      "generatorOptions": {
-        "packageRoot": "{projectRoot}",
-        "currentVersionResolver": "git-tag"
       }
     }
   }

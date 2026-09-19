@@ -1,0 +1,167 @@
+import nx from '@nx/eslint-plugin';
+import jsoncEslintParser from 'jsonc-eslint-parser';
+
+export default [
+  ...nx.configs['flat/base'],
+  {
+    files: ['{package,project}.json'],
+    rules: {
+      '@nx/dependency-checks': [
+        'error',
+        {
+          buildTargets: ['build'],
+          checkMissingDependencies: true,
+          checkObsoleteDependencies: true,
+          checkVersionMismatches: true,
+          ignoredDependencies: [],
+          ignoredFiles: [
+            '{projectRoot}/vite.config.{js,ts,mjs,mts}',
+            '{projectRoot}/drizzle.config.{js,ts,mjs,mts}',
+          ],
+        },
+      ],
+    },
+    languageOptions: {
+      parser: jsoncEslintParser,
+    },
+  },
+  {
+    files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
+    rules: {
+      '@nx/dependency-checks': [
+        'error',
+        {
+          buildTargets: ['build'],
+          checkMissingDependencies: true,
+          checkObsoleteDependencies: true,
+          checkVersionMismatches: true,
+          ignoredDependencies: ['lodash'],
+          ignoredFiles: [
+            'webpack.config.js',
+            'eslint.config.js',
+            'vite.config.js',
+            'vite.config.ts',
+            'vite.config.mjs',
+            'vite.config.mts',
+          ],
+          includeTransitiveDependencies: true,
+          useLocalPathsForWorkspaceDependencies: true,
+        },
+      ],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+      '@typescript-eslint/no-explicit-any': [
+        'error',
+        {
+          ignoreRestArgs: true,
+        },
+      ],
+      indent: [
+        'error',
+        2,
+        {
+          CallExpression: {
+            arguments: 2,
+          },
+          FunctionDeclaration: {
+            body: 1,
+            parameters: 2,
+          },
+          FunctionExpression: {
+            body: 1,
+            parameters: 2,
+          },
+          MemberExpression: 2,
+          ObjectExpression: 1,
+          SwitchCase: 1,
+          ignoredNodes: ['ConditionalExpression'],
+        },
+      ],
+      'max-len': [
+        'error',
+        {
+          code: 80,
+          tabWidth: 2,
+          ignoreUrls: true,
+        },
+      ],
+      'object-property-newline': 'error',
+      'comma-dangle': ['error', 'always-multiline'],
+      'key-spacing': [
+        'error',
+        {
+          align: {
+            beforeColon: false,
+            afterColon: false,
+            on: 'value',
+          },
+        },
+      ],
+      'comma-spacing': [
+        'error',
+        {
+          before: false,
+          after: true,
+        },
+      ],
+      'space-return-throw-case': 'error',
+      'operator-linebreak': ['error', 'after'],
+      'no-multiple-empty-lines': [
+        'error',
+        {
+          max: 2,
+        },
+      ],
+      'no-tabs': 'error',
+      'no-nested-ternary': 'error',
+      'no-array-constructor': 'error',
+      'no-trailing-spaces': 'error',
+      'no-unneeded-ternary': 'warn',
+      'no-var': 'error',
+      'prefer-rest-params': 'error',
+      'prefer-spread': 'error',
+      quotes: [
+        'error',
+        'single',
+        {
+          allowTemplateLiterals: true,
+        },
+      ],
+      'rest-spread-spacing': 'error',
+      semi: ['error', 'always'],
+      'space-before-blocks': 'error',
+      'space-before-function-paren': [
+        'error',
+        {
+          asyncArrow: 'always',
+          anonymous: 'never',
+          named: 'never',
+        },
+      ],
+      '@nx/enforce-module-boundaries': [
+        'error',
+        {
+          enforceBuildableLibDependency: true,
+          allow: [],
+          depConstraints: [
+            {
+              sourceTag: '*',
+              onlyDependOnLibsWithTags: ['*'],
+            },
+          ],
+        },
+      ],
+    },
+  },
+  ...nx.configs['flat/typescript'],
+  ...nx.configs['flat/javascript'],
+  {
+    ignores: ['dist', 'coverage', 'tmp', '.nx', '**/*.timestamp-*.mjs'],
+  },
+];

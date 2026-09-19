@@ -12,7 +12,7 @@
       "!{projectRoot}/cypress/**/*",
       "!{projectRoot}/**/*.cy.[jt]s?(x)",
       "!{projectRoot}/cypress.config.[jt]s",
-      "!{projectRoot}/.eslintrc.json",
+      "!{projectRoot}/eslint.config.mjs",
       "!{projectRoot}/eslint.config.js",
       "!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)",
       "!{projectRoot}/tsconfig.spec.json",
@@ -28,9 +28,9 @@
       "{workspaceRoot}/tools/vite-plugins/copy-readme.mjs",
       "{workspaceRoot}/tools/nx-plugins/build/**/*",
       "{workspaceRoot}/tools/nx-plugins/lint/**/*",
-      "{workspaceRoot}/.eslintignore",
+      "{workspaceRoot}/eslint.config.mjs",
       "{workspaceRoot}/tsconfig.base.json",
-      "{workspaceRoot}/.eslintrc.base.json"
+      "{workspaceRoot}/eslint.base.config.mjs"
     ]
   },
   "plugins": [
@@ -62,7 +62,6 @@
       "plugin": "@nx/vite/plugin",
       "options": {
         "buildTargetName": "build",
-        "testTargetName": "test",
         "serveTargetName": "serve",
         "previewTargetName": "preview",
         "serveStaticTargetName": "serve-static"
@@ -97,6 +96,13 @@
     },
     {
       "plugin": "./tools/nx-plugins/test/plugin.js"
+    },
+    {
+      "plugin": "@nx/vitest",
+      "options": {
+        "testTargetName": "test"
+      },
+      "exclude": ["vitest.config.ts"]
     }
   ],
   "generators": {
@@ -138,7 +144,7 @@
     },
     "test": {
       "cache": true,
-      "dependsOn": ["lint", "^build"],
+      "dependsOn": ["^build"],
       "inputs": [
         "default",
         "^production",
@@ -149,11 +155,11 @@
     },
     "@nx/js:tsc": {
       "cache": true,
-      "dependsOn": ["^build", "lint"],
+      "dependsOn": ["^build"],
       "inputs": ["production", "^production"]
     },
     "build": {
-      "dependsOn": ["^build", "lint"],
+      "dependsOn": ["^build"],
       "inputs": ["production", "^production"]
     },
     "nx-release-publish": {
@@ -180,7 +186,6 @@
   },
   "release": {
     "projectsRelationship": "independent",
-    "releaseTagPattern": "{projectName}@{version}",
     "projects": [
       "*",
       "!@adhd/source",
@@ -203,6 +208,9 @@
     },
     "version": {
       "preVersionCommand": "pnpm dlx nx run-many -t build"
+    },
+    "releaseTag": {
+      "pattern": "{projectName}@{version}"
     }
   }
 }

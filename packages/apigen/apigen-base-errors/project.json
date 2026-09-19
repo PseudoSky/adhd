@@ -5,19 +5,15 @@
   "projectType": "library",
   "release": {
     "version": {
-      "generatorOptions": {
-        "packageRoot": "{projectRoot}",
-        "currentVersionResolver": "git-tag"
-      }
+      "currentVersionResolver": "git-tag",
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": ["{projectRoot}"]
     }
   },
-  "tags": [
-    "layer:logic",
-    "platform:shared"
-  ],
+  "tags": ["layer:logic", "platform:shared"],
   "targets": {
     "test": {
-      "executor": "@nx/vite:test",
+      "executor": "@nx/vitest:test",
       "outputs": [
         "{workspaceRoot}/coverage/packages/apigen/apigen-base-errors"
       ],
@@ -27,29 +23,25 @@
     },
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "packages/apigen/apigen-base-errors/dist",
         "main": "packages/apigen/apigen-base-errors/src/index.ts",
         "tsConfig": "packages/apigen/apigen-base-errors/tsconfig.lib.json",
-        "assets": [
-          "packages/apigen/apigen-base-errors/*.md"
-        ]
+        "assets": ["packages/apigen/apigen-base-errors/*.md"]
       }
     },
     "nx-release-publish": {
-      "options": {
-        "packageRoot": "{projectRoot}/dist"
-      },
       "dependsOn": [
         "build",
         "test",
         "verify-dist-load",
         "dist-manifest",
         "publish-hygiene"
-      ]
+      ],
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      }
     }
   }
 }

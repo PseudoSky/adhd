@@ -36,11 +36,12 @@ const { isScratchPath } = require('../lib/scratch-root');
 const TARGET_NAME = 'verify-dist-load';
 
 /**
- * @type {[string, (configFilePath: string, options: unknown, context: { workspaceRoot: string }) => { projects?: Record<string, unknown> }]}
+ * @type {[string, (configFilePaths: string[], options: unknown, context: { workspaceRoot: string }) => Array<[string, { projects?: Record<string, unknown> }]>]}
  */
 exports.createNodes = [
   '**/package.json',
-  (packageJsonPath, _options, context) => {
+  (configFiles, _options, context) =>
+    configFiles.map((packageJsonPath) => {
     const projectRoot = dirname(packageJsonPath);
 
     if (
@@ -51,7 +52,7 @@ exports.createNodes = [
       projectRoot.includes('/dist/') ||
       isScratchPath(projectRoot)
     ) {
-      return {};
+      return [packageJsonPath, {}];
     }
 
     const projectJsonPath = join(
@@ -60,7 +61,7 @@ exports.createNodes = [
       'project.json'
     );
     if (!existsSync(projectJsonPath)) {
-      return {};
+      return [packageJsonPath, {}];
     }
 
     // `build` is often INFERRED (e.g. via @nx/vite/plugin from
@@ -68,10 +69,10 @@ exports.createNodes = [
     // shared/detect-build-target.js for why this can't just read
     // project.json's own `targets.build`.
     if (!hasBuildTarget(context.workspaceRoot, projectRoot)) {
-      return {};
+      return [packageJsonPath, {}];
     }
 
-    return {
+    return [packageJsonPath, {
       projects: {
         [projectRoot]: {
           targets: {
@@ -108,6 +109,6 @@ exports.createNodes = [
           },
         },
       },
-    };
-  },
+    }];
+    }),
 ];

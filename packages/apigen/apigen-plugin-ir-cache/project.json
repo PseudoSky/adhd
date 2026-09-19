@@ -5,10 +5,9 @@
   "projectType": "library",
   "release": {
     "version": {
-      "generatorOptions": {
-        "packageRoot": "packages/apigen/apigen-plugin-ir-cache",
-        "currentVersionResolver": "git-tag"
-      }
+      "currentVersionResolver": "git-tag",
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": ["packages/apigen/apigen-plugin-ir-cache"]
     }
   },
   "tags": [
@@ -22,26 +21,19 @@
   "targets": {
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "packages/apigen/apigen-plugin-ir-cache/dist",
         "main": "packages/apigen/apigen-plugin-ir-cache/src/index.ts",
         "tsConfig": "packages/apigen/apigen-plugin-ir-cache/tsconfig.lib.json",
-        "assets": [
-          "packages/apigen/apigen-plugin-ir-cache/*.md"
-        ]
+        "assets": ["packages/apigen/apigen-plugin-ir-cache/*.md"]
       }
     },
     "nx-release-publish": {
+      "dependsOn": ["build", "test"],
       "options": {
         "packageRoot": "packages/apigen/apigen-plugin-ir-cache/dist"
-      },
-      "dependsOn": [
-        "build",
-        "test"
-      ]
+      }
     },
     "lint": {
       "executor": "@nx/eslint:lint"

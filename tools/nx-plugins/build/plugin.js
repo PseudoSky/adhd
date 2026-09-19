@@ -5,14 +5,17 @@ const { dirname, join } = require('node:path');
 const { hasBuildTarget, isPublishable } = require('./detect-target');
 const { isScratchPath } = require('../lib/scratch-root');
 function skip(p) { return p === '.' || p.startsWith('node_modules/') || p.includes('/node_modules/') || p.startsWith('dist/') || p.includes('/dist/') || isScratchPath(p); }
-exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) =>
+// Nx 23 unified on the v2 plugin API: createNodes[1] receives the ARRAY of
+// matched config files and returns [configFile, result] tuples.
+exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
+  configFiles.map((pkgPath) =>
 {
   const projectRoot = dirname(pkgPath);
-  if (skip(projectRoot)) return {};
-  if (!existsSync(join(ctx.workspaceRoot, projectRoot, 'project.json'))) return {};
-  if (!hasBuildTarget(ctx.workspaceRoot, projectRoot)) return {};
+  if (skip(projectRoot)) return [pkgPath, {}];
+  if (!existsSync(join(ctx.workspaceRoot, projectRoot, 'project.json'))) return [pkgPath, {}];
+  if (!hasBuildTarget(ctx.workspaceRoot, projectRoot)) return [pkgPath, {}];
   // Private packages have no published artifact to verify/ship.
-  if (!isPublishable(ctx.workspaceRoot, projectRoot)) return {};
+  if (!isPublishable(ctx.workspaceRoot, projectRoot)) return [pkgPath, {}];
   // In-source dist ({projectRoot}/dist) + publish-from-source-root means pnpm resolves
   // @adhd/* natively via each package's own manifest (main → ./dist/…). The old `link`
   // target (symlink node_modules/@adhd/<name> → repo-root dist) is retired — it created
@@ -80,7 +83,7 @@ exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) =>
   // without ever re-reading the current rebase. The executor itself is
   // cheap (require/import of a handful of entries), so leaving it uncached
   // costs nothing.
-  return {
+  return [pkgPath, {
     projects: {
       [projectRoot]: {
         targets: {
@@ -121,5 +124,6 @@ exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) =>
         }
       }
     }
-  };
-}];
+  }];
+  }),
+];

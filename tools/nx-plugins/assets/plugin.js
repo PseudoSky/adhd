@@ -47,12 +47,15 @@ function assetOutputs(workspaceRoot, projectRoot) {
   return outs;
 }
 
-exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) => {
+// Nx 23 unified on the v2 plugin API: createNodes[1] receives the ARRAY of
+// matched config files and returns [configFile, result] tuples.
+exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
+  configFiles.map((pkgPath) => {
   const projectRoot = dirname(pkgPath);
-  if (skip(projectRoot)) return {};
-  if (!existsSync(join(ctx.workspaceRoot, projectRoot, 'project.json'))) return {};
-  if (!hasBuildTarget(ctx.workspaceRoot, projectRoot)) return {};
-  return { projects: { [projectRoot]: { targets: {
+  if (skip(projectRoot)) return [pkgPath, {}];
+  if (!existsSync(join(ctx.workspaceRoot, projectRoot, 'project.json'))) return [pkgPath, {}];
+  if (!hasBuildTarget(ctx.workspaceRoot, projectRoot)) return [pkgPath, {}];
+  return [pkgPath, { projects: { [projectRoot]: { targets: {
     assets: {
       executor: '@adhd/nx-assets:copy',
       // BUG-NXASSETS-001: `chmod-bin` in the dependsOn list (not merely
@@ -72,5 +75,5 @@ exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) => {
       // caching it reintroduces the exact defect it fixes.
       cache: false,
     },
-  } } } };
-}];
+  } } } }];
+  })];

@@ -4,41 +4,35 @@
   "projectType": "library",
   "release": {
     "version": {
-      "generatorOptions": {
-        "packageRoot": "packages/apigen/apigen-plugin-cli-output"
-      }
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": ["packages/apigen/apigen-plugin-cli-output"]
     }
   },
-  "tags": [
-    "layer:logic",
-    "platform:node"
-  ],
+  "tags": ["layer:logic", "platform:node"],
   "targets": {
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "packages/apigen/apigen-plugin-cli-output/dist",
         "emptyOutDir": true
       }
     },
     "test": {
-      "executor": "@nx/vite:test",
+      "executor": "@nx/vitest:test",
       "outputs": [
         "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-cli-output"
       ],
-      "options": {
-        "configFile": "packages/apigen/apigen-plugin-cli-output/vite.config.ts"
-      },
       "dependsOn": [
         "build",
         {
           "projects": ["apigen-cli"],
           "target": "build"
         }
-      ]
+      ],
+      "options": {
+        "configFile": "packages/apigen/apigen-plugin-cli-output/vite.config.ts"
+      }
     },
     "nx-release-publish": {
       "dependsOn": [
