@@ -61,8 +61,7 @@ export function groupIntoAtomicUnits(messages: Message[]): Message[][] {
         const current = units[units.length - 1];
         const isToolReplyToOpenUnit =
             message.role === 'tool' &&
-            current !== undefined &&
-            current[0].role === 'assistant' &&
+            current?.[0].role === 'assistant' &&
             (current[0].toolCalls?.length ?? 0) > 0;
 
         if (isToolReplyToOpenUnit) {

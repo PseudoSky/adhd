@@ -67,7 +67,7 @@ export class UsageClient {
 
   markModelCallEnd(taskId: string): void {
     const acc = this.accumulators.get(taskId);
-    if (!acc || acc.modelCallStartMs === undefined) return;
+    if (acc?.modelCallStartMs === undefined) return;
     acc.totalModelMs += Date.now() - acc.modelCallStartMs;
     acc.modelCallStartMs = undefined;
   }

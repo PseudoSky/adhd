@@ -5,7 +5,7 @@ import * as path from 'path';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 
-import { vitestPoolOptions } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
+import { vitestTestDefaults } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
 // NOTE: this project's `build` target now uses `@nx/js:tsc` (not this vite
 // config's `build` block) — @nx/js:tsc mirrors the src/ directory structure
 // and honors project.json's `assets` array (README, generators.json, the
@@ -48,7 +48,7 @@ export default defineConfig({
   },
 
   test: {
-    poolOptions: vitestPoolOptions,
+    ...vitestTestDefaults,
     globals: true,
     cache: {
       dir: '../../../node_modules/.vitest',

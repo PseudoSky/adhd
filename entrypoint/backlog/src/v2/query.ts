@@ -845,7 +845,7 @@ function compileV1Filter(filter: IBacklogFilter, repoCandidates: ReadonlySet<str
   // A single resolved repo pushes into `NodeFilter.namespace`; an alias set
   // with more than one member cannot be expressed as one equality, so it
   // becomes a post-filter instead of a silently-narrowed single pick (AC-7/AC-24).
-  if (repoCandidates && repoCandidates.size === 1) out.repo = [...repoCandidates][0];
+  if (repoCandidates?.size === 1) out.repo = [...repoCandidates][0];
   if (filter.projectPath !== undefined) out.projectPath = filter.projectPath;
   if (filter.kind !== undefined) out.kind = filter.kind;
   if (filter.family !== undefined) out.family = filter.family;
@@ -2646,7 +2646,7 @@ function extractTimeExpression(text: string): { term: string; iso: string } | un
   if (/\byesterday\b/.test(lower)) return { term: 'yesterday', iso: daysAgo(1) };
   if (/\btoday\b/.test(lower)) return { term: 'today', iso: daysAgo(0) };
   const explicit = /\b(\d+)\s*(?:d\b|days? ago\b)/.exec(lower);
-  if (explicit && explicit[1]) return { term: explicit[0].trim(), iso: daysAgo(Number(explicit[1])) };
+  if (explicit?.[1]) return { term: explicit[0].trim(), iso: daysAgo(Number(explicit[1])) };
   return undefined;
 }
 

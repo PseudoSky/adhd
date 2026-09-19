@@ -635,7 +635,7 @@ export async function killAll(hosts: Host[], graceMs = 3000): Promise<void> {
   const exits = live.map(
     (h) =>
       new Promise<void>((resolve) => {
-        if (!h.child || h.child.exitCode !== null || !h.alive) return resolve();
+        if (h.child?.exitCode !== null || !h.alive) return resolve();
         h.child.once('exit', () => resolve());
       })
   );

@@ -27,7 +27,7 @@ import type { EnvironmentSpec } from '@adhd/environment';
 
 /** The resolved, nested `env.config` shape for the `'agent-registry'`
  *  `Environment` instance. Empty — see module doc above. */
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type, @typescript-eslint/no-empty-interface
 export interface AgentRegistryEnvConfig {}
 
 /** Logical `Environment` project id shared by every registry-family package. */

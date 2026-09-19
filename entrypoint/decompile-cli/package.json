@@ -32,7 +32,6 @@
     "source-map": "0.6.1",
     "tough-cookie": "4.1.4",
     "tslib": "^2.3.0",
-    "util": "0.12.5",
     "@babel/register": "7.29.7",
     "react": "18.2.0",
     "@adhd/data-base-transforms": "^2.3.0"

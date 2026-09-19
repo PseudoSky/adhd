@@ -107,7 +107,7 @@ describe('backlog web ui (nx serve backlog seam)', () => {
   // every subsequent test a connection-refused.
 
   afterAll(() => {
-    if (proc && proc.exitCode === null) proc.kill('SIGTERM');
+    if (proc?.exitCode === null) proc.kill('SIGTERM');
     proc = undefined;
     if (storeDir) rmSync(storeDir, { recursive: true, force: true });
   });

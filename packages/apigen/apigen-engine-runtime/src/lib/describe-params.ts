@@ -27,7 +27,7 @@ export interface ParamInfo {
  * falls back to the plain `object` placeholder in that case.
  */
 function objectShape(def: SchemaProp | undefined): string | undefined {
-  if (!def || def.type !== 'object' || !def.properties) return undefined;
+  if (def?.type !== 'object' || !def.properties) return undefined;
   const entries = Object.entries(def.properties);
   if (entries.length === 0) return undefined;
   const required = new Set<string>(def.required ?? []);

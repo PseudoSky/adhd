@@ -3,8 +3,8 @@
   "version": "0.1.1",
   "description": "Nx generator for golden-path @adhd/workspace-* packages — base/core/engine/store/plugin/generator/entrypoint layers",
   "dependencies": {
-    "@nx/devkit": "*",
-    "@nx/js": "18.3.4",
+    "@nx/devkit": "23.2.1",
+    "@nx/js": "23.2.1",
     "tslib": "^2.3.0"
   },
   "main": "./dist/src/index.js",

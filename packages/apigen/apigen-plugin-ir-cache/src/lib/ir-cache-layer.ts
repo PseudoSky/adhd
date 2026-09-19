@@ -310,8 +310,7 @@ export function createIrCacheLayer(
     // "switch modes without a migration" true — no manual step, just one
     // real extraction to bootstrap the fast path).
     if (
-      !entry ||
-      entry.formatVersion !== CURRENT_FORMAT_VERSION ||
+      entry?.formatVersion !== CURRENT_FORMAT_VERSION ||
       entry.extractorVersion !== extractorVersion ||
       !entry.staleness
     ) {

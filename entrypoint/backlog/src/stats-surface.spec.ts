@@ -337,7 +337,7 @@ describe('FEAT-009/FEAT-BACKLOG-010/WO-3 over the REAL built HTTP server (spawne
   let storeDir = '';
 
   afterEach(async () => {
-    if (proc && proc.exitCode === null) proc.kill('SIGTERM');
+    if (proc?.exitCode === null) proc.kill('SIGTERM');
     await new Promise((r) => setTimeout(r, 300)); // let the process reap
     proc = undefined;
     if (storeDir) rmSync(storeDir, { recursive: true, force: true });

@@ -11,7 +11,10 @@ describe('useInfiniteScroll', () => {
     observeFn = vi.fn();
     disconnectFn = vi.fn();
 
-    const MockObserver = vi.fn((callback, _options) => {
+    // Vitest 4: a `vi.fn()` used as a constructor must wrap a `function`
+    // (or class), not an arrow — an arrow impl is not constructible under
+    // `new` (Vitest 4 migration guide §2.3).
+    const MockObserver = vi.fn(function (callback, _options) {
       intersectionCallback = callback;
       return {
         observe: observeFn,
