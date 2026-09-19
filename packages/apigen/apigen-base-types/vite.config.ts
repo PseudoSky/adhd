@@ -5,7 +5,7 @@ import * as path from 'path';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 
-import { vitestPoolOptions } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
+import { vitestTestDefaults } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
 export default defineConfig({
   root: __dirname,
   cacheDir: projectCacheDir(__dirname),
@@ -48,7 +48,7 @@ export default defineConfig({
   },
 
   test: {
-    poolOptions: vitestPoolOptions,
+    ...vitestTestDefaults,
     globals: true,
     cache: {
       dir: '../../../node_modules/.vitest',

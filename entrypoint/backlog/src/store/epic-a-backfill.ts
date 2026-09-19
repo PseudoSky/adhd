@@ -588,8 +588,8 @@ export async function planEpicABackfill(
       packageOk = existingPackageEdgeDsts.length === 0;
     }
 
-    const staleRepoEdges = existingRepoEdgeDsts.filter((d) => repoRef === null || d !== repoRef.nodeId).length;
-    const stalePackageEdges = existingPackageEdgeDsts.filter((d) => packageRef === null || d !== packageRef.nodeId).length;
+    const staleRepoEdges = existingRepoEdgeDsts.filter((d) => d !== repoRef?.nodeId).length;
+    const stalePackageEdges = existingPackageEdgeDsts.filter((d) => d !== packageRef?.nodeId).length;
     const staleEdgeCount = staleRepoEdges + stalePackageEdges;
     const needsWrite = !repoOk || !packageOk || staleEdgeCount > 0;
 

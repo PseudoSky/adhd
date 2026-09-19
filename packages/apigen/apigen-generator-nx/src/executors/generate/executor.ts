@@ -17,8 +17,16 @@ export default async function generateExecutor(
 ): Promise<{ success: boolean }> {
   const projectName = context.projectName;
   if (!projectName) throw new Error('projectName is required');
+  // Nx 23 removed `ExecutorContext.workspace.projects`; the project graph's
+  // roots now live on `projectsConfigurations`. Reading the removed field
+  // yielded an empty root, so `schema.source` resolved against the WORKSPACE
+  // root instead of the project root (`src/api.ts` instead of
+  // `entrypoint/dispatch-cli/src/api.ts`). Fall back to `workspace` so an
+  // older devkit still works.
   const projectRoot =
-    context.workspace?.projects[projectName]?.root ?? '';
+    context.projectsConfigurations?.projects?.[projectName]?.root ??
+    context.workspace?.projects?.[projectName]?.root ??
+    '';
   const sourceFile = path.resolve(context.root, projectRoot, schema.source);
   const outDir = path.resolve(context.root, schema.outDir);
 

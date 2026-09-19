@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.lib.json",
+  "compilerOptions": {
+    "paths": {
+      "@adhd/dispatch-base-spec": ["../../packages/dispatch/dispatch-base-spec/dist/index.d.ts"],
+      "@adhd/dispatch-base-types": ["../../packages/dispatch/dispatch-base-types/dist/index.d.ts"],
+      "@adhd/dispatch-core-client": ["../../packages/dispatch/dispatch-core-client/dist/index.d.ts"],
+      "@adhd/dispatch-core-optimizer": ["../../packages/dispatch/dispatch-core-optimizer/dist/index.d.ts"],
+      "@adhd/dispatch-orchestrator": ["../../packages/dispatch/dispatch-orchestrator/dist/index.d.ts"],
+      "@adhd/dispatch-serializer-json": ["../../packages/dispatch/dispatch-serializer-json/dist/index.d.ts"]
+    }
+  }
+}

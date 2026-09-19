@@ -34,10 +34,10 @@ export default [
   },
   {
     ignores: [
-      'vite.config.js',
-      'vite.config.ts',
-      'vite.config.mjs',
-      'vite.config.mts',
+      '**/vite.config.js',
+      '**/vite.config.ts',
+      '**/vite.config.mjs',
+      '**/vite.config.mts',
     ],
   },
 ];

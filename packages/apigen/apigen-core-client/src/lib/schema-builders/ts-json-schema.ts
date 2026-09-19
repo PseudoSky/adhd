@@ -218,13 +218,13 @@ function getTsjsTs(): typeof import('typescript') {
     const tsjsDir = path.dirname(
       require.resolve('ts-json-schema-generator/package.json')
     );
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     _tsjsTs = require(require.resolve('typescript', {
       paths: [tsjsDir],
     })) as typeof import('typescript');
   } catch {
     // Fallback: use whatever TypeScript is resolvable from here
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     _tsjsTs = require('typescript') as typeof import('typescript');
   }
   return _tsjsTs;
@@ -541,7 +541,7 @@ function runScalarAwareGenerator(
   cacheable: boolean,
   session?: InternalExtractionSession
 ): Record<string, unknown> {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const { DEFAULT_CONFIG } = require('ts-json-schema-generator/dist/src/Config.js') as { DEFAULT_CONFIG: CompletedConfig };
   const completedConfig: CompletedConfig = { ...DEFAULT_CONFIG, ...config };
   const pathStr = completedConfig.path as string;
@@ -568,7 +568,7 @@ function runScalarAwareGenerator(
     if (entry && entry.version === version) gen = entry.gen;
   }
   if (!gen) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const { createProgram } = require('ts-json-schema-generator/dist/factory/program.js') as {
       createProgram: (cfg: CompletedConfig) => unknown;
     };

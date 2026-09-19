@@ -504,7 +504,7 @@ function emitEnum(s: Schema, path: string, ctx: EmitContext): string {
  * tab, U+2028, U+2029) are escaped to their `\n`/`\r`/`\t`/`\u2028`/`\u2029`
  * sequences — a raw line terminator inside the literal is a syntax error.
  */
-function lit(v: string | number | boolean | null): string {
+function lit(v: unknown): string {
   if (typeof v === 'string') {
     return `'${v
       .replace(/\\/g, '\\\\')

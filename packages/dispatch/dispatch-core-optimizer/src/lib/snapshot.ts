@@ -83,7 +83,7 @@ function deriveKiEstimate(
   if (op.type === 'tool-call') return 0;
 
   const shape = op.shape;
-  if (!shape || shape.kind === null) return 0;
+  if (shape?.kind == null) return 0;
 
   const kind = shape.kind;
 
@@ -1030,7 +1030,7 @@ function buildOpenQuestions(
 
   for (const [slug, m] of Object.entries(milestones)) {
     const dagM = dag.milestones[slug];
-    if (dagM === undefined || dagM.pending === null) continue;
+    if (dagM?.pending == null) continue;
 
     const surfaced = m.status === 'pending-surfaced';
 

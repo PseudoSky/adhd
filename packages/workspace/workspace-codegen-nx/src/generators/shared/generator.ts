@@ -72,7 +72,10 @@ export async function scaffoldGenerator(tree: Tree, schema: ScaffoldGeneratorSch
   } else {
     await libraryGenerator(tree, {
       name: projectName,
-      directory: dir,
+      // Nx 19+ generates "as-provided": `directory` IS the project root, not a
+      // parent to append `name` to. Passing only the group dir placed the
+      // project at `packages/<group>` instead of `packages/<group>/<name>`.
+      directory: joinPathFragments(dir, projectName),
       importPath,
       publishable: true,
       bundler: 'vite',
@@ -147,9 +150,27 @@ export async function scaffoldGenerator(tree: Tree, schema: ScaffoldGeneratorSch
   await formatFiles(tree);
 }
 
+/**
+ * Locate a scaffolded project's vite config. Nx 23's `@nx/js:library` emits
+ * `vite.config.mts`; older Nx emitted `vite.config.ts`. Check both so the
+ * patches below apply regardless of which extension the generator produced.
+ */
+function findViteConfig(tree: Tree, dir: string): string | null {
+  for (const file of [
+    'vite.config.mts',
+    'vite.config.ts',
+    'vite.config.mjs',
+    'vite.config.js',
+  ]) {
+    const candidate = joinPathFragments(dir, file);
+    if (tree.exists(candidate)) return candidate;
+  }
+  return null;
+}
+
 function patchViteConfig(tree: Tree, dir: string, platform: 'node' | 'browser' | 'shared') {
-  const vitePath = joinPathFragments(dir, 'vite.config.ts');
-  if (!tree.exists(vitePath)) return;
+  const vitePath = findViteConfig(tree, dir);
+  if (!vitePath) return;
   let content = tree.read(vitePath, 'utf-8');
   if (!content) return;
 
@@ -294,8 +315,8 @@ function patchInSourceDist(tree: Tree, dir: string) {
     writeJson(tree, projectJsonPath, projectJson);
   }
 
-  const vitePath = joinPathFragments(dir, 'vite.config.ts');
-  if (tree.exists(vitePath)) {
+  const vitePath = findViteConfig(tree, dir);
+  if (vitePath) {
     let content = tree.read(vitePath, 'utf-8');
     if (content) {
       // root: __dirname already anchors relative build paths to the

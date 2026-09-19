@@ -4,6 +4,7 @@ import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { builtinModules } from 'node:module';
+import { vitestTestDefaults } from '../../tools/vite-plugins/vitest-pool-defaults.mjs';
 
 export default defineConfig({
   root: __dirname,
@@ -63,6 +64,7 @@ export default defineConfig({
   },
 
   test: {
+    ...vitestTestDefaults,
     globals: true,
     cache: {
       dir: '../../node_modules/.vitest',
@@ -73,10 +75,9 @@ export default defineConfig({
     // it needs a real global.gc so heap measurements are deterministic.
     // worker_threads reject V8 flags in execArgv (ERR_WORKER_INVALID_EXEC_ARGV),
     // so the suite runs in the forks pool, where --expose-gc is legal.
+    // Vitest 4 moved `poolOptions.forks.execArgv` to the top-level `execArgv`.
     pool: 'forks',
-    poolOptions: {
-      forks: { execArgv: ['--expose-gc'] },
-    },
+    execArgv: ['--expose-gc'],
 
     reporters: ['default'],
     coverage: {
