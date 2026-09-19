@@ -13,9 +13,7 @@
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "generatePackageJson": true,
       "updateBuildableProjectDepsInPackageJson": true,
       "buildableProjectDepsInPackageJsonType": "dependencies",
@@ -24,27 +22,21 @@
         "tsConfig": "entrypoint/environment-cli/tsconfig.lib.json",
         "packageJson": "entrypoint/environment-cli/package.json",
         "main": "entrypoint/environment-cli/src/index.ts",
-        "assets": [
-          "entrypoint/environment-cli/*.md"
-        ],
+        "assets": ["entrypoint/environment-cli/*.md"],
         "createLockFile": false
       }
     },
     "test": {
-      "executor": "@nx/vite:test",
+      "executor": "@nx/vitest:test",
       "cache": true,
       "inputs": [
         "default",
         "^production",
         {
-          "externalDependencies": [
-            "vitest"
-          ]
+          "externalDependencies": ["vitest"]
         }
       ],
-      "outputs": [
-        "{workspaceRoot}/coverage/entrypoint/environment-cli"
-      ],
+      "outputs": ["{workspaceRoot}/coverage/entrypoint/environment-cli"],
       "options": {
         "vitestConfig": "entrypoint/environment-cli/vite.config.ts"
       }

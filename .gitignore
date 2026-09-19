@@ -168,3 +168,8 @@ packages/agent/*/tsconfig.tsbuildinfo
 # under nested scratch git repos (e.g. apigen-engine-runtime's isolated-git
 # test-support), never at the real repo root, so this must not shadow those.
 /subject.txt
+
+.claude/worktrees
+.nx/polygraph
+.nx/self-healing
+.nx/migrate-runs

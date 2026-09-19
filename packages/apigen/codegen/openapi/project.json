@@ -5,51 +5,41 @@
   "projectType": "library",
   "release": {
     "version": {
-      "generatorOptions": {
-        "packageRoot": "{projectRoot}",
-        "currentVersionResolver": "git-tag"
-      }
+      "currentVersionResolver": "git-tag",
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": ["{projectRoot}"]
     }
   },
-  "tags": [
-    "layer:logic",
-    "platform:shared"
-  ],
+  "tags": ["layer:logic", "platform:shared"],
   "targets": {
     "test": {
-      "executor": "@nx/vite:test",
-      "outputs": [
-        "{workspaceRoot}/coverage/packages/apigen/codegen/openapi"
-      ],
+      "executor": "@nx/vitest:test",
+      "outputs": ["{workspaceRoot}/coverage/packages/apigen/codegen/openapi"],
       "options": {
         "configFile": "packages/apigen/codegen/openapi/vite.config.ts"
       }
     },
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "packages/apigen/codegen/openapi/dist",
         "main": "packages/apigen/codegen/openapi/src/index.ts",
         "tsConfig": "packages/apigen/codegen/openapi/tsconfig.lib.json",
-        "assets": [
-          "packages/apigen/codegen/openapi/*.md"
-        ]
+        "assets": ["packages/apigen/codegen/openapi/*.md"]
       }
     },
     "nx-release-publish": {
-      "options": {
-        "packageRoot": "{projectRoot}/dist"
-      },
       "dependsOn": [
         "build",
         "test",
         "dist-manifest",
         "verify-dist-load",
         "publish-hygiene"
-      ]
+      ],
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      }
     }
   }
 }

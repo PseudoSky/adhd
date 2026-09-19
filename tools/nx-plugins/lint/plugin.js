@@ -39,6 +39,11 @@ function skip(p) {
   );
 }
 
+// Nx 23 unified the plugin API on the v2 shape: `createNodes[1]` is invoked
+// ONCE with the ARRAY of all matched config files and must return an array of
+// `[configFile, result]` tuples (see nx's loaded-nx-plugin.js). The pre-23 v1
+// shape (one call per file, returning a bare result) is what this plugin used
+// and is what throws `dirname(<array>)` under Nx 23.
 exports.createNodes = [
   // `.cjs` added alongside the original `.json` for projects whose
   // `@nx/dependency-checks` `ignoredDependencies` must be COMPUTED, not
@@ -47,40 +52,41 @@ exports.createNodes = [
   // (CommonJS) config module. Purely additive: every existing
   // `.eslintrc.json` project is matched exactly as before.
   '**/.eslintrc.{json,cjs}',
-  (eslintrcPath, _opts, ctx) => {
-    const projectRoot = dirname(eslintrcPath);
-    if (skip(projectRoot)) return {};
-    // Only real nx projects (must have a project.json or package.json sibling).
-    const abs = join(ctx.workspaceRoot, projectRoot);
-    if (!existsSync(join(abs, 'project.json')) && !existsSync(join(abs, 'package.json'))) {
-      return {};
-    }
-    return {
-      projects: {
-        [projectRoot]: {
-          targets: {
-            lint: {
-              executor: '@nx/eslint:lint',
-              cache: true,
-              options: {
-                lintFilePatterns: [
-                  `${projectRoot}/**/*.{ts,tsx,js,jsx,cjs,mjs}`,
-                  `${projectRoot}/package.json`,
-                  `${projectRoot}/project.json`,
+  (configFiles, _opts, ctx) =>
+    configFiles.map((eslintrcPath) => {
+      const projectRoot = dirname(eslintrcPath);
+      if (skip(projectRoot)) return [eslintrcPath, {}];
+      // Only real nx projects (must have a project.json or package.json sibling).
+      const abs = join(ctx.workspaceRoot, projectRoot);
+      if (!existsSync(join(abs, 'project.json')) && !existsSync(join(abs, 'package.json'))) {
+        return [eslintrcPath, {}];
+      }
+      return [eslintrcPath, {
+        projects: {
+          [projectRoot]: {
+            targets: {
+              lint: {
+                executor: '@nx/eslint:lint',
+                cache: true,
+                options: {
+                  lintFilePatterns: [
+                    `${projectRoot}/**/*.{ts,tsx,js,jsx,cjs,mjs}`,
+                    `${projectRoot}/package.json`,
+                    `${projectRoot}/project.json`,
+                  ],
+                },
+                inputs: [
+                  'default',
+                  '{workspaceRoot}/.eslintrc.base.json',
+                  `{projectRoot}/${basename(eslintrcPath)}`,
+                  '{workspaceRoot}/.eslintignore',
+                  '{workspaceRoot}/tools/eslint-rules/**/*',
+                  { externalDependencies: ['eslint'] },
                 ],
               },
-              inputs: [
-                'default',
-                '{workspaceRoot}/.eslintrc.base.json',
-                `{projectRoot}/${basename(eslintrcPath)}`,
-                '{workspaceRoot}/.eslintignore',
-                '{workspaceRoot}/tools/eslint-rules/**/*',
-                { externalDependencies: ['eslint'] },
-              ],
             },
           },
         },
-      },
-    };
-  },
+      }];
+    }),
 ];
