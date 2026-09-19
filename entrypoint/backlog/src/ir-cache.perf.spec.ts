@@ -75,7 +75,7 @@ describe('FEAT-002 — real measured runtime, cache disabled vs. warm HIT', () =
     hitTimes.sort((a, b) => a - b);
     const hitMedian = hitTimes[1];
 
-    // eslint-disable-next-line no-console -- deliberate: real measured
+     
     // numbers must be visible in test output, not just a pass/fail.
     console.log(
       `[ir-cache perf] disabled/live median: ${disabledMedian.toFixed(1)}ms ` +

@@ -77,7 +77,7 @@ describe('[stream.error-after-first-chunk] error is delivered in-band', () => {
     const stream = createStream<number>({
       produce: async function* () {
         throw new ApiError('internal', 'immediate failure');
-        // eslint-disable-next-line no-unreachable
+         
         yield 0;
       },
     });

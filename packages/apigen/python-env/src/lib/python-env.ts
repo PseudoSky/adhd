@@ -233,7 +233,7 @@ export function ensurePythonEnv(opts: IEnsurePythonEnvOptions = {}): IPythonEnv 
   const healthy = (): boolean => {
     if (!fs.existsSync(python)) return false
     const stamp = readStamp(stampFile)
-    if (!stamp || stamp.pyprojectHash !== wantHash) return false
+    if (stamp?.pyprojectHash !== wantHash) return false
     return requested.every(e => stamp.extras.includes(e))
   }
 

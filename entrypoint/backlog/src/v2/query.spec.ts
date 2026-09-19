@@ -320,7 +320,7 @@ describe('§2.2 views', () => {
 
     const data = ok(await backlogQuery(tmp.store, { view: 'order', filter: { repo: REPO } }));
     const order = data.order;
-    if (!order || !order.ok) throw new Error('expected an acyclic order');
+    if (!order?.ok) throw new Error('expected an acyclic order');
     const shipped = await topoOrder(tmp.store, { repo: REPO });
     if (!shipped.ok) throw new Error('expected the shipped op to agree');
     expect(order.order.map((o) => o.humanId)).toEqual(shipped.order);

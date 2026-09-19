@@ -719,7 +719,7 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
   // window, so a signal arriving before the open finishes correctly closes
   // "nothing yet" (a documented no-op) instead of the closure capturing a
   // not-yet-existing binding.
-  // eslint-disable-next-line prefer-const
+   
   let store: GraphBacklogStore | undefined;
   // [inv:singleton] (docs/spec/service-lifecycle.md §5, sox-ecosystem) — see
   // serve-lock.ts's header for the full incident/rationale. Released ONLY

@@ -13,7 +13,7 @@ export const extract = async (callStack: Stack) => {
   const [type, input] = item;
   if (input === null) return;
   console.log(`Extract[${type}]`, {
-    input: input.path && input.path?.includes('.js') ? input : input.path,
+    input: input.path?.includes('.js') ? input : input.path,
   });
   try {
     if (!!callStack && input) {
@@ -100,7 +100,7 @@ export const extract = async (callStack: Stack) => {
          * input: <str>
          */
         r = extractMapLink(input);
-        if (r && r.length) {
+        if (r?.length) {
           console.log('EXTRACT[source] map link', r);
           r.forEach((l) => callStack.push('link', { path: l, data: '' }));
         } else {

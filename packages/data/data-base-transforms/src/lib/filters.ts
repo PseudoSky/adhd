@@ -15,7 +15,7 @@ type TsTypeMap = {
   Null: null;
   Undefined: undefined;
   Boolean: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   Array: readonly unknown[];
   Object: Record<string, unknown>;
   Function: (...args: unknown[]) => unknown;
@@ -84,7 +84,7 @@ export function isFloat(x: unknown): x is number {
   return isNumber(x) && !Number.isInteger(x) && Number.isFinite(x);
 }
 // Currently undefined and nulls are considered values
-// eslint-disable-next-line @typescript-eslint/ban-types
+ 
 export function isValue(x: unknown): x is Expand<ValueType> & {} {
   return (
     isString(x) ||

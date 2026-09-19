@@ -13,14 +13,28 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
-import { type Tree, readJson } from '@nx/devkit';
+import { type Tree, readJson, updateJson } from '@nx/devkit';
 import typesGenerator from './generator';
+
+// Nx 23's generator init ensures the formatter package through the package
+// manager; inside the vitest worker `pnpm --ignore-workspace --version` is not
+// resolvable. The generator already passes `skipFormat`, so opting out of the
+// formatter install here keeps the test focused on the scaffold it asserts.
+process.env.NX_SKIP_FORMAT = 'true';
 
 describe('types generator', () => {
   let tree: Tree;
 
   beforeEach(() => {
     tree = createTreeWithEmptyWorkspace();
+    // Nx 23's `@nx/js:init` asserts the workspace's declared `typescript` is
+    // >= 5.8.0; seed a supported version so the assertion reflects a real
+    // workspace rather than the bare empty-tree fixture.
+    updateJson(tree, 'package.json', (json) => ({
+      ...json,
+      packageManager: 'pnpm@8.15.9',
+      devDependencies: { ...json.devDependencies, typescript: '~6.0.3' },
+    }));
   });
 
   it('scaffolds packages/<group>/<group>-base-types with a project.json', async () => {

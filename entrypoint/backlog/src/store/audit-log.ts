@@ -116,7 +116,7 @@ export async function queryAuditEvents(store: GraphBacklogStore, itemNodeId: num
   const nodes = await store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_AUDIT_EVENT_TAG], metadata: { itemNodeId } });
   return nodes
     .map((n) => n.metadata as unknown as AuditEventMeta | undefined)
-    .filter((m): m is AuditEventMeta => m !== undefined && m.itemNodeId === itemNodeId)
+    .filter((m): m is AuditEventMeta => m?.itemNodeId === itemNodeId)
     .map((m) => ({ at: m.at, kind: m.kind, detail: m.detail }))
     .sort((a, b) => a.at.localeCompare(b.at));
 }

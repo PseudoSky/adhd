@@ -398,7 +398,7 @@ export async function runDoctorChecks(project: string, specPath: string, opts: B
 
     if (snapshotPath) {
       const readBack = readSnapshotFile(snapshotPath);
-      if (readBack.exists && readBack.data && readBack.data.configHash === data.configHash) {
+      if (readBack.exists && readBack.data?.configHash === data.configHash) {
         checks.push({ name: 'snapshot-readable', passed: true, message: `Read back snapshot from ${snapshotPath}` });
       } else {
         checks.push({

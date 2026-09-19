@@ -218,7 +218,7 @@ export function persistentSchemasFor(
 
   const key = `${sfPath}\0${tsconfig ?? ''}`;
   let entry = _persistentSchemas.get(key);
-  if (!entry || entry.version !== compositeVersion) {
+  if (entry?.version !== compositeVersion) {
     entry = { version: compositeVersion, schemas: new Map() };
     _persistentSchemas.set(key, entry);
   }

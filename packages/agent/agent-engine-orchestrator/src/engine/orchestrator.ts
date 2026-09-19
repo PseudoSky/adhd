@@ -178,7 +178,7 @@ export class Orchestrator {
         if (advertisementMode !== 'names' || tools.length === 0) return null;
         const doc = renderToolPromptDoc(tools);
         const existing = currentMessages[0];
-        if (existing && existing.role === 'system') {
+        if (existing?.role === 'system') {
           return {
             ...existing,
             content: `${doc}\n\n---\n\n${existing.content}`,

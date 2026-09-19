@@ -177,7 +177,7 @@ export function sortByProp<T, P extends keyof T>(
 ) {
   // REF: Performance
   // https://stackoverflow.com/questions/4020796/finding-the-max-value-of-an-attribute-in-an-array-of-objects
-  return arr && arr.sort
+  return arr?.sort
     ? arr.sort(({ [prop]: a }, { [prop]: b }) => cmp(a, b))
     : arr;
 }
@@ -241,12 +241,12 @@ export function uniqueByProp<
 }
 
 export function uniqueBy(arr: Record<string, unknown>[], props: string[]) {
-  if (!props || !props.length) return [];
+  if (!props?.length) return [];
   return props.reduce(uniqueByProp, arr);
 }
 
 export function indexBy(arr: Record<string, unknown>[], prop: string) {
-  if (!prop || !arr || !arr.length) return {};
+  if (!prop || !arr?.length) return {};
   return arr.reduce((res: Record<string, unknown[]>, e) => {
     if (prop in e) {
       // Object/array keys are always coerced to strings by JS at runtime;

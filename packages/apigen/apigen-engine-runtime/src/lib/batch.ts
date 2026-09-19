@@ -232,18 +232,18 @@ async function runSingleItem(
     const raw = await invoke(fnName, itemCall, opts);
     if (isApiStream(raw)) {
       const collected = await collectWithPhase(raw);
-      if (collected.ok) {
-        return { index, status: 'fulfilled', chunks: collected.chunks };
+      if (!collected.ok) {
+        const carrier = collected.carrier;
+        return {
+          index,
+          status: 'rejected',
+          reason: normalizeReason(carrier.error),
+          ...(carrier.phase === 'after-first-chunk'
+            ? { chunksDelivered: carrier.chunksDelivered }
+            : {}),
+        };
       }
-      const carrier = collected.carrier;
-      return {
-        index,
-        status: 'rejected',
-        reason: normalizeReason(carrier.error),
-        ...(carrier.phase === 'after-first-chunk'
-          ? { chunksDelivered: carrier.chunksDelivered }
-          : {}),
-      };
+      return { index, status: 'fulfilled', chunks: collected.chunks };
     }
     return { index, status: 'fulfilled', value: raw };
   } catch (err) {

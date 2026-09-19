@@ -5,7 +5,7 @@ import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { projectCacheDir } from '../workspace-base-vite-paths/src/index';
 
-import { vitestPoolOptions } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
+import { vitestTestDefaults } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
 export default defineConfig({
   root: __dirname,
   cacheDir: projectCacheDir(__dirname),
@@ -25,7 +25,7 @@ export default defineConfig({
     rollupOptions: { external: ['@nx/devkit'] },
   },
   test: {
-    poolOptions: vitestPoolOptions,
+    ...vitestTestDefaults,
     globals: true,
     cache: { dir: '../../../node_modules/.vitest' },
     environment: 'node',

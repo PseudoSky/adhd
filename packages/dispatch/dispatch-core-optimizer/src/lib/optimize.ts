@@ -80,7 +80,7 @@ export const DISPATCH_AGENT_SYSTEM_PREAMBLE =
 function selectPackableMilestones(snapshot: DagSnapshot): string[] {
   return Object.keys(snapshot.milestones).filter((slug) => {
     const m = snapshot.milestones[slug];
-    return m !== undefined && m.eligible === true && m.status === 'pending';
+    return m?.eligible === true && m.status === 'pending';
   });
 }
 
@@ -102,7 +102,7 @@ function getMilestoneKindFamily(milestoneOps: OperationSnapshot[]): KindFamily {
 
   // Find first generative op with a shape.kind
   for (const op of milestoneOps) {
-    if (op.type !== 'generative' || !op.shape || op.shape.kind === null)
+    if (op.type !== 'generative' || op.shape?.kind == null)
       continue;
     const kind = op.shape.kind;
     if (

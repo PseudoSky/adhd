@@ -5,7 +5,7 @@ import * as path from 'path';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 
-import { vitestPoolOptions } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
+import { vitestTestDefaults } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
 
 // `date.spec.ts` asserts formatted output with a hardcoded UTC-5 offset (e.g.
 // "GMT-5 ... America/Lima"). Those assertions are only correct in a FIXED -5
@@ -79,7 +79,7 @@ export default defineConfig({
     // flips `Intl.DateTimeFormat().resolvedOptions().timeZone` under
     // `'forks'` but not under `'threads'`.
     pool: 'forks',
-    poolOptions: vitestPoolOptions,
+    ...vitestTestDefaults,
     globals: true,
     cache: {
       dir: '../../../node_modules/.vitest',

@@ -69,7 +69,7 @@ describe('registry-package generator', () => {
     for (const f of [
       'package.json',
       'project.json',
-      '.eslintrc.json',
+      'eslint.config.mjs',
       'vite.config.ts',
       'drizzle.config.ts',
       'tsconfig.json',
@@ -113,11 +113,16 @@ describe('registry-package generator', () => {
     expect(drizzleConfig).toContain('resolveRegistryDbPath');
   });
 
-  it('eslintrc extends the workspace base so a lint target is inferred', async () => {
+  it('flat eslint config imports the workspace base so a lint target is inferred', async () => {
     const tree = seed(createTreeWithEmptyWorkspace());
     await registryPackageGenerator(tree, { name: 'budget' });
-    const eslint = readJson(tree, 'packages/agent/agent-budget/.eslintrc.json');
-    expect(eslint.extends).toEqual(['../../../.eslintrc.base.json']);
+    const eslint = tree.read(
+      'packages/agent/agent-budget/eslint.config.mjs',
+      'utf-8'
+    );
+    expect(eslint).toContain(
+      "import baseConfig from '../../../eslint.base.config.mjs'"
+    );
   });
 
   it('derives the table prefix and stamps it into the schema header', async () => {

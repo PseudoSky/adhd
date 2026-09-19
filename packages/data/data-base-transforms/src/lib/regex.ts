@@ -120,7 +120,7 @@ const filterPatterns = (
     let ele = token.string;
 
     if (options.relaxZeros !== false) {
-      if (prefix === '-' && ele && ele.charAt(0) === '0') {
+      if (prefix === '-' && ele?.charAt(0) === '0') {
         if (ele.charAt(1) === '{') {
           ele = `0*${ele.replace(/^0\{\d+\}/, '')}`;
         } else {
@@ -236,7 +236,7 @@ const splitToPatterns = (
     const obj = rangeToPattern(start, range, options);
     let zeros = '';
 
-    if (!token.isPadded && prev && prev.pattern === obj.pattern) {
+    if (!token.isPadded && prev?.pattern === obj.pattern) {
       if (prev.digits.length > 1) {
         prev.digits.pop();
       }

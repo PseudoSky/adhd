@@ -1,0 +1,73 @@
+import baseConfig from "../../../eslint.base.config.mjs";
+import nx from "@nx/eslint-plugin";
+import jsoncEslintParser from "jsonc-eslint-parser";
+
+export default [
+    ...baseConfig,
+    {
+        files: [
+            "**/*.ts",
+            "**/*.tsx",
+            "**/*.js",
+            "**/*.jsx"
+        ],
+        // Override or add rules here
+        rules: {}
+    },
+    {
+        files: [
+            "**/*.ts",
+            "**/*.tsx"
+        ],
+        // Override or add rules here
+        rules: {}
+    },
+    {
+        files: [
+            "**/*.js",
+            "**/*.jsx"
+        ],
+        // Override or add rules here
+        rules: {}
+    },
+    ...nx.configs["flat/javascript"],
+    {
+        files: [
+            "**/*.mjs"
+        ],
+        // Override or add rules here
+        rules: {},
+        languageOptions: {
+            parserOptions: {
+                sourceType: "module",
+                ecmaVersion: 2022
+            }
+        }
+    },
+    {
+        files: [
+            "**/*.json"
+        ],
+        rules: {
+            "@nx/dependency-checks": [
+                "error",
+                {
+                    ignoredFiles: [
+                        "{projectRoot}/vite.config.{js,ts,mjs,mts}"
+                    ]
+                }
+            ]
+        },
+        languageOptions: {
+            parser: jsoncEslintParser
+        }
+    },
+    {
+        ignores: [
+            "**/vite.config.js",
+            "**/vite.config.ts",
+            "**/vite.config.mjs",
+            "**/vite.config.mts"
+        ]
+    }
+];

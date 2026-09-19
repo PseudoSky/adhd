@@ -808,7 +808,7 @@ function injectCorrectionMilestone(
   extraReadOnly: string[]
 ): { slug: string; milestone: MilestoneDag; operation: OperationDag } | null {
   const original = dag.milestones[failedSlug];
-  if (!original || original.agent == null) return null;
+  if (original?.agent == null) return null;
 
   const slug = nextCorrectionSlug(dag, failedSlug);
   const truncatedOutput =
@@ -1047,8 +1047,7 @@ async function dispatchUnit(
   for (const opId of unit.operations) {
     const opDag = opLookup.get(opId);
     if (
-      !opDag ||
-      opDag.type !== 'automated' ||
+      opDag?.type !== 'automated' ||
       opDag.action !== 'guard' ||
       opDag.guard == null
     ) {

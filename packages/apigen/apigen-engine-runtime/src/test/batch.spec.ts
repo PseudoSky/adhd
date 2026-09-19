@@ -552,9 +552,9 @@ describe('invokeBatch — BUG-APIGEN-047 rejected reason wire normalization', ()
     // and it suffers the identical wire-loss bug a bare `Error` does.
     const invoke = createInvoker([]);
     const fns = {
-      // eslint-disable-next-line @typescript-eslint/only-throw-error -- deliberately exercising a non-Error throw to prove passthrough
+       
       echo: (): never => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error
+         
         throw { code: 'domain_specific', detail: 'not an Error instance' };
       },
     };

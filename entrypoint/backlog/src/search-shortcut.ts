@@ -236,7 +236,7 @@ export function buildSearchArgv(rest: readonly string[]): SearchShortcutOutcome 
   // same for a lone `--priority HIGH` (`Priority | readonly Priority[]`).
   for (const key of ['status', 'priority'] as const) {
     const values = filter[key] as string[] | undefined;
-    if (values !== undefined && values.length === 1) filter[key] = values[0];
+    if (values?.length === 1) filter[key] = values[0];
   }
 
   // Coerce ONLY where the schema says number, and only when the token really

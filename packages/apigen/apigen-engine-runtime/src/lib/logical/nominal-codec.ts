@@ -49,7 +49,7 @@ export class NominalCodecError extends Error {
  * schema-projected plain construction.
  */
 export type NominalCtor = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   new (...args: any[]): object;
   fromJSON?(bag: Record<string, unknown>): object;
   [staticCtor: string]: unknown;

@@ -83,6 +83,43 @@ export const findRoot = (d) => { while (d !== dirname(d)) { if (existsSync(join(
 const workspaceRoot = findRoot(__dirname);
 
 /**
+ * Flat-config filenames, in ESLint's own precedence order.
+ * (`eslint.config.mjs` is what the Nx flat-config migration produced here.)
+ */
+const FLAT_CONFIG_FILENAMES = ['eslint.config.js', 'eslint.config.mjs', 'eslint.config.cjs'];
+
+/**
+ * Find the nearest flat config for a project's package.json, walking up from
+ * the project directory to the workspace root.
+ *
+ * WHY THIS EXISTS: ESLint flat config is resolved from the process CWD, NOT
+ * per-file like eslintrc. `main()` runs `eslint <package.json> --fix` with
+ * `cwd = workspaceRoot`, so without an explicit `--config` ESLint loads the
+ * ROOT `eslint.config.mjs` and the project's own `@nx/dependency-checks`
+ * `ignoredDependencies` are lost. `@nx/dependency-checks --fix` would then
+ * treat every dynamically/transitively-used dependency (e.g. `pino` in
+ * `entrypoint/backlog`) as unused and silently delete it from package.json —
+ * exactly the failure class BUG-REPO-PRECOMMIT-DEPCHECK-STRIPS-USED-DEPS-001
+ * documents for a different trigger. `@nx/eslint:lint` passes the project's
+ * flat config explicitly for the same reason (see its `findFlatConfigFile`).
+ *
+ * @param {string} pkgJsonPath absolute path to the target package.json
+ * @param {string} root workspace root
+ * @returns {string|null} absolute path to the flat config, or null if none
+ */
+export function findFlatConfig(pkgJsonPath, root = workspaceRoot) {
+  let dir = dirname(pkgJsonPath);
+  while (true) {
+    for (const name of FLAT_CONFIG_FILENAMES) {
+      const candidate = join(dir, name);
+      if (existsSync(candidate)) return candidate;
+    }
+    if (dir === root || dir === dirname(dir)) return null;
+    dir = dirname(dir);
+  }
+}
+
+/**
  * pnpm's install marker. Written by pnpm into node_modules on a real install;
  * absent in a freshly-created git worktree (git does not copy node_modules).
  * (Was `.yarn-state.yml` under the pre-migration yarn Berry setup.)
@@ -142,8 +179,14 @@ export function main(argv = process.argv.slice(2), { workspaceRoot: root = works
   const eslintBin = join(root, 'node_modules', '.bin', 'eslint');
   const eslintCmd = existsSync(eslintBin) ? eslintBin : 'eslint';
 
+  // Flat config resolves from CWD, so pass the project's own config explicitly
+  // (see findFlatConfig). The first argv entry is the package.json path.
+  const pkgJsonPath = argv[0].startsWith('/') ? argv[0] : join(root, argv[0]);
+  const flatConfig = findFlatConfig(pkgJsonPath, root);
+  const eslintArgs = flatConfig ? ['--config', flatConfig, ...argv] : argv;
+
   try {
-    execFileSync(eslintCmd, argv, { cwd: root, stdio: 'inherit' });
+    execFileSync(eslintCmd, eslintArgs, { cwd: root, stdio: 'inherit' });
     return 0;
   } catch (err) {
     return typeof err.status === 'number' ? err.status : 1;

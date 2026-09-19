@@ -9,17 +9,17 @@ function skip(p) { return p === '.' || p.startsWith('node_modules/') || p.includ
 // found sync-deps/sync-deps-check UNCACHED — 1566 calls, 66% of all
 // build-tooling-plugin wall-time, almost all of them no-op re-runs against
 // unchanged inputs). `default` (not `production` — `production` deliberately
-// EXCLUDES `{projectRoot}/.eslintrc.json`, whose `ignoredDependencies`/etc.
+// EXCLUDES `{projectRoot}/eslint.config.mjs`, whose `ignoredDependencies`/etc.
 // affect this check's outcome) covers the project's OWN source + package.json
-// + eslintrc; `^production` covers every internal dependency's package.json
+// + eslint config; `^production` covers every internal dependency's package.json
 // (the only thing about a dependency this check reads is its declared name +
 // version, both in `production`) so a dependency bumping its OWN version (or
-// changing its own deps) still invalidates. The shared base eslintrc config
+// changing its own deps) still invalidates. The shared base eslint config
 // and the guarded wrapper script are both real correctness-affecting inputs.
 const SYNC_DEPS_INPUTS = [
   'default',
   '^production',
-  '{workspaceRoot}/.eslintrc.base.json',
+  '{workspaceRoot}/eslint.base.config.mjs',
   '{workspaceRoot}/tools/nx-plugins/deps/eslint-check.mjs',
   { externalDependencies: ['eslint'] },
 ];
