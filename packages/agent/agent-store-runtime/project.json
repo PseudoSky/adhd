@@ -5,10 +5,9 @@
   "projectType": "library",
   "release": {
     "version": {
-      "generatorOptions": {
-        "packageRoot": "{projectRoot}",
-        "currentVersionResolver": "git-tag"
-      }
+      "currentVersionResolver": "git-tag",
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": ["{projectRoot}"]
     }
   },
   "tags": [
@@ -21,9 +20,7 @@
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "packages/agent/agent-store-runtime/dist",
         "main": "packages/agent/agent-store-runtime/src/index.ts",
@@ -39,15 +36,13 @@
       }
     },
     "test": {
-      "executor": "@nx/vite:test",
+      "executor": "@nx/vitest:test",
       "cache": true,
       "inputs": [
         "default",
         "^production",
         {
-          "externalDependencies": [
-            "vitest"
-          ]
+          "externalDependencies": ["vitest"]
         }
       ],
       "outputs": [

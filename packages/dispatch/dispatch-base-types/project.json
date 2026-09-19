@@ -5,10 +5,9 @@
   "projectType": "library",
   "release": {
     "version": {
-      "generatorOptions": {
-        "packageRoot": "{projectRoot}",
-        "currentVersionResolver": "git-tag"
-      }
+      "currentVersionResolver": "git-tag",
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": ["{projectRoot}"]
     }
   },
   "tags": [
@@ -23,40 +22,34 @@
   "targets": {
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "packages/dispatch/dispatch-base-types/dist",
         "main": "packages/dispatch/dispatch-base-types/src/index.ts",
         "tsConfig": "packages/dispatch/dispatch-base-types/tsconfig.lib.json",
-        "assets": [
-          "packages/dispatch/dispatch-base-types/*.md"
-        ]
+        "assets": ["packages/dispatch/dispatch-base-types/*.md"]
       }
     },
     "nx-release-publish": {
-      "options": {
-        "packageRoot": "{projectRoot}/dist"
-      },
       "dependsOn": [
         "build",
         "test",
         "verify-dist-load",
         "dist-manifest",
         "publish-hygiene"
-      ]
+      ],
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      }
     },
     "test": {
-      "executor": "@nx/vite:test",
+      "executor": "@nx/vitest:test",
       "cache": true,
       "inputs": [
         "default",
         "^production",
         {
-          "externalDependencies": [
-            "vitest"
-          ]
+          "externalDependencies": ["vitest"]
         }
       ],
       "outputs": [

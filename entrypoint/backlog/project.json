@@ -5,10 +5,9 @@
   "projectType": "library",
   "release": {
     "version": {
-      "generatorOptions": {
-        "packageRoot": "{projectRoot}",
-        "currentVersionResolver": "git-tag"
-      }
+      "currentVersionResolver": "git-tag",
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": ["{projectRoot}"]
     }
   },
   "tags": [
@@ -21,16 +20,10 @@
   ],
   "targets": {
     "test": {
-      "executor": "@nx/vite:test",
+      "executor": "@nx/vitest:test",
       "//dependsOn": "the real-MCP stdio test (server.mcp.spec.ts) spawns the BUILT dist/index.js as a child process (a real MCP client can only talk to a real process, never an in-process stdio hijack) and verify-dist-load parity checks also read dist/ — the default targetDefaults.test dependsOn is only [\"^build\"] (dependencies), so backlog's OWN build must be added explicitly or dist/ is stale/missing when tests run. `assets` is ALSO required (BUG-013 FIX A): `@nx/vite:build`'s own `options.assets` is a documented no-op for this executor (verified against its build.impl.js — it never reads options.assets at all), so `dist/skill/SKILL.md` only exists once the separate, package.json-`assets`-array-driven `@adhd/nx-assets:copy` target (`tools/nx-plugins/assets/`) has run — the published-layout regression test (server.published-layout.spec.ts) and the install-skill/install CLI subprocess tests all need it present in dist/.",
-      "dependsOn": [
-        "^build",
-        "build",
-        "assets"
-      ],
-      "outputs": [
-        "{workspaceRoot}/coverage/entrypoint/backlog"
-      ],
+      "dependsOn": ["^build", "build", "assets"],
+      "outputs": ["{workspaceRoot}/coverage/entrypoint/backlog"],
       "options": {
         "configFile": "entrypoint/backlog/vite.config.ts"
       }
@@ -42,9 +35,7 @@
         "default",
         "^production",
         {
-          "externalDependencies": [
-            "typescript"
-          ]
+          "externalDependencies": ["typescript"]
         }
       ],
       "options": {
@@ -53,16 +44,12 @@
     },
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "entrypoint/backlog/dist",
         "main": "entrypoint/backlog/src/index.ts",
         "tsConfig": "entrypoint/backlog/tsconfig.lib.json",
-        "assets": [
-          "entrypoint/backlog/*.md"
-        ]
+        "assets": ["entrypoint/backlog/*.md"]
       }
     },
     "assets": {
@@ -86,24 +73,22 @@
       "//": "web UI prototype: spawns the real built CLI (`serve --transport http`) + a static/proxy web server (tools/run-web-ui.mjs) and owns both lifecycles. `nx serve backlog` then `open http://127.0.0.1:4173/`. Pass-through flags (e.g. `--sandbox` for an isolated store) go after `--`: `npx nx serve backlog -- --sandbox`. Long-lived dev process — never cacheable.",
       "executor": "nx:run-commands",
       "cache": false,
-      "dependsOn": [
-        "build"
-      ],
+      "dependsOn": ["build"],
       "options": {
         "command": "node entrypoint/backlog/tools/run-web-ui.mjs"
       }
     },
     "nx-release-publish": {
-      "options": {
-        "packageRoot": "{projectRoot}/dist"
-      },
       "dependsOn": [
         "build",
         "test",
         "verify-dist-load",
         "dist-manifest",
         "publish-hygiene"
-      ]
+      ],
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      }
     }
   }
 }

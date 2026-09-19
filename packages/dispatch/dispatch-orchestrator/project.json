@@ -5,19 +5,15 @@
   "projectType": "library",
   "release": {
     "version": {
-      "generatorOptions": {
-        "packageRoot": "{projectRoot}",
-        "currentVersionResolver": "git-tag"
-      }
+      "currentVersionResolver": "git-tag",
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": ["{projectRoot}"]
     }
   },
-  "tags": [
-    "layer:logic",
-    "platform:node"
-  ],
+  "tags": ["layer:logic", "platform:node"],
   "targets": {
     "test": {
-      "executor": "@nx/vite:test",
+      "executor": "@nx/vitest:test",
       "outputs": [
         "{workspaceRoot}/coverage/packages/dispatch/dispatch-orchestrator"
       ],
@@ -32,9 +28,7 @@
         "default",
         "^production",
         {
-          "externalDependencies": [
-            "typescript"
-          ]
+          "externalDependencies": ["typescript"]
         }
       ],
       "options": {
@@ -43,29 +37,25 @@
     },
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "packages/dispatch/dispatch-orchestrator/dist",
         "main": "packages/dispatch/dispatch-orchestrator/src/index.ts",
         "tsConfig": "packages/dispatch/dispatch-orchestrator/tsconfig.lib.json",
-        "assets": [
-          "packages/dispatch/dispatch-orchestrator/*.md"
-        ]
+        "assets": ["packages/dispatch/dispatch-orchestrator/*.md"]
       }
     },
     "nx-release-publish": {
-      "options": {
-        "packageRoot": "{projectRoot}/dist"
-      },
       "dependsOn": [
         "build",
         "test",
         "verify-dist-load",
         "dist-manifest",
         "publish-hygiene"
-      ]
+      ],
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      }
     }
   }
 }

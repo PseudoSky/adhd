@@ -4,31 +4,23 @@
   "projectType": "library",
   "release": {
     "version": {
-      "generatorOptions": {
-        "packageRoot": "packages/apigen/apigen-plugin-mcp"
-      }
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": ["packages/apigen/apigen-plugin-mcp"]
     }
   },
-  "tags": [
-    "layer:logic",
-    "platform:node"
-  ],
+  "tags": ["layer:logic", "platform:node"],
   "targets": {
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "packages/apigen/apigen-plugin-mcp/dist",
         "emptyOutDir": true
       }
     },
     "test": {
-      "executor": "@nx/vite:test",
-      "outputs": [
-        "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-mcp"
-      ],
+      "executor": "@nx/vitest:test",
+      "outputs": ["{workspaceRoot}/coverage/packages/apigen/apigen-plugin-mcp"],
       "options": {
         "configFile": "packages/apigen/apigen-plugin-mcp/vite.config.ts"
       }

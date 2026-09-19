@@ -5,56 +5,37 @@
   "projectType": "library",
   "release": {
     "version": {
-      "generatorOptions": {
-        "packageRoot": "{projectRoot}",
-        "currentVersionResolver": "git-tag"
-      }
+      "currentVersionResolver": "git-tag",
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": ["{projectRoot}"]
     }
   },
-  "tags": [
-    "layer:entrypoints",
-    "platform:node"
-  ],
+  "tags": ["layer:entrypoints", "platform:node"],
   "targets": {
     "test": {
-      "executor": "@nx/vite:test",
-      "outputs": [
-        "{workspaceRoot}/coverage/entrypoint/apigen-cli"
-      ],
-      "dependsOn": [
-        "build"
-      ],
+      "executor": "@nx/vitest:test",
+      "outputs": ["{workspaceRoot}/coverage/entrypoint/apigen-cli"],
+      "dependsOn": ["build"],
       "options": {
         "configFile": "entrypoint/apigen-cli/vite.config.ts"
       }
     },
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "entrypoint/apigen-cli/dist",
         "main": "entrypoint/apigen-cli/src/index.ts",
         "tsConfig": "entrypoint/apigen-cli/tsconfig.lib.json",
-        "assets": [
-          "entrypoint/apigen-cli/*.md"
-        ]
+        "assets": ["entrypoint/apigen-cli/*.md"]
       }
     },
     "generate-api": {
       "executor": "@adhd/apigen-nx:generate",
       "cache": true,
-      "outputs": [
-        "{workspaceRoot}/tmp/apigen-generate-out"
-      ],
-      "inputs": [
-        "default",
-        "^production"
-      ],
-      "dependsOn": [
-        "build"
-      ],
+      "outputs": ["{workspaceRoot}/tmp/apigen-generate-out"],
+      "inputs": ["default", "^production"],
+      "dependsOn": ["build"],
       "options": {
         "source": "src/test/fixtures/real-api.ts",
         "type": "mcp",
@@ -62,27 +43,27 @@
       }
     },
     "nx-release-publish": {
-      "options": {
-        "packageRoot": "{projectRoot}/dist"
-      },
       "dependsOn": [
         "build",
         "test",
         "verify-dist-load",
         "dist-manifest",
         "publish-hygiene"
-      ]
+      ],
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      }
     },
     "bench": {
       "executor": "nx:run-commands",
+      "cache": false,
       "options": {
         "command": "node --expose-gc --import tsx packages/apigen/tools/bench-extract.ts",
         "cwd": "{workspaceRoot}",
         "env": {
           "TSX_TSCONFIG_PATH": "tsconfig.base.json"
         }
-      },
-      "cache": false
+      }
     }
   }
 }

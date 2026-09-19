@@ -4,28 +4,22 @@
   "projectType": "library",
   "release": {
     "version": {
-      "generatorOptions": {
-        "packageRoot": "packages/apigen/apigen-plugin-jsonschema"
-      }
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": ["packages/apigen/apigen-plugin-jsonschema"]
     }
   },
-  "tags": [
-    "layer:logic",
-    "platform:node"
-  ],
+  "tags": ["layer:logic", "platform:node"],
   "targets": {
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "packages/apigen/apigen-plugin-jsonschema/dist",
         "emptyOutDir": true
       }
     },
     "test": {
-      "executor": "@nx/vite:test",
+      "executor": "@nx/vitest:test",
       "outputs": [
         "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-jsonschema"
       ],

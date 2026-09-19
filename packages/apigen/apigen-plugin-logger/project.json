@@ -4,28 +4,22 @@
   "projectType": "library",
   "release": {
     "version": {
-      "generatorOptions": {
-        "packageRoot": "packages/apigen/apigen-plugin-logger"
-      }
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": ["packages/apigen/apigen-plugin-logger"]
     }
   },
-  "tags": [
-    "layer:logic",
-    "platform:node"
-  ],
+  "tags": ["layer:logic", "platform:node"],
   "targets": {
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "packages/apigen/apigen-plugin-logger/dist",
         "emptyOutDir": true
       }
     },
     "test": {
-      "executor": "@nx/vite:test",
+      "executor": "@nx/vitest:test",
       "options": {
         "configFile": "packages/apigen/apigen-plugin-logger/vite.config.ts"
       }

@@ -5,9 +5,8 @@
   "projectType": "library",
   "release": {
     "version": {
-      "generatorOptions": {
-        "packageRoot": "packages/apigen/apigen-plugin-batch"
-      }
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": ["packages/apigen/apigen-plugin-batch"]
     }
   },
   "tags": [
@@ -28,7 +27,7 @@
       }
     },
     "test": {
-      "executor": "@nx/vite:test",
+      "executor": "@nx/vitest:test",
       "outputs": [
         "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-batch"
       ],

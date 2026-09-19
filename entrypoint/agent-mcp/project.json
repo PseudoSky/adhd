@@ -3,17 +3,18 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "entrypoint/agent-mcp/src",
   "projectType": "library",
-  "tags": [
-    "entrypoint:mcp",
-    "pkg-class:entrypoint",
-    "platform:node"
-  ],
+  "release": {
+    "version": {
+      "currentVersionResolver": "git-tag",
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": ["{projectRoot}"]
+    }
+  },
+  "tags": ["entrypoint:mcp", "pkg-class:entrypoint", "platform:node"],
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "main": "entrypoint/agent-mcp/src/index.ts",
         "outputPath": "entrypoint/agent-mcp/dist",
@@ -32,19 +33,14 @@
             "glob": "**/*.md",
             "input": "entrypoint/agent-mcp/docs",
             "output": "docs",
-            "ignore": [
-              "marketing/**"
-            ]
+            "ignore": ["marketing/**"]
           }
         ]
       }
     },
     "test": {
-      "executor": "@nx/vite:test",
-      "dependsOn": [
-        "build",
-        "dist-manifest"
-      ],
+      "executor": "@nx/vitest:test",
+      "dependsOn": ["build", "dist-manifest"],
       "options": {
         "config": "entrypoint/agent-mcp/vite.config.ts"
       }
@@ -65,14 +61,6 @@
       ],
       "options": {
         "packageRoot": "{projectRoot}/dist"
-      }
-    }
-  },
-  "release": {
-    "version": {
-      "generatorOptions": {
-        "packageRoot": "{projectRoot}",
-        "currentVersionResolver": "git-tag"
       }
     }
   }
