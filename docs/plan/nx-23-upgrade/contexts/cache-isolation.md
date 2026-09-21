@@ -20,6 +20,7 @@
 
 - [cache-isolation.2] The declared cache directory resolves inside this checkout
 - [cache-isolation.3] The project graph still loads after the cache change
+- [cache-isolation.4] The cache-isolation rationale record exists
 ---
 
 ## Reservations

@@ -257,6 +257,13 @@
       "cmd": "./node_modules/.bin/nx show projects",
       "expect": "marker",
       "marker": "backlog"
+    },
+    {
+      "id": "cache-isolation.4",
+      "phase": "config",
+      "tier": 1,
+      "kind": "exists",
+      "path": "docs/plan/nx-23-upgrade/CACHE-ISOLATION.md"
     }
   ]
 }
