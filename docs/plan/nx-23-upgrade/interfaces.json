@@ -7,5 +7,14 @@
     "resolved_version": "@nx/vitest@23.2.1",
     "source": "node_modules/@nx/vitest/package.json",
     "audit_check": "audit-final.iface-nx-vitest-peer-range"
+  },
+  "vitest-related-cli": {
+    "interface": "vitest related <files...>",
+    "shape": "runs only the specs that STATICALLY cover the listed source files; dynamic import(variable) edges are invisible; exits 0 having selected nothing, so the caller must treat zero as failure",
+    "provenance": "docs",
+    "confidence": "verified",
+    "resolved_version": "vitest@4.1.9",
+    "source": "https://vitest.dev/guide/cli",
+    "audit_check": "audit-final.iface-vitest-related-cli"
   }
 }
