@@ -20,6 +20,7 @@
 
 - [config-repair-absorbed.2] No self-referential build script remains in the nine recovered manifests
 - [config-repair-absorbed.3] A sample recovered project still exposes an inferred build target
+- [config-repair-absorbed.4] A sample recovered project builds successfully
 ---
 
 ## Reservations
