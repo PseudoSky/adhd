@@ -841,6 +841,14 @@
       "kind": "command",
       "cmd": "node docs/plan/nx-23-upgrade/scripts/check-guards-pinned.mjs",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-final.6",
+      "phase": "final",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "node -e \"const p=require(\\\"@nx/vitest/package.json\\\");const r=p.peerDependencies.vitest;console.log(\\\"vitest peer:\\\",r);process.exit(r.includes(\\\"^4.0.0\\\")?0:1)\"",
+      "expect": "exit0"
     }
   ]
 }
