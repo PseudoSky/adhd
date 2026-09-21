@@ -13,3 +13,5 @@ Land the Nx 23.2.1 + Vite 8 upgrade on perf/nx-upgraded, remodel the task graph 
 ## Definition of Done
 
 - `[dod.1]` **(structural) The workspace runs the latest published Nx 23 line with the matching first-party plugin line, and the three test targets that failed the commit gate after the bump have a recorded verdict. (structural)** — (structural) The workspace runs the latest published Nx 23 line with the matching first-party plugin line, and the three test targets that failed the commit gate after the bump have a recorded verdict..
+
+- `[dod.2]` **(structural) The test runner sits at the highest major its Nx peer range permits, and the ceiling blocking the next major is recorded with the evidence that establishes it. (structural)** — (structural) The test runner sits at the highest major its Nx peer range permits, and the ceiling blocking the next major is recorded with the evidence that establishes it..
