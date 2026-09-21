@@ -232,6 +232,14 @@
       "tier": 1,
       "kind": "exists",
       "path": "docs/plan/nx-23-upgrade/SHIM-REMOVAL.md"
+    },
+    {
+      "id": "cache-isolation.1",
+      "phase": "config",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "node -e \"process.exit(require(\\\"./nx.json\\\").cacheDirectory===\\\".nx/cache\\\"?0:1)\"",
+      "expect": "exit0"
     }
   ]
 }
