@@ -449,6 +449,14 @@
       "kind": "command",
       "cmd": "./node_modules/.bin/nx run data-base-transforms:test",
       "expect": "exit0"
+    },
+    {
+      "id": "graph-test-build-inferred.6",
+      "phase": "graph",
+      "tier": 3,
+      "kind": "command",
+      "cmd": "./node_modules/.bin/nx build data-query-engine",
+      "expect": "exit0"
     }
   ]
 }
