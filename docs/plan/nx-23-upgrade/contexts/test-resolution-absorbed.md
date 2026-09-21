@@ -18,6 +18,7 @@
 
 - [test-resolution-absorbed.1] The shared test-time source resolution helper exists
 
+- [test-resolution-absorbed.2] The helper exports the pre-ordered plugin used by project configs
 ---
 
 ## Reservations
