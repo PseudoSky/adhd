@@ -1,4 +1,4 @@
-# test-changed-optin — STATE_NAME
+# test-changed-optin — Fail-safe file-level test selection delivered
 
 **Phase:** tests · **Kind:** work · **Depends on:** test-selection-revalidated · **Guard:** `node -e "const s=require(\"./package.json\").scripts;if(!s[\"test:changed\"]||!s[\"test:related\"])process.exit(1)" && ./node_modules/.bin/nx show projects | rg -q "backlog" && test -f docs/plan/nx-23-upgrade/TEST-SELECTION.md`
 
@@ -6,7 +6,32 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+A developer can run only the tests covering a changed file, cross-package coverage is preserved, and an empty selection fails loudly.
+
+---
+
+## Semantic distillation
+
+- INVERTED DESIGN, deliberately: the full suite stays the default; the narrow path is explicit opt-in. A forgotten override then runs MORE tests than needed — a wall-clock cost — instead of silently running fewer, which is a correctness cost.
+- The full suite is reached from five-plus invocation sites (commit gate, CI workflows, the all-targets script, the release path). None of them may inherit a narrowed default.
+- Zero selected is a FAILURE. This is the one guard that must never be relaxed.
+- `^build` stays in the test path. It was measured inconclusive for speed and is load-bearing for the four child-process projects.
+
+---
+
+## Contract promise
+
+```text
+added:    ["the opt-in fast-path scripts","docs/plan/nx-23-upgrade/TEST-SELECTION.md"]
+modified: ["package.json"]
+deleted:  []
+```
+
+---
+
+## Commit points
+
+- Commit the fast path + TEST-SELECTION.md post-guard.
 
 ---
 
@@ -31,6 +56,12 @@
 read_only:  ["docs/plan/nx-23-upgrade/SCOPE.md", "docs/plan/nx-23-upgrade/USE_CASES.md", "docs/plan/nx-23-upgrade/demo/DEMO.md", "docs/plan/nx-23-upgrade/demo/UNRESOLVED.md", "docs/plan/nx-23-upgrade/TOOLS.md", "docs/plan/nx-23-upgrade/APPROVAL.md", "docs/plan/nx-23-upgrade/contexts/_shared.md", "AGENTS.md", "CLAUDE.md", "nx.json", ".githooks/pre-commit", ".githooks/README.md"]
 mutates:    ["package.json", "docs/plan/nx-23-upgrade/TEST-SELECTION.md"]
 ```
+
+---
+
+## References & interfaces
+
+- [ref:fail-safe-fast-path] — the narrow fast path exits non-zero when it selects zero tests; the default path is never narrowed
 
 ---
 
