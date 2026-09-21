@@ -18,6 +18,7 @@
 
 - [audit-tests.1] The tests-phase audit guard exists
 
+- [audit-tests.2] Every tests-phase criterion passes
 ---
 
 ## Reservations
