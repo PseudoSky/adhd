@@ -21,6 +21,7 @@
 - [gate-triage-absorbed.2] The verdict record covers the apigen-cli target
 - [gate-triage-absorbed.3] The verdict record covers the java-javalin target
 - [gate-triage-absorbed.4] The verdict record covers the backlog target
+- [gate-triage-absorbed.5] The project graph loads with the affected targets resolvable
 ---
 
 ## Reservations
