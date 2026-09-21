@@ -1,1 +1,11 @@
-{}
+{
+  "nx-vitest-peer-range": {
+    "interface": "@nx/vitest peerDependencies.vitest",
+    "shape": "vitest: ^3.0.0 || ^4.0.0 - a hard ceiling: vitest 5.0.1 (latest published) is unreachable without an Nx major bump",
+    "provenance": "vendored-source",
+    "confidence": "vendored",
+    "resolved_version": "@nx/vitest@23.2.1",
+    "source": "node_modules/@nx/vitest/package.json",
+    "audit_check": "audit-final.iface-nx-vitest-peer-range"
+  }
+}
