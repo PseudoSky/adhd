@@ -47,6 +47,7 @@ deleted:  []
 - [audit-final.4] Conformance: the fast path fails loudly on zero selection
 - [audit-final.5] Conformance: every guard resolves its tool through a repo-local anchor
 - [audit-final.6] Interface: the vitest ceiling is the one the installed Nx plugin declares
+- [audit-final.7] Interface: the related selector is available in the installed test runner
 ---
 
 ## Reservations
