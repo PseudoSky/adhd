@@ -710,6 +710,121 @@
       "kind": "command",
       "cmd": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_final.py",
       "expect": "exit0"
+    },
+    {
+      "phase": "final",
+      "id": "dod.1",
+      "kind": "command",
+      "tier": 2,
+      "cmd": "./node_modules/.bin/nx --version",
+      "expect": "marker",
+      "marker": "23.2.1"
+    },
+    {
+      "phase": "final",
+      "id": "dod.2",
+      "kind": "command",
+      "tier": 2,
+      "cmd": "node -e \"const p=require('@nx/vitest/package.json');process.exit(p.peerDependencies.vitest.includes('^4.0.0')?0:1)\"",
+      "expect": "exit0"
+    },
+    {
+      "phase": "final",
+      "id": "dod.3",
+      "kind": "command",
+      "tier": 3,
+      "cmd": "./node_modules/.bin/nx run-many -t build --projects=agent-base-types,data-query-engine,agent-core-policy && echo BUILD_PASS",
+      "expect": "exit0"
+    },
+    {
+      "phase": "final",
+      "id": "dod.4",
+      "kind": "absent",
+      "tier": 0,
+      "pattern": "\"strict\"",
+      "paths": [
+        "tsconfig.base.json"
+      ]
+    },
+    {
+      "phase": "final",
+      "id": "dod.5",
+      "kind": "command",
+      "tier": 3,
+      "cmd": "pnpm run test:related -- packages/data/data-base-transforms/src/lib/date.ts > /tmp/nx-sel.txt; grep -q \"selected=\" /tmp/nx-sel.txt && node -e \"const t=require('fs').readFileSync('/tmp/nx-sel.txt','utf8');const m=t.match(/selected=(\\d+)\\/(\\d+)/);process.exit(m&&Number(m[1])<Number(m[2])?0:1)\"",
+      "expect": "exit0"
+    },
+    {
+      "phase": "final",
+      "id": "dod.6",
+      "kind": "command",
+      "tier": 3,
+      "cmd": "pnpm run test:related -- packages/data/data-base-transforms/src/index.ts > /tmp/nx-zero.txt 2>&1; test $? -ne 0 && grep -q \"no tests selected\" /tmp/nx-zero.txt",
+      "expect": "exit0"
+    },
+    {
+      "phase": "final",
+      "id": "dod.7",
+      "kind": "command",
+      "tier": 3,
+      "cmd": "pnpm run test:related -- packages/data/data-base-transforms/src/lib/date.ts | grep -q \"data-query-engine\"",
+      "expect": "exit0"
+    },
+    {
+      "phase": "final",
+      "id": "dod.8",
+      "kind": "command",
+      "tier": 2,
+      "cmd": "rg -q \"nx affected --target=test\" .githooks/pre-commit",
+      "expect": "exit0"
+    },
+    {
+      "phase": "final",
+      "id": "dod.9",
+      "kind": "command",
+      "tier": 2,
+      "cmd": "node -e \"const fs=require('fs'),p=require('path');function w(d,o=[]){for(const e of fs.readdirSync(d,{withFileTypes:true})){if(['node_modules','.git','dist','.nx'].includes(e.name))continue;const q=p.join(d,e.name);if(e.isDirectory())w(q,o);else if(e.name==='project.json')o.push(q);}return o;}const bad=w('.').filter(f=>/@nx\\/(vitest:test|vite:build|js:tsc|js:release-publish|eslint:lint)/.test(fs.readFileSync(f,'utf8')));if(bad.length){console.error(bad.join('\\n'));process.exit(1)}console.log('REMODEL_CLEAN')\"",
+      "expect": "exit0"
+    },
+    {
+      "phase": "final",
+      "id": "dod.10",
+      "kind": "command",
+      "tier": 2,
+      "cmd": "node -e \"process.exit(require('./nx.json').cacheDirectory==='.nx/cache'?0:1)\"",
+      "expect": "exit0"
+    },
+    {
+      "phase": "final",
+      "id": "dod.11",
+      "kind": "command",
+      "tier": 2,
+      "cmd": "test \"$(git rev-parse --abbrev-ref HEAD)\" = \"perf/nx-upgraded\" && echo ON_UPGRADE_BRANCH",
+      "expect": "exit0"
+    },
+    {
+      "phase": "final",
+      "id": "dod.12",
+      "kind": "command",
+      "tier": 2,
+      "cmd": "test -f tools/vite-plugins/source-resolution.mjs && node -e \"process.exit((require('./nx.json').targetDefaults.test.dependsOn||[]).includes('lint')?0:1)\" && echo ABSORBED",
+      "expect": "exit0"
+    },
+    {
+      "phase": "final",
+      "id": "dod.13",
+      "kind": "command",
+      "tier": 2,
+      "cmd": "node -e \"const fs=require('fs');const f=fs.readdirSync('docs/plan/nx-23-upgrade/scripts').filter(x=>/^guard_audit_.*[.]py$/.test(x));process.exit(f.length>=5?0:1)\"",
+      "expect": "exit0"
+    },
+    {
+      "id": "audit-final.3",
+      "phase": "final",
+      "tier": 3,
+      "kind": "command",
+      "cmd": "test -d packages/data/data-query-engine/dist && echo PARITY_OK",
+      "expect": "exit0"
     }
   ]
 }
