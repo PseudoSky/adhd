@@ -264,6 +264,13 @@
       "tier": 1,
       "kind": "exists",
       "path": "docs/plan/nx-23-upgrade/CACHE-ISOLATION.md"
+    },
+    {
+      "id": "audit-config.1",
+      "phase": "config",
+      "tier": 1,
+      "kind": "exists",
+      "path": "docs/plan/nx-23-upgrade/scripts/guard_audit_config.py"
     }
   ]
 }
