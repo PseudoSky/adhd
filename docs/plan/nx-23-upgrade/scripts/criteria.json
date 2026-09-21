@@ -197,6 +197,16 @@
       "paths": [
         "tsconfig.base.json"
       ]
+    },
+    {
+      "id": "tsconfig-shim-removal.3",
+      "phase": "config",
+      "tier": 0,
+      "kind": "absent",
+      "pattern": "ignoreDeprecations",
+      "paths": [
+        "tsconfig.base.json"
+      ]
     }
   ]
 }
