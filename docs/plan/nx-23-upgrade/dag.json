@@ -309,7 +309,9 @@
       "guard": "node -e \"const s=require(\\\"./package.json\\\").scripts;if(!s[\\\"test:changed\\\"]||!s[\\\"test:related\\\"])process.exit(1)\" && ./node_modules/.bin/nx show projects | rg -q \"backlog\" && test -f docs/plan/nx-23-upgrade/TEST-SELECTION.md",
       "artifacts": [
         "package.json",
-        "docs/plan/nx-23-upgrade/TEST-SELECTION.md"
+        "docs/plan/nx-23-upgrade/TEST-SELECTION.md",
+        "docs/plan/nx-23-upgrade/scripts/check-zero-selection.mjs",
+        "docs/plan/nx-23-upgrade/scripts/check-cross-package-selection.mjs"
       ],
       "context": "contexts/test-changed-optin.md",
       "notes": "Deliver the fail-safe design: full suite stays the default, the fast path is explicit opt-in, and a run that selects zero tests must FAIL rather than report success."
