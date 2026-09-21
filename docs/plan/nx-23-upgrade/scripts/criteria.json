@@ -680,6 +680,13 @@
       "tier": 1,
       "kind": "exists",
       "path": "docs/plan/nx-23-upgrade/TEST-SELECTION.md"
+    },
+    {
+      "id": "audit-tests.1",
+      "phase": "tests",
+      "tier": 1,
+      "kind": "exists",
+      "path": "docs/plan/nx-23-upgrade/scripts/guard_audit_tests.py"
     }
   ]
 }
