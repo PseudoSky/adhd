@@ -90,10 +90,23 @@ function walk(dir) {
   return out;
 }
 
+/**
+ * Internal rollout/tracking docs that are never shipped (absent from
+ * package.json's `files`) and describe the in-progress cutover itself, not
+ * the package's post-cutover surface. `STATE.md` in particular necessarily
+ * narrates the OLD/NEW-store transition by name (e.g. `cutover-target-v2.db`,
+ * the literal ETL output filename) while the rollout is in progress — that
+ * is the document's job, not a defect the gate should catch. It is deleted
+ * or archived once the cutover lands; excluding it here is not the same
+ * exemption this file's own header warns against for shipped docs, because
+ * this file never reaches a consumer.
+ */
+const INTERNAL_DOCS = new Set(['STATE.md']);
+
 /** The package's own top-level markdown — its spec surface, scanned alongside `src/`. */
 function packageDocs() {
   return readdirSync(PKG)
-    .filter((entry) => entry.endsWith('.md'))
+    .filter((entry) => entry.endsWith('.md') && !INTERNAL_DOCS.has(entry))
     .map((entry) => join(PKG, entry))
     .filter((full) => statSync(full).isFile());
 }

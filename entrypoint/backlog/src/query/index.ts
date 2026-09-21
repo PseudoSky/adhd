@@ -34,6 +34,10 @@
  *   ranking primitive (`rankByFusedRelevance`). `query.ts`'s `case 'similar':`
  *   dispatch calls `querySimilarView` directly — there is no second,
  *   embedding-only `view:'similar'` implementation left in `query.ts`.
+ * - `markdown.ts` — `query`'s `format:'markdown'` rendering (§6.5/§6.6,
+ *   DATA_MODEL.md §8): a pure re-serialization of the SAME `IIssueCard[]`
+ *   `format:'json'` already returns for `list`/`ready`/`stale`/`similar` —
+ *   never a second query path.
  *
  * **Reconciliation note for the write layer.** `write/create-issue.ts`
  * declares its OWN `ICreateIssueCard` (a narrower, always-fully-populated
@@ -61,3 +65,4 @@ export * from './query.js';
 export * from './views/registry.js';
 export * from './views/stats.js';
 export * from './views/semantic.js';
+export * from './markdown.js';

@@ -51,9 +51,9 @@
  * `query/paging-wire.spec.ts`, which spawns this same built bin. That file
  * belongs next to the paging contract it proves rather than here.
  */
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -146,6 +146,10 @@ beforeAll(() => {
   const seedData = body['data'] as Record<string, unknown>;
   seedUid = seedData['uid'] as string;
   expect(typeof seedUid).toBe('string');
+});
+
+afterAll(() => {
+  if (tmpRoot) rmSync(tmpRoot, { recursive: true, force: true });
 });
 
 afterEach(() => {

@@ -16,25 +16,56 @@
  * This suite is the GREEN half of that same red→green pair, made durable.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+// STATE.md A15: this file previously spawned the real `dist/index.js serve
+// --transport mcp` with a local `adhdRoot` (mkdtempSync) used ONLY as the
+// transport's `cwd` — never wired to `ADHD_ROOT`/`--namespace sandbox` — so
+// the real machine's global `embedding.enabled: true` config.yaml still
+// resolved through (confirmed: 10 real onnxruntime/CoreML hits in
+// isolation, across this file's 3 tests). Moved onto the canonical
+// sandbox helper.
+import {
+  mintBacklogSandbox,
+  stdioSpawnOptionsForSandbox,
+  type SandboxHandle,
+} from './test/helpers/spawn-backlog-bin.js';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
+/**
+ * Bounded poll on the actual condition a crash-recovery proof needs — the
+ * SIGKILLed pid has genuinely stopped existing (`process.kill(pid, 0)`
+ * throws `ESRCH`), not a fixed sleep (AGENTS.md §7 rule 3: "be deterministic
+ * without timing... never sleep/wall-clock" for concurrency proofs). Mirrors
+ * the deadline+poll shape used elsewhere in this package (`server.spec.ts`,
+ * `server.verbs.spec.ts`, `batch-adoption.spec.ts`, `web-ui.spec.ts`).
+ */
+async function waitForProcessExit(pid: number, deadlineMs = 10_000): Promise<void> {
+  const deadline = Date.now() + deadlineMs;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(pid, 0);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ESRCH') return;
+      throw err;
+    }
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  throw new Error(`pid ${pid} still alive ${deadlineMs}ms after SIGKILL`);
+}
 
-async function connect(adhdRoot: string, name: string): Promise<
+async function connect(sandbox: SandboxHandle, name: string): Promise<
   { ok: true; client: Client; transport: StdioClientTransport } | { ok: false; error: Error }
 > {
-  const transport = new StdioClientTransport({
-    command: 'node',
-    args: [DIST_INDEX, 'serve', '--transport', 'mcp'],
-    cwd: adhdRoot,
-    env: { ...(process.env as Record<string, string>), ADHD_BACKLOG_SCOPE: 'project' },
-  });
+  // Deliberately NO `ADHD_BACKLOG_SCOPE: 'project'` override here — see
+  // `serve.spec.ts`'s identical note: `scope: 'project'` resolves its base
+  // purely from `findProjectRoot(cwd)`, never honoring `adhdRoot`
+  // (a real, disclosed `@adhd/environment-builder` bug this task found).
+  // `--namespace sandbox` alone (default `global` scope, which DOES honor
+  // `adhdRoot`) fully isolates every spawn here.
+  const transport = new StdioClientTransport(
+    stdioSpawnOptionsForSandbox(sandbox, ['serve', '--transport', 'mcp'])
+  );
   const client = new Client({ name, version: '1.0.0' }, { capabilities: {} });
   try {
     await client.connect(transport);
@@ -47,21 +78,21 @@ async function connect(adhdRoot: string, name: string): Promise<
 }
 
 describe('backlog serve — [inv:singleton]: a second concurrent instance against the same store is refused, never races', () => {
-  let adhdRoot: string | undefined;
+  let sandbox: SandboxHandle | undefined;
 
   afterEach(async () => {
-    if (adhdRoot) rmSync(adhdRoot, { recursive: true, force: true });
-    adhdRoot = undefined;
+    if (sandbox) rmSync(sandbox.adhdRoot, { recursive: true, force: true });
+    sandbox = undefined;
   });
 
   it('GREEN: while instance A is live, a second `serve` (B) against the SAME store is refused and names A\'s pid — A is unaffected', async () => {
-    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-singleton-'));
+    sandbox = mintBacklogSandbox();
 
-    const a = await connect(adhdRoot, 'singleton-a');
+    const a = await connect(sandbox, 'singleton-a');
     expect(a.ok).toBe(true);
     if (!a.ok) return;
 
-    const b = await connect(adhdRoot, 'singleton-b');
+    const b = await connect(sandbox, 'singleton-b');
     expect(b.ok).toBe(false);
     if (b.ok) {
       await b.client.close().catch(() => undefined);
@@ -81,7 +112,11 @@ describe('backlog serve — [inv:singleton]: a second concurrent instance agains
     expect(stillUp.tools.length).toBeGreaterThan(0);
 
     // The lock file names A's own pid as holder for the whole window.
-    const lockPath = join(adhdRoot, '.adhd', 'backlog', 'production', 'data', 'backlog.db.serve.lock');
+    // Namespace-sandbox layout (unlike the old `ADHD_BACKLOG_SCOPE=project`
+    // scheme): `<adhdRoot>/backlog/sandbox/data/...`, no `.adhd`/`production`
+    // segments — mirrors `sandbox.dbPath` (`sandbox-path`'s own report) with
+    // `.serve.lock` appended, the exact suffix `serve-lock.ts` uses.
+    const lockPath = `${sandbox.dbPath}.serve.lock`;
     expect(existsSync(lockPath)).toBe(true);
     const holderPid = Number(readFileSync(lockPath, 'utf8').split('\n')[0]);
     expect(Number.isInteger(holderPid) && holderPid > 0).toBe(true);
@@ -91,9 +126,9 @@ describe('backlog serve — [inv:singleton]: a second concurrent instance agains
   }, 30_000);
 
   it('shutdown-window: while A is still draining (lock held, not yet released), a concurrent start is refused; once A fully closes, a fresh start succeeds', async () => {
-    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-singleton-shutdown-'));
+    sandbox = mintBacklogSandbox();
 
-    const a = await connect(adhdRoot, 'shutdown-a');
+    const a = await connect(sandbox, 'shutdown-a');
     expect(a.ok).toBe(true);
     if (!a.ok) return;
 
@@ -107,7 +142,7 @@ describe('backlog serve — [inv:singleton]: a second concurrent instance agains
     await a.client.close().catch(() => undefined);
     await a.transport.close().catch(() => undefined);
 
-    const c = await connect(adhdRoot, 'shutdown-c');
+    const c = await connect(sandbox, 'shutdown-c');
     expect(c.ok).toBe(true);
     if (c.ok) {
       await c.client.close().catch(() => undefined);
@@ -116,9 +151,9 @@ describe('backlog serve — [inv:singleton]: a second concurrent instance agains
   }, 30_000);
 
   it('crash recovery: a SIGKILLed instance\'s stale lock is reclaimed automatically by the next start, no manual cleanup required', async () => {
-    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-singleton-crash-'));
+    sandbox = mintBacklogSandbox();
 
-    const d = await connect(adhdRoot, 'crash-d');
+    const d = await connect(sandbox, 'crash-d');
     expect(d.ok).toBe(true);
     if (!d.ok) return;
     const pid = (d.transport as unknown as { _process?: { pid?: number } })._process?.pid;
@@ -128,10 +163,12 @@ describe('backlog serve — [inv:singleton]: a second concurrent instance agains
     // the normal store-close+lock-release path this test exists to bypass).
     // A crash never gets that chance; this is the "no chance to run cleanup
     // code" case serve-lock.ts's own doc comment is honest about.
-    if (pid) process.kill(pid, 'SIGKILL');
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    if (pid) {
+      process.kill(pid, 'SIGKILL');
+      await waitForProcessExit(pid);
+    }
 
-    const e = await connect(adhdRoot, 'crash-e');
+    const e = await connect(sandbox, 'crash-e');
     expect(e.ok).toBe(true);
     if (e.ok) {
       await e.client.close().catch(() => undefined);

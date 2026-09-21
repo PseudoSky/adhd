@@ -305,7 +305,7 @@ export interface BacklogConfig {
 
 export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
   envPrefixOverride: 'ADHD_BACKLOG',
-  namespaces: ['production'],
+  namespaces: ['production', 'test'], // 'production' MUST stay first — see below
   dirs: { data: { kind: 'data' }, cache: { kind: 'cache' } },
   files: { db: { in: 'data', name: 'backlog.db' } },
   config: {
@@ -331,6 +331,81 @@ per-project namespacing.
 if the embedding pipeline did not exist (every semantic query input answers a
 typed "not configured" error), so a host opts in deliberately and nothing is ever
 switched on implicitly (§9).
+
+### 6a. Namespace selection — explicit-parameter-first, never ambient
+
+Every store-open site resolves `scope` (global/project/system) through
+`resolveBacklogScope`'s documented precedence cascade (explicit param →
+`ADHD_BACKLOG_SCOPE` → `ADHD_ENV_SCOPE` → `'global'`), but `namespace` — the
+sibling axis `@adhd/environment` uses to pick a trailing path segment under
+that scope root (`<root>/backlog/<namespace>/…`) — had no selector at all
+originally: `buildBacklogEnv` hardcoded `namespace: 'production'` and
+`backlogEnvironmentSpec.namespaces` declared only that one value.
+
+`BuildBacklogEnvOptions.namespace` is a real function parameter, threaded CLI
+flag → `RunBacklogCliOpts`/`RunServeCommandOpts`/`StartOpts` →
+`BuildBacklogEnvOptions` → `EnvironmentOptions.namespace`. It is deliberately
+**explicit-parameter-first with no env-var fallback** — unlike `scope`'s
+cascade, there is no `ADHD_BACKLOG_NAMESPACE` env var, on purpose: an env var
+leaks across an entire shell session and inherits into every spawned child
+process, which is exactly the class of ambient state that caused real
+confusion in this codebase's own history (a persisted
+`embedding.enabled: true` config, a forgotten `ADHD_ROOT`). A namespace
+selection that can only ever come from an explicit parameter cannot be
+silently defeated by a stray environment variable the caller forgot was set.
+Omitted ⇒ `'production'` (`backlogEnvironmentSpec.namespaces`' first
+declared entry, per `@adhd/environment`'s own `options.namespace ??
+namespaces[0]` fallback — every existing caller that never passes this
+keeps resolving there, unchanged).
+
+**SPEC.md §5c superseded the original `--sandbox` boolean with an explicit
+`--namespace <value>` flag** — the surface described below is the CURRENT
+one; `--sandbox` no longer exists (hard removal, no deprecated alias, D7).
+`backlogEnvironmentSpec.namespaces` declares THREE values:
+`['production', 'test', 'sandbox']`. `'test'` is a deliberately-persisted,
+non-ephemeral namespace (e.g. a shared CI/team store expected to accumulate
+state over time); `'sandbox'` is its own, separately-declared namespace —
+not an alias for `'test'` — because it carries an entirely different
+lifecycle: `--namespace sandbox` layers ephemeral-root-minting on top of
+namespace selection (a freshly-minted `adhdRoot`, `BuildBacklogEnvOptions`'s
+broader test-isolation knob the whole test suite depends on, and the one
+`resolveIrCacheFile`'s own leak fix is guarded on), so the resulting store
+path carries two independent, structural isolation layers
+(`<fresh-tmpdir>/backlog/sandbox/data/backlog.db`) rather than one. This
+closes `BUG-BACKLOG-SANDBOX-SILENT-BYPASS-001`'s bug *class* (an already-set
+`ADHD_ROOT` silently defeating the sandbox flag, since nothing read
+`process.env['ADHD_ROOT']` and the isolation swap ran unconditionally): even
+if a future regression reintroduces an unconditional `adhdRoot` bypass, an
+explicit `namespace: 'sandbox'` parameter still cannot be silently overridden
+the way a `process.env` read can, so `--namespace sandbox` would still
+resolve under the `sandbox` namespace segment rather than `production`.
+
+`--namespace sandbox` additionally writes a REAL `config.yaml` (not an
+in-code override) at the resolved sandbox root with `embedding.enabled:
+false`, on every invocation, before `buildBacklogEnv` ever reads file layers
+(SPEC.md §5c, D8) — this closes the gap where an isolated invocation's
+`embedding.enabled: false` was previously an ACCIDENT of an empty directory
+(no `config.yaml` existed yet), not a deliberate guarantee: a stray
+pre-existing `config.yaml` at that exact path would otherwise silently
+reintroduce the config-cascade bleed-through this whole mechanism exists to
+prevent. `ADHD_BACKLOG_EMBEDDING_ENABLED` (the env var) still outranks this
+written file — an explicit env var is a deliberate ask, a stray file is not.
+
+An unrecognized `--namespace` value is rejected BEFORE dispatch with the same
+`{ok:false,error:{code:'invalid_argument',...}}` envelope every other CLI
+failure uses (SPEC.md §5c, D3) — never silently falling through to the
+default or propagating an ungoverned namespace string into
+`EnvironmentOptions.namespace`.
+
+One remaining, deliberately out-of-scope precedence hole: an ambient
+`ADHD_BACKLOG_DATABASE_PATH` (→ `config.db.path`, `resolveBacklogDbPath`'s
+first-precedence source) still overrides namespace selection outright,
+since it short-circuits path derivation entirely before `namespace` is ever
+consulted. That is pre-existing `db.path` precedence (`§6`'s config table
+above), not a namespace-selection concern.
+
+Real, dedicated architecture review of this design against what actually
+shipped is tracked in `STATE.md` (item A11) as an explicit follow-up.
 
 ## 7. `server.ts` / `cli.ts` — apigen mount wiring
 

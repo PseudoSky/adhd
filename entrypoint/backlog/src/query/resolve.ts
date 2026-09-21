@@ -37,6 +37,7 @@ import type {
   NodeRecord,
 } from '@adhd/sox-graph-store';
 import {
+  BacklogValidationError,
   CatalogNotFoundError,
   IssueNotFoundError,
   StaleSupersedeError,
@@ -329,6 +330,127 @@ async function relIsSourceDirected(
     typeof meta?.['source_kind'] === 'string' &&
     meta['source_kind'] === expectedKind
   );
+}
+
+// ---------------------------------------------------------------------------
+// BUG-BACKLOG-QUERY-UNKNOWN-FILTER-SILENT-001 — validating `kind`/`status`/
+// `priority` filter values against the catalog's own live rows.
+//
+// `kind`/`status`/`priority` are OPEN string vocabularies (DATA_MODEL.md
+// §0.2/§2) — there is no fixed enum to `assertKnown*` a filter value against,
+// unlike `IIssueField`. But they are NOT unbounded either: each one's real
+// value space is exactly the set of live catalog rows of that kind. A filter
+// value that matches NO live row (neither by uid nor by name) is a typo, not
+// a legitimate "no issues currently have this value" read — and previously
+// both cases returned the byte-identical `{total:0, items:[]}`, with zero
+// signal to the caller which one happened. `query.ts`'s `queryList`/
+// `queryReady`/`queryStale`/`queryGraph`/`queryOrder` (via
+// `resolveEdgeScopedFilterIds`) AND `views/semantic.ts`'s `view:'similar'`
+// (via `resolveSimilarFilterIds`) share this ONE validation so the two read
+// paths cannot silently diverge on which filter values are "real."
+// ---------------------------------------------------------------------------
+
+/** Every live catalog row's `name` for a given open-vocabulary catalog kind — used only to VALIDATE a filter value against what genuinely exists, never to constrain what a caller may create. */
+export async function fetchCatalogNames(
+  graph: GraphBackend,
+  catalogKind: 'kind' | 'status' | 'priority'
+): Promise<string[]> {
+  const rows = await graph.queryNodes({ kind: catalogKind, liveOnly: true });
+  return rows
+    .map((r) => r.name)
+    .filter((n): n is string => typeof n === 'string');
+}
+
+/** Plain Levenshtein edit distance — small, dependency-free, and cheap enough for a typically single/low-double-digit-row catalog. */
+function levenshteinDistance(a: string, b: string): number {
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  const dp: number[][] = Array.from({ length: rows }, () => new Array<number>(cols).fill(0));
+  for (let i = 0; i < rows; i += 1) dp[i][0] = i;
+  for (let j = 0; j < cols; j += 1) dp[0][j] = j;
+  for (let i = 1; i < rows; i += 1) {
+    for (let j = 1; j < cols; j += 1) {
+      dp[i][j] =
+        a[i - 1] === b[j - 1]
+          ? dp[i - 1][j - 1]
+          : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+/**
+ * Nearest-name suggestions for an unresolved filter value — case-insensitive
+ * edit distance over the catalog's OWN live names, bounded to a distance
+ * proportional to the typo'd value's own length so an unrelated short
+ * catalog name is never suggested for a long, clearly-different value.
+ * Sorted nearest-first, capped at `max`.
+ */
+export function suggestClosestCatalogNames(
+  value: string,
+  candidates: readonly string[],
+  max = 3
+): string[] {
+  const threshold = Math.max(2, Math.ceil(value.length / 2));
+  return candidates
+    .map((candidate) => ({
+      candidate,
+      distance: levenshteinDistance(value.toLowerCase(), candidate.toLowerCase()),
+    }))
+    .filter((entry) => entry.distance <= threshold)
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, max)
+    .map((entry) => entry.candidate);
+}
+
+/**
+ * Resolves a multi-valued `kind`/`status`/`priority` filter dimension
+ * (OR-union across `refs`), rejecting with a `BacklogValidationError` naming
+ * every ref that matches NO live catalog row of that kind — see this
+ * section's top doc comment for the full rationale. Never rejects a ref that
+ * resolves to a real row with zero owning issues; that still contributes an
+ * empty set exactly as a plain unresolved-name read would.
+ */
+export async function resolveValidatedCatalogFilter(
+  graph: GraphBackend,
+  input: {
+    rel: string;
+    catalogKind: 'kind' | 'status' | 'priority';
+    field: string;
+    refs: readonly string[];
+  }
+): Promise<Set<number>> {
+  const catalogNames = await fetchCatalogNames(graph, input.catalogKind);
+  const union = new Set<number>();
+  const unknown: string[] = [];
+  for (const ref of input.refs) {
+    const resolved = await tryResolveRef(graph, input.catalogKind, ref);
+    if (!resolved) {
+      unknown.push(ref);
+      continue;
+    }
+    const edges = await graph.getEdges({ dst: resolved.id, rel: input.rel });
+    for (const e of edges) union.add(e.src);
+  }
+  if (unknown.length > 0) {
+    const existing =
+      catalogNames.length > 0
+        ? catalogNames.map((n) => `"${n}"`).join(', ')
+        : '(no live rows exist for this catalog yet)';
+    const detail = unknown
+      .map((ref) => {
+        const suggestions = suggestClosestCatalogNames(ref, catalogNames);
+        return suggestions.length > 0
+          ? `"${ref}" (did you mean ${suggestions.map((s) => `"${s}"`).join(' or ')}?)`
+          : `"${ref}"`;
+      })
+      .join(', ');
+    throw new BacklogValidationError(
+      input.field,
+      `unknown ${input.catalogKind} value(s): ${detail} — no live "${input.catalogKind}" catalog row matches (existing ${input.catalogKind} values: ${existing})`
+    );
+  }
+  return union;
 }
 
 /** Intersect a list of candidate-rowid sets (SPEC.md §6.5 rule 3: "AND semantics — an issue must satisfy every edge-scoped filter given"). An empty input list means "no edge-scoped filter was given" — returns `undefined` (no restriction), never an empty set. */

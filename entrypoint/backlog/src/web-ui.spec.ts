@@ -90,11 +90,27 @@ describe('backlog web ui (nx serve backlog seam)', () => {
         String(apiPort),
         '--web-port',
         String(webPort),
+        // STATE.md A14: this file previously isolated ONLY the DATA path
+        // (ADHD_BACKLOG_DATABASE_PATH below), never CONFIG resolution — the
+        // real machine's global config.yaml (embedding.enabled: true) still
+        // resolved through, so this real `serve --transport http` spawn
+        // silently paid a real ONNX/fastembed model load (confirmed by
+        // direct reproduction: real CoreML/onnxruntime warnings). `--sandbox`
+        // here maps to run-web-ui.mjs's own `--namespace sandbox` passthrough
+        // (SPEC.md §5c) — it mints its OWN isolated adhdRoot and writes a
+        // real config.yaml with embedding.enabled: false at that root,
+        // exactly like cli.spec.ts's now-fixed `runBin` harness does.
+        '--sandbox',
       ],
       {
         stdio: ['ignore', 'pipe', 'pipe'],
         env: {
           ...process.env,
+          // Still set explicitly: ADHD_BACKLOG_DATABASE_PATH outranks the
+          // sandbox namespace's own resolved db path (BUG-002's precedence
+          // order), so this test keeps its own well-known, already-asserted
+          // `storeDir` layout regardless of which adhdRoot `--namespace
+          // sandbox` happens to mint underneath it.
           ADHD_BACKLOG_DATABASE_PATH: join(storeDir, 'backlog.db'),
         },
       }

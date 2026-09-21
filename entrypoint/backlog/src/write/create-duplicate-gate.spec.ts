@@ -3,39 +3,54 @@
  * duplicate gate (SPEC.md §6.4, §8 AC-19) and its live-path sibling
  * criterion (§8 AC-2).
  *
- * **Real components, real embeddings, no fakes.** Every store here is
- * genuine: a real `GraphBackend` (`@adhd/sox-graph-store`, via
+ * **Real components throughout, except the embedding model.** Every store
+ * here is genuine: a real `GraphBackend` (`@adhd/sox-graph-store`, via
  * `openTestIssueStore`), the real production embedding wiring
  * (`bootstrap.ts`'s `bootstrapSemanticStoreMembers`, the same function
- * `api.ts` calls for a live host) resolving a real `@adhd/sox-embedding-provider`
- * fastembed model into a real `@adhd/sox-vector-store` Turso vector space,
- * fused into a real, unmodified `StoreSearchBackend`
+ * `api.ts` calls for a live host), a real `@adhd/sox-vector-store` Turso
+ * vector space, fused into a real, unmodified `StoreSearchBackend`
  * (`@adhd/sox-hybrid-search`) — and real issues written through the real
- * `createIssue` write verb — never a mock of the scan, the store, the
- * embedding model, or `createIssue` itself.
+ * `createIssue` write verb — never a mock of the scan, the store, or
+ * `createIssue` itself. Embeddings mocked here — explicit, scoped user
+ * authorization (see entrypoint/backlog/STATE.md), covers embedding cost
+ * only.
  *
- * `create-issue.ts`'s `scanForDuplicates` reads the vector channel's raw
- * cosine (`StoreSearchBackend.search`'s `vecScore`) as the ONLY score it
- * compares against a project's `dedupeThreshold` (see that function's own
- * doc comment) — a rank-fused score cannot be converted into a similarity,
- * and falling back to `textScore` would reintroduce a false-positive class.
- * So a calibrated similarity, and therefore every candidate this suite
- * asserts on, requires a real vector channel: this file bootstraps one via
- * the same code path a live host uses, rather than standing up a hand-built
- * or empty backend. Model load is the slow part of every test here (cold
- * ONNX init, cached on disk at `~/.cache/sox/models` after the first run) —
- * that is setup, not a reason to gate or skip (AGENTS.md "Live testing is
- * mandatory": fastembed is local, free, and reachable with no network, so
- * none of the narrow env-flag exceptions apply).
+ * **Why the fake preserves every assertion's teeth.** `create-issue.ts`'s
+ * `scanForDuplicates` reads the vector channel's raw cosine
+ * (`StoreSearchBackend.search`'s `vecScore`) against a project's
+ * `dedupeThreshold` — but EVERY duplicate/near-duplicate case this suite
+ * exercises re-files BYTE-IDENTICAL title/body text, so the exact model
+ * used to embed it is irrelevant to whether it crosses the threshold: any
+ * deterministic embedder maps identical text to an identical vector, whose
+ * cosine similarity to itself is exactly 1.0 regardless of which model
+ * produced it. No test in this file asserts a ranking or a similarity
+ * SCORE between two genuinely DIFFERENT, non-identical texts (that
+ * distinguishing-power proof belongs to `text-routing.spec.ts`'s
+ * paraphrase test and `rag-e2e.spec.ts`, neither of which is touched by
+ * this change) — so a negative-control fake that collides every input onto
+ * the same vector would not falsify any assertion here either, precisely
+ * BECAUSE this file's assertions are equality-shaped (duplicate gate
+ * outcome, write counts, audit rows), not ranking-shaped. What IS still
+ * proven for real: the full production wiring path
+ * (`bootstrapSemanticStoreMembers` → real Turso vector store →
+ * `StoreSearchBackend` → `scanForDuplicates` → `createIssue`'s
+ * abort/force/comment branches → real `node`/`edge` table writes).
  *
  * **The "writes nothing" proof has teeth.** `countIssueNodes`/`countAuditRows`
  * read the real `node`/`edge` tables directly (never trust the return value
  * alone) before and after every suppressed/commented call.
  */
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BacklogConfig } from '../env.js';
 import { bootstrapSemanticStoreMembers } from './bootstrap.js';
+import { createFakeEmbeddingModule } from '../test/helpers/fake-embedding-provider.js';
+
+// Embeddings mocked here — explicit, scoped user authorization (see
+// entrypoint/backlog/STATE.md), covers embedding cost only. Intercepts the
+// `import('@adhd/sox-embedding-provider')` specifier `bootstrap.ts`'s
+// `loadOptional` seam resolves at runtime.
+vi.mock('@adhd/sox-embedding-provider', () => createFakeEmbeddingModule());
 import {
   openTestIssueStore,
   removeTestIssueStoreDir,
@@ -51,8 +66,8 @@ import {
 import { InvalidArgumentError } from './errors.js';
 import type { IWriteStoreHandle } from './tx.js';
 
-/** Model load is the slow part (cold ONNX init); every test in this file shares one budget for it. */
-const DUP_GATE_TIMEOUT = 180_000;
+/** No cold ONNX model init anymore — the fake never touches disk/network — but the real Turso vector-store round-trip still needs headroom. */
+const DUP_GATE_TIMEOUT = 30_000;
 
 const EMBEDDING_CFG: BacklogConfig['embedding'] = {
   enabled: true,

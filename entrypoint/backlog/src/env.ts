@@ -33,7 +33,24 @@ export interface BacklogConfig {
 
 export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
   envPrefixOverride: 'ADHD_BACKLOG',
-  namespaces: ['production'],
+  // `'production'` MUST stay first — `@adhd/environment`'s own resolver
+  // (`environment-builder/src/snapshot.ts`: `options.namespace ?? namespaces[0]`)
+  // falls back to the FIRST declared namespace whenever a caller omits
+  // `namespace` entirely, so every existing caller of `buildBacklogEnv` (every
+  // production CLI/server invocation, none of which pass `namespace`) depends
+  // on this ordering to keep resolving the real store.
+  //
+  // `'test'` is a deliberately-PERSISTED, non-ephemeral namespace — suited to
+  // something like a shared CI/team store expected to accumulate state
+  // across many invocations over time. `'sandbox'` (SPEC.md §5c, D4) is its
+  // own THIRD declared namespace, not an alias for `'test'`: it layers
+  // ephemeral-root-minting on top of namespace selection (cli.ts's
+  // `--namespace sandbox` handling) — a fresh, throwaway-by-construction
+  // store minted per invocation. The two lifecycles are deliberately kept
+  // distinguishable by namespace name, never folded into one directory
+  // segment. Neither `'test'` nor `'sandbox'` is ever selected by default —
+  // both require an explicit `--namespace <value>` / `BuildBacklogEnvOptions.namespace`.
+  namespaces: ['production', 'test', 'sandbox'],
   dirs: {
     data: { kind: 'data' },
     // BUG-CACHE-CWD-001: the apigen extract-stage IR-cache root. `kind:
@@ -122,19 +139,31 @@ export function resolveBacklogScope(explicit?: Scope): Scope {
  * `instanceId` exist purely for test isolation (constructing an `Environment`
  * rooted at a temp directory instead of the real machine's `~/.adhd`), mirror
  * `EnvironmentOptions`'s own test-isolation fields.
+ *
+ * `namespace` is EXPLICIT-PARAMETER-FIRST, deliberately with no env-var
+ * fallback (unlike `scope`'s `resolveBacklogScope` cascade above) — a
+ * namespace selection must be threaded as a real function parameter (CLI
+ * flag → this field → `EnvironmentOptions.namespace`), never resolved from
+ * ambient `process.env`, so it can never be silently defeated by a shell
+ * variable a caller forgot was set the way `ADHD_ROOT` previously defeated
+ * `--sandbox` (`BUG-BACKLOG-SANDBOX-SILENT-BYPASS-001`, cli.ts). Omitted ⇒
+ * `'production'` (the first-declared namespace — see `backlogEnvironmentSpec`
+ * — every existing caller that never passes this keeps resolving there,
+ * unchanged).
  */
 export interface BuildBacklogEnvOptions {
   scope?: Scope;
   adhdRoot?: string;
   cwd?: string;
   instanceId?: string;
+  namespace?: string;
 }
 
 export function buildBacklogEnv(
   options: BuildBacklogEnvOptions = {}
 ): Environment<BacklogConfig> {
   const envOptions: EnvironmentOptions = {
-    namespace: 'production',
+    namespace: options.namespace ?? 'production',
     scope: resolveBacklogScope(options.scope),
   };
   if (options.adhdRoot !== undefined) envOptions.adhdRoot = options.adhdRoot;

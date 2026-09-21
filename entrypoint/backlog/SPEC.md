@@ -9,7 +9,11 @@ npm packages.
 **This is the application layer, built fresh against the sox library tier** —
 there is no coexistence with anything else, no dual-write bridge, and no
 gradual deprecation window. Nothing about this build is staged against, or
-constrained by, an earlier surface.
+constrained by, an earlier surface. The prior corpus is carried forward exactly
+once, by the cutover ETL (§7a), into a freshly created store file — the file it
+reads from is never mutated in place, and there is no code path anywhere in
+this package that writes this schema's node/edge shapes onto an old-schema
+file.
 
 Library versions (verified on npm): `@adhd/sox-graph-store@0.9.1` (the 0.9.1
 patch surfaces `NodeRecord.uid` + `getNodeByUid` — the stable-identity correction,
@@ -950,6 +954,831 @@ Primitives: `queryNodes`, `countNodes`, `countBy`, `getNodesByIds`, `getEdges`
 vector-only); the embedding-only path is `searchRanked({vec, signals:[{vec}]})`.
 A title/body text match surfaces even when its vector is not nearest.
 
+**`view:'similar'` requires `filter.anchor` OR `filter.semantic`** (exactly
+one seed, either the uid of a reference issue whose own title+body becomes
+the query text, or free text supplied directly) — neither given throws
+`InvalidArgumentError('filter', ...)`. It also requires a configured search
+backend (an embedding/vector provider injected into the store); with none
+configured it throws `InvalidArgumentError('semantic', ...)` rather than
+silently degrading to grep. The anchor issue itself is always excluded from
+its own results.
+
+### 5b. Lazy semantic-backend init (DEBT-BACKLOG-CLI-EAGER-EMBEDDING-001)
+
+**The defect.** Two independent sites bootstrap the real embedding/vector
+stack unconditionally, on every verb dispatch, regardless of whether that
+verb's own input ever touches the semantic channel:
+
+1. `cli.ts`'s `getCtx()` and `server.ts`'s `startBacklogServer` each
+   unconditionally `await enableSemanticSearchFromConfig(store,
+   env.config.embedding)` (`store/semantic-search.ts`) immediately after
+   opening the store — before any verb has even been selected.
+2. `api.ts`'s `writeHandle`/`queryHandle` each unconditionally `await
+   bootstrapSemanticStoreMembers(ctx.store.adapter, ctx.store.graph,
+   ctx.env.config.embedding)` (`write/bootstrap.ts`) — and EVERY write verb
+   (`create`, `update`, `transition`, `claim`, `relate`, `move`, `delete`,
+   `upsertProject`, `upsertComponent`, `upsertLocation`, `rmLocation`) and the
+   `query` verb call one of these two functions unconditionally.
+
+With `embedding.enabled: true` — the real, deliberate production setting;
+disabling it is not an available fix — both sites resolve a cold ONNX
+(`fastembed`/`bge-base-en-v1.5`) model load and a Turso vector-space open on
+**every process invocation**, independent of what the invoked verb does.
+Measured cost: 1.3–2.5s+ added to every command. For the CLI (a one-shot
+process — each command is a fresh process, so a per-adapter memo cache pays
+its "once" cost on literally every invocation) this means `claim`,
+`transition`, `delete`, `move`, `relate`, and every `upsert*`/`rmLocation`
+call — none of which ever read `handle.search`/`handle.embedding` — pay the
+full cost anyway. Worse: sites 1 and 2 are two structurally separate
+bootstraps (`bootstrapSemanticBackend` in `store/semantic-search.ts` vs.
+`deriveMembers` in `write/bootstrap.ts`), each independently calling
+`createEmbeddingProvider`/`openTursoVectorStore` — so today, `create`/`update`
+with embedding enabled pay the cold-load cost **twice**, sequentially, one
+via `getCtx()` and a second, distinct one via `writeHandle`.
+
+**Why both sites exist (do not collapse them — that is the §7a cutover's
+job, not this fix's).** `write/bootstrap.ts`'s own header states it is
+*deliberately* not built on `store/semantic-search.ts` — that module is
+"on the deletion list for an imminent hard cutover" and is coupled to types
+outside this data model. Tracing every consumer confirms the two paths now
+serve genuinely disjoint purposes:
+
+- `handle.search` / `handle.embedding` (`write/bootstrap.ts`'s
+  `bootstrapSemanticStoreMembers`, memoized per `StoreAdapter` in its own
+  `membersCache` `WeakMap`) is what every REAL semantic operation reads
+  today: `create-issue.ts`'s duplicate-scan gate (`scanForDuplicates`,
+  `handle.search`), `embedding-observer.ts`'s on-write embed round-trip for
+  both `create` (`create-issue.ts`) and `update` (`write/update.ts`,
+  `handle.embedding`), `query/query.ts`'s explicit `filter.semantic`
+  branch (`queryList`, `handle.search`), and `query/views/semantic.ts`'s
+  `view:'similar'` (`handle.search`).
+- The old singleton (`store/semantic-search.ts`'s
+  `configureSemanticBackend`/`isSemanticSearchReadable`) has exactly ONE
+  live consumer left: `query/query.ts`'s `resolveTextInput`, which decides
+  whether a bare `text` positional (the shared CLI-`search`/MCP/HTTP
+  free-text field, §6) auto-routes to `semantic` or `grep`
+  (`useSemantic = isSemanticSearchReadable() && handle.search !==
+  undefined`). Nothing else in the live 14-verb surface reads it —
+  `filter.semantic`, `filter.anchor`, and `view:'similar'` all gate on
+  `handle.search` alone, never on the singleton.
+
+Because `resolveTextInput`'s routing genuinely depends on the singleton
+being populated, the fix cannot simply delete the `enableSemanticSearchFromConfig`
+call sites — that would silently and permanently route every `text` query to
+`grep`, even with a fully configured, fully populated semantic backend. Both
+bootstraps must become lazy, together, gated on the same need-predicate.
+
+**The fix: a single lazy gate, called only when a verb's own input needs
+it.**
+
+1. **Need is structural, not a maintained list.** A verb needs the semantic
+   backend live iff it is `create` or `update` (on-write embedding — the
+   dup-scan gate is a real read even when the write never later provides a
+   `filter.semantic`), OR it is `query` with input matching the SAME
+   "semantic inputs" vocabulary `env.ts`'s `embedding.enabled` doc comment
+   already names: `filter.semantic`, `filter.anchor`, `view:'similar'`,
+   `sort:'relevance'`, `fields` containing `'_vector'` — **plus** a bare
+   `text` positional (§6), because deciding whether `text` auto-routes to
+   `semantic` or `grep` itself requires knowing whether the backend is
+   live. `get`, `lookup`, `transition`, `claim`, `relate`, `move`, `delete`,
+   `upsertProject`, `upsertComponent`, `upsertLocation`, and `rmLocation`
+   never need it — none of their write/query handles ever read
+   `search`/`embedding`.
+2. **One combined accessor, memoized per adapter, run in parallel.**
+   `api.ts` gains `ensureSemanticReady(ctx: BacklogCtx):
+   Promise<SemanticStoreMembers>` — the sole call site for BOTH bootstraps.
+   It runs `bootstrapSemanticStoreMembers(...)` (already self-memoized via
+   its own `membersCache`) and a NEW twin memo wrapping
+   `enableSemanticSearchFromConfig(ctx.store, ctx.env.config.embedding)`
+   (a second `WeakMap<StoreAdapter, Promise<void>>`, local to `api.ts` —
+   `write/bootstrap.ts` must NOT import `store/semantic-search.ts`, per its
+   own header) via `Promise.all`, so the two independent cold loads run
+   concurrently rather than back-to-back, incidentally fixing the
+   sequential-double-cost defect noted above as a side effect. Neither
+   underlying function's own "never throws" contract changes; `Promise.all`
+   over two promises that individually never reject cannot itself reject.
+3. **`writeHandle`/`queryHandle` take an explicit `needsSemantic: boolean`
+   and only call `ensureSemanticReady` when it is `true`; false skips the
+   accessor entirely and returns a handle whose `search`/`embedding` are
+   absent** — the exact same "absent means unconfigured" shape these
+   handles already produce today whenever the backend fails to start
+   (BUG-045's rule, `api.ts`'s existing `writeHandle`/`queryHandle` doc
+   comments), never a stub. The boolean is computed at each of `api.ts`'s
+   14 verb call sites — `true`/`false` literals for the 12 verbs whose need
+   is fixed regardless of input, and `queryNeedsSemanticBackend(input)` (a
+   new pure predicate exported from `query/query.ts`, next to
+   `resolveTextInput`) for `query`, whose need depends on the caller's
+   input shape. This keeps "what needs it" visible at the exact call site
+   that wires each verb, rather than a separately maintained list that
+   drifts as verbs are added.
+4. **`getCtx()` (`cli.ts`) and `startBacklogServer` (`server.ts`) stop
+   calling `enableSemanticSearchFromConfig` entirely.** Opening the store
+   no longer touches the embedding stack at all; only a verb dispatch that
+   actually needs it does, via step 2/3 above.
+
+**Never-throws is preserved exactly.** `ensureSemanticReady` performs no
+error handling of its own — both `bootstrapSemanticStoreMembers` and
+`enableSemanticSearchFromConfig` already swallow every failure internally
+(log + degrade to absent members / `null`, §5a's and this section's own
+citations), so a `create` whose embedding backend is broken still writes
+the issue successfully with `handle.embedding` absent, exactly as before
+this fix, and a `claim`/`transition`/`delete` never even attempts the
+bootstrap, broken or not.
+
+**Implementation plan** (no design decisions left open — execute exactly):
+
+- `entrypoint/backlog/src/api.ts`:
+  - Add `import type { StoreAdapter } from '@adhd/sox-store-adapter';` and
+    `import { enableSemanticSearchFromConfig } from './store/semantic-search.js';`
+    and `import type { SemanticStoreMembers } from './write/bootstrap.js';`
+    (already imports `bootstrapSemanticStoreMembers` from the same module —
+    add the type to that same import line) and
+    `import { queryNeedsSemanticBackend } from './query/query.js';` (added
+    alongside the existing `queryIssuesWithMeta` import from the same file).
+  - Add, near the existing `writeHandle`/`queryHandle`:
+    ```ts
+    const legacySingletonReady = new WeakMap<StoreAdapter, Promise<void>>();
+
+    async function ensureSemanticReady(
+      ctx: BacklogCtx
+    ): Promise<SemanticStoreMembers> {
+      let legacy = legacySingletonReady.get(ctx.store.adapter);
+      if (!legacy) {
+        legacy = enableSemanticSearchFromConfig(
+          ctx.store,
+          ctx.env.config.embedding
+        ).then(() => undefined);
+        legacySingletonReady.set(ctx.store.adapter, legacy);
+      }
+      const [members] = await Promise.all([
+        bootstrapSemanticStoreMembers(
+          ctx.store.adapter,
+          ctx.store.graph,
+          ctx.env.config.embedding
+        ),
+        legacy,
+      ]);
+      return members;
+    }
+    ```
+  - Change `writeHandle`'s signature to `(ctx: BacklogCtx, opts: {
+    needsSemantic: boolean })` and its body to
+    `const { search, embedding } = opts.needsSemantic ? await ensureSemanticReady(ctx) : {};`
+    (delete its direct `bootstrapSemanticStoreMembers` call). Same shape
+    for `queryHandle`: `(ctx: BacklogCtx, opts: { needsSemantic: boolean })`,
+    body `const { search } = opts.needsSemantic ? await ensureSemanticReady(ctx) : {};`.
+  - Update every call site:
+    - `create` → `writeHandle(ctx, { needsSemantic: true })`
+    - `update` → `writeHandle(ctx, { needsSemantic: true })`
+    - `transition`, `claim`, `relate`, `move`, `remove` (the `delete` verb),
+      `upsertProject`, `upsertComponent`, `upsertLocation`, `rmLocation` →
+      `writeHandle(ctx, { needsSemantic: false })`
+    - `query` → `queryHandle(ctx, { needsSemantic: queryNeedsSemanticBackend(input) })`
+- `entrypoint/backlog/src/query/query.ts`: add and export, next to
+  `resolveTextInput`:
+  ```ts
+  export function queryNeedsSemanticBackend(input: IIssueQueryInput): boolean {
+    return (
+      input.text !== undefined ||
+      input.filter?.semantic !== undefined ||
+      input.filter?.anchor !== undefined ||
+      input.view === 'similar' ||
+      input.sort === 'relevance' ||
+      (input.fields ?? []).includes('_vector')
+    );
+  }
+  ```
+- `entrypoint/backlog/src/cli.ts`: in `getCtx()`, delete the
+  `await enableSemanticSearchFromConfig(store, env.config.embedding);` line
+  and its doc comment (the concern it documented is now `api.ts`'s), and
+  remove the now-unused `enableSemanticSearchFromConfig` import.
+- `entrypoint/backlog/src/server.ts`: in `startBacklogServer`, delete the
+  `await enableSemanticSearchFromConfig(store, env.config.embedding);` line
+  (line 833) and its doc comment, and remove the now-unused import. The
+  surrounding `try/catch`/serve-lock-release structure is unchanged — the
+  `try` block still exists for `openGraphBacklogStore` itself.
+- New test file `entrypoint/backlog/src/api.semantic-laziness.spec.ts`
+  (in-process, real store, real `BacklogCtx` built via `buildBacklogEnv({
+  ..., namespace: 'test' })` — the A10 test-isolation namespace, never an
+  env-var override — against a temp `dbPath`; `vi.mock('@adhd/sox-embedding-provider',
+  () => createFakeEmbeddingModule())` from
+  `src/test/helpers/fake-embedding-provider.ts`, with
+  `createEmbeddingProvider` wrapped in a `vi.fn()` spy so the test asserts
+  an **invocation count**, never wall-clock):
+  - `embedding.enabled: true` (config), `claim`/`transition`/`delete`/`move`/
+    `relate`/`upsertProject`/`upsertComponent`/`upsertLocation`/`rmLocation`
+    each called once against a real `BacklogCtx` → assert the
+    `createEmbeddingProvider` spy call count is `0` after each. (Proves
+    §5b point 1's "never needed" set.)
+  - `create` called once → assert the spy call count is exactly `1` (not
+    `0`, not `2` — proving the sequential-double-bootstrap defect is also
+    fixed) and that the created issue's stored `embedModel` metadata is
+    the fake provider's `FAKE_EMBEDDING_MODEL_ID` (proves on-write embedding
+    still genuinely runs).
+  - `update` (a body-changing edit) called once on an existing issue →
+    assert the spy call count stays at `1` for the whole test (the
+    `create` that seeded the issue plus the `update` both hit the SAME
+    memoized adapter) and the superseding row's `embedModel` is stamped.
+  - `query` with a plain `{ filter: { status: 'open' } }` (no `text`, no
+    `filter.semantic`, no `view:'similar'`, no `sort:'relevance'`) →
+    assert spy count `0`.
+  - `query` with `{ filter: { semantic: 'find the auth bug' } }` → assert
+    spy count `1` and a real ranked result set comes back (not an error).
+  - `query` with a bare `text: 'find the auth bug'` positional → assert
+    spy count `1` and the result's implied routing used `semantic` (proves
+    `resolveTextInput`'s dependency on the now-lazily-populated legacy
+    singleton still resolves correctly under laziness).
+  - **Negative control (mandatory, AGENTS.md §7):** revert `writeHandle`
+    to its pre-fix unconditional `await bootstrapSemanticStoreMembers(...)`
+    (no `opts` gate) and confirm the `claim`/`transition`/`delete` count-`0`
+    assertions go RED. Then restore the fix.
+  - **Never-throws preservation:** a second variant of the same suite
+    configures `embedding.enabled: true` with `@adhd/sox-embedding-provider`
+    mocked to `vi.mock(..., () => { throw new Error('boom'); })` (or a
+    `createEmbeddingProvider` that rejects) and asserts (a) `create` still
+    returns a success envelope with the issue actually persisted
+    (`handle.embedding` absent, dup-scan reports unavailable, write
+    proceeds — §5b's "never-throws" paragraph), and (b) `claim`/`transition`
+    still succeed without ever invoking the mocked (throwing) provider at
+    all — proving the lazy gate, not the swallow-the-error path, is what
+    keeps them fast.
+
+### 5c. `--namespace` flag (replaces `--sandbox`)
+
+**The defect this replaces.** `--sandbox` (`cli.ts`'s `stripSandboxFlag`) is a
+boolean flag that conflates two things a caller should be able to control
+independently: *which declared namespace an invocation resolves under* and
+*whether the isolation root is a brand-new throwaway directory*. It also
+carries an accidental-not-deliberate correctness property: an isolated
+invocation gets `embedding.enabled: false` only because no `config.yaml`
+happens to exist yet at its resolved root — a real file placed there by a
+prior manual run would silently defeat that, reintroducing the exact
+config-cascade bleed-through this whole mechanism exists to prevent (the
+1213ms-vs-52ms measurement above `A13-PIVOT` in `STATE.md`). This section
+replaces the boolean with an explicit `--namespace <value>` flag and closes
+the accidental-default gap.
+
+Every one of the four hard-won bug fixes carried by today's `--sandbox` path
+is preserved below by construction, not by incidental overlap — each is
+numbered and cross-referenced to the design decision that carries it forward.
+
+#### D1. Surface: `--namespace <value>`, parsed anywhere in argv
+
+`runBacklogCli` gains a value-taking flag, recognized and stripped anywhere
+in `argv` (before verb dispatch), the same way `--help`/`--sandbox` already
+are — a caller should not have to remember flag ordering. Replaces
+`stripSandboxFlag`'s boolean scan:
+
+```ts
+export function stripNamespaceFlag(argv: readonly string[]): {
+  argv: string[];
+  namespace: string | undefined;
+  /** `true` iff `--namespace`/`--namespace=` was present but supplied no
+   *  value (bare trailing flag, or `--namespace=` with nothing after `=`) —
+   *  distinct from "flag absent" so the caller can reject it (D3) instead of
+   *  silently falling through to the default, the exact "explicit ask
+   *  silently ignored" class D3 exists to kill. */
+  missingValue: boolean;
+  /** `true` iff `--namespace`/`--namespace=` appeared MORE THAN ONCE with
+   *  two DIFFERING values — e.g. `--namespace test --namespace sandbox`.
+   *  Every occurrence is always stripped from the returned `argv` (never
+   *  just the first — a leaked, un-stripped second `--namespace <value>`
+   *  would otherwise fall through into the verb argv and get rejected by
+   *  the cli-output plugin's own generic, unrelated flag-parsing error
+   *  instead of this flag's clean `invalid_argument` envelope, the exact
+   *  cryptic-failure class D3 exists to kill). Two occurrences with the
+   *  SAME value are not a conflict (idempotent, e.g. a wrapper script that
+   *  always appends `--namespace $NS` and a caller who also typed it). */
+  conflicting: boolean;
+} {
+  const values: string[] = [];
+  let rest: string[] = [];
+  let missingValue = false;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg.startsWith('--namespace=')) {
+      const value = arg.slice('--namespace='.length);
+      if (value === '') missingValue = true;
+      else values.push(value);
+      continue;
+    }
+    if (arg === '--namespace') {
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith('-')) {
+        missingValue = true;
+      } else {
+        values.push(next);
+        i++; // consume the value token too
+      }
+      continue;
+    }
+    rest.push(arg);
+  }
+  const distinct = new Set(values);
+  return {
+    argv: rest,
+    namespace: values[values.length - 1],
+    missingValue,
+    conflicting: distinct.size > 1,
+  };
+}
+```
+
+Both `--namespace <value>` and `--namespace=<value>` are accepted — two real
+spellings a caller reasonably types, and treating only one as valid would
+itself be a silent-ignore trap for the other. Every occurrence is stripped
+from the returned `argv` regardless of count (never just the first). A bare
+`--namespace` with no following value (end of argv, or the next token is
+itself another flag) sets `missingValue: true` rather than silently treating
+the flag as absent; two occurrences with genuinely differing values set
+`conflicting: true`. `runBacklogCli` checks `missingValue`/`conflicting`
+before the D3 validity check and rejects either with the same
+`invalid_argument` envelope — `missingValue` naming `"namespace"` and stating
+a value is required, `conflicting` naming `"namespace"` and listing the
+distinct values it saw.
+
+`RunBacklogCliOpts.namespace` already exists (added for A10/`--sandbox`) and
+needs no shape change — it remains the single explicit-parameter-first field
+threaded into `buildBacklogEnv`. What changes is who sets it: a parsed
+`--namespace <value>` (or a programmatic caller's `optsIn.namespace`) sets it
+directly, instead of `--sandbox` hardcoding `'test'`.
+
+#### D2. Default: `'production'`
+
+Omitting `--namespace` resolves exactly as every existing production
+invocation does today — no behavior change for the overwhelmingly common
+case. This is enforced twice, redundantly and deliberately: `buildBacklogEnv`
+already defaults `options.namespace ?? 'production'`, and
+`backlogEnvironmentSpec.namespaces` keeps `'production'` first (the
+framework's own `namespaces[0]` fallback, per `env.ts`'s existing comment on
+why that ordering is load-bearing). `runBacklogCli` does not need its own
+third default — it simply leaves `opts.namespace` unset when the flag is
+absent and lets `buildBacklogEnv` do what it already does.
+
+#### D3. Validation: reject an unrecognized value by name, with a suggestion
+
+An unrecognized `--namespace` value must never resolve silently (that would
+either fall through to `buildBacklogEnv`'s own default, silently ignoring a
+caller's explicit ask, or — worse — get passed straight through to
+`EnvironmentOptions.namespace`, minting a real, ungoverned root segment
+outside the declared set). `runBacklogCli` validates the parsed value against
+`backlogEnvironmentSpec.namespaces` before doing anything else with it,
+reusing this package's own established pattern for an unresolved catalog
+value (`query --input '{"filter":{"kind":"typo"}}'`, CHANGELOG's "suggesting
+the nearest existing catalog name" entry) rather than a generic type error:
+
+```ts
+if (namespace !== undefined && !backlogEnvironmentSpec.namespaces?.includes(namespace)) {
+  const valid = backlogEnvironmentSpec.namespaces ?? [];
+  const suggestions = suggestClosestCatalogNames(namespace, valid);
+  const detail =
+    `must be one of ${valid.map((v) => `"${v}"`).join(', ')}` +
+    (suggestions.length > 0
+      ? ` (did you mean ${suggestions.map((s) => `"${s}"`).join(' or ')}?)`
+      : '');
+  const env = errorEnvelope('invalid_argument', `Invalid argument "namespace": ${detail}`);
+  console.log(JSON.stringify(env));
+  process.exitCode = exitCodeForEnvelope(env);
+  return;
+}
+```
+
+`suggestClosestCatalogNames` (`query/resolve.ts`) is already a pure
+`(value, candidates, max) => string[]` function with no store/graph
+dependency — reused verbatim, not reimplemented, per this package's own
+reuse-over-duplication rule. The failure is emitted as the SAME
+`{ok:false,error:{code:'invalid_argument',...}}` envelope shape every other
+CLI failure produces (`envelope.ts`), with the same exit code (2) — a caller
+scripting against this CLI sees one uniform failure shape whether the
+rejection happened before or after command dispatch, never a bare
+`console.error` + ad hoc exit code the way `--sandbox`'s silent-bypass
+warning is today (that warning is a *warning*, not a rejection — it still
+proceeds; this is a hard validation failure and must not proceed).
+
+#### D4. `'sandbox'` is its own declared namespace, not an alias for `'test'`
+
+`backlogEnvironmentSpec.namespaces` becomes `['production', 'test',
+'sandbox']` — three declared values, not two with an alias.
+
+**Why not alias `sandbox` onto the existing `test` namespace with
+ephemeral-root-minting as a bolt-on:** the alternative reading would keep
+`namespaces: ['production', 'test']` and treat `--namespace sandbox` as pure
+syntax sugar for `{ namespace: 'test', adhdRoot: mkdtemp(...) }`. Rejected,
+for three concrete reasons:
+
+1. **`'test'` already has a stated, distinct purpose that this task's own
+   framing introduces**: a deliberately-persisted, non-ephemeral namespace
+   suited to something like a shared CI/team store that is expected to
+   accumulate state across many invocations over time. An ephemeral,
+   mint-a-fresh-root-every-time mode is the opposite lifecycle. Folding both
+   under one directory-segment name (`.../backlog/test/...`) means two
+   invocations with completely different lifetime guarantees become
+   indistinguishable by the one field (`namespace`) that is supposed to
+   describe exactly that.
+2. **Observability breaks.** `sandbox-path`'s whole contract (D6, below) is
+   "report the resolved isolation root + namespace so a caller can confirm
+   what they are about to write into, without opening the store." If
+   `--namespace sandbox` reported `namespace: 'test'` in that diagnostic, a
+   caller who explicitly typed `sandbox` would see a different word reflected
+   back — the exact kind of "looks like isolation but the label lies" trap
+   `BUG-BACKLOG-SANDBOX-SILENT-BYPASS-001` was about.
+3. **No real cost avoided.** Aliasing saves exactly one array entry
+   (`'sandbox'` vs `'test'` in `namespaces`); it buys nothing, since
+   `adhdRoot` minting is already a fully separate code path regardless of
+   which namespace name it is paired with.
+
+Declaring `sandbox` as its own namespace costs nothing structurally —
+`resolveRoots` (`environment-builder/src/roots.ts`) already treats
+`namespace` as an opaque path segment, so a third value nests exactly like
+the first two (`<root>/backlog/sandbox/...`).
+
+#### D5. `sandbox` as a value layers ephemeral-root-minting on top of namespace selection (superset behavior)
+
+`--namespace sandbox` does everything `--namespace test` would structurally
+do (resolve under a `sandbox` root-namespace segment) **plus** mint a fresh
+`mkdtempSync(join(tmpdir(), 'backlog-sandbox-'))` `adhdRoot`, exactly as
+today's `--sandbox` boolean does — this is what makes it "a superset," per
+the task framing. The two effects are independent knobs on the same
+`RunBacklogCliOpts`:
+
+- `namespace` (the path segment) — set to the parsed `--namespace` value,
+  defaulting to `'production'` (D2).
+- `adhdRoot` (the isolation-root base) — minted fresh ONLY when
+  `namespace === 'sandbox'`, using the exact same guard logic `--sandbox`'s
+  handling block already has (reused verbatim, just re-keyed off the new
+  flag):
+
+Every existing guarantee this block already carries forward unchanged:
+
+| Guarantee | Fix ID | How D5 preserves it |
+|---|---|---|
+| An already-set ambient `ADHD_ROOT` that is not one of this tool's own sandbox tmpdirs must never be silently reused | `BUG-BACKLOG-SANDBOX-SILENT-BYPASS-001` | The `looksLikeOwnSandboxDir` guard and its loud `console.error` + fresh-mint override are unchanged — still gated on `namespace === 'sandbox'` instead of the old `sandbox` boolean, same logic, same message. |
+| A caller following the printed "pass `ADHD_ROOT=<path>` to reuse it" instruction must actually work | `BUG-BACKLOG-SANDBOX-ADHDROOT-UNWIRED-001` | The `process.env['ADHD_ROOT']` read into `opts.adhdRoot` (when `optsIn.adhdRoot` is unset) stays exactly where it is, before the `namespace === 'sandbox'` branch — an explicit `optsIn.adhdRoot` or a recognized ambient `ADHD_ROOT` still wins outright over minting a new one. |
+| `APIGEN_IR_CACHE_FILE` redirects into the sandbox tmpdir | `BUG-BACKLOG-SANDBOX-IRCACHE-LEAK-001` | Unchanged — still guarded on `opts.adhdRoot !== undefined` (never on the flag name), so it fires identically whether `adhdRoot` came from a mint, a reuse, or a programmatic caller. |
+| `--sandbox` sets an explicit `namespace` parameter as a second, structural layer of isolation independent of the `adhdRoot` swap | (A10's own fix, folded into this design) | Superseded by construction: `namespace` is now the PRIMARY explicit parameter (D1), no longer a side effect `--sandbox` sets internally — the same explicit-parameter-cannot-be-silently-defeated property A10 established, now the flag's whole point rather than one of its side effects. |
+| The telemetry file sink must never write into the real `~/.adhd/sox-ecosystem/backlog/logs` tree under an isolated invocation | `BUG-BACKLOG-SANDBOX-TELEMETRY-001` | `index.ts`'s bin-entry guard — which calls `initTelemetry(...)` BEFORE `runBacklogCli` ever runs, so it cannot see `opts.namespace` — imports and calls `stripNamespaceFlag` (D1's replacement for `stripSandboxFlag`) directly on `process.argv.slice(2)`, the same "peek at the flag only to redirect `logDir`, never re-dispatch" pattern it already uses today. The redirect condition changes from `sandbox === true` to `namespace === 'sandbox'`; the minted `sandboxLogDir` (`mkdtempSync(join(tmpdir(), 'backlog-sandbox-logs-'))`) is unchanged. This guarantee was not named in the original "preserve" list handed to this design pass, but it is carried by the exact code this design replaces, so it is preserved here rather than silently dropped. |
+
+Two ordering notes this table implies but does not otherwise state
+explicitly: (1) `index.ts` and `cli.ts` each independently call
+`stripNamespaceFlag` on their own copy of `process.argv` — exactly as
+`stripSandboxFlag` is independently called twice today — so the two call
+sites can never desync on which flag string they recognize, since both read
+the same exported parser. (2) `--namespace sandbox serve` must work
+identically to `--namespace sandbox <verb>`: A10 already threaded `namespace`
+through `RunServeCommandOpts`/`StartOpts` down to `startBacklogServer`, and
+D8's config-materialization write (below) happens in `runBacklogCli` before
+the `serve` special-case dispatches to `runServeCommand` — so a sandboxed
+`serve` invocation's config is written before `startBacklogServer` ever
+constructs its own `Environment`, the same ordering every other sandboxed
+verb gets.
+
+#### D6. `sandbox-path` diagnostic — contract unchanged, payload unchanged in shape
+
+`sandbox-path` keeps reporting the resolved isolation root, the effective db
+path, and the effective `namespace`, without ever opening the store — the
+same `buildBacklogEnv`/`resolveBacklogDbPath` path every real store-open site
+resolves through (BUG-002 parity, already true today). `namespace` now
+reflects whatever value was actually requested
+(`'production'`/`'test'`/`'sandbox'`) rather than the old binary
+`'test'`-or-`'production'` choice; the boolean `sandbox` field is removed
+outright (replaced by the richer `namespace` field it was always a stand-in
+for — see D7 on why it is not kept as a second, redundant field).
+
+One field is genuinely NEW, not a rename: `embeddingEnabled: boolean`, read
+straight off `env.config.embedding.enabled` after `buildBacklogEnv` resolves
+— the same `env` this diagnostic already builds to compute `dbPath`, so this
+costs one extra property read, no extra resolution work. This exists
+specifically so D8's guarantee (the config-materialization fix) has a
+**structural** assertion point: a test can confirm the resolved,
+effective config value directly, rather than inferring it from wall-clock
+timing (a real, but strictly weaker, proxy — see the Test plan). Final
+payload shape: `{adhdRoot, namespace, dbPath, embeddingEnabled}`.
+
+This is also a breaking shape change to `cli.spec.ts`'s own
+`SandboxPathBody` test-helper type (currently modeling the old
+`{sandbox, adhdRoot, namespace, dbPath}` shape, per the in-flight `A13-PIVOT`
+helper work) — implementation must update that type alongside the runtime
+payload, not treat it as a pre-existing test fixture to leave alone.
+
+#### D7. Backward compatibility: hard removal, no deprecated alias
+
+`--sandbox` (the boolean flag) is deleted outright in the same change that
+adds `--namespace` — not kept as a deprecated alias for one release. This
+package's own conventions make that the only choice consistent with how it
+already treats itself: §0 states plainly that this application layer has "no
+coexistence with anything else, no dual-write bridge, and no gradual
+deprecation window," and the CHANGELOG's own `Unreleased` section shows
+`--sandbox` itself has never shipped in a published version — there is no
+external consumer to break, so a deprecation window would protect nobody and
+would just be a second flag surface to maintain and eventually delete anyway.
+`stripSandboxFlag` is deleted and replaced by `stripNamespaceFlag` (D1); the
+`--help` text's `--sandbox` line is replaced by a `--namespace <value>` line
+naming the three valid values.
+
+#### D8. Explicit sandbox config materialization (the "properly set up" ask)
+
+**The gap.** Today, an isolated invocation gets `embedding.enabled: false`
+purely because no `config.yaml` exists yet at its resolved global root — an
+accident of a fresh directory, not a decision this tool ever makes. A stray
+`config.yaml` left over from an earlier manual experiment at that same
+resolved path (or, for the reused-`ADHD_ROOT` case `BUG-BACKLOG-SANDBOX-ADHDROOT-UNWIRED-001`
+explicitly supports, a config a caller wrote into a sandbox root themselves
+on a prior invocation) would silently reintroduce the exact bleed-through
+this whole mechanism exists to prevent, indistinguishable from the correct
+case by anything short of opening the file.
+
+**The fix: write a real `config.yaml`, not an in-code override.**
+`runBacklogCli`, immediately after resolving `opts.adhdRoot` for a
+`namespace === 'sandbox'` invocation and before ever calling
+`buildBacklogEnv`, writes:
+
+```ts
+const sandboxConfigDir = join(opts.adhdRoot, 'backlog', 'sandbox');
+mkdirSync(sandboxConfigDir, { recursive: true });
+writeFileSync(
+  join(sandboxConfigDir, 'config.yaml'),
+  '# Written by --namespace sandbox on every invocation — DELIBERATE, not\n' +
+    "# an absence-of-file default. embedding.enabled is off so a sandboxed\n" +
+    '# run never pays a real model-load cost or opens a real vector store.\n' +
+    'embedding:\n' +
+    '  enabled: false\n'
+);
+```
+
+This targets exactly the file `environment-builder/src/layer-files.ts`'s
+`loadLayerFiles` already reads for the `global` root
+(`join(roots.global, CONFIG_FILENAME)`), and `roots.global` for a
+sandbox invocation is `join(adhdRoot, 'backlog', 'sandbox')` — the identical
+path `resolveRoots` (`environment-builder/src/roots.ts`) computes internally,
+since `adhdRoot` overrides the global-root base directly. No new
+`@adhd/environment` capability is needed.
+
+**Why a written file, not an in-code override layer, even though the
+in-code form would be structurally undefeatable by any stray file at all.**
+Both would close the gap; they are not equally cheap. `EnvironmentOptions`
+(`environment-base-spec/src/index.ts`) has no config-override field today —
+`resolveConfig`'s cascade (`config-resolver.ts`) is env var → local file →
+project file → global file → system file → spec default, with no sixth,
+caller-injected tier. Adding one means extending
+`@adhd/environment-base-spec`'s public options shape and
+`environment-builder`'s resolver precedence — a cross-package change whose
+blast radius is every consumer of the framework, not just this CLI, to buy a
+guarantee this CLI can already get for free: because the write above happens
+unconditionally on every `sandbox` invocation, immediately before
+`buildBacklogEnv` reads the file layers, it **overwrites** whatever was at
+that exact path a moment before — the deliberate value wins by mtime, not by
+outranking a stray file that is still permitted to exist. A written file also
+satisfies the user's own "inspectable" framing directly: `cat
+<adhdRoot>/backlog/sandbox/config.yaml` shows a human exactly why embeddings
+are off, with a comment saying so, which an in-code override could never
+show without also being read out of the source.
+
+**`ADHD_BACKLOG_EMBEDDING_ENABLED` still outranks the written file, and
+that is intended, not an oversight.** The env var is the top tier of
+`config-resolver.ts`'s cascade, above every file layer — a sandboxed
+invocation with that env var explicitly set to `true` still resolves
+`embedding.enabled: true`, D8's written `config.yaml` notwithstanding. This
+is correct: an explicit env var is a deliberate, conscious ask from whoever
+is invoking the CLI (a caller who set it clearly wants embeddings on for
+this run, sandbox or not), categorically different from a *stray* file
+nobody consciously placed there for this invocation. D8 closes the
+accidental-file gap; it does not, and should not, override a caller's
+explicit env-var request.
+
+**Scoped to `sandbox` only, not also `test`.** `test` is deliberately the
+persisted, non-ephemeral namespace (D4) — a team standing up a shared
+CI/testing store under it may have legitimate reasons to hand-author its own
+`config.yaml` there (e.g. deliberately turning embeddings ON to test the RAG
+path against a stable non-production store). Auto-overwriting that file on
+every invocation would fight an intentional configuration this design has no
+business overriding. `sandbox`'s ephemeral, throwaway-by-construction
+lifecycle has no such competing use case: nothing is ever meant to persist
+custom config there across runs.
+
+**Open, explicitly unresolved residual gap.** The write above targets the
+`global`-scope root (`resolveBacklogScope`'s own default when no scope is
+given). If a caller combines `--namespace sandbox` with an explicit
+`--scope project` (or `ADHD_BACKLOG_SCOPE=project`) while invoked from a
+directory that itself has a checked-in `.adhd/backlog/sandbox/config.yaml`,
+that PROJECT-layer file resolves via `ctx.projectRoot` (the real cwd's
+project marker), not via `adhdRoot` — `adhdRoot` only overrides the
+`global`/`system` root bases (`roots.ts`'s `resolveRoots`), never the project
+root. Per the cascade's own precedence (`config-resolver.ts`:
+system → global → project → local, project outranks global), such a
+project-layer file would still win over this fix's deliberate global-layer
+write. This is a real, narrow gap, not swept under: it requires a
+project-scoped sandbox combined with a repo that happens to carry that exact
+committed file, which is not this session's default path (`resolveBacklogScope`
+defaults to `'global'`, not `'project'`), but it is not solved by D8 as
+written. Flagged here for the same reason `A13-PIVOT` flagged its own
+ambiguity rather than silently guessing — a project-scope-aware sandbox
+config write is real, additional work, not yet designed, and should be
+confirmed as in-scope or explicitly deferred before implementation closes
+this section out.
+
+#### Open question already raised by `A13-PIVOT`, resolved here
+
+**Does "support the standard adhd scopes" mean unifying `--scope` and
+`--namespace`, or does `--namespace` validate against the declared namespace
+list while the existing, separate `--scope` flag stays untouched?** This
+design proceeds on the second reading — the one `STATE.md`'s `A13-PIVOT`
+entry already flagged as lower-risk — and states the reasoning in the open,
+per that entry's own instruction, rather than silently committing to it a
+second time.
+
+The two concepts are genuinely orthogonal in the framework this package
+already sits on, not just historically separate by accident: `scope`
+(`global`/`project`/`system`) answers **where** a root lives — which of three
+physical base directories (`~/.adhd`, `<repo>/.adhd`, the OS app-support dir)
+an invocation's files resolve under. `namespace` answers **which parallel
+store instance** exists at that location. `resolveRoots` composes them
+multiplicatively, not as alternatives: every root is
+`<base>/<project>/<namespace>` (`roots.ts`) — `scope` picks the `<base>`,
+`namespace` picks the trailing segment underneath it. Collapsing them into
+one flag/one concept would mean giving up real, currently-expressible
+combinations for no stated gain: a `project`-scoped repo's real store and a
+`project`-scoped repo's `sandbox` isolation run would become
+indistinguishable requests, since there would be no second axis left to say
+"same place, different instance." Nothing in the user's two verbatim
+requests — "support the standard adhd scopes" and the sandbox-config
+follow-up — asks for that collapse; "standard adhd scopes" reads most
+naturally as "the same closed vocabulary every other `@adhd/environment`
+consumer already validates against" (i.e., `Scope`'s `'global'|'project'|
+'system'` are a solved, existing concept to point at for shape/rigor, not a
+literal instruction to fold two flags into one). If this reading is wrong,
+the concrete alternative (a single flag whose value can be either a scope
+name or a namespace name, disambiguated by which declared set it matches)
+is a materially bigger change — it would need its own collision-handling
+design (what happens if a project someday declares a namespace also named
+`'global'`?) — and should be scoped as its own follow-on rather than folded
+silently into this one.
+
+#### Test plan
+
+New/changed tests, following AGENTS.md §7 (real components, negative
+controls with teeth, no proxy assertions, no wall-clock-only proofs):
+
+1. **Real isolation under a genuinely dirty machine config (the headline
+   proof).** A real spawned-bin test (`cli.spec.ts`) invoking `--namespace
+   sandbox sandbox-path` (and a second real verb call) while the actual
+   machine's `~/.adhd/backlog/production/config.yaml` has
+   `embedding.enabled: true` (true on this machine today, per `STATE.md`) —
+   asserts (a) the reported `namespace` is `'sandbox'`, (b) the reported
+   `dbPath` is under a fresh `backlog-sandbox-*` tmpdir, never under the real
+   `~/.adhd` tree, (c) the reported `embeddingEnabled` (D6's new structural
+   field) is `false`, and (d) a real end-to-end command's wall-clock lands in
+   the fast-path band the ~52ms measurement established (bounded generously,
+   e.g. `< 300ms`, never a tight timing assertion) rather than the ~1213ms
+   embedding-load band. (c) is the structural proof; (d) is kept alongside it
+   because the user explicitly asked for the 52ms-vs-1213ms measurement to be
+   reproduced, but (d) alone would let a slow CI box fail a correct build, so
+   it is never the sole assertion.
+2. **The negative control for D8 specifically — the actual proof that closes
+   the accidental-vs-deliberate gap.** Before invoking `--namespace sandbox`,
+   the test:
+   - Mints its own sandbox-shaped root itself, via
+     `mkdtempSync(join(tmpdir(), 'backlog-sandbox-'))` — matching the
+     `looksLikeOwnSandboxDir` naming pattern the silent-bypass guard checks
+     for. A root created any other way is REJECTED by that guard (loud
+     warning + fresh mint), which would make the pre-planted file below
+     unreachable and the test pass vacuously regardless of whether D8's write
+     exists.
+   - Pre-plants a real `config.yaml` with `embedding.enabled: true` at
+     `<thatRoot>/backlog/sandbox/config.yaml` — the exact path D8's own write
+     targets.
+   - Invokes `--namespace sandbox sandbox-path` with `ADHD_ROOT=<thatRoot>`
+     set (the documented reuse contract, `BUG-BACKLOG-SANDBOX-ADHDROOT-UNWIRED-001`),
+     so the mint-guard recognizes and reuses this exact root rather than
+     minting a fresh one.
+   - Asserts the reported `embeddingEnabled` (D6) is `false` — i.e. D8's
+     write genuinely overwrote the planted stray file, not merely that no
+     file existed to begin with.
+   - **Negative control, mandatory:** temporarily remove D8's `writeFileSync`
+     call and confirm this exact assertion goes RED (the planted `true`
+     survives untouched). Restore the write. Without this step the test above
+     could pass by coincidence (e.g. some unrelated code path also happening
+     to reset the field) rather than because D8's write ran — D8 is the
+     entirety of part B's ask, and it is the one decision in this section
+     that most needs teeth, not just a green assertion.
+3. **Unrecognized `--namespace` value.** A real spawned-bin test asserting
+   `--namespace bogus <any command>` exits with code `2`, and the printed
+   envelope's `error.code` is `'invalid_argument'` and `error.message` names
+   all three valid values (`"production"`, `"test"`, `"sandbox"`) — plus a
+   second case with a near-miss typo (`"sandboxx"` or `"produciton"`)
+   asserting the message includes a "did you mean" suggestion naming the
+   correct value, proving `suggestClosestCatalogNames` reuse actually fires.
+4. **Explicit, non-default namespace still reaches a real store correctly.**
+   `--namespace production` (typed explicitly, not omitted) against a real
+   `ADHD_ROOT`-scoped test root resolves to the same path an omitted flag
+   would, and a `create` immediately followed by a `get` against that same
+   explicit namespace round-trips the real item — proving explicit
+   `'production'` is not silently treated differently from the default.
+5. **Every preserved guarantee from D5's table gets its own test, not an
+   assertion of overlap:**
+   - `BUG-BACKLOG-SANDBOX-SILENT-BYPASS-001` — re-run of the existing
+     `cli.spec.ts` case (an already-set, non-sandbox `ADHD_ROOT` in the
+     parent env before `--namespace sandbox` runs), re-keyed off the new flag,
+     confirming the loud-warning-and-fresh-mint behavior still holds.
+   - `BUG-BACKLOG-SANDBOX-ADHDROOT-UNWIRED-001` — re-run of the existing
+     reuse-across-two-calls case, re-keyed off `--namespace sandbox`.
+   - `BUG-BACKLOG-SANDBOX-IRCACHE-LEAK-001` — re-run of the existing
+     `APIGEN_IR_CACHE_FILE` redirect assertion, confirming it still fires
+     whenever `opts.adhdRoot` is set, regardless of which namespace value
+     produced it.
+   - `sandbox-path`'s store-free contract — a test asserting `sandbox-path`
+     under `--namespace sandbox` never causes a store file to be created
+     (matching the existing store-free assertion, re-pointed at the new
+     flag).
+   - `BUG-BACKLOG-SANDBOX-TELEMETRY-001` — re-run of the existing
+     `cli.spec.ts` case asserting a real `create` under `--namespace sandbox`
+     leaves no `*.jsonl` file under the real (faked-`HOME`-for-the-test)
+     `~/.adhd/sox-ecosystem/backlog/logs`, re-keyed off the new flag; this
+     guarantee was not in the task's original "preserve" list but is carried
+     by the code this design replaces (`index.ts`'s bin-entry guard, D5's
+     table), so it gets the same re-run-not-assumed treatment as the other
+     four.
+6. **Negative control for the validation gate itself (D3).** Temporarily
+   remove the `backlogEnvironmentSpec.namespaces?.includes(namespace)` guard
+   and confirm test 3 goes RED (an unrecognized value would otherwise either
+   silently fall through to `buildBacklogEnv`'s default or propagate an
+   ungoverned namespace string into `EnvironmentOptions.namespace`) — then
+   restore the guard.
+7. **`--namespace`/`--namespace=` with no value.** A real spawned-bin test
+   asserting a bare trailing `--namespace` (nothing after it) and
+   `--namespace=` (empty value) both exit `2` with an `invalid_argument`
+   envelope naming `"namespace"` and stating a value is required — proving
+   `stripNamespaceFlag`'s `missingValue` signal (D1) is wired to a real
+   rejection, not silently treated as "flag absent, use the default."
+8. **Both accepted flag spellings.** A real spawned-bin test confirming
+   `--namespace=sandbox` produces the identical effective `namespace`/`dbPath`
+   (via `sandbox-path`) as `--namespace sandbox` — the two-spelling
+   acceptance in D1 is itself covered, not merely asserted in prose.
+9. **`--namespace sandbox serve` startup.** A real spawned test starting
+   `serve` under `--namespace sandbox`, confirming (via the server's own
+   status/health surface, never a raw file peek) it reports the same
+   `namespace: 'sandbox'` and a `dbPath` under the minted tmpdir that a
+   one-shot verb under the identical flag would — proving A10's
+   `RunServeCommandOpts`/`StartOpts` threading and D8's config write both
+   still reach the long-lived server lifecycle, not just the one-shot CLI
+   dispatch path.
+10. **Conflicting repeated `--namespace` values.** A real spawned-bin test
+    asserting `--namespace test --namespace sandbox <verb>` exits `2` with an
+    `invalid_argument` envelope naming `"namespace"` and listing both
+    conflicting values, and — critically — that the verb's own argv never
+    saw a leaked, un-stripped second `--namespace sandbox` token (i.e. the
+    cli-output plugin's own generic flag-table error never fires; only this
+    flag's clean envelope does). A companion case asserts
+    `--namespace sandbox --namespace sandbox <verb>` (same value twice) is
+    NOT rejected as conflicting — proving `stripNamespaceFlag`'s
+    distinct-value check, not a bare repeat-count check.
+
+#### Implementation plan (per-file, so nothing is left implicit)
+
+- `entrypoint/backlog/src/cli.ts`:
+  - Delete `stripSandboxFlag`; add `stripNamespaceFlag` (D1) in its place,
+    same export visibility.
+  - Delete the whole `--sandbox` handling block (the `sandbox`-boolean
+    branch, `looksLikeOwnSandboxDir`'s call site, the `if (opts.namespace
+    === undefined) opts.namespace = 'test'` line) and replace it with:
+    validate `missingValue`/`conflicting` (reject via `errorEnvelope` +
+    `exitCodeForEnvelope`, D3's pattern), validate the resolved namespace
+    value against `backlogEnvironmentSpec.namespaces` (D3), then — only when
+    the resolved namespace is `'sandbox'` — run the existing
+    `looksLikeOwnSandboxDir` guard / mint-or-reuse `adhdRoot` logic
+    (unchanged internals, just re-gated) followed by D8's `mkdirSync` +
+    `writeFileSync` of `config.yaml`.
+  - `sandbox-path`'s handler: drop the `sandbox` boolean from the printed
+    JSON, add `embeddingEnabled: env.config.embedding.enabled` (D6).
+  - The `--help` text block has TWO `--sandbox` mentions, not one: the
+    `--sandbox` flag line itself, AND `sandbox-path`'s own listed description
+    ("see --sandbox below"). Both are rewritten to describe `--namespace
+    <value>` and its three valid values.
+  - `RunBacklogCliOpts.namespace`'s doc comment (currently "`--sandbox` sets
+    this to `'test'` below") is updated to describe the new flag instead.
+- `entrypoint/backlog/src/index.ts` (D5's fifth guarantee row):
+  - Replace the `stripSandboxFlag` import and its
+    `const { sandbox } = stripSandboxFlag(...)` call with
+    `stripNamespaceFlag`; the `sandboxLogDir` mint condition changes from
+    `sandbox` to `namespace === 'sandbox'`.
+  - The barrel re-export at the bottom of this file (`stripSandboxFlag`
+    alongside `runBacklogCli` and others in the public `@adhd/backlog`
+    export surface) is renamed to re-export `stripNamespaceFlag` in its
+    place — this is a public API surface change for the package, not just an
+    internal rename, and needs the same CHANGELOG treatment A10's
+    `namespace` addition already got.
+- `entrypoint/backlog/src/env.ts`: `backlogEnvironmentSpec.namespaces`
+  becomes `['production', 'test', 'sandbox']` (D4); no other field changes.
+- `entrypoint/backlog/src/cli.spec.ts`: `SandboxPathBody`'s shape updates to
+  drop `sandbox` and add `embeddingEnabled` (D6); every existing
+  `--sandbox`-flag-driven test call site (the ~40 `runBin`/`mintSandbox`
+  helper consumers `A13` is already mid-flight on) is re-pointed at
+  `--namespace sandbox` — this SPEC section does not re-litigate A13's own
+  helper-rework plan, only the flag surface A13's helpers must now target.
+- `entrypoint/backlog/src/serve.ts` / `server.ts`: no signature change needed
+  — `RunServeCommandOpts.namespace`/`StartOpts.namespace` already exist
+  (A10) and are set from the same resolved `opts.namespace` `cli.ts` already
+  threads through today; only the value flowing through them changes.
+
 ## 6. Consumers
 
 This section specifies the **issue** verb surface (CLI/MCP/HTTP), at the same
@@ -1654,8 +2483,9 @@ interface IIssueQueryInput {
   limit?: number; // default 50, max 1000 (MAX_QUERY_LIMIT) — see composition rule 6 below
   offset?: number; // offset-based paging when `after` is absent — see rule 6; mutually exclusive with `after` (rule 5), unstable under concurrent writes by design
   after?: string; // opaque keyset cursor from a prior page's `nextCursor` — see rule 5
-  view?: 'list' | 'ready' | 'graph' | 'order' | 'stale' | 'similar' | 'overlap'; // §5's existing view union, carried forward
-  format?: 'json' | 'markdown'; // default 'json'; 'markdown' renders this same page as issue-titled headers + `[target sha:…]` citations, never a second code path (§6.6)
+  view?: 'list' | 'ready' | 'graph' | 'order' | 'stale' | 'similar' | 'overlap'
+    | 'projects' | 'components' | 'locations'; // §5's existing view union, carried forward, plus §3a's registry LIST views (`projects`/`components`/`locations` — every live project/component/location row, optionally scoped by `filter.project`/`filter.component`)
+  format?: 'json' | 'markdown'; // default 'json'; 'markdown' renders this same page as issue-titled headers + `[target sha:…]` citations, never a second code path (§6.6) — only supported for the four item-list views (`list`/`ready`/`stale`/`similar`); any other view rejects it with `InvalidArgumentError('format', ...)`
 }
 
 interface IIssueFilter {
@@ -1668,8 +2498,8 @@ interface IIssueFilter {
   claimedBy?: string;
   author?: string; // resolves via authored_by edge traversal
   grep?: string; // FTS keyword, title+body — stays keyword-only, never hybrid (unchanged rule)
-  semantic?: string; // routes to searchRanked (§5a) — composes with grep, neither swallows the other
-  anchor?: string; // item-anchored similarity seed (§6.1) — uid of the reference item
+  semantic?: string; // routes to searchRanked (§5a) — composes with grep, neither swallows the other; ALSO the free-text seed for view:'similar' when filter.anchor is not given (§5a)
+  anchor?: string; // item-anchored similarity seed (§6.1) — uid of the reference item; view:'similar' requires this OR filter.semantic (§5a)
   closedAt?: { since?: string; until?: string };
   createdAt?: { since?: string; until?: string };
   updatedAt?: { since?: string; until?: string };
@@ -1730,7 +2560,21 @@ Default (`fields` omitted): `['uid', 'kind', 'title', 'status', 'priority']`
    the concrete backend class) and collect the `src` values
    (candidate issue rowids). When more than one such filter is present,
    **intersect** the candidate sets (AND semantics — an issue must satisfy
-   every edge-scoped filter given).
+   every edge-scoped filter given). **`kind`/`status`/`priority` values are
+   validated against the catalog's own live rows** (DATA_MODEL.md §0.2/§2:
+   each is an open string vocabulary realized as ordinary catalog nodes, so
+   there is no fixed enum to validate against — the catalog's live rows ARE
+   the real value space). A `filter.kind`/`filter.status`/`filter.priority`
+   value that matches NO live catalog row (neither by uid nor by name)
+   throws `BacklogValidationError` naming the unresolved value(s) and, when
+   feasible, suggesting the nearest existing name(s) by edit distance —
+   never silently proceeding to a `{total:0, items:[]}` result
+   indistinguishable from filtering by a real, sparse (currently zero-issue)
+   value, which still returns cleanly empty exactly as before. `project`/
+   `component`/`author`/`plan` filter values keep the pre-existing "unresolved
+   name is not an error, resolves to zero matches" read-path rule (§6.1) —
+   they are registry/agent references, not open catalog vocabularies, so this
+   validation does not extend to them.
 4. **Composing the final query.** Build one `NodeFilter`:
    `{ kind:'issue', ids: <the intersected candidate set, when any
 edge-scoped filter was given — omitted entirely when none was>,
@@ -1862,6 +2706,78 @@ nodes plus `lookup`.
 
 There is no coexistence shim and no legacy-id fallback: this is the only
 surface, and identifiers other than `uid` do not resolve, by design.
+
+## 7a. Data cutover (ETL)
+
+**Direction, once, never in place.** The real store's existing corpus is
+carried onto this schema by a one-time load (`tools/etl/`) that reads the
+OLD-schema file and writes a FRESHLY CREATED store file — the file it reads
+from is never mutated in place, and this package's live write layer never
+targets an old-schema file directly (§0). It runs exactly once, immediately
+before production traffic is pointed at the new file, and the tooling has no
+further job once that happens — there is no ongoing or staged process here,
+only a single cutover moment.
+
+**Status: the tooling has been proven once; the real cutover has not
+happened yet.** A proving run was executed against a corpus snapshot to
+answer one question — can this data model hold the real corpus without
+losing anything — and the answer was yes:
+
+- 1763 source items → 1763 imported, 0 failed; 205 cross-issue edges written,
+  0 dangling references; post-run 1511 live / 252 invalidated.
+- Comparison 1 (issue counts): source 1763/1511/252 = target, exact.
+- Comparison 2 (status histogram): all 18 statuses match exactly.
+- Comparison 3 (citation sets): 100 sampled issues, per-issue sets equal.
+- Comparison 4 (project→component→issue two-hop reachability): **diverged**
+  at proving time — source 1763, target 1261, a 502-item gap. Root cause:
+  `tools/etl/catalog-upsert.ts`'s `upsertComponentTx` minted a component
+  node without the `owns_project` edge back to its project, unlike real
+  `upsertComponent`, which writes node+edge in one transaction — 108 of 145
+  target components were left unreachable, owning exactly the missing 502
+  issues. **Fixed**: `upsertComponentTx` now takes the write handle and
+  writes `owns_project` in the same transaction as the mint, mirroring
+  `upsertProjectTx`'s own `(root)`-component pattern.
+- **Superseded by a structural fix**: `tools/etl/catalog-upsert.ts` no longer
+  hand-rolls its own find-then-create SQL for `project`/`component` at all —
+  that duplication (predating the real `upsertProject`/`upsertComponent`
+  registry verbs' existence) was the root cause of the bug above, and a
+  second hand-rolled copy can regress the same way a third time. `src/write/
+  catalog.ts`'s `upsertProject`/`upsertComponent` are now split into a
+  transaction-PARTICIPANT core (`upsertProjectTx`/`upsertComponentTx`, taking
+  the caller's own open `tx`) and a thin `executeWriteTransaction`-opening
+  public wrapper — the ETL's `import-item.ts` bundles an entire source item's
+  writes into ONE caller-owned `immediate` transaction (this section, above)
+  and cannot nest a second `executeWriteTransaction` inside it, so it now
+  calls the real `*Tx` cores directly instead of a parallel implementation.
+  `tools/etl/catalog-upsert.ts` is a thin adapter only: it maps the ETL's own
+  input shape onto the real verbs' `IUpsertProjectInput`/
+  `IUpsertComponentInput`, and re-fetches `rowid` via `getNodeByUidTx` (needed
+  by every downstream `writeEdgeTx` call; deliberately not part of either
+  outcome type's public, business-facing contract). Re-proven against an
+  1788-item re-run of the current corpus: all four comparisons clean,
+  including comparison 4's `owns_project` reachability walk.
+
+Because the proving run's snapshot predates real production activity that
+has continued to land on the OLD file since, **the proving run's numbers are
+not the cutover's numbers** — the real cutover must re-run this tooling
+against a copy of the CURRENT live corpus, not the snapshot above, before
+production is pointed anywhere new.
+
+**Before the real cutover:**
+
+1. Re-run `tools/etl/run-etl.ts` against a **read-only copy** of the real
+   production file (never the live file itself) to pick up everything
+   written since the proving run.
+2. Re-verify all four comparisons clean — including comparison 4, now that
+   its root cause is fixed.
+3. Only then, as an explicit, separately-approved step: point production's
+   `db.path` config at the new file, with a timestamped backup of the old
+   file taken first (mirroring the existing `backup-YYYYMMDD-HHMMSS/`
+   convention already used for this store).
+
+Nothing in the published package imports `tools/etl/`; it is cutover tooling,
+not a runtime dependency, and carries no further job once the real cutover
+above is complete.
 
 ## 8. Acceptance (negative-control teeth)
 

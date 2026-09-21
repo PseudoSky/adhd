@@ -56,6 +56,9 @@
  * called only after that statement, never before. See
  * `serve.telemetry-role.spec.ts`'s ordering test for the regression proof.
  */
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Scope } from '@adhd/environment-base-spec';
 import { initTelemetry } from '@adhd/sox-telemetry';
 import { startBacklogServer, type StartOpts } from './server.js';
@@ -66,6 +69,11 @@ export interface RunServeCommandOpts {
   /** Test-only override — see `buildBacklogEnv`'s `BuildBacklogEnvOptions`. */
   adhdRoot?: string;
   cwd?: string;
+  /** Explicit-parameter-first namespace override — see
+   *  `BuildBacklogEnvOptions.namespace`'s doc comment. `--namespace sandbox
+   *  serve` (cli.ts) sets this to `'sandbox'`, along with minting a fresh
+   *  `adhdRoot` and writing D8's sandbox `config.yaml`. */
+  namespace?: string;
 }
 
 /**
@@ -160,11 +168,29 @@ export async function runServeCommand(
   // any request handling starts — see the file-level doc comment above.
   // Non-fatal by design, matching the bin-entry guard's own contract:
   // telemetry must never take the server down.
+  //
+  // BUG-BACKLOG-SANDBOX-SERVE-TELEMETRY-001 (found during SPEC.md §5c's
+  // `--namespace sandbox serve` proof, entrypoint/backlog): this re-init
+  // previously carried NO `logDir` override at all, so it silently UNDID
+  // `index.ts`'s bin-entry guard's own sandbox redirect the moment `serve`
+  // re-stamped telemetry a few lines below — a real `--namespace sandbox
+  // serve` invocation's telemetry ended up written to the REAL, HOME-
+  // anchored `~/.adhd/sox-ecosystem/backlog/logs` after all, defeating
+  // BUG-BACKLOG-SANDBOX-TELEMETRY-001's guarantee for every long-lived
+  // `serve` session (proven empirically: `home/.adhd/sox-ecosystem` was
+  // created by a real `--namespace sandbox serve` run against a fake HOME).
+  // Mirrors `index.ts`'s own mint-a-fresh-logs-tmpdir pattern, re-keyed off
+  // this function's own `opts.namespace` rather than re-parsing argv.
+  const sandboxLogDir =
+    opts.namespace === 'sandbox'
+      ? mkdtempSync(join(tmpdir(), 'backlog-sandbox-logs-'))
+      : undefined;
   try {
     initTelemetry({
       service: 'backlog',
       role: 'live-service',
       logSink: 'file',
+      ...(sandboxLogDir !== undefined ? { logDir: sandboxLogDir } : {}),
     });
   } catch (err) {
     console.error(
