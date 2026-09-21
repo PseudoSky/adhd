@@ -18,6 +18,7 @@
 
 - [audit-config.1] The config-phase audit guard exists
 
+- [audit-config.2] Every config-phase criterion passes
 ---
 
 ## Reservations
