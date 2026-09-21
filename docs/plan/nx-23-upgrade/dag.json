@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "title": "Nx 23 / Vite 8 upgrade, task-graph remodel, and file-level test selection",
+  "plan_kind": "brownfield",
+  "phases": [],
+  "terminal": "done",
+  "nodes": {},
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.25",
+    "hash": "961c3053dfab"
+  },
+  "goal": "Land the Nx 23.2.1 + Vite 8 upgrade on perf/nx-upgraded, remodel the task graph onto inferred targets, and deliver fail-safe file-level test selection."
+}
