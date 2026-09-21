@@ -86,6 +86,19 @@
       ],
       "context": "contexts/test-resolution-absorbed.md",
       "notes": "Absorb perf/test-resolve-fix. It makes the test module graph continuous across package boundaries, which is the precondition for cross-package file-level selection. Keep the 4 child-process opt-outs."
+    },
+    "audit-reconcile": {
+      "kind": "audit",
+      "phase": "reconcile",
+      "depends_on": [
+        "test-resolution-absorbed"
+      ],
+      "guard": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_reconcile.py",
+      "artifacts": [
+        "docs/plan/nx-23-upgrade/scripts/guard_audit_reconcile.py"
+      ],
+      "context": "contexts/audit-reconcile.md",
+      "notes": "Hold point. The two absorbed branches must both be green before any config or graph work starts."
     }
   },
   "authored_with": {
