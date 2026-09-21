@@ -651,6 +651,14 @@
       "kind": "command",
       "cmd": "node -e \"process.exit(require(\\\"./package.json\\\").scripts[\\\"test:related\\\"]?0:1)\"",
       "expect": "exit0"
+    },
+    {
+      "id": "test-changed-optin.3",
+      "phase": "tests",
+      "tier": 3,
+      "kind": "command",
+      "cmd": "node -e \"const d=require(\\\"./nx.json\\\").targetDefaults.test;process.exit(d.dependsOn.includes(\\\"lint\\\")&&d.dependsOn.includes(\\\"^build\\\")&&!(d.options&&\\\"changed\\\" in d.options)?0:1)\"",
+      "expect": "exit0"
     }
   ]
 }
