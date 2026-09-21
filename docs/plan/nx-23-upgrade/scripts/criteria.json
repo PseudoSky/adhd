@@ -643,6 +643,14 @@
       "kind": "command",
       "cmd": "node -e \"process.exit(require(\\\"./package.json\\\").scripts[\\\"test:changed\\\"]?0:1)\"",
       "expect": "exit0"
+    },
+    {
+      "id": "test-changed-optin.2",
+      "phase": "tests",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "node -e \"process.exit(require(\\\"./package.json\\\").scripts[\\\"test:related\\\"]?0:1)\"",
+      "expect": "exit0"
     }
   ]
 }
