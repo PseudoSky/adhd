@@ -18,6 +18,7 @@
 
 - [test-changed-optin.1] The opt-in fast path is exposed as a workspace script
 
+- [test-changed-optin.2] The file-scoped fast path is exposed as a workspace script
 ---
 
 ## Reservations
