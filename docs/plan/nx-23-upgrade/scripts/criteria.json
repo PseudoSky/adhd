@@ -271,6 +271,14 @@
       "tier": 1,
       "kind": "exists",
       "path": "docs/plan/nx-23-upgrade/scripts/guard_audit_config.py"
+    },
+    {
+      "id": "audit-config.2",
+      "phase": "config",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_config.py",
+      "expect": "exit0"
     }
   ]
 }
