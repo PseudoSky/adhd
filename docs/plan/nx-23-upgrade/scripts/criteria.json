@@ -535,6 +535,20 @@
         "packages/apigen/apigen-plugin-py-flask/project.json",
         "packages/apigen/apigen-plugin-py-grpc/project.json"
       ]
+    },
+    {
+      "id": "graph-release-eslint-inferred.2",
+      "phase": "graph",
+      "tier": 0,
+      "kind": "absent",
+      "pattern": "@nx/eslint:lint",
+      "paths": [
+        "packages/apigen/apigen-plugin-batch/project.json",
+        "packages/apigen/apigen-plugin-ir-cache/project.json",
+        "packages/apigen/apigen-plugin-ts-types/project.json",
+        "packages/workspace/workspace-base-standard/project.json",
+        "packages/workspace/workspace-base-vite-paths/project.json"
+      ]
     }
   ]
 }
