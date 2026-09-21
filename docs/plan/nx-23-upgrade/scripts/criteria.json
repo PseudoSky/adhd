@@ -121,6 +121,13 @@
       "kind": "command",
       "cmd": "./node_modules/.bin/nx build agent-core-env",
       "expect": "exit0"
+    },
+    {
+      "id": "test-resolution-absorbed.1",
+      "phase": "reconcile",
+      "tier": 1,
+      "kind": "exists",
+      "path": "tools/vite-plugins/source-resolution.mjs"
     }
   ]
 }
