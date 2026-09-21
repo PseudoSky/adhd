@@ -5,5 +5,12 @@
     "discovered_via": "manual",
     "shared_ref": "[ref:target-artifact-parity]",
     "audit_check": "audit-final.ref-target-artifact-parity"
+  },
+  "fail-safe-fast-path": {
+    "anchor": "docs/plan/nx-23-upgrade/scripts/check-zero-selection.mjs",
+    "rule": "the narrow fast path exits non-zero when it selects zero tests; the default path is never narrowed",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:fail-safe-fast-path]",
+    "audit_check": "audit-final.ref-fail-safe-fast-path"
   }
 }
