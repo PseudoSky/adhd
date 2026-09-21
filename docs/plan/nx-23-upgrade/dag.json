@@ -127,6 +127,19 @@
       ],
       "context": "contexts/cache-isolation.md",
       "notes": "Defuse nrwl/nx#36675: Nx 23 pools the task cache and cache DB across sibling worktrees, and a test target has replayed another worktree cached PASS. Pin a relative cache directory so each checkout owns its cache."
+    },
+    "audit-config": {
+      "kind": "audit",
+      "phase": "config",
+      "depends_on": [
+        "cache-isolation"
+      ],
+      "guard": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_config.py",
+      "artifacts": [
+        "docs/plan/nx-23-upgrade/scripts/guard_audit_config.py"
+      ],
+      "context": "contexts/audit-config.md",
+      "notes": "Hold point. Nothing lands from the config phase until the shim removal and cache isolation are both green."
     }
   },
   "authored_with": {
