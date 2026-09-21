@@ -39,22 +39,26 @@
  * dispatched any request handling.
  *
  * BUG-014-LOCK-ORDER: `initTelemetry({ logSink: 'file' })` performs real
- * synchronous file I/O (opens a log file). `startBacklogServer` (server.ts)
- * claims the `[inv:singleton]` writer lock (`store/serve-lock.ts`,
- * `acquireServeLock`) SYNCHRONOUSLY, before its first `await` — but only if
- * nothing runs ahead of it that could stretch the window between two
- * concurrent `serve` starts. Calling `initTelemetry` before
- * `startBacklogServer` (as an earlier version of this fix did) put that
- * synchronous file I/O ahead of lock acquisition on the critical path,
- * which is never correct ordering for a singleton guard regardless of
- * whether it can be proven to flip an observed test result: the guard
- * should never have anything unrelated to its own correctness able to
- * widen its claim window. `startBacklogServer(...)` is therefore invoked
- * FIRST (unawaited) below — its synchronous prefix, ending at its own
- * first `await` (well past `acquireServeLock`), runs to completion in this
- * same tick before control ever returns here — and `initTelemetry` is
- * called only after that statement, never before. See
- * `serve.telemetry-role.spec.ts`'s ordering test for the regression proof.
+ * synchronous file I/O (opens a log file) and is explicitly best-effort —
+ * non-fatal by design (see the `catch` around it below): telemetry must
+ * never take the server down, and must never delay it either.
+ * `startBacklogServer` (server.ts) has its own synchronous prefix (env
+ * resolution via `buildBacklogEnv`, `env.ensureDirs()`'s real filesystem
+ * work, db-path resolution, and signal-cleanup registration) that runs to
+ * completion in the SAME tick, ending only at its first genuine `await`
+ * (`openGraphBacklogStore`). Calling `initTelemetry` before
+ * `startBacklogServer` (as an earlier version of this fix did) put
+ * telemetry's blocking file I/O ahead of that real startup work on the
+ * critical path — a best-effort, non-fatal call should never be able to
+ * delay the thing it is merely annotating. `startBacklogServer(...)` is
+ * therefore invoked FIRST (unawaited) below — its synchronous prefix runs
+ * to completion in this same tick before control ever returns here — and
+ * `initTelemetry` is called only after that statement, never before. (This
+ * ordering previously also protected `[inv:singleton]`'s serve-lock claim
+ * window; that lock was removed as unnecessary defense-in-depth — see
+ * STATE.md A17 — but the startup-latency reason for the ordering stands on
+ * its own and is preserved here.) See `serve.telemetry-role.spec.ts`'s
+ * ordering test for the regression proof.
  */
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -154,11 +158,12 @@ export async function runServeCommand(
   process.on('SIGTERM', () => controller.abort());
   process.on('SIGINT', () => controller.abort());
   // BUG-014-LOCK-ORDER: kick off `startBacklogServer` FIRST, unawaited.
-  // Its synchronous prefix (env resolution + the `[inv:singleton]`
-  // `acquireServeLock` call, both in server.ts, ahead of its own first
-  // `await`) runs to completion in THIS tick, before this function ever
-  // reaches the `initTelemetry` call below — so telemetry's file I/O can
-  // never precede lock acquisition. See the file-level doc comment.
+  // Its synchronous prefix (env resolution + `env.ensureDirs()` + signal-
+  // cleanup registration, all in server.ts, ahead of its own first `await`)
+  // runs to completion in THIS tick, before this function ever reaches the
+  // `initTelemetry` call below — so telemetry's best-effort, non-fatal file
+  // I/O can never precede or delay the server's real startup work. See the
+  // file-level doc comment.
   const serverPromise = startBacklogServer({
     ...parsed,
     ...opts,

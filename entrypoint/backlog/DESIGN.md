@@ -22,7 +22,7 @@ entrypoint/backlog/
 │   ├── env.ts             # @adhd/environment spec + scope resolution (§6 below)
 │   ├── server.ts          # apigen mount: extract() -> composeSchemas() -> plugin.run() (HTTP/MCP)
 │   ├── cli.ts             # apigen mount: THIRD transport, @adhd/apigen-plugin-cli-output (§7a)
-│   ├── serve.ts           # `backlog serve` host command (singleton-locked, §12)
+│   ├── serve.ts           # `backlog serve` host command (no lock — any number of concurrent instances, §12)
 │   ├── install.ts / install-skill.ts   # scaffolding commands for consumers of the CLI
 │   ├── search-shortcut.ts # `backlog search <text>` convenience argv rewrite
 │   ├── version-info.ts
@@ -52,7 +52,6 @@ entrypoint/backlog/
 │       ├── immediate-retry.ts      # bounded, jittered retry around a busy/locked `.immediate()` call
 │       ├── embed-queue.ts          # RAG write path — schedules embeds after commit, off the write lock
 │       ├── semantic-search.ts      # the RAG seam — injectable SemanticBackend (§9)
-│       ├── serve-lock.ts           # singleton PID-file lock for `backlog serve` (§12)
 │       └── signal-cleanup.ts       # SIGINT/SIGTERM store teardown for long-running hosts
 ├── SPEC.md
 ├── DESIGN.md
@@ -563,15 +562,21 @@ back the RAG seam (§9) and are never installed unless a host opts in.
   processes hold concurrent write connections to the same store, serialized
   through the store adapter's own locking (WAL + `busy_timeout` + `BEGIN
 IMMEDIATE`), which is exactly what makes the CAS design in §3/§4 correct. This
-  package additionally enforces one singleton constraint at a narrower scope:
-  **`backlog serve`** (the long-running HTTP/MCP host) takes an
-  `[inv:singleton]` PID-file lock (`store/serve-lock.ts`), keyed on the
-  canonical, realpath'd database path, so two concurrently-running `serve`
-  processes can never both bind the same backing file — a real incident this
-  guard closes. That lock is about one **server process** owning one **serve
-  port/host binding**, never about restricting how many processes may hold write
-  connections to the store itself; ad-hoc CLI/MCP-tool callers continue to write
-  concurrently exactly as §3/§4 describe.
+  applies to `backlog serve` (the long-running HTTP/MCP host) exactly as it
+  applies to any other caller: any number of `serve` processes may run
+  concurrently against the SAME store, with no singleton guard of any kind —
+  a hard requirement for this rewrite (never a PID-file lock, port lock, or any other
+  serialization gate on `serve` itself). An earlier PID-file mutex
+  (`store/serve-lock.ts`) briefly existed after a real incident where two
+  stray concurrent `serve` processes corrupted a production store; deeper
+  investigation found the actual root cause was a since-fixed store-adapter
+  bug (non-canonicalized quiescence check racing a TRUNCATE checkpoint — see
+  STATE.md A16/A17) reachable with no real concurrency hazard at all, and
+  that lock was removed once that was proven and re-verified empirically
+  (three real two-process sustained-write trials, zero failures — STATE.md
+  A17; durable coverage in `src/serve.singleton.spec.ts`). Ad-hoc CLI/MCP-tool
+  callers and `serve` processes all write concurrently exactly as §3/§4
+  describe, with no special case for `serve`.
 - **The embedding pipeline never shares the store's write-lock transaction** —
   every embed call happens strictly after the subject write has committed (§9),
   so an embedding backend's own thread/process model is never this package's
@@ -594,7 +599,7 @@ IMMEDIATE`), which is exactly what makes the CAS design in §3/§4 correct. This
 | Scope isolation            | `src/env.spec.ts`                                                                                       | Real `Environment` instances at `project` scope over temp `.git` dirs and at `global` scope over a temp `HOME`.                                                                                                       |
 | Ready/blocked view         | `src/query/query.ready.spec.ts`                                                                         | Real `blocks` edges written via `relate`, `view:'ready'` asserted against the real store.                                                                                                                             |
 | RAG opt-in / opt-out       | `src/store/rag-optional-deps.spec.ts`, `src/store/rag-e2e.spec.ts`, `src/store/semantic-search.spec.ts` | The default-disabled path answers the typed "not configured" error; the opted-in path drives a real (or injected fake, per test) `SemanticBackend` end to end.                                                        |
-| Singleton serve lock       | `src/serve.singleton.spec.ts`                                                                           | Two real `backlog serve` invocations against one store file — the second is refused the lock, never silently corrupting the first.                                                                                    |
+| Concurrent serve (no lock) | `src/serve.singleton.spec.ts`                                                                           | Two real, simultaneously-live `backlog serve` invocations against one store file, driven by real MCP clients issuing sustained concurrent writes — no lock coordinates them, and a fresh reopen finds exactly what was reported `ok:true`. |
 | Dist-load                  | `nx run backlog:verify-dist-load`                                                                       | Builds real `dist/`, imports it, calls a real verb against a real temp store — not source resolution.                                                                                                                 |
 
 Every test above uses a real store under `tmp/backlog/<test-name>/` per

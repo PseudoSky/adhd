@@ -66,11 +66,6 @@ import {
   installSignalCleanup,
 } from './store/signal-cleanup.js';
 import {
-  acquireServeLock,
-  isLockableDbPath,
-  type ServeLockHandle,
-} from './store/serve-lock.js';
-import {
   buildBacklogEnv,
   resolveBacklogDbPath,
   resolveIrCacheFile,
@@ -160,8 +155,8 @@ export function testSilentLogger(): Logger | undefined {
  * accidentally exports a host command from the mounted client module fails at
  * `buildBacklogApigenPackage()` — in every transport at once — instead of
  * silently shipping a `backlog_serve` MCP tool that would open a second
- * writer against the store (the exact condition serve-lock.ts exists to make
- * impossible).
+ * concurrent writer against the store via a completely different lifecycle
+ * path than the one `startBacklogServer` itself expects.
  */
 export const BACKLOG_HOST_COMMANDS: readonly string[] = [
   'install',
@@ -298,8 +293,8 @@ function assertHostCarveOut(
           .map((o) => o.id)
           .join(', ')} was mounted as a data operation. ` +
         `install/install-skill must never open the store (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001) ` +
-        `and serve must never be reachable as a tool (a second writer against the same store is ` +
-        `the condition serve-lock.ts exists to prevent). Keep them host commands in cli.ts.`
+        `and serve must never be reachable as a tool — it has a completely different lifecycle ` +
+        `than a mounted data operation. Keep them host commands in cli.ts.`
     );
   }
 }
@@ -799,20 +794,10 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
   // not-yet-existing binding.
   // eslint-disable-next-line prefer-const
   let store: GraphBacklogStore | undefined;
-  // [inv:singleton] (docs/spec/service-lifecycle.md §5, sox-ecosystem) — see
-  // serve-lock.ts's header for the full incident/rationale. Released ONLY
-  // after the store is actually closed below (never merely on signal
-  // receipt), so a second `serve` attempted while THIS one is mid-shutdown
-  // is refused, not raced.
   const dbPath = resolveBacklogDbPath(env);
-  const serveLock: ServeLockHandle | undefined = isLockableDbPath(dbPath)
-    ? acquireServeLock(dbPath)
-    : undefined;
   const closeStoreOnce = (): Promise<void> => {
     if (!closePromise) {
-      closePromise = closeGraphBacklogStoreSafe(store).finally(() =>
-        serveLock?.release()
-      );
+      closePromise = closeGraphBacklogStoreSafe(store);
     }
     return closePromise;
   };
@@ -828,14 +813,10 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
     // RAG-SPEC.md §1.6 — opt-in semantic search. A no-op (and silent) unless
     // `embedding.enabled`; never throws, so a missing/broken embedding stack
     // can never stop the server from starting. Deliberately INSIDE this
-    // try/catch: if it ever did throw, the serve lock and signal handler
-    // below must still be released rather than leaked.
+    // try/catch: if it ever did throw, the signal handler below must still
+    // be disposed rather than leaked.
     await enableSemanticSearchFromConfig(store, env.config.embedding);
   } catch (err) {
-    // The lock was acquired but the store open itself failed (bad path,
-    // corrupt file, etc.) — release the lock we're holding before propagating,
-    // or the failed attempt would permanently block every subsequent `serve`.
-    serveLock?.release();
     signalCleanup?.dispose();
     throw err;
   }
@@ -846,13 +827,12 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
   // can genuinely throw at mount-composition time — a missing built
   // `api.d.ts` (`extractApiOperations`), an extraction failure, or the
   // §6 host-carve-out violation `assertHostCarveOut` now raises — and every
-  // one of those happens AFTER the serve lock is held and the store is open.
-  // With the narrower scope, such a failure propagated without ever calling
-  // `closeStoreOnce()`, so the lock file stayed on disk naming a dead pid and
-  // every subsequent `backlog serve` against that store was refused until a
-  // human deleted it by hand — the same leak the store-open `catch` above
-  // already guards against, one step later in the sequence. Widening the
-  // scope cannot regress the success path: the `finally` already ran there.
+  // one of those happens AFTER the store is open. With the narrower scope,
+  // such a failure propagated without ever calling `closeStoreOnce()`,
+  // leaking the open store handle and signal-cleanup registration — the same
+  // leak the store-open `catch` above already guards against, one step later
+  // in the sequence. Widening the scope cannot regress the success path: the
+  // `finally` already ran there.
   try {
     const { pkg, operations } = await buildBacklogApigenPackage(ctx, {
       adhdRoot: opts.adhdRoot,
