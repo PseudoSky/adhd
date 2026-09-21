@@ -687,6 +687,14 @@
       "tier": 1,
       "kind": "exists",
       "path": "docs/plan/nx-23-upgrade/scripts/guard_audit_tests.py"
+    },
+    {
+      "id": "audit-tests.2",
+      "phase": "tests",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_tests.py",
+      "expect": "exit0"
     }
   ]
 }
