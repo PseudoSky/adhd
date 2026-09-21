@@ -1422,13 +1422,229 @@ is a single Opus architect synthesis of everything into
       PR-comment context-packet extraction; raw-SQL usage scan) + a
       parallel 4-way sonnet code-review fan-out (one per touched package).
       Dispatched.
-- [ ] G2. Pass 2 — depends on G1's outputs. 4 agents: forgotten-dead-file
+- [~] G2. Pass 2 — depends on G1's outputs. 4 agents: forgotten-dead-file
       assessment; sonnet PR-comment triage (answers, not just packets);
       external-package-claim removal-scope assessment (T2); architect
       review of T2 for where code should be unified (kept in backlog vs.
-      pushed to a shared package vs. fixed externally).
-- [ ] G3. Pass 3 — Opus architect synthesis of G1+G2 into
+      pushed to a shared package vs. fixed externally). Partial: the
+      triage/answers landed, but the architect placement-analysis leg
+      produced a dispatch-failure diagnosis instead of the analysis — that
+      gap is audit item **T-02**, now tracked in section H.
+- [x] G3. Pass 3 — Opus architect synthesis of G1+G2 into
       `BACKLOG_BACKLOG.md`, bucketed needs-triage / needs-scoping /
-      clear-fix. Not filed to the real backlog graph (store unreachable
-      this session) — a plain markdown file instead, explicitly named to
-      avoid colliding with the real `BACKLOG.md` projection.
+      clear-fix. Done — `BACKLOG_BACKLOG.md` (714 lines, 2026-09-21) is
+      the audit record this section H tracks against. Not filed to the
+      real backlog graph (store unreachable that session); the graph is
+      reachable again (2026-09-21) and filing is tracked in H4.
+
+## H. Hygiene-remediation status — tracked against BACKLOG_BACKLOG.md (2026-09-21)
+
+The audit (`BACKLOG_BACKLOG.md`) produced 60 items: 13 triage (T-01..T-13),
+21 scoping (S-01..S-21), 26 clear fixes (C-01..C-26). This section is the
+live status tracker for the remediation program that works them.
+
+Status key: `open` (no work started) · `triage` (decision in flight) ·
+`spec` (implementation spec in flight) · `in-progress` (executor
+dispatched) · `done` (verified against tests/git, reviewed) · `deferred`
+(recorded, sequenced later) · `resolved` (settled by a decision or by
+another item's work, e.g. its file gets deleted).
+
+**Sequencing (user directive, 2026-09-21):**
+1. *Triage* — settle every T-item verdict (architect-decision / product /
+   architect placement analysis).
+2. *Removal pass FIRST* — delete deprecated/redundant code (the S-01
+   semantic-search/embed-queue cluster + a full dead-code inventory) before
+   any fix work, so no effort lands on doomed files.
+3. *Clear fixes* C-01..C-26.
+4. *Scoped items* per their specs.
+5. *Review + merge* — nothing merges unreviewed.
+
+### H1 — Triage items (T-01..T-13)
+
+| Item | Summary | Status | Resolution / owner |
+|------|---------|--------|--------------------|
+| T-01 | audit schemas lack `coverage` (CODE_REVIEW_SCHEMA) and tool-exclusion (JSCPD_SCHEMA) fields | triage | fold into the review spec — add both fields before the next audit round (`review` agent) |
+| T-02 | external-package placement analysis was commissioned but never produced (dispatch-failure diagnosis instead) | triage | `architect` placement analysis dispatched 2026-09-21 |
+| T-03 | 35 external-package assessments fragmented under near-duplicate names, conflicting line estimates | triage | reconciled inside the T-02 placement analysis |
+| T-04 | `computeCitationSha` duplicated (create-issue.ts:307 / transition.ts:224); per-file convention vs extraction | triage | `architect-decision` dispatched 2026-09-21 |
+| T-05 | `carryForwardResidualEdgesTx` bypasses the multiplicity gate (update.ts:638) — only such write path | triage | `architect-decision` dispatched 2026-09-21 |
+| T-06 | `SemanticHealthState` literal-union duplicated in a file slated for deletion | resolved | moot — `semantic-search.ts` is deleted in the S-01 removal pass |
+| T-07 | `isSuperseded` upstream-support claim disproven (installed 0.4.3 and published 0.4.5 both lack it) | resolved | keep `dropSupersededResults`; file an upstream request against the sox ecosystem (no code change) |
+| T-08 | embed-queue write-lock framing dispute (author claim vs verified code) | resolved | moot — dead half of `embed-queue.ts` is deleted in the S-01 removal pass |
+| T-09 | add a git-SHA provenance field to audit records? (code matches SPEC §4a/DATA_MODEL §4; feature call) | triage | `product` verdict |
+| T-10 | anticipatory abstraction of `sortByPriorityRank` (exactly 1 caller today) | triage | `product` verdict (revisit-at-third-use candidate) |
+| T-11 | cache `fetchCatalogNames`? (verification: "correct but not worth fixing") | triage | `product` verdict |
+| T-12 | hardcoded 30s embed timeout in `bootstrap.spec.ts:55` | triage | `product` verdict; folds into the S-08/S-09 config pass if approved |
+| T-13 | adopt a duplication gate? (jscpd 6.54% / 15 blocks, several individually justified) | triage | `architect-decision` dispatched 2026-09-21 |
+
+### H2 — Scoping items (S-01..S-21)
+
+| Item | Summary | Status | Owner / notes |
+|------|---------|--------|---------------|
+| S-01 | free-text search degrades to grep-only for process lifetime; delete `semantic-search.ts` + dead half of `embed-queue.ts` + duplicate host bootstrap; implement SPEC §5b `ensureSemanticReady` seam | spec | **removal-pass wave 1** — `architect` spec dispatched 2026-09-21 |
+| S-02 | ad-hoc query filters ×5; `assignee`/`claimedBy`/`closedAt`/`createdAt`/`updatedAt` silently dropped on some paths (real correctness bug) | open | after removal pass; coordinate with C-01 |
+| S-03 | open/closed resolution triplicated verbatim across 3 query modules | open | — |
+| S-04 | `assertNonBlank` ×8 / `enforceRequiredFields` ×3 reimplemented; widened null-safe + `in`-guard to standardize | open | — |
+| S-05 | `grep` misnames the FTS field (public breaking rename) | triage | `product` verdict on rename-now-vs-defer |
+| S-06 | `'order'` misnames the execution-sequence view (public breaking rename) | triage | `product` verdict (same class as S-05) |
+| S-07 | user-defined named views/relations (feature; needs its own spec) | deferred | separate plan, not this remediation |
+| S-08 | query limits hardcoded (`MAX_QUERY_LIMIT`/`DEFAULT_QUERY_LIMIT`); no config plumbing at 3 call sites | open | config pass together with S-09 |
+| S-09 | retry tuning constants have no override path (`BASE_DELAY_MS`/`MAX_DELAY_MS`) | open | config pass together with S-08 |
+| S-10 | `catalog.ts` introduces 4 novel SQL shapes vs `tx.ts`'s stated mirror-only rule | open | promote to named `tx.ts` helpers |
+| S-11 | `tryResolveComponentRef` duplicates `tryResolveRef`'s name-resolution path | open | note: audit cross-ref "S-23" resolves to S-21 (determinism) |
+| S-12 | UUID v4 shape validation belongs in `@adhd/data-base-transforms` (cross-package export + publish + consume) | open | — |
+| S-13 | vector store can't distinguish "no filter" from "filtered to zero" | triage | `architect-decision` dispatched 2026-09-21 (upstream fix vs local guard; ADR-worthy) |
+| S-14 | external-package workaround-removal program (~1,400+ lines, upstream-contingent) | deferred | blocked on T-02 placement analysis; a program to plan, not a task to start |
+| S-15 | `closeStoreOnce` independently defined in both hosts (cli.ts / server.ts) | open | needs a shared host-bootstrap module |
+| S-16 | test-harness boilerplate copy-pasted across six spec files | open | home: `src/test/helpers/` |
+| S-17 | `write/CONTRACT.md` embeds code samples mirroring the implementation | open | generate-from-source / trim-to-signatures / gate — pick one |
+| S-18 | `findImplicitDiscriminatorBranch` can select the wrong union branch on a missing tag (apigen-base-logical, high) | open | negative-control test proving the bug today, then fix |
+| S-19 | unbounded recursion in `describeParams` for union-of-unions (apigen-engine-runtime, medium) | open | depth budget threaded through `typeName`/`unionValues`/`objectShape` |
+| S-20 | startup-cost fix in `extraction-session.ts` shipped with no test (apigen-core-client, medium) | open | child-process require-side-effect harness |
+| S-21 | name lookups return "first match" with no ordering guarantee (resolve.ts:134-153) | open | ORDER BY defence-in-depth + product call on project scoping |
+
+### H3 — Clear fixes (C-01..C-26)
+
+All `open`; none started. The removal pass runs before any of these. C-09's
+`semantic-search.ts:30` site resolves to "file deleted" via S-01 — only the
+`RAG-SPEC.md:13` wording fix and the C-10 sweep survive.
+
+| Item | Summary | Status | Owner / notes |
+|------|---------|--------|---------------|
+| C-01 | extract `buildDateRangeFilter` (query.ts + views/semantic.ts) | open | coordinate with S-02 (strict subset) |
+| C-02 | use `MARKDOWN_CAPABLE_VIEWS` in its own guard | open | with C-03 |
+| C-03 | one canonical markdown-capable-view type | open | with C-02 |
+| C-04 | one canonical graph-relation vocabulary (`GRAPH_RELS`) | open | — |
+| C-05 | name the catalog-kind union | open | — |
+| C-06 | constrain `mutateMetadata`'s generic | open | — |
+| C-07 | parallelize the independent ref-resolution loop | open | — |
+| C-08 | export the env-var name (`ADHD_BACKLOG_EMBEDDING_ENABLED`) | open | — |
+| C-09 | delete the false single-writer claim | open | `semantic-search.ts:30` site resolved by S-01 deletion; `RAG-SPEC.md:13` wording fix stands (repo hard rule) |
+| C-10 | sweep the package for other single-writer language | open | repo hard rule |
+| C-11 | remove the static import of an optional dependency (`bootstrap.ts:50-52`) | open | — |
+| C-12 | export `parseJsonObject` from `tx.ts`; delete the `parseMetaObject` copy | open | — |
+| C-13 | share the claim-staleness default (30) from `catalog.ts` | open | — |
+| C-14 | share the busy-timeout default (5000) from `env.ts` | open | — |
+| C-15 | name the default HTTP host/port; derive the help text | open | — |
+| C-16 | name the retry jitter band | open | — |
+| C-17 | name the default edge weight (incl. the raw-SQL literal at update.ts:871) | open | — |
+| C-18 | extract `resolveIssueProjectTx` (transition.ts:175 / update.ts:236 byte-identical) | open | — |
+| C-19 | export `looksLikeOwnSandboxDir` from one place | open | — |
+| C-20 | hoist `getScopeEnum()` out of the per-method loop (apigen-core-client) | open | — |
+| C-21 | fall back for an empty `enum: []` (apigen-engine-runtime describe-params) | open | — |
+| C-22 | run the vocabulary gates in CI (Nx target on the backlog project) | open | — |
+| C-23 | add a data-model diagram to `DATA_MODEL.md`; link it from README | open | doc-only |
+| C-24 | retire the now-satisfied TEST-GAP marker (`graph-backlog-store.spec.ts:73-89`) | open | — |
+| C-25 | correct the stale fixture header comment | open | — |
+| C-26 | reword the retry header's PRAGMA framing | open | cosmetic |
+
+### H4 — Backlog-graph filing status
+
+- Store: reachable for READS (integrity-repaired event on open:
+  `backlog.db-shm.stale-2026-09-21-2029` moved aside). Production graph is
+  **empty — 0 projects, 0 items** (verified via `adhd-backlog query`,
+  views `projects`/`list`). The pre-rollout corpus lives behind the
+  human-gated cutover steps (B3/B4) — noted, not mine to trigger.
+- **BLOCKER (2026-09-21): the write path is DOWN.** `upsert-project`
+  fails with `Write I/O failure: an unclassified driver/connection error
+  surfaced from the underlying transaction` (retryable flag set, but the
+  CLI's own retry does not recover); retried once, failed again. Reads
+  succeed, writes fail — same blocker class as the prior session's F3/D4
+  write-blocker. Consequence: **zero of the 60 items is filed yet**, and
+  the 11 prepared filing payloads (project + component + jscpd-gate +
+  findings + deferrals) are blocked. Triage this FIRST on resume
+  (`debug` → `architect` → fix), before filing or implementation can
+  transition states. Candidate root causes on record: stale install vs
+  lockfile (sox-graph-store declared 0.10.0 / installed 0.9.2),
+  BUG-008-class WAL issues, `classifyDriverError` classifying an
+  unrecognized driver error as retryable-I/O, harness-role telemetry
+  drop — all (unverified) until `debug` traces it.
+
+### H5 — Triage-wave outcomes, program directives, resume map (2026-09-21)
+
+**Standing user directives (2026-09-21):** (1) remove deprecated/redundant
+code FIRST; (2) a jscpd gate is wanted — filed high-value (uid pending the
+H4 write-path fix); (3) autonomy to complete the whole scope; (4) changes
+to sox-ecosystem packages allowed, publish allowed — repo located at
+`/Users/nix/dev/ai/sox-ecosystem`; (5) **dispatch code reviews after
+completion of task groups** (every wave/group gets a `review` pass before
+merge/push).
+
+**Triage decisions landed:**
+
+| Item | Verdict → consequence |
+|------|-----------------------|
+| T-01 | fold into the review spec — add `coverage` (CODE_REVIEW_SCHEMA) + tool-exclusion (JSCPD_SCHEMA) fields before the next audit round |
+| T-02/T-03 | placement analysis COMPLETE (architect): 13 cluster verdicts, T-03 estimates reconciled; **Finding 0 — worktree install is stale vs its own lockfile** (sox-graph-store declared 0.10.0 / installed 0.9.2) |
+| T-04 | EXTRACT `computeCitationSha` → new `src/write/citation-sha.ts`; both write sites import; the divergent `tools/etl/citation.ts` copy stays distinct (flagged for follow-up). Queued Wave 2 |
+| T-05 | doublet unreachable (acceptable) BUT the skip's doc comment is factually false and the gate is free: export `checkMultiplicityTx` (tx.ts:541), gate before the carry-forward INSERT, rewrite the justification. Queued Wave 2 |
+| T-06/T-08 | resolved by S-01 deletion (moot) |
+| T-07 | keep `dropSupersededResults`; upstream request filed (blocked on H4 write fix) |
+| T-09 | deferred — data-model feature, own epic (filing queued) |
+| T-10 | defer — revisit at the third caller |
+| T-11 | won't-fix — reply-only |
+| T-12 | defer — folds into the S-08/S-09 config pass if bootstrap.spec survives S-01 |
+| T-13 | architect: no gate at today's 6.54%; adopt a 5% CI ceiling AFTER S-01/S-03/S-04/S-16 land, CONTRACT.md mirrors + per-file write conventions allowlisted. **USER OVERRIDE: gate wanted → filed HIGH-VALUE** |
+| S-05/S-06 | defer both to the next major, batched as one breaking release with deprecation aliases |
+| S-13 | decision agent INSUFFICIENT twice (could not read installed dist in budget). Disposition: the ambiguity dies with semantic-search.ts; surviving path passes NodeFilter straight to `searchRanked` (upstream filtered-KNN); local guard rejected; the "filter-resolved-to-zero must return zero, never unfiltered" invariant is upstream-owned and warrants a sox-ecosystem ADR (ADR-0016 amendment candidate). Wave-0 A–D acceptance must include a behavioral pin of zero-not-unfiltered against the real installed vector store |
+| S-18 | exact fallback contract delivered (undefined tag never matches; distinct-literal gate; no-match → undefined → structural scoring → `oneOf[0] ?? {}`). Impl queued (apigen track) |
+| S-19 | exact depth contract delivered (integer `depth=2` budget; union gated ≥2 consuming 1; object terminal ≥1; truncation markers `'union'`/`'object'`; existing pins stay byte-identical). Impl queued (apigen track) |
+
+**Product worklist adopted:** Wave 0 removal (S-01 + dead-code + C-22 +
+C-09-RAG-SPEC-site) → Wave 1 correctness (S-02+C-01; apigen S-18/S-19/
+S-20/C-20/C-21; S-13 acceptance folded in) → Wave 2 clear fixes +
+refactors (remaining C-items, S-03/S-04/S-11/S-12/S-15/S-16/S-17/S-21a,
+config pass S-08/S-09) → Wave 3 (S-14 sox-ecosystem program; S-07 own
+plan).
+
+**Work landed this session:**
+- **C-22 DONE** — commit `67b385d3`: `vocabulary-gate` Nx target on the
+  backlog project (dependsOn build/assets; `test.dependsOn` extended),
+  negative-controlled. Review queued per directive 5.
+- **Wave 0 Seg E DONE (uncommitted, in tree — the A–D executor commits it
+  together with the code):** new `src/api.semantic-laziness.spec.ts`;
+  re-scoped `text-routing.spec.ts`, `superseded-ranking.spec.ts`,
+  `meta.spec.ts`, `views/semantic.spec.ts`, `bootstrap.spec.ts` (header);
+  staged rename `src/store/rag-optional-deps.spec.ts` →
+  `src/write/`. RED evidence: positive control + cross-process + upgrade
+  tests fail with `searchRanked` called 0 times (expected); the negative
+  control is the reciprocal guard (green pre-fix, must flip red post-fix)
+  — framing accepted: that is the correct teeth for a bug-presence test.
+
+**Resume map (ordered):**
+0. `debug` triage of the H4 graph write-path failure → `architect` plan →
+   implement fix. Until then no filing and no status transitions.
+1. Re-run the prepared filing block (project + component + 11 items), then
+   fan out filing the remaining program items (dedupe per backlog-usage).
+2. `review` pass on C-22 (directive 5).
+3. Wave 0 Seg A–D (`typescript`): bootstrap probe + `ensureSemanticReady`
+   seam + query routing + host deletions — one atomic commit together with
+   the uncommitted Seg-E files; full suite green; S-13 zero-not-unfiltered
+   behavioral pin included.
+4. Wave 0 Seg F (`typescript`): delete `semantic-search.ts`,
+   `embed-queue.ts`, `mutate-metadata.ts`, `rag-e2e.spec.ts`,
+   `semantic-search.spec.ts`; drop `flushEmbeds` from graph-backlog-store;
+   fix the stale REAL_BY_DESIGN bucket for text-routing.spec.ts in
+   `tools/gate/embedding-usage-gate.mjs`.
+5. Wave 0 Seg G (`backend`): docs (RAG-SPEC/DESIGN/PLUGIN_ARCHITECTURE/
+   immediate-retry header) + resolve S-01/C-09-part/T-06/T-08/C-06 +
+   transition filed items.
+6. `review` pass on Wave 0 (directive 5) → push.
+7. Wave 1: S-02+C-01 (query.ts, after Wave 0); apigen track
+   S-18/S-19/C-21/C-20/S-20 (file-disjoint, parallel) per the landed
+   verdicts.
+8. Wave 2: remaining C-fixes + refactors + S-08/S-09 config pass; then
+   activate the jscpd gate (5% + allowlist) per the filed item.
+9. Wave 3: S-14 against `/Users/nix/dev/ai/sox-ecosystem` (clusters
+   1/5/9/11, publish granted; start with lockfile re-install + cluster-1
+   verification vs sox-graph-store 0.10.0); S-07 as its own plan.
+10. Every transition: update this section + the backlog graph (once the
+    write path is fixed).
+
+**Notes:** audit cross-ref "S-23" in S-11 resolves to S-21 (determinism).
+Two spec-tsconfig type errors pre-existed the Seg-E edits and were left
+untouched (meta.spec.ts:51/272, views/semantic.spec.ts:488,
+bootstrap.spec.ts:152 — repo-wide `IIssueListResult | IIssueMarkdownResult`
+`.items` weakness on lines not authored this wave) — (unverified
+pre-existing).
+
