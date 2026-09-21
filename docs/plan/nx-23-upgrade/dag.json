@@ -326,6 +326,19 @@
       ],
       "context": "contexts/audit-tests.md",
       "notes": "Hold point. File-level selection must be proven to select cross-package tests AND to fail loudly on zero selection."
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "final",
+      "depends_on": [
+        "audit-tests"
+      ],
+      "guard": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_final.py",
+      "artifacts": [
+        "docs/plan/nx-23-upgrade/scripts/guard_audit_final.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": "Final hold. Proves every Definition-of-Done clause against the real codebase. Nothing lands until this is green."
     }
   },
   "authored_with": {
