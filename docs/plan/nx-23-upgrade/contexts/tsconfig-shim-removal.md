@@ -22,6 +22,7 @@
 - [tsconfig-shim-removal.3] No deprecation-suppression relaxation remains in the shared compiler config
 - [tsconfig-shim-removal.4] Representative projects still build and type-check
 - [tsconfig-shim-removal.5] The build gate has teeth: an injected type error turns it red
+- [tsconfig-shim-removal.6] The measured blast-radius record exists
 ---
 
 ## Reservations
