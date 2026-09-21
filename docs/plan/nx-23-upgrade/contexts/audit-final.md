@@ -18,6 +18,7 @@
 
 - [audit-final.1] The final audit guard exists
 
+- [audit-final.2] Every criterion across every phase passes at the final hold
 ---
 
 ## Reservations
