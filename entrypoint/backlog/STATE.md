@@ -1648,3 +1648,10 @@ bootstrap.spec.ts:152 — repo-wide `IIssueListResult | IIssueMarkdownResult`
 `.items` weakness on lines not authored this wave) — (unverified
 pre-existing).
 
+**Push status at pause:** commits `67b385d3` (C-22) and `e6b90897`
+(state/audit docs) are LOCAL-ONLY. The pre-push hook correctly blocks on
+`nx affected -t test` because the working tree holds the deliberately-RED
+Seg-E specs (positive-control/upgrade assertions awaiting the A–D code) —
+do NOT `--no-verify`; push after Wave 0 Seg A–D lands and the suite is
+green. Remote `origin/feat/backlog-hard-replacement` is at `af8eaf63`.
+
