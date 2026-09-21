@@ -1,4 +1,4 @@
-# graph-test-build-inferred — STATE_NAME
+# graph-test-build-inferred — Test and build targets inferred (phase 2a)
 
 **Phase:** graph · **Kind:** work · **Depends on:** audit-config · **Guard:** `./node_modules/.bin/nx show project data-query-engine --json | rg -q "\"test\"" && ./node_modules/.bin/nx show project data-base-transforms --json | rg -q "\"build\"" && node -e "
 const fs=require(\"fs\"),path=require(\"path\");
@@ -10,7 +10,31 @@ process.exit(bad?1:0)"`
 
 ## Goal
 
-<What is true after this state that was not true before?>
+The 104 explicit test/build executor targets that exactly duplicate what the registered plugins infer are gone, and the inferred targets produce the same artifacts.
+
+---
+
+## Semantic distillation
+
+- These 104 are the SAFE ones: all named exactly `test`/`build`, all backed by an already-registered plugin. The other three families are not — that is why this is phased.
+- Carry every non-default option (coverage outputs, config file paths, assets) into the inferred configuration BEFORE deleting the explicit target. Deleting first loses the options silently.
+- Prove equivalence with a real suite run and a real build through the inferred target — not with a task count.
+
+---
+
+## Contract promise
+
+```text
+added:    []
+modified: ["~62 project manifests","nx.json where options must be carried"]
+deleted:  ["104 explicit test/build executor targets"]
+```
+
+---
+
+## Commit points
+
+- Commit the 104 deletions + option carry-over post-guard, in one commit so the diff is reviewable as a unit.
 
 ---
 
@@ -35,6 +59,12 @@ process.exit(bad?1:0)"`
 read_only:  ["docs/plan/nx-23-upgrade/SCOPE.md", "docs/plan/nx-23-upgrade/USE_CASES.md", "docs/plan/nx-23-upgrade/demo/DEMO.md", "docs/plan/nx-23-upgrade/demo/UNRESOLVED.md", "docs/plan/nx-23-upgrade/TOOLS.md", "docs/plan/nx-23-upgrade/APPROVAL.md", "docs/plan/nx-23-upgrade/contexts/_shared.md", "AGENTS.md", "CLAUDE.md", "nx.json", "tsconfig.base.json"]
 mutates:    ["entrypoint/agent-mcp/project.json", "entrypoint/apigen-cli/project.json", "entrypoint/backlog/project.json", "entrypoint/decompile-cli/project.json", "entrypoint/dispatch-cli/project.json", "entrypoint/environment-cli/project.json", "packages/agent/agent-base-types/project.json", "packages/agent/agent-core-env/project.json", "packages/agent/agent-core-policy/project.json", "packages/agent/agent-core-provider/project.json", "packages/agent/agent-engine-compiler/project.json", "packages/agent/agent-engine-orchestrator/project.json", "packages/agent/agent-generator-plugin/project.json", "packages/agent/agent-plugin-budget/project.json", "packages/agent/agent-plugin-sanitize/project.json", "packages/agent/agent-store-prompts/project.json", "packages/agent/agent-store-runtime/project.json", "packages/agent/agent-store-tools/project.json", "packages/apigen/apigen-base-errors/project.json", "packages/apigen/apigen-base-logical/project.json", "packages/apigen/apigen-base-schema/project.json", "packages/apigen/apigen-base-types/project.json", "packages/apigen/apigen-core-client/project.json", "packages/apigen/apigen-engine-conformance/project.json", "packages/apigen/apigen-engine-gateway/project.json", "packages/apigen/apigen-engine-naming/project.json", "packages/apigen/apigen-engine-runtime/project.json", "packages/apigen/apigen-generator-nx/project.json", "packages/apigen/apigen-plugin-api-express/project.json", "packages/apigen/apigen-plugin-api-fastify/project.json", "packages/apigen/apigen-plugin-batch/project.json", "packages/apigen/apigen-plugin-cli-output/project.json", "packages/apigen/apigen-plugin-health/project.json", "packages/apigen/apigen-plugin-ir-cache/project.json", "packages/apigen/apigen-plugin-java-javalin/project.json", "packages/apigen/apigen-plugin-jsonschema/project.json", "packages/apigen/apigen-plugin-logger/project.json", "packages/apigen/apigen-plugin-mcp/project.json", "packages/apigen/apigen-plugin-openapi/project.json", "packages/apigen/apigen-plugin-py-flask/project.json", "packages/apigen/apigen-plugin-py-grpc/project.json", "packages/apigen/apigen-plugin-ts-types/project.json", "packages/apigen/codegen/openapi/project.json", "packages/apigen/python-env/project.json", "packages/data/data-base-transforms/project.json", "packages/data/data-core-structures/project.json", "packages/data/data-query-engine/project.json", "packages/dispatch/dispatch-base-spec/project.json", "packages/dispatch/dispatch-base-types/project.json", "packages/dispatch/dispatch-core-client/project.json", "packages/dispatch/dispatch-core-optimizer/project.json", "packages/dispatch/dispatch-orchestrator/project.json", "packages/dispatch/dispatch-serializer-json/project.json", "packages/environment/environment-base-spec/project.json", "packages/environment/environment-builder/project.json", "packages/environment/environment-core-node/project.json", "packages/ui-react/ui-react-base-hooks/project.json", "packages/ui-react/ui-react-base-storybook/project.json", "packages/workspace/workspace-base-standard/project.json", "packages/workspace/workspace-base-tools/project.json", "packages/workspace/workspace-base-vite-paths/project.json", "packages/workspace/workspace-codegen-nx/project.json", "project.json"]
 ```
+
+---
+
+## References & interfaces
+
+- [ref:target-artifact-parity] — a target converted to inference must still emit the same artifact at the same path as the explicit target it replaced
 
 ---
 
