@@ -549,6 +549,15 @@
         "packages/workspace/workspace-base-standard/project.json",
         "packages/workspace/workspace-base-vite-paths/project.json"
       ]
+    },
+    {
+      "id": "graph-release-eslint-inferred.3",
+      "phase": "graph",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "./node_modules/.bin/nx show project apigen-plugin-jsonschema --json",
+      "expect": "marker",
+      "marker": "nx-release-publish"
     }
   ]
 }
