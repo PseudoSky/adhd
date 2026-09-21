@@ -313,6 +313,19 @@
       ],
       "context": "contexts/test-changed-optin.md",
       "notes": "Deliver the fail-safe design: full suite stays the default, the fast path is explicit opt-in, and a run that selects zero tests must FAIL rather than report success."
+    },
+    "audit-tests": {
+      "kind": "audit",
+      "phase": "tests",
+      "depends_on": [
+        "test-changed-optin"
+      ],
+      "guard": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_tests.py",
+      "artifacts": [
+        "docs/plan/nx-23-upgrade/scripts/guard_audit_tests.py"
+      ],
+      "context": "contexts/audit-tests.md",
+      "notes": "Hold point. File-level selection must be proven to select cross-package tests AND to fail loudly on zero selection."
     }
   },
   "authored_with": {
