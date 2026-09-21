@@ -432,6 +432,15 @@
       "cmd": "./node_modules/.bin/nx show project data-query-engine --json",
       "expect": "marker",
       "marker": "\"test\""
+    },
+    {
+      "id": "graph-test-build-inferred.4",
+      "phase": "graph",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "./node_modules/.bin/nx show project data-base-transforms --json",
+      "expect": "marker",
+      "marker": "\"build\""
     }
   ]
 }
