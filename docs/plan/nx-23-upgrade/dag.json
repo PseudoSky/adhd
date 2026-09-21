@@ -113,6 +113,20 @@
       ],
       "context": "contexts/tsconfig-shim-removal.md",
       "notes": "Delete the five migration shims the upgrade added to the shared compiler config and prove empirically that builds still type-check. Measure the real blast radius; do not assume the stated one."
+    },
+    "cache-isolation": {
+      "kind": "work",
+      "phase": "config",
+      "depends_on": [
+        "tsconfig-shim-removal"
+      ],
+      "guard": "node -e \"const c=require(\\\"./nx.json\\\").cacheDirectory;if(c!==\\\".nx/cache\\\")process.exit(1)\" && ./node_modules/.bin/nx show projects | rg -q \"backlog\" && test -f docs/plan/nx-23-upgrade/CACHE-ISOLATION.md",
+      "artifacts": [
+        "nx.json",
+        "docs/plan/nx-23-upgrade/CACHE-ISOLATION.md"
+      ],
+      "context": "contexts/cache-isolation.md",
+      "notes": "Defuse nrwl/nx#36675: Nx 23 pools the task cache and cache DB across sibling worktrees, and a test target has replayed another worktree cached PASS. Pin a relative cache directory so each checkout owns its cache."
     }
   },
   "authored_with": {
