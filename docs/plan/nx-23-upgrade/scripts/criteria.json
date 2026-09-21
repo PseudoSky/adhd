@@ -702,6 +702,14 @@
       "tier": 1,
       "kind": "exists",
       "path": "docs/plan/nx-23-upgrade/scripts/guard_audit_final.py"
+    },
+    {
+      "id": "audit-final.2",
+      "phase": "final",
+      "tier": 3,
+      "kind": "command",
+      "cmd": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_final.py",
+      "expect": "exit0"
     }
   ]
 }
