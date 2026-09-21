@@ -248,6 +248,15 @@
       "kind": "command",
       "cmd": "node -e \"const p=require(\\\"path\\\");const r=process.cwd();process.exit(p.resolve(r,require(\\\"./nx.json\\\").cacheDirectory).startsWith(r+require(\\\"path\\\").sep)?0:1)\"",
       "expect": "exit0"
+    },
+    {
+      "id": "cache-isolation.3",
+      "phase": "config",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "./node_modules/.bin/nx show projects",
+      "expect": "marker",
+      "marker": "backlog"
     }
   ]
 }
