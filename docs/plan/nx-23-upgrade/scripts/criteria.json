@@ -457,6 +457,30 @@
       "kind": "command",
       "cmd": "./node_modules/.bin/nx build data-query-engine",
       "expect": "exit0"
+    },
+    {
+      "id": "graph-js-tsc-inferred.1",
+      "phase": "graph",
+      "tier": 0,
+      "kind": "absent",
+      "pattern": "@nx/js:tsc",
+      "paths": [
+        "entrypoint/agent-mcp/project.json",
+        "entrypoint/decompile-cli/project.json",
+        "entrypoint/dispatch-cli/project.json",
+        "entrypoint/environment-cli/project.json",
+        "packages/agent/agent-core-policy/project.json",
+        "packages/agent/agent-core-provider/project.json",
+        "packages/agent/agent-engine-compiler/project.json",
+        "packages/agent/agent-engine-orchestrator/project.json",
+        "packages/agent/agent-generator-plugin/project.json",
+        "packages/agent/agent-store-prompts/project.json",
+        "packages/agent/agent-store-runtime/project.json",
+        "packages/agent/agent-store-tools/project.json",
+        "packages/apigen/apigen-generator-nx/project.json",
+        "packages/workspace/workspace-base-tools/project.json",
+        "packages/workspace/workspace-codegen-nx/project.json"
+      ]
     }
   ]
 }
