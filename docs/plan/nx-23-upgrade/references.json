@@ -1,1 +1,9 @@
-{}
+{
+  "target-artifact-parity": {
+    "anchor": "packages/data/data-query-engine/project.json",
+    "rule": "a target converted to inference must still emit the same artifact at the same path as the explicit target it replaced",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:target-artifact-parity]",
+    "audit_check": "audit-final.ref-target-artifact-parity"
+  }
+}
