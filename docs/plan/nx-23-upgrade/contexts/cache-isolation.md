@@ -18,6 +18,7 @@
 
 - [cache-isolation.1] The task cache directory is declared relative to the checkout
 
+- [cache-isolation.2] The declared cache directory resolves inside this checkout
 ---
 
 ## Reservations
