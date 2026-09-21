@@ -596,6 +596,16 @@
       "tier": 1,
       "kind": "exists",
       "path": "docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md"
+    },
+    {
+      "id": "test-selection-revalidated.2",
+      "phase": "tests",
+      "tier": 0,
+      "kind": "present",
+      "pattern": "D1",
+      "paths": [
+        "docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md"
+      ]
     }
   ]
 }
