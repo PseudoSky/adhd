@@ -20,6 +20,7 @@
 
 - [test-changed-optin.2] The file-scoped fast path is exposed as a workspace script
 - [test-changed-optin.3] The full suite remains the default: the standard test target is unchanged
+- [test-changed-optin.4] A zero-selection run fails loudly instead of reporting success
 ---
 
 ## Reservations
