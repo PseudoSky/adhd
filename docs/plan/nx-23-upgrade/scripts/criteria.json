@@ -78,6 +78,14 @@
       "cmd": "./node_modules/.bin/nx show projects",
       "expect": "marker",
       "marker": "backlog"
+    },
+    {
+      "id": "config-repair-absorbed.1",
+      "phase": "reconcile",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "node -e \"const d=require(\\\"./nx.json\\\").targetDefaults.test.dependsOn;process.exit(d.includes(\\\"lint\\\")&&d.includes(\\\"^build\\\")?0:1)\"",
+      "expect": "exit0"
     }
   ]
 }

@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [config-repair-absorbed.1] The default test target still depends on lint, preserving the publish gate
 
 ---
 
