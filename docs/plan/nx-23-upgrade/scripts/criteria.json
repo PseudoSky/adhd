@@ -146,6 +146,14 @@
         "packages/agent/agent-engine-compiler/vite.config.ts",
         "packages/apigen/apigen-engine-conformance/vite.config.ts"
       ]
+    },
+    {
+      "id": "test-resolution-absorbed.3",
+      "phase": "reconcile",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "node -e \"process.exit(require(\\\"./nx.json\\\").namedInputs.sharedGlobals.join(\\\"|\\\").includes(\\\"source-resolution.mjs\\\")?0:1)\"",
+      "expect": "exit0"
     }
   ]
 }
