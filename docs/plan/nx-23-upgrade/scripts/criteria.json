@@ -69,6 +69,15 @@
       "paths": [
         "docs/plan/nx-23-upgrade/TRIAGE-VERDICTS.md"
       ]
+    },
+    {
+      "id": "gate-triage-absorbed.5",
+      "phase": "intake",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "./node_modules/.bin/nx show projects",
+      "expect": "marker",
+      "marker": "backlog"
     }
   ]
 }
