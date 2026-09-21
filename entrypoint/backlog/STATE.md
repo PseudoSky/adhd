@@ -1397,3 +1397,38 @@ real, verified, narrower wins — not the fix for what actually matters.
       10/10 tests green; `npx nx affected -t build test` for `backlog` + 19
       dependent tasks: 71 files / 602 tests green; vocabulary-gate CLEAN.
       Test-file-only change, no production code touched in the final diff.
+
+## G. Post-merge-readiness hygiene audit (new, 2026-09-21)
+
+Separate from A-F (which are the rollout itself, now functionally done
+except the human-gated B3/B4/D3/D4 steps). This is a multi-pass, multi-
+agent audit of the PR's accumulated diff for cruft, redundancy, and
+external-dependency-boundary issues that a straight-line rollout wouldn't
+surface on its own. Dispatched as a real multi-agent fan-out (not a single
+dispatch) per the user's own explicit orchestration plan — Pass 1 runs 6
+haiku agents in parallel over `entrypoint/backlog/src` plus a separate
+4-way sonnet code-review fan-out (one per PR-touched package: `backlog`,
+`apigen-base-logical`, `apigen-core-client`, `apigen-engine-runtime`,
+confirmed via `git diff --name-only main...feat/backlog-hard-replacement`).
+Pass 2 (4 more agents, some depending on Pass 1 output) triages PR
+comments, checks for forgotten dead files, and assesses how much backlog
+code exists only to work around external (sox/adhd) package issues. Pass 3
+is a single Opus architect synthesis of everything into
+`BACKLOG_BACKLOG.md` (buckets: needs triage / needs scoping / clear fix).
+
+- [~] G1. Pass 1 — 6 haiku agents (external-library-claim comment
+      extraction; GitNexus module graph + redundant/misplaced-function
+      scan; magic-variable/hardcoded-enum search; `jscpd` duplication scan;
+      PR-comment context-packet extraction; raw-SQL usage scan) + a
+      parallel 4-way sonnet code-review fan-out (one per touched package).
+      Dispatched.
+- [ ] G2. Pass 2 — depends on G1's outputs. 4 agents: forgotten-dead-file
+      assessment; sonnet PR-comment triage (answers, not just packets);
+      external-package-claim removal-scope assessment (T2); architect
+      review of T2 for where code should be unified (kept in backlog vs.
+      pushed to a shared package vs. fixed externally).
+- [ ] G3. Pass 3 — Opus architect synthesis of G1+G2 into
+      `BACKLOG_BACKLOG.md`, bucketed needs-triage / needs-scoping /
+      clear-fix. Not filed to the real backlog graph (store unreachable
+      this session) — a plain markdown file instead, explicitly named to
+      avoid colliding with the real `BACKLOG.md` projection.
