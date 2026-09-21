@@ -19,6 +19,7 @@
 - [test-selection-revalidated.1] The revalidation probe record exists
 
 - [test-selection-revalidated.2] The probe record reports defect one
+- [test-selection-revalidated.3] The probe record reports defect two
 ---
 
 ## Reservations
