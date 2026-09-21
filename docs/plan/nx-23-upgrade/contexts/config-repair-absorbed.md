@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["docs/plan/nx-23-upgrade/SCOPE.md", "docs/plan/nx-23-upgrade/USE_CASES.md", "docs/plan/nx-23-upgrade/demo/DEMO.md", "docs/plan/nx-23-upgrade/demo/UNRESOLVED.md", "docs/plan/nx-23-upgrade/TOOLS.md", "docs/plan/nx-23-upgrade/APPROVAL.md", "docs/plan/nx-23-upgrade/contexts/_shared.md", "AGENTS.md", "CLAUDE.md", "tools/nx-plugins/build/plugin.js", "tools/nx-plugins/lint/plugin.js", "package.json"]
 mutates:    ["nx.json", "CHANGELOG.md", "packages/agent/agent-core-env/package.json", "packages/agent/agent-core-policy/package.json", "packages/agent/agent-core-provider/package.json", "packages/agent/agent-engine-compiler/package.json", "packages/agent/agent-engine-orchestrator/package.json", "packages/agent/agent-store-prompts/package.json", "packages/agent/agent-store-runtime/package.json", "packages/agent/agent-store-tools/package.json", "entrypoint/decompile-cli/package.json"]
 ```
 
