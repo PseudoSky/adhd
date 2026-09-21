@@ -23,6 +23,7 @@ process.exit(bad?1:0)"`
 - [graph-js-tsc-inferred.1] No explicit tsc executor target remains
 
 - [graph-js-tsc-inferred.2] The js plugin is registered so the tsc-built projects still infer a build
+- [graph-js-tsc-inferred.3] A sample tsc-built project still exposes a build target
 ---
 
 ## Reservations
