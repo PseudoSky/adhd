@@ -24,6 +24,7 @@ process.exit(bad?1:0)"`
 
 - [graph-release-eslint-inferred.2] No deprecated eslint executor target remains
 - [graph-release-eslint-inferred.3] A sample publishable project still exposes a release target
+- [graph-release-eslint-inferred.4] A sample project still lints clean through the inferred target
 ---
 
 ## Reservations
