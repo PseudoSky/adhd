@@ -273,6 +273,19 @@
       ],
       "context": "contexts/graph-release-eslint-inferred.md",
       "notes": "Phase 2c: the deprecated eslint lint targets go through the sanctioned convert-to-inferred codemod; the twelve release targets have bespoke dependency chains that must survive the move to inference."
+    },
+    "audit-graph": {
+      "kind": "audit",
+      "phase": "graph",
+      "depends_on": [
+        "graph-release-eslint-inferred"
+      ],
+      "guard": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_graph.py",
+      "artifacts": [
+        "docs/plan/nx-23-upgrade/scripts/guard_audit_graph.py"
+      ],
+      "context": "contexts/audit-graph.md",
+      "notes": "Hold point. The remodel must produce byte-identical build artifacts and an equivalent task graph before anything downstream trusts it."
     }
   },
   "authored_with": {
