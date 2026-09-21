@@ -7,7 +7,8 @@
     "reconcile",
     "config",
     "graph",
-    "tests"
+    "tests",
+    "final"
   ],
   "terminal": "done",
   "nodes": {},
