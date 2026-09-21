@@ -31,7 +31,15 @@
     },
     "test": {
       "executor": "@nx/vitest:test",
-      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "//dependsOn": "compile-cli.test.ts (and compile-cli-migration-resolution.test.ts) spawn the BUILT bin at {projectRoot}/dist/src/cli/compile.js as a real child process, and symlink each @adhd dependency's package ROOT (whose package.json `exports` maps `.` -> `./dist/src/index.js`) into dist/node_modules/@adhd/. nx.json's default `test.dependsOn` is `[\"lint\",\"^build\"]` — `lint` plus DEPENDENCIES' builds only, never this project's OWN dist/ — so without this entry the bin's own build is invisible to the task graph and the test silently relies on its beforeAll's nested `nx build`. Declaring `build` here makes that build a cache-visible, parallelizable graph node. A project-level `dependsOn` REPLACES the targetDefault rather than merging with it (the rule entrypoint/dispatch-cli/project.json documents), so the global `lint` and `^build` are repeated here; dropping either would silently remove the publish-gating `lint`/`sync-deps` chain for this project alone (BUG-060).",
+      "dependsOn": [
+        "lint",
+        "^build",
+        "build"
+      ],
+      "outputs": [
+        "{options.reportsDirectory}"
+      ],
       "options": {
         "configFile": "packages/agent/agent-engine-compiler/vite.config.ts",
         "reportsDirectory": "coverage/packages/agent/agent-engine-compiler"
