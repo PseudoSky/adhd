@@ -20,6 +20,7 @@
 
 - [upgrade-baseline.2] The declared toolchain pins match the measured baseline
 - [upgrade-baseline.3] No vite 5 major pin remains declared
+- [upgrade-baseline.4] The measured baseline record exists
 ---
 
 ## Reservations
