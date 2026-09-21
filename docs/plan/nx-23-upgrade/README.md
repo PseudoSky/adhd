@@ -58,3 +58,5 @@ Land the Nx 23.2.1 + Vite 8 upgrade on perf/nx-upgraded, remodel the task graph 
 - `[dod.10]` **(structural) Each checkout owns its task cache, so a cached pass from a sibling worktree cannot be replayed here. (structural)** — (structural) Each checkout owns its task cache, so a cached pass from a sibling worktree cannot be replayed here..
 
 - `[dod.11]` **(structural) All of this work sits on the upgrade branch; nothing was pushed to or merged into the default branch. (structural)** — (structural) All of this work sits on the upgrade branch; nothing was pushed to or merged into the default branch..
+
+- `[dod.12]` **(structural) The two sibling work branches are absorbed into the upgrade branch, with the publish-gate restoration preserved and the test-time source resolution helper in place. (structural)** — (structural) The two sibling work branches are absorbed into the upgrade branch, with the publish-gate restoration preserved and the test-time source resolution helper in place..
