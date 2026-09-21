@@ -128,6 +128,24 @@
       "tier": 1,
       "kind": "exists",
       "path": "tools/vite-plugins/source-resolution.mjs"
+    },
+    {
+      "id": "test-resolution-absorbed.2",
+      "phase": "reconcile",
+      "tier": 0,
+      "kind": "present",
+      "pattern": "nxViteTsPathsPre",
+      "paths": [
+        "tools/vite-plugins/source-resolution.mjs",
+        "entrypoint/agent-mcp/vite.config.ts",
+        "entrypoint/apigen-cli/vite.config.ts",
+        "entrypoint/backlog/vite.config.ts",
+        "entrypoint/decompile-cli/vite.config.ts",
+        "entrypoint/dispatch-cli/vite.config.ts",
+        "entrypoint/environment-cli/vite.config.ts",
+        "packages/agent/agent-engine-compiler/vite.config.ts",
+        "packages/apigen/apigen-engine-conformance/vite.config.ts"
+      ]
     }
   ]
 }
