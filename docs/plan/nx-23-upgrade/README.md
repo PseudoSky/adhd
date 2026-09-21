@@ -42,3 +42,11 @@ Land the Nx 23.2.1 + Vite 8 upgrade on perf/nx-upgraded, remodel the task graph 
   - entrypoint: `pnpm run test:related -- packages/data/data-base-transforms/src/index.ts`
   - observable: `a non-zero exit and a message naming zero selected tests`
   - delivered-by: `test-changed-optin`
+
+- `[dod.7]` **A developer can change a base package and the run still selects the tests of the packages that depend on it. (behavioral)** — A developer can change a base package and the run still selects the tests of the packages that depend on it..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `pnpm run test:related -- packages/data/data-base-transforms/src/lib/date.ts`
+  - observable: `at least one selected spec file belonging to a dependent package, and exit 0`
+  - delivered-by: `test-changed-optin`
