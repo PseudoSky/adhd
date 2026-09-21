@@ -60,6 +60,32 @@
       ],
       "context": "contexts/config-repair-absorbed.md",
       "notes": "Absorb perf/nx-cfgfix into the upgrade branch. CRITICAL: the branch drops lint from the test target, which main reverted for BUG-060 (publish gate). Resolve the conflict in favour of the restored lint dependency."
+    },
+    "test-resolution-absorbed": {
+      "kind": "work",
+      "phase": "reconcile",
+      "depends_on": [
+        "config-repair-absorbed"
+      ],
+      "guard": "test -f tools/vite-plugins/source-resolution.mjs && node -e \"if(!require(\\\"./nx.json\\\").namedInputs.sharedGlobals.join(\\\"|\\\").includes(\\\"source-resolution.mjs\\\"))process.exit(1)\" && ./node_modules/.bin/nx show projects | rg -q \"workspace-codegen-nx\"",
+      "artifacts": [
+        "tools/vite-plugins/source-resolution.mjs",
+        "tools/vite-plugins/README.md",
+        "tools/vite-plugins/externalize.mjs",
+        "nx.json",
+        "packages/workspace/workspace-codegen-nx/src/generators/shared/generator.ts",
+        "packages/workspace/workspace-codegen-nx/src/generators/shared/source-resolution-optout.spec.ts",
+        "entrypoint/agent-mcp/vite.config.ts",
+        "entrypoint/apigen-cli/vite.config.ts",
+        "entrypoint/backlog/vite.config.ts",
+        "entrypoint/decompile-cli/vite.config.ts",
+        "entrypoint/dispatch-cli/vite.config.ts",
+        "entrypoint/environment-cli/vite.config.ts",
+        "packages/agent/agent-engine-compiler/vite.config.ts",
+        "packages/apigen/apigen-engine-conformance/vite.config.ts"
+      ],
+      "context": "contexts/test-resolution-absorbed.md",
+      "notes": "Absorb perf/test-resolve-fix. It makes the test module graph continuous across package boundaries, which is the precondition for cross-package file-level selection. Keep the 4 child-process opt-outs."
     }
   },
   "authored_with": {
