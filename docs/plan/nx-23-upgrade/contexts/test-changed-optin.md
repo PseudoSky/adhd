@@ -22,6 +22,7 @@
 - [test-changed-optin.3] The full suite remains the default: the standard test target is unchanged
 - [test-changed-optin.4] A zero-selection run fails loudly instead of reporting success
 - [test-changed-optin.5] A cross-package change still selects tests in the dependent package
+- [test-changed-optin.6] The test-selection design record exists
 ---
 
 ## Reservations
