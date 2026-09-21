@@ -1233,12 +1233,46 @@ real, verified, narrower wins — not the fix for what actually matters.
 
 ## D. Ship the package
 
-- [ ] D1. Commit everything from A/B/C.
-- [ ] D2. Push to PR #9 ("feat(backlog): 1.0.0 — one surface, one identity,
-      no predecessor left behind").
-- [ ] D3. Get the PR reviewed and merged.
-- [ ] D4. Publish to npm (currently blocked from earlier in the session —
-      cause not yet diagnosed; revisit before this step).
+- [x] D1. Committed everything from A/B/C as one commit, `2118d384`
+      ("feat(backlog): close out the hard-replacement rollout —
+      discoverability, cutover ETL, embeddings, ownership gates, and
+      serve-lock verification"). Staged explicitly by path (never `git add
+      -A`/`.`/`commit -a`) — `entrypoint/backlog/{CHANGELOG,DESIGN,README,
+      SPEC,STATE}.md`, `skill/`, `src/`, `tools/`, plus the specific
+      `packages/apigen/*` shared-package fixes from A2/A8 that were
+      individually reviewed and accepted earlier in the rollout.
+      Deliberately excluded: `AGENTS.md` (unrelated GitNexus-section
+      reformat, no relation to this rollout) and 8 pre-existing untracked
+      files all dated 2026-09-17 (`.claude/workflows/backlog-e2e-*.{js,
+      mjs}`, two unrelated package `CHANGELOG.md`s) — confirmed via `ls -la`
+      timestamps to predate this session's work window entirely, so not
+      mine to judge, commit, or discard. Pre-commit hook ran the real
+      vitest suite against the staged spec files and passed. First attempt
+      accidentally split into two commits (a scripting mistake — two
+      sequential `git commit` invocations in one background command); fixed
+      immediately via `git reset --soft` back to the pre-existing history
+      and one clean recommit — safe because both split commits were
+      local-only, unpushed, and mine alone (verified `origin/feat/backlog-
+      hard-replacement` was still at the prior `2894d82a` before touching
+      anything).
+- [x] D2. Pushed to `origin/feat/backlog-hard-replacement` (PR #9, "feat
+      (backlog): 1.0.0 — one surface, one identity, no predecessor left
+      behind", https://github.com/PseudoSky/adhd/pull/9, OPEN). Pre-push
+      hook ran `nx affected -t test` for 63 projects/171 tasks against the
+      full unpushed range (base `2894d82a` → head `2118d384`, 5 commits
+      total including 2 pre-existing from earlier in the rollout) — 0
+      errors (a handful of pre-existing lint warnings only, not
+      regressions). `origin/feat/backlog-hard-replacement` now matches
+      local HEAD exactly.
+- [ ] D3. Get the PR reviewed and merged. NOT done autonomously — merging a
+      PR is a human decision, not something this session executes on its
+      own initiative even under the standing overnight authorization
+      (which covered commit + push explicitly, not merge).
+- [ ] D4. Publish to npm. NOT done — still blocked from earlier in the
+      session (cause not diagnosed), AND publishing a public package is a
+      separate, more consequential action than commit+push; the standing
+      authorization did not cover it. Diagnose the block and get explicit
+      sign-off before attempting.
 
 ## E. Roll it out system-wide
 
