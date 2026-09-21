@@ -22,6 +22,7 @@ process.exit(bad?1:0)"`
 
 - [graph-release-eslint-inferred.1] No explicit release-publish executor target remains
 
+- [graph-release-eslint-inferred.2] No deprecated eslint executor target remains
 ---
 
 ## Reservations
