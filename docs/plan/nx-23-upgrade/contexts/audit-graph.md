@@ -18,6 +18,7 @@
 
 - [audit-graph.1] The graph-phase audit guard exists
 
+- [audit-graph.2] Every graph-phase criterion passes
 ---
 
 ## Reservations

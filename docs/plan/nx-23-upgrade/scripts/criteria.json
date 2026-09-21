@@ -581,6 +581,14 @@
       "tier": 1,
       "kind": "exists",
       "path": "docs/plan/nx-23-upgrade/scripts/guard_audit_graph.py"
+    },
+    {
+      "id": "audit-graph.2",
+      "phase": "graph",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_graph.py",
+      "expect": "exit0"
     }
   ]
 }
