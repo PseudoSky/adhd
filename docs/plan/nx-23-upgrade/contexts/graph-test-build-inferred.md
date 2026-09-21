@@ -26,6 +26,7 @@ process.exit(bad?1:0)"`
 - [graph-test-build-inferred.3] A sample project still exposes an inferred test target
 - [graph-test-build-inferred.4] A sample project still exposes an inferred build target
 - [graph-test-build-inferred.5] A sample project still runs its suite through the inferred target
+- [graph-test-build-inferred.6] A sample project still produces its build artifact
 ---
 
 ## Reservations
