@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["docs/plan/nx-23-upgrade/SCOPE.md", "docs/plan/nx-23-upgrade/USE_CASES.md", "docs/plan/nx-23-upgrade/demo/DEMO.md", "docs/plan/nx-23-upgrade/demo/UNRESOLVED.md", "docs/plan/nx-23-upgrade/TOOLS.md", "docs/plan/nx-23-upgrade/APPROVAL.md", "docs/plan/nx-23-upgrade/contexts/_shared.md", "AGENTS.md", "CLAUDE.md", "nx.json", "tsconfig.base.json", ".githooks/pre-commit", "docs/plan/nx-23-upgrade/UPGRADE-PLAN.md"]
 mutates:    ["docs/plan/nx-23-upgrade/BASELINE.md", "package.json", "pnpm-lock.yaml"]
 ```
 
