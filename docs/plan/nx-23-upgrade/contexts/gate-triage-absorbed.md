@@ -18,6 +18,7 @@
 
 - [gate-triage-absorbed.1] The triage verdict record exists
 
+- [gate-triage-absorbed.2] The verdict record covers the apigen-cli target
 ---
 
 ## Reservations
