@@ -17,6 +17,14 @@
       "kind": "command",
       "cmd": "node -e \"const d=require(\\\"./package.json\\\").devDependencies;process.exit(d.nx===\\\"23.2.1\\\"&&d.vite===\\\"^8.3.0\\\"&&d.vitest===\\\"4.1.9\\\"?0:1)\"",
       "expect": "exit0"
+    },
+    {
+      "id": "upgrade-baseline.3",
+      "phase": "intake",
+      "tier": 0,
+      "kind": "command",
+      "cmd": "node -e \"const v=require(\\\"./package.json\\\").devDependencies.vite;process.exit(/^[^0-9]*5\\./.test(v)?1:0)\"",
+      "expect": "exit0"
     }
   ]
 }
