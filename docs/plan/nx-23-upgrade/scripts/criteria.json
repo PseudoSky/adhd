@@ -589,6 +589,13 @@
       "kind": "command",
       "cmd": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_graph.py",
       "expect": "exit0"
+    },
+    {
+      "id": "test-selection-revalidated.1",
+      "phase": "tests",
+      "tier": 1,
+      "kind": "exists",
+      "path": "docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md"
     }
   ]
 }
