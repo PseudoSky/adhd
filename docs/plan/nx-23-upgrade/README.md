@@ -24,3 +24,5 @@ Land the Nx 23.2.1 + Vite 8 upgrade on perf/nx-upgraded, remodel the task graph 
   - observable: `exit 0, and the same build turns non-zero after a deliberately injected type error`
   - negative-control: `printf '\n\nexport const __shimProbe: number = "not a number";\n' >> packages/agent/agent-base-types/src/index.ts`
   - delivered-by: `tsconfig-shim-removal`
+
+- `[dod.4]` **(structural) No migration-only compiler relaxation remains in the shared compiler configuration. (structural)** — (structural) No migration-only compiler relaxation remains in the shared compiler configuration..
