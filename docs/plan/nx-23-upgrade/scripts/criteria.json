@@ -25,6 +25,13 @@
       "kind": "command",
       "cmd": "node -e \"const v=require(\\\"./package.json\\\").devDependencies.vite;process.exit(/^[^0-9]*5\\./.test(v)?1:0)\"",
       "expect": "exit0"
+    },
+    {
+      "id": "upgrade-baseline.4",
+      "phase": "intake",
+      "tier": 1,
+      "kind": "exists",
+      "path": "docs/plan/nx-23-upgrade/BASELINE.md"
     }
   ]
 }
