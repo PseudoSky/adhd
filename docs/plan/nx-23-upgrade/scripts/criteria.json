@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "upgrade-baseline.1",
+      "phase": "intake",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "./node_modules/.bin/nx --version",
+      "expect": "marker",
+      "marker": "23.2.1"
+    }
+  ]
+}
