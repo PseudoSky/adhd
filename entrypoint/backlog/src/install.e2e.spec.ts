@@ -17,8 +17,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { install, BACKLOG_MCP_NPX_ARGS } from './install.js';
@@ -26,9 +25,17 @@ import {
   buildBacklogApigenPackage,
   resolveExpectedMcpToolNames,
 } from './server.js';
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
+// STATE.md A15: this file previously spawned the real `dist/index.js serve
+// --transport mcp` with a local `adhdRoot` (mkdtempSync) used ONLY as the
+// transport's `cwd` — never wired to `ADHD_ROOT`/`--namespace sandbox` — so
+// the real machine's global `embedding.enabled: true` config.yaml still
+// resolved through (confirmed: 4 real onnxruntime/CoreML hits in isolation).
+// Moved onto the canonical sandbox helper.
+import {
+  mintBacklogSandbox,
+  stdioSpawnOptionsForSandbox,
+  type SandboxHandle,
+} from './test/helpers/spawn-backlog-bin.js';
 
 /**
  * Live-derived from `client.ts`'s ACTUAL exports (`buildBacklogApigenPackage`
@@ -49,7 +56,7 @@ async function expectedMcpToolNames(): Promise<string[]> {
 
 describe('BUG-013 — install-written MCP config actually launches a working real server (claude + opencode)', () => {
   let tmp: string | undefined;
-  let adhdRoot: string | undefined;
+  let sandbox: SandboxHandle | undefined;
   let client: Client | undefined;
   let transport: StdioClientTransport | undefined;
 
@@ -59,9 +66,9 @@ describe('BUG-013 — install-written MCP config actually launches a working rea
     client = undefined;
     transport = undefined;
     if (tmp) rmSync(tmp, { recursive: true, force: true });
-    if (adhdRoot) rmSync(adhdRoot, { recursive: true, force: true });
+    if (sandbox) rmSync(sandbox.adhdRoot, { recursive: true, force: true });
     tmp = undefined;
-    adhdRoot = undefined;
+    sandbox = undefined;
   });
 
   it('the exact args install.ts writes are the intended portable npx invocation (assertion on the config content itself, before ever spawning anything)', () => {
@@ -101,18 +108,10 @@ describe('BUG-013 — install-written MCP config actually launches a working rea
     const servArgsTail = doc.mcpServers.backlog.args.slice(2); // drop ["serve"]'s own preceding "-y","@adhd/backlog@latest"
     expect(servArgsTail).toEqual(['serve', '--transport', 'mcp']);
 
-    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-install-e2e-claude-adhd-'));
-    transport = new StdioClientTransport({
-      command: process.execPath,
-      args: [DIST_INDEX, ...servArgsTail],
-      cwd: adhdRoot,
-      env: {
-        ADHD_BACKLOG_SCOPE: 'project',
-        VITEST: 'true',
-        HOME: process.env['HOME'] ?? '',
-        PATH: process.env['PATH'] ?? '',
-      },
-    });
+    sandbox = mintBacklogSandbox();
+    transport = new StdioClientTransport(
+      stdioSpawnOptionsForSandbox(sandbox, servArgsTail)
+    );
     client = new Client(
       { name: 'backlog-install-e2e-claude', version: '1.0.0' },
       { capabilities: {} }
@@ -150,20 +149,10 @@ describe('BUG-013 — install-written MCP config actually launches a working rea
     const servArgsTail = doc.mcp.backlog.command.slice(3);
     expect(servArgsTail).toEqual(['serve', '--transport', 'mcp']);
 
-    adhdRoot = mkdtempSync(
-      join(tmpdir(), 'backlog-install-e2e-opencode-adhd-')
+    sandbox = mintBacklogSandbox();
+    transport = new StdioClientTransport(
+      stdioSpawnOptionsForSandbox(sandbox, servArgsTail)
     );
-    transport = new StdioClientTransport({
-      command: process.execPath,
-      args: [DIST_INDEX, ...servArgsTail],
-      cwd: adhdRoot,
-      env: {
-        ADHD_BACKLOG_SCOPE: 'project',
-        VITEST: 'true',
-        HOME: process.env['HOME'] ?? '',
-        PATH: process.env['PATH'] ?? '',
-      },
-    });
     client = new Client(
       { name: 'backlog-install-e2e-opencode', version: '1.0.0' },
       { capabilities: {} }

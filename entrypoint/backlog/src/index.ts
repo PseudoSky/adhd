@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { initTelemetry } from '@adhd/sox-telemetry';
-import { runBacklogCli, stripSandboxFlag } from './cli.js';
+import { runBacklogCli, stripNamespaceFlag } from './cli.js';
 
 // The mounted surface: nine issue verbs (SPEC 6.3), `lookup` (3a), and the
 // four registry CRUD verbs (3a). `server.ts` extracts `dist/api.d.ts`, so THIS
@@ -54,7 +54,7 @@ export {
   runBacklogCli,
   resolveCommandPrefix,
   prefixCommand,
-  stripSandboxFlag,
+  stripNamespaceFlag,
 } from './cli.js';
 export type { RunBacklogCliOpts } from './cli.js';
 
@@ -154,20 +154,21 @@ if (
   // BUG-BACKLOG-SANDBOX-TELEMETRY-001: this call fires BEFORE `runBacklogCli`
   // ever parses argv, so it used to write its file sink to the real
   // `~/.adhd/sox-ecosystem/backlog/logs` unconditionally — even under
-  // `--sandbox`, defeating that flag's whole "never touches the real
-  // production tree" guarantee (caught by `cli.spec.ts`'s "--sandbox
-  // diverts the store away from the (fake) production HOME entirely, and
-  // never creates anything under it": a real `create` invocation left
+  // `--namespace sandbox`, defeating that flag's whole "never touches the
+  // real production tree" guarantee (caught by `cli.spec.ts`'s "--namespace
+  // sandbox diverts the store away from the (fake) production HOME entirely,
+  // and never creates anything under it": a real `create` invocation left
   // `<fakeProdHome>/.adhd/sox-ecosystem/backlog/logs/*.jsonl` behind even
-  // though the STORE itself was correctly isolated). `--sandbox` is
-  // recognized here the same way `cli.ts`'s own `stripSandboxFlag` does —
-  // this file peeks at it ONLY to redirect telemetry's `logDir`; the actual
-  // flag-stripping/dispatch still happens exactly once, inside
+  // though the STORE itself was correctly isolated). `--namespace sandbox`
+  // is recognized here the same way `cli.ts`'s own `stripNamespaceFlag`
+  // does — this file peeks at it ONLY to redirect telemetry's `logDir`; the
+  // actual flag-stripping/dispatch still happens exactly once, inside
   // `runBacklogCli` below.
-  const { sandbox } = stripSandboxFlag(process.argv.slice(2));
-  const sandboxLogDir = sandbox
-    ? mkdtempSync(join(tmpdir(), 'backlog-sandbox-logs-'))
-    : undefined;
+  const { namespace } = stripNamespaceFlag(process.argv.slice(2));
+  const sandboxLogDir =
+    namespace === 'sandbox'
+      ? mkdtempSync(join(tmpdir(), 'backlog-sandbox-logs-'))
+      : undefined;
   try {
     initTelemetry({
       service: 'backlog',

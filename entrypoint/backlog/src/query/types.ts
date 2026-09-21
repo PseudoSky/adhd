@@ -264,6 +264,14 @@ export interface IIssueQueryInput {
   /** opaque keyset cursor from a prior page's `nextCursor`. */
   after?: string;
   view?: IIssueView;
+  /**
+   * default `'json'`. `'markdown'` is only supported for the four item-list
+   * views (`list`/`ready`/`stale`/`similar`) — see {@link IIssueMarkdownResult}
+   * — and rejects with `InvalidArgumentError('format', ...)` for any other
+   * view (`graph`/`order`/`overlap`/`projects`/`components`/`locations`),
+   * which return a shape DATA_MODEL.md §8's markdown projection has no rule
+   * for.
+   */
   format?: IIssueQueryFormat;
   /** `view:'overlap'` only (§6.2) — the axis to group `overlapUids` by. */
   overlapAxis?: IOverlapAxis;
@@ -321,6 +329,21 @@ export interface IIssueListResult extends IIssuePage {
   view: 'list';
 }
 
+/**
+ * `format:'markdown'`'s result shape (SPEC.md §6.5/§6.6, DATA_MODEL.md §8) —
+ * returned instead of the matching JSON-shaped member above for any of the
+ * four item-list views (`list`/`ready`/`stale`/`similar`; the only views whose
+ * result is an `IIssueCard[]` DATA_MODEL.md §8's markdown projection can
+ * render). `markdown` is the SAME page a `format:'json'` call would have
+ * returned, re-serialized (`query/markdown.ts`'s `renderIssueCardsMarkdown`)
+ * — never a second query path.
+ */
+export interface IIssueMarkdownResult {
+  view: 'list' | 'ready' | 'stale' | 'similar';
+  format: 'markdown';
+  markdown: string;
+}
+
 /** The one discriminated result shape `query` (§6.3, §5) returns — the `view` field selects which of the following members is populated. */
 export type IIssueQueryResult =
   | IIssueListResult
@@ -332,7 +355,8 @@ export type IIssueQueryResult =
   | { view: 'overlap'; groups: IOverlapGroup[] }
   | { view: 'projects'; items: IProjectSummary[] }
   | { view: 'components'; items: IComponentSummary[] }
-  | { view: 'locations'; items: ILocationSummary[] };
+  | { view: 'locations'; items: ILocationSummary[] }
+  | IIssueMarkdownResult;
 
 // ---------------------------------------------------------------------------
 // §3a registry read surface (project / component / location)

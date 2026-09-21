@@ -73,7 +73,7 @@ describe('describeParams — top-level object params expand one level (never a b
     expect(describeParams(schema).text).toBe('input: object');
   });
 
-  it('a primitive top-level param is unaffected (array/enum/union/scalar rendering unchanged)', () => {
+  it('a primitive top-level param is unaffected (array/scalar rendering unchanged)', () => {
     const schema = {
       input: {
         type: 'object',
@@ -84,13 +84,134 @@ describe('describeParams — top-level object params expand one level (never a b
             properties: {
               count: { type: 'number' },
               tags: { type: 'array', items: { type: 'string' } },
-              mode: { enum: ['a', 'b'] },
             },
           },
         },
       },
     };
     const { text } = describeParams(schema);
-    expect(text).toBe('count: number, tags?: string[], mode?: enum');
+    expect(text).toBe('count: number, tags?: string[]');
+  });
+});
+
+/**
+ * BUG-BACKLOG-CLI-HELP-BARE-ENUM-001 / BUG-BACKLOG-CLI-HELP-BARE-UNION-001 —
+ * `query --help` rendered `view?: enum` (no way to discover the actual
+ * allowed values, e.g. `'projects'`/`'components'`/`'locations'`) and `get
+ * --help` rendered its whole mounted input as the contentless `{ input: union
+ * }` (no way to discover either of its two structurally-disjoint variants).
+ * `describeParams` is the single source both `apigen-plugin-cli-output`'s
+ * per-command `--help` (`paramsText`) and `apigen-plugin-mcp`'s tool
+ * description render from (see this file's other describe block's own doc
+ * comment) — proving it here proves both transports without spawning either.
+ */
+describe('describeParams — enum values and union members render in full, never the bare placeholder word', () => {
+  it('an enum-typed param renders its actual allowed values, not the bare word "enum"', () => {
+    const schema = {
+      input: {
+        type: 'object',
+        properties: {
+          data: {
+            type: 'object',
+            required: [],
+            properties: {
+              view: { enum: ['list', 'similar', 'projects', 'components', 'locations'] },
+            },
+          },
+        },
+      },
+    };
+    const { text } = describeParams(schema);
+    expect(text).toBe(
+      "view?: 'list'|'similar'|'projects'|'components'|'locations'"
+    );
+    expect(text).not.toContain(': enum');
+  });
+
+  it('an enum nested inside an array item ALSO renders in full (enum expansion is unconditional, not gated by the one-level object/union bound)', () => {
+    const schema = {
+      input: {
+        type: 'object',
+        properties: {
+          data: {
+            type: 'object',
+            required: [],
+            properties: {
+              fields: { type: 'array', items: { enum: ['uid', 'title'] } },
+            },
+          },
+        },
+      },
+    };
+    const { text } = describeParams(schema);
+    expect(text).toBe("fields?: 'uid'|'title'[]");
+  });
+
+  it('a top-level (mounted) discriminated-union param expands its member shapes, not the bare word "union"', () => {
+    const schema = {
+      input: {
+        type: 'object',
+        properties: {
+          data: {
+            type: 'object',
+            required: ['input'],
+            properties: {
+              input: {
+                oneOf: [
+                  {
+                    type: 'object',
+                    required: ['uid'],
+                    properties: {
+                      uid: { type: 'string' },
+                      fields: { type: 'array', items: { type: 'string' } },
+                    },
+                  },
+                  {
+                    type: 'object',
+                    required: ['registry', 'name'],
+                    properties: {
+                      registry: { enum: ['project', 'component', 'location'] },
+                      name: { type: 'string' },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    };
+    const { text } = describeParams(schema);
+    expect(text).toBe(
+      "input: { uid: string, fields?: string[] } | { registry: 'project'|'component'|'location', name: string }"
+    );
+    expect(text).not.toBe('input: union');
+    expect(text).not.toContain(': union');
+  });
+
+  it('a union NESTED inside an already-expanded object field stays the bare "union" placeholder (one-level expansion bound preserved)', () => {
+    const schema = {
+      input: {
+        type: 'object',
+        properties: {
+          data: {
+            type: 'object',
+            required: ['input'],
+            properties: {
+              input: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string' },
+                  ref: { oneOf: [{ type: 'string' }, { type: 'number' }] },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+    const { text } = describeParams(schema);
+    expect(text).toBe('input: { id: string, ref?: union }');
   });
 });

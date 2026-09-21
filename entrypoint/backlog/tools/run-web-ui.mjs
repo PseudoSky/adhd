@@ -19,14 +19,21 @@
  * Usage:
  *   node tools/run-web-ui.mjs [--api-port N] [--web-port N] [--host H] [--sandbox]
  *
- *   --sandbox  passes the CLI's `--sandbox` flag through: the API serves an
- *              isolated throwaway store instead of the real production graph
- *              (prints the isolated path; not auto-deleted, per the CLI
- *              contract).
+ *   --sandbox  passes the CLI's `--namespace sandbox` flag through: the API
+ *              serves an isolated, ephemeral throwaway store instead of the
+ *              real production graph (prints the isolated path; not
+ *              auto-deleted, per the CLI contract). This tool's own
+ *              `--sandbox` flag name is deliberately kept stable even though
+ *              the underlying CLI flag it maps to was renamed from the old
+ *              boolean `--sandbox` to `--namespace sandbox` (SPEC.md §5c,
+ *              hard removal, no alias) — STATE.md A14 found this mapping had
+ *              silently gone stale (still emitting the removed `--sandbox`
+ *              flag, which the CLI no longer recognizes) and fixed it here.
  *
  * Env passthrough: ADHD_BACKLOG_SCOPE / ADHD_ENV_SCOPE /
- * ADHD_BACKLOG_DATABASE_PATH are inherited by the API child exactly as the
- * CLI would honor them.
+ * ADHD_BACKLOG_DATABASE_PATH / ADHD_ROOT are inherited by the API child
+ * exactly as the CLI would honor them (this tool's `env: process.env`
+ * passthrough is unfiltered).
  */
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -85,7 +92,7 @@ async function waitFor(urlPath, timeoutMs, label) {
 
 async function main() {
   const apiArgs = ['serve', '--transport', 'http', '--port', String(opts.apiPort), '--host', opts.host];
-  if (opts.sandbox) apiArgs.push('--sandbox');
+  if (opts.sandbox) apiArgs.push('--namespace', 'sandbox');
 
   spawnChild('api', process.execPath, [CLI_ENTRY, ...apiArgs]);
   await waitFor('/_meta/openapi', 30_000, 'api');

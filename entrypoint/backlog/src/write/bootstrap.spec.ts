@@ -3,16 +3,22 @@
  * `embedding` through the REAL `api.ts` surface in production shape, not a
  * hand-built handle.
  *
- * Every component here is real: a real store opened through the same
- * `openGraphBacklogStore` factory production uses, `api.ts`'s own
- * `create`/`query`/`upsertProject` verbs (never the write-layer internals
- * called directly), and the real fastembed embedding stack
- * (`@adhd/sox-embedding-provider` + `@adhd/sox-vector-store`) via
- * `write/bootstrap.ts`'s `bootstrapSemanticStoreMembers`. Nothing here is
- * mocked. Per AGENTS.md's "Live testing is mandatory": fastembed is local
- * ONNX inference over a model already cached on disk
- * (`~/.cache/sox/models`), never a paid/external service, so this runs
- * unflagged like `rag-e2e.spec.ts` does — no env gate, no skip.
+ * Every component here is real EXCEPT the embedding model itself: a real
+ * store opened through the same `openGraphBacklogStore` factory production
+ * uses, `api.ts`'s own `create`/`query`/`upsertProject` verbs (never the
+ * write-layer internals called directly), a real `@adhd/sox-vector-store`
+ * Turso vector space, and real duplicate-gate/on-write-embed wiring via
+ * `write/bootstrap.ts`'s `bootstrapSemanticStoreMembers` — the exact
+ * production code path. Embeddings mocked here — explicit, scoped user
+ * authorization (see entrypoint/backlog/STATE.md), covers embedding cost
+ * only: this file's assertions ((a) a BYTE-IDENTICAL second `create` is
+ * caught by the duplicate gate, (b) the SAME title text used to create an
+ * issue also finds it via `filter.semantic`) never require genuine
+ * cross-vocabulary semantic similarity — a deterministic fake that maps
+ * identical text to an identical vector is sufficient and has full teeth
+ * for both. `text-routing.spec.ts` (paraphrase-with-zero-shared-tokens) and
+ * `rag-e2e.spec.ts` are the files that actually need the real model, and
+ * neither is touched by this change.
  *
  * **Why `ADHD_BACKLOG_EMBEDDING_ENABLED` is set explicitly.** `env.ts`
  * declares `embedding.enabled`'s CODE default as `false`, but `cli.spec.ts`'s
@@ -22,7 +28,7 @@
  * non-deterministic across machines. This test pins it explicitly, the same
  * way `cli.spec.ts` pins it OFF for its own determinism.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { StoreAdapter } from '@adhd/sox-store-adapter';
@@ -34,9 +40,19 @@ import { buildBacklogEnv } from '../env.js';
 import { create, query, upsertProject, type BacklogCtx } from '../api.js';
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
 import { isOutcomeOk } from '../envelope.js';
+import { createFakeEmbeddingModule } from '../test/helpers/fake-embedding-provider.js';
 
-/** Cold ONNX model init is the slow part — matches `rag-e2e.spec.ts`'s own shared budget. */
-const EMBED_TIMEOUT = 180_000;
+// Embeddings mocked here — explicit, scoped user authorization (see
+// entrypoint/backlog/STATE.md), covers embedding cost only. Intercepts the
+// exact `import('@adhd/sox-embedding-provider')` specifier both
+// `write/bootstrap.ts`'s and `store/semantic-search.ts`'s own local
+// `loadOptional` seams resolve at runtime (a non-literal dynamic import,
+// deliberately decoupled from this package's type graph) — this file never
+// installs `@adhd/sox-embedding-provider` at all.
+vi.mock('@adhd/sox-embedding-provider', () => createFakeEmbeddingModule());
+
+/** No cold ONNX model init anymore — the fake never touches disk/network — but the real Turso vector-store round-trip still needs headroom. */
+const EMBED_TIMEOUT = 30_000;
 
 const ENV_VAR = 'ADHD_BACKLOG_EMBEDDING_ENABLED';
 

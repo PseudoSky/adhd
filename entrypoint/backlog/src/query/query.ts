@@ -31,6 +31,7 @@ import {
   getOutgoingEdges,
   intersectCandidateSets,
   resolveIssuePlacement,
+  resolveValidatedCatalogFilter,
   tryResolveComponentRef,
   tryResolveRef,
 } from './resolve.js';
@@ -53,6 +54,7 @@ import {
   MAX_QUERY_LIMIT,
 } from './types.js';
 import { querySimilarView } from './views/semantic.js';
+import { renderIssueCardsMarkdown } from './markdown.js';
 import {
   listComponents,
   listLocations,
@@ -185,9 +187,10 @@ async function resolveEdgeScopedFilterIds(
   if (filter.kind !== undefined) {
     const refs = Array.isArray(filter.kind) ? filter.kind : [filter.kind];
     perDimension.push(
-      await resolveMultiValuedEdgeScoped(graph, {
+      await resolveValidatedCatalogFilter(graph, {
         rel: 'has_kind',
-        expectedKind: 'kind',
+        catalogKind: 'kind',
+        field: 'filter.kind',
         refs,
       })
     );
@@ -203,9 +206,10 @@ async function resolveEdgeScopedFilterIds(
         ? filter.status
         : [filter.status];
       perDimension.push(
-        await resolveMultiValuedEdgeScoped(graph, {
+        await resolveValidatedCatalogFilter(graph, {
           rel: 'has_status',
-          expectedKind: 'status',
+          catalogKind: 'status',
+          field: 'filter.status',
           refs,
         })
       );
@@ -217,9 +221,10 @@ async function resolveEdgeScopedFilterIds(
       ? filter.priority
       : [filter.priority];
     perDimension.push(
-      await resolveMultiValuedEdgeScoped(graph, {
+      await resolveValidatedCatalogFilter(graph, {
         rel: 'has_priority',
-        expectedKind: 'priority',
+        catalogKind: 'priority',
+        field: 'filter.priority',
         refs,
       })
     );
@@ -1042,27 +1047,16 @@ export interface IQueryIssuesOutcome {
 }
 
 /**
- * `queryIssues` (below) plus the transport-facing `meta` the envelope
- * exposes for a list-shaped read (`api.ts`'s `query` mount is the one caller
- * that needs it). Every other in-process caller keeps calling `queryIssues`
- * itself, which discards `meta` and returns exactly the shape it always has.
+ * The `input.view` dispatch, factored out of {@link queryIssuesWithMeta} so
+ * that function can post-process the (always-`json`-shaped) result here into
+ * `format:'markdown'` when requested, without duplicating the switch itself.
+ * Always returns the JSON-shaped {@link IIssueQueryResult} member for
+ * `view` — never the markdown variant — regardless of `input.format`.
  */
-export async function queryIssuesWithMeta(
+async function dispatchQueryView(
   handle: IQueryStoreHandle,
-  rawInput: IIssueQueryInput = {}
+  input: IIssueQueryInput
 ): Promise<IQueryIssuesOutcome> {
-  const input = resolveTextInput(handle, rawInput);
-
-  if (input.format === 'markdown') {
-    // Rendering (headers + `[target sha:…]` citations, §6.5/§6.6) is the markdown-projection
-    // layer's job, not this read layer's — out of scope for this slice (documented, not silently
-    // faked, mirroring create-issue.ts's own `awaitEmbed` precedent).
-    throw new InvalidArgumentError(
-      'format',
-      '"markdown" rendering is not implemented in this slice — the query layer returns `json`; a markdown projection composes this result with the markdown renderer separately'
-    );
-  }
-
   const view = input.view ?? 'list';
   switch (view) {
     case 'list': {
@@ -1122,6 +1116,65 @@ export async function queryIssuesWithMeta(
       );
     }
   }
+}
+
+/**
+ * The four `view`s whose result is an `IIssueCard[]` — the only shapes
+ * DATA_MODEL.md §8's markdown projection has a rendering rule for. Declared
+ * once so {@link queryIssuesWithMeta}'s markdown branch and the `never`
+ * exhaustiveness check below cannot drift apart.
+ */
+const MARKDOWN_CAPABLE_VIEWS = ['list', 'ready', 'stale', 'similar'] as const;
+
+/**
+ * `queryIssues` (below) plus the transport-facing `meta` the envelope
+ * exposes for a list-shaped read (`api.ts`'s `query` mount is the one caller
+ * that needs it). Every other in-process caller keeps calling `queryIssues`
+ * itself, which discards `meta` and returns exactly the shape it always has.
+ *
+ * `format:'markdown'` (SPEC.md §6.5/§6.6, DATA_MODEL.md §8) is handled here,
+ * as a POST-PROCESSING step over {@link dispatchQueryView}'s always-`json`
+ * result — never a second query path (SPEC.md §6.5: "renders this same page
+ * ... never a second code path"). Only the four item-list views
+ * ({@link MARKDOWN_CAPABLE_VIEWS}) have a markdown rendering rule at all; any
+ * other view (`graph`/`order`/`overlap`/`projects`/`components`/`locations`)
+ * rejects `format:'markdown'` outright rather than silently falling back to
+ * `json` or inventing an ad hoc rendering for a shape DATA_MODEL.md §8 never
+ * describes.
+ */
+export async function queryIssuesWithMeta(
+  handle: IQueryStoreHandle,
+  rawInput: IIssueQueryInput = {}
+): Promise<IQueryIssuesOutcome> {
+  const input = resolveTextInput(handle, rawInput);
+  const outcome = await dispatchQueryView(handle, input);
+
+  if (input.format !== 'markdown') return outcome;
+
+  const { result } = outcome;
+  const { view } = result;
+  if (
+    view !== 'list' &&
+    view !== 'ready' &&
+    view !== 'stale' &&
+    view !== 'similar'
+  ) {
+    throw new InvalidArgumentError(
+      'format',
+      `"markdown" is only supported for view:${MARKDOWN_CAPABLE_VIEWS.map((v) => `"${v}"`).join('/')} — view:"${view}" returns a graph/order/grouping/registry shape with no markdown projection (DATA_MODEL.md §8)`
+    );
+  }
+  // Safe: `dispatchQueryView` never returns the markdown variant of
+  // `IIssueQueryResult` (only `queryIssuesWithMeta`, here, ever produces it),
+  // so every member whose `view` narrowed to one of the four checked above is
+  // one of `IIssueListResult`/`{view:'ready'|'stale'|'similar', items:
+  // IIssueCard[]}` — all four genuinely carry `items: IIssueCard[]`.
+  const items = (result as { items: IIssueCard[] }).items;
+
+  return {
+    result: { view, format: 'markdown', markdown: renderIssueCardsMarkdown(items) },
+    meta: outcome.meta,
+  };
 }
 
 /** The `query` verb (SPEC.md §5, §6.5) — dispatches on `input.view`, default `'list'`. */

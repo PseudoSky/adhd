@@ -4,9 +4,26 @@
  * `requireSemanticBackend` accessor every §5a gate funnels through, and
  * `bootstrapSemanticBackend`'s DIAGNOSTIC failure reporting.
  *
- * All deterministic: a FAKE backend, no model download, no native module,
- * no network. The real-model end-to-end proofs (RAG-SPEC §8) live in their
- * own suite.
+ * The `the injectable seam` describe block below is fully deterministic: a
+ * FAKE backend, no model download, no native module, no network. The
+ * real-model end-to-end proofs (RAG-SPEC §8) live in their own suite.
+ *
+ * ONE EXCEPTION, disclosed rather than left contradictory (STATE.md A15):
+ * `bootstrapSemanticBackend`'s own diagnostics test below calls the REAL
+ * `bootstrapSemanticBackend` with no mock, deliberately branching on
+ * success/failure to match the actual optional-dependency contract
+ * (`@adhd/sox-embedding-provider`/`@adhd/sox-vector-store` are
+ * `optionalDependencies`, RAG-SPEC.md §1.6). On a machine where neither
+ * package is installed it takes the `not_installed` branch (no model load,
+ * matching this file's "no model download" framing above) — but on a
+ * machine where they ARE installed (confirmed: this repo's dev machine),
+ * it takes the success branch and genuinely loads the real fastembed/
+ * onnxruntime model. This is not a bug in the test (it is honestly designed
+ * to be correct either way) — it is machine-dependent, real-embedding
+ * behavior that the `tools/gate/embedding-usage-gate.mjs` `INJECTED_FAKE`
+ * classification for this file does not fully capture on its own; see that
+ * gate's `DECLARED_INJECTED_FAKE` entry for this file, which now states
+ * this conditional behavior explicitly instead of contradicting it.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import {

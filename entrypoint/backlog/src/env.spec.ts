@@ -179,6 +179,60 @@ describe('scope isolation — real Environment instances, real temp filesystem r
     }
   });
 
+  // BUG-BACKLOG-SANDBOX-SILENT-BYPASS-001's fix class: `namespace` must be
+  // EXPLICIT-PARAMETER-FIRST, never resolved from ambient `process.env`, so a
+  // stray/leaked env var (the exact class of problem that caused real
+  // confusion this session — a persisted `ADHD_ROOT`/scope var a caller
+  // forgot was set) can never silently override an explicit selection.
+  // `ADHD_ROOT` and `ADHD_BACKLOG_SCOPE` are the deliberately-chosen ambient
+  // vars here: they compose with `namespace` (root/scope pick the base,
+  // namespace picks the trailing path segment), so the resulting `dbPath`
+  // string is a clean, unambiguous discriminator between "explicit namespace
+  // won" and "explicit namespace lost" — unlike `ADHD_BACKLOG_DATABASE_PATH`,
+  // which short-circuits `resolveBacklogDbPath` entirely and would make this
+  // test pass or fail for a reason unrelated to namespace selection.
+  it('buildBacklogEnv namespace precedence: explicit param wins over an ambient leaked ADHD_ROOT/ADHD_BACKLOG_SCOPE, landing under backlog/test/… not backlog/production/…', () => {
+    const prevRoot = process.env['ADHD_ROOT'];
+    const prevScope = process.env['ADHD_BACKLOG_SCOPE'];
+    let strayRoot: string | undefined;
+    try {
+      // Simulate exactly the kind of leaked ambient state this task's own
+      // brief describes: a stray ADHD_ROOT + scope var already set in the
+      // process's own env, NOT passed as an explicit function parameter.
+      strayRoot = mkdtempSync(join(tmpdir(), 'backlog-env-stray-ambient-'));
+      process.env['ADHD_ROOT'] = strayRoot;
+      process.env['ADHD_BACKLOG_SCOPE'] = 'global';
+
+      // Positive: an EXPLICIT `namespace: 'test'` parameter, passed
+      // alongside the SAME ambient env (adhdRoot is still explicit here too,
+      // matching how a real caller always supplies both — `resolveBacklogScope`
+      // itself already resolves `scope` from the ambient var, on purpose,
+      // since scope precedence is a separate, already-proven contract).
+      const explicitTest = buildBacklogEnv({
+        adhdRoot: strayRoot,
+        namespace: 'test',
+      });
+      const testDbPath = resolveBacklogDbPath(explicitTest);
+      expect(testDbPath).toContain(`${join('backlog', 'test')}`);
+      expect(testDbPath).not.toContain(`${join('backlog', 'production')}`);
+
+      // Negative control: the SAME ambient env, but withOUT an explicit
+      // `namespace` — proving the assertion above has teeth (it isn't
+      // trivially true regardless of what's passed). Falls through to the
+      // documented default, 'production' — a genuinely different path.
+      const implicitDefault = buildBacklogEnv({ adhdRoot: strayRoot });
+      const defaultDbPath = resolveBacklogDbPath(implicitDefault);
+      expect(defaultDbPath).toContain(`${join('backlog', 'production')}`);
+      expect(defaultDbPath).not.toBe(testDbPath);
+    } finally {
+      if (prevRoot === undefined) delete process.env['ADHD_ROOT'];
+      else process.env['ADHD_ROOT'] = prevRoot;
+      if (prevScope === undefined) delete process.env['ADHD_BACKLOG_SCOPE'];
+      else process.env['ADHD_BACKLOG_SCOPE'] = prevScope;
+      if (strayRoot) rmSync(strayRoot, { recursive: true, force: true });
+    }
+  });
+
   it('db.busyTimeoutMs defaults to 5000 and is overridable via ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS (DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001)', async () => {
     const prev = process.env['ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS'];
     try {

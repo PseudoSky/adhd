@@ -102,6 +102,7 @@ import {
 import {
   resolveEdgeScopedCandidates,
   resolveIssueByUid,
+  resolveValidatedCatalogFilter,
   tryResolveComponentRef,
   tryResolveRef,
 } from '../resolve.js';
@@ -304,12 +305,19 @@ export async function resolveSimilarFilterIds(
   const ownership = await resolveOwnershipChainIds(graph, filter);
   if (ownership !== undefined) edgeScoped.push(ownership);
 
+  // `kind`/`status`/`priority` (unlike `author` below) are OPEN vocabularies
+  // whose real value space is the catalog's own live rows — validated by
+  // `resolve.ts`'s shared `resolveValidatedCatalogFilter`, the SAME check
+  // `query.ts`'s `resolveEdgeScopedFilterIds` runs for `view:'list'` and its
+  // siblings, so `view:'similar'` cannot silently diverge on which filter
+  // values are real (BUG-BACKLOG-QUERY-UNKNOWN-FILTER-SILENT-001).
   if (filter.kind !== undefined) {
     const refs = Array.isArray(filter.kind) ? filter.kind : [filter.kind];
     edgeScoped.push(
-      await resolveMultiValuedCatalogEdge(graph, {
+      await resolveValidatedCatalogFilter(graph, {
         rel: 'has_kind',
-        expectedKind: 'kind',
+        catalogKind: 'kind',
+        field: 'filter.kind',
         refs,
       })
     );
@@ -323,9 +331,10 @@ export async function resolveSimilarFilterIds(
         ? filter.status
         : [filter.status];
       edgeScoped.push(
-        await resolveMultiValuedCatalogEdge(graph, {
+        await resolveValidatedCatalogFilter(graph, {
           rel: 'has_status',
-          expectedKind: 'status',
+          catalogKind: 'status',
+          field: 'filter.status',
           refs,
         })
       );
@@ -337,9 +346,10 @@ export async function resolveSimilarFilterIds(
       ? filter.priority
       : [filter.priority];
     edgeScoped.push(
-      await resolveMultiValuedCatalogEdge(graph, {
+      await resolveValidatedCatalogFilter(graph, {
         rel: 'has_priority',
-        expectedKind: 'priority',
+        catalogKind: 'priority',
+        field: 'filter.priority',
         refs,
       })
     );

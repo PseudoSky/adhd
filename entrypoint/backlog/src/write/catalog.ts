@@ -671,116 +671,138 @@ export async function upsertProject(
   assertNonBlank('by', input.by);
   assertNotBareRoleLiteral('by', input.by);
 
-  return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
-    const now = nowISO();
-    const existing = await tx.executeGet<{
-      rowid: number;
-      uid: string;
-      name: string | null;
-      meta: string | null;
-    }>(
-      "SELECT rowid, uid, name, meta FROM node WHERE kind = 'project' AND name = ? AND t_invalid IS NULL LIMIT 1",
-      [input.name]
+  return executeWriteTransaction(handle, (tx) =>
+    upsertProjectTx(tx, handle, input)
+  );
+}
+
+/**
+ * Transaction-PARTICIPANT core of {@link upsertProject} — the exact body
+ * that used to run inside its `executeWriteTransaction` callback, extracted
+ * so a caller that already owns an open `immediate` transaction (the ETL's
+ * `tools/etl/import-item.ts` bundles an entire source item's writes into ONE
+ * transaction, SPEC.md §7a) can participate in it instead of nesting a
+ * second `executeWriteTransaction` call — nesting would either deadlock or
+ * silently open two separate transactions where one atomic one was intended.
+ * `upsertProject` itself is now a thin wrapper: open the transaction, hand it
+ * to this function. Same validation contract as `upsertProject` — callers of
+ * THIS function are responsible for having already run `assertNonBlank`/
+ * `assertNotBareRoleLiteral` on `input.name`/`input.by` (this function does
+ * not re-validate, matching every other `*Tx` helper in this module).
+ */
+export async function upsertProjectTx(
+  tx: AdapterTransaction,
+  handle: Pick<IWriteStoreHandle, 'typePolicy'>,
+  input: IUpsertProjectInput
+): Promise<IUpsertProjectOutcome> {
+  const now = nowISO();
+  const existing = await tx.executeGet<{
+    rowid: number;
+    uid: string;
+    name: string | null;
+    meta: string | null;
+  }>(
+    "SELECT rowid, uid, name, meta FROM node WHERE kind = 'project' AND name = ? AND t_invalid IS NULL LIMIT 1",
+    [input.name]
+  );
+
+  const patch = {
+    path: input.path,
+    repoUrl: input.repoUrl,
+    monorepo: input.monorepo,
+    description: input.description,
+  };
+
+  if (existing) {
+    const mergedMeta = mergeBusinessFields(
+      parseMetaObject(existing.meta) ?? {},
+      patch
     );
-
-    const patch = {
-      path: input.path,
-      repoUrl: input.repoUrl,
-      monorepo: input.monorepo,
-      description: input.description,
-    };
-
-    if (existing) {
-      const mergedMeta = mergeBusinessFields(
-        parseMetaObject(existing.meta) ?? {},
-        patch
-      );
-      await tx.executeRun('UPDATE node SET meta = ? WHERE rowid = ?', [
-        JSON.stringify(mergedMeta),
-        existing.rowid,
-      ]);
-
-      await writeAudit({
-        tx,
-        typePolicy: handle.typePolicy,
-        subjectRowid: existing.rowid,
-        subjectUid: existing.uid,
-        subjectKind: 'project',
-        actor: input.by,
-        action: 'updated',
-        at: now,
-      });
-
-      return {
-        uid: existing.uid,
-        created: false,
-        project: {
-          uid: existing.uid,
-          name: existing.name ?? input.name,
-          path: mergedMeta.path as string | undefined,
-          repoUrl: mergedMeta.repoUrl as string | undefined,
-          monorepo: mergedMeta.monorepo as boolean | undefined,
-          description: mergedMeta.description as string | undefined,
-        },
-      };
-    }
-
-    const metadata = mergeBusinessFields({}, patch);
-    const project = await writeNodeTx(tx, {
-      kind: 'project',
-      name: input.name,
-      metadata,
-      at: now,
-    });
-
-    // First creation ONLY: the reserved default component `(root)` + its
-    // `owns_project` edge, in the SAME transaction (§4, §6.1's mint-vs-throw
-    // rule's own dependency — `resolveDefaultComponentTx` never mints this
-    // itself, it only traverses `owns_project` to find what THIS call wrote).
-    const root = await writeNodeTx(tx, {
-      kind: 'component',
-      name: '(root)',
-      metadata: { projectUid: project.uid },
-      at: now,
-    });
-    const ownsProjectRule = await resolveEdgeKindTx(tx, 'owns_project');
-    await writeEdgeTx(tx, {
-      at: now,
-      srcRowid: project.rowid,
-      srcUid: project.uid,
-      srcKind: 'project',
-      dstRowid: root.rowid,
-      dstUid: root.uid,
-      dstKind: 'component',
-      rel: 'owns_project',
-      rule: ownsProjectRule,
-      typePolicy: handle.typePolicy,
-    });
+    await tx.executeRun('UPDATE node SET meta = ? WHERE rowid = ?', [
+      JSON.stringify(mergedMeta),
+      existing.rowid,
+    ]);
 
     await writeAudit({
       tx,
       typePolicy: handle.typePolicy,
-      subjectRowid: project.rowid,
-      subjectUid: project.uid,
+      subjectRowid: existing.rowid,
+      subjectUid: existing.uid,
       subjectKind: 'project',
       actor: input.by,
-      action: 'created',
+      action: 'updated',
       at: now,
     });
 
     return {
-      uid: project.uid,
-      created: true,
+      uid: existing.uid,
+      created: false,
       project: {
-        uid: project.uid,
-        name: input.name,
-        path: input.path,
-        repoUrl: input.repoUrl,
-        monorepo: input.monorepo,
-        description: input.description,
+        uid: existing.uid,
+        name: existing.name ?? input.name,
+        path: mergedMeta.path as string | undefined,
+        repoUrl: mergedMeta.repoUrl as string | undefined,
+        monorepo: mergedMeta.monorepo as boolean | undefined,
+        description: mergedMeta.description as string | undefined,
       },
     };
+  }
+
+  const metadata = mergeBusinessFields({}, patch);
+  const project = await writeNodeTx(tx, {
+    kind: 'project',
+    name: input.name,
+    metadata,
+    at: now,
   });
+
+  // First creation ONLY: the reserved default component `(root)` + its
+  // `owns_project` edge, in the SAME transaction (§4, §6.1's mint-vs-throw
+  // rule's own dependency — `resolveDefaultComponentTx` never mints this
+  // itself, it only traverses `owns_project` to find what THIS call wrote).
+  const root = await writeNodeTx(tx, {
+    kind: 'component',
+    name: '(root)',
+    metadata: { projectUid: project.uid },
+    at: now,
+  });
+  const ownsProjectRule = await resolveEdgeKindTx(tx, 'owns_project');
+  await writeEdgeTx(tx, {
+    at: now,
+    srcRowid: project.rowid,
+    srcUid: project.uid,
+    srcKind: 'project',
+    dstRowid: root.rowid,
+    dstUid: root.uid,
+    dstKind: 'component',
+    rel: 'owns_project',
+    rule: ownsProjectRule,
+    typePolicy: handle.typePolicy,
+  });
+
+  await writeAudit({
+    tx,
+    typePolicy: handle.typePolicy,
+    subjectRowid: project.rowid,
+    subjectUid: project.uid,
+    subjectKind: 'project',
+    actor: input.by,
+    action: 'created',
+    at: now,
+  });
+
+  return {
+    uid: project.uid,
+    created: true,
+    project: {
+      uid: project.uid,
+      name: input.name,
+      path: input.path,
+      repoUrl: input.repoUrl,
+      monorepo: input.monorepo,
+      description: input.description,
+    },
+  };
 }
 
 export interface IUpsertComponentInput {
@@ -829,94 +851,112 @@ export async function upsertComponent(
   assertNonBlank('by', input.by);
   assertNotBareRoleLiteral('by', input.by);
 
-  return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
-    const now = nowISO();
-    const project = await resolveProjectTx(tx, input.project);
+  return executeWriteTransaction(handle, (tx) =>
+    upsertComponentTx(tx, handle, input)
+  );
+}
 
-    const existing = await tx.executeGet<{
-      rowid: number;
-      uid: string;
-      name: string | null;
-      meta: string | null;
-    }>(
-      `SELECT rowid, uid, name, meta FROM node
-       WHERE kind = 'component' AND name = ? AND t_invalid IS NULL
-         AND json_extract(meta, '$.projectUid') = ?
-       LIMIT 1`,
-      [input.name, project.uid]
+/**
+ * Transaction-PARTICIPANT core of {@link upsertComponent} — same extraction
+ * rationale as {@link upsertProjectTx}: lets a caller that already owns an
+ * open `immediate` transaction (the ETL) participate instead of nesting a
+ * second `executeWriteTransaction`. `upsertComponent` itself is now a thin
+ * wrapper: validate, open the transaction, hand it to this function. Callers
+ * of THIS function are responsible for having already run the same
+ * `assertNonBlank`/`assertNotBareRoleLiteral` validation `upsertComponent`
+ * runs before opening its transaction.
+ */
+export async function upsertComponentTx(
+  tx: AdapterTransaction,
+  handle: Pick<IWriteStoreHandle, 'typePolicy'>,
+  input: IUpsertComponentInput
+): Promise<IUpsertComponentOutcome> {
+  const now = nowISO();
+  const project = await resolveProjectTx(tx, input.project);
+
+  const existing = await tx.executeGet<{
+    rowid: number;
+    uid: string;
+    name: string | null;
+    meta: string | null;
+  }>(
+    `SELECT rowid, uid, name, meta FROM node
+     WHERE kind = 'component' AND name = ? AND t_invalid IS NULL
+       AND json_extract(meta, '$.projectUid') = ?
+     LIMIT 1`,
+    [input.name, project.uid]
+  );
+
+  const patch = { path: input.path, description: input.description };
+  let componentRowid: number;
+  let componentUid: string;
+  let componentName: string;
+  let created: boolean;
+  let resultMeta: Record<string, unknown>;
+
+  if (existing) {
+    resultMeta = mergeBusinessFields(
+      { ...(parseMetaObject(existing.meta) ?? {}), projectUid: project.uid },
+      patch
     );
-
-    const patch = { path: input.path, description: input.description };
-    let componentRowid: number;
-    let componentUid: string;
-    let componentName: string;
-    let created: boolean;
-    let resultMeta: Record<string, unknown>;
-
-    if (existing) {
-      resultMeta = mergeBusinessFields(
-        { ...(parseMetaObject(existing.meta) ?? {}), projectUid: project.uid },
-        patch
-      );
-      await tx.executeRun('UPDATE node SET meta = ? WHERE rowid = ?', [
-        JSON.stringify(resultMeta),
-        existing.rowid,
-      ]);
-      componentRowid = existing.rowid;
-      componentUid = existing.uid;
-      componentName = existing.name ?? input.name;
-      created = false;
-    } else {
-      resultMeta = mergeBusinessFields({ projectUid: project.uid }, patch);
-      const minted = await writeNodeTx(tx, {
-        kind: 'component',
-        name: input.name,
-        metadata: resultMeta,
-        at: now,
-      });
-      componentRowid = minted.rowid;
-      componentUid = minted.uid;
-      componentName = input.name;
-      created = true;
-    }
-
-    const ownsProjectRule = await resolveEdgeKindTx(tx, 'owns_project');
-    await writeEdgeTx(tx, {
-      at: now,
-      srcRowid: project.rowid,
-      srcUid: project.uid,
-      srcKind: 'project',
-      dstRowid: componentRowid,
-      dstUid: componentUid,
-      dstKind: 'component',
-      rel: 'owns_project',
-      rule: ownsProjectRule,
-      typePolicy: handle.typePolicy,
-    });
-
-    await writeAudit({
-      tx,
-      typePolicy: handle.typePolicy,
-      subjectRowid: componentRowid,
-      subjectUid: componentUid,
-      subjectKind: 'component',
-      actor: input.by,
-      action: created ? 'created' : 'updated',
+    await tx.executeRun('UPDATE node SET meta = ? WHERE rowid = ?', [
+      JSON.stringify(resultMeta),
+      existing.rowid,
+    ]);
+    componentRowid = existing.rowid;
+    componentUid = existing.uid;
+    componentName = existing.name ?? input.name;
+    created = false;
+  } else {
+    resultMeta = mergeBusinessFields({ projectUid: project.uid }, patch);
+    const minted = await writeNodeTx(tx, {
+      kind: 'component',
+      name: input.name,
+      metadata: resultMeta,
       at: now,
     });
+    componentRowid = minted.rowid;
+    componentUid = minted.uid;
+    componentName = input.name;
+    created = true;
+  }
 
-    return {
-      uid: componentUid,
-      created,
-      component: {
-        uid: componentUid,
-        name: componentName,
-        projectUid: project.uid,
-        path: resultMeta.path as string | undefined,
-        description: resultMeta.description as string | undefined,
-      },
-    };
+  const ownsProjectRule = await resolveEdgeKindTx(tx, 'owns_project');
+  await writeEdgeTx(tx, {
+    at: now,
+    srcRowid: project.rowid,
+    srcUid: project.uid,
+    srcKind: 'project',
+    dstRowid: componentRowid,
+    dstUid: componentUid,
+    dstKind: 'component',
+    rel: 'owns_project',
+    rule: ownsProjectRule,
+    typePolicy: handle.typePolicy,
   });
+
+  await writeAudit({
+    tx,
+    typePolicy: handle.typePolicy,
+    subjectRowid: componentRowid,
+    subjectUid: componentUid,
+    subjectKind: 'component',
+    actor: input.by,
+    action: created ? 'created' : 'updated',
+    at: now,
+  });
+
+  return {
+    uid: componentUid,
+    created,
+    component: {
+      uid: componentUid,
+      name: componentName,
+      projectUid: project.uid,
+      path: resultMeta.path as string | undefined,
+      description: resultMeta.description as string | undefined,
+    },
+  };
 }
 
 const VALID_LOCATION_TYPES: readonly ILocationType[] = ['path', 'url', 'tool'];

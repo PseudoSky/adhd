@@ -81,10 +81,11 @@ adhd-backlog sandbox-path
 ```
 
 `sandbox-path` prints the resolved store location and exits without opening
-it — `{"sandbox":bool,"adhdRoot":"…","dbPath":"…"}`. Use it to confirm WHICH
-store a command would touch before running a write. Combined with the global
-`--sandbox` flag (valid before any command) it reports the throwaway store
-that flag would mint, so you can check isolation without creating anything.
+it — `{"namespace":"production"|"test"|"sandbox","adhdRoot":"…","dbPath":"…","embeddingEnabled":bool}`.
+Use it to confirm WHICH store a command would touch before running a write.
+Combined with the global `--namespace sandbox` flag (valid before any
+command) it reports the throwaway store that flag would mint, so you can
+check isolation without creating anything.
 
 Two conventions apply to every transcript below. **Uids are truncated with
 `…` for readability** — always pass the FULL value the previous call
@@ -101,15 +102,19 @@ $ adhd-backlog search "auth module" --limit 5
 {"ok":true,"data":{"view":"list","items":[{"uid":"…","title":"Flaky test in auth module","kind":"issue","status":"closed","priority":"CRITICAL"}],"hasMore":false},"meta":{"total":1,"returned":1,"limit":5}}
 ```
 
-`--sandbox` is a global flag valid before ANY command — it diverts the
-invocation into a fresh throwaway store (`mkdtemp` + its own DB) instead of
-the real one, and prints the path so you can pass `ADHD_ROOT=<path>` to reuse
-it across calls. Use it whenever you want to try a command without touching
-production data — verified:
+`--namespace <value>` is a global flag valid before ANY command — it selects
+which declared store instance to resolve against: `production` (default),
+`test` (a persisted, non-ephemeral store), or `sandbox`. `--namespace
+sandbox` additionally diverts the invocation into a fresh throwaway store
+(`mkdtemp` + its own DB) instead of the real one, writes a real `config.yaml`
+there with `embedding.enabled: false` so a sandboxed run never pays a real
+model-load cost, and prints the path so you can pass `ADHD_ROOT=<path>` to
+reuse it across calls. Use it whenever you want to try a command without
+touching production data — verified:
 
 ```
-$ adhd-backlog --sandbox backlog upsert-project --input '{"name":"sandbox-demo","by":"claude:1"}'
-[backlog] --sandbox: isolated store at /var/folders/.../backlog-sandbox-AL1cJH (not auto-deleted — pass ADHD_ROOT=... to reuse it, or remove it yourself when done)
+$ adhd-backlog --namespace sandbox backlog upsert-project --input '{"name":"sandbox-demo","by":"claude:1"}'
+[backlog] --namespace sandbox: isolated store at /var/folders/.../backlog-sandbox-AL1cJH (not auto-deleted — pass ADHD_ROOT=... to reuse it, or remove it yourself when done)
 {"ok":true,"data":{"uid":"3ec19363-cd8c-4479-8d7f-c8e4e9f0948b","created":true,"project":{"uid":"3ec19363-cd8c-4479-8d7f-c8e4e9f0948b","name":"sandbox-demo"}}}
 ```
 
@@ -374,6 +379,23 @@ a silent empty result.
 ```
 $ adhd-backlog backlog rm-location --input '{"uid":"a4b0dd6b-…","by":"claude:1","reason":"tool renamed"}'
 {"ok":true,"data":{"uid":"a4b0dd6b-…","invalidated":true}}
+```
+
+**List every project/component/location in the registry** — the go-to for
+"what does this repo have registered?" without hand-rolling a scan. This is
+`query`'s `view:"projects"`/`"components"`/`"locations"` (not a separate
+verb): every live row of that kind, optionally scoped by `filter.project`
+(and, for `locations`, `filter.component`):
+
+```
+$ adhd-backlog backlog query --input '{"view":"projects"}'
+{"ok":true,"data":{"view":"projects","items":[{"uid":"020e87f2-…","name":"demo-project","path":"/tmp/demo"}]}}
+
+$ adhd-backlog backlog query --input '{"view":"components","filter":{"project":"demo-project"}}'
+{"ok":true,"data":{"view":"components","items":[{"uid":"41a61c6d-…","name":"auth-service","projectUid":"020e87f2-…","path":"packages/auth"},{"uid":"…","name":"(root)","projectUid":"020e87f2-…"}]}}
+
+$ adhd-backlog backlog query --input '{"view":"locations","filter":{"component":"auth-service","project":"demo-project"}}'
+{"ok":true,"data":{"view":"locations","items":[{"uid":"a4b0dd6b-…","locType":"path","value":"packages/auth/src/index.ts","componentUid":"41a61c6d-…"}]}}
 ```
 
 ## 5. Batch — N-way fan-out over one operation

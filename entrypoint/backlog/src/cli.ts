@@ -19,7 +19,7 @@
  * lazy `() => BacklogCtx` thunk for exactly this reason — see its own doc
  * comment.
  */
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 import type { Scope } from '@adhd/environment-base-spec';
@@ -35,7 +35,11 @@ import {
 } from './store/graph-backlog-store.js';
 import { enableSemanticSearchFromConfig } from './store/semantic-search.js';
 import { installSignalCleanup } from './store/signal-cleanup.js';
-import { buildBacklogEnv, resolveBacklogDbPath } from './env.js';
+import {
+  buildBacklogEnv,
+  resolveBacklogDbPath,
+  backlogEnvironmentSpec,
+} from './env.js';
 import {
   buildBacklogApigenPackage,
   requireRun,
@@ -45,8 +49,9 @@ import { runInstallSkillCommand } from './install-skill.js';
 import { runInstallCommand } from './install.js';
 import { runServeCommand } from './serve.js';
 import { readBacklogVersionInfo } from './version-info.js';
-import { exitCodeForEnvelope, isOutcomeEnvelope } from './envelope.js';
+import { errorEnvelope, exitCodeForEnvelope, isOutcomeEnvelope } from './envelope.js';
 import { buildSearchArgv } from './search-shortcut.js';
+import { suggestClosestCatalogNames } from './query/resolve.js';
 
 /**
  * Derives the internal command-path PREFIX every `client.ts` operation
@@ -224,38 +229,85 @@ export interface RunBacklogCliOpts {
   adhdRoot?: string;
   cwd?: string;
   signal?: AbortSignal;
+  /** Explicit-parameter-first namespace override — see
+   *  `BuildBacklogEnvOptions.namespace`'s doc comment and `--namespace`
+   *  (SPEC.md §5c). A parsed `--namespace <value>` (or a programmatic
+   *  caller's `optsIn.namespace`) sets this directly; a programmatic caller
+   *  may also pass it without going through argv at all. */
+  namespace?: string;
 }
 
 /**
- * backlog CLI had no sandbox/dry-run mode — every invocation defaulted
- * straight to the live production store (`~/.adhd/backlog` at scope
- * `global`), so trying a destructive or unfamiliar command meant either
- * risking the real graph or hand-rolling env-var isolation
- * (`ADHD_BACKLOG_SCOPE`/`ADHD_ROOT`) from scratch. `--sandbox`, recognized
- * ANYWHERE in argv (like `--help`), strips itself out and points the SAME
- * `adhdRoot` test-isolation knob `BuildBacklogEnvOptions` already exposes
- * (previously test-only — `cli.spec.ts`'s `runBin` is the proof this
- * mechanism genuinely isolates) at a freshly created, per-invocation temp
- * directory: `backlog --sandbox create-item …` writes into a throwaway
- * store, never the real one, and prints exactly where so a caller can
- * inspect or clean it up. It is NOT auto-deleted — a caller may want to
- * re-run further commands against the SAME sandbox by passing
- * `ADHD_ROOT=<printed path>` explicitly on a later invocation; deleting it
- * behind the caller's back the moment this process exits would defeat that.
+ * backlog CLI had no isolation mode at all originally, so trying a
+ * destructive or unfamiliar command meant either risking the real graph or
+ * hand-rolling env-var isolation (`ADHD_BACKLOG_SCOPE`/`ADHD_ROOT`) from
+ * scratch. `--namespace <value>` (SPEC.md §5c), recognized ANYWHERE in argv
+ * (like `--help`), strips itself out and validates against
+ * `backlogEnvironmentSpec.namespaces` (`'production'` | `'test'` |
+ * `'sandbox'`). Omitted ⇒ `'production'` (D2) — no behavior change for the
+ * overwhelmingly common case.
+ *
+ * `--namespace sandbox` additionally layers ephemeral-root-minting on top of
+ * namespace selection (D5): it points the SAME `adhdRoot` test-isolation
+ * knob `BuildBacklogEnvOptions` already exposes (previously test-only —
+ * `cli.spec.ts`'s `runBin` is the proof this mechanism genuinely isolates)
+ * at a freshly created, per-invocation temp directory: `backlog --namespace
+ * sandbox create …` writes into a throwaway store, never the real one, and
+ * prints exactly where so a caller can inspect or clean it up. It is NOT
+ * auto-deleted — a caller may want to re-run further commands against the
+ * SAME sandbox by passing `ADHD_ROOT=<printed path>` explicitly on a later
+ * invocation; deleting it behind the caller's back the moment this process
+ * exits would defeat that.
  */
 // Exported (BUG-BACKLOG-SANDBOX-TELEMETRY-001) so `index.ts`'s bin-entry
-// guard can detect `--sandbox` BEFORE its own `initTelemetry(...)` call —
-// which happens before `runBacklogCli` is ever invoked — and redirect the
-// telemetry file sink away from the real production `~/.adhd` tree too. See
-// that call site's own comment for the full rationale.
-export function stripSandboxFlag(argv: readonly string[]): {
+// guard can detect `--namespace sandbox` BEFORE its own `initTelemetry(...)`
+// call — which happens before `runBacklogCli` is ever invoked — and redirect
+// the telemetry file sink away from the real production `~/.adhd` tree too.
+// See that call site's own comment for the full rationale.
+export function stripNamespaceFlag(argv: readonly string[]): {
   argv: string[];
-  sandbox: boolean;
+  namespace: string | undefined;
+  /** `true` iff `--namespace`/`--namespace=` was present but supplied no
+   *  value (bare trailing flag, or `--namespace=` with nothing after `=`) —
+   *  distinct from "flag absent" so the caller can reject it (D3) instead of
+   *  silently falling through to the default. */
+  missingValue: boolean;
+  /** `true` iff `--namespace`/`--namespace=` appeared MORE THAN ONCE with
+   *  two DIFFERING values. Every occurrence is always stripped from the
+   *  returned `argv` regardless of count. Two occurrences with the SAME
+   *  value are not a conflict (idempotent). */
+  conflicting: boolean;
 } {
-  const sandbox = argv.includes('--sandbox');
+  const values: string[] = [];
+  const rest: string[] = [];
+  let missingValue = false;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === undefined) continue;
+    if (arg.startsWith('--namespace=')) {
+      const value = arg.slice('--namespace='.length);
+      if (value === '') missingValue = true;
+      else values.push(value);
+      continue;
+    }
+    if (arg === '--namespace') {
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith('-')) {
+        missingValue = true;
+      } else {
+        values.push(next);
+        i++; // consume the value token too
+      }
+      continue;
+    }
+    rest.push(arg);
+  }
+  const distinct = new Set(values);
   return {
-    argv: sandbox ? argv.filter((a) => a !== '--sandbox') : [...argv],
-    sandbox,
+    argv: rest,
+    namespace: values[values.length - 1],
+    missingValue,
+    conflicting: distinct.size > 1,
   };
 }
 
@@ -263,10 +315,71 @@ export async function runBacklogCli(
   argvIn?: string[],
   optsIn: RunBacklogCliOpts = {}
 ): Promise<void> {
-  const { argv: userArgvEarly, sandbox } = stripSandboxFlag(
-    argvIn ?? process.argv.slice(2)
-  );
+  const {
+    argv: userArgvEarly,
+    namespace: parsedNamespace,
+    missingValue,
+    conflicting,
+  } = stripNamespaceFlag(argvIn ?? process.argv.slice(2));
   const opts: RunBacklogCliOpts = { ...optsIn };
+
+  // D1/D3: reject a malformed `--namespace` BEFORE doing anything else with
+  // it — never silently fall through to `buildBacklogEnv`'s own default (an
+  // explicit-but-broken ask silently ignored), and never let an unvalidated
+  // string reach `EnvironmentOptions.namespace` (an ungoverned root segment).
+  if (missingValue) {
+    const env = errorEnvelope(
+      'invalid_argument',
+      'Invalid argument "namespace": a value is required (e.g. --namespace production)'
+    );
+    console.log(JSON.stringify(env));
+    process.exitCode = exitCodeForEnvelope(env);
+    return;
+  }
+  if (conflicting) {
+    // Recompute the distinct values purely for the message — stripNamespaceFlag
+    // already stripped every occurrence from userArgvEarly regardless of this.
+    const raw = argvIn ?? process.argv.slice(2);
+    const seen = new Set<string>();
+    for (let i = 0; i < raw.length; i++) {
+      const arg = raw[i];
+      if (arg === undefined) continue;
+      if (arg.startsWith('--namespace=')) seen.add(arg.slice('--namespace='.length));
+      else if (arg === '--namespace' && raw[i + 1] !== undefined)
+        seen.add(raw[i + 1] as string);
+    }
+    const env = errorEnvelope(
+      'invalid_argument',
+      `Invalid argument "namespace": conflicting values ${[...seen]
+        .map((v) => `"${v}"`)
+        .join(', ')}`
+    );
+    console.log(JSON.stringify(env));
+    process.exitCode = exitCodeForEnvelope(env);
+    return;
+  }
+  if (
+    parsedNamespace !== undefined &&
+    !backlogEnvironmentSpec.namespaces?.includes(parsedNamespace)
+  ) {
+    const valid = backlogEnvironmentSpec.namespaces ?? [];
+    const suggestions = suggestClosestCatalogNames(parsedNamespace, valid);
+    const detail =
+      `must be one of ${valid.map((v) => `"${v}"`).join(', ')}` +
+      (suggestions.length > 0
+        ? ` (did you mean ${suggestions.map((s) => `"${s}"`).join(' or ')}?)`
+        : '');
+    const env = errorEnvelope(
+      'invalid_argument',
+      `Invalid argument "namespace": ${detail}`
+    );
+    console.log(JSON.stringify(env));
+    process.exitCode = exitCodeForEnvelope(env);
+    return;
+  }
+  if (parsedNamespace !== undefined) opts.namespace = parsedNamespace;
+  const namespace = opts.namespace ?? 'production';
+
   // BUG-BACKLOG-SANDBOX-ADHDROOT-UNWIRED-001: the very message printed two
   // lines below has always told the caller to "pass ADHD_ROOT=<path> to
   // reuse it" — but nothing in this codebase ever read `process.env['ADHD_ROOT']`
@@ -281,46 +394,72 @@ export async function runBacklogCli(
   if (opts.adhdRoot === undefined && process.env['ADHD_ROOT']) {
     opts.adhdRoot = process.env['ADHD_ROOT'];
   }
-  // BUG-BACKLOG-SANDBOX-SILENT-BYPASS-001: `--sandbox` is an explicit,
-  // deliberate ask for isolation from the live production store. The reuse
-  // path above (an ambient `ADHD_ROOT` wins when `opts.adhdRoot` is still
-  // unset) previously ran unconditionally, so ANY `ADHD_ROOT` already set —
-  // which is the tool's own documented normal way to invoke it — silently
-  // defeated `--sandbox`: no banner, no warning, exit 0, and the write landed
-  // in that ADHD_ROOT store exactly as if `--sandbox` had never been passed.
-  // Confirmed: `ADHD_ROOT=<real> backlog --sandbox upsert-project ...`
-  // followed by a second non-sandboxed call against the same `ADHD_ROOT`
-  // returned the identical uid with `created:false` — proof the "isolated"
-  // write was never isolated.
+  // BUG-BACKLOG-SANDBOX-SILENT-BYPASS-001: `--namespace sandbox` is an
+  // explicit, deliberate ask for isolation from the live production store.
+  // The reuse path above (an ambient `ADHD_ROOT` wins when `opts.adhdRoot`
+  // is still unset) previously ran unconditionally, so ANY `ADHD_ROOT`
+  // already set — which is the tool's own documented normal way to invoke
+  // it — silently defeated `--namespace sandbox`: no banner, no warning, exit 0, and
+  // the write landed in that ADHD_ROOT store exactly as if `--namespace
+  // sandbox` had never been passed. Confirmed: `ADHD_ROOT=<real> backlog
+  // --namespace sandbox upsert-project ...` followed by a second
+  // non-sandboxed call against the same `ADHD_ROOT` returned the identical
+  // uid with `created:false` — proof the "isolated" write was never
+  // isolated.
   //
-  // `--sandbox` must always win UNLESS the already-set `ADHD_ROOT` is
-  // recognizably one of this tool's own sandbox tmpdirs (the caller resuming
-  // a specific sandbox they were handed earlier, per this function's own
-  // printed instruction). Anything else — including a real production root —
-  // gets overridden with a freshly minted sandbox and a loud warning, never a
-  // silent write into whatever ADHD_ROOT happened to be set.
+  // `--namespace sandbox` must always win UNLESS the already-set
+  // `ADHD_ROOT` is recognizably one of this tool's own sandbox tmpdirs (the
+  // caller resuming a specific sandbox they were handed earlier, per this
+  // function's own printed instruction). Anything else — including a real
+  // production root — gets overridden with a freshly minted sandbox and a
+  // loud warning, never a silent write into whatever ADHD_ROOT happened to
+  // be set.
   const looksLikeOwnSandboxDir = (p: string): boolean =>
     p.includes(`${sep}backlog-sandbox-`);
-  if (sandbox) {
+  if (namespace === 'sandbox') {
     if (opts.adhdRoot !== undefined && !looksLikeOwnSandboxDir(opts.adhdRoot)) {
       console.error(
-        `[backlog] --sandbox: ADHD_ROOT=${opts.adhdRoot} is set but is not a ` +
-          `sandbox this tool created — ignoring it and minting a fresh ` +
-          `isolated store instead, so --sandbox never writes into an ` +
-          `unrecognized (possibly production) location.`
+        `[backlog] --namespace sandbox: ADHD_ROOT=${opts.adhdRoot} is set but ` +
+          `is not a sandbox this tool created — ignoring it and minting a ` +
+          `fresh isolated store instead, so --namespace sandbox never writes ` +
+          `into an unrecognized (possibly production) location.`
       );
       opts.adhdRoot = undefined;
     }
     if (opts.adhdRoot === undefined) {
       opts.adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-sandbox-'));
       console.error(
-        `[backlog] --sandbox: isolated store at ${opts.adhdRoot} (not auto-deleted — pass ADHD_ROOT=${opts.adhdRoot} to reuse it, or remove it yourself when done)`
+        `[backlog] --namespace sandbox: isolated store at ${opts.adhdRoot} (not auto-deleted — pass ADHD_ROOT=${opts.adhdRoot} to reuse it, or remove it yourself when done)`
       );
     }
+    opts.namespace = 'sandbox';
+    // D8: write a REAL config.yaml, not an in-code override — an isolated
+    // invocation must get `embedding.enabled: false` DELIBERATELY, not as an
+    // accident of an empty directory. Targets exactly the file
+    // `layer-files.ts`'s `loadLayerFiles` reads for the `global` root, which
+    // for a sandbox invocation is `join(adhdRoot, 'backlog', 'sandbox')` —
+    // the identical path `resolveRoots` computes since `adhdRoot` overrides
+    // the global-root base directly. Written UNCONDITIONALLY on every
+    // sandbox invocation, before `buildBacklogEnv` ever reads file layers —
+    // overwrites (by mtime) any stray leftover file at that exact path,
+    // including one this same tool wrote and the caller reused via
+    // `ADHD_ROOT=<path>` above. `ADHD_BACKLOG_EMBEDDING_ENABLED` (the env
+    // var) still outranks this file — that is intended (D8): an explicit env
+    // var is a deliberate ask, a stray file is not.
+    const sandboxConfigDir = join(opts.adhdRoot, 'backlog', 'sandbox');
+    mkdirSync(sandboxConfigDir, { recursive: true });
+    writeFileSync(
+      join(sandboxConfigDir, 'config.yaml'),
+      '# Written by --namespace sandbox on every invocation — DELIBERATE, not\n' +
+        "# an absence-of-file default. embedding.enabled is off so a sandboxed\n" +
+        '# run never pays a real model-load cost or opens a real vector store.\n' +
+        'embedding:\n' +
+        '  enabled: false\n'
+    );
   }
-  // BUG-BACKLOG-SANDBOX-IRCACHE-LEAK-001: `--sandbox`'s promise is "diverts
-  // the store away from the (fake) production HOME entirely, and never
-  // creates anything under it" (`cli.spec.ts`) — but `server.ts`'s
+  // BUG-BACKLOG-SANDBOX-IRCACHE-LEAK-001: `--namespace sandbox`'s promise is
+  // "diverts the store away from the (fake) production HOME entirely, and
+  // never creates anything under it" (`cli.spec.ts`) — but `server.ts`'s
   // `irCacheFile()` calls `resolveIrCacheFile()` with no arguments, so its
   // module-level lazy singleton (`getExtractInvoke`, built on first
   // extraction) always resolves the REAL, HOME-anchored default
@@ -330,9 +469,9 @@ export async function runBacklogCli(
   // use so callers/tests can point `APIGEN_IR_CACHE_FILE`… at test values
   // before the first extraction" — so this redirects it into the same
   // sandbox tmpdir rather than inventing a second isolation mechanism.
-  // Guarded on `adhdRoot` (not `sandbox`) so an explicit
+  // Guarded on `adhdRoot` (not the namespace name) so an explicit
   // `runBacklogCli(argv, {adhdRoot})` caller (tests) gets the same
-  // isolation `--sandbox` gets on the CLI. Never overrides an
+  // isolation `--namespace sandbox` gets on the CLI. Never overrides an
   // already-set `APIGEN_IR_CACHE_FILE` — an explicit caller override (e.g.
   // an integration test pointing at its own throwaway file) always wins.
   if (
@@ -348,7 +487,7 @@ export async function runBacklogCli(
   // `sandbox-path` (store-free diagnostic — DEBT-BACKLOG-001's narrower real
   // instance / P5-cli-serve-transport's sandbox finding) reports the
   // resolved isolation root + effective db path WITHOUT ever opening the
-  // store, so a caller can confirm `--sandbox` (or a manually-set
+  // store, so a caller can confirm `--namespace sandbox` (or a manually-set
   // `ADHD_ROOT`) actually redirects storage before running anything
   // destructive. Uses the SAME `buildBacklogEnv`/`resolveBacklogDbPath`
   // path every store-open site resolves through (BUG-002 parity).
@@ -357,12 +496,21 @@ export async function runBacklogCli(
       scope: opts.scope,
       adhdRoot: opts.adhdRoot,
       cwd: opts.cwd,
+      namespace: opts.namespace,
     });
     console.log(
       JSON.stringify({
-        sandbox,
         adhdRoot: opts.adhdRoot,
+        // The real, effective namespace this invocation resolved through
+        // (`'production'`/`'test'`/`'sandbox'`) — a child-process-observable
+        // proof point for the bypass-bug regression test (cli.spec.ts)
+        // without reaching inside the spawned process.
+        namespace: opts.namespace ?? 'production',
         dbPath: resolveBacklogDbPath(env),
+        // D6: NEW, not a rename — read straight off `env.config.embedding.enabled`
+        // (the same `env` this diagnostic already builds to compute `dbPath`)
+        // so D8's guarantee has a structural, non-timing assertion point.
+        embeddingEnabled: env.config.embedding.enabled,
       })
     );
     return;
@@ -389,14 +537,23 @@ export async function runBacklogCli(
       '  search "<query>" [flags]  Natural-language search — `query --input` with the options as flags'
     );
     console.log(
-      '  sandbox-path             Report the resolved store path (store-free) — see --sandbox below'
+      '  sandbox-path             Report the resolved store path (store-free) — see --namespace below'
     );
     console.log('');
     console.log(
-      '  --sandbox    Global flag, valid before ANY command: isolates this invocation'
+      '  --namespace <value>  Global flag, valid before ANY command: selects which'
     );
     console.log(
-      '               into a fresh throwaway store instead of the live production one.'
+      '                       declared store instance to use — "production" (default),'
+    );
+    console.log(
+      '                       "test" (a persisted, non-ephemeral store), or "sandbox"'
+    );
+    console.log(
+      '                       (a fresh throwaway store minted per invocation, never'
+    );
+    console.log(
+      '                       the live production one).'
     );
     console.log('');
   }
@@ -484,6 +641,7 @@ export async function runBacklogCli(
         scope: opts.scope,
         adhdRoot: opts.adhdRoot,
         cwd: opts.cwd,
+        namespace: opts.namespace,
       });
       env.ensureDirs();
       // BUG-002: open through `resolveBacklogDbPath` so ADHD_BACKLOG_DATABASE_PATH
@@ -584,6 +742,26 @@ export async function runBacklogCli(
         'See also: `adhd-backlog batch action` — run this SAME operation over ' +
           'many items in one call instead of N one-at-a-time invocations ' +
           '(skill/SKILL.md §5).'
+      );
+    }
+    // BUG-BACKLOG-QUERY-SIMILAR-ANCHOR-UNDOCUMENTED-001: `query`'s per-verb
+    // `--help` (same shared-package limitation as the `batch action` note
+    // above — `paramsText` renders `view?: enum` values but has no field-
+    // level "this view additionally requires ..." annotation surface) never
+    // told a caller that `view:"similar"` throws unless `filter.anchor` OR
+    // `filter.semantic` is also given, and unless `filter.project`/
+    // `filter.component` narrows the registry views' listing. Surfaced here,
+    // backlog-local, mirroring the `batch action` precedent exactly — zero
+    // apigen changes.
+    if (isPerVerbHelp && userArgv[0] === 'query') {
+      console.log(
+        'Notes:\n' +
+          '  - view:"similar" additionally requires filter.anchor (uid of the ' +
+          'reference issue) OR filter.semantic (free text) — neither given ' +
+          'throws invalid_argument.\n' +
+          '  - view:"projects" | "components" | "locations" list the project/' +
+          'component/location registry (optionally scoped by filter.project/' +
+          'filter.component) — see skill/SKILL.md §3a for worked examples.'
       );
     }
   } finally {

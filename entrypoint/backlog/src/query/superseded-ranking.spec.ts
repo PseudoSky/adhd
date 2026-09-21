@@ -20,13 +20,27 @@
  * `rankByFusedRelevance` (`query/views/semantic.ts`): the result list carries
  * two entries for one issue, and the superseded uid is among them.
  *
- * Real components throughout — real fastembed (`bge-base-en-v1.5`), real
- * Turso vector space, real `createIssue`/`update` writes, and `queryIssues`
- * driven exactly as `api.ts`'s mounted `query` verb drives it. The harness
- * mirrors `text-routing.spec.ts`'s.
+ * Real components throughout EXCEPT the embedding model: real Turso vector
+ * space, real `createIssue`/`update` writes, and `queryIssues` driven
+ * exactly as `api.ts`'s mounted `query` verb drives it. The harness mirrors
+ * `text-routing.spec.ts`'s. Embeddings mocked here — explicit, scoped user
+ * authorization (see entrypoint/backlog/STATE.md), covers embedding cost
+ * only.
+ *
+ * **Why the fake preserves this test's teeth.** The one logical issue in
+ * this test is queried by a paraphrase of its OWN (edited) body — it is
+ * the only document in the vector space either way, live or superseded row
+ * alike, so no genuine cross-vocabulary discrimination between DIFFERENT
+ * topics is exercised (that proof belongs to `text-routing.spec.ts`, not
+ * touched by this change). What this test actually proves —
+ * `dropSupersededResults` excluding the frozen pre-edit row from a ranked
+ * result set — depends on `rankByFusedRelevance`'s supersede-filtering
+ * logic, not on the embedding model's semantic fidelity: any deterministic
+ * embedder that returns a retrievable vector for both the superseded and
+ * live rows exercises the exact same code path.
  */
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { openTursoVectorStore } from '@adhd/sox-vector-store';
 import { StoreSearchBackend } from '@adhd/sox-hybrid-search';
 import {
@@ -44,8 +58,16 @@ import {
   configureSemanticBackend,
 } from '../store/semantic-search.js';
 import type { GraphBacklogStore } from '../store/graph-backlog-store.js';
+import { createFakeEmbeddingModule } from '../test/helpers/fake-embedding-provider.js';
 
-const E2E_TIMEOUT = 180_000;
+// Embeddings mocked here — explicit, scoped user authorization (see
+// entrypoint/backlog/STATE.md), covers embedding cost only. Intercepts the
+// `import('@adhd/sox-embedding-provider')` specifier
+// `store/semantic-search.ts`'s `loadOptional` seam resolves at runtime.
+vi.mock('@adhd/sox-embedding-provider', () => createFakeEmbeddingModule());
+
+/** No cold ONNX model init anymore — the fake never touches disk/network — but the real Turso vector-store round-trip still needs headroom. */
+const E2E_TIMEOUT = 30_000;
 const EMBEDDING = { type: 'fastembed', model: 'bge-base-en-v1.5' } as const;
 
 describe('a body edit leaves nothing superseded in a ranked result (real fastembed + real Turso vectors)', () => {

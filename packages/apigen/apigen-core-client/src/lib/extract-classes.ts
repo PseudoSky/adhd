@@ -24,7 +24,12 @@
 //   included.
 
 import path from 'node:path';
-import { type Project, type SourceFile, Scope } from 'ts-morph';
+import type { Project, SourceFile } from 'ts-morph';
+// PERF (BUG-APIGEN-CORE-CLIENT-STARTUP-001): `Scope` is a ts-morph runtime
+// enum used only for two comparisons below (`Scope.Private`/`Scope.Protected`).
+// A static `import { Scope } from 'ts-morph'` pulls the whole ts-morph
+// package into every process that loads this module. Lazily `require`d and
+// memoized below.
 import type { Operation, Segment } from './descriptor';
 import { buildSchema } from './schema-builders/ts-json-schema';
 import { tokenize } from './extract';
@@ -35,6 +40,14 @@ import {
   type ExtractionSession,
   type InternalExtractionSession,
 } from './extraction-session';
+
+let _Scope: typeof import('ts-morph').Scope | undefined;
+function getScopeEnum(): typeof import('ts-morph').Scope {
+  if (_Scope) return _Scope;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  _Scope = (require('ts-morph') as typeof import('ts-morph')).Scope;
+  return _Scope;
+}
 
 // ---------------------------------------------------------------------------
 // Public entry-point
@@ -160,6 +173,7 @@ async function extractClassesWithSession(
       // Only public static methods (implicitly public when no modifier is set
       // in TS, but we also honour explicit `public`; exclude `private`/`protected`).
       const scope = method.getScope();
+      const Scope = getScopeEnum();
       if (scope === Scope.Private || scope === Scope.Protected) continue;
 
       const sig = method.getSignature();
@@ -248,6 +262,7 @@ async function extractClassesWithSession(
       if (shouldSkipName(methodName)) continue;
 
       const scope = method.getScope();
+      const Scope = getScopeEnum();
       if (scope === Scope.Private || scope === Scope.Protected) continue;
 
       const sig = method.getSignature();

@@ -352,6 +352,9 @@ export interface StartOpts {
   adhdRoot?: string;
   cwd?: string;
   signal: AbortSignal;
+  /** Explicit-parameter-first namespace override — see
+   *  `BuildBacklogEnvOptions.namespace`'s doc comment. */
+  namespace?: string;
 }
 
 /**
@@ -511,19 +514,19 @@ const CORE_CLIENT_VERSION: string = requirePkg(
  * ONLY along the `scope` axis (project vs global data — see this file's own
  * comment above about the cache staying "one stable machine-wide location
  * no matter which scope a given invocation resolved its backlog *data*
- * to"). It is NOT correct along the `--sandbox`/test-isolation axis:
+ * to"). It is NOT correct along the `--namespace sandbox`/test-isolation axis:
  * `cli.ts`'s `runBacklogCli` and `startBacklogServer` both already thread an
  * `adhdRoot` override through `buildBacklogEnv` for every OTHER path (the
  * real store, `env.ensureDirs()`), but this cache file's own
  * `resolveIrCacheFile({ adhdRoot, instanceId })` parameters were simply never
- * wired to it — so a `--sandbox` invocation, despite reporting (and
- * genuinely using) an isolated store root, would still create
+ * wired to it — so a `--namespace sandbox` invocation, despite reporting
+ * (and genuinely using) an isolated store root, would still create
  * `~/.adhd/backlog/production/cache/apigen/ir-cache/...` on the real
  * machine `HOME` on its first extraction, defeating the isolation guarantee
- * `--sandbox` advertises (caught by `cli.spec.ts`'s
- * "--sandbox diverts the store away from the (fake) production HOME
- * entirely, and never creates anything under it" — a fake HOME stands in
- * for the real one there, but the bug is identical against a real HOME).
+ * `--namespace sandbox` advertises (caught by `cli.spec.ts`'s
+ * "--namespace sandbox diverts the store away from the (fake) production
+ * HOME entirely, and never creates anything under it" — a fake HOME stands
+ * in for the real one there, but the bug is identical against a real HOME).
  * Now accepts the same `{ adhdRoot, instanceId }` test-isolation pair every
  * other resolver in this file already takes, and forwards it verbatim.
  */
@@ -676,7 +679,7 @@ async function extractApiOperations(
  *
  * @param opts.adhdRoot/instanceId BUG-BACKLOG-SANDBOX-IRCACHE-001 — forwarded
  *   verbatim to `extractApiOperations`/the IR-cache plugin, so a caller
- *   already isolating its real store via `adhdRoot` (`--sandbox`, or any
+ *   already isolating its real store via `adhdRoot` (`--namespace sandbox`, or any
  *   other test-isolation caller of `buildBacklogEnv`) gets the extract-stage
  *   IR cache isolated the SAME way, instead of it silently falling through
  *   to the real machine `HOME`. Optional and additive — every existing call
@@ -774,6 +777,7 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
     scope: opts.scope,
     adhdRoot: opts.adhdRoot,
     cwd: opts.cwd,
+    namespace: opts.namespace,
   });
   env.ensureDirs();
 

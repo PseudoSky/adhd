@@ -571,6 +571,79 @@ describe('buildTranscoder', () => {
       // decide, not declaration order.
       expect(transcoder.encode(value, schema)).toEqual(value);
     });
+
+    it('BUG-BACKLOG-QUERY-REGISTRY-VIEW-STRIPPED-001: a NO-discriminator union whose branches share identical top-level property NAMES is disambiguated by an implicit literal tag, never silently re-encoded through a sibling branch', () => {
+      // Reproduces `@adhd/backlog`'s `IIssueQueryResult` shape directly: no
+      // `discriminator` block at all (an anonymous TS union of inline
+      // object-literal types), and two branches — `view:'ready'` (an
+      // IIssueCard-shaped item) and `view:'projects'` (an IProjectSummary-
+      // shaped item) — that declare the EXACT SAME top-level property names
+      // (`view`, `items`), so `scoreUnionBranch` alone cannot tell them
+      // apart: both score identically regardless of what `items` actually
+      // holds, since the mismatch lives one level deeper, inside `items`'s
+      // element schema, which scoring never inspects.
+      const transcoder = buildTranscoder(createRegistry().freeze());
+
+      const schema: SchemaNode = {
+        oneOf: [
+          {
+            type: 'object',
+            properties: {
+              view: { type: 'string', const: 'ready' },
+              items: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: { uid: { type: 'string' }, title: { type: 'string' } },
+                  required: ['uid'],
+                },
+              },
+            },
+            required: ['view', 'items'],
+          },
+          {
+            type: 'object',
+            properties: {
+              view: { type: 'string', const: 'projects' },
+              items: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    uid: { type: 'string' },
+                    name: { type: 'string' },
+                    path: { type: 'string' },
+                  },
+                  required: ['uid', 'name'],
+                },
+              },
+            },
+            required: ['view', 'items'],
+          },
+        ],
+      };
+
+      const registryValue = {
+        view: 'projects',
+        items: [{ uid: 'p1', name: 'demo-project', path: '/tmp/demo' }],
+      };
+
+      // Before this fix: `scoreUnionBranch` tied both branches (identical
+      // required-key sets `['view','items']`), the documented tie-break
+      // picked the EARLIEST branch (`view:'ready'`, an `IIssueCard`-item
+      // shape), and its declared `properties.items.items.properties` (only
+      // `uid`/`title`) does not know `name`/`path` at all — dropping them.
+      // Live-verified against the real built `@adhd/backlog` CLI:
+      // `query --input '{"view":"projects"}'` returned `{items:[{uid:"..."}]}`
+      // with `name`/`path` silently gone.
+      expect(transcoder.encode(registryValue, schema)).toEqual(registryValue);
+
+      // The SAME union still routes the OTHER branch correctly — proof this
+      // is a real discriminating fix, not a blanket "always prefer the
+      // later/registry-shaped branch" that would merely invert the bug.
+      const issueValue = { view: 'ready', items: [{ uid: 'i1', title: 'An issue' }] };
+      expect(transcoder.encode(issueValue, schema)).toEqual(issueValue);
+    });
   });
 
   describe('schema-less envelope (any position)', () => {
