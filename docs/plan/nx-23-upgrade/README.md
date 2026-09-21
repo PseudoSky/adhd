@@ -26,3 +26,11 @@ Land the Nx 23.2.1 + Vite 8 upgrade on perf/nx-upgraded, remodel the task graph 
   - delivered-by: `tsconfig-shim-removal`
 
 - `[dod.4]` **(structural) No migration-only compiler relaxation remains in the shared compiler configuration. (structural)** — (structural) No migration-only compiler relaxation remains in the shared compiler configuration..
+
+- `[dod.5]` **A developer can change one source file and run only the tests that actually cover it, instead of the whole package suite. (behavioral)** — A developer can change one source file and run only the tests that actually cover it, instead of the whole package suite..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `pnpm run test:related -- packages/data/data-base-transforms/src/lib/date.ts`
+  - observable: `exit 0 and a selected spec-file count strictly smaller than that package full suite`
+  - delivered-by: `test-changed-optin`
