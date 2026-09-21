@@ -833,6 +833,14 @@
       "kind": "command",
       "cmd": "node docs/plan/nx-23-upgrade/scripts/check-zero-selection.mjs",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-final.5",
+      "phase": "final",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "node docs/plan/nx-23-upgrade/scripts/check-guards-pinned.mjs",
+      "expect": "exit0"
     }
   ]
 }
