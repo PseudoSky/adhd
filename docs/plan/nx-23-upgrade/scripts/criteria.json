@@ -666,6 +666,13 @@
       "tier": 3,
       "kind": "custom",
       "script": "docs/plan/nx-23-upgrade/scripts/check-zero-selection.mjs"
+    },
+    {
+      "id": "test-changed-optin.5",
+      "phase": "tests",
+      "tier": 3,
+      "kind": "custom",
+      "script": "docs/plan/nx-23-upgrade/scripts/check-cross-package-selection.mjs"
     }
   ]
 }
