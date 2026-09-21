@@ -2,12 +2,21 @@
   "schema_version": 2,
   "title": "Nx 23 / Vite 8 upgrade, task-graph remodel, and file-level test selection",
   "dag": "dag.json",
-  "states": {},
+  "states": {
+    "upgrade-baseline": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    }
+  },
   "transition_log": [],
   "amendment_log": [],
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.25",
     "hash": "961c3053dfab"
-  }
+  },
+  "current_state": "upgrade-baseline"
 }
