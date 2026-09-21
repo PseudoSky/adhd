@@ -50,3 +50,5 @@ Land the Nx 23.2.1 + Vite 8 upgrade on perf/nx-upgraded, remodel the task graph 
   - entrypoint: `pnpm run test:related -- packages/data/data-base-transforms/src/lib/date.ts`
   - observable: `at least one selected spec file belonging to a dependent package, and exit 0`
   - delivered-by: `test-changed-optin`
+
+- `[dod.8]` **(structural) The commit gate still covers downstream consumers and is not narrowed to the changed package, and the fail-open behaviour of the previous selection attempt is refuted or confirmed on the upgraded toolchain. (structural)** — (structural) The commit gate still covers downstream consumers and is not narrowed to the changed package, and the fail-open behaviour of the previous selection attempt is refuted or confirmed on the upgraded toolchain..
