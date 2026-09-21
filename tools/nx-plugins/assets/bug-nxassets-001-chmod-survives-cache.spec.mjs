@@ -19,10 +19,13 @@
  *      actual fix: an uncacheable target's body runs on EVERY invocation,
  *      so there is no cache-hit window in which the chmod can be skipped.
  *   2. `assets` itself depends on `chmod-bin` (not just `build`), so nx's
- *      task graph pulls `chmod-bin` in transitively for every EXISTING
- *      consumer of `assets` (e.g. `entrypoint/backlog/project.json`'s
- *      `test` target, `dependsOn: ["^build", "build", "assets"]`) with no
- *      change needed to any individual project.json.
+ *      task graph pulls `chmod-bin` in transitively for every consumer of
+ *      `assets` with no change needed to any individual project.json. The
+ *      one `test` target that consumes `assets` is
+ *      `entrypoint/backlog/project.json`'s, `dependsOn: ["^build", "build",
+ *      "assets"]`. (DEBT-024: the global `targetDefaults.test.dependsOn` is
+ *      `["lint","^build"]` and never included `assets`, so this is NOT a
+ *      "every `test`" propagation.)
  *
  * A second, executable-level proof lives in `executors/chmod-bin/impl.spec.mjs`:
  * it runs the real `chmod-bin` executor against a real temp dist directory
