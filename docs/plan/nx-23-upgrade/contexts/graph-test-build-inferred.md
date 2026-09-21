@@ -22,6 +22,7 @@ process.exit(bad?1:0)"`
 
 - [graph-test-build-inferred.1] No explicit test executor target remains to shadow inference
 
+- [graph-test-build-inferred.2] No explicit build executor target remains to shadow inference
 ---
 
 ## Reservations
