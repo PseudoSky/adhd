@@ -498,6 +498,14 @@
       "cmd": "./node_modules/.bin/nx show project agent-core-policy --json",
       "expect": "marker",
       "marker": "\"build\""
+    },
+    {
+      "id": "graph-js-tsc-inferred.4",
+      "phase": "graph",
+      "tier": 3,
+      "kind": "command",
+      "cmd": "./node_modules/.bin/nx build agent-core-policy",
+      "expect": "exit0"
     }
   ]
 }

@@ -24,6 +24,7 @@ process.exit(bad?1:0)"`
 
 - [graph-js-tsc-inferred.2] The js plugin is registered so the tsc-built projects still infer a build
 - [graph-js-tsc-inferred.3] A sample tsc-built project still exposes a build target
+- [graph-js-tsc-inferred.4] A sample tsc-built project still produces its build artifact
 ---
 
 ## Reservations
