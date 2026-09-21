@@ -574,6 +574,13 @@
       "kind": "command",
       "cmd": "node -e \"process.exit((require(\\\"./nx.json\\\").targetDefaults.lint.dependsOn||[]).includes(\\\"sync-deps-check\\\")?0:1)\"",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-graph.1",
+      "phase": "graph",
+      "tier": 1,
+      "kind": "exists",
+      "path": "docs/plan/nx-23-upgrade/scripts/guard_audit_graph.py"
     }
   ]
 }
