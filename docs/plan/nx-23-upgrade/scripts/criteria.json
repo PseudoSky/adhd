@@ -506,6 +506,14 @@
       "kind": "command",
       "cmd": "./node_modules/.bin/nx build agent-core-policy",
       "expect": "exit0"
+    },
+    {
+      "id": "graph-js-tsc-inferred.5",
+      "phase": "graph",
+      "tier": 3,
+      "kind": "command",
+      "cmd": "./node_modules/.bin/nx run dispatch-cli:build-bin",
+      "expect": "exit0"
     }
   ]
 }
