@@ -6,7 +6,8 @@
     "intake",
     "reconcile",
     "config",
-    "graph"
+    "graph",
+    "tests"
   ],
   "terminal": "done",
   "nodes": {},
