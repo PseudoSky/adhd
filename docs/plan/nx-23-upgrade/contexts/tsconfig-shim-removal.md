@@ -19,6 +19,7 @@
 - [tsconfig-shim-removal.1] No migration strictness relaxation remains in the shared compiler config
 
 - [tsconfig-shim-removal.2] No wildcard global-types relaxation remains in the shared compiler config
+- [tsconfig-shim-removal.3] No deprecation-suppression relaxation remains in the shared compiler config
 ---
 
 ## Reservations
