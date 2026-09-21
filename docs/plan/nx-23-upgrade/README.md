@@ -54,3 +54,5 @@ Land the Nx 23.2.1 + Vite 8 upgrade on perf/nx-upgraded, remodel the task graph 
 - `[dod.8]` **(structural) The commit gate still covers downstream consumers and is not narrowed to the changed package, and the fail-open behaviour of the previous selection attempt is refuted or confirmed on the upgraded toolchain. (structural)** — (structural) The commit gate still covers downstream consumers and is not narrowed to the changed package, and the fail-open behaviour of the previous selection attempt is refuted or confirmed on the upgraded toolchain..
 
 - `[dod.9]` **(structural) Task targets that merely restated what Nx can already infer are gone, and the inferred equivalents still produce the same artifacts. (structural)** — (structural) Task targets that merely restated what Nx can already infer are gone, and the inferred equivalents still produce the same artifacts..
+
+- `[dod.10]` **(structural) Each checkout owns its task cache, so a cached pass from a sibling worktree cannot be replayed here. (structural)** — (structural) Each checkout owns its task cache, so a cached pass from a sibling worktree cannot be replayed here..
