@@ -20,6 +20,7 @@
 
 - [test-selection-revalidated.2] The probe record reports defect one
 - [test-selection-revalidated.3] The probe record reports defect two
+- [test-selection-revalidated.4] The probe record reports defect three
 ---
 
 ## Reservations
