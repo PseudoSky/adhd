@@ -481,6 +481,14 @@
         "packages/workspace/workspace-base-tools/project.json",
         "packages/workspace/workspace-codegen-nx/project.json"
       ]
+    },
+    {
+      "id": "graph-js-tsc-inferred.2",
+      "phase": "graph",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "rg -q \"@nx/js/plugin\" nx.json",
+      "expect": "exit0"
     }
   ]
 }
