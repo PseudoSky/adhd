@@ -243,6 +243,36 @@
       ],
       "context": "contexts/graph-js-tsc-inferred.md",
       "notes": "Phase 2b: the js plugin is NOT registered, so deleting these targets would delete the build target outright. Register it, then convert the 14 tsc builds plus the bespoke build-bin."
+    },
+    "graph-release-eslint-inferred": {
+      "kind": "work",
+      "phase": "graph",
+      "depends_on": [
+        "graph-js-tsc-inferred"
+      ],
+      "guard": "./node_modules/.bin/nx show projects | rg -q \"apigen-plugin-jsonschema\" && node -e \"\nconst fs=require(\\\"fs\\\"),path=require(\\\"path\\\");\nfunction walk(d,o=[]){for(const e of fs.readdirSync(d,{withFileTypes:true})){if([\\\"node_modules\\\",\\\".git\\\",\\\"dist\\\",\\\".nx\\\"].includes(e.name))continue;const p=path.join(d,e.name);if(e.isDirectory())walk(p,o);else if(e.name===\\\"project.json\\\")o.push(p);}return o;}\nlet bad=0;for(const f of walk(\\\".\\\")){const t=fs.readFileSync(f,\\\"utf8\\\");if(t.includes(\\\"@nx/js:release-publish\\\")||t.includes(\\\"@nx/eslint:lint\\\")){bad++;console.error(f);}}\nprocess.exit(bad?1:0)\"",
+      "artifacts": [
+        "nx.json",
+        "packages/apigen/apigen-plugin-api-express/project.json",
+        "packages/apigen/apigen-plugin-api-fastify/project.json",
+        "packages/apigen/apigen-plugin-batch/project.json",
+        "packages/apigen/apigen-plugin-cli-output/project.json",
+        "packages/apigen/apigen-plugin-health/project.json",
+        "packages/apigen/apigen-plugin-java-javalin/project.json",
+        "packages/apigen/apigen-plugin-jsonschema/project.json",
+        "packages/apigen/apigen-plugin-logger/project.json",
+        "packages/apigen/apigen-plugin-mcp/project.json",
+        "packages/apigen/apigen-plugin-openapi/project.json",
+        "packages/apigen/apigen-plugin-py-flask/project.json",
+        "packages/apigen/apigen-plugin-py-grpc/project.json",
+        "packages/apigen/apigen-plugin-batch/project.json",
+        "packages/apigen/apigen-plugin-ir-cache/project.json",
+        "packages/apigen/apigen-plugin-ts-types/project.json",
+        "packages/workspace/workspace-base-standard/project.json",
+        "packages/workspace/workspace-base-vite-paths/project.json"
+      ],
+      "context": "contexts/graph-release-eslint-inferred.md",
+      "notes": "Phase 2c: the deprecated eslint lint targets go through the sanctioned convert-to-inferred codemod; the twelve release targets have bespoke dependency chains that must survive the move to inference."
     }
   },
   "authored_with": {
