@@ -59,6 +59,16 @@
       "paths": [
         "docs/plan/nx-23-upgrade/TRIAGE-VERDICTS.md"
       ]
+    },
+    {
+      "id": "gate-triage-absorbed.4",
+      "phase": "intake",
+      "tier": 0,
+      "kind": "present",
+      "pattern": "backlog",
+      "paths": [
+        "docs/plan/nx-23-upgrade/TRIAGE-VERDICTS.md"
+      ]
     }
   ]
 }
