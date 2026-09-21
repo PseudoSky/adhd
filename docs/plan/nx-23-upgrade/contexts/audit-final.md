@@ -43,18 +43,18 @@ deleted:  []
 - [audit-final.1] The final audit guard exists
 
 - [audit-final.2] Every criterion across every phase passes at the final hold
-- [audit-final.3] Conformance: a converted target still produces its artifact through the inferred path
-- [audit-final.4] Conformance: the fast path fails loudly on zero selection
-- [audit-final.5] Conformance: every guard resolves its tool through a repo-local anchor
-- [audit-final.6] Interface: the vitest ceiling is the one the installed Nx plugin declares
-- [audit-final.7] Interface: the related selector is available in the installed test runner
+- [audit-final.ref-target-artifact-parity] Conformance: a converted target still produces its artifact through the inferred path
+- [audit-final.ref-fail-safe-fast-path] Conformance: the fast path fails loudly on zero selection
+- [audit-final.ref-pinned-guard-tool-resolution] Conformance: every guard resolves its tool through a repo-local anchor
+- [audit-final.iface-nx-vitest-peer-range] Interface: the vitest ceiling is the one the installed Nx plugin declares
+- [audit-final.iface-vitest-related-cli] Interface: the related selector is available in the installed test runner
 ---
 
 ## Reservations
 
 ```text
 read_only:  ["docs/plan/nx-23-upgrade/SCOPE.md", "docs/plan/nx-23-upgrade/USE_CASES.md", "docs/plan/nx-23-upgrade/demo/DEMO.md", "docs/plan/nx-23-upgrade/demo/UNRESOLVED.md", "docs/plan/nx-23-upgrade/TOOLS.md", "docs/plan/nx-23-upgrade/APPROVAL.md", "docs/plan/nx-23-upgrade/contexts/_shared.md", "AGENTS.md", "CLAUDE.md", "nx.json", "package.json", "tsconfig.base.json", ".githooks/pre-commit"]
-mutates:    ["docs/plan/nx-23-upgrade/scripts/guard_audit_final.py"]
+mutates:    ["docs/plan/nx-23-upgrade/scripts/guard_audit_final.py", "docs/plan/nx-23-upgrade/scripts/check-guards-pinned.mjs"]
 ```
 
 ---
