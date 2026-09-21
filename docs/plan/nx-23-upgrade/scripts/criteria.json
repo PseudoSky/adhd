@@ -635,6 +635,14 @@
       "cmd": "./node_modules/.bin/nx --version",
       "expect": "marker",
       "marker": "23.2.1"
+    },
+    {
+      "id": "test-changed-optin.1",
+      "phase": "tests",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "node -e \"process.exit(require(\\\"./package.json\\\").scripts[\\\"test:changed\\\"]?0:1)\"",
+      "expect": "exit0"
     }
   ]
 }
