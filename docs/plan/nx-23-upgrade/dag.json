@@ -99,6 +99,20 @@
       ],
       "context": "contexts/audit-reconcile.md",
       "notes": "Hold point. The two absorbed branches must both be green before any config or graph work starts."
+    },
+    "tsconfig-shim-removal": {
+      "kind": "work",
+      "phase": "config",
+      "depends_on": [
+        "audit-reconcile"
+      ],
+      "guard": "node -e \"const c=require(\\\"./tsconfig.base.json\\\").compilerOptions;for(const k of [\\\"strict\\\",\\\"types\\\",\\\"esModuleInterop\\\",\\\"ignoreDeprecations\\\",\\\"noUncheckedSideEffectImports\\\"])if(k in c)process.exit(1)\" && ./node_modules/.bin/nx run-many -t build --projects=agent-base-types,data-query-engine,agent-core-policy",
+      "artifacts": [
+        "tsconfig.base.json",
+        "docs/plan/nx-23-upgrade/SHIM-REMOVAL.md"
+      ],
+      "context": "contexts/tsconfig-shim-removal.md",
+      "notes": "Delete the five migration shims the upgrade added to the shared compiler config and prove empirically that builds still type-check. Measure the real blast radius; do not assume the stated one."
     }
   },
   "authored_with": {
