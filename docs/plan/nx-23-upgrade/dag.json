@@ -5,7 +5,8 @@
   "phases": [
     "intake",
     "reconcile",
-    "config"
+    "config",
+    "graph"
   ],
   "terminal": "done",
   "nodes": {},
