@@ -162,6 +162,13 @@
       "kind": "command",
       "cmd": "rg -q nxViteTsPathsPre packages/workspace/workspace-codegen-nx/src/generators/shared/generator.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-reconcile.1",
+      "phase": "reconcile",
+      "tier": 1,
+      "kind": "exists",
+      "path": "docs/plan/nx-23-upgrade/scripts/guard_audit_reconcile.py"
     }
   ]
 }
