@@ -849,6 +849,14 @@
       "kind": "command",
       "cmd": "node -e \"const p=require(\\\"@nx/vitest/package.json\\\");const r=p.peerDependencies.vitest;console.log(\\\"vitest peer:\\\",r);process.exit(r.includes(\\\"^4.0.0\\\")?0:1)\"",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-final.7",
+      "phase": "final",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "./node_modules/.bin/vitest --help | rg -q related",
+      "expect": "exit0"
     }
   ]
 }
