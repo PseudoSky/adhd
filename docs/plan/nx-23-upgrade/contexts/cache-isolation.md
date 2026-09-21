@@ -19,6 +19,7 @@
 - [cache-isolation.1] The task cache directory is declared relative to the checkout
 
 - [cache-isolation.2] The declared cache directory resolves inside this checkout
+- [cache-isolation.3] The project graph still loads after the cache change
 ---
 
 ## Reservations
