@@ -18,6 +18,7 @@
 
 - [config-repair-absorbed.1] The default test target still depends on lint, preserving the publish gate
 
+- [config-repair-absorbed.2] No self-referential build script remains in the nine recovered manifests
 ---
 
 ## Reservations
