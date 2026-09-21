@@ -825,6 +825,14 @@
       "kind": "command",
       "cmd": "test -d packages/data/data-query-engine/dist && echo PARITY_OK",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-final.4",
+      "phase": "final",
+      "tier": 3,
+      "kind": "command",
+      "cmd": "node docs/plan/nx-23-upgrade/scripts/check-zero-selection.mjs",
+      "expect": "exit0"
     }
   ]
 }
