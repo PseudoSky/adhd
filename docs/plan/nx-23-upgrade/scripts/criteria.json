@@ -154,6 +154,14 @@
       "kind": "command",
       "cmd": "node -e \"process.exit(require(\\\"./nx.json\\\").namedInputs.sharedGlobals.join(\\\"|\\\").includes(\\\"source-resolution.mjs\\\")?0:1)\"",
       "expect": "exit0"
+    },
+    {
+      "id": "test-resolution-absorbed.4",
+      "phase": "reconcile",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "rg -q nxViteTsPathsPre packages/workspace/workspace-codegen-nx/src/generators/shared/generator.ts",
+      "expect": "exit0"
     }
   ]
 }
