@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "title": "Nx 23 / Vite 8 upgrade, task-graph remodel, and file-level test selection",
+  "dag": "dag.json",
+  "states": {},
+  "transition_log": [],
+  "amendment_log": [],
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.25",
+    "hash": "961c3053dfab"
+  }
+}
