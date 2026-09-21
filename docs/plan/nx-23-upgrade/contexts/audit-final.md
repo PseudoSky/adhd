@@ -45,6 +45,7 @@ deleted:  []
 - [audit-final.2] Every criterion across every phase passes at the final hold
 - [audit-final.3] Conformance: a converted target still produces its artifact through the inferred path
 - [audit-final.4] Conformance: the fast path fails loudly on zero selection
+- [audit-final.5] Conformance: every guard resolves its tool through a repo-local anchor
 ---
 
 ## Reservations
