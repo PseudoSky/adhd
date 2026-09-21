@@ -9,6 +9,14 @@
       "cmd": "./node_modules/.bin/nx --version",
       "expect": "marker",
       "marker": "23.2.1"
+    },
+    {
+      "id": "upgrade-baseline.2",
+      "phase": "intake",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "node -e \"const d=require(\\\"./package.json\\\").devDependencies;process.exit(d.nx===\\\"23.2.1\\\"&&d.vite===\\\"^8.3.0\\\"&&d.vitest===\\\"4.1.9\\\"?0:1)\"",
+      "expect": "exit0"
     }
   ]
 }

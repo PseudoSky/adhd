@@ -18,6 +18,7 @@
 
 - [upgrade-baseline.1] The repo-local Nx binary reports 23.2.1
 
+- [upgrade-baseline.2] The declared toolchain pins match the measured baseline
 ---
 
 ## Reservations
