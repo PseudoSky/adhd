@@ -20,7 +20,7 @@ process.exit(bad?1:0)"`
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [graph-release-eslint-inferred.1] No explicit release-publish executor target remains
 
 ---
 
