@@ -187,6 +187,16 @@
       "paths": [
         "tsconfig.base.json"
       ]
+    },
+    {
+      "id": "tsconfig-shim-removal.2",
+      "phase": "config",
+      "tier": 0,
+      "kind": "absent",
+      "pattern": "\"types\":",
+      "paths": [
+        "tsconfig.base.json"
+      ]
     }
   ]
 }
