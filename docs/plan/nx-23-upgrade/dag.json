@@ -286,6 +286,19 @@
       ],
       "context": "contexts/audit-graph.md",
       "notes": "Hold point. The remodel must produce byte-identical build artifacts and an equivalent task graph before anything downstream trusts it."
+    },
+    "test-selection-revalidated": {
+      "kind": "work",
+      "phase": "tests",
+      "depends_on": [
+        "audit-graph"
+      ],
+      "guard": "test -f docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && rg -q \"D1\" docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && rg -q \"D2\" docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && rg -q \"D3\" docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && ./node_modules/.bin/nx --version | rg -q \"23\\.2\\.1\"",
+      "artifacts": [
+        "docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md"
+      ],
+      "context": "contexts/test-selection-revalidated.md",
+      "notes": "The prior verdict on the changed flag was measured on Nx 18.3.4 with vitest 1.6.1. Re-run the same three probes on Nx 23.2.1 with vitest 4.1.9 and record confirm-or-refute per defect."
     }
   },
   "authored_with": {
