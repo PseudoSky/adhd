@@ -11,7 +11,21 @@
     "final"
   ],
   "terminal": "done",
-  "nodes": {},
+  "nodes": {
+    "upgrade-baseline": {
+      "kind": "work",
+      "phase": "intake",
+      "depends_on": [],
+      "guard": "test -f docs/plan/nx-23-upgrade/BASELINE.md && ./node_modules/.bin/nx --version | rg -q \"Local: v23\\.2\\.1\" && node -e \"const d=require(\\\"./package.json\\\").devDependencies;if(d.nx!==\\\"23.2.1\\\"||d.vite!==\\\"^8.3.0\\\"||d.vitest!==\\\"4.1.9\\\")process.exit(1)\"",
+      "artifacts": [
+        "docs/plan/nx-23-upgrade/BASELINE.md",
+        "package.json",
+        "pnpm-lock.yaml"
+      ],
+      "context": "contexts/upgrade-baseline.md",
+      "notes": "Commit the in-flight vite 8 bump and freeze the measured baseline that every later guard compares against."
+    }
+  },
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.25",

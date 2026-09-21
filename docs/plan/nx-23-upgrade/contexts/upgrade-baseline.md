@@ -1,0 +1,34 @@
+# upgrade-baseline — STATE_NAME
+
+**Phase:** intake · **Kind:** work · **Depends on:** none · **Guard:** `test -f docs/plan/nx-23-upgrade/BASELINE.md && ./node_modules/.bin/nx --version | rg -q "Local: v23\.2\.1" && node -e "const d=require(\"./package.json\").devDependencies;if(d.nx!==\"23.2.1\"||d.vite!==\"^8.3.0\"||d.vitest!==\"4.1.9\")process.exit(1)"`
+
+---
+
+## Goal
+
+<What is true after this state that was not true before?>
+
+---
+
+## Acceptance criteria
+
+<!-- Author criteria with `plan-scaffold.js add-criterion`. Each writes a
+     matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
+     bare [slug.N] tokens here without a matching audit check. -->
+
+_No criteria yet._
+
+---
+
+## Reservations
+
+```text
+read_only:  []
+mutates:    ["docs/plan/nx-23-upgrade/BASELINE.md", "package.json", "pnpm-lock.yaml"]
+```
+
+---
+
+## Notes for executor
+
+Commit the in-flight vite 8 bump and freeze the measured baseline that every later guard compares against.
