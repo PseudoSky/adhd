@@ -20,6 +20,7 @@
 
 - [test-resolution-absorbed.2] The helper exports the pre-ordered plugin used by project configs
 - [test-resolution-absorbed.3] The helper is part of the shared cache inputs
+- [test-resolution-absorbed.4] The codegen template carries the helper so new projects cannot miss it
 ---
 
 ## Reservations
