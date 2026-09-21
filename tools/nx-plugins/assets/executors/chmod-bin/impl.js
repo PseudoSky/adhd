@@ -22,8 +22,12 @@
  * EVERY invocation, so there is no cache-hit window in which this can be
  * skipped. `assets` depends on it (`plugin.js`'s `dependsOn`), so nx's task
  * graph pulls it in transitively for every existing consumer of `assets`
- * (e.g. `test`'s `dependsOn: ["^build","build","assets"]`) with no changes
- * needed to any individual project.json.
+ * with no changes needed to any individual project.json. (DEBT-024: the one
+ * `test` target that consumes `assets` is `entrypoint/backlog/project.json`'s,
+ * `dependsOn: ["^build","build","assets"]`. The global
+ * `targetDefaults.test.dependsOn` is `["lint","^build"]` and never included
+ * `assets` — so this propagation is scoped to `assets` consumers, not to
+ * "every test".)
  */
 const { existsSync, readFileSync, chmodSync, statSync } = require('node:fs');
 const { join } = require('node:path');

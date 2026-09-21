@@ -17,7 +17,6 @@
     }
   },
   "scripts": {
-    "build": "nx build agent-engine-orchestrator",
     "typecheck": "tsc -p tsconfig.lib.json --noEmit"
   },
   "dependencies": {

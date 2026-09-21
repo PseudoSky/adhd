@@ -191,19 +191,35 @@ describe('compile CLI bin — child-process behavioral tests', () => {
   // ── beforeAll: build the package, wire symlinks, seed a real DB ───────
 
   beforeAll(() => {
-    // ── 1. Build the package so the CLI bin exists at BIN ─────────────────
-    // The build runs nx tsc which emits to dist/.  nx cache makes reruns fast.
-    const build = spawnSync('npx', ['--yes', 'nx', 'build', 'agent-engine-compiler'], {
-      encoding: 'utf8',
-      cwd: REPO_ROOT,
-      timeout: 120_000,
-      shell: true,
-    });
-    if (build.status !== 0) {
-      throw new Error(
-        `nx build agent-engine-compiler failed (exit ${build.status ?? '?'}):\n` +
-          `stdout: ${build.stdout}\nstderr: ${build.stderr}`
-      );
+    // ── 1. Ensure the CLI bin exists at BIN ───────────────────────────────
+    // `project.json` declares `test.dependsOn: ["build"]`, so under `nx test`
+    // the bin is ALREADY built — and fresh — before this hook runs. Do NOT
+    // re-invoke nx unconditionally here: a nested `nx build` re-runs cached
+    // DEPENDENCY builds, and nx's cache restore for a HIT is a destructive
+    // `remove(dir); copy(cachedDir, dir)` swap. Executed concurrently with
+    // other projects' tests that spawn servers reading those same `dist/`
+    // dirs (nx runs several `test` targets at once), that swap makes them
+    // transiently unresolvable — observed directly: agent-mcp's spawned bin
+    // failing with `ERR_MODULE_NOT_FOUND ... @adhd/agent-core-provider/dist/
+    // src/index.js` while this hook's nested build was restoring it.
+    //
+    // Fall back to a build ONLY when the bin is absent — i.e. a standalone
+    // `vitest` run outside the nx task graph, which the declared `dependsOn`
+    // never reaches. Under `nx test` this block is a no-op, so the graph's
+    // build stays the single writer of `dist/`.
+    if (!fs.existsSync(BIN)) {
+      const build = spawnSync('npx', ['--yes', 'nx', 'build', 'agent-engine-compiler'], {
+        encoding: 'utf8',
+        cwd: REPO_ROOT,
+        timeout: 120_000,
+        shell: true,
+      });
+      if (build.status !== 0) {
+        throw new Error(
+          `nx build agent-engine-compiler failed (exit ${build.status ?? '?'}):\n` +
+            `stdout: ${build.stdout}\nstderr: ${build.stderr}`
+        );
+      }
     }
     if (!fs.existsSync(BIN)) {
       throw new Error(`Built bin not found at: ${BIN}`);
