@@ -225,6 +225,13 @@
       "mutate": "printf '\\n\\nexport const __shimProbe: number = \"not a number\";\\n' >> packages/agent/agent-base-types/src/index.ts",
       "restore": "git restore packages/agent/agent-base-types/src/index.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "tsconfig-shim-removal.6",
+      "phase": "config",
+      "tier": 1,
+      "kind": "exists",
+      "path": "docs/plan/nx-23-upgrade/SHIM-REMOVAL.md"
     }
   ]
 }
