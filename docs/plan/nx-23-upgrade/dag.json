@@ -299,6 +299,20 @@
       ],
       "context": "contexts/test-selection-revalidated.md",
       "notes": "The prior verdict on the changed flag was measured on Nx 18.3.4 with vitest 1.6.1. Re-run the same three probes on Nx 23.2.1 with vitest 4.1.9 and record confirm-or-refute per defect."
+    },
+    "test-changed-optin": {
+      "kind": "work",
+      "phase": "tests",
+      "depends_on": [
+        "test-selection-revalidated"
+      ],
+      "guard": "node -e \"const s=require(\\\"./package.json\\\").scripts;if(!s[\\\"test:changed\\\"]||!s[\\\"test:related\\\"])process.exit(1)\" && ./node_modules/.bin/nx show projects | rg -q \"backlog\" && test -f docs/plan/nx-23-upgrade/TEST-SELECTION.md",
+      "artifacts": [
+        "package.json",
+        "docs/plan/nx-23-upgrade/TEST-SELECTION.md"
+      ],
+      "context": "contexts/test-changed-optin.md",
+      "notes": "Deliver the fail-safe design: full suite stays the default, the fast path is explicit opt-in, and a run that selects zero tests must FAIL rather than report success."
     }
   },
   "authored_with": {
