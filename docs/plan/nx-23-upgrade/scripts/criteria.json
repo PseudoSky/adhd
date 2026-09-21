@@ -86,6 +86,24 @@
       "kind": "command",
       "cmd": "node -e \"const d=require(\\\"./nx.json\\\").targetDefaults.test.dependsOn;process.exit(d.includes(\\\"lint\\\")&&d.includes(\\\"^build\\\")?0:1)\"",
       "expect": "exit0"
+    },
+    {
+      "id": "config-repair-absorbed.2",
+      "phase": "reconcile",
+      "tier": 0,
+      "kind": "absent",
+      "pattern": "\"build\":",
+      "paths": [
+        "packages/agent/agent-core-env/package.json",
+        "packages/agent/agent-core-policy/package.json",
+        "packages/agent/agent-core-provider/package.json",
+        "packages/agent/agent-engine-compiler/package.json",
+        "packages/agent/agent-engine-orchestrator/package.json",
+        "packages/agent/agent-store-prompts/package.json",
+        "packages/agent/agent-store-runtime/package.json",
+        "packages/agent/agent-store-tools/package.json",
+        "entrypoint/decompile-cli/package.json"
+      ]
     }
   ]
 }
