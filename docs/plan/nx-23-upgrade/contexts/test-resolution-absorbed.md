@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["docs/plan/nx-23-upgrade/SCOPE.md", "docs/plan/nx-23-upgrade/USE_CASES.md", "docs/plan/nx-23-upgrade/demo/DEMO.md", "docs/plan/nx-23-upgrade/demo/UNRESOLVED.md", "docs/plan/nx-23-upgrade/TOOLS.md", "docs/plan/nx-23-upgrade/APPROVAL.md", "docs/plan/nx-23-upgrade/contexts/_shared.md", "AGENTS.md", "CLAUDE.md", "tools/vite-plugins/vitest-pool-defaults.mjs", "vitest.config.ts", "package.json"]
 mutates:    ["tools/vite-plugins/source-resolution.mjs", "tools/vite-plugins/README.md", "tools/vite-plugins/externalize.mjs", "nx.json", "packages/workspace/workspace-codegen-nx/src/generators/shared/generator.ts", "packages/workspace/workspace-codegen-nx/src/generators/shared/source-resolution-optout.spec.ts", "entrypoint/agent-mcp/vite.config.ts", "entrypoint/apigen-cli/vite.config.ts", "entrypoint/backlog/vite.config.ts", "entrypoint/decompile-cli/vite.config.ts", "entrypoint/dispatch-cli/vite.config.ts", "entrypoint/environment-cli/vite.config.ts", "packages/agent/agent-engine-compiler/vite.config.ts", "packages/apigen/apigen-engine-conformance/vite.config.ts"]
 ```
 
