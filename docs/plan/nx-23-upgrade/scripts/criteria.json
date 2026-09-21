@@ -566,6 +566,14 @@
       "kind": "command",
       "cmd": "./node_modules/.bin/nx run apigen-plugin-ts-types:lint",
       "expect": "exit0"
+    },
+    {
+      "id": "graph-release-eslint-inferred.5",
+      "phase": "graph",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "node -e \"process.exit((require(\\\"./nx.json\\\").targetDefaults.lint.dependsOn||[]).includes(\\\"sync-deps-check\\\")?0:1)\"",
+      "expect": "exit0"
     }
   ]
 }
