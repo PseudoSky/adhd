@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [tsconfig-shim-removal.1] No migration strictness relaxation remains in the shared compiler config
 
 ---
 

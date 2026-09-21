@@ -177,6 +177,16 @@
       "kind": "command",
       "cmd": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_reconcile.py",
       "expect": "exit0"
+    },
+    {
+      "id": "tsconfig-shim-removal.1",
+      "phase": "config",
+      "tier": 0,
+      "kind": "absent",
+      "pattern": "\"strict\"",
+      "paths": [
+        "tsconfig.base.json"
+      ]
     }
   ]
 }
