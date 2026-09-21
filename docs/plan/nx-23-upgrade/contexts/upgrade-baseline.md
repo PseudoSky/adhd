@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [upgrade-baseline.1] The repo-local Nx binary reports 23.2.1
 
 ---
 
