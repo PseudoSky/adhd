@@ -1,4 +1,4 @@
-# audit-final — STATE_NAME
+# audit-final — Final hold before anything lands
 
 **Phase:** final · **Kind:** audit · **Depends on:** audit-tests · **Guard:** `python3 docs/plan/nx-23-upgrade/scripts/guard_audit_final.py`
 
@@ -6,7 +6,31 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+Every Definition-of-Done clause is confirmed by an executed check against the real codebase. Nothing lands until this is green.
+
+---
+
+## Semantic distillation
+
+- This is a HOLD, not a merge. No state in this plan pushes, merges to the default branch, or publishes.
+- The guard refuses DONE if any DoD clause has no executed PASS — so a clause that was never really proven cannot be waved through.
+- If a clause fails, fix it in its owning state. Do not weaken the check.
+
+---
+
+## Contract promise
+
+```text
+added:    []
+modified: []
+deleted:  []
+```
+
+---
+
+## Commit points
+
+- Commit the final audit record; then stop and hand the landing decision to a human.
 
 ---
 
@@ -19,6 +43,7 @@
 - [audit-final.1] The final audit guard exists
 
 - [audit-final.2] Every criterion across every phase passes at the final hold
+- [audit-final.3] Conformance: a converted target still produces its artifact through the inferred path
 ---
 
 ## Reservations
