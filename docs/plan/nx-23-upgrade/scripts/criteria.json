@@ -606,6 +606,16 @@
       "paths": [
         "docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md"
       ]
+    },
+    {
+      "id": "test-selection-revalidated.3",
+      "phase": "tests",
+      "tier": 0,
+      "kind": "present",
+      "pattern": "D2",
+      "paths": [
+        "docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md"
+      ]
     }
   ]
 }
