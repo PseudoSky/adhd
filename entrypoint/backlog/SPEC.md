@@ -1155,8 +1155,9 @@ bootstrap, broken or not.
 - `entrypoint/backlog/src/server.ts`: in `startBacklogServer`, delete the
   `await enableSemanticSearchFromConfig(store, env.config.embedding);` line
   (line 833) and its doc comment, and remove the now-unused import. The
-  surrounding `try/catch`/serve-lock-release structure is unchanged — the
-  `try` block still exists for `openGraphBacklogStore` itself.
+  surrounding `try/catch` structure is unchanged — the `try` block still
+  exists for `openGraphBacklogStore` itself (there is no serve-lock to
+  release any more — see STATE.md A17).
 - New test file `entrypoint/backlog/src/api.semantic-laziness.spec.ts`
   (in-process, real store, real `BacklogCtx` built via `buildBacklogEnv({
   ..., namespace: 'test' })` — the A10 test-isolation namespace, never an

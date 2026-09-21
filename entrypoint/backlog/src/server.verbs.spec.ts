@@ -34,8 +34,9 @@
  * `serve` are host commands (the §6 carve-out, cli.ts:243-265) and
  * must appear on NO mount. `install`/`install-skill` must never open the
  * store (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001) and a reachable `serve`
- * *tool* would let a caller start a second writer against a store that
- * serve-lock.ts exists to keep single-writer. Their absence is asserted per
+ * *tool* would let a caller start a second, competing long-lived server
+ * process from inside a one-shot request handler — a completely different
+ * lifecycle than any mounted data operation. Their absence is asserted per
  * transport, not assumed.
  *
  * The MCP and CLI legs read `dist/`, which this project's `test` target

@@ -104,6 +104,70 @@ started, nothing pushed or published.
       edited (verified clean via `git status --porcelain`) — the bypass
       testing used standalone scratch harnesses outside the repo, not a
       live edit-and-revert of guarded source.
+- [x] A17. Reopened A16's "KEEP `acquireServeLock`" decision and reversed it
+      — REMOVED the lock (`src/store/serve-lock.ts` deleted). A16's
+      conclusion did not hold up under a deeper read of the CURRENT pinned
+      adapter, `@adhd/sox-store-adapter@0.9.1`, done directly against
+      `node_modules/@adhd/sox-store-adapter/dist/turso-adapter.js`:
+      1. The adapter's WAL-checkpoint strategy is HARDCODED to `'gated'` as
+         the permanent production default — its own doc comment states no
+         caller may select `'ungated'` outside a test. A16's crash
+         reproductions (2/3 raw-engine runs, `shared_wal_coordination.rs:1644`)
+         all required BYPASSING this gate entirely (raw `@tursodatabase/
+         database` calls, or the adapter's guard/coordination deliberately
+         skipped) — real `backlog` code, which only ever calls through the
+         adapter's public, gated surface, can never reach that path. A16
+         correctly proved the crash is real when bypassed; it did not
+         establish that real `backlog` usage can ever reach the bypass, and
+         on rereading it does not.
+      2. The adapter ships its own internal safety experiment
+         (`wal-truncate-safety-experiment`, referenced in its source,
+         2026-08-18) that ran 1,180 concurrent-writer trials specifically
+         hunting this crash class through the adapter's real gated surface
+         and found zero SIGABRT, zero integrity damage — independent
+         confirmation, at far higher trial count than A16's own 5 runs, that
+         the gated path (the only path `backlog` uses) does not reproduce it.
+      3. The ACTUAL historical corruption (the real incident A16's guard was
+         originally built to close) is traced, via the adapter's own
+         `BUG-STOREADAPTER-COORDINATION-PATH-ASYMMETRY` doc comments, to a
+         SEPARATE, since-FIXED bug: `close()` checked store quiescence under
+         a raw, non-canonicalized path, found nothing registered there,
+         wrongly concluded the store was idle, and TRUNCATEd while a live
+         peer still held it open — "the turso #7833 trigger, reachable with
+         no race at all, only a path spelling [bug]," per the adapter's own
+         words. `_canonicalDb`/`coordPath` now enforce canonical-path
+         coordination everywhere in the pinned 0.9.1 adapter, closing that
+         specific hole. A16 investigated the adapter's WAL-checkpoint
+         internals in real depth but did not have this particular fixed-bug
+         context in front of it, and concluded "second, near-free,
+         independent layer" was worth keeping as insurance against the
+         adapter regressing — a reasonable precaution at the time, but not a
+         response to any currently-reachable hazard.
+      Re-verified empirically, not just by reading: built the package with
+      the lock temporarily bypassed and spawned TWO real `backlog serve
+      --transport mcp` processes (the actual built `dist/index.js`, real OS
+      processes, no in-process bypass) against the SAME file-backed store,
+      driving sustained real concurrent writes through both via the real MCP
+      `backlog_create` tool for 90 seconds per trial, THREE independent
+      trials. Result: zero failures, zero crashes, exact read-back counts on
+      a fresh reopen every single trial — e.g. one trial 619+522=1141 writes
+      reported `ok:true`, 1141 read back; another 485+674=1159 reported,
+      1159 read back. Logs: `tmp/lock-verify/run4.log`, `run5.log`,
+      `run6.log` (gitignored scratch); harness: `tmp/lock-verify/
+      two-servers-sustained.ts`.
+      Also decisive independent of all of the above: the user has a
+      standing, explicit hard requirement for this v2 rewrite that MCP/the
+      API must never lock ("Really nothing should lock"). Combined with (1)-
+      (3) and the empirical re-verification, the lock no longer meets the
+      bar of solving a currently-real, currently-reachable problem in this
+      package's own code, so it was removed rather than kept as unjustified
+      defense-in-depth. Replacement coverage: `src/serve.singleton.spec.ts`
+      rewritten (previously asserted lock-refusal; now asserts two real,
+      simultaneously-live `serve` processes against the same store persist
+      exactly what they report under sustained concurrent MCP writes, with
+      no lock coordinating them at all) — the safety property A16/A17 both
+      investigated stays proven by the suite going forward, not just by the
+      one-off manual script above.
 - [x] A6. Final consolidated check across everything A1-A15 landed since this
       item was originally written (not a re-verification of any single item
       — the whole diff, together, as one coherent tree).
