@@ -423,6 +423,15 @@
         "packages/workspace/workspace-codegen-nx/project.json",
         "project.json"
       ]
+    },
+    {
+      "id": "graph-test-build-inferred.3",
+      "phase": "graph",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "./node_modules/.bin/nx show project data-query-engine --json",
+      "expect": "marker",
+      "marker": "\"test\""
     }
   ]
 }
