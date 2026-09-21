@@ -27,7 +27,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["docs/plan/nx-23-upgrade/SCOPE.md", "docs/plan/nx-23-upgrade/USE_CASES.md", "docs/plan/nx-23-upgrade/demo/DEMO.md", "docs/plan/nx-23-upgrade/demo/UNRESOLVED.md", "docs/plan/nx-23-upgrade/TOOLS.md", "docs/plan/nx-23-upgrade/APPROVAL.md", "docs/plan/nx-23-upgrade/contexts/_shared.md", "AGENTS.md", "CLAUDE.md", "tsconfig.base.json", "package.json", "tools/nx-plugins/build/plugin.js"]
 mutates:    ["nx.json", "packages/apigen/apigen-plugin-api-express/project.json", "packages/apigen/apigen-plugin-api-fastify/project.json", "packages/apigen/apigen-plugin-batch/project.json", "packages/apigen/apigen-plugin-cli-output/project.json", "packages/apigen/apigen-plugin-health/project.json", "packages/apigen/apigen-plugin-java-javalin/project.json", "packages/apigen/apigen-plugin-jsonschema/project.json", "packages/apigen/apigen-plugin-logger/project.json", "packages/apigen/apigen-plugin-mcp/project.json", "packages/apigen/apigen-plugin-openapi/project.json", "packages/apigen/apigen-plugin-py-flask/project.json", "packages/apigen/apigen-plugin-py-grpc/project.json", "packages/apigen/apigen-plugin-batch/project.json", "packages/apigen/apigen-plugin-ir-cache/project.json", "packages/apigen/apigen-plugin-ts-types/project.json", "packages/workspace/workspace-base-standard/project.json", "packages/workspace/workspace-base-vite-paths/project.json"]
 ```
 
