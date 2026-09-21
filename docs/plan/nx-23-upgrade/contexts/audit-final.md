@@ -59,6 +59,12 @@ mutates:    ["docs/plan/nx-23-upgrade/scripts/guard_audit_final.py"]
 
 ---
 
+## References & interfaces
+
+- [ref:pinned-guard-tool-resolution] — every guard resolves its tool through ./node_modules/.bin/ or a python3 script, never a bare PATH lookup
+
+---
+
 ## Notes for executor
 
 Final hold. Proves every Definition-of-Done clause against the real codebase. Nothing lands until this is green.
