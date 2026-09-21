@@ -2,7 +2,9 @@
   "schema_version": 2,
   "title": "Nx 23 / Vite 8 upgrade, task-graph remodel, and file-level test selection",
   "plan_kind": "brownfield",
-  "phases": [],
+  "phases": [
+    "intake"
+  ],
   "terminal": "done",
   "nodes": {},
   "authored_with": {
