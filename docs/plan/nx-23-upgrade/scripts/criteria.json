@@ -489,6 +489,15 @@
       "kind": "command",
       "cmd": "rg -q \"@nx/js/plugin\" nx.json",
       "expect": "exit0"
+    },
+    {
+      "id": "graph-js-tsc-inferred.3",
+      "phase": "graph",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "./node_modules/.bin/nx show project agent-core-policy --json",
+      "expect": "marker",
+      "marker": "\"build\""
     }
   ]
 }
