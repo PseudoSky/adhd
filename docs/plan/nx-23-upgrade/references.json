@@ -12,5 +12,12 @@
     "discovered_via": "manual",
     "shared_ref": "[ref:fail-safe-fast-path]",
     "audit_check": "audit-final.ref-fail-safe-fast-path"
+  },
+  "pinned-guard-tool-resolution": {
+    "anchor": "docs/plan/nx-23-upgrade/dag.json",
+    "rule": "every guard resolves its tool through ./node_modules/.bin/ or a python3 script, never a bare PATH lookup",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:pinned-guard-tool-resolution]",
+    "audit_check": "audit-final.ref-pinned-guard-tool-resolution"
   }
 }
