@@ -18,6 +18,7 @@
 
 - [audit-reconcile.1] The reconcile-phase audit guard exists
 
+- [audit-reconcile.2] Every reconcile-phase criterion passes
 ---
 
 ## Reservations

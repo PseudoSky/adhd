@@ -169,6 +169,14 @@
       "tier": 1,
       "kind": "exists",
       "path": "docs/plan/nx-23-upgrade/scripts/guard_audit_reconcile.py"
+    },
+    {
+      "id": "audit-reconcile.2",
+      "phase": "reconcile",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_reconcile.py",
+      "expect": "exit0"
     }
   ]
 }
