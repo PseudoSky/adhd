@@ -15,3 +15,12 @@ Land the Nx 23.2.1 + Vite 8 upgrade on perf/nx-upgraded, remodel the task graph 
 - `[dod.1]` **(structural) The workspace runs the latest published Nx 23 line with the matching first-party plugin line, and the three test targets that failed the commit gate after the bump have a recorded verdict. (structural)** — (structural) The workspace runs the latest published Nx 23 line with the matching first-party plugin line, and the three test targets that failed the commit gate after the bump have a recorded verdict..
 
 - `[dod.2]` **(structural) The test runner sits at the highest major its Nx peer range permits, and the ceiling blocking the next major is recorded with the evidence that establishes it. (structural)** — (structural) The test runner sits at the highest major its Nx peer range permits, and the ceiling blocking the next major is recorded with the evidence that establishes it..
+
+- `[dod.3]` **A developer can build any workspace package and the build still type-checks it. (behavioral)** — A developer can build any workspace package and the build still type-checks it..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `./node_modules/.bin/nx run-many -t build --projects=agent-base-types,data-query-engine,agent-core-policy`
+  - observable: `exit 0, and the same build turns non-zero after a deliberately injected type error`
+  - negative-control: `printf '\n\nexport const __shimProbe: number = "not a number";\n' >> packages/agent/agent-base-types/src/index.ts`
+  - delivered-by: `tsconfig-shim-removal`
