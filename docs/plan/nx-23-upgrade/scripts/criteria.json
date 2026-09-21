@@ -240,6 +240,14 @@
       "kind": "command",
       "cmd": "node -e \"process.exit(require(\\\"./nx.json\\\").cacheDirectory===\\\".nx/cache\\\"?0:1)\"",
       "expect": "exit0"
+    },
+    {
+      "id": "cache-isolation.2",
+      "phase": "config",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "node -e \"const p=require(\\\"path\\\");const r=process.cwd();process.exit(p.resolve(r,require(\\\"./nx.json\\\").cacheDirectory).startsWith(r+require(\\\"path\\\").sep)?0:1)\"",
+      "expect": "exit0"
     }
   ]
 }
