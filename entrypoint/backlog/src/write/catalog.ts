@@ -598,6 +598,23 @@ export function resolveProjectPolicy(
   };
 }
 
+/**
+ * Whether a resolved project has a known filesystem `path` (§8.4/§8.5) — the
+ * precondition for citation content-addressing to be POSSIBLE at all. When it
+ * does not, `computeCitationSha` can only ever return the `"unverified"`
+ * sentinel (`create-issue.ts`/`transition.ts` both short-circuit on a
+ * non-string/empty `metadata.path`), so `project_policy.citationRequiresSha`
+ * has nothing to gate: the gate applies only where verification is possible.
+ * A path-less project therefore records `sha:"unverified"` verbatim, matching
+ * the ETL's own precedent (`tools/etl/citation.ts`). Kept beside
+ * {@link resolveProjectPolicy} — it reads the same resolved project row — and
+ * shared by BOTH write paths so the `create`/`transition` gates never drift.
+ */
+export function projectHasKnownPath(project: IResolvedProjectRow): boolean {
+  const path = project.metadata?.path;
+  return typeof path === 'string' && path.length > 0;
+}
+
 // ---------------------------------------------------------------------------
 // Registry CRUD (SPEC.md §3a, §4, §4c): `upsertProject` / `upsertComponent` /
 // `upsertLocation` / `rmLocation` — the four verbs §3a names as "mounted as

@@ -308,6 +308,34 @@ describe('transition — status change (SPEC.md §6.3.4, real store)', () => {
     expect(citationEdges).toHaveLength(0);
   });
 
+  it('path-less project: a citation is ACCEPTED and persists sha:"unverified" — the gate applies only where verification is possible', async () => {
+    // No `setProjectPolicy` call: `seedProject` mints a project with an empty
+    // metadata blob (no `path`), and the DEFAULT policy still carries
+    // `citationRequiresSha:true`. Before the fix this transition threw
+    // `CitationUnverifiableError`; the gate must now have nothing to reject.
+    const outcome = await transition(store, {
+      uid: issueUid,
+      by: 'closer',
+      toStatus: 'in-progress',
+      note: 'citing evidence in a path-less project',
+      citations: [{ file: 'src/whatever.ts' }],
+    });
+    expect(outcome.toStatus).toBe('in-progress');
+
+    const citationEdges = await liveEdges(store, 'has_citation', {
+      src: issueRowid,
+    });
+    expect(citationEdges).toHaveLength(1);
+    const [citationEdge] = citationEdges;
+    const { rows } = await store.adapter.executeAll<{ uid: string }>(
+      'SELECT uid FROM node WHERE rowid = ?',
+      [citationEdge?.dst]
+    );
+    const [cited] = rows;
+    const citationRow = cited ? await readNode(store, cited.uid) : null;
+    expect(citationRow?.metadata?.['sha']).toBe('unverified');
+  });
+
   it('a REAL, resolvable citation writes a citation node + has_citation edge with a genuine (non-"unverified") sha', async () => {
     const citedPath = 'evidence.ts';
     writeFileSync(join(dir, citedPath), 'export const x = 1;\n');

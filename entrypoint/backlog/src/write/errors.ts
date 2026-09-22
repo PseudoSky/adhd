@@ -303,9 +303,12 @@ export class SingleValuedRelationConflictError extends BacklogWriteError {
 
 /**
  * A citation's `sha` resolved to the `"unverified"` sentinel (§8.5's
- * two-branch rule: file not found, or the issue's project has no known
- * filesystem `path`) and `project_policy.citation_requires_sha` (default
- * `true`) rejects that.
+ * two-branch rule) and `project_policy.citation_requires_sha` (default
+ * `true`) rejects that. The gate applies only where verification is POSSIBLE:
+ * the owning project has a non-empty filesystem `path` and the cited file is
+ * missing (or escapes the project root). A PATH-LESS project cannot hash its
+ * citations at all, so the gate is waived and `sha:"unverified"` is persisted
+ * verbatim — `CitationUnverifiableError` is never thrown for it.
  */
 export class CitationUnverifiableError extends BacklogWriteError {
   readonly code = 'E_VALIDATION' as const;

@@ -87,6 +87,7 @@ import type { ICitationInput } from './create-issue.js';
 import {
   type IResolvedProjectRow,
   mintOrResolveCatalogTx,
+  projectHasKnownPath,
   resolveEdgeKindTx,
   resolveProjectPolicy,
 } from './catalog.js';
@@ -303,7 +304,9 @@ function enforceRequiredFields(
  * (policy-gated, terminal-only), `CitationUnverifiableError(target)`
  * (policy-gated via `project_policy.citation_requires_sha` — a given
  * citation's `sha` resolved to the `"unverified"` sentinel and the project
- * requires a real hash), `ClaimHeldError(heldBy, heldSince)` (§6.3.5 — a
+ * requires a real hash; the gate applies only when the project has a known
+ * `path`, so a path-less project records `sha:"unverified"` verbatim),
+ * `ClaimHeldError(heldBy, heldSince)` (§6.3.5 — a
  * live, non-stale claim held by someone other than `input.by` blocks the
  * status change; see claim-lease.ts), `WriteContentionError`/`WriteIOError`
  * (§4c — an exhausted driver-level retry on the underlying `immediate`
@@ -342,7 +345,16 @@ export async function transition(
     const prePolicy = resolveProjectPolicy(preProject);
     for (const citation of citations) {
       const sha = await computeCitationSha(preProject, citation.file);
-      if (sha === 'unverified' && prePolicy.citationRequiresSha) {
+      // Same contract as `create-issue.ts`'s identical gate: enforce
+      // `citationRequiresSha` only where verification is POSSIBLE (a project
+      // with a known `path`). A path-less project records `sha:"unverified"`
+      // verbatim; a path-present project citing a missing/escaping file still
+      // hard-fails.
+      if (
+        sha === 'unverified' &&
+        prePolicy.citationRequiresSha &&
+        projectHasKnownPath(preProject)
+      ) {
         throw new CitationUnverifiableError(citation.file);
       }
       citationShas.push(sha);
