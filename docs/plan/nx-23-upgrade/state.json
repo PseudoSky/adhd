@@ -137,10 +137,10 @@
       "end_ref": "c1af25ef4f46215da7cfde24cf543e4bdf8186f0"
     },
     "typecheck-teeth-restored": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-09-22T17:49:19.569Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "f43edf8d45bcb62bcf4baeed32c87aef91a25cbe",
       "end_ref": null
     }
   },
