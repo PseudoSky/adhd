@@ -960,6 +960,16 @@
       "kind": "command",
       "cmd": "./node_modules/.bin/nx build ui-react-base-hooks && test -f packages/ui-react/ui-react-base-hooks/dist/index.js && test -f packages/ui-react/ui-react-base-hooks/dist/index.umd.js && test -f packages/ui-react/ui-react-base-hooks/dist/index.mjs",
       "expect": "exit0"
+    },
+    {
+      "id": "browser-package-build-repair.3",
+      "phase": "intake",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "@types/react",
+      "paths": [
+        "docs/plan/nx-23-upgrade/BROWSER-BUILD-REPAIR.md"
+      ]
     }
   ]
 }
