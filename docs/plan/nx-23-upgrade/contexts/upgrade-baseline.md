@@ -45,6 +45,7 @@ deleted:  []
 - [upgrade-baseline.2] The declared toolchain pins match the measured baseline
 - [upgrade-baseline.3] No vite 5 major pin remains declared
 - [upgrade-baseline.4] The measured baseline record exists
+- [upgrade-baseline.5] The baseline record names the state that lands the vite bump, so measuring the toolchain is not conflated with landing it
 ---
 
 ## Reservations
