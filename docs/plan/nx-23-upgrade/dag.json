@@ -298,7 +298,8 @@
         "packages/agent/agent-store-tools/project.json",
         "packages/apigen/apigen-generator-nx/project.json",
         "packages/workspace/workspace-base-tools/project.json",
-        "packages/workspace/workspace-codegen-nx/project.json"
+        "packages/workspace/workspace-codegen-nx/project.json",
+        "project.json"
       ],
       "context": "contexts/graph-js-tsc-inferred.md",
       "notes": "Phase 2b: the js plugin is NOT registered, so deleting these targets would delete the build target outright. Register it, then convert the 14 tsc builds plus the bespoke build-bin."
