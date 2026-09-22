@@ -18,7 +18,7 @@
     "backlog": {
       "type": "stdio",
       "command": "node",
-      "args": ["entrypoint/backlog/dist/index.js", "serve", "--transport", "mcp"]
+      "args": ["/Users/nix/dev/node/adhd/.worktrees/backlog-cutover/entrypoint/backlog/dist/index.js", "serve", "--transport", "mcp"]
     }
   }
 }
