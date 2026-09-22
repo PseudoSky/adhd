@@ -898,6 +898,13 @@
       "tier": 1,
       "kind": "exists",
       "path": "tools/vite-plugins/import-meta-url-cjs.mjs"
+    },
+    {
+      "id": "vite-cjs-import-meta-repair.5",
+      "phase": "intake",
+      "tier": 1,
+      "kind": "exists",
+      "path": "entrypoint/apigen-cli/src/test/e2e/cjs-import-meta-url.spec.ts"
     }
   ]
 }
