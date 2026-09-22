@@ -317,6 +317,26 @@
         "final-review.md"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-09-22T16:58:21.554Z",
+      "state": "graph-test-build-inferred",
+      "class": "executor",
+      "type": "insert-state",
+      "reason": "Planner-performed insert-state (proactive; no executor escalation). graph-test-build-inferred (commit 4a748796) deleted the 47 explicit @nx/vite:build targets whose executor ran validateTypes; the inferred target runs a plain vite build, so the build stopped type-checking and [tsconfig-shim-removal.5] went red — a cross-state regression that re-blocks audit-graph, which accumulates the config phase. Verified before authoring: guard_audit_config.py exits 1 with [tsconfig-shim-removal.5] neg-control positive-under-mutation exit=0 as the sole red check (50 other criteria PASS); nx run-many -t typecheck fails on exactly agent-core-env:typecheck (TS5103 — script-inferred pnpm run typecheck resolving package-local typescript@5.9.3 against the repo-wide ignoreDeprecations 6.0) and decompile-cli:typecheck (TS2454 index.ts:103, TS18048 site.ts:83), 60/62 green; nx build decompile-cli fails on a cold cache (scratch NX_CACHE_DIRECTORY + NX_WORKSPACE_DATA_DIRECTORY, 0/2 cache hit). Also corrects a falsified artifact: the claim in SHIM-REMOVAL.md that no removal changed a build outcome is false, because TS 6.0.3 defaults strict to true, so removing strict:false enabled strict for the 137 inheriting configs. Added work state typecheck-teeth-restored (phase graph, between graph-release-eslint-inferred and audit-graph) with 5 criteria, restoring the gate via targetDefaults.build.dependsOn [typecheck] plus a cacheable typecheck targetDefault and accepting TS 6 strict:true, per the architect-decision verdict (APPROVE, mechanism A). Re-pointed the inbound edge of audit-graph. No existing criterion weakened — [tsconfig-shim-removal.5] untouched and re-run by the new guard. apigen-java, the one build project with no typecheck target, is unaffected: Nx create-task-graph.js skips a same-project depends_on target a project does not have. gap-check PASS; env-pin-check --strict all 20 guards pinned.",
+      "files_synced": [
+        "dag.json",
+        "state.json",
+        "state-machine.md",
+        "README.md",
+        "APPROVAL.md",
+        "final-review.md",
+        "contexts/typecheck-teeth-restored.md",
+        "contexts/audit-graph.md",
+        "scripts/criteria.json",
+        "docs/plan/plan-index.json"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
