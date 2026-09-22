@@ -47,7 +47,10 @@ import { createRequire } from 'node:module';
  * `import.meta.url` per output format) — so suppressing the diagnostic is
  * scoped and safe. `@ts-ignore` (not `@ts-expect-error`) is deliberate: this
  * package's own build runs `module: esnext`, where no diagnostic exists, so an
- * expect-error directive would itself fail as unused.
+ * expect-error directive would itself fail as unused. The rule-disable above
+ * the `@ts-ignore` is the established repo pattern for this exact suppression
+ * (see packages/data/data-query-engine/src/lib/expressions.ts).
  */
-// @ts-ignore TS1343 — `import.meta` is valid in this package's esnext build and in the ESM bundle; only downstream commonjs type-checks reject it (see above).
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 export const lazyRequire: NodeRequire = createRequire(import.meta.url);
