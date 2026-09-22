@@ -311,6 +311,18 @@ interface OptAsyncVectorBackend {
     modelId: string,
     opts?: { filter?: OptVecFilter }
   ): AsyncIterable<{ id: number; vec: Float32Array }>;
+  /**
+   * Additive bounded existence probe (`@adhd/sox-vector-store` ≥0.7.0's
+   * `AsyncVectorExistenceProbe`): `true` iff at least one vector exists in
+   * `modelId`'s space, answered by a `SELECT 1 … LIMIT 1` that projects no
+   * embedding column. OPTIONAL and declared structurally (never imported) so
+   * this file keeps its zero compile-time dependency on that package — a
+   * backend predating the capability narrows to `undefined`, and
+   * {@link isVectorSpacePopulated} degrades to `false` rather than falling
+   * back to the unbounded `iter` corpus scan it exists to avoid (BUG
+   * e19bc9d0).
+   */
+  hasVectors?(modelId: string): Promise<boolean>;
 }
 interface OptVectorStoreModule {
   openTursoVectorStore(
@@ -394,6 +406,38 @@ async function resolveVecFilter(
   // just populated from `filter` above — the early return handles "neither".
   if (ids === undefined || ids.length === 0) return null;
   return { ids };
+}
+
+/**
+ * Bounded existence probe over a vector space: `true` iff `modelId`'s space
+ * holds at least one vector.
+ *
+ * Delegates to the backend's additive `hasVectors` capability
+ * (`@adhd/sox-vector-store` ≥0.7.0) — a `SELECT 1 … LIMIT 1` that projects no
+ * embedding column and stops at the first row, so it is O(1) in the size of
+ * the space. This replaced an `iter`-first-row probe (BUG e19bc9d0):
+ * `AsyncVectorBackend.iter` is a FULL corpus scan on the Turso backend — its
+ * `db.all`-backed query materializes every row *and every embedding BLOB*
+ * before the first yield — so the old "probe" read the entire vector table on
+ * every host boot.
+ *
+ * The capability is additive, NOT on the pinned backend contract, so a
+ * backend that predates it (or a structural test double) narrows to
+ * `undefined`; absence degrades to `false` — the honest conservative answer.
+ * A backend that cannot answer cheaply must NOT fall back to the unbounded
+ * scan this probe exists to avoid.
+ *
+ * Typed against a structural shape (not the internal `OptAsyncVectorBackend`
+ * mirror) so it is directly unit-testable without exporting that interface;
+ * `OptAsyncVectorBackend` satisfies it.
+ */
+export async function isVectorSpacePopulated(
+  vectorBackend: { hasVectors?(modelId: string): Promise<boolean> },
+  modelId: string
+): Promise<boolean> {
+  return typeof vectorBackend.hasVectors === 'function'
+    ? vectorBackend.hasVectors(modelId)
+    : false;
 }
 
 /**
@@ -598,14 +642,21 @@ export async function bootstrapSemanticBackend(
   // BUG-045 — is there anything to search? An installed backend over an
   // EMPTY space answers every query with the same arbitrary page and a null
   // score, which is indistinguishable from a working search and wrong for
-  // every input. One `iter` step settles it; the iterator is lazy, so this
-  // reads at most one row regardless of corpus size.
+  // every input. A bounded existence probe settles it.
+  //
+  // This used to advance `vectorBackend.iter(...)` one step and call that a
+  // "one-row" probe — it was not: `AsyncVectorBackend.iter` is a FULL corpus
+  // scan on the Turso backend (its `db.all`-backed query materializes every
+  // row *and every embedding BLOB* before the first yield), so the probe read
+  // the entire vector table on every host boot (BUG e19bc9d0). The bounded
+  // `hasVectors` capability (`@adhd/sox-vector-store` ≥0.7.0) issues a
+  // `SELECT 1 … LIMIT 1` instead — see {@link isVectorSpacePopulated}.
   let vectorSpacePopulated = false;
   try {
-    for await (const _first of vectorBackend.iter(space.modelId)) {
-      vectorSpacePopulated = true;
-      break;
-    }
+    vectorSpacePopulated = await isVectorSpacePopulated(
+      vectorBackend,
+      space.modelId
+    );
   } catch (err) {
     return {
       ok: false,

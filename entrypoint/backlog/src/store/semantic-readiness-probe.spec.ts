@@ -1,0 +1,119 @@
+/**
+ * semantic-readiness-probe.spec.ts — behavioral proof that the semantic
+ * readiness probe is BOUNDED end-to-end (BUG e19bc9d0).
+ *
+ * `bootstrapSemanticBackend` decides `vectorSpacePopulated` by asking the
+ * backend's additive `hasVectors` capability — a `SELECT 1 … LIMIT 1` — never
+ * by advancing the full-corpus `iter`. The old implementation advanced
+ * `iter(...)` one step and called that a "one-row" probe; on the Turso backend
+ * `iter` is a full corpus scan whose `db.all`-backed query materializes every
+ * row *and every embedding BLOB* before the first yield, so that "probe" read
+ * the entire vector table on every host boot.
+ *
+ * This file drives the REAL `bootstrapSemanticBackend` against a REAL store
+ * and mocks ONLY the two optional packages (the embedding provider — cost
+ * only, per STATE.md's scoped authorization — and the vector store, whose
+ * `hasVectors`/`iter` calls are the whole observable). The vector store double
+ * has an `iter()` that THROWS, so this suite is RED if the probe ever
+ * regresses to the `iter`-first-row scan it replaced — the negative control
+ * for the bounded-probe contract.
+ */
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createFakeEmbeddingModule } from '../test/helpers/fake-embedding-provider.js';
+import { openTmpStore } from '../test/helpers/tmp-store.js';
+import { bootstrapSemanticBackend } from './semantic-search.js';
+
+/**
+ * The vector-store double's controllable state. Hoisted so the `vi.mock`
+ * factory below (which vitest hoists above the imports) can reference it.
+ */
+const probeState = vi.hoisted(() => ({
+  populated: false,
+  /** When false, the double omits `hasVectors` entirely — a backend that predates the additive capability. */
+  hasHasVectors: true,
+  hasVectorsCalls: 0,
+  iterCalls: 0,
+}));
+
+vi.mock('@adhd/sox-embedding-provider', () => createFakeEmbeddingModule());
+
+vi.mock('@adhd/sox-vector-store', () => ({
+  openTursoVectorStore: async () => {
+    const backend: Record<string, unknown> = {
+      ensureSpace: async () => undefined,
+      upsert: async () => undefined,
+      delete: async () => undefined,
+      get: async () => null,
+      knn: async () => [],
+      // The unbounded corpus scan this probe must NEVER touch. It throws, so
+      // any regression back to `for await (… iter …)` fails loudly.
+      iter: () => {
+        probeState.iterCalls += 1;
+        throw new Error('the readiness probe must not scan the corpus');
+      },
+    };
+    if (probeState.hasHasVectors) {
+      backend.hasVectors = async () => {
+        probeState.hasVectorsCalls += 1;
+        return probeState.populated;
+      };
+    }
+    return backend;
+  },
+}));
+
+beforeEach(() => {
+  probeState.populated = false;
+  probeState.hasHasVectors = true;
+  probeState.hasVectorsCalls = 0;
+  probeState.iterCalls = 0;
+});
+
+async function bootstrap(): Promise<{
+  ok: boolean;
+  vectorSpacePopulated?: boolean;
+}> {
+  const tmp = await openTmpStore('semantic-readiness-probe');
+  try {
+    const result = await bootstrapSemanticBackend(tmp.store, {
+      embedding: { type: 'fastembed', model: 'bge-base-en-v1.5' },
+    });
+    return result.ok
+      ? { ok: true, vectorSpacePopulated: result.vectorSpacePopulated }
+      : { ok: false };
+  } finally {
+    await tmp.cleanup();
+  }
+}
+
+describe('bootstrapSemanticBackend — readiness probe is bounded (BUG e19bc9d0)', () => {
+  it('answers via hasVectors (never iter): a populated space ⇒ vectorSpacePopulated:true', async () => {
+    probeState.populated = true;
+    const result = await bootstrap();
+    expect(result.ok).toBe(true);
+    expect(result.vectorSpacePopulated).toBe(true);
+    expect(probeState.hasVectorsCalls).toBe(1);
+    expect(probeState.iterCalls).toBe(0);
+  });
+
+  it('an empty space ⇒ vectorSpacePopulated:false, still via hasVectors (never iter)', async () => {
+    probeState.populated = false;
+    const result = await bootstrap();
+    expect(result.ok).toBe(true);
+    expect(result.vectorSpacePopulated).toBe(false);
+    expect(probeState.hasVectorsCalls).toBe(1);
+    expect(probeState.iterCalls).toBe(0);
+  });
+
+  it('a backend predating hasVectors degrades to false — never falls back to the unbounded iter scan (negative control)', async () => {
+    // No `hasVectors` on the double, and its `iter()` throws. If the probe
+    // regressed to the iter-first-row scan, `iter` would throw and the
+    // bootstrap would return `ok:false` (vector_store_failed) — so BOTH
+    // `result.ok` and `iterCalls === 0` have teeth here.
+    probeState.hasHasVectors = false;
+    const result = await bootstrap();
+    expect(result.ok).toBe(true);
+    expect(result.vectorSpacePopulated).toBe(false);
+    expect(probeState.iterCalls).toBe(0);
+  });
+});
