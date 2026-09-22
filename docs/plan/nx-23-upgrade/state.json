@@ -46,11 +46,11 @@
       "end_ref": "8fa1b825a05e7494e0476518aa639b2ad4ee7df1"
     },
     "cache-isolation": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-09-22T14:50:57.810Z",
-      "done_at": null,
+      "done_at": "2026-09-22T14:57:27.828Z",
       "start_ref": "ccabdec631b6a9960d1ea85809e37b861f9e8168",
-      "end_ref": null
+      "end_ref": "1861fca5410ca83d5877c3dc679dfd5f74e7463d"
     },
     "audit-config": {
       "status": "pending",
@@ -245,6 +245,18 @@
       "audit_criteria_total": 51,
       "by": "pseudosky",
       "note": "Removed all 5 migration shims from tsconfig.base.json compilerOptions (strict:false, noUncheckedSideEffectImports:false, types:[\"*\"], esModuleInterop:false, ignoreDeprecations:\"6.0\") plus the ts-node ignoreDeprecations. Measured blast radius: 195 tsconfig*.json files, 193 reach the base config; inherit/override counts: strict 137/56, types 69/124, esModuleInterop 175/18, ignoreDeprecations 123/70, noUncheckedSideEffectImports 193/0. NO removal changed a build outcome - all removed values are TS defaults or (types:[\"*\"]) equivalent to unspecified; a scan of every tsconfig for TS6.0-deprecated options returned zero matches, so ignoreDeprecations was NOT load-bearing. Guard: red-before (key check exit 1), green-after (key check 0; nx run-many build agent-base-types,data-query-engine,agent-core-policy cache 0/5 -> real rebuild -> 5/5 success). Negative control: injected `export const __negativeControl: number = \"not a number\"` into agent-base-types/src/index.ts -> build exit 130 \"Found type errors\" (gate has teeth via vite-plugin-dts); reverted with git restore -> guard green again. Committed 8fa1b825 (tsconfig.base.json + docs/plan/nx-23-upgrade/SHIM-REMOVAL.md) with --no-verify (plan convention; pre-commit affected lint+test fans out whole-repo on a sharedGlobals change)."
+    },
+    {
+      "ts": "2026-09-22T14:57:27.828Z",
+      "from": "cache-isolation",
+      "to": "cache-isolation",
+      "start_ref": "ccabdec631b6a9960d1ea85809e37b861f9e8168",
+      "end_ref": "1861fca5410ca83d5877c3dc679dfd5f74e7463d",
+      "audit_exit": 0,
+      "audit_criteria_passed": 51,
+      "audit_criteria_total": 51,
+      "by": "pseudosky",
+      "note": "Declared relative \"cacheDirectory\": \".nx/cache\" in nx.json so Nx resolves the task cache inside whichever checkout runs. Verified via Nx own resolution API: cacheDir=cacheDirectoryForWorkspace=/Users/nix/dev/node/adhd/.worktrees/nx-perf-upgraded/.nx/cache (inside this checkout; workspace-data DB also relocates to .nx/workspace-data by Nx single-predicate design). Empirical: nx build agent-base-types wrote hashes 14366332645378538554 and 8011887749495049182 ONLY to local .nx/cache (absent from shared ~/.nx/232dc9326daffd54/cache); second run 2/2 cache hit. Wrote CACHE-ISOLATION.md recording nrwl/nx#36675 (BUG-NX-CACHE-003), the deliberate-upstream pooling, the explicit trade (gave up cross-worktree cache sharing to defuse a measured correctness hazard), residual risk (daemon/CPU contention across ~35 worktrees remains), and the [inv:no-cache-bypass] interaction. Guard red-before (exit 1) -> green-after (exit 0). Commit 1861fca5. NOTE: committed with --no-verify because nx.json is a sharedGlobals input so the pre-commit gate fans out to all ~70 projects (nx affected -t lint+test) and this work order forbids running nx lint (sync-deps rewrites tracked package.json)."
     }
   ],
   "amendment_log": [
@@ -281,7 +293,7 @@
     "version": "0.8.25",
     "hash": "961c3053dfab"
   },
-  "current_state": "cache-isolation",
+  "current_state": "audit-config",
   "dod_provenance": {
     "confirmed_at": "2026-09-22T02:05:38.210Z",
     "by": "pseudosky",
