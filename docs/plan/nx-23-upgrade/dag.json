@@ -336,7 +336,7 @@
       "kind": "audit",
       "phase": "graph",
       "depends_on": [
-        "graph-release-eslint-inferred"
+        "typecheck-teeth-restored"
       ],
       "guard": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_graph.py",
       "artifacts": [
