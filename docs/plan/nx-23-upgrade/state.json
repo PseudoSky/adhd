@@ -53,11 +53,11 @@
       "end_ref": "1861fca5410ca83d5877c3dc679dfd5f74e7463d"
     },
     "audit-config": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-09-22T14:58:32.865Z",
-      "done_at": null,
+      "done_at": "2026-09-22T15:00:26.467Z",
       "start_ref": "cc00c211c77758f01ca0aac37c8e7ec2e9ad80d7",
-      "end_ref": null
+      "end_ref": "dde0ea4e875589fc9bd8bd218a4d76b6a1763cc7"
     },
     "graph-test-build-inferred": {
       "status": "pending",
@@ -257,6 +257,18 @@
       "audit_criteria_total": 51,
       "by": "pseudosky",
       "note": "Declared relative \"cacheDirectory\": \".nx/cache\" in nx.json so Nx resolves the task cache inside whichever checkout runs. Verified via Nx own resolution API: cacheDir=cacheDirectoryForWorkspace=/Users/nix/dev/node/adhd/.worktrees/nx-perf-upgraded/.nx/cache (inside this checkout; workspace-data DB also relocates to .nx/workspace-data by Nx single-predicate design). Empirical: nx build agent-base-types wrote hashes 14366332645378538554 and 8011887749495049182 ONLY to local .nx/cache (absent from shared ~/.nx/232dc9326daffd54/cache); second run 2/2 cache hit. Wrote CACHE-ISOLATION.md recording nrwl/nx#36675 (BUG-NX-CACHE-003), the deliberate-upstream pooling, the explicit trade (gave up cross-worktree cache sharing to defuse a measured correctness hazard), residual risk (daemon/CPU contention across ~35 worktrees remains), and the [inv:no-cache-bypass] interaction. Guard red-before (exit 1) -> green-after (exit 0). Commit 1861fca5. NOTE: committed with --no-verify because nx.json is a sharedGlobals input so the pre-commit gate fans out to all ~70 projects (nx affected -t lint+test) and this work order forbids running nx lint (sync-deps rewrites tracked package.json)."
+    },
+    {
+      "ts": "2026-09-22T15:00:26.467Z",
+      "from": "audit-config",
+      "to": "audit-config",
+      "start_ref": "cc00c211c77758f01ca0aac37c8e7ec2e9ad80d7",
+      "end_ref": "dde0ea4e875589fc9bd8bd218a4d76b6a1763cc7",
+      "audit_exit": 0,
+      "audit_criteria_passed": 51,
+      "audit_criteria_total": 51,
+      "by": "pseudosky",
+      "note": "HOLD cleared. Guard guard_audit_config.py re-run post-guard: GUARD_EXIT=0, 51 criteria PASS / 0 FAIL across the accumulated phases (intake 15 [upgrade-baseline.1-5, gate-triage-absorbed.1-5, vite-cjs-import-meta-repair.1-9, browser-package-build-repair.1-4, browser-cjs-umd-repair.1-6], reconcile 10 [config-repair-absorbed.1-4, test-resolution-absorbed.1-4, audit-reconcile.1-2], config 26 [tsconfig-shim-removal.1-6, cache-isolation.1-4, audit-config.1-2, plus... ]). Genuinely green, not partial: zero FAIL markers, no [audit.no-criteria] sentinel, exit==failure-count==0. Guard passes terminal phase only (--phase config) and explicit --criteria <abs> with cwd=REPO_ROOT; both BUG-PLAN-AUDIT-PHASE / BUG-PLAN-AUDIT-CWD workarounds intact. Guard script UNMODIFIED (contract promise added:[] modified:[] deleted:[] held; only events.ndjson changed). No criterion re-runs the guard (no recursion). Shim removal + cache isolation both green before the 136-target graph remodel. Token figures are estimates (no session meter)."
     }
   ],
   "amendment_log": [
@@ -293,7 +305,7 @@
     "version": "0.8.25",
     "hash": "961c3053dfab"
   },
-  "current_state": "audit-config",
+  "current_state": "graph-test-build-inferred",
   "dod_provenance": {
     "confirmed_at": "2026-09-22T02:05:38.210Z",
     "by": "pseudosky",
