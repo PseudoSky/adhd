@@ -9,7 +9,7 @@ export interface UseInfiniteScrollOptions {
 }
 
 export interface UseInfiniteScrollReturn {
-  ref: RefObject<HTMLElement> | RefObject<HTMLDivElement>;
+  ref: RefObject<HTMLElement | null> | RefObject<HTMLDivElement | null>;
   isLoading: boolean;
   hasMore: boolean;
   error: Error | null;
