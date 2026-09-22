@@ -159,7 +159,21 @@ node docs/plan/nx-23-upgrade/scripts/run-audit.js [--phase <a,b>]
 - **Output:** one `[<id>] PASS|FAIL` marker per criterion on stdout.
 - **Exit:** the count of failing criteria (`0` ⇔ green).
 - **Phases accumulate:** `--phase config` runs `intake`, `reconcile` and `config`.
-- **Quirk:** `custom` criteria spawn `node <script>` with the repo root as cwd and pass iff exit 0 — their stdout is never parsed for markers.
+- **Quirks:**
+  - `custom` criteria spawn `node <script>` with the repo root as cwd and pass iff exit 0 —
+    their stdout is never parsed for markers.
+  - **It resolves `criteria.json` relative to `process.cwd()`**, not relative to its own
+    location. A caller that needs `cwd` = the repo root (because the criteria commands are
+    repo-root-relative) must pass `--criteria <abs path>` explicitly — that flag is checked
+    first and honours an absolute path. Omitting it makes the caller report
+    `[audit.no-criteria] FAIL` no matter how healthy the plan is.
+  - **`--phase` takes ONE phase name, never a list.** `--phase "intake,reconcile"` throws
+    `--phase "intake,reconcile" is not a declared phase`; the accumulation is implicit, so the
+    terminal phase is the correct argument.
+  - A `negative-control` criterion passes iff its `positive` command FAILS after `mutate` runs.
+    The harness **ignores `mutate`'s exit code**, so a mutation that could not be applied makes
+    the control pass without proving anything. Give a `negative-control` a positive whose
+    precondition is guaranteed by an earlier criterion in the same phase.
 
 ### 5.5 `git diff main..HEAD -- tsconfig.base.json`
 
@@ -257,6 +271,7 @@ staleness window.
 | `nx show project --json` | `./node_modules/.bin/nx show project data-query-engine --json` contains a `test` target | 14 days | Nx changes |
 | `cacheDirectory` | the resolution assertion in `criteria.json` → `cache-isolation.2` | 30 days | `nx.json` is edited |
 | `run-audit.js` | `node .../run-audit.js --phase intake` emits one marker per intake criterion | every plan edit | `plan-scaffold` vendors a new runner |
+| audit guards | `python3 docs/plan/nx-23-upgrade/scripts/guard_audit_reconcile.py` completes and emits real `[id]` markers (not `[audit.no-criteria]`) in well under 2 minutes | every plan edit | `run-audit.js` is re-vendored, or a criterion is added to an `audit-*` state |
 | compiler parity | `git diff main..HEAD -- tsconfig.base.json` is empty | 7 days | `main` touches the shared compiler config |
 | `check-guards-pinned.mjs` | exits 0 with all guards pinned | every plan edit | a guard is added or edited |
 | `importMetaUrlCjs()` | `node entrypoint/apigen-cli/dist/index.js --help` exits 0 **and** `rg -c '\{\}\.url'` over the CJS `dist` entries is 0 | 14 days | vite or Rolldown changes major/minor |

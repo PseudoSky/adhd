@@ -98,6 +98,13 @@ Guards and audits:
     `browser-package-build-repair`'s build leg is red today (`Found 4 errors`);
     `browser-cjs-umd-repair` is red today both because its spec does not exist
     and because the token is reported present in the bundles.
+[x] The audit gates actually RUN — **this was false until the 2026-09-21 repair
+    pass.** Three compounding defects made every `guard_audit_*.py` red by
+    construction, and one made them non-terminating. All four are fixed; the
+    reconcile gate now completes in ~55s and emits 39 real `[id] PASS/FAIL`
+    markers instead of `[audit.no-criteria] FAIL`. See *Open items* below for the
+    full list. Re-verify by running
+    `python3 docs/plan/nx-23-upgrade/scripts/guard_audit_reconcile.py`.
 [x] All criteria are deterministic commands — no prose, AST checks over greps
     where ambiguous (`absent` on the executor strings is an exact literal, not
     a loose grep).
@@ -141,6 +148,41 @@ Hand off:
   therefore hand-maintained and can drift. The false claim has been removed; the missing
   renderer is reported to the operator rather than filed to the backlog store, which this
   session was instructed not to touch.
+
+### Four audit-gate defects, found and fixed 2026-09-21
+
+All four are **plan-local** (they live in this plan's `scripts/`, not in the skill), and all
+four are invisible to `gap-check` and `env-pin-check` — which is why the plan reviewed clean
+while its hold points could not have passed. They were found by *running* the gates.
+
+1. **The guards could not find their own criteria file.** `guard_audit_*.py` invoke
+   `run-audit.js` with `cwd=REPO_ROOT`, but the runner resolves `criteria.json` relative to
+   `process.cwd()`. The criteria *commands* are repo-root-relative (`./node_modules/.bin/nx`),
+   so both cannot be satisfied by one `cwd`. Every guard reported
+   `[audit.no-criteria] FAIL` regardless of the plan's real state.
+   *Fix:* pass the runner its criteria file explicitly —
+   `--criteria <plan>/scripts/criteria.json` (checked first, honours an absolute path) —
+   keeping `cwd=REPO_ROOT` for command execution.
+2. **The guards passed a phase list the runner rejects.** `PHASES = "intake,reconcile"` (and
+   longer variants) were passed as `--phase "intake,reconcile"`, but the runner accepts **one**
+   phase name and *accumulates* every phase declared before it:
+   `--phase "intake,reconcile" is not a declared phase`. The guards contradicted the
+   accumulation contract their own docstrings and `TOOLS.md` §5.4 describe.
+   *Fix:* `PHASES` is now the terminal phase only — `reconcile`, `config`, `graph`, `tests` —
+   which yields exactly the "this phase plus all prior phases" behaviour intended.
+3. **Five audit criteria were self-recursive.** `audit-{reconcile,config,graph,tests,final}.2`
+   ran `python3 …/guard_audit_<phase>.py`, which re-ran the audit, which ran that criterion
+   again — unbounded recursion, and for `audit-final` it re-ran *every* criterion. Defects 1
+   and 2 masked this: the guard died on `[audit.no-criteria]` before recursing.
+   *Fix:* each is now a non-recursive `present` check asserting the guard passes the runner
+   `--criteria`, which also pins defect 1 against regression.
+4. **A false claim about generation.** See the corrected checklist item above.
+
+**Verified after the fix:** `guard_audit_reconcile.py` completes in ~55s and emits 39 real
+markers — the correct red/green pattern for a plan whose work has not started (the
+`upgrade-baseline` toolchain checks, the `vite-cjs-import-meta-repair` artifact-load proof and
+its negative control, and the corrected audit criteria all PASS; every not-yet-done state's
+criteria FAIL).
 - **The browser bundle token was not independently reproduced.** See `demo/UNRESOLVED.md`.
   `browser-cjs-umd-repair` re-confirms it as its first step.
 - **GATE 2 approval** is recorded in `APPROVAL.md` (committed artifact). Without

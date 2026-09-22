@@ -42,7 +42,7 @@ deleted:  []
 
 - [audit-final.1] The final audit guard exists
 
-- [audit-final.2] Every criterion across every phase passes at the final hold
+- [audit-final.2] The audit guard passes the runner its criteria file explicitly and names a single accumulated phase, so the gate is neither red by construction nor self-recursive
 - [audit-final.ref-target-artifact-parity] Conformance: a converted target still produces its artifact through the inferred path
 - [audit-final.ref-fail-safe-fast-path] Conformance: the fast path fails loudly on zero selection
 - [audit-final.ref-pinned-guard-tool-resolution] Conformance: every guard resolves its tool through a repo-local anchor
@@ -68,3 +68,16 @@ mutates:    ["docs/plan/nx-23-upgrade/scripts/guard_audit_final.py", "docs/plan/
 ## Notes for executor
 
 Final hold. Proves every Definition-of-Done clause against the real codebase. Nothing lands until this is green.
+
+**Guard mechanics (fixed 2026-09-21).** The guard runs
+`node scripts/run-audit.js --phase <terminal-phase> --criteria <abs>/scripts/criteria.json`
+with `cwd` = the repo root. Both flags are load-bearing and must not be "simplified":
+`--criteria` because the runner resolves `criteria.json` relative to `process.cwd()` while the
+criteria commands need the repo root; and a **single** terminal phase because the runner
+accumulates every phase declared before it (`--phase "a,b"` is rejected outright). Do not add
+a criterion to this state that re-runs this guard — the audit would recurse.
+
+**Precondition for the negative-control criteria.** The audit harness ignores the `mutate`
+step's exit code, so a control whose artifact does not exist yet reports PASS without proving
+anything. That is only reachable while its owning state is unfinished; the state's own guard
+is the real gate.

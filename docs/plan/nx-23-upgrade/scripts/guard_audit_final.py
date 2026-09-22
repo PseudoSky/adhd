@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """guard_audit_final.py — whole-plan final audit gate (the pre-landing hold).
 
+BUG-PLAN-AUDIT-CWD: the runner resolves `criteria.json` relative to
+`process.cwd()`, while the criteria commands need `cwd=REPO_ROOT`. Pass the
+criteria file explicitly via `--criteria` (absolute), keeping cwd at the repo
+root for command execution. Without this the gate is red by construction.
+
 Runs the full declarative harness across EVERY phase and then enforces two
 coverage invariants a narrowed run cannot satisfy:
 
@@ -44,7 +49,7 @@ def main() -> int:
     declared_n = len(declared_ids)
     dod_ids = {i for i in declared_ids if i.startswith("dod.")}
 
-    cmd = ["node", str(RUN_AUDIT)]
+    cmd = ["node", str(RUN_AUDIT), "--criteria", str(CRITERIA)]
     sys.stderr.write(f"guard_audit_final: {' '.join(cmd)} (cwd={REPO_ROOT})\n")
     proc = subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True)
     sys.stdout.write(proc.stdout or "")

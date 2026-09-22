@@ -173,10 +173,12 @@
     {
       "id": "audit-reconcile.2",
       "phase": "reconcile",
-      "tier": 2,
-      "kind": "command",
-      "cmd": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_reconcile.py",
-      "expect": "exit0"
+      "tier": 0,
+      "kind": "present",
+      "pattern": "--criteria",
+      "paths": [
+        "docs/plan/nx-23-upgrade/scripts/guard_audit_reconcile.py"
+      ]
     },
     {
       "id": "tsconfig-shim-removal.1",
@@ -275,10 +277,12 @@
     {
       "id": "audit-config.2",
       "phase": "config",
-      "tier": 2,
-      "kind": "command",
-      "cmd": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_config.py",
-      "expect": "exit0"
+      "tier": 0,
+      "kind": "present",
+      "pattern": "--criteria",
+      "paths": [
+        "docs/plan/nx-23-upgrade/scripts/guard_audit_config.py"
+      ]
     },
     {
       "id": "graph-test-build-inferred.1",
@@ -585,10 +589,12 @@
     {
       "id": "audit-graph.2",
       "phase": "graph",
-      "tier": 2,
-      "kind": "command",
-      "cmd": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_graph.py",
-      "expect": "exit0"
+      "tier": 0,
+      "kind": "present",
+      "pattern": "--criteria",
+      "paths": [
+        "docs/plan/nx-23-upgrade/scripts/guard_audit_graph.py"
+      ]
     },
     {
       "id": "test-selection-revalidated.1",
@@ -691,10 +697,12 @@
     {
       "id": "audit-tests.2",
       "phase": "tests",
-      "tier": 2,
-      "kind": "command",
-      "cmd": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_tests.py",
-      "expect": "exit0"
+      "tier": 0,
+      "kind": "present",
+      "pattern": "--criteria",
+      "paths": [
+        "docs/plan/nx-23-upgrade/scripts/guard_audit_tests.py"
+      ]
     },
     {
       "id": "audit-final.1",
@@ -706,10 +714,12 @@
     {
       "id": "audit-final.2",
       "phase": "final",
-      "tier": 3,
-      "kind": "command",
-      "cmd": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_final.py",
-      "expect": "exit0"
+      "tier": 0,
+      "kind": "present",
+      "pattern": "--criteria",
+      "paths": [
+        "docs/plan/nx-23-upgrade/scripts/guard_audit_final.py"
+      ]
     },
     {
       "phase": "final",
