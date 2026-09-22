@@ -17,6 +17,14 @@
  *  - "Citations render as `[target sha:…]` — the `sha` is part of the
  *    citation, visible and independently verifiable."
  *
+ * It additionally renders the item-level disclosure-contract git context
+ * (`IIssueCard.gitContext`, repo `AGENTS.md`'s "Cite what you read": the
+ * FIRST element of a `Citations:` block is `<active git context>`) ONCE at
+ * the head of the item's `Citations:` block — never per-citation. When the
+ * card carries no `gitContext`, the block is rendered exactly as before
+ * (`Citations:` followed by the citation lines), so every pre-existing card's
+ * output is byte-for-byte unchanged.
+ *
  * Only rendered for the fields actually present on each card (§6.5's `fields`
  * projection is honoured identically here — a caller who asked for the
  * five-field default card gets a terse markdown block; a caller who asked for
@@ -25,10 +33,23 @@
  */
 import type { IIssueCard } from './types.js';
 
+/**
+ * Renders the item's `Citations:` block — the disclosure contract's evidence
+ * section. The item-level `gitContext`, when present, is the block's head
+ * element (the disclosure format's `<active git context>`); the structured
+ * citations follow as `- [target sha:…]` lines. An item with neither a
+ * `gitContext` nor any citation renders NO block at all — never a bare
+ * `Citations:` header — which is what keeps the absent case a no-op.
+ */
 function renderCitationLines(card: IIssueCard): string[] {
-  if (!card.citations || card.citations.length === 0) return [];
-  const lines = ['', 'Citations:'];
-  for (const citation of card.citations) {
+  const gitContext =
+    typeof card.gitContext === 'string' && card.gitContext.length > 0
+      ? card.gitContext
+      : undefined;
+  const citations = card.citations ?? [];
+  if (gitContext === undefined && citations.length === 0) return [];
+  const lines = ['', gitContext ? `Citations: [${gitContext}]` : 'Citations:'];
+  for (const citation of citations) {
     const target = citation.lines
       ? `${citation.file}:${citation.lines}`
       : citation.file;

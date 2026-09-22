@@ -89,6 +89,7 @@ adhd-backlog create --input '{
   "title": "Query pagination drops the last page under offset paging",
   "body": "offset+limit near the end of a result set silently returns fewer rows than `total` implies.",
   "project": "adhd",
+  "gitContext": "feat/backlog-hard-replacement @ 4bf902fc",
   "by": "agent:worker-1"
 }'
 ```
@@ -106,11 +107,20 @@ adhd-backlog create --input '{
       "status": "open",
       "project": "adhd",
       "component": "(root)",
-      "createdAt": "2026-09-16T12:00:00.000Z"
+      "createdAt": "2026-09-16T12:00:00.000Z",
+      "gitContext": "feat/backlog-hard-replacement @ 4bf902fc"
     }
   }
 }
 ```
+
+`gitContext` is the item-level disclosure-contract git context (the repo
+`AGENTS.md` "Cite what you read" convention: the first element of a
+`Citations:` block is `<active git context>`). It is optional and plain — a
+sibling of `assignee` in the issue's metadata — and `transition` accepts the
+same field to update it. A `format:'markdown'` query renders it once at the
+head of the item's `Citations:` block (`Citations: [<active git context>]`),
+never per citation. Omit it and nothing is stored and no output changes.
 
 Query for it:
 

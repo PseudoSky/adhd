@@ -301,6 +301,15 @@ export async function assembleIssueCard(
     const assignee = issue.metadata?.assignee;
     if (typeof assignee === 'string') card.assignee = assignee;
   }
+  // Item-level disclosure-contract provenance, a sibling of `assignee` in the
+  // same metadata blob — populated only when requested AND non-empty, so a
+  // card that never asked for it (or an issue filed before the field existed)
+  // is byte-for-byte unchanged (SPEC.md §6.5's `plain` field, DATA_MODEL.md §8).
+  if (want('gitContext')) {
+    const gitContext = issue.metadata?.gitContext;
+    if (typeof gitContext === 'string' && gitContext.length > 0)
+      card.gitContext = gitContext;
+  }
   if (want('closedAt')) {
     const closedAt = issue.metadata?.closedAt;
     if (typeof closedAt === 'string') card.closedAt = closedAt;

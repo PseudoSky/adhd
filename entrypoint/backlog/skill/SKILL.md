@@ -49,7 +49,7 @@ $ adhd-backlog --help
 Available commands:
 
   backlog claim  { input: { uid: string, by: string, action: enum, force?: boolean } }
-  backlog create  { input: { title: string, body: string, project: string, component?: string, kind?: string, status?: string, priority?: string, citations?: object[], author?: string, assignee?: string, by: string, duplicateAction?: enum, awaitEmbed?: boolean } }
+  backlog create  { input: { title: string, body: string, project: string, component?: string, kind?: string, status?: string, priority?: string, citations?: object[], author?: string, assignee?: string, gitContext?: string, by: string, duplicateAction?: enum, awaitEmbed?: boolean } }
   backlog delete  { input: { uid: string, reason: string, by: string, awaitEmbed?: boolean } }
   backlog get  { input: { uid: string, fields?: union[] } }
   backlog lookup  { input: { q: string } }
@@ -57,7 +57,7 @@ Available commands:
   backlog query  { input: { text?: string, filter?: object, fields?: union[], sort?: enum, direction?: enum, limit?: number, offset?: number, after?: string, view?: enum, format?: enum, overlapAxis?: enum, overlapUids?: string[], staleAfterMin?: number } }
   backlog relate  { input: { sourceUid: string, targetUid: string, rel: enum, action: enum, by: string } }
   backlog rm-location  { input: { uid: string, by: string, reason?: string } }
-  backlog transition  { input: { uid: string, by: string, toStatus: string, note?: string, citations?: object[] } }
+  backlog transition  { input: { uid: string, by: string, toStatus: string, note?: string, citations?: object[], gitContext?: string } }
   backlog update  { input: { uid: string, by: string, title?: string, body?: string, kind?: string, priority?: string, assignee?: string, author?: string, awaitEmbed?: boolean } }
   backlog upsert-component  { input: { project: string, name: string, path?: string, description?: string, by: string } }
   backlog upsert-location  { input: { component: string, project?: string, locType: enum, value: string, by: string } }
@@ -445,6 +445,17 @@ free — the store shells out to `gitnexus impact <symbol>` at write time
 `blastRadius` when gitnexus is installed and the repo is indexed. Absence of
 `blastRadius` on a citation that named a `symbol` means "not enriched," never
 "confirmed zero blast radius."
+
+The item-level **`gitContext`** is separate from a citation's own `context`.
+Pass `gitContext` on `create` (or on a `transition` to update it) to record
+the repo disclosure contract's `<active git context>` — the FIRST element of a
+`Citations:` block (`Citations: [<active git context>, …]`, per the repo
+`AGENTS.md` "Cite what you read"). It is stored on the issue itself, never per
+citation, and a `format:'markdown'` query renders it once at the head of the
+item's `Citations:` block (`Citations: [<active git context>]`, then the
+citation lines). Omit it and nothing is stored and no output changes. A
+citation's own `context` is free-text prose and is never rendered by the
+markdown projection — it cannot carry the git context.
 
 ## 7. Verify writes from a NEW process
 

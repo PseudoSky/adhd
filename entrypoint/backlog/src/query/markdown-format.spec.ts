@@ -65,6 +65,56 @@ describe('query — format:"markdown" (real store)', () => {
     expect(result.markdown).not.toContain(created.uid);
   });
 
+  it('an item created with a `gitContext` renders it ONCE at the head of its `Citations:` block; an item created without one renders NO block (no regression)', async () => {
+    await createIssue(store, {
+      project: projectUid,
+      title: 'disclosed item',
+      body: 'body',
+      gitContext: 'feat/backlog-hard-replacement @ 4bf902fc',
+      citations: [{ file: 'src/x.ts', lines: '1-2' }],
+      by: 'filer',
+    });
+    await createIssue(store, {
+      project: projectUid,
+      title: 'plain item',
+      body: 'body',
+      by: 'filer',
+    });
+
+    const result = await queryIssues(store, {
+      filter: { project: projectUid },
+      fields: ['uid', 'title', 'citations', 'gitContext'],
+      format: 'markdown',
+    });
+    if (result.view !== 'list' || result.format !== 'markdown') {
+      throw new Error(`expected markdown list result, got ${JSON.stringify(result)}`);
+    }
+
+    // Split into per-card sections (`## <title>` at line start) so the
+    // assertion is independent of the page's item order.
+    const sections = result.markdown.split(/^## /m);
+    const disclosedSection = sections.find((s) => s.startsWith('disclosed item'));
+    const plainSection = sections.find((s) => s.startsWith('plain item'));
+    if (disclosedSection === undefined || plainSection === undefined) {
+      throw new Error(
+        `setup: expected both card sections, got ${JSON.stringify(sections)}`
+      );
+    }
+
+    // The disclosed item's block leads with the git context, exactly ONCE,
+    // followed by the citation line.
+    expect(disclosedSection).toContain(
+      'Citations: [feat/backlog-hard-replacement @ 4bf902fc]'
+    );
+    expect(
+      disclosedSection.match(/feat\/backlog-hard-replacement @ 4bf902fc/g)
+    ).toHaveLength(1);
+    expect(disclosedSection).toContain('[src/x.ts:1-2 sha:unverified]');
+
+    // The plain item has neither a git context nor citations — no block at all.
+    expect(plainSection).not.toContain('Citations');
+  });
+
   it('meta (total/returned/limit) is still reported for a markdown-formatted view:"list" call — only `result` changes shape, never `meta`', async () => {
     await createIssue(store, {
       project: projectUid,

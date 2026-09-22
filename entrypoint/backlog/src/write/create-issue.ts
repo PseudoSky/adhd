@@ -98,6 +98,20 @@ export interface ICreateIssueInput {
   author?: string;
   /** Plain metadata scalar (§6.2) — no edge. */
   assignee?: string;
+  /**
+   * The item-level disclosure-contract git context — a plain metadata scalar
+   * (a sibling of {@link assignee}, no edge), persisted verbatim into the
+   * `issue` node's metadata and surfaced by reads as `IIssueCard.gitContext`.
+   *
+   * Repo `AGENTS.md`'s "Cite what you read" rule fixes the shape of a
+   * `Citations:` block as `Citations: [<active git context>, <agent name>,
+   * <active plan or task>, …]` — the git context is the block's FIRST
+   * element. This field carries it. It is ITEM-level, deliberately NOT a
+   * per-citation `ref`: the block renders it once, at its head, so a
+   * multi-citation item never repeats it. Omitted ⇒ nothing is stored, and
+   * every read/render path is byte-for-byte unchanged.
+   */
+  gitContext?: string;
   /** The acting identity — agent or person (§6.3's opening rule) — REQUIRED on every mutating verb. A missing/blank value throws `InvalidArgumentError('by', ...)` before any write runs. */
   by: string;
   /**
@@ -242,6 +256,8 @@ export interface ICreateIssueCard {
   assignee?: string;
   author?: string;
   closedAt?: string;
+  /** The item-level disclosure-contract git context, echoed back from {@link ICreateIssueInput.gitContext} — present iff one was supplied. */
+  gitContext?: string;
 }
 
 /**
@@ -577,6 +593,15 @@ export async function createIssue(
     assertNonBlank(`citations[${i}].file`, citation.file)
   );
 
+  // The item-level git context, normalized to `undefined` for a blank/absent
+  // value so the metadata write and the echoed-back card both treat
+  // "not supplied" and "supplied blank" identically — a blank disclosure
+  // element is never stored.
+  const gitContext =
+    typeof input.gitContext === 'string' && input.gitContext.trim().length > 0
+      ? input.gitContext
+      : undefined;
+
   const duplicateAction: DuplicateAction = input.duplicateAction ?? 'abort';
   if (
     input.duplicateAction !== undefined &&
@@ -786,6 +811,7 @@ export async function createIssue(
 
       const issueMetadata: Record<string, unknown> = {};
       if (input.assignee !== undefined) issueMetadata.assignee = input.assignee;
+      if (gitContext !== undefined) issueMetadata.gitContext = gitContext;
 
       const issue = await writeNodeTx(tx, {
         kind: 'issue',
@@ -933,6 +959,7 @@ export async function createIssue(
           createdAt: now,
           assignee: input.assignee,
           author: authorRow.name,
+          ...(gitContext !== undefined ? { gitContext } : {}),
         },
         // §6.4 point 3: present on `'force'` when the scan found ≥1 candidate
         // (reported for the caller's own audit trail even though the write
