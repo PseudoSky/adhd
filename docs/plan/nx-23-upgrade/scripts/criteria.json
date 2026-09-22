@@ -857,6 +857,16 @@
       "kind": "command",
       "cmd": "./node_modules/.bin/vitest --help | rg -q related",
       "expect": "exit0"
+    },
+    {
+      "id": "upgrade-baseline.5",
+      "phase": "intake",
+      "tier": null,
+      "kind": "present",
+      "pattern": "vite-cjs-import-meta-repair",
+      "paths": [
+        "docs/plan/nx-23-upgrade/BASELINE.md"
+      ]
     }
   ]
 }
