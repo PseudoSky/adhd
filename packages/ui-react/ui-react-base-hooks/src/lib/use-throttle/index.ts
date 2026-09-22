@@ -13,10 +13,10 @@ export function useThrottle<T extends (...args: unknown[]) => unknown>(
 ): T {
   const { delay = 300, leading = true, trailing = true } = options;
 
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const lastRanRef = useRef<number>(0);
   const hasRanRef = useRef(false);
-  const lastArgsRef = useRef<Parameters<T>>();
+  const lastArgsRef = useRef<Parameters<T> | undefined>(undefined);
   const mountedRef = useRef(true);
 
   // Cleanup
