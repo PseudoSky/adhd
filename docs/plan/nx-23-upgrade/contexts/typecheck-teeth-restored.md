@@ -18,6 +18,7 @@
 
 - [typecheck-teeth-restored.1] The build gate has teeth again: an injected type error in a base package turns its build red
 
+- [typecheck-teeth-restored.2] agent-core-env builds green with the typecheck target restored
 ---
 
 ## Reservations
