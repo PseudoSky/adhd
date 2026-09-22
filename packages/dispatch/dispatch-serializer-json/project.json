@@ -12,15 +12,6 @@
   },
   "tags": ["layer:data", "platform:node"],
   "targets": {
-    "test": {
-      "executor": "@nx/vitest:test",
-      "outputs": [
-        "{workspaceRoot}/coverage/packages/dispatch/dispatch-serializer-json"
-      ],
-      "options": {
-        "configFile": "packages/dispatch/dispatch-serializer-json/vite.config.ts"
-      }
-    },
     "typecheck": {
       "executor": "nx:run-commands",
       "cache": true,
@@ -33,16 +24,6 @@
       ],
       "options": {
         "command": "tsc -p packages/dispatch/dispatch-serializer-json/tsconfig.lib.json --noEmit"
-      }
-    },
-    "build": {
-      "executor": "@nx/vite:build",
-      "outputs": ["{options.outputPath}"],
-      "options": {
-        "outputPath": "packages/dispatch/dispatch-serializer-json/dist",
-        "main": "packages/dispatch/dispatch-serializer-json/src/index.ts",
-        "tsConfig": "packages/dispatch/dispatch-serializer-json/tsconfig.lib.json",
-        "assets": ["packages/dispatch/dispatch-serializer-json/*.md"]
       }
     },
     "nx-release-publish": {

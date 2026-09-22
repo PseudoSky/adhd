@@ -12,24 +12,6 @@
   },
   "tags": ["layer:entrypoints", "platform:node"],
   "targets": {
-    "test": {
-      "executor": "@nx/vitest:test",
-      "outputs": ["{workspaceRoot}/coverage/entrypoint/apigen-cli"],
-      "dependsOn": ["build"],
-      "options": {
-        "configFile": "entrypoint/apigen-cli/vite.config.ts"
-      }
-    },
-    "build": {
-      "executor": "@nx/vite:build",
-      "outputs": ["{options.outputPath}"],
-      "options": {
-        "outputPath": "entrypoint/apigen-cli/dist",
-        "main": "entrypoint/apigen-cli/src/index.ts",
-        "tsConfig": "entrypoint/apigen-cli/tsconfig.lib.json",
-        "assets": ["entrypoint/apigen-cli/*.md"]
-      }
-    },
     "generate-api": {
       "executor": "@adhd/apigen-nx:generate",
       "cache": true,

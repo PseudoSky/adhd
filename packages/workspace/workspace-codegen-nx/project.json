@@ -30,15 +30,6 @@
         "assets": ["packages/workspace/workspace-codegen-nx/*.md"]
       }
     },
-    "test": {
-      "executor": "@nx/vitest:test",
-      "outputs": [
-        "{workspaceRoot}/coverage/packages/workspace/workspace-codegen-nx"
-      ],
-      "options": {
-        "configFile": "packages/workspace/workspace-codegen-nx/vite.config.ts"
-      }
-    },
     "nx-release-publish": {
       "dependsOn": [
         "build",

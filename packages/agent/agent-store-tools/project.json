@@ -41,14 +41,6 @@
         "command": "rm -rf dist/packages/agent/agent-store-tools"
       }
     },
-    "test": {
-      "executor": "@nx/vitest:test",
-      "outputs": ["{workspaceRoot}/coverage/packages/agent/agent-store-tools"],
-      "options": {
-        "configFile": "packages/agent/agent-store-tools/vite.config.ts",
-        "passWithNoTests": true
-      }
-    },
     "nx-release-publish": {
       "dependsOn": [
         "build",

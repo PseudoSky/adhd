@@ -35,13 +35,6 @@
         "command": "tsc -p packages/agent/agent-core-policy/tsconfig.typecheck.json --noEmit"
       }
     },
-    "test": {
-      "executor": "@nx/vitest:test",
-      "outputs": ["{workspaceRoot}/coverage/packages/agent/agent-core-policy"],
-      "options": {
-        "configFile": "packages/agent/agent-core-policy/vite.config.ts"
-      }
-    },
     "clean": {
       "executor": "nx:run-commands",
       "options": {

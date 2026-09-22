@@ -37,22 +37,6 @@
       "options": {
         "packageRoot": "{projectRoot}/dist"
       }
-    },
-    "test": {
-      "executor": "@nx/vitest:test",
-      "dependsOn": ["build", "dist-manifest"],
-      "cache": true,
-      "inputs": [
-        "default",
-        "^production",
-        {
-          "externalDependencies": ["vitest"]
-        }
-      ],
-      "outputs": ["{workspaceRoot}/coverage/entrypoint/decompile-cli"],
-      "options": {
-        "vitestConfig": "entrypoint/decompile-cli/vite.config.ts"
-      }
     }
   }
 }

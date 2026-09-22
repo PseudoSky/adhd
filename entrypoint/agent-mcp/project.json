@@ -38,13 +38,6 @@
         ]
       }
     },
-    "test": {
-      "executor": "@nx/vitest:test",
-      "dependsOn": ["build", "dist-manifest"],
-      "options": {
-        "config": "entrypoint/agent-mcp/vite.config.ts"
-      }
-    },
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {

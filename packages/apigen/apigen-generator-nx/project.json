@@ -53,23 +53,6 @@
       "options": {
         "packageRoot": "{projectRoot}/dist"
       }
-    },
-    "test": {
-      "executor": "@nx/vitest:test",
-      "cache": true,
-      "inputs": [
-        "default",
-        "^production",
-        {
-          "externalDependencies": ["vitest"]
-        }
-      ],
-      "outputs": [
-        "{workspaceRoot}/coverage/packages/apigen/apigen-generator-nx"
-      ],
-      "options": {
-        "vitestConfig": "packages/apigen/apigen-generator-nx/vite.config.ts"
-      }
     }
   }
 }
