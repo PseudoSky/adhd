@@ -59,7 +59,6 @@ import {
 
 import {
   CollisionDetectedError,
-  project,
   checkCollisions,
   envelopeKey,
   envelopeMetaKey,
