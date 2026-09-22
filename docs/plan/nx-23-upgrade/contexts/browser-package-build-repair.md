@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["docs/plan/nx-23-upgrade/SCOPE.md", "docs/plan/nx-23-upgrade/USE_CASES.md", "docs/plan/nx-23-upgrade/demo/DEMO.md", "docs/plan/nx-23-upgrade/demo/UNRESOLVED.md", "docs/plan/nx-23-upgrade/TOOLS.md", "docs/plan/nx-23-upgrade/APPROVAL.md", "docs/plan/nx-23-upgrade/contexts/_shared.md", "AGENTS.md", "CLAUDE.md", "packages/ui-react/ui-react-base-hooks/package.json", "packages/ui-react/ui-react-base-hooks/project.json", "packages/ui-react/ui-react-base-hooks/vite.config.ts"]
 mutates:    ["packages/ui-react/ui-react-base-hooks/src/lib/use-throttle/index.ts", "packages/ui-react/ui-react-base-hooks/src/lib/use-throttle-state/index.ts", "packages/ui-react/ui-react-base-hooks/src/lib/use-infinite-scroll/index.ts", "docs/plan/nx-23-upgrade/BROWSER-BUILD-REPAIR.md"]
 ```
 
