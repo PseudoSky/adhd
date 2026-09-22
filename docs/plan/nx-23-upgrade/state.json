@@ -11,10 +11,10 @@
       "end_ref": "863110448d73da17a68489e1d3cb9cc63b4965af"
     },
     "gate-triage-absorbed": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-09-22T13:55:50.701Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "1edef7995ecb01290b9c794f59fa1f51e06eac13",
       "end_ref": null
     },
     "config-repair-absorbed": {
