@@ -333,11 +333,24 @@ async function deriveMembers(
   // probe: true => Turso, whose vector support this async seam serves;
   // false => a substrate this seam does not serve. Refuse loudly (log,
   // absent members) rather than half-work.
-  if (adapter.capabilities.nativeVectors !== true) {
+  //
+  // The deref is OPTIONAL-CHAINED because `capabilities` is not guaranteed to
+  // exist at RUNTIME even though `StoreAdapter.capabilities` is required by
+  // the published type: a structural adapter double (a minimal host, a test
+  // double) can omit it, and this module's whole contract — documented at the
+  // top of this file and in SPEC.md §5b — is that `deriveMembers` degrades to
+  // ABSENT members and NEVER throws. Dereferencing it raw threw a TypeError
+  // that `api.ts` could only classify as `internal`, failing EVERY write and
+  // query verb against an otherwise-valid store (the same failure class as the
+  // absent-`cfg` TypeError this function's own first guard already fixes). An
+  // absent `capabilities` is "not Turso" — exactly the same honest degrade as
+  // `nativeVectors: false`.
+  const nativeVectors = adapter.capabilities?.nativeVectors;
+  if (nativeVectors !== true) {
     log(
       `backlog: embedding.enabled is set but this store's adapter does not report capabilities.nativeVectors ` +
         `(got ${JSON.stringify(
-          adapter.capabilities.nativeVectors
+          nativeVectors
         )}) — backlog's RAG layer requires a Turso-backed store. ` +
         `create()'s duplicate gate and query()'s/view:"similar"'s semantic filters will report as unconfigured.`
     );

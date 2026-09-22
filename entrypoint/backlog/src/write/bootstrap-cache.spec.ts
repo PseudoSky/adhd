@@ -41,6 +41,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
+import type { StoreAdapter } from '@adhd/sox-store-adapter';
 import type { BacklogConfig } from '../env.js';
 import {
   bootstrapSemanticStoreMembers,
@@ -200,6 +201,60 @@ describe('bootstrapSemanticStoreMembers — a soft failure must not be latched',
       expect(second.search).toBe(first.search);
       expect(second.embedding).toBe(first.embedding);
       expect(providerSpy.createProvider).toBe(1);
+    } finally {
+      await store.close();
+    }
+  });
+});
+
+describe('bootstrapSemanticStoreMembers — a missing adapter capability must not throw', () => {
+  /**
+   * The NEVER-THROWS contract's one unguarded deref: `deriveMembers` read
+   * `adapter.capabilities.nativeVectors` directly. `StoreAdapter.capabilities`
+   * is required by the published TYPE but not guaranteed at RUNTIME — a
+   * structural adapter double (a minimal host, a test double) can omit it, and
+   * the raw deref threw a TypeError that `api.ts` could only classify as
+   * `internal`, failing EVERY write and query verb against an otherwise-valid
+   * store. That is one of the five soft paths this file's header already
+   * enumerates (the non-Turso-adapter path). The probe is now optional-chained
+   * (`adapter.capabilities?.nativeVectors`), so an absent `capabilities` reads
+   * as "not Turso" — the same honest degrade as `nativeVectors: false`.
+   *
+   * TEETH (verified by temporary revert): remove the `?.` (back to
+   * `adapter.capabilities.nativeVectors`) and this test goes RED —
+   * `bootstrapSemanticStoreMembers` rejects with the TypeError instead of
+   * resolving to the member-less `{}`.
+   */
+  it('an adapter with NO `capabilities` degrades to absent members and logs the capability miss', async () => {
+    const store = await openTestIssueStore(tmpDbPath());
+    try {
+      // A capability-less adapter double: `Object.create` shadows the real
+      // adapter's inherited `capabilities` getter with an own `undefined`, so
+      // every OTHER member stays a genuine adapter (none is reached — the
+      // guard returns first). A real `createStoreAdapter` ALWAYS sets
+      // `capabilities`, so this derived object is the only way to reach the
+      // guard's early-return branch.
+      const capabilityLess: StoreAdapter = Object.create(store.adapter, {
+        capabilities: { value: undefined, configurable: true, writable: true },
+      });
+
+      const logs: string[] = [];
+      const members = await bootstrapSemanticStoreMembers(
+        capabilityLess,
+        store.graph,
+        CFG,
+        (m) => logs.push(m)
+      );
+
+      // The never-throws contract: member-less, NOT a rejection.
+      expect(members.search).toBeUndefined();
+      expect(members.embedding).toBeUndefined();
+
+      // …and it took the capability GUARD, not some other early return: the
+      // logged value is the guarded `undefined`, proving `?.` supplied it.
+      const logged = logs.join('\n');
+      expect(logged).toContain('does not report capabilities.nativeVectors');
+      expect(logged).toContain('(got undefined)');
     } finally {
       await store.close();
     }
