@@ -6,11 +6,13 @@
 > **Historical note (retired design).** An earlier revision of this document
 > specified a general plugin host — `src/plugins/` (`types.ts`, `registry.ts`),
 > an `embedding-remote` plugin, an `embed-pipeline.ts`, and a `flushEmbeds()`
-> drain. **None of that shipped**: there is no `src/plugins/` tree in this
-> package (never was, on any branch), no `embedding-remote` plugin, no
-> `embed-pipeline.ts`, and no store-level embed drain. The shipped path is a
-> single lazy, per-adapter bootstrap (`write/bootstrap.ts`). This document now
-> describes what exists today.
+> drain. **None of that plugin host shipped**: there is no `src/plugins/` tree
+> in this package (never was, on any branch), no `embedding-remote` plugin, and
+> no `embed-pipeline.ts`. The shipped path is a single lazy, per-adapter
+> bootstrap (`write/bootstrap.ts`). A bounded close-time `flushEmbeds()` drain
+> does exist (`write/embed-drain.ts`, surfaced as `GraphBacklogStore.flushEmbeds`)
+> — but it is a small durability backstop, not the retired plugin-host pipeline.
+> This document describes what exists today.
 
 ---
 
@@ -108,7 +110,10 @@ runs strictly after the subject transaction commits, off the write lock.
 - **No embedding daemon owned by backlog.** The default provider is in-process
   fastembed; a remote/service-backed provider type is a provider-package
   concern, selected by `embedding.provider`.
-- **No store-level embed drain.** There is no `flushEmbeds()` and no
-  `embed-pipeline.ts`; the durability guarantee is the per-write `awaitEmbed`.
+- **No plugin-host embed pipeline.** There is no `embed-pipeline.ts` and no
+  `src/plugins/`. The durability guarantee is the per-write `awaitEmbed` plus a
+  bounded close-time `GraphBacklogStore.flushEmbeds()` drain
+  (`write/embed-drain.ts`) that records anything unsettled at the bound as a
+  durable `embedding_failed` audit row before the adapter closes.
 - memory-server adopting a shared embedding service is an ecosystem concern,
   separate from backlog.

@@ -38,11 +38,12 @@ Backlog never touches a raw database driver handle. Every escape-hatch SQL path 
 
 ### 2.2 Durability for short-lived processes
 
-Fire-and-forget is correct for a long-lived server (the vector lands milliseconds later). It is wrong for a one-shot process — a CLI command that exits before the embed resolves loses the vector permanently. The live write layer closes that gap **per write**, not with a store-level drain:
+Fire-and-forget is correct for a long-lived server (the vector lands milliseconds later). It is wrong for a one-shot process — a CLI command that exits before the embed resolves loses the vector permanently. Two mechanisms close that gap:
 
-- `CreateIssueInput` / `UpdateIssueInput` / `DeleteIssueInput` carry `awaitEmbed?: boolean` (default `false` — the fire-and-forget server behavior).
-- `create`/`update`/`delete` each call `scheduleIssueEmbedding(...)` strictly AFTER their subject transaction commits, and `await` the returned promise when `awaitEmbed` is `true`.
-- A one-shot host that needs a durable vector passes `awaitEmbed: true` on the write that produced it. There is no `GraphBacklogStore.flushEmbeds()` drain and no per-store in-flight set: that mechanism belonged to the deleted `store/embed-queue.ts`, and `closeGraphBacklogStore` no longer drains — it closes the adapter and nothing else. A caller that never sets `awaitEmbed: true` still reproduces the lost-vector defect; the awaited per-write promise is what closes it now.
+- **Per-write await.** `CreateIssueInput` / `UpdateIssueInput` / `DeleteIssueInput` carry `awaitEmbed?: boolean` (default `false` — the fire-and-forget server behavior). `create`/`update`/`delete` each call `scheduleIssueEmbedding(...)` strictly AFTER their subject transaction commits, and `await` the returned promise when `awaitEmbed` is `true`.
+- **Close-time drain (the backstop).** Every scheduled embed is registered with a per-adapter in-flight registry (`write/embed-drain.ts`, a `WeakMap<StoreAdapter, …>` mirroring `write/bootstrap.ts`'s `membersCache`). `closeGraphBacklogStore` — which every one-shot host's `finally` already calls, via `closeGraphBacklogStoreSafe` — drains that registry **bounded** (`DEFAULT_EMBED_DRAIN_TIMEOUT_MS`, 30s; a tuning threshold, never a feature gate) BEFORE `adapter.close()`, and records any embed still unsettled at the bound as a durable `embedding_failed` audit row **while the connection is still open**. `GraphBacklogStore.flushEmbeds()` is that same drain, callable directly.
+
+A **recorded** close-time failure (the `embedding_failed` row is durable) warns on stderr but leaves the exit code alone: the subject write genuinely succeeded and the failure is recorded, so `create` still reports `ok:true`. An **unrecorded** death — the round-trip failed AND its `embedding_failed` audit row could not be written, so nothing durable records it — warns loudly and sets `process.exitCode = 1`. A scheduled embed can therefore be reported as failed while the subject write stands, but it can never die unrecorded behind a clean exit.
 
 ### 2.3 Re-embed on edit
 
@@ -115,7 +116,7 @@ RAG operations land on the existing 14-verb surface (`src/api.ts`; `get, query, 
 6. **`clusterIntoPlans` groups real embedded items** — 4 semantically close OAuth items cluster together; 2 unrelated items stay out. Asserts on real DBSCAN output.
 7. **RAG-not-configured degrades cleanly** — semantic operations throw `RagNotConfiguredError` against a store without embedding config, while `listItems({ grep })` keeps returning real FTS results.
 8. **`nx build backlog` + `nx run backlog:verify-dist-load`** stay green — the shipped `dist/` loads the native/ONNX-bearing dependencies.
-9. **A short-lived process's embed survives exit** — write with `awaitEmbed: true`, reopen a fresh store on the same file, assert the vector is present AND a semantic read (`view:"similar"`) returns the item. Negative control: write with the default fire-and-forget and exit before the returned promise settles — the reopened store's vector lookup is `null`, proving the awaited per-write promise (not any store-level drain) is what closes the gap.
+9. **A short-lived process's embed survives exit** — write with `awaitEmbed: true`, reopen a fresh store on the same file, assert the vector is present AND a semantic read (`view:"similar"`) returns the item. The fire-and-forget default is equally durable through the close-time drain: write without `awaitEmbed`, then close via `closeGraphBacklogStore` before the embed settles — the drain either lets the embed land or records it as a durable `embedding_failed` row, never a silent drop. An embed that dies **unrecorded** makes `closeGraphBacklogStoreSafe` warn loudly and set `process.exitCode = 1`.
 10. **Provenance** — `embed_model` stamp equals the resolved `modelInfo` modelId. Negative control: a backend reporting a model id the client never resolved is rejected.
 
 Every test uses a real Turso DB + real embeddings under `tmp/backlog/<test-name>/`, removed on teardown.

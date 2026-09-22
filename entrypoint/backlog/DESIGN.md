@@ -499,9 +499,12 @@ typed "not configured" error, never a silently-wrong keyword substitute.
   FTS-only reachability; it never fails the write that already committed, and
   the returned promise never rejects into the caller. `awaitEmbed: true` awaits
   that promise before the verb returns — the durability guarantee for a
-  short-lived process. There is no store-level drain: the old
-  `flushEmbeds`/in-flight-set mechanism was deleted with `store/embed-queue.ts`,
-  and `closeGraphBacklogStore` no longer drains.
+  short-lived process. `closeGraphBacklogStore` also runs a bounded close-time
+  drain (`GraphBacklogStore.flushEmbeds()`, backed by `write/embed-drain.ts`'s
+  per-adapter in-flight registry) BEFORE closing the adapter, so a
+  fire-and-forget embed still lands — or, if it cannot settle before the bound,
+  is recorded as a durable `embedding_failed` audit row while the connection is
+  still open. An unrecorded death warns loudly and sets `process.exitCode = 1`.
 - **Dedupe (§2.4):** once embeddings are enabled, `createIssue`'s dedupe scan
   gains a nearest-neighbor candidate source over `content` embeddings, ranked
   against the project's `dedupe_threshold` policy value — `force` still lets a
