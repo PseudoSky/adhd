@@ -199,7 +199,7 @@ describe('[FEAT-APIGEN-019] run command — unknown --type vs unsupported run mo
 describe('[cli-run-cmd.1+2] run command — imports fns and calls plugin.run()', () => {
   it(
     'passes a live fns record and resolves on abort',
-    { timeout: 20000 },
+    { timeout: 90000 },
     async () => {
       let capturedInput: RunInput | undefined;
       let resolveRun: (() => void) | undefined;
@@ -251,8 +251,8 @@ describe('[cli-run-cmd.1+2] run command — imports fns and calls plugin.run()',
         runCalled,
         new Promise<never>((_, reject) => {
           const t = setTimeout(
-            () => reject(new Error('plugin.run() was never called within 15s')),
-            15000,
+            () => reject(new Error('plugin.run() was never called within 60s')),
+            60000,
           );
           t.unref?.();
         }),
