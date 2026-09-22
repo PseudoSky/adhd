@@ -61,7 +61,26 @@
  */
 
 import { writeAudit } from './audit.js';
-import { type IWriteStoreHandle, executeWriteTransaction } from './tx.js';
+import {
+  type IEmbeddingBackend,
+  type IWriteStoreHandle,
+  executeWriteTransaction,
+} from './tx.js';
+import {
+  embedDrainFor,
+  type EmbedOutcome,
+  type IPendingEmbed,
+} from './embed-drain.js';
+
+/**
+ * The `note` every close-time drain failure carries on its `embedding_failed`
+ * audit row — so a vector that was still in flight when the store closed is
+ * distinguishable, in the durable audit trail, from one whose round-trip
+ * itself failed (`scheduleIssueEmbedding`'s own failure note is the error
+ * message). See `graph-backlog-store.ts`'s `closeGraphBacklogStore`.
+ */
+export const EMBED_DRAIN_TIMEOUT_NOTE =
+  'embed did not settle before store close — recorded by the close-time drain (RAG-SPEC.md §2.2)';
 
 /**
  * The exact text an issue is embedded from — `${title}\n${body}`.trim().
@@ -100,22 +119,19 @@ export type IScheduleEmbeddingInput =
   | (IScheduleEmbeddingBase & { action: 'delete' });
 
 /**
- * Runs the embed-or-delete round-trip against `handle.embedding` (a true
- * no-op, no audit row, when unconfigured — see `IWriteStoreHandle.embedding`'s
- * own doc comment) and unconditionally persists the outcome as one
- * `embedding_upserted`/`embedding_deleted`/`embedding_failed` audit row, in
- * its OWN follow-up `immediate` transaction opened via the SAME
- * `executeWriteTransaction` every subject write uses (§4a: "in its OWN
- * follow-up `immediate` transaction, opened after the subject write's own
- * transaction has already committed").
+ * Schedules the embed-or-delete round-trip and REGISTERS its promise with the
+ * per-adapter drain registry (`write/embed-drain.ts`), so a short-lived
+ * process can await it before `close()` instead of losing it. A true no-op
+ * (no registration, no audit row) when `handle.embedding` is unconfigured —
+ * see `IWriteStoreHandle.embedding`'s own doc comment.
  *
- * **Never throws.** Both the embed/vector round-trip AND the audit write are
- * individually try/caught; a failure in either degrades to a `console.error`
- * (§4b: "degrades to a log") and, for the embed/vector round-trip
- * specifically, ALSO an `embedding_failed` audit row — never a silent drop,
- * and never a failure that propagates back through the `create`/`update`
- * call that scheduled it (which, on the fire-and-forget default path, may
- * already have returned to ITS OWN caller by the time this settles).
+ * **Non-async wrapper, deliberately.** The body lives in
+ * {@link runEmbedRoundTrip} so this function can register the promise it
+ * creates and read its outcome without re-awaiting it. The returned promise
+ * is still `Promise<void>` and still never rejects, so every existing
+ * `await`/fire-and-forget call site is unchanged. Callers that omit
+ * `awaitEmbed` (the default) get fire-and-forget — the close-time drain is
+ * the backstop that makes it durable anyway.
  *
  * Must be called strictly AFTER the caller's own `executeWriteTransaction`
  * has resolved (i.e. after the subject transaction committed) — never from
@@ -125,13 +141,67 @@ export type IScheduleEmbeddingInput =
  * callback, and either await the returned promise (`awaitEmbed:true`) or
  * let it run fire-and-forget (the default).
  */
-export async function scheduleIssueEmbedding(
+export function scheduleIssueEmbedding(
   handle: IWriteStoreHandle,
   input: IScheduleEmbeddingInput
 ): Promise<void> {
   const backend = handle.embedding;
-  if (!backend) return; // unconfigured — true no-op, no audit row (IWriteStoreHandle.embedding's own contract)
+  if (!backend) return Promise.resolve(); // unconfigured — true no-op, no audit row (IWriteStoreHandle.embedding's own contract)
 
+  const settled = runEmbedRoundTrip(handle, backend, input); // never rejects (existing contract)
+  const entry: IPendingEmbed = {
+    subjectRowid: input.subjectRowid,
+    subjectUid: input.subjectUid,
+    actor: input.actor,
+    action: input.action,
+    settled,
+    outcome: 'pending',
+  };
+  const unregister = embedDrainFor(handle.adapter).register(entry);
+  settled.then(
+    (outcome) => {
+      entry.outcome = outcome;
+      // A recorded outcome's disposer fires (the entry leaves the registry).
+      // An `'unrecorded'` entry deliberately STAYS registered so a later
+      // drain/close can observe and report it — the drain only awaits
+      // `'pending'` entries, so retaining a settled one can never spin it.
+      if (outcome !== 'unrecorded') unregister();
+    },
+    () => {
+      // Contract breach: `runEmbedRoundTrip` is documented never to reject, so
+      // this is unreachable in practice — but if it ever happens, surface the
+      // worst case (`unrecorded`) rather than losing it. The entry stays
+      // registered for the same reason as the `'unrecorded'` branch above.
+      entry.outcome = 'unrecorded';
+    }
+  );
+  return settled.then(() => undefined);
+}
+
+/**
+ * Runs the embed-or-delete round-trip against `backend` and unconditionally
+ * persists the outcome as one
+ * `embedding_upserted`/`embedding_deleted`/`embedding_failed` audit row, in
+ * its OWN follow-up `immediate` transaction opened via the SAME
+ * `executeWriteTransaction` every subject write uses (§4a: "in its OWN
+ * follow-up `immediate` transaction, opened after the subject write's own
+ * transaction has already committed").
+ *
+ * **Never throws** (the contract {@link scheduleIssueEmbedding} depends on).
+ * Both the embed/vector round-trip AND the audit write are individually
+ * try/caught; a round-trip failure degrades to a `console.error` (§4b:
+ * "degrades to a log") AND an `embedding_failed` audit row. The ONE outcome
+ * §4b's "never only a log line a caller could miss" guarantee cannot fully
+ * close is the audit write itself failing (driver contention/IO exhausted its
+ * own retries, §4c): with no further durable sink to fall back to, this
+ * returns `'unrecorded'` — the caller's drain/close reports it loudly, and it
+ * never propagates back through the `create`/`update` that scheduled it.
+ */
+async function runEmbedRoundTrip(
+  handle: IWriteStoreHandle,
+  backend: IEmbeddingBackend,
+  input: IScheduleEmbeddingInput
+): Promise<Exclude<EmbedOutcome, 'pending'>> {
   let auditAction: EmbeddingAuditAction;
   let note: string | undefined;
 
@@ -168,16 +238,66 @@ export async function scheduleIssueEmbedding(
       });
     });
   } catch (auditErr) {
-    // The audit write itself failed (driver contention/IO exhausted its own
-    // retries, §4c) — this is the ONE outcome §4b's "never only a log line a
-    // caller could miss" guarantee cannot fully close, since there is no
-    // further durable sink to fall back to. Logged loudly rather than
-    // silently dropped; never rethrown, preserving this function's
-    // never-throws contract.
     // eslint-disable-next-line no-console
     console.error(
       `scheduleIssueEmbedding: failed to persist "${auditAction}" audit row for issue uid="${input.subjectUid}" — the embedding outcome itself is unrecorded.`,
       auditErr
     );
+    return 'unrecorded';
   }
+
+  switch (auditAction) {
+    case 'embedding_upserted':
+      return 'upserted';
+    case 'embedding_deleted':
+      return 'deleted';
+    case 'embedding_failed':
+      return 'failed';
+  }
+}
+
+/**
+ * Records each still-unsettled embed as a durable `embedding_failed` audit
+ * row, BEFORE the store connection closes — the whole point of the bounded
+ * drain. Called by `graph-backlog-store.ts`'s `closeGraphBacklogStore` with
+ * the `stillPending` list from a timed-out drain.
+ *
+ * Per entry: one `executeWriteTransaction` + `writeAudit` with the
+ * {@link EMBED_DRAIN_TIMEOUT_NOTE}. An entry whose audit write throws lands in
+ * `unrecorded` (its outcome is not durably recorded anywhere) rather than
+ * failing the whole loop — the remaining entries still get their chance.
+ */
+export async function recordUnsettledEmbedsAsFailed(
+  handle: IWriteStoreHandle,
+  pending: readonly IPendingEmbed[]
+): Promise<{ recorded: IPendingEmbed[]; unrecorded: IPendingEmbed[] }> {
+  const recorded: IPendingEmbed[] = [];
+  const unrecorded: IPendingEmbed[] = [];
+  for (const entry of pending) {
+    try {
+      await executeWriteTransaction(handle, async (tx) => {
+        await writeAudit({
+          tx,
+          typePolicy: handle.typePolicy,
+          subjectRowid: entry.subjectRowid,
+          subjectUid: entry.subjectUid,
+          subjectKind: 'issue',
+          actor: entry.actor,
+          action: 'embedding_failed',
+          note: EMBED_DRAIN_TIMEOUT_NOTE,
+        });
+      });
+      entry.outcome = 'failed';
+      recorded.push(entry);
+    } catch (auditErr) {
+      entry.outcome = 'unrecorded';
+      unrecorded.push(entry);
+      // eslint-disable-next-line no-console
+      console.error(
+        `recordUnsettledEmbedsAsFailed: could not persist the "embedding_failed" audit row for issue uid="${entry.subjectUid}" — this embed outcome is UNRECORDED.`,
+        auditErr
+      );
+    }
+  }
+  return { recorded, unrecorded };
 }
