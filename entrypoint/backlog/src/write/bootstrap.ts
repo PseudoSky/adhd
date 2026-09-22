@@ -166,6 +166,12 @@ const errText = (err: unknown): string =>
  * `BacklogConfig` (neither object-stable across calls), is the correct cache
  * key. A `WeakMap` never blocks a closed/discarded adapter (in tests) from
  * being garbage-collected.
+ *
+ * **Only a SUCCESSFUL, member-ful derive is retained.** A member-less result
+ * (`{}` — see {@link deriveMembers}'s five soft paths) is evicted on
+ * resolution, and a REJECTED derive is evicted on rejection, so a transient
+ * failure self-heals on the next semantic verb instead of latching for the
+ * adapter/process lifetime. See {@link bootstrapSemanticStoreMembers}.
  */
 const membersCache = new WeakMap<StoreAdapter, Promise<SemanticStoreMembers>>();
 
@@ -174,6 +180,24 @@ const membersCache = new WeakMap<StoreAdapter, Promise<SemanticStoreMembers>>();
  * `adapter`/`graph` pair, memoized per `adapter` instance. `cfg` is
  * `BacklogConfig['embedding']` (`env.ts`) — the caller passes
  * `ctx.env.config.embedding` verbatim.
+ *
+ * **The cache holds only a successful, member-ful derive.** `deriveMembers`
+ * never throws on a soft failure — it returns `{}` (both members absent) from
+ * five paths: `embedding` disabled, a non-Turso adapter (`nativeVectors !==
+ * true`), the optional packages unresolvable, `createEmbeddingProvider`
+ * throwing, or `openTursoVectorStore`/`ensureSpace` throwing. Several of those
+ * are TRANSIENT (a provider briefly unreachable, a store-open that hit a lock),
+ * so a member-less result is evicted rather than cached: the next semantic verb
+ * re-derives and recovers without a process restart. A hard rejection is
+ * likewise evicted, so it is surfaced to the current caller and retried later
+ * rather than replayed forever. Only a member-ful success is retained, which is
+ * where the expensive cold load actually is.
+ *
+ * (The `cfg.enabled === false` case is member-less and so is not retained
+ * either — but it does no I/O at all: `deriveMembers` returns `{}` on its first
+ * line. Re-deriving it per verb costs a `WeakMap` miss and a branch, which is
+ * cheaper than carrying a second "is it safe to cache?" signal through
+ * `deriveMembers`. Stated here as the deliberate choice.)
  *
  * @param log where a failed opt-in is reported (never thrown — mirrors
  *   `store/semantic-search.ts`'s own former `enableSemanticSearchFromConfig`
@@ -188,9 +212,29 @@ export async function bootstrapSemanticStoreMembers(
 ): Promise<SemanticStoreMembers> {
   const cached = membersCache.get(adapter);
   if (cached) return cached;
+  // Publish the in-flight promise BEFORE awaiting so concurrent callers share
+  // one derive (never two cold loads). It is replaced/evicted below unless the
+  // derive resolves member-ful.
   const pending = deriveMembers(adapter, graph, cfg, log);
   membersCache.set(adapter, pending);
-  return pending;
+  try {
+    const members = await pending;
+    if (members.search === undefined && members.embedding === undefined) {
+      // Member-less is not terminal: evict so the next call retries.
+      membersCache.delete(adapter);
+    }
+    return members;
+  } catch (err) {
+    // A rejected derive must not be latched either (finding 65481b78 — the
+    // surviving-path twin of BUG 8168bc41, fixed in `store/semantic-search.ts`):
+    // in a long-lived `serve`, one transient failure — a momentarily
+    // unreachable provider, a store-open that hit a lock — would otherwise
+    // permanently disable the semantic members for the process lifetime with no
+    // recovery short of a restart. Evict, surface now, retry on the next call
+    // rather than replaying the same rejection forever.
+    membersCache.delete(adapter);
+    throw err;
+  }
 }
 
 async function deriveMembers(
@@ -216,11 +260,23 @@ async function deriveMembers(
   // probe: true => Turso, whose vector support this async seam serves;
   // false => a substrate this seam does not serve. Refuse loudly (log,
   // absent members) rather than half-work.
-  if (adapter.capabilities.nativeVectors !== true) {
+  //
+  // The deref is OPTIONAL-CHAINED (finding 65481b78) because `capabilities` is
+  // not guaranteed to exist at RUNTIME even though `StoreAdapter.capabilities`
+  // is required by the published type: a structural adapter double (a minimal
+  // host, a test double) can omit it, and this module's whole contract is that
+  // `deriveMembers` degrades to ABSENT members and NEVER throws. Dereferencing
+  // it raw threw a TypeError that `api.ts` could only classify as `internal`,
+  // failing EVERY write and query verb against an otherwise-valid store (the
+  // same failure class as the absent-`cfg` TypeError this function's own first
+  // guard already fixes). An absent `capabilities` is "not Turso" — exactly the
+  // same honest degrade as `nativeVectors: false`.
+  const nativeVectors = adapter.capabilities?.nativeVectors;
+  if (nativeVectors !== true) {
     log(
       `backlog: embedding.enabled is set but this store's adapter does not report capabilities.nativeVectors ` +
         `(got ${JSON.stringify(
-          adapter.capabilities.nativeVectors
+          nativeVectors
         )}) — backlog's RAG layer requires a Turso-backed store. ` +
         `create()'s duplicate gate and query()'s/view:"similar"'s semantic filters will report as unconfigured.`
     );
