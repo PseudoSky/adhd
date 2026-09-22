@@ -4,11 +4,11 @@
   "dag": "dag.json",
   "states": {
     "upgrade-baseline": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-09-22T04:33:52.194Z",
-      "done_at": null,
+      "done_at": "2026-09-22T04:36:46.076Z",
       "start_ref": "477dfd3f675fe1e5a9f497c9d4d135361c460d6c",
-      "end_ref": null
+      "end_ref": "863110448d73da17a68489e1d3cb9cc63b4965af"
     },
     "gate-triage-absorbed": {
       "status": "pending",
@@ -137,7 +137,20 @@
       "end_ref": null
     }
   },
-  "transition_log": [],
+  "transition_log": [
+    {
+      "ts": "2026-09-22T04:36:46.076Z",
+      "from": "upgrade-baseline",
+      "to": "upgrade-baseline",
+      "start_ref": "477dfd3f675fe1e5a9f497c9d4d135361c460d6c",
+      "end_ref": "863110448d73da17a68489e1d3cb9cc63b4965af",
+      "audit_exit": 26,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 29,
+      "by": "pseudosky",
+      "note": "Created docs/plan/nx-23-upgrade/BASELINE.md as a measured toolchain baseline (nx 23.2.1, vite 8.3.0, vitest 4.1.9, typescript 6.0.3 measured by running), recorded the vitest ceiling + @nx/vitest peer-range evidence, project/target counts (70 projects; build 63, test 63, lint 62, typecheck 62), the nx run-many -t build health sweep (62/63 green; ui-react-base-hooks:build red), the deferred bump naming vite-cjs-import-meta-repair, and the CJS defect cost (apigen-cli:test 28/188 green on vite 6.4.3 -> 26 failed/162 passed on vite 8.3.0). Committed BASELINE.md alone as 86311044. Guard red before, green after. Flagged two deviations: (1) the --start transition swept the pre-staged vite bump into commit 6a6e4176 (tool commits without a pathspec); (2) 8 packages/agent/* package.json still declare devDependencies.vite ~5.0.13 (resolving to nested vite 5.0.13), outside this state reservation."
+    }
+  ],
   "amendment_log": [
     {
       "ts": "2026-09-22T03:40:21.214Z",
@@ -172,7 +185,7 @@
     "version": "0.8.25",
     "hash": "961c3053dfab"
   },
-  "current_state": "upgrade-baseline",
+  "current_state": "vite-cjs-import-meta-repair",
   "dod_provenance": {
     "confirmed_at": "2026-09-22T02:05:38.210Z",
     "by": "pseudosky",
