@@ -17,6 +17,13 @@
  * has an `iter()` that THROWS, so this suite is RED if the probe ever
  * regresses to the `iter`-first-row scan it replaced — the negative control
  * for the bounded-probe contract.
+ *
+ * Embeddings mocked here: `vi.mock('@adhd/sox-embedding-provider')` installs
+ * `createFakeEmbeddingModule` — the deterministic in-process stand-in from
+ * `test/helpers/fake-embedding-provider.ts` (cost only, per STATE.md's scoped
+ * authorization) — so no real ONNX model is ever loaded by this suite. The
+ * vector store is mocked too (its `hasVectors`/`iter` calls are the whole
+ * observable); neither mock is ever replaced by a real load.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakeEmbeddingModule } from '../test/helpers/fake-embedding-provider.js';
