@@ -18,6 +18,7 @@
 
 - [browser-cjs-umd-repair.1] Both browser CJS and UMD bundles are free of the empty-import-meta token and of the node-only shim
 
+- [browser-cjs-umd-repair.2] The default-running browser acceptance spec exists
 ---
 
 ## Reservations
