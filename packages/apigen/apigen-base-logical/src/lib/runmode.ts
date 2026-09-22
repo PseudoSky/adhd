@@ -392,6 +392,46 @@ function pickUnionBranch(
     }
   }
 
+  // ── Implicit discriminator (no `discriminator.propertyName` declared) ──────
+  // BUG-BACKLOG-QUERY-REGISTRY-VIEW-STRIPPED-001: `scoreUnionBranch` below
+  // scores ONLY the branch's OWN top-level required/declared keys against the
+  // value's OWN top-level keys — it never inspects a nested property's
+  // element schema. Two branches that happen to declare the exact same
+  // top-level property NAMES (e.g. `{view:'ready', items: IIssueCard[]}` vs
+  // `{view:'projects', items: IProjectSummary[]}` — both declare `view` +
+  // `items`) therefore score an EXACT TIE regardless of what `items` actually
+  // holds, and the documented tie-break ("earliest declared branch wins")
+  // silently re-encodes every tied branch using whichever was declared
+  // first — dropping every field the real value has that the winning
+  // branch's (wrong) schema doesn't also declare.
+  //
+  // Live-verified on `@adhd/backlog`'s `query` verb: `IIssueQueryResult`'s
+  // `view:'ready'|'stale'|'similar'|'projects'|'components'|'locations'`
+  // members are exactly this shape, and `view:'projects'`/`'components'`/
+  // `'locations'` responses were silently re-encoded against an
+  // `items: IIssueCard[]` branch (whichever `view`-tagged branch happened to
+  // be declared earliest) over EVERY transport (CLI/MCP/HTTP) — stripping
+  // `name`/`path`/`projectUid`/`locType`/`value`/`componentUid`, leaving only
+  // `uid` (the one field name `IIssueCard` and the registry summary types
+  // happen to share). No `discriminator` was declared for this union at all
+  // (an anonymous TS union of inline object-literal types, not named
+  // interfaces each carrying their own `kind`-style tag apigen recognizes as
+  // discriminator-worthy), so step 1 above never even ran.
+  //
+  // This is the SAME reasoning an explicit discriminator already encodes —
+  // "a shared property pinned to a distinct literal per branch tells you
+  // which branch a value belongs to" — just recovered for the case where the
+  // schema generator did not emit a formal `discriminator` block: scan every
+  // branch for a property whose schema is a literal (`const`, or a
+  // single-value `enum`), keep only the properties where every branch that
+  // declares it pins a DISTINCT literal (a repeated or partially-declared
+  // literal discriminates nothing), and match the runtime value's own value
+  // for that property against those literals. Strictly additive: a union
+  // with no such property behaves exactly as before (this returns
+  // `undefined` immediately and structural scoring runs unchanged).
+  const implicit = findImplicitDiscriminatorBranch(value, oneOf, ctx);
+  if (implicit) return implicit;
+
   // ── Structural match ───────────────────────────────────────────────────────
   // Score every branch; keep the strictly-best. Ties resolve to the EARLIEST
   // branch, preserving declaration order as the documented tie-break.
@@ -416,6 +456,67 @@ function pickUnionBranch(
 function resolveBranch(branch: SchemaNode, ctx: TranscodeCtx): SchemaNode {
   const ref = branch['$ref'];
   return typeof ref === 'string' ? ctx.resolve(ref) : branch;
+}
+
+/** The literal value a property schema pins — `const`, or a single-element `enum` — `undefined` if it isn't a literal-valued schema at all. */
+function literalValueOf(schema: SchemaNode): unknown {
+  if ('const' in schema) return schema['const'];
+  const enumVals = schema['enum'];
+  if (Array.isArray(enumVals) && enumVals.length === 1) return enumVals[0];
+  return undefined;
+}
+
+/**
+ * Finds a branch by an IMPLICIT discriminator — a property present, as a
+ * literal (`const`/single-value `enum`), on ≥2 branches with DISTINCT literal
+ * values — when no explicit `schema.discriminator` resolved one. See the
+ * caller's own doc comment (`pickUnionBranch`) for the full rationale.
+ * Returns `undefined` (never throws, never guesses) when no such property
+ * exists, or when the value's own tag matches none of the declared literals —
+ * both cases fall through to structural scoring unchanged.
+ */
+function findImplicitDiscriminatorBranch(
+  value: unknown,
+  oneOf: SchemaNode[],
+  ctx: TranscodeCtx
+): SchemaNode | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  const bag = value as Record<string, unknown>;
+  const resolvedBranches = oneOf.map((b) => resolveBranch(b, ctx));
+
+  const candidateProps = new Set<string>();
+  for (const branch of resolvedBranches) {
+    const props = branch['properties'] as
+      | Record<string, SchemaNode>
+      | undefined;
+    if (!props) continue;
+    for (const [name, propSchema] of Object.entries(props)) {
+      if (literalValueOf(propSchema) !== undefined) candidateProps.add(name);
+    }
+  }
+
+  for (const propertyName of candidateProps) {
+    const literalsByBranch = resolvedBranches.map((branch) => {
+      const props = branch['properties'] as
+        | Record<string, SchemaNode>
+        | undefined;
+      const propSchema = props?.[propertyName];
+      return propSchema ? literalValueOf(propSchema) : undefined;
+    });
+    // Only a genuine discriminator when every branch that declares this
+    // property pins it to a DISTINCT literal — a literal that repeats across
+    // branches (or is only partially declared) discriminates nothing.
+    const declared = literalsByBranch.filter((v) => v !== undefined);
+    const distinct = new Set(declared);
+    if (declared.length < 2 || distinct.size !== declared.length) continue;
+
+    const tag = bag[propertyName];
+    const matchIndex = literalsByBranch.findIndex((v) => v === tag);
+    if (matchIndex !== -1) return oneOf[matchIndex];
+  }
+  return undefined;
 }
 
 /** The JSON type name of a runtime value, for comparison against `type`. */

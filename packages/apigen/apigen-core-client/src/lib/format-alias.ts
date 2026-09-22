@@ -23,7 +23,21 @@ import type {
   TypeNode,
   TypeReferenceNode,
 } from 'ts-morph';
-import { SyntaxKind } from 'ts-morph';
+
+// PERF (BUG-APIGEN-CORE-CLIENT-STARTUP-001): `SyntaxKind` is a ts-morph
+// runtime enum used only inside `detectFormatAnnotatedAlias` below (a fully
+// synchronous, deep-in-the-hot-path helper — no reachable `await` boundary).
+// A static `import { SyntaxKind } from 'ts-morph'` pulls the whole ts-morph
+// package into every process that loads this module, even one that never
+// calls `detectFormatAnnotatedAlias` at all (e.g. `backlog --help`). Lazily
+// `require`d and memoized below.
+let _SyntaxKind: typeof import('ts-morph').SyntaxKind | undefined;
+function getSyntaxKindEnum(): typeof import('ts-morph').SyntaxKind {
+  if (_SyntaxKind) return _SyntaxKind;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  _SyntaxKind = (require('ts-morph') as typeof import('ts-morph')).SyntaxKind;
+  return _SyntaxKind;
+}
 
 /**
  * Detects a `@format` JSDoc annotation on a plain, non-generic reference to a
@@ -62,6 +76,7 @@ export function detectFormatAnnotatedAlias(
 ): string | undefined {
   try {
     if (!typeNode) return undefined;
+    const SyntaxKind = getSyntaxKindEnum();
     if (typeNode.getKind() !== SyntaxKind.TypeReference) return undefined;
 
     const refNode = typeNode as TypeReferenceNode;
