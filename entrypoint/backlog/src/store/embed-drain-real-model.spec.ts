@@ -87,6 +87,11 @@ describe('close-time embed drain — real fastembed + spawned bin', () => {
             'real semantic backend unavailable: bootstrapSemanticStoreMembers returned no search/embedding members — is fastembed + the bge-base-v1.5 model available?'
           );
         }
+        // Warm the model OUTSIDE the drain's bound: a cold ONNX load inside
+        // the timed `create`→close window could otherwise push the embed past
+        // the bound. This also leaves the model cached on disk for the spawned
+        // bin below.
+        await members.embedding.embedDocument('warmup');
 
         const proj = await upsertProject(ctx, { name: 'P', by: 't' });
         expect(isOutcomeOk(proj), JSON.stringify(proj)).toBe(true);
