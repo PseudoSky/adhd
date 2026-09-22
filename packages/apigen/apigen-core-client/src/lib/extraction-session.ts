@@ -36,6 +36,7 @@
 
 import type { Project, SourceFile } from 'ts-morph';
 import fs from 'node:fs';
+import { lazyRequire } from './esm-require';
 
 // PERF (BUG-APIGEN-CORE-CLIENT-STARTUP-001): `Project` is used as a runtime
 // VALUE (via `new Project(...)`) inside `syntacticResolverProject()` and
@@ -43,14 +44,16 @@ import fs from 'node:fs';
 // static `import { Project } from 'ts-morph'` pulls the whole ts-morph
 // package (and its bundled TypeScript) into every process that loads this
 // module, even one that never actually builds a Project (e.g. `backlog
-// --help`). Lazily `require`d and memoized below; every other usage in this
-// file is a TYPE position and stays on the `import type` above (erased at
-// compile time, zero runtime cost).
+// --help`). Lazily resolved and memoized below via `lazyRequire` (the
+// ESM-safe `createRequire` shim — see `./esm-require.ts`; a bare `require`
+// here threw `ReferenceError: require is not defined` in the built
+// `dist/index.mjs`); every other usage in this file is a TYPE position and
+// stays on the `import type` above (erased at compile time, zero runtime
+// cost).
 let _Project: typeof import('ts-morph').Project | undefined;
 function getProjectCtor(): typeof import('ts-morph').Project {
   if (_Project) return _Project;
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  _Project = (require('ts-morph') as typeof import('ts-morph')).Project;
+  _Project = (lazyRequire('ts-morph') as typeof import('ts-morph')).Project;
   return _Project;
 }
 

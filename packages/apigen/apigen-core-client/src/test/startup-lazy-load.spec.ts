@@ -47,6 +47,14 @@ const MODULE_UNDER_TEST = path.resolve(
   'lib',
   'extraction-session.ts'
 );
+/**
+ * `extraction-session.ts` now reaches `require` through the ESM-safe
+ * `lazyRequire` shim (review 663d463c / BUG-APIGEN-CORE-CLIENT-ESM-REQUIRE-001)
+ * rather than a bare `require`. The scratch transpile below loads the module
+ * in isolation, so it must also drop the shim beside it. See
+ * `toCommonJsEsmShim`.
+ */
+const ESM_REQUIRE_MODULE = path.resolve(HERE, '..', 'lib', 'esm-require.ts');
 
 /** The heavy deps the startup fix must keep off the import path. */
 const GUARDED_SPECIFIERS = ['ts-morph', 'ts-json-schema-generator'];
@@ -63,6 +71,19 @@ function toCommonJs(source: string): string {
   return ts.transpileModule(source, {
     compilerOptions: TRANSPILE_OPTIONS,
   }).outputText;
+}
+
+/**
+ * Transpile the `esm-require.ts` shim to a CJS scratch module.
+ *
+ * `ts.transpileModule` leaves `import.meta.url` verbatim (a syntax error in
+ * CJS), so — exactly as Rollup does for the CJS build — rewrite it to
+ * `__filename`, which is the CJS-native equivalent base for `createRequire`.
+ * Deriving the shim from the REAL source (rather than hand-copying it) keeps
+ * this scratch module honest if the shim ever changes.
+ */
+function toCommonJsEsmShim(source: string): string {
+  return toCommonJs(source).replace(/import\.meta\.url/g, '__filename');
 }
 
 interface ProbeError {
@@ -135,6 +156,13 @@ describe('S-20: extraction-session import is lazy w.r.t. heavy deps', () => {
     fs.writeFileSync(
       sessionCjsPath,
       toCommonJs(fs.readFileSync(MODULE_UNDER_TEST, 'utf8'))
+    );
+
+    // The shim `extraction-session.ts` now imports — resolved from the scratch
+    // dir by the transpiled `require('./esm-require')` above.
+    fs.writeFileSync(
+      path.join(scratchDir, 'esm-require.js'),
+      toCommonJsEsmShim(fs.readFileSync(ESM_REQUIRE_MODULE, 'utf8'))
     );
 
     fixturePath = path.join(scratchDir, 'probe-entry.ts');

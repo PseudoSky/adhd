@@ -7,24 +7,20 @@ import path from 'node:path';
 // `await import()` is not reachable there). A static `import { ... } from
 // 'ts-json-schema-generator'` pulls the WHOLE package (and its bundled
 // TypeScript) into every process that loads this module — including a bare
-// `backlog --help` that never calls `buildSchema()` at all. `createParser`/
-// `createFormatter` are ALSO used in type position below (`typeof
-// createParser`), so those two stay as `import type` (erased at compile
-// time, zero runtime cost) in addition to being resolved as values through
-// the lazy `getTsjsg()` getter — see its doc comment just above
-// `getTsjsg()`.  Mirrors the existing `getTsjsTs()` lazy-`require` pattern
-// immediately below for the same package's bundled `typescript`.
-import type {
-  createParser,
-  createFormatter,
-  Config,
-  CompletedConfig,
-} from 'ts-json-schema-generator';
+// `backlog --help` that never calls `buildSchema()` at all. Both
+// `createParser` and `createFormatter` are resolved as runtime values through
+// the lazy `getTsjsg()` getter below — see its doc comment just above
+// `getTsjsg()`. Mirrors the existing `getTsjsTs()` lazy-`require` pattern
+// immediately below for the same package's bundled `typescript`. Both go
+// through the ESM-safe `lazyRequire` shim (see `../esm-require.ts`) — a bare
+// `require` broke the built `dist/index.mjs`.
+import type { Config, CompletedConfig } from 'ts-json-schema-generator';
 import type { Project, SourceFile } from 'ts-morph';
 import { morphFallback } from './morph-fallback';
 import { buildMapSetTupleSchema } from './map-set-tuple';
 import { withResolvedType, walkType, detectDiscriminator } from './morph-walk';
 import { X_APIGEN_LOGICAL } from '@adhd/apigen-base-logical';
+import { lazyRequire } from '../esm-require';
 import {
   fileVersion,
   persistentSchemasFor,
@@ -231,8 +227,7 @@ function buildParserAugmentor(
 let _tsjsg: typeof import('ts-json-schema-generator') | undefined;
 function getTsjsg(): typeof import('ts-json-schema-generator') {
   if (_tsjsg) return _tsjsg;
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  _tsjsg = require('ts-json-schema-generator') as typeof import('ts-json-schema-generator');
+  _tsjsg = lazyRequire('ts-json-schema-generator') as typeof import('ts-json-schema-generator');
   return _tsjsg;
 }
 
@@ -249,16 +244,14 @@ function getTsjsTs(): typeof import('typescript') {
   try {
     // ts-json-schema-generator resolves TypeScript relative to its own package
     const tsjsDir = path.dirname(
-      require.resolve('ts-json-schema-generator/package.json')
+      lazyRequire.resolve('ts-json-schema-generator/package.json')
     );
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    _tsjsTs = require(require.resolve('typescript', {
+    _tsjsTs = lazyRequire(lazyRequire.resolve('typescript', {
       paths: [tsjsDir],
     })) as typeof import('typescript');
   } catch {
     // Fallback: use whatever TypeScript is resolvable from here
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    _tsjsTs = require('typescript') as typeof import('typescript');
+    _tsjsTs = lazyRequire('typescript') as typeof import('typescript');
   }
   return _tsjsTs;
 }
@@ -574,8 +567,7 @@ function runScalarAwareGenerator(
   cacheable: boolean,
   session?: InternalExtractionSession
 ): Record<string, unknown> {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { DEFAULT_CONFIG } = require('ts-json-schema-generator/dist/src/Config.js') as { DEFAULT_CONFIG: CompletedConfig };
+  const { DEFAULT_CONFIG } = lazyRequire('ts-json-schema-generator/dist/src/Config.js') as { DEFAULT_CONFIG: CompletedConfig };
   const completedConfig: CompletedConfig = { ...DEFAULT_CONFIG, ...config };
   const pathStr = completedConfig.path as string;
 
@@ -601,8 +593,7 @@ function runScalarAwareGenerator(
     if (entry && entry.version === version) gen = entry.gen;
   }
   if (!gen) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { createProgram } = require('ts-json-schema-generator/dist/factory/program.js') as {
+    const { createProgram } = lazyRequire('ts-json-schema-generator/dist/factory/program.js') as {
       createProgram: (cfg: CompletedConfig) => unknown;
     };
     // Declared before any `typeof createParser` type-query use below so the
