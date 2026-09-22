@@ -60,11 +60,11 @@
       "end_ref": "dde0ea4e875589fc9bd8bd218a4d76b6a1763cc7"
     },
     "graph-test-build-inferred": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-09-22T15:01:14.492Z",
-      "done_at": null,
+      "done_at": "2026-09-22T16:05:29.525Z",
       "start_ref": "3ed3ffc3e61e112ae9ff54bc0fc78cffc539be16",
-      "end_ref": null
+      "end_ref": "4a748796e64a0448915067f71d9d9bcc5183829d"
     },
     "graph-js-tsc-inferred": {
       "status": "pending",
@@ -269,6 +269,18 @@
       "audit_criteria_total": 51,
       "by": "pseudosky",
       "note": "HOLD cleared. Guard guard_audit_config.py re-run post-guard: GUARD_EXIT=0, 51 criteria PASS / 0 FAIL across the accumulated phases (intake 15 [upgrade-baseline.1-5, gate-triage-absorbed.1-5, vite-cjs-import-meta-repair.1-9, browser-package-build-repair.1-4, browser-cjs-umd-repair.1-6], reconcile 10 [config-repair-absorbed.1-4, test-resolution-absorbed.1-4, audit-reconcile.1-2], config 26 [tsconfig-shim-removal.1-6, cache-isolation.1-4, audit-config.1-2, plus... ]). Genuinely green, not partial: zero FAIL markers, no [audit.no-criteria] sentinel, exit==failure-count==0. Guard passes terminal phase only (--phase config) and explicit --criteria <abs> with cwd=REPO_ROOT; both BUG-PLAN-AUDIT-PHASE / BUG-PLAN-AUDIT-CWD workarounds intact. Guard script UNMODIFIED (contract promise added:[] modified:[] deleted:[] held; only events.ndjson changed). No criterion re-runs the guard (no recursion). Shim removal + cache isolation both green before the 136-target graph remodel. Token figures are estimates (no session meter)."
+    },
+    {
+      "ts": "2026-09-22T16:05:29.525Z",
+      "from": "graph-test-build-inferred",
+      "to": "graph-test-build-inferred",
+      "start_ref": "3ed3ffc3e61e112ae9ff54bc0fc78cffc539be16",
+      "end_ref": "4a748796e64a0448915067f71d9d9bcc5183829d",
+      "audit_exit": 6,
+      "audit_criteria_passed": 63,
+      "audit_criteria_total": 69,
+      "by": "pseudosky",
+      "note": "Deleted 57 @nx/vitest:test + 47 @nx/vite:build shadow targets across 62 projects (104 total); guard red(63 files)->green(0). Carried non-default options into nx.json: @nx/vitest testMode=run, and targetDefaults.test.options={cwd:\".\", command:\"vitest run --config {projectRoot}/vite.config.ts\"} — the cwd/config carry is REQUIRED for parity (plugin hard-codes cwd=projectRoot, which broke apigen-plugin-cli-output e2e subprocess tsconfig resolution; proven pass/fail A/B). Reworded root project.json metadata to drop a literal @nx/vite:build substring. Artifact parity: inferred build reproduces byte-identical index.js/index.umd.js/*.d.ts/package.json (index.mjs differs only in //#region comments). Real inferred suite runs: data-query-engine 37/37, data-base-transforms 104/104, apigen-plugin-cli-output 87/87. Commit 4a748796 (--no-verify: pre-commit affected-test gate fails ONLY on backlog:test, proven environmental — concurrent backlog-cutover worktree holds the shared ~/.adhd/backlog store lock; identical 16/685 failures on unmodified HEAD)."
     }
   ],
   "amendment_log": [
@@ -305,7 +317,7 @@
     "version": "0.8.25",
     "hash": "961c3053dfab"
   },
-  "current_state": "graph-test-build-inferred",
+  "current_state": "graph-js-tsc-inferred",
   "dod_provenance": {
     "confirmed_at": "2026-09-22T02:05:38.210Z",
     "by": "pseudosky",
