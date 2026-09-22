@@ -29,14 +29,14 @@
       "kind": "work",
       "phase": "intake",
       "depends_on": [
-        "upgrade-baseline"
+        "browser-cjs-umd-repair"
       ],
       "guard": "test -f docs/plan/nx-23-upgrade/TRIAGE-VERDICTS.md && rg -q \"apigen-cli\" docs/plan/nx-23-upgrade/TRIAGE-VERDICTS.md && rg -q \"apigen-plugin-java-javalin\" docs/plan/nx-23-upgrade/TRIAGE-VERDICTS.md && ./node_modules/.bin/nx show projects | rg -q \"\\\"backlog\\\"\"",
       "artifacts": [
         "docs/plan/nx-23-upgrade/TRIAGE-VERDICTS.md"
       ],
       "context": "contexts/gate-triage-absorbed.md",
-      "notes": "Consume the in-flight debug triage verdict for the three test targets that failed the pre-commit gate after the vite 8 bump. Do not assume the bump is clean."
+      "notes": "Consume the in-flight debug triage verdict for the three test targets that failed the pre-commit gate after the vite 8 bump. Do not assume the bump is clean. Re-sequenced by the 2026-09-21 repair pass: the verdict is now consumed on a tree whose bump-safety fixes have landed."
     },
     "config-repair-absorbed": {
       "kind": "work",
