@@ -55,7 +55,11 @@ const REAL_BY_DESIGN = new Map([
       'proven end-to-end against the REAL fastembed model — no vi.mock of @adhd/sox-embedding-provider. ' +
       'Its assertion is a route-discriminating outcome a fake cannot honestly provide: the query shares no ' +
       'meaningful token with the created item (a grep negative control over the same text asserts it is ' +
-      'unfindable), so only the real semantic ranker can surface it.',
+      'unfindable), so only the real semantic ranker can surface it. ' +
+      'It ALSO proves the create duplicate gate against the real model: a paraphrase that shares no ' +
+      'meaningful token with an original is caught (create suppressed, the original ranked FIRST), while an ' +
+      'unrelated item is not — a synonymy judgement the deterministic fake (which has no notion of ' +
+      'synonymy) cannot honestly make.',
   ],
   [
     'src/store/embed-drain-real-model.spec.ts',
