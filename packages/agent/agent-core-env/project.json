@@ -20,6 +20,12 @@
     "publish:npm"
   ],
   "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p packages/agent/agent-core-env/tsconfig.typecheck.json --noEmit"
+      }
+    },
     "nx-release-publish": {
       "dependsOn": [
         "build",
