@@ -116,10 +116,10 @@
       "end_ref": null
     },
     "vite-cjs-import-meta-repair": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-09-22T13:17:31.300Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "c6a4760092d5d3455c90123a89d6dd132a945570",
       "end_ref": null
     },
     "browser-package-build-repair": {
