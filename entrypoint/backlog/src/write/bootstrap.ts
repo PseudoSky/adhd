@@ -207,6 +207,12 @@ const errText = (err: unknown): string =>
  * `BacklogConfig` (neither object-stable across calls), is the correct cache
  * key. A `WeakMap` never blocks a closed/discarded adapter (in tests) from
  * being garbage-collected.
+ *
+ * **Only a SUCCESSFUL, member-ful derive is retained.** A member-less result
+ * (`{}` — see {@link deriveMembers}'s five soft paths) is evicted on
+ * resolution, and a REJECTED derive is evicted on rejection, so a transient
+ * failure self-heals on the next semantic verb instead of latching for the
+ * adapter/process lifetime. See {@link bootstrapSemanticStoreMembers}.
  */
 const membersCache = new WeakMap<StoreAdapter, Promise<SemanticStoreMembers>>();
 
@@ -215,6 +221,24 @@ const membersCache = new WeakMap<StoreAdapter, Promise<SemanticStoreMembers>>();
  * `adapter`/`graph` pair, memoized per `adapter` instance. `cfg` is
  * `BacklogConfig['embedding']` (`env.ts`) — the caller passes
  * `ctx.env.config.embedding` verbatim.
+ *
+ * **The cache holds only a successful, member-ful derive.** `deriveMembers`
+ * never throws on a soft failure — it returns `{}` (both members absent) from
+ * five paths: `embedding` disabled, a non-Turso adapter (`nativeVectors !==
+ * true`), the optional packages unresolvable, `createEmbeddingProvider`
+ * throwing, or `openTursoVectorStore`/`ensureSpace` throwing. Several of those
+ * are TRANSIENT (a provider briefly unreachable, a store-open that hit a lock),
+ * so a member-less result is evicted rather than cached: the next semantic verb
+ * re-derives and recovers without a process restart. A hard rejection is
+ * likewise evicted, so it is surfaced to the current caller and retried later
+ * rather than replayed forever. Only a member-ful success is retained, which is
+ * where the expensive cold load actually is.
+ *
+ * (The `cfg.enabled === false` case is member-less and so is not retained
+ * either — but it does no I/O at all: `deriveMembers` returns `{}` on its first
+ * line. Re-deriving it per verb costs a `WeakMap` miss and a branch, which is
+ * cheaper than carrying a second "is it safe to cache?" signal through
+ * `deriveMembers`. Stated here as the deliberate choice.)
  *
  * @param log where a failed opt-in is reported (never thrown — mirrors
  *   `store/semantic-search.ts`'s own former `enableSemanticSearchFromConfig`
@@ -229,9 +253,24 @@ export async function bootstrapSemanticStoreMembers(
 ): Promise<SemanticStoreMembers> {
   const cached = membersCache.get(adapter);
   if (cached) return cached;
+  // Publish the in-flight promise BEFORE awaiting so concurrent callers share
+  // one derive (never two cold loads). It is replaced/evicted below unless the
+  // derive resolves member-ful.
   const pending = deriveMembers(adapter, graph, cfg, log);
   membersCache.set(adapter, pending);
-  return pending;
+  try {
+    const members = await pending;
+    if (members.search === undefined && members.embedding === undefined) {
+      // Member-less is not terminal: evict so the next call retries.
+      membersCache.delete(adapter);
+    }
+    return members;
+  } catch (err) {
+    // A rejected derive must not be latched either: evict, surface now, retry
+    // on the next call rather than replaying the same rejection forever.
+    membersCache.delete(adapter);
+    throw err;
+  }
 }
 
 async function deriveMembers(

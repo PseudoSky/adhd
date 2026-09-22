@@ -996,37 +996,70 @@ bootstraps (`bootstrapSemanticBackend` in `store/semantic-search.ts` vs.
 with embedding enabled pay the cold-load cost **twice**, sequentially, one
 via `getCtx()` and a second, distinct one via `writeHandle`.
 
-**Why both sites exist (do not collapse them — that is the §7a cutover's
-job, not this fix's).** `write/bootstrap.ts`'s own header states it is
-*deliberately* not built on `store/semantic-search.ts` — that module is
-"on the deletion list for an imminent hard cutover" and is coupled to types
-outside this data model. Tracing every consumer confirms the two paths now
-serve genuinely disjoint purposes:
+**Why the two bootstraps existed (and how the authoritative design resolves
+them).** `write/bootstrap.ts`'s own header states it is *deliberately* not
+built on `store/semantic-search.ts` — that module is "on the deletion list for
+an imminent hard cutover" and is coupled to types outside this data model.
+Tracing every consumer confirmed the two paths served genuinely disjoint
+purposes:
 
 - `handle.search` / `handle.embedding` (`write/bootstrap.ts`'s
   `bootstrapSemanticStoreMembers`, memoized per `StoreAdapter` in its own
-  `membersCache` `WeakMap`) is what every REAL semantic operation reads
-  today: `create-issue.ts`'s duplicate-scan gate (`scanForDuplicates`,
+  `membersCache` `WeakMap`) is what every REAL semantic operation reads:
+  `create-issue.ts`'s duplicate-scan gate (`scanForDuplicates`,
   `handle.search`), `embedding-observer.ts`'s on-write embed round-trip for
-  both `create` (`create-issue.ts`) and `update` (`write/update.ts`,
-  `handle.embedding`), `query/query.ts`'s explicit `filter.semantic`
-  branch (`queryList`, `handle.search`), and `query/views/semantic.ts`'s
-  `view:'similar'` (`handle.search`).
+  both `create` and `update` (`handle.embedding`), `query/query.ts`'s explicit
+  `filter.semantic` branch (`queryList`, `handle.search`), and
+  `query/views/semantic.ts`'s `view:'similar'` (`handle.search`).
 - The old singleton (`store/semantic-search.ts`'s
-  `configureSemanticBackend`/`isSemanticSearchReadable`) has exactly ONE
-  live consumer left: `query/query.ts`'s `resolveTextInput`, which decides
-  whether a bare `text` positional (the shared CLI-`search`/MCP/HTTP
-  free-text field, §6) auto-routes to `semantic` or `grep`
-  (`useSemantic = isSemanticSearchReadable() && handle.search !==
-  undefined`). Nothing else in the live 14-verb surface reads it —
-  `filter.semantic`, `filter.anchor`, and `view:'similar'` all gate on
-  `handle.search` alone, never on the singleton.
+  `configureSemanticBackend`/`isSemanticSearchReadable`) had exactly ONE live
+  consumer left: `query/query.ts`'s `resolveTextInput`, which decided whether a
+  bare `text` positional (the shared CLI-`search`/MCP/HTTP free-text field, §6)
+  auto-routes to `semantic` or `grep`
+  (`useSemantic = isSemanticSearchReadable() && handle.search !== undefined`).
+  Nothing else in the live 14-verb surface read it — `filter.semantic`,
+  `filter.anchor`, and `view:'similar'` all gate on `handle.search` alone,
+  never on the singleton.
 
-Because `resolveTextInput`'s routing genuinely depends on the singleton
-being populated, the fix cannot simply delete the `enableSemanticSearchFromConfig`
-call sites — that would silently and permanently route every `text` query to
-`grep`, even with a fully configured, fully populated semantic backend. Both
-bootstraps must become lazy, together, gated on the same need-predicate.
+**The authoritative design: the singleton is deleted, not wrapped.** An earlier
+draft of this section mandated keeping BOTH bootstraps — `Promise.all` over
+`bootstrapSemanticStoreMembers` and a NEW `legacySingletonReady` twin memo
+wrapping `enableSemanticSearchFromConfig` — premised on "the fix cannot simply
+delete the `enableSemanticSearchFromConfig` call sites." That premise is
+rejected. The design of record deletes those call sites (`cli.ts`'s `getCtx()`,
+`server.ts`'s `startBacklogServer`) and replaces `resolveTextInput`'s
+process-global `isSemanticSearchReadable()` latch with a per-query read of the
+REAL vector table: `handle.search.spacePopulated()` — a one-row probe of the
+live space — snapshotted onto `IQueryStoreHandle.spacePopulated` by `api.ts`'s
+`queryHandle` before the (synchronous) routing decision reads it.
+`resolveTextInput` routes to `semantic` iff `handle.search !== undefined &&
+handle.spacePopulated === true`.
+
+**Why the twin memo was rejected.**
+
+1. **It preserves a hidden process-global.** The twin memo keeps
+   `store/semantic-search.ts`'s module-level singleton registry alive as the
+   routing authority — the exact hidden global `write/bootstrap.ts`'s own
+   header says this layer deliberately eliminated (a hidden global is what let
+   the production/test divergence this module fixes go unnoticed). Routing off
+   a handle-carried, per-query probe has no hidden state.
+2. **It is not ADR-0012-correct across processes.** `isSemanticSearchReadable()`
+   is a PROCESS-global latch set once at boot from a single space probe: a host
+   that boots against an empty space (a fresh store, or one populated by another
+   process) latches `false` for its whole lifetime, so every `text:` search
+   degrades to grep even after a real embed populates the space. The per-query
+   `spacePopulated()` probe reads the durable vector table itself, so a second
+   process's `create` is visible to the first process's very next `text:`
+   query. `api.semantic-laziness.spec.ts`'s two-adapter case pins exactly this
+   (a vector written through adapter A is routed to `semantic` by a `text:`
+   query through adapter B on the same file); the twin memo cannot satisfy it.
+3. **It is the only reconciliation with the module deletion.** The §7a cutover
+   deletes `store/semantic-search.ts` (and its
+   `enableSemanticSearchFromConfig`). A design that routes off that module's
+   singleton cannot survive the module's own deletion; routing off
+   `handle.search` + `spacePopulated()` is the only seam that both removes the
+   double bootstrap AND leaves the routing decision addressable once the legacy
+   module is gone.
 
 **The fix: a single lazy gate, called only when a verb's own input needs
 it.**
@@ -1044,19 +1077,13 @@ it.**
    `upsertProject`, `upsertComponent`, `upsertLocation`, and `rmLocation`
    never need it — none of their write/query handles ever read
    `search`/`embedding`.
-2. **One combined accessor, memoized per adapter, run in parallel.**
-   `api.ts` gains `ensureSemanticReady(ctx: BacklogCtx):
-   Promise<SemanticStoreMembers>` — the sole call site for BOTH bootstraps.
-   It runs `bootstrapSemanticStoreMembers(...)` (already self-memoized via
-   its own `membersCache`) and a NEW twin memo wrapping
-   `enableSemanticSearchFromConfig(ctx.store, ctx.env.config.embedding)`
-   (a second `WeakMap<StoreAdapter, Promise<void>>`, local to `api.ts` —
-   `write/bootstrap.ts` must NOT import `store/semantic-search.ts`, per its
-   own header) via `Promise.all`, so the two independent cold loads run
-   concurrently rather than back-to-back, incidentally fixing the
-   sequential-double-cost defect noted above as a side effect. Neither
-   underlying function's own "never throws" contract changes; `Promise.all`
-   over two promises that individually never reject cannot itself reject.
+2. **One accessor, memoized per adapter.** `api.ts` gains
+   `ensureSemanticReady(ctx: BacklogCtx): Promise<SemanticStoreMembers>` — the
+   sole call site of `bootstrapSemanticStoreMembers` (already self-memoized via
+   its own `membersCache`). There is no second bootstrap to combine: the legacy
+   singleton is not part of this path, so the sequential-double-cost defect is
+   removed by the legacy call's deletion, not by running two loads in parallel.
+   `bootstrapSemanticStoreMembers`'s own "never throws" contract is unchanged.
 3. **`writeHandle`/`queryHandle` take an explicit `needsSemantic: boolean`
    and only call `ensureSemanticReady` when it is `true`; false skips the
    accessor entirely and returns a handle whose `search`/`embedding` are
@@ -1071,69 +1098,73 @@ it.**
    input shape. This keeps "what needs it" visible at the exact call site
    that wires each verb, rather than a separately maintained list that
    drifts as verbs are added.
+   `queryHandle` additionally takes `probeSpace: boolean` — `true` iff the
+   caller passed a bare `text:` positional — and, when set, awaits
+   `search.spacePopulated()` and snapshots the result onto
+   `handle.spacePopulated` before returning. That snapshot is what
+   `resolveTextInput` reads; it is the per-query replacement for the legacy
+   singleton latch (see the rejection note above).
 4. **`getCtx()` (`cli.ts`) and `startBacklogServer` (`server.ts`) stop
    calling `enableSemanticSearchFromConfig` entirely.** Opening the store
    no longer touches the embedding stack at all; only a verb dispatch that
    actually needs it does, via step 2/3 above.
 
 **Never-throws is preserved exactly.** `ensureSemanticReady` performs no
-error handling of its own — both `bootstrapSemanticStoreMembers` and
-`enableSemanticSearchFromConfig` already swallow every failure internally
-(log + degrade to absent members / `null`, §5a's and this section's own
-citations), so a `create` whose embedding backend is broken still writes
-the issue successfully with `handle.embedding` absent, exactly as before
-this fix, and a `claim`/`transition`/`delete` never even attempts the
-bootstrap, broken or not.
+error handling of its own — `bootstrapSemanticStoreMembers` already swallows
+every soft failure internally (log + degrade to absent members, §5a's and this
+section's own citations) — so a `create` whose embedding backend is broken
+still writes the issue successfully with `handle.embedding` absent, exactly as
+before this fix, and a `claim`/`transition`/`delete` never even attempts the
+bootstrap, broken or not. (A member-less result is not cached: the
+`membersCache` evicts it, so a transient failure self-heals on the next
+semantic verb rather than latching for the process lifetime.)
 
-**Implementation plan** (no design decisions left open — execute exactly):
+**Implementation (authoritative — shipped in `4d54a54f`; this is the design of
+record, and supersedes the earlier `Promise.all` + `legacySingletonReady`
+draft):**
 
 - `entrypoint/backlog/src/api.ts`:
-  - Add `import type { StoreAdapter } from '@adhd/sox-store-adapter';` and
-    `import { enableSemanticSearchFromConfig } from './store/semantic-search.js';`
-    and `import type { SemanticStoreMembers } from './write/bootstrap.js';`
-    (already imports `bootstrapSemanticStoreMembers` from the same module —
-    add the type to that same import line) and
-    `import { queryNeedsSemanticBackend } from './query/query.js';` (added
-    alongside the existing `queryIssuesWithMeta` import from the same file).
+  - Add `import type { SemanticStoreMembers } from './write/bootstrap.js';`
+    (on the existing `bootstrapSemanticStoreMembers` import line) and
+    `import { queryNeedsSemanticBackend } from './query/query.js';` (alongside
+    the existing `queryIssuesWithMeta` import from the same file).
   - Add, near the existing `writeHandle`/`queryHandle`:
     ```ts
-    const legacySingletonReady = new WeakMap<StoreAdapter, Promise<void>>();
-
     async function ensureSemanticReady(
       ctx: BacklogCtx
     ): Promise<SemanticStoreMembers> {
-      let legacy = legacySingletonReady.get(ctx.store.adapter);
-      if (!legacy) {
-        legacy = enableSemanticSearchFromConfig(
-          ctx.store,
-          ctx.env.config.embedding
-        ).then(() => undefined);
-        legacySingletonReady.set(ctx.store.adapter, legacy);
-      }
-      const [members] = await Promise.all([
-        bootstrapSemanticStoreMembers(
-          ctx.store.adapter,
-          ctx.store.graph,
-          ctx.env.config.embedding
-        ),
-        legacy,
-      ]);
-      return members;
+      return bootstrapSemanticStoreMembers(
+        ctx.store.adapter,
+        ctx.store.graph,
+        ctx.env.config.embedding
+      );
     }
     ```
+    (No `legacySingletonReady` memo and no `Promise.all` — see the rejection
+    note above.)
   - Change `writeHandle`'s signature to `(ctx: BacklogCtx, opts: {
     needsSemantic: boolean })` and its body to
     `const { search, embedding } = opts.needsSemantic ? await ensureSemanticReady(ctx) : {};`
-    (delete its direct `bootstrapSemanticStoreMembers` call). Same shape
-    for `queryHandle`: `(ctx: BacklogCtx, opts: { needsSemantic: boolean })`,
-    body `const { search } = opts.needsSemantic ? await ensureSemanticReady(ctx) : {};`.
+    (delete its direct `bootstrapSemanticStoreMembers` call).
+  - Change `queryHandle`'s signature to `(ctx: BacklogCtx, opts: {
+    needsSemantic: boolean; probeSpace: boolean })` and its body to:
+    ```ts
+    const { search } = opts.needsSemantic ? await ensureSemanticReady(ctx) : {};
+    const spacePopulated =
+      search !== undefined && opts.probeSpace
+        ? await search.spacePopulated()
+        : undefined;
+    ```
+    returning `graph`, an `assertVocabulary` thunk, and `search`/`spacePopulated`
+    spread in only when defined.
   - Update every call site:
     - `create` → `writeHandle(ctx, { needsSemantic: true })`
     - `update` → `writeHandle(ctx, { needsSemantic: true })`
     - `transition`, `claim`, `relate`, `move`, `remove` (the `delete` verb),
       `upsertProject`, `upsertComponent`, `upsertLocation`, `rmLocation` →
       `writeHandle(ctx, { needsSemantic: false })`
-    - `query` → `queryHandle(ctx, { needsSemantic: queryNeedsSemanticBackend(input) })`
+    - `query` → `queryHandle(ctx, { needsSemantic:
+      queryNeedsSemanticBackend(input), probeSpace: input.text !== undefined })`
 - `entrypoint/backlog/src/query/query.ts`: add and export, next to
   `resolveTextInput`:
   ```ts
@@ -1148,61 +1179,61 @@ bootstrap, broken or not.
     );
   }
   ```
+  Change `resolveTextInput` to
+  `const useSemantic = handle.search !== undefined && handle.spacePopulated === true;`
+  and delete its `isSemanticSearchReadable` import. Add `spacePopulated():
+  Promise<boolean>` to the `IQueryStoreHandle['search']` member shape and the
+  optional `spacePopulated?: boolean` snapshot field (point 3 above).
 - `entrypoint/backlog/src/cli.ts`: in `getCtx()`, delete the
-  `await enableSemanticSearchFromConfig(store, env.config.embedding);` line
-  and its doc comment (the concern it documented is now `api.ts`'s), and
-  remove the now-unused `enableSemanticSearchFromConfig` import.
+  `await enableSemanticSearchFromConfig(store, env.config.embedding);` line and
+  its doc comment, and remove the now-unused
+  `enableSemanticSearchFromConfig` import.
 - `entrypoint/backlog/src/server.ts`: in `startBacklogServer`, delete the
-  `await enableSemanticSearchFromConfig(store, env.config.embedding);` line
-  (line 833) and its doc comment, and remove the now-unused import. The
-  surrounding `try/catch` structure is unchanged — the `try` block still
-  exists for `openGraphBacklogStore` itself (there is no serve-lock to
-  release any more — see STATE.md A17).
-- New test file `entrypoint/backlog/src/api.semantic-laziness.spec.ts`
-  (in-process, real store, real `BacklogCtx` built via `buildBacklogEnv({
-  ..., namespace: 'test' })` — the A10 test-isolation namespace, never an
-  env-var override — against a temp `dbPath`; `vi.mock('@adhd/sox-embedding-provider',
-  () => createFakeEmbeddingModule())` from
-  `src/test/helpers/fake-embedding-provider.ts`, with
-  `createEmbeddingProvider` wrapped in a `vi.fn()` spy so the test asserts
-  an **invocation count**, never wall-clock):
-  - `embedding.enabled: true` (config), `claim`/`transition`/`delete`/`move`/
-    `relate`/`upsertProject`/`upsertComponent`/`upsertLocation`/`rmLocation`
-    each called once against a real `BacklogCtx` → assert the
-    `createEmbeddingProvider` spy call count is `0` after each. (Proves
-    §5b point 1's "never needed" set.)
-  - `create` called once → assert the spy call count is exactly `1` (not
-    `0`, not `2` — proving the sequential-double-bootstrap defect is also
-    fixed) and that the created issue's stored `embedModel` metadata is
-    the fake provider's `FAKE_EMBEDDING_MODEL_ID` (proves on-write embedding
-    still genuinely runs).
-  - `update` (a body-changing edit) called once on an existing issue →
-    assert the spy call count stays at `1` for the whole test (the
-    `create` that seeded the issue plus the `update` both hit the SAME
-    memoized adapter) and the superseding row's `embedModel` is stamped.
-  - `query` with a plain `{ filter: { status: 'open' } }` (no `text`, no
-    `filter.semantic`, no `view:'similar'`, no `sort:'relevance'`) →
-    assert spy count `0`.
-  - `query` with `{ filter: { semantic: 'find the auth bug' } }` → assert
-    spy count `1` and a real ranked result set comes back (not an error).
-  - `query` with a bare `text: 'find the auth bug'` positional → assert
-    spy count `1` and the result's implied routing used `semantic` (proves
-    `resolveTextInput`'s dependency on the now-lazily-populated legacy
-    singleton still resolves correctly under laziness).
-  - **Negative control (mandatory, AGENTS.md §7):** revert `writeHandle`
-    to its pre-fix unconditional `await bootstrapSemanticStoreMembers(...)`
-    (no `opts` gate) and confirm the `claim`/`transition`/`delete` count-`0`
-    assertions go RED. Then restore the fix.
-  - **Never-throws preservation:** a second variant of the same suite
-    configures `embedding.enabled: true` with `@adhd/sox-embedding-provider`
-    mocked to `vi.mock(..., () => { throw new Error('boom'); })` (or a
-    `createEmbeddingProvider` that rejects) and asserts (a) `create` still
+  `await enableSemanticSearchFromConfig(store, env.config.embedding);` line and
+  its doc comment, and remove the now-unused import. The surrounding
+  `try/catch` structure is unchanged — the `try` block still exists for
+  `openGraphBacklogStore` itself (there is no serve-lock to release any more —
+  see STATE.md A17).
+- Test file `entrypoint/backlog/src/api.semantic-laziness.spec.ts` (in-process,
+  real store, real `BacklogCtx` built via `buildBacklogEnv({..., namespace:
+  'test' })` against a temp `dbPath`; `vi.mock('@adhd/sox-embedding-provider',
+  ...)` with the deterministic fake from
+  `src/test/helpers/fake-embedding-provider.ts`, and a per-call spy on
+  `createEmbeddingProvider`, so every assertion is an invocation COUNT, never
+  wall-clock):
+  - `embedding.enabled: true`, each of `claim`/`transition`/`move`/`relate`/
+    `delete`/`upsertProject`/`upsertComponent`/`upsertLocation`/`rmLocation`
+    called once → the provider spy count stays `0` after each. (Proves point
+    1's "never needed" set.)
+  - `create`, then `update`, each called once → the provider is constructed
+    exactly once across every verb (not `0`, not `2` — the
+    sequential-double-bootstrap defect is gone) and the created/superseding
+    rows carry the fake provider's model id (on-write embedding genuinely
+    runs).
+  - `query` with a plain `{ filter: { status } }` → count `0`; `query` with
+    `{ filter: { semantic } }` → count `1` and a real ranked result.
+  - **Empty-space control:** a bare `text:` against a store whose vector space
+    is still empty routes to `grep` (the `searchRanked` spy stays at `0`) —
+    proving routing keys on the live space being populated, not on a backend
+    merely existing. **Positive control:** the same `text:` routes to
+    `semantic` (`searchRanked` count `1`) after an on-write embed, with no
+    restart.
+  - **Cross-process control (ADR-0012):** a vector written through adapter A is
+    routed to `semantic` by a `text:` query issued through a SECOND adapter on
+    the same file — the property the rejected process-global latch could not
+    provide.
+  - **Negative control (mandatory, AGENTS.md §7):** revert `writeHandle` to its
+    pre-fix unconditional `await bootstrapSemanticStoreMembers(...)` (no `opts`
+    gate) and confirm the `claim`/`transition`/`delete` count-`0` assertions go
+    RED. Then restore the fix.
+  - **Never-throws preservation:** a second variant configures
+    `embedding.enabled: true` with `@adhd/sox-embedding-provider` mocked to a
+    `createEmbeddingProvider` that rejects, and asserts (a) `create` still
     returns a success envelope with the issue actually persisted
-    (`handle.embedding` absent, dup-scan reports unavailable, write
-    proceeds — §5b's "never-throws" paragraph), and (b) `claim`/`transition`
-    still succeed without ever invoking the mocked (throwing) provider at
-    all — proving the lazy gate, not the swallow-the-error path, is what
-    keeps them fast.
+    (`handle.embedding` absent, dup-scan reports unavailable, write proceeds —
+    §5b's "never-throws" paragraph), and (b) `claim`/`transition` still succeed
+    without ever invoking the mocked (throwing) provider at all — proving the
+    lazy gate, not the swallow-the-error path, keeps them fast.
 
 ### 5c. `--namespace` flag (replaces `--sandbox`)
 
