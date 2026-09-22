@@ -26,6 +26,7 @@ import {
   buildBacklogApigenPackage,
   resolveExpectedMcpToolNames,
 } from './server.js';
+import { isolatedSpawnOptions } from './test/helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
@@ -105,13 +106,13 @@ describe('BUG-013 — install-written MCP config actually launches a working rea
     transport = new StdioClientTransport({
       command: process.execPath,
       args: [DIST_INDEX, ...servArgsTail],
-      cwd: adhdRoot,
-      env: {
-        ADHD_BACKLOG_SCOPE: 'project',
+      // The `ADHD_BACKLOG_SCOPE=project` + `HOME=<root>` redirect pair lives
+      // in ONE place now — `test/helpers/spawn-isolated-bin.ts`; VITEST/PATH
+      // layer over it.
+      ...isolatedSpawnOptions(adhdRoot, {
         VITEST: 'true',
-        HOME: adhdRoot,
         PATH: process.env['PATH'] ?? '',
-      },
+      }),
     });
     client = new Client(
       { name: 'backlog-install-e2e-claude', version: '1.0.0' },
@@ -156,13 +157,13 @@ describe('BUG-013 — install-written MCP config actually launches a working rea
     transport = new StdioClientTransport({
       command: process.execPath,
       args: [DIST_INDEX, ...servArgsTail],
-      cwd: adhdRoot,
-      env: {
-        ADHD_BACKLOG_SCOPE: 'project',
+      // The `ADHD_BACKLOG_SCOPE=project` + `HOME=<root>` redirect pair lives
+      // in ONE place now — `test/helpers/spawn-isolated-bin.ts`; VITEST/PATH
+      // layer over it.
+      ...isolatedSpawnOptions(adhdRoot, {
         VITEST: 'true',
-        HOME: adhdRoot,
         PATH: process.env['PATH'] ?? '',
-      },
+      }),
     });
     client = new Client(
       { name: 'backlog-install-e2e-opencode', version: '1.0.0' },

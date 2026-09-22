@@ -36,6 +36,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createServer } from 'node:net';
 import { openTmpStore, type TmpStore } from './test/helpers/tmp-store.js';
+import { isolatedSpawnOptions } from './test/helpers/spawn-isolated-bin.js';
 import { createItemNode } from './store/crud.js';
 import { transitionStatusNode } from './store/lifecycle.js';
 import { backlogQuery, type IBacklogQueryResult } from './v2/query.js';
@@ -500,16 +501,13 @@ describe('FEAT-009/FEAT-BACKLOG-010/WO-3 over the REAL built HTTP server (spawne
       ],
       {
         stdio: ['ignore', 'pipe', 'pipe'],
-        // HOME redirect is required alongside `ADHD_BACKLOG_SCOPE=project`: the
-        // global config layer is read regardless of scope (see cli.spec.ts
-        // runBin's note). `storeDir` is this test's own throwaway root, removed
-        // in afterEach.
-        env: {
-          ...(process.env as Record<string, string>),
-          ADHD_BACKLOG_SCOPE: 'project',
-          HOME: storeDir,
+        // The `ADHD_BACKLOG_SCOPE=project` + `HOME=<root>` redirect pair (and
+        // why the scope alone is not enough) lives in ONE place now —
+        // `test/helpers/spawn-isolated-bin.ts`. `storeDir` is this test's own
+        // throwaway root, removed in afterEach.
+        ...isolatedSpawnOptions(storeDir, {
           ADHD_BACKLOG_DATABASE_PATH: join(storeDir, 'backlog.db'),
-        },
+        }),
       }
     );
     let bootLog = '';

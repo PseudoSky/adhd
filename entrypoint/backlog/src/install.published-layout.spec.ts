@@ -32,7 +32,6 @@
  * and copy `SKILL.md` in that shape, rather than crashing.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { spawnSync } from 'node:child_process';
 import {
   cpSync,
   existsSync,
@@ -44,6 +43,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runIsolatedBin } from './test/helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = join(HERE, '..');
@@ -75,31 +75,9 @@ function runInstallSkill(
   extraArgv: string[]
 ): SpawnResult {
   const indexJs = join(publishedRoot, 'index.js');
-  const result = spawnSync(
-    process.execPath,
-    [indexJs, 'install-skill', ...extraArgv],
-    {
-      cwd: publishedRoot,
-      // HOME redirect: the global config layer is read regardless of
-      // `ADHD_BACKLOG_SCOPE` (see cli.spec.ts runBin's note), so isolate it too.
-      env: {
-        ...process.env,
-        ADHD_BACKLOG_SCOPE: 'project',
-        HOME: publishedRoot,
-      },
-      encoding: 'utf8',
-      timeout: 30_000,
-    }
-  );
-  if (result.error)
-    throw new Error(
-      `spawn failed for ${indexJs} install-skill: ${String(result.error)}`
-    );
-  return {
-    status: result.status,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  };
+  // `runIsolatedBin` owns the `ADHD_BACKLOG_SCOPE=project` + `HOME=<root>`
+  // redirect pair (see test/helpers/spawn-isolated-bin.ts).
+  return runIsolatedBin(indexJs, ['install-skill', ...extraArgv], publishedRoot);
 }
 
 describe('BUG-013 — install-skill on a published (rebased-to-root) layout', () => {
@@ -160,27 +138,10 @@ describe('BUG-013 — install-skill on a published (rebased-to-root) layout', ()
   it('install --skill-only on the published layout behaves identically to install-skill (same underlying installSkillToHosts call)', () => {
     publishedRoot = flattenDistIntoFreshRoot();
     const indexJs = join(publishedRoot, 'index.js');
-    const result = spawnSync(
-      process.execPath,
-      [
-        indexJs,
-        'install',
-        '--host',
-        'claude',
-        '--scope',
-        'project',
-        '--skill-only',
-      ],
-      {
-        cwd: publishedRoot,
-        env: {
-          ...process.env,
-          ADHD_BACKLOG_SCOPE: 'project',
-          HOME: publishedRoot,
-        },
-        encoding: 'utf8',
-        timeout: 30_000,
-      }
+    const result = runIsolatedBin(
+      indexJs,
+      ['install', '--host', 'claude', '--scope', 'project', '--skill-only'],
+      publishedRoot
     );
     expect(
       result.status,
