@@ -1,4 +1,4 @@
-# config-repair-absorbed — STATE_NAME
+# config-repair-absorbed — Config-repair branch absorbed, publish gate intact
 
 **Phase:** reconcile · **Kind:** work · **Depends on:** gate-triage-absorbed · **Guard:** `./node_modules/.bin/nx show projects | rg -q "data-query-engine" && node -e "const d=require(\"./nx.json\").targetDefaults.test.dependsOn;if(!d.includes(\"lint\")||!d.includes(\"^build\"))process.exit(1)" && node -e "const s=require(\"./packages/agent/agent-core-env/package.json\").scripts;if(s&&s.build)process.exit(1)"`
 
@@ -6,7 +6,31 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+The four unpushed config-repair commits live on the upgrade branch, and the publish gate they would have removed is still in place.
+
+---
+
+## Semantic distillation
+
+- TRAP: the absorbed branch drops `lint` from the default test target. main reverted exactly that for BUG-060 — `publish`/`nx-release-publish` reach lint only via `test`, so dropping it silently disables dependency checks on every release.
+- Resolve that conflict in favour of `["lint", "^build"]`. This is the single most important decision in the state.
+- Deleting the nine self-referential build scripts is safe and orthogonal — they are redundant wrappers, not the real build target.
+
+---
+
+## Contract promise
+
+```text
+added:    []
+modified: ["nx.json","CHANGELOG.md"]
+deleted:  ["scripts.build from nine package manifests"]
+```
+
+---
+
+## Commit points
+
+- Absorb the commits, resolve the nx.json conflict, then commit the resolution separately so the decision is diffable.
 
 ---
 

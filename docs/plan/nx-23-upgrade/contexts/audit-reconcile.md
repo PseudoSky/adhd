@@ -1,4 +1,4 @@
-# audit-reconcile — STATE_NAME
+# audit-reconcile — Reconcile phase holds
 
 **Phase:** reconcile · **Kind:** audit · **Depends on:** test-resolution-absorbed · **Guard:** `python3 docs/plan/nx-23-upgrade/scripts/guard_audit_reconcile.py`
 
@@ -6,7 +6,30 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+Both absorbed branches are green together on the upgrade branch before any config or graph work begins.
+
+---
+
+## Semantic distillation
+
+- This is a HOLD, not a formality. A reconcile regression would otherwise be attributed to the config or graph phases.
+- Run the intake + reconcile criteria; do not advance on a partially green phase.
+
+---
+
+## Contract promise
+
+```text
+added:    []
+modified: []
+deleted:  []
+```
+
+---
+
+## Commit points
+
+- Commit the audit run record.
 
 ---
 

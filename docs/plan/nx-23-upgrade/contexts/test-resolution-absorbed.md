@@ -1,4 +1,4 @@
-# test-resolution-absorbed — STATE_NAME
+# test-resolution-absorbed — Test-time source resolution helper absorbed
 
 **Phase:** reconcile · **Kind:** work · **Depends on:** config-repair-absorbed · **Guard:** `test -f tools/vite-plugins/source-resolution.mjs && node -e "if(!require(\"./nx.json\").namedInputs.sharedGlobals.join(\"|\").includes(\"source-resolution.mjs\"))process.exit(1)" && ./node_modules/.bin/nx show projects | rg -q "workspace-codegen-nx"`
 
@@ -6,7 +6,31 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+The vitest module graph is continuous across package boundaries during tests, so a dependent package's specs can see a dependency's source.
+
+---
+
+## Semantic distillation
+
+- Root cause: vite's built-in resolver runs before normal-order plugins, so the tsconfig-paths plugin is only consulted when it returns null — and a symlinked workspace package IS resolvable, so built output wins.
+- The fix hoists a copy of that plugin ahead of the built-in resolver and scopes it to serve mode. The serve scoping is LOAD-BEARING: unscoped, it also reorders the production build and shrinks the published artifact.
+- Four child-process projects spawn real `node`, which still resolves to built output. They need the opt-out and they need `^build` kept. Do not 'fix' them.
+
+---
+
+## Contract promise
+
+```text
+added:    ["tools/vite-plugins/source-resolution.mjs"]
+modified: ["nx.json","65 project vite configs","the codegen template"]
+deleted:  []
+```
+
+---
+
+## Commit points
+
+- Commit the absorption and the conflict resolution post-guard.
 
 ---
 
