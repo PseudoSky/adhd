@@ -510,6 +510,24 @@
       ],
       "context": "contexts/browser-cjs-umd-repair.md",
       "notes": "The node CJS shim is NOT a valid fix here: its require/__filename do not exist in a browser chunk, so wiring it in trades undefined for ReferenceError. The guard therefore also asserts the node shim is ABSENT from the browser bundles. ui-react-base-storybook is private:true and explicitly out of scope."
+    },
+    "typecheck-teeth-restored": {
+      "kind": "work",
+      "phase": "graph",
+      "depends_on": [
+        "graph-release-eslint-inferred"
+      ],
+      "guard": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_config.py && ./node_modules/.bin/nx run-many -t typecheck && NX_CACHE_DIRECTORY=\"$(mktemp -d)/cache\" NX_WORKSPACE_DATA_DIRECTORY=\"$(mktemp -d)/data\" ./node_modules/.bin/nx build decompile-cli && ./node_modules/.bin/nx build agent-core-env && test -f docs/plan/nx-23-upgrade/TYPECHECK-TEETH.md",
+      "artifacts": [
+        "nx.json",
+        "packages/agent/agent-core-env/project.json",
+        "entrypoint/decompile-cli/src/lib/extractors/index.ts",
+        "entrypoint/decompile-cli/src/lib/extractors/site.ts",
+        "docs/plan/nx-23-upgrade/SHIM-REMOVAL.md",
+        "docs/plan/nx-23-upgrade/TYPECHECK-TEETH.md"
+      ],
+      "context": "contexts/typecheck-teeth-restored.md",
+      "notes": "Cross-state repair: restore the build gate teeth the graph remodel removed. graph-test-build-inferred deleted the explicit @nx/vite:build targets whose executor ran validateTypes; the inferred build runs plain vite build, so a type error no longer turns the build red ([tsconfig-shim-removal.5] regressed). Wire build.dependsOn to typecheck in nx.json and accept TS 6 strict:true, which exposed two real errors in decompile-cli. Scope fixed by the architect-decision verdict (APPROVE, mechanism A) — do not widen it."
     }
   },
   "authored_with": {
