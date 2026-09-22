@@ -88,11 +88,11 @@
       "end_ref": "89649106ea0c0808be85c0180eae8cc1743e23ec"
     },
     "test-changed-optin": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-09-22T20:21:29.627Z",
-      "done_at": null,
+      "done_at": "2026-09-22T21:36:18.181Z",
       "start_ref": "d69f7dd5fe6aa0c276028033a3c87c2613ff1e7d",
-      "end_ref": null
+      "end_ref": "9a0a2dd372155967008abc26092dcc701f6ccfa1"
     },
     "vite-cjs-import-meta-repair": {
       "status": "complete",
@@ -315,6 +315,18 @@
       "audit_criteria_total": 83,
       "by": "pseudosky",
       "note": "Revalidated the three changed-flag defects on nx 23.2.1 / vitest 4.1.9 (worktree nx-perf-upgraded). D1 REFUTED (options under target-name key no longer crash graph; nx 23.2.1 optional-chains options?.commands?.join). D2 REFUTED (vitest still issues git diff true...HEAD which fatals raw, but tinyexec swallows the non-zero exit; all four --changed forms exit 0 in <7s, no hang; nx e2e green). D3 CONFIRMED (zero selection exits 0 and NX reports success; vitest related on an uncovered file exits 0). Design decision to keep the fail-safe default is confirmed by measurement. Record: docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md; commit 89649106. Telemetry omitted (session does not expose token counts)."
+    },
+    {
+      "ts": "2026-09-22T21:36:18.181Z",
+      "from": "test-changed-optin",
+      "to": "test-changed-optin",
+      "start_ref": "d69f7dd5fe6aa0c276028033a3c87c2613ff1e7d",
+      "end_ref": "9a0a2dd372155967008abc26092dcc701f6ccfa1",
+      "audit_exit": 3,
+      "audit_criteria_passed": 100,
+      "audit_criteria_total": 103,
+      "by": "pseudosky",
+      "note": "Delivered test:related + test:changed: a fail-safe opt-in fast path over vitest related. Workspace-wide selection (cross-package: date.ts selects data-query-engine specs), zero-selection exits non-zero with 'no tests selected', selected=N/M on success. Both check scripts PASS. Full suite stays the default; nx.json untouched. TEST-SELECTION.md records design + measured behaviour. KNOWN RED: dod.6's input packages/data/data-base-transforms/src/index.ts is covered on this toolchain (3 specs across 2 dependents, selected=3/362), so no honest selector can satisfy it; filed as backlog de163601; see TEST-SELECTION.md section 8."
     }
   ],
   "amendment_log": [
