@@ -360,6 +360,18 @@
         "scripts/criteria.json"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-09-22T17:32:05.852Z",
+      "state": "graph-js-tsc-inferred",
+      "class": "executor",
+      "type": "expand-artifacts",
+      "reason": "DEFECT 2 - reservation gap. The state's guard walks EVERY project.json, but the reservation omitted root project.json. Work commit 5b038916 touched 17 files = the 16 reserved + root project.json (a metadata-only description reword dropping a literal '@nx/js:tsc' substring - the same guard-driven edit graph-test-build-inferred made, and that state did reserve root project.json). Added root project.json to mutates (now 17) for retroactive accuracy. Verified no other pending state has the same guard-scope-superset-of-reservation gap: graph-release-eslint-inferred's guard-matched files (the 16 project.json files containing @nx/js:release-publish or @nx/eslint:lint) are all already in its 17 mutates, and root project.json contains neither string.",
+      "files_synced": [
+        "dag.json",
+        "contexts/graph-js-tsc-inferred.md"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
