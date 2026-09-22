@@ -130,11 +130,11 @@
       "end_ref": "213e14391a04d21c265964b8e04a3e93e7518fb3"
     },
     "browser-cjs-umd-repair": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-09-22T13:42:44.365Z",
-      "done_at": null,
+      "done_at": "2026-09-22T13:47:00.495Z",
       "start_ref": "82c0286da69591a6c33e4de402a368b78edf12a8",
-      "end_ref": null
+      "end_ref": "c1af25ef4f46215da7cfde24cf543e4bdf8186f0"
     }
   },
   "transition_log": [
@@ -173,6 +173,18 @@
       "audit_criteria_total": 29,
       "by": "pseudosky",
       "note": "Conformed three hooks sources to installed React 19 types (no behaviour/API change): use-throttle useRef<NodeJS.Timeout|undefined>(undefined) + useRef<Parameters<T>|undefined>(undefined); use-throttle-state useRef<NodeJS.Timeout|undefined>(undefined); use-infinite-scroll return interface ref widened to RefObject<HTMLElement|null> | RefObject<HTMLDivElement|null> to match React 19 useRef<T>(null):RefObject<T|null>. Guard RED before (Found 4 errors, no dist) -> GREEN after (exit 0; dist/index.js, index.umd.js, index.mjs emitted). Added docs/plan/nx-23-upgrade/BROWSER-BUILD-REPAIR.md decision record attributing the failure to the React 19 type bump. Commit 213e1439."
+    },
+    {
+      "ts": "2026-09-22T13:47:00.495Z",
+      "from": "browser-cjs-umd-repair",
+      "to": "browser-cjs-umd-repair",
+      "start_ref": "82c0286da69591a6c33e4de402a368b78edf12a8",
+      "end_ref": "c1af25ef4f46215da7cfde24cf543e4bdf8186f0",
+      "audit_exit": 4,
+      "audit_criteria_passed": 25,
+      "audit_criteria_total": 29,
+      "by": "pseudosky",
+      "note": "Chose family (b): added tools/vite-plugins/import-meta-url-browser-cjs.mjs, a format-gated cjs/umd renderChunk plugin rewriting the Rolldown token {}.url to a browser-valid base (document.currentScript.src OR location.href OR empty-string), parenthesised to survive the surrounding empty-string concatenation; wired into ui-react-base-hooks vite.config.ts. Family (a) ruled out by criterion .4: the ES bundle must keep native import.meta.url, and the worker call site is the only import.meta.url in the package. The node shim is deliberately NOT wired (require and __filename are absent in a browser chunk, so it would throw ReferenceError). Added the default-running spec import-meta-url.spec.ts which reads the BUILT dist bundles: no {}.url and no __filename/node:url in cjs+umd; index.mjs keeps native import.meta.url with no pathToFileURL shim. Doc BROWSER-BUNDLE-REPAIR.md records red-before, the decision, and why the node shim is not a valid browser fix. Negative control neg-control-browser-bundle.mjs injected {}.url into both built bundles, turning the guard node check red (exit 1); restore returned it green. Guard RED before (EMPTY_IMPORT_META_URL in dist/index.js) and GREEN after (BROWSER_BUNDLES_CLEAN, 6/6 spec tests pass)."
     }
   ],
   "amendment_log": [
@@ -209,7 +221,7 @@
     "version": "0.8.25",
     "hash": "961c3053dfab"
   },
-  "current_state": "browser-cjs-umd-repair",
+  "current_state": "gate-triage-absorbed",
   "dod_provenance": {
     "confirmed_at": "2026-09-22T02:05:38.210Z",
     "by": "pseudosky",
