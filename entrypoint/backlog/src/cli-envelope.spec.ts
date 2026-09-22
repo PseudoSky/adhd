@@ -30,8 +30,8 @@
  * Each test asserts the CONSUMER-VISIBLE outcome (the payload a caller reads,
  * the code the shell branches on), never an implementation shape.
  */
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { mkdtempSync } from 'node:fs';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -95,8 +95,14 @@ beforeAll(() => {
   expect(body['ok']).toBe(true);
 });
 
-afterEach(() => {
-  /* each test is read-only apart from the shared seed */
+// The `beforeAll` temp root (and its `envelope.db`) is SHARED by every test
+// in this file — the seed is written once and each test is read-only against
+// it — so it must be removed ONCE at the end. A per-test `afterEach` would
+// delete the seed out from under the following tests; the old suite-level
+// `afterEach` was a no-op and leaked this root instead (PR #10 review finding
+// `40d9da12`).
+afterAll(() => {
+  if (tmpRoot) rmSync(tmpRoot, { recursive: true, force: true });
 });
 
 describe('outcome envelope over the real CLI mount', () => {
