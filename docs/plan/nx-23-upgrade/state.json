@@ -18,10 +18,10 @@
       "end_ref": "f96701879cc2818293fa75f079ba2c41757f3126"
     },
     "config-repair-absorbed": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-09-22T13:58:15.344Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "fa87b1ab14e212237b25301782ba79966e2afb33",
       "end_ref": null
     },
     "test-resolution-absorbed": {
