@@ -8,7 +8,10 @@
  * surviving mention is either dead code or a stale comment describing a
  * world that no longer exists. Both are defects.
  *
- * SCOPE: `src/` — the code that ships — AND the package's own top-level
+ * SCOPE: `src/` — the code that ships AND its non-code text assets
+ * (`.md`/`.json`/`.yaml`/`.sql`/…; a code-only walk left
+ * `src/write/CONTRACT.md`, 757 lines of shipped contract prose, invisible to
+ * both path and content scanning) — AND the package's own top-level
  * markdown (`SPEC.md`, `DESIGN.md`, `DATA_MODEL.md`, `RAG-SPEC.md`,
  * `README.md`, `CHANGELOG.md`). The docs were once excluded here with the
  * note "handled by a docs rewrite, not by grep", and that is precisely how a
@@ -31,12 +34,18 @@
  * `.d.ts` reproduces its source doc comments verbatim, so a banned term can
  * reach a consumer through generated output that never appears in `src/`.
  *
- * Run: node tools/gate/vocabulary-gate.mjs   (exit 0 clean, 1 dirty)
+ * Run: node tools/gate/vocabulary-gate.mjs [pkgDir]
+ *   (exit 0 clean, 1 dirty). `pkgDir` defaults to this package; pass one to
+ *   scan a fixture instead (used by src/vocabulary-gate.spec.ts).
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 
-const PKG = new URL('../..', import.meta.url).pathname;
+// Defaults to this package. An explicit path argument overrides it so a test
+// can point the gate at a fixture instead of the live tree (C-22).
+const PKG = process.argv[2]
+  ? resolve(process.argv[2])
+  : new URL('../..', import.meta.url).pathname;
 const ROOT = join(PKG, 'src');
 
 /**
@@ -80,12 +89,24 @@ const TERMS = [
   },
 ];
 
+/**
+ * Extensions whose contents are text the term regexes can meaningfully scan.
+ * Code first, then the non-code text assets under `src/` — a `.md`/`.json`/
+ * `.yaml`/`.sql` file ships the same vocabulary as a `.ts` one, and the
+ * earlier code-only filter made `src/write/CONTRACT.md` (757 lines) invisible
+ * to both path and content scanning. `.map` is deliberately absent: it is
+ * generated output, not authored text, and the sources it embeds are already
+ * scanned at their source.
+ */
+const SCANNABLE_EXT =
+  /\.(ts|mts|cts|tsx|js|mjs|cjs|jsx|md|markdown|json|jsonc|ya?ml|sql|txt|toml|sh|css|html)$/i;
+
 function walk(dir) {
   const out = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) out.push(...walk(full));
-    else if (/\.(ts|mts|js|mjs)$/.test(entry)) out.push(full);
+    else if (SCANNABLE_EXT.test(entry)) out.push(full);
   }
   return out;
 }

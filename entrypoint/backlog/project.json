@@ -22,7 +22,7 @@
   "targets": {
     "test": {
       "executor": "@nx/vite:test",
-      "//dependsOn": "the real-MCP stdio test (server.mcp.spec.ts) spawns the BUILT dist/index.js as a child process (a real MCP client can only talk to a real process, never an in-process stdio hijack) and verify-dist-load parity checks also read dist/ — the default targetDefaults.test dependsOn is only [\"^build\"] (dependencies), so backlog's OWN build must be added explicitly or dist/ is stale/missing when tests run. `assets` is ALSO required (BUG-013 FIX A): `@nx/vite:build`'s own `options.assets` is a documented no-op for this executor (verified against its build.impl.js — it never reads options.assets at all), so `dist/skill/SKILL.md` only exists once the separate, package.json-`assets`-array-driven `@adhd/nx-assets:copy` target (`tools/nx-plugins/assets/`) has run — the published-layout regression test (server.published-layout.spec.ts) and the install-skill/install CLI subprocess tests all need it present in dist/. `vocabulary-gate` is added (C-22) so the two vocabulary acceptance gates run as a real Nx task whenever this project's test runs — `nx affected -t test` in both PR workflows (ci.yml, pull-request.yml) therefore enforces them on every PR touching this package, and nx-release-publish gates on test so publish is covered transitively.",
+      "//dependsOn": "the real-MCP stdio test (server.mcp.spec.ts) spawns the BUILT dist/index.js as a child process (a real MCP client can only talk to a real process, never an in-process stdio hijack) and verify-dist-load parity checks also read dist/ — the default targetDefaults.test dependsOn is only [\"^build\"] (dependencies), so backlog's OWN build must be added explicitly or dist/ is stale/missing when tests run. `assets` is ALSO required (BUG-013 FIX A): `@nx/vite:build`'s own `options.assets` is a documented no-op for this executor (verified against its build.impl.js — it never reads options.assets at all), so `dist/skill/SKILL.md` only exists once the separate, package.json-`assets`-array-driven `@adhd/nx-assets:copy` target (`tools/nx-plugins/assets/`) has run — the published-layout regression test (server.published-layout.spec.ts) and the install-skill/install CLI subprocess tests all need it present in dist/. `vocabulary-gate` is added (C-22) so the two vocabulary acceptance gates run as a real Nx task whenever this project's test runs — `nx affected -t test` in both PR workflows (ci.yml, pull-request.yml) therefore enforces them on every PR touching this package, and nx-release-publish gates on test so publish is covered transitively. This target is the SOLE live-tree owner of those two gates: src/vocabulary-gate.spec.ts was rewritten (M1) to drive each gate against a fixture (proving it has teeth) rather than re-running it on the live tree, so the real `npm pack` happens once per test run, not twice.",
       "dependsOn": [
         "^build",
         "build",
@@ -37,7 +37,7 @@
       }
     },
     "vocabulary-gate": {
-      "//": "C-22: both vocabulary acceptance gates, as one Nx task. `tools/gate/vocabulary-gate.mjs` scans src/ plus the package's top-level markdown (SPEC/DESIGN/DATA_MODEL/RAG-SPEC/README/CHANGELOG); `scripts/check-vocabulary.mjs` npm-packs the REAL artifact (package.json `files`: dist + CHANGELOG.md + skill) and scans the tarball — the only scan that catches a banned token reaching a consumer through dist/*.d.ts, which reproduces source doc comments verbatim and never appears in src/. Wired into test.dependsOn so the PR workflows' `nx affected -t test` runs it on every PR touching this package. dependsOn build+assets so the packed artifact is the real shipped one, never a stale dist/. cache:true mirrors the verify-dist-load convention — deterministic given the inputs below; any src/doc/dist change re-runs it. NOTE: check-vocabulary.mjs takes NO path arg here deliberately — cwd is already {projectRoot} and the script defaults to process.cwd(); passing {projectRoot} again double-prefixes the path, npm pack spawns with a nonexistent cwd, and the failure surfaces as the misleading 'spawnSync npm ENOENT' (verified while authoring this target).",
+      "//": "C-22: both vocabulary acceptance gates, as one Nx task. `tools/gate/vocabulary-gate.mjs` scans src/ (code AND text assets such as src/write/CONTRACT.md) plus the package's top-level markdown (SPEC/DESIGN/DATA_MODEL/RAG-SPEC/README/CHANGELOG); `scripts/check-vocabulary.mjs` npm-packs the REAL artifact (package.json `files`: dist + CHANGELOG.md + skill) and scans the tarball — the only scan that catches a banned token reaching a consumer through dist/*.d.ts, which reproduces source doc comments verbatim and never appears in src/. Wired into test.dependsOn so the PR workflows' `nx affected -t test` runs it on every PR touching this package. dependsOn build+assets so the packed artifact is the real shipped one, never a stale dist/. cache:true mirrors the verify-dist-load convention — deterministic given `inputs: [\"default\"]`: a src/doc change re-runs it, and a dist/ change re-runs it too because nx folds the build/assets dependency task hashes into this task's hash, so dist/ (a dependency OUTPUT, not an input) needs no explicit input entry. NOTE: check-vocabulary.mjs takes NO path arg here deliberately — cwd is already {projectRoot} and the script defaults to process.cwd(); passing {projectRoot} again double-prefixes the path, npm pack spawns with a nonexistent cwd, and the failure surfaces as the misleading 'spawnSync npm ENOENT' (verified while authoring this target).",
       "executor": "nx:run-commands",
       "dependsOn": [
         "build",
@@ -45,8 +45,7 @@
       ],
       "cache": true,
       "inputs": [
-        "default",
-        "{projectRoot}/dist/**/*"
+        "default"
       ],
       "options": {
         "cwd": "{projectRoot}",
@@ -57,7 +56,7 @@
         "parallel": false
       },
       "metadata": {
-        "description": "Runs both vocabulary acceptance gates (src-tree scan + packed-tarball scan); non-zero exit on any banned v1/v2/humanId/migration/sqlite reference. Runs on every PR touching the package via test.dependsOn."
+        "description": "Runs both vocabulary acceptance gates (src-tree scan + packed-tarball scan); non-zero exit on any banned humanId/migration/sqlite reference anywhere, and on v1/v2 outside generated bundles. Runs on every PR touching the package via test.dependsOn."
       }
     },
     "typecheck": {
