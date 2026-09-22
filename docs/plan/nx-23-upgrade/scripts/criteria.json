@@ -933,6 +933,16 @@
       "kind": "command",
       "cmd": "./node_modules/.bin/nx build apigen-cli && node -e \"const fs=require('fs');const t=fs.readFileSync('entrypoint/apigen-cli/dist/index.mjs','utf8');if(!t.includes('import.meta.url'))process.exit(1);if(t.includes('pathToFileURL(__filename)'))process.exit(1);console.log('ESM_UNTOUCHED')\"",
       "expect": "exit0"
+    },
+    {
+      "id": "vite-cjs-import-meta-repair.9",
+      "phase": "intake",
+      "tier": 3,
+      "kind": "negative-control",
+      "positive": "node entrypoint/apigen-cli/dist/index.js --help | grep -q \"Usage: apigen\"",
+      "mutate": "node docs/plan/nx-23-upgrade/scripts/neg-control-cjs-shim.mjs mutate entrypoint/apigen-cli/dist/index.js",
+      "restore": "node docs/plan/nx-23-upgrade/scripts/neg-control-cjs-shim.mjs restore entrypoint/apigen-cli/dist/index.js",
+      "expect": "exit0"
     }
   ]
 }
