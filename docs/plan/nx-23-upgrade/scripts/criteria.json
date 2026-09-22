@@ -819,7 +819,7 @@
       "expect": "exit0"
     },
     {
-      "id": "audit-final.3",
+      "id": "audit-final.ref-target-artifact-parity",
       "phase": "final",
       "tier": 3,
       "kind": "command",
@@ -827,7 +827,7 @@
       "expect": "exit0"
     },
     {
-      "id": "audit-final.4",
+      "id": "audit-final.ref-fail-safe-fast-path",
       "phase": "final",
       "tier": 3,
       "kind": "command",
@@ -835,7 +835,7 @@
       "expect": "exit0"
     },
     {
-      "id": "audit-final.5",
+      "id": "audit-final.ref-pinned-guard-tool-resolution",
       "phase": "final",
       "tier": 2,
       "kind": "command",
@@ -843,7 +843,7 @@
       "expect": "exit0"
     },
     {
-      "id": "audit-final.6",
+      "id": "audit-final.iface-nx-vitest-peer-range",
       "phase": "final",
       "tier": 2,
       "kind": "command",
@@ -851,7 +851,7 @@
       "expect": "exit0"
     },
     {
-      "id": "audit-final.7",
+      "id": "audit-final.iface-vitest-related-cli",
       "phase": "final",
       "tier": 2,
       "kind": "command",

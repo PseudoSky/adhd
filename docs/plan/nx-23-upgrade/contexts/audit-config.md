@@ -1,4 +1,4 @@
-# audit-config — STATE_NAME
+# audit-config — Compiler-config phase holds
 
 **Phase:** config · **Kind:** audit · **Depends on:** cache-isolation · **Guard:** `python3 docs/plan/nx-23-upgrade/scripts/guard_audit_config.py`
 
@@ -6,7 +6,29 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+Shim removal and cache isolation are both green before the task graph is touched.
+
+---
+
+## Semantic distillation
+
+- The graph remodel deletes 136 targets. If a compiler shim was quietly load-bearing, you want to learn that HERE, not while three changes are in flight.
+
+---
+
+## Contract promise
+
+```text
+added:    []
+modified: []
+deleted:  []
+```
+
+---
+
+## Commit points
+
+- Commit the audit run record.
 
 ---
 

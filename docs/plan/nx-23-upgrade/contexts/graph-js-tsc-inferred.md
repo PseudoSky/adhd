@@ -1,4 +1,4 @@
-# graph-js-tsc-inferred — STATE_NAME
+# graph-js-tsc-inferred — tsc-built projects inferred (phase 2b)
 
 **Phase:** graph · **Kind:** work · **Depends on:** graph-test-build-inferred · **Guard:** `./node_modules/.bin/nx show projects | rg -q "agent-core-policy" && node -e "
 const fs=require(\"fs\"),path=require(\"path\");
@@ -10,7 +10,31 @@ process.exit(bad?1:0)"`
 
 ## Goal
 
-<What is true after this state that was not true before?>
+The fourteen tsc-built projects and the bespoke second-pass compile still build, with their targets inferred rather than declared.
+
+---
+
+## Semantic distillation
+
+- CRITICAL: the js plugin is NOT registered. Delete these targets first and the build target vanishes — nothing infers it. Register the plugin as part of this state, not after.
+- These targets carry genuinely non-inferable options (assets globs, explicit output paths, clean semantics). The inferred equivalent must reproduce them or the published artifact changes.
+- One of the fifteen is a bespoke second-pass compile with an additive-only output setting; it is not a shadow of anything. Treat it as a migration, not a deletion.
+
+---
+
+## Contract promise
+
+```text
+added:    ["the js plugin registration"]
+modified: ["15 project manifests","nx.json"]
+deleted:  ["15 explicit tsc executor targets"]
+```
+
+---
+
+## Commit points
+
+- Commit plugin registration and the conversions post-guard.
 
 ---
 

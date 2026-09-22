@@ -1,4 +1,4 @@
-# tsconfig-shim-removal — STATE_NAME
+# tsconfig-shim-removal — Migration compiler shims removed, parity with main proven
 
 **Phase:** config · **Kind:** work · **Depends on:** audit-reconcile · **Guard:** `node -e "const c=require(\"./tsconfig.base.json\").compilerOptions;for(const k of [\"strict\",\"types\",\"esModuleInterop\",\"ignoreDeprecations\",\"noUncheckedSideEffectImports\"])if(k in c)process.exit(1)" && ./node_modules/.bin/nx run-many -t build --projects=agent-base-types,data-query-engine,agent-core-policy`
 
@@ -6,7 +6,31 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+The shared compiler config carries no migration-only relaxation, and the tree still builds and type-checks.
+
+---
+
+## Semantic distillation
+
+- MEASURED, not assumed: main sets NONE of these keys. Of the 62 configs reaching the shared config, ~14 inherit `strict` and ~57 inherit `types` — but every removed value is either a TypeScript default or a diagnostics suppressor, so the shim is far less load-bearing than its reputation.
+- The one that suppresses real diagnostics is the deprecation key. Delete it too, but if the build goes red, that is the cause — record it rather than reinstating silently.
+- The negative-control criterion is the proof that matters: an injected type error must turn the build red. A green build with a dead type-checker is the failure this state exists to prevent.
+
+---
+
+## Contract promise
+
+```text
+added:    ["docs/plan/nx-23-upgrade/SHIM-REMOVAL.md"]
+modified: ["tsconfig.base.json"]
+deleted:  []
+```
+
+---
+
+## Commit points
+
+- Commit the shim removal + SHIM-REMOVAL.md post-guard. If a shim proves load-bearing, do NOT reinstate it silently — record which one and why, then escalate.
 
 ---
 

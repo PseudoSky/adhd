@@ -1,4 +1,4 @@
-# audit-tests — STATE_NAME
+# audit-tests — Test-selection phase holds
 
 **Phase:** tests · **Kind:** audit · **Depends on:** test-changed-optin · **Guard:** `python3 docs/plan/nx-23-upgrade/scripts/guard_audit_tests.py`
 
@@ -6,7 +6,30 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+File-level selection is proven to select cross-package tests AND to fail loudly on zero selection.
+
+---
+
+## Semantic distillation
+
+- Both halves matter. A selector that finds cross-package tests but passes silently on zero is the measured hazard with a nicer demo.
+- The commit gate must still be consumer-covering after this phase. Assert it, do not assume it.
+
+---
+
+## Contract promise
+
+```text
+added:    []
+modified: []
+deleted:  []
+```
+
+---
+
+## Commit points
+
+- Commit the audit run record.
 
 ---
 

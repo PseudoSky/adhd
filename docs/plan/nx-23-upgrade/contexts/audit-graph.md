@@ -1,4 +1,4 @@
-# audit-graph — STATE_NAME
+# audit-graph — Task-graph phase holds
 
 **Phase:** graph · **Kind:** audit · **Depends on:** graph-release-eslint-inferred · **Guard:** `python3 docs/plan/nx-23-upgrade/scripts/guard_audit_graph.py`
 
@@ -6,7 +6,30 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+The remodelled graph produces the same artifacts and an equivalent task graph before anything downstream trusts it.
+
+---
+
+## Semantic distillation
+
+- Re-run a real build and a real suite. A graph that loads is not a graph that works.
+- Re-run the earlier phases too — the accumulated harness catches a config regression introduced by the graph edits.
+
+---
+
+## Contract promise
+
+```text
+added:    []
+modified: []
+deleted:  []
+```
+
+---
+
+## Commit points
+
+- Commit the audit run record.
 
 ---
 
