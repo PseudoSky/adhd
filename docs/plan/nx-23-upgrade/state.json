@@ -81,10 +81,10 @@
       "end_ref": "131a0f4e1b70d762af3b49119c60d8494e3cdd0d"
     },
     "audit-graph": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-09-22T18:54:21.792Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "c8301de8efdf12d128d923ff4d66e26d53e0f921",
       "end_ref": null
     },
     "test-selection-revalidated": {
