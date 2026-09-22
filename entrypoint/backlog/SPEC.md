@@ -971,6 +971,14 @@ its own results.
 
 ### 5b. Lazy semantic-backend init (DEBT-BACKLOG-CLI-EAGER-EMBEDDING-001)
 
+> **Historical note (pre-fix state).** The paragraphs under **The defect.**
+> below describe the state BEFORE this item was fixed, in the tense they were
+> written. They name `store/semantic-search.ts` and its
+> `enableSemanticSearchFromConfig` singleton — a module the §7a cutover
+> **deleted** (there is no `store/semantic-search.ts` in the package today).
+> The shipped design is the single lazy gate described under **The fix**
+> further down; this note exists so the defect section is not read as current.
+
 **The defect.** Two independent sites bootstrap the real embedding/vector
 stack unconditionally, on every verb dispatch, regardless of whether that
 verb's own input ever touches the semantic channel:

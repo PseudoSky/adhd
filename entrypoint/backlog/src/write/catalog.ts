@@ -607,8 +607,12 @@ export function resolveProjectPolicy(
  * has nothing to gate: the gate applies only where verification is possible.
  * A path-less project therefore records `sha:"unverified"` verbatim, matching
  * the ETL's own precedent (`tools/etl/citation.ts`). Kept beside
- * {@link resolveProjectPolicy} — it reads the same resolved project row — and
- * shared by BOTH write paths so the `create`/`transition` gates never drift.
+ * {@link resolveProjectPolicy} — it reads the same resolved project row. The
+ * PREDICATE itself is shared by BOTH write paths so the `create`/`transition`
+ * gates never drift on WHICH projects are verifiable; the surrounding
+ * `computeCitationSha` hashing body is NOT shared — it stays a per-file copy
+ * in each verb (this package's established per-file-duplication convention —
+ * see `transition.ts`'s own doc comment on its copy).
  *
  * A TYPE PREDICATE, not a bare `boolean`: both `computeCitationSha` call sites
  * (and the waiver log beside each gate) need the narrowed `metadata.path` as a
