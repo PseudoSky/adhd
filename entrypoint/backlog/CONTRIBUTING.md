@@ -110,9 +110,9 @@ one repo is really in play.
 afterthought
 
 A sequential lead-then-implementer run proves nothing about concurrent
-multi-agent correctness — it is a single-writer scenario dressed up as
-multi-agent. Two distinct techniques are both required, because they prove
-different things:
+multi-agent correctness — it is a sequential, one-agent-at-a-time scenario
+dressed up as multi-agent. Two distinct techniques are both required, because
+they prove different things:
 
 1. **Raw forced contention** (no LLM in the loop): launch N real OS
    processes with `&`, collect every PID, and `wait` each one explicitly —
