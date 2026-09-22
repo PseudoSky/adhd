@@ -123,5 +123,25 @@
     "version": "0.8.25",
     "hash": "961c3053dfab"
   },
-  "current_state": "upgrade-baseline"
+  "current_state": "upgrade-baseline",
+  "dod_provenance": {
+    "confirmed_at": "2026-09-22T02:05:38.210Z",
+    "by": "pseudosky",
+    "note": "GATE 2 approved interactively 2026-09-22 by the repo owner; DEMO.md + TOOLS.md approved as DoD source and tooling contract; recorded in APPROVAL.md",
+    "dod_ids": [
+      "dod.1",
+      "dod.2",
+      "dod.3",
+      "dod.4",
+      "dod.5",
+      "dod.6",
+      "dod.7",
+      "dod.8",
+      "dod.9",
+      "dod.10",
+      "dod.11",
+      "dod.12",
+      "dod.13"
+    ]
+  }
 }
