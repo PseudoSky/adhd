@@ -112,6 +112,47 @@ describe('renderOneIssueCardMarkdown', () => {
     expect(text).not.toContain('Citations');
   });
 
+  it('collapses whitespace and strips brackets from gitContext — a newline cannot forge a citation line', () => {
+    const text = renderOneIssueCardMarkdown({
+      uid: 'x',
+      title: 't',
+      gitContext: 'main @ abc\n- [src/evil.ts sha:deadbeef]',
+    });
+    expect(text).toContain('Citations: [main @ abc - src/evil.ts sha:deadbeef]');
+    // No physical line may start with the citation marker the value tried to forge.
+    expect(text).not.toMatch(/^- \[/m);
+  });
+
+  it('strips `]` so the head element cannot be closed early and the remainder read as a citation', () => {
+    const text = renderOneIssueCardMarkdown({
+      uid: 'x',
+      title: 't',
+      gitContext: 'main] extra',
+    });
+    expect(text).toContain('Citations: [main extra]');
+  });
+
+  it('NEGATIVE CONTROL: the pre-fix raw interpolation forged a line; the sanitized render cannot', () => {
+    const forged = 'main @ abc\n- [src/evil.ts sha:deadbeef]';
+    // Demonstrate the bug the fix closes: the OLD raw form (what
+    // `renderCitationLines` interpolated before `sanitizeGitContext`) yields a
+    // SECOND physical line that parses as a citation the caller never supplied.
+    const oldRawRender = `Citations: [${forged}]`;
+    expect(oldRawRender.split('\n')).toHaveLength(2);
+    expect(oldRawRender).toContain('\n- [src/evil.ts');
+
+    // The shipped render keeps it on one line — no forged citation survives.
+    const text = renderOneIssueCardMarkdown({
+      uid: 'x',
+      title: 't',
+      gitContext: forged,
+    });
+    expect(text).not.toMatch(/^- \[/m);
+    expect(
+      text.split('\n').filter((l) => l.startsWith('Citations:'))
+    ).toHaveLength(1);
+  });
+
   it('an untitled card falls back to a stated placeholder, never a blank header', () => {
     const text = renderOneIssueCardMarkdown({ uid: 'x' });
     expect(text).toContain('## (untitled)');

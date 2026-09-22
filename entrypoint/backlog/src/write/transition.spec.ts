@@ -21,7 +21,7 @@ import {
   type TestIssueStore,
 } from '../test/helpers/open-test-issue-store.js';
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
-import { createIssue } from './create-issue.js';
+import { createIssue, MAX_GIT_CONTEXT_LENGTH } from './create-issue.js';
 import { update } from './update.js';
 import { transition } from './transition.js';
 import { claim } from './claim.js';
@@ -258,6 +258,34 @@ describe('transition — status change (SPEC.md §6.3.4, real store)', () => {
     expect(afterSecond?.metadata?.['gitContext']).toBe(
       'feat/backlog-hard-replacement @ 4bf902fc'
     );
+  });
+
+  it('a gitContext longer than MAX_GIT_CONTEXT_LENGTH is rejected with InvalidArgumentError before any write runs', async () => {
+    const before = await readNode(store, issueUid);
+    await expect(
+      transition(store, {
+        uid: issueUid,
+        by: 'closer',
+        toStatus: 'in-progress',
+        note: 'over-long',
+        gitContext: 'x'.repeat(MAX_GIT_CONTEXT_LENGTH + 1),
+      })
+    ).rejects.toThrow(InvalidArgumentError);
+
+    // Nothing changed — the cap is enforced before the write path runs.
+    const after = await readNode(store, issueUid);
+    expect(after?.metadata?.['gitContext']).toBeUndefined();
+    expect(after?.metadata?.['closedAt']).toBe(before?.metadata?.['closedAt']);
+
+    // Exactly at the cap is accepted (the boundary is inclusive).
+    const atCap = await transition(store, {
+      uid: issueUid,
+      by: 'closer',
+      toStatus: 'in-progress',
+      note: 'at-cap',
+      gitContext: 'x'.repeat(MAX_GIT_CONTEXT_LENGTH),
+    });
+    expect(atCap.toStatus).toBe('in-progress');
   });
 
   it('§8 AC-15: reopening a terminal issue CLEARS closedAt — the stale-timestamp case, not just never-set', async () => {

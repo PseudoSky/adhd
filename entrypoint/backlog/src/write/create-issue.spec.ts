@@ -26,9 +26,9 @@ import {
   type TestIssueStore,
 } from '../test/helpers/open-test-issue-store.js';
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
-import { createIssue } from './create-issue.js';
+import { createIssue, MAX_GIT_CONTEXT_LENGTH } from './create-issue.js';
 import { upsertProject } from './catalog.js';
-import { CitationUnverifiableError } from './errors.js';
+import { CitationUnverifiableError, InvalidArgumentError } from './errors.js';
 import { getNodeByUidTx, type ITxNodeRow } from './tx.js';
 import { queryIssues } from '../query/query.js';
 
@@ -489,5 +489,40 @@ describe('createIssue — item-level gitContext disclosure provenance (SPEC.md �
     if (!created.uid) throw new Error('setup: createIssue returned no uid');
     const row = await readNode(store, created.uid);
     expect(row?.metadata?.['gitContext']).toBeUndefined();
+  });
+
+  it('a gitContext longer than MAX_GIT_CONTEXT_LENGTH is rejected with InvalidArgumentError before any write runs', async () => {
+    const project = await upsertProject(store, {
+      name: 'gitcontext-cap-project',
+      by: 'filer',
+    });
+
+    await expect(
+      createIssue(store, {
+        project: project.uid,
+        title: 'over-long git context',
+        body: 'body',
+        gitContext: 'x'.repeat(MAX_GIT_CONTEXT_LENGTH + 1),
+        by: 'filer',
+      })
+    ).rejects.toBeInstanceOf(InvalidArgumentError);
+
+    // The cap is enforced before the write path runs — nothing was written.
+    const listed = await queryIssues(store, {
+      filter: { project: project.uid },
+    });
+    if (listed.view !== 'list')
+      throw new Error(`expected a list result, got view:${listed.view}`);
+    expect(listed.items).toHaveLength(0);
+
+    // Exactly at the cap is accepted (the boundary is inclusive).
+    const atCap = await createIssue(store, {
+      project: project.uid,
+      title: 'at-cap git context',
+      body: 'body',
+      gitContext: 'x'.repeat(MAX_GIT_CONTEXT_LENGTH),
+      by: 'filer',
+    });
+    expect(atCap.created).toBe(true);
   });
 });
