@@ -347,7 +347,7 @@ describe('api.ts create duplicate gate — real fastembed paraphrase proof', () 
     const members = await bootstrapSemanticStoreMembers(
       opened.store.adapter,
       opened.store.graph,
-      opened.env.config.embedding
+      opened.ctx.env.config.embedding
     );
     if (!members.search || !members.embedding) {
       throw new Error(
