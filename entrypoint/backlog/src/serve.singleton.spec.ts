@@ -35,7 +35,9 @@ async function connect(
   | { ok: false; error: Error }
 > {
   const transport = new StdioClientTransport({
-    command: 'node',
+    // `process.execPath` (not `'node'` off PATH) — aligned with the
+    // `runIsolatedBin`/`isolatedSpawnOptions` sites.
+    command: process.execPath,
     args: [DIST_INDEX, 'serve', '--transport', 'mcp'],
     // The required `ADHD_BACKLOG_SCOPE=project` + `HOME=<root>` redirect pair
     // lives in ONE place now — `test/helpers/spawn-isolated-bin.ts`.

@@ -62,7 +62,10 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
     // env vars + cwd, same convention `cli.spec.ts`'s `runBin` already
     // proves is real isolation (never the machine's global `~/.adhd/backlog`).
     transport = new StdioClientTransport({
-      command: 'node',
+      // `process.execPath` (not `'node'` off PATH) — the same interpreter
+      // `runIsolatedBin`/`isolatedSpawnOptions` sites use, so this spec cannot
+      // pick up a different Node via an ambient PATH.
+      command: process.execPath,
       args: [DIST_INDEX, 'serve', '--transport', 'mcp'],
       // The required `ADHD_BACKLOG_SCOPE=project` + `HOME=<root>` redirect
       // pair (and why the scope alone is not enough) lives in ONE place now —
