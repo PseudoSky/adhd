@@ -32,11 +32,11 @@
       "end_ref": "3e344506547870b14dce252edc6d6731bb262536"
     },
     "audit-reconcile": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-09-22T14:39:14.621Z",
-      "done_at": null,
+      "done_at": "2026-09-22T14:41:50.848Z",
       "start_ref": "176cab390f691b17dd4f0413f709c696a524c2a1",
-      "end_ref": null
+      "end_ref": "e8c501f9611028273736756fef32134bdb97e7d4"
     },
     "tsconfig-shim-removal": {
       "status": "pending",
@@ -221,6 +221,18 @@
       "audit_criteria_total": 39,
       "by": "pseudosky",
       "note": "Absorbed perf/test-resolve-fix (tip ce9e35c1, 3 commits) as commit 3e344506 (73 files). Method: file-level 3-way union merge (base 0d110a50, ours perf/nx-upgraded, theirs ce9e35c1) via `git merge-file --union` per file — NOT a cherry-pick, because both branches rewrote the same 62 vite configs + nx.json. nx.json resolved by intent (sharedGlobals=union incl. source-resolution.mjs + vitest-pool-defaults.mjs; test.dependsOn=[\"lint\",\"^build\"]; plugins=union). 62 configs: kept importMetaUrlCjs() AND added nxViteTsPathsPre(). Generator reconciled: NOTE (test resolution) injection now matches the importMetaUrlCjs-prefixed inline plugins array; base/generator.spec.ts reads vite.config.mts (branch extension) and asserts call adjacency with \\\\s*. 4 child-process opt-outs preserved (no import, no call, marker present, importMetaUrlCjs kept). Guard: RED before (helper absent) -> GREEN after (exit 0). Artifact unchanged: nx build data-query-engine index.js = 207020 B with plugin on (apply:serve) and 207020 B with the call removed. workspace-codegen-nx tests 14/14 pass (incl. source-resolution-optout.spec.ts 4/4). Audit criteria test-resolution-absorbed.1-.4 PASS. NOTE: committed with --no-verify because the pre-commit affected gate (63 projects, 10m22s) went red on backlog:test + apigen-plugin-py-grpc:test ONLY — both proven environmental and independent of this change: backlog fails identically with nxViteTsPathsPre present AND removed (A/B on entrypoint/backlog/vite.config.ts) and collides with the live host `backlog serve --transport mcp` (PID 53462, .worktrees/backlog-cutover) holding the store lock; py-grpc plugin.spec.ts passes 16/16 in isolation, failing only under the 63-project parallel run (a second agent ran `nx affected -t test` concurrently in .worktrees/backlog-v2). Token figures are estimates (no session meter)."
+    },
+    {
+      "ts": "2026-09-22T14:41:50.848Z",
+      "from": "audit-reconcile",
+      "to": "audit-reconcile",
+      "start_ref": "176cab390f691b17dd4f0413f709c696a524c2a1",
+      "end_ref": "e8c501f9611028273736756fef32134bdb97e7d4",
+      "audit_exit": 0,
+      "audit_criteria_passed": 39,
+      "audit_criteria_total": 39,
+      "by": "pseudosky",
+      "note": "Guard guard_audit_reconcile.py re-run post-guard: GUARD_EXIT=0, 39 criteria PASS / 0 FAIL (marker lines [upgrade-baseline.1-5][gate-triage-absorbed.1-5][config-repair-absorbed.1-4][test-resolution-absorbed.1-4][audit-reconcile.1-2][vite-cjs-import-meta-repair.1-9][browser-package-build-repair.1-4][browser-cjs-umd-repair.1-6]). Genuinely green, not partial: no FAIL markers, no zero-selected sentinel. Guard passes terminal phase only (--phase reconcile) and explicit --criteria <abs> with cwd=REPO_ROOT; both BUG-PLAN-AUDIT-PHASE/CWD workarounds intact. Guard script unmodified; contract promise added:[] modified:[] deleted:[] held."
     }
   ],
   "amendment_log": [
@@ -257,7 +269,7 @@
     "version": "0.8.25",
     "hash": "961c3053dfab"
   },
-  "current_state": "audit-reconcile",
+  "current_state": "tsconfig-shim-removal",
   "dod_provenance": {
     "confirmed_at": "2026-09-22T02:05:38.210Z",
     "by": "pseudosky",
