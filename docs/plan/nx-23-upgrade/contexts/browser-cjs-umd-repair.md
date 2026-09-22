@@ -22,6 +22,7 @@
 - [browser-cjs-umd-repair.3] The spec asserts against the BUILT bundles, not the source, because the defect is created by the bundler
 - [browser-cjs-umd-repair.4] The ESM bundle still carries native import.meta.url and is left untouched
 - [browser-cjs-umd-repair.5] The decision record states why the node shim is not a valid browser fix
+- [browser-cjs-umd-repair.6] Injecting the empty-import-meta token into a built browser bundle makes the bundle assertion fail
 ---
 
 ## Reservations
