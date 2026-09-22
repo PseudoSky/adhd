@@ -214,4 +214,85 @@ describe('describeParams — enum values and union members render in full, never
     const { text } = describeParams(schema);
     expect(text).toBe('input: { id: string, ref?: union }');
   });
+
+  it('a union whose member is itself a union truncates the inner union to "union" instead of re-expanding it (S-19 depth budget)', () => {
+    // The old boolean `expand` was threaded through `unionValues` unchanged,
+    // so a `oneOf` member that is directly another `oneOf`/`anyOf` (no
+    // intervening object) re-expanded at every nesting level. With the integer
+    // depth budget, the top-level union expands at depth 2 → members at depth
+    // 1; the inner union (depth 1 < 2) collapses to the `union` placeholder,
+    // while the scalar `boolean` member still shows.
+    const schema = {
+      input: {
+        type: 'object',
+        properties: {
+          data: {
+            type: 'object',
+            required: ['input'],
+            properties: {
+              input: {
+                oneOf: [
+                  { oneOf: [{ type: 'string' }, { type: 'number' }] },
+                  { type: 'boolean' },
+                ],
+              },
+            },
+          },
+        },
+      },
+    };
+    const { text } = describeParams(schema);
+    expect(text).toBe('input: union | boolean');
+    // Pre-fix this rendered 'input: string | number | boolean' — the inner
+    // union was fully re-expanded. Pin the absence of the runaway expansion.
+    expect(text).not.toContain('string | number');
+  });
+
+  it('a deeply-nested union terminates at the depth budget (bounded recursion, no stack overflow)', () => {
+    // Directly exercises S-19's "unbounded recursion": a 50k-deep union chain.
+    // The old boolean `expand` recursed once per level (RangeError: Maximum
+    // call stack size exceeded); the integer budget stops at the first nested
+    // union. Building the chain is cheap; only the render is under test.
+    let inner: unknown = { type: 'string' };
+    for (let i = 0; i < 50_000; i++) {
+      inner = { oneOf: [inner, { type: 'number' }] };
+    }
+    const schema = {
+      input: {
+        type: 'object',
+        properties: {
+          data: {
+            type: 'object',
+            required: ['input'],
+            properties: { input: inner },
+          },
+        },
+      },
+    };
+    expect(() => describeParams(schema)).not.toThrow();
+    // Top union expands; its first member (the next union down) truncates.
+    expect(describeParams(schema).text).toBe('input: union | number');
+  });
+
+  it('an empty enum array renders a placeholder, never a bare trailing colon (C-21)', () => {
+    // `def.enum` is truthy for `[]`, so the enum branch fired and
+    // `[].map(...).join('|')` produced '' — rendering `mode?: ` with nothing
+    // after the colon.
+    const schema = {
+      input: {
+        type: 'object',
+        properties: {
+          data: {
+            type: 'object',
+            required: [],
+            properties: { mode: { enum: [] } },
+          },
+        },
+      },
+    };
+    const { text } = describeParams(schema);
+    expect(text).toBe('mode?: unknown');
+    expect(text).not.toBe('mode?: ');
+    expect(text).not.toMatch(/:\s*$/);
+  });
 });

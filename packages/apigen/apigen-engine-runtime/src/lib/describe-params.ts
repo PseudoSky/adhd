@@ -18,13 +18,13 @@ export interface ParamInfo {
 
 /**
  * Renders one nested `object` schema's own fields as `{ a: string, b?: number }`
- * — the field-level detail a per-command `--help` needs. Deliberately bounded
- * to exactly ONE level: a field's own type is rendered via `typeName(propDef)`
- * with expansion OFF, so a doubly-nested object still collapses to the plain
- * `object` placeholder rather than fanning out into an unbounded recursive
- * dump. Returns `undefined` when the schema carries no `properties` to show
- * (an object with no declared shape, or a non-object schema) — the caller
- * falls back to the plain `object` placeholder in that case.
+ * — the field-level detail a per-command `--help` needs. TERMINAL: each field's
+ * own type is rendered via `typeName(propDef)` at depth 0 (see `typeName`'s
+ * doc comment for the depth contract), so a doubly-nested object still
+ * collapses to the plain `object` placeholder rather than fanning out into an
+ * unbounded recursive dump. Returns `undefined` when the schema carries no
+ * `properties` to show (an object with no declared shape, or a non-object
+ * schema) — the caller falls back to the plain `object` placeholder.
  */
 function objectShape(def: SchemaProp | undefined): string | undefined {
   if (!def || def.type !== 'object' || !def.properties) return undefined;
@@ -44,63 +44,82 @@ function enumLiteral(value: unknown): string {
 
 /**
  * Renders an `enum` schema's actual allowed values, e.g. `'open'|'closed'|'all'`
- * — never the bare, contentless word `enum`. Unconditional (not gated by
- * `expand`): unlike an `object`'s fields (genuinely unbounded, hence the
+ * — never the bare, contentless word `enum`. Unconditional (not gated by the
+ * depth budget): unlike an `object`'s fields (genuinely unbounded, hence the
  * one-level cap below), an enum's own value list is exactly the information a
  * caller needs to use the flag correctly, and is cheap to print in full at
  * any nesting depth (BUG-BACKLOG-CLI-HELP-BARE-ENUM-001 — `query --help`
  * rendered `view?: enum` for a ~10-value closed vocabulary, giving a caller no
  * way to discover `'projects'`/`'components'`/`'locations'` without reading
  * source or SPEC.md).
+ *
+ * An EMPTY `enum: []` has no values to render; `[].map(...).join('|')` would
+ * produce the empty string and leave a bare `mode?: ` with nothing after the
+ * colon (C-21), so it collapses to the same `unknown` placeholder used for an
+ * absent schema — an enum that constrains to nothing tells a caller nothing,
+ * and `unknown` says so rather than restating the JSON-Schema keyword `enum`.
  */
 function enumValues(def: SchemaProp): string {
-  return (def.enum ?? []).map(enumLiteral).join('|');
+  const values = def.enum ?? [];
+  if (values.length === 0) return 'unknown';
+  return values.map(enumLiteral).join('|');
 }
 
 /**
  * Renders a `oneOf`/`anyOf` union's member types, e.g.
  * `{ uid: string } | { registry: string, name: string }` — never the bare,
- * contentless word `union`. Only expanded when `expand` is true: each member
- * is itself rendered via `typeName(member, expand)`, so an object member gets
- * its OWN one-level field expansion too (this is what turns a mounted
- * discriminated-union verb's mounted top-level `{ input: union }` into the
- * member shapes a caller actually needs — BUG-BACKLOG-CLI-HELP-BARE-UNION-001,
- * `get --help` printed `{ input: union }` for its two structurally-disjoint
- * uid/registry variants, with zero way to discover either shape short of
- * reading source). When `expand` is false (a union nested inside an already-
- * expanded object's own field, or inside an array's `items`), stays the bare
- * `union` placeholder — same one-level bound `objectShape` already enforces,
- * so this can never runaway into an unbounded recursive dump.
+ * contentless word `union`. Each member is rendered via `typeName(member,
+ * depth)`, where `depth` is the budget `typeName` has ALREADY decremented for
+ * this level (see `typeName`'s doc comment for the full depth contract);
+ * `unionValues` deliberately does NOT re-inject or reset it. Re-injecting it
+ * (as the old boolean `expand` did) is exactly what let a union directly
+ * nested in a union re-expand at every level — unbounded recursion on a
+ * deeply nested schema (S-19). A member that is itself a union therefore
+ * receives `depth < 2` and collapses to the `union` placeholder, keeping the
+ * whole render bounded.
  */
-function unionValues(members: unknown[], expand: boolean): string {
+function unionValues(members: unknown[], depth: number): string {
   return (members as SchemaProp[])
-    .map((member) => typeName(member, expand))
+    .map((member) => typeName(member, depth))
     .join(' | ');
 }
 
 /**
- * @param expand When true, an `object` schema with `properties` renders its
- *   field-level shape (`objectShape`) instead of the plain `object`
- *   placeholder, AND a `oneOf`/`anyOf` union renders its member shapes
- *   (`unionValues`) instead of the plain `union` placeholder — both instead of
- *   collapsing to a contentless placeholder word. Only ever passed `true` for
- *   a TOP-LEVEL param — every recursive call for a field NESTED inside an
- *   already-expanded object/union (array items, a nested object's own fields,
- *   a union member's own fields) omits it, keeping expansion to exactly one
- *   level (see `objectShape`'s doc comment for why: apigen `--help` output —
- *   and any snapshot test asserting it — must stay bounded and readable, not
- *   an unbounded JSON dump). `enum` is the one exception to this bound: its
- *   value list is rendered in full unconditionally (`enumValues`), never
- *   gated by `expand` — see that function's own doc comment for why.
+ * Renders a schema node as a human-readable type, bounded by an integer
+ * `depth` budget rather than the old boolean `expand` flag (S-19: `expand` was
+ * threaded through `unionValues` unchanged, so a union directly nested inside
+ * a union re-expanded at every level and a deeply nested schema blew the call
+ * stack). `depth` is a strict superset of the boolean: the top-level caller
+ * that used to pass `true` now passes `2`, and `depth = 0` (the default, used
+ * for every nested field) is exactly the old `false`.
+ *
+ * The contract, exactly:
+ * - `!def`                   → `'unknown'`.
+ * - `array`                  → `${typeName(def.items, 0)}[]` — items always
+ *   render at depth 0; an element type is never expanded.
+ * - `enum`                   → `enumValues(def)`, unconditional at ANY depth
+ *   (see `enumValues`).
+ * - `$ref`                   → the ref's trailing name, unconditional.
+ * - `anyOf`/`oneOf` (union)  → `depth >= 2` → `unionValues(members, depth - 1)`
+ *   (member shapes); otherwise → the `'union'` truncation placeholder.
+ * - `object`                 → `depth >= 1` → `objectShape(def)` (terminal —
+ *   its fields render at depth 0); otherwise → `'object'`.
+ * - anything else            → `def.type ?? 'object'`.
+ *
+ * So exactly one level of object fields and one level of union members expand
+ * at the top (depth 2); a union member's own nested union/object collapses to
+ * the `'union'`/`'object'` placeholder. Both truncation markers are the
+ * pre-existing contentless placeholders — no new symbols — so every prior
+ * snapshot stays byte-identical.
  */
-function typeName(def: SchemaProp | undefined, expand = false): string {
+function typeName(def: SchemaProp | undefined, depth = 0): string {
   if (!def) return 'unknown';
-  if (def.type === 'array') return `${typeName(def.items)}[]`;
+  if (def.type === 'array') return `${typeName(def.items, 0)}[]`;
   if (def.enum) return enumValues(def);
   if (def.$ref) return String(def.$ref).split('/').pop() || 'object';
   const unionMembers = def.anyOf ?? def.oneOf;
-  if (unionMembers) return expand ? unionValues(unionMembers, expand) : 'union';
-  if (expand && def.type === 'object') return objectShape(def) ?? 'object';
+  if (unionMembers) return depth >= 2 ? unionValues(unionMembers, depth - 1) : 'union';
+  if (depth >= 1 && def.type === 'object') return objectShape(def) ?? 'object';
   return def.type ?? 'object';
 }
 
@@ -112,12 +131,15 @@ function typeName(def: SchemaProp | undefined, expand = false): string {
  * wrapper is always present (see [def:ComposedSchemas]). Returns both a
  * structured list (for JSON logs) and a `name?: type` summary string.
  *
- * Every TOP-LEVEL param's type is expanded one level deep when it is an
- * `object` with declared `properties` — e.g. `update`'s single `input` param
- * renders as `input: { repo: string, humanId: string, patch: object, by:
- * string }` instead of the placebo `input: object` that told a reader
- * nothing about what the command actually accepts (the surviving half of
- * FEAT-BACKLOG-003 / the `--help` finding in P5-cli-serve-transport).
+ * Every TOP-LEVEL param's type is expanded one level deep — an integer `depth`
+ * budget of 2 is passed to `typeName` (see its doc comment for the exact
+ * contract) — so an `object` with declared `properties` renders its fields and
+ * a `oneOf`/`anyOf` union renders its member shapes, e.g. `update`'s single
+ * `input` param renders as `input: { repo: string, humanId: string, patch:
+ * object, by: string }` instead of the placebo `input: object` that told a
+ * reader nothing about what the command actually accepts (the surviving half of
+ * FEAT-BACKLOG-003 / the `--help` finding in P5-cli-serve-transport). Nested
+ * unions/objects collapse to their placeholders, keeping the render bounded.
  */
 export function describeParams(schema: { input?: unknown } | undefined): {
   params: ParamInfo[];
@@ -134,7 +156,7 @@ export function describeParams(schema: { input?: unknown } | undefined): {
   const required = new Set<string>(data?.required ?? []);
   const params: ParamInfo[] = Object.entries(props).map(([name, def]) => ({
     name,
-    type: typeName(def, true),
+    type: typeName(def, 2),
     required: required.has(name),
   }));
   const text = params
