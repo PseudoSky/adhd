@@ -13,7 +13,8 @@
  *
  * **One substrate, no raw driver handles.** The vector channel runs on the
  * same Turso adapter the graph store already owns, which is what the
- * production RAG seam (`src/store/semantic-search.ts`) does — the synchronous
+ * production semantic seam (`src/write/bootstrap.ts`'s
+ * `bootstrapSemanticStoreMembers`) does — the synchronous
  * vector backend throws when handed a Turso adapter, so testing against it
  * would have pinned a configuration that can never ship. The ONLY faked seam is the embedding
  * MODEL itself (`embedQuery`) — a test-pinned text→vector map — which is

@@ -5,7 +5,7 @@
  *
  * A deterministic, in-process stand-in for `@adhd/sox-embedding-provider`'s
  * REAL `fastembed`/onnxruntime `bge-base-en-v1.5` model, implementing the
- * exact structural shape `semantic-search.ts`'s `loadOptional` seam expects
+ * exact structural shape `write/bootstrap.ts`'s `loadOptional` seam expects
  * (`OptEmbeddingModule`/`OptEmbeddingProvider` — see that file's header on
  * why the seam is a non-literal dynamic `import()`, deliberately decoupled
  * at compile time from the real optional package).
@@ -20,8 +20,8 @@
  * It is NOT used in every embedding-touching spec: any test whose fixtures
  * are deliberately constructed to require real cross-vocabulary semantic
  * similarity (e.g. finding a paraphrase that shares no token with the
- * query) stays on the real model — see `text-routing.spec.ts` and
- * `rag-e2e.spec.ts`, neither of which imports this file.
+ * query) stays on the real model — see `api.semantic-production-seam.spec.ts`,
+ * the only real-model suite, which does not import this file.
  *
  * **Determinism.** `embedTextDeterministic` hashes character trigrams of
  * the (lowercased) input text into a fixed-width vector via a seeded PRNG,
@@ -104,7 +104,7 @@ export function embedTextDeterministic(
   return vec;
 }
 
-/** Mirrors `semantic-search.ts`'s locally-declared `OptEmbeddingProvider`. */
+/** Mirrors `write/bootstrap.ts`'s locally-declared `OptEmbeddingProvider`. */
 export interface FakeEmbeddingProvider {
   readonly metadata: { modelId: string; dimensions: number };
   embedSingle(text: string, role?: 'document' | 'query'): Promise<Float32Array>;
@@ -117,7 +117,7 @@ export interface FakeEmbeddingProvider {
   };
 }
 
-/** Mirrors `semantic-search.ts`'s locally-declared `OptEmbeddingModule` — the shape `loadOptional('@adhd/sox-embedding-provider')` expects. */
+/** Mirrors `write/bootstrap.ts`'s locally-declared `OptEmbeddingModule` — the shape `loadOptional('@adhd/sox-embedding-provider')` expects. */
 export interface FakeEmbeddingModule {
   createEmbeddingProvider(config: {
     type: string;

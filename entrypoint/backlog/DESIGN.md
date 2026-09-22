@@ -43,15 +43,15 @@ entrypoint/backlog/
 │       ├── delete.ts        # delete — invalidate(), never a hard row delete
 │       ├── catalog.ts       # upsertProject/upsertComponent/upsertLocation/rmLocation
 │       ├── audit.ts         # writeAudit — the audit-trail node written by every mutating verb
+│       ├── bootstrap.ts     # bootstrapSemanticStoreMembers — THE per-adapter semantic seam (§9)
+│       ├── embedding-observer.ts   # scheduleIssueEmbedding — post-commit embed/delete round-trip (§9)
 │       ├── errors.ts        # the named E_VALIDATION/E_CONSTRAINT/E_CONTENTION/E_IO error classes
 │       └── tx.ts            # hand-composed, transaction-scoped SQL primitives (§3/§4.3 below)
 │   └── store/
 │       ├── graph-backlog-store.ts  # opens the store via @adhd/sox-store-adapter + createGraphBackend()
 │       ├── type-policy.ts          # the one open-vocabulary TypePolicy every store is opened with
-│       ├── mutate-metadata.ts      # the read-modify-write metadata primitive (§4.3)
 │       ├── immediate-retry.ts      # bounded, jittered retry around a busy/locked `.immediate()` call
-│       ├── embed-queue.ts          # RAG write path — schedules embeds after commit, off the write lock
-│       ├── semantic-search.ts      # the RAG seam — injectable SemanticBackend (§9)
+│       ├── vocabulary-guard.ts     # refuse an unrecognized-vocabulary store at open (read-only)
 │       └── signal-cleanup.ts       # SIGINT/SIGTERM store teardown for long-running hosts
 ├── SPEC.md
 ├── DESIGN.md
@@ -181,14 +181,13 @@ export interface GraphBacklogStore {
   readonly adapter: StoreAdapter; // ONLY for the CAS transaction wrapper
   readonly graph: GraphBackend; // all non-CAS reads/writes go through this
   readonly typePolicy: TypePolicy; // the SAME instance graph was constructed with
-  flushEmbeds(): Promise<void>; // RAG durability backstop (§9)
 }
 
 export async function openGraphBacklogStore(dbPath: string, busyTimeoutMs = 5000): Promise<GraphBacklogStore> {
   const adapter = await createStoreAdapter({ dbPath });
   await adapter.pragmaSet('busy_timeout', busyTimeoutMs); // AFTER graph construction — see the gotcha in §12
   const graph = createGraphBackend(adapter, { typePolicy: OPEN_TYPE_POLICY });
-  return { adapter, graph, typePolicy: OPEN_TYPE_POLICY, flushEmbeds: /* ... */ async () => {} };
+  return { adapter, graph, typePolicy: OPEN_TYPE_POLICY };
 }
 ```
 
@@ -243,16 +242,17 @@ Two distinct primitives now cover this, not one:
    same `uid` therefore serialize through the transaction's write lock: the loser
    blocks until the winner commits, then its own read executes against the
    winner's already-committed state.
-2. **`store/mutate-metadata.ts`'s `mutateMetadata`** — a read-full-compute-full-
-   write helper over the library's own (autocommitting) `touch()`, still used
-   where a caller does not need the hand-composed `tx.ts` machinery (e.g. the
-   embedding pipeline's post-commit `embedModel` bookkeeping, §9). It exists
-   because of an unresolved-by-contract ambiguity: whether `touch(id,
-Partial<NodeMeta>)` merges into the existing `metadata` JSON blob or replaces
-   it wholesale. It is confirmed (by reading `@adhd/sox-graph-store`'s published
-   `dist/`) to be a wholesale REPLACE, not a merge — so every caller of `touch`
-   must read the CURRENT full node, compute a full new metadata object, and pass
-   the COMPLETE object, regardless of which primitive it goes through.
+2. **Every metadata mutation now goes through `write/tx.ts`.** The former
+   read-full-compute-full-write `mutateMetadata` helper
+   (`store/mutate-metadata.ts`) is deleted — its last consumer was the dead RAG
+   write path. Where a caller previously used it, the verb's own
+   `executeWriteTransaction` re-fetches the node inside the transaction and
+   writes the complete metadata object through the tx-scoped primitives. The
+   reason it existed still holds and is recorded here: `touch(id,
+   Partial<NodeMeta>)` is a wholesale REPLACE, not a merge (verified against
+   `@adhd/sox-graph-store`'s published `dist/`), so any caller that does go
+   through `touch` must read the CURRENT full node, compute a full new metadata
+   object, and pass the COMPLETE object.
 
 Both primitives are wrapped in `withImmediateRetry` (`store/immediate-retry.ts`)
 — a bounded, jittered exponential backoff that retries only a busy/locked
@@ -459,7 +459,7 @@ layer returns `json`, and a markdown projection is expected to compose that JSON
 result with a separate renderer. There is no markdown parsing/rendering module in
 this package today, and no porting relationship to any external script.
 
-## 9. The RAG seam (embeddings — opt-in, decoupled by default)
+## 9. The RAG seam (embeddings — opt-in, lazy, decoupled by default)
 
 The embedding/vector pipeline is a real, shipping seam, off by default
 (`embedding.enabled`, §6). An unconfigured build has zero hard dependency on an
@@ -467,25 +467,41 @@ embedding/vector substrate: every semantic query input (`filter.semantic`,
 `filter.anchor`, a `similar` view, relevance sort, a `_vector` field) answers a
 typed "not configured" error, never a silently-wrong keyword substitute.
 
-- **`store/semantic-search.ts`** defines `SemanticBackend`, the narrow interface
-  the write layer (post-commit) and the read layer (`query/query.ts`,
-  `query/get.ts`) consult, and `bootstrapSemanticBackend`, which constructs the
-  real backend from the `optionalDependencies` `@adhd/sox-vector-store` +
-  `@adhd/sox-embedding-provider` — never installed unless a host opts in. Every
-  method on the interface is async because the backing store-adapter substrate's
-  entire API is async.
-- **Write-side (`store/embed-queue.ts`):** `createIssue`/`updateIssue` write the
-  node inside its own CAS transaction with NO embedding call inside it — the node
-  is FTS-searchable the instant that transaction commits. `scheduleEmbed` runs
-  strictly AFTER that commit, off the write lock, because an embedding call is a
-  network/inference round trip that must never hold the single write lock every
-  mutation in this store serializes through. A failed embed degrades that one
-  item to FTS-only reachability; it never fails the write that already
-  committed, and the returned promise never rejects into the caller.
-  `GraphBacklogStore.flushEmbeds()` is the durability backstop for a short-lived
-  process: it awaits every embed currently in flight so a CLI process that exits
-  right after a write does not lose a vector that was never given the chance to
-  finish.
+- **`write/bootstrap.ts` — `bootstrapSemanticStoreMembers`** is THE per-adapter
+  semantic path. Given the store's already-open `StoreAdapter`/`GraphBackend`
+  pair, it constructs the real stack from the `optionalDependencies`
+  `@adhd/sox-vector-store` + `@adhd/sox-embedding-provider` (loaded through a
+  non-literal dynamic `import()`, so neither is required at build time) and
+  returns two members:
+  - `embedding: IEmbeddingBackend` (`embedDocument` / `upsertVector` /
+    `deleteVector`) — the write-side handle, keyed on the graph node's rowid.
+  - `search: { backend: StoreSearchBackend, embedQuery, spacePopulated }` — the
+    read-side handle. `spacePopulated()` is a **bounded** `hasVectors` probe
+    (`SELECT 1 … LIMIT 1`), per-query truth read from the durable vector table —
+    never a process-lifetime latch (BUG e19bc9d0).
+
+  The derive is memoized per `StoreAdapter` (only a successful, member-ful
+  result is retained), so a process pays the cold model load once. Absent
+  members are the honest degrade: `scanForDuplicates` reports "scan unavailable"
+  and semantic reads report as unconfigured, never a stub returning empty.
+- **`api.ts` — `ensureSemanticReady`** is the sole call site: `writeHandle` /
+  `queryHandle` invoke it only under their `needsSemantic` gate, so a plain
+  `claim`/`transition`/`query` never pays the cold load (SPEC.md §5b). A bare
+  `text:` query additionally resolves `search.spacePopulated()` and snapshots it
+  onto the handle, because `resolveTextInput` is synchronous.
+- **Write-side (`write/embedding-observer.ts` — `scheduleIssueEmbedding`):**
+  `createIssue`/`updateIssue`/`deleteIssue` write the node inside their own CAS
+  transaction with NO embedding call inside it — the node is FTS-searchable the
+  instant that transaction commits. `scheduleIssueEmbedding` runs strictly AFTER
+  that commit, off the write lock, and writes its own
+  `embedding_upserted`/`embedding_deleted`/`embedding_failed` audit row in a
+  follow-up `immediate` transaction. A failed embed degrades that one item to
+  FTS-only reachability; it never fails the write that already committed, and
+  the returned promise never rejects into the caller. `awaitEmbed: true` awaits
+  that promise before the verb returns — the durability guarantee for a
+  short-lived process. There is no store-level drain: the old
+  `flushEmbeds`/in-flight-set mechanism was deleted with `store/embed-queue.ts`,
+  and `closeGraphBacklogStore` no longer drains.
 - **Dedupe (§2.4):** once embeddings are enabled, `createIssue`'s dedupe scan
   gains a nearest-neighbor candidate source over `content` embeddings, ranked
   against the project's `dedupe_threshold` policy value — `force` still lets a
@@ -598,7 +614,7 @@ IMMEDIATE`), which is exactly what makes the CAS design in §3/§4 correct. This
 | Live MCP mount             | `src/server.mcp.spec.ts`                                                                                | `startBacklogServer({transport:'mcp', signal})`, driven by a real MCP SDK client over stdio.                                                                                                                          |
 | Scope isolation            | `src/env.spec.ts`                                                                                       | Real `Environment` instances at `project` scope over temp `.git` dirs and at `global` scope over a temp `HOME`.                                                                                                       |
 | Ready/blocked view         | `src/query/query.ready.spec.ts`                                                                         | Real `blocks` edges written via `relate`, `view:'ready'` asserted against the real store.                                                                                                                             |
-| RAG opt-in / opt-out       | `src/store/rag-optional-deps.spec.ts`, `src/store/rag-e2e.spec.ts`, `src/store/semantic-search.spec.ts` | The default-disabled path answers the typed "not configured" error; the opted-in path drives a real (or injected fake, per test) `SemanticBackend` end to end.                                                        |
+| RAG opt-in / opt-out       | `src/write/rag-optional-deps.spec.ts`, `src/api.semantic-production-seam.spec.ts`, `src/api.semantic-laziness.spec.ts`, `src/query/views/semantic.spec.ts` | The default-disabled path answers the typed "not configured" error; the opted-in path drives a real (or injected fake, per test) embedding member end to end. |
 | Concurrent serve (no lock) | `src/serve.singleton.spec.ts`                                                                           | Two real, simultaneously-live `backlog serve` invocations against one store file, driven by real MCP clients issuing sustained concurrent writes — no lock coordinates them, and a fresh reopen finds exactly what was reported `ok:true`. |
 | Dist-load                  | `nx run backlog:verify-dist-load`                                                                       | Builds real `dist/`, imports it, calls a real verb against a real temp store — not source resolution.                                                                                                                 |
 
@@ -609,9 +625,9 @@ Every test above uses a real store under `tmp/backlog/<test-name>/` per
 
 - **`touch()` metadata merge is a wholesale REPLACE**, not a deep merge
   (verified against `@adhd/sox-graph-store`'s published `dist/`). Every caller
-  that goes through `touch` (directly, or via `mutateMetadata`, §4.3) must
-  therefore always pass the complete metadata object — passing a partial object
-  would silently drop every other field.
+  that goes through `touch` (§4.3) must therefore always pass the complete
+  metadata object — passing a partial object would silently drop every other
+  field.
 - **`invalidate()` (nodes) and `invalidateEdgeTx` (edges) merge, rather than
   replace**, the invalidation fields (`invalidatedAt`/`invalidatedReason`) into
   the existing metadata — a different, narrower primitive than `touch()`, used
