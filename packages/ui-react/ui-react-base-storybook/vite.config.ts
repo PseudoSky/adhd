@@ -1,4 +1,5 @@
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import { nxViteTsPathsPre } from '../../../tools/vite-plugins/source-resolution.mjs';
 import { projectCacheDir, projectCoverage } from '../../workspace/workspace-base-vite-paths/src/index';
 import react from '@vitejs/plugin-react';
 import * as path from 'path';
@@ -12,6 +13,7 @@ export default defineConfig({
   plugins: [
     react(),
     nxViteTsPaths(),
+    nxViteTsPathsPre(),
     dts({
       entryRoot: 'src',
       tsconfigPath: path.join(__dirname, 'tsconfig.lib.json'),

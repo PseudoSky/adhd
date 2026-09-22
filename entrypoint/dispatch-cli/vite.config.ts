@@ -13,6 +13,16 @@ export default defineConfig({
   root: __dirname,
   cacheDir: projectCacheDir(__dirname),
 
+  // Deliberately OMITS nxViteTsPathsPre(): src/test/cli-smoke.spec.ts spawns the
+  // COMPILED bin (dist/bin/cli.js) as a real Node child process, and a real-Node
+  // child resolves `@adhd/*` through node_modules to each dependency's built
+  // `dist` — it cannot be made to follow the parent's tsconfig paths. The
+  // pre-order tsconfig-paths plugin only reorders the vitest PARENT graph, so
+  // adding it here would resolve the parent to `src` while the child stays on
+  // `dist`: one test run, two builds of one package (BUG-062). Keep this project
+  // consistently all-`dist`; `^build` stays in the test target's dependsOn
+  // (project.json) so the child's `dist` is always fresh.
+  // Do NOT re-add nxViteTsPathsPre() here.
   plugins: [
     importMetaUrlCjs(),
     nxViteTsPaths(),

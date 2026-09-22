@@ -291,6 +291,79 @@ function patchViteConfig(tree: Tree, dir: string, platform: 'node' | 'browser' |
     'reportsDirectory: projectCoverage(__dirname),'
   );
 
+  // Centralized test-time source resolution — see
+  // `tools/vite-plugins/source-resolution.mjs` for the full rationale and the
+  // measured build-size proof (364480 B -> 223798 B with a bare
+  // `enforce: 'pre'`, byte-identical with `apply: 'serve'`). At TEST time a
+  // bare `@adhd/*` specifier resolves through the node_modules symlink to the
+  // dependency's built `dist`, because Vite's built-in `vite:resolve` runs
+  // BEFORE normal-order user plugins — so the `nxViteTsPaths()` above is never
+  // consulted for workspace packages and the test module graph terminates at
+  // project boundaries. `nxViteTsPathsPre()` is the same plugin hoisted ahead
+  // of `vite:resolve` via `enforce: 'pre'`, scoped to serve via
+  // `apply: 'serve'`. Emitting it here is what makes a freshly-scaffolded
+  // project structurally incapable of missing the fix. Uses the same
+  // idempotent `content.includes(...)` guard style as the externalize /
+  // workspace-base-vite-paths imports above.
+  //
+  // ⚠️ KNOWN-HAZARDOUS COMBINATION — BUG-062. The emitted plugin is WRONG for
+  // any project whose test suite spawns a REAL Node child process that resolves
+  // `@adhd/*` (e.g. it `spawnSync(process.execPath, [<built dist entry>])`, or
+  // `execFile`s an esbuild bundle that keeps `@adhd/*` external). A real-Node
+  // child resolves through node_modules to each dependency's built `dist` and
+  // CANNOT be made to follow the parent's tsconfig paths — `enforce: 'pre'`
+  // only reorders the vitest PARENT graph. Such a project would then run the
+  // parent against `src` and the child against `dist`: one test run, two builds
+  // of one package. The harm is LATENT, not always-visible — with `^build` in
+  // the test path it passes today, but drop `^build` and it fails loudly on an
+  // absent `dist`, or diverges silently on a stale one.
+  //
+  // THE FIX IS PER-PROJECT OPT-OUT: DELETE the `nxViteTsPathsPre()` entry and
+  // its import, add the `Deliberately OMITS nxViteTsPathsPre()` marker comment,
+  // and keep `^build` in the project's test `dependsOn` so the child's `dist`
+  // stays fresh. Confirmed opt-outs (do NOT re-add — see BUG-062):
+  //   entrypoint/agent-mcp                        (main-entry-symlink.test.ts)
+  //   entrypoint/dispatch-cli                     (cli-smoke.spec.ts, compiled bin)
+  //   packages/agent/agent-engine-compiler        (compile-cli*.test.ts)
+  //   packages/apigen/apigen-engine-conformance   (gate-workspace-root.spec.ts)
+  // Every generated config also carries a `NOTE (test resolution)` marker
+  // stating the same, and `source-resolution-optout.spec.ts` pins the invariant
+  // repo-wide (every vite.config.ts either uses the plugin or is a known
+  // opt-out — never both, never neither).
+  //
+  // NOTE: the injected marker deliberately avoids the literal substrings
+  // `source-resolution.mjs` and `nxViteTsPathsPre()` so it cannot fool the two
+  // `content.includes(...)` idempotency guards below.
+  if (!content.includes('NOTE (test resolution)')) {
+    // The importMetaUrlCjs() patch above may already have prefixed the array
+    // (`plugins: [importMetaUrlCjs(), nxViteTsPaths(), ...]`), so match either
+    // shape and preserve any such prefix in the replacement.
+    content = content.replace(
+      /plugins: \[(importMetaUrlCjs\(\),\s*)?nxViteTsPaths\(\)/,
+      (_m: string, pre: string | undefined) =>
+        `// NOTE (test resolution): the pre-ordered tsconfig-paths plugin below makes\n` +
+        `// the vitest PARENT resolve @adhd/* to \`src\`. If this project's tests spawn a\n` +
+        `// real Node child process (which resolves @adhd/* from each dependency's built\n` +
+        `// \`dist\`), DELETE that pre-ordered plugin and keep ^build in the test target —\n` +
+        `// otherwise one test run uses two builds. See BUG-062.\n` +
+        `        plugins: [${pre ?? ''}nxViteTsPaths()`
+    );
+  }
+  if (!content.includes('source-resolution.mjs')) {
+    content = content.replace(
+      /(import \{ nxViteTsPaths \} from '@nx\/vite\/plugins\/nx-tsconfig-paths\.plugin';\n)/,
+      `$1import { nxViteTsPathsPre } from '../../../tools/vite-plugins/source-resolution.mjs';\n`
+    );
+  }
+  if (!content.includes('nxViteTsPathsPre()')) {
+    // The `@nx/js` vite template emits `plugins: [nxViteTsPaths(), dts({...})],`
+    // (inline array, `dts` on the next line) rather than the fully multi-line
+    // shape a hand-authored config has, so match the call token itself instead
+    // of a line/array shape. `formatFiles` reformats the result into the
+    // conventional multi-line form.
+    content = content.replace('nxViteTsPaths()', 'nxViteTsPaths(), nxViteTsPathsPre()');
+  }
+
   tree.write(vitePath, content);
 }
 

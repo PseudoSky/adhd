@@ -1,5 +1,6 @@
 /// <reference types='vitest' />
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import { nxViteTsPathsPre } from '../../../tools/vite-plugins/source-resolution.mjs';
 import { projectCacheDir, projectCoverage } from '../../workspace/workspace-base-vite-paths/src/index';
 import react from '@vitejs/plugin-react';
 import * as path from 'path';
@@ -18,6 +19,7 @@ export default defineConfig({
     // (`import-meta-url-cjs.mjs`) is NOT wired here: its `require`/`__filename`
     // do not exist in a browser chunk. See docs/plan/nx-23-upgrade/BROWSER-BUNDLE-REPAIR.md.
     importMetaUrlBrowserCjs(),
+    nxViteTsPathsPre(),
     dts({
       entryRoot: 'src',
       tsconfigPath: path.join(__dirname, 'tsconfig.lib.json'),

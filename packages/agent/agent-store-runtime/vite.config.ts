@@ -1,6 +1,7 @@
 /// <reference types='vitest' />
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { importMetaUrlCjs } from '../../../tools/vite-plugins/import-meta-url-cjs.mjs';
+import { nxViteTsPathsPre } from '../../../tools/vite-plugins/source-resolution.mjs';
 import { projectCacheDir, projectCoverage } from '../../workspace/workspace-base-vite-paths/src/index';
 import { defineConfig } from 'vite';
 
@@ -9,6 +10,7 @@ export default defineConfig({
   cacheDir: projectCacheDir(__dirname),
 
   plugins: [importMetaUrlCjs(), nxViteTsPaths()],
+  plugins: [nxViteTsPaths(), nxViteTsPathsPre()],
 
   build: {
     outDir: 'dist',
