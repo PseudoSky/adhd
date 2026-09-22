@@ -53,10 +53,10 @@
       "end_ref": "1861fca5410ca83d5877c3dc679dfd5f74e7463d"
     },
     "audit-config": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-09-22T14:58:32.865Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "cc00c211c77758f01ca0aac37c8e7ec2e9ad80d7",
       "end_ref": null
     },
     "graph-test-build-inferred": {
