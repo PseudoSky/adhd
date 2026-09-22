@@ -109,15 +109,25 @@ async function waitForOpenApi(port: number): Promise<Record<string, unknown>> {
     }
     await new Promise((r) => setTimeout(r, 100));
   }
-  throw new Error(`OpenAPI doc never became available on :${port} — ${String(lastErr)}`);
+  throw new Error(
+    `OpenAPI doc never became available on :${port} — ${String(lastErr)}`
+  );
 }
 
 /** Issues the operation's own registered verb; 404 means "no such route". */
-async function probeRoute(port: number, verb: string, route: string): Promise<number> {
+async function probeRoute(
+  port: number,
+  verb: string,
+  route: string
+): Promise<number> {
   const url = `http://127.0.0.1:${port}${route}`;
   if (verb === 'GET') return (await fetch(url)).status;
   return (
-    await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    })
   ).status;
 }
 
@@ -129,7 +139,10 @@ async function probeRoute(port: number, verb: string, route: string): Promise<nu
 function parseCliTable(help: string): { apigen: string[]; special: string[] } {
   const marker = 'Available commands:';
   const idx = help.indexOf(marker);
-  if (idx < 0) throw new Error(`built bin --help printed no "${marker}" section:\n${help}`);
+  if (idx < 0)
+    throw new Error(
+      `built bin --help printed no "${marker}" section:\n${help}`
+    );
   const specialBlock = help.slice(0, idx);
   const tableBlock = help.slice(idx + marker.length);
 
@@ -180,7 +193,9 @@ beforeAll(async () => {
   // assertion for DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001 (a lazy caller must
   // be able to build the whole command table without opening the DB).
   const built = await buildBacklogApigenPackage((): BacklogCtx => {
-    throw new Error('buildBacklogApigenPackage opened the store while deriving the mounted surface');
+    throw new Error(
+      'buildBacklogApigenPackage opened the store while deriving the mounted surface'
+    );
   });
   const surface = describeMountedSurface(built.operations);
 
@@ -198,23 +213,43 @@ beforeAll(async () => {
     signal: httpAbort.signal,
   });
   const doc = await waitForOpenApi(port);
-  const openApiPaths = Object.keys((doc['paths'] ?? {}) as Record<string, unknown>).sort();
+  const openApiPaths = Object.keys(
+    (doc['paths'] ?? {}) as Record<string, unknown>
+  ).sort();
 
   const restStatus = new Map<string, number>();
   for (const entry of surface) {
-    restStatus.set(entry.httpRoute, await probeRoute(port, entry.httpVerb, entry.httpRoute));
+    restStatus.set(
+      entry.httpRoute,
+      await probeRoute(port, entry.httpVerb, entry.httpRoute)
+    );
   }
   for (const route of MOUNT_OP_HTTP_ROUTES) {
-    restStatus.set(route, await probeRoute(port, route === '/_meta/openapi' ? 'GET' : 'POST', route));
+    restStatus.set(
+      route,
+      await probeRoute(port, route === '/_meta/openapi' ? 'GET' : 'POST', route)
+    );
   }
   // Control for the probe itself: if an UNREGISTERED route did not 404, the
   // "status !== 404 ⇒ route exists" inference below would be vacuous.
-  const bogusRouteStatus = await probeRoute(port, 'GET', '/backlog/definitely-not-a-mounted-operation');
+  const bogusRouteStatus = await probeRoute(
+    port,
+    'GET',
+    '/backlog/definitely-not-a-mounted-operation'
+  );
 
   // ---- MCP (real built server, real JSON-RPC stdio) ----------------------
   const mcpRoot = tempRoot('backlog-v2-mcp-');
-  const transport = new StdioClientTransport({ command: 'node', args: [MCP_ENTRY, mcpRoot], cwd: mcpRoot, env: { HOME: mcpRoot } });
-  const client = new Client({ name: 'backlog-v2-parity-client', version: '1.0.0' }, { capabilities: {} });
+  const transport = new StdioClientTransport({
+    command: 'node',
+    args: [MCP_ENTRY, mcpRoot],
+    cwd: mcpRoot,
+    env: { HOME: mcpRoot },
+  });
+  const client = new Client(
+    { name: 'backlog-v2-parity-client', version: '1.0.0' },
+    { capabilities: {} }
+  );
   await client.connect(transport);
   const mcpTools = (await client.listTools()).tools.map((t) => t.name).sort();
   await client.close().catch(() => undefined);
@@ -233,7 +268,9 @@ beforeAll(async () => {
     timeout: 30_000,
   });
   if (help.status !== 0) {
-    throw new Error(`built bin --help exited ${String(help.status)}: ${help.stderr}`);
+    throw new Error(
+      `built bin --help exited ${String(help.status)}: ${help.stderr}`
+    );
   }
   const parsed = parseCliTable(help.stdout);
 
@@ -293,11 +330,13 @@ describe('AC-0 / INTERFACE_v2 §10.0 — one apigen package composed once, mount
     expect(missing).toEqual([]);
   });
 
-  it('OpenAPI: the served document\'s paths are EXACTLY the projected routes (derived, not hand-written)', () => {
+  it("OpenAPI: the served document's paths are EXACTLY the projected routes (derived, not hand-written)", () => {
     // Equality, not containment. A hand-maintained document drifts in both
     // directions — a stale path that no longer exists is as much a lie as a
     // missing one — so both directions must fail.
-    expect(live.openApiPaths).toEqual(live.surface.map((e) => e.httpRoute).sort());
+    expect(live.openApiPaths).toEqual(
+      live.surface.map((e) => e.httpRoute).sort()
+    );
   });
 
   it('OpenAPI: each path carries the same verb the Fastify mount registered', () => {
@@ -308,11 +347,15 @@ describe('AC-0 / INTERFACE_v2 §10.0 — one apigen package composed once, mount
   });
 
   it('MCP: tools/list is EXACTLY the projected tool names (plus the batch mount op)', () => {
-    expect(live.mcpTools).toEqual([...live.surface.map((e) => e.mcpTool), MOUNT_OP_MCP_TOOL].sort());
+    expect(live.mcpTools).toEqual(
+      [...live.surface.map((e) => e.mcpTool), MOUNT_OP_MCP_TOOL].sort()
+    );
   });
 
-  it('CLI: the built bin\'s command table is EXACTLY the projected commands (plus the batch mount op)', () => {
-    expect(live.cliApigen).toEqual([...live.surface.map((e) => e.cliCommand), MOUNT_OP_CLI_COMMAND].sort());
+  it("CLI: the built bin's command table is EXACTLY the projected commands (plus the batch mount op)", () => {
+    expect(live.cliApigen).toEqual(
+      [...live.surface.map((e) => e.cliCommand), MOUNT_OP_CLI_COMMAND].sort()
+    );
   });
 
   it('THE PARITY CLAIM: the four live surfaces name the same operation set, per operation', () => {
@@ -327,7 +370,9 @@ describe('AC-0 / INTERFACE_v2 §10.0 — one apigen package composed once, mount
       mcp: live.mcpTools.includes(entry.mcpTool),
       cli: live.cliApigen.includes(entry.cliCommand),
     }));
-    const disagreements = rows.filter((r) => !(r.rest && r.openapi && r.mcp && r.cli));
+    const disagreements = rows.filter(
+      (r) => !(r.rest && r.openapi && r.mcp && r.cli)
+    );
     expect(disagreements).toEqual([]);
     // …and the counts agree, so a transport cannot satisfy the row check
     // while ALSO advertising extra operations nobody else has.
@@ -354,16 +399,25 @@ describe('AC-0 / INTERFACE_v2 §10.0 — one apigen package composed once, mount
 describe('AC-0 negative control — the §6 host-command carve-out is pinned on every mount', () => {
   it('install / install-skill / serve are not projected as operations', () => {
     for (const cmd of BACKLOG_HOST_COMMANDS) {
-      expect(live.surface.map((e) => e.cliPath[e.cliPath.length - 1])).not.toContain(cmd);
+      expect(
+        live.surface.map((e) => e.cliPath[e.cliPath.length - 1])
+      ).not.toContain(cmd);
     }
   });
 
   it('no MCP tool, OpenAPI path, or CLI command exposes a host command', () => {
     for (const cmd of BACKLOG_HOST_COMMANDS) {
       const snake = cmd.replace(/-/g, '_');
-      expect(live.mcpTools.some((t) => t === `backlog_${snake}`), `mcp exposes ${cmd}`).toBe(false);
-      expect(live.openApiPaths, `openapi exposes ${cmd}`).not.toContain(`/backlog/${cmd}`);
-      expect(live.cliApigen, `cli table exposes ${cmd}`).not.toContain(`backlog ${cmd}`);
+      expect(
+        live.mcpTools.some((t) => t === `backlog_${snake}`),
+        `mcp exposes ${cmd}`
+      ).toBe(false);
+      expect(live.openApiPaths, `openapi exposes ${cmd}`).not.toContain(
+        `/backlog/${cmd}`
+      );
+      expect(live.cliApigen, `cli table exposes ${cmd}`).not.toContain(
+        `backlog ${cmd}`
+      );
     }
   });
 

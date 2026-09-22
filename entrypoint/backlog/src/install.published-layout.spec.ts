@@ -33,7 +33,15 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -51,25 +59,47 @@ interface SpawnResult {
 
 function flattenDistIntoFreshRoot(): string {
   mkdirSync(TMP_ROOT, { recursive: true });
-  const publishedRoot = mkdtempSync(join(TMP_ROOT, 'install-published-layout-'));
+  const publishedRoot = mkdtempSync(
+    join(TMP_ROOT, 'install-published-layout-')
+  );
   for (const entry of readdirSync(DIST_DIR)) {
-    cpSync(join(DIST_DIR, entry), join(publishedRoot, entry), { recursive: true });
+    cpSync(join(DIST_DIR, entry), join(publishedRoot, entry), {
+      recursive: true,
+    });
   }
   return publishedRoot;
 }
 
-function runInstallSkill(publishedRoot: string, extraArgv: string[]): SpawnResult {
+function runInstallSkill(
+  publishedRoot: string,
+  extraArgv: string[]
+): SpawnResult {
   const indexJs = join(publishedRoot, 'index.js');
-  const result = spawnSync(process.execPath, [indexJs, 'install-skill', ...extraArgv], {
-    cwd: publishedRoot,
-    // HOME redirect: the global config layer is read regardless of
-    // `ADHD_BACKLOG_SCOPE` (see cli.spec.ts runBin's note), so isolate it too.
-    env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project', HOME: publishedRoot },
-    encoding: 'utf8',
-    timeout: 30_000,
-  });
-  if (result.error) throw new Error(`spawn failed for ${indexJs} install-skill: ${String(result.error)}`);
-  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+  const result = spawnSync(
+    process.execPath,
+    [indexJs, 'install-skill', ...extraArgv],
+    {
+      cwd: publishedRoot,
+      // HOME redirect: the global config layer is read regardless of
+      // `ADHD_BACKLOG_SCOPE` (see cli.spec.ts runBin's note), so isolate it too.
+      env: {
+        ...process.env,
+        ADHD_BACKLOG_SCOPE: 'project',
+        HOME: publishedRoot,
+      },
+      encoding: 'utf8',
+      timeout: 30_000,
+    }
+  );
+  if (result.error)
+    throw new Error(
+      `spawn failed for ${indexJs} install-skill: ${String(result.error)}`
+    );
+  return {
+    status: result.status,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
 }
 
 describe('BUG-013 — install-skill on a published (rebased-to-root) layout', () => {
@@ -82,7 +112,10 @@ describe('BUG-013 — install-skill on a published (rebased-to-root) layout', ()
 
   it('FIX A precondition: the real built dist/ actually contains skill/SKILL.md before this test even flattens it', () => {
     const distSkillMd = join(DIST_DIR, 'skill', 'SKILL.md');
-    expect(existsSync(distSkillMd), `${distSkillMd} missing — run "nx run backlog:assets" (BUG-013 FIX A) before this suite`).toBe(true);
+    expect(
+      existsSync(distSkillMd),
+      `${distSkillMd} missing — run "nx run backlog:assets" (BUG-013 FIX A) before this suite`
+    ).toBe(true);
   });
 
   it('RED-state proof: the pre-FIX-B escaped path (one level above the flattened package root) is categorically absent — the real bug this test guards against', () => {
@@ -93,19 +126,33 @@ describe('BUG-013 — install-skill on a published (rebased-to-root) layout', ()
 
   it('install-skill --host opencode --scope project succeeds (exit 0) and writes the real packaged SKILL.md, never the escaped-path ENOENT', () => {
     publishedRoot = flattenDistIntoFreshRoot();
-    const res = runInstallSkill(publishedRoot, ['--host', 'opencode', '--scope', 'project']);
+    const res = runInstallSkill(publishedRoot, [
+      '--host',
+      'opencode',
+      '--scope',
+      'project',
+    ]);
 
     expect(res.stderr).not.toMatch(/packaged skill file not found/);
     expect(res.stderr).not.toMatch(/@adhd[/\\]skill/);
-    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
+      0
+    );
 
-    const body = JSON.parse(res.stdout.trim()) as { installed: Array<{ host: string; scope: string; path: string }> };
+    const body = JSON.parse(res.stdout.trim()) as {
+      installed: Array<{ host: string; scope: string; path: string }>;
+    };
     expect(body.installed).toHaveLength(1);
     const installedPath = body.installed[0].path;
-    expect(installedPath).toBe(join(publishedRoot, '.opencode', 'skills', 'backlog', 'SKILL.md'));
+    expect(installedPath).toBe(
+      join(publishedRoot, '.opencode', 'skills', 'backlog', 'SKILL.md')
+    );
     expect(existsSync(installedPath)).toBe(true);
 
-    const packagedSkillMd = readFileSync(join(publishedRoot, 'skill', 'SKILL.md'), 'utf8');
+    const packagedSkillMd = readFileSync(
+      join(publishedRoot, 'skill', 'SKILL.md'),
+      'utf8'
+    );
     expect(readFileSync(installedPath, 'utf8')).toBe(packagedSkillMd);
     expect(packagedSkillMd.length).toBeGreaterThan(0);
   }, 30_000);
@@ -113,13 +160,32 @@ describe('BUG-013 — install-skill on a published (rebased-to-root) layout', ()
   it('install --skill-only on the published layout behaves identically to install-skill (same underlying installSkillToHosts call)', () => {
     publishedRoot = flattenDistIntoFreshRoot();
     const indexJs = join(publishedRoot, 'index.js');
-    const result = spawnSync(process.execPath, [indexJs, 'install', '--host', 'claude', '--scope', 'project', '--skill-only'], {
-      cwd: publishedRoot,
-      env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project', HOME: publishedRoot },
-      encoding: 'utf8',
-      timeout: 30_000,
-    });
-    expect(result.status, `stderr:\n${result.stderr}\nstdout:\n${result.stdout}`).toBe(0);
+    const result = spawnSync(
+      process.execPath,
+      [
+        indexJs,
+        'install',
+        '--host',
+        'claude',
+        '--scope',
+        'project',
+        '--skill-only',
+      ],
+      {
+        cwd: publishedRoot,
+        env: {
+          ...process.env,
+          ADHD_BACKLOG_SCOPE: 'project',
+          HOME: publishedRoot,
+        },
+        encoding: 'utf8',
+        timeout: 30_000,
+      }
+    );
+    expect(
+      result.status,
+      `stderr:\n${result.stderr}\nstdout:\n${result.stdout}`
+    ).toBe(0);
     const body = JSON.parse(result.stdout.trim()) as {
       skill: Array<{ host: string; scope: string; path: string }>;
       mcp: unknown[];
