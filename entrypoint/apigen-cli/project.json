@@ -22,7 +22,8 @@
         "{workspaceRoot}/coverage/entrypoint/apigen-cli"
       ],
       "dependsOn": [
-        "build"
+        "build",
+        "apigen-java:package"
       ],
       "options": {
         "configFile": "entrypoint/apigen-cli/vite.config.ts"

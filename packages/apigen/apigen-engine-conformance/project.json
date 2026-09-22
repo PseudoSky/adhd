@@ -18,6 +18,11 @@
   "targets": {
     "test": {
       "executor": "@nx/vite:test",
+      "dependsOn": [
+        "lint",
+        "^build",
+        "apigen-java:package"
+      ],
       "outputs": [
         "{workspaceRoot}/coverage/packages/apigen/apigen-engine-conformance"
       ],
