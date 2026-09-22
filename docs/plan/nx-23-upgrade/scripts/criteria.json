@@ -1025,6 +1025,16 @@
       "paths": [
         "docs/plan/nx-23-upgrade/BROWSER-BUNDLE-REPAIR.md"
       ]
+    },
+    {
+      "id": "browser-cjs-umd-repair.6",
+      "phase": "intake",
+      "tier": 3,
+      "kind": "negative-control",
+      "positive": "node -e \"const fs=require('fs');const t=fs.readFileSync('packages/ui-react/ui-react-base-hooks/dist/index.js','utf8');process.exit(t.includes('{}.url')?1:0)\"",
+      "mutate": "node docs/plan/nx-23-upgrade/scripts/neg-control-browser-bundle.mjs mutate packages/ui-react/ui-react-base-hooks/dist/index.js packages/ui-react/ui-react-base-hooks/dist/index.umd.js",
+      "restore": "node docs/plan/nx-23-upgrade/scripts/neg-control-browser-bundle.mjs restore packages/ui-react/ui-react-base-hooks/dist/index.js packages/ui-react/ui-react-base-hooks/dist/index.umd.js",
+      "expect": "exit0"
     }
   ]
 }
