@@ -43,9 +43,19 @@ measured figure is **193**. The stated number was not used.)
 
 ## Which removal changed a build outcome
 
-**None.** Every removed value is either a TypeScript default or had nothing to act on:
+**One did.** `strict` was recorded here as a no-op, and that recording was wrong under
+the compiler this workspace actually pins (TypeScript 6.0.3):
 
-- `strict: false` — TS default is `false`; removal is a no-op.
+- `strict: false` — **NOT a no-op.** The claim "TS default is `false`; removal is a no-op"
+  held for TypeScript 5.x, where `strict` defaults to `false`. **TypeScript 6.0.3 defaults
+  `strict` to `true`**, so deleting the key *enabled* `strict` for the **137** configs that
+  inherited it — a real build-outcome change. Measured consequence: it surfaced two real,
+  previously-masked errors in `entrypoint/decompile-cli`
+  (TS2454 `Variable 'r' is used before being assigned` at `src/lib/extractors/index.ts:103`;
+  TS18048 `'cookies' is possibly 'undefined'` at `src/lib/extractors/site.ts:83`). Strict was
+  accepted — it is the point of the removal — and both errors were fixed in source rather than
+  suppressed. The full account, including the build-gate regression this later exposed and its
+  restoration, is in `TYPECHECK-TEETH.md`.
 - `esModuleInterop: false` — TS default is `false`; removal is a no-op.
 - `noUncheckedSideEffectImports: false` — TS default is `false`; removal is a no-op.
 - `types: ["*"]` — equivalent to leaving `types` unspecified (all `@types` packages);
@@ -75,7 +85,9 @@ by injecting a deliberate type error and confirming the gate goes red:
    ./node_modules/.bin/nx run-many -t build --projects=agent-base-types,data-query-engine,agent-core-policy
    ```
    Result: **exit 130**, `Found type errors.`, `agent-base-types:build` failed.
-   (The `@nx/vite:build` path type-checks via `vite-plugin-dts`.)
+   (At the time of this measurement the 47 explicit `@nx/vite:build` targets still ran
+   `validateTypes`; a later graph remodel deleted them and with them the gate. That
+   regression and its restoration are documented in `TYPECHECK-TEETH.md`.)
 3. Reverted the injection (`git restore packages/agent/agent-base-types/src/index.ts`).
 4. Re-ran the guard: **exit 0**, 5/5 success.
 
