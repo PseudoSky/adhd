@@ -1832,6 +1832,20 @@ other-agent edit — not ours.)
 - Still in flight: sox `hasVectors` (publish); review fixes code/docs. Then:
   full affected gate → push.
 
+**Checkpoint for context compaction (2026-09-22):**
+- HEAD `e23d7562` on `feat/backlog-hard-replacement`; remote `origin` still at
+  `af8eaf63` — **push pending** the affected gate (the java mvn race blocker
+  is fixed).
+- In flight (background task ids): sox `hasVectors`
+  (`ses_f36a6efc5ffeNgBQ6UICeIVjH1`); review fixes code/docs
+  (`ses_f36a6e0b5ffeOU8LAWvpbb2wdT` — its edits are the uncommitted `SPEC.md` /
+  `vocabulary-guard.ts`+spec / `bootstrap.ts` in the tree). Collect both, then:
+  `npx nx affected -t test --base=af8eaf63 --head=HEAD` → push.
+- Immediate queue after push: switch the readiness probe to `hasVectors`
+  (dep bump) → Seg F → Seg G → review → push → Wave 1 → Wave 2 → Wave 3.
+- Memory handoff (canonical): episode `01M34PTH0G1ZWJ7NM40HBAZTWN`, topic
+  `backlog-v2-remediation` — updated at this checkpoint.
+
 **Triage decisions landed:**
 
 | Item | Verdict → consequence |
