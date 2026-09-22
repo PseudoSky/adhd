@@ -33,7 +33,6 @@
  * exercises the exact mount path that crashed on the real npm install.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { spawnSync } from 'node:child_process';
 import {
   cpSync,
   mkdtempSync,
@@ -44,6 +43,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runIsolatedBin } from './test/helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = join(HERE, '..');
@@ -83,24 +83,9 @@ describe('backlog published (rebased-to-root) layout — real npm-install-shape 
     }
 
     const indexJs = join(publishedRoot, 'index.js');
-    const result = spawnSync(process.execPath, [indexJs, '--help'], {
-      cwd: publishedRoot,
-      // HOME redirect: the global config layer is read regardless of
-      // `ADHD_BACKLOG_SCOPE` (see cli.spec.ts runBin's note), so isolate it too.
-      env: {
-        ...process.env,
-        ADHD_BACKLOG_SCOPE: 'project',
-        HOME: publishedRoot,
-      },
-      encoding: 'utf8',
-      timeout: 30_000,
-    });
-
-    if (result.error) {
-      throw new Error(
-        `spawn failed for ${indexJs} --help: ${String(result.error)}`
-      );
-    }
+    // `runIsolatedBin` owns the `ADHD_BACKLOG_SCOPE=project` + `HOME=<root>`
+    // redirect pair (see test/helpers/spawn-isolated-bin.ts).
+    const result = runIsolatedBin(indexJs, ['--help'], publishedRoot);
 
     // The real, reproduced bug: a "cannot mount" error naming the WRONG,
     // escaped-past-root path. Assert it is categorically absent — not just
@@ -139,22 +124,8 @@ describe('backlog published (rebased-to-root) layout — real npm-install-shape 
     }
 
     const indexJs = join(publishedRoot, 'index.js');
-    const result = spawnSync(process.execPath, [indexJs, 'version'], {
-      cwd: publishedRoot,
-      env: {
-        ...process.env,
-        ADHD_BACKLOG_SCOPE: 'project',
-        HOME: publishedRoot,
-      },
-      encoding: 'utf8',
-      timeout: 30_000,
-    });
+    const result = runIsolatedBin(indexJs, ['version'], publishedRoot);
 
-    if (result.error) {
-      throw new Error(
-        `spawn failed for ${indexJs} version: ${String(result.error)}`
-      );
-    }
     expect(
       result.status,
       `stderr:\n${result.stderr}\nstdout:\n${result.stdout}`
