@@ -39,10 +39,10 @@
       "end_ref": "e8c501f9611028273736756fef32134bdb97e7d4"
     },
     "tsconfig-shim-removal": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-09-22T14:43:05.680Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "b82ec7c8f667afa9e1c778ec0c8b03362f4a4ad1",
       "end_ref": null
     },
     "cache-isolation": {
