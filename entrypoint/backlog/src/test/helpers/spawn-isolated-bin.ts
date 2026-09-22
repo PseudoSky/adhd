@@ -60,12 +60,12 @@ import { spawnSync } from 'node:child_process';
  * re-point a spawned child at the real store. A site that genuinely wants one
  * of these passes it through `extraEnv`, which is applied AFTER the strip.
  */
-export const AMBIENT_REDIRECT_ENV_KEYS = [
+export const AMBIENT_REDIRECT_ENV_KEYS: readonly string[] = [
   'ADHD_ROOT',
   'ADHD_BACKLOG_DATABASE_PATH',
   'SOX_ECOSYSTEM_HOME',
   'APIGEN_IR_CACHE_FILE',
-] as const;
+];
 
 /** The shape every spawn site here consumes — mirrors `spawnSync`'s fields. */
 export interface IsolatedSpawnResult {
@@ -103,7 +103,7 @@ export function buildIsolatedEnv(
   const base: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value === undefined) continue;
-    if ((AMBIENT_REDIRECT_ENV_KEYS as readonly string[]).includes(key)) continue;
+    if (AMBIENT_REDIRECT_ENV_KEYS.includes(key)) continue;
     base[key] = value;
   }
   return { ...base, ADHD_BACKLOG_SCOPE: 'project', HOME: root, ...extraEnv };
