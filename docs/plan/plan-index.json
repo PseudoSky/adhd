@@ -3418,8 +3418,9 @@
     {
       "plan": "nx-23-upgrade",
       "dir": "nx-23-upgrade",
-      "status": "published",
+      "status": "in-progress",
       "mutate_set": [
+        ".mcp.json",
         "CHANGELOG.md",
         "docs/plan/nx-23-upgrade/BASELINE.md",
         "docs/plan/nx-23-upgrade/BROWSER-BUILD-REPAIR.md",
@@ -3474,6 +3475,7 @@
         "packages/agent/agent-engine-orchestrator/project.json",
         "packages/agent/agent-engine-orchestrator/vite.config.ts",
         "packages/agent/agent-generator-plugin/project.json",
+        "packages/agent/agent-generator-plugin/src/generators/registry-package/__files__/vite.config.ts__tmpl__",
         "packages/agent/agent-generator-plugin/vite.config.ts",
         "packages/agent/agent-plugin-budget/project.json",
         "packages/agent/agent-plugin-budget/vite.config.ts",
@@ -3481,11 +3483,13 @@
         "packages/agent/agent-plugin-sanitize/vite.config.ts",
         "packages/agent/agent-store-prompts/package.json",
         "packages/agent/agent-store-prompts/project.json",
+        "packages/agent/agent-store-prompts/vite.config.ts",
         "packages/agent/agent-store-runtime/package.json",
         "packages/agent/agent-store-runtime/project.json",
         "packages/agent/agent-store-runtime/vite.config.ts",
         "packages/agent/agent-store-tools/package.json",
         "packages/agent/agent-store-tools/project.json",
+        "packages/agent/agent-store-tools/vite.config.ts",
         "packages/apigen/apigen-base-errors/project.json",
         "packages/apigen/apigen-base-errors/vite.config.ts",
         "packages/apigen/apigen-base-logical/project.json",
@@ -3505,8 +3509,11 @@
         "packages/apigen/apigen-engine-runtime/project.json",
         "packages/apigen/apigen-engine-runtime/vite.config.ts",
         "packages/apigen/apigen-generator-nx/project.json",
+        "packages/apigen/apigen-generator-nx/src/generators/host/__files__/vite.config.ts__tmpl__",
+        "packages/apigen/apigen-generator-nx/src/generators/plugin/__files__/vite.config.ts__tmpl__",
         "packages/apigen/apigen-generator-nx/vite.config.ts",
         "packages/apigen/apigen-plugin-api-express/project.json",
+        "packages/apigen/apigen-plugin-api-express/src/index.ts",
         "packages/apigen/apigen-plugin-api-express/vite.config.ts",
         "packages/apigen/apigen-plugin-api-fastify/project.json",
         "packages/apigen/apigen-plugin-api-fastify/vite.config.ts",
@@ -3570,9 +3577,11 @@
         "packages/ui-react/ui-react-base-hooks/src/lib/use-throttle/index.ts",
         "packages/ui-react/ui-react-base-hooks/vite.config.ts",
         "packages/ui-react/ui-react-base-storybook/project.json",
+        "packages/ui-react/ui-react-base-storybook/vite.config.ts",
         "packages/workspace/workspace-base-standard/project.json",
         "packages/workspace/workspace-base-standard/vite.config.ts",
         "packages/workspace/workspace-base-tools/project.json",
+        "packages/workspace/workspace-base-tools/vite.config.ts",
         "packages/workspace/workspace-base-vite-paths/project.json",
         "packages/workspace/workspace-base-vite-paths/vite.config.ts",
         "packages/workspace/workspace-codegen-nx/project.json",
@@ -3592,7 +3601,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-09-22T03:34:12.554Z"
+      "updated_at": "2026-09-22T14:07:28.546Z"
     },
     {
       "plan": "parallel-tool-execution",
@@ -4107,6 +4116,6 @@
       "updated_at": "2026-07-17T23:56:00.980Z"
     }
   ],
-  "updated_at": "2026-09-22T03:34:12.563Z",
+  "updated_at": "2026-09-22T14:07:28.554Z",
   "verified_at": null
 }
