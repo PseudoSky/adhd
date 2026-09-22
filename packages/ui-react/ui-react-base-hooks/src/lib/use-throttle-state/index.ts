@@ -18,7 +18,7 @@ export function useThrottleState<T>(
 
   const lastRan = useRef<number>(0);
   const isFirstRender = useRef(true);
-  const timeout = useRef<NodeJS.Timeout>();
+  const timeout = useRef<NodeJS.Timeout | undefined>(undefined);
   const mounted = useRef(true);
   const trailingValue = useRef<T>(initialValue);
 
