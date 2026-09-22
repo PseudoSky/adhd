@@ -324,7 +324,6 @@
         "packages/apigen/apigen-plugin-openapi/project.json",
         "packages/apigen/apigen-plugin-py-flask/project.json",
         "packages/apigen/apigen-plugin-py-grpc/project.json",
-        "packages/apigen/apigen-plugin-batch/project.json",
         "packages/apigen/apigen-plugin-ir-cache/project.json",
         "packages/apigen/apigen-plugin-ts-types/project.json",
         "packages/workspace/workspace-base-standard/project.json",
