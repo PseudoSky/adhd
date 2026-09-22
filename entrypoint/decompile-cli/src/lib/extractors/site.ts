@@ -80,7 +80,7 @@ export class BrowserClient {
     return new Promise<string[]>((resolve, reject) => {
       this.jar.getCookies(url, (err, cookies) => {
         if (err) return reject(err);
-        resolve(cookies.map((c) => c.cookieString()));
+        resolve((cookies ?? []).map((c) => c.cookieString()));
       });
     });
   }

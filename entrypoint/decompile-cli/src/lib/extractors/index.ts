@@ -99,10 +99,10 @@ export const extract = async (callStack: Stack) => {
          * desc: raw text from the requested link
          * input: <str>
          */
-        r = extractMapLink(input);
-        if (r?.length) {
-          console.log('EXTRACT[source] map link', r);
-          r.forEach((l) => callStack.push('link', { path: l, data: '' }));
+        const mapLinks = extractMapLink(input);
+        if (mapLinks?.length) {
+          console.log('EXTRACT[source] map link', mapLinks);
+          mapLinks.forEach((l) => callStack.push('link', { path: l, data: '' }));
         } else {
           callStack.push('write', { path: input.path, data: input.data });
         }
