@@ -3,6 +3,7 @@ import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import { importMetaUrlCjs } from '../../../tools/vite-plugins/import-meta-url-cjs.mjs';
 import { externalizeRealDeps } from '../../../tools/vite-plugins/externalize.mjs';
 
 export default defineConfig({
@@ -10,6 +11,7 @@ export default defineConfig({
   cacheDir: '../../../node_modules/.vite/packages/workspace/workspace-base-standard',
 
   plugins: [
+    importMetaUrlCjs(),
     nxViteTsPaths(),
     dts({
       entryRoot: 'src',

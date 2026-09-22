@@ -61,6 +61,12 @@ describe('base generator — vite external-deps enforcement', () => {
     expect(viteConfig).toContain('external: externalizeRealDeps(__dirname)');
     // The bug this closes: a bare `external: []` bundles every real npm dep.
     expect(viteConfig).not.toMatch(/external:\s*\[\]/);
+    // BUG-BUILD-002: Vite 8/Rolldown lowers `import.meta.url` to `{}.url` in a
+    // browser-platform CJS chunk; the shared shim must be wired automatically.
+    expect(viteConfig).toContain(
+      "import { importMetaUrlCjs } from '../../../tools/vite-plugins/import-meta-url-cjs.mjs';"
+    );
+    expect(viteConfig).toContain('importMetaUrlCjs()');
   });
 
   it('platform:shared — also wires externalizeRealDeps (apigen-core-client\'s tier)', async () => {
@@ -92,5 +98,8 @@ describe('base generator — vite external-deps enforcement', () => {
     );
     expect(viteConfig).not.toContain('externalizeRealDeps');
     expect(viteConfig).toMatch(/external:\s*\[\]/);
+    // BUG-BUILD-002: a browser package's CJS output is never run under Node, so
+    // `require('node:url')`/`__filename` are not defined there — do not wire it.
+    expect(viteConfig).not.toContain('importMetaUrlCjs');
   });
 });
