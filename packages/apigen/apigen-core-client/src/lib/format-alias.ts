@@ -23,6 +23,7 @@ import type {
   TypeNode,
   TypeReferenceNode,
 } from 'ts-morph';
+import { lazyRequire } from './esm-require';
 
 // PERF (BUG-APIGEN-CORE-CLIENT-STARTUP-001): `SyntaxKind` is a ts-morph
 // runtime enum used only inside `detectFormatAnnotatedAlias` below (a fully
@@ -30,12 +31,12 @@ import type {
 // A static `import { SyntaxKind } from 'ts-morph'` pulls the whole ts-morph
 // package into every process that loads this module, even one that never
 // calls `detectFormatAnnotatedAlias` at all (e.g. `backlog --help`). Lazily
-// `require`d and memoized below.
+// resolved and memoized below via the ESM-safe `lazyRequire` shim (see
+// `./esm-require.ts` — a bare `require` broke the built `dist/index.mjs`).
 let _SyntaxKind: typeof import('ts-morph').SyntaxKind | undefined;
 function getSyntaxKindEnum(): typeof import('ts-morph').SyntaxKind {
   if (_SyntaxKind) return _SyntaxKind;
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  _SyntaxKind = (require('ts-morph') as typeof import('ts-morph')).SyntaxKind;
+  _SyntaxKind = (lazyRequire('ts-morph') as typeof import('ts-morph')).SyntaxKind;
   return _SyntaxKind;
 }
 

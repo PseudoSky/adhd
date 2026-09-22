@@ -28,12 +28,14 @@ import type { Project, SourceFile } from 'ts-morph';
 // PERF (BUG-APIGEN-CORE-CLIENT-STARTUP-001): `Scope` is a ts-morph runtime
 // enum used only for two comparisons below (`Scope.Private`/`Scope.Protected`).
 // A static `import { Scope } from 'ts-morph'` pulls the whole ts-morph
-// package into every process that loads this module. Lazily `require`d and
-// memoized below.
+// package into every process that loads this module. Lazily resolved and
+// memoized below via the ESM-safe `lazyRequire` shim (see `./esm-require.ts`
+// — a bare `require` broke the built `dist/index.mjs`).
 import type { Operation, Segment } from './descriptor';
 import { buildSchema } from './schema-builders/ts-json-schema';
 import { tokenize } from './extract';
 import { detectStreamElementType } from './stream-type';
+import { lazyRequire } from './esm-require';
 import {
   createExtractionSession,
   internalSession,
@@ -44,8 +46,7 @@ import {
 let _Scope: typeof import('ts-morph').Scope | undefined;
 function getScopeEnum(): typeof import('ts-morph').Scope {
   if (_Scope) return _Scope;
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  _Scope = (require('ts-morph') as typeof import('ts-morph')).Scope;
+  _Scope = (lazyRequire('ts-morph') as typeof import('ts-morph')).Scope;
   return _Scope;
 }
 
