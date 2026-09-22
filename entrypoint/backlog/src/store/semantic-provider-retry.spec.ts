@@ -71,7 +71,8 @@ vi.mock('@adhd/sox-vector-store', () => ({
     delete: async () => undefined,
     get: async () => null,
     knn: async () => [],
-    iter: () => ({}) as AsyncIterable<never>,
+    // `iter` is deliberately ABSENT: bootstrap only calls `ensureSpace` and
+    // `hasVectors`, and an unused mock field would only invite a cast.
     hasVectors: async () => true,
   }),
 }));
