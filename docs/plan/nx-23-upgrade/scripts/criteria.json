@@ -1035,6 +1035,24 @@
       "mutate": "node docs/plan/nx-23-upgrade/scripts/neg-control-browser-bundle.mjs mutate packages/ui-react/ui-react-base-hooks/dist/index.js packages/ui-react/ui-react-base-hooks/dist/index.umd.js",
       "restore": "node docs/plan/nx-23-upgrade/scripts/neg-control-browser-bundle.mjs restore packages/ui-react/ui-react-base-hooks/dist/index.js packages/ui-react/ui-react-base-hooks/dist/index.umd.js",
       "expect": "exit0"
+    },
+    {
+      "id": "dod.14",
+      "phase": "final",
+      "kind": "command",
+      "tier": 2,
+      "cmd": "./node_modules/.bin/nx build apigen-cli && node entrypoint/apigen-cli/dist/index.js --help | grep -q \"Usage: apigen\" && echo APIGEN_CLI_LOADS_PASS",
+      "expect": "marker",
+      "marker": "APIGEN_CLI_LOADS_PASS"
+    },
+    {
+      "id": "dod.15",
+      "phase": "final",
+      "kind": "command",
+      "tier": 3,
+      "cmd": "./node_modules/.bin/nx build ui-react-base-hooks && node -e \"const fs=require('fs');for(const f of ['packages/ui-react/ui-react-base-hooks/dist/index.js','packages/ui-react/ui-react-base-hooks/dist/index.umd.js']){const t=fs.readFileSync(f,'utf8');if(t.includes('{}.url'))process.exit(1);if(t.includes('__filename')||t.includes('node:url'))process.exit(1)}console.log('BROWSER_BUNDLES_CLEAN_PASS')\"",
+      "expect": "marker",
+      "marker": "BROWSER_BUNDLES_CLEAN_PASS"
     }
   ]
 }

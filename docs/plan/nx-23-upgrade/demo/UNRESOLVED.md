@@ -39,6 +39,27 @@ Resolve each before treating the corresponding `DEMO.md` step as authoritative.
   measuring machine load, not the change. The selection beats assert *counts*
   (specs selected, specs skipped) which are load-independent.
 
+- **The browser bundle's red state is reported, not re-measured (beat 5.5).** The
+  empty-import-meta token in `ui-react-base-hooks`' CJS and UMD bundles was verified by the
+  reviewing pass, which built the package past the `vite-plugin-dts` type-check. It was not
+  independently reproduced during the 2026-09-21 plan-repair pass, because
+  `nx build ui-react-base-hooks` fails earlier on four React-19 type errors — which is why the
+  plan now owns `browser-package-build-repair` ahead of `browser-cjs-umd-repair`. That state
+  re-confirms the token as its first step and records the result in `BROWSER-BUNDLE-REPAIR.md`;
+  until then, treat 5.5's red as unconfirmed rather than measured.
+
+- **The React-19 build breakage is a finding of the repair pass, not of the original demo.**
+  `nx run-many -t build` over the 66 JS/TS projects reports exactly one failing target —
+  `ui-react-base-hooks:build`, with four type errors caused by the branch's
+  `@types/react 18 → 19` bump. It blocks publishing a public package, so it is in scope as a
+  consequence of goal 1, and `[dod.15]` now covers it. The demo's beats 2.4/2.5/5.5 and the
+  `REQ-019`–`REQ-021` / `CAP-011`–`CAP-012` rows were added with it.
+
+- **Two DoD clauses were added after the GATE 2 approval.** `[dod.14]` and `[dod.15]` are
+  derived from *measured* defects that the original 13 clauses did not cover, not from new
+  goals — but they post-date the approval recorded in `APPROVAL.md`, which carries an
+  amendment section naming them as pending owner re-acknowledgement.
+
 - **`vitest@5` is unreachable, not deferred.** Recorded in `interfaces.json` as
   `nx-vitest-peer-range` with a vendored source. This is not a gap; it is a documented
   ceiling. It appears here so a reader does not file it as a missing capability.

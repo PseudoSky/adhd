@@ -61,6 +61,10 @@ All literal paths used throughout. Nothing else is fabricated.
 | tsc-built project | `agent-core-policy` | Builds with the tsc executor, not vite |
 | Vite-built project | `data-query-engine` | Builds with the vite executor |
 | Bespoke second pass | `dispatch-cli:build-bin` | Compiles a bin entry into an already-populated dist |
+| Bundled CJS entrypoint | `entrypoint/apigen-cli/dist/index.js` | `formats: ['es','cjs']`; the defect was a module-load throw here, and it is a real CLI with a `--help` that exits 0 |
+| Second CJS entrypoint | `entrypoint/backlog/dist/index.js` | The other entrypoint the reviewer measured (`{}.url` ×5 pre-fix); proves the fix is not apigen-specific |
+| Browser package | `packages/ui-react/ui-react-base-hooks` | `platform:browser`, `formats: ['es','cjs','umd']`, public and publishable — the only package whose build is red on the branch |
+| CJS shim plugin | `tools/vite-plugins/import-meta-url-cjs.mjs` | The fix, and the file whose last-touching commit proves bump/fix atomicity |
 
 ### 2.3 Prerequisites
 
@@ -266,6 +270,65 @@ SHIMS_GONE
 
 🔗 **Proves:** REQ-004 · CAP-002
 📎 **Source:** `SCOPE.md` §4 corrections; `contexts/tsconfig-shim-removal.md`
+
+#### 2.4 · The built command-line entrypoint actually runs   (happy)
+
+🎬 **Scene.** A green build is not a working program. Vite 8's Rolldown lowered `import.meta.url` to the empty object in CommonJS output, so the built binary died the instant `node` loaded it — while the build itself reported success. The developer runs the artifact the way a consumer does.
+
+▶️ **Do**
+```bash
+./node_modules/.bin/nx build apigen-cli
+node entrypoint/apigen-cli/dist/index.js --help; echo "exit=$?"
+node entrypoint/backlog/dist/index.js --help | head -1; echo "exit=$?"
+rg -c -a '\{\}\.url' entrypoint/apigen-cli/dist/index.js entrypoint/backlog/dist/index.js; echo "exit=$?"
+```
+
+👀 **Expect**
+```
+NX  Successfully ran target build for project apigen-cli
+Usage: apigen [options] [command]
+exit=0
+Special commands (handled before the apigen command table):
+exit=0
+exit=1
+```
+
+✅ **Verify**
+- [ ] `node entrypoint/apigen-cli/dist/index.js --help` exits **0** and prints the usage text
+- [ ] `node entrypoint/backlog/dist/index.js --help` exits **0** and prints its command table
+- [ ] Neither bundle contains the empty-import-meta token (`rg` finds nothing, so it exits 1)
+- [ ] If either `node` invocation exits non-zero with `ERR_INVALID_ARG_VALUE`, the CJS fix is not wired — stop the run
+- [ ] The `.mjs` bundle is untouched: `rg -c 'import\.meta\.url' entrypoint/apigen-cli/dist/index.mjs` finds it, and the CJS shim is absent from it
+
+🔗 **Proves:** REQ-002 · REQ-019 · CAP-011
+📎 **Source:** `README.md` → `[dod.14]`; `contexts/vite-cjs-import-meta-repair.md`; `_shared.md` → `[def:empty-import-meta]`
+
+#### 2.5 · ⚠️ The bump landed with its fix, not before it   (edge)
+
+🎬 **Scene.** The reason the branch was untrustworthy: `vite ^8.3.0` was declared in a commit whose built binaries all threw on load. The developer checks that the bump and the fix are the *same* commit — so no bisect can land on a broken intermediate state.
+
+▶️ **Do**
+```bash
+git log -1 --format=%H -- tools/vite-plugins/import-meta-url-cjs.mjs
+git log -1 --format=%H -- package.json
+git show --stat --oneline HEAD -- package.json tools/vite-plugins/import-meta-url-cjs.mjs
+```
+
+👀 **Expect**
+```
+⟨same commit SHA⟩
+⟨same commit SHA⟩
+⟨one commit, listing both paths⟩
+```
+
+✅ **Verify**
+- [ ] The two SHAs are **identical** — one commit touched both the plugin and `package.json`
+- [ ] That commit's stat lists the fix and the version bump together
+- [ ] No commit on the branch bumps `vite` without the fix (walk `git log -p -- package.json` if in doubt)
+- [ ] If the SHAs differ, a broken intermediate commit exists — stop the run
+
+🔗 **Proves:** REQ-019 · REQ-021 · CAP-012
+📎 **Source:** `README.md` → `[dod.14]`; `_shared.md` → `[inv:bump-lands-with-its-fix]`; `contexts/upgrade-baseline.md`
 
 ---
 
@@ -577,6 +640,36 @@ rg -n 'dynamic|child process|spawned' docs/plan/nx-23-upgrade/TEST-SELECTION.md
 🔗 **Proves:** REQ-012 · CAP-008
 📎 **Source:** `contexts/test-resolution-absorbed.md`; `_shared.md` → `[inv:test-depends-on-caret-build]`
 
+#### 5.5 · ⚠️ The public browser package builds and its bundles are clean   (recovery)
+
+🎬 **Scene.** `@adhd/ui-react-base-hooks` is public and publishable. The toolchain bump left it in two independent kinds of trouble: its build was red (React 19 type changes), and once it built, both the CJS and UMD bundles carried the empty-import-meta token that breaks `useFileDownload`'s worker path. The developer checks the package the way its consumer does — by building it and reading what ships.
+
+▶️ **Do**
+```bash
+./node_modules/.bin/nx build ui-react-base-hooks; echo "exit=$?"
+node -e "const fs=require('fs');for(const f of ['packages/ui-react/ui-react-base-hooks/dist/index.js','packages/ui-react/ui-react-base-hooks/dist/index.umd.js']){const t=fs.readFileSync(f,'utf8');console.log(f, '{}.url:', t.includes('{}.url'), 'node-shim:', t.includes('__filename'))}"
+node -e "const t=require('fs').readFileSync('packages/ui-react/ui-react-base-hooks/dist/index.mjs','utf8');console.log('esm keeps import.meta.url:', t.includes('import.meta.url'))"
+```
+
+👀 **Expect**
+```
+NX  Successfully ran target build for project ui-react-base-hooks
+exit=0
+packages/ui-react/ui-react-base-hooks/dist/index.js {}.url: false node-shim: false
+packages/ui-react/ui-react-base-hooks/dist/index.umd.js {}.url: false node-shim: false
+esm keeps import.meta.url: true
+```
+
+✅ **Verify**
+- [ ] The build exits **0** and emits `index.js`, `index.umd.js` and `index.mjs`
+- [ ] Neither the CJS nor the UMD bundle contains the empty-import-meta token
+- [ ] Neither contains `__filename` — the Node shim was **not** smuggled into a browser bundle (it would trade `undefined` for `ReferenceError`)
+- [ ] The ESM bundle still carries native `import.meta.url`
+- [ ] If the build fails with `TS2554`/`TS2322` in `use-throttle*` or `use-infinite-scroll`, the React-19 type conformance has not landed — stop the run
+
+🔗 **Proves:** REQ-020 · CAP-012
+📎 **Source:** `README.md` → `[dod.15]`; `contexts/browser-package-build-repair.md`; `contexts/browser-cjs-umd-repair.md`
+
 ---
 
 ## 6 · Teardown — Back to Zero
@@ -628,6 +721,9 @@ git status --porcelain
 | REQ-016 | Each checkout owns its task cache | 5.2 | E | ☐ |
 | REQ-017 | All work sits on the upgrade branch | 5.3, 6 | H | ☐ |
 | REQ-018 | The publish gate survives the sibling-branch absorption | 5.1 | E | ☐ |
+| REQ-019 | The built CommonJS entrypoints load and run, not merely declare a bumped version | 2.4, 2.5 | H, E | ☐ |
+| REQ-020 | The public browser package builds and ships no empty-import-meta token | 5.5 | R | ☐ |
+| REQ-021 | The vite bump and its fix are one commit — no broken intermediate state | 2.5 | E | ☐ |
 
 ### 7.2 Capabilities → Beats
 
@@ -643,10 +739,22 @@ git status --porcelain
 | CAP-008 | Preserve cross-package consumer coverage | 4.1, 5.4 | ☐ |
 | CAP-009 | Isolate the task cache per checkout | 5.2, 5.3 | ☐ |
 | CAP-010 | Absorb sibling branches without regressing the publish gate | 5.1, 3.5, 3.6 | ☐ |
+| CAP-011 | Prove a built artifact loads by executing it | 2.4 | ☐ |
+| CAP-012 | Land a toolchain bump atomically with the change that makes it safe | 2.5, 5.5 | ☐ |
 
 ### 7.3 Unresolved Interfaces & Gaps
 
 - 3 unresolved interface stubs (⟦U1⟧–⟦U3⟧) and 2 scope gaps; full list in `UNRESOLVED.md`. Highest impact: ⟦U2⟧ — the exact stdout shape of the fast-path wrapper, which two beats assert against.
+- **Beat 5.5's red state is reported, not re-measured.** The empty-import-meta token in the
+  browser bundles was verified by the reviewing pass, which built the package past the
+  `vite-plugin-dts` type-check. It was **not** independently reproduced during the 2026-09-21
+  repair pass, because `nx build ui-react-base-hooks` fails earlier on the React-19 type
+  errors — which is exactly why `browser-package-build-repair` precedes
+  `browser-cjs-umd-repair`. The state re-confirms the token as its first step and records the
+  result in `BROWSER-BUNDLE-REPAIR.md`; until it does, treat 5.5's red as unconfirmed.
+- **Beat 2.5 asserts a git-history invariant, not a runtime one.** It is the only beat whose
+  proof is about *how* the work was committed rather than what the code does. It exists
+  because a correct artifact set landed in the wrong commit order is still a broken branch.
 
 ---
 
