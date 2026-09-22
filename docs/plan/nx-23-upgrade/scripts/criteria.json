@@ -867,6 +867,14 @@
       "paths": [
         "docs/plan/nx-23-upgrade/BASELINE.md"
       ]
+    },
+    {
+      "id": "vite-cjs-import-meta-repair.1",
+      "phase": "intake",
+      "tier": 3,
+      "kind": "command",
+      "cmd": "./node_modules/.bin/nx build apigen-cli && ./node_modules/.bin/nx build backlog && node entrypoint/apigen-cli/dist/index.js --help | grep -q \"Usage: apigen\" && node entrypoint/backlog/dist/index.js --help | grep -q \"install-skill\" && node -e \"const fs=require('fs');for(const f of ['entrypoint/apigen-cli/dist/index.js','entrypoint/backlog/dist/index.js']){const t=fs.readFileSync(f,'utf8');if(t.includes('{}.url')){console.error('EMPTY_IMPORT_META_URL in '+f);process.exit(1)}}console.log('CJS_ARTIFACTS_LOAD')\"",
+      "expect": "exit0"
     }
   ]
 }
