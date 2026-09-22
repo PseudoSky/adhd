@@ -8,16 +8,21 @@ Before publishing the plan, verify every box. If any item fails, the plan does n
 ```text
 [x] Definition of Done agreed in Step 1a — README has a `## Definition of
     Done` with IDed [dod.N] clauses (outcome, old-gone, evidence, non-goals,
-    rollback). The 5 goals were supplied verbatim by the requester; the 13
-    clauses are their derivation, confirmed at the GATE 2 approval recorded in
-    APPROVAL.md, with the provenance marker stamped via --confirm-dod.
+    rollback). The 5 goals were supplied verbatim by the requester; the 15
+    clauses are their derivation. dod.1–dod.13 were confirmed at the GATE 2
+    approval recorded in APPROVAL.md, with the provenance marker stamped via
+    --confirm-dod. dod.14/dod.15 were added by the 2026-09-21 repair pass from
+    measured defects the original 13 did not cover, and are recorded in
+    APPROVAL.md § Amendment 2026-09-21 as pending owner re-acknowledgement.
 [x] Every [dod.N] is proven by a final-audit check (gap-check.js Check 8) —
-    13 `dod.N` entries in scripts/criteria.json; gap-check green.
+    15 `dod.N` entries in scripts/criteria.json; gap-check green.
 [x] Every BEHAVIORAL [dod.N] declares `entrypoint:`/`observable:` and is proven
     by a check that DRIVES that entrypoint (tier 3) — not a grep/test -e proxy.
-    dod.3/5/6/7 are behavioral; each `dod.N` criterion's cmd contains the
+    dod.3/5/6/7/14/15 are behavioral; each `dod.N` criterion's cmd contains the
     entrypoint's distinctive token and asserts the observable. dod.4/9/10 are
-    structural absences, correctly proven by grep/AST.
+    structural absences, correctly proven by grep/AST. dod.14 drives the BUILT
+    apigen-cli artifact as a real child process; dod.15 drives the built browser
+    bundles and asserts the token's absence.
 [x] Any artifact-to-artifact seam is exercised by ONE check through the real
     path. The fast-path contract is the one seam: it is pinned in README
     [dod.5]/[dod.6], realized by `[shape:fast-path-contract]` in _shared.md,
@@ -47,8 +52,11 @@ Before publishing the plan, verify every box. If any item fails, the plan does n
     they are covered by explicit `absent` criteria instead, which is a
     stronger check for an absence assertion.
 [x] Every deferral has a forcing function — named state and guard, no "during
-    migration period". TOOLS.md §3's gaps G1–G6 each map to a state and its
+    migration period". TOOLS.md §3's gaps G1–G9 each map to a state and its
     guard; no context file contains a trigger phrase without a resolving state.
+    G7 (no state proved an artifact loads) and G8/G9 (the bundler token, and the
+    browser package's two independent failures) were closed by the 2026-09-21
+    repair pass, each with a named owning state.
 
 Structure (dag.json / state.json / _shared.md):
 [x] Identity is a stable slug — no positional state numbers anywhere in the
@@ -56,21 +64,25 @@ Structure (dag.json / state.json / _shared.md):
 [x] dag.json holds structure; state.json holds runtime only (status,
     timestamps, logs).
 [x] Slug set in dag.json.nodes == slug set in state.json.states; every context
-    path exists (16/16) — enforced by gap-check Check 1.
+    path exists (19/19) — enforced by gap-check Check 1.
 [x] Shared definitions centralized in contexts/_shared.md — no concept
-    restated across contexts. 12 `[def:]/[inv:]/[shape:]/[fix:]` entries.
+    restated across contexts. 17 `[def:]/[inv:]/[shape:]/[fix:]` entries,
+    including the two the repair pass added (`[def:empty-import-meta]`,
+    `[inv:bump-lands-with-its-fix]`, `[inv:guards-prove-the-artifact-loads]`).
 
 Per-state completeness (verified for every work state):
-[x] Acceptance criteria section present. 82 criteria across 16 states; every
+[x] Acceptance criteria section present. 104 criteria across 19 states; every
     modified file group has a criterion, and every deletion has a negative
-    (`absent`) criterion.
+    (`absent`) criterion. The two negative-control criteria
+    (`vite-cjs-import-meta-repair.9`, `browser-cjs-umd-repair.6`) perturb the
+    exact primitive their guard measures, in the gitignored build artifact.
 [x] Criterion IDs are slug-keyed (e.g. [core-types.1]) and match the check IDs
     in the next audit script — the criteria.json ids ARE the audit check ids,
     so the mirror holds by construction.
 [x] reservations.mutates is populated — every file the state creates or changes
     is listed.
 [x] dag.json node's artifacts array matches reservations.mutates exactly —
-    verified programmatically for all 16 nodes.
+    verified programmatically for all 19 nodes.
 [x] Commit points section present — mandatory post-guard commit on every state.
 [x] Shared-file merge protocols written. N/A — the graph is deliberately
     linear (no two states share a mutable file without a depends_on edge), so
@@ -80,7 +92,12 @@ Per-state completeness (verified for every work state):
 Guards and audits:
 [x] Guards are red→green — each guard currently fails before the state's work
     begins (verified: e.g. no `cacheDirectory` key, no `test:related` script,
-    five shims present, 136 shadowing targets present).
+    five shims present, 136 shadowing targets present). For the repair-pass
+    states: `vite-cjs-import-meta-repair`'s atomicity leg is red today (the
+    plugin is untracked, so its last-touching SHA ≠ `package.json`'s);
+    `browser-package-build-repair`'s build leg is red today (`Found 4 errors`);
+    `browser-cjs-umd-repair` is red today both because its spec does not exist
+    and because the token is reported present in the bundles.
 [x] All criteria are deterministic commands — no prose, AST checks over greps
     where ambiguous (`absent` on the executor strings is an exact literal, not
     a loose grep).
@@ -90,12 +107,20 @@ Guards and audits:
     selection.
 [x] Final audit has at least one live data check — real artifacts, not just
     fixtures: three real builds, a real package suite, a real bespoke
-    second-pass compile, and real spec selection across a package boundary.
+    second-pass compile, real spec selection across a package boundary, and (new
+    in the repair pass) two built CommonJS entrypoints executed as real child
+    processes plus the browser package's built bundles read off disk.
 [x] notes field answers "what do I need to know that the context file doesn't
     make obvious" — every node carries one.
 [x] dag.json dependency graph matches state-machine.md topology diagram
-    exactly — state-machine.md is GENERATED from dag.json by a render script,
-    so drift is impossible by construction.
+    exactly. **Corrected 2026-09-21:** the previous claim here — that
+    state-machine.md is generated from dag.json by a render script, so drift is
+    impossible by construction — was **false**. No such renderer exists in the
+    plan-state-machine skill (`templates/state-machine.template.md` is a
+    template; no script reads dag.json to emit the render). The file is
+    hand-maintained, so drift is possible and must be checked by eye after every
+    structural change. Filed as a tooling gap in the closing report; do not
+    re-assert the generation claim until a renderer actually exists.
 
 Hand off:
 [x] Dispatch-or-orchestrate decision made — automatic dispatch = NO (Step 1b);
@@ -104,6 +129,20 @@ Hand off:
 
 ## Open items carried, not hidden
 
+- **`[dod.14]` / `[dod.15]` post-date the GATE 2 approval.** They are derived from
+  measured defects (`BUG-BUILD-002` and the React-19 build breakage), not from new goals, but
+  they were authored after the approval recorded in `APPROVAL.md`. That file carries an
+  *Amendment 2026-09-21* section naming them as pending owner re-acknowledgement. The
+  `dod_provenance` marker in `state.json` still records the original 13 — deliberately not
+  re-stamped, because re-stamping would claim a confirmation that has not happened.
+- **The plan-state-machine skill ships no `state-machine.md` renderer.** `final-review.md`
+  previously asserted one existed. It does not — `templates/state-machine.template.md` is a
+  template, and no script in the skill reads `dag.json` to emit the render. The render is
+  therefore hand-maintained and can drift. The false claim has been removed; the missing
+  renderer is reported to the operator rather than filed to the backlog store, which this
+  session was instructed not to touch.
+- **The browser bundle token was not independently reproduced.** See `demo/UNRESOLVED.md`.
+  `browser-cjs-umd-repair` re-confirms it as its first step.
 - **GATE 2 approval** is recorded in `APPROVAL.md` (committed artifact). Without
   it, `gap-check` fails on the DoD-provenance gate — deliberately.
 - **The lint-mutation criterion** (`graph-release-eslint-inferred.5`) is a scope

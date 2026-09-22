@@ -1,6 +1,6 @@
 # _shared.md — cross-cutting definitions for `nx-23-upgrade`
 
-Referenced by every context file. Change a term here, not in sixteen places.
+Referenced by every context file. Change a term here, not in every context file.
 
 ---
 
@@ -28,6 +28,32 @@ plugin infers. Only these are safe to delete outright. Measured on the branch:
 | `@nx/js:tsc` | 15 | 14 `build`, 1 `build-bin` | **not** a shadow — plugin unregistered |
 | `@nx/js:release-publish` | 12 | all `nx-release-publish` | bespoke dependency chains |
 | `@nx/eslint:lint` | 5 | all `lint` | deprecated; sanctioned codemod |
+
+## [def:empty-import-meta]
+
+The defect vite 8 introduced (`BUG-BUILD-002`). Vite 8 replaced Rollup with Rolldown, which
+polyfills `import.meta.url` for a `cjs` output format **only** when the build platform is
+`node`. Vite 8's library build defaults to `platform: 'browser'`, so `import.meta` is lowered
+to the empty object and the emitted token is literally `{}.url`. Every shipped
+`createRequire(import.meta.url)` then becomes `createRequire(undefined)` and throws
+`ERR_INVALID_ARG_VALUE` **at module load** — the build still succeeds, only the artifact is
+broken. Measured: `apigen-cli:test` 28 files / 188 tests green on vite 6.4.3, 26 failed /
+162 passed on vite 8.3.0.
+
+The repair is `tools/vite-plugins/import-meta-url-cjs.mjs`: a `renderChunk` hook, strictly
+gated on `outputOptions.format === 'cjs'`, that rewrites the token back to Rollup's
+`require('node:url').pathToFileURL(__filename).href`. It is inert on `es`/`iife`/`umd` output
+and on any chunk that never referenced `import.meta.url`.
+
+**A grep for `{}.url` over built artifacts has one known false positive** — the generator
+source carries the string inside a *comment*, which survives into
+`packages/workspace/workspace-codegen-nx/dist/.../generator.js`. Token assertions are
+therefore scoped to real entrypoint bundles.
+
+**A browser bundle needs a different answer, not this one.** The node shim's replacement
+expression needs `require`/`__filename`, which do not exist in a browser chunk — applying it
+there trades `undefined` for `ReferenceError`. `platform: 'node'` was tested and rejected: it
+changes the ESM bundle and the module-resolution conditions.
 
 ## [def:migration-shim]
 
@@ -64,6 +90,27 @@ target so inputs, path aliases and the cache are all honoured.
 `^build` stays in the test path. Measured inconclusive for wall-clock; load-bearing
 for the four child-process projects whose spawned `node` resolves workspace
 packages to built output.
+
+## [inv:bump-lands-with-its-fix]
+
+A toolchain version bump may only be **committed** in the same commit as the change that keeps
+the built artifact working. The guard on `vite-cjs-import-meta-repair` enforces this
+mechanically: `git log -1 --format=%H -- <plugin>` must equal `git log -1 --format=%H --
+package.json`, i.e. the same commit touched both.
+
+Rationale: `upgrade-baseline` originally committed the `vite ^8.3.0` bump on its own. That
+produced a commit where the declared version was correct and every built CommonJS entrypoint
+threw on load — and the guard went green, because it compared a version string. The bump now
+sits uncommitted through `upgrade-baseline` (measured, recorded as pending) and lands in
+`vite-cjs-import-meta-repair` together with the fix.
+
+## [inv:guards-prove-the-artifact-loads]
+
+A guard for a packaging or bundling change must **execute the built artifact**, not inspect a
+declaration about it. "`package.json` says `vite ^8.3.0`" is not evidence that anything works;
+`node <dist-entry> --help` exiting 0 is. Structural absence checks (`absent` criteria, token
+greps) are legitimate for "the old thing is gone", but they never stand in for a load-and-run
+probe.
 
 ## [inv:guards-are-red-then-green]
 
