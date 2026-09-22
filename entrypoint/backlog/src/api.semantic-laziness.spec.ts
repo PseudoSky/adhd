@@ -184,8 +184,12 @@ describe('api.ts semantic laziness — routing flips to semantic once the space 
       const h = await openCtx('api-lazy-empty-space');
       try {
         // A real, usable store with a real project — but ZERO vectors in the
-        // space. `upsertProject` derives the write handle (and so constructs
-        // the provider) without embedding, so the space stays empty here.
+        // space. `upsertProject` passes `needsSemantic: false` (api.ts:540), so
+        // it derives no semantic members and embeds nothing: the space stays
+        // empty here. (The bare `text:` query below is `needsSemantic: true`,
+        // so IT is what bootstraps the memoized provider — but with no vectors
+        // to rank, routing stays on grep and the semantic ranker is never
+        // entered.)
         const proj = await upsertProject(h.ctx, { name: 'P', by: 't' });
         expect(isOutcomeOk(proj), JSON.stringify(proj)).toBe(true);
 
@@ -283,9 +287,11 @@ describe('api.ts semantic laziness — the laziness matrix', () => {
         await upsertProject(h.ctx, { name: 'P', by: 't' });
         await upsertProject(h.ctx, { name: 'Q', by: 't' });
 
-        // `upsertProject` is the first verb to derive a write handle, so it is
-        // where the (memoized) provider is constructed. Reset only the EMBED
-        // counter — `createProvider` must stay counted from process/store start.
+        // `create` is the first `needsSemantic: true` verb in this test
+        // (api.ts:464) — `upsertProject` above passes `needsSemantic: false`
+        // (api.ts:540) and constructs nothing — so `create` is where the
+        // (memoized) provider is constructed. Reset only the EMBED counter —
+        // `createProvider` must stay counted from process/store start.
         providerSpy.embedSingle = 0;
 
         // First issue in P: the duplicate gate short-circuits on a project with
