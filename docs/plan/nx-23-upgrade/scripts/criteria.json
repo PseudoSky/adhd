@@ -491,7 +491,7 @@
       "phase": "graph",
       "tier": 2,
       "kind": "command",
-      "cmd": "rg -q \"@nx/js/plugin\" nx.json",
+      "cmd": "node -e \"const p=require('./nx.json').plugins;process.exit(p.some(x=>x.plugin==='@nx/js/typescript')?0:1)\"",
       "expect": "exit0"
     },
     {
