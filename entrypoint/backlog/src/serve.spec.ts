@@ -56,7 +56,11 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
       command: 'node',
       args: [DIST_INDEX, 'serve', '--transport', 'mcp'],
       cwd: adhdRoot,
-      env: { ...(process.env as Record<string, string>), ADHD_BACKLOG_SCOPE: 'project' },
+      // HOME redirect is required alongside `ADHD_BACKLOG_SCOPE=project`: the
+      // global config layer is read regardless of scope (see cli.spec.ts
+      // runBin's note), so without it this child reads the real machine's
+      // `~/.adhd/backlog/production/config.yaml`.
+      env: { ...(process.env as Record<string, string>), ADHD_BACKLOG_SCOPE: 'project', HOME: adhdRoot },
     });
     client = new Client({ name: 'backlog-serve-cli-test-client', version: '1.0.0' }, { capabilities: {} });
     await client.connect(transport);
@@ -117,7 +121,7 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
     const { spawnSync } = await import('node:child_process');
     const result = spawnSync(process.execPath, [DIST_INDEX, 'serve', '--help'], {
       cwd: adhdRoot,
-      env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project' },
+      env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project', HOME: adhdRoot },
       encoding: 'utf8',
       timeout: 10_000,
     });
@@ -134,7 +138,7 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
     const { spawnSync } = await import('node:child_process');
     const result = spawnSync(process.execPath, [DIST_INDEX, 'serve', '--transport', 'bogus'], {
       cwd: adhdRoot,
-      env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project' },
+      env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project', HOME: adhdRoot },
       encoding: 'utf8',
       timeout: 10_000,
     });

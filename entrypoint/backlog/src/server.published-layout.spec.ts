@@ -76,7 +76,9 @@ describe('backlog published (rebased-to-root) layout — real npm-install-shape 
     const indexJs = join(publishedRoot, 'index.js');
     const result = spawnSync(process.execPath, [indexJs, '--help'], {
       cwd: publishedRoot,
-      env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project' },
+      // HOME redirect: the global config layer is read regardless of
+      // `ADHD_BACKLOG_SCOPE` (see cli.spec.ts runBin's note), so isolate it too.
+      env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project', HOME: publishedRoot },
       encoding: 'utf8',
       timeout: 30_000,
     });
@@ -122,7 +124,7 @@ describe('backlog published (rebased-to-root) layout — real npm-install-shape 
     const indexJs = join(publishedRoot, 'index.js');
     const result = spawnSync(process.execPath, [indexJs, 'version'], {
       cwd: publishedRoot,
-      env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project' },
+      env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project', HOME: publishedRoot },
       encoding: 'utf8',
       timeout: 30_000,
     });

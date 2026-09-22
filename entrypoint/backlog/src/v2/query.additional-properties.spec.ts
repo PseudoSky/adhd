@@ -49,7 +49,11 @@ interface SpawnResult {
 function runBin(args: string[], cwd: string): SpawnResult {
   const result = spawnSync(process.execPath, [DIST_INDEX, ...args], {
     cwd,
-    env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project' },
+    // HOME redirect is required alongside `ADHD_BACKLOG_SCOPE=project`: the
+    // global config layer is read regardless of scope (see cli.spec.ts
+    // runBin's note), so without it this child reads the real machine's
+    // `~/.adhd/backlog/production/config.yaml`.
+    env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project', HOME: cwd },
     encoding: 'utf8',
     timeout: 30_000,
   });

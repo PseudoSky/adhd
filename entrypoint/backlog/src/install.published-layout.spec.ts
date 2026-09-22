@@ -62,7 +62,9 @@ function runInstallSkill(publishedRoot: string, extraArgv: string[]): SpawnResul
   const indexJs = join(publishedRoot, 'index.js');
   const result = spawnSync(process.execPath, [indexJs, 'install-skill', ...extraArgv], {
     cwd: publishedRoot,
-    env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project' },
+    // HOME redirect: the global config layer is read regardless of
+    // `ADHD_BACKLOG_SCOPE` (see cli.spec.ts runBin's note), so isolate it too.
+    env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project', HOME: publishedRoot },
     encoding: 'utf8',
     timeout: 30_000,
   });
@@ -113,7 +115,7 @@ describe('BUG-013 — install-skill on a published (rebased-to-root) layout', ()
     const indexJs = join(publishedRoot, 'index.js');
     const result = spawnSync(process.execPath, [indexJs, 'install', '--host', 'claude', '--scope', 'project', '--skill-only'], {
       cwd: publishedRoot,
-      env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project' },
+      env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project', HOME: publishedRoot },
       encoding: 'utf8',
       timeout: 30_000,
     });

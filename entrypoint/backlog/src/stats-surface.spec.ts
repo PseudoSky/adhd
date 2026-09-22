@@ -349,7 +349,11 @@ describe('FEAT-009/FEAT-BACKLOG-010/WO-3 over the REAL built HTTP server (spawne
     storeDir = mkdtempSync(join(tmpdir(), 'backlog-stats-http-'));
     proc = spawn(process.execPath, [DIST_INDEX, 'serve', '--transport', 'http', '--port', String(port), '--host', '127.0.0.1'], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...(process.env as Record<string, string>), ADHD_BACKLOG_SCOPE: 'project', ADHD_BACKLOG_DATABASE_PATH: join(storeDir, 'backlog.db') },
+      // HOME redirect is required alongside `ADHD_BACKLOG_SCOPE=project`: the
+      // global config layer is read regardless of scope (see cli.spec.ts
+      // runBin's note). `storeDir` is this test's own throwaway root, removed
+      // in afterEach.
+      env: { ...(process.env as Record<string, string>), ADHD_BACKLOG_SCOPE: 'project', HOME: storeDir, ADHD_BACKLOG_DATABASE_PATH: join(storeDir, 'backlog.db') },
     });
     let bootLog = '';
     proc.stderr?.on('data', (d) => (bootLog += String(d)));

@@ -213,7 +213,7 @@ beforeAll(async () => {
 
   // ---- MCP (real built server, real JSON-RPC stdio) ----------------------
   const mcpRoot = tempRoot('backlog-v2-mcp-');
-  const transport = new StdioClientTransport({ command: 'node', args: [MCP_ENTRY, mcpRoot], cwd: mcpRoot });
+  const transport = new StdioClientTransport({ command: 'node', args: [MCP_ENTRY, mcpRoot], cwd: mcpRoot, env: { HOME: mcpRoot } });
   const client = new Client({ name: 'backlog-v2-parity-client', version: '1.0.0' }, { capabilities: {} });
   await client.connect(transport);
   const mcpTools = (await client.listTools()).tools.map((t) => t.name).sort();
@@ -224,7 +224,11 @@ beforeAll(async () => {
   const cliRoot = tempRoot('backlog-v2-cli-');
   const help = spawnSync(process.execPath, [DIST_INDEX, '--help'], {
     cwd: cliRoot,
-    env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project' },
+    // HOME redirect is required alongside `ADHD_BACKLOG_SCOPE=project`: the
+    // global config layer is read regardless of scope (see cli.spec.ts
+    // runBin's note), so without it this child reads the real machine's
+    // `~/.adhd/backlog/production/config.yaml`.
+    env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project', HOME: cliRoot },
     encoding: 'utf8',
     timeout: 30_000,
   });
