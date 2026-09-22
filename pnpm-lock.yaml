@@ -617,8 +617,8 @@ importers:
         specifier: ^0.4.1
         version: 0.4.1
       '@adhd/sox-vector-store':
-        specifier: ^0.6.2
-        version: 0.6.2
+        specifier: ^0.7.0
+        version: 0.7.0
 
   entrypoint/decompile-cli:
     dependencies:
@@ -1637,6 +1637,22 @@ packages:
     transitivePeerDependencies:
       - encoding
     dev: false
+
+  /@adhd/sox-vector-store@0.7.0:
+    resolution: {integrity: sha512-viU+Si3EuK77ipnvHAxLnoI2SnBudXgfGk+5Uk2QNoiT9xfT6zyrdO9ihnCz98FWSQqY/WLVoZEieyoJ26dOUw==}
+    engines: {node: '>=22'}
+    requiresBuild: true
+    dependencies:
+      '@adhd/sox-store-adapter': 0.9.2
+      '@lancedb/lancedb': 0.31.0(apache-arrow@18.1.0)
+      apache-arrow: 18.1.0
+      better-sqlite3: 12.10.0
+      sqlite-vec: 0.1.9
+      synckit: 0.11.13
+    transitivePeerDependencies:
+      - encoding
+    dev: false
+    optional: true
 
   /@adobe/css-tools@4.5.0:
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
