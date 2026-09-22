@@ -240,7 +240,7 @@
     },
     "lint": {
       "dependsOn": [
-        "sync-deps"
+        "sync-deps-check"
       ]
     }
   },
