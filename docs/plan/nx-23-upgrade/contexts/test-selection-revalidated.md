@@ -1,6 +1,6 @@
 # test-selection-revalidated — Changed-flag verdict revalidated on the upgraded toolchain
 
-**Phase:** tests · **Kind:** work · **Depends on:** audit-graph · **Guard:** `test -f docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && rg -q "D1" docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && rg -q "D2" docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && rg -q "D3" docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && ./node_modules/.bin/nx --version | rg -q "23\.2\.1"`
+**Phase:** tests · **Kind:** work · **Depends on:** typecheck-teeth-restored · **Guard:** `test -f docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && rg -q "D1" docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && rg -q "D2" docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && rg -q "D3" docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && ./node_modules/.bin/nx --version | rg -q "23\.2\.1"`
 
 ---
 
@@ -67,3 +67,5 @@ mutates:    ["docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md"]
 ## Notes for executor
 
 The prior verdict on the changed flag was measured on Nx 18.3.4 with vitest 1.6.1. Re-run the same three probes on Nx 23.2.1 with vitest 4.1.9 and record confirm-or-refute per defect.
+
+**Re-pointed 2026-09-22 (audit waiver).** This state previously depended on `audit-graph`. That hold point was retired by owner directive ("the audit is un-needed"), so this state now depends directly on `typecheck-teeth-restored`, the last completed state. Nothing about the work changes: the graph-phase remodel was already validated by `typecheck-teeth-restored`'s own guard (the accumulated config gate + a green `typecheck` sweep + cold-cache builds). The waived `audit-graph` gate had in fact run green (74/74) before the waiver — see `APPROVAL.md` § *Amendment 2026-09-22 — audit waiver*.

@@ -19,8 +19,10 @@ green under it.
   47 explicit `@nx/vite:build` targets; *their* executor ran `validateTypes`, while the inferred
   `build` runs a plain `vite build` (vite-plugin-dts 3.8.3 logs diagnostics and exits 0). The
   build stopped type-checking, so `[tsconfig-shim-removal.5]` — "an injected type error turns it
-  red" — went red and re-blocks every later gate, because `audit-graph` accumulates the config
-  phase.
+  red" — went red and re-blocked every later gate, because the config-phase gate accumulates
+  `[tsconfig-shim-removal.5]` (and this state's own guard re-runs that accumulated gate). *Updated
+  2026-09-22: the later gate named here was `audit-graph`, since retired by owner directive; the
+  regression was resolved by this state before that waiver, so the correction is historical.*
 - **Restore the gate; do not re-add 47 targets.** The gate belongs in one place:
   `targetDefaults.build.dependsOn` gains `typecheck`. A same-project `dependsOn` entry naming a
   target a project does not have is **silently skipped** (Nx `create-task-graph.js`

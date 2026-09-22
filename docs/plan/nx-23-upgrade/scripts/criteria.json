@@ -580,23 +580,6 @@
       "expect": "exit0"
     },
     {
-      "id": "audit-graph.1",
-      "phase": "graph",
-      "tier": 1,
-      "kind": "exists",
-      "path": "docs/plan/nx-23-upgrade/scripts/guard_audit_graph.py"
-    },
-    {
-      "id": "audit-graph.2",
-      "phase": "graph",
-      "tier": 0,
-      "kind": "present",
-      "pattern": "--criteria",
-      "paths": [
-        "docs/plan/nx-23-upgrade/scripts/guard_audit_graph.py"
-      ]
-    },
-    {
       "id": "test-selection-revalidated.1",
       "phase": "tests",
       "tier": 1,
@@ -686,40 +669,6 @@
       "tier": 1,
       "kind": "exists",
       "path": "docs/plan/nx-23-upgrade/TEST-SELECTION.md"
-    },
-    {
-      "id": "audit-tests.1",
-      "phase": "tests",
-      "tier": 1,
-      "kind": "exists",
-      "path": "docs/plan/nx-23-upgrade/scripts/guard_audit_tests.py"
-    },
-    {
-      "id": "audit-tests.2",
-      "phase": "tests",
-      "tier": 0,
-      "kind": "present",
-      "pattern": "--criteria",
-      "paths": [
-        "docs/plan/nx-23-upgrade/scripts/guard_audit_tests.py"
-      ]
-    },
-    {
-      "id": "audit-final.1",
-      "phase": "final",
-      "tier": 1,
-      "kind": "exists",
-      "path": "docs/plan/nx-23-upgrade/scripts/guard_audit_final.py"
-    },
-    {
-      "id": "audit-final.2",
-      "phase": "final",
-      "tier": 0,
-      "kind": "present",
-      "pattern": "--criteria",
-      "paths": [
-        "docs/plan/nx-23-upgrade/scripts/guard_audit_final.py"
-      ]
     },
     {
       "phase": "final",
@@ -825,7 +774,7 @@
       "id": "dod.13",
       "kind": "command",
       "tier": 2,
-      "cmd": "node -e \"const fs=require('fs');const f=fs.readdirSync('docs/plan/nx-23-upgrade/scripts').filter(x=>/^guard_audit_.*[.]py$/.test(x));process.exit(f.length>=5?0:1)\"",
+      "cmd": "node -e \"const fs=require('fs');const d=require('./docs/plan/nx-23-upgrade/dag.json');const a=Object.entries(d.nodes).filter(([,n])=>n.kind==='audit').map(([s])=>s).sort().join(',');const g=fs.readdirSync('docs/plan/nx-23-upgrade/scripts').filter(x=>/^guard_audit_.*[.]py$/.test(x));process.exit(a==='audit-config,audit-reconcile'&&g.length>=5?0:1)\"",
       "expect": "exit0"
     },
     {

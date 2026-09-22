@@ -8,7 +8,10 @@ Referenced by every context file. Change a term here, not in every context file.
 
 `perf/nx-upgraded`, checked out at `.worktrees/nx-perf-upgraded`. Every state in
 this plan commits here. **No state pushes, merges to the default branch, or
-publishes.** Landing is a human decision taken after `audit-final`.
+publishes.** Landing is a human decision taken after the terminal state completes
+(since the 2026-09-22 audit waiver that terminal is `test-changed-optin`; the
+dedicated `audit-final` hold was retired — see `APPROVAL.md` § *Amendment
+2026-09-22 — audit waiver*).
 
 ## [def:inferred-target]
 
