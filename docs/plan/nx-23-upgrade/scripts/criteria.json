@@ -1073,6 +1073,14 @@
       "mutate": "printf '\\n\\nexport const __ttProbe: number = \"not a number\";\\n' >> packages/agent/agent-base-types/src/index.ts",
       "restore": "git restore packages/agent/agent-base-types/src/index.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "typecheck-teeth-restored.2",
+      "phase": "graph",
+      "tier": 3,
+      "kind": "command",
+      "cmd": "./node_modules/.bin/nx build agent-core-env",
+      "expect": "exit0"
     }
   ]
 }
