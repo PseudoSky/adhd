@@ -21,6 +21,7 @@ import { dirname } from 'node:path';
 import { OPEN_TYPE_POLICY } from './type-policy.js';
 import { withImmediateRetry } from './immediate-retry.js';
 import { flushEmbeds as flushEmbedsFor } from './embed-queue.js';
+import { assertRecognizedStoreVocabulary } from './vocabulary-guard.js';
 
 export interface GraphBacklogStore {
   /** Store-adapter handle — ONLY for the CAS transaction wrapper (mutate-metadata.ts). */
@@ -106,6 +107,19 @@ export async function openGraphBacklogStore(
   // Production's 5000ms default left ample headroom, so this closes the gap
   // before it becomes an incident rather than after.
   await withImmediateRetry(() => graph.applySchema());
+  // Vocabulary guard (store/vocabulary-guard.ts): a store that holds live
+  // nodes but NONE of a kind this build recognizes would read as empty
+  // (`{ok:true, total:0}`) for every consumer. Refuse it at open rather than
+  // serve that emptiness. Runs AFTER `applySchema` so the `node` table
+  // exists, and is a pure read. The `catch` closes the adapter the guard's
+  // throw would otherwise leak — an open store that failed its own open must
+  // not leave a live connection behind.
+  try {
+    await assertRecognizedStoreVocabulary(adapter);
+  } catch (err) {
+    await adapter.close().catch(() => undefined);
+    throw err;
+  }
   const store: GraphBacklogStore = {
     adapter,
     graph,
