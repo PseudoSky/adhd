@@ -24,10 +24,12 @@
  * deterministic embedder maps identical text to an identical vector, whose
  * cosine similarity to itself is exactly 1.0 regardless of which model
  * produced it. No test in this file asserts a ranking or a similarity
- * SCORE between two genuinely DIFFERENT, non-identical texts (that
- * distinguishing-power proof belongs to the real-model suite
- * (`api.semantic-production-seam.spec.ts`), which is not touched by
- * this change) — so a negative-control fake that collides every input onto
+ * SCORE between two genuinely DIFFERENT, non-identical texts. That
+ * distinguishing-power proof — the duplicate gate CATCHING a paraphrase, and
+ * NOT catching an unrelated item — belongs to the real-model suite
+ * (`api.semantic-production-seam.spec.ts`), and cannot live here because the
+ * fake has no notion of synonymy (see `test/helpers/fake-embedding-provider.ts`).
+ * So a negative-control fake that collides every input onto
  * the same vector would not falsify any assertion here either, precisely
  * BECAUSE this file's assertions are equality-shaped (duplicate gate
  * outcome, write counts, audit rows), not ranking-shaped. What IS still

@@ -19,8 +19,9 @@
  * specific files removes real ONNX cost with zero loss of assertion teeth.
  * It is NOT used in every embedding-touching spec: any test whose fixtures
  * are deliberately constructed to require real cross-vocabulary semantic
- * similarity (e.g. finding a paraphrase that shares no token with the
- * query) stays on the real model — see `api.semantic-production-seam.spec.ts`,
+ * similarity (e.g. finding a paraphrase that shares no token with the query,
+ * or catching a paraphrased duplicate through the create gate) stays on the
+ * real model — see `api.semantic-production-seam.spec.ts`,
  * the only real-model suite, which does not import this file.
  *
  * **Determinism.** `embedTextDeterministic` hashes character trigrams of
