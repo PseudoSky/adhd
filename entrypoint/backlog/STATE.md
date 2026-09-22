@@ -1804,6 +1804,34 @@ other-agent edit — not ours.)
   Wave 3 (3a/3b/3c/3d per `report/sox-integration-plan.md` +
   `report/wave-3b-tx-elimination-spec.md`).
 
+**Update (2026-09-22 — java race fixed, test-review fixes landed):**
+- `653d8996` — test-review fixes: `src/cli.store-check.spec.ts` (spawned-CLI;
+  exit 0 + ok / exit 1 + `store_vocabulary_mismatch`), `src/store/
+  vocabulary-drift.spec.ts` (pins RECOGNIZED_NODE_KINDS vs write/tx.ts; teeth
+  proven), `src/api.semantic-production-seam.spec.ts` (DEFAULT-RUNNING
+  real-model seam spec; loud-fail precondition, no gating), stale comments
+  fixed. 12/12 touched specs green. Its deferral (canonical WRITE_NODE_KINDS
+  export) folded into existing item `41b8326e` (body updated).
+- `59bf05a9` — **java race fixed**: the previously-dead `apigen-java:package`
+  target wired into BOTH test targets' `dependsOn`. **Key finding: a
+  project-level `dependsOn` REPLACES `targetDefaults` (not merge)** — both now
+  list `["lint","^build","apigen-java:package"]`. `findFatJar` locates the
+  prebuilt jar under nx (`NX_TASK_TARGET_TARGET` detection — `@nx/vite:test`
+  has no env option) and never spawns mvn (proven: 7 mvn invocations under the
+  test, all `compile exec:java`, zero `package`); mvn stdout now included in
+  thrown errors (BUG 73741a3c); java-javalin green ×2, conformance green.
+- Debug confirmed the race (2/8 reproduction; shade plugin racing on
+  `dependency-reduced-pom.xml`/`target/*.jar` between the suite's two parallel
+  spec files — BUG 14614478). Residual cold-cache ordering hazard filed
+  `f80bf841` (LOW; cheapest fix = narrow `apigen-java:package` outputs to
+  `target/*.jar`).
+- Note (hypothesis, triage pending): the frozen build's
+  `scheduleIssueEmbedding` degraded once to `embedding_failed` ("database
+  connection is not open") during item creation — item persisted, vector
+  indexing skipped. Watch for recurrence.
+- Still in flight: sox `hasVectors` (publish); review fixes code/docs. Then:
+  full affected gate → push.
+
 **Triage decisions landed:**
 
 | Item | Verdict → consequence |
