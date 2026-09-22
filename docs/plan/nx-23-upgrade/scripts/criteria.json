@@ -915,6 +915,16 @@
       "paths": [
         "packages/workspace/workspace-codegen-nx/src/generators/shared/generator.ts"
       ]
+    },
+    {
+      "id": "vite-cjs-import-meta-repair.7",
+      "phase": "intake",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "importMetaUrlCjs",
+      "paths": [
+        "packages/workspace/workspace-codegen-nx/src/generators/base/generator.spec.ts"
+      ]
     }
   ]
 }
