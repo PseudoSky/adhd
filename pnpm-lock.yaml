@@ -614,8 +614,8 @@ importers:
         version: 1.10.3
     optionalDependencies:
       '@adhd/sox-embedding-provider':
-        specifier: ^0.4.1
-        version: 0.4.1
+        specifier: ^0.5.0
+        version: 0.5.0
       '@adhd/sox-vector-store':
         specifier: ^0.7.0
         version: 0.7.0
@@ -1528,17 +1528,6 @@ importers:
 
 packages:
 
-  /@adhd/sox-embedding-provider@0.4.1:
-    resolution: {integrity: sha512-NF/d/p7giJkio9OatTgJ4oAsv6ql1bHmJH+MaqRhaAX42dbVr9nrRCy8lihcLiidaUN2neS3E4VeNd+iOHUZAw==}
-    engines: {node: '>=22'}
-    requiresBuild: true
-    dependencies:
-      '@adhd/sox-telemetry': 0.2.1
-      '@huggingface/transformers': 4.2.0
-      fastembed: 2.1.0
-    dev: false
-    optional: true
-
   /@adhd/sox-embedding-provider@0.5.0:
     resolution: {integrity: sha512-64YXG59qW2DHLQKVqUhKULa6QpXSDvB2HKlLvO4pILzCv0n80CXhXxdJAXxrJAuUocn7ilKU7ukZsrq8tzxkSw==}
     engines: {node: '>=22'}
@@ -1597,20 +1586,6 @@ packages:
     optionalDependencies:
       better-sqlite3: 12.10.0
     dev: false
-
-  /@adhd/sox-telemetry@0.2.1:
-    resolution: {integrity: sha512-joPql1U0Ua5xyOPeZiuktfn0pAHOrApZLrDVK5yT8P9FEv9ePdUTYKuDOSAh36E1BBHPGS1QIKNiWpmk8sIUEQ==}
-    engines: {node: '>=20'}
-    requiresBuild: true
-    dependencies:
-      '@opentelemetry/api': 1.9.1
-      '@opentelemetry/context-async-hooks': 2.10.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/resources': 2.10.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-metrics': 2.10.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-trace-base': 2.10.0(@opentelemetry/api@1.9.1)
-      ulid: 2.4.0
-    dev: false
-    optional: true
 
   /@adhd/sox-telemetry@0.3.0:
     resolution: {integrity: sha512-i+VANrQKQgpZxxpDF/JiG+1jBEpEp8qKYetwQPZARIaTvkNjwNdXlnU21qSlPqsxj59afLGmxWvulpcp7DZv/g==}
@@ -5574,7 +5549,6 @@ packages:
   /@lancedb/lancedb@0.31.0(apache-arrow@18.1.0):
     resolution: {integrity: sha512-EUEVpheKhaCNE6ybcW760OUyfeei2dKR2ZwgLWeC/ntHL4BBiBLIErh9fuEuUP3/mAx4B5UFraB2m5nDUx5XEA==}
     engines: {node: '>= 18'}
-    cpu: [x64, arm64]
     os: [darwin, linux, win32]
     requiresBuild: true
     peerDependencies:
