@@ -997,6 +997,16 @@
       "tier": 1,
       "kind": "exists",
       "path": "packages/ui-react/ui-react-base-hooks/src/lib/use-file-download/import-meta-url.spec.ts"
+    },
+    {
+      "id": "browser-cjs-umd-repair.3",
+      "phase": "intake",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "dist/index.umd.js",
+      "paths": [
+        "packages/ui-react/ui-react-base-hooks/src/lib/use-file-download/import-meta-url.spec.ts"
+      ]
     }
   ]
 }
