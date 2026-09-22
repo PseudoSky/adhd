@@ -100,8 +100,9 @@ function unionValues(members: unknown[], depth: number): string {
  * - `enum`                   → `enumValues(def)`, unconditional at ANY depth
  *   (see `enumValues`).
  * - `$ref`                   → the ref's trailing name, unconditional.
- * - `anyOf`/`oneOf` (union)  → `depth >= 2` → `unionValues(members, depth - 1)`
- *   (member shapes); otherwise → the `'union'` truncation placeholder.
+ * - `anyOf`/`oneOf` (union)  → empty → `'unknown'` (see `unionValues`);
+ *   otherwise `depth >= 2` → `unionValues(members, depth - 1)` (member
+ *   shapes), else → the `'union'` truncation placeholder.
  * - `object`                 → `depth >= 1` → `objectShape(def)` (terminal —
  *   its fields render at depth 0); otherwise → `'object'`.
  * - anything else            → `def.type ?? 'object'`.
@@ -118,7 +119,15 @@ function typeName(def: SchemaProp | undefined, depth = 0): string {
   if (def.enum) return enumValues(def);
   if (def.$ref) return String(def.$ref).split('/').pop() || 'object';
   const unionMembers = def.anyOf ?? def.oneOf;
-  if (unionMembers) return depth >= 2 ? unionValues(unionMembers, depth - 1) : 'union';
+  if (unionMembers) {
+    // An EMPTY union (`anyOf: []` / `oneOf: []`) has no members to render, and
+    // `[].map(...).join(' | ')` would produce the empty string — leaving a bare
+    // `param?: ` with nothing after the colon, exactly the defect the empty-enum
+    // guard in `enumValues` fixes (C-21). Collapse to the shared `unknown`
+    // placeholder at ANY depth, mirroring the enum path.
+    if (unionMembers.length === 0) return 'unknown';
+    return depth >= 2 ? unionValues(unionMembers, depth - 1) : 'union';
+  }
   if (depth >= 1 && def.type === 'object') return objectShape(def) ?? 'object';
   return def.type ?? 'object';
 }
