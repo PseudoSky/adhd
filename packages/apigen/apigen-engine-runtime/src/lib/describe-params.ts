@@ -37,21 +37,69 @@ function objectShape(def: SchemaProp | undefined): string | undefined {
   return `{ ${fields} }`;
 }
 
+/** Renders one enum literal the way a caller would type it on the CLI/in JSON — a quoted string, or the bare JSON literal for a non-string value. */
+function enumLiteral(value: unknown): string {
+  return typeof value === 'string' ? `'${value}'` : JSON.stringify(value);
+}
+
 /**
- * @param expand When true and `def` is an `object` schema with `properties`,
- *   renders its field-level shape (`objectShape`) instead of the plain
- *   `object` placeholder. Only ever passed `true` for a TOP-LEVEL param —
- *   every recursive call (array items, a nested object's own fields) omits
- *   it, keeping expansion to exactly one level (see `objectShape`'s doc
- *   comment for why: apigen `--help` output — and any snapshot test
- *   asserting it — must stay bounded and readable, not an unbounded JSON dump).
+ * Renders an `enum` schema's actual allowed values, e.g. `'open'|'closed'|'all'`
+ * — never the bare, contentless word `enum`. Unconditional (not gated by
+ * `expand`): unlike an `object`'s fields (genuinely unbounded, hence the
+ * one-level cap below), an enum's own value list is exactly the information a
+ * caller needs to use the flag correctly, and is cheap to print in full at
+ * any nesting depth (BUG-BACKLOG-CLI-HELP-BARE-ENUM-001 — `query --help`
+ * rendered `view?: enum` for a ~10-value closed vocabulary, giving a caller no
+ * way to discover `'projects'`/`'components'`/`'locations'` without reading
+ * source or SPEC.md).
+ */
+function enumValues(def: SchemaProp): string {
+  return (def.enum ?? []).map(enumLiteral).join('|');
+}
+
+/**
+ * Renders a `oneOf`/`anyOf` union's member types, e.g.
+ * `{ uid: string } | { registry: string, name: string }` — never the bare,
+ * contentless word `union`. Only expanded when `expand` is true: each member
+ * is itself rendered via `typeName(member, expand)`, so an object member gets
+ * its OWN one-level field expansion too (this is what turns a mounted
+ * discriminated-union verb's mounted top-level `{ input: union }` into the
+ * member shapes a caller actually needs — BUG-BACKLOG-CLI-HELP-BARE-UNION-001,
+ * `get --help` printed `{ input: union }` for its two structurally-disjoint
+ * uid/registry variants, with zero way to discover either shape short of
+ * reading source). When `expand` is false (a union nested inside an already-
+ * expanded object's own field, or inside an array's `items`), stays the bare
+ * `union` placeholder — same one-level bound `objectShape` already enforces,
+ * so this can never runaway into an unbounded recursive dump.
+ */
+function unionValues(members: unknown[], expand: boolean): string {
+  return (members as SchemaProp[])
+    .map((member) => typeName(member, expand))
+    .join(' | ');
+}
+
+/**
+ * @param expand When true, an `object` schema with `properties` renders its
+ *   field-level shape (`objectShape`) instead of the plain `object`
+ *   placeholder, AND a `oneOf`/`anyOf` union renders its member shapes
+ *   (`unionValues`) instead of the plain `union` placeholder — both instead of
+ *   collapsing to a contentless placeholder word. Only ever passed `true` for
+ *   a TOP-LEVEL param — every recursive call for a field NESTED inside an
+ *   already-expanded object/union (array items, a nested object's own fields,
+ *   a union member's own fields) omits it, keeping expansion to exactly one
+ *   level (see `objectShape`'s doc comment for why: apigen `--help` output —
+ *   and any snapshot test asserting it — must stay bounded and readable, not
+ *   an unbounded JSON dump). `enum` is the one exception to this bound: its
+ *   value list is rendered in full unconditionally (`enumValues`), never
+ *   gated by `expand` — see that function's own doc comment for why.
  */
 function typeName(def: SchemaProp | undefined, expand = false): string {
   if (!def) return 'unknown';
   if (def.type === 'array') return `${typeName(def.items)}[]`;
-  if (def.enum) return 'enum';
+  if (def.enum) return enumValues(def);
   if (def.$ref) return String(def.$ref).split('/').pop() || 'object';
-  if (def.anyOf || def.oneOf) return 'union';
+  const unionMembers = def.anyOf ?? def.oneOf;
+  if (unionMembers) return expand ? unionValues(unionMembers, expand) : 'union';
   if (expand && def.type === 'object') return objectShape(def) ?? 'object';
   return def.type ?? 'object';
 }
