@@ -952,6 +952,14 @@
       "cmd": "./node_modules/.bin/nx build ui-react-base-hooks && echo UI_REACT_HOOKS_BUILD_PASS",
       "expect": "marker",
       "marker": "UI_REACT_HOOKS_BUILD_PASS"
+    },
+    {
+      "id": "browser-package-build-repair.2",
+      "phase": "intake",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "./node_modules/.bin/nx build ui-react-base-hooks && test -f packages/ui-react/ui-react-base-hooks/dist/index.js && test -f packages/ui-react/ui-react-base-hooks/dist/index.umd.js && test -f packages/ui-react/ui-react-base-hooks/dist/index.mjs",
+      "expect": "exit0"
     }
   ]
 }
