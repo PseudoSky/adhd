@@ -67,10 +67,10 @@
       "end_ref": "4a748796e64a0448915067f71d9d9bcc5183829d"
     },
     "graph-js-tsc-inferred": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-09-22T17:01:36.494Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "7ec8c340509a826e7a29bd3dfb14ae322f1c6f93",
       "end_ref": null
     },
     "graph-release-eslint-inferred": {
