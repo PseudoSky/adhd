@@ -87,7 +87,7 @@ describe('BUG-013 — install-written MCP config actually launches a working rea
       command: process.execPath,
       args: [DIST_INDEX, ...servArgsTail],
       cwd: adhdRoot,
-      env: { ADHD_BACKLOG_SCOPE: 'project', VITEST: 'true', HOME: process.env['HOME'] ?? '', PATH: process.env['PATH'] ?? '' },
+      env: { ADHD_BACKLOG_SCOPE: 'project', VITEST: 'true', HOME: adhdRoot, PATH: process.env['PATH'] ?? '' },
     });
     client = new Client({ name: 'backlog-install-e2e-claude', version: '1.0.0' }, { capabilities: {} });
     await client.connect(transport);
@@ -124,7 +124,7 @@ describe('BUG-013 — install-written MCP config actually launches a working rea
       command: process.execPath,
       args: [DIST_INDEX, ...servArgsTail],
       cwd: adhdRoot,
-      env: { ADHD_BACKLOG_SCOPE: 'project', VITEST: 'true', HOME: process.env['HOME'] ?? '', PATH: process.env['PATH'] ?? '' },
+      env: { ADHD_BACKLOG_SCOPE: 'project', VITEST: 'true', HOME: adhdRoot, PATH: process.env['PATH'] ?? '' },
     });
     client = new Client({ name: 'backlog-install-e2e-opencode', version: '1.0.0' }, { capabilities: {} });
     await client.connect(transport);

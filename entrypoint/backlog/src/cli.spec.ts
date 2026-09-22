@@ -6,8 +6,9 @@
  * the REAL BUILT `dist/index.js` as a genuine child process
  * (`process.execPath dist/index.js <args>`) — exactly how an installed
  * `backlog` bin is invoked — against a fresh, temp-scoped `.adhd` root
- * (`ADHD_BACKLOG_SCOPE=project` + a throwaway `cwd`), never the real
- * machine's global backlog graph. Mirrors `server.mcp.spec.ts`'s real-
+ * (`ADHD_BACKLOG_SCOPE=project` + a throwaway `cwd` + `HOME` redirected into
+ * that same throwaway root; both redirects are required, see `runBin`),
+ * never the real machine's global backlog graph. Mirrors `server.mcp.spec.ts`'s real-
  * subprocess pattern; this project's `test` target already
  * `dependsOn: ["build"]` so `dist/index.js` is always fresh.
  *
@@ -43,19 +44,31 @@ interface SpawnResult {
   stderr: string;
 }
 
-/** Spawns the REAL built `backlog` bin as a genuine child process. Never imported. */
+/**
+ * Spawns the REAL built `backlog` bin as a genuine child process. Never imported.
+ *
+ * Isolation is TWO redirects, and both are required:
+ *   - `ADHD_BACKLOG_SCOPE=project` + a fresh, empty `cwd` with no ancestor
+ *     `.adhd` marker (a throwaway `mkdtempSync` dir) moves the DATA root onto
+ *     that temp `cwd`.
+ *   - `HOME` is redirected to that same temp `cwd` so the GLOBAL config layer
+ *     resolves under the temp home too. `ADHD_BACKLOG_SCOPE=project` alone does
+ *     NOT isolate the global layer: `@adhd/environment`'s `resolveRoots`
+ *     (`roots.ts`) reads `<homedir()>/.adhd/<project>/<namespace>/config.yaml`
+ *     unconditionally, and `homedir()` honors `$HOME`. Without this redirect
+ *     the child read the real machine's
+ *     `~/.adhd/backlog/production/config.yaml`, whose post-cutover `db.path`
+ *     pointed at the PRODUCTION store — so every run opened production and
+ *     wrote test rows into it (the config-isolation leak this redirect fixes).
+ *
+ * `extraEnv` layers over both (BUG-002's `ADHD_BACKLOG_DATABASE_PATH`
+ * redirection probe, and the migration test's own `HOME`/`SOX_ECOSYSTEM_HOME`
+ * redirect — the latter a subdir of this same temp root).
+ */
 function runBin(args: string[], cwd: string, extraEnv: Record<string, string> = {}): SpawnResult {
   const result = spawnSync(process.execPath, [DIST_INDEX, ...args], {
     cwd,
-    // `ADHD_BACKLOG_SCOPE=project` + a fresh, empty `cwd` with no ancestor
-    // `.adhd` marker (a throwaway `mkdtempSync` dir) makes `@adhd/environment`
-    // bootstrap the graph store fresh AT `cwd` — never the real machine's
-    // global `~/.adhd/backlog` store. Confirmed empirically: a manual smoke
-    // run of this exact shape (`cd <tmp> && ADHD_BACKLOG_SCOPE=project node
-    // dist/index.js …`) left the real repo's `.adhd/` and the real global
-    // `~/.adhd/backlog/` both untouched. `extraEnv` layers BUG-002's
-    // `ADHD_BACKLOG_DATABASE_PATH` redirection probe on top.
-    env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project', ...extraEnv },
+    env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project', HOME: cwd, ...extraEnv },
     encoding: 'utf8',
     timeout: 30_000,
   });

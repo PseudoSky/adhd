@@ -33,7 +33,11 @@ async function connect(adhdRoot: string, name: string): Promise<
     command: 'node',
     args: [DIST_INDEX, 'serve', '--transport', 'mcp'],
     cwd: adhdRoot,
-    env: { ...(process.env as Record<string, string>), ADHD_BACKLOG_SCOPE: 'project' },
+    // HOME redirect is required alongside `ADHD_BACKLOG_SCOPE=project`: the
+    // global config layer is read regardless of scope (see cli.spec.ts
+    // runBin's note), so without it this child reads the real machine's
+    // `~/.adhd/backlog/production/config.yaml`.
+    env: { ...(process.env as Record<string, string>), ADHD_BACKLOG_SCOPE: 'project', HOME: adhdRoot },
   });
   const client = new Client({ name, version: '1.0.0' }, { capabilities: {} });
   try {

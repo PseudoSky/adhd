@@ -3,8 +3,11 @@
  *
  * Every assertion spawns the REAL BUILT `dist/index.js` as a child process
  * (AGENTS.md §7 "drive the real, BUILT consumer path, never an in-process
- * bypass"), against a throwaway `ADHD_BACKLOG_DATABASE_PATH` — never the
- * machine's real backlog graph.
+ * bypass"), against a throwaway `ADHD_BACKLOG_DATABASE_PATH` and a `HOME`
+ * redirected into the same throwaway root — never the machine's real backlog
+ * graph and never its real `~/.adhd/backlog/production/config.yaml` (the
+ * global config layer is read regardless of `ADHD_BACKLOG_SCOPE`, so pinning
+ * the DB path alone still left the machine's global config visible).
  *
  * It covers three defects that were invisible to every in-process test,
  * because all three live in the MOUNT, below `client.ts`:
@@ -53,6 +56,12 @@ function runBin(args: string[]): Run {
     env: {
       ...process.env,
       ADHD_BACKLOG_SCOPE: 'project',
+      // Redirect HOME so the GLOBAL config layer resolves under this
+      // throwaway root. `ADHD_BACKLOG_SCOPE=project` moves only the DATA
+      // root; the global layer is read unconditionally (see cli.spec.ts
+      // runBin's note). Without this, the child reads the real machine's
+      // `~/.adhd/backlog/production/config.yaml`.
+      HOME: tmpRoot,
       // The ONLY var that redirects the store. `BACKLOG_DB_PATH` is NOT
       // honored — using it silently writes to the real global graph.
       ADHD_BACKLOG_DATABASE_PATH: dbPath,
