@@ -121,6 +121,27 @@ exact trap the state guards against — dropping `lint` from the test target). T
 therefore **a candidate for deletion**. It is **not** deleted here — recorded as a
 recommendation only.
 
+## Audit-run observation
+
+`--complete` reported `audit_pass:false` with `audit_criteria_passed: 35 / 39`, yet the
+state advanced (`current_state: test-resolution-absorbed`) and `dod_confirmed: true`.
+
+The phase audit (`scripts/run-audit.js --phase reconcile`) is **cumulative** — it evaluates
+every `intake` + `reconcile` criterion, not just the current state's. The 4 failures are
+`test-resolution-absorbed.{1..4}` — the **next** state's criteria, not this state's:
+
+```
+$ node docs/plan/nx-23-upgrade/scripts/run-audit.js --phase reconcile --criteria "$PWD/docs/plan/nx-23-upgrade/scripts/criteria.json" | rg FAIL
+[test-resolution-absorbed.1] FAIL
+[test-resolution-absorbed.2] FAIL
+[test-resolution-absorbed.3] FAIL
+[test-resolution-absorbed.4] FAIL
+```
+
+All four of this state's own criteria (`config-repair-absorbed.{1..4}`) PASS. The
+non-zero audit exit is therefore expected at a mid-phase boundary and does not reflect a
+defect in this state's work.
+
 ## Invariants observed
 
 - No push, merge, or publish. `[def:upgrade-branch]`
