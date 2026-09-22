@@ -1568,7 +1568,149 @@ H4 write-path fix); (3) autonomy to complete the whole scope; (4) changes
 to sox-ecosystem packages allowed, publish allowed — repo located at
 `/Users/nix/dev/ai/sox-ecosystem`; (5) **dispatch code reviews after
 completion of task groups** (every wave/group gets a `review` pass before
-merge/push).
+merge/push); (6) **sox-semantic adoption** (user-directed): Wave 0's
+replacement triage must utilize `@adhd/sox-semantic`'s
+`createSemanticBackend` rather than preserve the hand-rolled
+`deriveMembers` — sequenced per the packaging verdict below.
+
+**H5a — Write-path root cause (debug, 2026-09-22) + sox-semantic amendment:**
+- **Root cause of the filing blocker:** the production store is a LEGACY
+  closed-schema graph DB (kind/rel CHECKs), holding ~1560 real items as
+  `kind='generic'`; the global `adhd-backlog` symlink resolves INTO this
+  worktree (v1.0.0, open vocabulary) → every write violates the legacy
+  CHECK. Not corruption/WAL/version-drift/telemetry. Fix = the plan's
+  CUTOVER (extract → ETL → new open-schema store → repoint; legacy
+  untouched as rollback). Cutover execution plan dispatched (`architect`).
+  7 adjacent bugs mapped (2 sox-ecosystem: nodeNeedsRebuild heuristic,
+  migrateToOpenSchema-Turso refusal; 5 backlog/ops: premature symlink, no
+  initTelemetry, sidecar churn, auto_vacuum panic, stale install).
+- **sox-semantic packaging verdict (architect-decision): (c) upstream
+  first.** sox-semantic's dist has STATIC value imports of the heavy two
+  used on the default probe path — DI injection skips calling, not
+  loading. Upstream change (sox-ecosystem, publish granted): lazy dynamic
+  imports on the default path only + heavy two out of hard deps → publish
+  (0.1.4 suggested). THEN backlog adopts: remove the dead
+  `@adhd/sox-semantic` hard dep (declared ^0.1.2, imported nowhere —
+  dead-dep finding), move it to optionalDependencies ^0.1.3, align ranges
+  (sox-embedding-provider ^0.4.1→^0.5.0, sox-vector-store ^0.6.0→^0.6.1),
+  and replace `deriveMembers` with a thin DI adapter over
+  `createSemanticBackend` (probe + seam + routing + host deletions in
+  A–D are unaffected). checkDim/errText/PermanentEmbeddingDimensionError
+  drop iff a red/green test proves SpaceInvariantError covers dim
+  mismatch. Batch-first `embedDocuments` is NOT a blocker (per-write
+  keeps the injected provider's `embedSingle`).
+- In-flight (2026-09-22 checkpoint): sox-integration triage (architect);
+  S-13 empty-ids upstream fix (typescript, sox-ecosystem, publish);
+  sox-semantic optional-loadability (typescript, sox-ecosystem, publish);
+  cutover execution (backend, full authorization). See H6.
+
+### H6 — Session checkpoint (2026-09-22) + superseding resume map
+
+**Landed (verified):**
+- `ef790a65` — S-18 fix (apigen-base-logical `runmode.ts` missing-tag branch
+  selection) + 5 tests (RED→GREEN); 228 passed; dependents green.
+- `c972d679` — C-22 review findings closed (blind review found 7; all
+  corrected: fixture-based controls with neuter evidence, dist-missing →
+  exit 2, widened scan incl. CONTRACT.md, metadata reworded, dist inputs
+  dropped). Carried unfiled: Finding 7 — backlog's release closure loses the
+  `lint`/@nx/dependency-checks edge (pre-existing BUG-060 class; CI gates
+  lint explicitly, only `nx release publish` is affected).
+- Wave 0 Seg A–D — IMPLEMENTED, UNCOMMITTED (inventory below). Suite
+  589/591; the only red = the S-13 pin (`search-ranked-zero-filter.spec.ts`:
+  `ids:[]` returns 1, not 0 — upstream conflation CONFIRMED; fix in flight).
+  Positive/cross-process/upgrade controls GREEN. Negative control CONVERTED
+  to the permanent EMPTY-SPACE→grep control (green) — the old reciprocal
+  guard is retired; its pre-fix RED evidence stands in the wave record.
+- apigen S-19+C-21, C-20, S-20 — implemented + verified RED→GREEN (committed
+  at this checkpoint; see git log). C-20 deviation accepted (single `Scope`
+  hoist — both loops share one block scope). S-20 harness: child-process
+  guarded-loader probe; barrel-level coverage gap noted (deferred item).
+- Write-path root cause (debug, evidence-backed) + cutover plan persisted:
+  `report/cutover-execution-plan.md`. **User approved full autonomous
+  cutover execution (2026-09-22).** Excluded: `@adhd/backlog` npm publish,
+  PR #9 merge (human-gated).
+- sox-semantic packaging verdict: (c) upstream-first (H5a).
+
+**In flight (background dispatches — collect results; use `agent_task_list`
+if a notification is missed):**
+1. sox-integration triage (architect) — user directive: integrate the recent
+   sox changes across graph/store/embedding/search/rrf/semantic; eliminate
+   custom SQL + modeling code. Deliverable: feature→elimination map,
+   upstream gaps, sequencing, verification.
+2. S-13 empty-ids fix (typescript, sox-ecosystem) — present-but-empty `ids`
+   ⇒ zero results at every layer; ADR + publish.
+3. sox-semantic optional-loadability (typescript, sox-ecosystem) — lazy
+   imports on the default path only + heavy two out of hard deps; publish.
+4. Cutover execution (backend) — per `report/cutover-execution-plan.md`;
+   full authorization; stop-and-report on gate failure.
+
+**Uncommitted inventory (the wave's atomic unit — commit together when
+green):** `entrypoint/backlog/src/write/bootstrap.ts`, `api.ts`,
+`query/query.ts`, `cli.ts`, `server.ts`; specs `query/meta.spec.ts`,
+`query/superseded-ranking.spec.ts`, `query/text-routing.spec.ts`,
+`query/views/semantic.spec.ts`, `write/bootstrap.spec.ts`,
+`query/search-ranked-zero-filter.spec.ts` (new S-13 pin),
+`api.semantic-laziness.spec.ts` (new), `write/rag-optional-deps.spec.ts`
+(renamed from `store/`). Plus this STATE.md. (AGENTS.md is a pre-existing
+other-agent edit — not ours.)
+
+**Sox-integration triage outcome (architect, 2026-09-22) — plan persisted at
+`report/sox-integration-plan.md`:**
+- **Headline correction: the tx-scoped-primitives hypothesis is FALSE** —
+  graph-store 0.10.0/HEAD still has `writeNodeInTx`/`writeEdgeInternal`
+  PRIVATE and `transaction(fn)` without an adapter swap. Upgrading removes
+  ~0 lines of tx.ts; the S-14 cluster-1 elimination (~205 lines +
+  claim/delete/catalog) requires NEW upstream work (**G1**).
+- **Version matrix:** graph-store 0.9.2 installed vs 0.10.0 declared/latest;
+  adapter 0.9.1 vs 0.9.2; hybrid-search 0.4.3 vs 0.4.5; semantic 0.1.3 vs
+  0.1.4 latest / 0.1.5 HEAD-unpublished; vector-store 0.6.1 and embedding
+  0.5.0 current. Declared `^0.10.0` is UNSATISFIED — re-install is a Wave 0
+  prerequisite.
+- **Usable immediately after re-install (published today):**
+  `NodeFilter.isSuperseded` pushdown (kills the `as unknown as NodeFilter`
+  casts + inflated counts); `countBy`/`getNodesByIds`/`NodeFilter.after`/
+  edge-meta filtering (read-path simplification).
+- **Gaps:** G1 tx-scoped primitives (BLOCKING, new sox work); G2 combined
+  busy/contention predicate; G3 hybrid-search isSuperseded passthrough
+  (=T-07); G4 migrateToOpenSchema-Turso + nodeNeedsRebuild (cutover
+  hardening); G5 publish semantic 0.1.5 + close its hybrid-search residual;
+  G6 empty-ids fix (in flight); G7 SortField joined-edge.
+- **Wave 3 sub-waves:** 3a semantic adoption (G5); 3b tx elimination (G1 —
+  dispatch AFTER the S-13 fix lands in graph-store to avoid version-bump
+  collisions); 3c ranked-path cleanup (G3+G6); 3d telemetry.
+- sox-semantic 0.1.5 optional-loadability is ALREADY AT HEAD (unpublished) —
+  the in-flight executor's job is verify + close the hybrid-search residual
+  + publish.
+
+**Next steps (revised):**
+1. Collect in-flight results (sox-semantic publish, S-13 publish, cutover).
+   Verify via `npm view`.
+2. **Wave 0 deps:** after the S-13 fix publishes → update the worktree to the
+   published set (graph-store 0.10.x, adapter 0.9.2, hybrid-search 0.4.x,
+   vector-store 0.6.x) → `pnpm install` → re-run the backlog suite → all
+   green → commit Wave 0 A–E atomically
+   (`refactor(backlog): SPEC §5b semantic-readiness seam + host bootstrap cleanup (S-01 A–E)`)
+   → pre-push hook unblocks.
+3. Wave 0 Seg F (deletions + `flushEmbeds` + embedding-usage-gate bucket
+   fix) → Seg G (docs + resolutions) → review pass → push.
+4. **On S-13 completion: dispatch G1** (sox-graph-store tx-scoped primitives —
+   `transaction(fn,{mode})` adapter-swap overload preferred; reconcile
+   ADR-0010 D3; publish), then 3b tx elimination.
+5. sox-semantic adoption (post-G5): `bootstrap.ts` thin DI adapter over
+   `createSemanticBackend` + package.json moves + range alignment + lockfile;
+   drop `checkDim`/`errText`/`PermanentEmbeddingDimensionError` iff a
+   red/green test proves `SpaceInvariantError` covers dim mismatch.
+6. Wave 1: S-02+C-01 (query.ts); apigen S-20 barrel coverage gap.
+7. Wave 2: remaining C-fixes + refactors + S-08/S-09 config pass + jscpd
+   gate activation (5% ceiling + allowlist) + the published-feature
+   adoptions (isSuperseded, countBy/getNodesByIds/after/edge-meta, range
+   alignment, dead-dep removal).
+8. Filing (once the cutover completes): the prepared block (project +
+   component + 11 items) + accumulated findings — sox 7-bug list + G1–G7,
+   review Finding 7, S-20 barrel gap, stale apigen-core-client AGENTS.md
+   test counts, S-13 pin status, sox-semantic dead-dep/range conflicts.
+9. Review each group before push (directive 5); PR #9 merge +
+   `@adhd/backlog` publish remain human-gated.
 
 **Triage decisions landed:**
 
