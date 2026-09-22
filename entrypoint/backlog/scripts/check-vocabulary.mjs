@@ -11,7 +11,12 @@
  * files it moved, and that is exactly how the tokens survive.
  *
  * EXIT CODES: 0 = clean. 1 = banned vocabulary found. 2 = the check itself
- * could not run (pack/extract failure) — a hard failure, never a silent pass.
+ * could not run — a pack/extract failure, OR the packed tarball contains no
+ * `dist/**\/*.d.ts` at all. The second case is a real pass-by-omission: npm
+ * pack exits 0 when package.json's `files` names a directory that does not
+ * exist, so an unbuilt package would otherwise report PASS while scanning only
+ * package.json/CHANGELOG.md/skill and silently skipping the one surface that
+ * reproduces source doc comments verbatim. A hard failure, never a silent pass.
  */
 import { execFileSync } from 'node:child_process';
 import {
@@ -102,6 +107,28 @@ function main() {
 
     const root = join(work, 'package');
     const files = walk(root);
+
+    // Pass-by-omission guard. `npm pack` exits 0 when a `files` entry names a
+    // directory that does not exist, yielding a tarball with no dist/ at all.
+    // Without this check the gate would then "pass" while scanning only
+    // package.json/CHANGELOG.md/skill — silently dropping the shipped
+    // declarations, the surface this gate exists to check. Treat an empty
+    // dist/ as the documented exit-2 "could not run" case, never a pass.
+    const declarations = files.filter((file) =>
+      /^dist\/.+\.d\.ts$/.test(relative(root, file))
+    );
+    if (declarations.length === 0) {
+      console.error(
+        'check-vocabulary: CANNOT RUN — the packed tarball contains no dist/**/*.d.ts.\n' +
+          '  The shipped type declarations are the surface this gate exists to check, so an\n' +
+          '  empty dist/ is a hard failure, not a clean result. Verify the package builds\n' +
+          '  dist/ and that package.json `files` names it.\n' +
+          `  tarball: ${tarball}\n` +
+          `  files found in tarball: ${files.length}`
+      );
+      return 2;
+    }
+
     const violations = [];
     let excludedHits = 0;
     let minifiedHits = 0;
@@ -165,6 +192,7 @@ function main() {
     );
     console.log(`  tarball: ${tarball}`);
     console.log(`  files scanned: ${files.length}`);
+    console.log(`  dist/*.d.ts declarations scanned: ${declarations.length}`);
     console.log(`  .map hits (excluded, informational): ${excludedHits}`);
     console.log(
       `  minifier-identifier v1/v2 hits in generated bundles (excluded, informational): ${minifiedHits}`
