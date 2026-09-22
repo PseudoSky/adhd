@@ -1,6 +1,7 @@
 /// <reference types='vitest' />
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { importMetaUrlCjs } from '../../../tools/vite-plugins/import-meta-url-cjs.mjs';
+import { nxViteTsPathsPre } from '../../../tools/vite-plugins/source-resolution.mjs';
 import { projectCacheDir, projectCoverage } from '../../workspace/workspace-base-vite-paths/src/index';
 import * as path from 'path';
 import { defineConfig } from 'vite';
@@ -14,6 +15,12 @@ export default defineConfig({
   plugins: [
     importMetaUrlCjs(),
     nxViteTsPaths(),
+    // Test-time source resolution for workspace @adhd/* packages: a
+    // pre-ordered (`enforce: 'pre'`), serve-scoped (`apply: 'serve'`) copy of
+    // the tsconfig-paths plugin hoisted ahead of vite:resolve, so @adhd/*
+    // maps to src/index.ts instead of dist. See
+    // tools/vite-plugins/source-resolution.mjs for the full rationale.
+    nxViteTsPathsPre(),
     dts({
       entryRoot: 'src',
       tsconfigPath: path.join(__dirname, 'tsconfig.lib.json'),
