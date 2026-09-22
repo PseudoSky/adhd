@@ -3,7 +3,8 @@
  * `createStoreAdapter()` (fully async) and hands the `StoreAdapter` to
  * `createGraphBackend()`, keeping the adapter handle for the CAS transaction
  * primitive (DESIGN.md §3). `.transaction(fn, { mode: 'immediate' })` (BEGIN
- * IMMEDIATE) is load-bearing — see mutate-metadata.ts for why.
+ * IMMEDIATE) is load-bearing — see `write/tx.ts`'s `executeWriteTransaction`
+ * for why.
  *
  * The adapter substrate is whatever `createStoreAdapter` selects; nothing in
  * this package names or depends on a particular one. That seam is the only
@@ -20,11 +21,14 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { OPEN_TYPE_POLICY } from './type-policy.js';
 import { withImmediateRetry } from './immediate-retry.js';
-import { flushEmbeds as flushEmbedsFor } from './embed-queue.js';
 import { assertRecognizedStoreVocabulary } from './vocabulary-guard.js';
 
 export interface GraphBacklogStore {
-  /** Store-adapter handle — ONLY for the CAS transaction wrapper (mutate-metadata.ts). */
+  /**
+   * Store-adapter handle — reached directly by the write layer's CAS
+   * transaction wrapper (`write/tx.ts`'s `executeWriteTransaction`), the
+   * vocabulary guard, and close. All other reads/writes go through `graph`.
+   */
   readonly adapter: StoreAdapter;
   /** All non-CAS reads/writes go through this. */
   readonly graph: GraphBackend;
@@ -44,22 +48,6 @@ export interface GraphBacklogStore {
    * rejects every write this package makes.
    */
   readonly typePolicy: TypePolicy;
-  /**
-   * RAG-SPEC.md §2.2 — durability backstop for a short-lived process. Every
-   * `scheduleEmbed` (embed-queue.ts) call fired by `createItem`/`updateItem`
-   * is fire-and-forget by default; a CLI process that exits before those
-   * promises settle would otherwise lose the vector permanently even though
-   * the item itself is already durably committed. `flushEmbeds()` awaits
-   * every embed currently in flight for THIS store — bounded, deterministic,
-   * no sleeps — including one scheduled while the drain is already running.
-   * `closeGraphBacklogStore` calls this automatically before closing the
-   * adapter, so a caller that does nothing but `await
-   * closeGraphBacklogStore(store)` already gets the durability guarantee;
-   * this method exists for a caller that wants to keep the store open
-   * afterward (e.g. a long batch of writes wanting a checkpoint partway
-   * through) or wants the guarantee without a close.
-   */
-  flushEmbeds(): Promise<void>;
 }
 
 /**
@@ -100,10 +88,10 @@ export async function openGraphBacklogStore(
   // DEBT-BACKLOG-APPLYSCHEMA-UNRETRIED-AT-OPEN-001. `applySchema()` issues DDL,
   // which takes the same write lock as every other write in this package — so
   // it gets the same bounded busy-retry every other write path gets
-  // (mutate-metadata.ts). Without it, opening a store while another process
-  // holds the write lock could fail outright: measured with 20 concurrent
-  // opens at busy_timeout=150 on a loaded box, `applySchema` threw
-  // "database is locked".
+  // (`withImmediateRetry`, immediate-retry.ts). Without it, opening a store
+  // while another process holds the write lock could fail outright: measured
+  // with 20 concurrent opens at busy_timeout=150 on a loaded box,
+  // `applySchema` threw "database is locked".
   // Production's 5000ms default left ample headroom, so this closes the gap
   // before it becomes an incident rather than after.
   await withImmediateRetry(() => graph.applySchema());
@@ -124,26 +112,20 @@ export async function openGraphBacklogStore(
     adapter,
     graph,
     typePolicy: OPEN_TYPE_POLICY,
-    flushEmbeds: () => flushEmbedsFor(store),
   };
   return store;
 }
 
 /**
- * Async (RAG-SPEC.md §2.2) — drains every embed still in flight for `store`
- * BEFORE closing the adapter, so a one-shot process that does nothing more
- * than `await closeGraphBacklogStore(store)` still gets the durability
- * guarantee without having to remember to call `flushEmbeds()` itself. This
- * is the belt-and-suspenders backstop `scheduleEmbed`'s doc comment
- * describes: `awaitEmbed: true` on individual writes and an explicit
- * `flushEmbeds()` mid-batch are the other two ways to get the same
- * guarantee, but a caller that does none of them still cannot lose a vector
- * as long as they close the store before the process exits.
+ * Async — closes the store's adapter. The embed drain that used to run here
+ * (the RAG-SPEC.md §2.2 durability backstop) is gone with the dead RAG write
+ * path; a short-lived process now relies on the live write layer's own
+ * `awaitEmbed` guarantee instead. Closing stays async so every existing
+ * `await closeGraphBacklogStore(store)` caller is unaffected.
  */
 export async function closeGraphBacklogStore(
   store: GraphBacklogStore
 ): Promise<void> {
-  await store.flushEmbeds();
   await store.adapter.close();
 }
 
