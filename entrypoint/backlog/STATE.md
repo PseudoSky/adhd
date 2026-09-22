@@ -1846,6 +1846,24 @@ other-agent edit — not ours.)
 - Memory handoff (canonical): episode `01M34PTH0G1ZWJ7NM40HBAZTWN`, topic
   `backlog-v2-remediation` — updated at this checkpoint.
 
+**Update (2026-09-22 — PUSHED; clean stopping point):**
+- **PUSHED:** `af8eaf63..d4a72009` — remote
+  `origin/feat/backlog-hard-replacement` now at `d4a72009`. Pre-push affected
+  gate passed: 63 projects / 174 tasks, 213/237 cache hits, 0 failures.
+- The branch now carries everything: apigen S-18/S-19/C-21/C-20/S-20; C-22 +
+  review-fix; the vocabulary guard; Wave 0 A–E; the java mvn race fix
+  (`59bf05a9`); the review fixes (`d7343221` code/docs, `653d8996` tests,
+  `5294244b` gate buckets); the run.spec load-flake fix (`d21f7a03`); the
+  bounded `hasVectors` probe switch (`d4a72009`).
+- **`e19bc9d0` (HIGH) fixed in code** — bounded `hasVectors` capability probe
+  (`sox-vector-store@0.7.0` installed; teeth proven by revert). Graph
+  resolution deferred to Seg G.
+- Residual notes: `run.spec.ts:304`'s doc comment still says the sibling
+  declares `{ timeout: 20000 }` (now 90000) — one-token fix; the other
+  load-sensitive bounds in that file (30s/20s) could get the same treatment.
+- **Next:** Seg F → Seg G (incl. resolving `e19bc9d0`/`f80bf841`/`b7805de9`
+  and the doc updates) → review → push → Wave 1 → Wave 2 → Wave 3.
+
 **Triage decisions landed:**
 
 | Item | Verdict → consequence |
