@@ -614,8 +614,8 @@ importers:
         version: 1.10.3
     optionalDependencies:
       '@adhd/sox-embedding-provider':
-        specifier: ^0.4.1
-        version: 0.4.1
+        specifier: ^0.5.2
+        version: 0.5.2
       '@adhd/sox-vector-store':
         specifier: ^0.7.0
         version: 0.7.0
@@ -1528,22 +1528,12 @@ importers:
 
 packages:
 
-  /@adhd/sox-embedding-provider@0.4.1:
-    resolution: {integrity: sha512-NF/d/p7giJkio9OatTgJ4oAsv6ql1bHmJH+MaqRhaAX42dbVr9nrRCy8lihcLiidaUN2neS3E4VeNd+iOHUZAw==}
-    engines: {node: '>=22'}
-    requiresBuild: true
-    dependencies:
-      '@adhd/sox-telemetry': 0.2.1
-      '@huggingface/transformers': 4.2.0
-      fastembed: 2.1.0
-    dev: false
-    optional: true
-
-  /@adhd/sox-embedding-provider@0.5.0:
-    resolution: {integrity: sha512-64YXG59qW2DHLQKVqUhKULa6QpXSDvB2HKlLvO4pILzCv0n80CXhXxdJAXxrJAuUocn7ilKU7ukZsrq8tzxkSw==}
+  /@adhd/sox-embedding-provider@0.5.2:
+    resolution: {integrity: sha512-RTnCnPsyrmnJWAPhKAvj9L4R5I+SG1ox8MMxtCLAYJuZq/dkqec3XCzTLlhMQruOWyfr7lBQdY/Vy6esvefUAw==}
     engines: {node: '>=22'}
     dependencies:
-      '@adhd/sox-telemetry': 0.3.0
+      '@adhd/sox-service-proxy': 0.4.1
+      '@adhd/sox-telemetry': 0.3.1
       '@huggingface/transformers': 4.2.0
       fastembed: 2.1.0
     dev: false
@@ -1568,24 +1558,38 @@ packages:
     resolution: {integrity: sha512-WFbJ1/rkdMGvOs43BIVHJaSIoqo9jUvk13XnWKt1XsQfN3zbkIxTITY+1S/3VXVV7AacU3+takxcj269tEPokQ==}
     engines: {node: '>=22'}
     dependencies:
-      '@adhd/sox-embedding-provider': 0.5.0
+      '@adhd/sox-embedding-provider': 0.5.2
       '@adhd/sox-graph-store': 0.10.1
       '@adhd/sox-vector-store': 0.6.2
     transitivePeerDependencies:
       - encoding
     dev: false
 
+  /@adhd/sox-listen-guard@0.1.1:
+    resolution: {integrity: sha512-Ucl1v8LxoCoZoaO+wvuF3VY5Z/B8FtPmzxYFDjrE+NJjoBjyo96U0st/VNdW3FkQEpWOrF5MvjTXLxwloAm5IQ==}
+    engines: {node: '>=20'}
+    requiresBuild: true
+    dev: false
+
   /@adhd/sox-semantic@0.1.3:
     resolution: {integrity: sha512-+Xj2QYIgwVxJIW8P3TX7d93qEfsA9oStFkJeMBRnVBVnzghi7xxxbHMl83dtoZZbkeIKtClIKrQCUTRsZPxybQ==}
     engines: {node: '>=22'}
     dependencies:
-      '@adhd/sox-embedding-provider': 0.5.0
+      '@adhd/sox-embedding-provider': 0.5.2
       '@adhd/sox-graph-store': 0.9.2
       '@adhd/sox-hybrid-search': 0.4.6
       '@adhd/sox-store-adapter': 0.9.2
       '@adhd/sox-vector-store': 0.6.1
     transitivePeerDependencies:
       - encoding
+    dev: false
+
+  /@adhd/sox-service-proxy@0.4.1:
+    resolution: {integrity: sha512-qz/cdkakISzUVa5ZrqnaPNUSOSYH/McZRRIGYUxNS8f/eUdYzRQ+mcoOpIFpuPXU3zWHV1RlD2JsxRZX9bU9tg==}
+    engines: {node: '>=20'}
+    requiresBuild: true
+    dependencies:
+      '@adhd/sox-listen-guard': 0.1.1
     dev: false
 
   /@adhd/sox-store-adapter@0.9.2:
@@ -1598,10 +1602,9 @@ packages:
       better-sqlite3: 12.10.0
     dev: false
 
-  /@adhd/sox-telemetry@0.2.1:
-    resolution: {integrity: sha512-joPql1U0Ua5xyOPeZiuktfn0pAHOrApZLrDVK5yT8P9FEv9ePdUTYKuDOSAh36E1BBHPGS1QIKNiWpmk8sIUEQ==}
+  /@adhd/sox-telemetry@0.3.0:
+    resolution: {integrity: sha512-i+VANrQKQgpZxxpDF/JiG+1jBEpEp8qKYetwQPZARIaTvkNjwNdXlnU21qSlPqsxj59afLGmxWvulpcp7DZv/g==}
     engines: {node: '>=20'}
-    requiresBuild: true
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/context-async-hooks': 2.10.0(@opentelemetry/api@1.9.1)
@@ -1610,11 +1613,11 @@ packages:
       '@opentelemetry/sdk-trace-base': 2.10.0(@opentelemetry/api@1.9.1)
       ulid: 2.4.0
     dev: false
-    optional: true
 
-  /@adhd/sox-telemetry@0.3.0:
-    resolution: {integrity: sha512-i+VANrQKQgpZxxpDF/JiG+1jBEpEp8qKYetwQPZARIaTvkNjwNdXlnU21qSlPqsxj59afLGmxWvulpcp7DZv/g==}
+  /@adhd/sox-telemetry@0.3.1:
+    resolution: {integrity: sha512-YHKgl+KIaYzLDrIhjPWKuL96hV8KGeaml1zvb+LkTbZLbiKcjDXlS6K/5IAq4Oy50YUYm2BO+AMR+Z5ggzapvQ==}
     engines: {node: '>=20'}
+    requiresBuild: true
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/context-async-hooks': 2.10.0(@opentelemetry/api@1.9.1)
@@ -1722,6 +1725,7 @@ packages:
   /@anush008/tokenizers@0.0.0:
     resolution: {integrity: sha512-IQD9wkVReKAhsEAbDjh/0KrBGTEXelqZLpOBRDaIRvlzZ9sjmUP+gKbpvzyJnei2JHQiE8JAgj7YcNloINbGBw==}
     engines: {node: '>= 10'}
+    deprecated: This package has been archived. Please use the official and updated "huggingface/tokenizers" package.
     requiresBuild: true
     optionalDependencies:
       '@anush008/tokenizers-darwin-universal': 0.0.0

@@ -544,30 +544,50 @@ export async function bootstrapSemanticBackend(
     };
   }
 
-  let provider: OptEmbeddingProvider;
-  try {
-    provider = await embeddingLoad.mod.createEmbeddingProvider(
-      config.embedding
-    );
-  } catch (err) {
-    return {
-      ok: false,
-      failure: {
-        reason: 'provider_failed',
-        detail: `createEmbeddingProvider(${config.embedding.type}:${
-          config.embedding.model
-        }) failed: ${errText(err)}`,
-      },
-    };
-  }
-
-  // §2.4 — provenance comes from the provider's RESOLVED metadata, never
-  // from `config`. An explicit `config.space` override is honoured, but it
-  // is the caller's deliberate act, not a default.
-  const space: OptVectorSpace = config.space ?? {
-    modelId: provider.metadata.modelId,
-    dim: provider.metadata.dimensions,
+  // ── Lazy provider (SPEC-EMBEDDING-FUNNEL.md §E) ──────────────────────────
+  // The provider is constructed on FIRST SEMANTIC USE, not at bootstrap, so a
+  // read-only verb (`query --input '{"view":"projects"}'`) never loads the
+  // model — and, under the embedding funnel, never spawns a shared host. When
+  // `config.space` is absent the vector space's dim is unknown without the
+  // provider's metadata, so the provider is constructed once here to read it;
+  // that construction is INERT (the fastembed factory no longer warms up), so
+  // it still spawns no host, and `provider_failed` is reported at bootstrap
+  // exactly as before for this case. When `config.space` IS supplied the
+  // construction is fully deferred, and a provider failure surfaces on first
+  // semantic use (thrown, never silent).
+  let providerPromise: Promise<OptEmbeddingProvider> | null = null;
+  const getProvider = (): Promise<OptEmbeddingProvider> => {
+    if (!providerPromise) {
+      providerPromise = embeddingLoad.mod.createEmbeddingProvider(
+        config.embedding
+      );
+    }
+    return providerPromise;
   };
+
+  // §2.4 — provenance comes from the provider's RESOLVED metadata, never from
+  // `config`. An explicit `config.space` override is honoured, but it is the
+  // caller's deliberate act, not a default.
+  let space: OptVectorSpace;
+  if (config.space) {
+    space = config.space;
+  } else {
+    let probe: OptEmbeddingProvider;
+    try {
+      probe = await getProvider();
+    } catch (err) {
+      return {
+        ok: false,
+        failure: {
+          reason: 'provider_failed',
+          detail: `createEmbeddingProvider(${config.embedding.type}:${
+            config.embedding.model
+          }) failed: ${errText(err)}`,
+        },
+      };
+    }
+    space = { modelId: probe.metadata.modelId, dim: probe.metadata.dimensions };
+  }
 
   let vectorBackend: OptAsyncVectorBackend;
   try {
@@ -610,11 +630,14 @@ export async function bootstrapSemanticBackend(
     modelId: space.modelId,
     dim: space.dim,
     async embedQuery(text: string): Promise<Float32Array> {
-      return checkDim(await provider.embedSingle(text, 'query'), 'embedQuery');
+      return checkDim(
+        await (await getProvider()).embedSingle(text, 'query'),
+        'embedQuery'
+      );
     },
     async embedDocument(text: string): Promise<Float32Array> {
       return checkDim(
-        await provider.embedSingle(text, 'document'),
+        await (await getProvider()).embedSingle(text, 'document'),
         'embedDocument'
       );
     },
@@ -664,6 +687,20 @@ export async function bootstrapSemanticBackend(
       // backend. When the provider exposes its own health, that is the
       // truth and it is passed through verbatim. When it does not, `active`
       // stays null rather than being invented from config.
+      let provider: OptEmbeddingProvider;
+      try {
+        provider = await getProvider();
+      } catch (err) {
+        // A deferred (space-supplied) provider that failed to construct is
+        // reported as an error state, never thrown from `health()`.
+        return {
+          configured: `${config.embedding.type}:${config.embedding.model}`,
+          active: null,
+          state: 'error',
+          dimensions: space.dim,
+          last_error: errText(err),
+        };
+      }
       const raw = provider.health?.();
       if (raw) return { ...raw };
       return {
