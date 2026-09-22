@@ -27,7 +27,6 @@
  * QUERY-001 was filed against.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -38,6 +37,7 @@ import {
   openGraphBacklogStore,
   closeGraphBacklogStore,
 } from '../store/graph-backlog-store.js';
+import { runIsolatedBin } from '../test/helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', '..', 'dist', 'index.js');
@@ -50,21 +50,9 @@ interface SpawnResult {
 
 /** Spawns the REAL built `backlog` bin as a genuine child process. Never imported. */
 function runBin(args: string[], cwd: string): SpawnResult {
-  const result = spawnSync(process.execPath, [DIST_INDEX, ...args], {
-    cwd,
-    // HOME redirect is required alongside `ADHD_BACKLOG_SCOPE=project`: the
-    // global config layer is read regardless of scope (see cli.spec.ts
-    // runBin's note), so without it this child reads the real machine's
-    // `~/.adhd/backlog/production/config.yaml`.
-    env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project', HOME: cwd },
-    encoding: 'utf8',
-    timeout: 30_000,
-  });
-  return {
-    status: result.status,
-    stdout: result.stdout ?? '',
-    stderr: result.stderr ?? '',
-  };
+  // `runIsolatedBin` owns the `ADHD_BACKLOG_SCOPE=project` + `HOME=<root>`
+  // redirect pair (see test/helpers/spawn-isolated-bin.ts).
+  return runIsolatedBin(DIST_INDEX, args, cwd);
 }
 
 describe('BUG-BACKLOG-QUERY-001: mis-nested top-level query keys are rejected, not silently dropped', () => {
