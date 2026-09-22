@@ -905,6 +905,16 @@
       "tier": 1,
       "kind": "exists",
       "path": "entrypoint/apigen-cli/src/test/e2e/cjs-import-meta-url.spec.ts"
+    },
+    {
+      "id": "vite-cjs-import-meta-repair.6",
+      "phase": "intake",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "importMetaUrlCjs",
+      "paths": [
+        "packages/workspace/workspace-codegen-nx/src/generators/shared/generator.ts"
+      ]
     }
   ]
 }
