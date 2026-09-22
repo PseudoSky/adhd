@@ -1,4 +1,4 @@
-# gate-triage-absorbed — STATE_NAME
+# gate-triage-absorbed — The post-bump gate failures have a recorded verdict
 
 **Phase:** intake · **Kind:** work · **Depends on:** upgrade-baseline · **Guard:** `test -f docs/plan/nx-23-upgrade/TRIAGE-VERDICTS.md && rg -q "apigen-cli" docs/plan/nx-23-upgrade/TRIAGE-VERDICTS.md && rg -q "apigen-plugin-java-javalin" docs/plan/nx-23-upgrade/TRIAGE-VERDICTS.md && ./node_modules/.bin/nx show projects | rg -q "\"backlog\""`
 
@@ -6,7 +6,31 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+The three test targets that failed the commit gate after the vite 8 bump have an explicit, cited verdict on file — so no later state assumes the bump was clean.
+
+---
+
+## Semantic distillation
+
+- An in-flight `debug` dispatch is triaging apigen-cli, backlog and apigen-plugin-java-javalin. CONSUME its verdict; do not re-derive it.
+- If the verdict is not available, that is itself a finding: record it as open and halt rather than guessing.
+- A flaky target (apigen-cli has a known flake history) is a different verdict from a real regression. Say which.
+
+---
+
+## Contract promise
+
+```text
+added:    ["docs/plan/nx-23-upgrade/TRIAGE-VERDICTS.md"]
+modified: []
+deleted:  []
+```
+
+---
+
+## Commit points
+
+- Commit TRIAGE-VERDICTS.md post-guard.
 
 ---
 

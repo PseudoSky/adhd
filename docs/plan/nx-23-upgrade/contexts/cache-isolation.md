@@ -1,4 +1,4 @@
-# cache-isolation — STATE_NAME
+# cache-isolation — Per-checkout task cache isolation
 
 **Phase:** config · **Kind:** work · **Depends on:** tsconfig-shim-removal · **Guard:** `node -e "const c=require(\"./nx.json\").cacheDirectory;if(c!==\".nx/cache\")process.exit(1)" && ./node_modules/.bin/nx show projects | rg -q "backlog" && test -f docs/plan/nx-23-upgrade/CACHE-ISOLATION.md`
 
@@ -6,7 +6,31 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+A cached task result belonging to a sibling worktree can never be replayed as a pass in this checkout.
+
+---
+
+## Semantic distillation
+
+- The hazard: Nx 23 pools the task cache and its sqlite database across sibling worktrees, and a test target has reported a cached PASS belonging to another worktree whose suite never ran.
+- THE TENSION: cross-worktree cache sharing IS the upgrade's headline benefit. You are trading a measured correctness hazard for a speed benefit. Make that trade explicitly in the record, not implicitly.
+- Use a RELATIVE cache directory so it resolves inside whichever checkout is running — an absolute path would re-pool everything.
+
+---
+
+## Contract promise
+
+```text
+added:    ["docs/plan/nx-23-upgrade/CACHE-ISOLATION.md"]
+modified: ["nx.json"]
+deleted:  []
+```
+
+---
+
+## Commit points
+
+- Commit nx.json + CACHE-ISOLATION.md post-guard.
 
 ---
 

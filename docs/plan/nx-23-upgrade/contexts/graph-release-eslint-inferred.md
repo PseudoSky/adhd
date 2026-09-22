@@ -1,4 +1,4 @@
-# graph-release-eslint-inferred — STATE_NAME
+# graph-release-eslint-inferred — Release and lint targets inferred (phase 2c)
 
 **Phase:** graph · **Kind:** work · **Depends on:** graph-js-tsc-inferred · **Guard:** `./node_modules/.bin/nx show projects | rg -q "apigen-plugin-jsonschema" && node -e "
 const fs=require(\"fs\"),path=require(\"path\");
@@ -10,7 +10,31 @@ process.exit(bad?1:0)"`
 
 ## Goal
 
-<What is true after this state that was not true before?>
+The twelve release targets and five deprecated lint targets are inferred, with their dependency chains and the publish gate preserved.
+
+---
+
+## Semantic distillation
+
+- The release targets each carry a bespoke dependency chain. Inference supplies the target; the chain must still be declared, or releases stop gating on tests and artifact verification.
+- The lint targets go through Nx's sanctioned convert-to-inferred codemod — use it rather than hand-deleting.
+- A lint path that REWRITES tracked manifests is not a correct check path. The criterion asserting the check-only sibling is a direct consequence of remodelling this target, not a separate goal.
+
+---
+
+## Contract promise
+
+```text
+added:    []
+modified: ["17 project manifests","nx.json"]
+deleted:  ["12 release + 5 lint explicit executor targets"]
+```
+
+---
+
+## Commit points
+
+- Commit the codemod output and the release-chain carry-over post-guard.
 
 ---
 
