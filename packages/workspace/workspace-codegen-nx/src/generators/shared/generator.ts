@@ -211,6 +211,34 @@ function patchViteConfig(tree: Tree, dir: string, platform: 'node' | 'browser' |
     content = content.replace(/external:\s*\[\]/, 'external: externalizeRealDeps(__dirname)');
   }
 
+  // BUG-BUILD-002: Vite 8's library build defaults to Rolldown with
+  // `platform: 'browser'`, and Rolldown only polyfills `import.meta.url` for a
+  // CJS output format when the platform is `node` — otherwise it lowers
+  // `import.meta` to `{}`, so a shipped `createRequire(import.meta.url)` becomes
+  // `createRequire({}.url)` and throws `ERR_INVALID_ARG_VALUE` at module load.
+  // Wire the shared, format-gated shim (a no-op on ES/IIFE/UMD output and on
+  // chunks that never reference `import.meta.url`) into every generated CJS-
+  // emitting config so a new package cannot re-introduce the defect later.
+  // `platform:browser` packages are skipped: their CJS output is never run
+  // under Node, where `require('node:url')`/`__filename` are defined.
+  // See tools/vite-plugins/import-meta-url-cjs.mjs.
+  if (platform === 'node' || platform === 'shared') {
+    if (!content.includes('importMetaUrlCjs')) {
+      content = content.replace(
+        /(import \{ nxViteTsPaths \} from '@nx\/vite\/plugins\/nx-tsconfig-paths\.plugin';\n)/,
+        `$1import { importMetaUrlCjs } from '../../../tools/vite-plugins/import-meta-url-cjs.mjs';\n`
+      );
+      if (/plugins:\s*\[\n/.test(content)) {
+        content = content.replace(/(plugins:\s*\[\n)/, `$1    importMetaUrlCjs(),\n`);
+      } else {
+        content = content.replace(/plugins:\s*\[([^\n\]]*)\]/, (_m, inner: string) => {
+          const trimmed = inner.trim();
+          return `plugins: [importMetaUrlCjs()${trimmed ? ', ' + trimmed : ''}]`;
+        });
+      }
+    }
+  }
+
   // DEBT-WORKSPACE-VITE-PATHS-001: `cacheDir` / `coverage.reportsDirectory`
   // are generated as literal strings (or `path.join(repoRoot, '...')`) baked
   // to the package's CURRENT directory. Moving a package afterwards

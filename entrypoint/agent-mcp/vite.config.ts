@@ -1,13 +1,14 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import { importMetaUrlCjs } from '../../tools/vite-plugins/import-meta-url-cjs.mjs';
 import { projectCacheDir, projectCoverage } from '../../packages/workspace/workspace-base-vite-paths/src/index';
 
 export default defineConfig({
   root: __dirname,
   cacheDir: projectCacheDir(__dirname),
 
-  plugins: [nxViteTsPaths()],
+  plugins: [importMetaUrlCjs(), nxViteTsPaths()],
 
   build: {
     outDir: 'dist',
