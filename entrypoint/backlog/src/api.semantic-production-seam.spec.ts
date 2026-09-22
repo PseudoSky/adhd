@@ -10,8 +10,9 @@
  * ## Why this file exists
  *
  * `write/bootstrap.spec.ts` verifies this same production seam, but with the
- * embedding MODEL faked. The only real-model spec (`store/rag-e2e.spec.ts`)
- * drives the LEGACY module-level seam (`bootstrapSemanticBackend` +
+ * embedding MODEL faked. The only real-model spec that existed
+ * (`store/rag-e2e.spec.ts`, since deleted with the legacy seam) drove the
+ * LEGACY module-level seam (`bootstrapSemanticBackend` +
  * `configureSemanticBackend` + a hand-built handle) that this wave made dead.
  * So the seam production actually runs on — `api.ts`'s `writeHandle`/
  * `queryHandle` deriving `search`/`embedding` from
@@ -55,7 +56,7 @@ import { freshTmpDir } from './test/helpers/tmp-store.js';
 import { isOutcomeOk } from './envelope.js';
 
 const ENV_VAR = 'ADHD_BACKLOG_EMBEDDING_ENABLED';
-/** Real cold ONNX model init is the slow part; mirrors rag-e2e.spec.ts's budget. */
+/** Real cold ONNX model init is the slow part; a cold-download/load budget, not a hang. */
 const E2E_TIMEOUT = 180_000;
 
 interface Harness {

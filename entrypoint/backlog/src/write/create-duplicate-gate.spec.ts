@@ -25,8 +25,8 @@
  * cosine similarity to itself is exactly 1.0 regardless of which model
  * produced it. No test in this file asserts a ranking or a similarity
  * SCORE between two genuinely DIFFERENT, non-identical texts (that
- * distinguishing-power proof belongs to `text-routing.spec.ts`'s
- * paraphrase test and `rag-e2e.spec.ts`, neither of which is touched by
+ * distinguishing-power proof belongs to the real-model suite
+ * (`api.semantic-production-seam.spec.ts`), which is not touched by
  * this change) — so a negative-control fake that collides every input onto
  * the same vector would not falsify any assertion here either, precisely
  * BECAUSE this file's assertions are equality-shaped (duplicate gate
@@ -111,8 +111,7 @@ async function openDupGateStore(
 /**
  * Files one issue through the real write path, waiting for its embed/
  * vector-upsert round-trip (`awaitEmbed: true`) so later scans in the same
- * test see it in the real vector space — mirrors `rag-e2e.spec.ts`'s own
- * `file` helper.
+ * test see it in the real vector space.
  */
 async function file(
   handle: DupGateHandle,

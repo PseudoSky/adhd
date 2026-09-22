@@ -14,6 +14,13 @@
  * shape lives on the adapter's side of it, and nothing here needs to know
  * which substrate raised the error.
  *
+ * This wrapper retries a THROWN busy/locked error; it neither sets nor
+ * introspects a `busy_timeout` PRAGMA. The busy-timeout budget is a separate,
+ * adapter-owned concern applied at connect time (`graph-backlog-store.ts`
+ * applies the caller's value via `adapter.pragmaSet('busy_timeout', N)` after
+ * the factory's init; a substrate may apply its own equivalent). Nothing here
+ * reads a PRAGMA or classifies an error by one.
+ *
  * Any other thrown error (including `NotFoundError`, `ClaimContentionError`)
  * propagates immediately, unretried — and the semantic `'held'`
  * claim-contention RESULT (claim.ts) is a normal RETURN VALUE, never an

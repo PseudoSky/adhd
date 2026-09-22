@@ -5,14 +5,17 @@
  *
  * ## The defect
  *
- * `resolveTextInput` (`query/query.ts`) decides whether `input.text` routes to
- * `filter.semantic` or `filter.grep` by consulting `isSemanticSearchReadable()`
- * — a PROCESS-GLOBAL singleton flag (`store/semantic-search.ts`) that a host
- * sets once at startup from a single space probe. A host that boots against a
- * store whose vector space is empty at that instant latches `false` for the
- * entire process lifetime, so every `text:` search degrades to grep even after
- * `create`'s own on-write embed has populated the space moments later. The
- * fix replaces the startup latch with a per-query probe of the live space.
+ * `resolveTextInput` (`query/query.ts`) routes `input.text` between
+ * `filter.semantic` and `filter.grep` by consulting a per-query probe of the
+ * live vector space (`search.spacePopulated()` — a bounded `hasVectors` read,
+ * `write/bootstrap.ts`). It USED to consult `isSemanticSearchReadable()` — a
+ * process-global singleton flag in the since-deleted `store/semantic-search.ts`
+ * that a host set once at startup from a single space probe. A host that booted
+ * against a store whose vector space was empty at that instant latched `false`
+ * for the entire process lifetime, so every `text:` search degraded to grep
+ * even after `create`'s own on-write embed had populated the space moments
+ * later. This suite pins the FIXED behavior: a per-query probe of the live
+ * space, never a process-lifetime latch.
  *
  * ## Real components, one faked seam
  *
