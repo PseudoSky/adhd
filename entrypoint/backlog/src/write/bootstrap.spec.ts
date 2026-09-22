@@ -32,6 +32,11 @@ import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { StoreAdapter } from '@adhd/sox-store-adapter';
 import {
+  openTursoVectorStore,
+  type AsyncVectorBackend,
+  type VectorSpace,
+} from '@adhd/sox-vector-store';
+import {
   openGraphBacklogStore,
   type GraphBacklogStore,
 } from '../store/graph-backlog-store.js';
@@ -39,6 +44,7 @@ import { buildBacklogEnv } from '../env.js';
 import { create, query, upsertProject, type BacklogCtx } from '../api.js';
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
 import { isOutcomeOk } from '../envelope.js';
+import { isVectorSpacePopulated } from './bootstrap.js';
 import { createFakeEmbeddingModule } from '../test/helpers/fake-embedding-provider.js';
 
 // Embeddings mocked here — explicit, scoped user authorization (see
@@ -153,4 +159,47 @@ describe('write/bootstrap.ts — search/embedding wired through the real api.ts 
     },
     EMBED_TIMEOUT
   );
+});
+
+describe('write/bootstrap.ts — isVectorSpacePopulated uses the bounded capability probe', () => {
+  it('delegates to the backend\'s hasVectors: empty space ⇒ false, one vector ⇒ true', async () => {
+    const opened = await openBootstrapTestCtx('is-vector-space-populated');
+    const { store, dir } = opened;
+    try {
+      const space: VectorSpace = { modelId: 'bounded-probe-spec', dim: 3 };
+      // Real Turso vector backend over the real store adapter — the same
+      // substrate production uses. `openTursoVectorStore` ensures the space.
+      const vec = await openTursoVectorStore(store.adapter, space);
+
+      const spy = vi.spyOn(vec, 'hasVectors');
+
+      // An ensured-but-empty space ⇒ false, answered by the probe itself.
+      expect(await isVectorSpacePopulated(vec, space.modelId)).toBe(false);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveBeenCalledWith(space.modelId);
+
+      // One vector ⇒ true, still through the SAME probe — no second mechanism.
+      await vec.upsert(1, Float32Array.from([1, 0, 0]), space);
+      expect(await isVectorSpacePopulated(vec, space.modelId)).toBe(true);
+      expect(spy).toHaveBeenCalledTimes(2);
+    } finally {
+      await store.adapter.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('degrades to false when the backend lacks the additive hasVectors capability (never falls back to an unbounded scan)', async () => {
+    // A structural double predating the additive `AsyncVectorExistenceProbe`
+    // capability: only the pinned `AsyncVectorBackend` surface. Its `iter`
+    // THROWS, so this assertion is RED if the readiness probe ever regresses
+    // to the `iter`-first-row corpus scan it replaced (BUG e19bc9d0) — the
+    // negative control for the bounded-probe contract.
+    const legacy = {
+      iter(): AsyncIterable<never> {
+        throw new Error('the readiness probe must not scan the corpus');
+      },
+    } as unknown as AsyncVectorBackend;
+
+    expect(await isVectorSpacePopulated(legacy, 'legacy-model')).toBe(false);
+  });
 });

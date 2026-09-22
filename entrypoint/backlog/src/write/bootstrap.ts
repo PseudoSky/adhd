@@ -43,7 +43,10 @@
  *    built for), not an availability signal, so it is defined locally.
  */
 import { StoreSearchBackend } from '@adhd/sox-hybrid-search';
-import type { AsyncVectorBackend } from '@adhd/sox-vector-store';
+import type {
+  AsyncVectorBackend,
+  AsyncVectorExistenceProbe,
+} from '@adhd/sox-vector-store';
 import type { GraphBackend } from '@adhd/sox-graph-store';
 import type { StoreAdapter } from '@adhd/sox-store-adapter';
 import type { BacklogConfig } from '../env.js';
@@ -74,11 +77,13 @@ export interface SemanticStoreMembers {
     readonly backend: StoreSearchBackend;
     embedQuery(text: string): Promise<Float32Array>;
     /**
-     * One-row probe of the REAL vector table: `true` iff at least one vector
-     * exists under this member's own space `modelId`. This is per-query truth
-     * read straight from the write layer's durable vectors — never a
-     * process-lifetime latch — so it is correct across process boundaries
-     * (a second process's `create` is visible here; ADR-0012).
+     * Bounded existence probe of the REAL vector table: `true` iff at least
+     * one vector exists under this member's own space `modelId`. Backed by
+     * `@adhd/sox-vector-store`'s `hasVectors` (`SELECT 1 … LIMIT 1`), so it
+     * never reads the embedding column or scans past the first row. This is
+     * per-query truth read straight from the write layer's durable vectors —
+     * never a process-lifetime latch — so it is correct across process
+     * boundaries (a second process's `create` is visible here; ADR-0012).
      */
     spacePopulated(): Promise<boolean>;
   };
@@ -142,10 +147,11 @@ interface OptVectorStoreModule {
 }
 
 /**
- * One-row probe of a REAL vector table: `true` iff at least one vector exists
- * under `modelId`. This is the readiness source the text-routing decision
- * (`query/query.ts`'s `resolveTextInput`) consults — per query, read from the
- * durable vector table the write layer's own `embedding` member writes to.
+ * Bounded existence probe of a REAL vector table: `true` iff at least one
+ * vector exists under `modelId`. This is the readiness source the text-routing
+ * decision (`query/query.ts`'s `resolveTextInput`) consults — per query, read
+ * from the durable vector table the write layer's own `embedding` member writes
+ * to.
  *
  * Deliberately NOT a flag latched at boot: a process that opens a store while
  * its vector space is still empty (a fresh store, or one populated by another
@@ -153,17 +159,31 @@ interface OptVectorStoreModule {
  * vectors exist. Reading the table itself makes that true across process
  * boundaries (ADR-0012: concurrent processes share the store).
  *
- * `AsyncVectorBackend` exposes no count primitive; `iter` is the one-row
- * surface, and returning on its first yielded row short-circuits the scan.
- * An absent table (a space that was never `ensureSpace`d) is "empty", not an
- * error — `iter` already tolerates it.
+ * Delegates to `@adhd/sox-vector-store`'s `hasVectors` — a bounded
+ * `SELECT 1 … LIMIT 1` that projects no embedding column and stops at the
+ * first row, so the probe is O(1) in the size of the space and never
+ * materializes an embedding BLOB. This replaced an `iter`-first-row probe
+ * (BUG e19bc9d0): `AsyncVectorBackend.iter` is a FULL corpus scan on the Turso
+ * backend — its `db.all`-backed query materializes every row *and every
+ * embedding BLOB* before the first yield — so the old probe read the entire
+ * vector table on every bare-`text:` query. Returning on the first yielded row
+ * short-circuited nothing.
+ *
+ * The capability is additive, NOT on the pinned `AsyncVectorBackend` contract,
+ * so a backend predating it (or a structural test double) narrows to
+ * `undefined`; absence degrades to `false` — the honest conservative answer,
+ * and a backend that cannot answer cheaply must not fall back to the unbounded
+ * scan this probe exists to avoid. An absent table (a space never
+ * `ensureSpace`d) is likewise "empty", not an error (`hasVectors` tolerates it).
  */
 export async function isVectorSpacePopulated(
   vectorBackend: AsyncVectorBackend,
   modelId: string
 ): Promise<boolean> {
-  for await (const _row of vectorBackend.iter(modelId)) return true;
-  return false;
+  const probe = vectorBackend as Partial<AsyncVectorExistenceProbe>;
+  return typeof probe.hasVectors === 'function'
+    ? probe.hasVectors(modelId)
+    : false;
 }
 
 /**
