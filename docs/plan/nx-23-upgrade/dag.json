@@ -417,6 +417,22 @@
       ],
       "context": "contexts/vite-cjs-import-meta-repair.md",
       "notes": "Land the in-flight vite 8 CJS import.meta.url fix and the vite bump in ONE commit. The guard proves atomicity (the plugin file and package.json were last touched by the same commit) AND that the built CJS artifacts actually load. A version-pin guard is what let BUG-BUILD-002 hide."
+    },
+    "browser-package-build-repair": {
+      "kind": "work",
+      "phase": "intake",
+      "depends_on": [
+        "vite-cjs-import-meta-repair"
+      ],
+      "guard": "./node_modules/.bin/nx build ui-react-base-hooks && test -f packages/ui-react/ui-react-base-hooks/dist/index.js && test -f packages/ui-react/ui-react-base-hooks/dist/index.umd.js && test -f packages/ui-react/ui-react-base-hooks/dist/index.mjs",
+      "artifacts": [
+        "packages/ui-react/ui-react-base-hooks/src/lib/use-throttle/index.ts",
+        "packages/ui-react/ui-react-base-hooks/src/lib/use-throttle-state/index.ts",
+        "packages/ui-react/ui-react-base-hooks/src/lib/use-infinite-scroll/index.ts",
+        "docs/plan/nx-23-upgrade/BROWSER-BUILD-REPAIR.md"
+      ],
+      "context": "contexts/browser-package-build-repair.md",
+      "notes": "The branch React-19 type bump left ui-react-base-hooks (public, publishable) unable to build: 4 type errors, no dist emitted, publish blocked. Fix the source to conform to the INSTALLED React 19 types; downgrading @types/react is not an option. This state must land before the bundle-token state, because the build failure makes the bundle unobservable."
     }
   },
   "authored_with": {
