@@ -8,24 +8,25 @@
  * (`openTestIssueStore`/`seedProject`), never a mock of the store itself
  * (AGENTS.md §7.1).
  *
- * **Architecture note — no store-level embed queue exists anymore.** Each
- * write verb schedules AT MOST one (two, for a body-changing update) direct
- * `scheduleIssueEmbedding` call per invocation; there is no queue and no
- * store-close/flush hook that drains outstanding fire-and-forget embeds
- * (`TestIssueStore.close()` is a bare `adapter.close()`, nothing more — see
- * `test/helpers/open-test-issue-store.ts`). Consequently a fire-and-forget
- * embed (`awaitEmbed` omitted/`false`) is NOT guaranteed to survive the
- * process/store closing before it settles — the durability boundary here is
- * `awaitEmbed:true` itself, not any store-level drain. Two tests below prove
- * both edges of that boundary by reopening a fresh store handle on the SAME
- * file (never a sleep, never wall-clock): `awaitEmbed:true` followed by a
- * close/reopen shows the `embedding_upserted` audit row survived, because by
- * the time `createIssue` resolves that row is ordinary committed graph
- * state, independent of the handle that wrote it; a fire-and-forget embed
- * whose store is closed out from under it — deterministically, via a gate
- * that is never released — shows nothing survived, because its own
- * follow-up `executeWriteTransaction` never had the chance to run. The
- * absent drain is a real, documented gap, not a bug this suite papers over.
+ * **Architecture note — a bounded close-time drain IS the durability
+ * backstop.** Each write verb schedules AT MOST one (two, for a body-changing
+ * update) direct `scheduleIssueEmbedding` call per invocation; there is no
+ * queue. But every scheduled embed IS registered with a per-adapter drain
+ * registry (`write/embed-drain.ts`), and the production close path
+ * (`closeGraphBacklogStore`) drains it — bounded — BEFORE closing the adapter,
+ * recording anything it cannot settle as a durable `embedding_failed` audit
+ * row while the connection is still open. `TestIssueStore.close()` is still a
+ * bare `adapter.close()` that bypasses that drain, so the drain-specific
+ * tests live in `embed-drain.spec.ts`, not here.
+ *
+ * Two tests below prove the two durability paths by reopening a fresh store
+ * handle on the SAME file (never a sleep, never wall-clock): `awaitEmbed:true`
+ * followed by a close/reopen shows the `embedding_upserted` audit row
+ * survived, because by the time `createIssue` resolves that row is ordinary
+ * committed graph state, independent of the handle that wrote it; and a
+ * fire-and-forget embed whose store closes before it settles — driven through
+ * the REAL `closeGraphBacklogStore`, deterministically, via a gate that is
+ * never released — is recorded as `embedding_failed` (durable, not silent).
  *
  * The `IEmbeddingBackend` here is a FAKE (deterministic, in-memory, no model
  * download, no network) constructed per-test and passed directly as
@@ -37,8 +38,8 @@
  * never settle before every promise it `await`s has settled, so blocking
  * `embedDocument` behind an unresolved gate lets a test prove "this call is
  * DEFINITELY still pending" with zero timing risk. Proving the gated embed
- * later COMPLETES (once nothing blocks it and there is no drain hook to
- * await directly) uses `vi.waitFor` — a bounded poll, not a blind sleep.
+ * later COMPLETES (after the gate is released, with no close in between) uses
+ * `vi.waitFor` — a bounded poll, not a blind sleep.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createIssue } from '../write/create-issue.js';
@@ -52,6 +53,7 @@ import {
   type TestIssueStore,
 } from '../test/helpers/open-test-issue-store.js';
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
+import { closeGraphBacklogStore } from './graph-backlog-store.js';
 
 /** A controllable deferred promise — the deterministic gate used by the fire-and-forget test. */
 function deferred(): { promise: Promise<void>; resolve: () => void } {
@@ -227,9 +229,9 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
       )
     ).toHaveLength(0);
 
-    // Release the gate and let the fire-and-forget round-trip settle. There
-    // is no store-level drain to await directly (see file header), so this
-    // is a bounded poll rather than a hard synchronization point.
+    // Release the gate and let the fire-and-forget round-trip settle. The
+    // store is NOT closed here, so this is a bounded poll rather than a drain
+    // (the drain is what `closeGraphBacklogStore` runs; see file header).
     gate.resolve();
     await vi.waitFor(() => {
       expect(vectors.has(rowid)).toBe(true);
@@ -269,9 +271,9 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
     expect(actions.filter((a) => a === 'embedding_upserted')).toHaveLength(1);
   });
 
-  it('negative control: a fire-and-forget embed whose store closes before it settles is genuinely lost — reopening shows no audit row and no vector (there is no drain to have waited for it)', async () => {
+  it('a fire-and-forget embed whose store closes before it settles is RECORDED as embedding_failed by the close-time drain — the loss is durable, never silent', async () => {
     const { store: store1, projectUid } = await openStore(
-      'embed-durability-negative'
+      'embed-durability-recorded-on-close'
     );
     const gate = deferred(); // deliberately NEVER released before the store closes
     const { backend, vectors } = makeFakeBackend({ gate: gate.promise });
@@ -279,8 +281,8 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
 
     const outcome = await createIssue(handle, {
       project: projectUid,
-      title: 'negative control',
-      body: 'closing before the embed settles must lose it — there is no drain',
+      title: 'recorded on close',
+      body: 'closing before the embed settles must record it, not lose it silently',
       by: 'filer',
       // awaitEmbed deliberately OMITTED — fire-and-forget.
     });
@@ -288,16 +290,22 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
     if (!outcome.created || !outcome.uid) throw new Error('expected created');
     const rowid = await rowidForUid(store1, outcome.uid);
 
-    // Close immediately. Deterministic, not a race: `gate` is never
-    // resolved, so the scheduled embed is still stuck inside
-    // `embedDocument`'s own `await opts.gate` — it cannot possibly have
-    // reached `upsertVector` or its own follow-up audit transaction yet.
-    await store1.close();
+    // Drive the REAL production close path, bounded. Deterministic, not a
+    // race: `gate` is never resolved, so the scheduled embed is still stuck
+    // inside `embedDocument`'s own `await opts.gate` — it cannot possibly have
+    // reached `upsertVector` or its own follow-up audit transaction. The drain
+    // times out and records it as `embedding_failed` while the connection is
+    // still open.
+    const result = await closeGraphBacklogStore(store1, { timeoutMs: 50 });
+    expect(result.stillPending).toHaveLength(1);
+    expect(result.recordedAsFailed).toBe(1);
+    expect(result.unrecorded).toHaveLength(0);
 
     store = await openTestIssueStore(`${dir}/backlog.db`); // reassigned so afterEach closes THIS handle
     expect(vectors.has(rowid)).toBe(false); // the round trip never got far enough to upsert
     const actions = await auditActionsFor(store, rowid);
-    expect(actions.filter((a) => a.startsWith('embedding_'))).toHaveLength(0); // lost — no drain exists to have waited for it
+    expect(actions.filter((a) => a === 'embedding_failed')).toHaveLength(1); // the loss is durable
+    expect(actions.filter((a) => a === 'embedding_upserted')).toHaveLength(0);
   });
 
   it('a backend rejecting upsertVector with a dimension-mismatch-shaped error also degrades honestly and never corrupts state', async () => {
