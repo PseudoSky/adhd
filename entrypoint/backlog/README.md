@@ -185,7 +185,7 @@ says so rather than silently looking complete.
 | `store_busy`          | Store contention (a lease or a write conflict); `details.retryable` and `details.retryAfterMs` indicate whether/how to retry    | 1             |
 | `rag_not_configured`  | A semantic/similarity read was requested but no embedding backend is configured, or the vector space is empty                   | 1             |
 | `conflict`            | Someone else holds the claim, a single-valued relation is already taken, or a supersede raced                                   | 1             |
-| `precondition_failed` | A gate refused the write — a terminal transition missing its required citation or note, or a citation that couldn't be verified | 1             |
+| `precondition_failed` | A gate refused the write — a terminal transition missing its required citation or note, or a citation that couldn't be verified against a known project path | 1             |
 | `internal`            | Unclassified server-side failure                                                                                                | 1             |
 
 Success always exits 0. `item_not_found` and `internal` are deliberately

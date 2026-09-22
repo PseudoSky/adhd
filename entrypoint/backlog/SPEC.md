@@ -113,7 +113,8 @@ of the hardcoded terminal/citation/reason knobs:
 ```
 project_policy (project → policy): transition_requires_note (default true),
   citation_required (false), citation_requires_sha (default true — gates
-  acceptance of an unverified citation, see below), default_status (catalog
+  acceptance of an unverified citation, but only where verification is
+  possible; see below), default_status (catalog
   ref; falls back to a global OPEN-equivalent catalog row when unset),
   default_kind (catalog ref; falls back to the global "issue" catalog row
   when unset), dedupe_scan_enabled (default true, §6.4), dedupe_threshold
@@ -130,11 +131,16 @@ node's `sha` hashes its own canonical serialization (never an external
 file), so it is always computable and §4a's "agent + note + sha REQUIRED"
 is a genuine hard invariant, never policy-tunable. A `citation`'s `sha`, by
 contrast, hashes EXTERNAL file content (§6.3.2) and can legitimately
-fail to resolve to a real hash — `citation_requires_sha` is what that
-failure composes with: `true` (default) rejects a citation write that would
-resolve to the `"unverified"` sentinel with `CitationUnverifiableError`;
-`false` accepts it verbatim — the posture for a project whose `path` is
-unknown, so its citation targets cannot be hashed at all.
+fail to resolve to a real hash. `citation_requires_sha` is what that failure
+composes with, and it applies ONLY where verification is possible — when the
+owning project has a non-empty `metadata.path`. For such a project, `true`
+(default) rejects a citation write whose `sha` would resolve to the
+`"unverified"` sentinel with `CitationUnverifiableError`, and `false` accepts
+it verbatim. A project with NO known `path` cannot hash any citation target at
+all, so there is nothing for the gate to verify and nothing for it to reject:
+the write succeeds and records `sha:"unverified"` verbatim whether
+`citation_requires_sha` is `true` or `false`, matching the ETL's own
+`computeCitationSha` precedent (§8.5).
 
 `project_status`/`project_kind` are enforced by the SAME write-layer step
 that resolves the `status`/`kind` catalog row (§4c's hand-composed
@@ -2084,9 +2090,11 @@ AC-23),
 empty), `StaleSupersedeError(uid)` (only when `supersedes` is given — the
 body-change CAS (§4c) lost a race to a concurrent edit of the same target;
 nothing was written, re-`get` and retry), `CitationUnverifiableError(target)`
-(policy-gated via `project_policy.citation_requires_sha`, §2 — a given
-citation's `file` did not resolve to a real, hashable file and the
-project requires one), `WriteContentionError`/`WriteIOError`
+(policy-gated via `project_policy.citation_requires_sha`, §2, and only where
+verification is possible — a project with a known `path`; a given citation's
+`file` did not resolve to a real, hashable file and the project requires one.
+A path-less project records `sha:"unverified"` verbatim instead),
+`WriteContentionError`/`WriteIOError`
 (§4c — an exhausted driver-level retry on the underlying `immediate`
 transaction). `DuplicateSuppressedError` is NOT thrown — a suppressed create is a
 **success response** with `created:false` — a caller must check the
@@ -2211,9 +2219,10 @@ terminal-only) — together they resolve the three-way
 `project_policy.citation_required` boolean; there is no more
 terminal-done-vs-terminal-dismissed distinction to error on.
 `CitationUnverifiableError(target)` (policy-gated via
-`project_policy.citation_requires_sha`, §2 — a given citation's `sha`
-resolved to the `"unverified"` sentinel, and the project requires a
-real hash).
+`project_policy.citation_requires_sha`, §2, and only where verification is
+possible — a project with a known `path`; a given citation's `sha` resolved
+to the `"unverified"` sentinel, and the project requires a real hash. A
+path-less project records `sha:"unverified"` verbatim instead).
 `ClaimHeldError(heldBy, heldSince)`: a live claim (§6.3.5) is a real
 concurrency guard, not advisory metadata — a `transition` targeting an issue
 whose `claimedBy` is set to someone OTHER than `input.by` **throws** unless
