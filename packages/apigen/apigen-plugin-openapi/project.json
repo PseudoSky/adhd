@@ -18,7 +18,6 @@
         "dist-manifest",
         "publish-hygiene"
       ],
-      "executor": "@nx/js:release-publish",
       "options": {
         "packageRoot": "{projectRoot}/dist"
       }

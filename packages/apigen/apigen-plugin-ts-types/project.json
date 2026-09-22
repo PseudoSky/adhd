@@ -24,9 +24,6 @@
       "options": {
         "packageRoot": "{projectRoot}/dist"
       }
-    },
-    "lint": {
-      "executor": "@nx/eslint:lint"
     }
   }
 }
