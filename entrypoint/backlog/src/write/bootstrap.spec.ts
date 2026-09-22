@@ -16,9 +16,8 @@
  * issue also finds it via `filter.semantic`) never require genuine
  * cross-vocabulary semantic similarity — a deterministic fake that maps
  * identical text to an identical vector is sufficient and has full teeth
- * for both. `text-routing.spec.ts` (paraphrase-with-zero-shared-tokens) and
- * `rag-e2e.spec.ts` are the files that actually need the real model, and
- * neither is touched by this change.
+ * for both. Genuine cross-vocabulary semantic similarity is exercised by the
+ * real-model suite, never by this file's deterministic fake.
  *
  * **Why `ADHD_BACKLOG_EMBEDDING_ENABLED` is set explicitly.** `env.ts`
  * declares `embedding.enabled`'s CODE default as `false`, but `cli.spec.ts`'s
@@ -44,11 +43,10 @@ import { createFakeEmbeddingModule } from '../test/helpers/fake-embedding-provid
 
 // Embeddings mocked here — explicit, scoped user authorization (see
 // entrypoint/backlog/STATE.md), covers embedding cost only. Intercepts the
-// exact `import('@adhd/sox-embedding-provider')` specifier both
-// `write/bootstrap.ts`'s and `store/semantic-search.ts`'s own local
-// `loadOptional` seams resolve at runtime (a non-literal dynamic import,
-// deliberately decoupled from this package's type graph) — this file never
-// installs `@adhd/sox-embedding-provider` at all.
+// exact `import('@adhd/sox-embedding-provider')` specifier
+// `write/bootstrap.ts`'s own local `loadOptional` seam resolves at runtime (a
+// non-literal dynamic import, deliberately decoupled from this package's type
+// graph) — this file never installs `@adhd/sox-embedding-provider` at all.
 vi.mock('@adhd/sox-embedding-provider', () => createFakeEmbeddingModule());
 
 /** No cold ONNX model init anymore — the fake never touches disk/network — but the real Turso vector-store round-trip still needs headroom. */

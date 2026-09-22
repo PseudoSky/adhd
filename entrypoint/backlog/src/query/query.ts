@@ -60,7 +60,6 @@ import {
   listLocations,
   listProjects,
 } from './views/registry.js';
-import { isSemanticSearchReadable } from '../store/semantic-search.js';
 
 /**
  * The dependencies `query`/the view helpers need. `search` is OPTIONAL —
@@ -77,7 +76,35 @@ export interface IQueryStoreHandle {
     readonly backend: StoreSearchBackend;
     /** Embeds `filter.semantic`'s free text into the SAME vector space `backend`'s vector store was built against. */
     embedQuery(text: string): Promise<Float32Array>;
+    /**
+     * One-row probe of the REAL vector table: `true` iff at least one vector
+     * exists under this backend's own space. Per-query truth, never a
+     * process-lifetime latch — see `write/bootstrap.ts`'s
+     * {@link isVectorSpacePopulated}. `api.ts`'s `queryHandle` runs this and
+     * snapshots the result onto {@link IQueryStoreHandle.spacePopulated}
+     * before the (synchronous) routing decision reads it.
+     */
+    spacePopulated(): Promise<boolean>;
   };
+  /**
+   * Snapshot of {@link IQueryStoreHandle.search}'s `spacePopulated()` probe,
+   * taken by `api.ts`'s `queryHandle` when the caller passed a bare `text:`
+   * positional. `resolveTextInput` is synchronous, so the (async) probe
+   * result is resolved onto the handle first; a handle built directly by a
+   * test or the ETL sets it itself. Absent means "unknown" and is treated as
+   * "not populated" — routing then falls back to grep.
+   */
+  readonly spacePopulated?: boolean;
+  /**
+   * Fail-loud vocabulary guard (`store/vocabulary-guard.ts`). When present,
+   * `queryIssuesWithMeta` awaits it before dispatching any view: a store
+   * holding live nodes under a vocabulary this build does not recognize must
+   * never read as `{ok:true, total:0}`. OPTIONAL so a hand-built handle
+   * (tests, the ETL) is unaffected — `api.ts`'s `queryHandle` wires it for
+   * every real host, and it is deliberately re-run per query (not latched at
+   * open) so a long-lived process notices a store rewritten under it.
+   */
+  readonly assertVocabulary?: () => Promise<void>;
 }
 
 function assertQueryLimit(limit: number | undefined): number {
@@ -971,16 +998,45 @@ async function queryLocations(
 }
 
 /**
+ * Whether a `query` verb's own input touches the semantic channel at all —
+ * the need-predicate `api.ts`'s `query` call site passes as
+ * `queryHandle(ctx, { needsSemantic: queryNeedsSemanticBackend(input) })`
+ * (SPEC.md §5b point 1). Structural, not a maintained list: it names the
+ * SAME "semantic inputs" vocabulary `env.ts`'s `embedding.enabled` doc
+ * comment already names, plus a bare `text` positional — deciding whether
+ * `text` auto-routes to `semantic` or `grep` itself requires the backend to
+ * be live, so a `text` query must bootstrap it even though it may end up on
+ * the grep route.
+ *
+ * A verb that returns `false` never derives a semantic backend: no embedding
+ * provider construction, no vector-store open, no cold ONNX load.
+ */
+export function queryNeedsSemanticBackend(input: IIssueQueryInput): boolean {
+  return (
+    input.text !== undefined ||
+    input.filter?.semantic !== undefined ||
+    input.filter?.anchor !== undefined ||
+    input.view === 'similar' ||
+    input.sort === 'relevance' ||
+    (input.fields ?? []).includes('_vector')
+  );
+}
+
+/**
  * Normalises `input.text` (the natural-language query shared by every mount —
  * CLI `search`, MCP, HTTP) into `filter.semantic` or `filter.grep`, exactly
  * ONCE, so every caller gets identical routing rather than each transport
- * reimplementing it. Routes to `semantic` when {@link isSemanticSearchReadable}
- * is true AND the store handle actually carries a `search` backend (a
- * readable-but-handle-less combination cannot happen in practice, but the
- * grep fallback keeps this total rather than throwing on it); otherwise
- * routes to `grep`. The matching default `sort` (`'relevance'` /
- * `'textMatch'`) is only applied when the caller did not pass `sort`
- * explicitly — an explicit `sort` always wins.
+ * reimplementing it. Routes to `semantic` when the store handle actually
+ * carries a `search` backend AND that backend's space is populated
+ * ({@link IQueryStoreHandle.spacePopulated}, the per-query snapshot of
+ * {@link IQueryStoreHandle.search}'s `spacePopulated()` probe taken by
+ * `api.ts`'s `queryHandle`); otherwise routes to `grep`. A non-empty handle
+ * whose space is still empty must NOT route to semantic: over an empty vector
+ * table `searchRanked` returns zero candidates, which is an empty page — worse
+ * than the grep fallback — so populated-ness is load-bearing, not an
+ * optimization. The matching default `sort` (`'relevance'` / `'textMatch'`)
+ * is only applied when the caller did not pass `sort` explicitly — an
+ * explicit `sort` always wins.
  *
  * Exported (in addition to being called internally by {@link queryIssues})
  * so the sort-precedence rule above can be unit-tested directly: the ranked
@@ -1012,7 +1068,8 @@ export function resolveTextInput(
     throw new InvalidArgumentError('text', 'must not be blank');
   }
 
-  const useSemantic = isSemanticSearchReadable() && handle.search !== undefined;
+  const useSemantic =
+    handle.search !== undefined && handle.spacePopulated === true;
   const { text, ...rest } = input;
 
   return {
@@ -1146,6 +1203,11 @@ export async function queryIssuesWithMeta(
   handle: IQueryStoreHandle,
   rawInput: IIssueQueryInput = {}
 ): Promise<IQueryIssuesOutcome> {
+  // Vocabulary guard BEFORE any view dispatch: a store whose live nodes are
+  // all of an unrecognized kind must fail loudly here rather than let
+  // `queryList` (and every other view) report a misleading zero. Optional —
+  // see `IQueryStoreHandle.assertVocabulary`.
+  await handle.assertVocabulary?.();
   const input = resolveTextInput(handle, rawInput);
   const outcome = await dispatchQueryView(handle, input);
 

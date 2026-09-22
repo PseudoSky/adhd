@@ -33,7 +33,6 @@ import {
   closeGraphBacklogStoreSafe,
   type GraphBacklogStore,
 } from './store/graph-backlog-store.js';
-import { enableSemanticSearchFromConfig } from './store/semantic-search.js';
 import { installSignalCleanup } from './store/signal-cleanup.js';
 import {
   buildBacklogEnv,
@@ -52,6 +51,11 @@ import { readBacklogVersionInfo } from './version-info.js';
 import { errorEnvelope, exitCodeForEnvelope, isOutcomeEnvelope } from './envelope.js';
 import { buildSearchArgv } from './search-shortcut.js';
 import { suggestClosestCatalogNames } from './query/resolve.js';
+import {
+  inspectStoreVocabulary,
+  RECOGNIZED_NODE_KINDS,
+  StoreVocabularyMismatchError,
+} from './store/vocabulary-guard.js';
 
 /**
  * Derives the internal command-path PREFIX every `client.ts` operation
@@ -515,6 +519,56 @@ export async function runBacklogCli(
     );
     return;
   }
+  // `store-check` (BUG-BACKLOG-005) — the explicit, operator-facing diagnostic for
+  // a store whose node vocabulary this build does not recognize. It opens the
+  // store (read-only) and reports the expected vocabulary against the kinds
+  // actually present, exiting non-zero on a mismatch. Without it a full store
+  // whose items sit under another build's vocabulary reads as
+  // `{ok:true, total:0}`, leaving an operator guessing why a healthy store
+  // looks empty. `openGraphBacklogStore` runs the same guard, so a mismatch
+  // surfaces here as a structured report rather than an open-time stack trace.
+  if (userArgvEarly[0] === 'store-check') {
+    const env = buildBacklogEnv({
+      scope: opts.scope,
+      adhdRoot: opts.adhdRoot,
+      cwd: opts.cwd,
+      namespace: opts.namespace,
+    });
+    env.ensureDirs();
+    const dbPath = resolveBacklogDbPath(env);
+    let store: GraphBacklogStore | undefined;
+    try {
+      store = await openGraphBacklogStore(dbPath, env.config.db.busyTimeoutMs);
+      const { total, observed } = await inspectStoreVocabulary(store.adapter);
+      console.log(
+        JSON.stringify({
+          ok: true,
+          dbPath,
+          total,
+          kinds: observed,
+          expectedKinds: [...RECOGNIZED_NODE_KINDS],
+        })
+      );
+      return;
+    } catch (err) {
+      if (err instanceof StoreVocabularyMismatchError) {
+        console.error(
+          JSON.stringify({
+            ok: false,
+            dbPath,
+            error: { code: 'store_vocabulary_mismatch', message: err.message },
+            observed: err.observed,
+            expectedKinds: err.recognized,
+          })
+        );
+        process.exitCode = 1;
+        return;
+      }
+      throw err;
+    } finally {
+      if (store) await closeGraphBacklogStoreSafe(store);
+    }
+  }
   // BUG-BACKLOG-001: `install-skill`/`install`/`serve` are intercepted below,
   // BEFORE the apigen package/command table is built, so `cliPlugin.run()`'s
   // own `--help`/`-h` rendering (and the identical no-args listing) can never
@@ -538,6 +592,9 @@ export async function runBacklogCli(
     );
     console.log(
       '  sandbox-path             Report the resolved store path (store-free) — see --namespace below'
+    );
+    console.log(
+      '  store-check              Report the store vocabulary this build expects vs. the kinds present; non-zero on a mismatch'
     );
     console.log('');
     console.log(
@@ -651,11 +708,6 @@ export async function runBacklogCli(
         resolveBacklogDbPath(env),
         env.config.db.busyTimeoutMs
       );
-      // RAG-SPEC.md §1.6 — opt-in semantic search. A no-op (and silent) unless
-      // `embedding.enabled`; never throws, so a missing/broken embedding stack
-      // can never stop the CLI from running. See
-      // `enableSemanticSearchFromConfig`'s contract.
-      await enableSemanticSearchFromConfig(store, env.config.embedding);
       opened = { store, ctx: { store, env } };
     }
     return opened.ctx;

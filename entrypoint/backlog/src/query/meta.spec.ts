@@ -23,6 +23,7 @@ import {
 } from '../test/helpers/open-test-issue-store.js';
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
 import { createIssue } from '../write/create-issue.js';
+import { isVectorSpacePopulated } from '../write/bootstrap.js';
 import { queryIssuesWithMeta, type IQueryStoreHandle } from './query.js';
 
 describe('queryIssuesWithMeta — view:list meta (real store)', () => {
@@ -106,6 +107,7 @@ describe('queryIssuesWithMeta — view:list meta (real store)', () => {
 // ---------------------------------------------------------------------------
 
 const DIM = 3;
+const SPACE = { modelId: 'meta-spec-test-model', dim: DIM } as const;
 
 /** Opens the same real-search topology `views/semantic.spec.ts` uses: real graph, real vector store, real `StoreSearchBackend`, only `embedQuery` pinned. */
 async function openSearchableStore(dir: string): Promise<{
@@ -119,12 +121,21 @@ async function openSearchableStore(dir: string): Promise<{
   const writeHandle = await openTestIssueStore(`${dir}/issues.db`);
   const vec = await openTursoVectorStore(writeHandle.adapter, {
     dim: DIM,
-    modelId: 'meta-spec-test-model',
+    modelId: SPACE.modelId,
   });
   const embedMap = new Map<string, Float32Array>();
+  let populated = false;
 
+  // `handle.spacePopulated` is the handle-level snapshot `api.ts`'s
+  // `queryHandle` sets before the synchronous routing decision reads it. Built
+  // directly here (not through `api.ts`), it is a live getter so it flips the
+  // moment `indexIssue` seeds a vector — the same per-query truth the real
+  // `search.spacePopulated()` probe reads from the vector table.
   const handle: IQueryStoreHandle = {
     graph: writeHandle.graph,
+    get spacePopulated(): boolean {
+      return populated;
+    },
     search: {
       backend: new StoreSearchBackend(vec, writeHandle.graph),
       embedQuery: async (text: string): Promise<Float32Array> => {
@@ -137,6 +148,7 @@ async function openSearchableStore(dir: string): Promise<{
           );
         return v;
       },
+      spacePopulated: async (): Promise<boolean> => populated,
     },
   };
 
@@ -150,10 +162,15 @@ async function openSearchableStore(dir: string): Promise<{
     async indexIssue(uid, v) {
       const node = await writeHandle.graph.getNodeByUid(uid);
       if (!node) throw new Error(`indexIssue: no live node for uid ${uid}`);
-      await vec.upsert(node.id, Float32Array.from(v), {
-        modelId: 'meta-spec-test-model',
-        dim: DIM,
-      });
+      await vec.upsert(node.id, Float32Array.from(v), SPACE);
+      populated = true;
+      // The probe and the flag must agree — otherwise `spacePopulated` is a
+      // claim the suite cannot stand behind.
+      if (!(await isVectorSpacePopulated(vec, SPACE.modelId))) {
+        throw new Error(
+          'indexIssue: space reported empty immediately after a successful upsert'
+        );
+      }
     },
     async close() {
       await writeHandle.close();

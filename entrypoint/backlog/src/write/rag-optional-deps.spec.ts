@@ -4,7 +4,7 @@
  * WHY THIS TEST EXISTS (it has already caught a real, silent, feature-killing
  * regression twice in one session):
  *
- * `semantic-search.ts` loads `@adhd/sox-vector-store` and
+ * `write/bootstrap.ts` loads `@adhd/sox-vector-store` and
  * `@adhd/sox-embedding-provider` through `loadOptional()`, which routes the
  * module specifier through a `const` so that NEITHER TypeScript NOR the
  * bundler resolves it statically (that indirection is load-bearing — see the
@@ -13,14 +13,13 @@
  * zero references, and `nx run backlog:sync-deps` therefore rewrites
  * `optionalDependencies` back to `{}`.
  *
- * Nothing else catches that. In-repo tests — including the full
- * `rag-e2e.spec.ts` real-model suite — resolve `@adhd/sox-*` through tsconfig
- * path aliases, so they stay green whether or not `package.json` declares the
- * dependency at all. The failure only appears for a consumer who installs the
- * published tarball: the packages are never fetched, `loadOptional` throws
- * MODULE_NOT_FOUND, `bootstrapSemanticBackend` reports "not installed", and
- * every semantic input answers `rag_not_configured` forever. A completely
- * dead feature, with 650+ green tests.
+ * Nothing else catches that. In-repo tests resolve `@adhd/sox-*` through
+ * tsconfig path aliases, so they stay green whether or not `package.json`
+ * declares the dependency at all. The failure only appears for a consumer who
+ * installs the published tarball: the packages are never fetched,
+ * `loadOptional` throws MODULE_NOT_FOUND, the bootstrap seam returns no
+ * semantic members, and every semantic input answers `rag_not_configured`
+ * forever. A completely dead feature, with 650+ green tests.
  *
  * So the manifest itself is the thing under test.
  */
@@ -47,7 +46,7 @@ const manifest = JSON.parse(readFileSync(join(PKG_DIR, 'package.json'), 'utf8'))
  * caught by this test too, instead of quietly shipping undeclared.
  */
 function loadOptionalSpecifiers(): string[] {
-  const source = readFileSync(join(HERE, 'semantic-search.ts'), 'utf8');
+  const source = readFileSync(join(HERE, 'bootstrap.ts'), 'utf8');
   const found = new Set<string>();
   for (const m of source.matchAll(/loadOptional<[^>]*>\(\s*'([^']+)'\s*\)/g)) {
     found.add(m[1]);
@@ -74,7 +73,7 @@ describe('RAG optional dependencies are declared in the shipped manifest', () =>
     for (const specifier of loadOptionalSpecifiers()) {
       expect(
         declared[specifier],
-        `${specifier} is loaded at runtime by semantic-search.ts but is NOT in ` +
+        `${specifier} is loaded at runtime by write/bootstrap.ts but is NOT in ` +
           `optionalDependencies — a consumer installing the published tarball would ` +
           `never receive it and RAG would be permanently dead for them.`,
       ).toBeTruthy();

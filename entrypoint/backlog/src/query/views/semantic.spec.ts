@@ -46,6 +46,7 @@ import {
   createIssue,
   type ICreateIssueInput,
 } from '../../write/create-issue.js';
+import { isVectorSpacePopulated } from '../../write/bootstrap.js';
 import {
   InvalidArgumentError,
   BacklogValidationError,
@@ -93,9 +94,18 @@ async function openSemanticTestStore(dir: string): Promise<SemanticTestStore> {
     modelId: SPACE.modelId,
   });
   const embedMap = new Map<string, Float32Array>();
+  let populated = false;
 
+  // `handle.spacePopulated` is the handle-level snapshot `api.ts`'s
+  // `queryHandle` sets before the synchronous routing decision reads it. Built
+  // directly here (not through `api.ts`), it is a live getter so it flips the
+  // moment `indexIssue` seeds a vector — the same per-query truth the real
+  // `search.spacePopulated()` probe reads from the vector table.
   const handle: IQueryStoreHandle = {
     graph: writeHandle.graph,
+    get spacePopulated(): boolean {
+      return populated;
+    },
     search: {
       backend: new StoreSearchBackend(vec, writeHandle.graph),
       embedQuery: async (text: string): Promise<Float32Array> => {
@@ -108,6 +118,7 @@ async function openSemanticTestStore(dir: string): Promise<SemanticTestStore> {
           );
         return v;
       },
+      spacePopulated: async (): Promise<boolean> => populated,
     },
   };
 
@@ -122,6 +133,14 @@ async function openSemanticTestStore(dir: string): Promise<SemanticTestStore> {
       const node = await writeHandle.graph.getNodeByUid(uid);
       if (!node) throw new Error(`indexIssue: no live node for uid ${uid}`);
       await vec.upsert(node.id, Float32Array.from(v), SPACE);
+      populated = true;
+      // The probe and the flag must agree — otherwise `spacePopulated` is a
+      // claim the suite cannot stand behind.
+      if (!(await isVectorSpacePopulated(vec, SPACE.modelId))) {
+        throw new Error(
+          'indexIssue: space reported empty immediately after a successful upsert'
+        );
+      }
     },
     async createIssueFixture(input) {
       const result = await createIssue(writeHandle, { by: 'tester', ...input });

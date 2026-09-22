@@ -1,24 +1,26 @@
 /**
  * text-routing.spec.ts — `IIssueQueryInput.text` (query/types.ts), routed
  * ONCE by `resolveTextInput` inside `queryIssues` (query/query.ts) into
- * `filter.grep` or `filter.semantic` depending on whether the vector space
- * can return ranked results (`isSemanticSearchReadable`, store/semantic-search.ts).
+ * `filter.grep` or `filter.semantic`.
  *
  * Real components throughout: a real store via `openTestIssueStore`/
  * `seedProject`, real `createIssue` writes, `queryIssues` driven exactly as
  * `api.ts`'s mounted `query` verb drives it — mirroring `paging.spec.ts`'s
- * harness. The one exception is the sort-precedence assertion, which calls
- * the exported `resolveTextInput` directly: the ranked grep/semantic branch
- * of `queryList` never echoes the resolved `sort` back in its output, so
- * there is no way to observe "explicit sort survived" from `queryIssues`'s
- * return value alone (see `resolveTextInput`'s own doc comment). That is not
- * a mock of the thing under test — `resolveTextInput` IS the real routing
- * function `queryIssues` calls, called directly rather than through the one
- * layer that would otherwise swallow its output.
+ * harness. The one faked seam in the semantic block is the embedding MODEL
+ * (`@adhd/sox-embedding-provider`), replaced with the deterministic fake from
+ * `test/helpers/fake-embedding-provider.ts` (embeddings mocked here — explicit
+ * scoped authorization, see entrypoint/backlog/STATE.md) — the routing proof
+ * needs a retrievable vector, not genuine paraphrase understanding (that
+ * belongs to the real-model suite, not this file).
+ *
+ * The `searchRanked` spy is the exact discriminator between the two routes:
+ * `filter.grep` runs through `graph.searchNodes`, while `filter.semantic`
+ * runs through `StoreSearchBackend.searchRanked`. Nothing else in this file's
+ * assertions can tell the routes apart for a query that shares tokens with its
+ * target, so every routing claim below is pinned on that spy.
  */
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openTursoVectorStore } from '@adhd/sox-vector-store';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StoreSearchBackend } from '@adhd/sox-hybrid-search';
 import {
   openTestIssueStore,
@@ -34,14 +36,16 @@ import {
   resolveTextInput,
   type IQueryStoreHandle,
 } from './query.js';
-import {
-  bootstrapSemanticBackend,
-  configureSemanticBackend,
-  isSemanticSearchConfigured,
-} from '../store/semantic-search.js';
-import type { GraphBacklogStore } from '../store/graph-backlog-store.js';
+import { bootstrapSemanticStoreMembers } from '../write/bootstrap.js';
+import { createFakeEmbeddingModule } from '../test/helpers/fake-embedding-provider.js';
 
-const E2E_TIMEOUT = 180_000;
+// Embeddings mocked here — explicit, scoped user authorization (see
+// entrypoint/backlog/STATE.md), covers embedding cost only. Intercepts the
+// exact `import('@adhd/sox-embedding-provider')` specifier
+// `write/bootstrap.ts`'s own local `loadOptional` seam resolves at runtime.
+vi.mock('@adhd/sox-embedding-provider', () => createFakeEmbeddingModule());
+
+const E2E_TIMEOUT = 30_000;
 
 describe('IIssueQueryInput.text — grep route (real store, no semantic backend configured)', () => {
   let dir: string;
@@ -50,9 +54,7 @@ describe('IIssueQueryInput.text — grep route (real store, no semantic backend 
 
   beforeEach(async () => {
     // No semantic backend is ever configured in this describe block, so
-    // `isSemanticSearchReadable()` is false and every `text` query below
-    // routes to `filter.grep`.
-    expect(isSemanticSearchConfigured()).toBe(false);
+    // every `text` query below routes to `filter.grep`.
     dir = freshTmpDir('query-text-routing-grep');
     store = await openTestIssueStore(join(dir, 'backlog.db'));
     projectUid = (await seedProject(store, 'text-routing-grep-project'))
@@ -79,7 +81,7 @@ describe('IIssueQueryInput.text — grep route (real store, no semantic backend 
     });
 
     const result = await queryIssues(store, { text: 'publish gate' });
-    if (result.view !== 'list')
+    if (result.view !== 'list' || !('items' in result))
       throw new Error(`expected view 'list', got '${result.view}'`);
     const uids = result.items.map((i) => i.uid);
     expect(uids).toContain(target.uid);
@@ -115,7 +117,6 @@ describe('resolveTextInput — sort precedence (direct unit test; see file heade
   const bareHandle: IQueryStoreHandle = { graph: {} as never }; // never touched — text is unset or routing short-circuits before any graph call
 
   it('derives sort:"textMatch" on the grep route when the caller passes no sort', () => {
-    expect(isSemanticSearchConfigured()).toBe(false); // this describe block never configures a backend
     const resolved = resolveTextInput(bareHandle, { text: 'publish gate' });
     expect(resolved.sort).toBe('textMatch');
     expect(resolved.filter?.grep).toBe('publish gate');
@@ -137,112 +138,134 @@ describe('resolveTextInput — sort precedence (direct unit test; see file heade
   });
 });
 
-describe('IIssueQueryInput.text — semantic route (real fastembed + real Turso vectors)', () => {
+describe('IIssueQueryInput.text — semantic route (real Turso vectors, deterministic fake model)', () => {
   const MODEL = 'bge-base-en-v1.5';
-  const EMBEDDING = { type: 'fastembed', model: MODEL } as const;
+  const EMBEDDING = { enabled: true, provider: 'fastembed', model: MODEL } as const;
 
-  let dir: string | undefined;
-  let store: TestIssueStore | undefined;
+  let dir: string;
+  let store: TestIssueStore;
+  let projectUid: string;
+  let handle: TestIssueStore & {
+    search: NonNullable<
+      Awaited<ReturnType<typeof bootstrapSemanticStoreMembers>>['search']
+    >;
+    embedding: NonNullable<
+      Awaited<ReturnType<typeof bootstrapSemanticStoreMembers>>['embedding']
+    >;
+  };
+
+  beforeEach(async () => {
+    dir = freshTmpDir('query-text-routing-semantic');
+    store = await openTestIssueStore(join(dir, 'backlog.db'));
+    // The production bootstrap seam `api.ts`'s write/query handles both derive
+    // from — real Turso vector space, real StoreSearchBackend, only the model
+    // faked. Replaces the old `bootstrapSemanticBackend` + hand-built vec store.
+    const members = await bootstrapSemanticStoreMembers(
+      store.adapter,
+      store.graph,
+      EMBEDDING
+    );
+    if (!members.search || !members.embedding) {
+      throw new Error(
+        'semantic harness unavailable — bootstrapSemanticStoreMembers returned no search/embedding members'
+      );
+    }
+    const searchMembers = members.search;
+    const embeddingMembers = members.embedding;
+
+    // A LIVE `handle.spacePopulated`, mirroring the per-query snapshot
+    // `api.ts`'s `queryHandle` takes from `search.spacePopulated()` before the
+    // (synchronous) `resolveTextInput` reads it. A handle built directly (not
+    // through `api.ts`) exposes that snapshot itself; it must flip the moment a
+    // vector reaches the space, not at construction, so it is a getter over a
+    // flag the real on-write embed sets below.
+    let spacePopulated = false;
+    const embedding = {
+      ...embeddingMembers,
+      async upsertVector(nodeRowid: number, vec: Float32Array): Promise<void> {
+        await embeddingMembers.upsertVector(nodeRowid, vec);
+        spacePopulated = true;
+      },
+    };
+    handle = {
+      ...store,
+      search: searchMembers,
+      embedding,
+      get spacePopulated(): boolean {
+        return spacePopulated;
+      },
+    };
+    projectUid = (await seedProject(store, 'text-routing-semantic-project'))
+      .projectUid;
+  });
 
   afterEach(async () => {
-    configureSemanticBackend(null); // never leak a live backend into another suite
-    if (store) {
-      await store.close();
-      store = undefined;
-    }
-    if (dir) {
-      removeTestIssueStoreDir(dir);
-      dir = undefined;
-    }
+    await store.close();
+    removeTestIssueStoreDir(dir);
   });
 
   it(
-    'a real readable vector space routes `text` to filter.semantic and finds the meaning-matching issue by paraphrase, not keywords',
+    'a fresh empty space routes text: to grep, and an on-write embed upgrades it to semantic with no restart',
     async () => {
-      expect(isSemanticSearchConfigured()).toBe(false);
-      dir = freshTmpDir('query-text-routing-semantic');
-      const bareStore = await openTestIssueStore(join(dir, 'backlog.db'));
-      const result = await bootstrapSemanticBackend(
-        bareStore as unknown as GraphBacklogStore,
-        { embedding: EMBEDDING }
-      );
-      if (!result.ok) {
-        throw new Error(
-          `real semantic backend unavailable (${result.failure.reason}): ${result.failure.detail}`
-        );
+      const spy = vi.spyOn(StoreSearchBackend.prototype, 'searchRanked');
+      try {
+        const title = 'Vector index refuses a dimension mismatch';
+        const body =
+          'Inserting an embedding whose length differs from the configured space dimension is rejected structurally.';
+        // The query is the target's EXACT composed embed text. The fake is
+        // deterministic (identical text -> identical vector), so the rank-1
+        // assertion below is a property of the ROUTE (did `text:` reach the
+        // semantic ranker at all?), never of the fake's lexical fidelity.
+        const queryText = `${title}\n${body}`;
+
+        // (1) Empty vector space: routing must fall back to grep — true both
+        // before and after the fix (there is genuinely nothing to rank).
+        const empty = await queryIssues(handle, { text: queryText });
+        expect(empty.view).toBe('list');
+        expect(spy).toHaveBeenCalledTimes(0);
+
+        // (2) Land a vector through the REAL write path: `createIssue`'s own
+        // on-write embed (`awaitEmbed:true` so it is durable before we query).
+        const target = await createIssue(handle, {
+          project: projectUid,
+          title,
+          body,
+          by: 'filer',
+          awaitEmbed: true,
+        });
+        if (!target.created || !target.uid)
+          throw new Error(`expected target create, got ${JSON.stringify(target)}`);
+        const unrelated = await createIssue(handle, {
+          project: projectUid,
+          title: 'Storybook theme tokens drift between builds',
+          body: 'Nothing to do with publishing or vectors.',
+          by: 'filer',
+          awaitEmbed: true,
+          // The project now holds `target`, so the duplicate scan runs; force
+          // the write so a coincidental fake-model similarity cannot suppress it.
+          duplicateAction: 'force',
+        });
+        if (!unrelated.created || !unrelated.uid)
+          throw new Error(
+            `expected unrelated create, got ${JSON.stringify(unrelated)}`
+          );
+
+        // (3) The space is now non-empty: `text` must upgrade to the semantic
+        // route WITHOUT a restart. Pre-fix this stays 0 (the startup latch
+        // never flips) and this assertion is RED; post-fix it is 1.
+        spy.mockClear();
+        const queried = await queryIssues(handle, { text: queryText });
+        if (queried.view !== 'list' || !('items' in queried))
+          throw new Error(`expected view 'list', got '${queried.view}'`);
+        expect(spy).toHaveBeenCalledTimes(1);
+        const uids = queried.items.map((i) => i.uid);
+        expect(uids).toContain(target.uid);
+        // The exact-text query ranks the target first; the routing spy above
+        // is what proves the ranking came from the SEMANTIC ranker.
+        expect(uids[0]).toBe(target.uid);
+      } finally {
+        spy.mockRestore();
       }
-      const backend = result.backend;
-      configureSemanticBackend(backend);
-
-      const vec = await openTursoVectorStore(bareStore.adapter, {
-        dim: backend.dim,
-        modelId: backend.modelId,
-      });
-      const search = {
-        backend: new StoreSearchBackend(vec, bareStore.graph),
-        embedQuery: (text: string) => backend.embedQuery(text),
-      };
-      const handle: TestIssueStore & {
-        embedding: typeof backend;
-        search: typeof search;
-      } = {
-        ...bareStore,
-        embedding: backend,
-        search,
-      };
-      store = bareStore;
-
-      const { projectUid } = await seedProject(
-        bareStore,
-        'text-routing-semantic-project'
-      );
-
-      // Deliberately shares no meaningful token with the target title/body —
-      // only a real semantic (not keyword/FTS) match can find it.
-      const target = await createIssue(handle, {
-        project: projectUid,
-        title: 'Vector index refuses a dimension mismatch',
-        body: 'Inserting an embedding whose length differs from the configured space dimension is rejected structurally.',
-        by: 'filer',
-        awaitEmbed: true,
-      });
-      if (!target.created || !target.uid)
-        throw new Error(
-          `expected the target issue to be created, got ${JSON.stringify(
-            target
-          )}`
-        );
-      const unrelated = await createIssue(handle, {
-        project: projectUid,
-        title: 'Storybook theme tokens drift between builds',
-        body: 'Nothing to do with publishing or vectors.',
-        by: 'filer',
-        awaitEmbed: true,
-      });
-      if (!unrelated.created || !unrelated.uid)
-        throw new Error(
-          `expected the unrelated issue to be created, got ${JSON.stringify(
-            unrelated
-          )}`
-        );
-
-      const queried = await queryIssues(handle, {
-        text: 'the embedding length does not match the configured dimension',
-      });
-      if (queried.view !== 'list')
-        throw new Error(`expected view 'list', got '${queried.view}'`);
-      const uids = queried.items.map((i) => i.uid);
-      // Only two issues exist in this store, so BOTH are returned by a
-      // ranked search over the whole corpus (there is no relevance-threshold
-      // cutoff) — the teeth here are the ORDER: only a genuine semantic match
-      // ranks the meaning-matching, zero-shared-token target ABOVE the
-      // unrelated item; a keyword/FTS-only comparison (or a broken route that
-      // fell through to grep) would not, since neither title/body shares any
-      // token with the query text.
-      expect(uids[0]).toBe(target.uid);
-      expect(uids.indexOf(target.uid)).toBeLessThan(
-        uids.indexOf(unrelated.uid)
-      );
     },
     E2E_TIMEOUT
   );

@@ -22,27 +22,27 @@
  *
  * Real components throughout EXCEPT the embedding model: real Turso vector
  * space, real `createIssue`/`update` writes, and `queryIssues` driven
- * exactly as `api.ts`'s mounted `query` verb drives it. The harness mirrors
- * `text-routing.spec.ts`'s. Embeddings mocked here — explicit, scoped user
- * authorization (see entrypoint/backlog/STATE.md), covers embedding cost
- * only.
+ * exactly as `api.ts`'s mounted `query` verb drives it. The search/embedding
+ * members come from the production `bootstrapSemanticStoreMembers` seam
+ * (`write/bootstrap.ts`) — the SAME one `api.ts` derives its handles from —
+ * rather than a hand-built vector store. Embeddings mocked here — explicit,
+ * scoped user authorization (see entrypoint/backlog/STATE.md), covers
+ * embedding cost only.
  *
  * **Why the fake preserves this test's teeth.** The one logical issue in
  * this test is queried by a paraphrase of its OWN (edited) body — it is
  * the only document in the vector space either way, live or superseded row
  * alike, so no genuine cross-vocabulary discrimination between DIFFERENT
- * topics is exercised (that proof belongs to `text-routing.spec.ts`, not
- * touched by this change). What this test actually proves —
- * `dropSupersededResults` excluding the frozen pre-edit row from a ranked
- * result set — depends on `rankByFusedRelevance`'s supersede-filtering
- * logic, not on the embedding model's semantic fidelity: any deterministic
- * embedder that returns a retrievable vector for both the superseded and
- * live rows exercises the exact same code path.
+ * topics is exercised (that proof belongs to the real-model suite, not this
+ * file). What this test actually proves — `dropSupersededResults` excluding
+ * the frozen pre-edit row from a ranked result set — depends on
+ * `rankByFusedRelevance`'s supersede-filtering logic, not on the embedding
+ * model's semantic fidelity: any deterministic embedder that returns a
+ * retrievable vector for both the superseded and live rows exercises the
+ * exact same code path.
  */
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { openTursoVectorStore } from '@adhd/sox-vector-store';
-import { StoreSearchBackend } from '@adhd/sox-hybrid-search';
 import {
   openTestIssueStore,
   removeTestIssueStoreDir,
@@ -53,29 +53,28 @@ import { freshTmpDir } from '../test/helpers/tmp-store.js';
 import { createIssue } from '../write/create-issue.js';
 import { update } from '../write/update.js';
 import { queryIssues } from './query.js';
-import {
-  bootstrapSemanticBackend,
-  configureSemanticBackend,
-} from '../store/semantic-search.js';
-import type { GraphBacklogStore } from '../store/graph-backlog-store.js';
+import { bootstrapSemanticStoreMembers } from '../write/bootstrap.js';
 import { createFakeEmbeddingModule } from '../test/helpers/fake-embedding-provider.js';
 
 // Embeddings mocked here — explicit, scoped user authorization (see
 // entrypoint/backlog/STATE.md), covers embedding cost only. Intercepts the
 // `import('@adhd/sox-embedding-provider')` specifier
-// `store/semantic-search.ts`'s `loadOptional` seam resolves at runtime.
+// `write/bootstrap.ts`'s `loadOptional` seam resolves at runtime.
 vi.mock('@adhd/sox-embedding-provider', () => createFakeEmbeddingModule());
 
-/** No cold ONNX model init anymore — the fake never touches disk/network — but the real Turso vector-store round-trip still needs headroom. */
+/** The fake never touches disk/network, but the real Turso vector-store round-trip still needs headroom. */
 const E2E_TIMEOUT = 30_000;
-const EMBEDDING = { type: 'fastembed', model: 'bge-base-en-v1.5' } as const;
+const EMBEDDING = {
+  enabled: true,
+  provider: 'fastembed',
+  model: 'bge-base-en-v1.5',
+} as const;
 
-describe('a body edit leaves nothing superseded in a ranked result (real fastembed + real Turso vectors)', () => {
+describe('a body edit leaves nothing superseded in a ranked result (real Turso vectors, deterministic fake model)', () => {
   let dir: string | undefined;
   let store: TestIssueStore | undefined;
 
   afterEach(async () => {
-    configureSemanticBackend(null); // never leak a live backend into another suite
     if (store) {
       await store.close();
       store = undefined;
@@ -91,28 +90,25 @@ describe('a body edit leaves nothing superseded in a ranked result (real fastemb
     async () => {
       dir = freshTmpDir('superseded-ranking');
       const bareStore = await openTestIssueStore(join(dir, 'backlog.db'));
-      const result = await bootstrapSemanticBackend(
-        bareStore as unknown as GraphBacklogStore,
-        { embedding: EMBEDDING }
+      store = bareStore;
+
+      // The production bootstrap seam `api.ts` itself uses — real Turso vector
+      // space + real StoreSearchBackend, only the embedding model faked.
+      const members = await bootstrapSemanticStoreMembers(
+        bareStore.adapter,
+        bareStore.graph,
+        EMBEDDING
       );
-      if (!result.ok) {
+      if (!members.search || !members.embedding) {
         throw new Error(
-          `real semantic backend unavailable (${result.failure.reason}): ${result.failure.detail}`
+          'real semantic members unavailable — bootstrapSemanticStoreMembers returned no search/embedding members'
         );
       }
-      const backend = result.backend;
-      configureSemanticBackend(backend);
-
-      const vec = await openTursoVectorStore(bareStore.adapter, {
-        dim: backend.dim,
-        modelId: backend.modelId,
-      });
-      const search = {
-        backend: new StoreSearchBackend(vec, bareStore.graph),
-        embedQuery: (text: string) => backend.embedQuery(text),
+      const handle = {
+        ...bareStore,
+        search: members.search,
+        embedding: members.embedding,
       };
-      const handle = { ...bareStore, embedding: backend, search };
-      store = bareStore;
 
       const { projectUid } = await seedProject(
         bareStore,
@@ -157,7 +153,7 @@ describe('a body edit leaves nothing superseded in a ranked result (real fastemb
             'the embedding length does not match the configured dimension',
         },
       });
-      if (queried.view !== 'similar')
+      if (queried.view !== 'similar' || !('items' in queried))
         throw new Error(`expected view 'similar', got '${queried.view}'`);
       const uids = queried.items.map((i) => i.uid);
 
