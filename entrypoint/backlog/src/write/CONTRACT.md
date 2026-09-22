@@ -638,7 +638,8 @@ export class CitationUnverifiableError extends BacklogWriteError {
 
 Guarantees: thrown when a citation's `sha` resolves to the `"unverified"`
 sentinel and `project_policy.citationRequiresSha` (default `true`) rejects
-that.
+that. Applies only where verification is possible — a project with a non-empty
+`path`; a path-less project records `sha:"unverified"` verbatim instead.
 
 ### `NoteRequiredError` — class (`errors.ts:254`)
 
