@@ -20,6 +20,7 @@
 
 - [browser-package-build-repair.2] All three published module formats are emitted by that build
 - [browser-package-build-repair.3] The decision record attributes the build failure to the installed React 19 type packages
+- [browser-package-build-repair.4] No zero-argument useRef call remains in the three failing sources
 ---
 
 ## Reservations

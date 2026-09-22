@@ -970,6 +970,18 @@
       "paths": [
         "docs/plan/nx-23-upgrade/BROWSER-BUILD-REPAIR.md"
       ]
+    },
+    {
+      "id": "browser-package-build-repair.4",
+      "phase": "intake",
+      "tier": 0,
+      "kind": "absent",
+      "pattern": "useRef<[^(]*>\\(\\)",
+      "paths": [
+        "packages/ui-react/ui-react-base-hooks/src/lib/use-throttle/index.ts",
+        "packages/ui-react/ui-react-base-hooks/src/lib/use-throttle-state/index.ts",
+        "packages/ui-react/ui-react-base-hooks/src/lib/use-infinite-scroll/index.ts"
+      ]
     }
   ]
 }
