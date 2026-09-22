@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [browser-package-build-repair.1] The browser hooks package builds again under the installed React 19 types
 
 ---
 
