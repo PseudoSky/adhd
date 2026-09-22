@@ -24,9 +24,6 @@
       "options": {
         "packageRoot": "packages/apigen/apigen-plugin-ir-cache/dist"
       }
-    },
-    "lint": {
-      "executor": "@nx/eslint:lint"
     }
   }
 }
