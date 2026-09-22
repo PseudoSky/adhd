@@ -990,6 +990,13 @@
       "kind": "command",
       "cmd": "./node_modules/.bin/nx build ui-react-base-hooks && ./node_modules/.bin/vitest run --config packages/ui-react/ui-react-base-hooks/vite.config.ts packages/ui-react/ui-react-base-hooks/src/lib/use-file-download/import-meta-url.spec.ts && node -e \"const fs=require('fs');for(const f of ['packages/ui-react/ui-react-base-hooks/dist/index.js','packages/ui-react/ui-react-base-hooks/dist/index.umd.js']){const t=fs.readFileSync(f,'utf8');if(t.includes('{}.url')){console.error('EMPTY_IMPORT_META_URL in '+f);process.exit(1)}if(t.includes('__filename')||t.includes('node:url')){console.error('NODE_SHIM_IN_BROWSER_BUNDLE in '+f);process.exit(1)}}console.log('BROWSER_BUNDLES_CLEAN')\"",
       "expect": "exit0"
+    },
+    {
+      "id": "browser-cjs-umd-repair.2",
+      "phase": "intake",
+      "tier": 1,
+      "kind": "exists",
+      "path": "packages/ui-react/ui-react-base-hooks/src/lib/use-file-download/import-meta-url.spec.ts"
     }
   ]
 }
