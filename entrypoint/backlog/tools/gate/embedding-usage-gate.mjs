@@ -57,6 +57,15 @@ const REAL_BY_DESIGN = new Map([
       'meaningful token with the created item (a grep negative control over the same text asserts it is ' +
       'unfindable), so only the real semantic ranker can surface it.',
   ],
+  [
+    'src/store/embed-drain-real-model.spec.ts',
+    'the close-time embed drain proven end-to-end against the REAL fastembed model, in-process AND through ' +
+      'a spawned dist/index.js `create` — no vi.mock of @adhd/sox-embedding-provider. Its assertion is the ' +
+      'one-shot consumer outcome a fake cannot honestly provide: a fire-and-forget `create` (awaitEmbed ' +
+      'omitted) must leave a vector that a fresh store finds by semantic rank, and the spawned bin must ' +
+      'exit 0 with no "unrecorded" on stderr. A fake backend can fake a vector the real model would never ' +
+      'produce, so only the real model proves the production path.',
+  ],
 ]);
 
 /**
