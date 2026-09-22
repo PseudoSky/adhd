@@ -2253,7 +2253,7 @@ Here's the complete remaining-work inventory, straight from the persisted plan, 
 **Open threads:** `cd34ba0d` (gate break — one-line fix); review of the Seg F+G+citations
 group (directive 5) → push; F3 implementation; sox singleton + lock identity; Wave 1/2/3.
 
-**Update (2026-09-22 — review-fix batch COMPLETE: all four items closed; gate red only on load-flakes):**
+**Update (2026-09-22 — review-fix batch COMPLETE: all four items closed; gate red on load-flakes + a concurrent agent's broken spec):**
 
 Blind-review fix batch executed in `.worktrees/backlog-v2` (branch
 `feat/backlog-hard-replacement`). All four queued items closed:
@@ -2319,10 +2319,26 @@ environmental load-flakes; the machine ran at load-avg 60→155 with 45 users
   load 155 — all spawned-server/wire specs, and a DIFFERENT set than run 2, i.e.
   non-deterministic saturation, not a fixed defect.
 - The touched specs are all green: `catalog.spec` 7, `contract-anchors.spec` 2,
-  `create-issue.spec` 9, `transition.spec` 27, `bootstrap.spec` 3 = 48 passed.
-- Verdict: the gate is blocked by machine saturation, not by this batch; the
-  spawn/wire tests have hardcoded 30–60s bounds that load-avg >100 cannot meet.
-  Re-run when the box is quiet.
+  `create-issue.spec` 10, `transition.spec` 27, `bootstrap.spec` 3 = 49, and a
+  final 5-file run reported 50 passed (the extra is a concurrent-agent test
+  addition); the pre-commit gates ran 46/43/2 across the three commits.
+- Run 4 (17:16, `nx test backlog --maxWorkers=1`, load-avg dropped to ~70):
+  73 files passed / 6 failed, 8 tests failed — `cross-process-write-safety.spec`
+  (2× 60s timeout), `serve.spec` (30s timeout), `server.spec` + `batch-adoption.spec`
+  (`server never became ready … fetch failed`), `serve.singleton.spec` (concurrent
+  serve) — ALL spawn/network/real-model/concurrency timeouts, PLUS
+  `api.semantic-production-seam.spec` (2 tests) which is NOT load: it fails
+  deterministically in isolation at load-avg 24 with
+  `TypeError: Cannot read properties of undefined (reading 'config')` at
+  `api.semantic-production-seam.spec.ts:350` — `openCtx` returns a Harness with no
+  `env`, introduced by the CONCURRENT agent's commit `140e0305` (not this batch;
+  the file is untouched by it). Filed as BUG `772b239f` (HIGH). Also note a
+  `nx affected --base=05ebbd6f` run was killed outright (EXIT=137 / SIGKILL) under
+  load-avg 145 — the box could not sustain the full affected graph.
+- Verdict: the gate is blocked by machine saturation AND by the concurrent agent's
+  `140e0305` spec break — neither is this batch. The spawn/wire tests have hardcoded
+  30–60s bounds that load-avg >100 cannot meet; re-run when the box is quiet and
+  `772b239f` is fixed.
 
 **Residuals:** none for the four items. The underlying published `dist/package.json`
 staleness is upstream (sox-ecosystem, `68aeea15`/`d98e4d49`).
