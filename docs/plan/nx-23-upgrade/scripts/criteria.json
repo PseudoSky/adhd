@@ -883,6 +883,14 @@
       "kind": "command",
       "cmd": "./node_modules/.bin/nx build apigen-cli && ./node_modules/.bin/vitest run --config entrypoint/apigen-cli/vite.config.ts entrypoint/apigen-cli/src/test/e2e/cjs-import-meta-url.spec.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "vite-cjs-import-meta-repair.3",
+      "phase": "intake",
+      "tier": 1,
+      "kind": "command",
+      "cmd": "node -e \"const fs=require('fs'),p=require('path');function w(d,o=[]){for(const e of fs.readdirSync(d,{withFileTypes:true})){if(['node_modules','.git','dist','.nx','tmp','.worktrees','coverage'].includes(e.name))continue;const q=p.join(d,e.name);if(e.isDirectory())w(q,o);else if(e.name==='vite.config.ts'&&fs.readFileSync(q,'utf8').includes('importMetaUrlCjs'))o.push(q);}return o;}const n=w('.').length;console.log('WIRED='+n);process.exit(n>=54?0:1)\"",
+      "expect": "exit0"
     }
   ]
 }
