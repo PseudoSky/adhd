@@ -13,7 +13,7 @@
  */
 import { join } from 'node:path';
 import { writeFileSync } from 'node:fs';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   openTestIssueStore,
   removeTestIssueStoreDir,
@@ -361,6 +361,58 @@ describe('transition — status change (SPEC.md §6.3.4, real store)', () => {
     const [cited] = rows;
     const citationRow = cited ? await readNode(store, cited.uid) : null;
     expect(citationRow?.metadata?.['sha']).toBe('unverified');
+  });
+
+  it('the path-less waiver is no longer SILENT — it emits an operator-visible warning (DEBT a934e089)', async () => {
+    const spy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      const outcome = await transition(store, {
+        uid: issueUid,
+        by: 'closer',
+        toStatus: 'in-progress',
+        note: 'waiver observability',
+        citations: [{ file: 'src/whatever.ts' }],
+      });
+      expect(outcome.toStatus).toBe('in-progress');
+      expect(
+        spy.mock.calls
+          .map((c) => String(c[0]))
+          .some(
+            (m) =>
+              m.includes('citation_requires_sha waived') &&
+              m.includes('src/whatever.ts')
+          )
+      ).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('the waiver warning fires ONLY on the waiver branch — a path-PRESENT hard-fail does NOT emit it', async () => {
+    await setProjectPolicy(store, projectUid, {}, dir); // real project path -> hard-fail branch
+    const spy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      await expect(
+        transition(store, {
+          uid: issueUid,
+          by: 'closer',
+          toStatus: 'in-progress',
+          note: 'trying',
+          citations: [{ file: 'this-file-does-not-exist.ts' }],
+        })
+      ).rejects.toThrow(CitationUnverifiableError);
+      expect(
+        spy.mock.calls
+          .map((c) => String(c[0]))
+          .some((m) => m.includes('citation_requires_sha waived'))
+      ).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('a REAL, resolvable citation writes a citation node + has_citation edge with a genuine (non-"unverified") sha', async () => {

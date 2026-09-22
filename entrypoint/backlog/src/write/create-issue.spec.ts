@@ -19,7 +19,7 @@
  */
 import { join } from 'node:path';
 import { writeFileSync } from 'node:fs';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   openTestIssueStore,
   removeTestIssueStoreDir,
@@ -231,6 +231,22 @@ describe('createIssue — citation sha gate applies only where verification is p
     return citationRow?.metadata?.['sha'];
   }
 
+  /** Direct SQL count of every LIVE node — the strongest "nothing was written" probe: an issue, a citation, or an audit row all land here. */
+  async function liveNodeCount(): Promise<number> {
+    const { rows } = await store.adapter.executeAll<{ n: number }>(
+      'SELECT COUNT(*) as n FROM node WHERE t_invalid IS NULL'
+    );
+    return rows[0]?.n ?? 0;
+  }
+
+  /** Direct SQL count of every LIVE edge — pairs with {@link liveNodeCount}; a half-write shows up as a node/edge count that moved. */
+  async function liveEdgeCount(): Promise<number> {
+    const { rows } = await store.adapter.executeAll<{ n: number }>(
+      'SELECT COUNT(*) as n FROM edge WHERE t_invalid IS NULL'
+    );
+    return rows[0]?.n ?? 0;
+  }
+
   it('path-less project: a citation is ACCEPTED and persists sha:"unverified" (the default citationRequiresSha:true gate is waived, not the policy)', async () => {
     // `upsertProject` with no `path` — the project has no known filesystem
     // root, so no citation target can be hashed. The policy itself is left at
@@ -253,12 +269,79 @@ describe('createIssue — citation sha gate applies only where verification is p
     expect(await persistedCitationSha(issueRow.rowid)).toBe('unverified');
   });
 
+  it('the path-less waiver is no longer SILENT — it emits an operator-visible warning naming the project (DEBT a934e089)', async () => {
+    const project = await upsertProject(store, {
+      name: 'citation-pathless-warn-project',
+      by: 'filer',
+    });
+    const spy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      const created = await createIssue(store, {
+        project: project.uid,
+        title: 'path-less citation warn',
+        body: 'the waiver must be observable, not silent',
+        by: 'filer',
+        citations: [{ file: 'src/whatever.ts' }],
+      });
+      expect(created.created).toBe(true);
+      const messages = spy.mock.calls.map((c) => String(c[0]));
+      expect(
+        messages.some(
+          (m) =>
+            m.includes('citation_requires_sha waived') &&
+            m.includes(project.uid) &&
+            m.includes('src/whatever.ts')
+        )
+      ).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('the waiver warning fires ONLY on the waiver branch — a path-PRESENT hard-fail does NOT emit it', async () => {
+    const project = await upsertProject(store, {
+      name: 'citation-pathpresent-nowarn-project',
+      path: dir,
+      by: 'filer',
+    });
+    const spy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      await expect(
+        createIssue(store, {
+          project: project.uid,
+          title: 'missing citation nowarn',
+          body: 'a path-present project hard-fails and must NOT claim a waiver',
+          by: 'filer',
+          citations: [{ file: 'does-not-exist.ts' }],
+        })
+      ).rejects.toThrow(CitationUnverifiableError);
+      expect(
+        spy.mock.calls
+          .map((c) => String(c[0]))
+          .some((m) => m.includes('citation_requires_sha waived'))
+      ).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('path-PRESENT project citing a MISSING file still hard-fails with CitationUnverifiableError — nothing is written', async () => {
     const project = await upsertProject(store, {
       name: 'citation-pathpresent-missing-project',
       path: dir,
       by: 'filer',
     });
+    // Snapshot BEFORE the rejected call. The gate throws in the pre-resolve
+    // loop, BEFORE `executeWriteTransaction` is ever entered, so both counts
+    // must be byte-identical after — no issue node, no citation node, no
+    // audit row, no edge. Direct SQL, never the outcome object (a partial
+    // write could still self-report a clean rejection).
+    const nodesBefore = await liveNodeCount();
+    const edgesBefore = await liveEdgeCount();
     await expect(
       createIssue(store, {
         project: project.uid,
@@ -268,6 +351,20 @@ describe('createIssue — citation sha gate applies only where verification is p
         citations: [{ file: 'does-not-exist.ts' }],
       })
     ).rejects.toThrow(CitationUnverifiableError);
+    // The teeth the title claims: if the gate ever moved to AFTER the write
+    // (or a partial write slipped through before the throw), the counts move
+    // and this fails — while `rejects.toThrow` above would stay green.
+    expect(await liveNodeCount()).toBe(nodesBefore);
+    expect(await liveEdgeCount()).toBe(edgesBefore);
+    // Consumer-visible confirmation: the project's filter still yields zero
+    // issues — nothing is reachable because nothing was written.
+    const result = await queryIssues(store, {
+      filter: { project: project.uid },
+      limit: 100,
+    });
+    if (result.view !== 'list')
+      throw new Error(`expected view:'list', got ${result.view}`);
+    expect(result.items).toHaveLength(0);
   });
 
   it('path-PRESENT project citing a REAL file computes a genuine sha256 — never "unverified"', async () => {
