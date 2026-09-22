@@ -513,6 +513,20 @@ function findImplicitDiscriminatorBranch(
     if (declared.length < 2 || distinct.size !== declared.length) continue;
 
     const tag = bag[propertyName];
+    // S-18: a MISSING tag (`undefined`) must NOT be compared against
+    // `literalsByBranch`. An `undefined` entry there means "branch i does not
+    // declare this property", NOT "branch i accepts `undefined`" — so
+    // `findIndex((v) => v === undefined)` would match the first branch that
+    // merely omits the property and `pickUnionBranch` would silently
+    // re-encode against it, dropping every field that branch doesn't model.
+    // That is the same silent-data-loss class this whole resolution order
+    // exists to prevent. An absent tag therefore yields NO implicit match for
+    // this property; the candidate loop continues, and the caller falls
+    // through to structural scoring (then `oneOf[0]` only if nothing matches).
+    if (tag === undefined) continue;
+    // The distinctness gate above guarantees at most one declared entry equals
+    // `tag`; `tag !== undefined` guarantees the match is a DECLARED entry,
+    // never one of the `undefined` "does not declare this property" slots.
     const matchIndex = literalsByBranch.findIndex((v) => v === tag);
     if (matchIndex !== -1) return oneOf[matchIndex];
   }
