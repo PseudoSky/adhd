@@ -31,11 +31,11 @@
  * the code the shell branches on), never an implementation shape.
  */
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { spawnSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runIsolatedBin } from './test/helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
@@ -51,32 +51,11 @@ let dbPath: string;
 
 /** Spawns the REAL built bin. Never imported — an import would skip the mount. */
 function runBin(args: string[]): Run {
-  const result = spawnSync(process.execPath, [DIST_INDEX, ...args], {
-    cwd: tmpRoot,
-    env: {
-      ...process.env,
-      ADHD_BACKLOG_SCOPE: 'project',
-      // Redirect HOME so the GLOBAL config layer resolves under this
-      // throwaway root. `ADHD_BACKLOG_SCOPE=project` moves only the DATA
-      // root; the global layer is read unconditionally (see cli.spec.ts
-      // runBin's note). Without this, the child reads the real machine's
-      // `~/.adhd/backlog/production/config.yaml`.
-      HOME: tmpRoot,
-      // The ONLY var that redirects the store. `BACKLOG_DB_PATH` is NOT
-      // honored — using it silently writes to the real global graph.
-      ADHD_BACKLOG_DATABASE_PATH: dbPath,
-    },
-    encoding: 'utf8',
-    timeout: 30_000,
+  return runIsolatedBin(DIST_INDEX, args, tmpRoot, {
+    // The ONLY var that redirects the store. `BACKLOG_DB_PATH` is NOT honored
+    // — using it silently writes to the real global graph.
+    extraEnv: { ADHD_BACKLOG_DATABASE_PATH: dbPath },
   });
-  if (result.error) {
-    throw new Error(`spawn failed: ${String(result.error)}`);
-  }
-  return {
-    status: result.status,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  };
 }
 
 function runJson(args: string[]): { run: Run; body: Record<string, unknown> } {

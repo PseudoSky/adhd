@@ -50,6 +50,7 @@ import {
   resolveMountNamespaces,
   USE_PLUGINS,
 } from './cli.js';
+import { runIsolatedBin } from './test/helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
@@ -63,21 +64,14 @@ interface SpawnResult {
 /**
  * Spawns the REAL built `backlog` bin as a genuine child process. Never imported.
  *
- * Isolation is TWO redirects, and both are required:
- *   - `ADHD_BACKLOG_SCOPE=project` + a fresh, empty `cwd` with no ancestor
- *     `.adhd` marker (a throwaway `mkdtempSync` dir) moves the DATA root onto
- *     that temp `cwd`.
- *   - `HOME` is redirected to that same temp `cwd` so the GLOBAL config layer
- *     resolves under the temp home too. `ADHD_BACKLOG_SCOPE=project` alone does
- *     NOT isolate the global layer: `@adhd/environment`'s `resolveRoots`
- *     (`roots.ts`) reads `<homedir()>/.adhd/<project>/<namespace>/config.yaml`
- *     unconditionally, and `homedir()` honors `$HOME`. Without this redirect
- *     the child read the real machine's
- *     `~/.adhd/backlog/production/config.yaml`, whose post-cutover `db.path`
- *     pointed at the PRODUCTION store — so every run opened production and
- *     wrote test rows into it (the config-isolation leak this redirect fixes).
+ * The isolation contract (the required `ADHD_BACKLOG_SCOPE=project` +
+ * `HOME=<cwd>` redirect pair, and why the scope alone does NOT isolate the
+ * global config layer) now lives in ONE place —
+ * `test/helpers/spawn-isolated-bin.ts`, guarded by its own spec — instead of
+ * being copy-pasted here. This wrapper only binds it to this spec's
+ * `DIST_INDEX` so every call site is unchanged.
  *
- * `extraEnv` layers over both (BUG-002's `ADHD_BACKLOG_DATABASE_PATH`
+ * `extraEnv` layers over the base (BUG-002's `ADHD_BACKLOG_DATABASE_PATH`
  * redirection probe, and the migration test's own `HOME`/`SOX_ECOSYSTEM_HOME`
  * redirect — the latter a subdir of this same temp root).
  */
@@ -86,29 +80,7 @@ function runBin(
   cwd: string,
   extraEnv: Record<string, string> = {}
 ): SpawnResult {
-  const result = spawnSync(process.execPath, [DIST_INDEX, ...args], {
-    cwd,
-    env: {
-      ...process.env,
-      ADHD_BACKLOG_SCOPE: 'project',
-      HOME: cwd,
-      ...extraEnv,
-    },
-    encoding: 'utf8',
-    timeout: 30_000,
-  });
-  if (result.error) {
-    throw new Error(
-      `spawn failed for ${DIST_INDEX} ${JSON.stringify(args)}: ${String(
-        result.error
-      )}`
-    );
-  }
-  return {
-    status: result.status,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  };
+  return runIsolatedBin(DIST_INDEX, args, cwd, { extraEnv });
 }
 
 /**

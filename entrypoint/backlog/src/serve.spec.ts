@@ -21,6 +21,10 @@ import {
   buildBacklogApigenPackage,
   resolveExpectedMcpToolNames,
 } from './server.js';
+import {
+  isolatedSpawnOptions,
+  runIsolatedBin,
+} from './test/helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
@@ -60,16 +64,10 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
     transport = new StdioClientTransport({
       command: 'node',
       args: [DIST_INDEX, 'serve', '--transport', 'mcp'],
-      cwd: adhdRoot,
-      // HOME redirect is required alongside `ADHD_BACKLOG_SCOPE=project`: the
-      // global config layer is read regardless of scope (see cli.spec.ts
-      // runBin's note), so without it this child reads the real machine's
-      // `~/.adhd/backlog/production/config.yaml`.
-      env: {
-        ...(process.env as Record<string, string>),
-        ADHD_BACKLOG_SCOPE: 'project',
-        HOME: adhdRoot,
-      },
+      // The required `ADHD_BACKLOG_SCOPE=project` + `HOME=<root>` redirect
+      // pair (and why the scope alone is not enough) lives in ONE place now —
+      // `test/helpers/spawn-isolated-bin.ts`, guarded by its own spec.
+      ...isolatedSpawnOptions(adhdRoot),
     });
     client = new Client(
       { name: 'backlog-serve-cli-test-client', version: '1.0.0' },
@@ -147,19 +145,11 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
     expect(got.data.title).toBe('created via serve cli');
   }, 30_000);
 
-  it('BUG-033: `serve --help` prints usage and exits 0 — never a raw unhandled-exception stack trace', async () => {
+  it('BUG-033: `serve --help` prints usage and exits 0 — never a raw unhandled-exception stack trace', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-serve-cli-help-'));
-    const { spawnSync } = await import('node:child_process');
-    const result = spawnSync(
-      process.execPath,
-      [DIST_INDEX, 'serve', '--help'],
-      {
-        cwd: adhdRoot,
-        env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project', HOME: adhdRoot },
-        encoding: 'utf8',
-        timeout: 10_000,
-      }
-    );
+    const result = runIsolatedBin(DIST_INDEX, ['serve', '--help'], adhdRoot, {
+      timeoutMs: 10_000,
+    });
     expect(result.status).toBe(0);
     expect(result.stdout).toMatch(/backlog serve/);
     // The defect this proves fixed: a raw stack trace (`at file:///…`,
@@ -168,18 +158,13 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
     expect(result.stderr).not.toMatch(/\.js:\d+:\d+/);
   });
 
-  it('rejects an unknown --transport value rather than silently defaulting', async () => {
+  it('rejects an unknown --transport value rather than silently defaulting', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-serve-cli-badtransport-'));
-    const { spawnSync } = await import('node:child_process');
-    const result = spawnSync(
-      process.execPath,
-      [DIST_INDEX, 'serve', '--transport', 'bogus'],
-      {
-        cwd: adhdRoot,
-        env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project', HOME: adhdRoot },
-        encoding: 'utf8',
-        timeout: 10_000,
-      }
+    const result = runIsolatedBin(
+      DIST_INDEX,
+      ['serve', '--transport', 'bogus'],
+      adhdRoot,
+      { timeoutMs: 10_000 }
     );
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(/--transport/);

@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { isolatedSpawnOptions } from './test/helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
@@ -36,16 +37,9 @@ async function connect(
   const transport = new StdioClientTransport({
     command: 'node',
     args: [DIST_INDEX, 'serve', '--transport', 'mcp'],
-    cwd: adhdRoot,
-    // HOME redirect is required alongside `ADHD_BACKLOG_SCOPE=project`: the
-    // global config layer is read regardless of scope (see cli.spec.ts
-    // runBin's note), so without it this child reads the real machine's
-    // `~/.adhd/backlog/production/config.yaml`.
-    env: {
-      ...(process.env as Record<string, string>),
-      ADHD_BACKLOG_SCOPE: 'project',
-      HOME: adhdRoot,
-    },
+    // The required `ADHD_BACKLOG_SCOPE=project` + `HOME=<root>` redirect pair
+    // lives in ONE place now — `test/helpers/spawn-isolated-bin.ts`.
+    ...isolatedSpawnOptions(adhdRoot),
   });
   const client = new Client({ name, version: '1.0.0' }, { capabilities: {} });
   try {
