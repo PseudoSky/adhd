@@ -24,6 +24,7 @@
 - [vite-cjs-import-meta-repair.5] The default-running acceptance spec exists
 - [vite-cjs-import-meta-repair.6] The package generator wires the shim for node and shared tiers, so a new package cannot re-introduce the defect
 - [vite-cjs-import-meta-repair.7] The generator spec asserts the browser tier is deliberately left unwired
+- [vite-cjs-import-meta-repair.8] The shim is format-gated: the ESM bundle keeps native import.meta.url and carries no CommonJS shim
 ---
 
 ## Reservations
