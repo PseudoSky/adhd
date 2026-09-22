@@ -55,8 +55,12 @@ const REAL_BY_DESIGN = new Map([
     'the one true end-to-end proof against the real model',
   ],
   [
-    'src/query/text-routing.spec.ts',
-    "asserts genuine cross-vocabulary semantic similarity a fake can't provide",
+    'src/api.semantic-production-seam.spec.ts',
+    'the PRODUCTION semantic seam (bootstrapSemanticStoreMembers + api.ts upsertProject/create/query) ' +
+      'proven end-to-end against the REAL fastembed model — no vi.mock of @adhd/sox-embedding-provider. ' +
+      'Its assertion is a route-discriminating outcome a fake cannot honestly provide: the query shares no ' +
+      'meaningful token with the created item (a grep negative control over the same text asserts it is ' +
+      'unfindable), so only the real semantic ranker can surface it.',
   ],
 ]);
 
