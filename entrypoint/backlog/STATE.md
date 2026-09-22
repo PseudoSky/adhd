@@ -1773,6 +1773,37 @@ other-agent edit — not ours.)
   class the cutover exposed; references BUG-BACKLOG-005; spec documents teeth.
   Suite green with it. Commit handling awaiting the user's answer.
 
+**Update (2026-09-22 — wave committed, review returned, push blocked):**
+- **Commits landed:** `18e1596d` (vocabulary guard — committed first, per the
+  user's decision), `4d54a54f` (the wave: 13 files, +1208/−270; 10 staged
+  specs / 107 tests green), `951224ce` (session docs). Suite at commit:
+  **600/600 green.**
+- **Blind review of the wave** (a8906d3d + 4d54a54f) returned 11 findings —
+  all filed to the graph: **HIGH `e19bc9d0`** (`spacePopulated()` reads the
+  ENTIRE vector table per bare `text:` query — `iter`→`executeAll`→`db.all`;
+  fix = bounded primitive; sox `hasVectors` dispatched), `f3f71daa`
+  (SPEC §5b stale vs the shipped design), `e769bdc4` (real-model coverage
+  moved off the production seam), `a1c2cbde` (`store-check` untested),
+  `b7805de9` (S-01 dead code left — resolves via Seg F), `8ca66712`
+  (vocabulary guard runs an O(store) histogram per verb), `efbb5c4b`
+  (membersCache latches failures), `496e2c58` (RECOGNIZED_NODE_KINDS
+  unpinned), + a stale-comment low. Fix batches dispatched (code/docs +
+  tests).
+- **Push BLOCKED:** the pre-push hook fails on `apigen-plugin-java-javalin:test`
+  — `mvn package` exits 1 under the parallel affected run while passing
+  standalone; TWO tasks invoke mvn on the same `packages/apigen/java` module
+  (`plugin.ts findFatJar` + `conformance gate.ts`) and overlap → race
+  (strongly evidenced; no metrics-guard messages). `debug` dispatched to
+  confirm + propose the fix (preferred: a cached `apigen-java:package` nx
+  target both consumers depend on). Remote still at `af8eaf63`; push waits
+  on the fix.
+- **In flight:** debug (java race) · sox-vector-store `hasVectors` + publish ·
+  review fixes (code/docs) · review fixes (tests).
+- **Next:** java fix → re-run affected → push; then switch the readiness
+  probe to `hasVectors`; Seg F → Seg G → review → push; Wave 1 → Wave 2 →
+  Wave 3 (3a/3b/3c/3d per `report/sox-integration-plan.md` +
+  `report/wave-3b-tx-elimination-spec.md`).
+
 **Triage decisions landed:**
 
 | Item | Verdict → consequence |
