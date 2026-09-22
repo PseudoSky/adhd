@@ -46,10 +46,10 @@
       "end_ref": "8fa1b825a05e7494e0476518aa639b2ad4ee7df1"
     },
     "cache-isolation": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-09-22T14:50:57.810Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "ccabdec631b6a9960d1ea85809e37b861f9e8168",
       "end_ref": null
     },
     "audit-config": {
