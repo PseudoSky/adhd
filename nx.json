@@ -221,8 +221,16 @@
     },
     "build": {
       "dependsOn": [
-        "^build"
+        "^build",
+        "typecheck"
       ],
+      "inputs": [
+        "production",
+        "^production"
+      ]
+    },
+    "typecheck": {
+      "cache": true,
       "inputs": [
         "production",
         "^production"
