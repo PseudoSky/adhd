@@ -51,7 +51,7 @@ import type { BacklogConfig } from './env.js';
 import type { GraphBacklogStore } from './store/graph-backlog-store.js';
 import type { IWriteStoreHandle } from './write/tx.js';
 import type { IQueryStoreHandle } from './query/query.js';
-import { queryIssuesWithMeta } from './query/query.js';
+import { queryIssuesWithMeta, queryNeedsSemanticBackend } from './query/query.js';
 import type {
   IOutcomeEnvelope,
   IOutcomeFailure,
@@ -77,6 +77,8 @@ import {
   WriteContentionError,
 } from './write/errors.js';
 import { bootstrapSemanticStoreMembers } from './write/bootstrap.js';
+import type { SemanticStoreMembers } from './write/bootstrap.js';
+import { assertRecognizedStoreVocabulary } from './store/vocabulary-guard.js';
 
 import { getIssue } from './query/get.js';
 import {
@@ -149,6 +151,32 @@ export interface BacklogCtx {
 // ---------------------------------------------------------------------------
 
 /**
+ * The one lazy accessor every semantic-needing verb goes through, and the SOLE
+ * call site of `bootstrapSemanticStoreMembers` (`write/bootstrap.ts`).
+ *
+ * SPEC.md §5b: the semantic backend is derived only when a verb's OWN input
+ * needs it — `writeHandle`/`queryHandle` call this solely under their
+ * `opts.needsSemantic` gate. `bootstrapSemanticStoreMembers` is itself
+ * memoized per `StoreAdapter` (its own `membersCache`), so repeated calls in a
+ * process share one provider/vector-store pair — never the two independent
+ * bootstraps (and two cold ONNX loads) the previous eager path paid.
+ *
+ * Never throws on its own: `bootstrapSemanticStoreMembers` swallows every
+ * failure internally and returns absent members, so a broken embedding backend
+ * degrades exactly as before (a `create` still writes with `handle.embedding`
+ * absent; a `claim`/`transition` never even attempts the bootstrap).
+ */
+async function ensureSemanticReady(
+  ctx: BacklogCtx
+): Promise<SemanticStoreMembers> {
+  return bootstrapSemanticStoreMembers(
+    ctx.store.adapter,
+    ctx.store.graph,
+    ctx.env.config.embedding
+  );
+}
+
+/**
  * The write layer's handle. `typePolicy` is read off the store rather than
  * imported here, because the policy a write is validated against MUST be the
  * same instance the store's `GraphBackend` was constructed with — importing a
@@ -163,15 +191,22 @@ export interface BacklogCtx {
  * production, not silent no-ops. `search`/`embedding` are absent whenever
  * `embedding.enabled` is off or the real backend could not start — the
  * honest degrade `bootstrap.ts` documents, never a stub.
+ *
+ * `opts.needsSemantic` is `true` only for `create`/`update` (the two verbs
+ * with an on-write embed / duplicate-scan read); every other write verb passes
+ * `false` and skips the bootstrap entirely (SPEC.md §5b point 3).
  */
 async function writeHandle(
-  ctx: BacklogCtx
+  ctx: BacklogCtx,
+  opts: { needsSemantic: boolean }
 ): Promise<IWriteStoreHandle & IDuplicateScanHandle> {
-  const { search, embedding } = await bootstrapSemanticStoreMembers(
-    ctx.store.adapter,
-    ctx.store.graph,
-    ctx.env.config.embedding
-  );
+  // Vocabulary guard (store/vocabulary-guard.ts): refuse to WRITE into a store
+  // this build cannot address, rather than let the write fail downstream with
+  // a misleading "project not found" caused by an unrecognized vocabulary.
+  await assertRecognizedStoreVocabulary(ctx.store.adapter);
+  const { search, embedding } = opts.needsSemantic
+    ? await ensureSemanticReady(ctx)
+    : {};
   return {
     adapter: ctx.store.adapter,
     typePolicy: ctx.store.typePolicy,
@@ -196,16 +231,33 @@ async function writeHandle(
  * back to a substring scan or serving a stub's empty results. That is the
  * same rule BUG-045 settled for the vector space: an unwired search must
  * report as disabled, never as a working-but-empty one.
+ *
+ * `opts.needsSemantic` gates the bootstrap (SPEC.md §5b point 3) — a plain
+ * `query` never pays the cold load. `opts.probeSpace` is set only for a bare
+ * `text:` positional: routing that text between `semantic` and `grep` needs
+ * to know whether the vector space actually holds anything, so the (async)
+ * `search.spacePopulated()` probe is resolved here and snapshotted onto
+ * `handle.spacePopulated` — `resolveTextInput` is synchronous and reads the
+ * snapshot. `needsSemantic` is always `true` when `probeSpace` is (a `text:`
+ * input satisfies `queryNeedsSemanticBackend`), so `search` is present
+ * whenever the probe runs.
  */
-async function queryHandle(ctx: BacklogCtx): Promise<IQueryStoreHandle> {
-  const { search } = await bootstrapSemanticStoreMembers(
-    ctx.store.adapter,
-    ctx.store.graph,
-    ctx.env.config.embedding
-  );
+async function queryHandle(
+  ctx: BacklogCtx,
+  opts: { needsSemantic: boolean; probeSpace: boolean }
+): Promise<IQueryStoreHandle> {
+  const { search } = opts.needsSemantic ? await ensureSemanticReady(ctx) : {};
+  const spacePopulated =
+    search !== undefined && opts.probeSpace
+      ? await search.spacePopulated()
+      : undefined;
   return {
     graph: ctx.store.graph,
+    // Fail-loud vocabulary guard, re-run per query (never latched) — see
+    // `IQueryStoreHandle.assertVocabulary` and store/vocabulary-guard.ts.
+    assertVocabulary: () => assertRecognizedStoreVocabulary(ctx.store.adapter),
     ...(search !== undefined ? { search } : {}),
+    ...(spacePopulated !== undefined ? { spacePopulated } : {}),
   };
 }
 
@@ -381,7 +433,10 @@ export async function query(
   // for a field every other verb would leave meaningless.
   try {
     const { result, meta } = await queryIssuesWithMeta(
-      await queryHandle(ctx),
+      await queryHandle(ctx, {
+        needsSemantic: queryNeedsSemanticBackend(input),
+        probeSpace: input.text !== undefined,
+      }),
       input
     );
     return okEnvelope(result, meta ? { meta } : undefined);
@@ -406,7 +461,7 @@ export async function create(
   ctx: BacklogCtx,
   input: ICreateIssueInput
 ): Promise<IOutcomeEnvelope<ICreateIssueResult>> {
-  return envelope(async () => createIssue(await writeHandle(ctx), input));
+  return envelope(async () => createIssue(await writeHandle(ctx, { needsSemantic: true }), input));
 }
 
 /**
@@ -420,7 +475,7 @@ export async function update(
   ctx: BacklogCtx,
   input: IUpdateIssueInput
 ): Promise<IOutcomeEnvelope<IUpdateIssueOutcome>> {
-  return envelope(async () => updateIssueOp(await writeHandle(ctx), input));
+  return envelope(async () => updateIssueOp(await writeHandle(ctx, { needsSemantic: true }), input));
 }
 
 /** Move an issue to a new status, recording the transition in its audit trail. */
@@ -428,7 +483,7 @@ export async function transition(
   ctx: BacklogCtx,
   input: ITransitionInput
 ): Promise<IOutcomeEnvelope<ITransitionOutcome>> {
-  return envelope(async () => transitionIssueOp(await writeHandle(ctx), input));
+  return envelope(async () => transitionIssueOp(await writeHandle(ctx, { needsSemantic: false }), input));
 }
 
 /** Take, renew or release an exclusive working lease on an issue. */
@@ -436,7 +491,7 @@ export async function claim(
   ctx: BacklogCtx,
   input: IClaimInput
 ): Promise<IOutcomeEnvelope<IClaimOutcome>> {
-  return envelope(async () => claimIssueOp(await writeHandle(ctx), input));
+  return envelope(async () => claimIssueOp(await writeHandle(ctx, { needsSemantic: false }), input));
 }
 
 /** Create or remove a typed relationship between two issues. */
@@ -444,7 +499,7 @@ export async function relate(
   ctx: BacklogCtx,
   input: IRelateInput
 ): Promise<IOutcomeEnvelope<IRelateOutcome>> {
-  return envelope(async () => relateIssueOp(await writeHandle(ctx), input));
+  return envelope(async () => relateIssueOp(await writeHandle(ctx, { needsSemantic: false }), input));
 }
 
 /** Re-file an issue under a different project component. */
@@ -452,7 +507,7 @@ export async function move(
   ctx: BacklogCtx,
   input: IMoveIssueInput
 ): Promise<IOutcomeEnvelope<IMoveIssueOutcome>> {
-  return envelope(async () => moveIssueOp(await writeHandle(ctx), input));
+  return envelope(async () => moveIssueOp(await writeHandle(ctx, { needsSemantic: false }), input));
 }
 
 /**
@@ -465,7 +520,7 @@ async function remove(
   ctx: BacklogCtx,
   input: IDeleteIssueInput
 ): Promise<IOutcomeEnvelope<IDeleteIssueOutcome>> {
-  return envelope(async () => deleteIssueOp(await writeHandle(ctx), input));
+  return envelope(async () => deleteIssueOp(await writeHandle(ctx, { needsSemantic: false }), input));
 }
 
 // ---------------------------------------------------------------------------
@@ -482,7 +537,7 @@ export async function upsertProject(
   ctx: BacklogCtx,
   input: IUpsertProjectInput
 ): Promise<IOutcomeEnvelope<IUpsertProjectOutcome>> {
-  return envelope(async () => upsertProjectOp(await writeHandle(ctx), input));
+  return envelope(async () => upsertProjectOp(await writeHandle(ctx, { needsSemantic: false }), input));
 }
 
 /** Create or update a component by `(project, name)`. */
@@ -490,7 +545,7 @@ export async function upsertComponent(
   ctx: BacklogCtx,
   input: IUpsertComponentInput
 ): Promise<IOutcomeEnvelope<IUpsertComponentOutcome>> {
-  return envelope(async () => upsertComponentOp(await writeHandle(ctx), input));
+  return envelope(async () => upsertComponentOp(await writeHandle(ctx, { needsSemantic: false }), input));
 }
 
 /**
@@ -503,7 +558,7 @@ export async function upsertLocation(
   ctx: BacklogCtx,
   input: IUpsertLocationInput
 ): Promise<IOutcomeEnvelope<IUpsertLocationOutcome>> {
-  return envelope(async () => upsertLocationOp(await writeHandle(ctx), input));
+  return envelope(async () => upsertLocationOp(await writeHandle(ctx, { needsSemantic: false }), input));
 }
 
 /** Soft-remove a location by `uid`. */
@@ -511,7 +566,7 @@ export async function rmLocation(
   ctx: BacklogCtx,
   input: IRmLocationInput
 ): Promise<IOutcomeEnvelope<IRmLocationOutcome>> {
-  return envelope(async () => rmLocationOp(await writeHandle(ctx), input));
+  return envelope(async () => rmLocationOp(await writeHandle(ctx, { needsSemantic: false }), input));
 }
 
 /**

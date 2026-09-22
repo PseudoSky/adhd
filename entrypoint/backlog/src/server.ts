@@ -60,7 +60,6 @@ import {
   closeGraphBacklogStoreSafe,
   type GraphBacklogStore,
 } from './store/graph-backlog-store.js';
-import { enableSemanticSearchFromConfig } from './store/semantic-search.js';
 import {
   hasExternalSignalHandling,
   installSignalCleanup,
@@ -810,12 +809,6 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
   // the fallback.
   try {
     store = await openGraphBacklogStore(dbPath, env.config.db.busyTimeoutMs);
-    // RAG-SPEC.md §1.6 — opt-in semantic search. A no-op (and silent) unless
-    // `embedding.enabled`; never throws, so a missing/broken embedding stack
-    // can never stop the server from starting. Deliberately INSIDE this
-    // try/catch: if it ever did throw, the signal handler below must still
-    // be disposed rather than leaked.
-    await enableSemanticSearchFromConfig(store, env.config.embedding);
   } catch (err) {
     signalCleanup?.dispose();
     throw err;

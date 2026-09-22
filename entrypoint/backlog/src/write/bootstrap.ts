@@ -14,42 +14,36 @@
  * were proven only in tests that hand-built their own handle. This module
  * closes that gap for real hosts (`cli.ts`/`server.ts` via `api.ts`).
  *
- * ## Deliberately NOT built on `store/semantic-search.ts`
+ * ## `bootstrapSemanticStoreMembers` is THE per-adapter semantic path
  *
- * `store/semantic-search.ts` is on the deletion list for an imminent hard
- * cutover — it is coupled at the TYPE level to types outside this data model
- * and cannot survive it: `bootstrapSemanticBackend`'s own signature takes
- * `GraphBacklogStore`, and the module imports `RagNotConfiguredError` from
- * `../model.js` — neither type is part of this data model. So this module
- * takes its dependencies the SAME way `test/helpers/open-test-issue-store.ts` and this package's own
- * `IWriteStoreHandle`/`IQueryStoreHandle` already do — the bare
- * `StoreAdapter`/`GraphBackend` pair, never a store wrapper — and re-homes
- * the REAL embedding-model construction logic (`createEmbeddingProvider` +
- * `openTursoVectorStore`, the same two calls `bootstrapSemanticBackend` made)
- * directly here, rather than reimplementing it from scratch. Two things are
- * deliberately NOT carried over:
+ * This module owns the one semantic bootstrap every host uses. `api.ts`'s
+ * `writeHandle`/`queryHandle` derive their `search`/`embedding` members from
+ * `bootstrapSemanticStoreMembers`, memoized per `StoreAdapter` in this
+ * module's own `membersCache`, and it is the sole constructor of the real
+ * embedding stack (`createEmbeddingProvider` + `openTursoVectorStore`). It
+ * takes its dependencies the SAME way `test/helpers/open-test-issue-store.ts`
+ * and this package's own `IWriteStoreHandle`/`IQueryStoreHandle` already do —
+ * the bare `StoreAdapter`/`GraphBackend` pair, never a store wrapper.
  *
- * 1. **The module-level singleton registry**
- *    (`configureSemanticBackend`/`getSemanticBackend`). This layer passes
- *    handles explicitly (`IWriteStoreHandle.embedding`,
- *    `IQueryStoreHandle.search`) — a hidden global is exactly what let the
- *    production/test divergence this module fixes go unnoticed.
- * 2. **`RagNotConfiguredError`** (`model.ts`, also on the deletion list).
- *    `deriveMembers` below never throws a "not configured" error — an
- *    unavailable model degrades to an ABSENT member (see
- *    {@link SemanticStoreMembers}'s own doc comment), which is how
- *    `create-issue.ts`/`query/query.ts` already report "unconfigured" today.
- *    The one error this module DOES throw —
+ * Two things the legacy module-level singleton registry
+ * (`store/semantic-search.ts`'s `configureSemanticBackend`/
+ * `getSemanticBackend`) carried are deliberately NOT part of this path:
+ *
+ * 1. **The hidden global.** This layer passes handles explicitly
+ *    (`IWriteStoreHandle.embedding`, `IQueryStoreHandle.search`) — a hidden
+ *    global is exactly what let the production/test divergence this module
+ *    fixes go unnoticed.
+ * 2. **`RagNotConfiguredError`** (`model.ts`). `deriveMembers` below never
+ *    throws a "not configured" error — an unavailable model degrades to an
+ *    ABSENT member (see {@link SemanticStoreMembers}'s own doc comment),
+ *    which is how `create-issue.ts`/`query/query.ts` already report
+ *    "unconfigured" today. The one error this module DOES throw —
  *    {@link PermanentEmbeddingDimensionError} — is a genuine structural fault
  *    (a resolved model whose vector length doesn't match the space it was
- *    built for), not an availability signal, so it is defined locally rather
- *    than imported from the dying module.
+ *    built for), not an availability signal, so it is defined locally.
  */
 import { StoreSearchBackend } from '@adhd/sox-hybrid-search';
-import {
-  openTursoVectorStore,
-  type AsyncVectorBackend,
-} from '@adhd/sox-vector-store';
+import type { AsyncVectorBackend } from '@adhd/sox-vector-store';
 import type { GraphBackend } from '@adhd/sox-graph-store';
 import type { StoreAdapter } from '@adhd/sox-store-adapter';
 import type { BacklogConfig } from '../env.js';
@@ -59,10 +53,10 @@ import type { IEmbeddingBackend } from './tx.js';
  * The two handle members `api.ts`'s `writeHandle`/`queryHandle` need, in the
  * exact shapes their consumers require:
  *  - `search` matches `query/query.ts`'s `IQueryStoreHandle['search']`
- *    (mandatory `embedQuery`) — a strict subset that also satisfies
- *    `write/create-issue.ts`'s `IDuplicateScanHandle['search']` (optional
- *    `embedQuery`), since a mandatory field trivially satisfies an optional
- *    one.
+ *    (mandatory `embedQuery` + `spacePopulated`) — a strict subset that also
+ *    satisfies `write/create-issue.ts`'s `IDuplicateScanHandle['search']`
+ *    (optional `embedQuery`), since a mandatory field trivially satisfies an
+ *    optional one.
  *  - `embedding` matches `write/tx.ts`'s `IWriteStoreHandle['embedding']`
  *    (`IEmbeddingBackend`) exactly.
  *
@@ -79,6 +73,14 @@ export interface SemanticStoreMembers {
   readonly search?: {
     readonly backend: StoreSearchBackend;
     embedQuery(text: string): Promise<Float32Array>;
+    /**
+     * One-row probe of the REAL vector table: `true` iff at least one vector
+     * exists under this member's own space `modelId`. This is per-query truth
+     * read straight from the write layer's durable vectors — never a
+     * process-lifetime latch — so it is correct across process boundaries
+     * (a second process's `create` is visible here; ADR-0012).
+     */
+    spacePopulated(): Promise<boolean>;
   };
   readonly embedding?: IEmbeddingBackend;
 }
@@ -123,6 +125,45 @@ interface OptEmbeddingModule {
     model: string;
     options?: Record<string, unknown>;
   }): Promise<OptEmbeddingProvider>;
+}
+
+// Structural mirror of the slice of `@adhd/sox-vector-store` this module
+// calls — the same pattern as `OptEmbeddingModule` above. `openTursoVectorStore`
+// is reached ONLY through `loadOptional`'s runtime-resolved non-literal
+// specifier; there is deliberately no static value import of it (the value
+// import would be dead weight and would defeat the optional-dependency
+// decoupling). `AsyncVectorBackend` (a type-only import above) is the real
+// backend contract this mirror returns.
+interface OptVectorStoreModule {
+  openTursoVectorStore(
+    adapter: StoreAdapter,
+    opts: { dim: number; modelId: string }
+  ): Promise<AsyncVectorBackend>;
+}
+
+/**
+ * One-row probe of a REAL vector table: `true` iff at least one vector exists
+ * under `modelId`. This is the readiness source the text-routing decision
+ * (`query/query.ts`'s `resolveTextInput`) consults — per query, read from the
+ * durable vector table the write layer's own `embedding` member writes to.
+ *
+ * Deliberately NOT a flag latched at boot: a process that opens a store while
+ * its vector space is still empty (a fresh store, or one populated by another
+ * process) must still route `text:` to the semantic ranker the moment real
+ * vectors exist. Reading the table itself makes that true across process
+ * boundaries (ADR-0012: concurrent processes share the store).
+ *
+ * `AsyncVectorBackend` exposes no count primitive; `iter` is the one-row
+ * surface, and returning on its first yielded row short-circuits the scan.
+ * An absent table (a space that was never `ensureSpace`d) is "empty", not an
+ * error — `iter` already tolerates it.
+ */
+export async function isVectorSpacePopulated(
+  vectorBackend: AsyncVectorBackend,
+  modelId: string
+): Promise<boolean> {
+  for await (const _row of vectorBackend.iter(modelId)) return true;
+  return false;
 }
 
 /**
@@ -228,9 +269,7 @@ async function deriveMembers(
   }
 
   const [vectorStoreLoad, embeddingLoad] = await Promise.all([
-    loadOptional<{ openTursoVectorStore: typeof openTursoVectorStore }>(
-      '@adhd/sox-vector-store'
-    ),
+    loadOptional<OptVectorStoreModule>('@adhd/sox-vector-store'),
     loadOptional<OptEmbeddingModule>('@adhd/sox-embedding-provider'),
   ]);
   if ('err' in vectorStoreLoad || 'err' in embeddingLoad) {
@@ -342,10 +381,19 @@ async function deriveMembers(
   // manual indexing step" guarantee: an issue embedded by THIS SAME store's
   // `create()` must be findable by a `query()` call issued moments later
   // against the same memoized members, with the vector space now non-empty.
+  //
+  // Member PRESENCE and SPACE POPULATEDNESS are separate concerns: `search`
+  // is present whenever the backend is reachable, and `spacePopulated()` is
+  // the per-query probe that decides whether a bare `text:` should route to
+  // it (`resolveTextInput`) — over an empty table a semantic route returns
+  // nothing, so routing falls back to grep until real vectors exist.
   const search: SemanticStoreMembers['search'] = {
     backend: new StoreSearchBackend(vectorBackend, graph),
     async embedQuery(text: string): Promise<Float32Array> {
       return checkDim(await provider.embedSingle(text, 'query'), 'embedQuery');
+    },
+    async spacePopulated(): Promise<boolean> {
+      return isVectorSpacePopulated(vectorBackend, space.modelId);
     },
   };
 
