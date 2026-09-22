@@ -6,7 +6,7 @@
 > (`templates/state-machine.template.md` is a template, not a generator), so
 > re-check it against `dag.json` after every structural change.
 
-**Plan kind:** brownfield · **Terminal:** `done` · **States:** 19 · **Phases:** intake → reconcile → config → graph → tests → final
+**Plan kind:** brownfield · **Terminal:** `done` · **States:** 20 · **Phases:** intake → reconcile → config → graph → tests → final
 
 ---
 
@@ -31,11 +31,12 @@ Identity is the **slug** (immutable). Order below is a topological render of
 | 12 | `graph-test-build-inferred` | work | graph | `./node_modules/.bin/nx show project data-query-engine --json \| rg -q "\"test\"" && ./node_modules/.bin/nx sho…` |
 | 13 | `graph-js-tsc-inferred` | work | graph | `./node_modules/.bin/nx show projects \| rg -q "agent-core-policy" && node -e "const fs=require(\"fs\"),path=r…` |
 | 14 | `graph-release-eslint-inferred` | work | graph | `./node_modules/.bin/nx show projects \| rg -q "apigen-plugin-jsonschema" && node -e "const fs=require(\"fs\")…` |
-| 15 | `audit-graph` | audit | graph | `python3 docs/plan/nx-23-upgrade/scripts/guard_audit_graph.py` |
-| 16 | `test-selection-revalidated` | work | tests | `test -f docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && rg -q "D1" docs/plan/nx-23-upgrade/TEST-SELECTION-P…` |
-| 17 | `test-changed-optin` | work | tests | `node -e "const s=require(\"./package.json\").scripts;if(!s[\"test:changed\"]\|\|!s[\"test:related\"])process.e…` |
-| 18 | `audit-tests` | audit | tests | `python3 docs/plan/nx-23-upgrade/scripts/guard_audit_tests.py` |
-| 19 | `audit-final` | audit | final | `python3 docs/plan/nx-23-upgrade/scripts/guard_audit_final.py` |
+| 15 | `typecheck-teeth-restored` | work | graph | `python3 docs/plan/nx-23-upgrade/scripts/guard_audit_config.py && ./node_modules/.bin/nx run-many -t typecheck &&…` |
+| 16 | `audit-graph` | audit | graph | `python3 docs/plan/nx-23-upgrade/scripts/guard_audit_graph.py` |
+| 17 | `test-selection-revalidated` | work | tests | `test -f docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && rg -q "D1" docs/plan/nx-23-upgrade/TEST-SELECTION-P…` |
+| 18 | `test-changed-optin` | work | tests | `node -e "const s=require(\"./package.json\").scripts;if(!s[\"test:changed\"]\|\|!s[\"test:related\"])process.e…` |
+| 19 | `audit-tests` | audit | tests | `python3 docs/plan/nx-23-upgrade/scripts/guard_audit_tests.py` |
+| 20 | `audit-final` | audit | final | `python3 docs/plan/nx-23-upgrade/scripts/guard_audit_final.py` |
 
 **Audit states are mandatory hold points.** `audit-reconcile`, `audit-config`,
 `audit-graph`, `audit-tests` and `audit-final` block their successors. Each runs every
@@ -68,7 +69,8 @@ later gate. There are no deferrable items in any audit state.
   graph-test-build-inferred     <- audit-config
   graph-js-tsc-inferred         <- graph-test-build-inferred
   graph-release-eslint-inferred <- graph-js-tsc-inferred
-  audit-graph                   <- graph-release-eslint-inferred
+  typecheck-teeth-restored      <- graph-release-eslint-inferred
+  audit-graph                   <- typecheck-teeth-restored
         |
 [tests]
   test-selection-revalidated    <- audit-graph
@@ -112,7 +114,8 @@ post-bump triage verdict consumed — on a tree whose artifacts actually load.
 | `audit-config` | **audit** — `python3 …/guard_audit_config.py` | `graph-test-build-inferred` |
 | `graph-test-build-inferred` | `data-query-engine` still has a `test` target, `data-base-transforms` a `build` target; no manifest declares a shadowing `@nx/vitest:test`/`@nx/vite:build` executor | `graph-js-tsc-inferred` |
 | `graph-js-tsc-inferred` | the graph loads; no manifest declares `@nx/js:tsc` | `graph-release-eslint-inferred` |
-| `graph-release-eslint-inferred` | the graph loads; no manifest declares `@nx/js:release-publish` or `@nx/eslint:lint` | `audit-graph` |
+| `graph-release-eslint-inferred` | the graph loads; no manifest declares `@nx/js:release-publish` or `@nx/eslint:lint` | `typecheck-teeth-restored` |
+| `typecheck-teeth-restored` | the accumulated config gate (which carries the regressed `[tsconfig-shim-removal.5]` teeth check) is green; the full `typecheck` sweep is green; a cold-cache `nx build decompile-cli` and `nx build agent-core-env` both exit 0; `TYPECHECK-TEETH.md` exists | `audit-graph` |
 | `audit-graph` | **audit** — `python3 …/guard_audit_graph.py` | `test-selection-revalidated` |
 | `test-selection-revalidated` | `TEST-SELECTION-PROBE.md` records D1, D2, D3; the repo-local Nx is 23.2.1 | `test-changed-optin` |
 | `test-changed-optin` | `test:changed` and `test:related` exist; the graph loads; `TEST-SELECTION.md` exists | `audit-tests` |
@@ -147,6 +150,7 @@ post-bump triage verdict consumed — on a tree whose artifacts actually load.
 | Compiler-shim removal | Restore the five keys in `tsconfig.base.json` (one revert commit) |
 | Cache isolation | Delete `cacheDirectory` from `nx.json` (one line) |
 | Target deletions (phase 2a/2b/2c) | Revert that phase's commit — each phase is one commit, by design |
+| Typecheck gate (`build.dependsOn` + `typecheck` targetDefault) | Revert `nx.json`'s `targetDefaults.build`/`targetDefaults.typecheck` (one commit); the gate goes back to inferred-`build`-only |
 | Absorbed sibling branches | Revert the merge commit; the sibling branches are untouched and still local-only |
 | Fast-path wrapper | Revert `package.json` scripts; the default path was never changed, so nothing else moves |
 
@@ -157,24 +161,25 @@ merges to the default branch, or publishes.
 
 ## Runtime status
 
-`current_state`: `upgrade-baseline`
+`current_state`: `graph-js-tsc-inferred`
 
 | Slug | Status |
 |---|---|
-| `upgrade-baseline` | pending |
-| `vite-cjs-import-meta-repair` | pending |
-| `browser-package-build-repair` | pending |
-| `browser-cjs-umd-repair` | pending |
-| `gate-triage-absorbed` | pending |
-| `config-repair-absorbed` | pending |
-| `test-resolution-absorbed` | pending |
-| `audit-reconcile` | pending |
-| `tsconfig-shim-removal` | pending |
-| `cache-isolation` | pending |
-| `audit-config` | pending |
-| `graph-test-build-inferred` | pending |
+| `upgrade-baseline` | complete |
+| `vite-cjs-import-meta-repair` | complete |
+| `browser-package-build-repair` | complete |
+| `browser-cjs-umd-repair` | complete |
+| `gate-triage-absorbed` | complete |
+| `config-repair-absorbed` | complete |
+| `test-resolution-absorbed` | complete |
+| `audit-reconcile` | complete |
+| `tsconfig-shim-removal` | complete |
+| `cache-isolation` | complete |
+| `audit-config` | complete |
+| `graph-test-build-inferred` | complete |
 | `graph-js-tsc-inferred` | pending |
 | `graph-release-eslint-inferred` | pending |
+| `typecheck-teeth-restored` | pending |
 | `audit-graph` | pending |
 | `test-selection-revalidated` | pending |
 | `test-changed-optin` | pending |
