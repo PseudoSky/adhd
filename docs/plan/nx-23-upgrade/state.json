@@ -349,6 +349,17 @@
         "docs/plan/plan-index.json"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-09-22T17:32:05.043Z",
+      "state": "graph-js-tsc-inferred",
+      "class": "executor",
+      "type": "fix-guard",
+      "reason": "DEFECT 1 - criterion graph-js-tsc-inferred.2 checked a specifier that does not exist. It asserted rg -q \"@nx/js/plugin\" nx.json, but @nx/js@23.2.1 has no ./plugin export (the real specifier is @nx/js/typescript). It went green on the nx.json // comment text, not on the registration - a meaningless check. Replaced with a structural assertion that the plugins array actually contains a @nx/js/typescript registration: node -e \"const p=require('./nx.json').plugins;process.exit(p.some(x=>x.plugin==='@nx/js/typescript')?0:1)\". Same stated intent (the js plugin is registered so the tsc-built projects still infer a build); not satisfiable by comment text. The nx.json // comment is left in place.",
+      "files_synced": [
+        "scripts/criteria.json"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
