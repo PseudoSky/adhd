@@ -18,6 +18,7 @@
  * `countLiveOwnsComponentEdges` discipline for the same edge kind).
  */
 import { join } from 'node:path';
+import { writeFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   openTestIssueStore,
@@ -27,6 +28,7 @@ import {
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
 import { createIssue } from './create-issue.js';
 import { upsertProject } from './catalog.js';
+import { CitationUnverifiableError } from './errors.js';
 import { getNodeByUidTx, type ITxNodeRow } from './tx.js';
 import { queryIssues } from '../query/query.js';
 
@@ -173,5 +175,121 @@ describe('createIssue — component-omitted defaults to (root), never orphaned (
     const uids = result.items.map((item) => item.uid);
     expect(uids).toContain(first.uid);
     expect(uids).toContain(second.uid);
+  });
+});
+
+/**
+ * The citation-sha gate (SPEC.md §8.5 / §2's `citation_requires_sha`) applies
+ * only where verification is POSSIBLE — a project with a non-empty
+ * filesystem `path`. A path-less project cannot hash a citation at all, so it
+ * records `sha:"unverified"` verbatim (matching the ETL's own precedent);
+ * a path-PRESENT project citing a missing/escaping file still hard-fails.
+ * Every assertion drives the REAL `upsertProject`/`createIssue` verbs against
+ * a REAL store and reads the persisted `sha` back via direct SQL — never the
+ * returned outcome object, and never a mock of any verb or the store.
+ */
+describe('createIssue — citation sha gate applies only where verification is possible (SPEC.md §8.5)', () => {
+  let dir: string;
+  let store: TestIssueStore;
+
+  beforeEach(async () => {
+    dir = freshTmpDir('create-issue-citation-spec');
+    store = await openTestIssueStore(join(dir, 'backlog.db'));
+  });
+
+  afterEach(async () => {
+    await store.close();
+    removeTestIssueStoreDir(dir);
+  });
+
+  /** The dst rowid of the single LIVE `has_citation` edge for `issueRowid`, or `undefined` — direct SQL, never the outcome object. */
+  async function citationDstRowid(
+    issueRowid: number
+  ): Promise<number | undefined> {
+    const { rows } = await store.adapter.executeAll<{ dst: number }>(
+      `SELECT dst FROM edge WHERE src = ? AND rel = 'has_citation' AND t_invalid IS NULL`,
+      [issueRowid]
+    );
+    return rows[0]?.dst;
+  }
+
+  /** The persisted `sha` on the issue's live citation node. Throws if the edge/node is absent so a silent mis-read is impossible. */
+  async function persistedCitationSha(issueRowid: number): Promise<unknown> {
+    const dst = await citationDstRowid(issueRowid);
+    if (dst === undefined)
+      throw new Error(
+        `expected a live has_citation edge for issue rowid ${issueRowid}, found none`
+      );
+    const { rows } = await store.adapter.executeAll<{ uid: string }>(
+      'SELECT uid FROM node WHERE rowid = ?',
+      [dst]
+    );
+    const uid = rows[0]?.uid;
+    if (uid === undefined)
+      throw new Error(`citation node for edge dst ${dst} not found`);
+    const citationRow = await readNode(store, uid);
+    return citationRow?.metadata?.['sha'];
+  }
+
+  it('path-less project: a citation is ACCEPTED and persists sha:"unverified" (the default citationRequiresSha:true gate is waived, not the policy)', async () => {
+    // `upsertProject` with no `path` — the project has no known filesystem
+    // root, so no citation target can be hashed. The policy itself is left at
+    // its default (`citationRequiresSha:true`); the gate simply has nothing
+    // to reject.
+    const project = await upsertProject(store, {
+      name: 'citation-pathless-project',
+      by: 'filer',
+    });
+    const created = await createIssue(store, {
+      project: project.uid,
+      title: 'path-less citation',
+      body: 'a project with no registered path cannot hash its citations',
+      by: 'filer',
+      citations: [{ file: 'src/whatever.ts' }],
+    });
+    expect(created.created).toBe(true);
+    const issueRow = await readNode(store, created.uid);
+    if (!issueRow) throw new Error('setup: issue not found after createIssue');
+    expect(await persistedCitationSha(issueRow.rowid)).toBe('unverified');
+  });
+
+  it('path-PRESENT project citing a MISSING file still hard-fails with CitationUnverifiableError — nothing is written', async () => {
+    const project = await upsertProject(store, {
+      name: 'citation-pathpresent-missing-project',
+      path: dir,
+      by: 'filer',
+    });
+    await expect(
+      createIssue(store, {
+        project: project.uid,
+        title: 'missing citation',
+        body: 'the cited file does not exist under the registered project path',
+        by: 'filer',
+        citations: [{ file: 'does-not-exist.ts' }],
+      })
+    ).rejects.toThrow(CitationUnverifiableError);
+  });
+
+  it('path-PRESENT project citing a REAL file computes a genuine sha256 — never "unverified"', async () => {
+    const citedPath = 'evidence.ts';
+    writeFileSync(join(dir, citedPath), 'export const x = 1;\n');
+    const project = await upsertProject(store, {
+      name: 'citation-pathpresent-real-project',
+      path: dir,
+      by: 'filer',
+    });
+    const created = await createIssue(store, {
+      project: project.uid,
+      title: 'real citation',
+      body: 'the cited file exists under the registered project path',
+      by: 'filer',
+      citations: [{ file: citedPath }],
+    });
+    expect(created.created).toBe(true);
+    const issueRow = await readNode(store, created.uid);
+    if (!issueRow) throw new Error('setup: issue not found after createIssue');
+    const sha = await persistedCitationSha(issueRow.rowid);
+    expect(sha).not.toBe('unverified');
+    expect(sha).toMatch(/^[0-9a-f]{64}$/);
   });
 });
