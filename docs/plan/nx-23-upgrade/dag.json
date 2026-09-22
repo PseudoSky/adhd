@@ -269,7 +269,8 @@
         "packages/workspace/workspace-base-tools/project.json",
         "packages/workspace/workspace-base-vite-paths/project.json",
         "packages/workspace/workspace-codegen-nx/project.json",
-        "project.json"
+        "project.json",
+        "nx.json"
       ],
       "context": "contexts/graph-test-build-inferred.md",
       "notes": "Phase 2a of the task-graph remodel: delete the 104 explicit executor targets that exactly shadow what the registered vitest and vite plugins already infer, carrying their options into the inferred configuration."
