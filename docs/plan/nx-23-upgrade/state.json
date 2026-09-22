@@ -81,10 +81,10 @@
       "end_ref": "131a0f4e1b70d762af3b49119c60d8494e3cdd0d"
     },
     "test-selection-revalidated": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-09-22T20:02:44.871Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "8899bb2b647120cfc2fdd8305cac0e7f9521c33e",
       "end_ref": null
     },
     "test-changed-optin": {
