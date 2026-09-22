@@ -434,7 +434,10 @@ required and enforced whenever the project's policy demands it (the
 default): a terminal transition with no citations, or with an unverifiable
 one, is rejected with `precondition_failed`. "Unverifiable" means the file
 could not be confirmed to exist under the project's own registered path —
-never resolved outside it.
+never resolved outside it. The verification gate applies only when the
+project HAS a registered path; a project with no `path` cannot hash any
+citation target at all, so its citations are accepted and recorded with
+`sha: "unverified"`.
 
 Name a `symbol` on a citation to get best-effort blast-radius enrichment for
 free — the store shells out to `gitnexus impact <symbol>` at write time

@@ -100,7 +100,8 @@ defaults exactly as below when a project carries no `policy` object at all:
 - `transitionRequiresNote` (default `true`)
 - `citationRequired` (default `false`)
 - `citationRequiresSha` (default `true` — gates acceptance of an unverified
-  citation with `CitationUnverifiableError`)
+  citation with `CitationUnverifiableError`, but only where verification is
+  possible: the owning project has a non-empty `path`)
 - `defaultStatus` (catalog ref; falls back to the global default when unset)
 - `defaultKind` (catalog ref; falls back to `'issue'` when unset)
 - `dedupeScanEnabled` (default `true`), `dedupeThreshold` (default `0.8`)
@@ -117,7 +118,9 @@ There is no `transition_requires_sha` field: a `transition` or `audit` node's
 is always computable — §4's "agent + note + sha REQUIRED" is a hard
 invariant, never policy-tunable. Only a `citation`'s `sha` (which hashes
 external file content) can legitimately fail to resolve, which is what
-`citationRequiresSha` gates.
+`citationRequiresSha` gates — and only when the owning project has a known
+`path`. A project with no `path` cannot hash any citation target, so its
+citations are accepted and record `sha: "unverified"` verbatim.
 
 ## 3. Entities (graph nodes)
 
