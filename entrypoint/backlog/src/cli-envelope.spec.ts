@@ -3,8 +3,11 @@
  *
  * Every assertion spawns the REAL BUILT `dist/index.js` as a child process
  * (AGENTS.md §7 "drive the real, BUILT consumer path, never an in-process
- * bypass"), against a throwaway `ADHD_BACKLOG_DATABASE_PATH` — never the
- * machine's real backlog graph.
+ * bypass"), against a throwaway `ADHD_BACKLOG_DATABASE_PATH` and a `HOME`
+ * redirected into the same throwaway root — never the machine's real backlog
+ * graph and never its real `~/.adhd/backlog/production/config.yaml` (the
+ * global config layer is read regardless of `ADHD_BACKLOG_SCOPE`, so pinning
+ * the DB path alone still left the machine's global config visible).
  *
  * It covers three defects that were invisible to every in-process test,
  * because all three live in the MOUNT, below `client.ts`:
@@ -53,6 +56,12 @@ function runBin(args: string[]): Run {
     env: {
       ...process.env,
       ADHD_BACKLOG_SCOPE: 'project',
+      // Redirect HOME so the GLOBAL config layer resolves under this
+      // throwaway root. `ADHD_BACKLOG_SCOPE=project` moves only the DATA
+      // root; the global layer is read unconditionally (see cli.spec.ts
+      // runBin's note). Without this, the child reads the real machine's
+      // `~/.adhd/backlog/production/config.yaml`.
+      HOME: tmpRoot,
       // The ONLY var that redirects the store. `BACKLOG_DB_PATH` is NOT
       // honored — using it silently writes to the real global graph.
       ADHD_BACKLOG_DATABASE_PATH: dbPath,
@@ -63,7 +72,11 @@ function runBin(args: string[]): Run {
   if (result.error) {
     throw new Error(`spawn failed: ${String(result.error)}`);
   }
-  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+  return {
+    status: result.status,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
 }
 
 function runJson(args: string[]): { run: Run; body: Record<string, unknown> } {
@@ -73,7 +86,9 @@ function runJson(args: string[]): { run: Run; body: Record<string, unknown> } {
   try {
     body = JSON.parse(line) as Record<string, unknown>;
   } catch {
-    throw new Error(`non-JSON stdout for ${args.join(' ')}: ${run.stdout}\n${run.stderr}`);
+    throw new Error(
+      `non-JSON stdout for ${args.join(' ')}: ${run.stdout}\n${run.stderr}`
+    );
   }
   return { run, body };
 }
@@ -87,7 +102,12 @@ beforeAll(() => {
     'create',
     '--input',
     JSON.stringify({
-      item: { family: 'BUG', title: 'envelope seam item', body: 'b', repo: REPO },
+      item: {
+        family: 'BUG',
+        title: 'envelope seam item',
+        body: 'b',
+        repo: REPO,
+      },
       by: 'cli-envelope.spec',
       duplicateAction: 'file',
     }),
@@ -136,7 +156,11 @@ describe('outcome envelope over the real CLI mount', () => {
   });
 
   it('a successful query carries its pagination meta', () => {
-    const { run, body } = runJson(['query', '--input', JSON.stringify({ view: 'list', limit: 2 })]);
+    const { run, body } = runJson([
+      'query',
+      '--input',
+      JSON.stringify({ view: 'list', limit: 2 }),
+    ]);
     expect(run.status).toBe(0);
     // `meta` is declared only on the success arm, so it was stripped too.
     const meta = body['meta'] as Record<string, unknown> | undefined;
@@ -170,7 +194,11 @@ describe('exit-code contract (INTERFACE_v2 §7.1)', () => {
   });
 
   it('a successful call still exits 0', () => {
-    const { run } = runJson(['query', '--input', JSON.stringify({ view: 'list', limit: 1 })]);
+    const { run } = runJson([
+      'query',
+      '--input',
+      JSON.stringify({ view: 'list', limit: 1 }),
+    ]);
     expect(run.status).toBe(0);
   });
 
@@ -206,7 +234,12 @@ describe('backlog_admin tagged report union over the real CLI mount (BUG-BACKLOG
       'create',
       '--input',
       JSON.stringify({
-        item: { family: 'BUG', title: 'reconcile seed item', body: 'b', repo: RECONCILE_REPO },
+        item: {
+          family: 'BUG',
+          title: 'reconcile seed item',
+          body: 'b',
+          repo: RECONCILE_REPO,
+        },
         by: 'cli-envelope.spec',
       }),
     ]);
@@ -218,7 +251,10 @@ describe('backlog_admin tagged report union over the real CLI mount (BUG-BACKLOG
     const { run, body } = runJson([
       'admin',
       '--input',
-      JSON.stringify({ action: 'reconcile_repo', params: { from: RECONCILE_REPO, to: REPO } }),
+      JSON.stringify({
+        action: 'reconcile_repo',
+        params: { from: RECONCILE_REPO, to: REPO },
+      }),
     ]);
     expect(run.status).toBe(0);
     expect(body['ok']).toBe(true);
@@ -226,28 +262,41 @@ describe('backlog_admin tagged report union over the real CLI mount (BUG-BACKLOG
     expect(data?.['action']).toBe('reconcile_repo');
     const report = data?.['report'] as Record<string, unknown> | undefined;
     // The whole defect: `report` used to arrive as `{}`.
-    expect(report, 'reconcile_repo report was collapsed to {} by the mount').toBeDefined();
+    expect(
+      report,
+      'reconcile_repo report was collapsed to {} by the mount'
+    ).toBeDefined();
     expect(report?.['fromRepo']).toBe(RECONCILE_REPO);
     expect(report?.['toRepo']).toBe(REPO);
     expect(report?.['dryRun']).toBe(true);
     const plan = report?.['plan'] as Record<string, unknown> | undefined;
-    expect(plan, 'reconcile_repo report.plan was dropped by the mount').toBeDefined();
+    expect(
+      plan,
+      'reconcile_repo report.plan was dropped by the mount'
+    ).toBeDefined();
     expect(plan?.['fromRepo']).toBe(RECONCILE_REPO);
     expect(plan?.['toRepo']).toBe(REPO);
     expect(Array.isArray(plan?.['items'])).toBe(true);
     expect((plan?.['items'] as unknown[]).length).toBeGreaterThan(0);
   });
 
-  it("a sibling action with the SAME {action,report} shape (prune) is also no longer collapsed", () => {
+  it('a sibling action with the SAME {action,report} shape (prune) is also no longer collapsed', () => {
     // Proves the fix is general (fixes the discriminator, not a backlog-
     // specific reconcile_repo special-case) — `prune` shares `doctor`'s exact
     // property names and was silently re-encoded as `doctor`'s report too.
-    const { run, body } = runJson(['admin', '--input', JSON.stringify({ action: 'prune', params: {} })]);
+    const { run, body } = runJson([
+      'admin',
+      '--input',
+      JSON.stringify({ action: 'prune', params: {} }),
+    ]);
     expect(run.status).toBe(0);
     const data = body['data'] as Record<string, unknown> | undefined;
     expect(data?.['action']).toBe('prune');
     const report = data?.['report'] as Record<string, unknown> | undefined;
-    expect(report, 'prune report was collapsed to {} by the mount').toBeDefined();
+    expect(
+      report,
+      'prune report was collapsed to {} by the mount'
+    ).toBeDefined();
     // `IPruneReport` has no `scannedItems`/`checks` (doctor's fields) — a
     // report silently re-encoded as doctor's would come back as `{}` since
     // prune's actual value has none of doctor's declared property names.
@@ -256,7 +305,11 @@ describe('backlog_admin tagged report union over the real CLI mount (BUG-BACKLOG
   });
 
   it("doctor's own report (branch 0 — the accidental tie-break winner) is unaffected", () => {
-    const { run, body } = runJson(['admin', '--input', JSON.stringify({ action: 'doctor', params: {} })]);
+    const { run, body } = runJson([
+      'admin',
+      '--input',
+      JSON.stringify({ action: 'doctor', params: {} }),
+    ]);
     expect(run.status).toBe(0);
     const data = body['data'] as Record<string, unknown> | undefined;
     expect(data?.['action']).toBe('doctor');
