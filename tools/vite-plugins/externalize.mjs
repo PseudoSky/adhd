@@ -9,24 +9,31 @@ import { computeRealDependencyNames } from '../nx-plugins/deps/compute-real-deps
  * (transitively) depends on — plus every Node builtin. `@adhd/*` package
  * names themselves are never externalized.
  *
- * WHY `@adhd/*` packages stay bundled (not externalized): this monorepo's
- * root `package.json` has no `workspaces` field and `node_modules/@adhd/*`
- * has no symlinks to the in-repo packages — there is no yarn/npm workspace
- * linking at all. `@adhd/*` imports only resolve today via Nx's
- * `tsconfig.base.json` path mapping, which vite's `nxViteTsPaths()` plugin
- * follows straight to SOURCE at build time. An unbundled
- * `require('@adhd/x')` (e.g. from an `@nx/js:tsc` build, or from an
- * externalized vite build) has nothing to resolve against at runtime and
- * throws `Cannot find module '@adhd/x'` / `ERR_MODULE_NOT_FOUND` — verified
- * directly in this repo (devops-engineer session, 2026-07-20): switching
- * `apigen-core-client` to `@nx/js:tsc` made its own `require('@adhd/apigen-
- * base-logical')` fail exactly this way, and `agent-mcp`/`decompile-cli`/
- * `agent-engine-compiler`/`agent-engine-orchestrator` (already on
- * `@nx/js:tsc`, already depending on sibling `@adhd/*` packages at runtime,
- * not just types) fail identically today — see BACKLOG.md
- * `BUG-WORKSPACE-NO-LINKING-001`. Bundling `@adhd/*` source is the only
- * mechanism in this repo that currently makes cross-package runtime imports
- * work, so it must stay bundled even while everything else is externalized.
+ * WHY `@adhd/*` packages stay bundled (not externalized): every in-repo
+ * package IS linked into its dependents' `node_modules` by pnpm today
+ * (`packages/<domain>/<pkg>/node_modules/@adhd/<dep>` -> `../../../<dep>`;
+ * verified 2026-09-20 for `data-query-engine` -> `data-base-transforms`).
+ * This policy predates that linking and was originally justified by its
+ * absence: at the time, `@adhd/*` resolved only via Nx's `tsconfig.base.json`
+ * path mapping, which vite's `nxViteTsPaths()` plugin follows straight to
+ * SOURCE at build time, so an unbundled `require('@adhd/x')` (e.g. from an
+ * `@nx/js:tsc` build, or from an externalized vite build) had nothing to
+ * resolve against at runtime and threw `Cannot find module '@adhd/x'` /
+ * `ERR_MODULE_NOT_FOUND` — verified directly in this repo (devops-engineer
+ * session, 2026-07-20): switching `apigen-core-client` to `@nx/js:tsc` made
+ * its own `require('@adhd/apigen-base-logical')` fail exactly this way, as
+ * did `agent-mcp`/`decompile-cli`/`agent-engine-compiler`/
+ * `agent-engine-orchestrator` (already on `@nx/js:tsc`, already depending on
+ * sibling `@adhd/*` packages at runtime, not just types) — see BACKLOG.md
+ * `BUG-WORKSPACE-NO-LINKING-001`. Bundling `@adhd/*` source remains the
+ * mechanism that makes cross-package runtime imports work, so the policy is
+ * unchanged.
+ *
+ * RE-EXAMINE (explicitly out of scope for this change): the original "no
+ * linking at all" premise no longer holds, so whether `@adhd/*` should still
+ * be force-bundled — versus externalized and resolved through the pnpm
+ * symlink — warrants a fresh look. This comment only records the current
+ * state; bundling behavior is deliberately left untouched.
  *
  * WHY THIS MUST BE TRANSITIVE, not just the package's own package.json:
  * `@adhd/apigen-plugin-api-express` does not itself list `ts-morph` as a

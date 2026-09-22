@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { importMetaUrlCjs } from '../../tools/vite-plugins/import-meta-url-cjs.mjs';
+import { nxViteTsPathsPre } from '../../tools/vite-plugins/source-resolution.mjs';
 import { projectCacheDir, projectCoverage } from '../../packages/workspace/workspace-base-vite-paths/src/index';
 import { externalizeRealDeps } from '../../tools/vite-plugins/externalize.mjs';
 
@@ -65,6 +66,7 @@ export default defineConfig({
   plugins: [
     importMetaUrlCjs(),
     nxViteTsPaths(),
+    nxViteTsPathsPre(),
     dts({
       entryRoot: 'src',
       tsconfigPath: path.join(__dirname, 'tsconfig.lib.json'),

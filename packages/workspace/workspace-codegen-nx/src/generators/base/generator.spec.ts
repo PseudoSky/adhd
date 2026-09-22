@@ -102,4 +102,64 @@ describe('base generator — vite external-deps enforcement', () => {
     // `require('node:url')`/`__filename` are not defined there — do not wire it.
     expect(viteConfig).not.toContain('importMetaUrlCjs');
   });
+
+  it('wires the centralized test-time source-resolution plugin into the generated config', async () => {
+    await baseGenerator(tree, {
+      name: 'widget',
+      group: 'billing',
+      nxLayer: 'logic',
+      platform: 'node',
+    });
+
+    const viteConfig = tree.read(
+      'packages/billing/billing-base-widget/vite.config.mts',
+      'utf-8'
+    );
+    // The helper is imported, not duplicated inline.
+    expect(viteConfig).toContain(
+      "import { nxViteTsPathsPre } from '../../../tools/vite-plugins/source-resolution.mjs';"
+    );
+    // It is invoked, and sits immediately after the normal-order plugin so it
+    // lands in `plugins: []` ahead of vite:resolve. The template emits the array
+    // inline (`plugins: [importMetaUrlCjs(), nxViteTsPaths(), nxViteTsPathsPre(), …]`),
+    // so accept any whitespace between the two calls, not a literal newline.
+    expect(viteConfig).toContain('nxViteTsPathsPre()');
+    expect(viteConfig).toMatch(/nxViteTsPaths\(\),\s*nxViteTsPathsPre\(\),/);
+  });
+
+  it('wires the source-resolution plugin for platform:browser too (tests still import @adhd/*)', async () => {
+    await baseGenerator(tree, {
+      name: 'widget',
+      group: 'billing',
+      nxLayer: 'ui-primitives',
+      platform: 'browser',
+    });
+
+    const viteConfig = tree.read(
+      'packages/billing/billing-base-widget/vite.config.mts',
+      'utf-8'
+    );
+    expect(viteConfig).toContain('nxViteTsPathsPre()');
+  });
+
+  it('emits the BUG-062 caution note (so a project author adding a real-Node child-process test sees the opt-out path)', async () => {
+    await baseGenerator(tree, {
+      name: 'widget',
+      group: 'billing',
+      nxLayer: 'logic',
+      platform: 'node',
+    });
+
+    const viteConfig = tree.read(
+      'packages/billing/billing-base-widget/vite.config.mts',
+      'utf-8'
+    );
+    // The note is what tells a future author to DELETE the pre-ordered plugin
+    // when their tests spawn a real-Node child (BUG-062) — it must actually be
+    // present, not merely described in the generator source.
+    expect(viteConfig).toContain('NOTE (test resolution)');
+    // ...and it must not itself defeat the idempotency guards it warns about.
+    expect(viteConfig.match(/source-resolution\.mjs/g)?.length).toBe(1);
+    expect(viteConfig.match(/nxViteTsPathsPre\(\)/g)?.length).toBe(1);
+  });
 });
