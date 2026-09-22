@@ -18,11 +18,11 @@
       "end_ref": "f96701879cc2818293fa75f079ba2c41757f3126"
     },
     "config-repair-absorbed": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-09-22T13:58:15.344Z",
-      "done_at": null,
+      "done_at": "2026-09-22T13:59:56.852Z",
       "start_ref": "fa87b1ab14e212237b25301782ba79966e2afb33",
-      "end_ref": null
+      "end_ref": "bf185772212d10d1524db9b8c6e82192ee6265c0"
     },
     "test-resolution-absorbed": {
       "status": "pending",
@@ -197,6 +197,18 @@
       "audit_criteria_total": 29,
       "by": "pseudosky",
       "note": "Wrote docs/plan/nx-23-upgrade/TRIAGE-VERDICTS.md recording all three gate failures: apigen-cli and backlog = CAUSED BY VITE 8, explained+fixed by vite-cjs-import-meta-repair (7916e639); apigen-plugin-java-javalin = open FLAKE (shared packages/apigen/java/target mvn collision), not a regression; plus vectors.spec.ts duplicate-import regression fixed. Validated fix holds on vite 8 toolchain: nx test apigen-cli = 29 files/192 tests pass exit 0; nx test backlog = 64 files/701 pass +3 skip exit 0. Guard green (TRIAGE-VERDICTS.md exists, cites apigen-cli + apigen-plugin-java-javalin, nx show projects resolves backlog). Committed f9670187."
+    },
+    {
+      "ts": "2026-09-22T13:59:56.852Z",
+      "from": "config-repair-absorbed",
+      "to": "config-repair-absorbed",
+      "start_ref": "fa87b1ab14e212237b25301782ba79966e2afb33",
+      "end_ref": "bf185772212d10d1524db9b8c6e82192ee6265c0",
+      "audit_exit": 4,
+      "audit_criteria_passed": 35,
+      "audit_criteria_total": 39,
+      "by": "pseudosky",
+      "note": "Verification-only: guard was ALREADY GREEN before work (main merge f03b9aef carried 0d110a50 + f48ccdaa). Verified .1 test.dependsOn=[\"lint\",\"^build\"]; .2 0/9 self-referential scripts.build remain; .3 agent-core-env exposes inferred @nx/vite:build target; .4 nx build agent-core-env exit 0. Recorded degenerate guard ([inv:guards-are-red-then-green]) + perf/nx-cfgfix redundancy (4 commits, superseded). No reserved files modified."
     }
   ],
   "amendment_log": [
@@ -233,7 +245,7 @@
     "version": "0.8.25",
     "hash": "961c3053dfab"
   },
-  "current_state": "config-repair-absorbed",
+  "current_state": "test-resolution-absorbed",
   "dod_provenance": {
     "confirmed_at": "2026-09-22T02:05:38.210Z",
     "by": "pseudosky",
