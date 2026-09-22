@@ -200,6 +200,63 @@ function isNxTask(): boolean {
 }
 
 /**
+ * The shaded-jar filename `packages/apigen/java/pom.xml` declares. Maven's
+ * attached shaded artifact is named `<finalName>-<shadedClassifierName>.jar`
+ * (the pom sets `finalName` to `apigen-java` and `shadedClassifierName` to
+ * `all`, i.e. `apigen-java-all.jar`). Returns `undefined` when either element
+ * is absent, so the caller falls back to newest-mtime selection.
+ */
+function expectedFatJarName(javaPkgDir: string): string | undefined {
+  try {
+    const pom = fs.readFileSync(path.join(javaPkgDir, 'pom.xml'), 'utf-8');
+    const finalName = /<finalName>\s*([^<\s]+)\s*<\/finalName>/.exec(pom)?.[1];
+    if (!finalName) return undefined;
+    const classifier =
+      /<shadedClassifierName>\s*([^<\s]+)\s*<\/shadedClassifierName>/.exec(
+        pom
+      )?.[1] ?? 'all';
+    return `${finalName}-${classifier}.jar`;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Deterministically choose the shaded fat jar in `target/`.
+ *
+ * The previous `readdirSync(targetDir).find((f) => f.endsWith('-all.jar'))`
+ * returned whichever candidate the filesystem happened to list FIRST, so a
+ * stale `*-all.jar` left behind by an earlier build (e.g. a different
+ * `<finalName>`/version — `target/` is not emptied between builds) could be
+ * selected instead of the jar the current build produced, making a test
+ * outcome depend on readdir order (backlog 7e3852df). We (1) prefer the exact
+ * filename `pom.xml` declares, and (2) otherwise pick the NEWEST by mtime,
+ * breaking ties by name so the result is a total order.
+ */
+export function selectFatJar(javaPkgDir: string): string | undefined {
+  const targetDir = path.join(javaPkgDir, 'target');
+  if (!fs.existsSync(targetDir)) return undefined;
+
+  const expected = expectedFatJarName(javaPkgDir);
+  if (expected && fs.existsSync(path.join(targetDir, expected))) {
+    return expected;
+  }
+
+  const candidates = fs
+    .readdirSync(targetDir)
+    .filter((f) => f.endsWith('-all.jar'));
+  if (candidates.length === 0) return undefined;
+
+  return candidates
+    .map((name) => ({
+      name,
+      mtimeMs: fs.statSync(path.join(targetDir, name)).mtimeMs,
+    }))
+    .sort((a, b) => b.mtimeMs - a.mtimeMs || a.name.localeCompare(b.name))[0]
+    .name;
+}
+
+/**
  * Find the shaded/fat jar `packages/apigen/java`'s `package` target
  * produces.
  *
@@ -220,9 +277,7 @@ function findFatJar(javaPkgDir: string): string {
   const targetDir = path.join(javaPkgDir, 'target');
 
   if (isNxTask()) {
-    const prebuilt = fs.existsSync(targetDir)
-      ? fs.readdirSync(targetDir).find((f) => f.endsWith('-all.jar'))
-      : undefined;
+    const prebuilt = selectFatJar(javaPkgDir);
     if (!prebuilt) {
       throw new Error(
         `java-javalin: running under Nx (NX_TASK_TARGET_TARGET=${String(
@@ -250,7 +305,7 @@ function findFatJar(javaPkgDir: string): string {
         `--- stdout ---\n${result.stdout ?? ''}\n--- stderr ---\n${result.stderr ?? ''}`
     );
   }
-  const rebuilt = fs.readdirSync(targetDir).find((f) => f.endsWith('-all.jar'));
+  const rebuilt = selectFatJar(javaPkgDir);
   if (!rebuilt) {
     throw new Error(
       `java-javalin: mvn package succeeded but no *-all.jar found in ${targetDir}`
