@@ -15,7 +15,9 @@ Before publishing the plan, verify every box. If any item fails, the plan does n
     measured defects the original 13 did not cover, and are recorded in
     APPROVAL.md § Amendment 2026-09-21 as pending owner re-acknowledgement.
 [x] Every [dod.N] is proven by a final-audit check (gap-check.js Check 8) —
-    15 `dod.N` entries in scripts/criteria.json; gap-check green.
+    15 `dod.N` entries in scripts/criteria.json; gap-check green. Since the
+    2026-09-22 audit waiver the proving check runs in the terminal state's
+    accumulated final-phase audit, not in a dedicated `audit-final` hold.
 [x] Every BEHAVIORAL [dod.N] declares `entrypoint:`/`observable:` and is proven
     by a check that DRIVES that entrypoint (tier 3) — not a grep/test -e proxy.
     dod.3/5/6/7/14/15 are behavioral; each `dod.N` criterion's cmd contains the
@@ -30,8 +32,10 @@ Before publishing the plan, verify every box. If any item fails, the plan does n
     scripts/check-zero-selection.mjs + check-cross-package-selection.mjs —
     one path, two checks, no isolated pair.
 [x] Final audit emits a `[dod.N] PASS` line per clause and the terminal
-    transition's DoD-confirmation gate is satisfiable. guard_audit_final.py
-    refuses green if any declared [dod.N] emitted no executed PASS marker.
+    transition's DoD-confirmation gate is satisfiable. `state-transition.js`
+    refuses `done` (exit 4, `dod_unconfirmed`) if any declared `[dod.N]` emitted
+    no executed PASS in the terminal state's final-phase audit. `guard_audit_final.py`
+    (retired 2026-09-22) enforced the same rule while it existed.
 [x] Final audit written first — every design principle has a named check.
     The DoD was authored before the `dod.N` proof criteria; each state's
     criteria were authored with its context.
@@ -64,14 +68,16 @@ Structure (dag.json / state.json / _shared.md):
 [x] dag.json holds structure; state.json holds runtime only (status,
     timestamps, logs).
 [x] Slug set in dag.json.nodes == slug set in state.json.states; every context
-    path exists (20/20) — enforced by gap-check Check 1.
+    path exists (17/17) — enforced by gap-check Check 1.
 [x] Shared definitions centralized in contexts/_shared.md — no concept
     restated across contexts. 17 `[def:]/[inv:]/[shape:]/[fix:]` entries,
     including the two the repair pass added (`[def:empty-import-meta]`,
     `[inv:bump-lands-with-its-fix]`, `[inv:guards-prove-the-artifact-loads]`).
 
 Per-state completeness (verified for every work state):
-[x] Acceptance criteria section present. 109 criteria across 20 states; every
+[x] Acceptance criteria section present. 103 criteria across 17 states (109/20
+    before the 2026-09-22 audit waiver removed the six self-referential
+    `audit-{graph,tests,final}.{1,2}` guard-existence criteria); every
     modified file group has a criterion, and every deletion has a negative
     (`absent`) criterion. The negative-control criteria
     (`vite-cjs-import-meta-repair.9`, `browser-cjs-umd-repair.6`,
@@ -83,7 +89,7 @@ Per-state completeness (verified for every work state):
 [x] reservations.mutates is populated — every file the state creates or changes
     is listed.
 [x] dag.json node's artifacts array matches reservations.mutates exactly —
-    verified programmatically for all 20 nodes.
+    verified programmatically for all 17 nodes.
 [x] Commit points section present — mandatory post-guard commit on every state.
 [x] Shared-file merge protocols written. N/A — the graph is deliberately
     linear (no two states share a mutable file without a depends_on edge), so
@@ -106,6 +112,10 @@ Guards and audits:
     markers instead of `[audit.no-criteria] FAIL`. See *Open items* below for the
     full list. Re-verify by running
     `python3 docs/plan/nx-23-upgrade/scripts/guard_audit_reconcile.py`.
+    **Updated 2026-09-22:** the `graph`/`tests`/`final` audit gates were waived by
+    owner directive. `audit-graph` did run — exit 0, 74/74 criteria, 0 FAIL — but
+    its completion transition re-runs that same gate, which the owner forbade, so
+    it is waived rather than recorded complete (see *Open items*).
 [x] All criteria are deterministic commands — no prose, AST checks over greps
     where ambiguous (`absent` on the executor strings is an exact literal, not
     a loose grep).
@@ -137,6 +147,19 @@ Hand off:
 
 ## Open items carried, not hidden
 
+- **The `graph`/`tests`/`final` audit holds were waived by owner directive (2026-09-22).**
+  `audit-graph`, `audit-tests` and `audit-final` are no longer DAG nodes. `audit-graph` **did
+  run green** — exit 0, 74/74 criteria, 0 FAIL, completed 2026-09-22T15:01:11 EDT (recorded in
+  `orchestration-ledger.md` F15/F16) — but it is **waived, not recorded complete**: the only
+  sanctioned completion path (`state-transition.js --complete`) re-runs the guard, which the
+  owner forbade, and a hand-written completion with no guard re-run would be an uncertified
+  completion. `audit-tests` and `audit-final` never ran. Their `scripts/guard_audit_*.py` files
+  remain on disk. Consequences, recorded rather than hidden: **(a)** the DoD is no longer proven
+  by a dedicated pre-landing hold — it is confirmed inline by the terminal state
+  (`test-changed-optin`); **(b)** **no state certifies the landing decision** (push/merge/publish),
+  which remains a human call; **(c)** the waiver is an owner directive, not a re-elicitation —
+  `dod_provenance` still lists the original 13 clauses and has deliberately not been re-stamped.
+  See `APPROVAL.md` § *Amendment 2026-09-22 — audit waiver*.
 - **`[dod.14]` / `[dod.15]` post-date the GATE 2 approval.** They are derived from
   measured defects (`BUG-BUILD-002` and the React-19 build breakage), not from new goals, but
   they were authored after the approval recorded in `APPROVAL.md`. That file carries an
@@ -176,7 +199,10 @@ while its hold points could not have passed. They were found by *running* the ga
    again — unbounded recursion, and for `audit-final` it re-ran *every* criterion. Defects 1
    and 2 masked this: the guard died on `[audit.no-criteria]` before recursing.
    *Fix:* each is now a non-recursive `present` check asserting the guard passes the runner
-   `--criteria`, which also pins defect 1 against regression.
+   `--criteria`, which also pins defect 1 against regression. **Updated 2026-09-22:** the
+   `graph`/`tests`/`final` instances (`audit-graph.2`, `audit-tests.2`, `audit-final.2`) were
+   removed from `criteria.json` when their states were waived; the `reconcile`/`config`
+   instances remain and still pin the `--criteria` wiring.
 4. **A false claim about generation.** See the corrected checklist item above.
 
 **Verified after the fix:** `guard_audit_reconcile.py` completes in ~55s and emits 39 real

@@ -1,6 +1,6 @@
 # test-changed-optin — Fail-safe file-level test selection delivered
 
-**Phase:** tests · **Kind:** work · **Depends on:** test-selection-revalidated · **Guard:** `node -e "const s=require(\"./package.json\").scripts;if(!s[\"test:changed\"]||!s[\"test:related\"])process.exit(1)" && ./node_modules/.bin/nx show projects | rg -q "backlog" && test -f docs/plan/nx-23-upgrade/TEST-SELECTION.md`
+**Phase:** final · **Kind:** work (terminal) · **Depends on:** test-selection-revalidated · **Guard:** `node -e "const s=require(\"./package.json\").scripts;if(!s[\"test:changed\"]||!s[\"test:related\"])process.exit(1)" && ./node_modules/.bin/nx show projects | rg -q "backlog" && test -f docs/plan/nx-23-upgrade/TEST-SELECTION.md`
 
 ---
 
@@ -68,3 +68,5 @@ mutates:    ["package.json", "docs/plan/nx-23-upgrade/TEST-SELECTION.md", "docs/
 ## Notes for executor
 
 Deliver the fail-safe design: full suite stays the default, the fast path is explicit opt-in, and a run that selects zero tests must FAIL rather than report success.
+
+**Terminal state since 2026-09-22 (audit waiver).** `audit-tests` and `audit-final` were retired by owner directive ("the audit is un-needed"), so this state carries phase `final`. It is the last state in the DAG: when its guard passes, `state-transition.js --complete` runs the accumulated **final-phase** audit (every `[dod.N]` clause plus the `[ref:]`/`[iface:]` conformance checks), which is the only path by which this state machine reaches `done` while the DoD-confirmation gate is active. That makes this state's completion the plan's DoD-confirmation boundary — the role the retired `audit-final` hold used to play. It is still a HOLD, not a landing: no state pushes, merges, or publishes. See `APPROVAL.md` § *Amendment 2026-09-22 — audit waiver*.
