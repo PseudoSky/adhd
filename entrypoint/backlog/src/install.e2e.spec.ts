@@ -22,7 +22,10 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { install, BACKLOG_MCP_NPX_ARGS } from './install.js';
-import { buildBacklogApigenPackage, resolveExpectedMcpToolNames } from './server.js';
+import {
+  buildBacklogApigenPackage,
+  resolveExpectedMcpToolNames,
+} from './server.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
@@ -37,7 +40,9 @@ const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
  */
 async function expectedMcpToolNames(): Promise<string[]> {
   const { operations } = await buildBacklogApigenPackage(() => {
-    throw new Error('expectedMcpToolNames: store must never be opened just to enumerate tool names');
+    throw new Error(
+      'expectedMcpToolNames: store must never be opened just to enumerate tool names'
+    );
   });
   return resolveExpectedMcpToolNames(operations);
 }
@@ -61,16 +66,30 @@ describe('BUG-013 — install-written MCP config actually launches a working rea
 
   it('the exact args install.ts writes are the intended portable npx invocation (assertion on the config content itself, before ever spawning anything)', () => {
     tmp = mkdtempSync(join(tmpdir(), 'backlog-install-e2e-argcheck-'));
-    const result = install(['--host', 'claude', '--scope', 'user', '--mcp-only'], tmp, tmp);
+    const result = install(
+      ['--host', 'claude', '--scope', 'user', '--mcp-only'],
+      tmp,
+      tmp
+    );
     const doc = JSON.parse(readFileSync(result.mcp[0]!.configPath, 'utf8'));
     expect(doc.mcpServers.backlog.command).toBe('npx');
     expect(doc.mcpServers.backlog.args).toEqual([...BACKLOG_MCP_NPX_ARGS]);
-    expect(BACKLOG_MCP_NPX_ARGS).toEqual(['-y', '@adhd/backlog@latest', 'serve', '--transport', 'mcp']);
+    expect(BACKLOG_MCP_NPX_ARGS).toEqual([
+      '-y',
+      '@adhd/backlog@latest',
+      'serve',
+      '--transport',
+      'mcp',
+    ]);
   });
 
   it('claude-style config: spawning the real dist/index.js serve --transport mcp (the local stand-in for the written npx invocation) advertises all 7 real tools', async () => {
     tmp = mkdtempSync(join(tmpdir(), 'backlog-install-e2e-claude-'));
-    const result = install(['--host', 'claude', '--scope', 'user', '--mcp-only'], tmp, tmp);
+    const result = install(
+      ['--host', 'claude', '--scope', 'user', '--mcp-only'],
+      tmp,
+      tmp
+    );
     const doc = JSON.parse(readFileSync(result.mcp[0]!.configPath, 'utf8')) as {
       mcpServers: { backlog: { command: string; args: string[] } };
     };
@@ -87,9 +106,17 @@ describe('BUG-013 — install-written MCP config actually launches a working rea
       command: process.execPath,
       args: [DIST_INDEX, ...servArgsTail],
       cwd: adhdRoot,
-      env: { ADHD_BACKLOG_SCOPE: 'project', VITEST: 'true', HOME: process.env['HOME'] ?? '', PATH: process.env['PATH'] ?? '' },
+      env: {
+        ADHD_BACKLOG_SCOPE: 'project',
+        VITEST: 'true',
+        HOME: adhdRoot,
+        PATH: process.env['PATH'] ?? '',
+      },
     });
-    client = new Client({ name: 'backlog-install-e2e-claude', version: '1.0.0' }, { capabilities: {} });
+    client = new Client(
+      { name: 'backlog-install-e2e-claude', version: '1.0.0' },
+      { capabilities: {} }
+    );
     await client.connect(transport);
 
     const tools = await client.listTools();
@@ -106,7 +133,11 @@ describe('BUG-013 — install-written MCP config actually launches a working rea
 
   it('opencode-style config: spawning the real dist/index.js via the written command ARRAY shape advertises the real tool set', async () => {
     tmp = mkdtempSync(join(tmpdir(), 'backlog-install-e2e-opencode-'));
-    const result = install(['--host', 'opencode', '--scope', 'user', '--mcp-only'], tmp, tmp);
+    const result = install(
+      ['--host', 'opencode', '--scope', 'user', '--mcp-only'],
+      tmp,
+      tmp
+    );
     const doc = JSON.parse(readFileSync(result.mcp[0]!.configPath, 'utf8')) as {
       mcp: { backlog: { type: string; command: string[] } };
     };
@@ -119,14 +150,24 @@ describe('BUG-013 — install-written MCP config actually launches a working rea
     const servArgsTail = doc.mcp.backlog.command.slice(3);
     expect(servArgsTail).toEqual(['serve', '--transport', 'mcp']);
 
-    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-install-e2e-opencode-adhd-'));
+    adhdRoot = mkdtempSync(
+      join(tmpdir(), 'backlog-install-e2e-opencode-adhd-')
+    );
     transport = new StdioClientTransport({
       command: process.execPath,
       args: [DIST_INDEX, ...servArgsTail],
       cwd: adhdRoot,
-      env: { ADHD_BACKLOG_SCOPE: 'project', VITEST: 'true', HOME: process.env['HOME'] ?? '', PATH: process.env['PATH'] ?? '' },
+      env: {
+        ADHD_BACKLOG_SCOPE: 'project',
+        VITEST: 'true',
+        HOME: adhdRoot,
+        PATH: process.env['PATH'] ?? '',
+      },
     });
-    client = new Client({ name: 'backlog-install-e2e-opencode', version: '1.0.0' }, { capabilities: {} });
+    client = new Client(
+      { name: 'backlog-install-e2e-opencode', version: '1.0.0' },
+      { capabilities: {} }
+    );
     await client.connect(transport);
 
     const tools = await client.listTools();

@@ -17,7 +17,10 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { buildBacklogApigenPackage, resolveExpectedMcpToolNames } from './server.js';
+import {
+  buildBacklogApigenPackage,
+  resolveExpectedMcpToolNames,
+} from './server.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
@@ -25,7 +28,9 @@ const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
 /** See install.e2e.spec.ts's identical helper doc comment. */
 async function expectedMcpToolNames(): Promise<string[]> {
   const { operations } = await buildBacklogApigenPackage(() => {
-    throw new Error('expectedMcpToolNames: store must never be opened just to enumerate tool names');
+    throw new Error(
+      'expectedMcpToolNames: store must never be opened just to enumerate tool names'
+    );
   });
   return resolveExpectedMcpToolNames(operations);
 }
@@ -56,9 +61,20 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
       command: 'node',
       args: [DIST_INDEX, 'serve', '--transport', 'mcp'],
       cwd: adhdRoot,
-      env: { ...(process.env as Record<string, string>), ADHD_BACKLOG_SCOPE: 'project' },
+      // HOME redirect is required alongside `ADHD_BACKLOG_SCOPE=project`: the
+      // global config layer is read regardless of scope (see cli.spec.ts
+      // runBin's note), so without it this child reads the real machine's
+      // `~/.adhd/backlog/production/config.yaml`.
+      env: {
+        ...(process.env as Record<string, string>),
+        ADHD_BACKLOG_SCOPE: 'project',
+        HOME: adhdRoot,
+      },
     });
-    client = new Client({ name: 'backlog-serve-cli-test-client', version: '1.0.0' }, { capabilities: {} });
+    client = new Client(
+      { name: 'backlog-serve-cli-test-client', version: '1.0.0' },
+      { capabilities: {} }
+    );
     await client.connect(transport);
 
     const tools = await client.listTools();
@@ -81,10 +97,23 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
     const createResult = await client.callTool({
       name: 'backlog_create',
       arguments: {
-        data: { input: { item: { family: 'BUG-SERVECLI', title: 'created via serve cli', body: 'x', repo }, by: 'serve.spec' } },
+        data: {
+          input: {
+            item: {
+              family: 'BUG-SERVECLI',
+              title: 'created via serve cli',
+              body: 'x',
+              repo,
+            },
+            by: 'serve.spec',
+          },
+        },
       },
     });
-    const createContent = createResult.content as Array<{ type: string; text: string }>;
+    const createContent = createResult.content as Array<{
+      type: string;
+      text: string;
+    }>;
     // Real observed shape: the §7.1 outcome envelope `{ ok, data }`, where
     // `data` is `ICreateOutcome` — `humanId` lives at `data.humanId`
     // directly, never nested under a `data.item.humanId` (BUG-BACKLOG-V2-
@@ -106,8 +135,14 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
       name: 'backlog_get',
       arguments: { data: { input: { repo, humanId: created.data.humanId } } },
     });
-    const getContent = getResult.content as Array<{ type: string; text: string }>;
-    const got = JSON.parse(getContent[0]?.text ?? '{}') as { ok: boolean; data: { title: string } };
+    const getContent = getResult.content as Array<{
+      type: string;
+      text: string;
+    }>;
+    const got = JSON.parse(getContent[0]?.text ?? '{}') as {
+      ok: boolean;
+      data: { title: string };
+    };
     expect(got.ok).toBe(true);
     expect(got.data.title).toBe('created via serve cli');
   }, 30_000);
@@ -115,12 +150,16 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
   it('BUG-033: `serve --help` prints usage and exits 0 — never a raw unhandled-exception stack trace', async () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-serve-cli-help-'));
     const { spawnSync } = await import('node:child_process');
-    const result = spawnSync(process.execPath, [DIST_INDEX, 'serve', '--help'], {
-      cwd: adhdRoot,
-      env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project' },
-      encoding: 'utf8',
-      timeout: 10_000,
-    });
+    const result = spawnSync(
+      process.execPath,
+      [DIST_INDEX, 'serve', '--help'],
+      {
+        cwd: adhdRoot,
+        env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project', HOME: adhdRoot },
+        encoding: 'utf8',
+        timeout: 10_000,
+      }
+    );
     expect(result.status).toBe(0);
     expect(result.stdout).toMatch(/backlog serve/);
     // The defect this proves fixed: a raw stack trace (`at file:///…`,
@@ -132,12 +171,16 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
   it('rejects an unknown --transport value rather than silently defaulting', async () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-serve-cli-badtransport-'));
     const { spawnSync } = await import('node:child_process');
-    const result = spawnSync(process.execPath, [DIST_INDEX, 'serve', '--transport', 'bogus'], {
-      cwd: adhdRoot,
-      env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project' },
-      encoding: 'utf8',
-      timeout: 10_000,
-    });
+    const result = spawnSync(
+      process.execPath,
+      [DIST_INDEX, 'serve', '--transport', 'bogus'],
+      {
+        cwd: adhdRoot,
+        env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project', HOME: adhdRoot },
+        encoding: 'utf8',
+        timeout: 10_000,
+      }
+    );
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(/--transport/);
   });
