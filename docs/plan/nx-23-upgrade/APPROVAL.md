@@ -66,7 +66,10 @@ it maps to a `[dod.N]` clause and to at least one state's acceptance criteria.
 ## Standing constraints accepted with this approval
 
 - **No landing.** No state pushes, merges to the default branch, or publishes.
-  `audit-final` is a hold; the landing decision is a separate human call.
+  The terminal state is a hold; the landing decision is a separate human call.
+  (Since the 2026-09-22 audit waiver the terminal state is `test-changed-optin`;
+  `audit-final` is retired. The landing decision is consequently **uncertified by
+  the plan** — see *Amendment 2026-09-22 — audit waiver* below.)
 - **`test.dependsOn` keeps `lint`.** Dropping it removes the publish gate (BUG-060).
 - **`^build` stays in the test path.** Measured inconclusive for speed; load-bearing
   for the four child-process projects.
@@ -229,6 +232,74 @@ re-run by the new state's guard.
   skips a same-project `depends_on` target a project does not have, so the graph-wide addition does
   not break it.
 - `gap-check.js` PASS; `env-pin-check.js --strict` — all 20 guards pinned.
+
+---
+
+## Amendment 2026-09-22 — audit waiver (planner-performed, `replan`)
+
+**Owner directive, verbatim:** *"Stop running the audit, it is un-needed"* — then *"finish the
+project."* Recorded in `orchestration-ledger.md` F17 (dispatcher-owned). This amendment retires
+the three remaining audit hold points so the plan can reach `done` by executing only the
+remaining **work** states.
+
+### What changed
+
+| Change | Detail |
+|---|---|
+| Retired state | `audit-graph` (phase `graph`) — **waived**, not recorded complete |
+| Retired state | `audit-tests` (phase `tests`) — waived; never run |
+| Retired state | `audit-final` (phase `final`) — waived; never run |
+| Re-pointed edge | `test-selection-revalidated` now depends on `typecheck-teeth-restored` (the last completed state) instead of `audit-graph` |
+| Phase move | `test-changed-optin` moves `tests` → `final`, becoming the terminal state |
+| Removed criteria | 6 self-referential guard-existence criteria (`audit-{graph,tests,final}.{1,2}`); 109 → 103 |
+| Kept on disk | `scripts/guard_audit_{graph,tests,final}.py`, `references.json`, `interfaces.json`, and the `audit-final.ref-*` / `audit-final.iface-*` conformance criteria (they now execute in the terminal state's final-phase audit) |
+
+### Why `audit-graph` is waived rather than recorded complete
+
+`audit-graph`'s gate **did run green** — exit 0, 74/74 criteria, 0 FAIL, completed
+2026-09-22T15:01:11 EDT (`orchestration-ledger.md` F15/F16; `GUARD_EXIT=0`). But the only
+sanctioned way to record a completion is `state-transition.js --complete`, and that path
+**re-runs the guard** (`state-transition.js:314-317`) — the very re-execution the owner
+forbade. A completion written directly into `state.json` with no guard re-run would be an
+uncertified completion: no `guard_pass` event, no audit leg, no metrics or training record —
+the "uncommitted approval" anti-pattern this plan exists to avoid. The gate's green result is
+therefore preserved as **evidence in the waiver record**, and the state is retired rather than
+falsely marked complete.
+
+### Consequence for the Definition of Done — recorded, not hidden
+
+- The DoD is **no longer proven by a dedicated `audit-final` hold**. It is confirmed **inline**
+  by the terminal state: `test-changed-optin` carries phase `final`, so its `--complete` runs
+  the accumulated final-phase audit (all 15 `[dod.N]` clauses plus the `[ref:]`/`[iface:]`
+  conformance checks) and `state-transition.js` refuses `done` (exit 4, `dod_unconfirmed`) if
+  any clause has no executed PASS. Reaching `done` therefore still requires the DoD to pass —
+  it is simply confirmed at the last work state rather than at a separate hold point.
+- **The landing decision is uncertified by the plan.** No state pushes, merges or publishes, and
+  with `audit-final` retired no state certifies that a landing is safe. That call is a human's,
+  taken outside this plan.
+- `[dod.13]` was amended to state the surviving holds (`audit-reconcile`, `audit-config`) and to
+  record the waiver; its criterion was updated to assert the two surviving audit nodes plus the
+  five guard scripts still on disk.
+- This waiver is an **owner directive, not a re-elicitation**. `state.json`'s `dod_provenance`
+  still records the original 13 clauses and has deliberately **not** been re-stamped.
+
+### Verification performed for this amendment
+
+- `gap-check.js` PASS after the edit; `env-pin-check.js --strict` — all 17 guards pinned.
+- `dag.json` node set == `state.json` state set (17/17); no dangling `depends_on`; `current_state`
+  is a real node.
+- `run-audit.js --phase final` selects 103 criteria (all phases); `--phase tests` selects 83
+  (intake→tests, no `[dod.N]`) — so `test-selection-revalidated` cannot trip the DoD gate before
+  the terminal state.
+- The amended `[dod.13]` criterion executes and exits 0.
+- No `nx` build, test or `reset` was run for this amendment — plan-file changes only.
+
+### Approval status of this amendment
+
+- `DEMO.md` and `TOOLS.md` are **unchanged**; the GATE 2 approval recorded above stands.
+- The waiver is an **owner directive**; the resulting DoD/topology change is recorded here and
+  in `state.json`'s `amendment_log`, and is flagged for owner re-acknowledgement alongside the
+  2026-09-21 and earlier 2026-09-22 amendments.
 
 ---
 

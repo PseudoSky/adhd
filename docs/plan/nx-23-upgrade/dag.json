@@ -333,24 +333,11 @@
       "context": "contexts/graph-release-eslint-inferred.md",
       "notes": "Phase 2c: the deprecated eslint lint targets go through the sanctioned convert-to-inferred codemod; the twelve release targets have bespoke dependency chains that must survive the move to inference."
     },
-    "audit-graph": {
-      "kind": "audit",
-      "phase": "graph",
-      "depends_on": [
-        "typecheck-teeth-restored"
-      ],
-      "guard": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_graph.py",
-      "artifacts": [
-        "docs/plan/nx-23-upgrade/scripts/guard_audit_graph.py"
-      ],
-      "context": "contexts/audit-graph.md",
-      "notes": "Hold point. The remodel must produce byte-identical build artifacts and an equivalent task graph before anything downstream trusts it."
-    },
     "test-selection-revalidated": {
       "kind": "work",
       "phase": "tests",
       "depends_on": [
-        "audit-graph"
+        "typecheck-teeth-restored"
       ],
       "guard": "test -f docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && rg -q \"D1\" docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && rg -q \"D2\" docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && rg -q \"D3\" docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && ./node_modules/.bin/nx --version | rg -q \"23\\.2\\.1\"",
       "artifacts": [
@@ -361,7 +348,7 @@
     },
     "test-changed-optin": {
       "kind": "work",
-      "phase": "tests",
+      "phase": "final",
       "depends_on": [
         "test-selection-revalidated"
       ],
@@ -373,34 +360,7 @@
         "docs/plan/nx-23-upgrade/scripts/check-cross-package-selection.mjs"
       ],
       "context": "contexts/test-changed-optin.md",
-      "notes": "Deliver the fail-safe design: full suite stays the default, the fast path is explicit opt-in, and a run that selects zero tests must FAIL rather than report success."
-    },
-    "audit-tests": {
-      "kind": "audit",
-      "phase": "tests",
-      "depends_on": [
-        "test-changed-optin"
-      ],
-      "guard": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_tests.py",
-      "artifacts": [
-        "docs/plan/nx-23-upgrade/scripts/guard_audit_tests.py"
-      ],
-      "context": "contexts/audit-tests.md",
-      "notes": "Hold point. File-level selection must be proven to select cross-package tests AND to fail loudly on zero selection."
-    },
-    "audit-final": {
-      "kind": "audit",
-      "phase": "final",
-      "depends_on": [
-        "audit-tests"
-      ],
-      "guard": "python3 docs/plan/nx-23-upgrade/scripts/guard_audit_final.py",
-      "artifacts": [
-        "docs/plan/nx-23-upgrade/scripts/guard_audit_final.py",
-        "docs/plan/nx-23-upgrade/scripts/check-guards-pinned.mjs"
-      ],
-      "context": "contexts/audit-final.md",
-      "notes": "Final hold. Proves every Definition-of-Done clause against the real codebase. Nothing lands until this is green."
+      "notes": "Deliver the fail-safe design: full suite stays the default, the fast path is explicit opt-in, and a run that selects zero tests must FAIL rather than report success. TERMINAL state since the 2026-09-22 audit waiver: it carries phase `final` so its `--complete` runs the accumulated final-phase audit, which is where the [dod.N] clauses are now confirmed (the dedicated audit-final hold was retired by owner directive)."
     },
     "vite-cjs-import-meta-repair": {
       "kind": "work",

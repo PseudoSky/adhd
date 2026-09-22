@@ -80,13 +80,6 @@
       "start_ref": "81f142ea40bb7f62c4776b18615db1dfab1e9448",
       "end_ref": "131a0f4e1b70d762af3b49119c60d8494e3cdd0d"
     },
-    "audit-graph": {
-      "status": "blocked",
-      "started_at": "2026-09-22T18:54:21.792Z",
-      "done_at": null,
-      "start_ref": "c8301de8efdf12d128d923ff4d66e26d53e0f921",
-      "end_ref": null
-    },
     "test-selection-revalidated": {
       "status": "pending",
       "started_at": null,
@@ -95,20 +88,6 @@
       "end_ref": null
     },
     "test-changed-optin": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
-    },
-    "audit-tests": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
-    },
-    "audit-final": {
       "status": "pending",
       "started_at": null,
       "done_at": null,
@@ -434,7 +413,7 @@
     "version": "0.8.25",
     "hash": "961c3053dfab"
   },
-  "current_state": "audit-graph",
+  "current_state": "test-selection-revalidated",
   "dod_provenance": {
     "confirmed_at": "2026-09-22T02:05:38.210Z",
     "by": "pseudosky",

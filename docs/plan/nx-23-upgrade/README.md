@@ -8,8 +8,10 @@ onto Nx-inferred targets, and deliver fail-safe file-level test selection.
 **Status:** authored; GATE 2 approval recorded in `APPROVAL.md`; amended 2026-09-21 by the
 repair pass that added the bump-safety states (`vite-cjs-import-meta-repair`,
 `browser-package-build-repair`, `browser-cjs-umd-repair`) and `[dod.14]`/`[dod.15]`, and
-2026-09-22 by the repair pass that added `typecheck-teeth-restored` — see
-`APPROVAL.md` § *Amendment 2026-09-21* and § *Amendment 2026-09-22*.
+2026-09-22 by the repair pass that added `typecheck-teeth-restored`, and 2026-09-22 by the
+**audit waiver** that retired `audit-graph`, `audit-tests` and `audit-final` — see
+`APPROVAL.md` § *Amendment 2026-09-21*, § *Amendment 2026-09-22 — typecheck-teeth restoration*
+and § *Amendment 2026-09-22 — audit waiver*.
 **Branch:** `perf/nx-upgraded` (worktree `.worktrees/nx-perf-upgraded`).
 **Plans-root:** `docs/plan/` · **Registry:** `docs/plan/plan-index.json`.
 
@@ -49,14 +51,19 @@ test target and would silently lose its dependency checks if that edge is droppe
 2. **Which agent implements?** The `dispatcher`, driving one state at a time via
    `state-transition.js`. Graph and config states want a strong executor; the
    reconcile states are mechanical and tolerate a weaker one.
-3. **Do agents review — who, and when?** Yes: the five `audit-*` hold points. Each
-   audit re-runs every criterion of its phase plus all prior phases and cannot be
-   skipped. `audit-final` is the pre-landing hold.
+3. **Do agents review — who, and when?** Yes: the two surviving `audit-*` hold points
+   (`audit-reconcile`, `audit-config`). Each re-runs every criterion of its phase plus
+   all prior phases and cannot be skipped. The `graph`, `tests` and `final` hold points
+   (`audit-graph`, `audit-tests`, `audit-final`) were **waived by owner directive on
+   2026-09-22** — they re-executed the full accumulated build+suite set and were declared
+   un-needed. The DoD is now confirmed inline at the terminal state, `test-changed-optin`
+   (see *Amendment 2026-09-22 — audit waiver* in `APPROVAL.md`).
 4. **Automatic dispatch?** No. This plan is handed off with the Dispatch line; the
    planner does not execute it.
 
-**Landing is explicitly out of scope.** `audit-final` is a hold, not a merge. No
-state pushes, merges to the default branch, or publishes.
+**Landing is explicitly out of scope.** The terminal state is a hold, not a merge. No
+state pushes, merges to the default branch, or publishes. With `audit-final` waived, no
+state in this plan certifies the landing decision — a human must take it.
 
 ---
 
@@ -99,19 +106,19 @@ state pushes, merges to the default branch, or publishes.
   - delivered-by: test-changed-optin, test-selection-revalidated
 
 - `[dod.9]` **(structural)** Task targets that merely restated what Nx can already infer are gone, and the inferred equivalents still produce the same artifacts.
-  - delivered-by: graph-test-build-inferred, graph-js-tsc-inferred, graph-release-eslint-inferred, typecheck-teeth-restored, audit-graph
+  - delivered-by: graph-test-build-inferred, graph-js-tsc-inferred, graph-release-eslint-inferred, typecheck-teeth-restored
 
 - `[dod.10]` **(structural)** Each checkout owns its task cache, so a cached pass from a sibling worktree cannot be replayed here.
   - delivered-by: cache-isolation
 
 - `[dod.11]` **(structural)** All of this work sits on the upgrade branch; nothing was pushed to or merged into the default branch.
-  - delivered-by: audit-final
+  - delivered-by: test-changed-optin
 
 - `[dod.12]` **(structural)** The two sibling work branches are absorbed into the upgrade branch, with the publish-gate restoration preserved and the test-time source resolution helper in place.
   - delivered-by: config-repair-absorbed, test-resolution-absorbed, audit-reconcile
 
-- `[dod.13]` **(structural)** Every phase holds at an audit gate that re-proves the criteria of all phases before it.
-  - delivered-by: audit-reconcile, audit-config, audit-graph, audit-tests, audit-final
+- `[dod.13]` **(structural)** Every phase through `config` holds at an audit gate that re-proves the criteria of all phases before it. The `graph`, `tests` and `final` hold points (`audit-graph`, `audit-tests`, `audit-final`) were **waived by owner directive on 2026-09-22** and are not delivered; their guard scripts remain on disk. See `APPROVAL.md` § *Amendment 2026-09-22 — audit waiver*.
+  - delivered-by: audit-reconcile, audit-config
 
 - `[dod.14]` A developer can run the workspace's bundled command-line entrypoint and it starts, instead of crashing while it loads.
   - entrypoint: `node entrypoint/apigen-cli/dist/index.js --help`
@@ -124,6 +131,17 @@ state pushes, merges to the default branch, or publishes.
   - observable: `the CJS and UMD bundles carry no empty-import-meta token and no node-only shim, then the BROWSER_BUNDLES_CLEAN_PASS marker is printed`
   - negative-control: `inject the empty-import-meta token into packages/ui-react/ui-react-base-hooks/dist/index.js and re-run the check — it must fail`
   - delivered-by: browser-package-build-repair, browser-cjs-umd-repair
+
+**DoD confirmation boundary (2026-09-22).** The DoD clauses are confirmed by the
+terminal state's accumulated **final-phase** audit — `test-changed-optin`'s
+`--complete` runs every Definition-of-Done clause check plus the `[ref:]`/`[iface:]`
+conformance checks, and `state-transition.js` refuses `done` if any clause has no
+executed PASS. The dedicated `audit-final` hold that used to carry this is retired, so
+the confirmation is now **inline at the last work state** rather than at a separate hold
+point. The DoD was NOT re-confirmed with the owner for this change; `state.json`'s
+`dod_provenance` still records the original 13 clauses and has deliberately not been
+re-stamped — the waiver is an owner directive, recorded in `APPROVAL.md`, not a
+re-elicitation.
 
 ---
 

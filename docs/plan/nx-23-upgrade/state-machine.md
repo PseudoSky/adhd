@@ -6,7 +6,15 @@
 > (`templates/state-machine.template.md` is a template, not a generator), so
 > re-check it against `dag.json` after every structural change.
 
-**Plan kind:** brownfield · **Terminal:** `done` · **States:** 20 · **Phases:** intake → reconcile → config → graph → tests → final
+**Plan kind:** brownfield · **Terminal:** `done` · **States:** 17 · **Phases:** intake → reconcile → config → graph → tests → final
+
+> **Amended 2026-09-22 — audit waiver.** `audit-graph`, `audit-tests` and
+> `audit-final` were retired by owner directive ("the audit is un-needed"). The
+> two surviving hold points are `audit-reconcile` and `audit-config`. The
+> terminal state is now the work state `test-changed-optin` (phase `final`),
+> whose `--complete` runs the accumulated final-phase audit and is therefore
+> where the `[dod.N]` clauses are confirmed. See `APPROVAL.md` § *Amendment
+> 2026-09-22 — audit waiver*.
 
 ---
 
@@ -32,16 +40,19 @@ Identity is the **slug** (immutable). Order below is a topological render of
 | 13 | `graph-js-tsc-inferred` | work | graph | `./node_modules/.bin/nx show projects \| rg -q "agent-core-policy" && node -e "const fs=require(\"fs\"),path=r…` |
 | 14 | `graph-release-eslint-inferred` | work | graph | `./node_modules/.bin/nx show projects \| rg -q "apigen-plugin-jsonschema" && node -e "const fs=require(\"fs\")…` |
 | 15 | `typecheck-teeth-restored` | work | graph | `python3 docs/plan/nx-23-upgrade/scripts/guard_audit_config.py && ./node_modules/.bin/nx run-many -t typecheck &&…` |
-| 16 | `audit-graph` | audit | graph | `python3 docs/plan/nx-23-upgrade/scripts/guard_audit_graph.py` |
-| 17 | `test-selection-revalidated` | work | tests | `test -f docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && rg -q "D1" docs/plan/nx-23-upgrade/TEST-SELECTION-P…` |
-| 18 | `test-changed-optin` | work | tests | `node -e "const s=require(\"./package.json\").scripts;if(!s[\"test:changed\"]\|\|!s[\"test:related\"])process.e…` |
-| 19 | `audit-tests` | audit | tests | `python3 docs/plan/nx-23-upgrade/scripts/guard_audit_tests.py` |
-| 20 | `audit-final` | audit | final | `python3 docs/plan/nx-23-upgrade/scripts/guard_audit_final.py` |
+| 16 | `test-selection-revalidated` | work | tests | `test -f docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md && rg -q "D1" docs/plan/nx-23-upgrade/TEST-SELECTION-P…` |
+| 17 | `test-changed-optin` | work | final | `node -e "const s=require(\"./package.json\").scripts;if(!s[\"test:changed\"]\|\|!s[\"test:related\"])process.e…` |
 
-**Audit states are mandatory hold points.** `audit-reconcile`, `audit-config`,
-`audit-graph`, `audit-tests` and `audit-final` block their successors. Each runs every
-criterion of its phase **plus all prior phases**, so an earlier regression re-blocks a
-later gate. There are no deferrable items in any audit state.
+**Audit states are mandatory hold points.** `audit-reconcile` and `audit-config`
+block their successors, and each runs every criterion of its phase **plus all
+prior phases**, so an earlier regression re-blocks a later gate. There are no
+deferrable items in either.
+
+`audit-graph`, `audit-tests` and `audit-final` were **waived 2026-09-22** by owner
+directive. Their `scripts/guard_audit_*.py` files remain on disk (rollback /
+re-enable), but they are no longer DAG nodes and are not dispatched. The DoD
+confirmation they carried is now performed inline by the terminal state
+(`test-changed-optin`) — see below.
 
 ---
 
@@ -70,15 +81,12 @@ later gate. There are no deferrable items in any audit state.
   graph-js-tsc-inferred         <- graph-test-build-inferred
   graph-release-eslint-inferred <- graph-js-tsc-inferred
   typecheck-teeth-restored      <- graph-release-eslint-inferred
-  audit-graph                   <- typecheck-teeth-restored
         |
 [tests]
-  test-selection-revalidated    <- audit-graph
-  test-changed-optin            <- test-selection-revalidated
-  audit-tests                   <- test-changed-optin
+  test-selection-revalidated    <- typecheck-teeth-restored
         |
 [final]
-  audit-final                   <- audit-tests
+  test-changed-optin            <- test-selection-revalidated
         |
         v
       done
@@ -94,6 +102,9 @@ The intake chain is ordered by **causality**: the toolchain is measured first, t
 bump is landed atomically with the fix that keeps built artifacts loadable, then the
 browser package is made buildable and its bundles made valid, and only then is the
 post-bump triage verdict consumed — on a tree whose artifacts actually load.
+
+`test-selection-revalidated` previously depended on `audit-graph`; with that hold
+waived it now depends directly on `typecheck-teeth-restored`.
 
 ---
 
@@ -115,12 +126,23 @@ post-bump triage verdict consumed — on a tree whose artifacts actually load.
 | `graph-test-build-inferred` | `data-query-engine` still has a `test` target, `data-base-transforms` a `build` target; no manifest declares a shadowing `@nx/vitest:test`/`@nx/vite:build` executor | `graph-js-tsc-inferred` |
 | `graph-js-tsc-inferred` | the graph loads; no manifest declares `@nx/js:tsc` | `graph-release-eslint-inferred` |
 | `graph-release-eslint-inferred` | the graph loads; no manifest declares `@nx/js:release-publish` or `@nx/eslint:lint` | `typecheck-teeth-restored` |
-| `typecheck-teeth-restored` | the accumulated config gate (which carries the regressed `[tsconfig-shim-removal.5]` teeth check) is green; the full `typecheck` sweep is green; a cold-cache `nx build decompile-cli` and `nx build agent-core-env` both exit 0; `TYPECHECK-TEETH.md` exists | `audit-graph` |
-| `audit-graph` | **audit** — `python3 …/guard_audit_graph.py` | `test-selection-revalidated` |
+| `typecheck-teeth-restored` | the accumulated config gate (which carries the regressed `[tsconfig-shim-removal.5]` teeth check) is green; the full `typecheck` sweep is green; a cold-cache `nx build decompile-cli` and `nx build agent-core-env` both exit 0; `TYPECHECK-TEETH.md` exists | `test-selection-revalidated` |
 | `test-selection-revalidated` | `TEST-SELECTION-PROBE.md` records D1, D2, D3; the repo-local Nx is 23.2.1 | `test-changed-optin` |
-| `test-changed-optin` | `test:changed` and `test:related` exist; the graph loads; `TEST-SELECTION.md` exists | `audit-tests` |
-| `audit-tests` | **audit** — `python3 …/guard_audit_tests.py` | `audit-final` |
-| `audit-final` | **audit** — `python3 …/guard_audit_final.py` | `done` |
+| `test-changed-optin` | `test:changed` and `test:related` exist; the graph loads; `TEST-SELECTION.md` exists | `done` |
+
+---
+
+## Terminal boundary — where the DoD is confirmed
+
+`test-changed-optin` is the last node. When its guard passes,
+`state-transition.js --complete` runs the accumulated **final-phase** audit — all
+`[dod.N]` clauses plus the `[ref:]`/`[iface:]` conformance checks — and advances to
+`done` only if every clause emits an executed PASS. This is the role the retired
+`audit-final` hold used to play; it is now inline at the terminal work state.
+
+Consequence, recorded rather than hidden: the plan no longer has a dedicated
+pre-landing hold, and **no state certifies the landing decision**. Pushing, merging
+or publishing remains a human call outside this plan.
 
 ---
 
@@ -153,6 +175,7 @@ post-bump triage verdict consumed — on a tree whose artifacts actually load.
 | Typecheck gate (`build.dependsOn` + `typecheck` targetDefault) | Revert `nx.json`'s `targetDefaults.build`/`targetDefaults.typecheck` (one commit); the gate goes back to inferred-`build`-only |
 | Absorbed sibling branches | Revert the merge commit; the sibling branches are untouched and still local-only |
 | Fast-path wrapper | Revert `package.json` scripts; the default path was never changed, so nothing else moves |
+| Audit waiver (2026-09-22) | Re-add the three `dag.json` nodes, their `state.json` entries and their context files, restore the removed `criteria.json` entries, and re-point `test-selection-revalidated` → `audit-graph` / `test-changed-optin` → phase `tests`; the `scripts/guard_audit_*.py` files were never deleted |
 
 Every change above is independently revertible. Nothing in this plan pushes,
 merges to the default branch, or publishes.
@@ -161,7 +184,7 @@ merges to the default branch, or publishes.
 
 ## Runtime status
 
-`current_state`: `graph-js-tsc-inferred`
+`current_state`: `test-selection-revalidated`
 
 | Slug | Status |
 |---|---|
@@ -177,13 +200,13 @@ merges to the default branch, or publishes.
 | `cache-isolation` | complete |
 | `audit-config` | complete |
 | `graph-test-build-inferred` | complete |
-| `graph-js-tsc-inferred` | pending |
-| `graph-release-eslint-inferred` | pending |
-| `typecheck-teeth-restored` | pending |
-| `audit-graph` | pending |
+| `graph-js-tsc-inferred` | complete |
+| `graph-release-eslint-inferred` | complete |
+| `typecheck-teeth-restored` | complete |
 | `test-selection-revalidated` | pending |
 | `test-changed-optin` | pending |
-| `audit-tests` | pending |
-| `audit-final` | pending |
+
+`audit-graph` (waived — gate ran green 74/74 before the waiver), `audit-tests` and
+`audit-final` (never run) are no longer states.
 
 Advance with `state-transition.js` — never by hand-editing `state.json`.
