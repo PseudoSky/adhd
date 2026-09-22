@@ -1015,6 +1015,16 @@
       "kind": "command",
       "cmd": "./node_modules/.bin/nx build ui-react-base-hooks && node -e \"const fs=require('fs');const t=fs.readFileSync('packages/ui-react/ui-react-base-hooks/dist/index.mjs','utf8');if(!t.includes('import.meta.url'))process.exit(1);if(t.includes('pathToFileURL(__filename)'))process.exit(1);console.log('BROWSER_ESM_UNTOUCHED')\"",
       "expect": "exit0"
+    },
+    {
+      "id": "browser-cjs-umd-repair.5",
+      "phase": "intake",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "ReferenceError",
+      "paths": [
+        "docs/plan/nx-23-upgrade/BROWSER-BUNDLE-REPAIR.md"
+      ]
     }
   ]
 }
