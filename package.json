@@ -19,6 +19,8 @@
     "list": "nx show projects --affected",
     "lint:all": "nx run-many --targets=lint --configuration=production",
     "test:all": "nx run-many --targets=test --configuration=production",
+    "test:related": "node -e 'const{spawnSync}=require(\"node:child_process\");const{globSync}=require(\"node:fs\");let raw=process.argv.slice(1);if(raw[0]===\"--\")raw=raw.slice(1);const useChanged=raw[0]===\"--changed\";const files=useChanged?raw.slice(1):raw;const args=useChanged?[\"run\",\"--changed\",\"--config\",\"vitest.config.ts\",\"--reporter=verbose\",\"--passWithNoTests=false\"]:[\"related\",\"--config\",\"vitest.config.ts\",\"--reporter=verbose\",\"--passWithNoTests=false\",...files];const r=spawnSync(\"./node_modules/.bin/vitest\",args,{encoding:\"utf8\"});const out=(r.stdout||\"\")+(r.stderr||\"\");process.stdout.write(r.stdout||\"\");process.stderr.write(r.stderr||\"\");const m=out.match(/Test Files\\s+[^(]*\\((\\d+)\\)/);const n=m?Number(m[1]):0;const total=globSync(\"**/*.{spec,test}.{ts,tsx,js,mjs,jsx}\",{cwd:process.cwd(),exclude:(x)=>x.includes(\"node_modules\")||x.includes(\"/dist/\")||x.includes(\"/.nx/\")}).length;console.log(\"selected=\"+n+\"/\"+total);if(n===0||/No test files found/i.test(out)){console.error(\"no tests selected — failing (fail-safe): the narrow fast path refuses to report success having run nothing. Run the full suite instead.\");process.exit(1)}process.exit(typeof r.status===\"number\"?r.status:1);'",
+    "test:changed": "pnpm run test:related -- --changed",
     "check:publish-hygiene": "nx run @adhd/source:check-publish-hygiene",
     "logs:agent": "node entrypoint/agent-mcp/dist/src/scripts/agent-mcp-tail.js",
     "check:test-wiring": "node tools/nx-plugins/test/executors/wiring/check-test-wiring.mjs",
