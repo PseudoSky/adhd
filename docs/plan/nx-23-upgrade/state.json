@@ -81,11 +81,11 @@
       "end_ref": "131a0f4e1b70d762af3b49119c60d8494e3cdd0d"
     },
     "test-selection-revalidated": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-09-22T20:02:44.871Z",
-      "done_at": null,
+      "done_at": "2026-09-22T20:15:27.102Z",
       "start_ref": "8899bb2b647120cfc2fdd8305cac0e7f9521c33e",
-      "end_ref": null
+      "end_ref": "89649106ea0c0808be85c0180eae8cc1743e23ec"
     },
     "test-changed-optin": {
       "status": "pending",
@@ -303,6 +303,18 @@
       "audit_criteria_total": 74,
       "by": "pseudosky",
       "note": "Restored the build gate teeth the graph remodel removed: nx.json build.dependsOn gains same-project typecheck + a typecheck targetDefault; agent-core-env gets an explicit workspace-root tsc typecheck target (was script-inferred to package-local tsc 5.9.3 -> TS5103); fixed the two real TS6-strict errors in decompile-cli (TS2454 index.ts:103 branch-local const; TS18048 site.ts:83 cookies ?? []). Corrected the SHIM-REMOVAL.md strict claim; wrote TYPECHECK-TEETH.md with the red-before/green-after transcript. Verified: full guard exit 0; accumulated config gate green ([tsconfig-shim-removal.5] PASS, was FAIL); nx run-many -t typecheck green (62/62); cold-cache decompile-cli build green (Cache 0/6, real execution); negative control red under mutation (TS2322, exit 130) then restored clean; apigen-java build --dry-run green (missing same-project typecheck dep silently skipped). Commits 8daf1efb + 36d2d0e5 made with --no-verify because nx.json is a sharedGlobals input that fans the pre-commit hook repo-wide (its sync-deps gate can also mutate package.json outside the reservation). Token figures are estimates: no in-session token meter is available."
+    },
+    {
+      "ts": "2026-09-22T20:15:27.102Z",
+      "from": "test-selection-revalidated",
+      "to": "test-selection-revalidated",
+      "start_ref": "8899bb2b647120cfc2fdd8305cac0e7f9521c33e",
+      "end_ref": "89649106ea0c0808be85c0180eae8cc1743e23ec",
+      "audit_exit": 5,
+      "audit_criteria_passed": 78,
+      "audit_criteria_total": 83,
+      "by": "pseudosky",
+      "note": "Revalidated the three changed-flag defects on nx 23.2.1 / vitest 4.1.9 (worktree nx-perf-upgraded). D1 REFUTED (options under target-name key no longer crash graph; nx 23.2.1 optional-chains options?.commands?.join). D2 REFUTED (vitest still issues git diff true...HEAD which fatals raw, but tinyexec swallows the non-zero exit; all four --changed forms exit 0 in <7s, no hang; nx e2e green). D3 CONFIRMED (zero selection exits 0 and NX reports success; vitest related on an uncovered file exits 0). Design decision to keep the fail-safe default is confirmed by measurement. Record: docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md; commit 89649106. Telemetry omitted (session does not expose token counts)."
     }
   ],
   "amendment_log": [
@@ -413,7 +425,7 @@
     "version": "0.8.25",
     "hash": "961c3053dfab"
   },
-  "current_state": "test-selection-revalidated",
+  "current_state": "test-changed-optin",
   "dod_provenance": {
     "confirmed_at": "2026-09-22T02:05:38.210Z",
     "by": "pseudosky",
