@@ -32,10 +32,10 @@
       "end_ref": "3e344506547870b14dce252edc6d6731bb262536"
     },
     "audit-reconcile": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-09-22T14:39:14.621Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "176cab390f691b17dd4f0413f709c696a524c2a1",
       "end_ref": null
     },
     "tsconfig-shim-removal": {
