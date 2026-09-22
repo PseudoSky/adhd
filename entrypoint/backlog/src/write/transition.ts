@@ -83,7 +83,10 @@ import { createHash } from 'node:crypto';
 import { isAbsolute, relative, resolve as resolvePath } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
-import type { ICitationInput } from './create-issue.js';
+import {
+  assertGitContextWithinCap,
+  type ICitationInput,
+} from './create-issue.js';
 import {
   type IResolvedProjectRow,
   mintOrResolveCatalogTx,
@@ -328,6 +331,10 @@ export async function transition(
   assertNonBlank('by', input.by);
   assertNotBareRoleLiteral('by', input.by);
   assertNonBlank('toStatus', input.toStatus);
+
+  // Same write-time cap `createIssue` enforces — a shared helper so the two
+  // gates never drift (see `create-issue.ts`'s `MAX_GIT_CONTEXT_LENGTH`).
+  assertGitContextWithinCap(input.gitContext);
 
   const citations = input.citations ?? [];
   citations.forEach((c, i) => assertNonBlank(`citations[${i}].file`, c.file));

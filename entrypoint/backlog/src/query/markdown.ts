@@ -34,6 +34,22 @@
 import type { IIssueCard } from './types.js';
 
 /**
+ * Sanitizes a `gitContext` for INLINE interpolation into the `Citations:`
+ * head line. `gitContext` is free-form caller text (a git branch/ref, a plan
+ * id, …) that reaches this renderer verbatim from stored metadata, so it must
+ * not be trusted to stay on one line: an embedded newline would forge a
+ * second `Citations:`-block line (and a `]` would close the head element
+ * early, letting the remainder masquerade as a citation). This collapses every
+ * whitespace run to a single space and strips `[`/`]`, so the rendered value
+ * can never break out of its line. (The write path additionally caps its
+ * length — see `create-issue.ts`'s `MAX_GIT_CONTEXT_LENGTH` — so this is the
+ * render-side half of the same guarantee.)
+ */
+function sanitizeGitContext(raw: string): string {
+  return raw.replace(/\s+/g, ' ').replace(/[[\]]/g, '').trim();
+}
+
+/**
  * Renders the item's `Citations:` block — the disclosure contract's evidence
  * section. The item-level `gitContext`, when present, is the block's head
  * element (the disclosure format's `<active git context>`); the structured
@@ -48,7 +64,12 @@ function renderCitationLines(card: IIssueCard): string[] {
       : undefined;
   const citations = card.citations ?? [];
   if (gitContext === undefined && citations.length === 0) return [];
-  const lines = ['', gitContext ? `Citations: [${gitContext}]` : 'Citations:'];
+  const lines = [
+    '',
+    gitContext !== undefined
+      ? `Citations: [${sanitizeGitContext(gitContext)}]`
+      : 'Citations:',
+  ];
   for (const citation of citations) {
     const target = citation.lines
       ? `${citation.file}:${citation.lines}`

@@ -299,6 +299,27 @@ function assertNonBlank(
 }
 
 /**
+ * Maximum length of the item-level `gitContext` disclosure scalar, enforced
+ * at WRITE time by every verb that accepts one (`create` here, `transition`).
+ * The field is free-form caller text that the markdown renderer interpolates
+ * inline (`query/markdown.ts`'s `sanitizeGitContext` is the render-side half
+ * of the same guarantee), so an unbounded value would let a single issue's
+ * citation block balloon arbitrarily. Shared by both write paths so the
+ * `create`/`transition` caps never drift.
+ */
+export const MAX_GIT_CONTEXT_LENGTH = 512;
+
+/** Rejects an over-long `gitContext` before any write runs (E_VALIDATION, never retried). A non-string (e.g. an untyped CLI/HTTP/MCP JSON `null`) is skipped here — the caller's own `typeof === 'string'` normalization treats it as absent. */
+export function assertGitContextWithinCap(value: string | undefined): void {
+  if (typeof value === 'string' && value.length > MAX_GIT_CONTEXT_LENGTH) {
+    throw new InvalidArgumentError(
+      'gitContext',
+      `must be at most ${MAX_GIT_CONTEXT_LENGTH} characters, got ${value.length}`
+    );
+  }
+}
+
+/**
  * §8.5's two-branch citation-sha rule, run identically at live-write time
  * (§8.5: "this is also the canonical rule for computing citation.sha on the
  * LIVE write path"). Confined to `project.metadata.path` (BUG blind-review
@@ -586,6 +607,7 @@ export async function createIssue(
   assertNonBlank('project', input.project);
   assertNonBlank('by', input.by);
   assertNotBareRoleLiteral('by', input.by);
+  assertGitContextWithinCap(input.gitContext);
   const citations = input.citations ?? [];
   citations.forEach((citation, i) =>
     assertNonBlank(`citations[${i}].file`, citation.file)
