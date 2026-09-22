@@ -329,11 +329,9 @@ async function computeCitationSha(
   project: IResolvedProjectRow,
   file: string
 ): Promise<string> {
-  const projectPath = project.metadata?.path;
-  if (typeof projectPath !== 'string' || projectPath.length === 0)
-    return 'unverified';
+  if (!projectHasKnownPath(project)) return 'unverified';
 
-  const root = resolvePath(projectPath);
+  const root = resolvePath(project.metadata.path);
   const candidate = isAbsolute(file)
     ? resolvePath(file)
     : resolvePath(root, file);
@@ -661,12 +659,23 @@ export async function createIssue(
   // and still throw.
   for (const citation of citations) {
     const sha = await computeCitationSha(preResolvedProject, citation.file);
-    if (
-      sha === 'unverified' &&
-      preResolvedPolicy.citationRequiresSha &&
-      projectHasKnownPath(preResolvedProject)
-    ) {
-      throw new CitationUnverifiableError(citation.file);
+    if (sha === 'unverified' && preResolvedPolicy.citationRequiresSha) {
+      if (projectHasKnownPath(preResolvedProject)) {
+        throw new CitationUnverifiableError(citation.file);
+      }
+      // Observability for the deliberate path-less waiver (DEBT a934e089).
+      // The gate above is enforced only where verification is POSSIBLE, so for
+      // a project with no `metadata.path` the caller's default
+      // `citation_requires_sha: true` is a silent no-op and `sha:"unverified"`
+      // is persisted verbatim. That waiver is correct (§8.5) but would
+      // otherwise be INVISIBLE — the operator set a policy and never learns it
+      // did not apply. A log is the whole fix: NOT a second audit row, which
+      // SPEC §4a's one-audit-node-per-state-change contract forbids for a
+      // branch that changes no state.
+      // eslint-disable-next-line no-console -- the write layer's only log sink; mirrors embedding-observer.ts's degrade logs.
+      console.error(
+        `createIssue: citation_requires_sha waived for path-less project uid="${preResolvedProject.uid}" — cannot verify citation "${citation.file}", persisting sha:"unverified" (set the project's metadata.path to make citation_requires_sha enforceable).`
+      );
     }
     citationShas.push(sha);
   }
