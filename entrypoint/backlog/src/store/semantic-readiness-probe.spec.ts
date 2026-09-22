@@ -28,7 +28,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakeEmbeddingModule } from '../test/helpers/fake-embedding-provider.js';
 import { openTmpStore } from '../test/helpers/tmp-store.js';
-import { bootstrapSemanticBackend } from './semantic-search.js';
+import { bootstrapSemanticBackend, enableSemanticSearchFromConfig, isSemanticSearchReadable } from './semantic-search.js';
 
 /**
  * The vector-store double's controllable state. Hoisted so the `vi.mock`
@@ -79,6 +79,7 @@ beforeEach(() => {
 async function bootstrap(): Promise<{
   ok: boolean;
   vectorSpacePopulated?: boolean;
+  vectorSpaceProbeReason?: string;
 }> {
   const tmp = await openTmpStore('semantic-readiness-probe');
   try {
@@ -86,7 +87,11 @@ async function bootstrap(): Promise<{
       embedding: { type: 'fastembed', model: 'bge-base-en-v1.5' },
     });
     return result.ok
-      ? { ok: true, vectorSpacePopulated: result.vectorSpacePopulated }
+      ? {
+          ok: true,
+          vectorSpacePopulated: result.vectorSpacePopulated,
+          vectorSpaceProbeReason: result.vectorSpaceProbeReason,
+        }
       : { ok: false };
   } finally {
     await tmp.cleanup();
@@ -112,15 +117,45 @@ describe('bootstrapSemanticBackend — readiness probe is bounded (BUG e19bc9d0)
     expect(probeState.iterCalls).toBe(0);
   });
 
-  it('a backend predating hasVectors degrades to false — never falls back to the unbounded iter scan (negative control)', async () => {
+  it('a backend predating hasVectors yields UNDEFINED (cannot determine — never "empty") — never falls back to the unbounded iter scan (negative control)', async () => {
     // No `hasVectors` on the double, and its `iter()` throws. If the probe
     // regressed to the iter-first-row scan, `iter` would throw and the
     // bootstrap would return `ok:false` (vector_store_failed) — so BOTH
-    // `result.ok` and `iterCalls === 0` have teeth here.
+    // `result.ok` and `iterCalls === 0` have teeth here. The value is
+    // UNDEFINED, not `false`: the probe could not ask, which is a different
+    // fact from "provably empty".
     probeState.hasHasVectors = false;
     const result = await bootstrap();
     expect(result.ok).toBe(true);
-    expect(result.vectorSpacePopulated).toBe(false);
+    expect(result.vectorSpacePopulated).toBeUndefined();
+    expect(result.vectorSpaceProbeReason).toBe(
+      'vector_store_probe_unsupported'
+    );
     expect(probeState.iterCalls).toBe(0);
+  });
+
+  it('the host names the distinct vector_store_probe_unsupported reason, never claims the space is EMPTY, and keeps reads CLOSED (fail-safe)', async () => {
+    // The bug this pins: `isVectorSpacePopulated` used to answer `false` for
+    // a backend that merely lacked `hasVectors`, so the host logged "its
+    // vector space … is EMPTY — zero items have been embedded". Indeterminate
+    // must be reported as indeterminate. The read gate must still be shut —
+    // the safety direction is unchanged.
+    probeState.hasHasVectors = false;
+    const tmp = await openTmpStore('semantic-readiness-probe');
+    const logs: string[] = [];
+    try {
+      await enableSemanticSearchFromConfig(
+        tmp.store,
+        { enabled: true, provider: 'fastembed', model: 'bge-base-en-v1.5' },
+        (m) => logs.push(m)
+      );
+    } finally {
+      await tmp.cleanup();
+    }
+    const joined = logs.join('\n');
+    expect(joined).toContain('vector_store_probe_unsupported');
+    expect(joined).not.toContain('is EMPTY');
+    // Fail-safe: an indeterminate space does NOT open the read gates.
+    expect(isSemanticSearchReadable()).toBe(false);
   });
 });

@@ -5,8 +5,12 @@
  * `bootstrapSemanticBackend`'s DIAGNOSTIC failure reporting.
  *
  * The `the injectable seam` describe block below is fully deterministic: a
- * FAKE backend, no model download, no native module, no network. The
- * real-model end-to-end proofs (RAG-SPEC §8) live in their own suite.
+ * FAKE backend, no model download, no network. (Process-level caveat: this
+ * FILE statically imports `@adhd/sox-vector-store` — the native Turso vector
+ * store — to drive the `isVectorSpacePopulated` block below, so that native
+ * module is loaded for every block here; the `injectable seam` block itself
+ * exercises no native code, it merely shares the process.) The real-model
+ * end-to-end proofs (RAG-SPEC §8) live in their own suite.
  *
  * ONE EXCEPTION, disclosed rather than left contradictory (STATE.md A15):
  * `bootstrapSemanticBackend`'s own diagnostics test below calls the REAL
@@ -234,16 +238,20 @@ describe('isVectorSpacePopulated — the bounded readiness probe (BUG e19bc9d0)'
     }
   });
 
-  it('degrades to false when the backend lacks the additive hasVectors capability — never falls back to an unbounded iter scan (negative control)', async () => {
+  it('yields undefined (cannot determine — never "empty") when the backend lacks the additive hasVectors capability, and never falls back to an unbounded iter scan (negative control)', async () => {
     // A structural double predating the additive capability: no `hasVectors`,
     // and an `iter` that THROWS. This assertion is RED if the readiness probe
     // ever regresses to the `iter`-first-row corpus scan it replaced (BUG
-    // e19bc9d0) — the negative control for the bounded-probe contract.
+    // e19bc9d0) — the negative control for the bounded-probe contract. It is
+    // also RED if "cannot determine" ever collapses back into `false`
+    // ("provably empty").
     const legacy = {
       iter(): AsyncIterable<never> {
         throw new Error('the readiness probe must not scan the corpus');
       },
     };
-    expect(await isVectorSpacePopulated(legacy, 'legacy-model')).toBe(false);
+    expect(
+      await isVectorSpacePopulated(legacy, 'legacy-model')
+    ).toBeUndefined();
   });
 });

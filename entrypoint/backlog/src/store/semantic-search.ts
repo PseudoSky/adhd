@@ -149,8 +149,9 @@ let vectorSpacePopulated = false;
  * `vectorSpacePopulated` defaults to `true` when a backend is supplied,
  * because the overwhelmingly common caller is a test installing a FAKE
  * backend whose space it has already stocked. The real host
- * ({@link enableSemanticSearchFromConfig}) probes the space and passes the
- * measured value.
+ * ({@link enableSemanticSearchFromConfig}) probes the space and passes `true`
+ * ONLY when the probe proved it populated — an empty (`false`) or
+ * indeterminate (`undefined`) space both stay closed.
  */
 export function configureSemanticBackend(
   backend: SemanticBackend | null,
@@ -251,17 +252,35 @@ export type SemanticBootstrapFailure =
   | { reason: 'vector_store_failed'; detail: string }
   | { reason: 'unsupported_adapter'; detail: string };
 
+/**
+ * Why a bootstrap could not DETERMINE whether the vector space holds vectors,
+ * even though the backend itself started. This is not a failure — the backend
+ * works; the bounded readiness probe is simply unavailable on it. Distinct
+ * from `false` ("provably empty") so a host can report "cannot determine"
+ * instead of a false "is EMPTY".
+ */
+export type SemanticVectorSpaceProbeReason = 'vector_store_probe_unsupported';
+
 export type SemanticBootstrapResult =
   | {
       ok: true;
       backend: SemanticBackend;
       /**
        * Whether the vector space held at least one vector at bootstrap.
-       * `false` means the backend works but has nothing to search — see
-       * {@link configureSemanticBackend}; the read gates treat it as
-       * disabled rather than serving unranked results (BUG-045).
+       * `false` means the backend works but has nothing to search; `undefined`
+       * means it could NOT be determined — the backend lacks the bounded
+       * `hasVectors` probe, so `vectorSpaceProbeReason` is set. BOTH `false`
+       * and `undefined` leave the read gates CLOSED rather than serving
+       * unranked results (BUG-045); see {@link configureSemanticBackend}.
        */
-      vectorSpacePopulated: boolean;
+      vectorSpacePopulated: boolean | undefined;
+      /**
+       * Present iff `vectorSpacePopulated === undefined`: names why the
+       * population could not be determined. `vector_store_probe_unsupported`
+       * — the backend predates the additive `hasVectors` capability, and the
+       * unbounded `iter` scan this probe exists to avoid is not a fallback.
+       */
+      vectorSpaceProbeReason?: SemanticVectorSpaceProbeReason;
     }
   | { ok: false; failure: SemanticBootstrapFailure };
 
@@ -409,8 +428,20 @@ async function resolveVecFilter(
 }
 
 /**
- * Bounded existence probe over a vector space: `true` iff `modelId`'s space
- * holds at least one vector.
+ * Bounded existence probe over a vector space. Returns:
+ *
+ * - `true` — `modelId`'s space provably holds at least one vector;
+ * - `false` — it is provably EMPTY (the backend answered, and the answer was
+ *   "none");
+ * - `undefined` — it CANNOT BE DETERMINED: the backend does not expose the
+ *   additive `hasVectors` capability, so there is no bounded way to ask.
+ *
+ * `undefined` is deliberately DISTINCT from `false`. Reporting "cannot
+ * determine" as "empty" is a false claim — the caller would otherwise log
+ * "its vector space … is EMPTY — zero items have been embedded" for a backend
+ * that simply could not answer. The caller keeps the read gates CLOSED on
+ * `undefined` (the same fail-safe direction as an empty space) but names the
+ * distinct `vector_store_probe_unsupported` reason.
  *
  * Delegates to the backend's additive `hasVectors` capability
  * (`@adhd/sox-vector-store` ≥0.7.0) — a `SELECT 1 … LIMIT 1` that projects no
@@ -422,8 +453,7 @@ async function resolveVecFilter(
  * every host boot.
  *
  * The capability is additive, NOT on the pinned backend contract, so a
- * backend that predates it (or a structural test double) narrows to
- * `undefined`; absence degrades to `false` — the honest conservative answer.
+ * backend that predates it (or a structural test double) yields `undefined`.
  * A backend that cannot answer cheaply must NOT fall back to the unbounded
  * scan this probe exists to avoid.
  *
@@ -434,10 +464,10 @@ async function resolveVecFilter(
 export async function isVectorSpacePopulated(
   vectorBackend: { hasVectors?(modelId: string): Promise<boolean> },
   modelId: string
-): Promise<boolean> {
+): Promise<boolean | undefined> {
   return typeof vectorBackend.hasVectors === 'function'
     ? vectorBackend.hasVectors(modelId)
-    : false;
+    : undefined;
 }
 
 /**
@@ -651,7 +681,7 @@ export async function bootstrapSemanticBackend(
   // the entire vector table on every host boot (BUG e19bc9d0). The bounded
   // `hasVectors` capability (`@adhd/sox-vector-store` ≥0.7.0) issues a
   // `SELECT 1 … LIMIT 1` instead — see {@link isVectorSpacePopulated}.
-  let vectorSpacePopulated = false;
+  let vectorSpacePopulated: boolean | undefined;
   try {
     vectorSpacePopulated = await isVectorSpacePopulated(
       vectorBackend,
@@ -669,7 +699,17 @@ export async function bootstrapSemanticBackend(
     };
   }
 
-  return { ok: true, backend, vectorSpacePopulated };
+  return {
+    ok: true,
+    backend,
+    vectorSpacePopulated,
+    // `undefined` is not a failure — the backend started fine; the bounded
+    // probe is simply unavailable on it. Name that distinctly so a host
+    // reports "cannot determine", never the false "is EMPTY".
+    ...(vectorSpacePopulated === undefined
+      ? { vectorSpaceProbeReason: 'vector_store_probe_unsupported' as const }
+      : {}),
+  };
 }
 
 /**
@@ -721,19 +761,35 @@ export async function enableSemanticSearchFromConfig(
     return null;
   }
 
-  if (!result.vectorSpacePopulated) {
-    // Loud, not fatal, and NOT silently degraded to keyword: the read gates
-    // now report `rag_not_configured` for this store until it is backfilled.
+  if (result.vectorSpacePopulated === false) {
+    // Provably empty. Loud, not fatal, and NOT silently degraded to keyword:
+    // the read gates report `rag_not_configured` for this store until it is
+    // backfilled.
     log(
       `backlog: embedding.enabled is set and the semantic backend started, but its vector space ` +
         `("${result.backend.modelId}", ${result.backend.dim}d) is EMPTY — zero items have been embedded. ` +
         `Semantic reads will answer rag_not_configured rather than returning unranked results; ` +
         `run \`backlog_admin(embedding_backfill)\` to populate it.`
     );
+  } else if (result.vectorSpacePopulated === undefined) {
+    // INDETERMINATE, not empty. The backend lacks the bounded `hasVectors`
+    // probe, so we cannot tell whether it holds vectors — and scanning the
+    // whole table to find out is exactly the cost this probe exists to
+    // avoid. Reads stay CLOSED (fail-safe, the same direction as an empty
+    // space) but the message must never claim the space is empty.
+    log(
+      `backlog: embedding.enabled is set and the semantic backend started, but whether its vector ` +
+        `space ("${result.backend.modelId}", ${result.backend.dim}d) holds any vectors could not be ` +
+        `determined (vector_store_probe_unsupported): this vector backend does not expose the bounded ` +
+        `\`hasVectors\` probe. Semantic reads will answer rag_not_configured rather than returning ` +
+        `unranked results; run \`backlog_admin(embedding_backfill)\` to (re)confirm and open them.`
+    );
   }
 
   configureSemanticBackend(result.backend, {
-    vectorSpacePopulated: result.vectorSpacePopulated,
+    // Only a PROVABLY populated space opens the read gates: `false` (empty)
+    // and `undefined` (indeterminate) both stay closed.
+    vectorSpacePopulated: result.vectorSpacePopulated === true,
   });
   return result.backend;
 }
