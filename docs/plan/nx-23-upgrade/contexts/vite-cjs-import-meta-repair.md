@@ -18,6 +18,7 @@
 
 - [vite-cjs-import-meta-repair.1] The built CommonJS entrypoints load and run as real processes, not merely declare the bumped version
 
+- [vite-cjs-import-meta-repair.2] The default-running acceptance spec drives the BUILT CJS artifact and passes
 ---
 
 ## Reservations
