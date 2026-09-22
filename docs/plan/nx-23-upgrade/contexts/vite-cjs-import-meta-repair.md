@@ -21,6 +21,7 @@
 - [vite-cjs-import-meta-repair.2] The default-running acceptance spec drives the BUILT CJS artifact and passes
 - [vite-cjs-import-meta-repair.3] Every CJS-emitting vite config in the workspace is wired to the shared shim
 - [vite-cjs-import-meta-repair.4] The shared format-gated shim plugin exists
+- [vite-cjs-import-meta-repair.5] The default-running acceptance spec exists
 ---
 
 ## Reservations
