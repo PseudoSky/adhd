@@ -261,7 +261,7 @@ describe('RAG §8 DoD — real fastembed + real Turso vectors', () => {
   });
 
   it(
-    'DoD#1 — bootstrap resolves a REAL model: health reports state:"real" with the resolved id, never a config placeholder',
+    'DoD#1 — health reflects the RESOLVED model on first use, never a config placeholder',
     async () => {
       opened = await openWithBackend('rag-e2e-dod1');
       const { backend } = opened;
@@ -269,9 +269,26 @@ describe('RAG §8 DoD — real fastembed + real Turso vectors', () => {
       expect(backend.modelId).toBe(MODEL);
       expect(backend.dim).toBe(768);
 
+      // SPEC-EMBEDDING-FUNNEL.md §E (lazy provider): bootstrap constructs the
+      // provider INERT — it does NOT load the model (and spawns no host), so
+      // health truthfully reports the pre-load state with NO active model. This
+      // is the contract a read-only verb depends on. A backend that merely
+      // echoed `config` would report this same null-active state, so this half
+      // alone is not yet a discriminator — the second half below is.
+      const before = await backend.health();
+      expect(before.state).toBe('uninitialized');
+      expect(before.active).toBeNull();
+      expect(before.dimensions).toBe(768);
+      expect(before.last_error).toBeNull();
+
+      // Drive ONE real embed: the model now loads, and health resolves the REAL
+      // model — never the config string. This is the half that distinguishes a
+      // resolved backend from a config echo (the original DoD#1 assertion, now
+      // reached via first use rather than at bootstrap).
+      await backend.embedQuery('force the real model to load');
+
       const health = await backend.health();
-      // §2.4/§1.5: `active` is the RESOLVED model. A backend that merely echoed
-      // config would still pass a modelId check, so assert the health state too.
+      // §2.4/§1.5: `active` is the RESOLVED model.
       expect(health.state).toBe('real');
       expect(health.active).toBe(MODEL);
       expect(health.dimensions).toBe(768);

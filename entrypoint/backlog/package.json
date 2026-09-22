@@ -35,7 +35,7 @@
     "yaml": "1.10.3"
   },
   "optionalDependencies": {
-    "@adhd/sox-embedding-provider": "^0.4.1",
+    "@adhd/sox-embedding-provider": "^0.5.2",
     "@adhd/sox-vector-store": "^0.7.0"
   },
   "assets": [
