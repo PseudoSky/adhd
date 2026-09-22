@@ -13,18 +13,11 @@
   "tags": ["platform:node", "layer:entrypoints"],
   "targets": {
     "build": {
-      "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
-      "generatePackageJson": true,
-      "updateBuildableProjectDepsInPackageJson": true,
-      "buildableProjectDepsInPackageJsonType": "dependencies",
+      "//": "Override of the `build` target inferred by @nx/js/typescript (see that plugin's registration in nx.json for why the inferred `tsc --build tsconfig.lib.json` cannot run in this workspace). The retired executor's `generatePackageJson`/`updateBuildableProjectDepsInPackageJson`/`createLockFile` are covered downstream by the `dist-manifest` + `sync-deps` targets; `*.md` assets are covered by the inferred `assets` target.",
+      "outputs": ["{projectRoot}/dist"],
       "options": {
-        "outputPath": "entrypoint/decompile-cli/dist",
-        "tsConfig": "entrypoint/decompile-cli/tsconfig.lib.json",
-        "packageJson": "entrypoint/decompile-cli/package.json",
-        "main": "entrypoint/decompile-cli/src/index.ts",
-        "assets": ["entrypoint/decompile-cli/*.md"],
-        "createLockFile": false
+        "cwd": ".",
+        "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.lib.json --outDir {projectRoot}/dist --rootDir {projectRoot} --baseUrl {projectRoot} --composite false --noEmitOnError"
       }
     },
     "nx-release-publish": {

@@ -19,13 +19,11 @@
   ],
   "targets": {
     "build": {
-      "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
+      "//": "Override of the `build` target inferred by @nx/js/typescript (see that plugin's registration in nx.json for why the inferred `tsc --build tsconfig.lib.json` cannot run in this workspace).",
+      "outputs": ["{projectRoot}/dist"],
       "options": {
-        "outputPath": "packages/agent/agent-engine-orchestrator/dist",
-        "main": "packages/agent/agent-engine-orchestrator/src/index.ts",
-        "tsConfig": "packages/agent/agent-engine-orchestrator/tsconfig.lib.json",
-        "clean": true
+        "cwd": ".",
+        "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.lib.json --outDir {projectRoot}/dist --rootDir {projectRoot} --baseUrl {projectRoot} --composite false --noEmitOnError"
       }
     },
     "typecheck": {
