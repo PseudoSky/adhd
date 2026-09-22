@@ -12,18 +12,11 @@
   ],
   "targets": {
     "build": {
-      "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
-      "generatePackageJson": true,
-      "updateBuildableProjectDepsInPackageJson": true,
-      "buildableProjectDepsInPackageJsonType": "dependencies",
+      "//": "Override of the `build` target inferred by @nx/js/typescript (see that plugin's registration in nx.json for why the inferred `tsc --build tsconfig.lib.json` cannot run in this workspace). The trailing cp calls reproduce the retired tsc build executor's `assets` glob and `generatePackageJson`: environment-cli is `private`, so neither the inferred `assets` target nor `dist-manifest` attaches to do it downstream.",
+      "outputs": ["{projectRoot}/dist"],
       "options": {
-        "outputPath": "entrypoint/environment-cli/dist",
-        "tsConfig": "entrypoint/environment-cli/tsconfig.lib.json",
-        "packageJson": "entrypoint/environment-cli/package.json",
-        "main": "entrypoint/environment-cli/src/index.ts",
-        "assets": ["entrypoint/environment-cli/*.md"],
-        "createLockFile": false
+        "cwd": ".",
+        "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.lib.json --outDir {projectRoot}/dist --rootDir {projectRoot} --baseUrl {projectRoot} --composite false --noEmitOnError && cp {projectRoot}/*.md {projectRoot}/package.json {projectRoot}/dist/"
       }
     }
   }

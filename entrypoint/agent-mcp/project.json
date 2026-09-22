@@ -13,29 +13,11 @@
   "tags": ["entrypoint:mcp", "pkg-class:entrypoint", "platform:node"],
   "targets": {
     "build": {
-      "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
+      "//": "Override of the `build` target inferred by @nx/js/typescript (see that plugin's registration in nx.json for why the inferred `tsc --build tsconfig.lib.json` cannot run in this workspace). The trailing cp calls reproduce the `assets` globs the retired tsc build executor copied; the rest of that spec (README/CHANGELOG/llms.txt/drizzle/package.json) is owned by the inferred `assets` target.",
+      "outputs": ["{projectRoot}/dist"],
       "options": {
-        "main": "entrypoint/agent-mcp/src/index.ts",
-        "outputPath": "entrypoint/agent-mcp/dist",
-        "tsConfig": "entrypoint/agent-mcp/tsconfig.lib.json",
-        "assets": [
-          "entrypoint/agent-mcp/package.json",
-          {
-            "input": "entrypoint/agent-mcp",
-            "glob": "drizzle/**/*",
-            "output": "."
-          },
-          "entrypoint/agent-mcp/*.md",
-          "entrypoint/agent-mcp/llms.txt",
-          "entrypoint/agent-mcp/LICENSE",
-          {
-            "glob": "**/*.md",
-            "input": "entrypoint/agent-mcp/docs",
-            "output": "docs",
-            "ignore": ["marketing/**"]
-          }
-        ]
+        "cwd": ".",
+        "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.lib.json --outDir {projectRoot}/dist --rootDir {projectRoot} --baseUrl {projectRoot} --composite false --noEmitOnError && cp {projectRoot}/*.md {projectRoot}/LICENSE {projectRoot}/dist/ && cp -R {projectRoot}/docs {projectRoot}/dist/"
       }
     },
     "typecheck": {

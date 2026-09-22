@@ -14,31 +14,11 @@
   "implicitDependencies": ["!workspace-base-vite-paths"],
   "targets": {
     "build": {
-      "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
+      "//": "Override of the `build` target inferred by @nx/js/typescript (see that plugin's registration in nx.json for why the inferred `tsc --build tsconfig.lib.json` cannot run in this workspace). The trailing cp calls reproduce the `assets` globs the retired tsc build executor copied (generator templates + schemas); README/CHANGELOG are owned by the inferred `assets` target.",
+      "outputs": ["{projectRoot}/dist"],
       "options": {
-        "outputPath": "packages/agent/agent-generator-plugin/dist",
-        "main": "packages/agent/agent-generator-plugin/src/index.ts",
-        "tsConfig": "packages/agent/agent-generator-plugin/tsconfig.lib.json",
-        "clean": true,
-        "assets": [
-          "packages/agent/agent-generator-plugin/*.md",
-          {
-            "input": "packages/agent/agent-generator-plugin",
-            "glob": "generators.json",
-            "output": "."
-          },
-          {
-            "input": "packages/agent/agent-generator-plugin/src/generators",
-            "glob": "**/__files__/**/*",
-            "output": "./src/generators"
-          },
-          {
-            "input": "packages/agent/agent-generator-plugin/src/generators",
-            "glob": "**/schema.json",
-            "output": "./src/generators"
-          }
-        ]
+        "cwd": ".",
+        "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.lib.json --outDir {projectRoot}/dist --rootDir {projectRoot} --baseUrl {projectRoot} --composite false --noEmitOnError && cp {projectRoot}/*.md {projectRoot}/generators.json {projectRoot}/dist/ && cp {projectRoot}/src/generators/registry-package/schema.json {projectRoot}/dist/src/generators/registry-package/ && cp -R {projectRoot}/src/generators/registry-package/__files__ {projectRoot}/dist/src/generators/registry-package/"
       }
     },
     "nx-release-publish": {

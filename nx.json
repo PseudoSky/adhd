@@ -2,6 +2,11 @@
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "defaultBase": "main",
   "cacheDirectory": ".nx/cache",
+  "sync": {
+    "disabledTaskSyncGenerators": [
+      "@nx/js:typescript-sync"
+    ]
+  },
   "namedInputs": {
     "default": [
       "{projectRoot}/**/*",
@@ -109,6 +114,45 @@
       "exclude": [
         "vitest.config.ts"
       ]
+    },
+    {
+      "plugin": "@nx/js/typescript",
+      "//": "Nx 23 exposes the TypeScript project-references plugin at '@nx/js/typescript' (package export './typescript'). There is no '@nx/js/plugin' export in @nx/js@23.2.1 — registering that specifier fails with ERR_PACKAGE_PATH_NOT_EXPORTED. Scoped by `include` to exactly the 14 tsc-built libraries: every project in this workspace also ships a vite.config.ts (the vitest config), so an unscoped registration would infer a tsc `build` that overrides the 47 vite builds.",
+      "include": [
+        "entrypoint/agent-mcp/tsconfig.lib.json",
+        "entrypoint/decompile-cli/tsconfig.lib.json",
+        "entrypoint/environment-cli/tsconfig.lib.json",
+        "packages/agent/agent-core-policy/tsconfig.lib.json",
+        "packages/agent/agent-core-provider/tsconfig.lib.json",
+        "packages/agent/agent-engine-compiler/tsconfig.lib.json",
+        "packages/agent/agent-engine-orchestrator/tsconfig.lib.json",
+        "packages/agent/agent-generator-plugin/tsconfig.lib.json",
+        "packages/agent/agent-store-prompts/tsconfig.lib.json",
+        "packages/agent/agent-store-runtime/tsconfig.lib.json",
+        "packages/agent/agent-store-tools/tsconfig.lib.json",
+        "packages/apigen/apigen-generator-nx/tsconfig.lib.json",
+        "packages/workspace/workspace-base-tools/tsconfig.lib.json",
+        "packages/workspace/workspace-codegen-nx/tsconfig.lib.json"
+      ],
+      "options": {
+        "build": {
+          "targetName": "build",
+          "configName": "tsconfig.lib.json"
+        }
+      }
+    },
+    {
+      "plugin": "@nx/js/typescript",
+      "//": "Second scoped registration: dispatch-cli's bespoke second-pass compile (`build-bin`) is a distinct tsc pass over `tsconfig.build-bin.json`, so it is inferred under its own target name rather than shadowing the vite `build`. Scoped to that single config file.",
+      "include": [
+        "entrypoint/dispatch-cli/tsconfig.build-bin.json"
+      ],
+      "options": {
+        "build": {
+          "targetName": "build-bin",
+          "configName": "tsconfig.build-bin.json"
+        }
+      }
     }
   ],
   "generators": {
@@ -174,16 +218,6 @@
         "cwd": ".",
         "command": "vitest run --config {projectRoot}/vite.config.ts"
       }
-    },
-    "@nx/js:tsc": {
-      "cache": true,
-      "dependsOn": [
-        "^build"
-      ],
-      "inputs": [
-        "production",
-        "^production"
-      ]
     },
     "build": {
       "dependsOn": [
