@@ -25,10 +25,10 @@
       "end_ref": "bf185772212d10d1524db9b8c6e82192ee6265c0"
     },
     "test-resolution-absorbed": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-09-22T14:08:23.214Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "ce69c1c8d444a402c78ab817003cace0dbcd693e",
       "end_ref": null
     },
     "audit-reconcile": {
