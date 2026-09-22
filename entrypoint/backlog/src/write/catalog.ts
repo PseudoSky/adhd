@@ -609,8 +609,17 @@ export function resolveProjectPolicy(
  * the ETL's own precedent (`tools/etl/citation.ts`). Kept beside
  * {@link resolveProjectPolicy} — it reads the same resolved project row — and
  * shared by BOTH write paths so the `create`/`transition` gates never drift.
+ *
+ * A TYPE PREDICATE, not a bare `boolean`: both `computeCitationSha` call sites
+ * (and the waiver log beside each gate) need the narrowed `metadata.path` as a
+ * `string` immediately after the guard, and a predicate is the one form that
+ * gives them that without a non-null assertion or a re-read of the same field.
  */
-export function projectHasKnownPath(project: IResolvedProjectRow): boolean {
+export function projectHasKnownPath(
+  project: IResolvedProjectRow
+): project is IResolvedProjectRow & {
+  metadata: Record<string, unknown> & { path: string };
+} {
   const path = project.metadata?.path;
   return typeof path === 'string' && path.length > 0;
 }

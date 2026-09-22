@@ -236,11 +236,9 @@ async function computeCitationSha(
   project: IResolvedProjectRow,
   file: string
 ): Promise<string> {
-  const projectPath = project.metadata?.path;
-  if (typeof projectPath !== 'string' || projectPath.length === 0)
-    return 'unverified';
+  if (!projectHasKnownPath(project)) return 'unverified';
 
-  const root = resolvePath(projectPath);
+  const root = resolvePath(project.metadata.path);
   const candidate = isAbsolute(file)
     ? resolvePath(file)
     : resolvePath(root, file);
@@ -360,12 +358,17 @@ export async function transition(
       // with a known `path`). A path-less project records `sha:"unverified"`
       // verbatim; a path-present project citing a missing/escaping file still
       // hard-fails.
-      if (
-        sha === 'unverified' &&
-        prePolicy.citationRequiresSha &&
-        projectHasKnownPath(preProject)
-      ) {
-        throw new CitationUnverifiableError(citation.file);
+      if (sha === 'unverified' && prePolicy.citationRequiresSha) {
+        if (projectHasKnownPath(preProject)) {
+          throw new CitationUnverifiableError(citation.file);
+        }
+        // Observability for the deliberate path-less waiver (DEBT a934e089) —
+        // same rationale as `create-issue.ts`'s identical log; never a second
+        // audit row (SPEC §4a's one-audit-node-per-state-change contract).
+        // eslint-disable-next-line no-console -- the write layer's only log sink.
+        console.error(
+          `transition: citation_requires_sha waived for path-less project uid="${preProject.uid}" — cannot verify citation "${citation.file}", persisting sha:"unverified" (set the project's metadata.path to make citation_requires_sha enforceable).`
+        );
       }
       citationShas.push(sha);
     }

@@ -146,6 +146,9 @@ interface OptVectorStoreModule {
   ): Promise<AsyncVectorBackend>;
 }
 
+/** One-shot latch for {@link isVectorSpacePopulated}'s capability-miss warning — see the note there. */
+let warnedMissingVectorProbe = false;
+
 /**
  * Bounded existence probe of a REAL vector table: `true` iff at least one
  * vector exists under `modelId`. This is the readiness source the text-routing
@@ -181,9 +184,23 @@ export async function isVectorSpacePopulated(
   modelId: string
 ): Promise<boolean> {
   const probe = vectorBackend as Partial<AsyncVectorExistenceProbe>;
-  return typeof probe.hasVectors === 'function'
-    ? probe.hasVectors(modelId)
-    : false;
+  if (typeof probe.hasVectors !== 'function') {
+    // Observability only (DEBT 2b1d8a22) — the `false` return is unchanged.
+    // This runs PER QUERY, so a backend that lacks the probe would otherwise
+    // log on every bare-`text:` query; the capability is a process-lifetime
+    // fact about the backend, so warn ONCE per process. (Per-process, not
+    // shared: duplicate module copies would each warn at most once, which is
+    // harmless — there is no cross-copy state to keep consistent here.)
+    if (!warnedMissingVectorProbe) {
+      warnedMissingVectorProbe = true;
+      // eslint-disable-next-line no-console -- the write layer's only log sink.
+      console.error(
+        `isVectorSpacePopulated: vector backend exposes no hasVectors() probe — treating the space as EMPTY (modelId="${modelId}"). Bare \`text:\` queries will not route to the semantic ranker until the backend provides the probe.`
+      );
+    }
+    return false;
+  }
+  return probe.hasVectors(modelId);
 }
 
 /**
