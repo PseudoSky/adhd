@@ -20,6 +20,7 @@
 
 - [typecheck-teeth-restored.2] agent-core-env builds green with the typecheck target restored
 - [typecheck-teeth-restored.3] The full typecheck sweep is green across every project that exposes the target
+- [typecheck-teeth-restored.4] decompile-cli builds green on a cold cache, so the result is a real execution and not a stale-cache replay
 ---
 
 ## Reservations
