@@ -172,29 +172,82 @@ function compileGeneratedDispatcher(
 }
 
 /**
+ * Is this process running as (or descended from) an Nx task?
+ *
+ * Nx sets `NX_TASK_TARGET_TARGET` (plus `_PROJECT`/`_CONFIGURATION`) on every
+ * task process — see `nx/src/tasks-runner/task-env.js`
+ * (`getNxEnvVariablesForTask`) — and every child spawned from it inherits
+ * them, including the `tsx` fixture subprocess `process-cleanup.spec.ts`
+ * spawns.
+ *
+ * DETECTION CHOICE (BUG 14614478): we key off Nx's own env marker rather than
+ * a purpose-built opt-in flag because the executor both consuming test targets
+ * use — `@nx/vite:test` — declares NO `env` option in its schema (only
+ * `nx:run-commands` does), so project.json alone offers no supported way to
+ * inject a custom flag into the vitest process. Nx's marker is present for
+ * free, is inherited across the whole process tree, and is absent for a
+ * standalone `apigen run`.
+ *
+ * The contract under Nx is that the task graph is responsible for ordering:
+ * the consuming targets declare `apigen-java:package` in their `dependsOn`,
+ * so a fresh, cached `target/*-all.jar` already exists before we run. Under
+ * Nx we therefore LOCATE that jar and NEVER spawn `mvn` — spawning a second
+ * `mvn package` here is exactly what raced two concurrent shade builds over
+ * the shared `dependency-reduced-pom.xml` / `target/*.jar`.
+ */
+function isNxTask(): boolean {
+  return (process.env['NX_TASK_TARGET_TARGET'] ?? '') !== '';
+}
+
+/**
  * Find the shaded/fat jar `packages/apigen/java`'s `package` target
- * produces. Builds it (mvn package -DskipTests) if not already present —
- * mirrors the "spawning a process / needing a build first is the test's job,
- * not a reason to gate" testing standard (AGENTS.md §7): callers never need
- * to remember to build the Java module first.
+ * produces.
+ *
+ * Under Nx (`isNxTask()`): the task graph has already built it via the
+ * `apigen-java:package` dependency — locate the prebuilt `*-all.jar` and
+ * never spawn `mvn`. If it is absent we FAIL LOUDLY (never fall back to
+ * spawning), because that means the `apigen-java:package` wiring or its cache
+ * restore is broken — a defect to surface, not paper over.
+ *
+ * Standalone (no Nx task, e.g. a direct `apigen run`): preserve the original
+ * freshness guarantee and ALWAYS run `mvn package`. Maven's own incremental
+ * compiler already no-ops (fast) when nothing changed, but reusing a stale
+ * jar unconditionally would mask real source changes (e.g. a fixed bug in
+ * ApigenJavalinServer.java) that a caller with a Java edit but no manual
+ * `mvn package` run would otherwise silently keep exercising.
  */
 function findFatJar(javaPkgDir: string): string {
   const targetDir = path.join(javaPkgDir, 'target');
 
-  // ALWAYS run `mvn package` rather than reusing a pre-existing *-all.jar
-  // unconditionally: Maven's own incremental compiler already no-ops (fast)
-  // when nothing changed, but reusing a stale jar unconditionally would mask
-  // real source changes (e.g. a fixed bug in ApigenJavalinServer.java) that
-  // a caller with a Java source edit but no manual `mvn package` run would
-  // otherwise silently keep exercising.
+  if (isNxTask()) {
+    const prebuilt = fs.existsSync(targetDir)
+      ? fs.readdirSync(targetDir).find((f) => f.endsWith('-all.jar'))
+      : undefined;
+    if (!prebuilt) {
+      throw new Error(
+        `java-javalin: running under Nx (NX_TASK_TARGET_TARGET=${String(
+          process.env['NX_TASK_TARGET_TARGET']
+        )}) but no prebuilt *-all.jar found in ${targetDir}. The Nx task graph must build it: ` +
+          `declare "apigen-java:package" in this target's dependsOn. ` +
+          `Refusing to spawn mvn here — a second concurrent "mvn package" is the shade-plugin race (BUG 14614478).`
+      );
+    }
+    return path.join(targetDir, prebuilt);
+  }
+
   const mvn = resolveMvn();
   const result = spawnSync(mvn, ['-q', '-pl', '.', 'package', '-DskipTests'], {
     cwd: javaPkgDir,
     encoding: 'utf-8',
   });
   if (result.status !== 0) {
+    // Include BOTH streams: Maven prints its real `[ERROR]` diagnostics to
+    // STDOUT (the shade-plugin failures that caused this race did), while
+    // only JVM/plugin startup warnings go to STDERR — interpolating stderr
+    // alone silently discarded the real cause (BUG 73741a3c).
     throw new Error(
-      `java-javalin: mvn package failed to build apigen-java's fat jar (exit ${String(result.status)}):\n${result.stderr ?? ''}`
+      `java-javalin: mvn package failed to build apigen-java's fat jar (exit ${String(result.status)}):\n` +
+        `--- stdout ---\n${result.stdout ?? ''}\n--- stderr ---\n${result.stderr ?? ''}`
     );
   }
   const rebuilt = fs.readdirSync(targetDir).find((f) => f.endsWith('-all.jar'));
