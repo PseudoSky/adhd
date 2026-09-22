@@ -88,10 +88,10 @@
       "end_ref": "89649106ea0c0808be85c0180eae8cc1743e23ec"
     },
     "test-changed-optin": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-09-22T20:21:29.627Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "d69f7dd5fe6aa0c276028033a3c87c2613ff1e7d",
       "end_ref": null
     },
     "vite-cjs-import-meta-repair": {
