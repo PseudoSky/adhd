@@ -135,6 +135,13 @@
       "done_at": "2026-09-22T13:47:00.495Z",
       "start_ref": "82c0286da69591a6c33e4de402a368b78edf12a8",
       "end_ref": "c1af25ef4f46215da7cfde24cf543e4bdf8186f0"
+    },
+    "typecheck-teeth-restored": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
     }
   },
   "transition_log": [
