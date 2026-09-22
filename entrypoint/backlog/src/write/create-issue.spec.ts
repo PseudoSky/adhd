@@ -268,6 +268,16 @@ describe('createIssue — citation sha gate applies only where verification is p
         citations: [{ file: 'does-not-exist.ts' }],
       })
     ).rejects.toThrow(CitationUnverifiableError);
+
+    // Teeth (blind review): the rejection must leave the graph UNTOUCHED — a
+    // failed create persists NO issue node. Assert the store side directly,
+    // never only the thrown error: a bug that wrote the row and THEN threw
+    // would still satisfy `.rejects.toThrow` alone.
+    const { rows } = await store.adapter.executeAll<{ n: number }>(
+      `SELECT COUNT(*) as n FROM node WHERE kind = 'issue' AND name = ? AND t_invalid IS NULL`,
+      ['missing citation']
+    );
+    expect(rows[0]?.n).toBe(0);
   });
 
   it('path-PRESENT project citing a REAL file computes a genuine sha256 — never "unverified"', async () => {
