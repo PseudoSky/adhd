@@ -20,6 +20,7 @@
 
 - [browser-cjs-umd-repair.2] The default-running browser acceptance spec exists
 - [browser-cjs-umd-repair.3] The spec asserts against the BUILT bundles, not the source, because the defect is created by the bundler
+- [browser-cjs-umd-repair.4] The ESM bundle still carries native import.meta.url and is left untouched
 ---
 
 ## Reservations
