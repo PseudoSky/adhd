@@ -123,10 +123,10 @@
       "end_ref": "7916e63943edf9837338c201a88e267a2421e8c8"
     },
     "browser-package-build-repair": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-09-22T13:39:50.983Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "ca547b220731624c29e6d5049973579fb927790c",
       "end_ref": null
     },
     "browser-cjs-umd-repair": {
