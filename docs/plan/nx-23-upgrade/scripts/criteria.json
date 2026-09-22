@@ -1097,6 +1097,13 @@
       "kind": "command",
       "cmd": "NX_CACHE_DIRECTORY=\"$(mktemp -d)/cache\" NX_WORKSPACE_DATA_DIRECTORY=\"$(mktemp -d)/data\" ./node_modules/.bin/nx build decompile-cli",
       "expect": "exit0"
+    },
+    {
+      "id": "typecheck-teeth-restored.5",
+      "phase": "graph",
+      "tier": 1,
+      "kind": "exists",
+      "path": "docs/plan/nx-23-upgrade/TYPECHECK-TEETH.md"
     }
   ]
 }
