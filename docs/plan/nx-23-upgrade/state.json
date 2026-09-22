@@ -60,10 +60,10 @@
       "end_ref": "dde0ea4e875589fc9bd8bd218a4d76b6a1763cc7"
     },
     "graph-test-build-inferred": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-09-22T15:01:14.492Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "3ed3ffc3e61e112ae9ff54bc0fc78cffc539be16",
       "end_ref": null
     },
     "graph-js-tsc-inferred": {
