@@ -1,9 +1,10 @@
 /**
  * immediate-retry.ts — bounded, jittered exponential-backoff retry wrapper
  * around `adapter.transaction(fn, { mode: 'immediate' })` (DEBT-BACKLOG-
- * CONCURRENCY-BUSY-RETRY-001). `mutate-metadata.ts` and
- * `graph-backlog-store.ts`'s schema apply are the write paths that reach the
- * `immediate` mode directly, and both funnel through this wrapper.
+ * CONCURRENCY-BUSY-RETRY-001). The write layer's `executeWriteTransaction`
+ * (`write/tx.ts`) and `graph-backlog-store.ts`'s schema apply are the write
+ * paths that reach the `immediate` mode directly, and both funnel through
+ * this wrapper.
  *
  * It retries ONLY busy-shaped errors, and it does not classify them itself:
  * `@adhd/sox-store-adapter`'s `isBusyError`/`isConcurrentConflict` duck-type

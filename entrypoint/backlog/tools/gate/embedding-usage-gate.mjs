@@ -21,9 +21,8 @@
  * DETECTION SIGNAL. "Reaches the embedding path" means the file contains a
  * genuine, quoted reference to the package specifier — a static import, a
  * dynamic `import(...)`, or a `vi.mock(...)` call — OR imports
- * `bootstrapSemanticStoreMembers` (`write/bootstrap.ts`'s real bootstrap) OR
- * imports from `store/semantic-search.js` (the other real bootstrap; see
- * SPEC.md §5b on why both still exist). This is deliberately narrower than
+ * `bootstrapSemanticStoreMembers` (`write/bootstrap.ts`, the single real
+ * bootstrap). This is deliberately narrower than
  * "imports api.ts/query.ts" — nearly every spec in the package imports the
  * verb surface, regardless of whether that test's own env ever turns
  * `embedding.enabled` on, so that broader signal is pure noise (verified:
@@ -51,10 +50,6 @@ const ROOT = join(PKG, 'src');
  */
 const REAL_BY_DESIGN = new Map([
   [
-    'src/store/rag-e2e.spec.ts',
-    'the one true end-to-end proof against the real model',
-  ],
-  [
     'src/api.semantic-production-seam.spec.ts',
     'the PRODUCTION semantic seam (bootstrapSemanticStoreMembers + api.ts upsertProject/create/query) ' +
       'proven end-to-end against the REAL fastembed model — no vi.mock of @adhd/sox-embedding-provider. ' +
@@ -65,24 +60,17 @@ const REAL_BY_DESIGN = new Map([
 ]);
 
 /**
- * A second, equally legitimate way to avoid a real model load: inject a
- * fake `SemanticBackend` directly via `configureSemanticBackend()` rather
- * than mocking the `@adhd/sox-embedding-provider` package. No `vi.mock()`
- * marker applies here because there is nothing to mock — the seam is a
- * plain function parameter. The file's own header must state the
- * no-model-load guarantee in prose for this to count.
+ * A second, equally legitimate way to avoid a real model load: a spec that
+ * injects a fake backend through a plain function parameter rather than
+ * mocking the `@adhd/sox-embedding-provider` package. No `vi.mock()` marker
+ * applies here because there is nothing to mock. The file's own header must
+ * state the no-model-load guarantee in prose for this to count.
+ *
+ * Currently empty — the one entry that used it was the deleted
+ * `store/semantic-search.spec.ts`. The mechanism is retained deliberately:
+ * the seam may need it again.
  */
-const DECLARED_INJECTED_FAKE = new Map([
-  [
-    'src/store/semantic-search.spec.ts',
-    'the injectable-seam describe block injects a fake SemanticBackend via configureSemanticBackend() — no model load. ' +
-      'DISCLOSED EXCEPTION (STATE.md A15): the separate bootstrapSemanticBackend diagnostics test calls the REAL ' +
-      'bootstrapSemanticBackend with no mock and conditionally loads the real fastembed/onnxruntime model when the ' +
-      'optional @adhd/sox-embedding-provider/@adhd/sox-vector-store packages happen to be installed on the host ' +
-      '(RAG-SPEC.md §1.6 optional-dependency contract) — machine-dependent by design, not REAL_BY_DESIGN (it is not an ' +
-      'end-to-end proof) and not a bug; see the file\'s own header for the full account.',
-  ],
-]);
+const DECLARED_INJECTED_FAKE = new Map();
 
 const MOCK_MARKER = 'Embeddings mocked here';
 const MOCK_CALL = /vi\.mock\(\s*['"]@adhd\/sox-embedding-provider['"]/;
@@ -91,7 +79,6 @@ const MOCK_CALL = /vi\.mock\(\s*['"]@adhd\/sox-embedding-provider['"]/;
 const REAL_REFERENCE_PATTERNS = [
   /['"]@adhd\/sox-embedding-provider['"]/, // static/dynamic import or vi.mock specifier
   /\bbootstrapSemanticStoreMembers\b/, // write/bootstrap.ts's real bootstrap entry point
-  /from\s+['"][.\w/]*semantic-search(\.js)?['"]/, // the other real bootstrap (relative path varies: '../store/semantic-search.js' vs './semantic-search.js' from within store/ itself)
 ];
 
 function walk(dir) {
