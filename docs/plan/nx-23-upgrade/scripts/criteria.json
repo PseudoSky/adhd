@@ -1081,6 +1081,14 @@
       "kind": "command",
       "cmd": "./node_modules/.bin/nx build agent-core-env",
       "expect": "exit0"
+    },
+    {
+      "id": "typecheck-teeth-restored.3",
+      "phase": "graph",
+      "tier": 3,
+      "kind": "command",
+      "cmd": "./node_modules/.bin/nx run-many -t typecheck",
+      "expect": "exit0"
     }
   ]
 }
