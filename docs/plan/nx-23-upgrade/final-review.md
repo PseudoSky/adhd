@@ -64,17 +64,18 @@ Structure (dag.json / state.json / _shared.md):
 [x] dag.json holds structure; state.json holds runtime only (status,
     timestamps, logs).
 [x] Slug set in dag.json.nodes == slug set in state.json.states; every context
-    path exists (19/19) — enforced by gap-check Check 1.
+    path exists (20/20) — enforced by gap-check Check 1.
 [x] Shared definitions centralized in contexts/_shared.md — no concept
     restated across contexts. 17 `[def:]/[inv:]/[shape:]/[fix:]` entries,
     including the two the repair pass added (`[def:empty-import-meta]`,
     `[inv:bump-lands-with-its-fix]`, `[inv:guards-prove-the-artifact-loads]`).
 
 Per-state completeness (verified for every work state):
-[x] Acceptance criteria section present. 104 criteria across 19 states; every
+[x] Acceptance criteria section present. 109 criteria across 20 states; every
     modified file group has a criterion, and every deletion has a negative
-    (`absent`) criterion. The two negative-control criteria
-    (`vite-cjs-import-meta-repair.9`, `browser-cjs-umd-repair.6`) perturb the
+    (`absent`) criterion. The negative-control criteria
+    (`vite-cjs-import-meta-repair.9`, `browser-cjs-umd-repair.6`,
+    `tsconfig-shim-removal.5`, `typecheck-teeth-restored.1`) perturb the
     exact primitive their guard measures, in the gitignored build artifact.
 [x] Criterion IDs are slug-keyed (e.g. [core-types.1]) and match the check IDs
     in the next audit script — the criteria.json ids ARE the audit check ids,
@@ -82,7 +83,7 @@ Per-state completeness (verified for every work state):
 [x] reservations.mutates is populated — every file the state creates or changes
     is listed.
 [x] dag.json node's artifacts array matches reservations.mutates exactly —
-    verified programmatically for all 19 nodes.
+    verified programmatically for all 20 nodes.
 [x] Commit points section present — mandatory post-guard commit on every state.
 [x] Shared-file merge protocols written. N/A — the graph is deliberately
     linear (no two states share a mutable file without a depends_on edge), so

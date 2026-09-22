@@ -167,6 +167,71 @@ constraint on this session.
 
 ---
 
+## Amendment 2026-09-22 — typecheck-teeth restoration (planner-performed, `insert-state`)
+
+A **cross-state regression** introduced by `graph-test-build-inferred`, plus a **falsified plan
+artifact**, both verified before this amendment was authored.
+
+### What the defect was
+
+- `graph-test-build-inferred` (commit `4a748796`) deleted 57 explicit `@nx/vitest:test` and 47
+  explicit `@nx/vite:build` targets. The explicit `@nx/vite:build` executor ran `validateTypes`;
+  the inferred target runs a plain `vite build`, and vite-plugin-dts 3.8.3 logs diagnostics but
+  exits 0 on type errors. The build stopped type-checking, so `[tsconfig-shim-removal.5]` — "the
+  build gate has teeth: an injected type error turns it red" — **went red**. Because `audit-graph`
+  accumulates the config phase, the plan could not complete while it was red.
+- `SHIM-REMOVAL.md` claimed "None [of the removals] changed a build outcome". That is **false**:
+  TS 6.0.3 defaults `strict` to **true**, so removing `strict: false` enabled strict for the 137
+  configs that inherit it. `entrypoint/decompile-cli` now carries two real strict errors (TS2454
+  at `src/lib/extractors/index.ts:103`, TS18048 at `src/lib/extractors/site.ts:83`) and
+  `nx build decompile-cli` fails on a cold cache.
+
+### The decision
+
+`architect-decision` (one-shot) verdict **APPROVE**, mechanism (A): restore the gate in one place
+via `targetDefaults.build.dependsOn: ["typecheck"]` plus a cacheable `typecheck` targetDefault,
+fix `agent-core-env`'s script-inferred typecheck, fix the two `decompile-cli` errors, and accept
+TS 6's `strict: true` default. Risk assessed **medium (leaning low)**.
+
+### What changed
+
+| Change | Detail |
+|---|---|
+| New state | `typecheck-teeth-restored` (phase `graph`, work) — restores the build gate and lands the strict-default fixes |
+| Re-pointed edge | `audit-graph` now depends on `typecheck-teeth-restored`, so it validates the repair |
+| New criteria | 5 added — 109 total, up from 104 |
+| Corrected artifact | `SHIM-REMOVAL.md`'s false "no build outcome changed" claim is corrected by the state, with the measured consequence recorded |
+| New artifact | `docs/plan/nx-23-upgrade/TYPECHECK-TEETH.md` — the state's red-before/green-after record |
+
+No existing criterion is weakened — in particular `[tsconfig-shim-removal.5]` is untouched and is
+re-run by the new state's guard.
+
+### Approval status of this amendment
+
+- `DEMO.md` and `TOOLS.md` are **unchanged**; the GATE 2 approval recorded above stands.
+- The new state is **pending owner re-acknowledgement**. It is not fabricated as approved.
+- The amendment is logged in `state.json`'s `amendment_log` as an `insert-state` performed by the
+  planner (not an executor escalation), so the plan stays dispatchable.
+
+### Verification performed for this amendment
+
+- The regression is reproduced: `guard_audit_config.py` exits 1 with
+  `[tsconfig-shim-removal.5] neg-control positive-under-mutation exit=0` as the sole red check.
+- `nx run-many -t typecheck` fails today on exactly `agent-core-env:typecheck` (TS5103) and
+  `decompile-cli:typecheck` (the two strict errors); 60/62 projects pass.
+- `nx build decompile-cli` fails on a cold cache (scratch `NX_CACHE_DIRECTORY` +
+  `NX_WORKSPACE_DATA_DIRECTORY`, 0/2 cache hit), so criterion `.4` measures a real execution.
+- `nx build agent-core-env` exits 0 today, and
+  `tsc -p packages/agent/agent-core-env/tsconfig.typecheck.json --noEmit` from the workspace root
+  exits 0 under TS 6.0.3 — confirming the planned target fix is sufficient without touching the
+  package's source or tsconfig.
+- `apigen-java` is the one `build` project with no `typecheck` target; Nx's `create-task-graph.js`
+  skips a same-project `depends_on` target a project does not have, so the graph-wide addition does
+  not break it.
+- `gap-check.js` PASS; `env-pin-check.js --strict` — all 20 guards pinned.
+
+---
+
 ## Open items carried into execution
 
 1. **The three post-bump gate failures have no verdict yet** (`apigen-cli`,
@@ -194,3 +259,11 @@ constraint on this session.
    that. In practice the owning state's *guard* is the real gate and cannot pass in that
    state, so this is a reporting weakness rather than a false green — but it is a harness
    limitation worth fixing upstream, and it is recorded rather than hidden.
+8. **`typecheck-teeth-restored` awaits owner re-acknowledgement** — see *Amendment 2026-09-22*
+   above. It is a planner-performed repair of a regression in an already-approved state, not a
+   new goal.
+9. **The `apigen-java` build gains no type gate.** It is the one `build` project without a
+   `typecheck` target, so `build.dependsOn: ["typecheck"]` is silently skipped for it (verified
+   safe, not broken). Its Maven `compile` is the only type check it has. Left as-is deliberately:
+   the state's scope is fixed by the `architect-decision` verdict and widening it to a Java
+   `typecheck` target would be unapproved scope.

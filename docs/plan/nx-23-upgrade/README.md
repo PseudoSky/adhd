@@ -7,8 +7,9 @@ onto Nx-inferred targets, and deliver fail-safe file-level test selection.
 
 **Status:** authored; GATE 2 approval recorded in `APPROVAL.md`; amended 2026-09-21 by the
 repair pass that added the bump-safety states (`vite-cjs-import-meta-repair`,
-`browser-package-build-repair`, `browser-cjs-umd-repair`) and `[dod.14]`/`[dod.15]` — see
-`APPROVAL.md` § *Amendment 2026-09-21*.
+`browser-package-build-repair`, `browser-cjs-umd-repair`) and `[dod.14]`/`[dod.15]`, and
+2026-09-22 by the repair pass that added `typecheck-teeth-restored` — see
+`APPROVAL.md` § *Amendment 2026-09-21* and § *Amendment 2026-09-22*.
 **Branch:** `perf/nx-upgraded` (worktree `.worktrees/nx-perf-upgraded`).
 **Plans-root:** `docs/plan/` · **Registry:** `docs/plan/plan-index.json`.
 
@@ -98,7 +99,7 @@ state pushes, merges to the default branch, or publishes.
   - delivered-by: test-changed-optin, test-selection-revalidated
 
 - `[dod.9]` **(structural)** Task targets that merely restated what Nx can already infer are gone, and the inferred equivalents still produce the same artifacts.
-  - delivered-by: graph-test-build-inferred, graph-js-tsc-inferred, graph-release-eslint-inferred, audit-graph
+  - delivered-by: graph-test-build-inferred, graph-js-tsc-inferred, graph-release-eslint-inferred, typecheck-teeth-restored, audit-graph
 
 - `[dod.10]` **(structural)** Each checkout owns its task cache, so a cached pass from a sibling worktree cannot be replayed here.
   - delivered-by: cache-isolation
