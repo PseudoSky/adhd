@@ -28,6 +28,7 @@ import {
   type IResolvedProjectRow,
   mintOrResolveCatalogTx,
   nextPriorityRankTx,
+  projectHasKnownPath,
   resolveComponentTx,
   resolveDefaultComponentTx,
   resolveEdgeKindTx,
@@ -292,13 +293,17 @@ function assertNonBlank(
  * branch. This is a deliberate choice to keep §8.5's rule exactly
  * two-branched (project has no known path → unverified; file not
  * confirmed → unverified) rather than adding an escape-specific throw. It
- * still closes the reported hole: under the default
- * `project_policy.citation_requires_sha` (`true`), `'unverified'` is
- * REJECTED by `createIssue`'s own policy gate below, so an escaping path can
- * never satisfy that policy and can never be used as a
- * file-exists/readable oracle for paths outside the project — the read
- * itself never happens, so no distinguishable success/failure signal about
- * the escaped path ever reaches the caller.
+ * still closes the reported hole: the escape branch is only reachable when
+ * the project HAS a known `path` (the first branch returns early otherwise),
+ * and for a path-present project the default
+ * `project_policy.citation_requires_sha` (`true`) REJECTS `'unverified'` at
+ * `createIssue`'s own policy gate below — so an escaping path can never
+ * satisfy that policy and can never be used as a file-exists/readable oracle
+ * for paths outside the project. The read itself never happens, so no
+ * distinguishable success/failure signal about the escaped path ever reaches
+ * the caller. (The gate is waived only for a PATH-LESS project — where no
+ * escape is even computable — and there `sha:"unverified"` is persisted
+ * verbatim, per §8.5.)
  *
  * The confinement check uses `path.resolve` + `path.relative` (never a raw
  * string `startsWith` on `projectPath`, which a sibling directory sharing a
@@ -549,7 +554,9 @@ async function scanForDuplicates(
  * 'kind'|'status'|'priority'|'agent', ref)` (`'component'` fires only when a
  * name/uid was GIVEN and did not resolve — omitting `component` never throws
  * it), `CitationUnverifiableError(file)` (policy-gated via
- * `project_policy.citation_requires_sha`), `InvalidArgumentError('duplicateAction', ...)`
+ * `project_policy.citation_requires_sha`, and only when the project has a
+ * known `path` — a path-less project records `sha:"unverified"` verbatim),
+ * `InvalidArgumentError('duplicateAction', ...)`
  * (an unrecognized value — §6.4), `WriteContentionError`/
  * `WriteIOError` (§4c — an exhausted driver-level retry on the underlying
  * `immediate` transaction).
@@ -618,9 +625,22 @@ export async function createIssue(
   );
   const preResolvedPolicy = resolveProjectPolicy(preResolvedProject);
   const citationShas: string[] = [];
+  // The `citationRequiresSha` gate applies only where verification is
+  // POSSIBLE: a project with a known `path`. A path-less project can never
+  // hash a citation (every target degrades to `"unverified"` at
+  // `computeCitationSha`'s first branch), so the gate has nothing to reject —
+  // the citation is accepted and `sha:"unverified"` is persisted verbatim,
+  // exactly as the ETL's own `computeCitationSha` already does. The hard-fail
+  // is preserved for a path-PRESENT project whose cited file is missing (or
+  // whose path escapes the project root): both still resolve to `"unverified"`
+  // and still throw.
   for (const citation of citations) {
     const sha = await computeCitationSha(preResolvedProject, citation.file);
-    if (sha === 'unverified' && preResolvedPolicy.citationRequiresSha) {
+    if (
+      sha === 'unverified' &&
+      preResolvedPolicy.citationRequiresSha &&
+      projectHasKnownPath(preResolvedProject)
+    ) {
       throw new CitationUnverifiableError(citation.file);
     }
     citationShas.push(sha);
