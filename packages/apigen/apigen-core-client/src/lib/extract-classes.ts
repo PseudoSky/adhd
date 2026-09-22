@@ -165,6 +165,11 @@ async function extractClassesWithSession(
 
     const classSeg = makeSeg(className);
 
+    // C-20: resolve the ts-morph `Scope` enum once per exported class instead
+    // of once per method iteration. It is process-global and never changes, so
+    // both method loops below can share this single memoized lookup.
+    const Scope = getScopeEnum();
+
     // ── Static methods ─────────────────────────────────────────────────────
     for (const method of cls.getStaticMethods()) {
       const methodName = method.getName();
@@ -173,7 +178,6 @@ async function extractClassesWithSession(
       // Only public static methods (implicitly public when no modifier is set
       // in TS, but we also honour explicit `public`; exclude `private`/`protected`).
       const scope = method.getScope();
-      const Scope = getScopeEnum();
       if (scope === Scope.Private || scope === Scope.Protected) continue;
 
       const sig = method.getSignature();
@@ -262,7 +266,6 @@ async function extractClassesWithSession(
       if (shouldSkipName(methodName)) continue;
 
       const scope = method.getScope();
-      const Scope = getScopeEnum();
       if (scope === Scope.Private || scope === Scope.Protected) continue;
 
       const sig = method.getSignature();
