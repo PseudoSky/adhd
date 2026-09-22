@@ -24,17 +24,31 @@
 //   included.
 
 import path from 'node:path';
-import { type Project, type SourceFile, Scope } from 'ts-morph';
+import type { Project, SourceFile } from 'ts-morph';
+// PERF (BUG-APIGEN-CORE-CLIENT-STARTUP-001): `Scope` is a ts-morph runtime
+// enum used only for two comparisons below (`Scope.Private`/`Scope.Protected`).
+// A static `import { Scope } from 'ts-morph'` pulls the whole ts-morph
+// package into every process that loads this module. Lazily resolved and
+// memoized below via the ESM-safe `lazyRequire` shim (see `./esm-require.ts`
+// — a bare `require` broke the built `dist/index.mjs`).
 import type { Operation, Segment } from './descriptor';
 import { buildSchema } from './schema-builders/ts-json-schema';
 import { tokenize } from './extract';
 import { detectStreamElementType } from './stream-type';
+import { lazyRequire } from './esm-require';
 import {
   createExtractionSession,
   internalSession,
   type ExtractionSession,
   type InternalExtractionSession,
 } from './extraction-session';
+
+let _Scope: typeof import('ts-morph').Scope | undefined;
+function getScopeEnum(): typeof import('ts-morph').Scope {
+  if (_Scope) return _Scope;
+  _Scope = (lazyRequire('ts-morph') as typeof import('ts-morph')).Scope;
+  return _Scope;
+}
 
 // ---------------------------------------------------------------------------
 // Public entry-point
@@ -151,6 +165,11 @@ async function extractClassesWithSession(
     if (shouldSkipName(className)) continue;
 
     const classSeg = makeSeg(className);
+
+    // C-20: resolve the ts-morph `Scope` enum once per exported class instead
+    // of once per method iteration. It is process-global and never changes, so
+    // both method loops below can share this single memoized lookup.
+    const Scope = getScopeEnum();
 
     // ── Static methods ─────────────────────────────────────────────────────
     for (const method of cls.getStaticMethods()) {

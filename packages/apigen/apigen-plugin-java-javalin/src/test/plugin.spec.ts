@@ -14,11 +14,17 @@
  * param/return (`identityInstant`) — FEAT-APIGEN-001 acceptance criterion 1.
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import { javaJavalinPlugin, resolveJavaPkgDir } from '../lib/plugin';
+import {
+  javaJavalinPlugin,
+  resolveJavaPkgDir,
+  selectFatJar,
+} from '../lib/plugin';
 import type { RunInput } from '@adhd/apigen-core-client';
+
+const REPO_ROOT = path.resolve(__dirname, '../../../../..');
 
 const FIXTURE = path.resolve(
   __dirname,
@@ -175,5 +181,100 @@ describe('resolveJavaPkgDir', () => {
   it('locates the real packages/apigen/java Maven module from this file tree', () => {
     const dir = resolveJavaPkgDir(__dirname);
     expect(fs.existsSync(path.join(dir, 'pom.xml'))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// selectFatJar — deterministic shaded-jar selection (backlog 7e3852df).
+//
+// Pure and hermetic: builds synthetic `packages/apigen/java`-shaped dirs under
+// `tmp/`, never spawns mvn. The regression it prevents: the old
+// `readdirSync(target).find(f => f.endsWith('-all.jar'))` picked whichever
+// candidate the filesystem listed first, so a stale `*-all.jar` could win.
+// ---------------------------------------------------------------------------
+describe('selectFatJar', () => {
+  let scratchRoot: string;
+
+  const POM =
+    '<project><build><finalName>apigen-java</finalName>' +
+    '<plugins><plugin><configuration>' +
+    '<shadedClassifierName>all</shadedClassifierName>' +
+    '</configuration></plugin></plugins></build></project>';
+
+  beforeAll(() => {
+    const parent = path.join(REPO_ROOT, 'tmp', 'apigen-plugin-java-javalin');
+    fs.mkdirSync(parent, { recursive: true });
+    scratchRoot = fs.mkdtempSync(path.join(parent, 'select-fat-jar-'));
+  });
+
+  afterAll(() => {
+    if (scratchRoot) {
+      fs.rmSync(scratchRoot, { recursive: true, force: true });
+    }
+  });
+
+  function makePkg(opts: {
+    pom: string | null;
+    jars: Array<{ name: string; mtimeMs: number }>;
+  }): string {
+    const pkgDir = fs.mkdtempSync(path.join(scratchRoot, 'pkg-'));
+    const target = path.join(pkgDir, 'target');
+    fs.mkdirSync(target, { recursive: true });
+    if (opts.pom !== null) {
+      fs.writeFileSync(path.join(pkgDir, 'pom.xml'), opts.pom);
+    }
+    for (const jar of opts.jars) {
+      const jarPath = path.join(target, jar.name);
+      fs.writeFileSync(jarPath, 'x');
+      const t = new Date(jar.mtimeMs);
+      fs.utimesSync(jarPath, t, t);
+    }
+    return pkgDir;
+  }
+
+  it('prefers the jar the pom declares even when another *-all.jar is NEWER (the stale-jar regression)', () => {
+    const pkg = makePkg({
+      pom: POM,
+      jars: [
+        { name: 'apigen-java-all.jar', mtimeMs: 1_000 },
+        { name: 'apigen-java-0.0.1-all.jar', mtimeMs: 2_000_000 },
+      ],
+    });
+    // Teeth: a naive newest-mtime (or readdir-first) pick would return the
+    // stale `apigen-java-0.0.1-all.jar`; only the pom-declared preference
+    // yields the current jar deterministically.
+    expect(selectFatJar(pkg)).toBe('apigen-java-all.jar');
+  });
+
+  it('falls back to the newest by mtime when no pom declares a matching jar', () => {
+    const pkg = makePkg({
+      pom: null,
+      jars: [
+        { name: 'apigen-java-all.jar', mtimeMs: 1_000 },
+        { name: 'apigen-java-0.0.1-all.jar', mtimeMs: 2_000_000 },
+      ],
+    });
+    expect(selectFatJar(pkg)).toBe('apigen-java-0.0.1-all.jar');
+  });
+
+  it('returns undefined when target/ holds no *-all.jar', () => {
+    const pkg = makePkg({
+      pom: POM,
+      jars: [{ name: 'apigen-java.jar', mtimeMs: 1_000 }],
+    });
+    expect(selectFatJar(pkg)).toBeUndefined();
+  });
+
+  it('breaks mtime ties by name, so the result never depends on readdir order', () => {
+    const pkg = makePkg({
+      pom: null,
+      jars: [
+        { name: 'b-all.jar', mtimeMs: 5_000 },
+        { name: 'a-all.jar', mtimeMs: 5_000 },
+        { name: 'c-all.jar', mtimeMs: 5_000 },
+      ],
+    });
+    expect(selectFatJar(pkg)).toBe('a-all.jar');
+    expect(selectFatJar(pkg)).toBe('a-all.jar');
   });
 });

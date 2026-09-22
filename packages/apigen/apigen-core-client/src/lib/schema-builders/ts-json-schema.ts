@@ -1,17 +1,26 @@
 import path from 'node:path';
-import {
-  createParser,
-  createFormatter,
-  SchemaGenerator,
-  AnnotatedType,
-  StringType,
-} from 'ts-json-schema-generator';
+// PERF (BUG-APIGEN-CORE-CLIENT-STARTUP-001): `createParser`/`createFormatter`/
+// `SchemaGenerator`/`AnnotatedType`/`StringType` are ONLY used as runtime
+// VALUES deep inside `buildParserAugmentor`/`runScalarAwareGenerator` (both
+// fully synchronous — `buildParserAugmentor`'s closures are handed to
+// ts-json-schema-generator's own synchronous `chain.addNodeParser`, so an
+// `await import()` is not reachable there). A static `import { ... } from
+// 'ts-json-schema-generator'` pulls the WHOLE package (and its bundled
+// TypeScript) into every process that loads this module — including a bare
+// `backlog --help` that never calls `buildSchema()` at all. Both
+// `createParser` and `createFormatter` are resolved as runtime values through
+// the lazy `getTsjsg()` getter below — see its doc comment just above
+// `getTsjsg()`. Mirrors the existing `getTsjsTs()` lazy-`require` pattern
+// immediately below for the same package's bundled `typescript`. Both go
+// through the ESM-safe `lazyRequire` shim (see `../esm-require.ts`) — a bare
+// `require` broke the built `dist/index.mjs`.
 import type { Config, CompletedConfig } from 'ts-json-schema-generator';
 import type { Project, SourceFile } from 'ts-morph';
 import { morphFallback } from './morph-fallback';
 import { buildMapSetTupleSchema } from './map-set-tuple';
 import { withResolvedType, walkType, detectDiscriminator } from './morph-walk';
 import { X_APIGEN_LOGICAL } from '@adhd/apigen-base-logical';
+import { lazyRequire } from '../esm-require';
 import {
   fileVersion,
   persistentSchemasFor,
@@ -183,6 +192,7 @@ function buildParserAugmentor(
       createType(node: TsRefNode) {
         const name = (node.typeName?.escapedText ??
           node.typeName?.right?.escapedText) as string;
+        const { AnnotatedType, StringType } = getTsjsg();
         return new AnnotatedType(
           new StringType(),
           { format: REFERENCE_FORMAT_MAP[name] },
@@ -197,10 +207,28 @@ function buildParserAugmentor(
         return node.kind === bigIntKind;
       },
       createType() {
+        const { AnnotatedType, StringType } = getTsjsg();
         return new AnnotatedType(new StringType(), { format: 'int64' }, false);
       },
     });
   };
+}
+
+/**
+ * PERF (BUG-APIGEN-CORE-CLIENT-STARTUP-001): lazy, memoized `require` of the
+ * `ts-json-schema-generator` package itself, for the bindings
+ * (`createParser`, `createFormatter`, `SchemaGenerator`, `AnnotatedType`,
+ * `StringType`) that are used as runtime VALUES in this file. Resolved once
+ * per process on first actual use and cached in `_tsjsg` — every call after
+ * the first is a plain field read, no re-`require`. Type-only usages
+ * (`typeof createParser`) are unaffected: they come from the `import type`
+ * above and are erased at compile time regardless of this getter.
+ */
+let _tsjsg: typeof import('ts-json-schema-generator') | undefined;
+function getTsjsg(): typeof import('ts-json-schema-generator') {
+  if (_tsjsg) return _tsjsg;
+  _tsjsg = lazyRequire('ts-json-schema-generator') as typeof import('ts-json-schema-generator');
+  return _tsjsg;
 }
 
 /**
@@ -216,16 +244,14 @@ function getTsjsTs(): typeof import('typescript') {
   try {
     // ts-json-schema-generator resolves TypeScript relative to its own package
     const tsjsDir = path.dirname(
-      require.resolve('ts-json-schema-generator/package.json')
+      lazyRequire.resolve('ts-json-schema-generator/package.json')
     );
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    _tsjsTs = require(require.resolve('typescript', {
+    _tsjsTs = lazyRequire(lazyRequire.resolve('typescript', {
       paths: [tsjsDir],
     })) as typeof import('typescript');
   } catch {
     // Fallback: use whatever TypeScript is resolvable from here
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    _tsjsTs = require('typescript') as typeof import('typescript');
+    _tsjsTs = lazyRequire('typescript') as typeof import('typescript');
   }
   return _tsjsTs;
 }
@@ -541,8 +567,7 @@ function runScalarAwareGenerator(
   cacheable: boolean,
   session?: InternalExtractionSession
 ): Record<string, unknown> {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { DEFAULT_CONFIG } = require('ts-json-schema-generator/dist/src/Config.js') as { DEFAULT_CONFIG: CompletedConfig };
+  const { DEFAULT_CONFIG } = lazyRequire('ts-json-schema-generator/dist/src/Config.js') as { DEFAULT_CONFIG: CompletedConfig };
   const completedConfig: CompletedConfig = { ...DEFAULT_CONFIG, ...config };
   const pathStr = completedConfig.path as string;
 
@@ -568,10 +593,13 @@ function runScalarAwareGenerator(
     if (entry && entry.version === version) gen = entry.gen;
   }
   if (!gen) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { createProgram } = require('ts-json-schema-generator/dist/factory/program.js') as {
+    const { createProgram } = lazyRequire('ts-json-schema-generator/dist/factory/program.js') as {
       createProgram: (cfg: CompletedConfig) => unknown;
     };
+    // Declared before any `typeof createParser` type-query use below so the
+    // local value binding is in scope for both (TS block-scoping would
+    // otherwise flag a "used before declaration" if this were placed later).
+    const { createParser, createFormatter, SchemaGenerator } = getTsjsg();
     const ts = getTsjsTs();
     const augmentor = buildParserAugmentor(
       ts.SyntaxKind.BigIntKeyword,

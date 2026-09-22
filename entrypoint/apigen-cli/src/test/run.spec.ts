@@ -199,7 +199,7 @@ describe('[FEAT-APIGEN-019] run command — unknown --type vs unsupported run mo
 describe('[cli-run-cmd.1+2] run command — imports fns and calls plugin.run()', () => {
   it(
     'passes a live fns record and resolves on abort',
-    { timeout: 20000 },
+    { timeout: 90000 },
     async () => {
       let capturedInput: RunInput | undefined;
       let resolveRun: (() => void) | undefined;
@@ -251,8 +251,8 @@ describe('[cli-run-cmd.1+2] run command — imports fns and calls plugin.run()',
         runCalled,
         new Promise<never>((_, reject) => {
           const t = setTimeout(
-            () => reject(new Error('plugin.run() was never called within 15s')),
-            15000,
+            () => reject(new Error('plugin.run() was never called within 60s')),
+            60000,
           );
           t.unref?.();
         }),
@@ -301,8 +301,12 @@ describe('[cli-run-cmd.1+2] run command — imports fns and calls plugin.run()',
 describe('[cli-run-cmd.4] run-registry command — passes multiple packages at once', () => {
   // Explicit timeout: drives a REAL ts-morph extraction over two fixture packages.
   // It inherited vitest's 5 s default and timed out under `--parallel=5`. The work is
-  // genuinely slow, not hung; its sibling already declares `{ timeout: 20000 }`.
-  it('discovers pkg-a and pkg-b and passes them as a single packages array', { timeout: 30000 }, async () => {
+  // genuinely slow, not hung; its sibling `[cli-run-cmd.1+2]` declares `{ timeout: 90000 }`
+  // for the same reason (d21f7a03 raised it from 20 s after a 15 s latch flaked under the
+  // parallel affected run). Same treatment here — and on the other real-extraction /
+  // live-server tests in this file — so load tolerance is uniform: a generous outer
+  // deadline, with every inner wait bounded and failing loudly.
+  it('discovers pkg-a and pkg-b and passes them as a single packages array', { timeout: 90000 }, async () => {
     let capturedInput: RunInput | undefined;
 
     const capturingPlugin: OutputPlugin = {
@@ -363,7 +367,7 @@ describe('[cli-run-cmd.4] run-registry command — passes multiple packages at o
   // action end to end with a real dynamically-`import()`ed `--use` plugin.
   it(
     'a --use plugin declaring extractLayer actually intercepts extraction for the real `run-registry` command',
-    { timeout: 30000 },
+    { timeout: 90000 },
     async () => {
       const tmpDir = fs.mkdtempSync(
         path.join(os.tmpdir(), 'apigen-cli-run-registry-use-')
@@ -684,7 +688,7 @@ describe('[cli-run-cmd.non-ts] non-TS plugin bypasses TS extraction', () => {
 describe('[cli-run-cmd.1 live] run command starts a live MCP server via plugin.run()', () => {
   it(
     'serves tools/list with fixture tools over streaming-http',
-    { timeout: 20000 },
+    { timeout: 90000 },
     async () => {
       const port = await freePort();
       const program = makeProgram();
