@@ -3433,13 +3433,9 @@
         "docs/plan/nx-23-upgrade/TYPECHECK-TEETH.md",
         "docs/plan/nx-23-upgrade/VITE-CJS-REPAIR.md",
         "docs/plan/nx-23-upgrade/scripts/check-cross-package-selection.mjs",
-        "docs/plan/nx-23-upgrade/scripts/check-guards-pinned.mjs",
         "docs/plan/nx-23-upgrade/scripts/check-zero-selection.mjs",
         "docs/plan/nx-23-upgrade/scripts/guard_audit_config.py",
-        "docs/plan/nx-23-upgrade/scripts/guard_audit_final.py",
-        "docs/plan/nx-23-upgrade/scripts/guard_audit_graph.py",
         "docs/plan/nx-23-upgrade/scripts/guard_audit_reconcile.py",
-        "docs/plan/nx-23-upgrade/scripts/guard_audit_tests.py",
         "docs/plan/nx-23-upgrade/scripts/neg-control-browser-bundle.mjs",
         "docs/plan/nx-23-upgrade/scripts/neg-control-cjs-shim.mjs",
         "entrypoint/agent-mcp/project.json",
@@ -3604,7 +3600,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-09-22T16:55:22.690Z"
+      "updated_at": "2026-09-22T19:58:27.067Z"
     },
     {
       "plan": "parallel-tool-execution",
@@ -4119,6 +4115,6 @@
       "updated_at": "2026-07-17T23:56:00.980Z"
     }
   ],
-  "updated_at": "2026-09-22T16:55:22.699Z",
+  "updated_at": "2026-09-22T19:58:27.076Z",
   "verified_at": null
 }
