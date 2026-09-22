@@ -13,10 +13,20 @@
  * `assertRecognizedStoreVocabulary` is removed from `openGraphBacklogStore`.
  * Both were verified by temporarily removing each call and re-running — see
  * the test's own `expect` messages.
+ *
+ * TEETH (bounded criterion, finding 8ca66712): the `bounded criterion probe`
+ * suite observes the exact SQL the guard issues. It is RED if the guard reverts
+ * to running `inspectStoreVocabulary`'s `GROUP BY kind` histogram on the
+ * healthy path (the probe test would then see two statements, the second a
+ * histogram, instead of one `LIMIT 1` probe). Verified by temporarily reverting
+ * `assertRecognizedStoreVocabulary` to the unconditional-histogram form and
+ * re-running: `short-circuits ...` goes RED. No sleeps — the observation is a
+ * statement recording, not timing.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
+import type { StoreAdapter } from '@adhd/sox-store-adapter';
 import { openGraphBacklogStore, closeGraphBacklogStore } from './graph-backlog-store.js';
 import {
   assertRecognizedStoreVocabulary,
@@ -50,6 +60,50 @@ async function seedForeignNode(
     },
     { mode: 'immediate' }
   );
+}
+
+/**
+ * Writes one live node of a RECOGNIZED kind (`note` by default) through the
+ * real write primitive — used to grow a healthy store so the bounded probe has
+ * many recognized rows to short-circuit past.
+ */
+async function seedRecognizedNode(
+  store: TestIssueStore,
+  name: string,
+  kind = 'note'
+): Promise<void> {
+  await store.adapter.transaction(
+    async (tx) => {
+      await writeNodeTx(tx, { kind, name, at: nowISO() });
+    },
+    { mode: 'immediate' }
+  );
+}
+
+/**
+ * A recording proxy around the real adapter: every `executeAll` call is
+ * appended to `statements` and delegated to the real adapter. This is how the
+ * bounded-probe tests observe WHICH queries the guard issued — a deterministic
+ * statement count, never a timing measurement.
+ */
+function recordingAdapter(adapter: StoreAdapter): {
+  adapter: StoreAdapter;
+  statements: string[];
+} {
+  const statements: string[] = [];
+  const proxy = new Proxy(adapter, {
+    get(target, prop) {
+      if (prop === 'executeAll') {
+        return (sql: string, args?: unknown[]) => {
+          statements.push(sql);
+          return target.executeAll(sql, args);
+        };
+      }
+      const value = Reflect.get(target, prop);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  }) as StoreAdapter;
+  return { adapter: proxy, statements };
 }
 
 const dirs: string[] = [];
@@ -213,6 +267,69 @@ describe('store open — startup guard', () => {
       expect([...RECOGNIZED_NODE_KINDS]).toContain('issue');
     } finally {
       await closeGraphBacklogStore(store);
+    }
+  });
+});
+
+describe('bounded criterion probe — the healthy path is one LIMIT 1, not a scan', () => {
+  it('short-circuits on a LARGE healthy store: exactly one statement, a LIMIT-1 probe, no histogram', async () => {
+    const store = await openTestIssueStore(tmpDbPath());
+    try {
+      // Grow the store well past a handful of rows: 200 recognized live nodes
+      // plus the seeded project/component. If the guard still ran the full
+      // histogram, it would scan all of them and the statement count below
+      // would be 2, not 1 — the assertion that pins the bounded path.
+      await seedProject(store, 'adhd');
+      for (let i = 0; i < 200; i += 1) {
+        await seedRecognizedNode(store, `note-${i}`);
+      }
+
+      const rec = recordingAdapter(store.adapter);
+      await expect(
+        assertRecognizedStoreVocabulary(rec.adapter)
+      ).resolves.toBeUndefined();
+
+      expect(rec.statements).toHaveLength(1);
+      expect(rec.statements[0]).toContain('LIMIT 1');
+      expect(rec.statements[0]).not.toContain('GROUP BY');
+    } finally {
+      await store.close();
+    }
+  });
+
+  it('falls back to the histogram only when no recognized node exists — and throws with it', async () => {
+    const store = await openTestIssueStore(tmpDbPath());
+    try {
+      await seedForeignNode(store, 'generic');
+
+      const rec = recordingAdapter(store.adapter);
+      await expect(
+        assertRecognizedStoreVocabulary(rec.adapter)
+      ).rejects.toBeInstanceOf(StoreVocabularyMismatchError);
+
+      // Probe first (bounded), then the histogram — the latter only because
+      // the probe found nothing, and only to build the refusal's diagnostic.
+      expect(rec.statements).toHaveLength(2);
+      expect(rec.statements[0]).toContain('LIMIT 1');
+      expect(rec.statements[1]).toContain('GROUP BY');
+    } finally {
+      await store.close();
+    }
+  });
+
+  it('pays the histogram for an EMPTY store (no recognized node) but still passes', async () => {
+    const store = await openTestIssueStore(tmpDbPath());
+    try {
+      const rec = recordingAdapter(store.adapter);
+      await expect(
+        assertRecognizedStoreVocabulary(rec.adapter)
+      ).resolves.toBeUndefined();
+      // Empty store: probe finds nothing, histogram runs and reports zero —
+      // a true zero, never a refusal.
+      expect(rec.statements).toHaveLength(2);
+      expect(rec.statements[1]).toContain('GROUP BY');
+    } finally {
+      await store.close();
     }
   });
 });

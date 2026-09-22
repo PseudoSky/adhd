@@ -38,6 +38,15 @@
  *  - a store holding only recognized catalog rows (a freshly created project,
  *    say) is legitimately item-empty and must NOT be refused.
  * Only a store whose whole vocabulary is foreign is refused.
+ *
+ * ## Bounded, because it runs on the hot path
+ *
+ * The criterion is decided by a single `LIMIT 1` existence probe — "is there
+ * at least one live node of a RECOGNIZED kind?" — which passes and stops. That
+ * probe is the whole cost on the healthy path; the O(live nodes) `GROUP BY
+ * kind` histogram runs ONLY when the probe finds nothing, because that is the
+ * one branch whose output (the observed vocabulary) is the diagnostic the
+ * refusal error carries. The full histogram is never paid per verb.
  */
 import type { StoreAdapter } from '@adhd/sox-store-adapter';
 
@@ -118,18 +127,48 @@ export async function inspectStoreVocabulary(
 }
 
 /**
+ * Bounded criterion check: `true` iff at least one live node is of a kind this
+ * build recognizes. `LIMIT 1` — the store stops at the first match, so this is
+ * O(1) on the healthy path and never the O(live nodes) histogram. The kinds are
+ * bound as query parameters (never string-interpolated), one placeholder each.
+ */
+async function hasRecognizedLiveNode(adapter: StoreAdapter): Promise<boolean> {
+  const kinds = [...RECOGNIZED_NODE_KINDS];
+  const placeholders = kinds.map(() => '?').join(', ');
+  const { rows } = await adapter.executeAll<{ one: unknown }>(
+    `SELECT 1 AS one FROM node WHERE t_invalid IS NULL AND kind IN (${placeholders}) LIMIT 1`,
+    kinds
+  );
+  return rows.length > 0;
+}
+
+/**
  * Assert the store's live nodes speak a vocabulary this build understands.
  *
  * Passes (no throw) when the store is empty, or when at least one live node
  * is of a recognized kind. Throws {@link StoreVocabularyMismatchError} when
  * the store holds live nodes but none of a recognized kind.
+ *
+ * BOUNDED BY CONSTRUCTION: this runs on every write verb (`api.ts`'s
+ * `writeHandle`) and every query (`api.ts`'s `queryHandle` → `query.ts`), so it
+ * must not scan the store per call. The criterion is answered by a single
+ * `LIMIT 1` existence probe ({@link hasRecognizedLiveNode}); only when that
+ * finds no recognized node — the empty-store and foreign-store cases — does the
+ * full histogram run, and there it is either trivial (no rows) or the payload
+ * of the error we are about to throw.
  */
 export async function assertRecognizedStoreVocabulary(
   adapter: StoreAdapter
 ): Promise<void> {
+  // Healthy path: one bounded probe, then stop. A recognized live node means
+  // the store speaks this build's vocabulary — nothing more to learn.
+  if (await hasRecognizedLiveNode(adapter)) return;
+
+  // No recognized live node. Either the store is empty (a true zero — pass) or
+  // its whole live vocabulary is foreign (refuse, with the histogram as the
+  // diagnostic). Only this branch pays for the full `GROUP BY kind` read.
   const { total, observed } = await inspectStoreVocabulary(adapter);
   if (total === 0) return; // fresh/empty store — a read of it is a true zero
-  if (observed.some((o) => RECOGNIZED_NODE_KINDS.has(o.kind))) return;
   throw new StoreVocabularyMismatchError(observed, [
     ...RECOGNIZED_NODE_KINDS,
   ]);
