@@ -116,11 +116,11 @@
       "end_ref": null
     },
     "vite-cjs-import-meta-repair": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-09-22T13:17:31.300Z",
-      "done_at": null,
+      "done_at": "2026-09-22T13:29:32.191Z",
       "start_ref": "c6a4760092d5d3455c90123a89d6dd132a945570",
-      "end_ref": null
+      "end_ref": "7916e63943edf9837338c201a88e267a2421e8c8"
     },
     "browser-package-build-repair": {
       "status": "pending",
@@ -149,6 +149,18 @@
       "audit_criteria_total": 29,
       "by": "pseudosky",
       "note": "Created docs/plan/nx-23-upgrade/BASELINE.md as a measured toolchain baseline (nx 23.2.1, vite 8.3.0, vitest 4.1.9, typescript 6.0.3 measured by running), recorded the vitest ceiling + @nx/vitest peer-range evidence, project/target counts (70 projects; build 63, test 63, lint 62, typecheck 62), the nx run-many -t build health sweep (62/63 green; ui-react-base-hooks:build red), the deferred bump naming vite-cjs-import-meta-repair, and the CJS defect cost (apigen-cli:test 28/188 green on vite 6.4.3 -> 26 failed/162 passed on vite 8.3.0). Committed BASELINE.md alone as 86311044. Guard red before, green after. Flagged two deviations: (1) the --start transition swept the pre-staged vite bump into commit 6a6e4176 (tool commits without a pathspec); (2) 8 packages/agent/* package.json still declare devDependencies.vite ~5.0.13 (resolving to nested vite 5.0.13), outside this state reservation."
+    },
+    {
+      "ts": "2026-09-22T13:29:32.191Z",
+      "from": "vite-cjs-import-meta-repair",
+      "to": "vite-cjs-import-meta-repair",
+      "start_ref": "c6a4760092d5d3455c90123a89d6dd132a945570",
+      "end_ref": "7916e63943edf9837338c201a88e267a2421e8c8",
+      "audit_exit": 26,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 29,
+      "by": "pseudosky",
+      "note": "Verified + committed the in-flight vite 8 CJS work as ONE atomic commit 7916e639 (63 files): plugin tools/vite-plugins/import-meta-url-cjs.mjs + 54 CJS-emitting vite.config.ts wirings + apigen-cli built-artifact acceptance spec + generator anti-drift (shared generator + base spec) + VITE-CJS-REPAIR.md + package.json/pnpm-lock (vite ~6.4.3 -> ^8.3.0) landed together. Guard RED before (atomicity leg empty), GREEN after (exit 0, CJS_ARTIFACTS_LOAD, both --help greps fire). Negative control: restoring {}.url into the built CJS artifact makes the load proof FAIL with ERR_INVALID_ARG_VALUE (exit 1), restore returns green. Also fixed a second vite-8 regression the bump surfaced: apigen-engine-conformance/vectors.spec.ts had a duplicate `project` import binding rejected by vite 8 vite:oxc (deterministic pre-commit failure) — OUTSIDE the state reservation, reported. apigen-plugin-java-javalin:test is a flaky concurrency race on packages/apigen/java/target (passes alone, Nx flags flaky), unrelated to the bump."
     }
   ],
   "amendment_log": [
@@ -185,7 +197,7 @@
     "version": "0.8.25",
     "hash": "961c3053dfab"
   },
-  "current_state": "vite-cjs-import-meta-repair",
+  "current_state": "browser-package-build-repair",
   "dod_provenance": {
     "confirmed_at": "2026-09-22T02:05:38.210Z",
     "by": "pseudosky",
