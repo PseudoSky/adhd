@@ -26,9 +26,13 @@
  * backed by a raw driver handle — it *throws* when handed a Turso adapter,
  * directing the caller elsewhere. The sync interface is bridged for LanceDB by running
  * the driver in a `synckit` worker, but that trick is WRONG here: a worker
- * thread would open a SECOND connection to backlog's own database file,
- * breaking the "one file, one writer" invariant RAG-SPEC §0 pins. So the
- * Turso path is async and in-process, reusing the store's existing adapter
+ * thread would open a SECOND connection to backlog's own database file
+ * rather than reuse the ONE adapter handle through which this process
+ * reaches graph, vector, and escape-hatch SQL. That single HANDLE keeps this
+ * process's vector writes on the same substrate as its graph writes — it is
+ * NOT a one-file-one-writer lock; concurrent writer processes are safe
+ * (ADR-0012). So the Turso path is async and in-process, reusing the store's
+ * existing adapter
  * (`@adhd/sox-vector-store`'s additive `AsyncVectorBackend`), and this seam
  * — backlog's own interface, not a vendored one — is async to match.
  *
@@ -472,7 +476,9 @@ export async function isVectorSpacePopulated(
 
 /**
  * Builds a REAL {@link SemanticBackend} from `@adhd/sox-vector-store`
- * (vectors, stored in the store's OWN adapter — one file, one writer) +
+ * (vectors, stored in the store's OWN adapter — the single HANDLE through
+ * which this process reaches graph, vector, and escape-hatch SQL, safe under
+ * concurrent writer processes per ADR-0012) +
  * `@adhd/sox-embedding-provider` (text→vector).
  *
  * Unlike a bare `null` return, every failure is REPORTED with a reason (see

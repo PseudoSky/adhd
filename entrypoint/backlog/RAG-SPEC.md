@@ -10,7 +10,7 @@
 
 ## 0. Substrate — verified facts
 
-- **Adapter:** `@adhd/sox-store-adapter` `createStoreAdapter({ dbPath })` defaults to `turso` (`@tursodatabase/database@^0.7.1`, `TursoAdapterImpl`). The adapter is the single handle for graph, vector, and escape-hatch SQL — one file, one writer.
+- **Adapter:** `@adhd/sox-store-adapter` `createStoreAdapter({ dbPath })` defaults to `turso` (`@tursodatabase/database@^0.7.1`, `TursoAdapterImpl`). The adapter is the single HANDLE through which this process reaches graph, vector, and escape-hatch SQL — safe under concurrent writer processes (ADR-0012), not a one-file-one-writer lock.
 - **Graph:** `@adhd/sox-graph-store` 0.6.0 `createGraphBackend(adapter: StoreAdapter, opts?: { typePolicy })` — the entire API is async; `StoreAdapter.transaction(fn, { mode: 'immediate' })` is the CAS primitive; `buildNodeFilterClause` is exported for predicate pushdown into any adapter query.
 - **Vectors:** `createVectorDialect(adapter.config.type)` → `TursoVectorDialect` — `F32_BLOB(dim)` columns (dimension is structural at the schema level), `CREATE INDEX ON (embedding)` (Turso infers the DiskANN index), `vector_distance_cos/l2/dot`, and a `topKQuery` emitting a parameterised `WHERE` seam for filter pushdown. `vecToBlob`/`blobToFloat32` are the vector byte codecs.
 - **Embedding provider:** `@adhd/sox-embedding-provider` 0.2.0 — `EmbeddingProvider` interface (`embedSingle(text, role?)` / `embedBatch`), fastembed `bge-base-en-v1.5` (768-dim), shared ONNX/fastembed child singleton, cache-hit/cache-miss warmup budgets (a cache hit is single-digit seconds; a cache miss is the model-download budget).
