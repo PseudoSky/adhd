@@ -138,7 +138,35 @@
     }
   },
   "transition_log": [],
-  "amendment_log": [],
+  "amendment_log": [
+    {
+      "ts": "2026-09-22T03:40:21.214Z",
+      "state": "upgrade-baseline",
+      "class": "executor",
+      "type": "replan",
+      "reason": "Planner-performed replan (proactive, no executor escalation): the approved plan committed the vite ^8.3.0 bump in upgrade-baseline while no state owned the fix that makes it safe. Verified: (a) Vite 8/Rolldown lowers import.meta.url to {}.url in browser-platform cjs output, so every built CJS entrypoint throws ERR_INVALID_ARG_VALUE at module load (measured apigen-cli:test 188 pass on vite 6.4.3 -> 26 failed on 8.3.0); (b) packages/ui-react/ui-react-base-hooks is public and cannot build at all under the branch's @types/react 19 bump (4 TS errors, no dist emitted) and its CJS/UMD bundles carry the same token. Added three states (vite-cjs-import-meta-repair, browser-package-build-repair, browser-cjs-umd-repair), moved the bump commit out of upgrade-baseline into vite-cjs-import-meta-repair so bump and fix are one commit (guard asserts same-commit-SHA atomicity AND executes the built artifacts), re-pointed gate-triage-absorbed's inbound edge, and added dod.14/dod.15 with 22 criteria. Five original goals unchanged; all pre-existing states untouched apart from that one edge.",
+      "files_synced": [
+        "dag.json",
+        "state.json",
+        "state-machine.md",
+        "README.md",
+        "SCOPE.md",
+        "TOOLS.md",
+        "APPROVAL.md",
+        "contexts/_shared.md",
+        "contexts/upgrade-baseline.md",
+        "contexts/vite-cjs-import-meta-repair.md",
+        "contexts/browser-package-build-repair.md",
+        "contexts/browser-cjs-umd-repair.md",
+        "contexts/gate-triage-absorbed.md",
+        "scripts/criteria.json",
+        "demo/DEMO.md",
+        "demo/UNRESOLVED.md",
+        "final-review.md"
+      ],
+      "by": "pseudosky"
+    }
+  ],
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.25",
