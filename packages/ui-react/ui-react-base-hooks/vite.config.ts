@@ -6,6 +6,7 @@ import * as path from 'path';
 import { defineConfig, type UserConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 
+import { importMetaUrlBrowserCjs } from '../../../tools/vite-plugins/import-meta-url-browser-cjs.mjs';
 import { vitestTestDefaults } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
 export default defineConfig({
   root: __dirname,
@@ -13,6 +14,10 @@ export default defineConfig({
   plugins: [
     react(),
     nxViteTsPaths(),
+    // Browser-valid `import.meta.url` in cjs/umd output. The node shim
+    // (`import-meta-url-cjs.mjs`) is NOT wired here: its `require`/`__filename`
+    // do not exist in a browser chunk. See docs/plan/nx-23-upgrade/BROWSER-BUNDLE-REPAIR.md.
+    importMetaUrlBrowserCjs(),
     dts({
       entryRoot: 'src',
       tsconfigPath: path.join(__dirname, 'tsconfig.lib.json'),

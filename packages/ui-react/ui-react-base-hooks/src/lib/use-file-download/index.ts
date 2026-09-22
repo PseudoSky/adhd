@@ -121,6 +121,12 @@ export const useFileDownload = ({
   //     return null;
   // }, [data]);
 
+  // The worker URL is resolved against `import.meta.url`. In the ES build that
+  // stays native; in the cjs/umd builds Rolldown lowers it to `{}.url`, so
+  // `importMetaUrlBrowserCjs()` (wired in `vite.config.ts`) rewrites that token
+  // to a browser-valid base (`document.currentScript.src` → `location.href`).
+  // Without it the base is `undefined` and the constructor throws
+  // `TypeError: Invalid URL`. The node shim is deliberately NOT used here.
   const worker = useMemo(() => {
     if (
       typeof Worker !== 'undefined' &&
