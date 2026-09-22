@@ -549,18 +549,34 @@ export async function bootstrapSemanticBackend(
   // read-only verb (`query --input '{"view":"projects"}'`) never loads the
   // model — and, under the embedding funnel, never spawns a shared host. When
   // `config.space` is absent the vector space's dim is unknown without the
-  // provider's metadata, so the provider is constructed once here to read it;
-  // that construction is INERT (the fastembed factory no longer warms up), so
-  // it still spawns no host, and `provider_failed` is reported at bootstrap
-  // exactly as before for this case. When `config.space` IS supplied the
-  // construction is fully deferred, and a provider failure surfaces on first
-  // semantic use (thrown, never silent).
+  // provider's metadata, so the provider is constructed once here to read it.
+  // That construction is where a CONFIG error surfaces, so `provider_failed`
+  // IS still reported at bootstrap for this space-probe case (an unknown
+  // model/type fails at factory time). A MODEL-LOAD failure, by contrast, is
+  // deferred to first use: under the shared funnel the fastembed factory no
+  // longer warms up, so construction is INERT — it resolves static metadata,
+  // loads no ONNX model, and spawns no host — and the model only resolves on
+  // the first real embed, where a failure is thrown, never silent. When
+  // `config.space` IS supplied even construction is deferred, so both kinds of
+  // failure surface on first semantic use.
   let providerPromise: Promise<OptEmbeddingProvider> | null = null;
   const getProvider = (): Promise<OptEmbeddingProvider> => {
     if (!providerPromise) {
-      providerPromise = embeddingLoad.mod.createEmbeddingProvider(
-        config.embedding
-      );
+      providerPromise = embeddingLoad.mod
+        .createEmbeddingProvider(config.embedding)
+        .catch((err) => {
+          // A REJECTED promise must never stay memoized for the process
+          // lifetime (BUG 8168bc41): in a long-lived `serve`, one transient
+          // failure — a momentary model-load error, a mid-flight host
+          // restart — would otherwise permanently disable RAG with no
+          // recovery path short of a process restart. Clearing the memo here
+          // lets the NEXT semantic use retry construction from scratch. The
+          // rejection is re-thrown so every caller still observes it:
+          // `health()` reports it as an error state, and the first-use embed
+          // path propagates it.
+          providerPromise = null;
+          throw err;
+        });
     }
     return providerPromise;
   };
