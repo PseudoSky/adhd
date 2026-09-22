@@ -3430,6 +3430,7 @@
         "docs/plan/nx-23-upgrade/TEST-SELECTION-PROBE.md",
         "docs/plan/nx-23-upgrade/TEST-SELECTION.md",
         "docs/plan/nx-23-upgrade/TRIAGE-VERDICTS.md",
+        "docs/plan/nx-23-upgrade/TYPECHECK-TEETH.md",
         "docs/plan/nx-23-upgrade/VITE-CJS-REPAIR.md",
         "docs/plan/nx-23-upgrade/scripts/check-cross-package-selection.mjs",
         "docs/plan/nx-23-upgrade/scripts/check-guards-pinned.mjs",
@@ -3450,6 +3451,8 @@
         "entrypoint/backlog/vite.config.ts",
         "entrypoint/decompile-cli/package.json",
         "entrypoint/decompile-cli/project.json",
+        "entrypoint/decompile-cli/src/lib/extractors/index.ts",
+        "entrypoint/decompile-cli/src/lib/extractors/site.ts",
         "entrypoint/decompile-cli/vite.config.ts",
         "entrypoint/dispatch-cli/project.json",
         "entrypoint/dispatch-cli/vite.config.ts",
@@ -3601,7 +3604,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-09-22T14:07:28.546Z"
+      "updated_at": "2026-09-22T16:55:22.690Z"
     },
     {
       "plan": "parallel-tool-execution",
@@ -4116,6 +4119,6 @@
       "updated_at": "2026-07-17T23:56:00.980Z"
     }
   ],
-  "updated_at": "2026-09-22T14:07:28.554Z",
+  "updated_at": "2026-09-22T16:55:22.699Z",
   "verified_at": null
 }
