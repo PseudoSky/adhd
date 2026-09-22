@@ -52,6 +52,66 @@ describe('renderOneIssueCardMarkdown', () => {
     expect(text).toContain('[src/retry.ts sha:abc123]');
   });
 
+  it('renders the item-level `gitContext` ONCE at the head of the `Citations:` block, before the citation lines (repo AGENTS.md disclosure format)', () => {
+    const text = renderOneIssueCardMarkdown({
+      uid: 'x',
+      title: 'Disclosed',
+      gitContext: 'feat/backlog-hard-replacement @ 4bf902fc',
+      citations: [
+        { uid: 'c1', file: 'src/retry.ts', lines: '10-20', sha: 'abc123', at: '2026-01-01T00:00:00.000Z' },
+        { uid: 'c2', file: 'src/other.ts', sha: 'def456', at: '2026-01-01T00:00:00.000Z' },
+      ],
+    });
+    // The head element is the git context, bracketed on the `Citations:` line.
+    expect(text).toContain('Citations: [feat/backlog-hard-replacement @ 4bf902fc]');
+    // ...and it appears exactly ONCE, never repeated per citation.
+    expect(text.match(/feat\/backlog-hard-replacement @ 4bf902fc/g)).toHaveLength(1);
+    // ...and the citation lines follow it, in order.
+    const lines = text.split('\n');
+    const headerIdx = lines.findIndex((l) => l.startsWith('Citations:'));
+    expect(lines[headerIdx]).toBe(
+      'Citations: [feat/backlog-hard-replacement @ 4bf902fc]'
+    );
+    expect(lines[headerIdx + 1]).toBe('- [src/retry.ts:10-20 sha:abc123]');
+    expect(lines[headerIdx + 2]).toBe('- [src/other.ts sha:def456]');
+  });
+
+  it('a gitContext-only item renders a `Citations: [ctx]` block with no citation lines (never a bare header)', () => {
+    const text = renderOneIssueCardMarkdown({
+      uid: 'x',
+      title: 't',
+      gitContext: 'main @ deadbeef',
+    });
+    expect(text).toContain('Citations: [main @ deadbeef]');
+    expect(text).not.toMatch(/^- \[/m);
+  });
+
+  it('a card with citations but NO gitContext renders the ORIGINAL bare `Citations:` header (no regression)', () => {
+    const text = renderOneIssueCardMarkdown({
+      uid: 'x',
+      title: 't',
+      citations: [
+        { uid: 'c1', file: 'src/retry.ts', sha: 'abc123', at: '2026-01-01T00:00:00.000Z' },
+      ],
+    });
+    expect(text).toContain('\nCitations:\n- [src/retry.ts sha:abc123]');
+    expect(text).not.toContain('Citations: [');
+  });
+
+  it('a card with NEITHER gitContext nor citations renders no `Citations:` block at all', () => {
+    const text = renderOneIssueCardMarkdown({ uid: 'x', title: 't' });
+    expect(text).not.toContain('Citations');
+  });
+
+  it('an empty-string gitContext is treated as absent (no `Citations: []` block)', () => {
+    const text = renderOneIssueCardMarkdown({
+      uid: 'x',
+      title: 't',
+      gitContext: '',
+    });
+    expect(text).not.toContain('Citations');
+  });
+
   it('an untitled card falls back to a stated placeholder, never a blank header', () => {
     const text = renderOneIssueCardMarkdown({ uid: 'x' });
     expect(text).toContain('## (untitled)');

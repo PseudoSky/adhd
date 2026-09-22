@@ -149,12 +149,14 @@ location     kind='location'
   -- Belongs to exactly one component via has_location (§5).
 
 issue        kind='issue', name=title, content=body
-  meta: { assignee?, closedAt? }
+  meta: { assignee?, closedAt?, gitContext? }
   -- kind/status/priority are catalog refs reached via has_kind/has_status/
   -- has_priority edges (§5), never inline columns. closedAt is stamped, as
   -- meta.metadata.closedAt, by the transition that moves status to
   -- terminal, and cleared (never carried forward stale) by a transition
-  -- that moves it back off terminal.
+  -- that moves it back off terminal. gitContext is the item-level
+  -- disclosure-contract git context (a plain scalar sibling of assignee,
+  -- §8) — set by create/transition when supplied, never per-citation.
 ```
 
 ## 4. Event/evidence nodes (first-class rows, content-addressed)
@@ -298,6 +300,12 @@ index.
   next render.
 - Citations render as `[target sha:…]` — the `sha` is part of the citation,
   visible and independently verifiable.
+- The item-level `gitContext` (§3), when present, renders ONCE at the head of
+  the item's `Citations:` block — `Citations: [<active git context>]`,
+  followed by the citation lines. This is the repo disclosure contract's
+  `<active git context>`, the block's first element (repo `AGENTS.md` "Cite
+  what you read"); it is item-level, never repeated per citation. An item
+  with no `gitContext` renders its `Citations:` block exactly as before.
 - CLI / MCP / HTTP address every entity by `uid` and filter by kind, status
   (including lifecycle via `terminal`), priority rank, component, project,
   and graph traversal (dependencies, relations, the registry chain in §7).

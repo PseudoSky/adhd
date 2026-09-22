@@ -293,3 +293,104 @@ describe('createIssue — citation sha gate applies only where verification is p
     expect(sha).toMatch(/^[0-9a-f]{64}$/);
   });
 });
+
+describe('createIssue — item-level gitContext disclosure provenance (SPEC.md §6.3.2/§6.5, DATA_MODEL.md §8)', () => {
+  let dir: string;
+  let store: TestIssueStore;
+
+  beforeEach(async () => {
+    dir = freshTmpDir('create-issue-gitcontext-spec');
+    store = await openTestIssueStore(join(dir, 'backlog.db'));
+  });
+
+  afterEach(async () => {
+    await store.close();
+    removeTestIssueStoreDir(dir);
+  });
+
+  it('a supplied gitContext is persisted on the issue node metadata AND echoed on the result card; an omitted one leaves no key', async () => {
+    const project = await upsertProject(store, {
+      name: 'gitcontext-project',
+      by: 'filer',
+    });
+
+    const withCtx = await createIssue(store, {
+      project: project.uid,
+      title: 'with git context',
+      body: 'body',
+      gitContext: 'feat/backlog-hard-replacement @ 4bf902fc',
+      by: 'filer',
+    });
+    expect(withCtx.created).toBe(true);
+    expect(withCtx.item?.gitContext).toBe(
+      'feat/backlog-hard-replacement @ 4bf902fc'
+    );
+    if (!withCtx.uid) throw new Error('setup: createIssue returned no uid');
+    const row = await readNode(store, withCtx.uid);
+    expect(row?.metadata?.['gitContext']).toBe(
+      'feat/backlog-hard-replacement @ 4bf902fc'
+    );
+
+    const without = await createIssue(store, {
+      project: project.uid,
+      title: 'without git context',
+      body: 'body',
+      by: 'filer',
+    });
+    expect(without.item?.gitContext).toBeUndefined();
+    if (!without.uid) throw new Error('setup: createIssue returned no uid');
+    const row2 = await readNode(store, without.uid);
+    expect(row2?.metadata?.['gitContext']).toBeUndefined();
+  });
+
+  it('round-trips on read: `gitContext` in `fields` surfaces it on the card; the default/terse card omits it', async () => {
+    const project = await upsertProject(store, {
+      name: 'gitcontext-read-project',
+      by: 'filer',
+    });
+    const created = await createIssue(store, {
+      project: project.uid,
+      title: 'readable git context',
+      body: 'body',
+      gitContext: 'main @ cafebabe',
+      by: 'filer',
+    });
+    if (!created.uid) throw new Error('setup: createIssue returned no uid');
+
+    const withField = await queryIssues(store, {
+      filter: { project: project.uid },
+      fields: ['uid', 'gitContext'],
+    });
+    if (withField.view !== 'list')
+      throw new Error(`expected a list result, got view:${withField.view}`);
+    expect(
+      withField.items.find((i) => i.uid === created.uid)?.gitContext
+    ).toBe('main @ cafebabe');
+
+    const terse = await queryIssues(store, {
+      filter: { project: project.uid },
+      fields: ['uid', 'title'],
+    });
+    if (terse.view !== 'list')
+      throw new Error(`expected a list result, got view:${terse.view}`);
+    expect(terse.items.find((i) => i.uid === created.uid)?.gitContext).toBeUndefined();
+  });
+
+  it('a blank/whitespace-only gitContext is treated as absent — never stored, never echoed', async () => {
+    const project = await upsertProject(store, {
+      name: 'gitcontext-blank-project',
+      by: 'filer',
+    });
+    const created = await createIssue(store, {
+      project: project.uid,
+      title: 'blank git context',
+      body: 'body',
+      gitContext: '   ',
+      by: 'filer',
+    });
+    expect(created.item?.gitContext).toBeUndefined();
+    if (!created.uid) throw new Error('setup: createIssue returned no uid');
+    const row = await readNode(store, created.uid);
+    expect(row?.metadata?.['gitContext']).toBeUndefined();
+  });
+});

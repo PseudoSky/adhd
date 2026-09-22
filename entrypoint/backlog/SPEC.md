@@ -2002,6 +2002,7 @@ interface ICreateIssueInput {
   citations?: Citation[];
   author?: string; // catalog agent name/uid; defaults to `by`; an unresolved NAME mints a new `agent` catalog row (§6.1's general rule), exactly like `kind`/`status`/`priority` above; a uid-shaped `author` that does not resolve instead throws CatalogNotFoundError('agent', ref) — minting never applies to a uid (§6.1)
   assignee?: string; // plain metadata scalar (§6.2)
+  gitContext?: string; // plain metadata scalar (§6.2) — the item-level disclosure-contract git context (repo AGENTS.md "Cite what you read": the FIRST element of a `Citations:` block is `<active git context>`). ITEM-level, never a per-citation field; rendered once at the head of the item's `Citations:` block (§6.6). Omitted ⇒ nothing stored, every read/render path unchanged.
   awaitEmbed?: boolean;
   // duplicate-gate controls — §6.4
   duplicateAction?: 'abort' | 'force' | 'comment'; // default 'abort'
@@ -2045,13 +2046,14 @@ REMAINING `ICreateIssueInput` fields are each disposed of explicitly below
 — no field is silently dropped, and none is covered by a vague "every
 other field": every field maps onto exactly one of these named paths.
 
-- **`title`, `kind`, `priority`, `author`, `assignee`** — applied via a
+- **`title`, `kind`, `priority`, `author`, `assignee`, `gitContext`** —
+  applied via a
   following `touch`/edge-write against the same new node, atomically,
   inside the SAME transaction the `supersede` call opened — mirroring
   exactly the touch+edge-rewrite `update` (§6.3.3) already defines for
   each of these fields (an unresolved `kind`/`priority`/`author` NAME
   still auto-mints, §6.1's general rule, identically to a standalone
-  `update` call).
+  `update` call; `assignee`/`gitContext` are plain metadata scalars, §6.2).
 - **`project`/`component`** — handled separately, never via a generic
   edge-write: `owns_component`'s invalidate-old+write-new sequence is
   reserved to `move` (§6.3.6) specifically to guarantee at most one live
@@ -2195,6 +2197,7 @@ interface ITransitionInput {
   toStatus: string; // catalog name or uid
   note?: string; // REQUIRED unless project_policy.transition_requires_note is false (default true) — optional in the type; the write layer enforces the policy-gated requirement at runtime, never at the TS level (see `NoteRequiredError` below)
   citations?: Citation[]; // REQUIRED (≥1) when project_policy.citation_required is true AND toStatus resolves to a terminal status
+  gitContext?: string; // plain metadata scalar (§6.2) — the item-level disclosure-contract git context, the same field `create`'s input carries (repo AGENTS.md "Cite what you read"). Supplied ⇒ it UPDATES the issue's stored value on the metadata touch this verb already performs; omitted ⇒ the existing value is left untouched. ITEM-level, never per-citation; rendered once at the head of the item's `Citations:` block (§6.6).
 }
 ```
 
@@ -2526,7 +2529,7 @@ interface IIssueQueryInput {
   after?: string; // opaque keyset cursor from a prior page's `nextCursor` — see rule 5
   view?: 'list' | 'ready' | 'graph' | 'order' | 'stale' | 'similar' | 'overlap'
     | 'projects' | 'components' | 'locations'; // §5's existing view union, carried forward, plus §3a's registry LIST views (`projects`/`components`/`locations` — every live project/component/location row, optionally scoped by `filter.project`/`filter.component`)
-  format?: 'json' | 'markdown'; // default 'json'; 'markdown' renders this same page as issue-titled headers + `[target sha:…]` citations, never a second code path (§6.6) — only supported for the four item-list views (`list`/`ready`/`stale`/`similar`); any other view rejects it with `InvalidArgumentError('format', ...)`
+  format?: 'json' | 'markdown'; // default 'json'; 'markdown' renders this same page as issue-titled headers + `[target sha:…]` citations, never a second code path (§6.6) — and, when the card carries one, the item-level `gitContext` once at the head of its `Citations:` block (`Citations: [<active git context>]`, the disclosure format's first element). Only supported for the four item-list views (`list`/`ready`/`stale`/`similar`); any other view rejects it with `InvalidArgumentError('format', ...)`
 }
 
 interface IIssueFilter {
@@ -2554,7 +2557,7 @@ interface IIssueFilter {
 ```
 plain (cheap, always included when requested):
   uid, title, kind, status, priority, project, component,
-  createdAt, updatedAt, assignee, author, closedAt
+  createdAt, updatedAt, assignee, author, closedAt, gitContext
 pseudo (opt-in only — never in the default card, each costs a real extra read):
   body, citations, notes, auditTrail, blockers, related,
   _score, _vector
@@ -2569,7 +2572,9 @@ every genuine `pseudo` field (`citations`/`notes`/`auditTrail`/`blockers`/
 excluded for context-size reasons, §6.2's 'context-blow defense', not read
 cost). Classifying it `pseudo` under this section's own stated criterion
 ('each costs a real extra read') was inconsistent with `assignee`'s `plain`
-classification given they are mechanistically identical.
+classification given they are mechanistically identical. `gitContext` is
+`plain` for the same reason — a sibling of `assignee` in the same metadata
+blob, read in the same single-row fetch.
 
 Default (`fields` omitted): `['uid', 'kind', 'title', 'status', 'priority']`
 — the five-field terse card (`DEFAULT_CARD_FIELDS`), keyed on `uid`.
@@ -2704,7 +2709,7 @@ not carry (§7). Every action once carried under `admin` is accounted for:
 | Admin action                                                                                       | Disposition                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `import`, the phase-status/phase-setting actions, `reconcile_repo`, and the model-transform action | none of these have any surface here at all — this application layer carries no markdown `import`, no phase-tracking machinery, and no repo-reconciliation module                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `render`, `export`                                                                                 | folded into `query`'s output: `format:'markdown'` (new) alongside the existing `format:'json'` — a plain read, not an admin mutation. Markdown headers render the issue **title** (never `uid`); citations render `[target sha:…]` (unchanged from the current surface's stated projection rule)                                                                                                                                                                                                                                                                                                 |
+| `render`, `export`                                                                                 | folded into `query`'s output: `format:'markdown'` (new) alongside the existing `format:'json'` — a plain read, not an admin mutation. Markdown headers render the issue **title** (never `uid`); citations render `[target sha:…]` (unchanged from the current surface's stated projection rule), and the item-level `gitContext` renders once at the head of the `Citations:` block when present (`Citations: [<active git context>]`, the disclosure format's first element)                                                                                                                                                                                                                                                                    |
 | `archive`                                                                                          | no longer a mutation at all — see §6.2's `ArchiveOpts` row: `status.terminal` is the only exclusion signal the default projection needs                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `merge`                                                                                            | 1:1 mapping onto `relate('duplicate_of')` + `delete` — §6.2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `embedding_backfill`                                                                               | already specified: §4b's `reembed` (batch, backfill-only)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -2725,7 +2730,8 @@ mechanism, new operation list. MCP tool names follow the existing
 CRUD verbs from §3a). CLI commands follow the same leaf-name convention
 (`backlog get`, `backlog query`, ...). Every response is `uid`-keyed;
 `BACKLOG.md`/markdown projection renders issue **titles** as headers (never
-`uid`s) with `[target sha:…]` citations, per §6.6's `format:'markdown'`.
+`uid`s) with `[target sha:…]` citations, per §6.6's `format:'markdown'` — the
+item-level `gitContext`, when present, leading that `Citations:` block once.
 Web UI list/detail/stats views read the catalogs and edges directly through
 `query`'s `view`/`groupBy` axes, exactly as the current surface's stats
 views already do — no separate web-specific query path.

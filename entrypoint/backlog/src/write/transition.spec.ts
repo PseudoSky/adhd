@@ -233,6 +233,33 @@ describe('transition — status change (SPEC.md §6.3.4, real store)', () => {
     expect(row?.metadata?.['closedAt']).toBe(outcome.closedAt);
   });
 
+  it('a supplied gitContext updates issue.meta.metadata.gitContext on the metadata touch; a later transition omitting it PRESERVES the stored value', async () => {
+    await transition(store, {
+      uid: issueUid,
+      by: 'closer',
+      toStatus: 'in-progress',
+      note: 'start',
+      gitContext: 'feat/backlog-hard-replacement @ 4bf902fc',
+    });
+    const afterFirst = await readNode(store, issueUid);
+    expect(afterFirst?.metadata?.['gitContext']).toBe(
+      'feat/backlog-hard-replacement @ 4bf902fc'
+    );
+
+    // The metadata touch REPLACES `meta` wholesale — prove the omitted case
+    // carries the prior value forward rather than dropping it.
+    await transition(store, {
+      uid: issueUid,
+      by: 'closer',
+      toStatus: 'open',
+      note: 'reopen',
+    });
+    const afterSecond = await readNode(store, issueUid);
+    expect(afterSecond?.metadata?.['gitContext']).toBe(
+      'feat/backlog-hard-replacement @ 4bf902fc'
+    );
+  });
+
   it('§8 AC-15: reopening a terminal issue CLEARS closedAt — the stale-timestamp case, not just never-set', async () => {
     await seedStatus(store, 'done', true);
     const closeOutcome = await transition(store, {

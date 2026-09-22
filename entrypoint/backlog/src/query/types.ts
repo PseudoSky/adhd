@@ -23,9 +23,11 @@ export type IssueUid = string;
  * it — never a silent drop.
  *
  * `plain` fields are cheap: each is either a column on the `issue` node
- * itself or a scalar living in `issue.meta.metadata` (`assignee`, `closedAt`
- * — SPEC.md §6.5's own reclassification of `closedAt` as `plain`, since it is
- * read in the SAME single-row fetch as `assignee`, not a second query).
+ * itself or a scalar living in `issue.meta.metadata` (`assignee`, `closedAt`,
+ * `gitContext` — SPEC.md §6.5's own reclassification of `closedAt` as
+ * `plain`, since it is read in the SAME single-row fetch as `assignee`, not a
+ * second query; `gitContext` is the item-level disclosure-contract git
+ * context, a sibling of `assignee` in the same metadata blob).
  *
  * `pseudo` fields are opt-in only: each costs a genuine extra read (an edge
  * traversal to another node kind, or only exists on a `searchRanked`
@@ -43,7 +45,8 @@ export type IIssuePlainField =
   | 'updatedAt'
   | 'assignee'
   | 'author'
-  | 'closedAt';
+  | 'closedAt'
+  | 'gitContext';
 
 export type IIssuePseudoField =
   | 'body'
@@ -70,6 +73,7 @@ export const ISSUE_PLAIN_FIELDS: readonly IIssuePlainField[] = [
   'assignee',
   'author',
   'closedAt',
+  'gitContext',
 ];
 
 export const ISSUE_PSEUDO_FIELDS: readonly IIssuePseudoField[] = [
@@ -106,6 +110,14 @@ export interface IIssueCitation {
   uid: string;
   file: string;
   lines?: string;
+  /**
+   * Free-text prose for this citation (the write layer's `ICitationInput.context`).
+   * NOT the item's disclosure-contract git context — that is ITEM-level
+   * provenance and lives on {@link IIssueCard.gitContext}, a sibling of
+   * `assignee`, rendered once at the head of the `Citations:` block. This
+   * per-citation `context` is never rendered by `markdown.ts` and cannot carry
+   * the git context.
+   */
   context?: string;
   symbol?: string;
   sha: string;
@@ -157,6 +169,16 @@ export interface IIssueCard {
   assignee?: string;
   author?: string;
   closedAt?: string;
+  /**
+   * The item-level disclosure-contract git context (repo `AGENTS.md`'s
+   * "Cite what you read": the FIRST element of a `Citations:` block is
+   * `<active git context>`). A plain field — a sibling of `assignee` in
+   * `issue.meta.metadata`, read in the same single-row fetch. Rendered once at
+   * the head of the `Citations:` block by `markdown.ts`; never per-citation.
+   * Absent on every issue filed before the field existed, and on any issue
+   * whose `create`/`transition` supplied no `gitContext`.
+   */
+  gitContext?: string;
   body?: string;
   citations?: IIssueCitation[];
   notes?: IIssueNote[];

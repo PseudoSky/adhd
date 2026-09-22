@@ -130,6 +130,16 @@ export interface ITransitionInput {
   note?: string;
   /** REQUIRED (≥1) when `project_policy.citation_required` is `true` AND `toStatus` resolves to a terminal status. Written as `citation` nodes + `has_citation` edges exactly like `create`'s own citations. */
   citations?: ICitationInput[];
+  /**
+   * The item-level disclosure-contract git context — the SAME plain metadata
+   * scalar `create`'s own `gitContext` field writes (repo `AGENTS.md`'s "Cite
+   * what you read": the FIRST element of a `Citations:` block is `<active git
+   * context>`). When supplied, it UPDATES the item's stored value on the
+   * metadata touch this verb already performs; when omitted, the item's
+   * existing value (if any) is left untouched. ITEM-level, deliberately not a
+   * per-citation `ref` — it rides the issue, never a `citation` node.
+   */
+  gitContext?: string;
 }
 
 export interface ITransitionOutcome {
@@ -533,6 +543,16 @@ export async function transition(
       newIssueMetadata.closedAt = now;
     } else {
       delete newIssueMetadata.closedAt;
+    }
+    // Item-level disclosure-contract provenance (§6.3.4): a supplied git
+    // context updates the issue's stored value; omitted leaves it untouched.
+    // `touch` REPLACES `meta` wholesale (see this file's own doc comment), so
+    // the spread above already carried the prior value forward.
+    if (
+      typeof input.gitContext === 'string' &&
+      input.gitContext.trim().length > 0
+    ) {
+      newIssueMetadata.gitContext = input.gitContext;
     }
     const touchResult = await tx.executeRun(
       'UPDATE node SET meta = ?, t_updated = ? WHERE rowid = ?',
