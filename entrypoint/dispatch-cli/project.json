@@ -18,21 +18,6 @@
     "platform:node"
   ],
   "targets": {
-    "test": {
-      "executor": "@nx/vitest:test",
-      "//dependsOn": "cli-smoke.spec.ts drives the GENERATED CLI at dist/entrypoint/dispatch-cli/cli/cli.ts and fails loudly when it is absent. Its error message claimed this target already declared dependsOn:[generate-cli] — it did not; only nx.json's targetDefaults dependsOn:[^build] applied, which never runs generate-cli. Declaring it here restores that promise. NOTE: a project-level dependsOn REPLACES the targetDefaults value, so ^build must be repeated. build-bin is added so the COMPILED-bin describe block's beforeAll guard (dist/bin/cli.js) is always satisfied by a normal `nx test` run.",
-      "dependsOn": [
-        "^build",
-        "generate-cli",
-        "build-bin"
-      ],
-      "outputs": [
-        "{workspaceRoot}/coverage/entrypoint/dispatch-cli"
-      ],
-      "options": {
-        "configFile": "entrypoint/dispatch-cli/vite.config.ts"
-      }
-    },
     "typecheck": {
       "executor": "nx:run-commands",
       "cache": true,
@@ -47,20 +32,6 @@
       ],
       "options": {
         "command": "tsc -p entrypoint/dispatch-cli/tsconfig.lib.json --noEmit"
-      }
-    },
-    "build": {
-      "executor": "@nx/vite:build",
-      "outputs": [
-        "{options.outputPath}"
-      ],
-      "options": {
-        "outputPath": "entrypoint/dispatch-cli/dist",
-        "main": "entrypoint/dispatch-cli/src/index.ts",
-        "tsConfig": "entrypoint/dispatch-cli/tsconfig.lib.json",
-        "assets": [
-          "entrypoint/dispatch-cli/*.md"
-        ]
       }
     },
     "generate-cli": {

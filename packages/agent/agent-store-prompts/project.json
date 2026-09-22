@@ -29,23 +29,6 @@
         ]
       }
     },
-    "test": {
-      "executor": "@nx/vitest:test",
-      "cache": true,
-      "inputs": [
-        "default",
-        "^production",
-        {
-          "externalDependencies": ["vitest"]
-        }
-      ],
-      "outputs": [
-        "{workspaceRoot}/coverage/packages/agent/agent-store-prompts"
-      ],
-      "options": {
-        "vitestConfig": "packages/agent/agent-store-prompts/vite.config.ts"
-      }
-    },
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {

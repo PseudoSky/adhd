@@ -12,16 +12,6 @@
   },
   "tags": ["layer:mcp", "platform:shared"],
   "targets": {
-    "build": {
-      "executor": "@nx/vite:build",
-      "outputs": ["{options.outputPath}"],
-      "options": {
-        "outputPath": "packages/agent/agent-base-types/dist",
-        "main": "packages/agent/agent-base-types/src/index.ts",
-        "tsConfig": "packages/agent/agent-base-types/tsconfig.lib.json",
-        "assets": ["packages/agent/agent-base-types/*.md"]
-      }
-    },
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {
