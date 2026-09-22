@@ -5,7 +5,10 @@
 Land the Nx 23.2.1 + Vite 8 upgrade on `perf/nx-upgraded`, remodel the task graph
 onto Nx-inferred targets, and deliver fail-safe file-level test selection.
 
-**Status:** authored, awaiting the GATE 2 approval recorded in `APPROVAL.md`.
+**Status:** authored; GATE 2 approval recorded in `APPROVAL.md`; amended 2026-09-21 by the
+repair pass that added the bump-safety states (`vite-cjs-import-meta-repair`,
+`browser-package-build-repair`, `browser-cjs-umd-repair`) and `[dod.14]`/`[dod.15]` — see
+`APPROVAL.md` § *Amendment 2026-09-21*.
 **Branch:** `perf/nx-upgraded` (worktree `.worktrees/nx-perf-upgraded`).
 **Plans-root:** `docs/plan/` · **Registry:** `docs/plan/plan-index.json`.
 
@@ -32,6 +35,7 @@ test target and would silently lose its dependency checks if that edge is droppe
 | Compiler config | Branch carries 5 migration shims main does not have | Byte-parity with main's shared compiler config, proven empirically |
 | Task cache | Pooled across sibling worktrees (Nx 23 default) — a sibling's cached PASS can replay here | Each checkout owns its cache directory |
 | Toolchain | Nx 18.3.4 / vite 5 / vitest 1.6.1 on main | Nx 23.2.1 / vite 8.3.0 / vitest 4.1.9 on the upgrade branch |
+| Bump safety | `vite ^8.3.0` declared in a commit whose built CommonJS entrypoints throw at module load, and a public browser package that neither builds nor ships a loadable bundle | The bump and its fix are one commit; every built CJS entrypoint loads as a real process; the browser package builds and its bundles carry no empty-import-meta token |
 
 ---
 
@@ -107,6 +111,18 @@ state pushes, merges to the default branch, or publishes.
 
 - `[dod.13]` **(structural)** Every phase holds at an audit gate that re-proves the criteria of all phases before it.
   - delivered-by: audit-reconcile, audit-config, audit-graph, audit-tests, audit-final
+
+- `[dod.14]` A developer can run the workspace's bundled command-line entrypoint and it starts, instead of crashing while it loads.
+  - entrypoint: `node entrypoint/apigen-cli/dist/index.js --help`
+  - observable: `the CLI prints its usage text and exits 0, then the APIGEN_CLI_LOADS_PASS marker is printed`
+  - negative-control: `restore the Rolldown empty-import-meta token in entrypoint/apigen-cli/dist/index.js and re-run node entrypoint/apigen-cli/dist/index.js --help — it must exit non-zero`
+  - delivered-by: vite-cjs-import-meta-repair
+
+- `[dod.15]` A developer can build the browser hooks package and ship its bundles without an invalid-URL failure.
+  - entrypoint: `packages/ui-react/ui-react-base-hooks/dist/index.js`
+  - observable: `the CJS and UMD bundles carry no empty-import-meta token and no node-only shim, then the BROWSER_BUNDLES_CLEAN_PASS marker is printed`
+  - negative-control: `inject the empty-import-meta token into packages/ui-react/ui-react-base-hooks/dist/index.js and re-run the check — it must fail`
+  - delivered-by: browser-package-build-repair, browser-cjs-umd-repair
 
 ---
 
