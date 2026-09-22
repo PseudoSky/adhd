@@ -18,6 +18,7 @@
 
 - [browser-package-build-repair.1] The browser hooks package builds again under the installed React 19 types
 
+- [browser-package-build-repair.2] All three published module formats are emitted by that build
 ---
 
 ## Reservations
