@@ -27,7 +27,7 @@
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["docs/plan/nx-23-upgrade/SCOPE.md", "docs/plan/nx-23-upgrade/USE_CASES.md", "docs/plan/nx-23-upgrade/demo/DEMO.md", "docs/plan/nx-23-upgrade/demo/UNRESOLVED.md", "docs/plan/nx-23-upgrade/TOOLS.md", "docs/plan/nx-23-upgrade/APPROVAL.md", "docs/plan/nx-23-upgrade/contexts/_shared.md", "AGENTS.md", "CLAUDE.md", "package.json", "tsconfig.base.json", "docs/plan/nx-23-upgrade/scripts/guard_audit_config.py", "docs/plan/nx-23-upgrade/scripts/run-audit.js", "docs/plan/nx-23-upgrade/scripts/criteria.json"]
 mutates:    ["nx.json", "packages/agent/agent-core-env/project.json", "entrypoint/decompile-cli/src/lib/extractors/index.ts", "entrypoint/decompile-cli/src/lib/extractors/site.ts", "docs/plan/nx-23-upgrade/SHIM-REMOVAL.md", "docs/plan/nx-23-upgrade/TYPECHECK-TEETH.md"]
 ```
 
