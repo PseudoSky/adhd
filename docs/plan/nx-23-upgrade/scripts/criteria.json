@@ -1063,6 +1063,16 @@
       "cmd": "./node_modules/.bin/nx build ui-react-base-hooks && node -e \"const fs=require('fs');for(const f of ['packages/ui-react/ui-react-base-hooks/dist/index.js','packages/ui-react/ui-react-base-hooks/dist/index.umd.js']){const t=fs.readFileSync(f,'utf8');if(t.includes('{}.url'))process.exit(1);if(t.includes('__filename')||t.includes('node:url'))process.exit(1)}console.log('BROWSER_BUNDLES_CLEAN_PASS')\"",
       "expect": "marker",
       "marker": "BROWSER_BUNDLES_CLEAN_PASS"
+    },
+    {
+      "id": "typecheck-teeth-restored.1",
+      "phase": "graph",
+      "tier": 3,
+      "kind": "negative-control",
+      "positive": "./node_modules/.bin/nx build agent-base-types",
+      "mutate": "printf '\\n\\nexport const __ttProbe: number = \"not a number\";\\n' >> packages/agent/agent-base-types/src/index.ts",
+      "restore": "git restore packages/agent/agent-base-types/src/index.ts",
+      "expect": "exit0"
     }
   ]
 }

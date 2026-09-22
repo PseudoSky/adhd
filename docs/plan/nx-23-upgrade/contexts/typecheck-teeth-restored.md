@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [typecheck-teeth-restored.1] The build gate has teeth again: an injected type error in a base package turns its build red
 
 ---
 
