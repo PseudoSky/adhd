@@ -5,22 +5,5 @@
   "projectType": "library",
   "tags": ["platform:browser", "layer:test-ui"],
   "targets": {
-    "test": {
-      "executor": "@nx/vitest:test",
-      "cache": true,
-      "inputs": [
-        "default",
-        "^production",
-        {
-          "externalDependencies": ["vitest"]
-        }
-      ],
-      "outputs": [
-        "{workspaceRoot}/coverage/packages/ui-react/ui-react-base-storybook"
-      ],
-      "options": {
-        "vitestConfig": "packages/ui-react/ui-react-base-storybook/vite.config.ts"
-      }
-    }
   }
 }

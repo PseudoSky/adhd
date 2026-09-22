@@ -28,23 +28,6 @@
         "clean": true
       }
     },
-    "test": {
-      "executor": "@nx/vitest:test",
-      "cache": true,
-      "inputs": [
-        "default",
-        "^production",
-        {
-          "externalDependencies": ["vitest"]
-        }
-      ],
-      "outputs": [
-        "{workspaceRoot}/coverage/packages/agent/agent-engine-orchestrator"
-      ],
-      "options": {
-        "vitestConfig": "packages/agent/agent-engine-orchestrator/vite.config.ts"
-      }
-    },
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {

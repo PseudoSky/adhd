@@ -103,7 +103,8 @@
     {
       "plugin": "@nx/vitest",
       "options": {
-        "testTargetName": "test"
+        "testTargetName": "test",
+        "testMode": "run"
       },
       "exclude": [
         "vitest.config.ts"
@@ -168,7 +169,11 @@
             "drizzle-orm"
           ]
         }
-      ]
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "vitest run --config {projectRoot}/vite.config.ts"
+      }
     },
     "@nx/js:tsc": {
       "cache": true,

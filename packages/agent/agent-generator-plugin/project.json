@@ -41,14 +41,6 @@
         ]
       }
     },
-    "test": {
-      "executor": "@nx/vitest:test",
-      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
-      "options": {
-        "configFile": "packages/agent/agent-generator-plugin/vite.config.ts",
-        "reportsDirectory": "coverage/packages/agent/agent-generator-plugin"
-      }
-    },
     "nx-release-publish": {
       "dependsOn": [
         "build",

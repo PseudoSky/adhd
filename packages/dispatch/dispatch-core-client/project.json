@@ -12,25 +12,6 @@
   },
   "tags": ["layer:data", "platform:shared"],
   "targets": {
-    "test": {
-      "executor": "@nx/vitest:test",
-      "outputs": [
-        "{workspaceRoot}/coverage/packages/dispatch/dispatch-core-client"
-      ],
-      "options": {
-        "configFile": "packages/dispatch/dispatch-core-client/vite.config.ts"
-      }
-    },
-    "build": {
-      "executor": "@nx/vite:build",
-      "outputs": ["{options.outputPath}"],
-      "options": {
-        "outputPath": "packages/dispatch/dispatch-core-client/dist",
-        "main": "packages/dispatch/dispatch-core-client/src/index.ts",
-        "tsConfig": "packages/dispatch/dispatch-core-client/tsconfig.lib.json",
-        "assets": ["packages/dispatch/dispatch-core-client/*.md"]
-      }
-    },
     "nx-release-publish": {
       "dependsOn": [
         "build",
