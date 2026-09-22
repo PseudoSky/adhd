@@ -74,10 +74,10 @@
       "end_ref": "5b038916afc95228ceff3bcefdec9e7c5b75623f"
     },
     "graph-release-eslint-inferred": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-09-22T17:34:04.454Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "81f142ea40bb7f62c4776b18615db1dfab1e9448",
       "end_ref": null
     },
     "audit-graph": {
