@@ -1712,6 +1712,67 @@ other-agent edit — not ours.)
 9. Review each group before push (directive 5); PR #9 merge +
    `@adhd/backlog` publish remain human-gated.
 
+**Update (2026-09-22 late) — publishes + cutover landed:**
+- **Published (sox-ecosystem, npm-verified):** `sox-semantic@0.1.5`
+  (optional-loadability; residual — hybrid-search still hard-declares the
+  heavy two → `BUG-HYBRID-SEARCH-OPTIONAL-LOADABILITY-001` filed) +
+  `sox-host-registry@0.5.0` (batched changeset). `sox-graph-store@0.10.1`,
+  `sox-vector-store@0.6.2`, `sox-hybrid-search@0.4.6` (empty-ids conflation
+  fixed at every layer; **ADR-0017** written; BUG-032 filed+resolved). The
+  live worktree's declared ranges already satisfy these — only a lockfile
+  refresh was needed.
+- **Cutover executed** (A + B1–B5): new open-schema store
+  `~/.adhd/backlog/production/data/backlog-v2.db` (1824 issues: 1569 live /
+  257 invalidated; 1568 embeddings); parity green (full-population 1824/1824,
+  residual 0 on every reproducible delta — the plan's "675" criterion was
+  unreproducible as written and replaced by the decomposition); legacy
+  untouched (hash-stable) + backed up to `backup-cutover-20260922-002647/`;
+  config `db.path` flipped; global bin → frozen build
+  (`.worktrees/backlog-cutover`, which needed an in-range hybrid-search
+  0.4.5 bump to build — filed `0c800822`; ETL superlinear cost filed
+  `50c69b14`). Frozen-build `update` verb rejects `note`/`addNote` (filing);
+  two smoke items remain in the production store (`ef8295d5`, `848afee9`).
+- **In flight now:** Wave 0 dep-align + suite-green + atomic A–E commit
+  (typescript); G1 tx-scoped primitives (typescript, sox-ecosystem);
+  Phase C serve/MCP repoint + real-JSON-RPC verify (backend); adhd-graph
+  filing block (general).
+- After Wave 0 commits: dispatch the wave review (directive 5) → push.
+
+**Update (2026-09-22, later still):**
+- **G1 PUBLISHED** — `@adhd/sox-graph-store@0.11.0` (+ cascade analysis 0.1.13,
+  hybrid-search 0.4.7, semantic 0.1.6, memory-core 0.10.2): `transaction(fn, opts?)`'s
+  callback now receives a `GraphTransaction` (AdapterTransaction superset) with
+  typed tx-bound primitives (`writeNode`/`writeEdge`/`invalidateEdge`/`touch`/
+  `getNodeByUid`/`getEdges`/`getNodesByIds`/`writeGraph`/`writeEdges`…);
+  `{mode:'immediate'}` = BEGIN IMMEDIATE. 15 specs + negative control; commits
+  `b7303404`/`856c8d50`/`7497c56f`/`d0e65326` on sox main. **CORRECTION
+  recorded:** the old "writes autocommit against the bare adapter" premise was
+  FALSE (AdapterTransaction wraps the same connection) — 3b is an API-adoption
+  refactor (kill the SQL mirrors), not a correctness fix. 3b spec dispatched.
+- **Phase C COMPLETE** — MCP registrations repointed (`.mcp.json` committed
+  `fcb2f2dd` in the main repo; `~/.claude.json` + `~/Library/pnpm/backlog`
+  shim backed up + repointed at the frozen build); stale serve PID 46472
+  stopped (TERM hung → SIGKILL; bug filed `52a099ac` — serve ignores
+  SIGTERM/SIGINT with a stdio peer); verified as a real MCP client: 40
+  projects / 1571 items from `backlog-v2.db`. No orphan serve (host-owned stdio).
+- **Filing COMPLETE** — 22 creates + 1 dedupe-update in the adhd graph (project
+  `7ee5721e`; component `entrypoint/backlog` `9a7bf578`): jscpd gate
+  `b63a66fe`, S-01 `76f0cef4`, C-22 `6bb37a98`, S-18 `7a197624`, S-19+C-21
+  `d25f6b17`, C-20 `8c9b1b9f`, S-20 `751c4630`, C-06 `53a7eb55`, S-14 umbrella
+  `6ff60c82`, isSuperseded adoption `095db4f3`, +12 more.
+- **Wave 0 status:** deps committed (`a8906d3d` — ranges bumped to
+  `^0.10.1`/`^0.6.2`/`^0.4.6`/`^0.9.2`; note: `pnpm update` silently no-ops on
+  these, the range bump + install was the working path; lockfile churn is
+  cosmetic re-serialization). **Suite 600/600 GREEN including the S-13 pin.**
+  Wave commit BLOCKED by the vocabulary-guard entanglement (below).
+- **NEW stream (not from any dispatcher dispatch): `store/vocabulary-guard`**
+  — `src/store/vocabulary-guard.{ts,spec.ts}` + `graph-backlog-store.ts` +
+  integration calls inside `api.ts`/`query.ts`/`cli.ts`; appeared 23:14-23:15.
+  A fail-loud guard for the silent-empty-store class (a store written under a
+  foreign node vocabulary reads as `{ok:true,total:0}`) — exactly the failure
+  class the cutover exposed; references BUG-BACKLOG-005; spec documents teeth.
+  Suite green with it. Commit handling awaiting the user's answer.
+
 **Triage decisions landed:**
 
 | Item | Verdict → consequence |
