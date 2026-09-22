@@ -43,24 +43,20 @@
       }
     },
     "build-bin": {
-      "executor": "@nx/js:tsc",
-      "//": "Compiles bin/cli.ts's WHOLE reachable graph (src/** AND bin/*, per tsconfig.lib.json's existing include list) in one tsc pass, mirroring source structure under dist/ so dist/bin/cli.js's `require('../src/api.js')` resolves to the ALSO-emitted dist/src/api.js. dependsOn:[build] is load-bearing: vite's build.emptyOutDir wipes dist/ on every run, so this MUST run after build (tsc is additive, never empties outDir) never before/parallel.",
-      "//clean": "@nx/js:tsc defaults `clean: true` ('Remove previous output before build' — node_modules/@nx/js/src/executors/tsc/schema.json). Since build-bin's outputPath is the SAME shared entrypoint/dispatch-cli/dist that `build` (vite) just populated with index.js/index.mjs/index.d.ts/api.d.ts/lib, a default clean=true run of build-bin WIPES those files the instant it starts, before writing bin/+src — verified empirically (a real data-loss repro while authoring this fix: build's output vanished entirely after build-bin ran on top of it). clean:false makes build-bin strictly additive, matching the spec's stated intent ('added into the already-populated folder rather than wiped').",
-      "//outputs": "Narrower than build's outputs ({options.outputPath} = the whole dist/ dir) so each target's own Nx cache-restore only ever touches the subtree it actually owns, never the sibling target's files.",
+      "//": "Override of the `build-bin` target inferred by @nx/js/typescript's second registration (configName tsconfig.build-bin.json) — see that registration in nx.json for why the inferred `tsc --build tsconfig.build-bin.json` cannot run in this workspace. Compiles bin/cli.ts's WHOLE reachable graph (src/** AND bin/*, per tsconfig.lib.json's existing include list) in one tsc pass, mirroring source structure under dist/ so dist/bin/cli.js's `require('../src/api.js')` resolves to the ALSO-emitted dist/src/api.js. dependsOn:[build] is load-bearing: vite's build.emptyOutDir wipes dist/ on every run, so this MUST run after build (tsc is additive, never empties outDir) never before/parallel.",
+      "//clean": "Additive by construction: this command never empties dist/, so the retired executor's `clean: false` is preserved. That was load-bearing — build-bin's output dir is the SAME entrypoint/dispatch-cli/dist that `build` (vite) just populated with index.js/index.mjs/index.d.ts/api.d.ts/lib, so a clean run would WIPE those files the instant it starts (verified empirically while authoring the original fix: build's output vanished entirely after build-bin ran on top of it).",
+      "//outputs": "Narrower than build's outputs ({projectRoot}/dist = the whole dir) so each target's own Nx cache-restore only ever touches the subtree it actually owns, never the sibling target's files.",
       "dependsOn": [
         "build",
         "^build"
       ],
       "outputs": [
-        "{options.outputPath}/bin",
-        "{options.outputPath}/src"
+        "{projectRoot}/dist/bin",
+        "{projectRoot}/dist/src"
       ],
       "options": {
-        "outputPath": "entrypoint/dispatch-cli/dist",
-        "main": "entrypoint/dispatch-cli/bin/cli.ts",
-        "tsConfig": "entrypoint/dispatch-cli/tsconfig.build-bin.json",
-        "assets": [],
-        "clean": false
+        "cwd": ".",
+        "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.build-bin.json --outDir {projectRoot}/dist --rootDir {projectRoot} --baseUrl {projectRoot} --composite false --noEmitOnError"
       }
     },
     "nx-release-publish": {

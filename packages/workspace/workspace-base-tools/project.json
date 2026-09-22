@@ -22,19 +22,11 @@
   "implicitDependencies": ["!workspace-base-vite-paths"],
   "targets": {
     "build": {
-      "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
+      "//": "Override of the `build` target inferred by @nx/js/typescript (see that plugin's registration in nx.json for why the inferred `tsc --build tsconfig.lib.json` cannot run in this workspace). The `*.md` asset glob is covered by the inferred `assets` target.",
+      "outputs": ["{projectRoot}/dist"],
       "options": {
-        "outputPath": "packages/workspace/workspace-base-tools/dist",
-        "main": "packages/workspace/workspace-base-tools/src/index.ts",
-        "tsConfig": "packages/workspace/workspace-base-tools/tsconfig.lib.json",
-        "assets": [
-          {
-            "input": "packages/workspace/workspace-base-tools",
-            "glob": "*.md",
-            "output": "."
-          }
-        ]
+        "cwd": ".",
+        "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.lib.json --outDir {projectRoot}/dist --rootDir {projectRoot} --baseUrl {projectRoot} --composite false --noEmitOnError"
       }
     },
     "nx-release-publish": {

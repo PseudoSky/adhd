@@ -14,32 +14,11 @@
   "implicitDependencies": ["!workspace-base-vite-paths"],
   "targets": {
     "build": {
-      "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
+      "//": "Override of the `build` target inferred by @nx/js/typescript (see that plugin's registration in nx.json for why the inferred `tsc --build tsconfig.lib.json` cannot run in this workspace). The trailing cp calls reproduce the `assets` globs the retired tsc build executor copied (generator/executor schemas + templates); README/CHANGELOG are owned by the inferred `assets` target.",
+      "outputs": ["{projectRoot}/dist"],
       "options": {
-        "outputPath": "packages/apigen/apigen-generator-nx/dist",
-        "main": "packages/apigen/apigen-generator-nx/src/index.ts",
-        "tsConfig": "packages/apigen/apigen-generator-nx/tsconfig.lib.json",
-        "assets": [
-          "packages/apigen/apigen-generator-nx/*.md",
-          "packages/apigen/apigen-generator-nx/generators.json",
-          "packages/apigen/apigen-generator-nx/executors.json",
-          {
-            "input": "packages/apigen/apigen-generator-nx/src/generators",
-            "glob": "**/__files__/**",
-            "output": "./src/generators"
-          },
-          {
-            "input": "packages/apigen/apigen-generator-nx/src/generators",
-            "glob": "**/schema.json",
-            "output": "./src/generators"
-          },
-          {
-            "input": "packages/apigen/apigen-generator-nx/src/executors",
-            "glob": "**/schema.json",
-            "output": "./src/executors"
-          }
-        ]
+        "cwd": ".",
+        "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.lib.json --outDir {projectRoot}/dist --rootDir {projectRoot} --baseUrl {projectRoot} --composite false --noEmitOnError && cp {projectRoot}/*.md {projectRoot}/generators.json {projectRoot}/executors.json {projectRoot}/dist/ && cp {projectRoot}/src/generators/host/schema.json {projectRoot}/dist/src/generators/host/ && cp -R {projectRoot}/src/generators/host/__files__ {projectRoot}/dist/src/generators/host/ && cp {projectRoot}/src/generators/plugin/schema.json {projectRoot}/dist/src/generators/plugin/ && cp -R {projectRoot}/src/generators/plugin/__files__ {projectRoot}/dist/src/generators/plugin/ && cp {projectRoot}/src/executors/generate/schema.json {projectRoot}/dist/src/executors/generate/"
       }
     },
     "nx-release-publish": {

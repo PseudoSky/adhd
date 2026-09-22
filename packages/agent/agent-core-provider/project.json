@@ -13,20 +13,11 @@
   "tags": ["layer:ai", "platform:node"],
   "targets": {
     "build": {
-      "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
+      "//": "Override of the `build` target inferred by @nx/js/typescript (see that plugin's registration in nx.json for why the inferred `tsc --build tsconfig.lib.json` cannot run in this workspace). The `drizzle/**/*` asset glob is covered by the inferred `assets` target.",
+      "outputs": ["{projectRoot}/dist"],
       "options": {
-        "outputPath": "packages/agent/agent-core-provider/dist",
-        "main": "packages/agent/agent-core-provider/src/index.ts",
-        "tsConfig": "packages/agent/agent-core-provider/tsconfig.lib.json",
-        "clean": true,
-        "assets": [
-          {
-            "input": "packages/agent/agent-core-provider",
-            "glob": "drizzle/**/*",
-            "output": "."
-          }
-        ]
+        "cwd": ".",
+        "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.lib.json --outDir {projectRoot}/dist --rootDir {projectRoot} --baseUrl {projectRoot} --composite false --noEmitOnError"
       }
     },
     "serve": {
