@@ -943,6 +943,15 @@
       "mutate": "node docs/plan/nx-23-upgrade/scripts/neg-control-cjs-shim.mjs mutate entrypoint/apigen-cli/dist/index.js",
       "restore": "node docs/plan/nx-23-upgrade/scripts/neg-control-cjs-shim.mjs restore entrypoint/apigen-cli/dist/index.js",
       "expect": "exit0"
+    },
+    {
+      "id": "browser-package-build-repair.1",
+      "phase": "intake",
+      "tier": 3,
+      "kind": "command",
+      "cmd": "./node_modules/.bin/nx build ui-react-base-hooks && echo UI_REACT_HOOKS_BUILD_PASS",
+      "expect": "marker",
+      "marker": "UI_REACT_HOOKS_BUILD_PASS"
     }
   ]
 }
