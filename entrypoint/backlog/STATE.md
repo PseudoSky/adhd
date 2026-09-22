@@ -1949,3 +1949,382 @@ Seg-E specs (positive-control/upgrade assertions awaiting the A–D code) —
 do NOT `--no-verify`; push after Wave 0 Seg A–D lands and the suite is
 green. Remote `origin/feat/backlog-hard-replacement` is at `af8eaf63`.
 
+**Update (2026-09-22 — waves + citations + telemetry + PR-split; persisted-plan sync):**
+
+**Stream A (hygiene waves):**
+- Seg F DONE `111c19bd` (not pushed): deleted `semantic-search.{ts,spec.ts}`,
+  `embed-queue.ts`, `mutate-metadata.ts`, `rag-e2e.spec.ts` (−1695/+32, 8 files);
+  dropped the `flushEmbeds` import/member/drain from `graph-backlog-store.ts`
+  (vocabulary-guard untouched); `embedding-usage-gate.mjs` buckets updated. Suite
+  75 files / 597 tests green (reconciled: −16 tests from the deleted specs); both
+  gates CLEAN; lint clean. Filed `2b607b26` (residual stale comments) — resolved by Seg G.
+- Seg G DONE `315f120f` + `145fda7b` (not pushed): RAG-SPEC/DESIGN/PLUGIN_ARCHITECTURE
+  retired to the live seam; C-26 immediate-retry header; run.spec:304 comment + bounds
+  30s/20s→90s; `2b607b26` sweep (+2 extra `rag-e2e` refs in the production-seam spec);
+  CONTRIBUTING single-writer phrase fixed (C-10 partial — SPEC.md is citation-fix-owned).
+  Graph: S-01→`45da2e00` (closed), e19bc9d0→`eacf4aa8` (closed), b7805de9→`fee0d523`
+  (closed), 2b607b26→`836d4209` (closed); C-06 already closed; f80bf841 left OPEN.
+  C-09/T-06/T-08 not filed in the graph (STATE-only) — no write possible.
+- **Citations fix DONE `7875d848`** (typescript, not pushed) per verdict (A):
+  `projectHasKnownPath(project)` predicate + both throw sites gated on it; path-less
+  projects persist `sha:'unverified'`; path-present-unresolvable still hard-fails.
+  4 new tests + negative control (red→green proven). No `policy` deep-merge (dropped).
+  Optional `unverified-citation` audit event NOT added (conflicts with SPEC §4a one-
+  audit-node contract — open question).
+- **F3 verdict (ref field):** architect-decision APPROVE — add now, but ITEM-LEVEL
+  provenance (`ICreateIssueInput`), not per-citation `ref`; `context` is prose and
+  unrendered (markdown.ts:32-35) so it can't carry it; render once at the head of the
+  `Citations:` block. LOW risk. Implementation queued (next wave).
+- **Cross-agent gate break + fix:** Seg G's comment edit (`315f120f`) tripped the
+  embedding-usage gate (`bootstrapSemanticStoreMembers` bare identifier in a comment)
+  → filed `cd34ba0d` (blocks full-suite green). Needs the one-line fix (reword the
+  comment). Next wave.
+
+**Stream C (citations):** verdict (A) + fix landed (above). `29b4578d` enriched → live
+`6defe186`; EISDIR gap `aede6810`; BUG-026 sidecar `edc4f456`; scheduleIssueEmbedding
+audit-persist `cb47fb79` (2nd occurrence — now filed).
+
+**Stream D (telemetry + fastembed) — user HARD requirements:**
+- R1: BL-404 = duplicate `@adhd/sox-telemetry` singleton (`sox-embedding-provider@0.4.1`
+  nests 0.2.1 as a regular dep; parent-side fastembed client emits through it; stack-
+  probe proven). Backlog-side already correct in v2 (lazy seam; frozen build's eager
+  init is L1, fixed in v2). **Verdict: mechanism (b) — globalThis-backed singleton in
+  sox-telemetry** (ADR-0006-aligned; peerDependency rejected by ADR-0006). LOW-MODERATE;
+  implementation must pin the global-key contract with a regression test + optional ADR
+  addendum. sox-ecosystem work, publish authorized.
+- R2: BL-331 lock stores `{pid,startedAt,poolGroup?}` — no service identity. Fix: `service`
+  label (+cmdline) threaded via env (mirror `SOX_FASTEMBED_POOL_GROUP`), printed in the
+  warning. Durable option: machine-wide host broker (later). Live contention confirmed
+  (memory-server + backlog serve).
+- Filed: dual-package hazard → `2d5f40b5` (reopened HIGH + requirement verbatim);
+  store-adapter variant `db88fb0d`; lock identity `8331b4d8` (DEBT HIGH); onnx stderr
+  `065b672f` (enriched `a4304cc7`, LOW→MEDIUM); library-embedded startBacklogServer
+  `ed06a22b`. Check-only: `cfa3c313`/`80455bf5` (near-dup merge candidates, OPEN).
+- Next: sox implementation (singleton + lock identity) + publish → backlog re-install →
+  verify all namespaces clean.
+
+**Stream B (deployment separation):** unchanged — Phase 0.1–0.3 still await user
+approval (machine-global). All pointer-map findings filed (9 items, prior turn).
+
+**PR split (user question):** architect-decision APPROVE — **stacked pair** (apigen PR
+first, backlog rebases), MODERATE risk. Verified NOT merged (origin/main `0d110a50`).
+`origin/main..HEAD` apigen footprint: 6 clean commits (`ef790a65` S-18, `2209e2a7`
+S-19+C-21, `08ac7aac` C-20, `5caf3791` S-20, `59bf05a9` java race, `d21f7a03` run.spec)
++ apigen content bundled inside the mixed mega-commit `2118d384` (union encoder + lazy
+ts-morph — needs surgical extraction) + run.spec portion of `315f120f`. `f80bf841`
+excluded (LOW, stays). **User chose FULL stacked split.** Execution dispatched:
+`.worktrees/apigen-fixes` on `fix/apigen-audit-fixes` from origin/main. Enumeration
+CLEAN (all backlog-subject apigen-path touches are comment/formatting/net-absent);
+`2118d384` extraction applied + staged; the six cherry-picks verified parent-blob-clean.
+**PAUSED at step 5 (gate):** `backlog:test` = 16 failures on the apigen worktree —
+PROVEN identical test-for-test on a pristine origin/main baseline (environmental/
+pre-existing, NOT extraction-induced). Signature: spawned children never create the
+temp store / read-write the wrong store (`item_not_found` for in-process seeds,
+`duplicate_candidate`, serve-singleton failures) — matches the A-era config-isolation
+finding, plausibly amplified by the cutover repointing the GLOBAL
+`~/.adhd/backlog/production/config.yaml` at the production v2 store. `debug` triage
+dispatched (isolation-leak hypothesis + PRODUCTION-POLLUTION check + CI-vs-local
+verdict). Staged extraction preserved in `.worktrees/apigen-fixes` for resumption.
+
+**Update (2026-09-22 — live degradation confirmed; isolation leak; parallel queue):**
+
+**Live deployment (user report: vector search unusable, citations broken):**
+- Live triage dispatched (`debug`). Established candidate causes (prior evidence, to
+  verify live): the LIVE frozen build predates the branch fixes — `e19bc9d0`/`d4a72009`
+  (bounded `hasVectors` probe; frozen build still scans the whole vector table per bare
+  `text:` query), the citation-sha fix `7875d848`, and the lazy semantic init (frozen
+  `cli.ts:658` eager-loads embeddings every verb); BL-331 fastembed host contention
+  (live serve + memory-server); `cb47fb79` embed-write degradation; and the production
+  contamination (below). Deployment response (re-cutover to a fresh frozen build) queued
+  behind the triage + user approval.
+- **Production store CONTAMINATED (proven):** the origin/main config-isolation leak
+  (the cutover wrote `db.path` into the global config; spawned test children now open
+  the PRODUCTION store) wrote ~20+ rows/gate-run (`author:"cli.spec"` etc., some
+  orphaned and invisible to `view:list`). Root-cause chain proven end-to-end
+  (`config-resolver.ts:128,163-167` global layer unconditional → `cli.spec.ts:47-58`
+  no HOME redirect → cutover `config.yaml` `db.path`). Fix = HOME-redirect in spawned-
+  bin helpers ON MAIN (do NOT scope-gate the resolver — gx impact HIGH). CI green is
+  NOT evidence (the affected set excluded backlog:test). Filing pass dispatched
+  (7 findings).
+
+**Parallel queue (background dispatches):**
+- LIVE: cd34ba0d gate fix + F3 git-context (typescript, backlog worktree);
+  live-degradation triage (debug); isolation-leak filing (general).
+- NEW: sox singleton/lock RE-DISPATCH — the first sox executor returned an EMPTY
+  report; state-side check shows `sox-telemetry/src/runtime.ts` modified (+210/−123)
+  UNCOMMITTED, NO regression test, Change 2 (lock identity) absent → fresh session to
+  review/complete Change 1 + the mandatory regression test + Change 2 + commit
+  (no publish).
+- NEW: origin/main HOME-redirect test-isolation fix (new worktree
+  `.worktrees/test-isolation-fix`, test-only, local commit + gate; PUSH/PR held for
+  user approval) — stops the contamination bleed and unblocks the apigen-split gate.
+
+**Held for user approval:** Phase 0.1–0.3 (deployment separation, machine-global);
+re-cutover/fresh frozen build; production contamination cleanup (destructive); push of
+the test-isolation branch; apigen PR push (paused at step 5, staged extraction preserved
+in `.worktrees/apigen-fixes`).
+
+**Update (2026-09-22 — LIVE triage complete: measured breakage + deployment recipe):**
+- **The live deployment is 31 commits behind and broken for consumers (measured):**
+  (1) LATENCY — frozen `cli.ts:658` eager semantic init + `semantic-search.ts:605`
+  `iter` first-row probe = full-corpus scan per store-open: **12.18/13.94/78.94s** per
+  trivial query vs **0.99/1.16s** on the branch (frozen with embeddings off: 3.4–4.8s).
+  (2) CITATIONS — frozen unconditional sha gate; **38/40 projects path-less**; sandbox
+  repro: frozen fails / branch passes (`7875d848`). (3) BL-331 contention live
+  (memory-server 54752 + backlog serve child 33774); **the lock is last-writer-wins —
+  its pid cannot identify the partner** (new; strengthens the R2 requirement).
+- **NEW live correctness findings:** (4) production v2 store `integrity.damaged` on
+  `ix_edge_dst_live` (−2 rows) / `ix_node_kind_live` (−1) at 13:33:46, self-healed
+  13:33:47 — rows invisible to index-routed queries; recurrence-prone (mixed
+  better-sqlite3 + turso writers; WHO the b-sqlite3 writer is = open question).
+  (5) WAL unlinked/replaced warnings — "graceful close in this state discards every
+  write since the last checkpoint, silently". (6) 2849 `recursive_cte_probe_failed`/day
+  (~2849 store-opens). (7) BUG-026 foreign `-shm` peer-hold reconnect refusals (live).
+  (8) Contamination nuance: 23/40 projects are test-authored and DO surface in
+  `view:projects`; cli.spec item rows are orphaned.
+- **Deployment recipe (triage):** rebuild/re-cut from the branch (or cherry-pick
+  `7875d848` + `d4a72009` + `a8906d3d`); MUST carry dep bumps (vector-store ^0.7.0,
+  hybrid-search ^0.4.6, store-adapter ^0.9.2, graph-store ^0.10.1); repoint `.mcp.json`
+  + symlink chain; restart serve; verify with a real semantic query + citation write.
+  Vehicle choice → architect-decision dispatched. Findings → filing pass dispatched.
+- **Correction:** `cb47fb79`'s embed-degradation hypothesis NOT confirmed live
+  (`embedding_failed`=0; the 28 "connection not open" hits are `rollback_failed` debug
+  events). Note: `e19bc9d0`/`cb47fb79` are backlog ITEM uids, not commits — the triage
+  correctly identified the fix commits as `d4a72009`/`7875d848`.
+- **Deployment verdict (architect-decision): (b) minimal cherry-pick** — branch off
+  `ab262d8f` (cutover HEAD) + `a8906d3d`→`d4a72009`→`7875d848`, fast-track bounded review
+  of exactly those three diffs, build via normal cache, verify the two consumer outcomes
+  through the real CLI, then deploy (deploy step = user-gated). Restore prep + blind
+  review dispatched. (The verdict's "separation spec missing" discrepancy is a
+  wrong-checkout artifact — the spec is untracked in the backlog-v2 worktree.)
+- **Isolation-leak filing COMPLETE:** 7 items filed — `82468ca7` (config-isolation leak,
+  HIGH), `6d332464` (contamination, HIGH), `c85c820e` (orphaned-row gap), `d2f11ab6`
+  (HOME opt-out), `06922862` (side-effectful opens), `81de39f7` (CI blind spot),
+  `87ef8bf9` (scratch projects) — all cross-linked.
+- **Semantic package swap (Wave 3a) NOT started:** upstream published (`sox-semantic`
+  0.1.5→0.1.7 optional-loadability); residual `BUG-HYBRID-SEARCH-OPTIONAL-LOADABILITY-001`
+  open; the adoption (thin DI adapter over `createSemanticBackend` replacing
+  `deriveMembers`, optionalDependencies move, range alignment, drop `checkDim`/`errText`/
+  `PermanentEmbeddingDimensionError` iff `SpaceInvariantError` covers dim mismatch) is
+  queued behind the restore + the wave review (worktree occupied). Pull-forward only on
+  user request.
+
+**Remaining-work inventory (2026-09-22 — verbatim per user request):**
+
+Here's the complete remaining-work inventory, straight from the persisted plan, by stream and priority:
+
+## In flight (4 of my sessions still running; I'm holding all new launches per your instruction)
+`cd34ba0d` gate fix + F3 git-context · sox telemetry singleton + lock identity (re-do) · origin/main HOME-redirect test-isolation fix · blind review of the 3 restore commits.
+
+## A. Hygiene waves (the main program)
+1. **Wave 0 close-out** — collect the F3 executor → **group review** (Seg F `111c19bd` + Seg G `315f120f`/`145fda7b` + citations `7875d848` + F3) → fix findings → **push** (all of these are local-only, unpushed).
+2. **Wave 1** — S-02 (ad-hoc query filters silently dropping `assignee`/`claimedBy`/date fields — the real correctness bug) + C-01 (`buildDateRangeFilter` extraction) + the S-20 barrel coverage gap. Not started.
+3. **Wave 2** — ~20 remaining C-fixes, the S-03/S-04/S-11/S-12/S-15/S-16/S-17/S-21a refactors, the S-08/S-09 config pass, **jscpd gate activation** (5% + allowlist, per your directive), `isSuperseded`/`countBy` adoptions, T-04/T-05. Not started.
+4. **Wave 3** — **3a the semantic package swap** (not started; pull-forward on your word), 3b tx elimination (spec written, upstream G1 published), 3c ranked-path cleanup, 3d telemetry. Not started.
+5. The **EISDIR gap** (`aede6810`) — citation of a directory path throws instead of degrading. Filed, unfixed.
+
+## B. Live deployment (your production)
+6. **Restore** — the minimal cherry-pick **failed its pre-flight**: `d4a72009` (bounded probe) depends on the hygiene wave, so the verdict's fallback is a **hand-port** of just the citation-gate fix + a bespoke bounded probe, build, verify, then **deploy** (repoint + restart — needs your approval). The durable fix is a full **re-cutover** from the reviewed branch tip.
+7. **Contamination cleanup** — surgical removal of the test-authored rows (destructive; needs your approval).
+8. **Index desync / WAL silent-write-loss / BUG-026** — all filed (HIGH), unfixed, likely needing sox upstream work (concurrent-engine writers on the production store).
+9. **Phase 0.1–0.6** separation spec — 0.1–0.3 need your approval (machine-global).
+
+## C. Apigen split
+10. Test-isolation fix lands on main → resume the paused apigen split (extraction is staged, ready) → gate green → **push + PR** (needs your approval).
+
+## D. Telemetry (your hard requirements)
+11. sox singleton + lock-identity fixes → review → **publish** → backlog re-install → verify all namespaces emit no BL-404/BL-331 warnings.
+
+**Needs you:** deploy/restart, contamination cleanup, Phase 0.1–0.3, the four pushes (backlog branch, test-isolation, apigen PR), PR #9 + `@adhd/backlog` publish.
+
+**Open bugs/deferrals:** live latency `46d04e3f` · citation gate `4290b63a` · lock identity `348cc700` · index desync `b200542b` · WAL silent-loss `d4b2cc68` · CTE probes `1c9e40d5` · BUG-026 `bfe3f770` · contamination `53eb67a7`/`e679f8f0`/`e9a094be` · staleness `42fc1822` · isolation leak `82468ca7`/`6d332464`/`c85c820e`/`d2f11ab6`/`06922862`/`81de39f7`/`87ef8bf9` · EISDIR `aede6810` · `f80bf841` · hybrid-search residual (BUG-HYBRID-SEARCH-OPTIONAL-LOADABILITY-001) · `2b607b26` resolved · `cd34ba0d` in flight.
+
+**Update (2026-09-22 — restore-commit review returned; review-fix batch queued):**
+- Blind review of `7875d848` + `d4a72009` + `a8906d3d` COMPLETE: **sound; 0 critical /
+  0 high**; 1 medium (design), 5 low, 3 info. Teeth verified independently (reviewer
+  reverted the `iter`-probe → both new bootstrap tests went RED; restored, file clean).
+  - MEDIUM: `citationRequiresSha:true` is now a silent no-op for path-less projects
+    (`create-issue.ts:641` / `transition.ts:356`) — documented (SPEC.md:134) and
+    consistent with the architect-decision verdict (A); the fix is OBSERVABILITY
+    (a warning/debug log — not an audit node; option (a) "keep flag authoritative" is
+    ruled out by the standing verdict). Fix batch item.
+  - LOW: predicate duplicated 3× (`catalog.ts:613`, `create-issue.ts:316`,
+    `transition.ts:229`) — unify via `projectHasKnownPath`; test title "nothing is
+    written" unasserted (`create-issue.spec.ts:256`); `projectHasKnownPath` untested
+    directly; `CONTRACT.md` line-reference table stale (up to +75 drift); the
+    align-commit left `sox-embedding-provider` at `^0.4.1` vs the graph's `^0.5.0`
+    → TWO copies installed (latent dual-package/ONNX-singleton hazard — same class as
+    the telemetry singleton).
+  - INFO: `isVectorSpacePopulated` capability-miss silent (optional log);
+    `a8906d3d`'s 17,966-line lockfile diff verified content-equivalent (format
+    normalization only; 4 entries removed / 3 added, hashes preserved).
+- **Review-fix batch queued** (typescript): all findings above. **Held under the
+  resource-serialization rule** — 2 heavy sessions currently active (sox redo +
+  test-isolation); nothing new heavy launches until they drain + user all-clear.
+- Review findings → light filing pass dispatched (3 substantive + 1 combined-low).
+- F3 open questions dispositioned: update-parity (`IUpdateIssueInput.gitContext`) —
+  keep create/transition only (the verdict's scope); markdown head format accepted as
+  shipped (`Citations: [<gitContext>]`); gitnexus partial-impact noted (index stale).
+
+**Update (2026-09-22 — HOLD directive; 3 sessions in flight; review returned):**
+- **USER DIRECTIVE: do not run more agents** — no new dispatches (heavy or light) until
+  further notice. The one-heavy-session-at-a-time serialization rule stands.
+- **Running (3):** (1) sox telemetry singleton + fastembed lock identity re-do
+  (sox-ecosystem; vitest live); (2) origin/main HOME-redirect test-isolation fix
+  (`.worktrees/test-isolation-fix`; `nx affected -t test lint build` live); (3)
+  review-findings filing pass (light, graph writes only).
+- **Since the last inventory:** `cd34ba0d` + F3 DONE — commits `4bf902fc` (gate comment
+  fix; gates CLEAN) + `05ebbd6f` (F3 item-level `gitContext`, +10 tests, negative
+  control proven; 611 tests / 608 passed + 3 load-flakes verified isolated). Wave 0
+  close-out is now: group review of Seg F+G+citations+F3 → fix review findings → push.
+  Blind review of the 3 restore commits DONE: **0 critical / 0 high**; 1 medium
+  (`citationRequiresSha` silent no-op for path-less projects → verdict (A) stands,
+  add observability via log — not an audit node), 5 low (predicate 3× duplication;
+  unasserted "nothing is written" title; `projectHasKnownPath` untested; `CONTRACT.md`
+  line drift up to +75; `sox-embedding-provider` `^0.4.1` vs `^0.5.0` skew = two copies
+  installed, dual-package hazard), 3 info. **Review-fix batch queued, NOT dispatched.**
+  Restore pre-flight result: the minimal cherry-pick is NOT constructible (`d4a72009`
+  depends on hygiene-wave `4d54a54f`/`d7343221`; `a8906d3d` conflicts with the cutover's
+  own `^0.4.5` bump; `7875d848` applies clean) → fallback = hand-port citation fix +
+  bespoke bounded probe. **Queued, NOT dispatched.** Deployment step remains user-gated.
+
+**Update (2026-09-22 — sox redo COMPLETE (all green); 2 sessions left):**
+- **Sox telemetry singleton + fastembed lock identity DONE** — commits `d4160578`
+  (BL-404 duplicate-module regression test via `vi.resetModules()` + fresh dynamic
+  import, negative control proven red→green; ADR-0018 authored) + `668ded42` (BL-331
+  lock service identity: `FastembedLockInfo.service`, `SOX_FASTEMBED_SERVICE` env,
+  warning names the service, same-service suppression, `competing_service`/
+  `competing_host_service` telemetry fields; 5 tests red→green). The inherited
+  `runtime.ts` migration was already committed (`a1b50621`) and sound — all mutable
+  runtime state + the `_warnedUnlabeled` latch live in
+  `globalThis[Symbol.for('@adhd/sox-telemetry.runtime.v1')]`; no module-level `let`/`var`
+  remains. Suites: telemetry 42, embedding-provider 112, store-adapter 639,
+  mcp-runtime 32, graph-store 223, memory-core 752 (+8 skipped) — all green (two
+  first-run failures were load-induced at LA 149; green re-run alone).
+- **Versions to bump (NOT bumped/published — held):** `sox-telemetry` 0.3.1,
+  `sox-embedding-provider` 0.5.1.
+- **New disclosures (filing held):** (1) `trace.ts` duplicate-module hazard —
+  module-level `AsyncLocalStorage`/`ulid` consts; trace propagation breaks across
+  duplicate copies; ADR-0018 records it as not-covered; fix = same globalThis slot.
+  (2) graph-store BL-504 spec load-fragile (`timeout: 200000` hard-coded at
+  `graph-store.spec.ts:761`). (3) memory-core debug spec writes to a hard-coded
+  foreign scratchpad path (`debug-heal-churn-perpass-vs-cumulative.spec.ts`). (4) The
+  installed `backlog` bin exposes the uid surface (not the skill's six-verb v2) and
+  rejects `--sandbox` — matches the already-filed skill-drift; executor correctly did
+  NOT probe production. (5) memory MCP `E_FOREIGN_SQLITE_SIDECAR` on 2/3 recalls.
+  (6) `registry/index.json` modified by a concurrent agent — left untouched.
+- **Running (2):** test-isolation fix; review-findings filing pass. All new dispatches
+  remain held per the user directive.
+
+**Update (2026-09-22 — filing complete; 1 session left):**
+- **Review-findings filing COMPLETE (5 items):** `8a09824c` (provider skew `^0.4.1`
+  vs `^0.5.0`, two copies), `1e12507f` (CONTRACT.md line-reference drift),
+  `a934e089` (citation `citationRequiresSha` observability), `2b1d8a22` (combined
+  fix-batch lows), + **new discovery `e68be52c`** — one-shot CLI create loses the
+  fire-and-forget embed AND its `embedding_failed` audit row (`TypeError: The database
+  connection is not open`; reproduced 3/3 visible creates on the frozen bin). **Dedupe
+  check vs `cb47fb79` pending** (same defect family — merge if confirmed; `cb47fb79`
+  was filed for the same symptom class). Filing corrected the review's stale line
+  numbers (actual gate sites: `create-issue.ts:664-668` / `transition.ts:363-367`;
+  inline predicates `create-issue.ts:333` / `transition.ts:240` — the worktree had
+  advanced past the review's read).
+- **Running (1):** test-isolation fix (`.worktrees/test-isolation-fix`). Everything
+  else held per the user directive — no new agents.
+
+**Update (2026-09-22 — ALL AGENTS DRAINED; test-isolation COMPLETE; bleed stopped):**
+- **Test-isolation fix DONE — commit `59b08868`** (branch `fix/backlog-test-isolation`,
+  NOT pushed — human-gated): HOME redirects added to every spawned-bin helper across
+  10 spec files (+74/−28, test-only; `install.e2e.spec.ts`'s explicit real-HOME pass
+  fixed). RED→GREEN probe transcript captured (real HOME → production dbPath; temp HOME
+  → temp path). Targeted 10 specs: 88 tests green. Full gate `nx affected -t test lint
+  build --base=origin/main`: **GREEN** (64 files, 701 passed, 3 skipped; lint + build
+  clean). **PRODUCTION BLEED STOPPED — proven: live-item count 1683 before the gate →
+  1683 after (zero rows added; an earlier +6 was other agents' legitimate filings,
+  inspected by title).**
+- Filed `40d9da12` (cli-envelope.spec.ts `afterEach` no-op → tmpRoot leak, DEBT);
+  dedupe respected for `c68ce863` (IR-cache cold-under-temp-HOME latency, latency-only)
+  and `44f7535a` (load flakiness). The filer's own create hit `e68be52c`
+  (double-create on retry — its duplicate deleted, `2ba9a2a8`).
+- **RUNNING: 0.** All dispatched work has returned; everything queued is held per the
+  user directive. Next steps are user-gated: push `fix/backlog-test-isolation` → PR →
+  merge to main → resume the apigen split; push the backlog branch; deploy/cleanup;
+  Phase 0.1–0.3; sox publish (0.3.1/0.5.1); etc.
+
+**Open threads:** `cd34ba0d` (gate break — one-line fix); review of the Seg F+G+citations
+group (directive 5) → push; F3 implementation; sox singleton + lock identity; Wave 1/2/3.
+
+**Update (2026-09-22 — review-fix batch COMPLETE: all four items closed; gate red only on load-flakes):**
+
+Blind-review fix batch executed in `.worktrees/backlog-v2` (branch
+`feat/backlog-hard-replacement`). All four queued items closed:
+
+- **`a934e089` (MEDIUM) — citation `citationRequiresSha` waiver observability** —
+  commit `1704fb77` (code) + `acb2acc1` (tests). Both gate sites now emit an
+  operator-visible `console.error` on the path-less waiver branch (`createIssue` +
+  `transition`), naming the project uid and the cited file. Permissive behaviour is
+  unchanged and NO audit node is added (SPEC §4a one-audit-node-per-state-change
+  stands). Teeth: two tests per verb — positive (warning fires, names project+file)
+  and negative (a path-PRESENT hard-fail emits NO waiver warning); negative control
+  (log removed) proven RED.
+- **`2b1d8a22` (LOW) — combined lows** — commits `1704fb77` + `acb2acc1`:
+  (a) the 3× inline path-known predicate is gone — `projectHasKnownPath` is now the
+  single shared helper, upgraded to a TYPE PREDICATE so both `computeCitationSha`
+  call sites narrow `metadata.path` to `string` with no assertion;
+  (b) the "nothing is written" test now asserts live node/edge counts unchanged +
+  zero issues reachable through the project filter (it had no write-absence
+  assertion) — negative control (injected pre-throw write) proven RED on the count
+  while `rejects.toThrow` stayed green;
+  (c) new `catalog.spec.ts` boundary tests (undefined / no-key / empty / non-string /
+  valid / whitespace + the narrowing contract);
+  (d) `isVectorSpacePopulated`'s capability-miss now warns ONCE per process (per-query
+  spam avoided) — the `false` return is unchanged.
+- **`8a09824c` (MEDIUM) — `sox-embedding-provider` range skew** — commit `ff599403`.
+  `package.json` `^0.4.1` → `^0.5.0`; `pnpm-lock.yaml` regenerated with pnpm 8.15.9
+  (the lockfile's own version — no manager switch). The nested 0.4.1 entry and its
+  `sox-telemetry@0.2.1` are removed; ONE 0.5.0 entry remains. One-copy proof: all five
+  consumer anchors (backlog/src, backlog/pkg, sox-hybrid-search, sox-semantic, root)
+  resolve the SAME realpath → 1 distinct module file.
+- **`1e12507f` (LOW) — CONTRACT.md line-reference drift** — commit `cb1fbbff`.
+  Re-anchored ALL anchors, not just the six errors.ts ones: the drift was systematic
+  across tx.ts (+280), catalog.ts (up to +148), errors.ts (up to +75), audit.ts (up to
+  +8). New `contract-anchors.spec.ts` guards it (parses every heading anchor, asserts
+  the cited line opens the named declaration, and that the parser saw every reference);
+  negative control (revert one anchor) proven RED.
+
+**Incident (self-inflicted, contained):** the first `adhd-backlog update` call passed
+the JSON through an UNQUOTED shell arg, so the body's backticks were command-
+substituted — an `npm pack` ran (stray `adhd-backlog-1.0.0.tgz`, deleted) and the
+update superseded `68aeea15` → `3baf3c31` with a backtick-stripped body. Repaired by
+re-updating through a non-shell `spawnSync` argv array; the live item is now
+`d98e4d49` with the correct body + new evidence. **Lesson: never pass `--input` JSON
+through a shell — use an argv array or a file.**
+
+**Discovery (enriched an existing item, no duplicate):** the published
+`@adhd/sox-embedding-provider@0.5.0` tarball ships a STALE `dist/package.json`
+declaring `version: "0.4.1"` (verified via `npm pack` + `tar -O`). Enriched the open
+`68aeea15` (same class as `2654570b`) rather than filing a duplicate.
+
+**Gate — `nx affected -t test lint build --uncommitted`:** red, but ONLY on
+environmental load-flakes; the machine ran at load-avg 60→155 with 45 users
+(concurrent agents). Evidence, per run:
+- Run 1 (15:23): lint 4 ERRORS (my empty-arrow console spies → fixed to the repo's
+  `mockImplementation(() => undefined)` convention, lint then 0 errors); test 622
+  passed / 2 failed — `cli.spec.ts` sandbox timing (2028ms vs <1000ms) and
+  `server.published-layout.spec.ts` (`spawnSync … ETIMEDOUT`). BOTH re-run isolated
+  and GREEN (load 60).
+- Run 2 (15:47): failed on `meta-wire.spec.ts` (`spawnSync … ETIMEDOUT`; the built
+  bin's cold start measured 33.67s at load 143 — its spawn bound is 60s).
+- Run 3 (16:37, `--maxWorkers=2`): failed on `server.spec.ts` (`fetch failed`),
+  `serve.spec.ts` (30000ms timeout) and `search-shortcut-wire.spec.ts` (error arm) at
+  load 155 — all spawned-server/wire specs, and a DIFFERENT set than run 2, i.e.
+  non-deterministic saturation, not a fixed defect.
+- The touched specs are all green: `catalog.spec` 7, `contract-anchors.spec` 2,
+  `create-issue.spec` 9, `transition.spec` 27, `bootstrap.spec` 3 = 48 passed.
+- Verdict: the gate is blocked by machine saturation, not by this batch; the
+  spawn/wire tests have hardcoded 30–60s bounds that load-avg >100 cannot meet.
+  Re-run when the box is quiet.
+
+**Residuals:** none for the four items. The underlying published `dist/package.json`
+staleness is upstream (sox-ecosystem, `68aeea15`/`d98e4d49`).
+
+
