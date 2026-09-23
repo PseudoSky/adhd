@@ -20,7 +20,12 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { OPEN_TYPE_POLICY } from './type-policy.js';
 import { withImmediateRetry } from './immediate-retry.js';
-import { flushEmbeds as flushEmbedsFor } from './embed-queue.js';
+import {
+  embedDrainFor,
+  type IEmbedDrainOptions,
+  type IEmbedDrainResult,
+} from '../write/embed-drain.js';
+import { recordUnsettledEmbedsAsFailed } from '../write/embedding-observer.js';
 
 export interface GraphBacklogStore {
   /** Store-adapter handle — ONLY for the CAS transaction wrapper (mutate-metadata.ts). */
@@ -44,21 +49,15 @@ export interface GraphBacklogStore {
    */
   readonly typePolicy: TypePolicy;
   /**
-   * RAG-SPEC.md §2.2 — durability backstop for a short-lived process. Every
-   * `scheduleEmbed` (embed-queue.ts) call fired by `createItem`/`updateItem`
-   * is fire-and-forget by default; a CLI process that exits before those
-   * promises settle would otherwise lose the vector permanently even though
-   * the item itself is already durably committed. `flushEmbeds()` awaits
-   * every embed currently in flight for THIS store — bounded, deterministic,
-   * no sleeps — including one scheduled while the drain is already running.
-   * `closeGraphBacklogStore` calls this automatically before closing the
-   * adapter, so a caller that does nothing but `await
-   * closeGraphBacklogStore(store)` already gets the durability guarantee;
-   * this method exists for a caller that wants to keep the store open
-   * afterward (e.g. a long batch of writes wanting a checkpoint partway
-   * through) or wants the guarantee without a close.
+   * Await every embed the write layer scheduled against this store's adapter
+   * (`write/embed-drain.ts`'s per-adapter registry), bounded — RAG-SPEC.md
+   * §2.2's durability backstop for a short-lived process. `closeGraphBacklogStore`
+   * calls this BEFORE closing the adapter, so a fire-and-forget embed that has
+   * not yet settled gets its chance to land rather than dying on a closed
+   * connection. Exposed on the store (rather than only inside close) so a host
+   * that wants to drain without closing can, and so tests can override the bound.
    */
-  flushEmbeds(): Promise<void>;
+  flushEmbeds(opts?: IEmbedDrainOptions): Promise<IEmbedDrainResult>;
 }
 
 /**
@@ -110,49 +109,106 @@ export async function openGraphBacklogStore(
     adapter,
     graph,
     typePolicy: OPEN_TYPE_POLICY,
-    flushEmbeds: () => flushEmbedsFor(store),
+    flushEmbeds: (opts?: IEmbedDrainOptions) =>
+      embedDrainFor(adapter).drain(opts),
   };
   return store;
 }
 
 /**
- * Async (RAG-SPEC.md §2.2) — drains every embed still in flight for `store`
- * BEFORE closing the adapter, so a one-shot process that does nothing more
- * than `await closeGraphBacklogStore(store)` still gets the durability
- * guarantee without having to remember to call `flushEmbeds()` itself. This
- * is the belt-and-suspenders backstop `scheduleEmbed`'s doc comment
- * describes: `awaitEmbed: true` on individual writes and an explicit
- * `flushEmbeds()` mid-batch are the other two ways to get the same
- * guarantee, but a caller that does none of them still cannot lose a vector
- * as long as they close the store before the process exits.
+ * Async — drains the adapter's in-flight embeds, records any that are still
+ * unsettled as durable `embedding_failed` audit rows, THEN closes the adapter.
+ *
+ * This is RAG-SPEC.md §2.2's durability backstop for a short-lived process: a
+ * write verb schedules its embed fire-and-forget by default, and without this
+ * drain a CLI that exits immediately after `create` would close the adapter
+ * out from under that embed — its `upsertVector`/audit write would hit a
+ * closed connection and die as a log line. The drain runs BEFORE `close()`, so
+ * the post-close state is never exercised on the normal path; anything the
+ * drain cannot settle within its bound is recorded as `embedding_failed`
+ * WHILE THE CONNECTION IS STILL OPEN, so the loss is durable rather than
+ * silent.
+ *
+ * `adapter.close()` runs unconditionally (in a `finally`): a failed drain, or
+ * a failed recording, must still close the adapter — a leaked connection is
+ * never an acceptable outcome of a close call. `opts` is the drain bound
+ * (default `DEFAULT_EMBED_DRAIN_TIMEOUT_MS`); it exists so a caller can tune
+ * the wait and so tests can bound it deterministically.
+ *
+ * Return type widened from `Promise<void>` to `Promise<IEmbedDrainResult>` —
+ * non-breaking, since `Promise<T>` is assignable where `Promise<void>` is
+ * expected and every existing caller `await`s or ignores the result.
  */
 export async function closeGraphBacklogStore(
-  store: GraphBacklogStore
-): Promise<void> {
-  await store.flushEmbeds();
-  await store.adapter.close();
+  store: GraphBacklogStore,
+  opts?: IEmbedDrainOptions
+): Promise<IEmbedDrainResult> {
+  const drained = await store.flushEmbeds(opts);
+  let recordedAsFailed = 0;
+  let unrecorded = [...drained.unrecorded];
+  try {
+    if (drained.stillPending.length > 0) {
+      const rec = await recordUnsettledEmbedsAsFailed(store, drained.stillPending);
+      recordedAsFailed = rec.recorded.length;
+      unrecorded = [...unrecorded, ...rec.unrecorded];
+    }
+  } finally {
+    await store.adapter.close();
+  }
+  return {
+    drained: drained.drained,
+    stillPending: drained.stillPending,
+    recordedAsFailed,
+    unrecorded,
+  };
 }
 
 /**
  * Best-effort close for teardown finally-paths (cli.ts / server.ts).
- * closeGraphBacklogStore may throw only in the extreme edge where the
- * driver's own db.close() fails (every checkpoint/verify failure is already
- * caught and logged inside the adapter — turso-adapter close()). On that edge
- * this logs and returns so a close failure can never mask a command/transport
- * error or turn a successful command into a failed exit. The adapter's own
- * logs are the durable record; the client never rethrows here.
+ *
+ * Unlike the pre-drain version, this is no longer a silent discard: a store
+ * close can now carry an embed-durability outcome, and swallowing it would
+ * recreate exactly the "died unrecorded" defect this wave fixes. So:
+ *
+ * - `closeGraphBacklogStore` throwing (the extreme edge where the driver's own
+ *   `db.close()` fails) still logs and returns — a close failure must never
+ *   mask a command/transport error or turn a successful command into a failed
+ *   exit.
+ * - An **unrecorded** embed death (its `embedding_failed` audit row could not
+ *   be written, so the outcome is not durably recorded anywhere) logs loudly
+ *   AND sets `process.exitCode = 1`: the subject write is durable but the
+ *   vector is missing and nothing recorded why. Only this case changes the
+ *   exit code — a **recorded** failure (the `embedding_failed` row IS durable)
+ *   warns but exits 0, because the subject write genuinely succeeded and the
+ *   failure is recorded. Filing must never depend on RAG succeeding.
  */
 export async function closeGraphBacklogStoreSafe(
   store: GraphBacklogStore | undefined
 ): Promise<void> {
   if (!store) return;
+  let result: IEmbedDrainResult;
   try {
-    await closeGraphBacklogStore(store);
+    result = await closeGraphBacklogStore(store);
   } catch (err) {
     console.error(
       `backlog: store close failed (data is durable; WAL checkpoint may be pending): ${
         err instanceof Error ? err.message : String(err)
       }`
+    );
+    return;
+  }
+
+  if (result.unrecorded.length > 0) {
+    console.error(
+      `backlog: ${result.unrecorded.length} scheduled embed(s) died UNRECORDED — the store closed ` +
+        `before they settled and the embedding_failed audit row could not be written. The subject ` +
+        `write(s) are durable; the vector(s) are missing. Re-run the embedding backfill.`
+    );
+    if (!process.exitCode) process.exitCode = 1; // data-integrity defect ⇒ non-zero exit
+  } else if (result.stillPending.length > 0) {
+    console.error(
+      `backlog: ${result.stillPending.length} scheduled embed(s) did not settle before close — ` +
+        `recorded as embedding_failed. The subject write(s) are durable.`
     );
   }
 }
