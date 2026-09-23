@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../../../dist/out-tsc-etl-specs",
+    "declaration": false,
+    "types": ["node", "vitest/globals"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmit": true
+  },
+  "include": ["**/*.ts"]
+}
