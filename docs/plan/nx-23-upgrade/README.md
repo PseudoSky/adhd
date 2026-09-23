@@ -91,9 +91,9 @@ state in this plan certifies the landing decision — a human must take it.
   - delivered-by: test-changed-optin
 
 - `[dod.6]` When a change selects no tests, the fast path fails loudly rather than reporting success.
-  - entrypoint: `pnpm run test:related -- packages/data/data-base-transforms/src/index.ts`
+  - entrypoint: `pnpm run test:related -- packages/data/data-base-transforms/README.md`
   - observable: `a non-zero exit and a message reading no tests selected`
-  - negative-control: `printf '\n' >> packages/data/data-base-transforms/src/index.ts`
+  - negative-control: `printf '\n' >> packages/data/data-base-transforms/README.md`
   - delivered-by: test-changed-optin
 
 - `[dod.7]` A developer can change a base package and the run still selects the tests of the packages that depend on it.
