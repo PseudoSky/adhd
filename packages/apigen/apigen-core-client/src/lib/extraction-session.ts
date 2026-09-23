@@ -57,23 +57,6 @@ function getProjectCtor(): typeof import('ts-morph').Project {
   return _Project;
 }
 
-// PERF (BUG-APIGEN-CORE-CLIENT-STARTUP-001): `Project` is used as a runtime
-// VALUE (via `new Project(...)`) inside `syntacticResolverProject()` and
-// `createExtractionSession()`'s `projectFor()` — both fully synchronous. A
-// static `import { Project } from 'ts-morph'` pulls the whole ts-morph
-// package (and its bundled TypeScript) into every process that loads this
-// module, even one that never actually builds a Project (e.g. `backlog
-// --help`). Lazily `require`d and memoized below; every other usage in this
-// file is a TYPE position and stays on the `import type` above (erased at
-// compile time, zero runtime cost).
-let _Project: typeof import('ts-morph').Project | undefined;
-function getProjectCtor(): typeof import('ts-morph').Project {
-  if (_Project) return _Project;
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  _Project = (require('ts-morph') as typeof import('ts-morph')).Project;
-  return _Project;
-}
-
 /** Counters proving how much work a session actually did — used by perf regression tests. */
 export interface ISessionStats {
   /** ts-morph Projects constructed (one per distinct tsconfig per session). */
