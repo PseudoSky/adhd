@@ -201,7 +201,17 @@ async function startJavaServer(fixturePath: string, ns: string): Promise<LiveSer
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('java-ts-decimal-parity — TS (api-fastify) vs Java (java-javalin), real CLI subprocesses', () => {
+// CPU-THRASH-SKIP (owner-requested, 2026-09-23): this is the single most expensive test
+// in the repo. It spawns TWO real CLI subprocesses, and the Java host runs a full
+// `mvn` dependency-resolution + `javac` compile + JVM boot pipeline (its own comment:
+// "mvn/javac add real wall-clock the TS host doesn't pay"), bounded only by
+// liveTestTimeoutMs(2) + 60_000 — all to assert one decimal wire format matches.
+// Deviates from AGENTS.md §7 (skipping is permitted only for paid/external third-party
+// services; "it spawns child processes" and "it's slow" are named non-reasons) —
+// owner-approved override, recorded.
+// Durable fix: docs/backlog/grooming/test-perf-improvements.md (recs #1, #2, #5).
+// Run: npx vitest run src/test/integration/java-ts-decimal-parity.spec.ts
+describe.skip('java-ts-decimal-parity — TS (api-fastify) vs Java (java-javalin), real CLI subprocesses [CPU-THRASH-SKIP: owner-requested]', () => {
   it(
     'byte-identical decimal wire form for the same input value across TS and Java hosts',
     async () => {

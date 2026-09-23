@@ -107,7 +107,17 @@ async function runOnce() {
   };
 }
 
-describe('[perf] buildDescriptor through the real orchestrator', () => {
+// CPU-THRASH-SKIP (owner-requested, 2026-09-23): builds a full TypeScript program
+// (its own comment: "A single full TS program rebuild costs >1000ms"), then loops 10
+// iterations generating ~1 GB+ of garbage to prove the heap stays flat, on 120_000 /
+// 300_000 / 120_000 ms timeouts. It also asserts WALL-CLOCK timings (warmMs < 1500),
+// which is non-deterministic under the parallel load `nx run-many -t test` creates —
+// i.e. it violates AGENTS.md §7.3 ("be deterministic without timing") as well as §7's
+// no-gating rule. Deviates from §7 — owner-approved override, recorded.
+// Durable fix: docs/backlog/grooming/test-perf-improvements.md (recs #7, #8 — give it a
+// serial lane rather than deleting the assertion).
+// Run: npx vitest run src/test/perf.spec.ts
+describe.skip('[perf] buildDescriptor through the real orchestrator [CPU-THRASH-SKIP: owner-requested]', () => {
   it('repeated runs return deep-equal descriptors (cache changes nothing observable)', async () => {
     const first = await runOnce();
     expect(first.operations.length).toBe(FILES * FNS);

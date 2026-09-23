@@ -78,7 +78,15 @@ describe('generate() — hyphenated namespace identifier (unit)', () => {
   })
 })
 
-describe('generate() — REAL hyphenated source dir, SPAWNED (end-to-end regression)', () => {
+// CPU-THRASH-SKIP (owner-requested, 2026-09-23): shells out via `spawnSync('npx', ['tsx',
+// '--tsconfig', ...])` — `npx` resolution + a fresh node process + on-the-fly TypeScript
+// transpile of the generated CLI, twice (a --help call and a real `ping` call), blocking
+// the test thread. `npx` is network-capable, so this is not a hermetic unit test.
+// NOTE: the unit block above (identifier sanitization) is pure logic and is LEFT RUNNING.
+// Deviates from AGENTS.md §7 — owner-approved override, recorded.
+// Durable fix: docs/backlog/grooming/test-perf-improvements.md.
+// Run: npx vitest run src/test/hyphenated-namespace.spec.ts -t "SPAWNED"
+describe.skip('generate() — REAL hyphenated source dir, SPAWNED (end-to-end regression) [CPU-THRASH-SKIP: owner-requested]', () => {
   afterAll(() => {
     fs.rmSync(TMP_ROOT, { recursive: true, force: true })
   })
