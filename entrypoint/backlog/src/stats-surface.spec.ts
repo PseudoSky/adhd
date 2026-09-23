@@ -36,6 +36,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createServer } from 'node:net';
 import { openTmpStore, type TmpStore } from './test/helpers/tmp-store.js';
+import { isolatedSpawnOptions } from './test/helpers/spawn-isolated-bin.js';
 import { createItemNode } from './store/crud.js';
 import { transitionStatusNode } from './store/lifecycle.js';
 import { backlogQuery, type IBacklogQueryResult } from './v2/query.js';
@@ -49,7 +50,11 @@ import {
 
 const REPO = 'PseudoSky/stats-surface';
 const BY = 'stats-surface-spec';
-const CIT = { file: 'entrypoint/backlog/src/stats-surface.spec.ts', lines: '1-2', context: 'stats-surface-spec' };
+const CIT = {
+  file: 'entrypoint/backlog/src/stats-surface.spec.ts',
+  lines: '1-2',
+  context: 'stats-surface-spec',
+};
 
 let tmp: TmpStore;
 
@@ -70,7 +75,7 @@ interface ISeedOptions {
   repo?: string;
   title?: string;
   priority?: Priority;
-  citations?: typeof CIT[];
+  citations?: (typeof CIT)[];
 }
 
 async function seed(opts: ISeedOptions = {}): Promise<string> {
@@ -84,17 +89,30 @@ async function seed(opts: ISeedOptions = {}): Promise<string> {
   if (opts.priority) input.priority = opts.priority;
   if (opts.citations) input.citations = opts.citations;
   const result = await createItemNode(tmp.store, input);
-  if (!result.created) throw new Error(`fixture: create was suppressed for ${input.title}`);
+  if (!result.created)
+    throw new Error(`fixture: create was suppressed for ${input.title}`);
   return result.item.humanId;
 }
 
 /** Closes an item through the REAL lifecycle gate (a terminal transition without a citation is refused — model.ts:75). */
-async function close(humanId: string, repo = REPO, status: BacklogStatus = 'RESOLVED'): Promise<void> {
-  await transitionStatusNode(tmp.store, repo, humanId, status, { by: BY, citations: [CIT] });
+async function close(
+  humanId: string,
+  repo = REPO,
+  status: BacklogStatus = 'RESOLVED'
+): Promise<void> {
+  await transitionStatusNode(tmp.store, repo, humanId, status, {
+    by: BY,
+    citations: [CIT],
+  });
 }
 
-function okQuery(env: IOutcomeEnvelope<IBacklogQueryResult>): IBacklogQueryResult {
-  if (!isOutcomeOk(env)) throw new Error(`expected ok envelope, got ${env.error.code}: ${env.error.message}`);
+function okQuery(
+  env: IOutcomeEnvelope<IBacklogQueryResult>
+): IBacklogQueryResult {
+  if (!isOutcomeOk(env))
+    throw new Error(
+      `expected ok envelope, got ${env.error.code}: ${env.error.message}`
+    );
   return env.data;
 }
 
@@ -104,23 +122,48 @@ function okQuery(env: IOutcomeEnvelope<IBacklogQueryResult>): IBacklogQueryResul
 
 describe('FEAT-009 — citationCount on cards + the summary citation dimension', () => {
   it('query({view:"list", fields:["citationCount"]}) returns per-item counts for the WHOLE population — no per-item gets, no batch', async () => {
-    const cited = await seed({ family: 'BUG-CIT', title: 'one citation', citations: [CIT] });
+    const cited = await seed({
+      family: 'BUG-CIT',
+      title: 'one citation',
+      citations: [CIT],
+    });
     const uncited = await seed({ family: 'BUG-CIT', title: 'zero citations' });
-    const twoCits = await seed({ family: 'BUG-CIT2', title: 'two citations', citations: [CIT, { ...CIT, file: 'second.ts' }] });
+    const twoCits = await seed({
+      family: 'BUG-CIT2',
+      title: 'two citations',
+      citations: [CIT, { ...CIT, file: 'second.ts' }],
+    });
 
-    const data = okQuery(await backlogQuery(tmp.store, { view: 'list', filter: { repo: REPO, status: 'all' }, fields: ['citationCount'] }));
-    const byId = new Map((data.items ?? []).map((c) => [c.humanId, c.citationCount]));
+    const data = okQuery(
+      await backlogQuery(tmp.store, {
+        view: 'list',
+        filter: { repo: REPO, status: 'all' },
+        fields: ['citationCount'],
+      })
+    );
+    const byId = new Map(
+      (data.items ?? []).map((c) => [c.humanId, c.citationCount])
+    );
     expect(byId.get(cited)).toBe(1);
     expect(byId.get(uncited)).toBe(0);
     expect(byId.get(twoCits)).toBe(2);
     // Every card carries the field — the whole point: a heatmap needs no
     // `_batch/action` fan-out over the population.
-    for (const card of data.items ?? []) expect(typeof card.citationCount).toBe('number');
+    for (const card of data.items ?? [])
+      expect(typeof card.citationCount).toBe('number');
   });
 
   it('backlog_get honours fields:["citationCount"] the same way (one projection vocabulary, §7.3)', async () => {
-    const cited = await seed({ family: 'BUG-CIT', title: 'cited', citations: [CIT, CIT] });
-    const env = await backlogGet(tmp.store, { humanId: cited, repo: REPO, fields: ['citationCount'] });
+    const cited = await seed({
+      family: 'BUG-CIT',
+      title: 'cited',
+      citations: [CIT, CIT],
+    });
+    const env = await backlogGet(tmp.store, {
+      humanId: cited,
+      repo: REPO,
+      fields: ['citationCount'],
+    });
     expect(isOutcomeOk(env)).toBe(true);
     if (!isOutcomeOk(env)) throw new Error('unreachable');
     expect(env.data.citationCount).toBe(2);
@@ -133,12 +176,19 @@ describe('FEAT-009 — citationCount on cards + the summary citation dimension',
     await seed({ family: 'BUG-CIT', title: 'c' });
     await seed({ family: 'BUG-CIT2', title: 'd' });
 
-    const data = okQuery(await backlogQuery(tmp.store, { view: 'summary', filter: { repo: REPO, status: 'all' } }));
+    const data = okQuery(
+      await backlogQuery(tmp.store, {
+        view: 'summary',
+        filter: { repo: REPO, status: 'all' },
+      })
+    );
     const summary = data.summary;
     if (!summary) throw new Error('expected a summary payload');
     expect(summary.citationsTotal).toBe(2);
     expect(summary.citationCoverage).toBe(50); // 2 of 4 items carry ≥1 citation
-    expect(summary.byFamilyCitationCoverage['BUG-CIT']).toBe(round1((2 / 3) * 100));
+    expect(summary.byFamilyCitationCoverage['BUG-CIT']).toBe(
+      round1((2 / 3) * 100)
+    );
     expect(summary.byFamilyCitationCoverage['BUG-CIT2']).toBe(0);
   });
 });
@@ -153,7 +203,13 @@ describe('FEAT-BACKLOG-010 — closedAt + closedByBucket/openedByBucket', () => 
     const open = await seed({ family: 'BUG-CL', title: 'stays open' });
     await close(closed);
 
-    const data = okQuery(await backlogQuery(tmp.store, { view: 'list', filter: { repo: REPO, status: 'all' }, fields: ['closedAt', 'citationCount'] }));
+    const data = okQuery(
+      await backlogQuery(tmp.store, {
+        view: 'list',
+        filter: { repo: REPO, status: 'all' },
+        fields: ['closedAt', 'citationCount'],
+      })
+    );
     const byId = new Map((data.items ?? []).map((c) => [c.humanId, c]));
     const closedCard = byId.get(closed);
     const openCard = byId.get(open);
@@ -172,7 +228,13 @@ describe('FEAT-BACKLOG-010 — closedAt + closedByBucket/openedByBucket', () => 
     await close(c1);
     await close(c2);
 
-    const data = okQuery(await backlogQuery(tmp.store, { view: 'summary', filter: { repo: REPO, status: 'all' }, bucket: 'week' }));
+    const data = okQuery(
+      await backlogQuery(tmp.store, {
+        view: 'summary',
+        filter: { repo: REPO, status: 'all' },
+        bucket: 'week',
+      })
+    );
     const summary = data.summary;
     if (!summary) throw new Error('expected a summary payload');
 
@@ -181,8 +243,14 @@ describe('FEAT-BACKLOG-010 — closedAt + closedByBucket/openedByBucket', () => 
     expect(summary.closedByBucket?.length).toBeGreaterThanOrEqual(1);
     expect(summary.openedByBucket?.length).toBeGreaterThanOrEqual(1);
 
-    const closedSum = (summary.closedByBucket ?? []).reduce((a, b) => a + b.count, 0);
-    const openedSum = (summary.openedByBucket ?? []).reduce((a, b) => a + b.count, 0);
+    const closedSum = (summary.closedByBucket ?? []).reduce(
+      (a, b) => a + b.count,
+      0
+    );
+    const openedSum = (summary.openedByBucket ?? []).reduce(
+      (a, b) => a + b.count,
+      0
+    );
     // One "closed" event per item (first terminal transition) — never a
     // double-count on reopen.
     expect(closedSum).toBe(2);
@@ -196,9 +264,18 @@ describe('FEAT-BACKLOG-010 — closedAt + closedByBucket/openedByBucket', () => 
     // The BARE query (no bucket, no window) is the "historical" case the
     // work order named: the series spans ALL history at the default day
     // grain, with the same sums — never clamped to the AC-15 30-day window.
-    const bare = okQuery(await backlogQuery(tmp.store, { view: 'summary', filter: { repo: REPO, status: 'all' } }));
-    expect((bare.summary?.closedByBucket ?? []).reduce((a, b) => a + b.count, 0)).toBe(2);
-    expect((bare.summary?.openedByBucket ?? []).reduce((a, b) => a + b.count, 0)).toBe(3);
+    const bare = okQuery(
+      await backlogQuery(tmp.store, {
+        view: 'summary',
+        filter: { repo: REPO, status: 'all' },
+      })
+    );
+    expect(
+      (bare.summary?.closedByBucket ?? []).reduce((a, b) => a + b.count, 0)
+    ).toBe(2);
+    expect(
+      (bare.summary?.openedByBucket ?? []).reduce((a, b) => a + b.count, 0)
+    ).toBe(3);
     void o;
   });
 
@@ -207,7 +284,14 @@ describe('FEAT-BACKLOG-010 — closedAt + closedByBucket/openedByBucket', () => 
     await close(closed);
     const future = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
 
-    const data = okQuery(await backlogQuery(tmp.store, { view: 'summary', filter: { repo: REPO, status: 'all' }, window: { since: future }, bucket: 'day' }));
+    const data = okQuery(
+      await backlogQuery(tmp.store, {
+        view: 'summary',
+        filter: { repo: REPO, status: 'all' },
+        window: { since: future },
+        bucket: 'day',
+      })
+    );
     const summary = data.summary;
     if (!summary) throw new Error('expected a summary payload');
     expect(summary.closedByBucket).toEqual([]);
@@ -225,39 +309,73 @@ describe('FEAT-BACKLOG-010 — closedAt + closedByBucket/openedByBucket', () => 
 describe('FEAT-BACKLOG-STATS-TIME-WINDOWED-THROUGHPUT-001 — summary honours scope and takes a window', () => {
   async function seedMixed(): Promise<void> {
     await seed({ family: 'BUG-SCOPED', title: 'fam-a open', priority: 'HIGH' });
-    await seed({ family: 'BUG-SCOPED', title: 'fam-a open 2', priority: 'LOW' });
-    const aClosed = await seed({ family: 'BUG-SCOPED', title: 'fam-a closed', priority: 'HIGH' });
+    await seed({
+      family: 'BUG-SCOPED',
+      title: 'fam-a open 2',
+      priority: 'LOW',
+    });
+    const aClosed = await seed({
+      family: 'BUG-SCOPED',
+      title: 'fam-a closed',
+      priority: 'HIGH',
+    });
     await close(aClosed);
     await seed({ family: 'BUG-OTHER', title: 'fam-b open', priority: 'LOW' });
-    const bClosed = await seed({ family: 'BUG-OTHER', title: 'fam-b closed', priority: 'LOW' });
+    const bClosed = await seed({
+      family: 'BUG-OTHER',
+      title: 'fam-b closed',
+      priority: 'LOW',
+    });
     await close(bClosed);
   }
 
   it('filter:{family, status:"open"} ACTUALLY changes the numbers — the silent-discard bug is gone', async () => {
     await seedMixed();
 
-    const unscoped = okQuery(await backlogQuery(tmp.store, { view: 'summary', filter: { repo: REPO, status: 'all' } }));
+    const unscoped = okQuery(
+      await backlogQuery(tmp.store, {
+        view: 'summary',
+        filter: { repo: REPO, status: 'all' },
+      })
+    );
     expect(unscoped.summary?.total).toBe(5);
 
     // The negative control: scoping by family+status must produce DIFFERENT
     // numbers — before this work order, summary silently returned the
     // unscoped totals for any family/status filter.
-    const scoped = okQuery(await backlogQuery(tmp.store, { view: 'summary', filter: { repo: REPO, family: 'BUG-SCOPED', status: 'open' } }));
+    const scoped = okQuery(
+      await backlogQuery(tmp.store, {
+        view: 'summary',
+        filter: { repo: REPO, family: 'BUG-SCOPED', status: 'open' },
+      })
+    );
     const s = scoped.summary;
     if (!s) throw new Error('expected a summary payload');
     expect(s.total).toBe(2); // the two open BUG-SCOPED items — not 5, not 3
     expect(s.closed).toBe(0);
     expect(s.byFamilyAllStatuses).toEqual({ 'BUG-SCOPED': 2 });
-    expect(Object.keys(s.byStatus).every((k) => k === 'OPEN' || !['RESOLVED', 'FIXED'].includes(k))).toBe(true);
+    expect(
+      Object.keys(s.byStatus).every(
+        (k) => k === 'OPEN' || !['RESOLVED', 'FIXED'].includes(k)
+      )
+    ).toBe(true);
 
-    const closedScoped = okQuery(await backlogQuery(tmp.store, { view: 'summary', filter: { repo: REPO, family: 'BUG-SCOPED', status: 'closed' } }));
+    const closedScoped = okQuery(
+      await backlogQuery(tmp.store, {
+        view: 'summary',
+        filter: { repo: REPO, family: 'BUG-SCOPED', status: 'closed' },
+      })
+    );
     expect(closedScoped.summary?.total).toBe(1);
     expect(closedScoped.summary?.open).toBe(0);
     expect(closedScoped.summary?.closed).toBe(1);
   });
 
   it('an unsupported summary filter key is a typed error naming it — never a silent drop (WO-3: "or errors loudly")', async () => {
-    const env = await backlogQuery(tmp.store, { view: 'summary', filter: { repo: REPO, plan: 'some-plan' } });
+    const env = await backlogQuery(tmp.store, {
+      view: 'summary',
+      filter: { repo: REPO, plan: 'some-plan' },
+    });
     expect(isOutcomeOk(env)).toBe(false);
     if (isOutcomeOk(env)) throw new Error('unreachable');
     expect(env.error.code).toBe('invalid_argument');
@@ -271,24 +389,42 @@ describe('FEAT-BACKLOG-STATS-TIME-WINDOWED-THROUGHPUT-001 — summary honours sc
     const past = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
 
     // Window excludes everything → windowed numbers are zero.
-    const empty = okQuery(await backlogQuery(tmp.store, { view: 'summary', filter: { repo: REPO, status: 'all' }, window: { since: sinceNow } }));
+    const empty = okQuery(
+      await backlogQuery(tmp.store, {
+        view: 'summary',
+        filter: { repo: REPO, status: 'all' },
+        window: { since: sinceNow },
+      })
+    );
     expect(empty.summary?.closedInWindow).toBe(0);
     expect(empty.summary?.openedInWindow).toBe(0);
 
     // Window since yesterday includes the today-closed item.
-    const covering = okQuery(await backlogQuery(tmp.store, { view: 'summary', filter: { repo: REPO, status: 'all' }, window: { since: past } }));
+    const covering = okQuery(
+      await backlogQuery(tmp.store, {
+        view: 'summary',
+        filter: { repo: REPO, status: 'all' },
+        window: { since: past },
+      })
+    );
     expect(covering.summary?.closedInWindow).toBe(1);
     expect(covering.summary?.openedInWindow).toBe(1);
   });
 
   it('window is rejected on any non-summary view, and a malformed window fails loudly', async () => {
-    const onList = await backlogQuery(tmp.store, { view: 'list', window: { since: '2026-01-01T00:00:00Z' } });
+    const onList = await backlogQuery(tmp.store, {
+      view: 'list',
+      window: { since: '2026-01-01T00:00:00Z' },
+    });
     expect(isOutcomeOk(onList)).toBe(false);
     if (isOutcomeOk(onList)) throw new Error('unreachable');
     expect(onList.error.code).toBe('invalid_argument');
     expect(onList.error.message).toContain('view:"list"');
 
-    const badShape = await backlogQuery(tmp.store, { view: 'summary', window: { since: 12345 } as never });
+    const badShape = await backlogQuery(tmp.store, {
+      view: 'summary',
+      window: { since: 12345 } as never,
+    });
     expect(isOutcomeOk(badShape)).toBe(false);
     if (isOutcomeOk(badShape)) throw new Error('unreachable');
     expect(badShape.error.message).toContain('window.since');
@@ -320,7 +456,9 @@ async function waitForHttpReady(port: number, path: string): Promise<void> {
   let lastErr: unknown;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(1500) });
+      const res = await fetch(`http://127.0.0.1:${port}${path}`, {
+        signal: AbortSignal.timeout(1500),
+      });
       await res.text().catch(() => undefined);
       return;
     } catch (err) {
@@ -328,7 +466,9 @@ async function waitForHttpReady(port: number, path: string): Promise<void> {
       await new Promise((r) => setTimeout(r, 100));
     }
   }
-  throw new Error(`built server never became ready on port ${port}: ${String(lastErr)}`);
+  throw new Error(
+    `built server never became ready on port ${port}: ${String(lastErr)}`
+  );
 }
 
 describe('FEAT-009/FEAT-BACKLOG-010/WO-3 over the REAL built HTTP server (spawned dist, real fetch)', () => {
@@ -347,10 +487,29 @@ describe('FEAT-009/FEAT-BACKLOG-010/WO-3 over the REAL built HTTP server (spawne
   async function start(): Promise<number> {
     port = await freePort();
     storeDir = mkdtempSync(join(tmpdir(), 'backlog-stats-http-'));
-    proc = spawn(process.execPath, [DIST_INDEX, 'serve', '--transport', 'http', '--port', String(port), '--host', '127.0.0.1'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...(process.env as Record<string, string>), ADHD_BACKLOG_SCOPE: 'project', ADHD_BACKLOG_DATABASE_PATH: join(storeDir, 'backlog.db') },
-    });
+    proc = spawn(
+      process.execPath,
+      [
+        DIST_INDEX,
+        'serve',
+        '--transport',
+        'http',
+        '--port',
+        String(port),
+        '--host',
+        '127.0.0.1',
+      ],
+      {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        // The `ADHD_BACKLOG_SCOPE=project` + `HOME=<root>` redirect pair (and
+        // why the scope alone is not enough) lives in ONE place now —
+        // `test/helpers/spawn-isolated-bin.ts`. `storeDir` is this test's own
+        // throwaway root, removed in afterEach.
+        ...isolatedSpawnOptions(storeDir, {
+          ADHD_BACKLOG_DATABASE_PATH: join(storeDir, 'backlog.db'),
+        }),
+      }
+    );
     let bootLog = '';
     proc.stderr?.on('data', (d) => (bootLog += String(d)));
     proc.stdout?.on('data', (d) => (bootLog += String(d)));
@@ -358,12 +517,18 @@ describe('FEAT-009/FEAT-BACKLOG-010/WO-3 over the REAL built HTTP server (spawne
     return port;
   }
 
-  function post(path: string, input: unknown): Promise<{ status: number; json: unknown }> {
+  function post(
+    path: string,
+    input: unknown
+  ): Promise<{ status: number; json: unknown }> {
     return fetch(`http://127.0.0.1:${port}${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: { input } }),
-    }).then(async (res) => ({ status: res.status, json: (await res.json()) as unknown }));
+    }).then(async (res) => ({
+      status: res.status,
+      json: (await res.json()) as unknown,
+    }));
   }
 
   it('a consumer POSTs the exact HTTP shapes and gets citationCount + closedAt + the scoped summary series back', async () => {
@@ -390,7 +555,10 @@ describe('FEAT-009/FEAT-BACKLOG-010/WO-3 over the REAL built HTTP server (spawne
         duplicateAction: 'file',
       });
       expect(r.status).toBe(200);
-      const env = r.json as { ok: boolean; data: { created: boolean; humanId: string } };
+      const env = r.json as {
+        ok: boolean;
+        data: { created: boolean; humanId: string };
+      };
       expect(env.ok).toBe(true);
       expect(env.data.created).toBe(true);
       created.push(env.data.humanId);
@@ -419,7 +587,13 @@ describe('FEAT-009/FEAT-BACKLOG-010/WO-3 over the REAL built HTTP server (spawne
     });
     const listEnv = list.json as {
       ok: boolean;
-      data: { items: Array<{ humanId: string; citationCount?: number; closedAt?: string }> };
+      data: {
+        items: Array<{
+          humanId: string;
+          citationCount?: number;
+          closedAt?: string;
+        }>;
+      };
     };
     expect(listEnv.ok).toBe(true);
     const byId = new Map(listEnv.data.items.map((c) => [c.humanId, c]));
@@ -433,8 +607,21 @@ describe('FEAT-009/FEAT-BACKLOG-010/WO-3 over the REAL built HTTP server (spawne
     expect(byId.get(created[0])?.closedAt).toBeUndefined();
 
     // 2) WO-2: the summary carries the historical closed series.
-    const summary = await post('/backlog/query', { view: 'summary', filter: { repo: HTTP_REPO, status: 'all' }, bucket: 'week' });
-    const sEnv = summary.json as { ok: boolean; data: { summary: { closedByBucket: Array<{ bucket: string; count: number }>; openedByBucket: Array<{ bucket: string; count: number }>; closedInWindow: number } } };
+    const summary = await post('/backlog/query', {
+      view: 'summary',
+      filter: { repo: HTTP_REPO, status: 'all' },
+      bucket: 'week',
+    });
+    const sEnv = summary.json as {
+      ok: boolean;
+      data: {
+        summary: {
+          closedByBucket: Array<{ bucket: string; count: number }>;
+          openedByBucket: Array<{ bucket: string; count: number }>;
+          closedInWindow: number;
+        };
+      };
+    };
     expect(sEnv.ok).toBe(true);
     const s = sEnv.data.summary;
     expect(s.closedByBucket.reduce((a, b) => a + b.count, 0)).toBe(1);
@@ -442,13 +629,26 @@ describe('FEAT-009/FEAT-BACKLOG-010/WO-3 over the REAL built HTTP server (spawne
 
     // 3) WO-3: family scope CHANGES the numbers over HTTP (the negative
     //    control) and the window param is honoured on the wire.
-    const scoped = await post('/backlog/query', { view: 'summary', filter: { repo: HTTP_REPO, family: 'BUG-HTTP', status: 'open' } });
-    const scopedEnv = scoped.json as { ok: boolean; data: { summary: { total: number; open: number; closed: number } } };
+    const scoped = await post('/backlog/query', {
+      view: 'summary',
+      filter: { repo: HTTP_REPO, family: 'BUG-HTTP', status: 'open' },
+    });
+    const scopedEnv = scoped.json as {
+      ok: boolean;
+      data: { summary: { total: number; open: number; closed: number } };
+    };
     expect(scopedEnv.ok).toBe(true);
     expect(scopedEnv.data.summary.total).toBe(2); // the two open BUG-HTTP items only
 
-    const windowed = await post('/backlog/query', { view: 'summary', filter: { repo: HTTP_REPO, status: 'all' }, window: { since: new Date(Date.now() + 60_000).toISOString() } });
-    const wEnv = windowed.json as { ok: boolean; data: { summary: { closedInWindow: number; openedInWindow: number } } };
+    const windowed = await post('/backlog/query', {
+      view: 'summary',
+      filter: { repo: HTTP_REPO, status: 'all' },
+      window: { since: new Date(Date.now() + 60_000).toISOString() },
+    });
+    const wEnv = windowed.json as {
+      ok: boolean;
+      data: { summary: { closedInWindow: number; openedInWindow: number } };
+    };
     expect(wEnv.ok).toBe(true);
     expect(wEnv.data.summary.closedInWindow).toBe(0);
     expect(wEnv.data.summary.openedInWindow).toBe(0);

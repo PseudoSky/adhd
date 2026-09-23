@@ -12,6 +12,10 @@
   },
   "tags": ["layer:logic", "platform:shared"],
   "targets": {
+    "test": {
+      "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference). `apigen-java:package` is load-bearing: the conformance gate runs a live JVM matrix against the packaged jar (PR #11). `lint`/`^build` mirror the workspace `test` targetDefaults.",
+      "dependsOn": ["lint", "^build", "apigen-java:package"]
+    },
     "conformance": {
       "executor": "nx:run-commands",
       "cache": true,

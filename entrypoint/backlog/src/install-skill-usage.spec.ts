@@ -14,16 +14,36 @@
  * when this runs. No env gate: nothing here is paid or external (AGENTS.md
  * "Live testing is mandatory — no silent gating").
  */
-import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { runIsolatedBin } from './test/helpers/spawn-isolated-bin.js';
 
 const DIST_INDEX = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.js');
 
+/**
+ * Spawns the real bin under the shared HOME-redirect isolation helper
+ * (`test/helpers/spawn-isolated-bin.ts`) with a fresh throwaway root as both
+ * `cwd` and `HOME`, so none of these invocations can read the machine's real
+ * `~/.adhd`. The root is removed after each run.
+ */
+function runIn(
+  root: string,
+  ...args: string[]
+): { code: number; stdout: string; stderr: string } {
+  const r = runIsolatedBin(DIST_INDEX, args, root);
+  return { code: r.status ?? -1, stdout: r.stdout, stderr: r.stderr };
+}
+
 function run(...args: string[]): { code: number; stdout: string; stderr: string } {
-  const r = spawnSync(process.execPath, [DIST_INDEX, ...args], { encoding: 'utf8' });
-  return { code: r.status ?? -1, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+  const root = mkdtempSync(join(tmpdir(), 'backlog-install-skill-usage-'));
+  try {
+    return runIn(root, ...args);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 }
 
 /** A minified dist stack frame — `    at u1 (/…/dist/index.js:363:5909)`. */
@@ -86,13 +106,26 @@ describe('BUG-BACKLOG-INSTALLSKILL-UX-001 — usage errors are usage messages, n
   });
 
   it('a real (non-usage) fault is NOT swallowed into a usage message', () => {
-    // A well-formed invocation pointed at an unwritable scope still fails
-    // loudly — proving the catch is narrowed by TYPE (BacklogUsageError) and
-    // is not a blanket try/catch that would hide genuine faults.
-    const r = spawnSync(process.execPath, [DIST_INDEX, 'install-skill', '--host', 'claude', '--scope', 'project'], {
-      encoding: 'utf8',
-      cwd: '/dev/null/nonexistent-cwd-for-backlog-test',
-    });
-    expect(r.status).not.toBe(0);
+    // A well-formed invocation whose project-scope skill directory cannot be
+    // created still fails loudly — proving the catch is narrowed by TYPE
+    // (BacklogUsageError) and is not a blanket try/catch that would hide
+    // genuine faults. The fault is genuine FILESYSTEM failure, not a usage
+    // error: `.claude` is planted as a regular FILE, so the install's
+    // `mkdirSync(<root>/.claude/skills/backlog, {recursive:true})` throws
+    // ENOTDIR. (An invalid `cwd` — the previous form — fails at spawn with
+    // ENOENT before the CLI even runs, so it "passed" for the wrong reason
+    // and never exercised the usage-vs-fault narrowing at all.)
+    const root = mkdtempSync(join(tmpdir(), 'backlog-install-skill-fault-'));
+    try {
+      writeFileSync(join(root, '.claude'), 'not a directory');
+      const r = runIn(root, 'install-skill', '--host', 'claude', '--scope', 'project');
+      expect(r.code).not.toBe(0);
+      // Genuine fault, not a swallowed usage error: no machine-readable
+      // invalid_argument envelope, and the failure is stack-bearing.
+      expect(r.stderr).not.toContain('"code":"invalid_argument"');
+      expect(r.stderr).toMatch(STACK_FRAME);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
