@@ -186,7 +186,14 @@ afterAll(async () => {
 // (1) MCP variant — real MCP client over stdio against the BUILT bin.
 // ---------------------------------------------------------------------------
 
-describe('real-consumer: MCP over the built bin against UNMODIFIED @adhd/data-base-transforms', () => {
+// CPU-THRASH-SKIP (owner-requested, 2026-09-23): spawns the BUILT bin
+// (dist/packages/apigen/cli/index.js) as a real child process and drives a real MCP
+// stdio session against it, with a 120_000 ms budget. Every block in this file does a
+// variant of that (stdio, HTTP, live client), so the whole file is skipped.
+// Deviates from AGENTS.md §7 — owner-approved override, recorded.
+// Durable fix: docs/backlog/grooming/test-perf-improvements.md (recs #7, #8).
+// Run: npx vitest run src/test/e2e/real-consumer.spec.ts
+describe.skip('real-consumer: MCP over the built bin against UNMODIFIED @adhd/data-base-transforms [CPU-THRASH-SKIP: owner-requested]', () => {
   it('tools/list == transform exports; callTool deep-equals in-process ground truth', async () => {
     // The MCP SDK stdio client SPAWNS the built bin as the server process and
     // manages its lifecycle (closed in afterEach).
@@ -281,7 +288,10 @@ function fnParamNames(fn: (...a: unknown[]) => unknown): string[] {
 // (2) HTTP variant — real HTTP client against the BUILT bin (api-fastify).
 // ---------------------------------------------------------------------------
 
-describe('real-consumer: HTTP over the built bin against UNMODIFIED @adhd/transform', () => {
+// CPU-THRASH-SKIP (owner-requested, 2026-09-23): same file — spawns the built bin as a
+// real HTTP child process and polls it to readiness. See the block comment above.
+// Run: npx vitest run src/test/e2e/real-consumer.spec.ts -t "HTTP over the built bin"
+describe.skip('real-consumer: HTTP over the built bin against UNMODIFIED @adhd/transform [CPU-THRASH-SKIP: owner-requested]', () => {
   it('GET /<id>/<fn> deep-equals in-process ground truth over real HTTP', async () => {
     const port = await freePort();
     httpChild = spawn(
@@ -393,7 +403,10 @@ describe('real-consumer: HTTP over the built bin against UNMODIFIED @adhd/transf
 // (3) Model-independent invariants via a real MCP client (no AI model needed).
 // ---------------------------------------------------------------------------
 
-describe('real-consumer: LIVE client drives the MCP loop (model-independent invariants)', () => {
+// CPU-THRASH-SKIP (owner-requested, 2026-09-23): same file — a real MCP client driving
+// the real loop against a spawned server. See the block comment above.
+// Run: npx vitest run src/test/e2e/real-consumer.spec.ts -t "LIVE client"
+describe.skip('real-consumer: LIVE client drives the MCP loop (model-independent invariants) [CPU-THRASH-SKIP: owner-requested]', () => {
   it('a real MCP client lists + calls a real transform tool; result == in-process ground truth', async () => {
     // Stand up the same MCP server via the built bin.
     const transport = new StdioClientTransport({

@@ -685,7 +685,18 @@ describe('[cli-run-cmd.non-ts] non-TS plugin bypasses TS extraction', () => {
 // Live MCP server: run command starts a real streaming-http server
 // ───────────────────────────────────────────────────────────────────────────
 
-describe('[cli-run-cmd.1 live] run command starts a live MCP server via plugin.run()', () => {
+// CPU-THRASH-SKIP (owner-requested, 2026-09-23): this is the live MCP server block —
+// plugin.run() starts a real streaming-http server on a real port and the suite drives
+// it with a real MCP client over real transport ({ timeout: 90000 }).
+// NOTE: every other block in this file (cli-run-cmd.3, FEAT-APIGEN-019, cli-run-cmd.1+2,
+// cli-run-cmd.4, dod.fail-fast.a/b/c, cli-run-cmd.non-ts) is in-process
+// command/orchestrator logic and is deliberately LEFT RUNNING.
+// Deviates from AGENTS.md §7 (skipping permitted only for paid/external third-party
+// services; "it spawns child processes" and "it's slow" are named non-reasons) —
+// owner-approved override, recorded.
+// Durable fix: docs/backlog/grooming/test-perf-improvements.md (recs #7, #8).
+// Run: npx vitest run src/test/run.spec.ts -t "cli-run-cmd.1 live"
+describe.skip('[cli-run-cmd.1 live] run command starts a live MCP server via plugin.run() [CPU-THRASH-SKIP: owner-requested]', () => {
   it(
     'serves tools/list with fixture tools over streaming-http',
     { timeout: 90000 },

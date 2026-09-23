@@ -382,7 +382,15 @@ async function getHealth(): Promise<Response> {
 // Live tests
 // ---------------------------------------------------------------------------
 
-describe('py-flask plugin — LIVE server', () => {
+// CPU-THRASH-SKIP (owner-requested, 2026-09-23): boots a real Python Flask server and
+// drives it over real HTTP across ~10 assertions (decimal wire-format parity, validation
+// 400s, envelope forwarding, 404s) — a real python process per block plus real network.
+// NOTE: the blocks below (batch mount, route/verb parity) and above (unit surface) are
+// deliberately LEFT RUNNING unless they themselves boot a server.
+// Deviates from AGENTS.md §7 — owner-approved override, recorded.
+// Durable fix: docs/backlog/grooming/test-perf-improvements.md (recs #7, #8).
+// Run: npx vitest run src/test/plugin.spec.ts -t "LIVE server"
+describe.skip('py-flask plugin — LIVE server [CPU-THRASH-SKIP: owner-requested]', () => {
   it('GET /_meta/health → 200 with status:ok', async () => {
     server = await startServer();
     const res = await getHealth();

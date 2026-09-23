@@ -212,7 +212,17 @@ describe('[serve.findFreePort] allocates distinct usable loopback ports', () => 
 // real process exit event — never a fixed sleep that races the system.
 // ───────────────────────────────────────────────────────────────────────────
 
-describe('[serve.live] real cross-language serve front', () => {
+// CPU-THRASH-SKIP (owner-requested, 2026-09-23): this is the only block in the file that
+// spawns real servers — a real cross-language serve front, `spawn(grpcurl, ...)` for the
+// py-grpc leg, a real `serve` child process, pgrep/ps process-table scans, and a real
+// `srv.listen()` — all behind readiness-polling with liveTestTimeoutMs budgets.
+// NOTE: every block above this one (parseMounts, namespaceOfSource, namespaceFromUrl,
+// httpNamespaceSegment, resolveHosts, aggregateHealth, findFreePort) is pure in-process
+// logic and is deliberately LEFT RUNNING.
+// Deviates from AGENTS.md §7 — owner-approved override, recorded.
+// Durable fix: docs/backlog/grooming/test-perf-improvements.md (recs #7, #8).
+// Run: npx vitest run src/test/serve.spec.ts -t "serve.live"
+describe.skip('[serve.live] real cross-language serve front [CPU-THRASH-SKIP: owner-requested]', () => {
   let tmpDir: string | undefined;
   let shutdownFn: (() => Promise<void>) | undefined;
 
