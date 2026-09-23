@@ -15,7 +15,7 @@
     "release:sync-global:dry": "node tools/nx-plugins/build/executors/sync-global/sync-global.mjs --dry-run",
     "check:release-ranges": "node tools/nx-plugins/build/executors/range-check/check-release-ranges.mjs",
     "check:clean-room-smoke": "node tools/nx-plugins/build/executors/smoke-test/clean-room-smoke.mjs",
-    "storybook": "nx run storybook:storybook",
+    "storybook": "nx run ui-react-base-storybook:storybook",
     "list": "nx show projects --affected",
     "lint:all": "nx run-many --targets=lint --configuration=production",
     "test:all": "nx run-many --targets=test --configuration=production",

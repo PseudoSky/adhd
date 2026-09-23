@@ -295,4 +295,25 @@ describe('describeParams — enum values and union members render in full, never
     expect(text).not.toBe('mode?: ');
     expect(text).not.toMatch(/:\s*$/);
   });
+
+  it('an empty union array (anyOf/oneOf: []) renders a placeholder, never a bare trailing colon (C-21)', () => {
+    // `def.anyOf` is truthy for `[]`, so the union branch fired and
+    // `[].map(...).join(' | ')` produced '' — rendering `mode?: ` with nothing
+    // after the colon. Mirrors the empty-enum guard.
+    const schema = {
+      input: {
+        type: 'object',
+        properties: {
+          data: {
+            type: 'object',
+            required: [],
+            properties: { mode: { oneOf: [] }, other: { anyOf: [] } },
+          },
+        },
+      },
+    };
+    const { text } = describeParams(schema);
+    expect(text).toBe('mode?: unknown, other?: unknown');
+    expect(text).not.toMatch(/:\s*(,|$)/);
+  });
 });

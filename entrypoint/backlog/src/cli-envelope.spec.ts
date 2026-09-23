@@ -51,12 +51,12 @@
  * `query/paging-wire.spec.ts`, which spawns this same built bin. That file
  * belongs next to the paging contract it proves rather than here.
  */
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { spawnSync } from 'node:child_process';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runIsolatedBin } from './test/helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
@@ -74,26 +74,11 @@ let seedUid: string;
 
 /** Spawns the REAL built bin. Never imported — an import would skip the mount. */
 function runBin(args: string[]): Run {
-  const result = spawnSync(process.execPath, [DIST_INDEX, ...args], {
-    cwd: tmpRoot,
-    env: {
-      ...process.env,
-      ADHD_BACKLOG_SCOPE: 'project',
-      // The ONLY var that redirects the store. `BACKLOG_DB_PATH` is NOT
-      // honored — using it silently writes to the real global graph.
-      ADHD_BACKLOG_DATABASE_PATH: dbPath,
-    },
-    encoding: 'utf8',
-    timeout: 30_000,
+  return runIsolatedBin(DIST_INDEX, args, tmpRoot, {
+    // The ONLY var that redirects the store. `BACKLOG_DB_PATH` is NOT honored
+    // — using it silently writes to the real global graph.
+    extraEnv: { ADHD_BACKLOG_DATABASE_PATH: dbPath },
   });
-  if (result.error) {
-    throw new Error(`spawn failed: ${String(result.error)}`);
-  }
-  return {
-    status: result.status,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  };
 }
 
 function runJson(args: string[]): { run: Run; body: Record<string, unknown> } {
@@ -148,12 +133,14 @@ beforeAll(() => {
   expect(typeof seedUid).toBe('string');
 });
 
+// The `beforeAll` temp root (and its `envelope.db`) is SHARED by every test
+// in this file — the seed is written once and each test is read-only against
+// it — so it must be removed ONCE at the end. A per-test `afterEach` would
+// delete the seed out from under the following tests; the old suite-level
+// `afterEach` was a no-op and leaked this root instead (PR #10 review finding
+// `40d9da12`).
 afterAll(() => {
   if (tmpRoot) rmSync(tmpRoot, { recursive: true, force: true });
-});
-
-afterEach(() => {
-  /* each test is read-only apart from the shared seed */
 });
 
 describe('outcome envelope over the real CLI mount', () => {

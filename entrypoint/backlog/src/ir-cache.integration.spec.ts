@@ -37,7 +37,6 @@
  * at all when caching is disabled — real extraction, no cache involvement.
  */
 import { describe, expect, it, afterEach } from 'vitest';
-import { spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdtempSync,
@@ -50,6 +49,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runIsolatedBin } from './test/helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
@@ -61,11 +61,11 @@ function runHelp(
   cwd: string,
   extraEnv: Record<string, string> = {}
 ): { status: number | null } {
-  const r = spawnSync(process.execPath, [DIST_INDEX, '--help'], {
-    cwd,
-    env: { ...process.env, APIGEN_IR_CACHE_FILE: cacheFile, ...extraEnv },
-    encoding: 'utf8',
-    timeout: 60_000,
+  // Routed through the shared HOME-redirect isolation helper; the throwaway
+  // cache file + any caller overrides layer over it via `extraEnv`.
+  const r = runIsolatedBin(DIST_INDEX, ['--help'], cwd, {
+    extraEnv: { APIGEN_IR_CACHE_FILE: cacheFile, ...extraEnv },
+    timeoutMs: 60_000,
   });
   return { status: r.status };
 }
