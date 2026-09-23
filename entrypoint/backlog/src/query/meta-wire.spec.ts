@@ -18,11 +18,11 @@
  * bytes a real consumer reads.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runIsolatedBin } from '../test/helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', '..', 'dist', 'index.js');
@@ -41,22 +41,12 @@ interface Run {
 
 /** Spawns the REAL built bin — never imported, which would resolve to source and skip the mount under test. */
 function runBin(args: string[]): Run {
-  const result = spawnSync(process.execPath, [DIST_INDEX, ...args], {
-    cwd: tmpRoot,
-    env: {
-      ...process.env,
-      ADHD_BACKLOG_SCOPE: 'project',
-      ADHD_BACKLOG_DATABASE_PATH: dbPath,
-    },
-    encoding: 'utf8',
-    timeout: 60_000,
+  // `runIsolatedBin` owns the `ADHD_BACKLOG_SCOPE=project` + `HOME=<root>`
+  // redirect pair (see test/helpers/spawn-isolated-bin.ts); the explicit DB
+  // path is the ONLY var that redirects the store.
+  return runIsolatedBin(DIST_INDEX, args, tmpRoot, {
+    extraEnv: { ADHD_BACKLOG_DATABASE_PATH: dbPath },
   });
-  if (result.error) throw new Error(`spawn failed: ${String(result.error)}`);
-  return {
-    status: result.status,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  };
 }
 
 function runJson(args: string[]): { run: Run; body: Record<string, unknown> } {
