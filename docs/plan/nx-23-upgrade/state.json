@@ -90,9 +90,9 @@
     "test-changed-optin": {
       "status": "complete",
       "started_at": "2026-09-22T20:21:29.627Z",
-      "done_at": "2026-09-22T21:36:18.181Z",
+      "done_at": "2026-09-23T00:57:25.092Z",
       "start_ref": "d69f7dd5fe6aa0c276028033a3c87c2613ff1e7d",
-      "end_ref": "9a0a2dd372155967008abc26092dcc701f6ccfa1"
+      "end_ref": "7bc4daad66b03db839031b02f339b579d3a6b03b"
     },
     "vite-cjs-import-meta-repair": {
       "status": "complete",
@@ -327,6 +327,18 @@
       "audit_criteria_total": 103,
       "by": "pseudosky",
       "note": "Delivered test:related + test:changed: a fail-safe opt-in fast path over vitest related. Workspace-wide selection (cross-package: date.ts selects data-query-engine specs), zero-selection exits non-zero with 'no tests selected', selected=N/M on success. Both check scripts PASS. Full suite stays the default; nx.json untouched. TEST-SELECTION.md records design + measured behaviour. KNOWN RED: dod.6's input packages/data/data-base-transforms/src/index.ts is covered on this toolchain (3 specs across 2 dependents, selected=3/362), so no honest selector can satisfy it; filed as backlog de163601; see TEST-SELECTION.md section 8."
+    },
+    {
+      "ts": "2026-09-23T00:57:25.092Z",
+      "from": "test-changed-optin",
+      "to": "test-changed-optin",
+      "start_ref": "d69f7dd5fe6aa0c276028033a3c87c2613ff1e7d",
+      "end_ref": "7bc4daad66b03db839031b02f339b579d3a6b03b",
+      "audit_exit": 0,
+      "audit_criteria_passed": 103,
+      "audit_criteria_total": 103,
+      "by": "pseudosky",
+      "note": "terminal DoD gate re-run after plan-side repair: re-vendored run-audit.js (negative-control nx-daemon isolation, 13fa7f81) + re-pointed dod.6 to an uncovered input"
     }
   ],
   "amendment_log": [
@@ -437,7 +449,7 @@
     "version": "0.8.25",
     "hash": "961c3053dfab"
   },
-  "current_state": "test-changed-optin",
+  "current_state": "done",
   "dod_provenance": {
     "confirmed_at": "2026-09-22T02:05:38.210Z",
     "by": "pseudosky",
