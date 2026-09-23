@@ -10,7 +10,6 @@
     "decompile": "./dist/bin/decompile.js"
   },
   "scripts": {
-    "build": "nx run decompile-cli:build",
     "watch": "nx run decompile-cli:build --watch",
     "cli": "node dist/entrypoint/decompile-cli"
   },

@@ -54,7 +54,6 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as net from 'node:net';
-import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -70,6 +69,7 @@ import {
   type IMountedOperationSurface,
 } from './server.js';
 import type { BacklogCtx } from './api.js';
+import { runIsolatedBin } from './test/helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
@@ -253,6 +253,7 @@ beforeAll(async () => {
     command: 'node',
     args: [MCP_ENTRY, mcpRoot],
     cwd: mcpRoot,
+    env: { HOME: mcpRoot },
   });
   const client = new Client(
     { name: 'backlog-parity-client', version: '1.0.0' },
@@ -265,12 +266,9 @@ beforeAll(async () => {
 
   // ---- CLI (real built bin) ---------------------------------------------
   const cliRoot = tempRoot('backlog-cli-');
-  const help = spawnSync(process.execPath, [DIST_INDEX, '--help'], {
-    cwd: cliRoot,
-    env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project' },
-    encoding: 'utf8',
-    timeout: 30_000,
-  });
+  // `runIsolatedBin` owns the `ADHD_BACKLOG_SCOPE=project` + `HOME=<root>`
+  // redirect pair (see test/helpers/spawn-isolated-bin.ts).
+  const help = runIsolatedBin(DIST_INDEX, ['--help'], cliRoot);
   if (help.status !== 0) {
     throw new Error(
       `built bin --help exited ${String(help.status)}: ${help.stderr}`
