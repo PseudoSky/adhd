@@ -15,9 +15,15 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { createItem } from './ops-v1.js';
-import { buildBacklogEnv } from './env.js';
-import { openGraphBacklogStore, closeGraphBacklogStore } from './store/graph-backlog-store.js';
+import { createIssue } from './write/create-issue.js';
+import {
+  openTestIssueStore,
+  seedProject,
+} from './test/helpers/open-test-issue-store.js';
+import { buildBacklogEnv, resolveBacklogDbPath } from './env.js';
+import type { IOutcomeEnvelope } from './envelope.js';
+import type { IIssueCard, IIssueQueryResult } from './query/types.js';
+import type { ICreateIssueResult } from './write/create-issue.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ENTRY_SCRIPT = join(HERE, 'test', 'fixtures', 'mcp-stdio-entry.js');
@@ -36,87 +42,152 @@ describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotoco
     adhdRoot = undefined;
   });
 
-  it('tools/list advertises the six v2 verbs (get/query/create/update/relate/admin) + batch_action; callTool backlog_query returns real data', async () => {
+  it('tools/list advertises the mounted verbs (get/query/create/update/relate/…); callTool backlog_query returns real data', async () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-server-mcp-'));
-    const repo = 'PseudoSky/mcp-test';
 
     // Seed real data BEFORE spawning the server subprocess (which will open
-    // its own exclusive connection to the same file).
-    const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
+    // its own exclusive connection to the same file). `resolveBacklogDbPath`
+    // resolves the exact same file `startBacklogServer` will open below,
+    // given the same `adhdRoot`/scope.
+    const seedEnv = buildBacklogEnv({
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+    });
     seedEnv.ensureDirs();
-    const seedStore = await openGraphBacklogStore(seedEnv.files.db);
-    const seeded = await createItem({ store: seedStore, env: seedEnv }, { family: 'BUG-MCP', title: 'via mcp', body: 'x', repo });
-    await closeGraphBacklogStore(seedStore);
+    const dbPath = resolveBacklogDbPath(seedEnv);
+    const seedStore = await openTestIssueStore(dbPath);
+    const { projectUid } = await seedProject(seedStore, 'mcp-test-project');
+    const seeded = await createIssue(seedStore, {
+      project: projectUid,
+      title: 'via mcp',
+      body: 'x',
+      by: 'mcp-spec-seed',
+    });
+    await seedStore.close();
+    if (!seeded.uid) throw new Error('seed createIssue did not return a uid');
+    const seededUid = seeded.uid;
 
-    transport = new StdioClientTransport({ command: 'node', args: [ENTRY_SCRIPT, adhdRoot], cwd: adhdRoot });
-    client = new Client({ name: 'backlog-mcp-test-client', version: '1.0.0' }, { capabilities: {} });
+    transport = new StdioClientTransport({
+      command: 'node',
+      args: [ENTRY_SCRIPT, adhdRoot],
+      cwd: adhdRoot,
+    });
+    client = new Client(
+      { name: 'backlog-mcp-test-client', version: '1.0.0' },
+      { capabilities: {} }
+    );
     await client.connect(transport);
 
     const tools = await client.listTools();
     const toolNames = tools.tools.map((t) => t.name);
-    // INTERFACE_v2 §10.0 / AC-0 — the mounted surface is the SIX consolidated
-    // verbs (`BACKLOG_V2_VERBS` in server.ts), each projected to
-    // `backlog_<verb>` by `apigen-plugin-mcp`'s canonical tool-name
-    // projection (namespace + path segment, snake_cased), plus the
-    // un-namespaced `batch_action` synthetic mount. The old flat
-    // `backlog_list_items`/`backlog_create_item`/`backlog_get_item` verbs
-    // (v1) are no longer mounted at all — `ops-v1.ts` is barrel-only now.
+    // The mounted surface is the operation set `api.ts` exports (`BACKLOG_VERBS`
+    // in server.ts), each projected to `backlog_<verb>` by `apigen-plugin-mcp`'s
+    // canonical tool-name projection (namespace + path segment, snake_cased).
     expect(toolNames).toEqual(
-      expect.arrayContaining(['backlog_get', 'backlog_query', 'backlog_create', 'backlog_update', 'backlog_relate', 'backlog_admin'])
+      expect.arrayContaining([
+        'backlog_get',
+        'backlog_query',
+        'backlog_create',
+        'backlog_update',
+        'backlog_relate',
+      ])
     );
 
-    // Empirically observed shape (MCP wraps the single non-ctx client.ts
-    // parameter under `data`, and that parameter is itself named `input` in
-    // `query()`'s signature, so the arg is `data.input.filter`, NOT
-    // `data.filter`): `backlog_query`'s content block carries the §7.1
-    // outcome envelope `{ ok, data: { view, items }, meta }` — `items`, not a
-    // bare array, and each card is the terse default projection (humanId,
-    // kind, title, status — no body).
+    // `backlog_query`'s content block carries the outcome envelope
+    // `{ ok, data: { view, items }, meta? }` — the MCP transport wraps the
+    // single non-ctx `query()` parameter under `data`, and that parameter is
+    // itself named `input` in `query()`'s signature, so the arg is
+    // `data.input.filter`, NOT `data.filter`.
     const result = await client.callTool({
       name: 'backlog_query',
-      arguments: { data: { input: { filter: { repo, family: 'BUG-MCP' } } } },
+      arguments: { data: { input: { filter: { project: projectUid } } } },
     });
     const content = result.content as Array<{ type: string; text: string }>;
-    const parsed = JSON.parse(content[0]?.text ?? '{}') as {
-      ok: boolean;
-      data: { view: string; items: Array<{ humanId: string; title: string }> };
-    };
+    const parsed = JSON.parse(
+      content[0]?.text ?? '{}'
+    ) as IOutcomeEnvelope<IIssueQueryResult>;
     expect(parsed.ok).toBe(true);
+    if (!parsed.ok) throw new Error('unreachable — checked above');
+    if (parsed.data.view !== 'list') throw new Error('expected view:"list"');
     expect(parsed.data.items).toHaveLength(1);
-    expect(parsed.data.items[0]?.humanId).toBe(seeded.item.humanId);
+    expect(parsed.data.items[0]?.uid).toBe(seededUid);
     expect(parsed.data.items[0]?.title).toBe('via mcp');
   }, 30_000);
 
   it('callTool backlog_create via MCP actually persists — a follow-up backlog_get call sees it', async () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-server-mcp-create-'));
-    const repo = 'PseudoSky/mcp-create-test';
 
-    transport = new StdioClientTransport({ command: 'node', args: [ENTRY_SCRIPT, adhdRoot], cwd: adhdRoot });
-    client = new Client({ name: 'backlog-mcp-test-client', version: '1.0.0' }, { capabilities: {} });
+    // The `project` a real `create` call resolves against must already
+    // exist (SPEC: `project` is resolved-only, never minted by `create`),
+    // so seed it through the same real store path before the server starts.
+    const seedEnv = buildBacklogEnv({
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+    });
+    seedEnv.ensureDirs();
+    const dbPath = resolveBacklogDbPath(seedEnv);
+    const seedStore = await openTestIssueStore(dbPath);
+    const { projectUid } = await seedProject(
+      seedStore,
+      'mcp-create-test-project'
+    );
+    await seedStore.close();
+
+    transport = new StdioClientTransport({
+      command: 'node',
+      args: [ENTRY_SCRIPT, adhdRoot],
+      cwd: adhdRoot,
+    });
+    client = new Client(
+      { name: 'backlog-mcp-test-client', version: '1.0.0' },
+      { capabilities: {} }
+    );
     await client.connect(transport);
 
-    // See the tool-name note in the previous test — real tool names are
-    // `backlog_<verb>`, not bare/flat `createItem`/`getItem`. `by` is
-    // mandatory on every mutation (INTERFACE_v2 §7.5, `assertAttribution` in
-    // client.ts) and the envelope wraps the create outcome under `data`.
+    // Real tool names are `backlog_<verb>`, not bare/flat `createItem`/
+    // `getItem`. `by` is mandatory attribution on every mutation and the
+    // envelope wraps the create outcome under `data`.
     const createResult = await client.callTool({
       name: 'backlog_create',
       arguments: {
-        data: { input: { item: { family: 'BUG-MCPCREATE', title: 'created via mcp', body: 'x', repo }, by: 'mcp-test-client' } },
+        data: {
+          input: {
+            title: 'created via mcp',
+            body: 'x',
+            project: projectUid,
+            by: 'mcp-test-client',
+          },
+        },
       },
     });
-    const createContent = createResult.content as Array<{ type: string; text: string }>;
-    const created = JSON.parse(createContent[0]?.text ?? '{}') as { ok: boolean; data: { humanId: string } };
+    const createContent = createResult.content as Array<{
+      type: string;
+      text: string;
+    }>;
+    const created = JSON.parse(
+      createContent[0]?.text ?? '{}'
+    ) as IOutcomeEnvelope<ICreateIssueResult>;
     expect(created.ok).toBe(true);
-    expect(created.data.humanId).toBe('BUG-MCPCREATE-001');
+    if (!created.ok) throw new Error('unreachable — checked above');
+    expect(created.data.created).toBe(true);
+    const createdUid = created.data.uid;
+    expect(createdUid).toBeTruthy();
 
     const getResult = await client.callTool({
       name: 'backlog_get',
-      arguments: { data: { input: { repo, humanId: created.data.humanId } } },
+      arguments: { data: { input: { uid: createdUid } } },
     });
-    const getContent = getResult.content as Array<{ type: string; text: string }>;
-    const got = JSON.parse(getContent[0]?.text ?? '{}') as { ok: boolean; data: { title: string } };
+    const getContent = getResult.content as Array<{
+      type: string;
+      text: string;
+    }>;
+    const got = JSON.parse(
+      getContent[0]?.text ?? '{}'
+    ) as IOutcomeEnvelope<IIssueCard>;
     expect(got.ok).toBe(true);
+    if (!got.ok) throw new Error('unreachable — checked above');
     expect(got.data.title).toBe('created via mcp');
   }, 30_000);
 });

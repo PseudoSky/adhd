@@ -94,14 +94,15 @@ describe('backlog published (rebased-to-root) layout — real npm-install-shape 
     expect(result.stderr).not.toMatch(/cannot mount/);
     expect(result.stderr).not.toMatch(/client\.d\.ts does not exist/);
     // Reaches the cli-output plugin's usage listing (mount + extraction
-    // succeeded) and exits cleanly. INTERFACE_v2 AC-5 collapsed the mount
-    // surface to the SIX `client.ts` verbs (`get`, `query`, `create`,
-    // `update`, `relate`, `admin` — `BACKLOG_V2_TOOLS`, model.ts); the old
-    // v1 verb names (`create-item`, `get-item`, ...) moved to `ops-v1.ts`
-    // and are no longer mounted on any transport. Verified empirically
-    // against the real built bin (`node dist/index.js --help`), which lists
-    // exactly `backlog admin`, `backlog create`, `backlog get`, `backlog
-    // query`, `backlog relate`, `backlog update` plus `batch action`.
+    // succeeded) and exits cleanly. SPEC.md §6.7 fixes the mount surface at
+    // exactly the `client.ts` verbs — the nine issue verbs (`get`, `query`,
+    // `create`, `update`, `transition`, `claim`, `relate`, `move`, `delete`)
+    // plus §3a's registry verbs (`lookup`, `rm-location`, `upsert-project`,
+    // `upsert-component`, `upsert-location`) — and nothing else. No flat
+    // legacy verb name (`create-item`, `get-item`, ...) is mounted on any
+    // transport. Verified empirically against the real built bin
+    // (`node dist/index.js --help`), whose command table is exactly that list
+    // plus `apigen-plugin-batch`'s own `batch action` contribution.
     expect(result.status).toBe(0);
     expect(result.stdout).toMatch(/backlog create\b/);
     expect(result.stdout).toMatch(/backlog get\b/);

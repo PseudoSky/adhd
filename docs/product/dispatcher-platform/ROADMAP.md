@@ -352,7 +352,7 @@ WAL. Turso is a Rust rewrite and may differ, but **this is not provable in-proce
 needs a kill-mid-commit harness — and it must not be assumed.
 
 **(b) A capability slot on backlog's plugin host.**
-`docs/spec/backlog/PLUGIN_ARCHITECTURE.md` §2.1 already types this:
+`entrypoint/backlog/PLUGIN_ARCHITECTURE.md` §2.1 already types this:
 
 ```typescript
 capabilities: {

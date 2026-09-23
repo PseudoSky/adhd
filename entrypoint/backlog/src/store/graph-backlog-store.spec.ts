@@ -10,7 +10,7 @@
  * the adapter's own `pragmaSet('busy_timeout', N)` surface. The read-back
  * assertion below verifies THAT path: the adapter must report the value the
  * caller asked for (verified against both substrates — turso returns
- * `[{ busy_timeout: N }]`, sqlite returns the bare number).
+ * `[{ busy_timeout: N }]`, the store adapter's other substrate returns the bare number).
  *
  * `:memory:` is NOT supported by the turso adapter (its multiprocess WAL
  * cannot open an in-memory path), so these tests open real files under
@@ -19,7 +19,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { openGraphBacklogStore, closeGraphBacklogStore, type GraphBacklogStore } from './graph-backlog-store.js';
+import {
+  openGraphBacklogStore,
+  closeGraphBacklogStore,
+  type GraphBacklogStore,
+} from './graph-backlog-store.js';
 import { TMP_ROOT } from '../test/helpers/tmp-store.js';
 
 /** Normalizes `pragmaGet('busy_timeout')`'s adapter-dependent shape to a bare number. */
@@ -52,13 +56,17 @@ describe('openGraphBacklogStore — busy_timeout actually takes effect (BUG-SOXG
 
   it('a custom busyTimeoutMs is reflected by the adapter pragma read-back, not silently reset', async () => {
     store = await openGraphBacklogStore(join(dir, 'backlog.db'), 250);
-    const readBack = busyTimeoutValue(await store.adapter.pragmaGet('busy_timeout'));
+    const readBack = busyTimeoutValue(
+      await store.adapter.pragmaGet('busy_timeout')
+    );
     expect(readBack).toBe(250);
   });
 
   it('the default (no busyTimeoutMs argument) is 5000', async () => {
     store = await openGraphBacklogStore(join(dir, 'backlog.db'));
-    const readBack = busyTimeoutValue(await store.adapter.pragmaGet('busy_timeout'));
+    const readBack = busyTimeoutValue(
+      await store.adapter.pragmaGet('busy_timeout')
+    );
     expect(readBack).toBe(5000);
   });
 
@@ -90,9 +98,12 @@ describe('openGraphBacklogStore — busy_timeout actually takes effect (BUG-SOXG
       const held = new Promise<void>((r) => {
         release = r;
       });
-      const holding = holder.adapter.transaction(async () => {
-        await held;
-      }, { mode: 'immediate' });
+      const holding = holder.adapter.transaction(
+        async () => {
+          await held;
+        },
+        { mode: 'immediate' }
+      );
       // Let the holder genuinely acquire the write lock before racing it.
       await new Promise((r) => setTimeout(r, 250));
 
@@ -101,7 +112,9 @@ describe('openGraphBacklogStore — busy_timeout actually takes effect (BUG-SOXG
       try {
         // The body is irrelevant — acquiring the write lock is what is being
         // timed, so the transaction does the smallest real thing it can.
-        await waiter.adapter.transaction(async () => Promise.resolve(), { mode: 'immediate' });
+        await waiter.adapter.transaction(async () => Promise.resolve(), {
+          mode: 'immediate',
+        });
       } catch (err) {
         threw = err;
       }
@@ -112,7 +125,10 @@ describe('openGraphBacklogStore — busy_timeout actually takes effect (BUG-SOXG
       await closeGraphBacklogStore(waiter);
       await closeGraphBacklogStore(holder);
 
-      expect(threw, `expected the contended BEGIN IMMEDIATE at busy_timeout=${timeoutMs} to bounce`).toBeDefined();
+      expect(
+        threw,
+        `expected the contended BEGIN IMMEDIATE at busy_timeout=${timeoutMs} to bounce`
+      ).toBeDefined();
       return elapsed;
     }
 
@@ -125,7 +141,7 @@ describe('openGraphBacklogStore — busy_timeout actually takes effect (BUG-SOXG
     // would collapse to the same near-instant bounce).
     expect(
       atLarge,
-      `busy_timeout appears ignored: waited ${atLarge}ms at 1500ms vs ${atZero}ms at 0ms`,
+      `busy_timeout appears ignored: waited ${atLarge}ms at 1500ms vs ${atZero}ms at 0ms`
     ).toBeGreaterThan(Math.max(atZero * 5, 500));
   }, 30000);
 });
