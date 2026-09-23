@@ -718,7 +718,7 @@
       "id": "dod.6",
       "kind": "command",
       "tier": 3,
-      "cmd": "pnpm run test:related -- packages/data/data-base-transforms/src/index.ts > /tmp/nx-zero.txt 2>&1; test $? -ne 0 && grep -q \"no tests selected\" /tmp/nx-zero.txt",
+      "cmd": "pnpm run test:related -- packages/data/data-base-transforms/README.md > /tmp/nx-zero.txt 2>&1; test $? -ne 0 && grep -q \"no tests selected\" /tmp/nx-zero.txt",
       "expect": "exit0"
     },
     {
