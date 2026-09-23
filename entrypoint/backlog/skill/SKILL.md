@@ -455,14 +455,15 @@ $ adhd-backlog backlog query --input '{"view":"locations","filter":{"component":
    item under the other row is invisible to a query scoped to the first.
    (`adhd` is already reconciled to one row; `PseudoSky/adhd` does not exist.)
 2. **Store/scope confusion — an item can land in a store nobody reads.**
-   `adhd-backlog sandbox-path` reports the store a command will touch. The
-   production store is `~/.adhd/backlog/production/data/backlog-v2.db`;
-   `--namespace test` is a DIFFERENT file (`…/test/data/backlog.db`), and
-   `ADHD_BACKLOG_SCOPE=project` moves the store under `<repo>/.adhd/…`. A build
-   that writes a per-repo namespace (e.g. `entrypoint/backlog` on `main`) files
-   items that are silently absent from production — no error, just a missing
-   row (filed as 49ce83b8). Run `sandbox-path` before a write you care about,
-   and file through the production CLI only.
+   `adhd-backlog sandbox-path` reports the store a command will touch. Each
+   namespace resolves to its OWN file under `~/.adhd/backlog/<namespace>/data/`
+   (default `backlog.db`; that namespace's `config.yaml` may pin another name),
+   so the `production` store is never the `test` store — and
+   `ADHD_BACKLOG_SCOPE=project` moves the store under `<repo>/.adhd/…` instead.
+   A build that writes a per-repo namespace (e.g. `entrypoint/backlog` on
+   `main`) files items that are silently absent from production — no error,
+   just a missing row (filed as 49ce83b8). Run `sandbox-path` before a write
+   you care about, and file through the production CLI only.
 
 ## 5. Batch — N-way fan-out over one operation
 
