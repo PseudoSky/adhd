@@ -48,11 +48,26 @@ import { resolveEdgeKindTx } from '../../write/catalog.js';
 export { OPEN_TYPE_POLICY } from '../../store/type-policy.js';
 import { OPEN_TYPE_POLICY } from '../../store/type-policy.js';
 import type { IQueryStoreHandle } from '../../query/query.js';
+import {
+  embedDrainFor,
+  type IEmbedDrainOptions,
+  type IEmbedDrainResult,
+} from '../../write/embed-drain.js';
 
 export interface TestIssueStore extends IWriteStoreHandle, IQueryStoreHandle {
   readonly adapter: StoreAdapter;
   readonly graph: GraphBackend;
   readonly typePolicy: TypePolicy;
+  /**
+   * The real per-adapter embed drain (`write/embed-drain.ts`) — present so a
+   * test can drive the PRODUCTION close path (`closeGraphBacklogStore`) with
+   * this store, exactly as `openGraphBacklogStore` wires it. `close()` below
+   * stays a bare `adapter.close()` and deliberately does NOT drain (that is
+   * the defect the production `closeGraphBacklogStore` fixes), so a test that
+   * means to exercise the drain must call `closeGraphBacklogStore(store)`,
+   * never `store.close()`.
+   */
+  flushEmbeds(opts?: IEmbedDrainOptions): Promise<IEmbedDrainResult>;
   close(): Promise<void>;
 }
 
@@ -77,6 +92,8 @@ export async function openTestIssueStore(
     adapter,
     graph,
     typePolicy: OPEN_TYPE_POLICY,
+    flushEmbeds: (opts?: IEmbedDrainOptions) =>
+      embedDrainFor(adapter).drain(opts),
     close: () => adapter.close(),
   };
 }
