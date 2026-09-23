@@ -34,7 +34,12 @@ import { join, relative, extname } from 'node:path';
  * `migrat` catches migrate/migrated/migrating/migration/migrator in one rule,
  * and `sqlite` catches `better-sqlite3` and every casing. `v1`/`v2` are
  * word-bounded and must not be followed by `.<digit>`, so genuine dependency
- * and model versions (`bge-base-en-v1.5`) are not false positives.
+ * and model versions (`bge-base-en-v1.5`) are not false positives. They are
+ * likewise not followed by `.db`: `backlog-v2.db` is the live production
+ * store's real filename (config.yaml `db.path` / `sandbox-path`), an
+ * operational identifier the docs must reproduce verbatim, not this package
+ * naming its own surface. The carve-out is exactly `.db` (word-bounded), so
+ * bare `v2` prose and `v2.dbx`-shaped names still fail.
  *
  * `minifiable` marks the two terms a JavaScript minifier can FABRICATE out of
  * nothing. A bundler renaming locals emits `v1`, `V1`, `function v2(t,e)` by
@@ -50,8 +55,8 @@ const BANNED = [
   { name: 'humanId', re: /humanid/i, minifiable: false },
   { name: 'migrat', re: /migrat/i, minifiable: false },
   { name: 'sqlite', re: /sqlite/i, minifiable: false },
-  { name: 'v1', re: /\bv1\b(?!\.\d)/i, minifiable: true },
-  { name: 'v2', re: /\bv2\b(?!\.\d)/i, minifiable: true },
+  { name: 'v1', re: /\bv1\b(?!\.\d)(?!\.db\b)/i, minifiable: true },
+  { name: 'v2', re: /\bv2\b(?!\.\d)(?!\.db\b)/i, minifiable: true },
 ];
 
 /** Source maps embed original source verbatim and are not human-facing shipped
