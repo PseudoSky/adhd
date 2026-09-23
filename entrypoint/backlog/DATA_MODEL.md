@@ -291,6 +291,13 @@ index.
   `upsertProject` (by `name`), `upsertComponent` (by `(project, name)`),
   `upsertLocation` (by `(component, locType, value)`), and `rmLocation` —
   never a hand-rolled scan or an implicit mint from an issue verb.
+- **Filing convention (agent-facing)** — which project/component an item
+  belongs to, and the misfiling hazards (a component-less item lands on
+  `(root)` and is then invisible to component-scoped scans; duplicate project
+  identities split one repo's items), is the `@adhd/backlog` skill's
+  §4 "The filing rule" (`adhd-backlog install-skill`). This document defines
+  the model; the skill states the rule — choose and register the project and
+  component *before* filing.
 
 ## 8. Projection & consumers
 
