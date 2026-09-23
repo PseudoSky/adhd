@@ -148,18 +148,16 @@ option, and none was touched by this state:
 
 ### Note on `src/index.ts`
 
-README `[dod.6]` names `src/index.ts` as the zero-selection input, on the assumption
-that a package's barrel is not covered by any spec. **On this toolchain that
-assumption does not hold:** `data-query-engine` imports `@adhd/data-base-transforms`
-(the barrel), and with the source-resolution helper in place that resolves to
-`src/index.ts`, so `vitest related src/index.ts` selects three specs across two
-dependent packages (`selected=3/362`, exit 0). That is the **correct and desirable**
-behaviour — a change to a package's public surface *is* covered by its consumers'
-specs, and reporting it as "no tests selected" would be a false negative that hides a
-real cross-package blast radius. The fail-safe clause (zero ⇒ non-zero) is proven by
-`check-zero-selection.mjs` against `README.md`, which is genuinely uncovered; the
-`[dod.6]` *input* is the stale part, not the behaviour. See the backlog entry filed
-with this state.
+`[dod.6]` probes `README.md` (a package README no spec covers) as its zero-selection
+input. A package barrel is **not** a valid zero-selection input on this toolchain:
+`data-query-engine` imports `@adhd/data-base-transforms` (the barrel), and with the
+source-resolution helper in place that resolves to `src/index.ts`, so
+`vitest related src/index.ts` selects three specs across two dependent packages
+(`selected=3/362`, exit 0). That is the **correct and desirable** behaviour — a change
+to a package's public surface *is* covered by its consumers' specs, and reporting it as
+"no tests selected" would be a false negative that hides a real cross-package blast
+radius. The fail-safe clause (zero ⇒ non-zero) is therefore probed against `README.md`,
+which is genuinely uncovered.
 
 ## 9 · Reproduce
 
