@@ -24,16 +24,20 @@
  *
  * BUG-014-LOCK-ORDER (second describe block below): a follow-on fix to the
  * fix above. `initTelemetry({ logSink: 'file' })` performs real synchronous
- * file I/O. An earlier version of this change called it BEFORE
- * `startBacklogServer` — ahead of that function's synchronous
- * `[inv:singleton]` lock acquisition (`acquireServeLock`,
- * `store/serve-lock.ts`, called before `server.ts`'s first `await`). That
- * is never correct ordering for a singleton guard: nothing unrelated to the
- * guard's own correctness should be able to widen its claim window, whether
- * or not doing so can be proven to flip a specific observed test result.
- * Fixed by invoking `startBacklogServer(...)` first (unawaited) and calling
+ * file I/O and is explicitly best-effort/non-fatal — it must never delay
+ * the server's real startup work. An earlier version of this change called
+ * it BEFORE `startBacklogServer` — ahead of that function's synchronous
+ * startup prefix (env resolution, `env.ensureDirs()`, signal-cleanup
+ * registration, all before `server.ts`'s first `await`). That is never
+ * correct ordering for a best-effort side-call: nothing unrelated to the
+ * server's own startup correctness should be able to delay it. Fixed by
+ * invoking `startBacklogServer(...)` first (unawaited) and calling
  * `initTelemetry` only after that statement — see `serve.ts`'s
- * `BUG-014-LOCK-ORDER` doc comment for the full ordering argument. The test
+ * `BUG-014-LOCK-ORDER` doc comment for the full ordering argument. (This
+ * ordering originally also protected `[inv:singleton]`'s serve-lock claim
+ * window; that lock has since been removed as unnecessary defense-in-depth
+ * — see STATE.md A17 — but the startup-latency ordering it happened to
+ * share the invariant with is unaffected and still enforced here.) The test
  * below is a deterministic invocation-order assertion (mocked
  * `startBacklogServer`/`initTelemetry`), not a timing-flake reproduction —
  * the underlying race, if any, is in a real subprocess spawn window this
@@ -58,12 +62,11 @@ import {
 // calls above all imports in this file — can close over it safely.
 const serveCommandCallOrder: string[] = [];
 
-// `startBacklogServer` (server.ts) is owned by a concurrent work item in
-// this repo (store/serve-lock.ts, server.ts, serve.singleton.spec.ts) and
-// is not touched here — mocked purely to observe INVOCATION ORDER, not to
-// change its behavior. The mock resolves immediately (no signal wait), so
-// `runServeCommand` completes without needing to deliver a real
-// SIGTERM/SIGINT to this test process.
+// `startBacklogServer` (server.ts) is exercised for real (with real
+// subprocesses) in `serve.singleton.spec.ts` — mocked purely here to
+// observe INVOCATION ORDER, not to change its behavior. The mock resolves
+// immediately (no signal wait), so `runServeCommand` completes without
+// needing to deliver a real SIGTERM/SIGINT to this test process.
 vi.mock('./server.js', () => ({
   startBacklogServer: vi.fn(async () => {
     serveCommandCallOrder.push('startBacklogServer');
@@ -93,7 +96,7 @@ describe('BUG-014-LOCK-ORDER: runServeCommand invokes startBacklogServer before 
     _resetTelemetryForTest();
   });
 
-  it('RED (pre-fix): initTelemetry ran before startBacklogServer, ahead of its synchronous [inv:singleton] lock acquisition — GREEN (this fix): startBacklogServer is invoked first, unawaited, and its synchronous prefix (including acquireServeLock) completes in this tick before initTelemetry is ever called', async () => {
+  it('RED (pre-fix): initTelemetry ran before startBacklogServer, ahead of its synchronous startup prefix — GREEN (this fix): startBacklogServer is invoked first, unawaited, and its synchronous prefix (env resolution + ensureDirs + signal-cleanup registration) completes in this tick before initTelemetry is ever called', async () => {
     const { runServeCommand } = await import('./serve.js');
     await runServeCommand(['--transport', 'mcp']);
     expect(serveCommandCallOrder).toEqual(['startBacklogServer', 'initTelemetry']);

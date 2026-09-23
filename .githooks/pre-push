@@ -1,0 +1,89 @@
+#!/usr/bin/env sh
+#
+# Pre-push hook — the full, honest `nx affected -t test` closure that used to
+# live in `pre-commit` (DEBT-PROCESS-AFFECTED-TEST-001 Option 2 -> Option 3
+# migration; see `.githooks/pre-commit`'s Gate 3 header for the incident that
+# moved it here). `pre-commit`'s Gate 3 now runs a fast, staged-file-scoped
+# vitest pass (seconds); THIS hook runs the real, whole-project, full-affected
+# suite that gate used to run (minutes), but scoped by COMMIT RANGE rather
+# than a snapshot of the working tree — which is what makes it safe to run in
+# a worktree with other agents' concurrent, uncommitted edits: a commit range
+# can only ever contain COMMITTED history, so another agent's in-flight WIP
+# (uncommitted, by definition) can never appear in `--base`/`--head` here,
+# unlike the old Gate 3's `--files=<staged>` selection whose actual test
+# EXECUTION still read the dirty working tree off disk.
+#
+# git invokes pre-push with two args ($1 = remote name, $2 = remote URL) and
+# feeds ref-update lines on stdin: "<local-ref> <local-sha> <remote-ref>
+# <remote-sha>", one per ref being pushed. A deleted ref has local-sha =
+# all-zeroes (nothing to test). A brand-new remote branch has remote-sha =
+# all-zeroes (no upstream commit to diff against yet) — fall back to the
+# merge-base with origin/main so a first push of a feature branch is scoped
+# to just that branch's own commits, not all of history.
+#
+# Activated by the same `core.hooksPath=.githooks` as every other hook here.
+# Bypass for an emergency push: `git push --no-verify` (use sparingly — CI's
+# `nx affected -t test` job on the PR is the real, non-bypassable backstop;
+# see `.github/workflows/pull-request.yml`).
+
+zero_sha="0000000000000000000000000000000000000000"
+hook_dir=$(dirname "$0")
+repo_root=$(cd "$hook_dir/.." && pwd)
+
+any_ref=0
+overall_status=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "$local_ref" ] && continue
+  # Deleting a remote ref (local_sha all-zero) — nothing to test.
+  if [ "$local_sha" = "$zero_sha" ]; then
+    continue
+  fi
+  any_ref=1
+
+  base="$remote_sha"
+  if [ "$remote_sha" = "$zero_sha" ]; then
+    # New remote branch: no remote tip to diff against yet. Scope to this
+    # branch's own commits by diffing against its merge-base with main,
+    # rather than the full repo history (which "affected" against a null
+    # base would otherwise fall back to).
+    base=$(git merge-base "$local_sha" origin/main 2>/dev/null || git merge-base "$local_sha" main 2>/dev/null)
+    if [ -z "$base" ]; then
+      echo "⚠ pre-push: could not resolve a merge-base for a new branch (no origin/main or main reachable)."
+      echo "  Falling back to running 'nx affected' with no explicit base (repo default)."
+      base=""
+    fi
+  fi
+
+  echo "→ pre-push: nx affected -t test  (base=${base:-<default>}  head=$local_sha, ref=$local_ref)"
+
+  if [ -n "$base" ]; then
+    CI=true npx nx affected --target=test --base="$base" --head="$local_sha" --output-style=stream-without-prefixes
+  else
+    CI=true npx nx affected --target=test --head="$local_sha" --output-style=stream-without-prefixes
+  fi
+  status=$?
+
+  if [ "$status" -ne 0 ]; then
+    echo ""
+    echo "✖ pre-push: affected test failed for $local_ref — fix and re-push."
+    if [ -n "$base" ]; then
+      echo "  Inspect: npx nx affected -t test --base=$base --head=$local_sha"
+    else
+      echo "  Inspect: npx nx affected -t test --head=$local_sha"
+    fi
+    echo "  (bypass in an emergency with: git push --no-verify)"
+    overall_status=1
+  fi
+done
+
+if [ "$any_ref" -eq 0 ]; then
+  exit 0
+fi
+
+if [ "$overall_status" -ne 0 ]; then
+  exit 1
+fi
+
+echo "✓ pre-push: affected test clean."
+exit 0
