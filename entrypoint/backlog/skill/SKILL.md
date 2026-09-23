@@ -364,8 +364,8 @@ does. So, before filing:
 3. `create` with both `project` and `component`.
 
 A component-scoped scan is how a repo's own work is found (e.g.
-`filter.component:"entrypoint/backlog"` = 113 items; project `adhd` = 821); an
-item filed on `(root)` is invisible to it.
+`filter.component:"entrypoint/backlog"` for this repo's own items, or project
+`adhd`); an item filed on `(root)` is invisible to it.
 
 ### When to use each registry verb
 
@@ -447,22 +447,26 @@ $ adhd-backlog backlog query --input '{"view":"locations","filter":{"component":
 
 1. **Duplicate project identities.** The same repo can exist as TWO project
    rows — one path-derived, one repo-derived — and an item lands under
-   whichever name you pass. Live split (2026-09-22): `sox-ecosystem` (path,
-   732 items) vs `PseudoSky/sox-ecosystem` (no path, 0); `claude-agents`
-   (path, 47) vs `PseudoSky/claude-agents` (0); `claude-tools` (55) vs
-   `QuSecure/claude-tools` (17); `dot` (1) vs `id8/dot` (2). Prefer the row
-   that carries a `path` (and, for an active repo, the bulk of items) — an
-   item under the other row is invisible to a query scoped to the first.
-   (`adhd` is already reconciled to one row; `PseudoSky/adhd` does not exist.)
+   whichever name you pass. Observed split (2026-09-22): `sox-ecosystem` (path)
+   vs `PseudoSky/sox-ecosystem` (no path); `claude-agents` (path) vs
+   `PseudoSky/claude-agents`; `claude-tools` vs `QuSecure/claude-tools`;
+   `dot` vs `id8/dot`. Prefer the row that carries a `path` (and, for an
+   active repo, the bulk of the items) — an item under the other row is
+   invisible to a query scoped to the first. (`adhd` is already reconciled to
+   one row; `PseudoSky/adhd` does not exist.)
 2. **Store/scope confusion — an item can land in a store nobody reads.**
    `adhd-backlog sandbox-path` reports the store a command will touch. The
    production store is `~/.adhd/backlog/production/data/backlog-v2.db`;
-   `--namespace test` is a DIFFERENT file (`…/test/data/backlog.db`), and
-   `ADHD_BACKLOG_SCOPE=project` moves the store under `<repo>/.adhd/…`. A build
-   that writes a per-repo namespace (e.g. `entrypoint/backlog` on `main`) files
-   items that are silently absent from production — no error, just a missing
-   row (filed as 49ce83b8). Run `sandbox-path` before a write you care about,
-   and file through the production CLI only.
+   `--namespace test` resolves a DIFFERENT file (`…/test/data/backlog.db`).
+   `ADHD_BACKLOG_SCOPE=project` relocates the store under `<repo>/.adhd/…`
+   only for the FALLBACK path: an absolute `db.path` set in any config layer
+   wins over it (`db.path ?? files.db`), and this machine's production config
+   sets one — so here the scope does NOT move the store. Never infer the store
+   from the environment; run `sandbox-path` and read the path it prints. A
+   build that writes a per-repo namespace (e.g. `entrypoint/backlog` on
+   `main`) files items that are silently absent from production — no error,
+   just a missing row (filed as 49ce83b8). Run `sandbox-path` before a write
+   you care about, and file through the production CLI only.
 
 ## 5. Batch — N-way fan-out over one operation
 

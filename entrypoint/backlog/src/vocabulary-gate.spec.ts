@@ -194,6 +194,52 @@ describe('vocabulary gates have teeth (SPEC.md AC-1)', () => {
       ).toBe(2);
       expect(stderr).toMatch(/no dist/i);
     }, 120_000); // real `npm pack` of the fixture
+
+    /**
+     * The TARBALL gate's `.db` carve-out — unlike the source-tree half above,
+     * this one is LOAD-BEARING: `package.json`'s `files` packs `skill`, and
+     * the shipped `skill/SKILL.md` reproduces the live production store's
+     * filename verbatim, so that hit is scanned ONLY here (the source-tree
+     * gate's scope — `src/` plus top-level markdown — never sees `skill/`). A
+     * fixture whose packed `skill/*.md` carries a `<token>.db` data-file name
+     * must pass; the bare-token variant must still fail. Tokens are assembled
+     * at runtime — this spec is itself scanned by the source-tree gate.
+     */
+    it('exempts a packed `<token>.db` data-file name but still fails bare <token> prose', () => {
+      const TOKEN = ['v', '2'].join('');
+      const cleanRun = runNodeScript('scripts/check-vocabulary.mjs', [
+        makeFixture('tarball-skill-db-filename', {
+          'package.json': JSON.stringify({
+            name: 'vocab-fixture-skill-db',
+            version: '0.0.0',
+            files: ['dist', 'skill'],
+          }),
+          'dist/index.d.ts': 'export declare const ok: string;\n',
+          'skill/x.md': `The live production store is \`backlog-${TOKEN}.db\`.\n`,
+        }),
+      ]);
+      expect(
+        cleanRun.status,
+        `expected a packed data-file name 'backlog-${TOKEN}.db' to be exempt\nexited ${cleanRun.status}\n--- stdout ---\n${cleanRun.stdout}\n--- stderr ---\n${cleanRun.stderr}`
+      ).toBe(0);
+
+      const dirtyRun = runNodeScript('scripts/check-vocabulary.mjs', [
+        makeFixture('tarball-skill-bare-token', {
+          'package.json': JSON.stringify({
+            name: 'vocab-fixture-skill-bare',
+            version: '0.0.0',
+            files: ['dist', 'skill'],
+          }),
+          'dist/index.d.ts': 'export declare const ok: string;\n',
+          'skill/x.md': `this replaced the old backlog ${TOKEN} era\n`,
+        }),
+      ]);
+      expect(
+        dirtyRun.status,
+        `expected bare version-token prose in a packed skill doc to fail the gate\nexited ${dirtyRun.status}\n--- stdout ---\n${dirtyRun.stdout}\n--- stderr ---\n${dirtyRun.stderr}`
+      ).toBe(1);
+      expect(dirtyRun.stderr).toContain(join('skill', 'x.md'));
+    }, 120_000); // real `npm pack` of the fixture
   });
 
   it('the embedding-usage gate (tools/gate/embedding-usage-gate.mjs) exits 0 — every embedding-touching spec is a declared real-by-design or faked file', () => {

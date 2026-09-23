@@ -62,15 +62,21 @@ const TERMS = [
   // naming its own surface. `server.v2.spec.ts` is NOT exempted: `v2` there is
   // followed by `.s`, not by a digit, so the two cases separate cleanly
   // without a hand-maintained allowlist that would rot.
-  // `(?!\.db\b)` exempts a DATA-FILE NAME, the same way `(?!\.\d)` exempts a
-  // third-party version: `backlog-v2.db`, the live production store's actual
-  // filename (declared by `~/.adhd/backlog/production/config.yaml`'s `db.path`
-  // and reported by `sandbox-path`), is an operational identifier the docs
-  // must reproduce VERBATIM — not this package naming its own surface `v2`.
-  // Without this carve-out the gate forces the docs to either lie about the
-  // path or go silent, which is the opposite of its purpose. The exemption is
-  // exactly `.db` (word-bounded), so bare `v2` prose, `server.v2.spec.ts`, and
-  // `v2.dbx`-like names all still fail.
+  // `(?!\.db\b)` MIRRORS the tarball gate's carve-out
+  // (`scripts/check-vocabulary.mjs`), kept here for consistency across the two
+  // gates and for future `src/` use. It is deliberately NOT load-bearing for
+  // THIS gate today: no file in this gate's scope (`src/` plus the package's
+  // top-level markdown) contains a `.db` data-file name. The hit the carve-out
+  // actually protects is the shipped `skill/SKILL.md`, which reproduces the
+  // live production store's filename verbatim and is packed-and-scanned ONLY
+  // by the tarball gate (`package.json` `files` includes `skill`). Should a
+  // `src/` file ever need to name that store
+  // (`~/.adhd/backlog/production/data/backlog-v2.db`, declared by config.yaml
+  // `db.path` and reported by `sandbox-path`) — an operational identifier, not
+  // this package naming its own surface `v2` — this exemption keeps that
+  // possible rather than forcing the docs to lie about the path or go silent.
+  // The exemption is exactly `.db` (word-bounded), so bare `v2` prose,
+  // `server.v2.spec.ts`, and `v2.dbx`-like names all still fail.
   {
     name: 'v1',
     re: /(?<![a-z0-9])v1\b(?!\.\d)(?!\.db\b)/i,
