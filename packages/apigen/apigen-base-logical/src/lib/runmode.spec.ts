@@ -571,6 +571,246 @@ describe('buildTranscoder', () => {
       // decide, not declaration order.
       expect(transcoder.encode(value, schema)).toEqual(value);
     });
+
+    it('BUG-BACKLOG-QUERY-REGISTRY-VIEW-STRIPPED-001: a NO-discriminator union whose branches share identical top-level property NAMES is disambiguated by an implicit literal tag, never silently re-encoded through a sibling branch', () => {
+      // Reproduces `@adhd/backlog`'s `IIssueQueryResult` shape directly: no
+      // `discriminator` block at all (an anonymous TS union of inline
+      // object-literal types), and two branches — `view:'ready'` (an
+      // IIssueCard-shaped item) and `view:'projects'` (an IProjectSummary-
+      // shaped item) — that declare the EXACT SAME top-level property names
+      // (`view`, `items`), so `scoreUnionBranch` alone cannot tell them
+      // apart: both score identically regardless of what `items` actually
+      // holds, since the mismatch lives one level deeper, inside `items`'s
+      // element schema, which scoring never inspects.
+      const transcoder = buildTranscoder(createRegistry().freeze());
+
+      const schema: SchemaNode = {
+        oneOf: [
+          {
+            type: 'object',
+            properties: {
+              view: { type: 'string', const: 'ready' },
+              items: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: { uid: { type: 'string' }, title: { type: 'string' } },
+                  required: ['uid'],
+                },
+              },
+            },
+            required: ['view', 'items'],
+          },
+          {
+            type: 'object',
+            properties: {
+              view: { type: 'string', const: 'projects' },
+              items: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    uid: { type: 'string' },
+                    name: { type: 'string' },
+                    path: { type: 'string' },
+                  },
+                  required: ['uid', 'name'],
+                },
+              },
+            },
+            required: ['view', 'items'],
+          },
+        ],
+      };
+
+      const registryValue = {
+        view: 'projects',
+        items: [{ uid: 'p1', name: 'demo-project', path: '/tmp/demo' }],
+      };
+
+      // Before this fix: `scoreUnionBranch` tied both branches (identical
+      // required-key sets `['view','items']`), the documented tie-break
+      // picked the EARLIEST branch (`view:'ready'`, an `IIssueCard`-item
+      // shape), and its declared `properties.items.items.properties` (only
+      // `uid`/`title`) does not know `name`/`path` at all — dropping them.
+      // Live-verified against the real built `@adhd/backlog` CLI:
+      // `query --input '{"view":"projects"}'` returned `{items:[{uid:"..."}]}`
+      // with `name`/`path` silently gone.
+      expect(transcoder.encode(registryValue, schema)).toEqual(registryValue);
+
+      // The SAME union still routes the OTHER branch correctly — proof this
+      // is a real discriminating fix, not a blanket "always prefer the
+      // later/registry-shaped branch" that would merely invert the bug.
+      const issueValue = { view: 'ready', items: [{ uid: 'i1', title: 'An issue' }] };
+      expect(transcoder.encode(issueValue, schema)).toEqual(issueValue);
+    });
+
+    // ── S-18: implicit-discriminator tag must be PRESENT to match ─────────────
+    //
+    // `findImplicitDiscriminatorBranch` builds `literalsByBranch[i]` as "the
+    // literal branch i pins this property to, or `undefined` when branch i does
+    // NOT declare the property at all". A value that OMITS the discriminator
+    // property has `bag[propertyName] === undefined`, and the old
+    // `literalsByBranch.findIndex((v) => v === tag)` then matched the FIRST
+    // branch that merely does not declare the property (`undefined ===
+    // undefined`). That branch is chosen and `pickUnionBranch` silently
+    // re-encodes the value through it, dropping every field it doesn't model —
+    // the same silent-data-loss class this resolution order exists to prevent.
+    //
+    // NEGATIVE CONTROL (verified, not assumed): against the pre-fix code the
+    // assertion below fails with `{ a: 'x' }` — branch 0's projection, with
+    // `b`/`c` silently deleted. The correct behavior is to treat a missing tag
+    // as NO implicit match and fall through to structural scoring, which picks
+    // branch 2 and preserves every field.
+    it('S-18: a value MISSING the implicit discriminator tag never selects the non-declaring branch by undefined===undefined — it falls through to structural scoring', () => {
+      const transcoder = buildTranscoder(createRegistry().freeze());
+
+      const schema: SchemaNode = {
+        oneOf: [
+          // Branch 0 declares NO `view` — the branch the buggy
+          // `undefined === undefined` match used to select.
+          {
+            type: 'object',
+            properties: { a: { type: 'string' } },
+          },
+          {
+            type: 'object',
+            properties: {
+              view: { type: 'string', const: 'ready' },
+              a: { type: 'string' },
+              b: { type: 'string' },
+            },
+            required: ['a', 'b'],
+          },
+          {
+            type: 'object',
+            properties: {
+              view: { type: 'string', const: 'projects' },
+              a: { type: 'string' },
+              b: { type: 'string' },
+              c: { type: 'string' },
+            },
+            required: ['a', 'b', 'c'],
+          },
+        ],
+      };
+
+      const value = { a: 'x', b: 'y', c: 'z' };
+
+      // Pre-fix this returned `{ a: 'x' }` — branch 0's projection, with `b`
+      // and `c` silently deleted. Post-fix structural scoring selects branch 2
+      // (its `required:['a','b','c']` is the only exact match) and the whole
+      // value round-trips.
+      expect(transcoder.encode(value, schema)).toEqual(value);
+    });
+
+    // Shared fixture for the S-18 cases below: three branches where `view` is
+    // the implicit discriminator (a distinct literal on branches 1 and 2) and
+    // branch 0 deliberately declares NO `view`.
+    const S18_SCHEMA: SchemaNode = {
+      oneOf: [
+        { type: 'object', properties: { a: { type: 'string' } } },
+        {
+          type: 'object',
+          properties: {
+            view: { type: 'string', const: 'ready' },
+            a: { type: 'string' },
+            b: { type: 'string' },
+          },
+          required: ['a', 'b'],
+        },
+        {
+          type: 'object',
+          properties: {
+            view: { type: 'string', const: 'projects' },
+            a: { type: 'string' },
+            b: { type: 'string' },
+            c: { type: 'string' },
+          },
+          required: ['a', 'b', 'c'],
+        },
+      ],
+    };
+
+    it('S-18: when the implicit discriminator tag IS present, the branch pinning that literal is selected', () => {
+      const transcoder = buildTranscoder(createRegistry().freeze());
+
+      // `view:'projects'` matches branch 2's const — the branch selected, so
+      // its declared `properties` (a/b/c/view) are what the walk projects.
+      const projects = { view: 'projects', a: 'x', b: 'y', c: 'z' };
+      expect(transcoder.encode(projects, S18_SCHEMA)).toEqual(projects);
+
+      // The SAME union still routes the other literal to its own branch —
+      // proof this is a real per-literal match, not a fixed preference.
+      const ready = { view: 'ready', a: 'x', b: 'y' };
+      expect(transcoder.encode(ready, S18_SCHEMA)).toEqual(ready);
+    });
+
+    it('S-18: an UNMODELLED tag value matches no implicit literal and falls through to structural scoring', () => {
+      const transcoder = buildTranscoder(createRegistry().freeze());
+
+      // No branch pins `view:'archived'`. The implicit matcher must skip every
+      // candidate (never guess), leaving structural scoring to pick branch 2
+      // (its `required:['a','b','c']` is the best fit) — which preserves the
+      // unmodelled tag itself along with every other field.
+      const value = { view: 'archived', a: 'x', b: 'y', c: 'z' };
+      expect(transcoder.encode(value, S18_SCHEMA)).toEqual(value);
+    });
+
+    it('S-18: null, a non-object, and an array yield no implicit match and never crash', () => {
+      const transcoder = buildTranscoder(createRegistry().freeze());
+
+      // Step 0 of the contract: a null / non-object / array value returns
+      // `undefined` immediately (there is no bag to read a tag from), so the
+      // walk falls through to structural scoring and ultimately passthrough.
+      expect(transcoder.encode(null, S18_SCHEMA)).toBeNull();
+      expect(transcoder.encode('ready', S18_SCHEMA)).toBe('ready');
+      expect(transcoder.encode(['x'], S18_SCHEMA)).toEqual(['x']);
+    });
+
+    it('S-18: a property two branches pin to the SAME literal is not a discriminator (candidate disqualified)', () => {
+      const transcoder = buildTranscoder(createRegistry().freeze());
+
+      const schema: SchemaNode = {
+        oneOf: [
+          {
+            type: 'object',
+            properties: {
+              view: { type: 'string', const: 'ready' },
+              a: { type: 'string' },
+            },
+            required: ['a'],
+          },
+          {
+            type: 'object',
+            properties: {
+              view: { type: 'string', const: 'ready' },
+              b: { type: 'string' },
+              c: { type: 'string' },
+            },
+            required: ['b', 'c'],
+          },
+          {
+            type: 'object',
+            properties: {
+              view: { type: 'string', const: 'projects' },
+              d: { type: 'string' },
+            },
+            required: ['d'],
+          },
+        ],
+      };
+
+      const value = { view: 'ready', b: 'y', c: 'z' };
+
+      // `view` repeats the literal 'ready' on branches 0 and 1, so it
+      // discriminates nothing and the candidate is skipped. Structural scoring
+      // then selects branch 1 (`required:['b','c']`), preserving the value.
+      // Teeth: if the repeated literal were wrongly honoured, `view:'ready'`
+      // would match branch 0 first and project `{view:'ready'}` — `b`/`c`
+      // silently dropped — failing this assertion.
+      expect(transcoder.encode(value, schema)).toEqual(value);
+    });
   });
 
   describe('schema-less envelope (any position)', () => {

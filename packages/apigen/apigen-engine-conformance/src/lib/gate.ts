@@ -779,9 +779,16 @@ export function runJavaMatrix(
     mvnPid = result.pid;
 
     if (result.status !== 0) {
-      const detail = result.stderr ?? result.error?.message ?? 'unknown error';
+      // Include BOTH streams: Maven prints its real `[ERROR]` diagnostics to
+      // STDOUT (e.g. the shade-plugin failures), while STDERR carries only
+      // JVM/plugin startup warnings — reading stderr alone silently discarded
+      // the real cause (BUG 73741a3c).
+      const stdout = result.stdout ?? '';
+      const stderr = result.stderr ?? '';
+      const spawnErr = result.error ? `\n[spawn error] ${result.error.message}` : '';
       throw new Error(
-        `Java matrix subprocess failed (exit ${String(result.status)}):\n${detail}`
+        `Java matrix subprocess failed (exit ${String(result.status)}):\n` +
+          `--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}${spawnErr}`
       );
     }
 

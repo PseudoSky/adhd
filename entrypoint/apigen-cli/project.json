@@ -12,6 +12,10 @@
   },
   "tags": ["layer:entrypoints", "platform:node"],
   "targets": {
+    "test": {
+      "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference — the inferred coverage output matches vite.config.ts's reportsDirectory, which main's explicit output did not). Adds the project's OWN `build` — the integration specs (ir-cache-plugin-registration, java-ts-decimal-parity) spawn the built CLI bin — and `apigen-java:package`, which the java-javalin parity host needs (PR #11). `lint`/`^build` mirror the workspace `test` targetDefaults, which an explicit dependsOn otherwise replaces.",
+      "dependsOn": ["lint", "^build", "build", "apigen-java:package"]
+    },
     "generate-api": {
       "executor": "@adhd/apigen-nx:generate",
       "cache": true,

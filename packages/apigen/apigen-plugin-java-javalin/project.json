@@ -10,6 +10,10 @@
   },
   "tags": ["domain:apigen", "pkg-kind:plugin", "layer:logic", "platform:node"],
   "targets": {
+    "test": {
+      "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference). `apigen-java:package` is preserved from PR #11: the javalin plugin resolves the packaged `packages/apigen/java` module and its shaded jar. `lint`/`^build` mirror the workspace `test` targetDefaults, which an explicit dependsOn otherwise replaces.",
+      "dependsOn": ["lint", "^build", "apigen-java:package"]
+    },
     "nx-release-publish": {
       "dependsOn": [
         "build",

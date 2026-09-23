@@ -12,6 +12,10 @@
   },
   "tags": ["layer:logic", "platform:shared"],
   "targets": {
+    "test": {
+      "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference). Adds the project's OWN `build` because dist-artifact-smoke.spec.ts loads dist/index.mjs through Node's native ESM loader (PR #11) — `^build` alone builds only dependencies, not this package. `lint`/`^build` mirror the workspace `test` targetDefaults, which an explicit dependsOn otherwise replaces.",
+      "dependsOn": ["lint", "^build", "build"]
+    },
     "nx-release-publish": {
       "dependsOn": [
         "build",
