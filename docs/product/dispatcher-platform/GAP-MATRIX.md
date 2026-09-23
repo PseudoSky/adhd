@@ -148,9 +148,9 @@ Rows 1, 2, 3, 4, and 7 below were originally filed as `absent` on the false prem
 ### 20. Backlog as a work source for dispatch plans
 - **Criticality:** important
 - **State:** partial
-- **Owner:** `entrypoint/backlog` + `docs/plan/backlog-interface-v2-dispatch`
+- **Owner:** `entrypoint/backlog`
 - **Epic:** EPIC-DISPATCH-05-work-authoring
-- **Evidence:** `docs/plan/backlog-interface-v2-dispatch` already designs backlog-as-work-orders — 45 work orders authored across 7 epics, zero claimed (per the plan-corpus audit's finding-2).
+- **Evidence:** `entrypoint/backlog/src/query/query.ts:795-800` dispatches `view:'ready'|'graph'|'order'` to real `queryReady`/`queryGraph`/`queryOrder` implementations over `blocks`/`blocked_by` traversal (`query.ts:531`, `:572`) — the graph primitives a dispatch DAG needs (readiness, dependency graph, topological order) are shipped and real, not just designed. No work-order-authoring layer on top of them has been built — hence "partial."
 
 ### 21. Cross-repo-key backlog dedupe for this repo
 - **Criticality:** important

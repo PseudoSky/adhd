@@ -1,5 +1,5 @@
 /**
- * install-skill.ts — `backlog install-skill` (MIGRATION.md §4.2). A PURE
+ * install-skill.ts — `backlog install-skill`. A PURE
  * filesystem operation: copy the packaged `skill/SKILL.md` (this package's
  * OWN single source of truth for the skill's content, versioned in lockstep
  * with `client.ts` in the exact same publish — see `package.json`'s `files`
@@ -10,12 +10,12 @@
  * building the apigen package, the same way `cliPlugin.run()` itself
  * special-cases `--help`/`-h` before consulting its own route table.
  *
- * No new external dependency (`soxe` et al.) — MIGRATION.md §4.2's explicit
+ * No new external dependency (`soxe` et al.) — this package's explicit
  * design decision: a second published package or a hard dependency on an
  * external installer CLI both need human approval this repo has NOT granted
  * (`AGENTS.md`: "You always get human approval before installing external
- * tools"). This is the zero-new-dependency fallback the plan itself
- * recommends.
+ * tools"). Copying the packaged file directly is the zero-new-dependency
+ * approach the design settles on.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -36,19 +36,33 @@ export const ALL_HOSTS: readonly SkillHost[] = ['claude', 'codex', 'opencode'];
  * `~/.config/opencode/`, mirroring its own `.opencode/` project-root
  * convention — `sox-host-registry.md` lines 78-81).
  */
-const PROJECT_DIR_BY_HOST: Record<SkillHost, string> = { claude: '.claude', codex: '.codex', opencode: '.opencode' };
+const PROJECT_DIR_BY_HOST: Record<SkillHost, string> = {
+  claude: '.claude',
+  codex: '.codex',
+  opencode: '.opencode',
+};
 
 /** Exported so `install.ts`'s codex MCP-registration path (which needs the
  *  SAME `~/.codex` (or `$CODEX_HOME`) root as the skill installer, but the
  *  file `config.toml` rather than a `skills/` subdirectory) never
  *  re-derives — and risks desyncing from — this resolution rule. */
-export function resolveCodexHomeDir(home: string, homeOverride?: string): string {
+export function resolveCodexHomeDir(
+  home: string,
+  homeOverride?: string
+): string {
   // `CODEX_HOME` is only honored for the REAL machine home (never under a
   // test's isolated `homeOverride`, which must be fully self-contained).
-  return homeOverride ? join(home, '.codex') : (process.env['CODEX_HOME'] ?? join(home, '.codex'));
+  return homeOverride
+    ? join(home, '.codex')
+    : process.env['CODEX_HOME'] ?? join(home, '.codex');
 }
 
-export function hostSkillsDir(host: SkillHost, scope: SkillScope, cwd: string, homeOverride?: string): string {
+export function hostSkillsDir(
+  host: SkillHost,
+  scope: SkillScope,
+  cwd: string,
+  homeOverride?: string
+): string {
   if (scope === 'project') {
     return join(cwd, PROJECT_DIR_BY_HOST[host], 'skills');
   }
@@ -110,14 +124,16 @@ export class BacklogUsageError extends Error {
 }
 
 /**
- * Prints a usage error the SAME way the apigen-mounted verbs and
- * `runMigrationPhaseCommand` already do — a machine-readable
+ * Prints a usage error the SAME way the apigen-mounted verbs and every
+ * other CLI command's own rejection path already do — a machine-readable
  * `{"code":"invalid_argument","message":…}` as the last stderr line, exit
  * code 2 (`CLI_EXIT_CODE['invalid_argument']`) — plus the human-readable
  * usage text, so a reader gets both the parse and the fix in one screen.
  */
 export function failUsage(err: BacklogUsageError, helpText: string): void {
-  console.error(JSON.stringify({ code: 'invalid_argument', message: err.message }));
+  console.error(
+    JSON.stringify({ code: 'invalid_argument', message: err.message })
+  );
   console.error('');
   console.error(helpText);
   process.exitCode = 2;
@@ -151,7 +167,10 @@ function parseArgs(argv: string[]): ParsedInstallSkillArgs {
     const arg = argv[i];
     if (arg === '--host') hostArg = argv[++i] ?? 'all';
     else if (arg === '--scope') scope = (argv[++i] as SkillScope) ?? 'user';
-    else throw new BacklogUsageError(`backlog install-skill: unknown argument "${arg}" (expected --host/--scope)`);
+    else
+      throw new BacklogUsageError(
+        `backlog install-skill: unknown argument "${arg}" (expected --host/--scope)`
+      );
   }
   if (scope !== 'user' && scope !== 'project') {
     // "global" is the single most common wrong guess (it is what every other
@@ -159,7 +178,8 @@ function parseArgs(argv: string[]): ParsedInstallSkillArgs {
     // listing the valid set. Deliberately NOT silently aliased to "user":
     // silent coercion of a caller's stated intent is the defect shape this
     // codebase treats as a bug (see BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001).
-    const hint = scope === 'global' ? ' — the machine-wide scope is spelled "user"' : '';
+    const hint =
+      scope === 'global' ? ' — the machine-wide scope is spelled "user"' : '';
     throw new BacklogUsageError(
       `backlog install-skill: --scope must be "user" or "project", got "${scope}"${hint}`
     );
@@ -167,7 +187,11 @@ function parseArgs(argv: string[]): ParsedInstallSkillArgs {
   const hosts = hostArg === 'all' ? [...ALL_HOSTS] : [hostArg as SkillHost];
   for (const h of hosts) {
     if (!ALL_HOSTS.includes(h)) {
-      throw new BacklogUsageError(`backlog install-skill: --host must be one of ${ALL_HOSTS.join('|')}|all, got "${hostArg}"`);
+      throw new BacklogUsageError(
+        `backlog install-skill: --host must be one of ${ALL_HOSTS.join(
+          '|'
+        )}|all, got "${hostArg}"`
+      );
     }
   }
   return { hosts, scope };
@@ -193,7 +217,11 @@ export interface InstallSkillResult {
  * package) — never passed by `runInstallSkillCommand`/the real CLI, which
  * always resolves the genuine machine home directory for `--scope user`.
  */
-export function installSkill(argv: string[], cwd: string = process.cwd(), homeOverride?: string): InstallSkillResult[] {
+export function installSkill(
+  argv: string[],
+  cwd: string = process.cwd(),
+  homeOverride?: string
+): InstallSkillResult[] {
   const { hosts, scope } = parseArgs(argv);
   return installSkillToHosts(hosts, scope, cwd, homeOverride);
 }
@@ -205,10 +233,17 @@ export function installSkill(argv: string[], cwd: string = process.cwd(), homeOv
  * already-parsed `{ hosts, scope }` instead of re-parsing (and risking a
  * DIFFERENT `--host`/`--scope` grammar from) a raw argv a second time.
  */
-export function installSkillToHosts(hosts: SkillHost[], scope: SkillScope, cwd: string, homeOverride?: string): InstallSkillResult[] {
+export function installSkillToHosts(
+  hosts: SkillHost[],
+  scope: SkillScope,
+  cwd: string,
+  homeOverride?: string
+): InstallSkillResult[] {
   const skillMdSource = packagedSkillMdPath();
   if (!existsSync(skillMdSource)) {
-    throw new Error(`backlog install-skill: packaged skill file not found at ${skillMdSource} — was @adhd/backlog built/installed correctly?`);
+    throw new Error(
+      `backlog install-skill: packaged skill file not found at ${skillMdSource} — was @adhd/backlog built/installed correctly?`
+    );
   }
   const skillMdContent = readFileSync(skillMdSource, 'utf8');
 
@@ -219,19 +254,36 @@ export function installSkillToHosts(hosts: SkillHost[], scope: SkillScope, cwd: 
   // sibling-first probe as `packagedSkillMdPath()`.
   const hereForPkg = dirname(fileURLToPath(import.meta.url));
   const siblingPkgJson = join(hereForPkg, 'package.json');
-  const pkgJsonPath = existsSync(siblingPkgJson) ? siblingPkgJson : join(hereForPkg, '..', 'package.json');
-  const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8')) as { name: string; version: string };
+  const pkgJsonPath = existsSync(siblingPkgJson)
+    ? siblingPkgJson
+    : join(hereForPkg, '..', 'package.json');
+  const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8')) as {
+    name: string;
+    version: string;
+  };
 
   const results: InstallSkillResult[] = [];
   for (const host of hosts) {
-    const targetDir = join(hostSkillsDir(host, scope, cwd, homeOverride), 'backlog');
+    const targetDir = join(
+      hostSkillsDir(host, scope, cwd, homeOverride),
+      'backlog'
+    );
     mkdirSync(targetDir, { recursive: true });
     const targetSkillMd = join(targetDir, 'SKILL.md');
     writeFileSync(targetSkillMd, skillMdContent, 'utf8');
     writeFileSync(
       join(targetDir, 'extension.json'),
-      JSON.stringify({ name: pkg.name, version: pkg.version, type: 'skill', entrypoint: 'SKILL.md' }, null, 2) + '\n',
-      'utf8',
+      JSON.stringify(
+        {
+          name: pkg.name,
+          version: pkg.version,
+          type: 'skill',
+          entrypoint: 'SKILL.md',
+        },
+        null,
+        2
+      ) + '\n',
+      'utf8'
     );
     results.push({ host, scope, path: targetSkillMd });
   }
@@ -245,10 +297,11 @@ export function installSkillToHosts(hosts: SkillHost[], scope: SkillScope, cwd: 
  *  dispatch entirely. */
 export async function runInstallSkillCommand(argv: string[]): Promise<void> {
   // `--help`/`-h` ANYWHERE in argv is a usage request, never an unknown
-  // argument — matching `runMigrationPhaseCommand`'s `rest.includes('--help')`
-  // and cli-output's own pre-dispatch check. Previously `--help` fell through
-  // to parseArgs and came back as `unknown argument "--help"` on a stack
-  // trace, which is the exact opposite of what the reader asked for.
+  // argument — matching cli-output's own pre-dispatch check and every other
+  // CLI command's own `rest.includes('--help')` handling. Checking for it
+  // here, ahead of `parseArgs`, keeps a usage request from ever being
+  // misread as an unknown argument and surfaced as a raw stack trace, which
+  // would be the exact opposite of what the reader asked for.
   if (argv.includes('--help') || argv.includes('-h')) {
     console.log(INSTALL_SKILL_HELP_TEXT);
     return;
@@ -257,7 +310,8 @@ export async function runInstallSkillCommand(argv: string[]): Promise<void> {
   try {
     results = installSkill(argv);
   } catch (err) {
-    if (err instanceof BacklogUsageError) return failUsage(err, INSTALL_SKILL_HELP_TEXT);
+    if (err instanceof BacklogUsageError)
+      return failUsage(err, INSTALL_SKILL_HELP_TEXT);
     throw err;
   }
   console.log(JSON.stringify({ installed: results }));

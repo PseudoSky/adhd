@@ -1,6 +1,6 @@
 /**
  * serve.ts — `backlog serve [--transport mcp|http|both] [--port N] [--host H]`
- * (MIGRATION.md §4.5). A thin CLI entry point onto the existing
+ * (per the CLI spec §4.5). A thin CLI entry point onto the existing
  * `startBacklogServer` library function (`server.ts`) — the ONLY thing this
  * adds is a process-lifetime wrapper (SIGTERM/SIGINT → `AbortController`,
  * matching `test/fixtures/mcp-stdio-entry.js`'s own proven pattern) so
@@ -39,23 +39,30 @@
  * dispatched any request handling.
  *
  * BUG-014-LOCK-ORDER: `initTelemetry({ logSink: 'file' })` performs real
- * synchronous file I/O (opens a log file). `startBacklogServer` (server.ts)
- * claims the `[inv:singleton]` writer lock (`store/serve-lock.ts`,
- * `acquireServeLock`) SYNCHRONOUSLY, before its first `await` — but only if
- * nothing runs ahead of it that could stretch the window between two
- * concurrent `serve` starts. Calling `initTelemetry` before
- * `startBacklogServer` (as an earlier version of this fix did) put that
- * synchronous file I/O ahead of lock acquisition on the critical path,
- * which is never correct ordering for a singleton guard regardless of
- * whether it can be proven to flip an observed test result: the guard
- * should never have anything unrelated to its own correctness able to
- * widen its claim window. `startBacklogServer(...)` is therefore invoked
- * FIRST (unawaited) below — its synchronous prefix, ending at its own
- * first `await` (well past `acquireServeLock`), runs to completion in this
- * same tick before control ever returns here — and `initTelemetry` is
- * called only after that statement, never before. See
- * `serve.telemetry-role.spec.ts`'s ordering test for the regression proof.
+ * synchronous file I/O (opens a log file) and is explicitly best-effort —
+ * non-fatal by design (see the `catch` around it below): telemetry must
+ * never take the server down, and must never delay it either.
+ * `startBacklogServer` (server.ts) has its own synchronous prefix (env
+ * resolution via `buildBacklogEnv`, `env.ensureDirs()`'s real filesystem
+ * work, db-path resolution, and signal-cleanup registration) that runs to
+ * completion in the SAME tick, ending only at its first genuine `await`
+ * (`openGraphBacklogStore`). Calling `initTelemetry` before
+ * `startBacklogServer` (as an earlier version of this fix did) put
+ * telemetry's blocking file I/O ahead of that real startup work on the
+ * critical path — a best-effort, non-fatal call should never be able to
+ * delay the thing it is merely annotating. `startBacklogServer(...)` is
+ * therefore invoked FIRST (unawaited) below — its synchronous prefix runs
+ * to completion in this same tick before control ever returns here — and
+ * `initTelemetry` is called only after that statement, never before. (This
+ * ordering previously also protected `[inv:singleton]`'s serve-lock claim
+ * window; that lock was removed as unnecessary defense-in-depth — see
+ * STATE.md A17 — but the startup-latency reason for the ordering stands on
+ * its own and is preserved here.) See `serve.telemetry-role.spec.ts`'s
+ * ordering test for the regression proof.
  */
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Scope } from '@adhd/environment-base-spec';
 import { initTelemetry } from '@adhd/sox-telemetry';
 import { startBacklogServer, type StartOpts } from './server.js';
@@ -66,6 +73,11 @@ export interface RunServeCommandOpts {
   /** Test-only override — see `buildBacklogEnv`'s `BuildBacklogEnvOptions`. */
   adhdRoot?: string;
   cwd?: string;
+  /** Explicit-parameter-first namespace override — see
+   *  `BuildBacklogEnvOptions.namespace`'s doc comment. `--namespace sandbox
+   *  serve` (cli.ts) sets this to `'sandbox'`, along with minting a fresh
+   *  `adhdRoot` and writing D8's sandbox `config.yaml`. */
+  namespace?: string;
 }
 
 /**
@@ -96,7 +108,9 @@ Examples:
   backlog serve --transport both --host 0.0.0.0
 `;
 
-function parseArgs(argv: string[]): Pick<StartOpts, 'transport' | 'port' | 'host'> {
+function parseArgs(
+  argv: string[]
+): Pick<StartOpts, 'transport' | 'port' | 'host'> {
   let transport: StartOpts['transport'] = 'mcp';
   let port: number | undefined;
   let host: string | undefined;
@@ -105,10 +119,15 @@ function parseArgs(argv: string[]): Pick<StartOpts, 'transport' | 'port' | 'host
     if (arg === '--transport') transport = argv[++i] as StartOpts['transport'];
     else if (arg === '--port') port = Number(argv[++i]);
     else if (arg === '--host') host = argv[++i];
-    else throw new BacklogUsageError(`backlog serve: unknown argument "${arg}" (expected --transport/--port/--host)`);
+    else
+      throw new BacklogUsageError(
+        `backlog serve: unknown argument "${arg}" (expected --transport/--port/--host)`
+      );
   }
   if (transport !== 'mcp' && transport !== 'http' && transport !== 'both') {
-    throw new BacklogUsageError(`backlog serve: --transport must be mcp|http|both, got "${transport}"`);
+    throw new BacklogUsageError(
+      `backlog serve: --transport must be mcp|http|both, got "${transport}"`
+    );
   }
   const opts: Pick<StartOpts, 'transport' | 'port' | 'host'> = { transport };
   if (port !== undefined) opts.port = port;
@@ -119,7 +138,10 @@ function parseArgs(argv: string[]): Pick<StartOpts, 'transport' | 'port' | 'host
 /** Runs until the process receives SIGTERM/SIGINT (the normal way a host
  *  process manager — or `.mcp.json`'s own stdio transport lifecycle — stops
  *  a long-lived MCP/HTTP server), then resolves cleanly. */
-export async function runServeCommand(argv: string[], opts: RunServeCommandOpts = {}): Promise<void> {
+export async function runServeCommand(
+  argv: string[],
+  opts: RunServeCommandOpts = {}
+): Promise<void> {
   if (argv.includes('--help') || argv.includes('-h')) {
     console.log(SERVE_HELP_TEXT);
     return;
@@ -128,30 +150,58 @@ export async function runServeCommand(argv: string[], opts: RunServeCommandOpts 
   try {
     parsed = parseArgs(argv);
   } catch (err) {
-    if (err instanceof BacklogUsageError) return failUsage(err, SERVE_HELP_TEXT);
+    if (err instanceof BacklogUsageError)
+      return failUsage(err, SERVE_HELP_TEXT);
     throw err;
   }
   const controller = new AbortController();
   process.on('SIGTERM', () => controller.abort());
   process.on('SIGINT', () => controller.abort());
   // BUG-014-LOCK-ORDER: kick off `startBacklogServer` FIRST, unawaited.
-  // Its synchronous prefix (env resolution + the `[inv:singleton]`
-  // `acquireServeLock` call, both in server.ts, ahead of its own first
-  // `await`) runs to completion in THIS tick, before this function ever
-  // reaches the `initTelemetry` call below — so telemetry's file I/O can
-  // never precede lock acquisition. See the file-level doc comment.
-  const serverPromise = startBacklogServer({ ...parsed, ...opts, signal: controller.signal });
+  // Its synchronous prefix (env resolution + `env.ensureDirs()` + signal-
+  // cleanup registration, all in server.ts, ahead of its own first `await`)
+  // runs to completion in THIS tick, before this function ever reaches the
+  // `initTelemetry` call below — so telemetry's best-effort, non-fatal file
+  // I/O can never precede or delay the server's real startup work. See the
+  // file-level doc comment.
+  const serverPromise = startBacklogServer({
+    ...parsed,
+    ...opts,
+    signal: controller.signal,
+  });
   // BUG-014: re-stamp this process as the live-service population before
   // any request handling starts — see the file-level doc comment above.
   // Non-fatal by design, matching the bin-entry guard's own contract:
   // telemetry must never take the server down.
+  //
+  // BUG-BACKLOG-SANDBOX-SERVE-TELEMETRY-001 (found during SPEC.md §5c's
+  // `--namespace sandbox serve` proof, entrypoint/backlog): this re-init
+  // previously carried NO `logDir` override at all, so it silently UNDID
+  // `index.ts`'s bin-entry guard's own sandbox redirect the moment `serve`
+  // re-stamped telemetry a few lines below — a real `--namespace sandbox
+  // serve` invocation's telemetry ended up written to the REAL, HOME-
+  // anchored `~/.adhd/sox-ecosystem/backlog/logs` after all, defeating
+  // BUG-BACKLOG-SANDBOX-TELEMETRY-001's guarantee for every long-lived
+  // `serve` session (proven empirically: `home/.adhd/sox-ecosystem` was
+  // created by a real `--namespace sandbox serve` run against a fake HOME).
+  // Mirrors `index.ts`'s own mint-a-fresh-logs-tmpdir pattern, re-keyed off
+  // this function's own `opts.namespace` rather than re-parsing argv.
+  const sandboxLogDir =
+    opts.namespace === 'sandbox'
+      ? mkdtempSync(join(tmpdir(), 'backlog-sandbox-logs-'))
+      : undefined;
   try {
-    initTelemetry({ service: 'backlog', role: 'live-service', logSink: 'file' });
+    initTelemetry({
+      service: 'backlog',
+      role: 'live-service',
+      logSink: 'file',
+      ...(sandboxLogDir !== undefined ? { logDir: sandboxLogDir } : {}),
+    });
   } catch (err) {
     console.error(
       `[sox-telemetry] WARNING: initTelemetry failed for serve (${
         err instanceof Error ? err.message : String(err)
-      }); telemetry records will be silently dropped this process`,
+      }); telemetry records will be silently dropped this process`
     );
   }
   await serverPromise;

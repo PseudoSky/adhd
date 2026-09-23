@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../../../dist/out-tsc-etl",
+    "declaration": false,
+    "types": ["node"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmit": true
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["**/*.spec.ts"]
+}

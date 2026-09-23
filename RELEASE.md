@@ -11,7 +11,7 @@
 
 This release represents a **fundamental retooling of the @adhd ecosystem** across every layer:
 
-- **Brand-new product**: [`@adhd/backlog`](#backlog-graph-based-backlog-management) — graph-based backlog management with 34 CLI/HTTP/MCP operations, replacing hand-edited markdown with an authoritative graph store
+- **Brand-new product**: [`@adhd/backlog`](#backlog-graph-based-backlog-management) — graph-based backlog management over four transports, replacing hand-edited markdown with an authoritative graph store
 - **Build pipeline overhaul**: The monorepo's own build tooling is now a first-class @adhd subsystem — 5 custom Nx plugins, 10+ executors, published-state cache, centralized metrics with CPU guard
 - **Apigen maturation**: serve-core OpPlan/TransportAdapter refactor, canonical route/tool-name projection across all 8 transport plugins, CLI passthrough, configurable namespace, Python extract/serve split (Flask + gRPC)
 - **Agent ecosystem hardening**: Import-time DB side effects eliminated (12 packages), SSE port contention fixed, fresh-machine registry DB setup, environment cascade now powers all agent config
@@ -23,30 +23,45 @@ This release represents a **fundamental retooling of the @adhd ecosystem** acros
 
 ### @adhd/backlog — Graph-Based Backlog Management
 
-A brand-new package: **graph-backed multi-agent backlog manager** with three live transports (CLI, HTTP, MCP stdio), all mounted via apigen's live `run()` path — no code generation.
+A brand-new package: **graph-backed multi-agent backlog manager** — issues, a
+project/component/location registry, and the relationships between them, served from
+one store over four transports (CLI, HTTP, MCP stdio, and in-process), all mounted via
+apigen's live `run()` path — no code generation.
 
-- **34 operations**: CRUD, query/report, lifecycle (transition, archive, resolve), multi-agent coordination (claim, renew, release, assign), structure (dependencies, supersede, split, merge), markdown interop (import/render with parity-check gate)
-- **Concurrency-safe SQLite graph store**: TOCTOU-free ID allocation via CAS inside `.immediate()` transaction, bounded jittered exponential backoff for `SQLITE_BUSY`, 20-worker race-free proven at the test level
-- **Audit-log event system**: Every transition, claim, and release is independently recoverable via `DERIVED_FROM` audit nodes — immune to metadata-replace semantics
-- **UPSERT markdown import**: Re-importing a BACKLOG.md diff-and-updates against the live graph, with ownership-gated cross-file edits and malformed-header diagnostics
-- **Phase-3 migration active**: Graph is authoritative, CLI/MCP is the write path, `BACKLOG.md` is a generated projection verified by a parity-check gate
-- **Installable agent skill**: `backlog install-skill --host opencode` installs the skill file for MCP-based backlog access
-
-- **`backlog install-skill`**: One-command skill installation to any supported host (claude, codex, opencode). Zero external dependencies — copies the packaged `skill/SKILL.md` to the correct per-host skill directory. Verified on opencode.
-
-Verified: `backlog --help` lists 34 commands, 249 items tracked (211 open).
+- **14 verbs, one calling convention**: `claim`, `create`, `delete`, `get`, `lookup`,
+  `move`, `query`, `relate`, `rm-location`, `transition`, `update`, `upsert-component`,
+  `upsert-location`, `upsert-project` — each taking a single `--input '<json>'`
+  payload, plus `batch action` for fan-out. The verb list and every worked example live
+  in the packaged skill (`skill/SKILL.md`), captured from the real built binary.
+- **One identity, global**: every verb returns and accepts a `uid`. There is no
+  family-scoped human-readable id, so no two repos can mint colliding ids and no
+  caller has to carry a repo alongside an id to disambiguate one.
+- **Content edits never fork an issue**: editing a body supersedes the old node and
+  carries the issue's WHOLE graph — every relation, note, citation, transition and
+  audit edge, in both directions — onto its successor, so an edited issue stays one
+  row in every listing, one entry in every ranked result, and one identity in the
+  point-in-time open curve.
+- **Concurrency-safe graph store**: TOCTOU-free writes via CAS inside `BEGIN IMMEDIATE`
+  transactions with bounded jittered backoff, proven under real concurrent processes.
+- **Audit-log event system**: every transition, claim, and release is independently
+  recoverable via `DERIVED_FROM` audit nodes — immune to metadata-replace semantics.
+- **Retrieval that stays honest**: keyword and vector retrieval are fused, and a
+  superseded revision is never returned beside the live issue it was replaced by.
+- **Installable agent skill**: `adhd-backlog install-skill --host <claude|codex|opencode>`
+  copies the packaged skill into the correct per-host directory. Zero external
+  dependencies.
 
 ### Build Tooling: Custom Nx Plugin Ecosystem
 
 The monorepo's release pipeline is now built on 5 custom Nx plugins with 10+ executors:
 
-| Plugin | Executors | Purpose |
-|--------|-----------|---------|
-| `@adhd/nx-build` | `version`, `publish`, `reconcile`, `manifest`, `verify-dist-load`, `hygiene`, `link` | Full release lifecycle |
-| `@adhd/nx-deps` | `sync-deps`, `sync-deps-check` | Dependency range reconciliation |
-| `@adhd/nx-assets` | `copy` | README/CHANGELOG to dist |
-| `@adhd/nx-secret-scan` | `scan` | Credential detection (whole-repo task) |
-| `@adhd/nx-test` | `wiring` | Test configuration verification |
+| Plugin                 | Executors                                                                            | Purpose                                |
+| ---------------------- | ------------------------------------------------------------------------------------ | -------------------------------------- |
+| `@adhd/nx-build`       | `version`, `publish`, `reconcile`, `manifest`, `verify-dist-load`, `hygiene`, `link` | Full release lifecycle                 |
+| `@adhd/nx-deps`        | `sync-deps`, `sync-deps-check`                                                       | Dependency range reconciliation        |
+| `@adhd/nx-assets`      | `copy`                                                                               | README/CHANGELOG to dist               |
+| `@adhd/nx-secret-scan` | `scan`                                                                               | Credential detection (whole-repo task) |
+| `@adhd/nx-test`        | `wiring`                                                                             | Test configuration verification        |
 
 Key capabilities:
 
@@ -80,13 +95,14 @@ The code-first API generation framework reaches a new level of maturity:
 
   **Measured performance (8-file edit+verify task, same model across all conditions):**
 
-  | Condition | Turns | Cost | Wall Time |
-  |-----------|-------|------|-----------|
-  | Agent-tool harness (wildcard tools) | 28 | $0.71 | 90.6s |
-  | Agent-tool harness (scoped tools) | 27 | $0.69 | 71.8s |
+  | Condition                             | Turns | Cost      | Wall Time |
+  | ------------------------------------- | ----- | --------- | --------- |
+  | Agent-tool harness (wildcard tools)   | 28    | $0.71     | 90.6s     |
+  | Agent-tool harness (scoped tools)     | 27    | $0.69     | 71.8s     |
   | **claudecli provider (scoped tools)** | **5** | **$0.21** | **26.2s** |
 
   The claudecli provider completes identical work in **~3.4x fewer turns and at ~3.4x lower cost** than the interactive Agent-tool harness. Root cause: the claudecli provider batches multiple tool calls into single dense turns (833-1335 output tokens/turn) while the Agent-tool harness issues one tool call per round-trip (70-300 tokens/turn). Savings come from turn-count reduction, not per-turn efficiency — the interactive harness's dispatch loop adds overhead between every tool call that headless `claude -p` doesn't incur.
+
 - **Rate cards**: Provider pricing configuration in `@adhd/agent-core-provider` — maps provider type and model to per-unit costs, used by usage accounting for monetary cost computation.
 - **12 packages published** to npm: base-types (2.1.5), core-policy (2.1.6), core-provider (2.1.6), core-env (0.0.4), store-prompts (2.1.4), store-tools (2.1.6), store-runtime (2.1.5), engine-compiler (2.1.5), engine-orchestrator (2.1.5), plugin-budget (0.0.6), plugin-sanitize (0.0.4), generator-plugin (0.0.4).
 
@@ -115,7 +131,7 @@ The code-first API generation framework reaches a new level of maturity:
 ### For npm consumers
 
 - **@adhd/agent-mcp**: If running multiple instances, ensure `ADHD_AGENT_SSE_ENABLED` is set correctly. The default port is no longer a fixed 3001 — concurrent instances spread across ports. Set `sse.enabled: false` to skip the SSE bind entirely.
-- **@adhd/backlog**: If migrating from hand-edited `BACKLOG.md`, run `backlog import-from-markdown --path BACKLOG.md --plan <plan-name>` to seed the graph. Phase-3 means the graph is authoritative — edit via CLI/MCP, not by editing markdown.
+- **@adhd/backlog**: The binary is `adhd-backlog` — the bare `backlog` name collided with an unrelated public npm package. Every verb takes one `--input '<json>'` payload, and identity is the `uid` each verb returns. The graph is the source of truth: edit through the CLI/MCP surface, never by hand-editing a `BACKLOG.md`. Run `adhd-backlog install-skill` after upgrading, so the installed agent skill matches the shipped surface.
 - **@adhd/agent-core-env**: Registry DB default moved to `~/.adhd/agent-registry/`. If you had custom `ADHD_AGENT_REGISTRY_DB_PATH` set, behavior is unchanged. Otherwise, agent-mcp now creates a fresh registry DB at the canonical path — existing `.adhd/agent-mcp/registry.db` is no longer read automatically.
 - **@adhd/apigen-cli**: `apigen serve`'s front proxy now requires canonical kebab-case routes. If you were accessing `/namespace/opName` directly (not through the generated OpenAPI spec), update your paths to `/namespace/file-segment/op-name`. The `--namespace` flag on `apigen run` now affects the wire route.
 
@@ -131,7 +147,7 @@ The code-first API generation framework reaches a new level of maturity:
 
 ## Deprecated
 
-- **Legacy `tools/util/backlog.mjs`** — standalone BACKLOG.md markdown parser. Superseded by `@adhd/backlog` (Phase-3 graph-authoritative). Retained for backward compatibility but no longer the recommended tool.
+- **Legacy `tools/util/backlog.mjs`** — removed. It was a standalone `BACKLOG.md` text parser, kept alive only as the independent oracle for a markdown round-trip that `@adhd/backlog` no longer performs. With that interop gone it had no callers left, and a parser for a format nothing writes is not backward compatibility.
 
 ---
 
@@ -143,16 +159,16 @@ The code-first API generation framework reaches a new level of maturity:
 
 ## Statistics
 
-| Metric | Value |
-|--------|-------|
-| Published packages | 54 |
-| Shipped capabilities | 42 |
-| Packages with capability docs | 54/54 |
-| Projects (nx targets) | 62 |
-| Test files | 169+ |
-| Git commits since last catalog | 269 |
-| Monorepo domains | 7 (agent, apigen, data, dispatch, environment, ui-react, workspace) |
-| Entrypoints | 5 (backlog, agent-mcp, apigen-cli, dispatch-cli, decompile-cli) |
+| Metric                         | Value                                                               |
+| ------------------------------ | ------------------------------------------------------------------- |
+| Published packages             | 54                                                                  |
+| Shipped capabilities           | 42                                                                  |
+| Packages with capability docs  | 54/54                                                               |
+| Projects (nx targets)          | 62                                                                  |
+| Test files                     | 169+                                                                |
+| Git commits since last catalog | 269                                                                 |
+| Monorepo domains               | 7 (agent, apigen, data, dispatch, environment, ui-react, workspace) |
+| Entrypoints                    | 5 (backlog, agent-mcp, apigen-cli, dispatch-cli, decompile-cli)     |
 
 ---
 
@@ -162,4 +178,4 @@ See [CHANGELOG.md](./CHANGELOG.md) for the full per-entry changelog with commit 
 
 ---
 
-*Prepared by the doc-steward from verified catalog data. Every shipped-capability claim resolves to a `status: shipped` entry in [capabilities.json](./docs/marketing/.catalog/capabilities.json). 42 shipped, 1 roadmap, 1 deprecated — see [CHANGELOG.md](./CHANGELOG.md) for the full per-entry changelog.*
+_Prepared by the doc-steward from verified catalog data. Every shipped-capability claim resolves to a `status: shipped` entry in [capabilities.json](./docs/marketing/.catalog/capabilities.json). 42 shipped, 1 roadmap, 1 deprecated — see [CHANGELOG.md](./CHANGELOG.md) for the full per-entry changelog._

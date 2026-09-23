@@ -1,5 +1,5 @@
 /**
- * install-skill.spec.ts — MIGRATION.md §4.2. `installSkill`'s `homeOverride`
+ * install-skill.spec.ts — SPEC.md §6.6's host-command carve-out. `installSkill`'s `homeOverride`
  * parameter is a TEST-ISOLATION ESCAPE HATCH ONLY (mirrors
  * `BacklogCtx.adhdRoot` elsewhere in this package) — every test here passes
  * one, so NOTHING in this file ever touches the real machine's
@@ -23,9 +23,12 @@ import { installSkill } from './install-skill.js';
 // instead (`install-skill.ts`'s own `packagedSkillMdPath()` already uses the
 // identical `dirname(fileURLToPath(import.meta.url))` pattern) — correct
 // regardless of the caller's cwd.
-const REAL_SKILL_MD = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'skill', 'SKILL.md'), 'utf8');
+const REAL_SKILL_MD = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), '..', 'skill', 'SKILL.md'),
+  'utf8'
+);
 
-describe('installSkill (MIGRATION.md §4.2)', () => {
+describe('installSkill (SPEC.md §6.6 host-command carve-out)', () => {
   let tmp: string;
 
   beforeEach(() => {
@@ -39,7 +42,11 @@ describe('installSkill (MIGRATION.md §4.2)', () => {
   it('default (--host all --scope user) installs to all 3 host dirs under the ISOLATED home override, never the real machine home', () => {
     const results = installSkill([], tmp, tmp);
     expect(results).toHaveLength(3);
-    expect(results.map((r) => r.host).sort()).toEqual(['claude', 'codex', 'opencode']);
+    expect(results.map((r) => r.host).sort()).toEqual([
+      'claude',
+      'codex',
+      'opencode',
+    ]);
     for (const r of results) {
       expect(r.path.startsWith(tmp)).toBe(true);
       expect(existsSync(r.path)).toBe(true);
@@ -47,9 +54,15 @@ describe('installSkill (MIGRATION.md §4.2)', () => {
     }
     // Exact expected paths per the surveyed per-host table.
     const byHost = Object.fromEntries(results.map((r) => [r.host, r]));
-    expect(byHost['claude']?.path).toBe(join(tmp, '.claude', 'skills', 'backlog', 'SKILL.md'));
-    expect(byHost['codex']?.path).toBe(join(tmp, '.codex', 'skills', 'backlog', 'SKILL.md'));
-    expect(byHost['opencode']?.path).toBe(join(tmp, '.config', 'opencode', 'skills', 'backlog', 'SKILL.md'));
+    expect(byHost['claude']?.path).toBe(
+      join(tmp, '.claude', 'skills', 'backlog', 'SKILL.md')
+    );
+    expect(byHost['codex']?.path).toBe(
+      join(tmp, '.codex', 'skills', 'backlog', 'SKILL.md')
+    );
+    expect(byHost['opencode']?.path).toBe(
+      join(tmp, '.config', 'opencode', 'skills', 'backlog', 'SKILL.md')
+    );
   });
 
   it('--host claude installs to only the Claude Code directory', () => {
@@ -59,9 +72,15 @@ describe('installSkill (MIGRATION.md §4.2)', () => {
   });
 
   it('--scope project installs under the given cwd, never under the home override', () => {
-    const results = installSkill(['--host', 'claude', '--scope', 'project'], tmp, '/should-never-be-used');
+    const results = installSkill(
+      ['--host', 'claude', '--scope', 'project'],
+      tmp,
+      '/should-never-be-used'
+    );
     expect(results).toHaveLength(1);
-    expect(results[0].path).toBe(join(tmp, '.claude', 'skills', 'backlog', 'SKILL.md'));
+    expect(results[0].path).toBe(
+      join(tmp, '.claude', 'skills', 'backlog', 'SKILL.md')
+    );
   });
 
   it('drops a thin extension.json alongside SKILL.md, matching the memory-usage precedent shape', () => {
@@ -69,7 +88,11 @@ describe('installSkill (MIGRATION.md §4.2)', () => {
     const extPath = join(results[0].path, '..', 'extension.json');
     expect(existsSync(extPath)).toBe(true);
     const ext = JSON.parse(readFileSync(extPath, 'utf8'));
-    expect(ext).toMatchObject({ name: '@adhd/backlog', type: 'skill', entrypoint: 'SKILL.md' });
+    expect(ext).toMatchObject({
+      name: '@adhd/backlog',
+      type: 'skill',
+      entrypoint: 'SKILL.md',
+    });
     expect(typeof ext.version).toBe('string');
   });
 
@@ -84,7 +107,9 @@ describe('installSkill (MIGRATION.md §4.2)', () => {
   });
 
   it('rejects an unknown --scope', () => {
-    expect(() => installSkill(['--host', 'claude', '--scope', 'bogus'], tmp, tmp)).toThrow(/--scope/);
+    expect(() =>
+      installSkill(['--host', 'claude', '--scope', 'bogus'], tmp, tmp)
+    ).toThrow(/--scope/);
   });
 
   it('NEGATIVE-CONTROL-style guard: every returned path lands under the supplied override root, never containing a literal ".adhd" segment or the real os.homedir()', async () => {
