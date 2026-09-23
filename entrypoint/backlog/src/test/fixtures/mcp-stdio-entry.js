@@ -23,6 +23,19 @@ const path = require('node:path');
 // in the suite's stderr even though the in-process specs went quiet.
 process.env.VITEST = 'true';
 
+// STATE.md A15: this fixture calls `startBacklogServer({ scope:'project',
+// adhdRoot })` directly — it bypasses `cli.ts`'s `--namespace sandbox`
+// entirely, so it never gets D8's guarantee (a REAL written `config.yaml`
+// forcing `embedding.enabled: false`, deliberately, at the resolved
+// project-config path). It has stayed leak-free so far purely because
+// `embedding.enabled` DEFAULTS to `false` when no config.yaml exists
+// anywhere in the resolved chain — the exact "accident of an empty
+// directory, not a deliberate guarantee" fragility D8's own doc comment
+// (cli.ts) explicitly called out and hardened against for the CLI path.
+// Made explicit here too, so this fixture's isolation no longer depends on
+// nothing else ever planting a config.yaml above it in the chain.
+process.env.ADHD_BACKLOG_EMBEDDING_ENABLED = 'false';
+
 const distIndexPath = path.join(__dirname, '..', '..', '..', 'dist', 'index.js');
 const backlog = require(distIndexPath);
 

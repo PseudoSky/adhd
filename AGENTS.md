@@ -23,7 +23,7 @@ You are an expert full-stack engineer operating within a high-scale **Nx Monorep
 - You never create folders in the repo root without human approval
 - You never chain file removals in bash commands
 - You never write fs removals within scripts relying on variables without human approval
-- You file, claim, transition, and resolve backlog items via the `adhd-backlog` CLI (renamed from the bare `backlog` bin, which collided with the unrelated public npm package `backlog@1.4.56`) / `mcp__backlog__*` tools — never by hand-editing a `BACKLOG.md`. Every `BACKLOG.md` is now a generated projection of the global backlog graph (`@adhd/backlog`, migration phase-3); a hand edit is overwritten on the next render and rejected by the parity gate. Check `adhd-backlog admin --input '{"action":"migration_status"}'` for the authoritative phase. (For this repo, this supersedes the global "store deferrals/bugs to BACKLOG.md" disclosure rule.)
+- You file, claim, transition, and resolve backlog items via the `adhd-backlog` CLI (renamed from the bare `backlog` bin, which collided with the unrelated public npm package `backlog@1.4.56`) / `mcp__backlog__*` tools — never by hand-editing a `BACKLOG.md`. The graph is the source of truth and any `BACKLOG.md` still on disk is a dead artifact, not a projection: nothing regenerates it, so a hand edit is simply invisible to every reader. Identity is the `uid` each verb returns. The command surface, the `--input '<json>'` calling convention, and a worked example of every verb live in `entrypoint/backlog/skill/SKILL.md` — read it rather than guessing a flag. (For this repo, this supersedes the global "store deferrals/bugs to BACKLOG.md" disclosure rule.)
 - You never declare bugs as "pre-existing"
 - After merging branches or worktrees, you always clean up the branch and write to the apropriate changelogs
 - You always update relevant docs to include surface features added (add to backlog if the docs do not exist)
@@ -63,17 +63,17 @@ The generator builds `<group>-<tier>-<name>` for you:
 
 ### Tiers (the generator collection)
 
-| Tier | Command | Usage |
-|-------|---------|-------|
-| **types** | `nx g @adhd/workspace-codegen-nx:types --group <domain> --name <name>` | Pure type/contract packages (zero deps, `access:public`) |
-| **base** | `nx g @adhd/workspace-codegen-nx:base --group <domain> --name <name> --nxLayer <layer> --platform <platform>` | Zero internal deps, roots of dep graph |
-| **core** | `nx g @adhd/workspace-codegen-nx:core --group <domain> --name <name> --nxLayer <layer> --platform <platform> [--access public] [--publish true]` | Depends only on base packages |
-| **engine** | `nx g @adhd/workspace-codegen-nx:engine --group <domain> --name <name> --nxLayer <layer> --platform <platform>` | Orchestration/wiring (depends on base + core) |
-| **store** | `nx g @adhd/workspace-codegen-nx:store --group <domain> --name <name> --nxLayer <layer> --platform <platform>` | Persistence/storage (depends on base + core) |
-| **plugin** | `nx g @adhd/workspace-codegen-nx:plugin --group <domain> --name <name> --nxLayer <layer> --platform <platform>` | Optional extension |
-| **generator** | `nx g @adhd/workspace-codegen-nx:generator --group <domain> --name <name> --nxLayer <layer> --platform <platform>` | Code generator |
-| **query** | `nx g @adhd/workspace-codegen-nx:query --group <domain> --name <name> --nxLayer <layer> --platform <platform>` | Query engine |
-| **entrypoint** | `nx g @adhd/workspace-codegen-nx:entrypoint --name <name> --nxLayer entrypoints --platform node [--access public] [--publish true]` | CLI/server/runner (lives under `entrypoint/`, **not** `packages/`) |
+| Tier           | Command                                                                                                                                          | Usage                                                              |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| **types**      | `nx g @adhd/workspace-codegen-nx:types --group <domain> --name <name>`                                                                           | Pure type/contract packages (zero deps, `access:public`)           |
+| **base**       | `nx g @adhd/workspace-codegen-nx:base --group <domain> --name <name> --nxLayer <layer> --platform <platform>`                                    | Zero internal deps, roots of dep graph                             |
+| **core**       | `nx g @adhd/workspace-codegen-nx:core --group <domain> --name <name> --nxLayer <layer> --platform <platform> [--access public] [--publish true]` | Depends only on base packages                                      |
+| **engine**     | `nx g @adhd/workspace-codegen-nx:engine --group <domain> --name <name> --nxLayer <layer> --platform <platform>`                                  | Orchestration/wiring (depends on base + core)                      |
+| **store**      | `nx g @adhd/workspace-codegen-nx:store --group <domain> --name <name> --nxLayer <layer> --platform <platform>`                                   | Persistence/storage (depends on base + core)                       |
+| **plugin**     | `nx g @adhd/workspace-codegen-nx:plugin --group <domain> --name <name> --nxLayer <layer> --platform <platform>`                                  | Optional extension                                                 |
+| **generator**  | `nx g @adhd/workspace-codegen-nx:generator --group <domain> --name <name> --nxLayer <layer> --platform <platform>`                               | Code generator                                                     |
+| **query**      | `nx g @adhd/workspace-codegen-nx:query --group <domain> --name <name> --nxLayer <layer> --platform <platform>`                                   | Query engine                                                       |
+| **entrypoint** | `nx g @adhd/workspace-codegen-nx:entrypoint --name <name> --nxLayer entrypoints --platform node [--access public] [--publish true]`              | CLI/server/runner (lives under `entrypoint/`, **not** `packages/`) |
 
 ### Domains (`--group`)
 
@@ -89,7 +89,7 @@ Packages follow `<domain>-<tier>-<name>` and live at `packages/<domain>/<domain>
 
 A `packages/` entry is a **library with importers**. If nothing will `import` it, it is not a package:
 
-- **One-shot migrations / ETL** → a temporary, uncommitted throwaway script. Reusable tooling is *not* one-shot: build/publish gates belong in a `tools/nx-plugins/*` plugin (e.g. the `@adhd/nx-build` executors), and a reusable CLI belongs in the owning `entrypoint/` package (e.g. DAG validation is `dispatch-cli`'s `validate` command).
+- **One-shot migrations / ETL** → a temporary, uncommitted throwaway script. Reusable tooling is _not_ one-shot: build/publish gates belong in a `tools/nx-plugins/*` plugin (e.g. the `@adhd/nx-build` executors), and a reusable CLI belongs in the owning `entrypoint/` package (e.g. DAG validation is `dispatch-cli`'s `validate` command).
 - **A CLI / server / runner** → `entrypoint/`, via the `entrypoint` generator.
 - **A library that must never publish** → `--publish` already defaults to `false`; leave it.
 
@@ -123,13 +123,13 @@ version of this doc said they did (`layer:data → packages/shared/`), which is 
 
 **Tier** (`pkg-kind:` tag) — position in the dep graph:
 
-| Tier | Meaning | Depends on |
-|---|---|---|
-| `base` / `types` | zero-dep types & spec | nothing |
-| `core` | pure logic | base |
-| `store` | persistence | base + core |
-| `engine` | orchestration | base + core + store |
-| `serializer` / `plugin` / `generator` / `query` | adapters & extensions | base + core |
+| Tier                                            | Meaning               | Depends on          |
+| ----------------------------------------------- | --------------------- | ------------------- |
+| `base` / `types`                                | zero-dep types & spec | nothing             |
+| `core`                                          | pure logic            | base                |
+| `store`                                         | persistence           | base + core         |
+| `engine`                                        | orchestration         | base + core + store |
+| `serializer` / `plugin` / `generator` / `query` | adapters & extensions | base + core         |
 
 **Layer** (`layer:` tag) — the Nx module-boundary attribute, set via `--nxLayer`.
 Valid values: `shared`, `logic`, `data`, `entrypoints`, `ui-primitives`, `ui-composites`, `components`, `workflows`, `ai`, `mcp`.
@@ -239,9 +239,9 @@ You are responsible for maintaining the health of the shared ecosystem. **Follow
 
 1. **Prefer Imports over Creation:** Before writing a utility (e.g., deep copy, camelCase, data filter), check the existing `@adhd/data-*` packages (`data-base-transforms`, `data-query-engine`). **Always** use existing exports.
 2. **The "Two-Use" Refactor Rule:** If you are writing logic in an `entrypoint` or feature that is generic and likely reusable, **STOP**.
-    - Extract the logic.
-    - Place it in the appropriate `packages/<domain>/` package at the right tier.
-    - Import it back into the original file using the `@adhd/` scoped path.
+   - Extract the logic.
+   - Place it in the appropriate `packages/<domain>/` package at the right tier.
+   - Import it back into the original file using the `@adhd/` scoped path.
 3. **Dependency Purity:** `base`/`core` tier packages must **never** depend on higher tiers or UI. They are the bedrock.
 4. **Hyphenated NPM Naming:** All new libraries must use hyphenated names (e.g., `network-helpers`, not `networkHelpers`) for NPM compatibility.
 
@@ -277,7 +277,7 @@ See [PUBLISHING.md](./PUBLISHING.md) for the full version-bump, build, and publi
 
 ## 🧵 13. Task Decomposition — when to fan out instead of looping in one context
 
-adhd's token spend is dominated by a single structural anti-pattern, not by expensive models or bad prompts: a subagent given a naturally decomposable job (fix N files, migrate N backlog entries, orchestrate N independent steps) looping internally over all N items in **one continuous dispatch** instead of forking. Four real examples from one session alone: `backlog-tool-fixer` (399 sequential tool calls → 155M tokens), `typescript-pro` (341 calls → 122M tokens), `backlog-migrator-2` (360 calls → 112M tokens), `apigen-orch` (304 calls → 104M tokens) — combined tool *output* for each was under 1MB, and turn-by-turn inspection shows `cache_read` tokens climbing every turn while each turn's actual new output stays flat: every turn re-pays to re-read the entire accumulated conversation history, so cumulative cost over N turns grows faster than linearly with N. A controlled A/B test (8 files, same task, same model, only the dispatch structure varied) measured this directly: one continuous 9-turn dispatch cost 1.13x what the same work cost split into 8 independent one-turn dispatches via `pipeline()` — the effect is negligible at ~10 turns and dominant at the 300-400 turn scale these production dispatches ran at. Full detail: BACKLOG DEBT items for monolithic-dispatch (token-cost driver) and parked-teammate idle gaps (wall-clock driver).
+adhd's token spend is dominated by a single structural anti-pattern, not by expensive models or bad prompts: a subagent given a naturally decomposable job (fix N files, migrate N backlog entries, orchestrate N independent steps) looping internally over all N items in **one continuous dispatch** instead of forking. Four real examples from one session alone: `backlog-tool-fixer` (399 sequential tool calls → 155M tokens), `typescript-pro` (341 calls → 122M tokens), `backlog-migrator-2` (360 calls → 112M tokens), `apigen-orch` (304 calls → 104M tokens) — combined tool _output_ for each was under 1MB, and turn-by-turn inspection shows `cache_read` tokens climbing every turn while each turn's actual new output stays flat: every turn re-pays to re-read the entire accumulated conversation history, so cumulative cost over N turns grows faster than linearly with N. A controlled A/B test (8 files, same task, same model, only the dispatch structure varied) measured this directly: one continuous 9-turn dispatch cost 1.13x what the same work cost split into 8 independent one-turn dispatches via `pipeline()` — the effect is negligible at ~10 turns and dominant at the 300-400 turn scale these production dispatches ran at. Full detail: BACKLOG DEBT items for monolithic-dispatch (token-cost driver) and parked-teammate idle gaps (wall-clock driver).
 
 **The rule:** before dispatching a Task/Agent for work that spans a list of independently-fixable items (files, tickets, migration targets, config entries, etc.), count the items first.
 
@@ -289,6 +289,7 @@ adhd's token spend is dominated by a single structural anti-pattern, not by expe
 - **Self-check periodically:** `scratch-claude-metadata flags <project>` (in `~/dev/ai/scratch/claude-metadata`) flags `MONOLITHIC_DISPATCH`, `IDLE_GAP`, `RETRY_LOOP`, `HIGH_ERROR_RATE`, and `HIGH_CHURN` against real session history — run it after a big orchestration to catch this before it compounds.
 
 <!-- gitnexus:start -->
+
 # GitNexus — Code Intelligence
 
 This project is indexed by GitNexus. Use the GitNexus CLI (via the `gx` wrapper) to understand code, assess impact, and navigate safely.
@@ -312,22 +313,22 @@ This project is indexed by GitNexus. Use the GitNexus CLI (via the `gx` wrapper)
 
 ## Resources
 
-| Resource | Use for |
-|----------|---------|
-| `gitnexus://repo/adhd/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/adhd/clusters` | All functional areas |
-| `gitnexus://repo/adhd/processes` | All execution flows |
-| `gitnexus://repo/adhd/process/{name}` | Step-by-step execution trace |
+| Resource                              | Use for                                  |
+| ------------------------------------- | ---------------------------------------- |
+| `gitnexus://repo/adhd/context`        | Codebase overview, check index freshness |
+| `gitnexus://repo/adhd/clusters`       | All functional areas                     |
+| `gitnexus://repo/adhd/processes`      | All execution flows                      |
+| `gitnexus://repo/adhd/process/{name}` | Step-by-step execution trace             |
 
 ## CLI
 
-| Task | Read this skill file |
-|------|---------------------|
-| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
-| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
-| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
-| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
-| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
-| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+| Task                                         | Read this skill file                                        |
+| -------------------------------------------- | ----------------------------------------------------------- |
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md`       |
+| Blast radius / "What breaks if I change X?"  | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?"             | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md`       |
+| Rename / extract / split / refactor          | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md`     |
+| Tools, resources, schema reference           | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md`           |
+| Index, status, clean, wiki CLI commands      | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md`             |
 
 <!-- gitnexus:end -->

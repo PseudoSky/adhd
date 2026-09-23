@@ -4,7 +4,7 @@
  *
  * ## Why a translation and not a seventh operation
  *
- * INTERFACE_v2 §3 fixes the apigen mount surface at exactly six verbs
+ * The apigen mount-surface spec §3 fixes the apigen mount surface at exactly six verbs
  * (`get, query, create, update, relate, admin`) — `index.ts`'s own comment
  * above those exports says "these, and only these". Adding a `search` export
  * to `client.ts` would widen that surface for every transport (CLI, HTTP,
@@ -18,29 +18,29 @@
  *
  * ## Why the positional compiles to `text`, not `filter.semantic`
  *
- * `IBacklogQueryInput.text` is already specified as "the natural-language
+ * `IIssueQueryInput.text` is already specified as "the natural-language
  * query; also the CLI positional form" (§2.1b) — this shortcut is the CLI
- * form that field was written for. `compileTextQuery` (v2/query.ts) routes
- * the whole string into `filter.semantic` when the vector space is readable
- * and into `filter.grep` when it is NOT (RAG-SPEC §3.1 / BUG-045), and picks
- * `sort: "relevance"` or `"textMatch"` to match. Compiling the positional
- * straight to `filter.semantic` instead would hard-fail with
- * `rag_not_configured` on an unconfigured or unbackfilled store, throwing
- * away a working keyword answer — and would ALSO need this module to
- * hardcode a `sort` default that `compileTextQuery` already derives
- * correctly. Neither divergence is worth owning here.
+ * form that field was written for. `resolveTextInput` (query/query.ts, called
+ * once from `queryIssues`) routes the whole string into `filter.semantic`
+ * when the vector space is readable and into `filter.grep` when it is NOT
+ * (RAG-SPEC §3.1 / BUG-045), and picks `sort: "relevance"` or `"textMatch"`
+ * to match. Compiling the positional straight to `filter.semantic` instead
+ * would hard-fail on an unconfigured or unbackfilled store, throwing away a
+ * working keyword answer — and would ALSO need this module to hardcode a
+ * `sort` default that `resolveTextInput` already derives correctly. Neither
+ * divergence is worth owning here.
  *
  * For the same reason there is no `fields` default: the `text` path's own
- * projection is already the compact `humanId/kind/title/status/priority`
- * list, so a default invented here could only make it worse. `--fields`
- * overrides it (add `_score` to see the ranking scores).
+ * projection is already the compact `uid/kind/title/status/priority`
+ * list (`DEFAULT_ISSUE_CARD_FIELDS`, query/types.ts), so a default invented
+ * here could only make it worse. `--fields` overrides it (add `_score` to
+ * see the ranking scores).
  *
  * ## Error parity
  *
  * The flags below are hand-parsed, not schema-derived, so every rejection
  * mirrors `@adhd/apigen-plugin-cli-output`'s `parseArgs`/validate-Layer
- * wording byte-for-byte, exactly as `runMigrationPhaseCommand` (cli.ts)
- * does: `Unknown option: --X. Available: …` (a REAL list, never a placebo),
+ * wording byte-for-byte: `Unknown option: --X. Available: …` (a REAL list, never a placebo),
  * `Missing value for --X`, `Unexpected positional argument: "X"`. The caller
  * prints them as `{"code":"invalid_argument","message":…}` on stderr with
  * `process.exitCode = 2` (`CLI_EXIT_CODE['invalid_argument']`).
@@ -51,13 +51,33 @@
  */
 
 /** Top-level `IBacklogQueryInput` keys this shortcut exposes as flags. */
-const SCALAR_TOP_LEVEL_FLAGS = ['limit', 'offset', 'sort', 'direction'] as const;
+const SCALAR_TOP_LEVEL_FLAGS = [
+  'limit',
+  'offset',
+  'sort',
+  'direction',
+] as const;
 
-/** `IBacklogFilter` keys exposed as single-valued flags. */
+/**
+ * `IBacklogFilter` keys exposed as single-valued flags.
+ *
+ * `repo`, `family`, and `tag` (formerly here) were removed, not wired: none
+ * of the three has a persisted, filterable datum anywhere in this package's
+ * write layer. SPEC.md is explicit on all three — `repo` was superseded by
+ * `project` and is "not part of the surface as an addressing key" (§ "repo
+ * as an addressing key on every verb"); `family` is "not part of the
+ * surface... there is no id to parse a prefix from" (same table); `tags`
+ * has "no field in this spec... folded into the audit note" (§ field
+ * mapping table). Advertising a flag whose filter key `IIssueFilter` (query/types.ts) does
+ * not declare made the apigen-derived schema reject it before any query
+ * ran — see this repo's search-shortcut defect report. `plan` and
+ * `project-path` stayed: both resolve to a real, persisted, filterable
+ * datum (`part_of` edge to a plan issue; `component.meta.path`
+ * respectively) and are now wired in `IIssueFilter`/`buildMetadataFilter`'s
+ * sibling `resolveEdgeScopedFilterIds`.
+ */
 const SCALAR_FILTER_FLAGS = [
-  'repo',
   'kind',
-  'family',
   'plan',
   'assignee',
   'claimed-by',
@@ -68,15 +88,15 @@ const SCALAR_FILTER_FLAGS = [
 
 /**
  * `IBacklogFilter` keys that accept a LIST. Each is comma-splittable in one
- * token AND repeatable across tokens (`--tag a --tag b` ≡ `--tag a,b`), which
- * is the union of the two conventions a caller might reach for.
+ * token AND repeatable across tokens, which is the union of the two
+ * conventions a caller might reach for.
  *
  * `status` and `priority` collapse to a bare string when exactly one value is
  * given: `IStatusSelector` is `IStatusClosedness | BacklogStatus |
  * BacklogStatus[]`, so `--status open` must stay the scalar closedness word
  * `"open"` rather than becoming `["open"]` (which is not a `BacklogStatus`).
  */
-const LIST_FILTER_FLAGS = ['status', 'priority', 'tag'] as const;
+const LIST_FILTER_FLAGS = ['status', 'priority'] as const;
 
 /** Flags whose single value is a comma-separated projection list (`IProjection.fields`). */
 const LIST_TOP_LEVEL_FLAGS = ['fields'] as const;
@@ -85,7 +105,6 @@ const LIST_TOP_LEVEL_FLAGS = ['fields'] as const;
 const FILTER_KEY_ALIASES: Readonly<Record<string, string>> = {
   'claimed-by': 'claimedBy',
   'project-path': 'projectPath',
-  tag: 'tags',
 };
 
 /**
@@ -103,8 +122,14 @@ export const SEARCH_FLAGS: readonly string[] = [
   .map((f) => `--${f}`)
   .sort();
 
-const TOP_LEVEL_FLAGS = new Set<string>([...SCALAR_TOP_LEVEL_FLAGS, ...LIST_TOP_LEVEL_FLAGS]);
-const LIST_FLAGS = new Set<string>([...LIST_FILTER_FLAGS, ...LIST_TOP_LEVEL_FLAGS]);
+const TOP_LEVEL_FLAGS = new Set<string>([
+  ...SCALAR_TOP_LEVEL_FLAGS,
+  ...LIST_TOP_LEVEL_FLAGS,
+]);
+const LIST_FLAGS = new Set<string>([
+  ...LIST_FILTER_FLAGS,
+  ...LIST_TOP_LEVEL_FLAGS,
+]);
 const KNOWN_FLAGS = new Set<string>([
   ...SCALAR_TOP_LEVEL_FLAGS,
   ...LIST_TOP_LEVEL_FLAGS,
@@ -134,13 +159,10 @@ export const SEARCH_HELP = [
   '  --status <s>       open | closed | OPEN,IN_PROGRESS | …',
   '  --priority <p>     CRITICAL | HIGH | MEDIUM | LOW (comma-separated for several)',
   '  --kind <k>         BUG | DEBT | FEAT | …',
-  '  --family <f>       humanId minus the trailing -NNN, e.g. BUG-APIGEN',
-  '  --repo <r>         repo key',
-  '  --project-path <p> package-relative path within the repo',
-  '  --plan <slug>      plan slug',
+  "  --project-path <p> component's repo-relative path (component.meta.path)",
+  '  --plan <uid|title> the parent plan issue this item is filed under (part_of)',
   '  --assignee <a>     durable owner',
   '  --claimed-by <c>   ephemeral claim holder',
-  '  --tag <t>          repeatable, or comma-separated',
   '  --grep <q>         extra keyword predicate. Composes with the query text ONLY',
   '                     once the embedding space is populated — without it the query',
   '                     text IS the keyword query and the two collide (§2.1b step 1).',
@@ -156,13 +178,24 @@ export type SearchShortcutOutcome =
   | { kind: 'error'; message: string }
   | { kind: 'argv'; argv: string[] };
 
-function pushValue(bag: Record<string, unknown>, key: string, raw: string, isList: boolean): void {
+function pushValue(
+  bag: Record<string, unknown>,
+  key: string,
+  raw: string,
+  isList: boolean
+): void {
   if (!isList) {
     bag[key] = raw;
     return;
   }
   const previous = (bag[key] as string[] | undefined) ?? [];
-  bag[key] = [...previous, ...raw.split(',').map((part) => part.trim()).filter((part) => part.length > 0)];
+  bag[key] = [
+    ...previous,
+    ...raw
+      .split(',')
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0),
+  ];
 }
 
 /**
@@ -173,10 +206,13 @@ function pushValue(bag: Record<string, unknown>, key: string, raw: string, isLis
  * can reject a bad invocation before any of `runBacklogCli`'s store lifecycle
  * has started, and so every branch here is unit-testable on its own.
  */
-export function buildSearchArgv(rest: readonly string[]): SearchShortcutOutcome {
-  // Mirrors cli-output's own pre-dispatch check (and `runMigrationPhaseCommand`'s):
+export function buildSearchArgv(
+  rest: readonly string[]
+): SearchShortcutOutcome {
+  // Mirrors cli-output's own pre-dispatch check:
   // `--help` ANYWHERE after the command shows usage, never an error.
-  if (rest.includes('--help') || rest.includes('-h')) return { kind: 'help', text: SEARCH_HELP };
+  if (rest.includes('--help') || rest.includes('-h'))
+    return { kind: 'help', text: SEARCH_HELP };
 
   const topLevel: Record<string, unknown> = {};
   const filter: Record<string, unknown> = {};
@@ -187,7 +223,11 @@ export function buildSearchArgv(rest: readonly string[]): SearchShortcutOutcome 
     const token = rest[i] as string;
 
     if (!token.startsWith('--')) {
-      if (text !== undefined) return { kind: 'error', message: `Unexpected positional argument: "${token}"` };
+      if (text !== undefined)
+        return {
+          kind: 'error',
+          message: `Unexpected positional argument: "${token}"`,
+        };
       text = token;
       i += 1;
       continue;
@@ -207,11 +247,17 @@ export function buildSearchArgv(rest: readonly string[]): SearchShortcutOutcome 
     if (name === 'input') {
       return {
         kind: 'error',
-        message: 'Unknown option: --input. `search` takes the query as a positional argument; for the raw JSON form use `backlog query --input \'{...}\'`',
+        message:
+          "Unknown option: --input. `search` takes the query as a positional argument; for the raw JSON form use `backlog query --input '{...}'`",
       };
     }
     if (!KNOWN_FLAGS.has(name)) {
-      return { kind: 'error', message: `Unknown option: --${name}. Available: ${SEARCH_FLAGS.join(', ')}` };
+      return {
+        kind: 'error',
+        message: `Unknown option: --${name}. Available: ${SEARCH_FLAGS.join(
+          ', '
+        )}`,
+      };
     }
 
     i += 1;
@@ -219,7 +265,8 @@ export function buildSearchArgv(rest: readonly string[]): SearchShortcutOutcome 
     if (inlineValue !== undefined) {
       value = inlineValue;
     } else {
-      if (i >= rest.length) return { kind: 'error', message: `Missing value for --${name}` };
+      if (i >= rest.length)
+        return { kind: 'error', message: `Missing value for --${name}` };
       value = rest[i] as string;
       i += 1;
     }
@@ -245,20 +292,23 @@ export function buildSearchArgv(rest: readonly string[]): SearchShortcutOutcome 
   // module inventing a second, differently-worded one.
   for (const key of NUMERIC_FLAGS) {
     const value = topLevel[key];
-    if (typeof value === 'string' && /^-?\d+$/.test(value)) topLevel[key] = Number(value);
+    if (typeof value === 'string' && /^-?\d+$/.test(value))
+      topLevel[key] = Number(value);
   }
 
   const anchor = filter['anchor'] as string | undefined;
   if (anchor !== undefined && text !== undefined) {
     return {
       kind: 'error',
-      message: 'Validation failed: --anchor and a positional query are mutually exclusive — --anchor ranks by an EXISTING item\'s vector (view:"similar"), so there is no query text to also match (INTERFACE_v2 §2.1)',
+      message:
+        'Validation failed: --anchor and a positional query are mutually exclusive — --anchor ranks by an EXISTING item\'s vector (view:"similar"), so there is no query text to also match (mount-surface spec §2.1)',
     };
   }
   if (anchor === undefined && text === undefined) {
     return {
       kind: 'error',
-      message: 'Validation failed: /data must have required property \'text\' — Example: {"data":{"text":"flaky publish gate"}}',
+      message:
+        'Validation failed: /data must have required property \'text\' — Example: {"data":{"text":"flaky publish gate"}}',
     };
   }
 

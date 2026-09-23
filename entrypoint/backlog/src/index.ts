@@ -1,107 +1,99 @@
 // Entrypoint: @adhd/backlog
 //
-// Public barrel — re-exports every `client.ts` operation (for a Node
-// consumer, or a test, that wants to call them in-process),
-// `startBacklogServer` (HTTP/MCP host entry), and `runBacklogCli` (the third,
-// CLI transport). All three mount live via apigen — no codegen. See SPEC.md /
+// Public barrel. Re-exports every mounted operation (for a Node consumer, or a
+// test, that wants to call them in-process), `startBacklogServer` (the HTTP/MCP
+// host entry) and `runBacklogCli` (the CLI transport). All three transports
+// mount live via apigen from ONE operation descriptor set -- there is no
+// codegen step and no per-transport operation definition. See SPEC.md /
 // DESIGN.md for the full contract.
 //
 // This file is ALSO the `adhd-backlog` bin (`package.json` `bin: {
-// "adhd-backlog": "./dist/index.js" }` — renamed from the bare `backlog` key,
-// which collided with the unrelated public npm package `backlog@1.4.56`) —
-// see the entry-guard at the bottom.
+// "adhd-backlog": "./dist/index.js" }` -- the bare `backlog` key collided with
+// an unrelated public npm package) -- see the entry-guard at the bottom.
 import { realpathSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { initTelemetry } from '@adhd/sox-telemetry';
-import { runBacklogCli, stripSandboxFlag } from './cli.js';
+import { runBacklogCli, stripNamespaceFlag } from './cli.js';
+
+// The mounted surface: nine issue verbs (SPEC 6.3), `lookup` (3a), and the
+// four registry CRUD verbs (3a). `server.ts` extracts `dist/api.d.ts`, so THIS
+// list and the mounted tool set are the same list by construction -- a verb
+// cannot be exported here and missing from a transport, or vice versa.
+export {
+  get,
+  query,
+  lookup,
+  create,
+  update,
+  transition,
+  claim,
+  relate,
+  move,
+  upsertProject,
+  upsertComponent,
+  upsertLocation,
+  rmLocation,
+  delete,
+} from './api.js';
+export type { BacklogCtx } from './api.js';
+
+// The response envelope every verb returns, plus its closed error-code union
+// and the exit codes a CLI host keys off.
+export * from './envelope.js';
 
 export {
-  addCitation,
-  addDependency,
-  appendNote,
-  archiveResolved,
-  assignItem,
-  attachToPlan,
-  auditTrail,
-  blockers,
-  claimItem,
-  createItem,
-  dependencyGraph,
-  exportJson,
-  getItem,
-  importFromMarkdown,
-  linkRelated,
-  listItems,
-  mergeItems,
-  migrationStatus,
-  readyItems,
-  releaseClaim,
-  removeDependency,
-  renderToMarkdown,
-  renewClaim,
-  resolveItem,
-  setMigrationPhase,
-  setPriority,
-  softDeleteItem,
-  spotlight,
-  splitItem,
-  staleClaims,
-  startWork,
-  stats,
-  supersedeItem,
-  topoOrder,
-  transitionStatus,
-  updateItem,
-  version,
-} from './ops-v1.js';
-
-// INTERFACE_v2 §3 — the six consolidated verbs. These, and only these, are the
-// apigen mount surface (`server.ts` extracts `dist/client.d.ts`); the v1 ops
-// above now live in `ops-v1.ts` and are barrel-only, so re-exporting them here
-// does NOT re-widen the mounted tool set.
-export { get, query, create, update, relate, admin } from './client.js';
-export type { BacklogCtx, BacklogVersionInfo } from './client.js';
-
-export { startBacklogServer, buildBacklogApigenPackage, resolveExpectedMcpToolNames } from './server.js';
+  startBacklogServer,
+  buildBacklogApigenPackage,
+  resolveExpectedMcpToolNames,
+} from './server.js';
 export type { StartOpts } from './server.js';
 
-export { runBacklogCli, resolveCommandPrefix, prefixCommand, stripSandboxFlag } from './cli.js';
+export {
+  runBacklogCli,
+  resolveCommandPrefix,
+  prefixCommand,
+  stripNamespaceFlag,
+} from './cli.js';
 export type { RunBacklogCliOpts } from './cli.js';
 
 // `search`'s argv translation (see search-shortcut.ts). NOT a mount-surface
-// widening: `server.ts` extracts `client.ts`, never this barrel, so exporting
-// it here keeps it unit-testable without adding a seventh apigen operation.
-export { buildSearchArgv, SEARCH_FLAGS, SEARCH_HELP } from './search-shortcut.js';
+// widening: `server.ts` extracts `api.ts`, never this barrel, so exporting it
+// here keeps it unit-testable without adding an extra apigen operation.
+export {
+  buildSearchArgv,
+  SEARCH_FLAGS,
+  SEARCH_HELP,
+} from './search-shortcut.js';
 export type { SearchShortcutOutcome } from './search-shortcut.js';
 
 export { installSkill, runInstallSkillCommand } from './install-skill.js';
-export type { InstallSkillResult, SkillHost, SkillScope } from './install-skill.js';
+export type {
+  InstallSkillResult,
+  SkillHost,
+  SkillScope,
+} from './install-skill.js';
 
 export { runServeCommand } from './serve.js';
 export type { RunServeCommandOpts } from './serve.js';
 
-export { buildBacklogEnv, resolveBacklogScope, resolveBacklogDbPath, suggestClaimantIdentity, backlogEnvironmentSpec } from './env.js';
+export {
+  buildBacklogEnv,
+  resolveBacklogScope,
+  resolveBacklogDbPath,
+  suggestClaimantIdentity,
+  backlogEnvironmentSpec,
+} from './env.js';
 export type { BacklogConfig, BuildBacklogEnvOptions } from './env.js';
 
-export { openGraphBacklogStore, closeGraphBacklogStore } from './store/graph-backlog-store.js';
+export {
+  openGraphBacklogStore,
+  closeGraphBacklogStore,
+} from './store/graph-backlog-store.js';
 export type { GraphBacklogStore } from './store/graph-backlog-store.js';
 
-export {
-  buildChangelogSection,
-  classifyStatus,
-  detectPriority,
-  detectStatus,
-  normalizeLegacyStatus,
-  parseBacklogMarkdown,
-  parseBacklogMarkdownWithDiagnostics,
-  renderItemsToMarkdown,
-  toImportItems,
-} from './markdown.js';
-export type { ParsedImportItem, ParsedMarkdownItem, ParseWithDiagnosticsResult } from './markdown.js';
-
-export * from './model.js';
+export { readBacklogVersionInfo } from './version-info.js';
 
 // ---------------------------------------------------------------------------
 // `bin` entry-guard — replicates `entrypoint/apigen-cli/src/index.ts`'s
@@ -134,7 +126,10 @@ export * from './model.js';
 // same file's `server.ts`, which already relies on `import.meta.url`
 // resolving correctly from both `dist/index.js`, the rollup CJS output where
 // it's shimmed as `pathToFileURL(__filename).href`, and `dist/index.mjs`.)
-if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href
+) {
   // Telemetry composition root — the ONLY initTelemetry() call in this process.
   // Every telemetry record emitted by the store substrate (@adhd/sox-store-
   // adapter + @adhd/sox-graph-store dist emitters: retry, engine-guard, turso
@@ -159,20 +154,21 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
   // BUG-BACKLOG-SANDBOX-TELEMETRY-001: this call fires BEFORE `runBacklogCli`
   // ever parses argv, so it used to write its file sink to the real
   // `~/.adhd/sox-ecosystem/backlog/logs` unconditionally — even under
-  // `--sandbox`, defeating that flag's whole "never touches the real
-  // production tree" guarantee (caught by `cli.spec.ts`'s "--sandbox
-  // diverts the store away from the (fake) production HOME entirely, and
-  // never creates anything under it": a real `create` invocation left
+  // `--namespace sandbox`, defeating that flag's whole "never touches the
+  // real production tree" guarantee (caught by `cli.spec.ts`'s "--namespace
+  // sandbox diverts the store away from the (fake) production HOME entirely,
+  // and never creates anything under it": a real `create` invocation left
   // `<fakeProdHome>/.adhd/sox-ecosystem/backlog/logs/*.jsonl` behind even
-  // though the STORE itself was correctly isolated). `--sandbox` is
-  // recognized here the same way `cli.ts`'s own `stripSandboxFlag` does —
-  // this file peeks at it ONLY to redirect telemetry's `logDir`; the actual
-  // flag-stripping/dispatch still happens exactly once, inside
+  // though the STORE itself was correctly isolated). `--namespace sandbox`
+  // is recognized here the same way `cli.ts`'s own `stripNamespaceFlag`
+  // does — this file peeks at it ONLY to redirect telemetry's `logDir`; the
+  // actual flag-stripping/dispatch still happens exactly once, inside
   // `runBacklogCli` below.
-  const { sandbox } = stripSandboxFlag(process.argv.slice(2));
-  const sandboxLogDir = sandbox
-    ? mkdtempSync(join(tmpdir(), 'backlog-sandbox-logs-'))
-    : undefined;
+  const { namespace } = stripNamespaceFlag(process.argv.slice(2));
+  const sandboxLogDir =
+    namespace === 'sandbox'
+      ? mkdtempSync(join(tmpdir(), 'backlog-sandbox-logs-'))
+      : undefined;
   try {
     initTelemetry({
       service: 'backlog',
@@ -184,11 +180,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
     console.error(
       `[sox-telemetry] WARNING: initTelemetry failed (${
         err instanceof Error ? err.message : String(err)
-      }); telemetry records will be silently dropped this process`,
+      }); telemetry records will be silently dropped this process`
     );
   }
   runBacklogCli().catch((err) => {
-    console.error(err instanceof Error ? (err.stack ?? err.message) : String(err));
+    console.error(
+      err instanceof Error ? err.stack ?? err.message : String(err)
+    );
     process.exitCode = 1;
   });
 }

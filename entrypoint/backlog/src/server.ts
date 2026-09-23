@@ -13,8 +13,8 @@
  * DEVIATION from the README's illustrative pattern (which points BOTH
  * `extract()` and the live `import()` at the same file path): `extract()`
  * needs real TYPE INFORMATION (ts-morph parses declarations + JSDoc) to
- * derive JSON Schemas, but a shipped npm package's `dist/client.js` is
- * stripped JavaScript with none. `dist/client.d.ts` (emitted by
+ * derive JSON Schemas, but a shipped npm package's `dist/api.js` is
+ * stripped JavaScript with none. `dist/api.d.ts` (emitted by
  * vite-plugin-dts, mirroring `src/`) carries the SAME type graph as the
  * `.ts` source via ambient `declare function` nodes — a documented,
  * anticipated extraction path (`@adhd/apigen-core-client`'s
@@ -23,11 +23,11 @@
  * targets the built `.d.ts` (always present once `nx build backlog` has run
  * — nothing here needs the raw `.ts` source shipped in the npm package),
  * while the live function references come from a plain STATIC import of
- * `client.js` (resolved by the bundler/module loader at build/load time, not
+ * `api.js` (resolved by the bundler/module loader at build/load time, not
  * a runtime dynamic `import()` of a computed path) — avoiding the runtime
  * dynamic-import-of-a-string entirely. `import.meta.url` resolves to the
  * OUTPUT chunk's own URL once bundled (rollup's documented behavior), so
- * `<packageRoot>/dist/client.d.ts` is reachable the same way whether this
+ * `<packageRoot>/dist/api.d.ts` is reachable the same way whether this
  * module is executing from `dist/index.{js,mjs}` (production) or from
  * `src/server.ts` under vitest's transform (tests) — either way `dist/`
  * has already been built by the time this runs (nx `dependsOn`).
@@ -53,13 +53,22 @@ import { apiFastifyPlugin } from '@adhd/apigen-plugin-api-fastify';
 import { openapiPlugin } from '@adhd/apigen-plugin-openapi';
 import { mcpPlugin } from '@adhd/apigen-plugin-mcp';
 import { batchPlugin } from '@adhd/apigen-plugin-batch';
-import * as clientMod from './client.js';
-import type { BacklogCtx } from './client.js';
-import { openGraphBacklogStore, closeGraphBacklogStoreSafe, type GraphBacklogStore } from './store/graph-backlog-store.js';
-import { enableSemanticSearchFromConfig } from './store/semantic-search.js';
-import { hasExternalSignalHandling, installSignalCleanup } from './store/signal-cleanup.js';
-import { acquireServeLock, isLockableDbPath, type ServeLockHandle } from './store/serve-lock.js';
-import { buildBacklogEnv, resolveBacklogDbPath, resolveIrCacheFile } from './env.js';
+import * as clientMod from './api.js';
+import type { BacklogCtx } from './api.js';
+import {
+  openGraphBacklogStore,
+  closeGraphBacklogStoreSafe,
+  type GraphBacklogStore,
+} from './store/graph-backlog-store.js';
+import {
+  hasExternalSignalHandling,
+  installSignalCleanup,
+} from './store/signal-cleanup.js';
+import {
+  buildBacklogEnv,
+  resolveBacklogDbPath,
+  resolveIrCacheFile,
+} from './env.js';
 import { readBacklogVersionInfo } from './version-info.js';
 import type { Logger, OutputPlugin, RunInput } from '@adhd/apigen-core-client';
 
@@ -73,8 +82,13 @@ import type { Logger, OutputPlugin, RunInput } from '@adhd/apigen-core-client';
  * ACROSS packages, not an in-package private helper), so it's shared via a
  * plain re-export instead.
  */
-export function requireRun(plugin: OutputPlugin): (input: RunInput) => Promise<void> {
-  if (!plugin.run) throw new Error(`@adhd/backlog: apigen plugin "${plugin.id}" declares no run() — cannot mount live`);
+export function requireRun(
+  plugin: OutputPlugin
+): (input: RunInput) => Promise<void> {
+  if (!plugin.run)
+    throw new Error(
+      `@adhd/backlog: apigen plugin "${plugin.id}" declares no run() — cannot mount live`
+    );
   return plugin.run;
 }
 
@@ -106,17 +120,24 @@ export function testSilentLogger(): Logger | undefined {
   const noop = (): void => {
     /* silenced under vitest — see doc comment above */
   };
-  const silent: Record<string, unknown> = { info: noop, error: noop, debug: noop, fatal: noop, warn: noop, trace: noop };
+  const silent: Record<string, unknown> = {
+    info: noop,
+    error: noop,
+    debug: noop,
+    fatal: noop,
+    warn: noop,
+    trace: noop,
+  };
   silent['child'] = () => silent;
   return silent as unknown as Logger;
 }
 
 // ---------------------------------------------------------------------------
-// The one-package → four-mount surface (INTERFACE_v2 §10.0, AC-0)
+// The one-package → four-mount surface (SPEC.md §6.7)
 // ---------------------------------------------------------------------------
 
 /**
- * INTERFACE_v2 §6 "host-command carve-out" — the commands that are
+ * SPEC.md §6.6's "host-command carve-out" — the commands that are
  * deliberately NOT part of the mounted data surface, pinned as a value so the
  * refusal is enforceable rather than prose.
  *
@@ -128,38 +149,57 @@ export function testSilentLogger(): Logger | undefined {
  * Neither is a data op, so neither may ever appear as an apigen operation on
  * ANY of the four mounts.
  *
- * `assertHostCarveOut` turns AC-0's negative assertion ("`install`/`serve` are
- * NOT among the six") into a mount-time invariant: a future refactor that
+ * `assertHostCarveOut` turns §6.6's negative assertion ("`install`/`serve` are
+ * NOT among the mounted verbs") into a mount-time invariant: a future refactor that
  * accidentally exports a host command from the mounted client module fails at
  * `buildBacklogApigenPackage()` — in every transport at once — instead of
  * silently shipping a `backlog_serve` MCP tool that would open a second
- * writer against the store (the exact condition serve-lock.ts exists to make
- * impossible).
+ * concurrent writer against the store via a completely different lifecycle
+ * path than the one `startBacklogServer` itself expects.
  */
-export const BACKLOG_HOST_COMMANDS: readonly string[] = ['install', 'install-skill', 'serve'];
+export const BACKLOG_HOST_COMMANDS: readonly string[] = [
+  'install',
+  'install-skill',
+  'serve',
+];
 
 /**
- * INTERFACE_v2 §10.0 / AC-0 — the SIX data verbs the whole surface consolidates
- * onto (`backlog_get`, `backlog_query`, `backlog_create`, `backlog_update`,
- * `backlog_relate`, `backlog_admin`). Pinned here, next to the carve-out it is
- * the complement of, because it is the ONE list four separate surfaces are
+ * SPEC.md §6.7 — the data verbs the whole surface consolidates onto:
+ * the nine issue verbs plus `lookup` and §3a's registry CRUD verbs, mounted
+ * as `backlog_<verb>`. Pinned here, next to the carve-out it is the
+ * complement of, because it is the ONE list four separate surfaces are
  * checked against: the three apigen mounts derive their names from the
- * operation descriptors via `describeMountedSurface`, and `cli.ts`'s v2 argv
+ * operation descriptors via `describeMountedSurface`, and `cli.ts`'s argv
  * parser — which is deliberately NOT an apigen mount, because apigen's
  * `parseArgs` cannot express the §2.1b positional form, projects `string[]`
  * as a JSON-valued flag where §7.3 wants comma-separated, and only sets
  * `process.exitCode` on a thrown `ApiError` (so an `ok:false` envelope would
- * exit 0 and fail AC-6) — has to be checked against this list rather than
+ * exit 0, contradicting `BACKLOG_EXIT_CODE`) — has to be checked against this list rather than
  * derived from the mount.
  *
  * That asymmetry is exactly how a split brain starts, and this repo already
- * has one open as BUG-BACKLOG-MCP-CLI-SPLIT-BRAIN-001. `server.v2.spec.ts`
+ * has one open as BUG-BACKLOG-MCP-CLI-SPLIT-BRAIN-001. `server.verbs.spec.ts`
  * asserts BOTH sides against this constant so a verb added to one surface and
  * forgotten on the other fails a test instead of shipping.
  *
- * Order is the §1-§6 declaration order, not alphabetical; compare as sets.
+ * Order is the SPEC.md §4/§6 declaration order, not alphabetical; compare as sets.
  */
-export const BACKLOG_V2_VERBS: readonly string[] = ['get', 'query', 'create', 'update', 'relate', 'admin'];
+export const BACKLOG_VERBS: readonly string[] = [
+  'get',
+  'query',
+  'lookup',
+  'create',
+  'update',
+  'transition',
+  'claim',
+  'relate',
+  'move',
+  'upsert-project',
+  'upsert-component',
+  'upsert-location',
+  'rm-location',
+  'delete',
+];
 
 /**
  * One mounted operation, projected to all four transports backlog serves.
@@ -192,11 +232,11 @@ export interface IMountedOperationSurface {
  * Projects the extracted operation descriptors onto the four transports
  * backlog mounts, returning the single expected surface.
  *
- * This is the mechanical statement of INTERFACE_v2 §10.0: *one* operation
+ * This is the mechanical statement of SPEC.md §6.7: *one* operation
  * definition serves CLI, MCP, REST and OpenAPI. A test (or an operator) can
  * call this once and compare it against what each live transport actually
  * advertises; a divergence means some transport grew its own definition,
- * which is precisely what AC-0 forbids.
+ * which is precisely what §6.7 forbids.
  *
  * Only `kind: 'action'` operations are mounted — the same filter
  * `buildBacklogApigenPackage` applies when it builds `generated.schemas`, so
@@ -206,7 +246,9 @@ export interface IMountedOperationSurface {
  * @returns one entry per mounted operation, sorted by canonical id for stable
  *   comparison
  */
-export function describeMountedSurface(operations: readonly Operation[]): IMountedOperationSurface[] {
+export function describeMountedSurface(
+  operations: readonly Operation[]
+): IMountedOperationSurface[] {
   return operations
     .filter((op) => op.kind === 'action')
     .map((op) => {
@@ -224,28 +266,34 @@ export function describeMountedSurface(operations: readonly Operation[]): IMount
 }
 
 /**
- * INTERFACE_v2 §6 / AC-0 negative assertion, enforced at mount time.
+ * SPEC.md §6.6's negative assertion, enforced at mount time.
  *
  * Throws if any mounted operation's CLI leaf or MCP tool name collides with a
  * host command. Checked against the LEAF segment (`get-item` out of
  * `backlog get-item`) and against the full MCP tool name, because a host
  * command could be absorbed under either spelling.
  */
-function assertHostCarveOut(surface: readonly IMountedOperationSurface[]): void {
+function assertHostCarveOut(
+  surface: readonly IMountedOperationSurface[]
+): void {
   const offenders = surface.filter((entry) => {
     const leaf = entry.cliPath[entry.cliPath.length - 1] ?? '';
     return (
       BACKLOG_HOST_COMMANDS.includes(leaf) ||
-      BACKLOG_HOST_COMMANDS.some((cmd) => entry.mcpTool.endsWith(`_${cmd.replace(/-/g, '_')}`))
+      BACKLOG_HOST_COMMANDS.some((cmd) =>
+        entry.mcpTool.endsWith(`_${cmd.replace(/-/g, '_')}`)
+      )
     );
   });
   if (offenders.length > 0) {
     throw new Error(
-      `@adhd/backlog: host-command carve-out violated (INTERFACE_v2 §6, AC-0) — ` +
-        `${offenders.map((o) => o.id).join(', ')} was mounted as a data operation. ` +
+      `@adhd/backlog: host-command carve-out violated (SPEC.md §6.6) — ` +
+        `${offenders
+          .map((o) => o.id)
+          .join(', ')} was mounted as a data operation. ` +
         `install/install-skill must never open the store (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001) ` +
-        `and serve must never be reachable as a tool (a second writer against the same store is ` +
-        `the condition serve-lock.ts exists to prevent). Keep them host commands in cli.ts.`
+        `and serve must never be reachable as a tool — it has a completely different lifecycle ` +
+        `than a mounted data operation. Keep them host commands in cli.ts.`
     );
   }
 }
@@ -275,7 +323,10 @@ export function resolveExpectedMcpToolNames(
 ): string[] {
   const surface = describeMountedSurface(operations);
   const names = new Set<string>(surface.map((entry) => entry.mcpTool));
-  const descriptor: Descriptor = { host: 'backlog', operations: operations as Operation[] };
+  const descriptor: Descriptor = {
+    host: 'backlog',
+    operations: operations as Operation[],
+  };
   for (const plugin of usePlugins) {
     const mount = plugin.capabilities.mount;
     if (!mount) continue;
@@ -295,42 +346,45 @@ export interface StartOpts {
   adhdRoot?: string;
   cwd?: string;
   signal: AbortSignal;
+  /** Explicit-parameter-first namespace override — see
+   *  `BuildBacklogEnvOptions.namespace`'s doc comment. */
+  namespace?: string;
 }
 
 /**
- * Resolves the directory that actually contains the built `client.d.ts` /
- * `client.js` artifacts, by PROBING for `client.d.ts` rather than assuming a
+ * Resolves the directory that actually contains the built `api.d.ts` /
+ * `api.js` artifacts, by PROBING for `api.d.ts` rather than assuming a
  * fixed relative path — because this module executes from THREE genuinely
  * different layouts and a single `../dist` computation cannot satisfy all
  * three (BUG confirmed live via `npm install @adhd/backlog@0.1.0`: it
- * crashed at mount with `.../node_modules/@adhd/dist/client.d.ts does not
+ * crashed at mount with `.../node_modules/@adhd/dist/api.d.ts does not
  * exist`):
  *
  *  1. PUBLISHED (`node_modules/@adhd/backlog/…`): `@adhd/nx-build`'s
  *     `dist-manifest`/`publish` executors run `npm publish <distDir>` —
  *     `dist/` IS packed as the package root, so the shipped tarball has
- *     `index.js` and `client.d.ts` as SIBLINGS at the package root (there is
+ *     `index.js` and `api.d.ts` as SIBLINGS at the package root (there is
  *     no `dist/` subdirectory at all once installed). `dirname(import.meta.url)`
  *     here is already that root, so the OLD `join(here, '..', 'dist')` escaped
  *     one level too far, past the package root into
  *     `node_modules/@adhd/dist` — nonexistent.
  *  2. DEV-BUILT (`entrypoint/backlog/dist/index.{js,mjs}`, e.g. this repo's
- *     own `nx build backlog` output before packing): `client.d.ts` is ALSO a
+ *     own `nx build backlog` output before packing): `api.d.ts` is ALSO a
  *     sibling of `index.js`, both living directly under `dist/`.
- *  3. VITEST (`src/server.ts` transformed and run in place): `client.d.ts`
+ *  3. VITEST (`src/server.ts` transformed and run in place): `api.d.ts`
  *     has not moved next to `src/` — it's still only in the built `dist/`,
  *     one level up and back down from `src/`.
  *
- * Layouts 1 and 2 are identical in shape (client.d.ts is a sibling of the
+ * Layouts 1 and 2 are identical in shape (api.d.ts is a sibling of the
  * running module) and differ from layout 3 only in WHERE that sibling lives
- * relative to the module — so probing "is client.d.ts sitting right next to
+ * relative to the module — so probing "is api.d.ts sitting right next to
  * me?" before falling back to the vitest-only `../dist` shape correctly
  * covers all three without needing to distinguish "published" from
  * "dev-built" explicitly.
  */
 function backlogDistDir(): string {
   const here = dirname(fileURLToPath(import.meta.url));
-  if (existsSync(join(here, 'client.d.ts'))) return here;
+  if (existsSync(join(here, 'api.d.ts'))) return here;
   return join(here, '..', 'dist');
 }
 
@@ -384,7 +438,9 @@ function dereferenceSchema(schema: unknown): unknown {
     for (const key of ['definitions', '$defs']) {
       const defs = obj[key];
       if (defs && typeof defs === 'object' && !Array.isArray(defs)) {
-        for (const [name, def] of Object.entries(defs as Record<string, unknown>)) {
+        for (const [name, def] of Object.entries(
+          defs as Record<string, unknown>
+        )) {
           if (!(name in definitions)) definitions[name] = def;
         }
       }
@@ -452,23 +508,25 @@ const CORE_CLIENT_VERSION: string = requirePkg(
  * ONLY along the `scope` axis (project vs global data — see this file's own
  * comment above about the cache staying "one stable machine-wide location
  * no matter which scope a given invocation resolved its backlog *data*
- * to"). It is NOT correct along the `--sandbox`/test-isolation axis:
+ * to"). It is NOT correct along the `--namespace sandbox`/test-isolation axis:
  * `cli.ts`'s `runBacklogCli` and `startBacklogServer` both already thread an
  * `adhdRoot` override through `buildBacklogEnv` for every OTHER path (the
- * real SQLite store, `env.ensureDirs()`), but this cache file's own
+ * real store, `env.ensureDirs()`), but this cache file's own
  * `resolveIrCacheFile({ adhdRoot, instanceId })` parameters were simply never
- * wired to it — so a `--sandbox` invocation, despite reporting (and
- * genuinely using) an isolated store root, would still create
+ * wired to it — so a `--namespace sandbox` invocation, despite reporting
+ * (and genuinely using) an isolated store root, would still create
  * `~/.adhd/backlog/production/cache/apigen/ir-cache/...` on the real
  * machine `HOME` on its first extraction, defeating the isolation guarantee
- * `--sandbox` advertises (caught by `cli.spec.ts`'s
- * "--sandbox diverts the store away from the (fake) production HOME
- * entirely, and never creates anything under it" — a fake HOME stands in
- * for the real one there, but the bug is identical against a real HOME).
+ * `--namespace sandbox` advertises (caught by `cli.spec.ts`'s
+ * "--namespace sandbox diverts the store away from the (fake) production
+ * HOME entirely, and never creates anything under it" — a fake HOME stands
+ * in for the real one there, but the bug is identical against a real HOME).
  * Now accepts the same `{ adhdRoot, instanceId }` test-isolation pair every
  * other resolver in this file already takes, and forwards it verbatim.
  */
-function irCacheFile(opts: { adhdRoot?: string; instanceId?: string } = {}): string {
+function irCacheFile(
+  opts: { adhdRoot?: string; instanceId?: string } = {}
+): string {
   return resolveIrCacheFile(opts);
 }
 
@@ -501,10 +559,13 @@ function irCacheEnabled(): boolean {
  * instead — exactly the escape hatch that module doc describes for a caller
  * wanting non-default configuration in the same process.
  */
-function backlogIrCachePlugin(opts: { adhdRoot?: string; instanceId?: string } = {}): Plugin {
+function backlogIrCachePlugin(
+  opts: { adhdRoot?: string; instanceId?: string } = {}
+): Plugin {
   return {
     id: 'ir-cache',
-    description: 'Extract-stage IR cache, configured for the backlog hot path (BUG-019).',
+    description:
+      'Extract-stage IR cache, configured for the backlog hot path (BUG-019).',
     language: 'ts',
     capabilities: {
       extractLayer: {
@@ -543,7 +604,9 @@ function backlogIrCachePlugin(opts: { adhdRoot?: string; instanceId?: string } =
  * such caller exists today.
  */
 let extractInvoke: ((call: ExtractCall) => Promise<Operation[]>) | undefined;
-function getExtractInvoke(opts: { adhdRoot?: string; instanceId?: string } = {}): (call: ExtractCall) => Promise<Operation[]> {
+function getExtractInvoke(
+  opts: { adhdRoot?: string; instanceId?: string } = {}
+): (call: ExtractCall) => Promise<Operation[]> {
   extractInvoke ??= createExtractInvokerFromPlugins(
     irCacheEnabled() ? [backlogIrCachePlugin(opts)] : [],
     (call: ExtractCall) =>
@@ -560,10 +623,10 @@ function getExtractInvoke(opts: { adhdRoot?: string; instanceId?: string } = {})
   return extractInvoke;
 }
 
-async function extractClientOperations(
+async function extractApiOperations(
   opts: { adhdRoot?: string; instanceId?: string } = {}
 ): Promise<Operation[]> {
-  const clientDts = join(backlogDistDir(), 'client.d.ts');
+  const clientDts = join(backlogDistDir(), 'api.d.ts');
   if (!existsSync(clientDts)) {
     throw new Error(
       `@adhd/backlog: cannot mount — ${clientDts} does not exist. ` +
@@ -572,7 +635,7 @@ async function extractClientOperations(
   }
   // `dropFileSegment: true` (`ExtractOptions`, `@adhd/apigen-core-client`):
   // without it every op's `path` would unconditionally start with the
-  // `client.d.ts` extraction FILENAME artifact (`normalizeFileName` →
+  // `api.d.ts` extraction FILENAME artifact (`normalizeFileName` →
   // `'client-d'`), leaking into every transport's name — `backlog client-d
   // create-item` / `backlog_client_d_create_item` instead of the intended
   // `backlog create-item` / `backlog_create_item`. Safe here because every
@@ -604,13 +667,13 @@ async function extractClientOperations(
  * when a dispatched command actually reaches the real function, which never
  * happens for `--help`/no-args/an unknown command. This is what closes
  * DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001: `operations`/`schemas` below are
- * computed purely from the built `client.d.ts` (via `extractClientOperations`)
+ * computed purely from the built `api.d.ts` (via `extractApiOperations`)
  * and never touch `ctx` at all, so a lazy caller can defer opening the real
  * backing store until a command that actually needs it is dispatched.
  *
  * @param opts.adhdRoot/instanceId BUG-BACKLOG-SANDBOX-IRCACHE-001 — forwarded
- *   verbatim to `extractClientOperations`/the IR-cache plugin, so a caller
- *   already isolating its real store via `adhdRoot` (`--sandbox`, or any
+ *   verbatim to `extractApiOperations`/the IR-cache plugin, so a caller
+ *   already isolating its real store via `adhdRoot` (`--namespace sandbox`, or any
  *   other test-isolation caller of `buildBacklogEnv`) gets the extract-stage
  *   IR cache isolated the SAME way, instead of it silently falling through
  *   to the real machine `HOME`. Optional and additive — every existing call
@@ -630,7 +693,7 @@ export async function buildBacklogApigenPackage(
     createClient: () => Promise<BacklogCtx>;
   };
   /**
-   * AC-0: the four-transport projection of `operations`, computed once here
+   * §6.7: the four-transport projection of `operations`, computed once here
    * so CLI, MCP, REST and OpenAPI are provably reading ONE definition. Callers
    * that need to know "what is mounted" must read this rather than
    * re-deriving names per transport.
@@ -638,8 +701,9 @@ export async function buildBacklogApigenPackage(
   surface: IMountedOperationSurface[];
   operations: Operation[];
 }> {
-  const getCtx: () => BacklogCtx | Promise<BacklogCtx> = typeof ctx === 'function' ? ctx : () => ctx;
-  const operations = await extractClientOperations(opts);
+  const getCtx: () => BacklogCtx | Promise<BacklogCtx> =
+    typeof ctx === 'function' ? ctx : () => ctx;
+  const operations = await extractApiOperations(opts);
   const generated = {
     metadata: { namespace: 'backlog', phase: '' },
     schemas: Object.fromEntries(
@@ -667,7 +731,7 @@ export async function buildBacklogApigenPackage(
     ),
   };
   const schemas = composeSchemas(generated, []);
-  // AC-0 (INTERFACE_v2 §10.0) — project the ONE descriptor list onto the four
+  // SPEC.md §6.7 — project the ONE descriptor list onto the four
   // transports here, at the single composition point, and enforce the §6
   // host-command carve-out before any transport mounts. Every mount below
   // (and `cli.ts`'s cli-output mount) is handed this same `operations` array,
@@ -685,8 +749,11 @@ export async function buildBacklogApigenPackage(
       id: 'backlog',
       version,
       schemas,
-      importPath: join(backlogDistDir(), 'client.js'),
-      fns: clientMod as unknown as Record<string, (...args: unknown[]) => unknown>,
+      importPath: join(backlogDistDir(), 'api.js'),
+      fns: clientMod as unknown as Record<
+        string,
+        (...args: unknown[]) => unknown
+      >,
       createClient: async () => getCtx(),
     },
     operations,
@@ -700,7 +767,12 @@ export async function buildBacklogApigenPackage(
  * — no code generation.
  */
 export async function startBacklogServer(opts: StartOpts): Promise<void> {
-  const env = buildBacklogEnv({ scope: opts.scope, adhdRoot: opts.adhdRoot, cwd: opts.cwd });
+  const env = buildBacklogEnv({
+    scope: opts.scope,
+    adhdRoot: opts.adhdRoot,
+    cwd: opts.cwd,
+    namespace: opts.namespace,
+  });
   env.ensureDirs();
 
   // BUG-BACKLOG-NO-SIGNAL-HANDLERS-001: `serve.ts`'s `runServeCommand`
@@ -721,37 +793,23 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
   // not-yet-existing binding.
   // eslint-disable-next-line prefer-const
   let store: GraphBacklogStore | undefined;
-  // [inv:singleton] (docs/spec/service-lifecycle.md §5, sox-ecosystem) — see
-  // serve-lock.ts's header for the full incident/rationale. Released ONLY
-  // after the store is actually closed below (never merely on signal
-  // receipt), so a second `serve` attempted while THIS one is mid-shutdown
-  // is refused, not raced.
   const dbPath = resolveBacklogDbPath(env);
-  const serveLock: ServeLockHandle | undefined = isLockableDbPath(dbPath) ? acquireServeLock(dbPath) : undefined;
   const closeStoreOnce = (): Promise<void> => {
     if (!closePromise) {
-      closePromise = closeGraphBacklogStoreSafe(store).finally(() => serveLock?.release());
+      closePromise = closeGraphBacklogStoreSafe(store);
     }
     return closePromise;
   };
-  const signalCleanup = hasExternalSignalHandling() ? undefined : installSignalCleanup(closeStoreOnce);
+  const signalCleanup = hasExternalSignalHandling()
+    ? undefined
+    : installSignalCleanup(closeStoreOnce);
 
   // BUG-002: open through `resolveBacklogDbPath` so ADHD_BACKLOG_DATABASE_PATH
   // (→ config.db.path) actually redirects the store; `env.files.db` is only
   // the fallback.
   try {
     store = await openGraphBacklogStore(dbPath, env.config.db.busyTimeoutMs);
-    // RAG-SPEC.md §1.6 — opt-in semantic search. A no-op (and silent) unless
-    // `embedding.enabled`; never throws, so a missing/broken embedding stack
-    // can never stop the server from starting. Deliberately INSIDE this
-    // try/catch: if it ever did throw, the serve lock and signal handler
-    // below must still be released rather than leaked.
-    await enableSemanticSearchFromConfig(store, env.config.embedding);
   } catch (err) {
-    // The lock was acquired but the store open itself failed (bad path,
-    // corrupt file, etc.) — release the lock we're holding before propagating,
-    // or the failed attempt would permanently block every subsequent `serve`.
-    serveLock?.release();
     signalCleanup?.dispose();
     throw err;
   }
@@ -760,21 +818,22 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
   // Everything from here on runs inside the try/finally below, NOT just the
   // `Promise.all(runs)` it originally wrapped. `buildBacklogApigenPackage`
   // can genuinely throw at mount-composition time — a missing built
-  // `client.d.ts` (`extractClientOperations`), an extraction failure, or the
+  // `api.d.ts` (`extractApiOperations`), an extraction failure, or the
   // §6 host-carve-out violation `assertHostCarveOut` now raises — and every
-  // one of those happens AFTER the serve lock is held and the store is open.
-  // With the narrower scope, such a failure propagated without ever calling
-  // `closeStoreOnce()`, so the lock file stayed on disk naming a dead pid and
-  // every subsequent `backlog serve` against that store was refused until a
-  // human deleted it by hand — the same leak the store-open `catch` above
-  // already guards against, one step later in the sequence. Widening the
-  // scope cannot regress the success path: the `finally` already ran there.
+  // one of those happens AFTER the store is open. With the narrower scope,
+  // such a failure propagated without ever calling `closeStoreOnce()`,
+  // leaking the open store handle and signal-cleanup registration — the same
+  // leak the store-open `catch` above already guards against, one step later
+  // in the sequence. Widening the scope cannot regress the success path: the
+  // `finally` already ran there.
   try {
-    const { pkg, operations } = await buildBacklogApigenPackage(ctx, { adhdRoot: opts.adhdRoot });
+    const { pkg, operations } = await buildBacklogApigenPackage(ctx, {
+      adhdRoot: opts.adhdRoot,
+    });
     const logger = testSilentLogger();
 
     const runs: Promise<void>[] = [];
-    // AC-0 / INTERFACE_v2 §10.0 — BOTH mounts below are handed the SAME
+    // SPEC.md §6.7 — BOTH mounts below are handed the SAME
     // `pkg` and the SAME `operations` array produced by the single
     // `buildBacklogApigenPackage` call above; `cli.ts`'s cli-output mount
     // makes the same call for the same reason. `openapiPlugin` is a
@@ -790,16 +849,20 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
         requireRun(apiFastifyPlugin)({
           packages: [pkg],
           outputDir: '',
-          options: { port: opts.port ?? 3300, host: opts.host ?? '127.0.0.1', usePlugins: [openapiPlugin, batchPlugin] },
+          options: {
+            port: opts.port ?? 3300,
+            host: opts.host ?? '127.0.0.1',
+            usePlugins: [openapiPlugin, batchPlugin],
+          },
           signal: opts.signal,
-          // AC-0 / INTERFACE_v2 §10.0 — the SAME `operations` array the MCP
+          // SPEC.md §6.7 — the SAME `operations` array the MCP
           // mount below receives. A per-transport operation list is exactly
-          // what AC-0 forbids, because it lets the REST surface drift from
+          // what §6.7 forbids, because it lets the REST surface drift from
           // the MCP one silently.
           //
           // This line previously read
           // `operations.filter((op) => !op.id.endsWith('get-item'))`, labelled
-          // "NEGATIVE CONTROL (temporary)" — a deliberate AC-0 violation
+          // "NEGATIVE CONTROL (temporary)" — a deliberate §6.7 violation
           // inserted to prove a parity assertion had teeth, which was never
           // reverted and shipped on main in 0cb37400. The published server's
           // REST/OpenAPI surface was therefore missing `get-item` entirely.

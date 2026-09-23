@@ -1,19 +1,30 @@
 /**
  * immediate-retry.ts — bounded, jittered exponential-backoff retry wrapper
  * around `adapter.transaction(fn, { mode: 'immediate' })` (DEBT-BACKLOG-
- * CONCURRENCY-BUSY-RETRY-001). `mutate-metadata.ts` / `ids.ts` are the ONLY
- * two write paths that call `.immediate()` directly (DESIGN.md §3/§4.3) and
- * both funnel through this wrapper — retrying ONLY busy-shaped errors, using
- * store-adapter's portable `isBusyError`/`isConcurrentConflict` duck-type
- * checks (the same helpers the adapter's own retry loop uses) so BOTH
- * adapter error shapes are covered: the legacy SQLite adapter's
- * `SQLITE_BUSY`/`SQLITE_BUSY_SNAPSHOT` codes and the turso driver's
- * `GenericFailure` with a
- * "database is locked"/"database is busy" message. Any other thrown error
- * (including `NotFoundError`, `ClaimContentionError`) propagates immediately,
- * unretried — and the semantic `'held'` claim-contention RESULT (claim.ts) is
- * a normal RETURN VALUE, never an exception, so it is never touched by this
- * wrapper either.
+ * CONCURRENCY-BUSY-RETRY-001). The write layer's `executeWriteTransaction`
+ * (`write/tx.ts`) and `graph-backlog-store.ts`'s schema apply are the write
+ * paths that reach the `immediate` mode directly, and both funnel through
+ * this wrapper.
+ *
+ * It retries ONLY busy-shaped errors, and it does not classify them itself:
+ * `@adhd/sox-store-adapter`'s `isBusyError`/`isConcurrentConflict` duck-type
+ * checks are the single portable definition of "this write lost a lock race"
+ * — the same helpers the adapter's own retry loop uses. Keeping the
+ * classification behind that seam is the point: every driver-specific error
+ * shape lives on the adapter's side of it, and nothing here needs to know
+ * which substrate raised the error.
+ *
+ * This wrapper retries a THROWN busy/locked error; it neither sets nor
+ * introspects a `busy_timeout` PRAGMA. The busy-timeout budget is a separate,
+ * adapter-owned concern applied at connect time (`graph-backlog-store.ts`
+ * applies the caller's value via `adapter.pragmaSet('busy_timeout', N)` after
+ * the factory's init; a substrate may apply its own equivalent). Nothing here
+ * reads a PRAGMA or classifies an error by one.
+ *
+ * Any other thrown error (including `NotFoundError`, `ClaimContentionError`)
+ * propagates immediately, unretried — and the semantic `'held'`
+ * claim-contention RESULT (claim.ts) is a normal RETURN VALUE, never an
+ * exception, so it is never touched by this wrapper either.
  */
 
 import { isBusyError, isConcurrentConflict } from '@adhd/sox-store-adapter';
@@ -27,21 +38,22 @@ export interface ImmediateRetryOpts {
   maxAttempts?: number;
 }
 
-/** True iff `err` is a busy/locked contention error on EITHER substrate. */
-function isSqliteBusyError(err: unknown): boolean {
+/** True iff `err` is a busy/locked contention error, on whichever substrate the adapter is driving. */
+function isBusyContention(err: unknown): boolean {
   return isBusyError(err) || isConcurrentConflict(err);
 }
 
 /**
  * Jittered async sleep. The store-adapter API is fully async end-to-end, so
  * the retry wrapper waits via a real `setTimeout` promise — the event loop
- * stays free for the adapter's own async connection/query machinery (turso
- * in particular needs it: its driver is async I/O, unlike the old
- * synchronous SQLite handle, which is why the pre-adapter version of
- * this file used a blocking `Atomics.wait`).
+ * stays free for the adapter's own async connection/query machinery. The
+ * driver underneath does async I/O, so a blocking wait here would starve the
+ * very machinery the retry is waiting on.
  */
 function sleepAsync(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.round(ms))));
+  return new Promise((resolve) =>
+    setTimeout(resolve, Math.max(0, Math.round(ms)))
+  );
 }
 
 /**
@@ -54,13 +66,16 @@ function sleepAsync(ms: number): Promise<void> {
  * is still a real failure — this bounds the wait, it doesn't hide contention
  * forever).
  */
-export async function withImmediateRetry<T>(attempt: () => Promise<T>, opts: ImmediateRetryOpts = {}): Promise<T> {
+export async function withImmediateRetry<T>(
+  attempt: () => Promise<T>,
+  opts: ImmediateRetryOpts = {}
+): Promise<T> {
   const maxAttempts = opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   for (let i = 0; ; i++) {
     try {
       return await attempt();
     } catch (err) {
-      if (!isSqliteBusyError(err) || i >= maxAttempts - 1) throw err;
+      if (!isBusyContention(err) || i >= maxAttempts - 1) throw err;
       const delay = Math.min(MAX_DELAY_MS, BASE_DELAY_MS * 2 ** i);
       await sleepAsync(delay * (0.5 + Math.random() * 0.5));
     }
