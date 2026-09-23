@@ -92,7 +92,8 @@ describe('openGraphBacklogStore — busy_timeout actually takes effect (BUG-SOXG
   // comment above), so the older "timing assertion" objection no longer applies. The
   // remaining reason to skip is purely cost: the test's mechanism is to hold a real
   // `.immediate()` transaction open on a second connection and measure how long a third
-  // connection spins in SQLite's native busy handler before giving up — paying that
+  // connection spins in the store adapter's native busy handler before giving up —
+  // paying that
   // multi-second hold TWICE (large timeout vs zero) to compute the ratio. Real wall-clock
   // burn for a property, not CPU throughput. The sibling tests above are cheap pragma
   // read-backs and are LEFT RUNNING.
