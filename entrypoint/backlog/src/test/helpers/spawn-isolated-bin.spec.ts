@@ -26,7 +26,7 @@
  *        - unit: `expected '/Users/nix' to be '/tmp/isolation-unit-root'`
  *        - e2e:  the child falls back to the real machine home and resolves
  *          the real production store (`…/Users/nix/.adhd/backlog/production/
- *          data/backlog-v2.db`), exactly the leak the invariant prevents.
+ *          data/backlog.db`), exactly the leak the invariant prevents.
  *      Restore `HOME: root`; green again.
  *
  *   B. In `buildIsolatedEnv`, remove the `AMBIENT_REDIRECT_ENV_KEYS` strip
@@ -196,15 +196,18 @@ describe('spawn-isolated-bin — the HOME-redirect invariant is enforced, not ju
     );
   });
 
-  // Durability guard (PR #12 review finding, optional): a NEW spec that
+  // Durability guard (PR #12 review finding `82470ae8`, widened on the merge
+  // with the branch's `--namespace sandbox` architecture): a NEW spec that
   // spawns the real built bin by `process.execPath [DIST_INDEX, …]` without
-  // routing through this helper silently reintroduces the leak. This scans
-  // the package's spec sources for exactly that shape and fails if the file
-  // does not import the helper. Sites that isolate by a different mechanism
-  // use a different spawn shape (fixtures, `workerData`) and are not matched.
-  it('every spec that spawns `process.execPath [DIST_INDEX, …]` imports this helper', () => {
+  // routing through an isolation helper silently reintroduces the config-layer
+  // leak. This package now has TWO canonical isolation helpers — this one
+  // (HOME redirect) and `spawn-backlog-bin.ts` (`--namespace sandbox`) — so the
+  // guard accepts a spawn site that imports EITHER. Sites that isolate by a
+  // different mechanism use a different spawn shape (fixtures, `workerData`,
+  // an explicit `HOME`) and are not matched.
+  it('every spec that spawns `process.execPath [DIST_INDEX, …]` imports an isolation helper', () => {
     const spawnsDistIndex = /(?:spawn|spawnSync)\s*\(\s*process\.execPath\s*,\s*\[\s*DIST_INDEX/;
-    const importsHelper = /from\s+['"][^'"]*spawn-isolated-bin(?:\.js)?['"]/;
+    const importsHelper = /from\s+['"][^'"]*(?:spawn-isolated-bin|spawn-backlog-bin)(?:\.js)?['"]/;
     const offenders = listSpecFiles(SRC_ROOT)
       .filter((file) => {
         const content = readFileSync(file, 'utf8');

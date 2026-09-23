@@ -1,24 +1,24 @@
 /**
  * ir-cache.integration.spec.ts — FEAT-002's real-hot-path proof: the extract-
  * stage IR cache wired into `entrypoint/backlog`'s ACTUAL BUG-019 call site
- * (`extractClientOperations()`), driven through the REAL BUILT `dist/index.js`
+ * (`extractApiOperations()`), driven through the REAL BUILT `dist/index.js`
  * exactly like `cli.spec.ts` does (per AGENTS.md §7 — drive the built
  * consumer path, never an in-process bypass). This project's `test` target
- * already `dependsOn: ["build"]`, so `dist/index.js` + `dist/client.d.ts`
+ * already `dependsOn: ["build"]`, so `dist/index.js` + `dist/api.d.ts`
  * are always fresh.
  *
  * What is proven, with the repo's verification bar (deterministic, no sleeps,
  * real components):
  *  1. A real `backlog --help` run writes exactly ONE IR-cache entry — the
- *     single `extractClientOperations()` `ExtractCall` on the hot path.
+ *     single `extractApiOperations()` `ExtractCall` on the hot path.
  *  2. A SECOND identical run HITS: the entry file's mtime is unchanged, which
  *     can only mean no `put` happened — i.e. the terminal extractor never ran
  *     (a MISS would overwrite the entry and bump its mtime).
- *  3. After touching ONLY the built `client.d.ts`'s MTIME (content unchanged),
+ *  3. After touching ONLY the built `api.d.ts`'s MTIME (content unchanged),
  *     a THIRD run still HITs — proving the cache key is content-addressed on
  *     the real path, not mtime-based. (This is the same teeth as the plugin's
  *     unit-level mtime test, asserted here against the shipped artifact.)
- *  4. After editing the built `client.d.ts`'s ACTUAL CONTENT (a real byte
+ *  4. After editing the built `api.d.ts`'s ACTUAL CONTENT (a real byte
  *     change, restored afterward), a FOURTH run MISSes and overwrites the
  *     entry (its mtime changes) — the real-content-change-invalidation proof
  *     on the actual built path, closing the gap where only mtime-invariance
@@ -53,7 +53,7 @@ import { runIsolatedBin } from './test/helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
-const CLIENT_DTS = join(HERE, '..', 'dist', 'client.d.ts');
+const API_DTS = join(HERE, '..', 'dist', 'api.d.ts');
 
 /** Spawns the REAL built `backlog` bin with a throwaway cache file/cwd. */
 function runHelp(
@@ -87,24 +87,26 @@ describe('FEAT-002 — extract-stage IR cache on the REAL backlog hot path', () 
     // Fail loudly if the built artifact this test drives is missing (the
     // project's test target dependsOn build, but a missing dist must turn
     // this suite red, never silently skip — AGENTS.md §7).
-    expect(DIST_INDEX, `built bin missing — run "nx build backlog" first: ${DIST_INDEX}`).toSatisfy(
-      (p: string) => {
-        try {
-          return statSync(p).isFile();
-        } catch {
-          return false;
-        }
+    expect(
+      DIST_INDEX,
+      `built bin missing — run "nx build backlog" first: ${DIST_INDEX}`
+    ).toSatisfy((p: string) => {
+      try {
+        return statSync(p).isFile();
+      } catch {
+        return false;
       }
-    );
-    expect(CLIENT_DTS, `built client.d.ts missing — run "nx build backlog" first: ${CLIENT_DTS}`).toSatisfy(
-      (p: string) => {
-        try {
-          return statSync(p).isFile();
-        } catch {
-          return false;
-        }
+    });
+    expect(
+      API_DTS,
+      `built api.d.ts missing — run "nx build backlog" first: ${API_DTS}`
+    ).toSatisfy((p: string) => {
+      try {
+        return statSync(p).isFile();
+      } catch {
+        return false;
       }
-    );
+    });
 
     // Run 1: extraction MISS — the invoker's single ExtractCall writes one entry.
     expect(runHelp(cacheFile, cwd).status).toBe(0);
@@ -118,9 +120,9 @@ describe('FEAT-002 — extract-stage IR cache on the REAL backlog hot path', () 
     expect(statSync(cacheFile).mtimeMs).toBe(mtimeAfterRun1);
 
     // Touch ONLY the mtime of the built source artifact (content byte-identical).
-    const st = statSync(CLIENT_DTS);
+    const st = statSync(API_DTS);
     utimesSync(
-      CLIENT_DTS,
+      API_DTS,
       new Date(st.atime.getTime() + 60_000),
       new Date(st.mtime.getTime() + 60_000)
     );
@@ -147,30 +149,39 @@ describe('FEAT-002 — extract-stage IR cache on the REAL backlog hot path', () 
     // mtime-invariance proof, closing the previously-flagged gap where only
     // "content unchanged, mtime touched" (never a genuine content change) was
     // exercised against the real built artifact.
-    const originalClientDts = readFileSync(CLIENT_DTS, 'utf8');
+    const originalApiDts = readFileSync(API_DTS, 'utf8');
     const mtimeBeforeRun4 = statSync(cacheFile).mtimeMs;
     try {
-      writeFileSync(CLIENT_DTS, `${originalClientDts}\n// FEAT-002 content-invalidation probe\n`);
+      writeFileSync(
+        API_DTS,
+        `${originalApiDts}\n// FEAT-002 content-invalidation probe\n`
+      );
       expect(runHelp(cacheFile, cwd).status).toBe(0);
       expect(statSync(cacheFile).mtimeMs).not.toBe(mtimeBeforeRun4);
     } finally {
       // Restore the built artifact exactly — this test must not leave the
       // shared `dist/` output mutated for any other test/consumer.
-      writeFileSync(CLIENT_DTS, originalClientDts);
+      writeFileSync(API_DTS, originalApiDts);
     }
   });
 
   it('APIGEN_IR_CACHE_ENABLED=0 disables caching entirely — no cache file is ever created', () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), 'apigen-ir-cache-backlog-disabled-'));
+    const cacheDir = mkdtempSync(
+      join(tmpdir(), 'apigen-ir-cache-backlog-disabled-')
+    );
     cacheFile = join(cacheDir, 'backlog-client.ir.json');
     cwd = mkdtempSync(join(tmpdir(), 'apigen-ir-cache-cwd-disabled-'));
 
-    expect(runHelp(cacheFile, cwd, { APIGEN_IR_CACHE_ENABLED: '0' }).status).toBe(0);
+    expect(
+      runHelp(cacheFile, cwd, { APIGEN_IR_CACHE_ENABLED: '0' }).status
+    ).toBe(0);
     expect(existsSync(cacheFile)).toBe(false);
 
     // A second run also succeeds — real extraction every time, no cache
     // involvement at all (the opt-out's behavioral proof).
-    expect(runHelp(cacheFile, cwd, { APIGEN_IR_CACHE_ENABLED: '0' }).status).toBe(0);
+    expect(
+      runHelp(cacheFile, cwd, { APIGEN_IR_CACHE_ENABLED: '0' }).status
+    ).toBe(0);
     expect(existsSync(cacheFile)).toBe(false);
   });
 });

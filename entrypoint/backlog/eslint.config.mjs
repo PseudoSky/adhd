@@ -44,15 +44,27 @@ const {
  * runtime, including everything reachable transitively through bundled
  * `@adhd/*` source — so it's exactly the set `@nx/dependency-checks`
  * structurally cannot compute on its own. Any dependency it can already see
- * correctly (`better-sqlite3`, `yaml`, `@adhd/sox-graph-store`, …) is a
+ * correctly (`fastify`, `yaml`, `@adhd/sox-graph-store`, …) is a
  * harmless no-op to also list here. Add a new npm dependency to any bundled
  * `@adhd/*` package and this list grows with it automatically — no manual
  * edit, no drift. This config is `.mjs` (not `.cjs`) so it can both compute
  * that list via `createRequire` and import the shared flat base config.
  */
-const ignoredDependencies = Array.from(
-  computeRealDependencyNames(import.meta.dirname),
-);
+const ignoredDependencies = [
+  ...computeRealDependencyNames(import.meta.dirname),
+  // `@adhd/apigen-base-logical` is the same structural blind spot as the
+  // pino/pino-pretty case above, one level up: `findNpmDependencies` (which
+  // backs `@nx/dependency-checks`) walks only the `build` target's own file
+  // graph (`vite.config.ts`'s `main: src/index.ts`), which never reaches a
+  // `*.spec.ts` file — so a dependency imported ONLY by a spec (here,
+  // `src/mcp-discoverability-real-ops.spec.ts`'s `synthesizeExample` /
+  // `X_APIGEN_*` imports, proving apigen's schema-driven worked-example
+  // synthesis against backlog's own real, already-built `dist/api.d.ts`) is
+  // permanently invisible to the rule and gets reported/stripped as
+  // "obsolete" no matter what the source does. Declared here so
+  // `sync-deps`/`lint` stop deleting the real, needed `package.json` entry.
+  '@adhd/apigen-base-logical',
+];
 
 export default [
   ...baseConfig,

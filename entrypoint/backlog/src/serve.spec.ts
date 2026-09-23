@@ -1,6 +1,6 @@
 /**
- * serve.spec.ts — MIGRATION.md §4.5: `.mcp.json` wires a `backlog` stdio
- * entry that spawns `node dist/index.js serve --transport mcp` directly (no
+ * serve.spec.ts — `.mcp.json` wires a `backlog` stdio entry that spawns
+ * `node dist/index.js serve --transport mcp` directly (no
  * test-only fixture, no `startBacklogServer` import) — before this command
  * existed, `.mcp.json` would have had nothing real to point at
  * (`startBacklogServer` was only reachable by importing `@adhd/backlog`
@@ -11,23 +11,35 @@
  * MCP server works").
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { rmSync } from 'node:fs';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import {
   buildBacklogApigenPackage,
   resolveExpectedMcpToolNames,
 } from './server.js';
+import { buildBacklogEnv, resolveBacklogDbPath } from './env.js';
 import {
-  isolatedSpawnOptions,
-  runIsolatedBin,
-} from './test/helpers/spawn-isolated-bin.js';
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
+  openTestIssueStore,
+  seedProject,
+} from './test/helpers/open-test-issue-store.js';
+import type { IOutcomeEnvelope } from './envelope.js';
+import type { IIssueCard } from './query/types.js';
+import type { ICreateIssueResult } from './write/create-issue.js';
+// STATE.md A15: this file previously used a local `adhdRoot` (mkdtempSync)
+// as the spawn's `cwd` ONLY — never wired to `ADHD_ROOT`/`--namespace
+// sandbox` — so the real machine's global `embedding.enabled: true`
+// config.yaml still resolved through, silently paying a real ONNX/fastembed
+// model load per invocation (confirmed by direct reproduction: real
+// CoreML/onnxruntime warnings). Moved onto the canonical sandbox helper,
+// which mints a real isolated `adhdRoot` AND writes `embedding.enabled:
+// false` before this file's `serve` subprocess ever starts.
+import {
+  mintBacklogSandbox,
+  runBacklogBin,
+  stdioSpawnOptionsForSandbox,
+  type SandboxHandle,
+} from './test/helpers/spawn-backlog-bin.js';
 
 /** See install.e2e.spec.ts's identical helper doc comment. */
 async function expectedMcpToolNames(): Promise<string[]> {
@@ -42,36 +54,57 @@ async function expectedMcpToolNames(): Promise<string[]> {
 describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, real spawned bin', () => {
   let client: Client | undefined;
   let transport: StdioClientTransport | undefined;
-  let adhdRoot: string | undefined;
+  let sandbox: SandboxHandle | undefined;
 
   afterEach(async () => {
     await client?.close().catch(() => undefined);
     await transport?.close().catch(() => undefined);
     client = undefined;
     transport = undefined;
-    if (adhdRoot) rmSync(adhdRoot, { recursive: true, force: true });
-    adhdRoot = undefined;
+    if (sandbox) rmSync(sandbox.adhdRoot, { recursive: true, force: true });
+    sandbox = undefined;
   });
 
-  it('starts a real MCP stdio server via `serve --transport mcp`; tools/list + a real createItem/getItem round-trip work', async () => {
-    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-serve-cli-mcp-'));
-    const repo = 'PseudoSky/serve-cli-mcp-test';
+  it('starts a real MCP stdio server via `serve --transport mcp`; tools/list + a real create/get round-trip work', async () => {
+    sandbox = mintBacklogSandbox();
 
-    // Exactly the invocation `.mcp.json` itself performs: `node dist/index.js
-    // serve --transport mcp`, no other flags — scope/isolation come from
-    // env vars + cwd, same convention `cli.spec.ts`'s `runBin` already
-    // proves is real isolation (never the machine's global `~/.adhd/backlog`).
-    transport = new StdioClientTransport({
-      // `process.execPath` (not `'node'` off PATH) — the same interpreter
-      // `runIsolatedBin`/`isolatedSpawnOptions` sites use, so this spec cannot
-      // pick up a different Node via an ambient PATH.
-      command: process.execPath,
-      args: [DIST_INDEX, 'serve', '--transport', 'mcp'],
-      // The required `ADHD_BACKLOG_SCOPE=project` + `HOME=<root>` redirect
-      // pair (and why the scope alone is not enough) lives in ONE place now —
-      // `test/helpers/spawn-isolated-bin.ts`, guarded by its own spec.
-      ...isolatedSpawnOptions(adhdRoot),
+    // `project` is resolved-only — `create` never mints one (SPEC.md §1/
+    // §6.1) — so seed it through the real store BEFORE the server subprocess
+    // opens its own connection to the same file. `resolveBacklogDbPath` given
+    // the SAME `adhdRoot`+`namespace:'sandbox'` resolves the identical file
+    // the spawned `serve --transport mcp` process below will open. Deliberately
+    // NO `scope: 'project'` override here (a real, disclosed environment-
+    // builder bug this task found: `resolveRoots`'s `project`-scope branch
+    // resolves its base purely from `findProjectRoot(cwd)`, never honoring
+    // `adhdRoot` — the exact opposite of the `global`/`system` bases, which
+    // DO honor it. `scope: 'project'` + `adhdRoot` therefore silently
+    // resolves to the WRONG directory whenever an ancestor of `cwd` happens
+    // to carry a stray `.git`/`.adhd`/`adhd.environment.yaml` marker. Filed;
+    // not fixed here — CRITICAL blast radius, shared by every
+    // `@adhd/environment-builder` consumer, out of this task's scope.
+    // `buildBacklogEnv`'s own default scope is `'global'`, which DOES honor
+    // `adhdRoot` correctly — matching `cli.spec.ts`'s own proven convention
+    // of never combining an explicit `scope` with `--namespace sandbox`.
+    const seedEnv = buildBacklogEnv({
+      adhdRoot: sandbox.adhdRoot,
+      namespace: 'sandbox',
     });
+    seedEnv.ensureDirs();
+    const dbPath = resolveBacklogDbPath(seedEnv);
+    const seedStore = await openTestIssueStore(dbPath);
+    const { projectUid } = await seedProject(
+      seedStore,
+      'serve-cli-mcp-test-project'
+    );
+    await seedStore.close();
+
+    // Exactly the invocation `.mcp.json` itself performs (`serve --transport
+    // mcp`) — routed through the canonical sandbox helper (STATE.md A15) so
+    // this real subprocess never touches the machine's global
+    // `~/.adhd/backlog/production/config.yaml` (`embedding.enabled: true`).
+    transport = new StdioClientTransport(
+      stdioSpawnOptionsForSandbox(sandbox, ['serve', '--transport', 'mcp'])
+    );
     client = new Client(
       { name: 'backlog-serve-cli-test-client', version: '1.0.0' },
       { capabilities: {} }
@@ -86,26 +119,22 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
     const expected = await expectedMcpToolNames();
     expect(tools.tools.map((t) => t.name).sort()).toEqual(expected);
 
-    // `create(ctx, input: IBacklogCreateInput)` is a single non-`ctx` param,
-    // so apigen's MCP mount wraps it as `{ data: { input: <the param> } }`
-    // (the "apigen calling convention" — observed directly from
-    // `backlog_create`'s real `tools/list` inputSchema, whose
-    // `description` states it, and from a real `callTool` round-trip against
-    // the spawned server below). `IBacklogCreateInput` itself carries the
-    // create payload under `item` (renamed from the old, confusing
-    // `input.input` double-nesting) plus the required `by` attribution
-    // (INTERFACE_v2 §7.5 — every mutation needs one).
+    // `create(ctx, input: ICreateIssueInput)` is a single non-`ctx` param, so
+    // apigen's MCP mount wraps it as `{ data: { input: <the flat create
+    // payload> } }` (the "apigen calling convention" — observed directly from
+    // `backlog_create`'s real `tools/list` inputSchema and from a real
+    // `callTool` round-trip against the spawned server below). The flat
+    // payload carries `title`/`body`/`project`/`by` directly — no `item`
+    // wrapper, no `family`/`repo` (identity is the global `uid`; there is no
+    // human-readable id in this data model).
     const createResult = await client.callTool({
       name: 'backlog_create',
       arguments: {
         data: {
           input: {
-            item: {
-              family: 'BUG-SERVECLI',
-              title: 'created via serve cli',
-              body: 'x',
-              repo,
-            },
+            title: 'created via serve cli',
+            body: 'x',
+            project: projectUid,
             by: 'serve.spec',
           },
         },
@@ -115,44 +144,42 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
       type: string;
       text: string;
     }>;
-    // Real observed shape: the §7.1 outcome envelope `{ ok, data }`, where
-    // `data` is `ICreateOutcome` — `humanId` lives at `data.humanId`
-    // directly, never nested under a `data.item.humanId` (BUG-BACKLOG-V2-
-    // ENVELOPE-DATA-STRIPPED-001 / cli-envelope.spec.ts covers the envelope
-    // itself; this asserts the MCP transport carries the same shape).
-    const created = JSON.parse(createContent[0]?.text ?? '{}') as {
-      ok: boolean;
-      data: { created: boolean; humanId: string; item: { humanId: string } };
-    };
+    // Real observed shape: the outcome envelope `{ ok, data }`, where `data`
+    // is `ICreateIssueResult` — the new `uid` lives at `data.uid` directly.
+    const created = JSON.parse(
+      createContent[0]?.text ?? '{}'
+    ) as IOutcomeEnvelope<ICreateIssueResult>;
     expect(created.ok).toBe(true);
+    if (!created.ok) throw new Error('unreachable — checked above');
     expect(created.data.created).toBe(true);
-    expect(created.data.humanId).toBe('BUG-SERVECLI-001');
+    const createdUid = created.data.uid;
+    expect(createdUid).toBeTruthy();
 
-    // `get(ctx, input: IBacklogGetOptions)`'s single param is also named
-    // `input`, but `IBacklogGetOptions` has no nested `input` field of its
-    // own, so this is a single level of `data.input` wrapping (unlike
-    // `create`'s double nesting above).
+    // `get(ctx, input: IIssueGetInput)`'s single param is also named `input`,
+    // and `IIssueGetInput` has no nested `input` field of its own, so this is
+    // a single level of `data.input` wrapping (unlike `create`'s payload
+    // above, which is itself a flat object).
     const getResult = await client.callTool({
       name: 'backlog_get',
-      arguments: { data: { input: { repo, humanId: created.data.humanId } } },
+      arguments: { data: { input: { uid: createdUid } } },
     });
     const getContent = getResult.content as Array<{
       type: string;
       text: string;
     }>;
-    const got = JSON.parse(getContent[0]?.text ?? '{}') as {
-      ok: boolean;
-      data: { title: string };
-    };
+    const got = JSON.parse(
+      getContent[0]?.text ?? '{}'
+    ) as IOutcomeEnvelope<IIssueCard>;
     expect(got.ok).toBe(true);
+    if (!got.ok) throw new Error('unreachable — checked above');
     expect(got.data.title).toBe('created via serve cli');
   }, 30_000);
 
   it('BUG-033: `serve --help` prints usage and exits 0 — never a raw unhandled-exception stack trace', () => {
-    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-serve-cli-help-'));
-    const result = runIsolatedBin(DIST_INDEX, ['serve', '--help'], adhdRoot, {
-      timeoutMs: 10_000,
-    });
+    const result = runBacklogBin(['serve', '--help']);
+    sandbox = result.sandboxRoot
+      ? ({ adhdRoot: result.sandboxRoot } as SandboxHandle)
+      : undefined;
     expect(result.status).toBe(0);
     expect(result.stdout).toMatch(/backlog serve/);
     // The defect this proves fixed: a raw stack trace (`at file:///…`,
@@ -162,13 +189,10 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
   });
 
   it('rejects an unknown --transport value rather than silently defaulting', () => {
-    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-serve-cli-badtransport-'));
-    const result = runIsolatedBin(
-      DIST_INDEX,
-      ['serve', '--transport', 'bogus'],
-      adhdRoot,
-      { timeoutMs: 10_000 }
-    );
+    const result = runBacklogBin(['serve', '--transport', 'bogus']);
+    sandbox = result.sandboxRoot
+      ? ({ adhdRoot: result.sandboxRoot } as SandboxHandle)
+      : undefined;
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(/--transport/);
   });

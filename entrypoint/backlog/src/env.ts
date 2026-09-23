@@ -6,24 +6,51 @@
  */
 import { join } from 'node:path';
 import { Environment } from '@adhd/environment';
-import type { EnvironmentOptions, EnvironmentSpec, Scope } from '@adhd/environment-base-spec';
+import type {
+  EnvironmentOptions,
+  EnvironmentSpec,
+  Scope,
+} from '@adhd/environment-base-spec';
 
 export interface BacklogConfig {
-  readonly db: { readonly path: string | undefined; readonly busyTimeoutMs: number };
+  readonly db: {
+    readonly path: string | undefined;
+    readonly busyTimeoutMs: number;
+  };
   readonly logging: { readonly level: string };
-  readonly migration: { readonly phase: string };
   /**
    * RAG-SPEC.md §1.6 — the opt-in embedding/vector stack. `enabled` defaults
    * to FALSE: an unconfigured build must behave exactly as it did before RAG
-   * existed (every semantic input answers `RagNotConfiguredError`, AC-12), so
+   * existed (every semantic input answers `RagNotConfiguredError`, §5a), so
    * a host opts IN deliberately and nothing is ever switched on implicitly.
    */
-  readonly embedding: { readonly enabled: boolean; readonly provider: string; readonly model: string };
+  readonly embedding: {
+    readonly enabled: boolean;
+    readonly provider: string;
+    readonly model: string;
+  };
 }
 
 export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
   envPrefixOverride: 'ADHD_BACKLOG',
-  namespaces: ['production'],
+  // `'production'` MUST stay first — `@adhd/environment`'s own resolver
+  // (`environment-builder/src/snapshot.ts`: `options.namespace ?? namespaces[0]`)
+  // falls back to the FIRST declared namespace whenever a caller omits
+  // `namespace` entirely, so every existing caller of `buildBacklogEnv` (every
+  // production CLI/server invocation, none of which pass `namespace`) depends
+  // on this ordering to keep resolving the real store.
+  //
+  // `'test'` is a deliberately-PERSISTED, non-ephemeral namespace — suited to
+  // something like a shared CI/team store expected to accumulate state
+  // across many invocations over time. `'sandbox'` (SPEC.md §5c, D4) is its
+  // own THIRD declared namespace, not an alias for `'test'`: it layers
+  // ephemeral-root-minting on top of namespace selection (cli.ts's
+  // `--namespace sandbox` handling) — a fresh, throwaway-by-construction
+  // store minted per invocation. The two lifecycles are deliberately kept
+  // distinguishable by namespace name, never folded into one directory
+  // segment. Neither `'test'` nor `'sandbox'` is ever selected by default —
+  // both require an explicit `--namespace <value>` / `BuildBacklogEnvOptions.namespace`.
+  namespaces: ['production', 'test', 'sandbox'],
   dirs: {
     data: { kind: 'data' },
     // BUG-CACHE-CWD-001: the apigen extract-stage IR-cache root. `kind:
@@ -39,7 +66,7 @@ export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
   },
   files: {
     // Deliberately a DIFFERENT file/dir than agent-mcp's operational db or
-    // memory-server's store (~/.memory/memory.db) — no shared SQLite file
+    // memory-server's store (~/.memory/memory.db) — no shared database file
     // between unrelated servers, ever (DESIGN.md §12).
     db: { in: 'data', name: 'backlog.db' },
   },
@@ -47,14 +74,15 @@ export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
     'db.path': {
       type: 'string',
       env: 'ADHD_BACKLOG_DATABASE_PATH',
-      description: 'SQLite backlog-graph DB path. Unset ⇒ falls back to env.files.db under the resolved scope root.',
+      description:
+        'Backlog graph DB path. Unset ⇒ falls back to env.files.db under the resolved scope root.',
     },
     'db.busyTimeoutMs': {
       type: 'integer',
       env: 'ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS',
       default: 5000,
       description:
-        'SQLite `busy_timeout` (ms) each write waits for a contended lock before retrying (DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001). ' +
+        "The store adapter's `busy_timeout` (ms) each write waits for a contended lock before retrying (DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001). " +
         'Raise this when scaling toward more concurrent agents writing the same global-scope store.',
     },
     'logging.level': {
@@ -63,22 +91,13 @@ export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
       default: 'info',
       enum: ['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'],
     },
-    'migration.phase': {
-      type: 'string',
-      env: 'ADHD_BACKLOG_MIGRATION_PHASE',
-      default: 'not-started',
-      enum: ['not-started', 'phase-1', 'phase-2', 'phase-3', 'phase-4', 'phase-5', 'complete'],
-      description:
-        'MIGRATION.md §4.4 — a queried signal (never hardcoded prose) for whether BACKLOG.md or the tool is authoritative right now. ' +
-        'Read via `migrationStatus(ctx)`/`backlog migration-status`. NOT yet per-repo-keyed (MIGRATION.md §9 open decision 6) — one global value.',
-    },
     'embedding.enabled': {
       type: 'boolean',
       env: 'ADHD_BACKLOG_EMBEDDING_ENABLED',
       default: false,
       description:
         'RAG-SPEC.md §1.6 — opt IN to the semantic/RAG stack. Default FALSE: semantic inputs (filter.semantic, filter.anchor, ' +
-        'view:"similar", sort:"relevance", fields:["_vector"]) answer RagNotConfiguredError (AC-12) until this is set. ' +
+        'view:"similar", sort:"relevance", fields:["_vector"]) answer RagNotConfiguredError (§5a) until this is set. ' +
         'Requires the optionalDependencies @adhd/sox-embedding-provider + @adhd/sox-vector-store to be installed, and a ' +
         'store whose adapter reports capabilities.nativeVectors (turso). Enabling it with any of those missing logs a ' +
         'typed reason and leaves RAG unconfigured — it never crashes startup.',
@@ -87,7 +106,8 @@ export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
       type: 'string',
       env: 'ADHD_BACKLOG_EMBEDDING_PROVIDER',
       default: 'fastembed',
-      description: "Embedding provider type, forwarded verbatim to @adhd/sox-embedding-provider's createEmbeddingProvider ('fastembed' | 'remote').",
+      description:
+        "Embedding provider type, forwarded verbatim to @adhd/sox-embedding-provider's createEmbeddingProvider ('fastembed' | 'remote').",
     },
     'embedding.model': {
       type: 'string',
@@ -119,27 +139,46 @@ export function resolveBacklogScope(explicit?: Scope): Scope {
  * `instanceId` exist purely for test isolation (constructing an `Environment`
  * rooted at a temp directory instead of the real machine's `~/.adhd`), mirror
  * `EnvironmentOptions`'s own test-isolation fields.
+ *
+ * `namespace` is EXPLICIT-PARAMETER-FIRST, deliberately with no env-var
+ * fallback (unlike `scope`'s `resolveBacklogScope` cascade above) — a
+ * namespace selection must be threaded as a real function parameter (CLI
+ * flag → this field → `EnvironmentOptions.namespace`), never resolved from
+ * ambient `process.env`, so it can never be silently defeated by a shell
+ * variable a caller forgot was set the way `ADHD_ROOT` previously defeated
+ * `--sandbox` (`BUG-BACKLOG-SANDBOX-SILENT-BYPASS-001`, cli.ts). Omitted ⇒
+ * `'production'` (the first-declared namespace — see `backlogEnvironmentSpec`
+ * — every existing caller that never passes this keeps resolving there,
+ * unchanged).
  */
 export interface BuildBacklogEnvOptions {
   scope?: Scope;
   adhdRoot?: string;
   cwd?: string;
   instanceId?: string;
+  namespace?: string;
 }
 
-export function buildBacklogEnv(options: BuildBacklogEnvOptions = {}): Environment<BacklogConfig> {
+export function buildBacklogEnv(
+  options: BuildBacklogEnvOptions = {}
+): Environment<BacklogConfig> {
   const envOptions: EnvironmentOptions = {
-    namespace: 'production',
+    namespace: options.namespace ?? 'production',
     scope: resolveBacklogScope(options.scope),
   };
   if (options.adhdRoot !== undefined) envOptions.adhdRoot = options.adhdRoot;
   if (options.cwd !== undefined) envOptions.cwd = options.cwd;
-  if (options.instanceId !== undefined) envOptions.instanceId = options.instanceId;
-  return new Environment<BacklogConfig>('backlog', backlogEnvironmentSpec, envOptions);
+  if (options.instanceId !== undefined)
+    envOptions.instanceId = options.instanceId;
+  return new Environment<BacklogConfig>(
+    'backlog',
+    backlogEnvironmentSpec,
+    envOptions
+  );
 }
 
 /**
- * BUG-002: the effective SQLite backlog-graph DB path. Every store-open site
+ * BUG-002: the effective backlog graph DB path. Every store-open site
  * (`cli.ts`'s `runBacklogCli`, `server.ts`'s `startBacklogServer`) must
  * resolve the path through THIS helper — never `env.files.db` directly —
  * or a consumer setting `ADHD_BACKLOG_DATABASE_PATH` silently hits the
@@ -169,7 +208,10 @@ export function resolveBacklogDbPath(env: Environment<BacklogConfig>): string {
  * `${agentName}:${instanceId}`. Exposed as a plain helper, never baked into
  * `claimItem` itself.
  */
-export function suggestClaimantIdentity(agentName: string, instanceId: string): string {
+export function suggestClaimantIdentity(
+  agentName: string,
+  instanceId: string
+): string {
   return `${agentName}:${instanceId}`;
 }
 
@@ -202,12 +244,27 @@ export function suggestClaimantIdentity(agentName: string, instanceId: string): 
  * `buildBacklogEnv`'s own test-isolation fields) — production callers never
  * pass them.
  */
-export function resolveIrCacheFile(options: { adhdRoot?: string; instanceId?: string } = {}): string {
+export function resolveIrCacheFile(
+  options: { adhdRoot?: string; instanceId?: string } = {}
+): string {
   const fromEnv = process.env['APIGEN_IR_CACHE_FILE'];
   if (fromEnv) return fromEnv;
-  const envOptions: EnvironmentOptions = { namespace: 'production', scope: 'global' };
+  const envOptions: EnvironmentOptions = {
+    namespace: 'production',
+    scope: 'global',
+  };
   if (options.adhdRoot !== undefined) envOptions.adhdRoot = options.adhdRoot;
-  if (options.instanceId !== undefined) envOptions.instanceId = options.instanceId;
-  const env = new Environment<BacklogConfig>('backlog', backlogEnvironmentSpec, envOptions);
-  return join(env.paths['cache'] as string, 'apigen', 'ir-cache', 'backlog-client.ir.json');
+  if (options.instanceId !== undefined)
+    envOptions.instanceId = options.instanceId;
+  const env = new Environment<BacklogConfig>(
+    'backlog',
+    backlogEnvironmentSpec,
+    envOptions
+  );
+  return join(
+    env.paths['cache'] as string,
+    'apigen',
+    'ir-cache',
+    'backlog-client.ir.json'
+  );
 }
