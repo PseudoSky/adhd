@@ -68,7 +68,12 @@ and a read failure is always structured.
 ## Worked example: file, query, transition
 
 Issues live under a project and (optionally) a component, both resolved by
-name or `uid`. File a project first if one doesn't already exist:
+name or `uid`. File a project first if one doesn't already exist. File every
+issue with the correct project **and component** — a component-less item lands
+on the project's `(root)` component and is invisible to component-scoped
+queries. The agent-facing rule, the registry verbs, and the real misfiling
+hazards (duplicate project rows, store/scope confusion) live in
+[`skill/SKILL.md` §4](skill/SKILL.md):
 
 ```bash
 adhd-backlog upsert-project --input '{

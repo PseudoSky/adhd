@@ -177,8 +177,9 @@ missing/blank `by` is rejected with `invalid_argument` before any write
 runs.
 
 **File a new issue.** `project` is RESOLVE-ONLY — `create` never mints one;
-register it first with `upsert-project` (§4). `component` defaults to the
-project's reserved `(root)` component when omitted:
+register it first with `upsert-project` (§4). `component` is also resolve-only
+and defaults to the project's reserved `(root)` component when omitted — pass
+it, or the item is invisible to component-scoped scans (§4, "The filing rule"):
 
 ```
 $ adhd-backlog backlog create --input '{
@@ -334,6 +335,50 @@ $ adhd-backlog backlog delete --input '{"uid":"777c5e33-…","reason":"duplicate
 The registry answers **"where does this live, and what do I file the bug
 against?"** in one call, before you `rg`/search for it.
 
+### The model
+
+- **project** — one repo/workspace root, registered with its filesystem `path`
+  and/or git `repoUrl`. ONE canonical row per logical repo (`adhd`,
+  `sox-ecosystem`). Every issue verb RESOLVES a project by name or `uid` and
+  **never mints one** — an unknown project name is `not_found` (exit 4).
+- **component** — a path *within* that project (`entrypoint/backlog`,
+  `tools/nx-plugins/build`), resolved-only within its project. `upsert-project`
+  mints exactly ONE reserved component, `(root)`, per project; `create`
+  defaults an omitted `component` to it. **No other component is ever
+  auto-created** — an unknown component name is `not_found`, never a new row.
+- **location** — a tool name, file path, or URL owned by a component; the thing
+  `lookup` resolves.
+
+### The filing rule — file every item with the right project AND component
+
+A component-less item is not an error: it lands on `(root)` and is then
+**invisible to every component-scoped query** (`filter.component:"…"`), while
+still appearing in a project-scoped one. That is the misfiling signature —
+`get <uid>` finds the item, but the component scan that should list it never
+does. So, before filing:
+
+1. Discover the exact registered names:
+   `adhd-backlog query --input '{"view":"projects"}'` and
+   `adhd-backlog query --input '{"view":"components","filter":{"project":"<p>"}}'`.
+2. Register anything missing with `upsert-project`/`upsert-component` FIRST.
+3. `create` with both `project` and `component`.
+
+A component-scoped scan is how a repo's own work is found (e.g.
+`filter.component:"entrypoint/backlog"` = 113 items; project `adhd` = 821); an
+item filed on `(root)` is invisible to it.
+
+### When to use each registry verb
+
+| verb | use it when | idempotent key |
+| --- | --- | --- |
+| `upsert-project` | registering/updating a repo or workspace root; also mints its `(root)` component | `name` |
+| `upsert-component` | registering/updating a path *inside* an already-registered project | `(project, name)` |
+| `upsert-location` | pointing a tool/file/URL at its owning component so `lookup` resolves it | `(component, locType, value)` |
+| `rm-location` | retiring a location (soft-invalidate) | `uid` |
+
+All four are create-or-update by that key — never a duplicate row — and all
+require `by`.
+
 **Register or update a project** (create-or-update by `name`; also mints the
 project's reserved default component `(root)` on first creation):
 
@@ -397,6 +442,27 @@ $ adhd-backlog backlog query --input '{"view":"components","filter":{"project":"
 $ adhd-backlog backlog query --input '{"view":"locations","filter":{"component":"auth-service","project":"demo-project"}}'
 {"ok":true,"data":{"view":"locations","items":[{"uid":"a4b0dd6b-…","locType":"path","value":"packages/auth/src/index.ts","componentUid":"41a61c6d-…"}]}}
 ```
+
+### Filing hazards (real, observed on this machine)
+
+1. **Duplicate project identities.** The same repo can exist as TWO project
+   rows — one path-derived, one repo-derived — and an item lands under
+   whichever name you pass. Live split (2026-09-22): `sox-ecosystem` (path,
+   732 items) vs `PseudoSky/sox-ecosystem` (no path, 0); `claude-agents`
+   (path, 47) vs `PseudoSky/claude-agents` (0); `claude-tools` (55) vs
+   `QuSecure/claude-tools` (17); `dot` (1) vs `id8/dot` (2). Prefer the row
+   that carries a `path` (and, for an active repo, the bulk of items) — an
+   item under the other row is invisible to a query scoped to the first.
+   (`adhd` is already reconciled to one row; `PseudoSky/adhd` does not exist.)
+2. **Store/scope confusion — an item can land in a store nobody reads.**
+   `adhd-backlog sandbox-path` reports the store a command will touch. The
+   production store is `~/.adhd/backlog/production/data/backlog-v2.db`;
+   `--namespace test` is a DIFFERENT file (`…/test/data/backlog.db`), and
+   `ADHD_BACKLOG_SCOPE=project` moves the store under `<repo>/.adhd/…`. A build
+   that writes a per-repo namespace (e.g. `entrypoint/backlog` on `main`) files
+   items that are silently absent from production — no error, just a missing
+   row (filed as 49ce83b8). Run `sandbox-path` before a write you care about,
+   and file through the production CLI only.
 
 ## 5. Batch — N-way fan-out over one operation
 
