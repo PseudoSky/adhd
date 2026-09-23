@@ -115,6 +115,41 @@ describe('vocabulary gates have teeth (SPEC.md AC-1)', () => {
         `expected the offending file to be named in the gate output\n--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}`
       ).toContain(join('src', 'offender.ts'));
     });
+
+    /**
+     * The version-token `.db` carve-out, held narrow. `backlog-<token>.db` is
+     * the LIVE production store's actual filename (config.yaml `db.path`, also
+     * reported by `sandbox-path`); the docs must reproduce it verbatim, so the
+     * gate must pass it — while bare version-token PROSE must still fail. Both
+     * halves run so the exempting regex can never quietly widen into swallowing
+     * real vocabulary. Tokens are assembled at runtime (as with BANNED_TOKEN
+     * above) because this spec file is itself scanned by the source-tree gate.
+     */
+    it('exempts a `<token>.db` data-file name but still fails bare <token> prose', () => {
+      const TOKEN = ['v', '2'].join('');
+      const cleanRun = runNodeScript('tools/gate/vocabulary-gate.mjs', [
+        makeFixture('src-db-filename', {
+          'src/store-path.ts': `export const STORE = 'backlog-${TOKEN}.db';\n`,
+        }),
+      ]);
+      expect(
+        cleanRun.status,
+        `expected a data-file name 'backlog-${TOKEN}.db' to be exempt\nexited ${cleanRun.status}\n--- stdout ---\n${cleanRun.stdout}\n--- stderr ---\n${cleanRun.stderr}`
+      ).toBe(0);
+
+      const dirtyRun = runNodeScript('tools/gate/vocabulary-gate.mjs', [
+        makeFixture('src-bare-token', {
+          'src/legacy.ts': `// this replaced the old backlog ${TOKEN} era\n`,
+        }),
+      ]);
+      expect(
+        dirtyRun.status,
+        `expected bare version-token prose to fail the gate\nexited ${dirtyRun.status}\n--- stdout ---\n${dirtyRun.stdout}\n--- stderr ---\n${dirtyRun.stderr}`
+      ).toBe(1);
+      expect(dirtyRun.stdout + dirtyRun.stderr).toContain(
+        join('src', 'legacy.ts')
+      );
+    });
   });
 
   describe('shipped-artifact gate (scripts/check-vocabulary.mjs)', () => {
