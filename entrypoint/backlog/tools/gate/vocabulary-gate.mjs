@@ -62,14 +62,23 @@ const TERMS = [
   // naming its own surface. `server.v2.spec.ts` is NOT exempted: `v2` there is
   // followed by `.s`, not by a digit, so the two cases separate cleanly
   // without a hand-maintained allowlist that would rot.
+  // `(?!\.db\b)` exempts a DATA-FILE NAME, the same way `(?!\.\d)` exempts a
+  // third-party version: `backlog-v2.db`, the live production store's actual
+  // filename (declared by `~/.adhd/backlog/production/config.yaml`'s `db.path`
+  // and reported by `sandbox-path`), is an operational identifier the docs
+  // must reproduce VERBATIM — not this package naming its own surface `v2`.
+  // Without this carve-out the gate forces the docs to either lie about the
+  // path or go silent, which is the opposite of its purpose. The exemption is
+  // exactly `.db` (word-bounded), so bare `v2` prose, `server.v2.spec.ts`, and
+  // `v2.dbx`-like names all still fail.
   {
     name: 'v1',
-    re: /(?<![a-z0-9])v1\b(?!\.\d)/i,
+    re: /(?<![a-z0-9])v1\b(?!\.\d)(?!\.db\b)/i,
     why: 'there is no v1 to contrast against — only backlog',
   },
   {
     name: 'v2',
-    re: /(?<![a-z0-9])v2\b(?!\.\d)/i,
+    re: /(?<![a-z0-9])v2\b(?!\.\d)(?!\.db\b)/i,
     why: 'the replacement IS backlog; calling it v2 implies a v1 still exists',
   },
   {
