@@ -22,18 +22,26 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { isolatedSpawnOptions } from './test/helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
 
-async function connect(adhdRoot: string, name: string): Promise<
-  { ok: true; client: Client; transport: StdioClientTransport } | { ok: false; error: Error }
+async function connect(
+  adhdRoot: string,
+  name: string
+): Promise<
+  | { ok: true; client: Client; transport: StdioClientTransport }
+  | { ok: false; error: Error }
 > {
   const transport = new StdioClientTransport({
-    command: 'node',
+    // `process.execPath` (not `'node'` off PATH) — aligned with the
+    // `runIsolatedBin`/`isolatedSpawnOptions` sites.
+    command: process.execPath,
     args: [DIST_INDEX, 'serve', '--transport', 'mcp'],
-    cwd: adhdRoot,
-    env: { ...(process.env as Record<string, string>), ADHD_BACKLOG_SCOPE: 'project' },
+    // The required `ADHD_BACKLOG_SCOPE=project` + `HOME=<root>` redirect pair
+    // lives in ONE place now — `test/helpers/spawn-isolated-bin.ts`.
+    ...isolatedSpawnOptions(adhdRoot),
   });
   const client = new Client({ name, version: '1.0.0' }, { capabilities: {} });
   try {
@@ -42,7 +50,10 @@ async function connect(adhdRoot: string, name: string): Promise<
     return { ok: true, client, transport };
   } catch (err) {
     await transport.close().catch(() => undefined);
-    return { ok: false, error: err instanceof Error ? err : new Error(String(err)) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err : new Error(String(err)),
+    };
   }
 }
 
@@ -54,7 +65,7 @@ describe('backlog serve — [inv:singleton]: a second concurrent instance agains
     adhdRoot = undefined;
   });
 
-  it('GREEN: while instance A is live, a second `serve` (B) against the SAME store is refused and names A\'s pid — A is unaffected', async () => {
+  it("GREEN: while instance A is live, a second `serve` (B) against the SAME store is refused and names A's pid — A is unaffected", async () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-singleton-'));
 
     const a = await connect(adhdRoot, 'singleton-a');
@@ -81,7 +92,14 @@ describe('backlog serve — [inv:singleton]: a second concurrent instance agains
     expect(stillUp.tools.length).toBeGreaterThan(0);
 
     // The lock file names A's own pid as holder for the whole window.
-    const lockPath = join(adhdRoot, '.adhd', 'backlog', 'production', 'data', 'backlog.db.serve.lock');
+    const lockPath = join(
+      adhdRoot,
+      '.adhd',
+      'backlog',
+      'production',
+      'data',
+      'backlog.db.serve.lock'
+    );
     expect(existsSync(lockPath)).toBe(true);
     const holderPid = Number(readFileSync(lockPath, 'utf8').split('\n')[0]);
     expect(Number.isInteger(holderPid) && holderPid > 0).toBe(true);
@@ -115,13 +133,14 @@ describe('backlog serve — [inv:singleton]: a second concurrent instance agains
     }
   }, 30_000);
 
-  it('crash recovery: a SIGKILLed instance\'s stale lock is reclaimed automatically by the next start, no manual cleanup required', async () => {
+  it("crash recovery: a SIGKILLed instance's stale lock is reclaimed automatically by the next start, no manual cleanup required", async () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-singleton-crash-'));
 
     const d = await connect(adhdRoot, 'crash-d');
     expect(d.ok).toBe(true);
     if (!d.ok) return;
-    const pid = (d.transport as unknown as { _process?: { pid?: number } })._process?.pid;
+    const pid = (d.transport as unknown as { _process?: { pid?: number } })
+      ._process?.pid;
     expect(typeof pid).toBe('number');
     // SIGKILL directly — deliberately NOT `client.close()`/`transport.close()`
     // first (those send SIGTERM and await a graceful exit, which would run

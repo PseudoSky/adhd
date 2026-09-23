@@ -15,22 +15,23 @@
  * practice; 3x is a safety margin, not the expected real ratio.
  */
 import { describe, expect, it, afterEach } from 'vitest';
-import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runIsolatedBin } from './test/helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
 
 function timedRun(env: Record<string, string>, cwd: string): number {
   const start = performance.now();
-  const r = spawnSync(process.execPath, [DIST_INDEX, '--help'], {
-    cwd,
-    env: { ...process.env, ...env },
-    encoding: 'utf8',
-    timeout: 60_000,
+  // Routed through the shared HOME-redirect isolation helper (the temp `cwd`
+  // is also the child's `HOME`); this spec's own cache vars layer over it via
+  // `extraEnv`.
+  const r = runIsolatedBin(DIST_INDEX, ['--help'], cwd, {
+    extraEnv: env,
+    timeoutMs: 60_000,
   });
   const elapsed = performance.now() - start;
   expect(r.status, `stderr:\n${r.stderr}`).toBe(0);
@@ -43,6 +44,9 @@ describe('FEAT-002 — real measured runtime, cache disabled vs. warm HIT', () =
 
   afterEach(() => {
     rmSync(cwd, { recursive: true, force: true });
+    // The cache file lives in its own throwaway dir; remove it too so the
+    // suite leaves no artifact behind (AGENTS.md §10).
+    if (cacheFile) rmSync(dirname(cacheFile), { recursive: true, force: true });
   });
 
   it('a warm cache HIT is measurably (>=3x) faster than a live/disabled-cache run, real numbers', () => {

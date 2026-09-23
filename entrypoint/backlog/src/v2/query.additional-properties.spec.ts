@@ -27,14 +27,17 @@
  * QUERY-001 was filed against.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createItem } from '../ops-v1.js';
 import { buildBacklogEnv } from '../env.js';
-import { openGraphBacklogStore, closeGraphBacklogStore } from '../store/graph-backlog-store.js';
+import {
+  openGraphBacklogStore,
+  closeGraphBacklogStore,
+} from '../store/graph-backlog-store.js';
+import { runIsolatedBin } from '../test/helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', '..', 'dist', 'index.js');
@@ -47,13 +50,9 @@ interface SpawnResult {
 
 /** Spawns the REAL built `backlog` bin as a genuine child process. Never imported. */
 function runBin(args: string[], cwd: string): SpawnResult {
-  const result = spawnSync(process.execPath, [DIST_INDEX, ...args], {
-    cwd,
-    env: { ...process.env, ADHD_BACKLOG_SCOPE: 'project' },
-    encoding: 'utf8',
-    timeout: 30_000,
-  });
-  return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+  // `runIsolatedBin` owns the `ADHD_BACKLOG_SCOPE=project` + `HOME=<root>`
+  // redirect pair (see test/helpers/spawn-isolated-bin.ts).
+  return runIsolatedBin(DIST_INDEX, args, cwd);
 }
 
 describe('BUG-BACKLOG-QUERY-001: mis-nested top-level query keys are rejected, not silently dropped', () => {
@@ -67,19 +66,33 @@ describe('BUG-BACKLOG-QUERY-001: mis-nested top-level query keys are rejected, n
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-query-addlprops-'));
     const repo = 'PseudoSky/query-addlprops-test';
 
-    const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
+    const seedEnv = buildBacklogEnv({
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+    });
     seedEnv.ensureDirs();
     const seedStore = await openGraphBacklogStore(seedEnv.files.db);
     await createItem(
       { store: seedStore, env: seedEnv },
-      { family: 'BUG-ADDLPROPS', title: 'unrelated seeded item', body: 'x', repo }
+      {
+        family: 'BUG-ADDLPROPS',
+        title: 'unrelated seeded item',
+        body: 'x',
+        repo,
+      }
     );
     await closeGraphBacklogStore(seedStore);
 
     // Deliberately mis-nested: `grep` belongs under `filter`, not top-level.
-    const res = runBin(['query', '--input', JSON.stringify({ grep: 'reconcile_repo' })], adhdRoot);
+    const res = runBin(
+      ['query', '--input', JSON.stringify({ grep: 'reconcile_repo' })],
+      adhdRoot
+    );
 
-    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(2);
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
+      2
+    );
     const lastLine = res.stderr.trim().split('\n').pop() ?? '';
     const body = JSON.parse(lastLine) as { code: string; message: string };
     expect(body.code).toBe('invalid_argument');
@@ -96,28 +109,52 @@ describe('BUG-BACKLOG-QUERY-001: mis-nested top-level query keys are rejected, n
     const matchRepo = 'PseudoSky/query-addlprops-match';
     const otherRepo = 'PseudoSky/query-addlprops-other';
 
-    const seedEnv = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot });
+    const seedEnv = buildBacklogEnv({
+      scope: 'project',
+      cwd: adhdRoot,
+      adhdRoot,
+    });
     seedEnv.ensureDirs();
     const seedStore = await openGraphBacklogStore(seedEnv.files.db);
     const seeded = await createItem(
       { store: seedStore, env: seedEnv },
-      { family: 'BUG-ADDLPROPS', title: 'matching item', body: 'x', repo: matchRepo }
+      {
+        family: 'BUG-ADDLPROPS',
+        title: 'matching item',
+        body: 'x',
+        repo: matchRepo,
+      }
     );
     await createItem(
       { store: seedStore, env: seedEnv },
-      { family: 'BUG-ADDLPROPS', title: 'non-matching item', body: 'x', repo: otherRepo }
+      {
+        family: 'BUG-ADDLPROPS',
+        title: 'non-matching item',
+        body: 'x',
+        repo: otherRepo,
+      }
     );
     await closeGraphBacklogStore(seedStore);
 
-    const res = runBin(['query', '--input', JSON.stringify({ filter: { repo: matchRepo } })], adhdRoot);
+    const res = runBin(
+      ['query', '--input', JSON.stringify({ filter: { repo: matchRepo } })],
+      adhdRoot
+    );
 
-    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
-    const body = JSON.parse(res.stdout.trim()) as { ok: boolean; data: { items: Array<{ humanId: string; repo?: string }> } };
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
+      0
+    );
+    const body = JSON.parse(res.stdout.trim()) as {
+      ok: boolean;
+      data: { items: Array<{ humanId: string; repo?: string }> };
+    };
     expect(body.ok).toBe(true);
     const humanIds = body.data.items.map((i) => i.humanId);
     expect(humanIds).toContain(seeded.item.humanId);
     // Teeth: genuinely scoped — the other-repo item must NOT be present.
-    expect(body.data.items.every((i) => i.repo === matchRepo || i.repo === undefined)).toBe(true);
+    expect(
+      body.data.items.every((i) => i.repo === matchRepo || i.repo === undefined)
+    ).toBe(true);
     expect(body.data.items.length).toBe(1);
   });
 });
