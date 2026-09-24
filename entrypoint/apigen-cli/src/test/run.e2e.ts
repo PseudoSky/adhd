@@ -695,7 +695,7 @@ describe('[cli-run-cmd.non-ts] non-TS plugin bypasses TS extraction', () => {
 // services; "it spawns child processes" and "it's slow" are named non-reasons) —
 // owner-approved override, recorded.
 // Durable fix: docs/backlog/grooming/test-perf-improvements.md (recs #7, #8).
-// Run: npx vitest run src/test/run.spec.ts -t "cli-run-cmd.1 live"
+// Run: npx vitest run src/test/run.e2e.ts --config vitest.e2e.config.ts -t "cli-run-cmd.1 live"
 describe.skip('[cli-run-cmd.1 live] run command starts a live MCP server via plugin.run() [CPU-THRASH-SKIP: owner-requested]', () => {
   it(
     'serves tools/list with fixture tools over streaming-http',

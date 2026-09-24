@@ -2,12 +2,12 @@
 //
 // Context: `nx test apigen-cli` in isolation passes green (157/157, proven
 // twice), but under a massively-parallel release run (`nx run-many -t
-// publish`, 479 tasks) the same LIVE cross-language tests (serve.spec.ts,
-// cross-host-response-envelope.spec.ts, real-consumer.spec.ts) intermittently
+// publish`, 479 tasks) the same LIVE cross-language tests (serve.e2e.ts,
+// cross-host-response-envelope.e2e.ts, real-consumer.e2e.ts) intermittently
 // fail with `waitForHttp: … never responded within 15000ms — TypeError:
 // fetch failed`. Root cause: these tests spawn REAL TS + Python subprocess
 // servers and the fixed ~15s per-host readiness deadline is marginal even
-// solo (serve.spec.ts alone takes ~18.7s) and gets blown by CPU/port
+// solo (serve.e2e.ts alone takes ~18.7s) and gets blown by CPU/port
 // contention from concurrent sibling builds/tests.
 //
 // This module centralizes the fix:

@@ -5,7 +5,7 @@
  * compile.
  *
  * This is the EXACT test proven already for `@adhd/apigen-plugin-api-fastify`
- * in `batch-plugin-e2e.spec.ts`, re-run against
+ * in `batch-plugin-e2e.e2e.ts`, re-run against
  * `@adhd/apigen-plugin-api-express`'s `run()` instead — closing the
  * disclosed proof gap that express's hostBridge wiring (identical
  * `MountHostBridge` pattern, merged `schemasByOpId`/`fnsByOpId` tables) had

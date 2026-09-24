@@ -1,4 +1,4 @@
-// perf.spec.ts — consumer-outcome regression net for the extraction-session
+// perf.e2e.ts — consumer-outcome regression net for the extraction-session
 // performance/memory work, driven through the REAL orchestrator entrypoint
 // (buildDescriptor), the same seam `apigen generate/run/serve` use.
 //
@@ -116,7 +116,7 @@ async function runOnce() {
 // no-gating rule. Deviates from §7 — owner-approved override, recorded.
 // Durable fix: docs/backlog/grooming/test-perf-improvements.md (recs #7, #8 — give it a
 // serial lane rather than deleting the assertion).
-// Run: npx vitest run src/test/perf.spec.ts
+// Run: npx vitest run src/test/perf.e2e.ts --config vitest.e2e.config.ts
 describe.skip('[perf] buildDescriptor through the real orchestrator [CPU-THRASH-SKIP: owner-requested]', () => {
   it('repeated runs return deep-equal descriptors (cache changes nothing observable)', async () => {
     const first = await runOnce();

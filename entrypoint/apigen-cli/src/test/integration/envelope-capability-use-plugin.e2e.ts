@@ -104,7 +104,7 @@ export default {
 // ---------------------------------------------------------------------------
 // Canonical route/verb — derived from the same `project()` authority every
 // transport uses, never hand-guessed (matches the convention established by
-// `real-consumer.spec.ts` / `cross-host-response-envelope.spec.ts`).
+// `real-consumer.e2e.ts` / `cross-host-response-envelope.e2e.ts`).
 // ---------------------------------------------------------------------------
 
 function seg(raw: string): Segment {

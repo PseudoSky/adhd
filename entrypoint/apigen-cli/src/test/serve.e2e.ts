@@ -221,7 +221,7 @@ describe('[serve.findFreePort] allocates distinct usable loopback ports', () => 
 // logic and is deliberately LEFT RUNNING.
 // Deviates from AGENTS.md §7 — owner-approved override, recorded.
 // Durable fix: docs/backlog/grooming/test-perf-improvements.md (recs #7, #8).
-// Run: npx vitest run src/test/serve.spec.ts -t "serve.live"
+// Run: npx vitest run src/test/serve.e2e.ts --config vitest.e2e.config.ts -t "serve.live"
 describe.skip('[serve.live] real cross-language serve front [CPU-THRASH-SKIP: owner-requested]', () => {
   let tmpDir: string | undefined;
   let shutdownFn: (() => Promise<void>) | undefined;
