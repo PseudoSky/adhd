@@ -98,6 +98,17 @@ export interface BacklogCtx {
    * this field existed; reverted, see CHANGELOG).
    */
   adhdRoot?: string;
+  /**
+   * BUG-BACKLOG-COMPUTENEXTHUMANID-GRAPH-ONLY-SCAN-001 part 2 — the repo
+   * root a cold-path humanId counter seed should ALSO scan `BACKLOG.md`/
+   * `CHANGELOG.md` history under, in addition to the graph
+   * (`store/ids.ts`'s `scanMaxOrdinalFromMarkdown`). Undefined (the default
+   * everywhere except `cli.ts`'s real invocation path, which sets it to the
+   * process's cwd) skips the markdown scan entirely, preserving pre-fix
+   * behavior for every test/store-only `ctx` and for any programmatic caller
+   * that never supplies it.
+   */
+  markdownRoot?: string;
 }
 
 /**

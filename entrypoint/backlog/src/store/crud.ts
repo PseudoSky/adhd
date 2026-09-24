@@ -9,7 +9,7 @@ import type { NodeRecord } from '@adhd/sox-graph-store';
 import type { BacklogItem, CreateItemInput, CreateItemResult, ICreateSuppressionReason, IUpdatePatch } from '../model.js';
 import { InvalidArgumentError, UnsupportedOperationError, assertKnownPatchKeys, assertNoSilentlyDiscardedPatchKeys } from '../model.js';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
-import { allocateHumanIdAndInsert } from './ids.js';
+import { allocateHumanIdAndInsert, type NextOrdinalOpts } from './ids.js';
 import { buildNotFoundError, findItemNode, knownRepos, resolveCanonicalRepo } from './query.js';
 import { mutateMetadata } from './mutate-metadata.js';
 import { assertValidCitation } from './lifecycle.js';
@@ -348,7 +348,7 @@ async function incrementDupeHits(store: GraphBacklogStore, nodeId: number): Prom
  * `createItemNode` can layer `scheduleEmbed` on top AFTER this settles,
  * without disturbing it.
  */
-async function createItemNodeCore(store: GraphBacklogStore, input: CreateItemInput): Promise<CreateItemOutcome> {
+async function createItemNodeCore(store: GraphBacklogStore, input: CreateItemInput, opts?: NextOrdinalOpts): Promise<CreateItemOutcome> {
   // BUG-BACKLOG-HUMANID-COLLISION-001 fix #1: `family` is REQUIRED unless
   // `idOverride` is given (SPEC.md §5.1, model.ts `CreateItemInput.family`
   // doc comment). Validated HERE, before any allocation runs, so a missing/
@@ -538,11 +538,11 @@ async function createItemNodeCore(store: GraphBacklogStore, input: CreateItemInp
     const node = await store.graph.getNode(nodeId);
     if (!node) throw new Error(`backlog: writeNode returned an id that does not resolve: ${nodeId}`);
     return { item: toBacklogItem(node), created: true, duplicateCandidates: [], ...(repoWarning !== undefined ? { repoWarning } : {}) };
-  });
+  }, opts);
 }
 
-export async function createItemNode(store: GraphBacklogStore, input: CreateItemInput): Promise<CreateItemOutcome> {
-  const outcome = await createItemNodeCore(store, input);
+export async function createItemNode(store: GraphBacklogStore, input: CreateItemInput, opts?: NextOrdinalOpts): Promise<CreateItemOutcome> {
+  const outcome = await createItemNodeCore(store, input, opts);
   // RAG-SPEC.md §2.1 Phase B: scheduled strictly AFTER `createItemNodeCore`
   // has returned (i.e. its CAS transaction has committed and released the
   // write lock) — never from inside `allocateHumanIdAndInsert`'s updater
