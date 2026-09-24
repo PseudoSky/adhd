@@ -35,19 +35,23 @@
  *     - `done-<index>`   (embed mode) `{"ok":true,"dim":768}` after one real
  *                        embed, or `{"ok":false,"error":…}` if it threw
  *   In `embed` mode it waits for the parent's `go` latch before embedding;
- *   both modes then HOLD until the parent kills them (SIGTERM), so any host
- *   they spawned stays attributable for the parent's count.
+ *   both modes then HOLD so any host they spawned stays attributable for the
+ *   parent's count — but never forever: the parent reaps them on the normal
+ *   path, and a self-watchdog (`installSelfWatchdog`) exits them if the parent
+ *   dies first or never signals, so an externally-killed test process cannot
+ *   strand a consumer (and, through it, a shared host).
  *
  * ## Isolation
  *
  * `SOX_ECOSYSTEM_HOME` is set by the parent to a per-test temp dir, so the
  * funnel's socket dir (`<SOX_ECOSYSTEM_HOME>/run`) — and therefore every host
- * this consumer spawns — is isolated from the machine's live hosts. The model
- * cache is deliberately left at its default (already populated), so the run
- * stays fast and never downloads.
+ * this consumer spawns — is isolated from the machine's live hosts. This
+ * consumer's own store likewise lives under the parent's signal dir (the spec's
+ * gitignored `tmp/` scratch) and is removed with that dir on teardown; it is
+ * never the machine's real store. The model cache is deliberately left at its
+ * default (already populated), so the run stays fast and never downloads.
  */
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { openGraphBacklogStore } from '../../store/graph-backlog-store.js';
 import { buildBacklogEnv } from '../../env.js';
@@ -92,9 +96,116 @@ function holdForever(): Promise<never> {
   return new Promise<never>(() => setInterval(() => undefined, 1_000));
 }
 
+/** Env knob for the consumer's own absolute lifetime bound (ms). */
+export const WATCHDOG_ENV = 'SOX_FUNNEL_CONSUMER_WATCHDOG_MS';
+/**
+ * Env carrying the pid of the process that OWNS this consumer (the test/gate
+ * process). The watchdog polls it and exits the moment it disappears. Set by
+ * the spawning spec from its own `process.pid`.
+ */
+export const PARENT_PID_ENV = 'SOX_FUNNEL_CONSUMER_PARENT_PID';
+/**
+ * Default absolute lifetime bound. Deliberately generous (10 min) so it can
+ * never trip a legitimate cold-model run — the spec budgets 180 s per test.
+ * The parent-lease poll below is what actually bounds an orphan to ~1 s; this
+ * timer only covers the pathological case of an owner that stays alive but
+ * wedged and never signals.
+ */
+export const DEFAULT_WATCHDOG_MS = 600_000;
+/** How often the parent-lease poll runs (ms). */
+const PARENT_POLL_MS = 1_000;
+
+/** `kill(pid, 0)` — true while `pid` exists (EPERM means it exists but is not ours). */
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/**
+ * Absolute self-watchdog — the load-bearing half of the process-leak fix.
+ *
+ * Why the consumer must self-terminate: a reaper that lives in the PARENT
+ * cannot be relied on. When the test/gate process is killed externally (the
+ * observed pre-push-gate SIGPIPE/timeout), the spec's `afterEach` teardown
+ * never runs, and a consumer parked in `holdForever()` would keep its funnel
+ * UDS client connection open forever — which is exactly what pins the shared
+ * embedding host and its ONNX child (the host correctly refuses to reap while
+ * a client is attached). The consumer therefore must be unable to outlive its
+ * owner on its own:
+ *
+ *   1. **parent lease** — the owning process's pid is passed in the
+ *      environment (`PARENT_PID_ENV`); we poll it and exit within ~one interval
+ *      of it disappearing. This bounds the observed `kill -9 <test process>`
+ *      mode to ~1 s instead of forever.
+ *   2. **absolute lifetime bound** — an unref'd timer as a backstop for an
+ *      owner that stays alive but wedged and never signals us.
+ *
+ * Either exit closes the UDS socket, which is the host's only reason to stay
+ * up; the host then self-reaps on its own idle grace. Installed before
+ * `main()` so it is armed during the slow cold-model prefix too.
+ *
+ * ── Why an explicit pid lease, not `process.ppid` ──────────────────────────────
+ *
+ * `process.ppid` is captured ONCE at process start and is a plain cached value
+ * here (verified: `Object.getOwnPropertyDescriptor(process, 'ppid')` is a
+ * `value` descriptor, not a getter), so it never reflects a reparent — polling
+ * it can never see the owner die. Worse, the consumer is not a direct child of
+ * the owner: `tsx` runs the script under a wrapper process, so the consumer's
+ * real parent is that wrapper (which itself survives, orphaned, when the owner
+ * dies). The owner's pid carried explicitly in the environment is the only
+ * reliable signal, and it works through the wrapper.
+ */
+export function installSelfWatchdog(): void {
+  const raw = process.env[WATCHDOG_ENV];
+  const parsed = raw === undefined ? Number.NaN : Number(raw);
+  const maxLifetimeMs =
+    Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : DEFAULT_WATCHDOG_MS;
+
+  const bail = (why: string): void => {
+    try {
+      process.stderr.write(`embed-funnel-consumer: self-watchdog: ${why}\n`);
+    } catch {
+      /* the owner's stderr pipe may already be gone — nothing more to do */
+    }
+    process.exit(0);
+  };
+
+  const lifetime = setTimeout(
+    () => bail(`absolute lifetime ${maxLifetimeMs}ms exceeded`),
+    maxLifetimeMs
+  );
+  // Must not itself keep the process alive: `holdForever()` (or an in-flight
+  // step) already holds the loop. This only needs to fire if we are still here.
+  lifetime.unref?.();
+
+  const rawParent = process.env[PARENT_PID_ENV];
+  const parentPid = rawParent === undefined ? Number.NaN : Number(rawParent);
+  if (Number.isInteger(parentPid) && parentPid > 0 && parentPid !== process.pid) {
+    const poll = setInterval(() => {
+      if (!isPidAlive(parentPid)) bail(`owning process pid ${parentPid} is gone`);
+    }, PARENT_POLL_MS);
+    poll.unref?.();
+  }
+}
+
+// Arm the watchdog before `main()` does any work, so an owner killed during the
+// cold-store/model prefix still cannot strand this process.
+installSelfWatchdog();
+
 async function main(): Promise<void> {
-  // A store per consumer, under a throwaway tmp dir — never the real one.
-  const dir = mkdtempSync(join(tmpdir(), `embed-funnel-consumer-${index}-`));
+  // A store per consumer, under the parent's signal dir so the spec's teardown
+  // removes it with everything else. It is deliberately NOT a `mkdtemp` in the
+  // OS temp dir: the spec reaps consumers with SIGKILL, so nothing here can run
+  // on that path, and a per-run `mkdtemp` would accumulate one stray store per
+  // consumer per run. `signalDir` is the spec's `tmp/backlog/…` (AGENTS.md §10's
+  // sanctioned, gitignored scratch root), and the spec removes it after the
+  // consumers are dead. Never the machine's real store.
+  const dir = join(signalDir, `store-${index}`);
+  mkdirSync(dir, { recursive: true });
   const store = await openGraphBacklogStore(join(dir, 'backlog.db'));
   const env = buildBacklogEnv({ adhdRoot: dir });
 

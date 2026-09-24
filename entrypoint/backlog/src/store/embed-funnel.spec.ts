@@ -42,7 +42,9 @@
  * temp dir, so the funnel's socket dir (`<SOX_ECOSYSTEM_HOME>/run`) — and
  * every host it spawns — is isolated from the machine's live hosts (the
  * deploy + memory-server both hold funnel hosts). Each consumer opens its own
- * real store under a throwaway tmp dir, never the production store.
+ * real store under its signal dir — this spec's gitignored `tmp/` scratch,
+ * removed in `afterEach` once the consumers are dead — never the production
+ * store, and never a stray store left in the OS temp dir.
  *
  * ## NEGATIVE CONTROL (verified)
  *
@@ -51,6 +53,22 @@
  * child, test 2 because the pre-funnel topology has no machine-wide shared UDS
  * host at all (zero sockets in the isolated run dir). See the branch's report
  * for the observed raw output.
+ *
+ * ## Process lifecycle — the tests must never outlive an externally-killed run
+ *
+ * These consumers HOLD a persistent funnel UDS client connection, and the shared
+ * host correctly refuses to reap while any client is attached. So a consumer
+ * that outlives this test process would pin the host (and its ONNX child)
+ * indefinitely. Two independent guards make that impossible:
+ *
+ *   - the consumers are spawned **`detached`** (own process group) and
+ *     `afterEach` reaps the whole group, on the normal path; and
+ *   - the consumer carries an **absolute self-watchdog**
+ *     (`embed-funnel-consumer.ts` `installSelfWatchdog`) — independent of this
+ *     process — so a SIGKILLed test/gate process cannot strand it.
+ *
+ * `embed-funnel-watchdog.spec.ts` proves the watchdog and the parent-death
+ * (reparent) path directly, in bounded wall-clock, with no parent signal.
  */
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -103,10 +121,27 @@ function spawnConsumer(
         ...process.env,
         SOX_ECOSYSTEM_HOME: soxHome,
         ADHD_BACKLOG_EMBEDDING_ENABLED: 'true',
+        // The consumer's watchdog polls THIS process (the test) and exits the
+        // moment it disappears, so an externally-killed test run cannot strand
+        // a consumer holding the shared host's UDS connection open.
+        SOX_FUNNEL_CONSUMER_PARENT_PID: String(process.pid),
       },
       stdio: ['ignore', 'ignore', 'pipe'],
+      // Its own session + process group (pgid === pid). Two reasons:
+      //   1. `killConsumer` can reap the WHOLE group with one signal, so no
+      //      descendant a consumer forks into its group can be missed;
+      //   2. the group is independently identifiable, so an external reaper can
+      //      still find and clear it even if this test process is killed.
+      // The consumer is NOT left to this test alone — it carries its own
+      // self-watchdog (`embed-funnel-consumer.ts` `installSelfWatchdog`), so a
+      // SIGKILLed test process (the observed pre-push-gate SIGPIPE/timeout)
+      // cannot strand it holding the shared host's UDS connection open.
+      detached: true,
     }
   );
+  // Fully detach: this process must not be kept alive by the consumer, and must
+  // not be its reaper-of-record (the watchdog is).
+  child.unref();
   let stderr = '';
   child.stderr?.on('data', (d: Buffer) => {
     stderr += String(d);
@@ -117,12 +152,21 @@ function spawnConsumer(
 }
 
 function killConsumer(consumer: Consumer): void {
-  if (consumer.child.exitCode === null && !consumer.child.killed) {
-    try {
-      consumer.child.kill('SIGKILL');
-    } catch {
-      /* best-effort teardown */
-    }
+  if (consumer.child.exitCode !== null || consumer.child.signalCode !== null) return;
+  const pid = consumer.child.pid;
+  if (pid === undefined) return;
+  // Reap the process GROUP (the consumer is detached, so pgid === pid): one
+  // signal covers the consumer and any descendant it forked into its group.
+  try {
+    process.kill(-pid, 'SIGKILL');
+    return;
+  } catch {
+    /* group already gone, or never formed — fall back to the bare pid */
+  }
+  try {
+    consumer.child.kill('SIGKILL');
+  } catch {
+    /* best-effort teardown */
   }
 }
 
@@ -205,8 +249,16 @@ async function awaitFirstFile(
   }
 }
 
+/** Per-test signal/scratch dirs, removed in `afterEach` AFTER consumers die. */
+const liveSignalDirs: string[] = [];
+
 afterEach(() => {
+  // Reap consumers FIRST, then remove their scratch dirs. The order matters:
+  // each consumer's store now lives under its signal dir, so removing the dir
+  // while a consumer still holds the store open would pull it out from under a
+  // live process (harmless on macOS, but wrong to rely on).
   for (const consumer of liveConsumers.splice(0)) killConsumer(consumer);
+  for (const dir of liveSignalDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
 describe('embedding funnel — real components, real consumer processes', () => {
@@ -249,7 +301,8 @@ describe('embedding funnel — real components, real consumer processes', () => 
           []
         );
       } finally {
-        rmSync(signalDir, { recursive: true, force: true });
+        // Hand the scratch dir to `afterEach` — it reaps the consumer first.
+        liveSignalDirs.push(signalDir);
       }
     },
     E2E_TIMEOUT
@@ -341,7 +394,8 @@ describe('embedding funnel — real components, real consumer processes', () => 
           'the shared host must be a separate process, not a consumer'
         ).toBe(false);
       } finally {
-        rmSync(signalDir, { recursive: true, force: true });
+        // Hand the scratch dir to `afterEach` — it reaps the consumers first.
+        liveSignalDirs.push(signalDir);
       }
     },
     E2E_TIMEOUT
