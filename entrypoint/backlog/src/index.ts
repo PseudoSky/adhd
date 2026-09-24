@@ -17,13 +17,18 @@ import { pathToFileURL } from 'node:url';
 import { initTelemetry } from '@adhd/sox-telemetry';
 import { runBacklogCli, stripNamespaceFlag } from './cli.js';
 
-// The mounted surface: nine issue verbs (SPEC 6.3), `lookup` (3a), and the
-// four registry CRUD verbs (3a). `server.ts` extracts `dist/api.d.ts`, so THIS
-// list and the mounted tool set are the same list by construction -- a verb
-// cannot be exported here and missing from a transport, or vice versa.
+// The mounted surface: nine issue verbs (SPEC 6.3), `lookup` (3a), the four
+// registry CRUD verbs (3a), and the three §5 stats/rollup reads
+// (`priorityMatrix`/`partOfRollup`/`openCurve`). `server.ts` extracts
+// `dist/api.d.ts`, so THIS list and the mounted tool set are the same list by
+// construction -- a verb cannot be exported here and missing from a
+// transport, or vice versa.
 export {
   get,
   query,
+  priorityMatrix,
+  partOfRollup,
+  openCurve,
   lookup,
   create,
   update,
