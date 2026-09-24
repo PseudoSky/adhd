@@ -15,14 +15,14 @@ Identity is the global `uid` returned by `create`/`upsertProject`/etc. —
 never a family-scoped human-readable id. A `uid` is stable for the life of its
 node, but a `body` edit replaces that node: as §3 below spells out, `update`
 with a `body` mints a successor with a fresh `uid` and joins the two with a
-`SUPERSEDES` edge. A uid you persisted earlier therefore stays *resolvable* but
-may no longer be the *live* one — addressing it returns `conflict` and names
+`SUPERSEDES` edge. A uid you persisted earlier therefore stays _resolvable_ but
+may no longer be the _live_ one — addressing it returns `conflict` and names
 the successor. Never treat a stored uid as immutable across edits.
 
 Every example below was run against `entrypoint/backlog/dist/index.js` — the
 baseline examples on revision `9df2a5c7`, the §8 stats/rollup examples on the
 build that first mounted those ops — and its exact output is what is shown. A
-*globally installed* `adhd-backlog` may be an older build: in particular
+_globally installed_ `adhd-backlog` may be an older build: in particular
 `gitContext` on `create`/`transition` (§6) exists in the `9df2a5c7` build but
 an older installed build rejects it with `invalid_argument`, and the §8 stats
 ops (`priority-matrix`/`part-of-rollup`/`open-curve`) exist only in a build at
@@ -389,7 +389,7 @@ against?"** in one call, before you `rg`/search for it.
   and/or git `repoUrl`. ONE canonical row per logical repo (`adhd`,
   `sox-ecosystem`). Every issue verb RESOLVES a project by name or `uid` and
   **never mints one** — an unknown project name is `not_found` (exit 4).
-- **component** — a path *within* that project (`entrypoint/backlog`,
+- **component** — a path _within_ that project (`entrypoint/backlog`,
   `tools/nx-plugins/build`), resolved-only within its project. `upsert-project`
   mints exactly ONE reserved component, `(root)`, per project; `create`
   defaults an omitted `component` to it. **No other component is ever
@@ -417,12 +417,12 @@ A component-scoped scan is how a repo's own work is found (e.g.
 
 ### When to use each registry verb
 
-| verb | use it when | idempotent key |
-| --- | --- | --- |
-| `upsert-project` | registering/updating a repo or workspace root; also mints its `(root)` component | `name` |
-| `upsert-component` | registering/updating a path *inside* an already-registered project | `(project, name)` |
-| `upsert-location` | pointing a tool/file/URL at its owning component so `lookup` resolves it | `(component, locType, value)` |
-| `rm-location` | retiring a location (soft-invalidate) | `uid` |
+| verb               | use it when                                                                      | idempotent key                |
+| ------------------ | -------------------------------------------------------------------------------- | ----------------------------- |
+| `upsert-project`   | registering/updating a repo or workspace root; also mints its `(root)` component | `name`                        |
+| `upsert-component` | registering/updating a path _inside_ an already-registered project               | `(project, name)`             |
+| `upsert-location`  | pointing a tool/file/URL at its owning component so `lookup` resolves it         | `(component, locType, value)` |
+| `rm-location`      | retiring a location (soft-invalidate)                                            | `uid`                         |
 
 All four are create-or-update by that key — never a duplicate row — and all
 require `by`.
@@ -506,9 +506,10 @@ $ adhd-backlog backlog query --input '{"view":"locations","filter":{"component":
    `adhd-backlog sandbox-path` reports the store a command will touch. Each
    namespace resolves to its OWN file under `~/.adhd/backlog/<namespace>/data/`
    (default `backlog.db`; that namespace's `config.yaml` may pin another name),
-   so the `production` store is never the `test` store — and
-   `ADHD_BACKLOG_SCOPE=project` moves the store under `<repo>/.adhd/…` instead.
-   A build that writes a per-repo namespace (e.g. `entrypoint/backlog` on
+   so the `production` store is never the `test` store. `ADHD_BACKLOG_SCOPE`
+   only changes the scope ROOT; an absolute `db.path` from any config layer
+   still wins (`db.path ?? files.db`) — run `sandbox-path` to confirm. A build
+   that writes a per-repo namespace (e.g. `entrypoint/backlog` on
    `main`) files items that are silently absent from production — no error,
    just a missing row (filed as 49ce83b8). Run `sandbox-path` before a write
    you care about, and file through the production CLI only.
