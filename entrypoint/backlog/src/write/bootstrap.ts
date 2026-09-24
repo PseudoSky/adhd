@@ -150,6 +150,40 @@ interface OptVectorStoreModule {
 let warnedMissingVectorProbe = false;
 
 /**
+ * One-shot latches for {@link deriveMembers}'s DISABLED branch — the two
+ * member-less soft paths that used to be completely silent.
+ *
+ * `warnedEmbeddingDisabled` fires once per process for the plain, expected
+ * case (no embedding block, or `enabled:false`) so an operator can see WHY
+ * semantic features are off and WHICH config file to edit, without the line
+ * repeating on every write/query verb.
+ *
+ * `warnedEmbeddingDivergent` fires once per process for the genuinely
+ * surprising case: the on-disk config now says `enabled:true` while this
+ * process is still running with it disabled. It is defensive — the per-verb
+ * refresh in `api.ts`'s `ensureSemanticReady` normally adopts the change
+ * first — but if the stat pre-gate ever misses an edit, this is the line that
+ * makes the stall visible instead of silent (carrying both config hashes).
+ *
+ * Per-process, not shared: duplicate module copies would each warn at most
+ * once, which is harmless — there is no cross-copy state to keep consistent.
+ */
+let warnedEmbeddingDisabled = false;
+let warnedEmbeddingDivergent = false;
+
+/**
+ * Synchronous presence mirror of {@link membersCache}, for
+ * {@link peekSemanticStoreMembers}. Written when a derive resolves
+ * MEMBER-FUL (the same condition `membersCache` retains), deleted by
+ * {@link resetSemanticStoreMembers}. A `WeakMap` keyed on the stable
+ * `StoreAdapter` instance, so a closed/discarded adapter collects normally.
+ */
+const membersPresence = new WeakMap<
+  StoreAdapter,
+  { embedding: boolean; search: boolean }
+>();
+
+/**
  * Bounded existence probe of a REAL vector table: `true` iff at least one
  * vector exists under `modelId`. This is the readiness source the text-routing
  * decision (`query/query.ts`'s `resolveTextInput`) consults — per query, read
@@ -277,48 +311,119 @@ const membersCache = new WeakMap<StoreAdapter, Promise<SemanticStoreMembers>>();
  * cheaper than carrying a second "is it safe to cache?" signal through
  * `deriveMembers`. Stated here as the deliberate choice.)
  *
- * @param log where a failed opt-in is reported (never thrown — mirrors
- *   `store/semantic-search.ts`'s own former `enableSemanticSearchFromConfig`
- *   "best-effort, never fatal" contract). Defaults to `console.error`; a host
- *   with a structured logger should pass its own sink.
+ * @param log where a failed opt-in — and the once-per-process disabled/
+ *   divergent notice — is reported (never thrown; best-effort, never fatal).
+ *   Defaults to `console.error`; a host with a structured logger should pass
+ *   its own sink.
  */
 export async function bootstrapSemanticStoreMembers(
   adapter: StoreAdapter,
   graph: GraphBackend,
   cfg: BacklogConfig['embedding'],
-  log: (message: string) => void = (m) => console.error(m)
+  log: (message: string) => void = (m) => console.error(m),
+  /**
+   * Additive, trailing, optional: the loudness signal for the DISABLED branch
+   * (see {@link deriveMembers}). `configuredEnabled` is the on-disk value the
+   * caller observed (equal to `cfg.enabled` unless a per-verb refresh found
+   * them divergent); the hashes and layer paths are what the WARN reports. All
+   * absent ⇒ the pre-existing behaviour, unchanged.
+   */
+  opts?: {
+    configuredEnabled?: boolean;
+    startupHash?: string;
+    configuredHash?: string;
+    configPaths?: readonly string[];
+  }
 ): Promise<SemanticStoreMembers> {
   const cached = membersCache.get(adapter);
   if (cached) return cached;
   // Publish the in-flight promise BEFORE awaiting so concurrent callers share
   // one derive (never two cold loads). It is replaced/evicted below unless the
   // derive resolves member-ful.
-  const pending = deriveMembers(adapter, graph, cfg, log);
+  const pending = deriveMembers(adapter, graph, cfg, log, opts);
   membersCache.set(adapter, pending);
   try {
     const members = await pending;
     if (members.search === undefined && members.embedding === undefined) {
       // Member-less is not terminal: evict so the next call retries.
       membersCache.delete(adapter);
+    } else {
+      // Mirror the retained (member-ful) derive for the synchronous presence
+      // peek the `embedding_status` read op exposes.
+      membersPresence.set(adapter, {
+        embedding: members.embedding !== undefined,
+        search: members.search !== undefined,
+      });
     }
     return members;
   } catch (err) {
     // A rejected derive must not be latched either: evict, surface now, retry
     // on the next call rather than replaying the same rejection forever.
     membersCache.delete(adapter);
+    membersPresence.delete(adapter);
     throw err;
   }
+}
+
+/**
+ * Synchronous presence peek for the health/observability surface
+ * (`api.ts`'s `embedding_status`). Reads the member-ful derive this module has
+ * already resolved for `adapter` — `undefined` when none is currently
+ * retained (never resolved, member-less, or dropped by
+ * {@link resetSemanticStoreMembers}). Never triggers a derive and never does
+ * I/O.
+ */
+export function peekSemanticStoreMembers(
+  adapter: StoreAdapter
+): { present: boolean; embedding: boolean; search: boolean } | undefined {
+  const entry = membersPresence.get(adapter);
+  if (!entry) return undefined;
+  return { present: true, embedding: entry.embedding, search: entry.search };
+}
+
+/**
+ * Drops the memoized derive for `adapter` — called by `api.ts`'s
+ * `ensureSemanticReady` when a live embedding-config refresh ADOPTS a change.
+ * Eviction is what makes the DISABLE direction work: a member-ful derive is
+ * otherwise retained for the adapter's lifetime, so flipping `enabled` back to
+ * `false` must explicitly retire it. The next semantic verb re-derives against
+ * the newly-effective config.
+ */
+export function resetSemanticStoreMembers(adapter: StoreAdapter): void {
+  membersCache.delete(adapter);
+  membersPresence.delete(adapter);
+}
+
+/**
+ * Renders the resolved config layer file list for the DISABLED-branch logs, so
+ * an operator is told WHICH file to edit rather than only that RAG is off.
+ */
+function renderConfigPaths(paths: readonly string[] | undefined): string {
+  return paths && paths.length > 0
+    ? paths.join(', ')
+    : '(no config layer files found on disk)';
 }
 
 async function deriveMembers(
   adapter: StoreAdapter,
   graph: GraphBackend,
   cfg: BacklogConfig['embedding'],
-  log: (message: string) => void
+  log: (message: string) => void,
+  opts?: {
+    configuredEnabled?: boolean;
+    startupHash?: string;
+    configuredHash?: string;
+    configPaths?: readonly string[];
+  }
 ): Promise<SemanticStoreMembers> {
-  // RAG-SPEC.md §1.6: disabled is the default and is completely silent — no
-  // package load, no store touch, no log line. Mirrors
-  // `enableSemanticSearchFromConfig`'s own point 1.
+  // RAG-SPEC.md §1.6: disabled is the default — no package load, no store
+  // touch. It is no longer SILENT, though: a member-less result here used to
+  // be the one soft path of five that logged nothing, which is exactly how a
+  // long-lived process could sit with semantic features off while the operator
+  // believed they were on. The line is latched to ONCE per process so it never
+  // repeats per verb, and it names the resolved config layers so the fix is
+  // obvious.
+  //
   // `cfg` itself is optional, not just `cfg.enabled`: a config with no
   // `embedding` block at all is the ZERO-CONFIG default, and it reaches here
   // as `undefined`. Dereferencing it threw a TypeError that `api.ts` could
@@ -326,7 +431,34 @@ async function deriveMembers(
   // embedding configured failed EVERY write and query verb with "the server
   // blew up". Absent config means the semantic members are absent, which is
   // exactly what an empty bag of members already expresses.
-  if (!cfg?.enabled) return {};
+  if (!cfg?.enabled) {
+    if (opts?.configuredEnabled === true) {
+      // The genuinely surprising case: on-disk says enabled, but this process
+      // is still effectively disabled. Normally the per-verb refresh in
+      // `api.ts`'s `ensureSemanticReady` adopts first and this never fires; it
+      // is the defensive net for a missed stat pre-gate. Carries BOTH hashes
+      // so the divergence is checkable, not merely asserted.
+      if (!warnedEmbeddingDivergent) {
+        warnedEmbeddingDivergent = true;
+        log(
+          `backlog: embedding.enabled is TRUE in the on-disk config but this process is still running with it DISABLED ` +
+            `(startup configHash ${opts.startupHash ?? 'unknown'}, on-disk configHash ${
+              opts.configuredHash ?? 'unknown'
+            }). ` +
+            `The next semantic verb adopts it without a restart; if it does not, restart the process. ` +
+            `Resolved config layers: ${renderConfigPaths(opts.configPaths)}.`
+        );
+      }
+    } else if (!warnedEmbeddingDisabled) {
+      warnedEmbeddingDisabled = true;
+      log(
+        `backlog: embedding is DISABLED (the default) — semantic/RAG features are OFF for this process. ` +
+          `Set embedding.enabled: true in a resolved config layer to opt in (adopted without a restart). ` +
+          `Resolved config layers: ${renderConfigPaths(opts?.configPaths)}.`
+      );
+    }
+    return {};
+  }
 
   // The vector table lives in backlog's own database, reached through the
   // SAME adapter the graph uses. `nativeVectors` is the blessed capability

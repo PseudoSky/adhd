@@ -29,11 +29,11 @@
  *
  * ## What is no longer testable here
  *
- * The application layer's mounted surface is exactly the 17 verbs `api.ts`
- * exports (`get, query, priorityMatrix, partOfRollup, openCurve, lookup,
- * create, update, transition, claim, relate, move, upsertProject,
- * upsertComponent, upsertLocation, rmLocation, delete`, projected onto the
- * CLI's kebab-case command names). There is no `admin`
+ * The application layer's mounted surface is exactly the 18 verbs `api.ts`
+ * exports (`get, query, priorityMatrix, partOfRollup, openCurve,
+ * embeddingStatus, lookup, create, update, transition, claim, relate, move,
+ * upsertProject, upsertComponent, upsertLocation, rmLocation, delete`,
+ * projected onto the CLI's kebab-case command names). There is no `admin`
  * verb anywhere in that surface — it is not exported by `api.ts`, it is not
  * in `server.ts`'s pinned `BACKLOG_VERBS` list, and `cli.ts` mounts no such
  * command. The tagged-report-union coverage this file used to carry for a

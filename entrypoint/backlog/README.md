@@ -189,8 +189,9 @@ resolve to the wrong record.
 
 ## Command surface
 
-Every verb takes a single `--input` flag carrying one JSON object; there are no
-per-field flags. Eighteen operations (the 17 verbs plus `batch`):
+Every verb but `embedding-status` takes a single `--input` flag carrying one JSON
+object; there are no per-field flags. Nineteen operations (the 18 verbs plus
+`batch`):
 
 | Verb              | CLI                             | MCP tool                   |
 | ----------------- | ------------------------------- | -------------------------- |
@@ -199,6 +200,7 @@ per-field flags. Eighteen operations (the 17 verbs plus `batch`):
 | `priorityMatrix`  | `adhd-backlog priority-matrix`  | `backlog_priority_matrix`  |
 | `partOfRollup`    | `adhd-backlog part-of-rollup`   | `backlog_part_of_rollup`   |
 | `openCurve`       | `adhd-backlog open-curve`       | `backlog_open_curve`       |
+| `embeddingStatus` | `adhd-backlog embedding-status` | `backlog_embedding_status` |
 | `lookup`          | `adhd-backlog lookup`           | `backlog_lookup`           |
 | `create`          | `adhd-backlog create`           | `backlog_create`           |
 | `update`          | `adhd-backlog update`           | `backlog_update`           |
@@ -215,7 +217,7 @@ per-field flags. Eighteen operations (the 17 verbs plus `batch`):
 
 `--help` prints these as `backlog <verb>`; the CLI also accepts the bare
 `adhd-backlog <verb>` form shown above, and accepts the explicit namespace
-prefix at any position. `get`/`query`/`lookup` are reads.
+prefix at any position. `get`/`query`/`lookup`/`embedding-status` are reads.
 `create`/`update`/`transition`/`claim`/`relate`/`move`/`delete` mutate one
 issue. The four `upsert*`/`rmLocation` verbs manage the **registry** —
 projects, components, and locations. `batch action` fans any one of them out
