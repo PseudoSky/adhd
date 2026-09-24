@@ -48,6 +48,17 @@
         "configFile": "entrypoint/backlog/vite.config.ts"
       }
     },
+    "e2e": {
+      "//": "On-demand RESOURCE lane (backlog-e2e-separation): the 33 `src/**/*.e2e.ts` suites extracted out of `test` — real subprocess spawns, the real fastembed model, real bound-port HTTP/MCP servers, and the CPU/mem/disk/io hogs — each paired 1:1 with a cheap `*.spec.ts` stub left in the default lane (see the stub `Resource lane:` tags and vitest.e2e.config.ts). REACHABILITY GUARD: this target is deliberately unreachable from `nx affected` and from a bare `test` run — it appears in NO target's `dependsOn` and is deliberately absent from `nx.json` `targetDefaults`, so ONLY an explicit `nx run backlog:e2e` (or `nx run-many -t e2e`) runs it. Never add it to `test.dependsOn`. `dependsOn:[\"build\"]` is the ONLY dependency the suites need: every one either spawns the built `dist/index.js` or loads the real model/store/server, and the three published-layout/install-skill suites that read `dist/skill/SKILL.md` are satisfied by `build` ALONE — vite.config.ts's copySkillDirPlugin writes it on a bare `nx build backlog` (verified 2026-09-24: dist/skill/SKILL.md present after build, dist/README.md absent) — so `assets` and `vocabulary-gate` are NOT dependencies. No `outputs` declared: a dist-shaped output would let this target's cache restore clobber `build`'s dist/, and coverage is opt-in.",
+      "executor": "@nx/vite:test",
+      "dependsOn": [
+        "build"
+      ],
+      "options": {
+        "configFile": "entrypoint/backlog/vitest.e2e.config.ts",
+        "passWithNoTests": true
+      }
+    },
     "vocabulary-gate": {
       "//": "C-22: both vocabulary acceptance gates, as one Nx task. `tools/gate/vocabulary-gate.mjs` scans src/ (code AND text assets such as src/write/CONTRACT.md) plus the package's top-level markdown (SPEC/DESIGN/DATA_MODEL/RAG-SPEC/README/CHANGELOG); `scripts/check-vocabulary.mjs` npm-packs the REAL artifact (package.json `files`: dist + CHANGELOG.md + skill) and scans the tarball — the only scan that catches a banned token reaching a consumer through dist/*.d.ts, which reproduces source doc comments verbatim and never appears in src/. Wired into test.dependsOn so the PR workflows' `nx affected -t test` runs it on every PR touching this package. dependsOn build+assets so the packed artifact is the real shipped one, never a stale dist/. cache:true mirrors the verify-dist-load convention — deterministic given `inputs: [\"default\"]`: a src/doc change re-runs it, and a dist/ change re-runs it too because nx folds the build/assets dependency task hashes into this task's hash, so dist/ (a dependency OUTPUT, not an input) needs no explicit input entry. NOTE: check-vocabulary.mjs takes NO path arg here deliberately — cwd is already {projectRoot} and the script defaults to process.cwd(); passing {projectRoot} again double-prefixes the path, npm pack spawns with a nonexistent cwd, and the failure surfaces as the misleading 'spawnSync npm ENOENT' (verified while authoring this target).",
       "executor": "nx:run-commands",
