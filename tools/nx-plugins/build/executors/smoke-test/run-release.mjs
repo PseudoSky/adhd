@@ -84,6 +84,12 @@
  *      underlying `nx show projects --affected` call fails), it THROWS, and
  *      this script exits non-zero immediately, before GATE 1, `version`, or
  *      `publish` ever run. There is no unscoped code path left in this file.
+ *      The VERY FIRST statement of `main()` mints a per-run
+ *      `RELEASE_RUN_TOKEN` (random UUID) into the process env; step 0's
+ *      manifest write stamps it, and every later spawned phase inherits it, so
+ *      the manifest backstop's age gate is skipped for THIS run's own manifest
+ *      regardless of how long the batch takes (F1 root fix — see
+ *      `../../lib/release-manifest.js`'s "RUN-SCOPED FRESHNESS" header).
  *   0.5. `nx run-many -t build --projects=<computed-list>` (NEW,
  *      DEBT-BUILD-COMPOSITE-TSC-PARALLEL-001) runs EXPLICITLY, scoped to the
  *      same computed project list, BEFORE the `version` phase. Previously
@@ -163,6 +169,7 @@ import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { randomUUID } from 'node:crypto';
 
 const require = createRequire(import.meta.url);
 const { computeChangedProjectSet } = require('../../lib/changed-set.js');
@@ -187,6 +194,20 @@ function run(label, command, args) {
 }
 
 function main() {
+  // Run-scoped freshness token (F1 root fix) — MUST be the very first thing
+  // this run does. `computeChangedProjectSet` (step 0, below) writes the
+  // release manifest, and `release-manifest.js` stamps this value into it;
+  // every later phase (build, version, GATE 1, publish) is spawned with this
+  // process's env inherited, so every publish task sees the SAME token and the
+  // manifest's age gate is skipped for the duration of THIS run — a large
+  // batch that pushes publish past the 10-minute window no longer refuses its
+  // own in-scope projects. Minting it before the scope computation is what
+  // guarantees the step-0 manifest carries it. Setting it here is safe even if
+  // a caller already provided one (we still re-mint per run; the manifest and
+  // the children always agree because both read this same process env).
+  process.env.RELEASE_RUN_TOKEN = randomUUID();
+  console.error(`run-release: release run token ${process.env.RELEASE_RUN_TOKEN}`);
+
   // Step 0 — compute the changed/affected project scope. NO catch-and-
   // fall-back-to-unscoped here: a failure computing the scope is a hard,
   // immediate stop. This is the one deliberate anti-pattern-prevention
