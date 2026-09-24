@@ -190,12 +190,15 @@ resolve to the wrong record.
 ## Command surface
 
 Every verb takes a single `--input` flag carrying one JSON object; there are no
-per-field flags. Fifteen operations (the 14 verbs plus `batch`):
+per-field flags. Eighteen operations (the 17 verbs plus `batch`):
 
 | Verb              | CLI                             | MCP tool                   |
 | ----------------- | ------------------------------- | -------------------------- |
 | `get`             | `adhd-backlog get`              | `backlog_get`              |
 | `query`           | `adhd-backlog query`            | `backlog_query`            |
+| `priorityMatrix`  | `adhd-backlog priority-matrix`  | `backlog_priority_matrix`  |
+| `partOfRollup`    | `adhd-backlog part-of-rollup`   | `backlog_part_of_rollup`   |
+| `openCurve`       | `adhd-backlog open-curve`       | `backlog_open_curve`       |
 | `lookup`          | `adhd-backlog lookup`           | `backlog_lookup`           |
 | `create`          | `adhd-backlog create`           | `backlog_create`           |
 | `update`          | `adhd-backlog update`           | `backlog_update`           |
@@ -281,8 +284,11 @@ These docs describe `entrypoint/backlog/dist/index.js` built from revision
 `9df2a5c7`, whose `create`/`transition` inputs include `gitContext`. A
 **globally installed** `adhd-backlog` may be an older build (it is whatever was
 last published/installed); on such a build `gitContext` is not in the schema
-and is rejected with `invalid_argument`. Run `adhd-backlog --help` and compare
-the `backlog create` line against this page if a documented field is refused.
+and is rejected with `invalid_argument`, and the stats/rollup ops
+(`priority-matrix` / `part-of-rollup` / `open-curve`) are absent. Run
+`adhd-backlog --help` and compare the `backlog create` / `backlog
+priority-matrix` lines against this page if a documented field or verb is
+refused.
 
 ## Library API
 
@@ -298,10 +304,10 @@ members of `query.view`:
 - `openCurve(handle, { filter?, at })` — per-sampled-instant counts of issues
   that existed and how many were open, reconstructed from the audit trail.
 
-Reach them by importing `@adhd/backlog` in-process. A development build may
-additionally mount some of them as CLI/MCP operations — run
-`adhd-backlog --help` to see what a given build exposes. The committed
-`9df2a5c7` surface does **not** mount them.
+Reach them by importing `@adhd/backlog` in-process. The same three are also
+mounted as operations — `priority-matrix` / `part-of-rollup` / `open-curve` on
+the CLI (`backlog_priority_matrix` / `backlog_part_of_rollup` /
+`backlog_open_curve` on MCP); see the command surface above.
 
 ## Configuration
 
