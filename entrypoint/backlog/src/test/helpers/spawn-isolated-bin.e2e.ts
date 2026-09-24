@@ -41,13 +41,20 @@
  * from the helper OR the ambient-env strip is dropped, so the invariant can
  * never silently regress even on a machine with no global `~/.adhd` config to
  * leak from.
+ *
+ * The DURABILITY half of this guard — "every spec/e2e file that spawns
+ * `process.execPath [DIST_INDEX, …]` imports an isolation helper" — is NOT
+ * here. It is a pure fs-read + regex check (no child spawn, no model load), so
+ * it lives in the default-running static gate
+ * `tools/gate/spawn-isolation-gate.mjs`, wired into the `vocabulary-gate` Nx
+ * target and therefore into `nx affected -t test`. Keeping it only in this
+ * resource-lane suite silently stopped it running by default once the suite
+ * became `*.e2e.ts`; the gate above is now the single source of truth.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   existsSync,
   mkdtempSync,
-  readdirSync,
-  readFileSync,
   realpathSync,
   rmSync,
 } from 'node:fs';
@@ -62,7 +69,6 @@ import {
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', '..', '..', 'dist', 'index.js');
-const SRC_ROOT = join(HERE, '..', '..');
 
 /** Saves, mutates, and restores a set of `process.env` keys. */
 function withEnv(
@@ -84,21 +90,6 @@ function withEnv(
       else process.env[key] = value;
     }
   }
-}
-
-/** Recursively lists every `.spec.ts` and `.e2e.ts` under `src/`. */
-function listSpecFiles(dir: string): string[] {
-  const out: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...listSpecFiles(full));
-    // `.e2e.ts` is scanned too: the spawn sites were extracted out of the
-    // default `test` target into e2e siblings, so a guard that only looked at
-    // `*.spec.ts` would now be scanning an empty set — teeth with no teeth.
-    else if (entry.name.endsWith('.spec.ts') || entry.name.endsWith('.e2e.ts'))
-      out.push(full);
-  }
-  return out;
 }
 
 describe('spawn-isolated-bin — the HOME-redirect invariant is enforced, not just copy-pasted', () => {
@@ -200,28 +191,13 @@ describe('spawn-isolated-bin — the HOME-redirect invariant is enforced, not ju
     );
   });
 
-  // Durability guard (PR #12 review finding `82470ae8`, widened on the merge
-  // with the branch's `--namespace sandbox` architecture): a NEW spec/e2e file
-  // that spawns the real built bin by `process.execPath [DIST_INDEX, …]` without
-  // routing through an isolation helper silently reintroduces the config-layer
-  // leak. This package now has TWO canonical isolation helpers — this one
-  // (HOME redirect) and `spawn-backlog-bin.ts` (`--namespace sandbox`) — so the
-  // guard accepts a spawn site that imports EITHER. It scans BOTH `*.spec.ts`
-  // and `*.e2e.ts` (the resource-consuming suites were extracted to e2e).
-  // Sites that isolate by a different mechanism use a different spawn shape
-  // (fixtures, `workerData`, an explicit `HOME`) and are not matched.
-  it('every spec/e2e file that spawns `process.execPath [DIST_INDEX, …]` imports an isolation helper', () => {
-    const spawnsDistIndex = /(?:spawn|spawnSync)\s*\(\s*process\.execPath\s*,\s*\[\s*DIST_INDEX/;
-    const importsHelper = /from\s+['"][^'"]*(?:spawn-isolated-bin|spawn-backlog-bin)(?:\.js)?['"]/;
-    const offenders = listSpecFiles(SRC_ROOT)
-      .filter((file) => {
-        const content = readFileSync(file, 'utf8');
-        return spawnsDistIndex.test(content) && !importsHelper.test(content);
-      })
-      .map((file) => file.slice(SRC_ROOT.length + 1));
-    expect(
-      offenders,
-      `these specs/e2e files spawn the real bin without the isolation helper: ${offenders.join(', ')}`
-    ).toEqual([]);
-  });
+  // The DURABILITY guard — "every spec/e2e file that spawns the real built bin
+  // by `process.execPath [DIST_INDEX, …]` routes through an isolation helper" —
+  // moved to the default-running static gate `tools/gate/spawn-isolation-gate.mjs`,
+  // wired into the `vocabulary-gate` Nx target (so it runs under
+  // `nx affected -t test` / the pre-commit + pre-push hooks). It is a pure
+  // fs-read + regex check with no child spawn and no model load, so it never
+  // needed the resource lane — and leaving it ONLY here meant it silently
+  // stopped running by default once this suite was extracted to e2e. It is
+  // deliberately NOT duplicated here; the gate is the single source of truth.
 });

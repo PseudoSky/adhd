@@ -20,9 +20,12 @@
  * `process.exit(0)` turns these red; that negative control was run and
  * recorded when this spec landed.
  *
- * The embedding-usage gate (`tools/gate/embedding-usage-gate.mjs`) has no Nx
- * target, so its live-tree assertion stays here — the suite remains the only
- * thing that runs it.
+ * The embedding-usage gate (`tools/gate/embedding-usage-gate.mjs`) now ALSO
+ * has a default-running Nx home: it is a command on the same `vocabulary-gate`
+ * target (backlog-e2e-separation review, HIGH finding), so it censuses the live
+ * tree under `nx affected -t test` without this suite. The case below is kept
+ * as the resource-lane copy (a real child-process run with its own assertion);
+ * it is no longer the only thing that runs the gate.
  *
  * Real components throughout: every script runs as a real child process
  * (a real `npm pack` for the tarball gate), never a mock and never an

@@ -12,6 +12,13 @@
  * case in `spawn-isolated-bin.e2e.ts`); they are the contract a mocked version must satisfy
  * without touching a subprocess or a real model.
  *
+ * The durability guard case ("every spec/e2e file that spawns
+ * `process.execPath [DIST_INDEX, …]` imports an isolation helper") is NOT
+ * inventoried here: it is a static/parsing check with no subprocess and no
+ * model, so it now runs by default in
+ * `tools/gate/spawn-isolation-gate.mjs` (via the `vocabulary-gate` Nx target)
+ * rather than in the resource lane.
+ *
  * Resource lane: proc — spawns isolated bins as child processes.
  */
 import { describe, it } from 'vitest';
@@ -21,5 +28,4 @@ describe("mocked: spawn-isolated-bin", () => {
   it.todo("mocked: buildIsolatedEnv strips ambient store-redirect vars, while extraEnv still wins");
   it.todo("mocked: a store-free CLI run through the helper resolves dbPath UNDER the temp root");
   it.todo("mocked: ambient store-redirect vars (ADHD_ROOT / ADHD_BACKLOG_DATABASE_PATH / SOX_ECOSYSTEM_HOME / APIGEN_IR_CACHE_FILE) do not leak into the child");
-  it.todo("mocked: every spec that spawns `process.execPath [DIST_INDEX, …]` imports an isolation helper");
 });

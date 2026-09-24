@@ -59,7 +59,7 @@
       }
     },
     "vocabulary-gate": {
-      "//": "C-22: both vocabulary acceptance gates, as one Nx task. `tools/gate/vocabulary-gate.mjs` scans src/ (code AND text assets such as src/write/CONTRACT.md) plus the package's top-level markdown (SPEC/DESIGN/DATA_MODEL/RAG-SPEC/README/CHANGELOG); `scripts/check-vocabulary.mjs` npm-packs the REAL artifact (package.json `files`: dist + CHANGELOG.md + skill) and scans the tarball — the only scan that catches a banned token reaching a consumer through dist/*.d.ts, which reproduces source doc comments verbatim and never appears in src/. Wired into test.dependsOn so the PR workflows' `nx affected -t test` runs it on every PR touching this package. dependsOn build+assets so the packed artifact is the real shipped one, never a stale dist/. cache:true mirrors the verify-dist-load convention — deterministic given `inputs: [\"default\"]`: a src/doc change re-runs it, and a dist/ change re-runs it too because nx folds the build/assets dependency task hashes into this task's hash, so dist/ (a dependency OUTPUT, not an input) needs no explicit input entry. NOTE: check-vocabulary.mjs takes NO path arg here deliberately — cwd is already {projectRoot} and the script defaults to process.cwd(); passing {projectRoot} again double-prefixes the path, npm pack spawns with a nonexistent cwd, and the failure surfaces as the misleading 'spawnSync npm ENOENT' (verified while authoring this target).",
+      "//": "C-22: both vocabulary acceptance gates, as one Nx task. `tools/gate/vocabulary-gate.mjs` scans src/ (code AND text assets such as src/write/CONTRACT.md) plus the package's top-level markdown (SPEC/DESIGN/DATA_MODEL/RAG-SPEC/README/CHANGELOG); `scripts/check-vocabulary.mjs` npm-packs the REAL artifact (package.json `files`: dist + CHANGELOG.md + skill) and scans the tarball — the only scan that catches a banned token reaching a consumer through dist/*.d.ts, which reproduces source doc comments verbatim and never appears in src/. Wired into test.dependsOn so the PR workflows' `nx affected -t test` runs it on every PR touching this package. dependsOn build+assets so the packed artifact is the real shipped one, never a stale dist/. cache:true mirrors the verify-dist-load convention — deterministic given `inputs: [\"default\"]`: a src/doc change re-runs it, and a dist/ change re-runs it too because nx folds the build/assets dependency task hashes into this task's hash, so dist/ (a dependency OUTPUT, not an input) needs no explicit input entry. NOTE: check-vocabulary.mjs takes NO path arg here deliberately — cwd is already {projectRoot} and the script defaults to process.cwd(); passing {projectRoot} again double-prefixes the path, npm pack spawns with a nonexistent cwd, and the failure surfaces as the misleading 'spawnSync npm ENOENT' (verified while authoring this target). backlog-e2e-separation review (HIGH finding): two MORE static policy gates run here, so they are default-running and never depend on the resource `e2e` lane — `tools/gate/embedding-usage-gate.mjs` censuses the real-vs-fake embedding policy across BOTH `*.spec.ts` and `*.e2e.ts` (its live assertion had been left in the resource-only `vocabulary-gate.e2e.ts`, with no Nx target at all), and `tools/gate/spawn-isolation-gate.mjs` is the static/parsing half of the spawn-isolation guard (every `spawn(process.execPath, [DIST_INDEX, …]` site must import an isolation helper), which had lost its only default-running executor when `spawn-isolated-bin.e2e.ts` moved to the resource lane. Both are pure reads/regexes with no child spawn and no model load, so they belong in the fast lane; do NOT move either back into an e2e suite.",
       "executor": "nx:run-commands",
       "dependsOn": [
         "build",
@@ -73,12 +73,14 @@
         "cwd": "{projectRoot}",
         "commands": [
           "node tools/gate/vocabulary-gate.mjs",
-          "node scripts/check-vocabulary.mjs"
+          "node scripts/check-vocabulary.mjs",
+          "node tools/gate/embedding-usage-gate.mjs",
+          "node tools/gate/spawn-isolation-gate.mjs"
         ],
         "parallel": false
       },
       "metadata": {
-        "description": "Runs both vocabulary acceptance gates (src-tree scan + packed-tarball scan); non-zero exit on any banned humanId/migration/sqlite reference anywhere, and on v1/v2 outside generated bundles. Runs on every PR touching the package via test.dependsOn."
+        "description": "Runs the package's static policy gates: the two vocabulary acceptance gates (src-tree scan + packed-tarball scan) — non-zero exit on any banned humanId/migration/sqlite reference anywhere, and on v1/v2 outside generated bundles — plus the embedding-usage census (real-vs-fake) and the spawn-isolation guard. All four are cheap static reads; runs on every PR touching the package via test.dependsOn."
       }
     },
     "typecheck": {
