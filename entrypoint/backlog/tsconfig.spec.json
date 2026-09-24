@@ -14,6 +14,7 @@
   },
   "include": [
     "vite.config.ts",
+    "vitest.e2e.config.ts",
     "src/**/*.test.ts",
     "src/**/*.spec.ts",
     "src/**/*.e2e.ts",

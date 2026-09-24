@@ -41,7 +41,7 @@ import {
   type SandboxHandle,
 } from './test/helpers/spawn-backlog-bin.js';
 
-/** See install.e2e.spec.ts's identical helper doc comment. */
+/** See install.e2e.ts's identical helper doc comment. */
 async function expectedMcpToolNames(): Promise<string[]> {
   const { operations } = await buildBacklogApigenPackage(() => {
     throw new Error(
