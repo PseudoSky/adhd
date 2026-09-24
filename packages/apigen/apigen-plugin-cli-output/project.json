@@ -57,8 +57,7 @@
         "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-cli-output-e2e"
       ],
       "options": {
-        "configFile": "packages/apigen/apigen-plugin-cli-output/vitest.e2e.config.ts",
-        "passWithNoTests": true
+        "configFile": "packages/apigen/apigen-plugin-cli-output/vitest.e2e.config.ts"
       }
     },
     "nx-release-publish": {
