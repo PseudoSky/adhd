@@ -29,6 +29,16 @@ const repoRoot = path.resolve(__dirname, '../..');
  * `dependsOn` and is absent from `nx.json` `targetDefaults`, so only an
  * explicit invocation runs it. Never add it to `test.dependsOn`.
  *
+ * TARGET NAME (backlog-e2e-separation review): the lane KEEPS the name `e2e`
+ * for repo-wide consistency with the 12 sibling apigen packages that name the
+ * identical resource lane `e2e` across 5 branches; renaming only backlog would
+ * split one concept into two names. This is also the name `nx.json`'s
+ * @nx/cypress/plugin reserves (`targetName: "e2e"`) — a LATENT collision
+ * accepted and documented: no cypress project exists today, and a global
+ * `nx.json` `targetDefaults.e2e` must NEVER be added, because `targetDefaults`
+ * is keyed by target name only (no project filter) and so cannot be scoped to
+ * this project; every default here lives inline in `project.json` instead.
+ *
  * LANE SELECTION — why there is no `BACKLOG_E2E_LANE` env var here:
  * the `Resource lane:` tags (proc|embed|cpu|mem|disk|io) live in the sibling
  * `*.spec.ts` STUB doc-comments, NOT in any test NAME, so vitest's
