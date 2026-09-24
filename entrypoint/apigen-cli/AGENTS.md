@@ -107,6 +107,33 @@ Custom plugins can be loaded by package specifier or local path.
 - **Logging:** `src/lib/logging.ts` — pino-based, stderr-only
 - **Tsconfig resolution:** `src/lib/resolve-tsconfig.ts` — explicit → nearest → builtin (memoized)
 
+## Testing — two lanes (default `test` vs explicit `e2e`)
+
+This project's suites are split by RESOURCE CLASS, so the resource-consuming
+ones never run under `nx affected -t test` / the pre-commit + pre-push hooks.
+
+| | default lane | e2e lane |
+|---|---|---|
+| target | `nx test apigen-cli` (runs in `affected`) | `nx run apigen-cli:e2e` (explicit only) |
+| vitest config | `vite.config.ts` | `vitest.e2e.config.ts` |
+| include | `src/**/*.spec.ts` | `src/**/*.e2e.ts` |
+| prerequisites | none (in-process, source-level) | `build`, `apigen-java:package` |
+| cost | seconds | minutes (subprocesses, ports, real extraction, JVM, python) |
+
+**A resource-consuming suite must live in a `*.e2e.ts` file, never a `*.spec.ts`.**
+"Resource-consuming" is broad: any use of `child_process`/`spawn`/`execFile`
+(including spawning the built `dist/index.js`), any `python3`/`java`/`mvn`/`javac`
+/`grpcurl` host, any real HTTP server bound to a port (`app.listen`) even when
+in-process, embedding models, and CPU/mem-heavy work such as real ts-morph
+extraction over fixtures. When you extract one, `git mv <name>.spec.ts
+<name>.e2e.ts` and leave a cheap `<name>.spec.ts` STUB at the original path — a
+header naming the sibling `.e2e.ts` and a `Resource lane: proc|embed|cpu|mem|disk|io`
+line, plus one `it.todo('mocked: …')` per real case. The stub is the home of the
+future MOCKED unit-test version; it must spawn/embed/bind nothing.
+
+The `e2e` target is deliberately NOT in `affected`, NOT in any `test.dependsOn`,
+and NOT in `targetDefaults` — `nx affected -t test` can never select it.
+
 ## Architecture
 
 Extract → Compose → Project:
