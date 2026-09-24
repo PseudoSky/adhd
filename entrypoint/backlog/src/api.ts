@@ -51,7 +51,10 @@ import type { BacklogConfig } from './env.js';
 import type { GraphBacklogStore } from './store/graph-backlog-store.js';
 import type { IWriteStoreHandle } from './write/tx.js';
 import type { IQueryStoreHandle } from './query/query.js';
-import { queryIssuesWithMeta, queryNeedsSemanticBackend } from './query/query.js';
+import {
+  queryIssuesWithMeta,
+  queryNeedsSemanticBackend,
+} from './query/query.js';
 import type {
   IOutcomeEnvelope,
   IOutcomeFailure,
@@ -680,7 +683,9 @@ export async function create(
   ctx: BacklogCtx,
   input: ICreateIssueInput
 ): Promise<IOutcomeEnvelope<ICreateIssueResult>> {
-  return envelope(async () => createIssue(await writeHandle(ctx, { needsSemantic: true }), input));
+  return envelope(async () =>
+    createIssue(await writeHandle(ctx, { needsSemantic: true }), input)
+  );
 }
 
 /**
@@ -694,7 +699,9 @@ export async function update(
   ctx: BacklogCtx,
   input: IUpdateIssueInput
 ): Promise<IOutcomeEnvelope<IUpdateIssueOutcome>> {
-  return envelope(async () => updateIssueOp(await writeHandle(ctx, { needsSemantic: true }), input));
+  return envelope(async () =>
+    updateIssueOp(await writeHandle(ctx, { needsSemantic: true }), input)
+  );
 }
 
 /** Move an issue to a new status, recording the transition in its audit trail. */
@@ -702,7 +709,9 @@ export async function transition(
   ctx: BacklogCtx,
   input: ITransitionInput
 ): Promise<IOutcomeEnvelope<ITransitionOutcome>> {
-  return envelope(async () => transitionIssueOp(await writeHandle(ctx, { needsSemantic: false }), input));
+  return envelope(async () =>
+    transitionIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
 }
 
 /** Take, renew or release an exclusive working lease on an issue. */
@@ -710,7 +719,9 @@ export async function claim(
   ctx: BacklogCtx,
   input: IClaimInput
 ): Promise<IOutcomeEnvelope<IClaimOutcome>> {
-  return envelope(async () => claimIssueOp(await writeHandle(ctx, { needsSemantic: false }), input));
+  return envelope(async () =>
+    claimIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
 }
 
 /** Create or remove a typed relationship between two issues. */
@@ -718,7 +729,9 @@ export async function relate(
   ctx: BacklogCtx,
   input: IRelateInput
 ): Promise<IOutcomeEnvelope<IRelateOutcome>> {
-  return envelope(async () => relateIssueOp(await writeHandle(ctx, { needsSemantic: false }), input));
+  return envelope(async () =>
+    relateIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
 }
 
 /** Re-file an issue under a different project component. */
@@ -726,7 +739,9 @@ export async function move(
   ctx: BacklogCtx,
   input: IMoveIssueInput
 ): Promise<IOutcomeEnvelope<IMoveIssueOutcome>> {
-  return envelope(async () => moveIssueOp(await writeHandle(ctx, { needsSemantic: false }), input));
+  return envelope(async () =>
+    moveIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
 }
 
 /**
@@ -739,7 +754,9 @@ async function remove(
   ctx: BacklogCtx,
   input: IDeleteIssueInput
 ): Promise<IOutcomeEnvelope<IDeleteIssueOutcome>> {
-  return envelope(async () => deleteIssueOp(await writeHandle(ctx, { needsSemantic: false }), input));
+  return envelope(async () =>
+    deleteIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -756,7 +773,9 @@ export async function upsertProject(
   ctx: BacklogCtx,
   input: IUpsertProjectInput
 ): Promise<IOutcomeEnvelope<IUpsertProjectOutcome>> {
-  return envelope(async () => upsertProjectOp(await writeHandle(ctx, { needsSemantic: false }), input));
+  return envelope(async () =>
+    upsertProjectOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
 }
 
 /** Create or update a component by `(project, name)`. */
@@ -764,7 +783,9 @@ export async function upsertComponent(
   ctx: BacklogCtx,
   input: IUpsertComponentInput
 ): Promise<IOutcomeEnvelope<IUpsertComponentOutcome>> {
-  return envelope(async () => upsertComponentOp(await writeHandle(ctx, { needsSemantic: false }), input));
+  return envelope(async () =>
+    upsertComponentOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
 }
 
 /**
@@ -777,7 +798,9 @@ export async function upsertLocation(
   ctx: BacklogCtx,
   input: IUpsertLocationInput
 ): Promise<IOutcomeEnvelope<IUpsertLocationOutcome>> {
-  return envelope(async () => upsertLocationOp(await writeHandle(ctx, { needsSemantic: false }), input));
+  return envelope(async () =>
+    upsertLocationOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
 }
 
 /** Soft-remove a location by `uid`. */
@@ -785,7 +808,9 @@ export async function rmLocation(
   ctx: BacklogCtx,
   input: IRmLocationInput
 ): Promise<IOutcomeEnvelope<IRmLocationOutcome>> {
-  return envelope(async () => rmLocationOp(await writeHandle(ctx, { needsSemantic: false }), input));
+  return envelope(async () =>
+    rmLocationOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
 }
 
 /**

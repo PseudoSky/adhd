@@ -43,7 +43,7 @@ adhd-backlog upsert-project --input '{
 ```
 
 ```json
-{"ok":true,"data":{"uid":"49ec673b-…","created":true,"project":{"uid":"49ec673b-…","name":"demo-project","path":"/tmp/demo"}}}
+{ "ok": true, "data": { "uid": "49ec673b-…", "created": true, "project": { "uid": "49ec673b-…", "name": "demo-project", "path": "/tmp/demo" } } }
 ```
 
 File an issue against it:
@@ -60,7 +60,7 @@ adhd-backlog create --input '{
 ```
 
 ```json
-{"ok":true,"data":{"created":true,"uid":"b3b2da0e-…","item":{"uid":"b3b2da0e-…","title":"Query pagination drops the last page under offset paging","kind":"issue","status":"open","priority":"HIGH","project":"49ec673b-…","component":"65c4e373-…","createdAt":"2026-09-24T00:14:38.802Z","author":"agent:worker-1","gitContext":"feat/backlog-hard-replacement @ 4bf902fc"}}}
+{ "ok": true, "data": { "created": true, "uid": "b3b2da0e-…", "item": { "uid": "b3b2da0e-…", "title": "Query pagination drops the last page under offset paging", "kind": "issue", "status": "open", "priority": "HIGH", "project": "49ec673b-…", "component": "65c4e373-…", "createdAt": "2026-09-24T00:14:38.802Z", "author": "agent:worker-1", "gitContext": "feat/backlog-hard-replacement @ 4bf902fc" } } }
 ```
 
 > `project` and `component` in the result are `uid`s, not names. `gitContext`
@@ -73,7 +73,7 @@ adhd-backlog query --input '{"filter":{"project":"demo-project","status":"open"}
 ```
 
 ```json
-{"ok":true,"data":{"view":"list","items":[{"uid":"b3b2da0e-…","title":"Query pagination drops the last page under offset paging","kind":"issue","status":"open","priority":"HIGH"}],"hasMore":false},"meta":{"total":1,"returned":1,"limit":50}}
+{ "ok": true, "data": { "view": "list", "items": [{ "uid": "b3b2da0e-…", "title": "Query pagination drops the last page under offset paging", "kind": "issue", "status": "open", "priority": "HIGH" }], "hasMore": false }, "meta": { "total": 1, "returned": 1, "limit": 50 } }
 ```
 
 Move it forward — a `transition` records the status change in the issue's audit
@@ -92,13 +92,13 @@ adhd-backlog transition --input '{
 ```
 
 ```json
-{"ok":true,"data":{"uid":"b3b2da0e-…","fromStatus":"open","toStatus":"in-progress","transitionUid":"9bcb9844-…"}}
+{ "ok": true, "data": { "uid": "b3b2da0e-…", "fromStatus": "open", "toStatus": "in-progress", "transitionUid": "9bcb9844-…" } }
 ```
 
 A failed call returns the same envelope with `ok:false` instead of throwing:
 
 ```json
-{"ok":false,"error":{"code":"item_not_found","message":"No live issue found for uid \"does-not-exist\"","details":{"retryable":false}}}
+{ "ok": false, "error": { "code": "item_not_found", "message": "No live issue found for uid \"does-not-exist\"", "details": { "retryable": false } } }
 ```
 
 Every output above was captured from the built binary
@@ -126,7 +126,7 @@ adhd-backlog claim --input '{"uid":"b3b2da0e-…","by":"agent:worker-1","action"
 ```
 
 ```json
-{"ok":true,"data":{"uid":"b3b2da0e-…","status":"claimed","claimedBy":"agent:worker-1","claimedAt":"2026-09-24T00:14:39.978Z"}}
+{ "ok": true, "data": { "uid": "b3b2da0e-…", "status": "claimed", "claimedBy": "agent:worker-1", "claimedAt": "2026-09-24T00:14:39.978Z" } }
 ```
 
 ### 3. Structured, verifiable citations
@@ -149,7 +149,7 @@ adhd-backlog get --input '{"registry":"project","name":"demo-project"}'
 ```
 
 ```json
-{"ok":true,"data":{"uid":"49ec673b-…","name":"demo-project","path":"/tmp/demo","components":[{"name":"(root)"}],"locations":[]}}
+{ "ok": true, "data": { "uid": "49ec673b-…", "name": "demo-project", "path": "/tmp/demo", "components": [{ "name": "(root)" }], "locations": [] } }
 ```
 
 ### 5. Optional semantic search, optional Markdown rendering
@@ -184,7 +184,7 @@ forward to it. The old `uid` remains queryable history: addressing it returns
 resolve to the wrong record.
 
 ```json
-{"ok":false,"error":{"code":"conflict","message":"Issue \"63c2f57e-…\" was superseded by a body edit and is no longer the live issue; it now lives under \"e3b32183-…\"","details":{"retryable":false}}}
+{ "ok": false, "error": { "code": "conflict", "message": "Issue \"63c2f57e-…\" was superseded by a body edit and is no longer the live issue; it now lives under \"e3b32183-…\"", "details": { "retryable": false } } }
 ```
 
 ## Command surface
@@ -250,17 +250,17 @@ looks complete.
 
 ### Error codes
 
-| Code                  | Meaning                                                                                                                         | CLI exit code |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| `not_found`           | A referenced catalog entry (project/component/kind/status/priority) doesn't exist                                               | 4             |
-| `item_not_found`      | The addressed issue doesn't exist                                                                                               | 1             |
-| `invalid_argument`    | Malformed flag or parameter shape                                                                                               | 2             |
-| `validation`          | Schema rejection — unknown filter key, unknown projection field, over-limit                                                     | 2             |
-| `store_busy`          | Store contention (a lease or a write conflict); `details.retryable` and `details.retryAfterMs` indicate whether/how to retry    | 1             |
-| `rag_not_configured`  | A semantic/similarity read was requested but no embedding backend is configured, or the vector space is empty                   | 1             |
-| `conflict`            | Someone else holds the claim, a single-valued relation is already taken, or a supersede raced                                   | 1             |
+| Code                  | Meaning                                                                                                                                                   | CLI exit code |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| `not_found`           | A referenced catalog entry (project/component/kind/status/priority) doesn't exist                                                                         | 4             |
+| `item_not_found`      | The addressed issue doesn't exist                                                                                                                         | 1             |
+| `invalid_argument`    | Malformed flag or parameter shape                                                                                                                         | 2             |
+| `validation`          | Schema rejection — unknown filter key, unknown projection field, over-limit                                                                               | 2             |
+| `store_busy`          | Store contention (a lease or a write conflict); `details.retryable` and `details.retryAfterMs` indicate whether/how to retry                              | 1             |
+| `rag_not_configured`  | A semantic/similarity read was requested but no embedding backend is configured, or the vector space is empty                                             | 1             |
+| `conflict`            | Someone else holds the claim, a single-valued relation is already taken, or a supersede raced                                                             | 1             |
 | `precondition_failed` | A gate refused the write — a terminal transition missing its required citation/note, or a citation that couldn't be verified against a known project path | 1             |
-| `internal`            | Unclassified server-side failure                                                                                                | 1             |
+| `internal`            | Unclassified server-side failure                                                                                                                          | 1             |
 
 Success always exits 0. `item_not_found` and `internal` are deliberately
 distinct codes even though they share exit code 1 — a caller distinguishes
@@ -320,16 +320,16 @@ spanning every project on the machine, not one per repository — so an agent
 working across repos sees the same graph everywhere unless it explicitly opts
 into a narrower scope.
 
-| Setting            | Env var                                               | Default                    | Notes                                                        |
-| ------------------ | ----------------------------------------------------- | -------------------------- | ------------------------------------------------------------ |
-| Database path      | `ADHD_BACKLOG_DATABASE_PATH`                          | resolved under the scope root | Where the graph store's data file lives                   |
-| Write busy timeout | `ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS`               | `5000`                     | How long a write waits on a contended lock before giving up  |
-| Log level          | `ADHD_BACKLOG_LOG_LEVEL`                              | `info`                     | `trace`\|`debug`\|`info`\|`warn`\|`error`\|`fatal`\|`silent` |
-| Scope              | `ADHD_BACKLOG_SCOPE` (falls back to `ADHD_ENV_SCOPE`) | `global`                   | Which store root to resolve against                          |
-| Namespace          | `--namespace <value>` CLI flag (no env var)           | `production`               | Which path segment under the scope root to resolve against (`<root>/backlog/<namespace>/…`) — one of `production`\|`test`\|`sandbox`. `--namespace sandbox` ALSO mints a fresh throwaway root and writes a real `config.yaml` there with `embedding.enabled: false`, so a sandboxed invocation is isolated along two independent axes plus a deliberate config, never an accident of an empty directory |
-| Semantic search    | `ADHD_BACKLOG_EMBEDDING_ENABLED`                      | `false`                    | See below                                                    |
-| Embedding provider | `ADHD_BACKLOG_EMBEDDING_PROVIDER`                     | `fastembed`                | Only consulted when embedding is enabled                     |
-| Embedding model    | `ADHD_BACKLOG_EMBEDDING_MODEL`                        | `bge-base-en-v1.5` (768-dim) | Only consulted when embedding is enabled                   |
+| Setting            | Env var                                               | Default                       | Notes                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------ | ----------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Database path      | `ADHD_BACKLOG_DATABASE_PATH`                          | resolved under the scope root | Where the graph store's data file lives                                                                                                                                                                                                                                                                                                                                                                 |
+| Write busy timeout | `ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS`               | `5000`                        | How long a write waits on a contended lock before giving up                                                                                                                                                                                                                                                                                                                                             |
+| Log level          | `ADHD_BACKLOG_LOG_LEVEL`                              | `info`                        | `trace`\|`debug`\|`info`\|`warn`\|`error`\|`fatal`\|`silent`                                                                                                                                                                                                                                                                                                                                            |
+| Scope              | `ADHD_BACKLOG_SCOPE` (falls back to `ADHD_ENV_SCOPE`) | `global`                      | Which store root to resolve against                                                                                                                                                                                                                                                                                                                                                                     |
+| Namespace          | `--namespace <value>` CLI flag (no env var)           | `production`                  | Which path segment under the scope root to resolve against (`<root>/backlog/<namespace>/…`) — one of `production`\|`test`\|`sandbox`. `--namespace sandbox` ALSO mints a fresh throwaway root and writes a real `config.yaml` there with `embedding.enabled: false`, so a sandboxed invocation is isolated along two independent axes plus a deliberate config, never an accident of an empty directory |
+| Semantic search    | `ADHD_BACKLOG_EMBEDDING_ENABLED`                      | `false`                       | See below                                                                                                                                                                                                                                                                                                                                                                                               |
+| Embedding provider | `ADHD_BACKLOG_EMBEDDING_PROVIDER`                     | `fastembed`                   | Only consulted when embedding is enabled                                                                                                                                                                                                                                                                                                                                                                |
+| Embedding model    | `ADHD_BACKLOG_EMBEDDING_MODEL`                        | `bge-base-en-v1.5` (768-dim)  | Only consulted when embedding is enabled                                                                                                                                                                                                                                                                                                                                                                |
 
 **Embedding (semantic search) is entirely optional.** With it left at its
 default (`false`), `@adhd/backlog` works fully — every verb, keyword filtering

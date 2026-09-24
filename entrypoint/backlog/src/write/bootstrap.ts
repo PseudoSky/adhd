@@ -442,9 +442,9 @@ async function deriveMembers(
         warnedEmbeddingDivergent = true;
         log(
           `backlog: embedding.enabled is TRUE in the on-disk config but this process is still running with it DISABLED ` +
-            `(startup configHash ${opts.startupHash ?? 'unknown'}, on-disk configHash ${
-              opts.configuredHash ?? 'unknown'
-            }). ` +
+            `(startup configHash ${
+              opts.startupHash ?? 'unknown'
+            }, on-disk configHash ${opts.configuredHash ?? 'unknown'}). ` +
             `The next semantic verb adopts it without a restart; if it does not, restart the process. ` +
             `Resolved config layers: ${renderConfigPaths(opts.configPaths)}.`
         );

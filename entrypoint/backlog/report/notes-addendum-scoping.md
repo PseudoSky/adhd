@@ -36,10 +36,10 @@ Three consequences, all observed live rather than inferred:
 
 **The friction is already one of this package's documented failure modes.** The open triage
 item `bf97b4ed-b0ae-4f2e-9704-190d0f22db6a` establishes that supersede is keyed on the
-*presence* of the `body` key, not on the body changing; that write verbs' stale-uid error
+_presence_ of the `body` key, not on the body changing; that write verbs' stale-uid error
 omits the successor uid; and that **no read surface enumerates superseded rows**. The
 docs-consistency item `0f1f4a9c-1395-472f-8fe4-db85ee89e3c3` records that `SKILL.md:14`
-invites consumers to persist the uid as *the* identity while `SKILL.md:245-246` retires it
+invites consumers to persist the uid as _the_ identity while `SKILL.md:245-246` retires it
 on any body edit, and that the recovery path (`successorUid`, chain re-resolution) is
 documented nowhere in the skill.
 
@@ -48,8 +48,8 @@ documented nowhere in the skill.
 completed real work but **could not append their findings to their own items** — no note
 tool existed in their toolset — so they asked the orchestrator to append the notes by hand.
 They never landed. This is the same failure the repo's own global disclosure policy
-(`AGENTS.md` / `~/.claude/AGENTS.md`: *"Never leave a dangling thread when tying it off
-takes five more minutes"*) exists to prevent.
+(`AGENTS.md` / `~/.claude/AGENTS.md`: _"Never leave a dangling thread when tying it off
+takes five more minutes"_) exists to prevent.
 
 **And an accepted ADR already assumes the missing verb exists.** sox-ecosystem
 **ADR-0011** (ACCEPTED 2026-08-06), §"What changes" item 2, rules that notes and citations
@@ -64,41 +64,41 @@ correct.** A note is already a first-class node kind with a dedicated edge, alre
 into the issue card, and already carried across a supersede. What is missing is exactly one
 mounted write verb.
 
-| Layer | State today | Evidence |
-| --- | --- | --- |
-| Node kind | `note` is a recognized kind (`kind='note'`) | `src/store/vocabulary-guard.ts:63-77` (`RECOGNIZED_NODE_KINDS`, `'note'` at `:73`) |
-| Node shape | `meta: { author, text, at }`, `content` = the text | `DATA_MODEL.md:169-170`; `SPEC.md:236` |
-| Edge | `has_note: issue → note (1:n)`, registered with multiplicity | `DATA_MODEL.md:208`; `SPEC.md:254`; `src/write/catalog.ts:347-354` |
-| Read | resolved into the card as `IIssueNote[]`, opt-in | `src/query/types.ts:127-132` (`IIssueNote`), `:54`/`:82` (`'notes'` pseudo field), `:184`; `src/query/card.ts:133-149` (`resolveNotes`), `:282`, `:338-339` |
-| Read surface | `get --input '{"uid":…,"fields":["notes"]}'` already returns them | `SKILL.md:250` (field vocabulary) |
-| Survivability | a supersede carries `has_note` forward to the successor | `src/write/update.ts:549-583` (`carryForwardResidualEdgesTx`, both directions) |
-| Write | **the only path in the codebase** is `create`'s duplicate-gate comment branch | `src/write/create-issue.ts:752-784` |
-| Mounted verbs | none of the 17 verbs writes a note | `src/server.ts:189-207` (`BACKLOG_VERBS`); `SKILL.md:29-53` |
+| Layer         | State today                                                                   | Evidence                                                                                                                                                    |
+| ------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node kind     | `note` is a recognized kind (`kind='note'`)                                   | `src/store/vocabulary-guard.ts:63-77` (`RECOGNIZED_NODE_KINDS`, `'note'` at `:73`)                                                                          |
+| Node shape    | `meta: { author, text, at }`, `content` = the text                            | `DATA_MODEL.md:169-170`; `SPEC.md:236`                                                                                                                      |
+| Edge          | `has_note: issue → note (1:n)`, registered with multiplicity                  | `DATA_MODEL.md:208`; `SPEC.md:254`; `src/write/catalog.ts:347-354`                                                                                          |
+| Read          | resolved into the card as `IIssueNote[]`, opt-in                              | `src/query/types.ts:127-132` (`IIssueNote`), `:54`/`:82` (`'notes'` pseudo field), `:184`; `src/query/card.ts:133-149` (`resolveNotes`), `:282`, `:338-339` |
+| Read surface  | `get --input '{"uid":…,"fields":["notes"]}'` already returns them             | `SKILL.md:250` (field vocabulary)                                                                                                                           |
+| Survivability | a supersede carries `has_note` forward to the successor                       | `src/write/update.ts:549-583` (`carryForwardResidualEdgesTx`, both directions)                                                                              |
+| Write         | **the only path in the codebase** is `create`'s duplicate-gate comment branch | `src/write/create-issue.ts:752-784`                                                                                                                         |
+| Mounted verbs | none of the 17 verbs writes a note                                            | `src/server.ts:189-207` (`BACKLOG_VERBS`); `SKILL.md:29-53`                                                                                                 |
 
 Two consequences of that table drive the whole scope:
 
-- **The mount is the deliverable.** `api.ts`'s own header states the rule: *"The exported
+- **The mount is the deliverable.** `api.ts`'s own header states the rule: _"The exported
   surface of this file IS the mounted surface … Adding an exported function here widens the
-  tool surface an agent must hold in its head"* (`src/api.ts:1-13`). So this feature is a
-  deliberate, costed widening of a surface the package has been *shrinking* (the pre-1.0.0
+  tool surface an agent must hold in its head"_ (`src/api.ts:1-13`). So this feature is a
+  deliberate, costed widening of a surface the package has been _shrinking_ (the pre-1.0.0
   37-tool surface was consolidated; `TASK-003`). §9 justifies the widening.
 - **Do not invent a parallel model.** A second way to hold commentary (an inline field, a
   body convention) would fragment the read path that already works.
 
 ## 3. User stories
 
-| # | As… | I want… | So that… |
-| --- | --- | --- | --- |
-| US-1 | an agent that just triaged an item | to append my findings to it | the evidence lives on the item, and the item keeps the uid everyone already references |
-| US-2 | an agent filing a partial correction | to state the correction without deleting the original | a reader can see both the original claim and why it is wrong |
-| US-3 | an orchestrator whose worker finished | to attach the worker's completion evidence to the item | the closure has an auditable addendum rather than a rewritten body |
-| US-4 | an observer whose item is **claimed by someone else** | to attach evidence anyway | the evidence stream is not blocked by a working lease (see §6, INV-6) |
-| US-5 | an operator auditing an item | to read its notes in order, with author and timestamp | I can reconstruct what was asserted, by whom, and when |
-| US-6 | a consumer searching for a phrase | to find the item whose **note** contains it | evidence is not a write-only grave |
-| US-7 | a reader arriving after a body edit | to still see pre-edit notes | a supersede does not orphan the evidence trail |
-| US-8 | an agent working from the ADR-0011 migration | to call the verb that ADR names | the accepted ADR's ruled path is executable |
+| #    | As…                                                   | I want…                                                | So that…                                                                               |
+| ---- | ----------------------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| US-1 | an agent that just triaged an item                    | to append my findings to it                            | the evidence lives on the item, and the item keeps the uid everyone already references |
+| US-2 | an agent filing a partial correction                  | to state the correction without deleting the original  | a reader can see both the original claim and why it is wrong                           |
+| US-3 | an orchestrator whose worker finished                 | to attach the worker's completion evidence to the item | the closure has an auditable addendum rather than a rewritten body                     |
+| US-4 | an observer whose item is **claimed by someone else** | to attach evidence anyway                              | the evidence stream is not blocked by a working lease (see §6, INV-6)                  |
+| US-5 | an operator auditing an item                          | to read its notes in order, with author and timestamp  | I can reconstruct what was asserted, by whom, and when                                 |
+| US-6 | a consumer searching for a phrase                     | to find the item whose **note** contains it            | evidence is not a write-only grave                                                     |
+| US-7 | a reader arriving after a body edit                   | to still see pre-edit notes                            | a supersede does not orphan the evidence trail                                         |
+| US-8 | an agent working from the ADR-0011 migration          | to call the verb that ADR names                        | the accepted ADR's ruled path is executable                                            |
 
-Non-user: US-8 is a *conformance* need, not a persona. It is listed because it fixes a
+Non-user: US-8 is a _conformance_ need, not a persona. It is listed because it fixes a
 documented contradiction, not because an agent feels it.
 
 ## 4. Proposed surface (exact names)
@@ -106,16 +106,16 @@ documented contradiction, not because an agent feels it.
 **One new mounted write verb.** Recommended name, verbatim from the tool name ADR-0011
 already rules on:
 
-| Mount | Name |
-| --- | --- |
-| CLI | `adhd-backlog append-note --input '<IAppendNoteInput json>'` |
-| MCP | `backlog_append_note` |
-| HTTP | generated from the same descriptor (no per-transport work) |
+| Mount          | Name                                                                                     |
+| -------------- | ---------------------------------------------------------------------------------------- |
+| CLI            | `adhd-backlog append-note --input '<IAppendNoteInput json>'`                             |
+| MCP            | `backlog_append_note`                                                                    |
+| HTTP           | generated from the same descriptor (no per-transport work)                               |
 | Library export | `appendNote(ctx, input)` (`src/api.ts`, re-exported for library-only use via `index.ts`) |
-| `batch` | `backlog/append-note` — free, since `batch action` covers every mounted op |
+| `batch`        | `backlog/append-note` — free, since `batch action` covers every mounted op               |
 
 **Why `append-note` and not `note`.** (a) ADR-0011 names `backlog_append_note`; matching it
-restores a ruled contract instead of contradicting it. (b) The verb is *append*-only by
+restores a ruled contract instead of contradicting it. (b) The verb is _append_-only by
 construction (§6), and the name should say so. (c) `note` alone collides conceptually with
 `transition`'s existing `note` field (`src/write/transition.ts`; `SKILL.md:75`), which is a
 different thing entirely (the rationale of a status change, stored on a `transition` node).
@@ -125,20 +125,20 @@ Proposed input:
 
 ```ts
 interface IAppendNoteInput {
-  uid: string;          // the issue to append to (resolve-only, must be LIVE)
-  by: string;           // actor, `${agentName}:${instanceId}` (mutating-verb convention)
-  text: string;         // the note body (required, non-blank)
-  kind?: string;        // note classifier — see §10 Q6; CLOSED vocabulary, never minting
+  uid: string; // the issue to append to (resolve-only, must be LIVE)
+  by: string; // actor, `${agentName}:${instanceId}` (mutating-verb convention)
+  text: string; // the note body (required, non-blank)
+  kind?: string; // note classifier — see §10 Q6; CLOSED vocabulary, never minting
   citations?: ICitationInput[]; // { file, lines?, context?, symbol? } — see §7
-  clientRequestId?: string;     // optional idempotency key — see §10 Q4
+  clientRequestId?: string; // optional idempotency key — see §10 Q4
 }
 ```
 
 Returns `{ uid, noteUid, appendedAt }` where `uid` is the **unchanged** issue uid.
 
-**Explicitly NOT proposed:** a `notes` *read* verb. `get`'s existing
+**Explicitly NOT proposed:** a `notes` _read_ verb. `get`'s existing
 `fields:["notes"]` projection (`SKILL.md:250`) already returns them, and a second read
-surface would be a second thing to keep in sync. The read gap that *does* need work is
+surface would be a second thing to keep in sync. The read gap that _does_ need work is
 search reachability (§7), which is not solved by another read verb.
 
 ## 5. Semantics and invariants
@@ -168,8 +168,8 @@ node metadata contract (`DATA_MODEL.md:169-170`) and are already surfaced by `II
 (`src/query/types.ts:127-132`). `by` is required and blank-rejected before any write, like
 every other mutating verb (`SKILL.md:194-197`).
 
-**INV-6 — Append is not gated by the working claim.** A claim is a lease on *moving the
-item* (it guards `transition`); evidence is additive and non-destructive. If append were
+**INV-6 — Append is not gated by the working claim.** A claim is a lease on _moving the
+item_ (it guards `transition`); evidence is additive and non-destructive. If append were
 claim-guarded, US-4 would fail and the exact PKG-11 blockage would recur whenever another
 agent held the lease. This is a deliberate divergence and is ranked in §10 (Q3).
 
@@ -189,7 +189,7 @@ transaction, so a transient failure can double-insert a note. Append-only semant
 duplicate benign, but benign-by-accident must be stated and tested; `clientRequestId`
 (after `memory_write`'s `client_request_id` precedent) is the optional hardening. §10 Q4.
 
-**INV-10 — No body text is ever rewritten by an append.** A correction is a note *about*
+**INV-10 — No body text is ever rewritten by an append.** A correction is a note _about_
 the original; the original text remains byte-identical. This preserves the
 "both the original and why it is wrong" property that US-2 exists for — the property a body
 edit destroys.
@@ -198,11 +198,11 @@ edit destroys.
 
 ### 6.1 Supersession
 
-- A note **never** supersedes the *item*. Note → item is additive only. Body edits remain
+- A note **never** supersedes the _item_. Note → item is additive only. Body edits remain
   the only supersede path (`update`), unchanged.
-- A note **can** record that it supersedes a *prior note* (`supersedesNoteUid`, note→note).
+- A note **can** record that it supersedes a _prior note_ (`supersedesNoteUid`, note→note).
   That is cheap, addressable, and churns nothing.
-- A note **cannot yet** supersede a specific *claim inside a body*, because claims are not
+- A note **cannot yet** supersede a specific _claim inside a body_, because claims are not
   addressable today: the body is an opaque `content` string on the issue node
   (`DATA_MODEL.md:151-152`). Two honest options:
   - **(a) v1 — additive only.** A `kind:'correction'` note states the correction in prose
@@ -230,18 +230,18 @@ This is the sharpest finding of the pass. A note written today is reachable **on
   (`src/query/types.ts:217`).
 - **Semantic search is blind to notes.** The vector filter is the same `kind:'issue'`
   base filter (`src/query/query.ts:494-503`), and no code path embeds a `note` node at all:
-  the embedding unit is `${title}\n${body}` of the *issue*
+  the embedding unit is `${title}\n${body}` of the _issue_
   (`src/write/embedding-observer.ts:86`), and the one existing note-write path explicitly
   schedules **no** embed — `embeddedIssue` "stays `undefined` on every branch that writes
   no issue node … `'comment'` (writes only a `note`)" (`src/write/create-issue.ts:731-739`).
 
 So **the note layer is a write-only grave for discovery purposes.** The task framing is
-right: *a note that is invisible to search may be worse than no note*, because it creates
+right: _a note that is invisible to search may be worse than no note_, because it creates
 the false confidence that evidence was captured where it can be found. Two consequences for
 the spec:
 
 - **Minimum acceptable v1:** make note text reachable by **keyword** search — a note hit
-  must map back to its owning issue, so the user still gets an *item* back. This is a
+  must map back to its owning issue, so the user still gets an _item_ back. This is a
   scoping decision with a real cost (it widens the grep filter's semantics beyond
   "title+body") and is ranked first in §10.
 - **Embedding a note is a bigger architectural call** than it looks: the embedded unit
@@ -275,7 +275,7 @@ Two shapes, unresolved (§10 Q8):
   cost: a note's citation is indistinguishable from the item's own, and the read path
   attributes it to the item.
 - **(b) A new edge `has_note_citation: note → citation`.** Correct attribution; cost: a new
-  edge kind in the type policy, i.e. a vocabulary widening — ADR-0010 makes this *legal*,
+  edge kind in the type policy, i.e. a vocabulary widening — ADR-0010 makes this _legal_,
   but it must be a deliberate, registered addition (`src/write/catalog.ts:347-354` is the
   registration site), not an accident.
 
@@ -294,8 +294,8 @@ The word "note" invites scope creep into a social product. Explicitly **out of s
 - **Chat / conversation.** The tracker is a record, not a channel.
 - **Editing the item body through a note.** That is `update`, and a note that wanted to
   become the body would reintroduce the supersede churn this feature exists to avoid.
-- **Replacing `transition`'s `note`.** A transition's note is the *rationale of a status
-  change* and lives on a `transition` node (`SPEC.md:238`); an addendum is not a transition
+- **Replacing `transition`'s `note`.** A transition's note is the _rationale of a status
+  change_ and lives on a `transition` node (`SPEC.md:238`); an addendum is not a transition
   and must not create one.
 - **Note-level ACLs / permissions, per-note visibility.**
 - **Real-time notification/subscription.**
@@ -309,7 +309,7 @@ The word "note" invites scope creep into a social product. Explicitly **out of s
 
 Written as observable DoF clauses — each names a real entrypoint and an outcome a verifier
 can drive without reading implementation internals. Per `AGENTS.md` §7, the proof that the
-*mount* exists must be a wire-level test against the **real built `dist/index.js`**, because
+_mount_ exists must be a wire-level test against the **real built `dist/index.js`**, because
 an in-process assertion resolves to source and skips the mount — the exact defect class
 `src/stats-surface.wire.spec.ts:8-21` was written to catch.
 
@@ -339,7 +339,7 @@ an in-process assertion resolves to source and skips the mount — the exact def
   broken deterministically (§10 Q1 — this clause cannot be written until that is decided).
 - **AC-9 (search reachability — the clause that makes it worth having).** A keyword query
   containing a token that occurs **only** in a note returns the **owning issue** in
-  `data.items` (§10 Q1 decides the exact shape). This AC is *conditional on* the Q1 decision
+  `data.items` (§10 Q1 decides the exact shape). This AC is _conditional on_ the Q1 decision
   and must not ship as "note text is searchable" in docs until it passes at the wire.
 - **AC-10 (audit consistency).** The append emits exactly one audit row for the write, with
   a named action (consistent with `SPEC.md`'s one-audit-node-per-state-change contract and
@@ -350,10 +350,10 @@ an in-process assertion resolves to source and skips the mount — the exact def
   the existing path already violates the contract and the fix belongs with this work.
   (§10 Q9.)
 - **AC-11 (teeth / negative control).** Removing the `export` on the new verb from
-  `src/api.ts` turns AC-1 red on the wire test. *(This is not hypothetical: during this
+  `src/api.ts` turns AC-1 red on the wire test. _(This is not hypothetical: during this
   scoping pass an un-reverted negative control on `priorityMatrix` in `src/api.ts` left the
   verb unmounted and the suite red — see the session disclosure. A surface AC without a
-  demonstrated red state proves nothing.)*
+  demonstrated red state proves nothing.)_
 - **AC-12 (`batch` composition).** `batch action` with `operation:"backlog/append-note"`
   over two uids attaches a note to each and returns two `fulfilled` arms. (Expected free
   from the mount; assert it rather than assuming it.)
@@ -369,8 +369,8 @@ Ordered by how much the answer changes the spec. Q1–Q5 are blocking.
    (and later `semantic`) see note text, and in what shape? Options: unify to an
    issue-returning union (a note hit maps to its owning issue); a separate note-view; or
    concede and document the limitation. **A note no search can find is worse than no note**
-   (§6.2). Decides AC-9 and essentially the feature's value proposition. *Product call, with
-   an architecture read on the query-layer cost.*
+   (§6.2). Decides AC-9 and essentially the feature's value proposition. _Product call, with
+   an architecture read on the query-layer cost._
 2. **Ordering and bounds (BLOCKING).** `resolveNotes` currently does not sort
    (`src/query/card.ts:133-149`) while `resolveAuditTrail` does (`:173`). Define: ordering
    key and tie-break; and whether a note list is bounded/paginated (an item with hundreds of
@@ -391,7 +391,7 @@ Ordered by how much the answer changes the spec. Q1–Q5 are blocking.
 6. **Note classifier (`kind?`) vocabulary.** A `noteKind` discriminator
    (`evidence`/`correction`/`triage`/`commentary`) is what lets a consumer tell "this
    corrects the body" from "this adds evidence" — without it, addendums cannot be consumed
-   programmatically. **It must be a CLOSED vocabulary with unknown values rejected**, *not*
+   programmatically. **It must be a CLOSED vocabulary with unknown values rejected**, _not_
    an auto-minting open catalog: the tracker already has an open-status pitfall where an
    unresolved NAME silently mints a new status and a typo becomes a real one
    (`SKILL.md:309-322`). A note-kind typo minting a kind would be the same defect.
@@ -420,12 +420,12 @@ Ordered by how much the answer changes the spec. Q1–Q5 are blocking.
 1. **The missing identity-stability ADR (REQUIRED — blocks the spec).** The repo has **no
    in-repo ADR catalog at all** (`entrypoint/backlog/docs/decisions/` does not exist), and
    none of the sox-ecosystem ADRs (0009/0011/0012/0015) defines issue-uid stability. Item
-   `0f1f4a9c` records the resulting contradiction as *"documented but not decided"*, and the
+   `0f1f4a9c` records the resulting contradiction as _"documented but not decided"_, and the
    triage item `bf97b4ed` (finding A4) states the ADR is absent. **This feature's entire
    rationale is "append so you don't churn the uid" — which presupposes a decision that uid
    stability is a property worth protecting.** That decision does not exist yet. Writing it
-   is architect-verdict condition C6. Scope-wise: the note feature may be *specified* before
-   that ADR lands, but it should not *ship* before it, because it would otherwise be
+   is architect-verdict condition C6. Scope-wise: the note feature may be _specified_ before
+   that ADR lands, but it should not _ship_ before it, because it would otherwise be
    optimizing against an unrecorded contract.
 2. **Vector/embedding coverage policy for non-issue nodes.** Deciding whether a `note`
    participates in the vector space — and if so, whether the embedded unit is the note, the
@@ -448,11 +448,11 @@ whether `supersedesNoteUid` lands in v1 (§10 Q12).
 
 ## 12. Minimum surface — "usable" vs "worth having"
 
-**Minimum that is *usable*:** one mounted write verb (`append-note`). The read path already
+**Minimum that is _usable_:** one mounted write verb (`append-note`). The read path already
 works (`SKILL.md:250`), the node/edge vocabulary already exists, and the carry-forward across
 supersede already works.
 
-**Minimum that is *worth having* — the four clauses without which this is a toy:**
+**Minimum that is _worth having_ — the four clauses without which this is a toy:**
 
 1. **Append does not churn the uid** (INV-1, AC-2). Without it, the verb is a body edit with
    a nicer name.
@@ -470,7 +470,7 @@ one that decides whether this feature changes behaviour or just adds a verb.
 **Surface cost, stated honestly:** this takes the mounted surface from **17 → 18 verbs**
 (`src/server.ts:189-207`), against a package whose recent direction has been consolidation.
 `src/api.ts:1-13` explicitly warns that every export here is a cost an agent pays in
-attention. The justification is that it *removes* a much larger cost: the alternative to a
+attention. The justification is that it _removes_ a much larger cost: the alternative to a
 note verb is a body-edit supersede, which breaks every persisted reference and is already
 the subject of an open identity defect.
 
@@ -485,7 +485,7 @@ Read directly during this pass (all paths relative to `entrypoint/backlog/`):
   `:190-223` (command surface), `:345-355` (embedding optional / `rag_not_configured`).
 - `src/api.ts:1-13` (the mounted-surface rule), `:478-490` (`priorityMatrix`, and the
   negative-control comment that was live during this pass), `:562-568` (`update`).
-- `src/server.ts:189-207` (`BACKLOG_VERBS`), `:855-885` (BUG-BACKLOG-003, the *properly*
+- `src/server.ts:189-207` (`BACKLOG_VERBS`), `:855-885` (BUG-BACKLOG-003, the _properly_
   handled negative-control residue).
 - `src/query/types.ts:51-59`, `:63-97` (field vocabulary), `:127-132` (`IIssueNote`),
   `:184` (`notes` on the card), `:217` (`grep` = title+body), `:302-303` (`stale` keyed on
