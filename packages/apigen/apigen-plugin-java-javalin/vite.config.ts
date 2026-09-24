@@ -47,16 +47,27 @@ export default defineConfig({
       dir: '../../../node_modules/.vitest',
     },
     environment: 'node',
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    // `*.spec.ts` ONLY — never `*.e2e.ts`. The resource-consuming suites (a
+    // real `mvn`/`javac`/`java` pipeline + a real Javalin server bound to a
+    // port, and the real child-process SIGTERM/`pgrep` hygiene test) were
+    // extracted out of this default target into sibling `*.e2e.ts` files (see
+    // the `*.spec.ts` STUB left at each original path); those must never run
+    // under `nx affected -t test` or the pre-commit / pre-push hooks. The
+    // resource lane runs only via `nx run apigen-plugin-java-javalin:e2e`
+    // (see the sibling `vitest.e2e.config.ts`, the only place that includes
+    // `.e2e.ts`).
+    include: ['src/**/*.spec.ts'],
     reporters: ['default'],
     coverage: {
       reportsDirectory: '../../../coverage/packages/apigen/plugins/java-javalin',
       provider: 'v8',
     },
     // Real mvn subprocess + real Javalin server + real HTTP round trip — the
-    // integration test in plugin.spec.ts spawns a JVM (compile + start) and
-    // waits for a real port bind, so it needs headroom beyond vitest's
-    // default 5s test / hook timeouts.
+    // integration tests in plugin.e2e.ts spawn a JVM (compile + start) and
+    // wait for a real port bind, so they need headroom beyond vitest's
+    // default 5s test / hook timeouts. (Inherited by `vitest.e2e.config.ts`
+    // via mergeConfig; harmless for the default `*.spec.ts` lane, which has no
+    // long-running case.)
     testTimeout: 120_000,
     hookTimeout: 120_000,
   },
