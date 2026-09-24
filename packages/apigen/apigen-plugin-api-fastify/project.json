@@ -50,14 +50,13 @@
       "//": "RESOURCE-CONSUMING lane. Runs ONLY the `*.e2e.ts` suite extracted out of the default `test` target (real live-dispatched Fastify servers bound to real ports, driven over real HTTP round-trips plus a live SSE stream). Opt-in and deliberately NOT wired into any `test.dependsOn` nor into nx.json `targetDefaults`, so `nx affected -t test` / the pre-commit + pre-push hooks never reach it. `dependsOn: [\"build\"]` because it builds the package before exercising its real run() path. Its coverage dir is DISTINCT from the default lane's, and declares no dist-shaped output.",
       "executor": "@nx/vite:test",
       "outputs": [
-        "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-api-fastify/e2e"
+        "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-api-fastify-e2e"
       ],
       "dependsOn": [
         "build"
       ],
       "options": {
-        "configFile": "packages/apigen/apigen-plugin-api-fastify/vitest.e2e.config.ts",
-        "passWithNoTests": true
+        "configFile": "packages/apigen/apigen-plugin-api-fastify/vitest.e2e.config.ts"
       }
     },
     "nx-release-publish": {

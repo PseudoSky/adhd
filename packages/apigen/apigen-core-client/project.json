@@ -22,6 +22,19 @@
       "outputs": [
         "{workspaceRoot}/coverage/packages/apigen/apigen-core-client"
       ],
+      "//inputs": "Exclude *.e2e.ts so editing a resource-consuming suite never invalidates the default lane's cache — it never runs those files (its vitest `include` is `src/**/*.spec.ts`, see vite.config.ts). Mirrors the workspace targetDefaults.test inputs plus the negative pattern.",
+      "inputs": [
+        "default",
+        "!{projectRoot}/**/*.e2e.ts",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest",
+            "better-sqlite3",
+            "drizzle-orm"
+          ]
+        }
+      ],
       "options": {
         "configFile": "packages/apigen/apigen-core-client/vite.config.ts"
       }
@@ -30,14 +43,13 @@
       "//": "Resource-consuming lane: runs ONLY the `*.e2e.ts` suites extracted out of the default `test` target (the CPU-heavy real ts-morph/TypeScript compilation suites, plus two spawnSync subprocess specs). Opt-in and deliberately NOT wired into any `test.dependsOn` nor into nx.json `targetDefaults`, so `nx affected -t test` / the pre-commit + pre-push hooks never reach it. `dependsOn: [\"build\"]` because the moved suite spawns the shipped `dist/index.mjs`. Its coverage dir is DISTINCT from the default lane's, and declares no dist-shaped output.",
       "executor": "@nx/vite:test",
       "outputs": [
-        "{workspaceRoot}/coverage/packages/apigen/apigen-core-client/e2e"
+        "{workspaceRoot}/coverage/packages/apigen/apigen-core-client-e2e"
       ],
       "dependsOn": [
         "build"
       ],
       "options": {
-        "configFile": "packages/apigen/apigen-core-client/vitest.e2e.config.ts",
-        "passWithNoTests": true
+        "configFile": "packages/apigen/apigen-core-client/vitest.e2e.config.ts"
       }
     },
     "build": {

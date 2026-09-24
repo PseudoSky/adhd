@@ -11,12 +11,17 @@
  *     raw.end() is called without an error frame.
  *
  * Transport tests are ALL in-process (mock FastifyRequest/Reply with a fake
- * raw socket collector) so they run deterministically in CI.
- * A real Fastify server test is gated behind APIGEN_LIVE=1.
+ * raw socket collector) so they run deterministically in CI. The one live
+ * case — a real Fastify server bound to an OS-assigned port, driven over real
+ * `fetch` — was REMOVED from this default lane: the resource lane's
+ * `[fastify-adapter.3]` test in plugin.e2e.ts drives the real server over real
+ * `fetch` and asserts the identical invariants (2xx, `text/event-stream`,
+ * ordered data frames [1,2,3]) through the plugin's own `run()` path, which
+ * calls this module's `sendStreamSse` — a strict superset of this case, so
+ * keeping a second copy in the default lane added no failure-detection power.
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import Fastify from 'fastify';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import EventEmitter from 'node:events';
 import { sendStreamSse } from '../lib/stream';
@@ -416,38 +421,5 @@ describe('[sse-stream.cancel] client disconnect aborts stream cleanly (end path,
     const frames = parseSseFrames(raw.body);
     expect(frames.filter((f) => f.event === 'error')).toHaveLength(0);
     expect(raw.ended).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Real Fastify server streaming test (always runs — no env gate)
-// ---------------------------------------------------------------------------
-
-describe('[sse-stream.live] real Fastify SSE — ordered chunks + error-after-first-chunk', () => {
-  it('live SSE stream yields chunks then closes', async () => {
-    const app = Fastify();
-    app.get('/stream', (req, reply) => {
-      const s = createStream<number>({
-        produce: async function* () {
-          yield 1;
-          yield 2;
-          yield 3;
-        },
-      });
-      return sendStreamSse(s, req, reply);
-    });
-
-    await app.listen({ port: 0 }); // random port — OS assigns a free one
-    const addr = app.server.address() as { port: number };
-    try {
-      const res = await fetch(`http://127.0.0.1:${addr.port}/stream`);
-      expect(res.ok).toBe(true);
-      expect(res.headers.get('content-type')).toContain('text/event-stream');
-      const text = await res.text();
-      const frames = parseSseFrames(text).filter((f) => !f.event);
-      expect(frames.map((f) => JSON.parse(f.data))).toEqual([1, 2, 3]);
-    } finally {
-      await app.close();
-    }
   });
 });
