@@ -56,3 +56,16 @@ the envelope fields a function requires (e.g. a `session` added by middleware) a
 npx nx build apigen-engine-runtime
 npx nx test  apigen-engine-runtime
 ```
+
+`nx test` runs only the cheap in-process `*.spec.ts` lane (and is what
+`nx affected -t test` / the git hooks run). The resource-consuming self-tests
+(real `git` subprocesses, a real `node:http` server) live in sibling
+`*.e2e.ts` files and run on demand only:
+
+```bash
+npx nx run apigen-engine-runtime:e2e
+```
+
+Both `.e2e.ts` suites are currently `describe.skip`'d (CPU-THRASH-SKIP,
+owner-requested); `*.spec.ts` stubs at the original paths hold their mocked
+`it.todo` inventory.
