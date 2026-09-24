@@ -6,6 +6,7 @@
     "vite.config.ts",
     "vite.config.mjs",
     "vite.config.mts",
+    "vitest.e2e.config.ts",
     "src/test/fixtures/**/**"
   ],
   "overrides": [
