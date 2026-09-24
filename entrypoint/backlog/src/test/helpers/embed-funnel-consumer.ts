@@ -10,7 +10,8 @@
  * collapse onto ONE peer-spawned embedding host.
  *
  * It is NOT a test file (no `.spec`/`.test` suffix) — vitest's `include`
- * glob (`src/**\/*.{test,spec}.*`) never collects it, and `tsconfig.lib.json`
+ * glob (`src/**\/*.spec.ts`, and the sibling e2e lane's `src/**\/*.e2e.ts`)
+ * never collects it, and `tsconfig.lib.json`
  * excludes `src/test/**`, so it never ships in `dist/`.
  *
  * ## Why a real process (not an in-process client)
