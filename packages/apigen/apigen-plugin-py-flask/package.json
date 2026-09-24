@@ -1,6 +1,6 @@
 {
   "name": "@adhd/apigen-plugin-py-flask",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -13,10 +13,10 @@
     "flask"
   ],
   "dependencies": {
-    "@adhd/apigen-python-env": "^0.2.4",
-    "@adhd/apigen-core-client": "^0.3.0",
-    "@adhd/apigen-engine-naming": "^0.2.2",
-    "@adhd/apigen-engine-runtime": "^0.2.3"
+    "@adhd/apigen-python-env": "^0.2.5",
+    "@adhd/apigen-core-client": "^0.3.1",
+    "@adhd/apigen-engine-naming": "^0.2.3",
+    "@adhd/apigen-engine-runtime": "^0.2.4"
   },
   "publishConfig": {
     "access": "public"

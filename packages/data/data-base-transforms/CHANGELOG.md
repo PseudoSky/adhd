@@ -1,3 +1,21 @@
+## 2.3.1 (2026-09-24)
+
+
+### 🩹 Fixes
+
+- **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
+
+- **data-base-transforms:** TZ stub was silently ineffective under vitest's threads pool
+
+- **data-base-transforms:** pin TZ so date.spec is deterministic on every machine
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+- Sky
+
 ## 2.2.6 (2026-07-25)
 
 

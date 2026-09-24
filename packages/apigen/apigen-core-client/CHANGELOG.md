@@ -1,3 +1,34 @@
+## 0.3.1 (2026-09-24)
+
+
+### 🚀 Features
+
+- **apigen:** schema-driven worked examples for MCP tool descriptions + validation errors
+
+- **backlog:** INTERFACE_v2 consolidation — six-verb surface, web UI (search/stats/batch/edit), stats API (citationCount, closedAt, summary scope + window)
+
+
+### 🩹 Fixes
+
+- **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
+
+- **apigen-core-client:** hoist nested defs for return types and batch schemas
+
+- **apigen-core-client:** close Path-2 object schemas with additionalProperties, index-signature aware
+
+- **backlog:** unblock backlog:build — author/reporter TS2339 + wire MCP identity
+
+- **apigen-cli:** batch nested-input CLI/HTTP wiring, sandbox isolation leaks, morph-walk index-signature regression
+
+- **apigen:** audit fixes — S-18/S-19/C-20/C-21/S-20, java mvn race, union-encoder envelope, lazy heavy-dep loading
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+- Sky
+
 ## 0.2.2 (2026-07-30)
 
 

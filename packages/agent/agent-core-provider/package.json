@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-core-provider",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Provider registry: adapters, model catalog, and tool-format emitter for @adhd/agent-mcp",
   "type": "module",
   "publishConfig": {
@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
-    "@adhd/agent-base-types": "^2.3.0"
+    "@adhd/agent-base-types": "^2.3.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

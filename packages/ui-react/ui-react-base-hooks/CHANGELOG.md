@@ -1,3 +1,7 @@
+## 2.3.3 (2026-09-24)
+
+This was a version bump only for ui-react-base-hooks to align it with other projects, there were no code changes.
+
 ## 2.3.2 (2026-08-07)
 
 

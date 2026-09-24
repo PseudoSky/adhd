@@ -1,3 +1,28 @@
+## 0.2.4 (2026-09-24)
+
+
+### 🚀 Features
+
+- **apigen:** let a CLI host derive its process exit code from the result
+
+- **backlog:** INTERFACE_v2 consolidation — six-verb surface, web UI (search/stats/batch/edit), stats API (citationCount, closedAt, summary scope + window)
+
+
+### 🩹 Fixes
+
+- **apigen:** accept camelCase flag spellings as aliases in the flag table
+
+- **apigen-cli:** batch nested-input CLI/HTTP wiring, sandbox isolation leaks, morph-walk index-signature regression
+
+- **apigen-plugin-cli-output:** detect a root union by oneOf, not by a discriminator that is no longer emitted
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+- Sky
+
 ## 0.2.3 (2026-08-07)
 
 

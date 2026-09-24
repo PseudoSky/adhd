@@ -1,3 +1,34 @@
+## 2.2.2 (2026-09-24)
+
+
+### 🩹 Fixes
+
+- **agent-engine-compiler:** CLI migration-resolution correctness
+
+- **eslintrc:** exclude vite.config.ts from dependency-checks source scan + module-boundary lint
+
+- **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
+
+- **agent:** typecheck targets no longer fail TS6305 in fresh worktrees (additive typecheck configs + real type fixes)
+
+- **workspace:** correct nx project names in package.json build scripts
+
+- **agent-engine-compiler:** stop the migration-resolution spec re-invoking nx (DEBT-BUILD-001)
+
+- **nx:** drop self-referential scripts.build wrappers to restore build cache
+
+
+### 🔥 Performance
+
+- **nx:** drop lint+sync-deps from the default test target
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+- Sky
+
 ## 2.2.1 (2026-07-27)
 
 

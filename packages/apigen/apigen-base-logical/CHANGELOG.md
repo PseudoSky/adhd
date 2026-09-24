@@ -1,3 +1,30 @@
+## 0.1.2 (2026-09-24)
+
+
+### 🚀 Features
+
+- **backlog:** INTERFACE_v2 consolidation — six-verb surface, web UI (search/stats/batch/edit), stats API (citationCount, closedAt, summary scope + window)
+
+- **backlog:** 1.0.0 — one surface, one identity, no predecessor left behind
+
+
+### 🩹 Fixes
+
+- **apigen-base-logical:** pick union branches structurally and stop codecs claiming foreign values
+
+- **apigen-base-logical:** discriminated-union branch selection is inert after $ref inlining
+
+- **apigen-cli:** batch nested-input CLI/HTTP wiring, sandbox isolation leaks, morph-walk index-signature regression
+
+- **apigen:** audit fixes — S-18/S-19/C-20/C-21/S-20, java mvn race, union-encoder envelope, lazy heavy-dep loading
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+- Sky
+
 ## 0.1.1 (2026-08-07)
 
 

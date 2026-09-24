@@ -1,9 +1,9 @@
 {
   "name": "@adhd/environment",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "dependencies": {
-    "@adhd/environment-base-spec": "^0.1.0",
-    "@adhd/environment-builder": "^0.1.4"
+    "@adhd/environment-base-spec": "^0.1.1",
+    "@adhd/environment-builder": "^0.1.5"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
