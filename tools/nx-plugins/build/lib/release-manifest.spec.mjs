@@ -95,6 +95,156 @@ test('checkPublishAllowed: REFUSES when the manifest is stale (older than maxAge
   });
 });
 
+// ---------------------------------------------------------------------------
+// RUN-SCOPED FRESHNESS (F1 root fix). The age gate is a proxy for "was this
+// manifest written by the release run publishing right now?"; the run token
+// makes that identity explicit. These tests pin the four behaviours the fix
+// depends on: a same-run manifest is trusted no matter how old, everything
+// else is unchanged, and the token relaxes ONLY freshness — never the force
+// gate or the scope gate.
+// ---------------------------------------------------------------------------
+
+test('writeReleaseManifest: records runToken from opts.runToken, else from env.RELEASE_RUN_TOKEN, else null', () => {
+  withTmpDir((dir) => {
+    const saved = process.env.RELEASE_RUN_TOKEN;
+    try {
+      delete process.env.RELEASE_RUN_TOKEN;
+      const fromOpts = writeReleaseManifest(dir, ['a'], { runToken: 'tok-explicit' });
+      assert.equal(fromOpts.runToken, 'tok-explicit');
+      assert.equal(readReleaseManifest(dir).runToken, 'tok-explicit', 'must round-trip through the file');
+
+      const fromEnv = writeReleaseManifest(dir, ['a']);
+      assert.equal(fromEnv.runToken, null, 'no opts.runToken and no env token -> explicit null, not undefined');
+
+      process.env.RELEASE_RUN_TOKEN = 'tok-env';
+      const inherited = writeReleaseManifest(dir, ['a']);
+      assert.equal(inherited.runToken, 'tok-env', 'must inherit the process env token when opts.runToken is absent');
+    } finally {
+      if (saved === undefined) delete process.env.RELEASE_RUN_TOKEN;
+      else process.env.RELEASE_RUN_TOKEN = saved;
+    }
+  });
+});
+
+test('writeReleaseManifest: normalizes a whitespace-padded token at WRITE time so it matches the read-side trim (no silent age-gate degradation)', () => {
+  withTmpDir((dir) => {
+    const now = 2_000_000_000_000;
+    // 2 hours old — far beyond MANIFEST_MAX_AGE_MS, stamped with a PADDED token.
+    writeReleaseManifest(dir, ['pkg-b'], { now: now - 2 * 60 * 60 * 1000, runToken: '  run-padded  ' });
+    assert.equal(
+      readReleaseManifest(dir).runToken,
+      'run-padded',
+      'the token must be stored trimmed, i.e. in the SAME canonical form the read-side comparison uses'
+    );
+
+    // Given the same padded token in env, the run must now MATCH its own
+    // manifest — before the write-side trim it never could (env was trimmed,
+    // the manifest was not), silently degrading to the age gate.
+    const result = checkPublishAllowed({
+      workspaceRoot: dir,
+      projectName: 'pkg-b',
+      env: { RELEASE_RUN_TOKEN: '  run-padded  ' },
+      now,
+    });
+    assert.equal(result.allowed, true, 'a padded token must match its own run once both sides are canonicalized');
+    assert.match(result.reason, /same run token/);
+  });
+});
+
+test('checkPublishAllowed: token MATCH + ancient manifest -> ALLOWED (the age gate is skipped for the same run)', () => {
+  withTmpDir((dir) => {
+    const now = 2_000_000_000_000;
+    // 2 hours old — far beyond MANIFEST_MAX_AGE_MS.
+    writeReleaseManifest(dir, ['pkg-b'], { now: now - 2 * 60 * 60 * 1000, runToken: 'run-abc' });
+    const result = checkPublishAllowed({
+      workspaceRoot: dir,
+      projectName: 'pkg-b',
+      env: { RELEASE_RUN_TOKEN: 'run-abc' },
+      now,
+    });
+    assert.equal(result.allowed, true, 'a same-run token must override the stale refusal');
+    assert.equal(result.forced, false);
+    assert.match(result.reason, /same run token/);
+  });
+});
+
+test('checkPublishAllowed: token MISMATCH + ancient manifest -> still REFUSED as stale', () => {
+  withTmpDir((dir) => {
+    const now = 2_000_000_000_000;
+    writeReleaseManifest(dir, ['pkg-b'], { now: now - 2 * 60 * 60 * 1000, runToken: 'run-abc' });
+    const result = checkPublishAllowed({
+      workspaceRoot: dir,
+      projectName: 'pkg-b',
+      env: { RELEASE_RUN_TOKEN: 'run-OTHER' },
+      now,
+    });
+    assert.equal(result.allowed, false);
+    assert.match(result.reason, /is stale/);
+  });
+});
+
+test('checkPublishAllowed: tokenless stale manifest -> still REFUSED (existing behaviour preserved)', () => {
+  withTmpDir((dir) => {
+    const now = 2_000_000_000_000;
+    writeReleaseManifest(dir, ['pkg-b'], { now: now - 2 * 60 * 60 * 1000 }); // runToken: null
+    // Even WITH a non-empty env token: there is nothing in the manifest to
+    // match, so the age gate must still fire.
+    const result = checkPublishAllowed({
+      workspaceRoot: dir,
+      projectName: 'pkg-b',
+      env: { RELEASE_RUN_TOKEN: 'run-abc' },
+      now,
+    });
+    assert.equal(result.allowed, false, 'a token cannot resurrect a manifest that never recorded one');
+    assert.match(result.reason, /is stale/);
+  });
+});
+
+test('checkPublishAllowed: empty/whitespace env token is NOT a match (an unset-or-blank token must never bypass freshness)', () => {
+  withTmpDir((dir) => {
+    const now = 2_000_000_000_000;
+    writeReleaseManifest(dir, ['pkg-b'], { now: now - 2 * 60 * 60 * 1000, runToken: '   ' });
+    const result = checkPublishAllowed({
+      workspaceRoot: dir,
+      projectName: 'pkg-b',
+      env: { RELEASE_RUN_TOKEN: '   ' },
+      now,
+    });
+    assert.equal(result.allowed, false, 'blank tokens must not count as a same-run identity');
+    assert.match(result.reason, /is stale/);
+  });
+});
+
+test('checkPublishAllowed: matching run token does NOT bypass the SCOPE gate (token relaxes freshness only)', () => {
+  withTmpDir((dir) => {
+    const now = 2_000_000_000_000;
+    writeReleaseManifest(dir, ['some-other-pkg'], { now: now - 2 * 60 * 60 * 1000, runToken: 'run-abc' });
+    const result = checkPublishAllowed({
+      workspaceRoot: dir,
+      projectName: 'pkg-b',
+      env: { RELEASE_RUN_TOKEN: 'run-abc' },
+      now,
+    });
+    assert.equal(result.allowed, false, 'same-run or not, a project outside the computed scope must be refused');
+    assert.match(result.reason, /is not listed in the release manifest/);
+  });
+});
+
+test('checkPublishAllowed: force WITHOUT a reason is still REFUSED even with a matching run token and a valid manifest (force gate is checked first, unconditionally)', () => {
+  withTmpDir((dir) => {
+    const now = 2_000_000_000_000;
+    writeReleaseManifest(dir, ['pkg-b'], { now, runToken: 'run-abc' });
+    const result = checkPublishAllowed({
+      workspaceRoot: dir,
+      projectName: 'pkg-b',
+      env: { RELEASE_RUN_TOKEN: 'run-abc', RELEASE_FORCE_FULL_PUBLISH: '1', RELEASE_FORCE_REASON: '  ' },
+      now,
+    });
+    assert.equal(result.allowed, false);
+    assert.match(result.reason, /RELEASE_FORCE_REASON is empty/);
+  });
+});
+
 test('checkPublishAllowed: PROCEEDS when the project IS listed in a fresh manifest', () => {
   withTmpDir((dir) => {
     const now = 2_000_000_000_000;
