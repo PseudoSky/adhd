@@ -99,7 +99,8 @@ describe('backlog published (rebased-to-root) layout — real npm-install-shape 
     // `create`, `update`, `transition`, `claim`, `relate`, `move`, `delete`)
     // plus §3a's registry verbs (`lookup`, `rm-location`, `upsert-project`,
     // `upsert-component`, `upsert-location`) plus the three §5 stats/rollup
-    // reads (`priority-matrix`, `part-of-rollup`, `open-curve`) — and nothing
+    // reads (`priority-matrix`, `part-of-rollup`, `open-curve`) plus the
+    // `embedding-status` health read — and nothing
     // else. No flat legacy verb name (`create-item`, `get-item`, ...) is
     // mounted on any transport. Verified empirically against the real built bin
     // (`node dist/index.js --help`), whose command table is exactly that list

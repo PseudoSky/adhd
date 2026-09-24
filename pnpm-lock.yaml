@@ -561,6 +561,9 @@ importers:
       '@adhd/environment-base-spec':
         specifier: ^0.1.0
         version: link:../../packages/environment/environment-base-spec
+      '@adhd/environment-builder':
+        specifier: ^0.1.4
+        version: link:../../packages/environment/environment-builder
       '@adhd/sox-graph-store':
         specifier: ^0.10.1
         version: 0.10.1

@@ -39,11 +39,12 @@ const API_DTS = join(
 
 /**
  * SPEC §6.7's mounted surface — the nine issue verbs, §3a's `lookup` and
- * registry CRUD verbs, and the three §5 stats/rollup reads
- * (`priority-matrix`/`part-of-rollup`/`open-curve`) — with the exact MCP tool
- * name and CLI command each must project to. Written out longhand rather than
- * derived, because a derived expectation would track whatever the code does
- * and assert nothing.
+ * registry CRUD verbs, the three §5 stats/rollup reads
+ * (`priority-matrix`/`part-of-rollup`/`open-curve`), and the
+ * `embedding-status` health read — with the exact MCP tool name and CLI
+ * command each must project to. Written out longhand rather than derived,
+ * because a derived expectation would track whatever the code does and assert
+ * nothing.
  */
 const EXPECTED = [
   { id: 'backlog/get', mcp: 'backlog_get', cli: 'backlog get' },
@@ -94,6 +95,11 @@ const EXPECTED = [
     id: 'backlog/open-curve',
     mcp: 'backlog_open_curve',
     cli: 'backlog open-curve',
+  },
+  {
+    id: 'backlog/embedding-status',
+    mcp: 'backlog_embedding_status',
+    cli: 'backlog embedding-status',
   },
 ] as const;
 
