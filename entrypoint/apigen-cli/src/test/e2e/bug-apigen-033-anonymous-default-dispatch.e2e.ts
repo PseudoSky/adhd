@@ -20,7 +20,7 @@
 // export as `default.default` before `buildFnTable`'s unwrap logic resolves
 // the real function under its runtime `.name`; Vitest's own SSR transform
 // resolves the fixture differently and would mask this exact class of bug
-// (see `import-source-cjs-format.spec.ts`'s header comment for the established
+// (see `import-source-cjs-format.e2e.ts`'s header comment for the established
 // precedent — same lesson, different trigger).
 //
 // Pre-fix: `tools/list` shows a `foo_default`-style tool name, but

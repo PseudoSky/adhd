@@ -8,7 +8,7 @@
 // value — proving the canonical decimal wire contract (a JSON STRING, never
 // a float — DESIGN §3) is honoured identically across languages.
 //
-// Architecture mirrors `cross-host-response-envelope.spec.ts` (TS <-> Python)
+// Architecture mirrors `cross-host-response-envelope.e2e.ts` (TS <-> Python)
 // exactly: both hosts are spawned via `node dist/index.js run --type <plugin>
 // --source <fixture> --opt port=<ephemeral>`, the REAL bundled artifact, not
 // a hand-rolled substitute for it — the same subprocess protocol a real
@@ -210,7 +210,7 @@ async function startJavaServer(fixturePath: string, ns: string): Promise<LiveSer
 // services; "it spawns child processes" and "it's slow" are named non-reasons) —
 // owner-approved override, recorded.
 // Durable fix: docs/backlog/grooming/test-perf-improvements.md (recs #1, #2, #5).
-// Run: npx vitest run src/test/integration/java-ts-decimal-parity.spec.ts
+// Run: npx vitest run src/test/integration/java-ts-decimal-parity.e2e.ts --config vitest.e2e.config.ts
 describe.skip('java-ts-decimal-parity — TS (api-fastify) vs Java (java-javalin), real CLI subprocesses [CPU-THRASH-SKIP: owner-requested]', () => {
   it(
     'byte-identical decimal wire form for the same input value across TS and Java hosts',

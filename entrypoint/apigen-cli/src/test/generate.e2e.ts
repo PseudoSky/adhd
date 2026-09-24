@@ -176,7 +176,7 @@ describe('generate command', () => {
   // `apigen-plugin-ir-cache`). This drives the REAL `generate` command action
   // (`registerGenerateCommand` + `program.parseAsync`, not `buildDescriptor()`
   // directly) with a real dynamically-`import()`ed `--use` plugin — the exact
-  // gap the FEAT-002 R2.6/R2-3 orchestrator.spec.ts tests don't close, since
+  // gap the FEAT-002 R2.6/R2-3 orchestrator.e2e.ts tests don't close, since
   // those call `buildDescriptor()` with a hand-supplied `usePluginObjects`
   // and never touch the command layer.
   it('a --use plugin declaring extractLayer actually intercepts extraction for the real `generate` command (BUG-APIGEN-CLI-GENERATE-USE-UNRESOLVED-001)', async () => {

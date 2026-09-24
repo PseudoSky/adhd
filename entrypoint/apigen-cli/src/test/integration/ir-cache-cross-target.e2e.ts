@@ -12,7 +12,7 @@
  * meaningful (a target that produced nothing wouldn't prove much).
  *
  * Spawns the BUILT bin (never imports/reaches inside it), same pattern as
- * `ir-cache-plugin-registration.spec.ts`.
+ * `ir-cache-plugin-registration.e2e.ts`.
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';

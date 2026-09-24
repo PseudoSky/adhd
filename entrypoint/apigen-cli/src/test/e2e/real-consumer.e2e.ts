@@ -192,7 +192,7 @@ afterAll(async () => {
 // variant of that (stdio, HTTP, live client), so the whole file is skipped.
 // Deviates from AGENTS.md §7 — owner-approved override, recorded.
 // Durable fix: docs/backlog/grooming/test-perf-improvements.md (recs #7, #8).
-// Run: npx vitest run src/test/e2e/real-consumer.spec.ts
+// Run: npx vitest run src/test/e2e/real-consumer.e2e.ts --config vitest.e2e.config.ts
 describe.skip('real-consumer: MCP over the built bin against UNMODIFIED @adhd/data-base-transforms [CPU-THRASH-SKIP: owner-requested]', () => {
   it('tools/list == transform exports; callTool deep-equals in-process ground truth', async () => {
     // The MCP SDK stdio client SPAWNS the built bin as the server process and
@@ -290,7 +290,7 @@ function fnParamNames(fn: (...a: unknown[]) => unknown): string[] {
 
 // CPU-THRASH-SKIP (owner-requested, 2026-09-23): same file — spawns the built bin as a
 // real HTTP child process and polls it to readiness. See the block comment above.
-// Run: npx vitest run src/test/e2e/real-consumer.spec.ts -t "HTTP over the built bin"
+// Run: npx vitest run src/test/e2e/real-consumer.e2e.ts --config vitest.e2e.config.ts -t "HTTP over the built bin"
 describe.skip('real-consumer: HTTP over the built bin against UNMODIFIED @adhd/transform [CPU-THRASH-SKIP: owner-requested]', () => {
   it('GET /<id>/<fn> deep-equals in-process ground truth over real HTTP', async () => {
     const port = await freePort();
@@ -405,7 +405,7 @@ describe.skip('real-consumer: HTTP over the built bin against UNMODIFIED @adhd/t
 
 // CPU-THRASH-SKIP (owner-requested, 2026-09-23): same file — a real MCP client driving
 // the real loop against a spawned server. See the block comment above.
-// Run: npx vitest run src/test/e2e/real-consumer.spec.ts -t "LIVE client"
+// Run: npx vitest run src/test/e2e/real-consumer.e2e.ts --config vitest.e2e.config.ts -t "LIVE client"
 describe.skip('real-consumer: LIVE client drives the MCP loop (model-independent invariants) [CPU-THRASH-SKIP: owner-requested]', () => {
   it('a real MCP client lists + calls a real transform tool; result == in-process ground truth', async () => {
     // Stand up the same MCP server via the built bin.
