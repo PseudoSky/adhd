@@ -3,7 +3,7 @@
  * embedding-usage-gate.mjs — enforces the real-vs-fake embedding test policy.
  *
  * The rule (see `src/test/helpers/fake-embedding-provider.ts`'s own header):
- * every spec file that can reach a real embedding-model load falls into
+ * every spec/e2e file that can reach a real embedding-model load falls into
  * exactly one declared bucket —
  *
  *   REAL_BY_DESIGN — named explicitly below, because its own assertions
@@ -13,7 +13,7 @@
  *   FAKED — carries the exact marker string `Embeddings mocked here` in a
  *   comment AND a `vi.mock('@adhd/sox-embedding-provider', ...)` call.
  *
- * A spec file that reaches the embedding path and is in NEITHER bucket is
+ * A spec/e2e file that reaches the embedding path and is in NEITHER bucket is
  * an undeclared real-embedding test — exactly the ambiguous middle ground
  * this gate exists to catch before it silently reintroduces multi-minute
  * test cost or an unreviewed "is this real or fake" question.
@@ -50,7 +50,7 @@ const ROOT = join(PKG, 'src');
  */
 const REAL_BY_DESIGN = new Map([
   [
-    'src/api.semantic-production-seam.spec.ts',
+    'src/api.semantic-production-seam.e2e.ts',
     'the PRODUCTION semantic seam (bootstrapSemanticStoreMembers + api.ts upsertProject/create/query) ' +
       'proven end-to-end against the REAL fastembed model — no vi.mock of @adhd/sox-embedding-provider. ' +
       'Its assertion is a route-discriminating outcome a fake cannot honestly provide: the query shares no ' +
@@ -62,7 +62,7 @@ const REAL_BY_DESIGN = new Map([
       'synonymy) cannot honestly make.',
   ],
   [
-    'src/store/embed-funnel.spec.ts',
+    'src/store/embed-funnel.e2e.ts',
     'the embedding funnel’s headline invariant — N consumer PROCESSES share EXACTLY ONE self-reaping host, ' +
       'and constructing the production seam is INERT (zero hosts) — proven against the REAL ' +
       '@adhd/sox-embedding-provider (no vi.mock). A fake backend is in-process and has no funnel host at all, ' +
@@ -72,7 +72,7 @@ const REAL_BY_DESIGN = new Map([
       'pre-funnel provider (0.5.0).',
   ],
   [
-    'src/store/embed-drain-real-model.spec.ts',
+    'src/store/embed-drain-real-model.e2e.ts',
     'the close-time embed drain proven end-to-end against the REAL fastembed model, in-process AND through ' +
       'a spawned dist/index.js `create` — no vi.mock of @adhd/sox-embedding-provider. Its assertion is the ' +
       'one-shot consumer outcome a fake cannot honestly provide: a fire-and-forget `create` (awaitEmbed ' +
@@ -109,7 +109,14 @@ function walk(dir) {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) out.push(...walk(full));
-    else if (entry.endsWith('.spec.ts')) out.push(full);
+    // Both suites are in scope. The resource-consuming real-model specs were
+    // extracted from `*.spec.ts` to sibling `*.e2e.ts` so the default `test`
+    // target no longer loads a model — but the census below MUST still cover
+    // them, or the move would silently blind this gate (the exact "route the
+    // gate doesn't recognize" gap its own header warns against). A real-model
+    // file is declared REAL_BY_DESIGN in either suite.
+    else if (entry.endsWith('.spec.ts') || entry.endsWith('.e2e.ts'))
+      out.push(full);
   }
   return out;
 }

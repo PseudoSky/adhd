@@ -69,7 +69,10 @@ export default defineConfig({
       // src/test/** holds test-support (fixtures + the real-server-spawn
       // harness) that lacks a .spec/.test suffix, so tsconfig.lib.json's
       // *.spec/*.test excludes miss them — never ship test .d.ts.
-      exclude: ['src/test/**'],
+      // `*.e2e.ts` is excluded too: those are the resource-consuming specs
+      // extracted out of the default `test` target (see the sibling `*.spec.ts`
+      // stubs) and must never reach dist/ or its declarations.
+      exclude: ['src/test/**', 'src/**/*.e2e.ts'],
     }),
     copySkillDirPlugin(),
   ],
@@ -121,7 +124,15 @@ export default defineConfig({
     environment: 'node',
     pool: 'forks',
     fileParallelism: false,
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    // `*.spec.ts` ONLY — never `*.e2e.ts`. The resource-consuming suites (real
+    // subprocess spawns, the real fastembed embedding model, real HTTP servers
+    // bound to ports) were extracted out of this default target into sibling
+    // `*.e2e.ts` files (see their `*.spec.ts` stubs); those must never run
+    // under `nx affected -t test` or the pre-commit/pre-push hooks. This project
+    // has exclusively `*.spec.ts` test files, so narrowing the glob is
+    // behaviour-preserving and makes the `.e2e.ts` exclusion structural rather
+    // than an emergent property of glob semantics.
+    include: ['src/**/*.spec.ts'],
     testTimeout: 30000,
     hookTimeout: 30000,
 
