@@ -61,7 +61,7 @@ Classes: **(a)** covered by an existing spec/batch/queue · **(b)** actionable n
 | `d4b2cc68`→`4ba0d969` | WAL unlinked/replaced → silent write-loss | **a** | **sox-store-adapter batch 0.10.0** (fix 2) |
 | `d677a575` | `close()` doesn't drain `_inFlightOps` | **a** | **sox-store-adapter batch 0.10.0** (fix 3) |
 | `0ab0078a` | `isDatabaseError` misses closed-connection `TypeError` | **a** | **sox-store-adapter batch 0.10.0** (fix 4) |
-| `82468ca7` | Config-isolation leak (global layer unconditional) | **a** (+d) | **fix/backlog-test-isolation `59b08868`** (HOME redirect); root-cause decision D3 |
+| `82468ca7` | Config-isolation leak (global layer unconditional) | **a** (+d) | **`59b08868`** (HOME redirect) — **already merged** (PR #10 `17236a3a`, PR #12 `29da1926`); root-cause decision D3 open |
 | `aede6810` | Citation of a directory (EISDIR) throws instead of degrading | **b** | **L4 backlog wave** |
 | `92b82a73` | `gitContext` rendered raw into markdown `Citations:` block | **b** | **L4 backlog wave** |
 | `81de39f7` | CI affected set excluded `backlog:test` | **b** | **L5 repo tooling** |
@@ -108,7 +108,7 @@ Cross-referenced extras (filed during the same incident, not in the hand-off lis
 | `276b8f2a` | `report/embed-durability-fix-spec.md` §3–6 (close-time drain, loud+recorded) | Implement as written; it is M2. |
 | `e769bdc4` | `report/embed-durability-fix-spec.md` **Segment F** (restores real-model coverage) + M1 restore | Implement with M2; no separate plan. |
 | `b200542b`, `d4b2cc68`, `d677a575`, `0ab0078a` | `docs/plan/store-adapter-batch-0.10.0/SPEC.md` (fixes 1–4) | One changeset/publish (L1). |
-| `82468ca7` | `fix/backlog-test-isolation` `59b08868` (HOME redirect, 10 spec files) | Push/merge (human-gated); root-cause decision D3. |
+| `82468ca7` | `59b08868` (HOME redirect, 10 spec files) | **Already merged** (PR #10 `17236a3a`, PR #12 `29da1926`); root-cause decision D3 still open. |
 
 ---
 
@@ -262,7 +262,8 @@ smoke-test. This is a **deployment step**, not part of the sox changeset.
   Decide: keep HOME-redirect-only (accepted posture), or scope-gate the resolver
   (HIGH blast radius, `packages/environment`).
 - **D4 — production contamination cleanup (`53eb67a7`, `e9a094be`).** Destructive
-  row removal; needs explicit approval. Root cause already fixed by `59b08868`.
+  row removal; needs explicit approval. The test-side leak is fixed by `59b08868`
+  (merged); the resolver root cause is **NOT** (see D3).
 - **D5 — production re-cutover vs interim hand-port (`L0`).** The durable fix is a
   full re-cutover from the reviewed branch tip; the interim is a hand-port of the
   citation fix + a bespoke bounded probe. Both are user-gated (deploy/restart).

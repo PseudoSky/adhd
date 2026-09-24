@@ -45,7 +45,7 @@ Legend: ✅ = verified by command this session (2026-09-23); ◐ = corpus claim,
 | local `main` (primary tree) | `0361798a` — "docs(backlog): point DATA_MODEL_v2…", 2026-09-22 20:56 | **DIVERGED** — not an ancestor of `origin/main`. Never build from it. |
 | `.worktrees/restore-min` | `257b146e` `[fix/live-restore]` | **= LIVE production build** (§1.2). |
 | `.worktrees/backlog-release` | `545d7025` `[release/backlog-1.0.0]` | Clean build of merged main (see manifest, §1.4). |
-| `.worktrees/backlog-cutover` | `ab262d8f` `[cutover/frozen-build-2118d384]` | Frozen OLD build = rollback target (slow baseline 12–35 s). |
+| ~~`.worktrees/backlog-cutover`~~ | `ab262d8f` / `cutover/frozen-build-2118d384` — **deleted 2026-09-23** | Was the frozen OLD rollback build. The branch + worktree were **redundant**: `ab262d8f` is an ancestor of `fix/live-restore` (on the remote), so nothing was lost. |
 | `.worktrees/backlog-v2` | `483fe47e` `[feat/backlog-hard-replacement]` | Holds the plan corpus. HEAD is on `origin/feat/backlog-hard-replacement`. |
 | `.worktrees/backlog-post-merge-followups` | `969d9ca9` `[chore/backlog-post-merge-followups]` | PR #13 head. |
 | **PR #13** | **OPEN + MERGEABLE**, base `main` | "port the stranded post-squash commits". |
@@ -59,7 +59,8 @@ corpus document states it.**
 - **LIVE is +95 commits** off that base; **`origin/main` is +10**. **Neither contains the other**
   (`git merge-base --is-ancestor` is false in both directions).
 - `2118d384` ("close out the hard-replacement rollout") and `ab262d8f` (the *frozen cutover
-  build* `cutover/frozen-build-2118d384`) are ancestors of **LIVE** and **not** of `main`.
+  build*) are ancestors of **LIVE** and **not** of `main`. (`ab262d8f`'s branch
+  `cutover/frozen-build-2118d384` and worktree were deleted 2026-09-23 — **redundant**.)
 - `feat/backlog-hard-replacement` (`483fe47e`, the PR #9 source) is **not** an ancestor of either.
 - **Content delta, `entrypoint/backlog` only:** 85 files, **+4,094 / −15,003**.
   **Two-way `src` divergence:**
@@ -236,7 +237,7 @@ by a named Wave-0 task.
 | # | Defect | Evidence | Fix |
 |---|---|---|---|
 | **DEF-01** | **Most of the plan corpus is untracked** in `backlog-v2`; a routine worktree cleanup destroys the program. | §1.5 | **Wave 0, first action:** commit the untracked corpus (incl. this file) on `feat/backlog-hard-replacement`; only then may any worktree be reaped. |
-| **DEF-02** | `HANDOFF-PROMPT.md` claims "self-contained" but requires 11 sibling files; four are untracked. | §1.5 | This strategy is the self-sufficient entry point; the handoff is history. |
+| **DEF-02** | `HANDOFF-PROMPT.md` claims "self-contained" but requires 11 sibling files; four are untracked. | §1.5 | This strategy is the self-sufficient entry point; the handoff is history — `HANDOFF-PROMPT.md` is **now deleted** (folded into `HANDOFF.md`, 2026-09-23). |
 | **DEF-03** | Live-pointer contradiction: `cli-deployment-separation-spec.md` §0/F1 says live = `backlog-cutover`; reality = `restore-min`. | §1.2 | Treat the spec's §0 as **stale** (superseded by the `restore-min` hand-port). Record only §1/§3/§4 topology, which remains valid. |
 | **DEF-04** | `G1` collision (`SEQUENCE` write-stall vs `sox-integration` graph-store txs). | §3 | Canonical scheme; `CORE-1` / `SOX-1`. |
 | **DEF-05** | Wave-count inconsistency ("5-wave plan" vs "Waves 1–3"; cutover = Wave 4). | §2 | Target restated over all five waves. |
@@ -441,7 +442,7 @@ corpus label in parentheses.
 | **24** | C13: `restore`/`hard_delete` as verbs (15) vs admin actions (14) — must clear **before** RSD-3 | **admin actions (stay 14)** | D27 |
 | **25** | LIVE-6 DeepSource red | **fix the `return`s at source**, never game `.deepsource.toml` | D5 |
 | **26** | LIVE-10 keep `migration.phase` removed? | **yes** (already removed — verified) | D7 |
-| **28** | Worktree reap list (~50 registered, many stale `agent-*`/`burn-*`) | **reap only after DEF-01**; preserve `restore-min` until LIVE-2, `backlog-cutover` until rollback retired, `backlog-release`, `backlog-v2` | DEF-01/§13 |
+| **28** | Worktree reap list (~50 registered, many stale `agent-*`/`burn-*`) | **reap only after DEF-01**; preserve `restore-min` until LIVE-2, `backlog-release`, `backlog-v2` (`backlog-cutover` already deleted — redundant, §1.1) | DEF-01/§13 |
 
 ### 9.2 Recommend-defaults, low blast radius (confirm in the same pass)
 SPEC-REG Q2–Q8 (one generic `registry-upsert`; refuse-if-referenced; `(root)` never deletable;
@@ -595,8 +596,7 @@ re-install is the first prerequisite of the sox track.
 | File | Role |
 |---|---|
 | **`EXECUTION-STRATEGY.md`** (this) | **Single source of truth.** Entry point post-compaction. |
-| `HANDOFF-PROMPT.md` | History — superseded by this file (DEF-02). |
-| `PAUSE-STATE.md` | State of record @05:05Z; superseded by §1 (several claims stale). Untracked. |
+| `HANDOFF.md` | The single authoritative resume doc. Replaces `HANDOFF.md`-session-2 + `HANDOFF-PROMPT.md` + `PAUSE-STATE.md` + `SESSION-HANDOFF-2026-09-23.md` (the latter three deleted 2026-09-23). |
 | `packets/SEQUENCE.md` | Wave plan + 47 gates + 14 lanes + findings F1–F5. Untracked (**commit, DEF-01**). |
 | `packets/1-live-deploy-ci.md` | WORK PACKETS: LIVE-1…11. Tracked. |
 | `packets/2-embedding-semantic.md` | WORK PACKETS: EMBED-1…16. Untracked. |

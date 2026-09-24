@@ -3,7 +3,7 @@
 **Author:** architect (packet-authoring pass), 2026-09-22.
 **Base branch:** `feat/backlog-hard-replacement` (worktree `.worktrees/backlog-v2`), the PR #9 cutover candidate (643/643 green, MERGEABLE).
 **Live build today:** `.worktrees/restore-min` (branch `fix/live-restore`) — a temporary hand-port, **not** `main`.
-**Frozen rollback build:** `.worktrees/backlog-cutover` @ `ab262d8f` (dist 2026-09-21 23:19).
+**Frozen rollback build:** ~~`.worktrees/backlog-cutover` @ `ab262d8f`~~ — **deleted 2026-09-23** (redundant; `ab262d8f` is an ancestor of `fix/live-restore`).
 
 ## Shared invariants every packet obeys
 

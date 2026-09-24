@@ -15,6 +15,15 @@ concurrent sessions on one store are sanctioned), **ADR-0013** (feature switches
 **ADR-0014** (snapshot retention is report-first, never automatic), **ADR-0015** (PROPOSED, never
 accepted — **do not adopt**). This spec violates none of them.
 
+> **STATE UPDATE (2026-09-23).** §0's diagnosis is a 2026-09-22 snapshot and has since moved: the
+> machine-global bin (`adhd-backlog`, and the `backlog` pnpm shim) now resolves to the
+> **primary-tree build = `main` @ `9df2a5c7`** — **not** `.worktrees/backlog-cutover`. That
+> worktree and its branch `cutover/frozen-build-2118d384` have been **deleted** (redundant —
+> `ab262d8f` is an ancestor of `fix/live-restore`). The `~/.claude.json` MCP entry still points at
+> `.worktrees/restore-min`; the repo `.mcp.json` points at the relative primary-tree path. The
+> analysis below is retained as the 2026-09-22 diagnosis; treat F1/F3's `.worktrees/backlog-cutover`
+> pin, and the "do not remove that worktree" sequencing, as **historical**.
+
 ---
 
 ## 0. Diagnosis — why agents report "completely broken"

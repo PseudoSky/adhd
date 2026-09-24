@@ -3,7 +3,7 @@
 **Author:** architect (packet-authoring pass), 2026-09-22.
 **Base branch:** `feat/backlog-hard-replacement` (worktree `.worktrees/backlog-v2`), the PR #9 cutover candidate.
 **Live build today:** `.worktrees/restore-min` (branch `fix/live-restore`) — a temporary hand-port, **not** `main`.
-**Frozen rollback build:** `.worktrees/backlog-cutover` @ `ab262d8f`.
+**Frozen rollback build:** ~~`.worktrees/backlog-cutover` @ `ab262d8f`~~ — **deleted 2026-09-23** (redundant; `ab262d8f` is an ancestor of `fix/live-restore`).
 **Live store (PRODUCTION):** `~/.adhd/backlog/production/data/backlog-v2.db`. Item bodies written earlier spell it
 `backlog.db`; treat `backlog-v2.db` as canonical (the older name is a pre-cutover artifact). Every packet that
 touches it is **backup-first + reversible** (see the shared invariants).
