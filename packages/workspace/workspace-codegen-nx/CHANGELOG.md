@@ -1,3 +1,17 @@
+## 0.1.2 (2026-09-24)
+
+
+### 🩹 Fixes
+
+- **nx-build:** run-scoped release manifest token + apigen-cli readiness flake + codegen test output
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+- Sky
+
 ## 0.1.1 (2026-08-07)
 
 
