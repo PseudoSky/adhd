@@ -68,8 +68,19 @@ export default defineConfig({
       dir: '../../node_modules/.vitest',
     },
     environment: 'node',
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
-    // perf.spec.ts asserts heap flatness across repeated buildDescriptor runs;
+    // `*.spec.ts` ONLY — never `*.e2e.ts`. The resource-consuming suites (real
+    // subprocess spawns of the built `dist/index.js`, real python/JVM hosts,
+    // real HTTP servers bound to ports, and the CPU-heavy real ts-morph
+    // extraction suites) were extracted out of this default target into sibling
+    // `*.e2e.ts` files (see the `*.spec.ts` STUB left at each original path);
+    // those must never run under `nx affected -t test` or the pre-commit /
+    // pre-push hooks. This project has exclusively `*.spec.ts` test files, so
+    // narrowing the glob is behaviour-preserving AND makes the `.e2e.ts`
+    // exclusion structural rather than an emergent property of glob semantics.
+    // The resource lane runs only via `nx run apigen-cli:e2e` (see the sibling
+    // `vitest.e2e.config.ts`, which is the only place that includes `.e2e.ts`).
+    include: ['src/**/*.spec.ts'],
+    // perf.e2e.ts asserts heap flatness across repeated buildDescriptor runs;
     // it needs a real global.gc so heap measurements are deterministic.
     // worker_threads reject V8 flags in execArgv (ERR_WORKER_INVALID_EXEC_ARGV),
     // so the suite runs in the forks pool, where --expose-gc is legal.
