@@ -19,14 +19,18 @@ with a `body` mints a successor with a fresh `uid` and joins the two with a
 may no longer be the *live* one — addressing it returns `conflict` and names
 the successor. Never treat a stored uid as immutable across edits.
 
-Every example below was run against `entrypoint/backlog/dist/index.js` built
-from revision `9df2a5c7`, and its exact output is what is shown. A *globally
-installed* `adhd-backlog` may be an older build: in particular `gitContext` on
-`create`/`transition` (§6) exists in the `9df2a5c7` build but an older
-installed build rejects it with `invalid_argument`. Compare the `backlog
-create` line of `adhd-backlog --help` with §1 before relying on a field.
+Every example below was run against `entrypoint/backlog/dist/index.js` — the
+baseline examples on revision `9df2a5c7`, the §8 stats/rollup examples on the
+build that first mounted those ops — and its exact output is what is shown. A
+*globally installed* `adhd-backlog` may be an older build: in particular
+`gitContext` on `create`/`transition` (§6) exists in the `9df2a5c7` build but
+an older installed build rejects it with `invalid_argument`, and the §8 stats
+ops (`priority-matrix`/`part-of-rollup`/`open-curve`) exist only in a build at
+or after the one that mounted them. Compare the `backlog create` and `backlog
+priority-matrix` lines of `adhd-backlog --help` with §1 before relying on a
+field.
 
-## 1. Command surface — 14 verbs (plus `batch`), one calling convention
+## 1. Command surface — 17 verbs (plus `batch`), one calling convention
 
 **Every verb takes a single `--input` flag carrying one JSON object.** There
 are no per-field flags.
@@ -34,6 +38,9 @@ are no per-field flags.
 ```
 adhd-backlog backlog get                --input '<IIssueGetInput json>'
 adhd-backlog backlog query              --input '<IIssueQueryInput json>'
+adhd-backlog backlog priority-matrix    --input '<IPriorityMatrixInput json>'
+adhd-backlog backlog part-of-rollup     --input '<IPartOfRollupInput json>'
+adhd-backlog backlog open-curve         --input '<IOpenCurveInput json>'
 adhd-backlog backlog lookup             --input '{"q": "<tool, file path, or URL>"}'
 adhd-backlog backlog create             --input '<ICreateIssueInput json>'
 adhd-backlog backlog update             --input '<IUpdateIssueInput json>'
@@ -66,6 +73,9 @@ Available commands:
   backlog get  { input: { uid: string, fields?: union[] } | { registry: 'project'|'component'|'location', name: string, filter?: object } }
   backlog lookup  { input: { q: string } }
   backlog move  { input: { uid: string, toProject?: string, toComponent?: string, by: string } }
+  backlog open-curve  { input: { filter?: object, at: string[] } }
+  backlog part-of-rollup  { input: { uid: string } }
+  backlog priority-matrix  { input: { filter?: object } }
   backlog query  { input: { text?: string, filter?: object, fields?: union[], sort?: 'priority'|'updated'|'created'|'relevance'|'textMatch', direction?: 'asc'|'desc', limit?: number, offset?: number, after?: string, view?: 'list'|'ready'|'graph'|'order'|'stale'|'similar'|'overlap'|'projects'|'components'|'locations', format?: 'json'|'markdown', overlapAxis?: 'file'|'project'|'component'|'author', overlapUids?: string[], staleAfterMin?: number } }
   backlog relate  { input: { sourceUid: string, targetUid: string, rel: 'relates_to'|'supersedes'|'blocks'|'duplicate_of'|'part_of', action: 'add'|'remove', by: string } }
   backlog rm-location  { input: { uid: string, by: string, reason?: string } }
@@ -180,7 +190,8 @@ Success is always exit `0`.
 
 Each verb is also an MCP tool once `.mcp.json` wires the server, named
 `backlog_<verb>` with the verb's own words snake_cased: `backlog_get`,
-`backlog_query`, `backlog_lookup`, `backlog_create`, `backlog_update`,
+`backlog_query`, `backlog_priority_matrix`, `backlog_part_of_rollup`,
+`backlog_open_curve`, `backlog_lookup`, `backlog_create`, `backlog_update`,
 `backlog_transition`, `backlog_claim`, `backlog_relate`, `backlog_move`,
 `backlog_upsert_project`, `backlog_upsert_component`,
 `backlog_upsert_location`, `backlog_rm_location`, `backlog_delete`, plus the
@@ -529,7 +540,8 @@ status:'rejected', reason}` — `value`/`reason` is the SAME outcome envelope
 `error.code` still applies. `mode` (`'parallel'` default · `'serial'` ·
 `'chained'`), `onItemError` (`'continue'` default · `'abort'`), and
 `concurrency`/`itemTimeoutMs` govern how the fan-out runs. The valid
-`operation` values are exactly the 14 issue/registry verbs above, each
+`operation` values are exactly the 17 mounted verbs above (the nine issue
+verbs, the four registry verbs, and the three stats reads of §8), each
 prefixed `backlog/` — passing a bare verb name (`"create"`) is rejected with
 `invalid_argument` naming the full list.
 
@@ -575,24 +587,45 @@ care about, verify by running the `adhd-backlog` CLI in a fresh shell — a
 genuinely new process — rather than re-reading through the same live MCP
 session.
 
-## 8. Library-only views — query-layer exports, not a command surface
+## 8. Stats & rollups
 
-Three aggregate read views are exported from the package's query layer
-(`src/query/views/stats.ts`, re-exported by `src/query/index.ts`) and are **not**
-members of `query.view`. In the committed `9df2a5c7` build there is no CLI verb
-or MCP tool for them — reach them by importing `@adhd/backlog` in-process. (A
-development build may mount some of them; run `adhd-backlog --help` to see what
-a given build exposes.)
+Three aggregate read views are first-class mounted ops — `backlog
+priority-matrix`, `backlog part-of-rollup`, `backlog open-curve` (MCP:
+`backlog_priority_matrix` / `backlog_part_of_rollup` / `backlog_open_curve`).
+All three are read-only and take no `by`, and each returns its own shape — a
+matrix, a rollup tree, a time series — so none is a `query.view` member.
 
-- `priorityMatrix(handle, { filter? })` — per-priority issue counts, scoped by
-  `project`/`component`/`kind`/`status`. An omitted `status` scopes to OPEN
-  work (unlike `list`, where an omitted status means no restriction); pass
-  `filter.status:'all'` to remove that default, and read the applied scope off
-  the result's `statusScope`.
-- `partOfRollup(handle, { uid })` — every TRANSITIVE `part_of` descendant of an
-  issue (not just direct children), counted exactly once each regardless of
-  chain depth.
-- `openCurve(handle, { filter?, at })` — for each sampled ISO-8601 instant, how
-  many in-scope issues existed and how many are reconstructed as open.
+**Priority matrix** — per-priority counts, scoped by
+`project`/`component`/`kind`/`status`. An omitted `filter.status` scopes to
+OPEN work (unlike `list`, where an omitted status means no restriction); the
+applied scope is echoed on `data.statusScope`, and `unassigned` counts in-scope
+issues carrying no priority:
 
-Described for consumers in `README.md` → "Library API".
+```
+$ adhd-backlog backlog priority-matrix --input '{}'
+{"ok":true,"data":{"rows":[{"priority":"HIGH","priorityUid":"fb9d525e-…","rank":0,"count":1}],"unassigned":1,"statusScope":"open"}}
+```
+
+**Part-of rollup** — every TRANSITIVE `part_of` descendant of the root issue
+(not just direct children), counted once each regardless of chain depth, split
+into `childrenOpen`/`childrenClosed` (plus the open descendants' uids):
+
+```
+$ adhd-backlog backlog part-of-rollup --input '{"uid":"74c22c35-…"}'
+{"ok":true,"data":{"uid":"74c22c35-…","childrenTotal":1,"childrenOpen":1,"childrenClosed":0,"childrenOpenUids":["db4587ba-…"]}}
+```
+
+**Open curve** — for each sampled ISO-8601 instant, how many in-scope issues
+EXISTED then (exact, via `validAt`) and, of those, how many were OPEN then
+(reconstructed from the audit trail, never the issue's current status):
+
+```
+$ adhd-backlog backlog open-curve --input '{"at":["2020-01-01T00:00:00.000Z"]}'
+{"ok":true,"data":{"points":[{"at":"2020-01-01T00:00:00.000Z","existed":0,"open":0,"closed":0}]}}
+```
+
+The same three functions are also exported from the package's query layer
+(`src/query/views/stats.ts`, re-exported by `src/query/index.ts`) for
+in-process consumers — `priorityMatrix(handle, { filter? })`,
+`partOfRollup(handle, { uid })`, `openCurve(handle, { filter?, at })`. That
+in-process surface is described in `README.md` → "Library API".
