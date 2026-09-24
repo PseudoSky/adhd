@@ -38,6 +38,7 @@ import { spawnSync } from 'node:child_process';
 import { dirname, join, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { spawnTimeoutMs } from './spawn-timeout.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 /** `src/test/helpers/` -> package root -> `dist/index.js`. */
@@ -77,11 +78,17 @@ export function extractMintedSandboxRoot(stderr: string): string | undefined {
  * `mintBacklogSandbox`/`runInBacklogSandbox` below). `--namespace sandbox`
  * stays on every call either way, so `BUG-BACKLOG-SANDBOX-SILENT-BYPASS-001`'s
  * guard stays active throughout.
+ *
+ * `timeoutMs` bounds the child's wall-clock (default `spawnTimeoutMs()` —
+ * see `spawn-timeout.ts`; it is generous so a load-starved host cannot turn a
+ * successful command into an `ETIMEDOUT`, BACKLOG 345973b3). Pass an explicit
+ * value only for a genuinely long-running invocation.
  */
 export function runBacklogBin(
   args: string[],
   extraEnv: Record<string, string> = {},
-  cwd: string = tmpdir()
+  cwd: string = tmpdir(),
+  timeoutMs: number = spawnTimeoutMs()
 ): SpawnResult & { sandboxRoot?: string } {
   const result = spawnSync(
     process.execPath,
@@ -90,7 +97,7 @@ export function runBacklogBin(
       cwd,
       env: { ...process.env, ...extraEnv },
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: timeoutMs,
     }
   );
   if (result.error) {
@@ -119,13 +126,14 @@ export function runBacklogBin(
 export function runBacklogBinRaw(
   args: string[],
   cwd: string,
-  extraEnv: Record<string, string> = {}
+  extraEnv: Record<string, string> = {},
+  timeoutMs: number = spawnTimeoutMs()
 ): SpawnResult {
   const result = spawnSync(process.execPath, [DIST_INDEX, ...args], {
     cwd,
     env: { ...process.env, ...extraEnv },
     encoding: 'utf8',
-    timeout: 30_000,
+    timeout: timeoutMs,
   });
   if (result.error) throw new Error(`spawn failed: ${String(result.error)}`);
   return {
