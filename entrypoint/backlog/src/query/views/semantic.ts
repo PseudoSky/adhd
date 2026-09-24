@@ -381,8 +381,15 @@ export async function resolveSimilarFilterIds(
     if (edgeIntersected.size === 0) return new Set();
   }
 
-  if (!scalarFilter) return edgeIntersected;
-
+  // Every path returns LIVE, CURRENT issues only. The scalar-filter branch has
+  // always applied `{liveOnly:true, isSuperseded:false}`; the edge-only branch
+  // used to return `edgeIntersected` verbatim, which can carry a non-live id —
+  // a soft-deleted node keeps its live `owns_component` edge, and a superseded
+  // one is only dropped once that edge is invalidated. A candidate id set that
+  // can name a dead issue is exactly the defect the dedupe gate's re-file
+  // suppression came from (`create-issue.ts`'s `scanForDuplicates`), and
+  // `view:'similar'` shares this resolver — so the SAME live filter is applied
+  // on both paths, and no caller can receive a non-live candidate id.
   const nodeFilter: Record<string, unknown> = {
     kind: 'issue',
     liveOnly: true,
