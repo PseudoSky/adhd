@@ -1,3 +1,17 @@
+## 2.3.1 (2026-09-24)
+
+
+### 🩹 Fixes
+
+- **nx:** drop self-referential scripts.build wrappers to restore build cache
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+- Sky
+
 ## 2.3.0 (2026-08-11)
 
 

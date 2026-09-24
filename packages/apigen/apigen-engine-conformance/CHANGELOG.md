@@ -1,3 +1,19 @@
+## 0.2.3 (2026-09-24)
+
+
+### 🩹 Fixes
+
+- **apigen-engine-conformance:** cache the conformance target keyed on Java source + pom.xml
+
+- **apigen:** audit fixes — S-18/S-19/C-20/C-21/S-20, java mvn race, union-encoder envelope, lazy heavy-dep loading
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+- Sky
+
 ## 0.2.2 (2026-08-08)
 
 
