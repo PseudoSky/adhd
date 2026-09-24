@@ -29,6 +29,10 @@ export default defineConfig({
     globals: true,
     cache: { dir: '../../../node_modules/.vitest' },
     environment: 'node',
+    // @nx/vite:test passes `reporters: []` when this is unset, which silences
+    // ALL vitest output (a passing/failing suite prints nothing). Declaring
+    // `['default']` restores normal per-test output. F3 fix.
+    reporters: ['default'],
     include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
   },
 });
