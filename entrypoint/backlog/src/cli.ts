@@ -763,6 +763,14 @@ export async function runBacklogCli(
       options: {
         argv: prefixCommand(userArgv, prefix, reservedNamespaces),
         usePlugins: [...USE_PLUGINS],
+        // BUG-APIGEN-CLI-002: the SAME `prefix` computed above (never a
+        // second, independently-derived list) — tells the shared
+        // `apigen-plugin-cli-output` help renderer that the leading
+        // `backlog` segment is an OPTIONAL, host-specific UX convenience
+        // (this is the exact prefix `prefixCommand` silently elides), so
+        // it's rendered bracketed (`[backlog] get-item`) and visually
+        // distinct from a mandatory mount-namespace command (`batch action`).
+        cliElidablePrefix: prefix,
         // The issue verbs (api.ts's `IOutcomeEnvelope` shape) REPORT failure in the envelope
         // rather than throwing, so without this hook every `{ok:false}` still
         // exited 0 and a scripted caller read a failure as a success
