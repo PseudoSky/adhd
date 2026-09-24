@@ -93,7 +93,7 @@ measure_min() {
   local label="$1" samples="$2"
   shift 2
   local -a ts=()
-  local i t
+  local i
   for ((i = 1; i <= samples; i++)); do
     run_timed "$@"
     if [ -z "$RUN_T" ]; then
