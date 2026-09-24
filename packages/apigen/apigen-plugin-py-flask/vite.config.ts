@@ -48,7 +48,16 @@ export default defineConfig({
       dir: '../../../node_modules/.vitest',
     },
     environment: 'node',
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    // `*.spec.ts` ONLY — never `*.e2e.ts`. The resource-consuming suite (a real
+    // spawned `python3` Flask server bound to a port, driven by real `fetch`)
+    // was extracted out of this default target into a sibling `plugin.e2e.ts`
+    // file (see the `plugin.spec.ts` STUB left at the original path); it must
+    // never run under `nx affected -t test` or the pre-commit / pre-push hooks.
+    // Narrowing the glob is behaviour-preserving AND makes the `.e2e.ts`
+    // exclusion structural rather than an emergent property of glob semantics.
+    // The resource lane runs only via `nx run apigen-plugin-py-flask:e2e` (see
+    // the sibling `vitest.e2e.config.ts`, the only place that includes `.e2e.ts`).
+    include: ['src/**/*.spec.ts'],
     reporters: ['default'],
     coverage: {
       reportsDirectory: projectCoverage(__dirname),

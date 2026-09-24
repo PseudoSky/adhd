@@ -28,16 +28,40 @@
     },
     "test": {
       "executor": "@nx/vite:test",
-      "dependsOn": [
-        "lint",
-        "^build",
-        "apigen-java:package"
-      ],
+      "//dependsOn": "The default lane is now purely in-process: the live `mvn`/`javac`/`java` Javalin suite and the real child-process SIGTERM/pgrep hygiene suite moved to sibling *.e2e.ts files with cheap *.spec.ts stubs. It no longer spawns a JVM and no longer declares `apigen-java:package`; that resource prerequisite now lives ONLY on the `e2e` target. This target inherits the workspace targetDefaults.test dependsOn ([\"lint\", \"^build\"]).",
       "outputs": [
         "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-java-javalin"
       ],
+      "//inputs": "Exclude *.e2e.ts so editing a resource-consuming suite never invalidates the default lane's cache — it never runs those files (its vitest `include` is `src/**/*.spec.ts`, see vite.config.ts). Mirrors the workspace targetDefaults.test inputs plus the negative pattern.",
+      "inputs": [
+        "default",
+        "!{projectRoot}/**/*.e2e.ts",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest",
+            "better-sqlite3",
+            "drizzle-orm"
+          ]
+        }
+      ],
       "options": {
         "configFile": "packages/apigen/apigen-plugin-java-javalin/vite.config.ts"
+      }
+    },
+    "e2e": {
+      "executor": "@nx/vite:test",
+      "//": "RESOURCE-CONSUMING lane. Deliberately NOT part of `affected` and NOT referenced by any target's dependsOn or by targetDefaults — it runs ONLY on an explicit `nx run apigen-plugin-java-javalin:e2e` (nx affected never selects it). It runs the sibling *.e2e.ts suites via vitest.e2e.config.ts. `dependsOn` is exactly the resource prerequisites those suites need: `build` (the plugin's own built artifact) and `apigen-java:package` (the real JVM pipeline the plugin drives).",
+      "dependsOn": [
+        "build",
+        "apigen-java:package"
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-java-javalin-e2e"
+      ],
+      "options": {
+        "configFile": "packages/apigen/apigen-plugin-java-javalin/vitest.e2e.config.ts",
+        "passWithNoTests": true
       }
     },
     "nx-release-publish": {

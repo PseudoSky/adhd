@@ -51,6 +51,7 @@
  * the invariant.
  */
 import { spawnSync } from 'node:child_process';
+import { spawnTimeoutMs } from './spawn-timeout.js';
 
 /**
  * Ambient env keys that, if inherited, would OVERRIDE the temp-root redirect
@@ -82,9 +83,12 @@ export interface IsolatedRunOptions {
    */
   extraEnv?: Record<string, string>;
   /**
-   * Child-process timeout in ms. Defaults to 60_000 — the built bin's
-   * extraction dominates a cold run, so the older 30_000 default had little
-   * headroom under load.
+   * Child-process timeout in ms. Defaults to `spawnTimeoutMs()` (120_000
+   * unless `ADHD_SPAWN_TIMEOUT_MS` overrides it) — the built bin's extraction
+   * dominates a cold run, and on a loaded host the child's EXIT can be
+   * starved even though its work completes in well under a second, so a small
+   * default turns a successful command into an `ETIMEDOUT` (BACKLOG 345973b3).
+   * Shared with `spawn-backlog-bin.ts` so both helpers follow one policy.
    */
   timeoutMs?: number;
 }
@@ -134,7 +138,7 @@ export function runIsolatedBin(
   root: string,
   options: IsolatedRunOptions = {}
 ): IsolatedSpawnResult {
-  const { extraEnv, timeoutMs = 60_000 } = options;
+  const { extraEnv, timeoutMs = spawnTimeoutMs() } = options;
   const result = spawnSync(process.execPath, [binPath, ...args], {
     ...isolatedSpawnOptions(root, extraEnv),
     encoding: 'utf8',

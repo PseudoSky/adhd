@@ -18,16 +18,41 @@
   "targets": {
     "test": {
       "executor": "@nx/vite:test",
-      "dependsOn": [
-        "lint",
-        "^build",
-        "apigen-java:package"
-      ],
+      "//dependsOn": "The default lane is now pure in-process logic only — the live matrix (real Python subprocess + real JVM) moved to gate.e2e.ts (lane proc). It no longer declares `apigen-java:package`; that resource prerequisite now lives on the `conformance` + `e2e` targets. Inherits the workspace targetDefaults.test dependsOn ([\"lint\", \"^build\"]).",
       "outputs": [
         "{workspaceRoot}/coverage/packages/apigen/apigen-engine-conformance"
       ],
+      "//inputs": "Exclude *.e2e.ts so editing a resource-consuming suite never invalidates the default lane's cache — it never runs those files (its vitest `include` is `src/**/*.spec.ts`, see vite.config.ts). Mirrors the workspace targetDefaults.test inputs plus the negative pattern.",
+      "inputs": [
+        "default",
+        "!{projectRoot}/**/*.e2e.ts",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest",
+            "better-sqlite3",
+            "drizzle-orm"
+          ]
+        }
+      ],
       "options": {
         "configFile": "packages/apigen/apigen-engine-conformance/vite.config.ts"
+      }
+    },
+    "e2e": {
+      "executor": "@nx/vite:test",
+      "//": "RESOURCE-CONSUMING lane. Deliberately NOT part of `affected` and NOT referenced by any target's dependsOn or by targetDefaults — it runs ONLY on an explicit `nx run apigen-engine-conformance:e2e` (nx affected never selects it). It runs the sibling *.e2e.ts suite via vitest.e2e.config.ts. `dependsOn` is the resource prerequisites those tests need: `conformance` (the SINGLE live-matrix execution path — its durable report is what gate.e2e.ts asserts against, so the live TS+Python+Java matrix is never duplicated), plus `apigen-java:package` and `apigen-python-env:build` (the JVM/Python host prerequisites the lane's own runJavaMatrix negative-control and the matrix need).",
+      "dependsOn": [
+        "conformance",
+        "apigen-java:package",
+        "apigen-python-env:build"
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/apigen-engine-conformance-e2e"
+      ],
+      "options": {
+        "configFile": "packages/apigen/apigen-engine-conformance/vitest.e2e.config.ts",
+        "passWithNoTests": true
       }
     },
     "build": {
