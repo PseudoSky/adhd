@@ -63,7 +63,7 @@ and growing, load ~258, `97c03dfd` / `6417df20` / `ce98c6c3` / `287c301e` newly 
 | **G4** | `287c301e` — no automatic backfill/heal | **No packet** (sibling of EMBED-1's `88b26235`). | **Fold into EMBED-1.** Wave 2. |
 | **G5** | `53eb67a7` + `e9a094be` — production contamination cleanup (destructive, owner-gated) | **No packet.** Domain 3's seam note assigns it to Domain 1, but Domain 1 has no such packet. | **New packet, Wave 4**, Domain 1 — report-first, ADR-0014 `--apply`, owner-gated. `backend`. |
 | **G6** | `e46b7ca0` — hybrid-search optional loadability (deferral-plan L3, blocked on D1 ADR) | **No packet in any file.** | **New packet**, cross-repo (sox) + a **new ADR** decision (D1). Wave 3; `backend`. |
-| **G7** | `82468ca7` — config-isolation leak (`59b08868` in flight) + root-fix decision D3 | **No packet.** | **New packet, Wave 1/4** — push/merge `59b08868`; D3 decision in §6. `backend`. |
+| **G7** | `82468ca7` — config-isolation leak + root-fix decision D3 | **No packet.** | **New packet, Wave 1/4** — `59b08868` is **already merged** (PR #10 `17236a3a`, follow-up PR #12 `29da1926`); only the D3 root-fix decision remains (§6). `backend`. |
 | **G8** | `f80bf841` — `apigen-java` target race (L5) | **No packet.** | **New small packet, Wave 3** (or fold into LIVE-11). `refactor`, LOW. |
 | **G9** | `8b05358e` — `registry/index.json` checksum drift armed | **Partially covered** by LIVE-4 (`fa894329`) but the deploy-time registry sync is not named. | **Extend LIVE-4** scope to include the deploy-time registry sync. |
 | **G10** | `1c9e40d5` + `06922862` — adapter fixes 5/6 | **Conflict, not gap:** deferral-plan L1 folds them into 0.10.0; **STORE-1's gate says keep them as follow-ups.** | **Resolve in §6 (STORE-1 gate).** |
@@ -128,7 +128,7 @@ Two heavy lanes, serialized at the machine level; light coordination in between.
   after STORE-1}. **STORE-13** is independent (unblocks STORE-15/16) — run it first inside this
   lane to clear the memory-core reds.
 - **Lane 1B — adhd write path:** **G1 (`97c03dfd`, new)** → **WAVE-1** → **EMBED-5** (`_adapter_meta`
-  repair + `store-check` assertion). **G7** (`59b08868` push/merge) rides here.
+  repair + `store-check` assertion). **G7** (root-fix only — `59b08868` already merged) rides here.
 - **Lane 1C — in-flight durability:** verify/land the **embed-durability + dedupe over-match** fix
   (already implemented — spec §"IMPLEMENTED"); reconcile **G3 (`ce98c6c3`)** if not deferred to Wave 2.
 - **Lane 1D — live store:** **STORE-14** after STORE-1/10/13 — backup-first, owner-gated.
