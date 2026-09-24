@@ -59,7 +59,15 @@ export default defineConfig({
       dir: '../../../node_modules/.vitest',
     },
     environment: 'node',
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    // `*.spec.ts` ONLY — never `*.e2e.ts`. The resource-consuming self-tests
+    // (`isolated-git.e2e.ts`: real `git` subprocesses; `parity-harness.e2e.ts`:
+    // a real `node:http` server + real `git apply`) were extracted out of this
+    // default target into sibling `*.e2e.ts` files (see the `*.spec.ts` STUB
+    // left at each original path). They must never run under
+    // `nx affected -t test` or the pre-commit / pre-push hooks; the resource
+    // lane runs only via `nx run apigen-engine-runtime:e2e` (see the sibling
+    // `vitest.e2e.config.ts`, the only place that includes `.e2e.ts`).
+    include: ['src/**/*.spec.ts'],
 
     reporters: ['default'],
     coverage: {

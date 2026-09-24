@@ -146,6 +146,21 @@ pnpm release:commit       # stage + commit ONLY the bumped package.json + CHANGE
 
 **Step 3.5 — global-CLI sync (advisory, runs inside `pnpm release`).** After publish (and before GATE 2), `sync-global.mjs` flips any stale global link shims — a `~/Library/pnpm/<bin>` whose content still execs local workspace source (the `pnpm link -g` shape) — to the published artifacts via `pnpm add -g <name>@<exact-version>`, gated on the exact version being on the registry. Sync failures print `ERROR` but never fail the release (BUG-003 exit-capture pattern) — retry manually with `pnpm release:sync-global` (preview: `pnpm release:sync-global:dry`).
 
+---
+
+## Big-release pre-flight — run the resource lanes explicitly
+
+`nx affected -t test` (and the pre-commit/pre-push hooks that wrap it) is the **fast gate**: it runs each package's default `test` target only, and the default target deliberately excludes the resource-consuming suites — real subprocess spawns, bound-port HTTP/MCP servers, the real fastembed embedding model, and CPU/memory hogs. Those live in a separately-named `e2e` lane per package (e.g. `entrypoint/backlog`'s `src/**/*.e2e.ts`, collected by its `e2e` target and its `vitest.e2e.config.ts`).
+
+**Before a big release, run the resource lanes explicitly:**
+
+```bash
+npx nx run-many -t e2e            # every package that declares an e2e target
+npx nx run backlog:e2e            # one package — the per-project form
+```
+
+This is deliberate, not an oversight: the `e2e` target is in **no** target's `dependsOn` and is absent from `nx.json` `targetDefaults`, and it has **no automatic CI runner** — it never runs under `nx affected -t test` or the fast hooks. It is run as this explicit checklist step instead. Do **not** add it to `test.dependsOn` and do **not** add a global `targetDefaults.e2e` (the latter is keyed by target name only, so it cannot be scoped to one project).
+
 ## Installability gates (BUG-RELEASE-UNINSTALLABLE-AGENTMCP-001)
 
 Neither gate below existed before; every prior gate (`dist-manifest`, `verify-dist-load`, `@nx/dependency-checks`/`sync-deps`, `publish-hygiene`) validates against the **local on-disk workspace**, never the real registry — so a range like `agent-store-tools: "^2.1.7"` can ship even when the registry's max published version is `2.1.6`. Full write-up + reconciliation matrix: [`tools/nx-plugins/build/lib/range-resolvability.js`](tools/nx-plugins/build/lib/range-resolvability.js).

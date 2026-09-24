@@ -271,6 +271,47 @@ test('RED-equivalent: the pre-BUG-027 shape (publishOk && smokeOk alone deciding
   assert.ok(!/RESULT \(d\)/.test(preFixSource), 'sanity: the pre-fix simulated source has no RESULT (d) branch at all');
 });
 
+// --- F1 run-scoped freshness: the token must PROPAGATE, not just be minted ---
+
+/**
+ * The source text of `run()`'s spawnSync call, from `spawnSync(command, args`
+ * to its closing `);`. Used by the no-explicit-env guard below. Sliced (not
+ * brace-matched) because an `env: {}` regression introduces a nested brace.
+ */
+function runSpawnCallText(text) {
+  const start = text.indexOf('spawnSync(command, args');
+  if (start === -1) return null;
+  const end = text.indexOf(');', start);
+  return end === -1 ? null : text.slice(start, end + 2);
+}
+
+test('run-release.mjs: the run() spawnSync call passes NO explicit `env` — so the minted RELEASE_RUN_TOKEN propagates to every spawned phase', () => {
+  // The whole F1 fix rests on the spawn inheriting this process's env: main()
+  // mints RELEASE_RUN_TOKEN into `process.env`, and `run()` must let every
+  // spawned phase (build/version/GATE 1/publish) inherit it. An explicit
+  // `env: {...}` option with no RELEASE_RUN_TOKEN (e.g. `env: {}`) would drop
+  // it and silently disable the run-scoped path. The dynamic proof that env
+  // DOES cross the real pnpm -> nx -> task boundary lives in
+  // `./run-release-env-propagation.spec.mjs`; this is the static guard against
+  // `run()` regressing to pass an explicit env.
+  const call = runSpawnCallText(source);
+  assert.ok(call, 'expected to find the run() spawnSync call');
+  assert.ok(
+    !/\benv\s*:/.test(call),
+    'run() must NOT pass an explicit `env` option — an explicit env (e.g. `env: {}`) would drop the minted ' +
+      'RELEASE_RUN_TOKEN and silently disable the F1 run-scoped freshness path'
+  );
+});
+
+test('RED-equivalent: an explicit `env: {}` on the run() spawn is exactly the shape that drops the token and breaks F1 propagation', () => {
+  // Simulates the regression the guard above catches: a spawn that passes an
+  // explicit empty env. Proves the guard's pattern has teeth.
+  const regressed = "const result = spawnSync(command, args, { stdio: 'inherit', cwd: workspaceRoot, shell: false, env: {} });";
+  const call = runSpawnCallText(regressed);
+  assert.ok(call, 'sanity: the simulated regressed call is found by the same slicer');
+  assert.ok(/\benv\s*:/.test(call), 'sanity: the simulated regressed call has an explicit env, so the guard must reject it');
+});
+
 test('RED-equivalent: a sync-global step placed BEFORE publish (or missing entirely) is exactly the mis-order this step-3.5 assertion exists to catch', () => {
   // Simulated pre-fix source with the sync BEFORE publish — the ordering
   // assertion above must have teeth against it.
