@@ -11,6 +11,8 @@
  * The `it.todo` entries below inventory the original cases (one per real
  * case in `api.semantic-production-seam.e2e.ts`); they are the contract a mocked version must satisfy
  * without touching a subprocess or a real model.
+ *
+ * Resource lane: embed — loads the real @adhd/sox-embedding-provider fastembed/bge-base-en-v1.5 ONNX model in-process.
  */
 import { describe, it } from 'vitest';
 

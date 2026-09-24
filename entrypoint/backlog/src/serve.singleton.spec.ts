@@ -11,6 +11,8 @@
  * The `it.todo` entries below inventory the original cases (one per real
  * case in `serve.singleton.e2e.ts`); they are the contract a mocked version must satisfy
  * without touching a subprocess or a real model.
+ *
+ * Resource lane: proc — two concurrently-running `serve` child processes against the same store.
  */
 import { describe, it } from 'vitest';
 

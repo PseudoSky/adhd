@@ -11,6 +11,8 @@
  * The `it.todo` entries below inventory the original cases (one per real
  * case in `embed-funnel-watchdog.e2e.ts`); they are the contract a mocked version must satisfy
  * without touching a subprocess or a real model.
+ *
+ * Resource lane: proc — spawns the embedding-funnel consumer child process.
  */
 import { describe, it } from 'vitest';
 

@@ -11,6 +11,8 @@
  * The `it.todo` entries below inventory the original cases (one per real
  * case in `embed-drain-real-model.e2e.ts`); they are the contract a mocked version must satisfy
  * without touching a subprocess or a real model.
+ *
+ * Resource lane: embed, proc — real fastembed ONNX model AND the built bin as a child process.
  */
 import { describe, it } from 'vitest';
 

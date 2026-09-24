@@ -11,6 +11,8 @@
  * The `it.todo` entries below inventory the original cases (one per real
  * case in `catalog-verbs.e2e.ts`); they are the contract a mocked version must satisfy
  * without touching a subprocess or a real model.
+ *
+ * Resource lane: proc — spawns real OS processes racing the same upsert (AC-12).
  */
 import { describe, it } from 'vitest';
 
