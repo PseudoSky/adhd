@@ -29,6 +29,15 @@ export default defineConfig({
     globals: true,
     cache: { dir: '../../../node_modules/.vitest' },
     environment: 'node',
+    // The two devkit generator specs drive the real Nx devkit generator tree
+    // (~2.5-3s each in isolation). Under `nx affected -t test --parallel=5`
+    // on a load-saturated box (measured load 100-222 on 10 cores -> up to 22x
+    // CPU oversubscription) they exceed vitest's 5s default and fail with
+    // `Test timed out in 5000ms`, reding the release test gate. 120_000 is
+    // 24-48x the isolated runtime and the repo's established headroom
+    // precedent (apigen-plugin-java-javalin, tools/etl), so the gate is
+    // deterministic under load without weakening any assertion.
+    testTimeout: 120_000,
     // @nx/vite:test passes `reporters: []` when this is unset, which silences
     // ALL vitest output (a passing/failing suite prints nothing). Declaring
     // `['default']` restores normal per-test output. F3 fix.
