@@ -110,7 +110,18 @@ module.exports = {
         '@nx/dependency-checks': [
           'error',
           {
-            ignoredFiles: ['{projectRoot}/vite.config.{js,ts,mjs,mts}'],
+            ignoredFiles: [
+              '{projectRoot}/vite.config.{js,ts,mjs,mts}',
+              // The resource-consuming `*.e2e.ts` suites (extracted out of the
+              // default `test` target — see their sibling `*.spec.ts` stubs)
+              // are TESTS, exactly like `*.spec.ts`. `@nx/dependency-checks`'s
+              // built-in test-file ignore predates the `.e2e.ts` suffix, so
+              // without this their test-only imports (`vitest`, `jsdom`) would
+              // be tallied as production usage and `sync-deps` would demand
+              // them in `dependencies` (verified: it does, and this silences it
+              // correctly rather than declaring test-only deps as runtime deps).
+              '{projectRoot}/**/*.e2e.{ts,tsx,mts,cts}',
+            ],
             ignoredDependencies,
           },
         ],
