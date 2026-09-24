@@ -34,23 +34,46 @@
 #   goes RED when the bin IS the frozen build (ratio ~1), so it cannot mask a real
 #   regression.
 #
-# Env overrides
-#   EXPECTED_SHA       merged-main source sha          (default 545d7025...)
+# Env overrides (every default is sourced at runtime — no machine-local absolute
+# path and no unread hardcoded sha; the release manifest supplies the shas)
+#   EXPECTED_SHA       merged-main source sha      (default: `sourceSha` from
+#                                                   report/release-manifest-1.0.0.json)
+#   RESTORE_MIN_SHA    disposable hand-port sha    (default: repo-history commit
+#                                                   `257b146e…`; not a manifest field)
 #   LATENCY_MAX_S      (b) threshold, seconds          (default 2)
 #   LATENCY_SAMPLES    samples per latency run         (default 5)
-#   FROZEN_DIST        frozen rollback dist path       (default backlog-cutover)
+#   FROZEN_DIST        frozen rollback dist path       (default: the frozen
+#                                                       `backlog-cutover` worktree,
+#                                                       resolved from the repo root)
 #   FROZEN_CAP_S       (c) rollback answer cap, sec    (default 120)
 #   FROZEN_MIN_RED_S   negative-control floor, sec     (default 12; packet baseline)
+#   RECORDED_DIST_SHA  clean merged-main dist sha256   (default: `distSha256` from
+#                                                       report/release-manifest-1.0.0.json)
 
 set -uo pipefail
 
-EXPECTED_SHA="${EXPECTED_SHA:-545d70253242d5b1c0571a64d357113da5e40312}"
+# ---- repo-relative anchors + release manifest -------------------------------
+# This script is checked in at entrypoint/backlog/report/, so its own location
+# yields the repo root without any hardcoded absolute path.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+RELEASE_MANIFEST="${RELEASE_MANIFEST:-$SCRIPT_DIR/release-manifest-1.0.0.json}"
+
+# manifest_field KEY -> the first quoted string value for KEY, or empty.
+manifest_field() {
+  [ -f "$RELEASE_MANIFEST" ] || return 0
+  sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" \
+    "$RELEASE_MANIFEST" | head -1
+}
+
+EXPECTED_SHA="${EXPECTED_SHA:-$(manifest_field sourceSha)}"
 RESTORE_MIN_SHA="${RESTORE_MIN_SHA:-257b146edb7292dc152792015a5bf1e9ed50067c}"
 LATENCY_MAX_S="${LATENCY_MAX_S:-2}"
 LATENCY_SAMPLES="${LATENCY_SAMPLES:-5}"
-FROZEN_DIST="${FROZEN_DIST:-/Users/nix/dev/node/adhd/.worktrees/backlog-cutover/entrypoint/backlog/dist/index.js}"
+FROZEN_DIST="${FROZEN_DIST:-$REPO_ROOT/.worktrees/backlog-cutover/entrypoint/backlog/dist/index.js}"
 FROZEN_CAP_S="${FROZEN_CAP_S:-120}"
 FROZEN_MIN_RED_S="${FROZEN_MIN_RED_S:-12}"
+RECORDED_DIST_SHA="${RECORDED_DIST_SHA:-$(manifest_field distSha256)}"
 QUERY_INPUT='{"limit":1}'
 BIN_NAME="adhd-backlog"
 
@@ -58,7 +81,7 @@ NEGATIVE_CONTROL=0
 case "${1:-}" in
   --negative-control) NEGATIVE_CONTROL=1 ;;
   --help | -h)
-    sed -n '2,40p' "$0"
+    sed -n '2,51p' "$0"
     exit 0
     ;;
   "") ;;
@@ -124,6 +147,12 @@ hdr "Environment"
 note "load average: $(uptime | sed 's/.*load averages*: *//')"
 note "cpu count   : $(sysctl -n hw.ncpu 2>/dev/null || echo '?')"
 note "thresholds  : latency<=${LATENCY_MAX_S}s  samples=${LATENCY_SAMPLES}  red>=${FROZEN_MIN_RED_S}s"
+note "manifest    : $RELEASE_MANIFEST"
+note "expected sha: ${EXPECTED_SHA:-<unset>}"
+note "frozen dist : $FROZEN_DIST"
+if [ -z "$EXPECTED_SHA" ]; then
+  fault "EXPECTED_SHA is unset (no env override, and no 'sourceSha' in the release manifest)"
+fi
 
 hdr "Resolve the live bin"
 LIVE_BIN="$(command -v "$BIN_NAME" 2>/dev/null || true)"
@@ -199,7 +228,7 @@ else
 fi
 
 # supporting evidence: dist fingerprint vs the recorded merged-main build
-RECORDED_DIST_SHA="a74a180e913c6d177a4485990e0b98fb45e470a20610dee0af6cdb41a8207668"
+# (`RECORDED_DIST_SHA` defaults to the manifest's `distSha256`; env-overridable.)
 LIVE_DIST_SHA="$(shasum -a 256 "$LIVE_DIST" | awk '{print $1}')"
 note "dist sha256 : $LIVE_DIST_SHA"
 if [ "$LIVE_DIST_SHA" = "$RECORDED_DIST_SHA" ]; then
@@ -255,11 +284,23 @@ fi
 if [ "$NEGATIVE_CONTROL" = "1" ]; then
   hdr "negative control: re-point bin at frozen, prove (b) goes RED, restore"
   LIVE_BIN_DIR="$(cd "$(dirname "$LIVE_BIN")" && pwd)"
-  PKG_LINK="$LIVE_BIN_DIR/../lib/node_modules/@adhd/backlog"
+  # Resolve the npm-global node_modules root portably — ask npm where it placed
+  # the global root rather than assuming the `<prefix>/lib/node_modules` layout,
+  # falling back to the conventional path only when npm is unavailable.
+  NPM_GLOBAL_ROOT="$(npm root -g 2>/dev/null || true)"
+  if [ -z "$NPM_GLOBAL_ROOT" ]; then
+    NPM_GLOBAL_ROOT="$(cd "$LIVE_BIN_DIR/../lib/node_modules" 2>/dev/null && pwd || true)"
+  fi
+  PKG_LINK=""
+  if [ -n "$NPM_GLOBAL_ROOT" ]; then
+    PKG_LINK="$NPM_GLOBAL_ROOT/@adhd/backlog"
+  fi
   ORIG_LINK="$(readlink "$PKG_LINK" 2>/dev/null || true)"
   FROZEN_PKG="$(dirname "$(dirname "$FROZEN_DIST")")"
 
-  if [ -z "$ORIG_LINK" ]; then
+  if [ -z "$NPM_GLOBAL_ROOT" ]; then
+    fault "cannot resolve the npm-global node_modules root (npm root -g unavailable; <bin>/../lib/node_modules missing)"
+  elif [ -z "$ORIG_LINK" ]; then
     fault "cannot read the package symlink to re-point: $PKG_LINK"
   elif [ ! -d "$FROZEN_PKG" ]; then
     fault "frozen package dir missing: $FROZEN_PKG"

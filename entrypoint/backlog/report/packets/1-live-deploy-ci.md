@@ -133,7 +133,7 @@
 - **Scope:** `scripts/acceptance/clean-room-smoke.sh` (sox-ecosystem), `scripts/build-index.ts`
   (sox-ecosystem), `tools/nx-plugins/build/executors/publish/release-publish.mjs`,
   `tools/nx-plugins/build/executors/version/impl.js`, `tools/nx-plugins/build/executors/verify/`.
-  Non-goals: the release *content*; the `assets` cache fix (LIVE-5).
+  Non-goals: the release _content_; the `assets` cache fix (LIVE-5).
 - **Inputs:** `ddaf7a82` (`--skip-nx-cache` + unscoped `run-many -t build` at `clean-room-smoke.sh:69,77`),
   `fa894329` (script rewrites `registry/index.json`, never restores → `build-index` refuses dirty tree),
   `c582e60d` (release cannot run from a clean worktree — `build-index.ts` resolves the **primary** root),
@@ -201,7 +201,7 @@
 
 ## PACKET LIVE-6: CI unblock — format:check, real-model tests, affected-set blind spot
 
-- **Goal:** CI is green and, more importantly, is *evidence* — its green means the affected tests ran.
+- **Goal:** CI is green and, more importantly, is _evidence_ — its green means the affected tests ran.
 - **Scope:** `.github/workflows/ci.yml`, `.github/workflows/pull-request.yml`, `.prettierrc`/
   `.prettierignore`, the real-model spec files, `tools/nx-plugins/lib/metrics.js`. Non-goals: fixing
   the code under test; the packed-consumer harness (LIVE-7).
@@ -395,13 +395,13 @@
 
 ## Coordination map (who owns what, to keep packets disjoint)
 
-| Surface | Owner packet | Do not touch in this domain |
-|---|---|---|
-| Embedding funnel / provider / pool / lock | embedding-domain architect | any `libs/data/embed/**` change |
-| `2039bb80` + `87799e1d` (version/health) | **Domain 2** (EMBED-2 / EMBED-4) — LIVE-9 is a pointer only | the `store-meta`/health-record implementation |
-| `PLUGIN_ARCHITECTURE.md` / `RAG-SPEC.md` funnel text | LIVE-8 | the funnel BUG's code fix (embedding domain) |
-| `tools/nx-plugins/build/**` | LIVE-3, LIVE-4, LIVE-11 (sequence: 3 → 4 → 11) | — |
-| Machine-global bin/MCP/skill | LIVE-2, LIVE-8 | — |
+| Surface                                              | Owner packet                                                | Do not touch in this domain                   |
+| ---------------------------------------------------- | ----------------------------------------------------------- | --------------------------------------------- |
+| Embedding funnel / provider / pool / lock            | embedding-domain architect                                  | any `libs/data/embed/**` change               |
+| `2039bb80` + `87799e1d` (version/health)             | **Domain 2** (EMBED-2 / EMBED-4) — LIVE-9 is a pointer only | the `store-meta`/health-record implementation |
+| `PLUGIN_ARCHITECTURE.md` / `RAG-SPEC.md` funnel text | LIVE-8                                                      | the funnel BUG's code fix (embedding domain)  |
+| `tools/nx-plugins/build/**`                          | LIVE-3, LIVE-4, LIVE-11 (sequence: 3 → 4 → 11)              | —                                             |
+| Machine-global bin/MCP/skill                         | LIVE-2, LIVE-8                                              | —                                             |
 
 **Cross-repo note:** `ddaf7a82`, `fa894329`, `524c4bef`, `cc03366b`, `c582e60d` live in
 `sox-ecosystem` / `PseudoSky- sox`, not `adhd`. Their packets need the sox-ecosystem owner's dispatch.

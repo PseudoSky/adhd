@@ -25,19 +25,19 @@ gitignored directory.
 **Contents — it is a MIX of two unrelated workstreams.**
 
 Four files are the real BUG-050 (`duplicate_candidate` carries empty
-`details` — the caller is told to "resolve one" but not *which*):
+`details` — the caller is told to "resolve one" but not _which_):
 
-| file | role |
-| --- | --- |
-| `entrypoint/backlog/src/client.ts` | `duplicateAction:'list'` dry-run; scored candidates; `threshold` propagation |
-| `entrypoint/backlog/src/model.ts` | `duplicateCandidateDetails`, `IListCandidatesResult`, `details.candidates`/`threshold`, corrected `action:'file'`→`duplicateAction:'file'` remediation text |
-| `entrypoint/backlog/src/store/crud.ts` | `DedupeScanHit` + `toDuplicateCandidateCards` — keeps the similarity score the scan already computed |
-| `packages/apigen/apigen-base-logical/src/lib/runmode.ts` | `encodeNode` passthrough for undeclared keys — the ENCODE-side mirror of `BUG-APIGEN-DECODE-UNKNOWN-KEY-STRIP-001` |
+| file                                                     | role                                                                                                                                                        |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `entrypoint/backlog/src/client.ts`                       | `duplicateAction:'list'` dry-run; scored candidates; `threshold` propagation                                                                                |
+| `entrypoint/backlog/src/model.ts`                        | `duplicateCandidateDetails`, `IListCandidatesResult`, `details.candidates`/`threshold`, corrected `action:'file'`→`duplicateAction:'file'` remediation text |
+| `entrypoint/backlog/src/store/crud.ts`                   | `DedupeScanHit` + `toDuplicateCandidateCards` — keeps the similarity score the scan already computed                                                        |
+| `packages/apigen/apigen-base-logical/src/lib/runmode.ts` | `encodeNode` passthrough for undeclared keys — the ENCODE-side mirror of `BUG-APIGEN-DECODE-UNKNOWN-KEY-STRIP-001`                                          |
 
 Three files are **reconcile worktree noise**, not BUG-050:
 `.githooks/pre-commit` (BUG-GATE-001 diagnostics — the target hunk text no
 longer exists), `.mcp.json` (an absolute `backlog-cutover` path — the live
-file now uses a portable relative path), and `AGENTS.md` (which *reverts* the
+file now uses a portable relative path), and `AGENTS.md` (which _reverts_ the
 `adhd-backlog` rename back to the stale bare `backlog`).
 
 **Reproducibility / applicability verdict (2026-09-23, vs `origin/main`
@@ -48,19 +48,19 @@ file now uses a portable relative path), and `AGENTS.md` (which *reverts* the
 2. The three BUG-050 backlog files (`client.ts`, `model.ts`, `crud.ts`) target
    the **pre-1.0.0 surface that PR #9 deleted** — those paths do not exist in
    the current tree at all.
-3. The BUG-050 *symptom* cannot occur on the current tree: the
+3. The BUG-050 _symptom_ cannot occur on the current tree: the
    `duplicate_candidate` error code has been removed entirely (it is not in
    `BACKLOG_EXIT_CODE`, and `rg duplicate_candidate` hits only comments). The
    abort path now returns `created:false` + `duplicateCandidates` in the
    SUCCESS arm (`write/create-issue.ts:723`), where `duplicateCandidates` is a
-   *declared* outcome field and therefore survives encode. The only keys ever
+   _declared_ outcome field and therefore survives encode. The only keys ever
    placed in `error.details` today are `retryable`/`retryAfterMs`
    (`api.ts:344-351`), both declared in `IOutcomeErrorDetails`, so `encodeNode`
    never drops them.
 4. The backlog item for the defect is **RESOLVED**:
-   `5efca7e0-25f8-427e-a4b5-a9affd3639e3` — *"create's duplicate_candidate
+   `5efca7e0-25f8-427e-a4b5-a9affd3639e3` — _"create's duplicate_candidate
    error reports a COUNT but returns empty details — the caller is told to
-   'resolve one' without being told which"*.
+   'resolve one' without being told which"_.
 
 **The one still-live fragment.** `runmode.ts`'s `encodeNode` object arm
 (`runmode.ts:122-145`) still projects ONLY declared `properties` and discards

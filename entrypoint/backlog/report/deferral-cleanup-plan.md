@@ -30,17 +30,17 @@ and are reclassified `(e)`.
 
 Live-uid corrections:
 
-| Hand-off prefix | Live item | Why |
-|---|---|---|
-| `b200542b` | `2e117b1a` | superseded (index desync) |
-| `d4b2cc68` | `4ba0d969` | superseded (WAL fold) |
-| `bfe3f770` | `be760b45` (orig `edc4f456`) | superseded chain (EForeignSqliteSidecar) |
-| `6d332464` | `53eb67a7` | superseded (contamination) |
-| `c85c820e` | `e679f8f0` | superseded (orphaned rows) |
-| `87ef8bf9` | `e9a094be` | superseded (scratch projects) |
-| `2b607b26` | `836d4209` | closed by Seg G |
-| `4290b63a` | `4290b63a` (live) | chain `3c376607→29b4578d→6defe186→4290b63a` |
-| `92b82a73` | `92b82a73` (live) | — |
+| Hand-off prefix | Live item                    | Why                                         |
+| --------------- | ---------------------------- | ------------------------------------------- |
+| `b200542b`      | `2e117b1a`                   | superseded (index desync)                   |
+| `d4b2cc68`      | `4ba0d969`                   | superseded (WAL fold)                       |
+| `bfe3f770`      | `be760b45` (orig `edc4f456`) | superseded chain (EForeignSqliteSidecar)    |
+| `6d332464`      | `53eb67a7`                   | superseded (contamination)                  |
+| `c85c820e`      | `e679f8f0`                   | superseded (orphaned rows)                  |
+| `87ef8bf9`      | `e9a094be`                   | superseded (scratch projects)               |
+| `2b607b26`      | `836d4209`                   | closed by Seg G                             |
+| `4290b63a`      | `4290b63a` (live)            | chain `3c376607→29b4578d→6defe186→4290b63a` |
+| `92b82a73`      | `92b82a73` (live)            | —                                           |
 
 ---
 
@@ -49,66 +49,66 @@ Live-uid corrections:
 Classes: **(a)** covered by an existing spec/batch/queue · **(b)** actionable now ·
 **(c)** needs upstream/sox work · **(d)** needs a user decision · **(e)** stale/closeable.
 
-| uid (live) | Item | Class | Batch / owner |
-|---|---|---|---|
-| `46d04e3f` | Live latency: frozen build 12–79s/query (eager semantic + `iter` full-corpus probe) | **a** | **L0 Deployment/restore** |
-| `42fc1822` | Live build 31 commits behind branch; fixes undeployed | **a** | **L0 Deployment/restore** |
-| `4290b63a` | Deployed `get` body-less + `update` body supersedes UID + citation lockout (38/40 projects path-less) | **a** (+d) | **L0** (branch `7875d848`); see D2 |
-| `bfe3f770`→`be760b45` | `EForeignSqliteSidecar` reads blocked by peer | **a** | **L0** (adapter 0.9.2, fixed upstream `6f9ec560`) |
-| `276b8f2a` | One-shot embed lost + audit unrecorded | **a** | **embed-durability-fix-spec.md** (M2) |
-| `e769bdc4` | Only default-running real-model spec deleted | **a** | **embed-durability-fix-spec.md** Segment F (+ M1 restore) |
-| `b200542b`→`2e117b1a` | Index desync / `probeBtreeIndexes` torn read + REINDEX race | **a** | **sox-store-adapter batch 0.10.0** (fix 1) |
-| `d4b2cc68`→`4ba0d969` | WAL unlinked/replaced → silent write-loss | **a** | **sox-store-adapter batch 0.10.0** (fix 2) |
-| `d677a575` | `close()` doesn't drain `_inFlightOps` | **a** | **sox-store-adapter batch 0.10.0** (fix 3) |
-| `0ab0078a` | `isDatabaseError` misses closed-connection `TypeError` | **a** | **sox-store-adapter batch 0.10.0** (fix 4) |
-| `82468ca7` | Config-isolation leak (global layer unconditional) | **a** (+d) | **fix/backlog-test-isolation `59b08868`** (HOME redirect); root-cause decision D3 |
-| `aede6810` | Citation of a directory (EISDIR) throws instead of degrading | **b** | **L4 backlog wave** |
-| `92b82a73` | `gitContext` rendered raw into markdown `Citations:` block | **b** | **L4 backlog wave** |
-| `81de39f7` | CI affected set excluded `backlog:test` | **b** | **L5 repo tooling** |
-| `f80bf841` | `apigen-java` targets race in shared basedir | **b** | **L5 repo tooling** |
-| `82470ae8` | HOME-redirect invariant duplicated ×10 specs, no guard | **b** | **L4 backlog wave** |
-| `348cc700` | Fastembed lock has no service identity | **c** | **L2 sox publish** (done at HEAD, held) |
-| `1c9e40d5` | `recursive_cte_probe_failed` 2849×/day | **c** | **L1 sox-store-adapter** (fold as fix 5) |
-| `06922862` | Side-effectful read-only opens + sidecar churn | **c** | **L1 sox-store-adapter** (fold as fix 6 / 0.10.1) |
-| `8b05358e` | `registry/index.json` checksum drift armed | **c** | **L2 sox ops** (sync at deploy) |
-| `148acecb` | `memory-core` publishable surface drift, no changeset | **c** | **L2 sox** (changeset) |
-| `BUG-HYBRID-SEARCH-OPTIONAL-LOADABILITY-001` (`e46b7ca0`) | hybrid-search keeps native chain mandatory | **d** | **L3 hybrid-search**; ADR route decision D1 |
-| `6d332464` | Contamination (superseded) | **e** | close → `53eb67a7` |
-| `c85c820e` | Orphaned-row gap (superseded) | **e** | close → `e679f8f0` |
-| `87ef8bf9` | Scratch projects (superseded) | **e** | close → `e9a094be` |
-| `40d9da12` | `cli-envelope.spec.ts` afterEach no-op → tmp leak | **e** | already fixed in-tree (`cli-envelope.spec.ts:151-153` `afterAll` rmSync) |
-| read-only-CLI-queries-mutate-the-store (unfiled) | reads mutate the store | **e** | **duplicate of `06922862`** — do not file |
+| uid (live)                                                | Item                                                                                                  | Class      | Batch / owner                                                                     |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------- |
+| `46d04e3f`                                                | Live latency: frozen build 12–79s/query (eager semantic + `iter` full-corpus probe)                   | **a**      | **L0 Deployment/restore**                                                         |
+| `42fc1822`                                                | Live build 31 commits behind branch; fixes undeployed                                                 | **a**      | **L0 Deployment/restore**                                                         |
+| `4290b63a`                                                | Deployed `get` body-less + `update` body supersedes UID + citation lockout (38/40 projects path-less) | **a** (+d) | **L0** (branch `7875d848`); see D2                                                |
+| `bfe3f770`→`be760b45`                                     | `EForeignSqliteSidecar` reads blocked by peer                                                         | **a**      | **L0** (adapter 0.9.2, fixed upstream `6f9ec560`)                                 |
+| `276b8f2a`                                                | One-shot embed lost + audit unrecorded                                                                | **a**      | **embed-durability-fix-spec.md** (M2)                                             |
+| `e769bdc4`                                                | Only default-running real-model spec deleted                                                          | **a**      | **embed-durability-fix-spec.md** Segment F (+ M1 restore)                         |
+| `b200542b`→`2e117b1a`                                     | Index desync / `probeBtreeIndexes` torn read + REINDEX race                                           | **a**      | **sox-store-adapter batch 0.10.0** (fix 1)                                        |
+| `d4b2cc68`→`4ba0d969`                                     | WAL unlinked/replaced → silent write-loss                                                             | **a**      | **sox-store-adapter batch 0.10.0** (fix 2)                                        |
+| `d677a575`                                                | `close()` doesn't drain `_inFlightOps`                                                                | **a**      | **sox-store-adapter batch 0.10.0** (fix 3)                                        |
+| `0ab0078a`                                                | `isDatabaseError` misses closed-connection `TypeError`                                                | **a**      | **sox-store-adapter batch 0.10.0** (fix 4)                                        |
+| `82468ca7`                                                | Config-isolation leak (global layer unconditional)                                                    | **a** (+d) | **fix/backlog-test-isolation `59b08868`** (HOME redirect); root-cause decision D3 |
+| `aede6810`                                                | Citation of a directory (EISDIR) throws instead of degrading                                          | **b**      | **L4 backlog wave**                                                               |
+| `92b82a73`                                                | `gitContext` rendered raw into markdown `Citations:` block                                            | **b**      | **L4 backlog wave**                                                               |
+| `81de39f7`                                                | CI affected set excluded `backlog:test`                                                               | **b**      | **L5 repo tooling**                                                               |
+| `f80bf841`                                                | `apigen-java` targets race in shared basedir                                                          | **b**      | **L5 repo tooling**                                                               |
+| `82470ae8`                                                | HOME-redirect invariant duplicated ×10 specs, no guard                                                | **b**      | **L4 backlog wave**                                                               |
+| `348cc700`                                                | Fastembed lock has no service identity                                                                | **c**      | **L2 sox publish** (done at HEAD, held)                                           |
+| `1c9e40d5`                                                | `recursive_cte_probe_failed` 2849×/day                                                                | **c**      | **L1 sox-store-adapter** (fold as fix 5)                                          |
+| `06922862`                                                | Side-effectful read-only opens + sidecar churn                                                        | **c**      | **L1 sox-store-adapter** (fold as fix 6 / 0.10.1)                                 |
+| `8b05358e`                                                | `registry/index.json` checksum drift armed                                                            | **c**      | **L2 sox ops** (sync at deploy)                                                   |
+| `148acecb`                                                | `memory-core` publishable surface drift, no changeset                                                 | **c**      | **L2 sox** (changeset)                                                            |
+| `BUG-HYBRID-SEARCH-OPTIONAL-LOADABILITY-001` (`e46b7ca0`) | hybrid-search keeps native chain mandatory                                                            | **d**      | **L3 hybrid-search**; ADR route decision D1                                       |
+| `6d332464`                                                | Contamination (superseded)                                                                            | **e**      | close → `53eb67a7`                                                                |
+| `c85c820e`                                                | Orphaned-row gap (superseded)                                                                         | **e**      | close → `e679f8f0`                                                                |
+| `87ef8bf9`                                                | Scratch projects (superseded)                                                                         | **e**      | close → `e9a094be`                                                                |
+| `40d9da12`                                                | `cli-envelope.spec.ts` afterEach no-op → tmp leak                                                     | **e**      | already fixed in-tree (`cli-envelope.spec.ts:151-153` `afterAll` rmSync)          |
+| read-only-CLI-queries-mutate-the-store (unfiled)          | reads mutate the store                                                                                | **e**      | **duplicate of `06922862`** — do not file                                         |
 
 **Counts (27 hand-off items):** (a) **11** · (b) **5** · (c) **5** · (d) **1** · (e) **5**.
 
 Cross-referenced extras (filed during the same incident, not in the hand-off list):
 
-| uid | Item | Class | Batch |
-|---|---|---|---|
-| `53eb67a7` | Active production contamination (~20 rows/gate run) | **d** | **L6 cleanup** (destructive, user-gated) |
-| `e679f8f0` | Orphaned test rows invisible to `view:list` | **b** | L6 (+ vocabulary guard already shipped) |
-| `e9a094be` | Historical scratch projects in production | **d** | **L6 cleanup** |
-| `8a09824c` | `sox-embedding-provider` `^0.4.1` vs `^0.5.0` — two copies | **b** | **L4 backlog wave** |
-| `2b1d8a22` | Review-fix batch (predicate ×3, test teeth, cap-miss log) | **b** (partial e) | **L4 backlog wave** |
-| `a934e089` | `citationRequiresSha` path-less waiver is a silent no-op | **b** | **L4 backlog wave** |
-| `1e12507f` | `CONTRACT.md` line-reference drift | **b** | **L4 backlog wave** |
-| `cd34ba0d` | Embedding-usage gate break | **e** | fixed `4bf902fc` |
-| `2b607b26` | Stale comments | **e** | closed `836d4209` |
-| `d2f11ab6` | Real-HOME opt-out in `install.e2e.spec` | **e** | RESOLVED (`59b08868`) |
-| `e68be52c` | One-shot embed loss | **e** | DUPLICATE → merged into `276b8f2a` |
-| `edc4f456`, `6defe186` | Superseded intermediates | **e** | close |
+| uid                    | Item                                                       | Class             | Batch                                    |
+| ---------------------- | ---------------------------------------------------------- | ----------------- | ---------------------------------------- |
+| `53eb67a7`             | Active production contamination (~20 rows/gate run)        | **d**             | **L6 cleanup** (destructive, user-gated) |
+| `e679f8f0`             | Orphaned test rows invisible to `view:list`                | **b**             | L6 (+ vocabulary guard already shipped)  |
+| `e9a094be`             | Historical scratch projects in production                  | **d**             | **L6 cleanup**                           |
+| `8a09824c`             | `sox-embedding-provider` `^0.4.1` vs `^0.5.0` — two copies | **b**             | **L4 backlog wave**                      |
+| `2b1d8a22`             | Review-fix batch (predicate ×3, test teeth, cap-miss log)  | **b** (partial e) | **L4 backlog wave**                      |
+| `a934e089`             | `citationRequiresSha` path-less waiver is a silent no-op   | **b**             | **L4 backlog wave**                      |
+| `1e12507f`             | `CONTRACT.md` line-reference drift                         | **b**             | **L4 backlog wave**                      |
+| `cd34ba0d`             | Embedding-usage gate break                                 | **e**             | fixed `4bf902fc`                         |
+| `2b607b26`             | Stale comments                                             | **e**             | closed `836d4209`                        |
+| `d2f11ab6`             | Real-HOME opt-out in `install.e2e.spec`                    | **e**             | RESOLVED (`59b08868`)                    |
+| `e68be52c`             | One-shot embed loss                                        | **e**             | DUPLICATE → merged into `276b8f2a`       |
+| `edc4f456`, `6defe186` | Superseded intermediates                                   | **e**             | close                                    |
 
 ---
 
 ## 2. (a) Already covered — confirm + cross-reference
 
-| Item | Covered by | Action |
-|---|---|---|
+| Item                                           | Covered by                                                                                                                                                                                                                          | Action                                                                                                                               |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `46d04e3f`, `42fc1822`, `4290b63a`, `bfe3f770` | **L0 Deployment/restore** — `report/cutover-execution-plan.md` §B + `report/cli-deployment-separation-spec.md` §3–4; branch fixes `7875d848` (citation), `d4a72009` (bounded `hasVectors`), `a8906d3d` (dep bumps), adapter `0.9.2` | Deploy (see §7). The minimal cherry-pick **failed pre-flight**; durable path = full re-cutover from branch tip, interim = hand-port. |
-| `276b8f2a` | `report/embed-durability-fix-spec.md` §3–6 (close-time drain, loud+recorded) | Implement as written; it is M2. |
-| `e769bdc4` | `report/embed-durability-fix-spec.md` **Segment F** (restores real-model coverage) + M1 restore | Implement with M2; no separate plan. |
-| `b200542b`, `d4b2cc68`, `d677a575`, `0ab0078a` | `docs/plan/store-adapter-batch-0.10.0/SPEC.md` (fixes 1–4) | One changeset/publish (L1). |
-| `82468ca7` | `fix/backlog-test-isolation` `59b08868` (HOME redirect, 10 spec files) | Push/merge (human-gated); root-cause decision D3. |
+| `276b8f2a`                                     | `report/embed-durability-fix-spec.md` §3–6 (close-time drain, loud+recorded)                                                                                                                                                        | Implement as written; it is M2.                                                                                                      |
+| `e769bdc4`                                     | `report/embed-durability-fix-spec.md` **Segment F** (restores real-model coverage) + M1 restore                                                                                                                                     | Implement with M2; no separate plan.                                                                                                 |
+| `b200542b`, `d4b2cc68`, `d677a575`, `0ab0078a` | `docs/plan/store-adapter-batch-0.10.0/SPEC.md` (fixes 1–4)                                                                                                                                                                          | One changeset/publish (L1).                                                                                                          |
+| `82468ca7`                                     | `fix/backlog-test-isolation` `59b08868` (HOME redirect, 10 spec files)                                                                                                                                                              | Push/merge (human-gated); root-cause decision D3.                                                                                    |
 
 ---
 
@@ -118,6 +118,7 @@ All (b) items below are **targeted** — no blanket `nx affected`. Unless stated
 verify with `npx nx build backlog` + `npx nx lint backlog` + the named spec(s) only.
 
 ### B1 — `aede6810` · EISDIR citation degrade
+
 - **Files:** `entrypoint/backlog/src/write/create-issue.ts:359-361`,
   `entrypoint/backlog/src/write/transition.ts:~244-250`,
   `entrypoint/backlog/tools/etl/citation.ts:91-102`.
@@ -132,6 +133,7 @@ verify with `npx nx build backlog` + `npx nx lint backlog` + the named spec(s) o
 - **Segments:** 3 edits + 1 new export. Read ~120 tok, out ~90 tok. No deps.
 
 ### B2 — `92b82a73` · sanitize/bound `gitContext`
+
 - **Files:** `src/query/markdown.ts:44-58` (render), `src/write/create-issue.ts:598-603`
   and `src/write/transition.ts:551-556` (write-time cap).
 - **Change:** a `sanitizeGitContext(s)` that (a) rejects/escapes `]`, `[`, CR/LF
@@ -144,6 +146,7 @@ verify with `npx nx build backlog` + `npx nx lint backlog` + the named spec(s) o
 - **Segments:** 3 files. Read ~90 tok, out ~80 tok. No deps.
 
 ### B3 — `82470ae8` · one shared isolated-spawn helper + guard
+
 - **Files:** new `src/test/helpers/spawn-isolated-bin.ts` (or extend
   `src/test/helpers/spawn-backlog-bin.ts`); migrate the 15 spawn sites across
   `cli.spec.ts`, `cli-envelope.spec.ts`, `stats-surface.spec.ts`,
@@ -159,6 +162,7 @@ verify with `npx nx build backlog` + `npx nx lint backlog` + the named spec(s) o
   Depends on nothing; independent of the other (b) items.
 
 ### B4 — `2b1d8a22` + `a934e089` + `8a09824c` + `1e12507f` (fold into the queued review-fix batch)
+
 - **`2b1d8a22`:** (1) delete the inline predicate copies at
   `create-issue.ts:333` / `transition.ts:240`, import `projectHasKnownPath`;
   (2) give `create-issue.spec.ts:256`'s "nothing is written" claim a real
@@ -174,10 +178,11 @@ verify with `npx nx build backlog` + `npx nx lint backlog` + the named spec(s) o
 - **`1e12507f`:** regenerate the six `errors.ts` anchors in
   `src/write/CONTRACT.md` (doc-only).
 - **Test:** `npx vitest run src/write/catalog.spec.ts src/write/create-issue.spec.ts
-  src/write/transition.spec.ts`; `node tools/gate/embedding-usage-gate.mjs`.
+src/write/transition.spec.ts`; `node tools/gate/embedding-usage-gate.mjs`.
 - **Segments:** 4 small edits; ~1 commit. Read ~200 tok, out ~200 tok.
 
 ### B5 — `81de39f7` · CI blind spot (repo tooling)
+
 - **File:** `.github/workflows/ci.yml:54`.
 - **Change:** guarantee `backlog:test` actually runs — add an explicit
   `npx nx run backlog:test` step (or correct the `nrwl/nx-set-shas` base/head so
@@ -188,6 +193,7 @@ verify with `npx nx build backlog` + `npx nx lint backlog` + the named spec(s) o
 - **Segments:** 1 file, ~5 lines.
 
 ### B6 — `f80bf841` · `apigen-java` target race (repo tooling)
+
 - **File:** `packages/apigen/java/project.json`.
 - **Change:** narrow `package.outputs` from `["{projectRoot}/target"]` to
   `["{projectRoot}/target/*.jar"]` so `build`/`package`/`test` no longer claim
@@ -202,6 +208,7 @@ verify with `npx nx build backlog` + `npx nx lint backlog` + the named spec(s) o
 ## 4. (c) Needs upstream / sox work
 
 ### L1 — `@adhd/sox-store-adapter` (one changeset, one publish)
+
 Implement `docs/plan/store-adapter-batch-0.10.0/SPEC.md` (fixes 1–4: probe
 atomicity, WAL fold, close drain, taxonomy), **and fold two more same-package
 items** so they ship in the same 0.10.0 (the standing directive is one
@@ -224,6 +231,7 @@ changeset/publish per sox package):
 smoke-test. This is a **deployment step**, not part of the sox changeset.
 
 ### L2 — sox publish / ops (held, low effort)
+
 - **`348cc700`:** the BL-432 service identity **is already implemented at sox HEAD**
   (`fastembedLock.ts:64,83,92`; `sharedFastembedProcess.ts:140,171,388-421`;
   red→green tests in `fastembedProcessHost-lock.spec.ts`). Publish
@@ -238,6 +246,7 @@ smoke-test. This is a **deployment step**, not part of the sox changeset.
   `enrich`/`neardup`/`supersession-chain` `.d.ts` surface (0.10.2 → 0.10.3).
 
 ### L3 — `@adhd/sox-hybrid-search` (decision-gated)
+
 - **`BUG-HYBRID-SEARCH-OPTIONAL-LOADABILITY-001` (`e46b7ca0`):** implement
   `docs/spec/hybrid-search-optional-loadability-spec.md` (move the heavy two to
   `optionalDependencies`; lazy non-literal dynamic import in `cross-encoder.ts`),
@@ -271,18 +280,18 @@ smoke-test. This is a **deployment step**, not part of the sox changeset.
 
 ## 6. (e) Stale / closeable — close with evidence, no code
 
-| uid | Close reason |
-|---|---|
-| `6d332464` | superseded → live `53eb67a7` |
-| `c85c820e` | superseded → live `e679f8f0` |
-| `87ef8bf9` | superseded → live `e9a094be` |
-| `40d9da12` | already fixed in-tree — `cli-envelope.spec.ts:151-153` has `afterAll` rmSync (verified by read) |
-| read-only-CLI-queries-mutate-the-store | **duplicate of `06922862`** — file as a dedupe note, do not create |
-| `cd34ba0d` | fixed `4bf902fc` (gates CLEAN) |
-| `2b607b26` | closed `836d4209` |
-| `d2f11ab6` | RESOLVED (`59b08868`) |
-| `e68be52c` | DUPLICATE → merged into `276b8f2a` |
-| `edc4f456`, `6defe186` | superseded intermediates |
+| uid                                    | Close reason                                                                                    |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `6d332464`                             | superseded → live `53eb67a7`                                                                    |
+| `c85c820e`                             | superseded → live `e679f8f0`                                                                    |
+| `87ef8bf9`                             | superseded → live `e9a094be`                                                                    |
+| `40d9da12`                             | already fixed in-tree — `cli-envelope.spec.ts:151-153` has `afterAll` rmSync (verified by read) |
+| read-only-CLI-queries-mutate-the-store | **duplicate of `06922862`** — file as a dedupe note, do not create                              |
+| `cd34ba0d`                             | fixed `4bf902fc` (gates CLEAN)                                                                  |
+| `2b607b26`                             | closed `836d4209`                                                                               |
+| `d2f11ab6`                             | RESOLVED (`59b08868`)                                                                           |
+| `e68be52c`                             | DUPLICATE → merged into `276b8f2a`                                                              |
+| `edc4f456`, `6defe186`                 | superseded intermediates                                                                        |
 
 Also: `2b1d8a22` sub-item (3) is stale — `catalog.spec.ts:25-62` already unit-tests
 `projectHasKnownPath`.
@@ -295,30 +304,30 @@ Standing directives honoured: **one changeset/publish per sox package**;
 backlog-side work folds into the wave fix round; nothing dispatches per-item when
 it can batch; sox edits are authorized (publish granted for sox packages).
 
-| Lane | Contents | Vehicle | Gate |
-|---|---|---|---|
-| **L0 — Deployment / restore** | `46d04e3f`, `42fc1822`, `4290b63a`, `bfe3f770` | full re-cutover from branch tip (durable) / hand-port (interim), per `report/cutover-execution-plan.md` + `cli-deployment-separation-spec.md` §3–4 | **user-gated** (deploy/restart) |
-| **L1 — sox-store-adapter 0.10.0** | batch SPEC fixes 1–4 + `1c9e40d5` (5) + `06922862` (6) | one changeset → `0.10.0` → publish → backlog pin bump + rebuild | publish allowed; deployment step user-gated |
-| **L2 — sox publish/ops** | `348cc700` (publish 0.3.1/0.5.1), `8b05358e` (registry sync at deploy), `148acecb` (memory-core changeset) | changesets | publish allowed |
-| **L3 — hybrid-search 0.4.9** | `e46b7ca0` | spec + publish | **blocked on D1** |
-| **L4 — backlog wave** | `aede6810`, `92b82a73`, `82470ae8`, `2b1d8a22`, `a934e089`, `8a09824c`, `1e12507f` | one wave commit on `feat/backlog-hard-replacement`; one `@adhd/backlog` bump | review pass before push |
-| **L5 — repo tooling** | `81de39f7`, `f80bf841` | 2 tiny commits | independent |
-| **L6 — contamination cleanup** | `53eb67a7`, `e679f8f0`, `e9a094be` | destructive; report-first per ADR-0014 | **user-gated** |
-| **L7 — housekeeping** | §6 closes | graph transitions | none |
+| Lane                              | Contents                                                                                                   | Vehicle                                                                                                                                            | Gate                                        |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| **L0 — Deployment / restore**     | `46d04e3f`, `42fc1822`, `4290b63a`, `bfe3f770`                                                             | full re-cutover from branch tip (durable) / hand-port (interim), per `report/cutover-execution-plan.md` + `cli-deployment-separation-spec.md` §3–4 | **user-gated** (deploy/restart)             |
+| **L1 — sox-store-adapter 0.10.0** | batch SPEC fixes 1–4 + `1c9e40d5` (5) + `06922862` (6)                                                     | one changeset → `0.10.0` → publish → backlog pin bump + rebuild                                                                                    | publish allowed; deployment step user-gated |
+| **L2 — sox publish/ops**          | `348cc700` (publish 0.3.1/0.5.1), `8b05358e` (registry sync at deploy), `148acecb` (memory-core changeset) | changesets                                                                                                                                         | publish allowed                             |
+| **L3 — hybrid-search 0.4.9**      | `e46b7ca0`                                                                                                 | spec + publish                                                                                                                                     | **blocked on D1**                           |
+| **L4 — backlog wave**             | `aede6810`, `92b82a73`, `82470ae8`, `2b1d8a22`, `a934e089`, `8a09824c`, `1e12507f`                         | one wave commit on `feat/backlog-hard-replacement`; one `@adhd/backlog` bump                                                                       | review pass before push                     |
+| **L5 — repo tooling**             | `81de39f7`, `f80bf841`                                                                                     | 2 tiny commits                                                                                                                                     | independent                                 |
+| **L6 — contamination cleanup**    | `53eb67a7`, `e679f8f0`, `e9a094be`                                                                         | destructive; report-first per ADR-0014                                                                                                             | **user-gated**                              |
+| **L7 — housekeeping**             | §6 closes                                                                                                  | graph transitions                                                                                                                                  | none                                        |
 
 **Recommended execution order (dependencies flagged):**
 
-1. **L7** — close the stale/superseded items now (no code). *Unblocks nothing; removes noise.*
+1. **L7** — close the stale/superseded items now (no code). _Unblocks nothing; removes noise._
 2. **L0-step-1** — deploy the **branch tip** (clears `46d04e3f`, `42fc1822`,
-   `4290b63a`, `bfe3f770`). *User-gated.* Prefer this over the interim hand-port:
+   `4290b63a`, `bfe3f770`). _User-gated._ Prefer this over the interim hand-port:
    it carries the lazy semantic seam + bounded `hasVectors` + citation fix +
    adapter `0.9.2`. Then run the Phase 0.1–0.3 relocation so production leaves the
    worktree.
 3. **L4** — backlog wave (independent of sox). If a later re-cutover is chosen,
    L4 must be committed **before** that re-cutover so its fixes are carried.
-4. **L1** — sox-store-adapter 0.10.0 (batch + fixes 5/6). *Depends on nothing;
+4. **L1** — sox-store-adapter 0.10.0 (batch + fixes 5/6). _Depends on nothing;
    but its backlog pin-bump + rebuild is a **second** deployment step, so sequence
-   it after L0-step-1 to avoid two deploys in one window if possible.*
+   it after L0-step-1 to avoid two deploys in one window if possible._
 5. **L2** — sox publish 0.3.1/0.5.1 + memory-core changeset + registry sync
    (batch the release train with L1's publish). Then backlog reinstall + verify
    no BL-331/BL-404.
@@ -346,7 +355,7 @@ it can batch; sox edits are authorized (publish granted for sox packages).
 - **Relocation** (`cli-deployment-separation-spec.md` Phase 0.1–0.3): move bytes
   to `~/.adhd/backlog/current`, create the canonical `adhd-backlog` bin, quarantine
   the ambiguous `backlog` shim, repoint `.mcp.json` + `~/.claude.json` + opencode.
-  *User-gated (machine-global).*
+  _User-gated (machine-global)._
 - **Verification (real CLI, exit-code keyed):** a real semantic query + a real
   citation write must both succeed; `rg '\.worktrees/backlog'` must find nothing
   in live pointers; item count ≈ parity baseline.
@@ -370,6 +379,6 @@ it can batch; sox edits are authorized (publish granted for sox packages).
 
 ---
 
-*No code was written or modified by this pass. The `.worktrees/backlog-v2` tree was
+_No code was written or modified by this pass. The `.worktrees/backlog-v2` tree was
 read-only throughout. All uids resolved against the live graph (1701 items,
-project `7ee5721e`).*
+project `7ee5721e`)._

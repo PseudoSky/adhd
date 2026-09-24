@@ -24,39 +24,39 @@ The seam is stated explicitly in §7.
 Every claim below is from a file read, not inferred. Line references are to the
 `.worktrees/backlog-v2` tree unless a path names the main repo.
 
-| Evidence | Location |
-|---|---|
-| `IOverlapAxis = 'file' \| 'project' \| 'component' \| 'author'` | `src/query/types.ts:268` |
-| `overlapAxis` / `overlapUids` inputs; `IOverlapGroup` output | `src/query/types.ts:299-301,330-334` |
-| The 10 `IIssueView` values | `src/query/types.ts:254-264` |
-| `IIssueQueryResult` union | `src/query/types.ts:370-381` |
-| `IIssueFilter` (`component` at :209; `projectPath` at :233) | `src/query/types.ts:205-237` |
-| Registry read types (`IComponentSummary.path`, `IProjectSummary.path/repoUrl`) | `src/query/types.ts:387-411` |
-| `IIssueCitation` (`file`/`lines`/`sha`) | `src/query/types.ts:108-125` |
-| `IIssueCard` (single `component`) | `src/query/types.ts:159-190` |
-| `queryOverlap` — `file` axis reads `c.metadata.target`; `project`/`component` via `resolveIssuePlacement` | `src/query/query.ts:889-968` |
-| `resolveIssuePlacement` — single `owns_component` → `owns_project` | `src/query/resolve.ts:228-249` |
-| Direction-aware edge filter resolution (reads the `edge_kind` row) | `src/query/resolve.ts:286-329` |
-| `resolveCitations` — maps citation node `meta.target`→`file`, `meta.line`→`lines` | `src/query/card.ts:110-131` |
-| `ICitationInput {file, lines?, context?, symbol?, blastRadius?}` | `src/write/create-issue.ts:74-81` |
-| Citation node write (`meta:{target, target_type:'path', sha, line, …}`) + `has_citation` edge | `src/write/create-issue.ts:928-966` |
-| Citation write on `transition` | `src/write/transition.ts:88,135,520,540` |
-| `EDGE_KIND_TABLE` — the 17 declared rels | `src/write/catalog.ts:311-409` |
-| `resolveEdgeKindTx` — self-heals a row from the table | `src/write/catalog.ts:452-509` |
-| `projectHasKnownPath` — reads `project.metadata.path` | `src/write/catalog.ts:603-628` |
-| `upsertProject` by `name` (mints `(root)` component) | `src/write/catalog.ts:655-707` |
-| `upsertComponent` by `(project,name)` with `path` | `src/write/catalog.ts:839-950` |
-| `upsertLocation` by `(component,locType,value)` | `src/write/catalog.ts:992-1146` |
-| `IWriteEdgeTxInput` carries `metadata?` + `weight?` | `src/write/tx.ts:506-528` |
-| `IEdgeKindRule {rel, sourceKind, targetKind, multiplicity}` | `src/write/tx.ts:496-504` |
-| `OPEN_TYPE_POLICY` — `validateRel` is permissive | `src/store/type-policy.ts:21-31` |
-| `carryForwardResidualEdgesTx` — both directions, copies `origin`/`meta`; excludes 5 rels | `src/write/update.ts:536-637,977-982` |
-| `relate` — issue↔issue only, closed 5-rel set | `src/write/relate.ts:86-111` |
-| `relate` cross-project gap resolved by construction | `src/write/relate.ts:52-65` |
-| Skill "filing rule"; "No other component is ever auto-created" | `skill/SKILL.md:333-376` |
-| Repo-string split, measured (`PseudoSky/adhd:384`, `adhd:57`) | main `docs/product/dispatcher-platform/GAP-MATRIX.md:160` |
-| v2 ETL reconciles the repo fork to ONE `project` row | main `entrypoint/backlog/DATA_MODEL_v2.md:93-96,216-254` |
-| The re-cutover step this must land before | main `report/deferral-cleanup-plan.md:328-333` |
+| Evidence                                                                                                  | Location                                                  |
+| --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `IOverlapAxis = 'file' \| 'project' \| 'component' \| 'author'`                                           | `src/query/types.ts:268`                                  |
+| `overlapAxis` / `overlapUids` inputs; `IOverlapGroup` output                                              | `src/query/types.ts:299-301,330-334`                      |
+| The 10 `IIssueView` values                                                                                | `src/query/types.ts:254-264`                              |
+| `IIssueQueryResult` union                                                                                 | `src/query/types.ts:370-381`                              |
+| `IIssueFilter` (`component` at :209; `projectPath` at :233)                                               | `src/query/types.ts:205-237`                              |
+| Registry read types (`IComponentSummary.path`, `IProjectSummary.path/repoUrl`)                            | `src/query/types.ts:387-411`                              |
+| `IIssueCitation` (`file`/`lines`/`sha`)                                                                   | `src/query/types.ts:108-125`                              |
+| `IIssueCard` (single `component`)                                                                         | `src/query/types.ts:159-190`                              |
+| `queryOverlap` — `file` axis reads `c.metadata.target`; `project`/`component` via `resolveIssuePlacement` | `src/query/query.ts:889-968`                              |
+| `resolveIssuePlacement` — single `owns_component` → `owns_project`                                        | `src/query/resolve.ts:228-249`                            |
+| Direction-aware edge filter resolution (reads the `edge_kind` row)                                        | `src/query/resolve.ts:286-329`                            |
+| `resolveCitations` — maps citation node `meta.target`→`file`, `meta.line`→`lines`                         | `src/query/card.ts:110-131`                               |
+| `ICitationInput {file, lines?, context?, symbol?, blastRadius?}`                                          | `src/write/create-issue.ts:74-81`                         |
+| Citation node write (`meta:{target, target_type:'path', sha, line, …}`) + `has_citation` edge             | `src/write/create-issue.ts:928-966`                       |
+| Citation write on `transition`                                                                            | `src/write/transition.ts:88,135,520,540`                  |
+| `EDGE_KIND_TABLE` — the 17 declared rels                                                                  | `src/write/catalog.ts:311-409`                            |
+| `resolveEdgeKindTx` — self-heals a row from the table                                                     | `src/write/catalog.ts:452-509`                            |
+| `projectHasKnownPath` — reads `project.metadata.path`                                                     | `src/write/catalog.ts:603-628`                            |
+| `upsertProject` by `name` (mints `(root)` component)                                                      | `src/write/catalog.ts:655-707`                            |
+| `upsertComponent` by `(project,name)` with `path`                                                         | `src/write/catalog.ts:839-950`                            |
+| `upsertLocation` by `(component,locType,value)`                                                           | `src/write/catalog.ts:992-1146`                           |
+| `IWriteEdgeTxInput` carries `metadata?` + `weight?`                                                       | `src/write/tx.ts:506-528`                                 |
+| `IEdgeKindRule {rel, sourceKind, targetKind, multiplicity}`                                               | `src/write/tx.ts:496-504`                                 |
+| `OPEN_TYPE_POLICY` — `validateRel` is permissive                                                          | `src/store/type-policy.ts:21-31`                          |
+| `carryForwardResidualEdgesTx` — both directions, copies `origin`/`meta`; excludes 5 rels                  | `src/write/update.ts:536-637,977-982`                     |
+| `relate` — issue↔issue only, closed 5-rel set                                                             | `src/write/relate.ts:86-111`                              |
+| `relate` cross-project gap resolved by construction                                                       | `src/write/relate.ts:52-65`                               |
+| Skill "filing rule"; "No other component is ever auto-created"                                            | `skill/SKILL.md:333-376`                                  |
+| Repo-string split, measured (`PseudoSky/adhd:384`, `adhd:57`)                                             | main `docs/product/dispatcher-platform/GAP-MATRIX.md:160` |
+| v2 ETL reconciles the repo fork to ONE `project` row                                                      | main `entrypoint/backlog/DATA_MODEL_v2.md:93-96,216-254`  |
+| The re-cutover step this must land before                                                                 | main `report/deferral-cleanup-plan.md:328-333`            |
 
 **Governing prior research (researcher, 2026-09-22; 14 findings in memory).** The core is a
 **lexicographically-sorted prefix array + binary search with a segment-boundary guard** —
@@ -110,6 +110,7 @@ registry prefix set. Deterministic, no clock, no I/O (see §2.4).
 ### 2.1 Canonicalization (`canonicalizeCitationPath`)
 
 Given `citation.file`:
+
 1. Trim; reject empty → **unresolved** (`empty-path`).
 2. Defensively strip a trailing `:<line>` / `:<line>-<line>` and a `file://` scheme. (The write
    path already separates `file`/`lines`, but ETL'd and hand-written citations embed them.)
@@ -121,9 +122,10 @@ Given `citation.file`:
 ### 2.2 The prefix index
 
 Built from live rows only:
+
 - every `component` with `meta.path` → `{prefix, componentUid, projectUid, kind:'component'}`;
 - every `location` with `locType:'path'` → `{prefix, componentUid, projectUid, kind:'location'}`
-  (a file anchor is *more specific* than its component directory, so it wins by longest prefix);
+  (a file anchor is _more specific_ than its component directory, so it wins by longest prefix);
 - every `project` with `meta.path` → `{prefix, projectUid, kind:'project'}` (rolls up to that
   project's reserved `(root)` component).
 
@@ -141,6 +143,7 @@ longest matches from two entries is **ambiguity**, never a silent first-register
 
 When **no component prefix matches** but a **project root** does, the linker detects a package
 root between the project root and the file:
+
 1. Walk up from the file's directory to the nearest ancestor that is a **manifest boundary**
    (`package.json` / `pyproject.toml` / `Cargo.toml` / `go.mod` / `*.csproj`), stopping at the
    project root.
@@ -165,15 +168,15 @@ from growing on every stray path.
 
 ### 2.5 Ambiguity and unresolved handling
 
-| Case | Outcome |
-|---|---|
-| One component prefix matches | one derived edge |
-| Path location + its component both match | the **location** (longer prefix) wins |
-| Two projects' roots both match (nested roots) | the **deeper** root wins (longest prefix) |
-| Two entries share the same longest prefix | **ambiguity** — signal, write **no** edge for that path |
-| Project root matches, no component | **auto-upsert** the discovered component (§2.4) |
-| No project root matches | **unresolved** (`outside-registered-root`) |
-| Empty / malformed path | **unresolved** (`empty-path`) |
+| Case                                          | Outcome                                                 |
+| --------------------------------------------- | ------------------------------------------------------- |
+| One component prefix matches                  | one derived edge                                        |
+| Path location + its component both match      | the **location** (longer prefix) wins                   |
+| Two projects' roots both match (nested roots) | the **deeper** root wins (longest prefix)               |
+| Two entries share the same longest prefix     | **ambiguity** — signal, write **no** edge for that path |
+| Project root matches, no component            | **auto-upsert** the discovered component (§2.4)         |
+| No project root matches                       | **unresolved** (`outside-registered-root`)              |
+| Empty / malformed path                        | **unresolved** (`empty-path`)                           |
 
 Nothing is ever silently guessed. The `move`/`relate` precedent ("never silently pick one") is
 the governing rule.
@@ -192,7 +195,7 @@ the residual carry-forward sweep (`update.ts:580-637`) already handles unknown r
 { rel: 'implicates', sourceKind: 'issue', targetKind: 'component', multiplicity: 'n:m' }
 ```
 
-- **Why `implicates` and not `owns_component`.** `owns_component` is the single *home placement*
+- **Why `implicates` and not `owns_component`.** `owns_component` is the single _home placement_
   (AC-17, re-pointed by `move`). Overloading it to mean "touches" would break AC-17, `move`, and
   the skill's documented placement rule. The derived link is a **separate, additive, many-to-many**
   assertion.
@@ -231,6 +234,7 @@ meta: {
 ### 3.3 Recompute — idempotent, delete-then-recompute
 
 `recomputeIssueLinks(tx, issueRowid, issueUid)`:
+
 1. Read the issue's live citations (outgoing `has_citation` → citation nodes → `meta.target`).
 2. Compute the match set (pure, §2).
 3. Invalidate every live `implicates` edge **from this issue with `provenance:'derived'`** whose
@@ -242,12 +246,12 @@ Re-running is a no-op-equivalent. The function is the **only** writer of `implic
 
 ### 3.4 Trigger points
 
-| Verb | Behavior |
-|---|---|
-| `create` | after the citation nodes land, **same `immediate` tx** (`create-issue.ts:928-966`) |
-| `transition` | after the citation nodes land, **same `immediate` tx** (`transition.ts:520-540`) |
+| Verb                             | Behavior                                                                                                                                                                                                      |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create`                         | after the citation nodes land, **same `immediate` tx** (`create-issue.ts:928-966`)                                                                                                                            |
+| `transition`                     | after the citation nodes land, **same `immediate` tx** (`transition.ts:520-540`)                                                                                                                              |
 | `update` (body-change supersede) | **carry forward for free** — the residual sweep copies the `implicates` edges with their `meta` onto the successor. No recompute needed (the citations are carried verbatim, so the derivation is unchanged). |
-| registry `path` change | **targeted recompute** (§3.5) |
+| registry `path` change           | **targeted recompute** (§3.5)                                                                                                                                                                                 |
 
 `move` does **not** recompute: the derived links are citation evidence, independent of home
 placement.
@@ -256,6 +260,7 @@ placement.
 
 A `component`/`project` `path` upsert can invalidate many derived edges at once. When a
 registry write changes a `path`:
+
 1. Query live citations whose `meta.target` falls under the **old** or **new** prefix.
 2. Recompute the links for each distinct owning issue.
 
@@ -307,7 +312,7 @@ two `project` rows, every derived link fragments across them. **Therefore:**
 - **Scale:** ~1,700 items (`deferral-cleanup-plan.md` read the graph at 1701 items). The prefix
   index is built **once** and reused across the whole run.
 - **Output:** a report — `{issues, edgesWritten, edgesInvalidated, unresolved:[…], ambiguous:[…],
-  pathlessProjects:[…]}` — so the operator sees exactly what did not resolve. Exit non-zero if
+pathlessProjects:[…]}` — so the operator sees exactly what did not resolve. Exit non-zero if
   any project with citations is path-less (the blocking condition).
 
 ---
@@ -344,7 +349,7 @@ Add:
 implicatesProjects?: readonly string[];
 ```
 
-- **All-of semantics** (the issue must touch *every* listed project). This is the cross-project
+- **All-of semantics** (the issue must touch _every_ listed project). This is the cross-project
   requirement. `implicatesProjects: ['Y','Z']` + `status:'open'` is the "spans Y and Z" query.
 - **Why a filter, not a `view`.** It composes with status/sort/paging/fields for free; a new
   `view:'cross-project'` would duplicate the list machinery for no gain (rejected).
@@ -429,13 +434,13 @@ default.
 
 ## 8. Docs and skill
 
-| Doc | Change |
-|---|---|
-| `skill/SKILL.md:344-367` | Amend **"No other component is ever auto-created"**: distinguish **declared** components (`upsert-component`) from **discovered** ones (auto-created by the linker from citation paths). Add a **"Citations drive linking"** subsection: file citations with precise, repo-relative paths — **the path is the linking key**; a vague path links to nothing. |
-| `skill/SKILL.md:352-367` ("The filing rule") | Restate: file the correct **project** (the linker needs a registered root to resolve); the component links then follow from the citations. Component-less filing is still legal (lands on `(root)`) but now costs less, because citations still derive the real links. |
-| `DATA_MODEL.md` §3/§5 | Add the `implicates` edge row + its provenance meta; note the derived-vs-asserted discriminator. |
-| `SPEC.md` / `DESIGN.md` | Document the linker, the two new filters, the new overlap axis, and the `implicates` pseudo-field. |
-| `CHANGELOG.md` | New entry (new edge kind + query surface). |
+| Doc                                          | Change                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `skill/SKILL.md:344-367`                     | Amend **"No other component is ever auto-created"**: distinguish **declared** components (`upsert-component`) from **discovered** ones (auto-created by the linker from citation paths). Add a **"Citations drive linking"** subsection: file citations with precise, repo-relative paths — **the path is the linking key**; a vague path links to nothing. |
+| `skill/SKILL.md:352-367` ("The filing rule") | Restate: file the correct **project** (the linker needs a registered root to resolve); the component links then follow from the citations. Component-less filing is still legal (lands on `(root)`) but now costs less, because citations still derive the real links.                                                                                      |
+| `DATA_MODEL.md` §3/§5                        | Add the `implicates` edge row + its provenance meta; note the derived-vs-asserted discriminator.                                                                                                                                                                                                                                                            |
+| `SPEC.md` / `DESIGN.md`                      | Document the linker, the two new filters, the new overlap axis, and the `implicates` pseudo-field.                                                                                                                                                                                                                                                          |
+| `CHANGELOG.md`                               | New entry (new edge kind + query surface).                                                                                                                                                                                                                                                                                                                  |
 
 ---
 
@@ -479,17 +484,10 @@ export interface ICitationLinkOutcome {
 }
 
 /** Pure: canonicalize + longest-prefix match. No I/O. */
-export function resolveCitationTargets(
-  canonicalPath: string,
-  index: IPrefixIndex
-): Array<{ componentUid: string; projectUid: string; prefix: string; matchKind: 'component' | 'location' | 'project' }>;
+export function resolveCitationTargets(canonicalPath: string, index: IPrefixIndex): Array<{ componentUid: string; projectUid: string; prefix: string; matchKind: 'component' | 'location' | 'project' }>;
 
 /** Tx-scoped: delete-then-recompute the issue's derived `implicates` edges. Idempotent. */
-export async function recomputeIssueLinksTx(
-  tx: AdapterTransaction,
-  handle: Pick<IWriteStoreHandle, 'typePolicy'>,
-  params: { issueRowid: number; issueUid: string; at: string; discoveredRoots?: readonly string[] }
-): Promise<ICitationLinkOutcome>;
+export async function recomputeIssueLinksTx(tx: AdapterTransaction, handle: Pick<IWriteStoreHandle, 'typePolicy'>, params: { issueRowid: number; issueUid: string; at: string; discoveredRoots?: readonly string[] }): Promise<ICitationLinkOutcome>;
 ```
 
 ### `src/query/types.ts`
@@ -497,7 +495,9 @@ export async function recomputeIssueLinksTx(
 ```ts
 // BEFORE
 export type IOverlapAxis = 'file' | 'project' | 'component' | 'author';
-export interface IIssueFilter { /* … component?, projectPath? … */ }
+export interface IIssueFilter {
+  /* … component?, projectPath? … */
+}
 export type IIssuePseudoField = 'body' | 'citations' | 'notes' | 'auditTrail' | 'blockers' | 'related' | '_score' | '_vector';
 
 // AFTER
@@ -508,7 +508,7 @@ export interface IIssueFilter {
   implicatesProject?: string;
   implicatesProjects?: readonly string[];
 }
-export type IIssuePseudoField = /* … */ | 'implicates';
+export type IIssuePseudoField = /* … */ 'implicates';
 // IIssueCard gains: implicates?: Array<{componentUid;componentName;projectUid;projectName;provenance}>
 ```
 
@@ -523,18 +523,18 @@ export type IIssuePseudoField = /* … */ | 'implicates';
 
 ## 11. Independent segments (for the executor)
 
-| # | Segment | Files | Depends on | Read tok | Out tok |
-|---|---|---|---|---|---|
-| 1 | Edge kind row | `write/catalog.ts` (`EDGE_KIND_TABLE`) | — | ~80 | ~30 |
-| 2 | Linker core (pure + tx) | `write/link-citations.ts` (new) | 1 | ~250 | ~600 |
-| 3 | Create/transition hooks | `write/create-issue.ts`, `write/transition.ts` | 2 | ~200 | ~120 |
-| 4 | Query types | `query/types.ts` | — | ~200 | ~120 |
-| 5 | Query filters + overlap axis | `query/query.ts`, `query/resolve.ts` | 2,4 | ~250 | ~300 |
-| 6 | Card pseudo-field | `query/card.ts` | 4 | ~120 | ~120 |
-| 7 | Backfill tool | `tools/recompute-links.ts` (new) + `project.json` target | 2 | ~100 | ~400 |
-| 8 | Registry-delete guard + path-change hook | `write/catalog.ts` (delete guard), `write/catalog.ts`/`link-citations.ts` | 2 | ~150 | ~150 |
-| 9 | Skill + docs | `skill/SKILL.md`, `DATA_MODEL.md`, `SPEC.md`, `CHANGELOG.md` | 3 | ~300 | ~450 |
-| 10 | Tests (with teeth) | new `write/link-citations.spec.ts`, `write/link-backfill.spec.ts`, query specs | 2,5,7 | ~150 | ~600 |
+| #   | Segment                                  | Files                                                                          | Depends on | Read tok | Out tok |
+| --- | ---------------------------------------- | ------------------------------------------------------------------------------ | ---------- | -------- | ------- |
+| 1   | Edge kind row                            | `write/catalog.ts` (`EDGE_KIND_TABLE`)                                         | —          | ~80      | ~30     |
+| 2   | Linker core (pure + tx)                  | `write/link-citations.ts` (new)                                                | 1          | ~250     | ~600    |
+| 3   | Create/transition hooks                  | `write/create-issue.ts`, `write/transition.ts`                                 | 2          | ~200     | ~120    |
+| 4   | Query types                              | `query/types.ts`                                                               | —          | ~200     | ~120    |
+| 5   | Query filters + overlap axis             | `query/query.ts`, `query/resolve.ts`                                           | 2,4        | ~250     | ~300    |
+| 6   | Card pseudo-field                        | `query/card.ts`                                                                | 4          | ~120     | ~120    |
+| 7   | Backfill tool                            | `tools/recompute-links.ts` (new) + `project.json` target                       | 2          | ~100     | ~400    |
+| 8   | Registry-delete guard + path-change hook | `write/catalog.ts` (delete guard), `write/catalog.ts`/`link-citations.ts`      | 2          | ~150     | ~150    |
+| 9   | Skill + docs                             | `skill/SKILL.md`, `DATA_MODEL.md`, `SPEC.md`, `CHANGELOG.md`                   | 3          | ~300     | ~450    |
+| 10  | Tests (with teeth)                       | new `write/link-citations.spec.ts`, `write/link-backfill.spec.ts`, query specs | 2,5,7      | ~150     | ~600    |
 
 Segments 1 and 4 are independent and parallel; 2 gates 3/5/6/7/8.
 
@@ -545,6 +545,7 @@ Verify with `npx nx build backlog` + `npx nx lint backlog` + `npx nx test backlo
 ## 12. Test cases (with teeth)
 
 ### Unit — `write/link-citations.spec.ts`
+
 - **Segment-boundary guard:** prefix `packages/foo` does **not** match `packages/foobar/x.ts`
   (negative control: drop the `/` guard → RED).
 - **Longest prefix wins:** a path location (`packages/auth/src/index.ts`) beats its component
@@ -557,6 +558,7 @@ Verify with `npx nx build backlog` + `npx nx lint backlog` + `npx nx test backlo
 - **Idempotency:** recompute twice → the same live edge set, no duplicate rows.
 
 ### Integration — `write/link-backfill.spec.ts` (real store)
+
 - Create an issue with three citations across two projects → assert three live `implicates`
   edges with `provenance:'derived'`, each carrying the right `via`/`prefix`.
 - **Discovery:** a citation under a registered project root but in an unregistered package →
@@ -570,6 +572,7 @@ Verify with `npx nx build backlog` + `npx nx lint backlog` + `npx nx test backlo
 - **Backfill determinism:** run the tool twice on a fixture store → byte-identical edge set.
 
 ### Query — real store
+
 - `filter.implicatesComponent:'X'` + `status:'open'` returns exactly the issues with a derived
   edge to X (not the ones merely placed on X).
 - `filter.implicatesProjects:['Y','Z']` returns only issues touching **both**.
@@ -579,6 +582,7 @@ Verify with `npx nx build backlog` + `npx nx lint backlog` + `npx nx test backlo
 - `fields:['implicates']` returns the component+project pairs.
 
 ### Consumer proof (AGENTS.md §7)
+
 - Drive the **real built CLI**: create an issue with a cross-project citation, then
   `query --input '{"filter":{"implicatesComponent":"…"}}'` and assert the issue appears; key on
   the exit code, not stdout.
@@ -609,6 +613,6 @@ Verify with `npx nx build backlog` + `npx nx lint backlog` + `npx nx test backlo
 
 ---
 
-*No code was written or modified by this pass. The `.worktrees/backlog-v2` tree was read-only
+_No code was written or modified by this pass. The `.worktrees/backlog-v2` tree was read-only
 throughout. All line references are to the `backlog-v2` worktree unless a path names the main
-repo.*
+repo._

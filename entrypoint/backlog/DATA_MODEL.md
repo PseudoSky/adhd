@@ -297,7 +297,7 @@ index.
   identities split one repo's items), is the `@adhd/backlog` skill's
   §4 "The filing rule" (`adhd-backlog install-skill`). This document defines
   the model; the skill states the rule — choose and register the project and
-  component *before* filing.
+  component _before_ filing.
 
 ## 8. Projection & consumers
 

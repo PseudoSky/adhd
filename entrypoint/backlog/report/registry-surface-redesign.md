@@ -10,7 +10,7 @@ Move/commit it onto `backlog-v2` as the owner sees fit (same posture as
 `/Users/nix/dev/ai/sox-ecosystem/docs/decisions/` (0001–0018). This design complies with
 **ADR-0013 (typed config, never env-var feature switches)** — it introduces **no** env toggle.
 (The existing `APIGEN_IR_CACHE_ENABLED` kill-switch in `server.ts:541-543` is a pre-existing
-deviation, out of scope here, and is *not* a precedent for this design.)
+deviation, out of scope here, and is _not_ a precedent for this design.)
 
 ---
 
@@ -18,26 +18,36 @@ deviation, out of scope here, and is *not* a precedent for this design.)
 
 Every claim below is from a file read, not inferred.
 
-| Evidence | Location |
-|---|---|
-| The 14 mounted verbs, pinned | `.worktrees/backlog-v2/entrypoint/backlog/src/server.ts:187-208` (`BACKLOG_VERBS`) |
-| The mounted surface = `api.ts` exports | `src/api.ts:1-48` (file header: "The exported surface of this file IS the mounted surface") |
-| Registry CRUD implementations | `src/write/catalog.ts:655-1252` (`IUpsertProjectInput`…`rmLocation`) |
-| Registry read surface | `src/query/views/registry.ts:1-498` (`listProjects`/`listComponents`/`listLocations`/`getRegistryDetail`/`lookup`) |
-| Registry read types | `src/query/types.ts:383-502` (`IProjectSummary`…`IIssueGetInput`) |
-| `get` registry union | `src/api.ts:391-417`; `src/query/types.ts:451-469` |
-| `query` registry views | `src/query/types.ts:254-264` (`IIssueView` incl. `projects`/`components`/`locations`) |
-| Envelope | `src/envelope.ts:143-172` (`IOutcomeEnvelope`) |
-| SPEC-v2 §3a (registry, non-negotiable) | `entrypoint/backlog/SPEC-v2.md:270-329` |
-| SPEC-v2 §4 write layer / §4c mode table | `SPEC-v2.md:368-383`, `:497-507` |
-| SPEC-v2 §6.1 addressing / §6.3 issue verbs / §6.7 surfaces | `SPEC-v2.md:969-1033`, `:1074-1080`, `:1791-1806` |
-| SPEC-v2 §7 "wipe, no coexistence shim" | `SPEC-v2.md:1808-1824` |
-| Surface pins (tests) | `src/api.surface.spec.ts:46-81`; `src/server.verbs.spec.ts:400-412`; `src/cli-envelope.spec.ts:32-34,105`; `src/server.published-layout.spec.ts:100-101` |
-| Skill source + redeploy | `skill/SKILL.md`; `src/install-skill.ts:101-106,220-291` |
-| Docs naming the verbs | `README.md:51-59`; `DESIGN.md:92-99,287-288`; `SPEC-v2.md:324,376-377,1079,2254` |
+> **Provenance — `SPEC-v2.md` line references.** Every `SPEC-v2.md:<lines>`
+> reference in this spec targets the **pre-squash** `SPEC-v2.md`, which the 1.0.0
+> squash (`545d7025`, PR #9) **deleted**; that path does not exist at this commit.
+> Its last-committed revision is the squash's parent,
+> `29da1926946f563bd267a9d63f76b35f38478f20` (2351 lines; sha256
+> `3eebfc2ccd77087cb50a545435b259e0df274cfd9b6d6dcf09f3fbf92bcf577f`). The
+> surviving `entrypoint/backlog/SPEC.md` is a different, much larger document
+> (3000 lines here), so these line numbers do **not** transfer to it — resolve by
+> section heading (§3a, §4c, §6.1, §6.3, §6.6, §6.7, §7) instead.
+
+| Evidence                                                   | Location                                                                                                                                                 |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The 14 mounted verbs, pinned                               | `.worktrees/backlog-v2/entrypoint/backlog/src/server.ts:187-208` (`BACKLOG_VERBS`)                                                                       |
+| The mounted surface = `api.ts` exports                     | `src/api.ts:1-48` (file header: "The exported surface of this file IS the mounted surface")                                                              |
+| Registry CRUD implementations                              | `src/write/catalog.ts:655-1252` (`IUpsertProjectInput`…`rmLocation`)                                                                                     |
+| Registry read surface                                      | `src/query/views/registry.ts:1-498` (`listProjects`/`listComponents`/`listLocations`/`getRegistryDetail`/`lookup`)                                       |
+| Registry read types                                        | `src/query/types.ts:383-502` (`IProjectSummary`…`IIssueGetInput`)                                                                                        |
+| `get` registry union                                       | `src/api.ts:391-417`; `src/query/types.ts:451-469`                                                                                                       |
+| `query` registry views                                     | `src/query/types.ts:254-264` (`IIssueView` incl. `projects`/`components`/`locations`)                                                                    |
+| Envelope                                                   | `src/envelope.ts:143-172` (`IOutcomeEnvelope`)                                                                                                           |
+| SPEC-v2 §3a (registry, non-negotiable)                     | `entrypoint/backlog/SPEC-v2.md:270-329`                                                                                                                  |
+| SPEC-v2 §4 write layer / §4c mode table                    | `SPEC-v2.md:368-383`, `:497-507`                                                                                                                         |
+| SPEC-v2 §6.1 addressing / §6.3 issue verbs / §6.7 surfaces | `SPEC-v2.md:969-1033`, `:1074-1080`, `:1791-1806`                                                                                                        |
+| SPEC-v2 §7 "wipe, no coexistence shim"                     | `SPEC-v2.md:1808-1824`                                                                                                                                   |
+| Surface pins (tests)                                       | `src/api.surface.spec.ts:46-81`; `src/server.verbs.spec.ts:400-412`; `src/cli-envelope.spec.ts:32-34,105`; `src/server.published-layout.spec.ts:100-101` |
+| Skill source + redeploy                                    | `skill/SKILL.md`; `src/install-skill.ts:101-106,220-291`                                                                                                 |
+| Docs naming the verbs                                      | `README.md:51-59`; `DESIGN.md:92-99,287-288`; `SPEC-v2.md:324,376-377,1079,2254`                                                                         |
 
 **Which surface ships.** The deployed binary is v1-shaped (the installed skill documents
-`humanId`/`family`/`migration-status`, which the deployed build answers with *Unknown command*).
+`humanId`/`family`/`migration-status`, which the deployed build answers with _Unknown command_).
 The replacement branch's surface is the 14-verb apigen mount. **This design targets the
 `backlog-v2` branch** — the surface that ships once the cutover lands. The current
 binary/skill mismatch is exactly what the cutover reconciles; this redesign must therefore be
@@ -57,7 +67,7 @@ pattern in five distinct ways.
 - `rm-location` uses the abbreviation `rm`; the item verb for the same operation is **`delete`**
   (`api.ts:519-585`). Two names for one concept.
 - `upsert-project` / `upsert-component` / `upsert-location` fuse create + update behind a verb
-  the item surface does not have at all. (This fusion is *justified* — see D2 — but the naming
+  the item surface does not have at all. (This fusion is _justified_ — see D2 — but the naming
   is still a second, unexplained verb vocabulary.)
 
 ### D2 — Addressing is inconsistent (and the one deliberate deviation is undocumented at the verb level)
@@ -77,11 +87,11 @@ reads as an accident next to the uid-addressed item verbs. The design keeps it a
 
 ### D3 — CRUD is asymmetric: there is no delete for project or component
 
-| Kind | Create/Update | Read | Delete |
-|---|---|---|---|
-| project | `upsert-project` | `get --registry project` / `query --view projects` | **MISSING** |
-| component | `upsert-component` | `get --registry component` / `query --view components` | **MISSING** |
-| location | `upsert-location` | `get --registry location` / `query --view locations` / `lookup` | `rm-location` |
+| Kind      | Create/Update      | Read                                                            | Delete        |
+| --------- | ------------------ | --------------------------------------------------------------- | ------------- |
+| project   | `upsert-project`   | `get --registry project` / `query --view projects`              | **MISSING**   |
+| component | `upsert-component` | `get --registry component` / `query --view components`          | **MISSING**   |
+| location  | `upsert-location`  | `get --registry location` / `query --view locations` / `lookup` | `rm-location` |
 
 Consequence (the owner's concrete complaint): **`deploy-verify-*` projects are un-removable.**
 No verb invalidates a `project` or `component` node. `rmLocation` is the only registry delete,
@@ -109,11 +119,12 @@ registry" — the family has no shared name, no shared input convention, and no 
 discovery entry point.
 
 **What is NOT a deviation (so the redesign does not over-correct):**
+
 - The envelope is already correct — every registry verb runs through the shared
   `envelope()`/`toEnvelope()` helper (`api.ts:370-379,536-570`).
 - The business-key upsert is justified (D2).
-- `lookup`'s separate existence is justified: it resolves a *value* (tool/path/url) to a
-  *chain*, distinct from resolving an *identity* (`SPEC-v2.md:293-305`). It stays.
+- `lookup`'s separate existence is justified: it resolves a _value_ (tool/path/url) to a
+  _chain_, distinct from resolving an _identity_ (`SPEC-v2.md:293-305`). It stays.
 
 ---
 
@@ -123,13 +134,13 @@ discovery entry point.
 
 Replace the four registry verbs with a coherent, symmetric namespace:
 
-| Verb | Replaces | Addressing |
-|---|---|---|
-| `registry-get` | `get --registry …` | `kind` + `ref` (uid **or** name) |
-| `registry-list` | `query --view projects\|components\|locations` | `kind` + `filter` |
-| `registry-upsert` | `upsert-project` / `upsert-component` / `upsert-location` | `kind` + business key |
-| `registry-delete` | `rm-location` **+ closes the project/component gap** | `uid` |
-| `lookup` | unchanged | `q` (value) |
+| Verb              | Replaces                                                  | Addressing                       |
+| ----------------- | --------------------------------------------------------- | -------------------------------- |
+| `registry-get`    | `get --registry …`                                        | `kind` + `ref` (uid **or** name) |
+| `registry-list`   | `query --view projects\|components\|locations`            | `kind` + `filter`                |
+| `registry-upsert` | `upsert-project` / `upsert-component` / `upsert-location` | `kind` + business key            |
+| `registry-delete` | `rm-location` **+ closes the project/component gap**      | `uid`                            |
+| `lookup`          | unchanged                                                 | `q` (value)                      |
 
 `get` and `query` become **pure issue verbs** (their registry overloads are removed).
 
@@ -174,8 +185,8 @@ discovery and addressing as-is.
 
 ### Recommendation
 
-**Option A.** It is the only option that closes all five deviations *without growing the
-surface* and *without* re-creating the rejected grab-bag. It keeps the §3a non-negotiable
+**Option A.** It is the only option that closes all five deviations _without growing the
+surface_ and _without_ re-creating the rejected grab-bag. It keeps the §3a non-negotiable
 (`registry-get`/`lookup` resolve by name in one call) and it keeps the justified business-key
 upsert (documented as deliberate). If union extraction proves problematic in practice, **Option
 B is the fallback**, and it should be chosen deliberately rather than drifted into.
@@ -211,10 +222,7 @@ export type IRegistryGetResult = IProjectDetail | IComponentDetail | ILocationDe
 
 ```ts
 // api.ts
-export async function registryGet(
-  ctx: BacklogCtx,
-  input: IRegistryGetInput
-): Promise<IOutcomeEnvelope<IRegistryGetResult>>;
+export async function registryGet(ctx: BacklogCtx, input: IRegistryGetInput): Promise<IOutcomeEnvelope<IRegistryGetResult>>;
 ```
 
 Delegates to the existing `getRegistryDetail(graph, …)` (`query/views/registry.ts:162-349`) —
@@ -227,17 +235,11 @@ export interface IRegistryListInput {
   kind: 'project' | 'component' | 'location';
   filter?: IRegistryQueryFilter; // { project?, component? }
 }
-export type IRegistryListResult =
-  | { kind: 'project'; items: IProjectSummary[] }
-  | { kind: 'component'; items: IComponentSummary[] }
-  | { kind: 'location'; items: ILocationSummary[] };
+export type IRegistryListResult = { kind: 'project'; items: IProjectSummary[] } | { kind: 'component'; items: IComponentSummary[] } | { kind: 'location'; items: ILocationSummary[] };
 ```
 
 ```ts
-export async function registryList(
-  ctx: BacklogCtx,
-  input: IRegistryListInput
-): Promise<IOutcomeEnvelope<IRegistryListResult>>;
+export async function registryList(ctx: BacklogCtx, input: IRegistryListInput): Promise<IOutcomeEnvelope<IRegistryListResult>>;
 ```
 
 Delegates to `listProjects`/`listComponents`/`listLocations` (`registry.ts:88-148`). The result
@@ -246,25 +248,13 @@ is `kind`-discriminated (literal), so apigen's union encoder is safe.
 ### 3.3 `registry-upsert`
 
 ```ts
-export type IRegistryUpsertInput =
-  | { kind: 'project'; name: string; path?: string; repoUrl?: string;
-      monorepo?: boolean; description?: string; by: string }
-  | { kind: 'component'; project: string; name: string;
-      path?: string; description?: string; by: string }
-  | { kind: 'location'; component: string; project?: string;
-      locType: ILocationType; value: string; by: string };
+export type IRegistryUpsertInput = { kind: 'project'; name: string; path?: string; repoUrl?: string; monorepo?: boolean; description?: string; by: string } | { kind: 'component'; project: string; name: string; path?: string; description?: string; by: string } | { kind: 'location'; component: string; project?: string; locType: ILocationType; value: string; by: string };
 
-export type IRegistryUpsertOutcome =
-  | { kind: 'project'; uid: string; created: boolean; project: IProjectSummary }
-  | { kind: 'component'; uid: string; created: boolean; component: IComponentSummary }
-  | { kind: 'location'; uid: string; created: boolean; location: ILocationSummary };
+export type IRegistryUpsertOutcome = { kind: 'project'; uid: string; created: boolean; project: IProjectSummary } | { kind: 'component'; uid: string; created: boolean; component: IComponentSummary } | { kind: 'location'; uid: string; created: boolean; location: ILocationSummary };
 ```
 
 ```ts
-export async function registryUpsert(
-  ctx: BacklogCtx,
-  input: IRegistryUpsertInput
-): Promise<IOutcomeEnvelope<IRegistryUpsertOutcome>>;
+export async function registryUpsert(ctx: BacklogCtx, input: IRegistryUpsertInput): Promise<IOutcomeEnvelope<IRegistryUpsertOutcome>>;
 ```
 
 Dispatches on `input.kind` to the **existing, unchanged** `upsertProjectOp` /
@@ -288,10 +278,7 @@ export interface IRegistryDeleteOutcome {
 ```
 
 ```ts
-export async function registryDelete(
-  ctx: BacklogCtx,
-  input: IRegistryDeleteInput
-): Promise<IOutcomeEnvelope<IRegistryDeleteOutcome>>;
+export async function registryDelete(ctx: BacklogCtx, input: IRegistryDeleteInput): Promise<IOutcomeEnvelope<IRegistryDeleteOutcome>>;
 ```
 
 Backed by a new `write/catalog.ts` function (replacing the location-only `rmLocation`,
@@ -302,12 +289,12 @@ Backed by a new `write/catalog.ts` function (replacing the location-only `rmLoca
 
 - **`location`** — invalidate the location node + its owning `has_location` edge. No issue
   references a location directly (`has_location` is the only rel touching a location,
-  `catalog.ts:1180-1184`). *This is today's `rmLocation`, unchanged.*
+  `catalog.ts:1180-1184`). _This is today's `rmLocation`, unchanged._
 - **`component`** — refuse with `precondition_failed` if the component has any **live
   `owns_component` edge** (issues) or any **live `has_location` edge** (locations). The message
   names the blockers ("N live issues, M live locations"). A project's reserved **`(root)`
   component is never deletable** (`precondition_failed`). On success: invalidate the component
-  + its `owns_project` edge; audit `'deleted'`.
+  - its `owns_project` edge; audit `'deleted'`.
 - **`project`** — refuse with `precondition_failed` if the project has any **live component
   other than its `(root)`**, or any **live issue** under any of its components. On success:
   invalidate the `(root)` component + its `owns_project` edge, then the project; audit
@@ -316,7 +303,7 @@ Backed by a new `write/catalog.ts` function (replacing the location-only `rmLoca
 
 No env toggle, no hidden `force` (ADR-0013). A future cascade (reparent issues to `(root)`,
 invalidate locations) is a **literal `cascade?: boolean` argument** — the same posture as
-`claim`'s `force` (`SPEC-v2.md:1057`) — explicitly *out of scope* for this slice (§6, Q3).
+`claim`'s `force` (`SPEC-v2.md:1057`) — explicitly _out of scope_ for this slice (§6, Q3).
 
 ### 3.5 `lookup` — unchanged
 
@@ -356,13 +343,10 @@ registryGet, registryList, registryUpsert, registryDelete
 
 ```ts
 // BEFORE
-export async function rmLocation(handle, input: IRmLocationInput): Promise<IRmLocationOutcome>
+export async function rmLocation(handle, input: IRmLocationInput): Promise<IRmLocationOutcome>;
 
 // AFTER
-export async function deleteRegistryNode(
-  handle: IWriteStoreHandle,
-  input: IRegistryDeleteInput
-): Promise<IRegistryDeleteOutcome>
+export async function deleteRegistryNode(handle: IWriteStoreHandle, input: IRegistryDeleteInput): Promise<IRegistryDeleteOutcome>;
 ```
 
 `upsertProject` / `upsertComponent` / `upsertLocation` **unchanged** (dispatch targets).
@@ -395,15 +379,15 @@ Re-export list (`index.ts:24-39`) updated to the new export names.
 
 ### 5.1 Code — files and blast radius
 
-| File | Change |
-|---|---|
-| `src/write/catalog.ts` | `rmLocation` → `deleteRegistryNode` (+ project/component guards); upserts unchanged |
-| `src/api.ts` | remove 4 exports + `get` registry branch; add 4 `registry*` exports |
-| `src/server.ts` | `BACKLOG_VERBS` list |
-| `src/index.ts` | re-export list |
-| `src/query/types.ts` | add 7 registry types; simplify `get`/`query` types |
-| `src/query/views/registry.ts` | no logic change (new api.ts wrappers call it) |
-| `src/cli.ts` | delete `query` registry note (`:808-818`); optional `registry-list --help` note |
+| File                          | Change                                                                              |
+| ----------------------------- | ----------------------------------------------------------------------------------- |
+| `src/write/catalog.ts`        | `rmLocation` → `deleteRegistryNode` (+ project/component guards); upserts unchanged |
+| `src/api.ts`                  | remove 4 exports + `get` registry branch; add 4 `registry*` exports                 |
+| `src/server.ts`               | `BACKLOG_VERBS` list                                                                |
+| `src/index.ts`                | re-export list                                                                      |
+| `src/query/types.ts`          | add 7 registry types; simplify `get`/`query` types                                  |
+| `src/query/views/registry.ts` | no logic change (new api.ts wrappers call it)                                       |
+| `src/cli.ts`                  | delete `query` registry note (`:808-818`); optional `registry-list --help` note     |
 
 **Direct importers that break (must be updated in the same commit):**
 `src/index.ts:34-37`; `src/api.semantic-laziness.spec.ts:71-73,196…`;
@@ -444,6 +428,7 @@ not the mount.
 ### 5.3 Skill (`entrypoint/backlog/skill/SKILL.md`) + redeploy
 
 Rewrite:
+
 - §1 command table (`SKILL.md:24-40`) → the 14 new verbs.
 - §1 `--help` excerpt (`:47-66`) → the new live shape (it is an example, not a pin).
 - §2 MCP tool names (`:162-170`) → `backlog_registry_*`.
@@ -451,7 +436,7 @@ Rewrite:
   `registry-delete` / `lookup`, with worked examples.
 - §5 batch note (`:425-427`) → "the 14 verbs above".
 
-**Redeploy is part of the change, not optional.** `install-skill` copies the *packaged*
+**Redeploy is part of the change, not optional.** `install-skill` copies the _packaged_
 `skill/SKILL.md` from the built `dist/` (`install-skill.ts:101-106,242-248`), so the skill is
 versioned in lockstep with the binary. Sequence: rebuild → `adhd-backlog install-skill --host all
 --scope user` (and `--scope project` where a repo pins it). **The installed skill must be
@@ -460,16 +445,16 @@ already seeing recurs.
 
 ### 5.4 Docs
 
-| Doc | Change |
-|---|---|
+| Doc                                                              | Change                                                                                                                          |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `SPEC-v2.md:314-326` (§3a "Surface — the verbs, one convention") | replace the verb list with `registry-get`/`registry-list`/`registry-upsert`/`registry-delete`; keep the non-negotiable sentence |
-| `SPEC-v2.md:1078-1080` (§6.3) | update the parenthetical registry-verb list |
-| `SPEC-v2.md:497-507` (§4c mode table) | rename `rmLocation` → `registry-delete`; note the project/component delete is the same `immediate` mode |
-| `SPEC-v2.md:2254` (AC-21) | restate for `registry-delete` (all three kinds) |
-| `SPEC-v2.md:1791-1806` (§6.7) | update the mounted verb list |
-| `README.md:51-59` | update the verb table + the "four `upsert*`/`rmLocation` verbs" sentence |
-| `DESIGN.md:92-99` (mint table), `:287-288` | `rmLocation` → `registry-delete`; note the delete guard |
-| `CHANGELOG.md` | new entry (this is a surface change) |
+| `SPEC-v2.md:1078-1080` (§6.3)                                    | update the parenthetical registry-verb list                                                                                     |
+| `SPEC-v2.md:497-507` (§4c mode table)                            | rename `rmLocation` → `registry-delete`; note the project/component delete is the same `immediate` mode                         |
+| `SPEC-v2.md:2254` (AC-21)                                        | restate for `registry-delete` (all three kinds)                                                                                 |
+| `SPEC-v2.md:1791-1806` (§6.7)                                    | update the mounted verb list                                                                                                    |
+| `README.md:51-59`                                                | update the verb table + the "four `upsert*`/`rmLocation` verbs" sentence                                                        |
+| `DESIGN.md:92-99` (mint table), `:287-288`                       | `rmLocation` → `registry-delete`; note the delete guard                                                                         |
+| `CHANGELOG.md`                                                   | new entry (this is a surface change)                                                                                            |
 
 ### 5.5 Landing relative to the v1/v2 cutover
 
@@ -485,8 +470,7 @@ grace, that is a decision (§6, Q7), not a default.
 
 ## 6. Open questions for the owner
 
-1. **Option A vs B** — accept the `kind`-discriminated union inputs/results (A, surface stays
-   14) or keep per-kind typed verbs and grow the surface to ~18 (B)? Recommendation: **A**.
+1. **Option A vs B** — accept the `kind`-discriminated union inputs/results (A, surface stays 14) or keep per-kind typed verbs and grow the surface to ~18 (B)? Recommendation: **A**.
 2. **`registry-upsert` generic vs three typed upserts** — if A is chosen, is one
    `registry-upsert {kind}` acceptable, or keep `upsert-project`/`upsert-component`/
    `upsert-location` as-is and genericize only get/list/delete? (The latter is a hybrid: 16 verbs.)
@@ -510,22 +494,22 @@ grace, that is a decision (§6, Q7), not a default.
 
 ## 7. Independent segments (for the executor)
 
-| # | Segment | Files | Depends on | Read tok | Out tok |
-|---|---|---|---|---|---|
-| 1 | Registry delete core | `write/catalog.ts` | — | ~250 | ~450 |
-| 2 | Registry types | `query/types.ts` | — | ~200 | ~300 |
-| 3 | api.ts surface swap | `api.ts` | 1,2 | ~250 | ~350 |
-| 4 | Pins + barrel | `server.ts`, `index.ts`, `cli.ts` | 3 | ~120 | ~120 |
-| 5 | Spec pins | `api.surface.spec.ts`, `server.verbs.spec.ts`, `cli-envelope.spec.ts`, `search-shortcut-wire.spec.ts`, `server.published-layout.spec.ts`, `server.mcp.spec.ts` | 3 | ~300 | ~300 |
-| 6 | Import-site fixes | `api.semantic-laziness.spec.ts`, `api.semantic-production-seam.spec.ts`, `store/embed-drain-real-model.spec.ts`, `write/bootstrap.spec.ts` | 3 | ~150 | ~150 |
-| 7 | New delete tests (teeth) | `write/registry-delete.spec.ts`, `registry-wire.spec.ts` | 1 | ~100 | ~400 |
-| 8 | Skill rewrite | `skill/SKILL.md` | 3 | ~200 | ~500 |
-| 9 | Docs | `SPEC-v2.md`, `README.md`, `DESIGN.md`, `CHANGELOG.md` | 3 | ~300 | ~400 |
+| #   | Segment                  | Files                                                                                                                                                          | Depends on | Read tok | Out tok |
+| --- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | -------- | ------- |
+| 1   | Registry delete core     | `write/catalog.ts`                                                                                                                                             | —          | ~250     | ~450    |
+| 2   | Registry types           | `query/types.ts`                                                                                                                                               | —          | ~200     | ~300    |
+| 3   | api.ts surface swap      | `api.ts`                                                                                                                                                       | 1,2        | ~250     | ~350    |
+| 4   | Pins + barrel            | `server.ts`, `index.ts`, `cli.ts`                                                                                                                              | 3          | ~120     | ~120    |
+| 5   | Spec pins                | `api.surface.spec.ts`, `server.verbs.spec.ts`, `cli-envelope.spec.ts`, `search-shortcut-wire.spec.ts`, `server.published-layout.spec.ts`, `server.mcp.spec.ts` | 3          | ~300     | ~300    |
+| 6   | Import-site fixes        | `api.semantic-laziness.spec.ts`, `api.semantic-production-seam.spec.ts`, `store/embed-drain-real-model.spec.ts`, `write/bootstrap.spec.ts`                     | 3          | ~150     | ~150    |
+| 7   | New delete tests (teeth) | `write/registry-delete.spec.ts`, `registry-wire.spec.ts`                                                                                                       | 1          | ~100     | ~400    |
+| 8   | Skill rewrite            | `skill/SKILL.md`                                                                                                                                               | 3          | ~200     | ~500    |
+| 9   | Docs                     | `SPEC-v2.md`, `README.md`, `DESIGN.md`, `CHANGELOG.md`                                                                                                         | 3          | ~300     | ~400    |
 
 Segments 1 and 2 are independent and can run in parallel; 3 gates the rest.
 Verify with `npx nx run backlog:test` (the `test` target `dependsOn: ["build"]`, so the built
 `api.d.ts` this surface extracts is rebuilt) + `npx nx lint backlog`.
 
-*No code was written or modified by this pass. The `.worktrees/backlog-v2` tree was read-only
+_No code was written or modified by this pass. The `.worktrees/backlog-v2` tree was read-only
 throughout. All line references are to the `backlog-v2` worktree unless a path names the main
-repo's `SPEC-v2.md`.*
+repo's `SPEC-v2.md`._
