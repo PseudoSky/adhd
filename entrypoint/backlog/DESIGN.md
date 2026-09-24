@@ -593,7 +593,7 @@ IMMEDIATE`), which is exactly what makes the CAS design in §3/§4 correct. This
   STATE.md A16/A17) reachable with no real concurrency hazard at all, and
   that lock was removed once that was proven and re-verified empirically
   (three real two-process sustained-write trials, zero failures — STATE.md
-  A17; durable coverage in `src/serve.singleton.spec.ts`). Ad-hoc CLI/MCP-tool
+  A17; durable coverage in `src/serve.singleton.e2e.ts`). Ad-hoc CLI/MCP-tool
   callers and `serve` processes all write concurrently exactly as §3/§4
   describe, with no special case for `serve`.
 - **The embedding pipeline never shares the store's write-lock transaction** —
@@ -611,16 +611,36 @@ IMMEDIATE`), which is exactly what makes the CAS design in §3/§4 correct. This
 
 | DoD clause                 | Test location                                                                                           | Real components exercised                                                                                                                                                                                             |
 | -------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CAS claim race             | `src/write/claim.spec.ts`                                                                               | Concurrent `claim` calls against one real store, driven through a barrier so both are in-flight before either commits — never a `sleep`.                                                                              |
-| Cross-process write safety | `src/write/cross-process-write-safety.spec.ts`, `src/test/fixtures/cross-process-*.ts`                  | Real separate Node processes writing/claiming against one shared temp store file.                                                                                                                                     |
-| Live HTTP mount            | `src/server.spec.ts`                                                                                    | `startBacklogServer({transport:'http', signal})` against a real temp store file, then a real `fetch()` call — unflagged/default-running per `AGENTS.md`'s "Live testing is mandatory" (no paid third party involved). |
-| Live MCP mount             | `src/server.mcp.spec.ts`                                                                                | `startBacklogServer({transport:'mcp', signal})`, driven by a real MCP SDK client over stdio.                                                                                                                          |
+| CAS claim race             | `src/write/claim.e2e.ts`                                                                               | Concurrent `claim` calls against one real store, driven through a barrier so both are in-flight before either commits — never a `sleep`.                                                                              |
+| Cross-process write safety | `src/write/cross-process-write-safety.e2e.ts`, `src/test/fixtures/cross-process-*.ts`                  | Real separate Node processes writing/claiming against one shared temp store file.                                                                                                                                     |
+| Live HTTP mount            | `src/server.e2e.ts`                                                                                     | `startBacklogServer({transport:'http', signal})` against a real temp store file, then a real `fetch()` call — resource-consuming (binds a real port), so it moved to the explicitly-invoked `e2e` resource lane (this package's `e2e` target; `nx run backlog:e2e`), which has **no automatic CI runner** and is deliberately not part of `nx affected -t test`; run it per the big-release checklist in [`PUBLISHING.md`](../../PUBLISHING.md).                  |
+| Live MCP mount             | `src/server.mcp.e2e.ts`                                                                                | `startBacklogServer({transport:'mcp', signal})`, driven by a real MCP SDK client over stdio.                                                                                                                          |
 | Scope isolation            | `src/env.spec.ts`                                                                                       | Real `Environment` instances at `project` scope over temp `.git` dirs and at `global` scope over a temp `HOME`.                                                                                                       |
 | Ready/blocked view         | `src/query/query.ready.spec.ts`                                                                         | Real `blocks` edges written via `relate`, `view:'ready'` asserted against the real store.                                                                                                                             |
-| RAG opt-in / opt-out       | `src/write/rag-optional-deps.spec.ts`, `src/api.semantic-production-seam.spec.ts`, `src/api.semantic-laziness.spec.ts`, `src/query/views/semantic.spec.ts` | The default-disabled path answers the typed "not configured" error; the opted-in path drives a real (or injected fake, per test) embedding member end to end. |
-| Semantic dedup paraphrase  | `src/api.semantic-production-seam.spec.ts` (duplicate-gate block)                                        | Real fastembed through the production `create` seam: a paraphrase that shares no meaningful token with an original is caught (suppressed, the original ranked FIRST), while an unrelated item is not — the distinguishing-power proof the deterministic fake cannot honestly make. |
-| Concurrent serve (no lock) | `src/serve.singleton.spec.ts`                                                                           | Two real, simultaneously-live `backlog serve` invocations against one store file, driven by real MCP clients issuing sustained concurrent writes — no lock coordinates them, and a fresh reopen finds exactly what was reported `ok:true`. |
+| RAG opt-in / opt-out       | `src/write/rag-optional-deps.spec.ts`, `src/api.semantic-production-seam.e2e.ts`, `src/api.semantic-laziness.spec.ts`, `src/query/views/semantic.spec.ts` | The default-disabled path answers the typed "not configured" error; the opted-in path drives a real (or injected fake, per test) embedding member end to end. |
+| Semantic dedup paraphrase  | `src/api.semantic-production-seam.e2e.ts` (duplicate-gate block)                                        | Real fastembed through the production `create` seam: a paraphrase that shares no meaningful token with an original is caught (suppressed, the original ranked FIRST), while an unrelated item is not — the distinguishing-power proof the deterministic fake cannot honestly make. |
+| Concurrent serve (no lock) | `src/serve.singleton.e2e.ts`                                                                           | Two real, simultaneously-live `backlog serve` invocations against one store file, driven by real MCP clients issuing sustained concurrent writes — no lock coordinates them, and a fresh reopen finds exactly what was reported `ok:true`. |
 | Dist-load                  | `nx run backlog:verify-dist-load`                                                                       | Builds real `dist/`, imports it, calls a real verb against a real temp store — not source resolution.                                                                                                                 |
+
+The `*.e2e.ts` paths above are the RESOURCE-CONSUMING suites — every test that
+spawns a subprocess (`child_process`/`StdioClientTransport`/`tsx` workers),
+loads the real fastembed embedding model, or is a CPU/memory hog (a large
+real-store fixture, a repeated ts-morph extraction, or a measured benchmark;
+e.g. `src/query/views/registry.e2e.ts`'s 1,000-node fixture and
+`src/api.surface.e2e.ts`'s three ts-morph passes over `dist/api.d.ts`, which
+peaks at ~1 GB RSS). They were extracted out of the default `test` target (a
+cheap `*.spec.ts` STUB is left at each original path) so
+`nx affected -t test` and therefore the pre-commit/pre-push hooks no longer
+pay for them; they are not matched by the test target's vitest `include`
+(`src/**/*.spec.ts`) and run only under the explicitly-invoked `e2e` resource
+lane (`nx run backlog:e2e`), which has **no automatic CI runner** and is
+deliberately absent from `nx.json` `targetDefaults` and from every target's
+`dependsOn`. It is run as the big-release pre-flight step in
+[`PUBLISHING.md`](../../PUBLISHING.md), never automatically. Each
+stub header carries a `Resource lane:` tag (`cpu`/`mem`/`disk`/`io`/`proc`/
+`embed`) naming why its sibling is separated, so the lane can be filtered
+later. Rows still citing a `*.spec.ts` path are the cheap, in-process (or
+explicitly faked-embedding) suites that remain in the default run.
 
 Every test above uses a real store under `tmp/backlog/<test-name>/` per
 `AGENTS.md` §10, removed on teardown.

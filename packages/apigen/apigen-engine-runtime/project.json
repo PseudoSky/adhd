@@ -18,11 +18,36 @@
   "targets": {
     "test": {
       "executor": "@nx/vite:test",
+      "//inputs": "Exclude *.e2e.ts so editing a resource-consuming suite never invalidates the default lane's cache — it never runs those files (its vitest `include` is `src/**/*.spec.ts`, see vite.config.ts). Mirrors the workspace targetDefaults.test inputs plus the negative pattern.",
+      "inputs": [
+        "default",
+        "!{projectRoot}/**/*.e2e.ts",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest",
+            "better-sqlite3",
+            "drizzle-orm"
+          ]
+        }
+      ],
       "outputs": [
         "{workspaceRoot}/coverage/packages/apigen/apigen-engine-runtime"
       ],
       "options": {
         "configFile": "packages/apigen/apigen-engine-runtime/vite.config.ts"
+      }
+    },
+    "e2e": {
+      "executor": "@nx/vite:test",
+      "//": "RESOURCE-CONSUMING lane. Deliberately NOT part of `affected` and NOT referenced by any target's dependsOn or by targetDefaults — it runs ONLY on an explicit `nx run apigen-engine-runtime:e2e` (nx affected never selects it). It runs the sibling *.e2e.ts suites via vitest.e2e.config.ts. `dependsOn: []` is correct here: both suites drive only the system `git` binary and a real `node:http` server over source (`./parity-harness`) — neither needs this package's built artifact.",
+      "dependsOn": [],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/apigen-engine-runtime-e2e"
+      ],
+      "options": {
+        "configFile": "packages/apigen/apigen-engine-runtime/vitest.e2e.config.ts",
+        "passWithNoTests": true
       }
     },
     "build": {
