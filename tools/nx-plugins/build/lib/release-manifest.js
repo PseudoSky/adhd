@@ -40,6 +40,26 @@
  * batch or network contention) can always re-run the changed-set computation
  * to refresh the manifest, or use the explicit override below.
  *
+ * RUN-SCOPED FRESHNESS: the window above is a proxy for "was this manifest
+ * written by the release attempt that is publishing right now?" — and a proxy
+ * is all it can be, because it measures WALL-CLOCK AGE, not identity. A real
+ * `run-release.mjs` run that legitimately takes longer than 10 minutes (a
+ * large batch under contention) would have its own step-0 manifest age out
+ * mid-run and start refusing the very projects it just computed as in scope
+ * (the F1 root cause). The run-scoped fix: `run-release.mjs` mints one
+ * `RELEASE_RUN_TOKEN` (a random UUID) at startup and every spawned child —
+ * build, version, publish — inherits it, so the step-0 manifest stamps that
+ * token in `runToken` and every later `publish` task sees the same value in
+ * its environment. A match proves token EQUALITY, not identity: the token is
+ * stamped into a user-readable on-disk manifest and travels by env, so it is a
+ * NONCE, not a secret. What it establishes is that the manifest carries the
+ * same run token this process was started with — i.e. the manifest was written
+ * by this run's scope computation — which is enough to skip the AGE gate for
+ * that run; it grants no other privilege (in particular it does not relax the
+ * scope check below). The age gate still applies to every tokenless or
+ * non-matching manifest — e.g. an abandoned earlier run's manifest, or a
+ * hand-typed `nx run-many -t publish` that happens to reuse a stale file.
+ *
  * OVERRIDE: `RELEASE_FORCE_FULL_PUBLISH=1` + a non-empty
  * `RELEASE_FORCE_REASON="..."` bypasses the check entirely. This mirrors this
  * repo's own established convention for exceptional/dismissed transitions —
@@ -78,8 +98,8 @@ function overrideLogPath(workspaceRoot) {
  *
  * @param {string} workspaceRoot
  * @param {string[]} projectNames nx project names in scope (e.g. "agent-base-types")
- * @param {{ baseRef?: string, now?: number }} [opts]
- * @returns {{generatedAt: string, baseRef: string|null, projectNames: string[]}}
+ * @param {{ baseRef?: string, now?: number, runToken?: string|null }} [opts]
+ * @returns {{generatedAt: string, baseRef: string|null, projectNames: string[], runToken: string|null}}
  */
 function writeReleaseManifest(workspaceRoot, projectNames, opts = {}) {
   if (!Array.isArray(projectNames)) {
@@ -87,10 +107,21 @@ function writeReleaseManifest(workspaceRoot, projectNames, opts = {}) {
   }
   const p = manifestPath(workspaceRoot);
   mkdirSync(dirname(p), { recursive: true });
+  // Normalize the token to the SAME canonical form `checkPublishAllowed`
+  // compares on the read side (trimmed; blank -> null). Without this, a
+  // whitespace-padded token would be stamped verbatim but compared trimmed, so
+  // it could never match its own run and the run-scoped path would silently
+  // degrade to the age gate. See the module header's "RUN-SCOPED FRESHNESS".
+  const runToken = String(opts.runToken ?? process.env.RELEASE_RUN_TOKEN ?? '').trim() || null;
   const manifest = {
     generatedAt: new Date(opts.now ?? Date.now()).toISOString(),
     baseRef: opts.baseRef ?? null,
     projectNames: [...projectNames].sort(),
+    // The run-scoped freshness token (see the module header's "RUN-SCOPED
+    // FRESHNESS" section). Defaults to the inherited `RELEASE_RUN_TOKEN` so
+    // `computeChangedProjectSet` — which writes the step-0 manifest before any
+    // child spawns — stamps it identically to every later publish task.
+    runToken,
   };
   writeFileSync(p, JSON.stringify(manifest, null, 2) + '\n');
   return manifest;
@@ -102,7 +133,7 @@ function writeReleaseManifest(workspaceRoot, projectNames, opts = {}) {
  * distinct, clearly-reported refusal reason rather than an unhandled crash.
  *
  * @param {string} workspaceRoot
- * @returns {{generatedAt: string, baseRef: string|null, projectNames: string[]} | null}
+ * @returns {{generatedAt: string, baseRef: string|null, projectNames: string[], runToken?: string|null} | null}
  */
 function readReleaseManifest(workspaceRoot) {
   const p = manifestPath(workspaceRoot);
@@ -209,7 +240,21 @@ function checkPublishAllowed(opts) {
   }
 
   const age = manifestAgeMs(manifest, now);
-  if (age > maxAgeMs) {
+
+  // RUN-SCOPED FRESHNESS (F1 root fix) — see the module header. A non-empty
+  // inherited token equal to the manifest's own `runToken` means the manifest
+  // carries the same run token this process was started with — i.e. it was
+  // written by this run's scope computation (a NONCE, not a secret; equality
+  // of a value, not proof of identity) — so its scope is authoritative
+  // regardless of wall-clock age; skip ONLY the age gate (the scope check
+  // below is unchanged and still enforced). A tokenless manifest, or a token
+  // that does not match, falls through to the age gate exactly as before — so
+  // an abandoned earlier attempt's manifest, or a hand-typed publish with no
+  // inherited token, is still refused when stale.
+  const runToken = String(env.RELEASE_RUN_TOKEN || '').trim();
+  const sameRun = runToken !== '' && runToken === manifest.runToken;
+
+  if (!sameRun && age > maxAgeMs) {
     return {
       allowed: false,
       forced: false,
@@ -237,7 +282,11 @@ function checkPublishAllowed(opts) {
   return {
     allowed: true,
     forced: false,
-    reason: `${projectName} is listed in a fresh (${Math.round(age / 1000)}s old) release manifest.`,
+    reason: sameRun
+      ? `${projectName} is listed in the release manifest, which carries the same run token this process was ` +
+        `started with — i.e. the manifest was written by this run's scope computation (age gate skipped, ` +
+        `${Math.round(age / 1000)}s old).`
+      : `${projectName} is listed in a fresh (${Math.round(age / 1000)}s old) release manifest.`,
   };
 }
 

@@ -183,6 +183,20 @@ async function readNoteContent(
   };
 }
 
+/** The store-adapter `rowid` for a live uid — used to assert a fixture's liveness axes directly. */
+async function rowidForUid(
+  store: TestIssueStore,
+  uid: string
+): Promise<number> {
+  const { rows } = await store.adapter.executeAll<{ rowid: number }>(
+    'SELECT rowid FROM node WHERE uid = ?',
+    [uid]
+  );
+  const row = rows[0];
+  if (!row) throw new Error(`rowidForUid: no node for uid ${uid}`);
+  return row.rowid;
+}
+
 function assertCreated(
   result: ICreateIssueResult
 ): asserts result is ICreateIssueResult & {
@@ -383,6 +397,65 @@ describe('createIssue — duplicate gate (SPEC.md §6.4, §8 AC-19)', () => {
         })
       ).rejects.toBeInstanceOf(InvalidArgumentError);
       expect(await countIssueNodes(store, projectUid)).toBe(issuesBefore);
+    },
+    DUP_GATE_TIMEOUT
+  );
+
+  it(
+    'a re-file is NOT suppressed by a SUPERSEDED original — non-live candidates are excluded (non-live over-match regression)',
+    async () => {
+      const title = 'non-live over-match superseded title, exact match';
+      const body =
+        'non-live over-match superseded body, exact match, long enough to fts-match strongly';
+      const first = await file(handle, projectUid, title, body, 'filer');
+      assertCreated(first);
+
+      // Put the original into the exact non-live-but-reachable state this
+      // regression is about: `is_superseded` set (its content was edited) while
+      // its `owns_component` edge and its vector both remain. A real
+      // `updateIssue` body-change also invalidates the ownership edge and
+      // schedules the old vector's deletion — but the scan must not TRUST that
+      // a superseded row's vector is gone: the delete is fire-and-forget, and a
+      // concurrent writer can supersede a row this process still holds a live
+      // edge for. Marking the row superseded directly, leaving its vector in
+      // place, is the faithful fixture.
+      await store.adapter.executeRun(
+        'UPDATE node SET is_superseded = 1 WHERE uid = ?',
+        [first.uid]
+      );
+
+      // NEGATIVE CONTROL — the premise the fix must hold under. A superseded
+      // row keeps `t_invalid IS NULL`, so a scan whose only liveness signal is
+      // `getNodesByIds`'s default fetch (whose `liveOnly` omits only
+      // `t_invalid` rows) STILL returns it, and would treat it as a candidate.
+      // The fix that keeps it out is a PAIR, and the PAIR — not either half —
+      // is the unit under test: `resolveSimilarFilterIds` (`semantic.ts`) now
+      // applies the live filter on BOTH of its branches, so it never hands out
+      // a superseded id, and `scanForDuplicates` (`create-issue.ts`) re-asserts
+      // liveness per row. Each side independently drops this row, so reverting
+      // either one ALONE stays GREEN; the `create-issue.ts` guard is the
+      // defence-in-depth half (it survives a future `getNodesByIds` default
+      // change), not the sole reason this test passes. Revert BOTH and the
+      // re-file below is wrongly suppressed — the regression this test guards.
+      const [supersededRow] = await store.graph.getNodesByIds([
+        await rowidForUid(store, first.uid),
+      ]);
+      expect(
+        supersededRow?.isSuperseded,
+        'fixture must be a superseded row'
+      ).toBe(true);
+      expect(
+        supersededRow?.tInvalid,
+        'a superseded row keeps t_invalid NULL (so liveOnly alone does not drop it)'
+      ).toBeUndefined();
+
+      const issuesBefore = await countIssueNodes(store, projectUid);
+      const second = await file(handle, projectUid, title, body, 'filer');
+
+      assertCreated(second);
+      expect(second.uid).not.toBe(first.uid);
+      expect(second.duplicateCandidates).toBeUndefined();
+      expect(await countIssueNodes(store, projectUid)).toBe(issuesBefore + 1);
     },
     DUP_GATE_TIMEOUT
   );

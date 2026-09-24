@@ -10,7 +10,7 @@
  * `--namespace sandbox` handling, SPEC.md §5c D8) depended entirely on each
  * file's author remembering to wire it correctly, every single time. That is
  * mechanically why the embedding leak recurred across 12+ files (8 in the
- * original sweep, `web-ui.spec.ts` found by profiling, `install.e2e.spec.ts`
+ * original sweep, `web-ui.spec.ts` found by profiling, `install.e2e.ts`
  * + `serve.singleton.spec.ts` + `serve.spec.ts` found by direct isolated-run
  * testing): a local variable literally named `adhdRoot` was minted
  * (`mkdtempSync`) and used only as the spawn's `cwd` — never passed as the
@@ -32,12 +32,13 @@
  * this file does not reinvent it), plus a new stdio-transport variant for
  * the tests that drive a real `@modelcontextprotocol/sdk` `Client` over
  * `StdioClientTransport` instead of a synchronous `spawnSync` round-trip
- * (`serve.spec.ts`, `serve.singleton.spec.ts`, `install.e2e.spec.ts`).
+ * (`serve.spec.ts`, `serve.singleton.spec.ts`, `install.e2e.ts`).
  */
 import { spawnSync } from 'node:child_process';
 import { dirname, join, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { spawnTimeoutMs } from './spawn-timeout.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 /** `src/test/helpers/` -> package root -> `dist/index.js`. */
@@ -77,11 +78,17 @@ export function extractMintedSandboxRoot(stderr: string): string | undefined {
  * `mintBacklogSandbox`/`runInBacklogSandbox` below). `--namespace sandbox`
  * stays on every call either way, so `BUG-BACKLOG-SANDBOX-SILENT-BYPASS-001`'s
  * guard stays active throughout.
+ *
+ * `timeoutMs` bounds the child's wall-clock (default `spawnTimeoutMs()` —
+ * see `spawn-timeout.ts`; it is generous so a load-starved host cannot turn a
+ * successful command into an `ETIMEDOUT`, BACKLOG 345973b3). Pass an explicit
+ * value only for a genuinely long-running invocation.
  */
 export function runBacklogBin(
   args: string[],
   extraEnv: Record<string, string> = {},
-  cwd: string = tmpdir()
+  cwd: string = tmpdir(),
+  timeoutMs: number = spawnTimeoutMs()
 ): SpawnResult & { sandboxRoot?: string } {
   const result = spawnSync(
     process.execPath,
@@ -90,7 +97,7 @@ export function runBacklogBin(
       cwd,
       env: { ...process.env, ...extraEnv },
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: timeoutMs,
     }
   );
   if (result.error) {
@@ -119,13 +126,14 @@ export function runBacklogBin(
 export function runBacklogBinRaw(
   args: string[],
   cwd: string,
-  extraEnv: Record<string, string> = {}
+  extraEnv: Record<string, string> = {},
+  timeoutMs: number = spawnTimeoutMs()
 ): SpawnResult {
   const result = spawnSync(process.execPath, [DIST_INDEX, ...args], {
     cwd,
     env: { ...process.env, ...extraEnv },
     encoding: 'utf8',
-    timeout: 30_000,
+    timeout: timeoutMs,
   });
   if (result.error) throw new Error(`spawn failed: ${String(result.error)}`);
   return {
@@ -195,7 +203,7 @@ export interface StdioSpawnOptions {
  * sandbox` store (see `mintBacklogSandbox`) — the stdio-client analogue of
  * `runInBacklogSandbox` for the tests that drive a real
  * `@modelcontextprotocol/sdk` `Client` (`serve.spec.ts`,
- * `serve.singleton.spec.ts`, `install.e2e.spec.ts`) instead of a synchronous
+ * `serve.singleton.spec.ts`, `install.e2e.ts`) instead of a synchronous
  * `spawnSync` round-trip. `tailArgs` is everything after the bin path itself
  * (e.g. `['serve', '--transport', 'mcp']`) — `--namespace sandbox` is always
  * injected before it, and `ADHD_ROOT` is always pinned to the minted

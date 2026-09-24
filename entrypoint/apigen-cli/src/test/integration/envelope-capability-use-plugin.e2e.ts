@@ -6,7 +6,7 @@
 // (`capabilities.envelope.request`) reach a served operation's schema — every
 // existing test that exercised `x-apigen-envelope` hand-built its
 // `ComposedSchemas` directly (`apigen-plugin-cli-output/src/test/run.spec.ts`'s
-// `whoAmI` fixture; that package's own `run-cli-integration.spec.ts` parity
+// `whoAmI` fixture; that package's own `run-cli-integration.e2e.ts` parity
 // harness, whose header comment documents this exact gap). This spec is the
 // first test in the repo that drives a REAL `--use <plugin>` through the REAL
 // orchestrator + a REAL HTTP transport (api-fastify) end to end.
@@ -48,6 +48,7 @@ import * as net from 'node:net';
 import { tokenize } from '@adhd/apigen-core-client';
 import type { Operation, Segment } from '@adhd/apigen-core-client';
 import { project, envelopeKey } from '@adhd/apigen-engine-naming';
+import { waitForHttp, liveTestTimeoutMs, captureStderr } from '../support/readiness';
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -147,25 +148,6 @@ async function freePort(): Promise<number> {
   });
 }
 
-/** Bounded readiness poll — no fixed sleep. */
-async function waitForReady(url: string, timeoutMs = 15_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(url, {
-        method: http.verb,
-        headers: { [SESSION_HEADER]: 'probe' },
-      });
-      await res.text().catch(() => undefined);
-      return;
-    } catch {
-      // not ready yet
-    }
-    await new Promise<void>((r) => setTimeout(r, 50));
-  }
-  throw new Error(`api-fastify server did not become ready at ${url}`);
-}
-
 let child: ChildProcess | undefined;
 let tmpDir: string | undefined;
 
@@ -181,7 +163,7 @@ afterEach(() => {
 describe('[envelope-capability] DEBT-APIGEN-ENVELOPE-CAPABILITY-UNWIRED-001', () => {
   it(
     'a --use plugin declaring EnvelopeCapability surfaces its field through a real HTTP transport',
-    { timeout: 60_000 },
+    { timeout: liveTestTimeoutMs(1) },
     async () => {
       tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'apigen-envelope-'));
       const fixtureFile = path.join(tmpDir, 'envelope-fixture.ts');
@@ -209,8 +191,12 @@ describe('[envelope-capability] DEBT-APIGEN-ENVELOPE-CAPABILITY-UNWIRED-001', ()
         { cwd: REPO_ROOT, stdio: ['ignore', 'pipe', 'pipe'] }
       );
 
+      // Shared readiness helper: fails FAST (with the child's captured
+      // stderr) if the server exits before becoming ready, instead of burning
+      // the full deadline polling a dead process. See `../support/readiness`.
+      const getStderr = captureStderr(child);
       const url = `http://127.0.0.1:${port}${http.route}`;
-      await waitForReady(url);
+      await waitForHttp(url, { child, getStderr });
 
       // ── (1) + (2): the header-supplied session value must surface in the
       // response body, bound at the plugin's OWN id (`x-auth-session`) — the

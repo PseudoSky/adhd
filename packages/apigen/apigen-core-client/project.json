@@ -18,14 +18,26 @@
   "targets": {
     "test": {
       "executor": "@nx/vite:test",
+      "//dependsOn": "No `build` dependency: the resource-consuming suites that read this project's OWN build (dist-artifact-smoke spawns dist/index.mjs) were extracted into sibling `*.e2e.ts` files (see their `*.spec.ts` stubs) and now run only under the opt-in `e2e` target. No remaining default-lane spec reads dist/, so the default target no longer builds before testing. targetDefaults.test still contributes `^build` (dependency builds) + `lint`.",
       "outputs": [
         "{workspaceRoot}/coverage/packages/apigen/apigen-core-client"
+      ],
+      "options": {
+        "configFile": "packages/apigen/apigen-core-client/vite.config.ts"
+      }
+    },
+    "e2e": {
+      "//": "Resource-consuming lane: runs ONLY the `*.e2e.ts` suites extracted out of the default `test` target (the CPU-heavy real ts-morph/TypeScript compilation suites, plus two spawnSync subprocess specs). Opt-in and deliberately NOT wired into any `test.dependsOn` nor into nx.json `targetDefaults`, so `nx affected -t test` / the pre-commit + pre-push hooks never reach it. `dependsOn: [\"build\"]` because the moved suite spawns the shipped `dist/index.mjs`. Its coverage dir is DISTINCT from the default lane's, and declares no dist-shaped output.",
+      "executor": "@nx/vite:test",
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/apigen-core-client/e2e"
       ],
       "dependsOn": [
         "build"
       ],
       "options": {
-        "configFile": "packages/apigen/apigen-core-client/vite.config.ts"
+        "configFile": "packages/apigen/apigen-core-client/vitest.e2e.config.ts",
+        "passWithNoTests": true
       }
     },
     "build": {
