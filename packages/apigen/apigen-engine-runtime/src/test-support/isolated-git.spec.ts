@@ -40,7 +40,14 @@ function unsafeGit(args: readonly string[], cwd: string): string {
   return execFileSync('git', args as string[], { cwd, stdio: 'pipe' }).toString();
 }
 
-describe('BUG-APIGEN-052: isolated-git escape mechanism + fix', () => {
+// CPU-THRASH-SKIP (owner-requested, 2026-09-23): the whole file is a real-git harness —
+// `execFileSync('git', ...)` creating and mutating real repositories on disk per test to
+// prove the isolated-repo escape mechanism, so each assertion pays real process spawns
+// plus real filesystem work.
+// Deviates from AGENTS.md §7 — owner-approved override, recorded.
+// Durable fix: docs/backlog/grooming/test-perf-improvements.md.
+// Run: npx vitest run src/test-support/isolated-git.spec.ts
+describe.skip('BUG-APIGEN-052: isolated-git escape mechanism + fix [CPU-THRASH-SKIP: owner-requested]', () => {
   let victimDir: string;
 
   // BUG-APIGEN-052-SELF (found live, 2026-08-07): this helper managed the

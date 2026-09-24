@@ -1,6 +1,8 @@
 # Backlog Application Layer — Specification (FEAT-017)
 
-Status: PROPOSED — revised after blind architect review + backlog-feature
+Status: IMPLEMENTED — the surface this spec describes is realized in `src/`
+and shipped as `@adhd/backlog` (package version 1.0.0; see `CHANGELOG.md` for
+release state). Revised after blind architect review + backlog-feature
 audit. All library primitive names below were re-verified against the published
 npm packages.
 
@@ -321,7 +323,8 @@ project to log the bug against, in one call, with no search.
 
 - `query --input '{"view":"projects"}'` / `"components"` / `"locations"` — list
   registry nodes (`filter` narrows: `filter.project`, `filter.component`).
-- `query --input '{"view":"lookup","lookup":"<tool|file|url>"}'` — resolve.
+- `lookup --input '{"q":"<tool|file|url>"}'` — resolve a tool/file/url to its
+  owning project/component/location.
 - `get --input '{"registry":"project","name":"adhd"}'` — expanded detail:
   - project → `{ name, path, repoUrl, components:[{name,path}], locations:[{locType,value}] }`
   - component → `{ name, path, project:{name,path,repoUrl}, locations[] }`
@@ -947,8 +950,13 @@ Primitives: `queryNodes`, `countNodes`, `countBy`, `getNodesByIds`, `getEdges`
   (open) items by default; closed items only under an explicit terminal filter.
 - Keyset pagination for stable listing; `validAt` for cumulative-open curves.
 - **Hierarchical rollup (FEAT-005):** `part_of` + derived two-axis rollup.
+- **Mounted stats/rollup reads:** the status-aware priority matrix, the
+  `part_of` rollup and the cumulative-open curve above are each a first-class
+  mounted op — `priority-matrix`, `part-of-rollup`, `open-curve` on the CLI
+  (`backlog_priority_matrix`/`backlog_part_of_rollup`/`backlog_open_curve` on
+  MCP), not `query.view` members (§6.7).
 - **Registry views (§3a):** `view: projects|components|locations` (list), and
-  `view: lookup` with the `lookup` key (resolve tool/file/url →
+  the `lookup` verb (resolve a tool/file/url →
   project/component/location) — the agent navigation index, not an item list.
 
 ### 5a. Semantic search (FEAT-022)
@@ -2740,9 +2748,10 @@ CRUD verbs from §3a). CLI commands follow the same leaf-name convention
 `BACKLOG.md`/markdown projection renders issue **titles** as headers (never
 `uid`s) with `[target sha:…]` citations, per §6.6's `format:'markdown'` — the
 item-level `gitContext`, when present, leading that `Citations:` block once.
-Web UI list/detail/stats views read the catalogs and edges directly through
-`query`'s `view`/`groupBy` axes, exactly as the current surface's stats
-views already do — no separate web-specific query path.
+Web UI list/detail views read the catalogs and edges directly through
+`query`'s `view` axes and the three mounted stats/rollup reads
+(`priority-matrix`/`part-of-rollup`/`open-curve`), exactly as every transport
+does — no separate web-specific query path.
 
 ## 7. Removed application-layer machinery
 

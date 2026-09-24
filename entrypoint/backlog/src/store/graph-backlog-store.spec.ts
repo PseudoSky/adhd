@@ -87,7 +87,21 @@ describe('openGraphBacklogStore — busy_timeout actually takes effect (BUG-SOXG
    * box — but "a large timeout waits substantially longer than a zero
    * timeout" is a property no accepting-and-ignoring implementation can fake.
    */
-  it('busy_timeout genuinely BLOCKS a contended BEGIN IMMEDIATE — a large value waits much longer than zero', async () => {
+  // CPU-THRASH-SKIP (owner-requested, 2026-09-23). Scope note: upstream has already
+  // de-flaked this — the assertion is a RATIO, not a wall-clock threshold (see the
+  // comment above), so the older "timing assertion" objection no longer applies. The
+  // remaining reason to skip is purely cost: the test's mechanism is to hold a real
+  // `.immediate()` transaction open on a second connection and measure how long a third
+  // connection spins in the store adapter's native busy handler before giving up —
+  // paying that
+  // multi-second hold TWICE (large timeout vs zero) to compute the ratio. Real wall-clock
+  // burn for a property, not CPU throughput. The sibling tests above are cheap pragma
+  // read-backs and are LEFT RUNNING.
+  // DEVIATION: contravenes AGENTS.md §7 ("Live testing is mandatory — no silent gating");
+  // skipping is permitted there only for paid/external third-party services.
+  // Durable fix: docs/backlog/grooming/test-perf-improvements.md.
+  // Run explicitly: npx vitest run src/store/graph-backlog-store.spec.ts -t "genuinely BLOCKS"
+  it.skip('busy_timeout genuinely BLOCKS a contended BEGIN IMMEDIATE — a large value waits much longer than zero [CPU-THRASH-SKIP: owner-requested]', async () => {
     const dbPath = join(dir, 'backlog.db');
 
     /** Elapsed ms until a contended `.immediate()` gives up, at `timeoutMs`. */

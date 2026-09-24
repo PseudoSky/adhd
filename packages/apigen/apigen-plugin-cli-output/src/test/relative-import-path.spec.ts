@@ -76,7 +76,14 @@ describe('generate() — relative import path (unit)', () => {
   })
 })
 
-describe('generate() — REAL cross-directory importPath, SPAWNED (end-to-end regression)', () => {
+// CPU-THRASH-SKIP (owner-requested, 2026-09-23): same mechanism as its sibling — two
+// blocking `spawnSync('npx', ['tsx', ...])` calls (resolution + fresh node + on-the-fly
+// TS transpile) behind a 60_000 ms timeout. `npx` is network-capable, not hermetic.
+// NOTE: the unit block above (importPath rewriting) is pure logic and is LEFT RUNNING.
+// Deviates from AGENTS.md §7 — owner-approved override, recorded.
+// Durable fix: docs/backlog/grooming/test-perf-improvements.md.
+// Run: npx vitest run src/test/relative-import-path.spec.ts -t "SPAWNED"
+describe.skip('generate() — REAL cross-directory importPath, SPAWNED (end-to-end regression) [CPU-THRASH-SKIP: owner-requested]', () => {
   afterAll(() => {
     fs.rmSync(TMP_ROOT, { recursive: true, force: true })
   })

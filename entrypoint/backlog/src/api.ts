@@ -86,6 +86,19 @@ import {
   lookup as lookupRegistry,
 } from './query/views/registry.js';
 import {
+  priorityMatrix as priorityMatrixView,
+  partOfRollup as partOfRollupView,
+  openCurve as openCurveView,
+} from './query/views/stats.js';
+import type {
+  IPriorityMatrixInput,
+  IPriorityMatrixResult,
+  IPartOfRollupInput,
+  IPartOfRollupResult,
+  IOpenCurveInput,
+  IOpenCurveResult,
+} from './query/views/stats.js';
+import {
   createIssue,
   type IDuplicateScanHandle,
 } from './write/create-issue.js';
@@ -103,7 +116,6 @@ import {
 } from './write/catalog.js';
 
 import type {
-  IIssueCard,
   IIssueGetInput,
   IIssueGetResult,
   IIssueQueryInput,
@@ -443,6 +455,81 @@ export async function query(
   } catch (err) {
     return toEnvelope(err);
   }
+}
+
+/**
+ * SPEC.md §5's status-aware priority matrix (BUG-023) — a per-priority
+ * breakdown of issue counts, scoped by `project`/`component`/`kind`/`status`.
+ *
+ * An omitted `input.filter.status` scopes to OPEN work (a deliberate
+ * divergence from `query`'s `list` default, where an omitted status means "no
+ * restriction"); the applied scope is echoed on `data.statusScope`, so a
+ * default-scoped result can never be mistaken for an all-status one. `{}` is a
+ * valid input.
+ *
+ * A read op, NOT a `query.view` member: it returns a matrix
+ * (`{rows, unassigned, statusScope}`) rather than a `{view, items}` list
+ * permutation, and mounting it as a view would force `IIssueQueryInput` to
+ * carry axes (`at`, an issue root) the other views must reject. Uses only
+ * `handle.graph` — hence `needsSemantic:false`/`probeSpace:false`, so this op
+ * never pays the cold semantic-backend bootstrap (`queryHandle`'s own doc
+ * comment).
+ */
+export async function priorityMatrix(
+  ctx: BacklogCtx,
+  input: IPriorityMatrixInput
+): Promise<IOutcomeEnvelope<IPriorityMatrixResult>> {
+  return envelope(async () =>
+    priorityMatrixView(
+      await queryHandle(ctx, { needsSemantic: false, probeSpace: false }),
+      input
+    )
+  );
+}
+
+/**
+ * SPEC.md §5's `part_of` hierarchy rollup (FEAT-005) — every TRANSITIVE
+ * descendant of the root issue `input.uid` via `part_of` (issue → issue,
+ * `n:1`), counted exactly once each regardless of chain depth, split into
+ * `childrenOpen`/`childrenClosed` (plus the open descendants' uids).
+ *
+ * A read op, NOT a `query.view` member: it is rooted at an issue (`uid`), a
+ * per-op input no list view carries. Uses only `handle.graph` — see
+ * {@link priorityMatrix}'s note on the `queryHandle` gates.
+ */
+export async function partOfRollup(
+  ctx: BacklogCtx,
+  input: IPartOfRollupInput
+): Promise<IOutcomeEnvelope<IPartOfRollupResult>> {
+  return envelope(async () =>
+    partOfRollupView(
+      await queryHandle(ctx, { needsSemantic: false, probeSpace: false }),
+      input
+    )
+  );
+}
+
+/**
+ * SPEC.md §5's `validAt` cumulative-open curve — for each sampled ISO-8601
+ * instant in `input.at`, how many in-scope issues EXISTED then and, of those,
+ * how many were reconstructed as OPEN then (never the issue's current status;
+ * see `openCurve`'s own doc comment for the reconstruction rule).
+ *
+ * A read op, NOT a `query.view` member: it returns a time series
+ * (`{points}`) keyed by a caller-given instant list, an axis no list view has.
+ * Uses only `handle.graph` — see {@link priorityMatrix}'s note on the
+ * `queryHandle` gates.
+ */
+export async function openCurve(
+  ctx: BacklogCtx,
+  input: IOpenCurveInput
+): Promise<IOutcomeEnvelope<IOpenCurveResult>> {
+  return envelope(async () =>
+    openCurveView(
+      await queryHandle(ctx, { needsSemantic: false, probeSpace: false }),
+      input
+    )
+  );
 }
 
 /**

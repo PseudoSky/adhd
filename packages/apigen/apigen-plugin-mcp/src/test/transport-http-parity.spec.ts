@@ -217,7 +217,18 @@ async function connectStreamingHttp(port: number): Promise<Client> {
 // sse
 // ---------------------------------------------------------------------------
 
-describe('[mcp-adapter.10] sse transport — real SSEClientTransport parity', () => {
+// ─── CPU-THRASH-SKIP (owner-requested, 2026-09-23) ──────────────────────────
+// All three blocks in this file stand up a REAL MCP server and drive it with a real
+// SSE / StreamableHTTP client across independent concurrent sessions, plus a deliberate
+// negative control. Real sockets, real sessions, real per-request round-trips, and (in
+// the aborted-shutdown assertions) real connection-teardown waits.
+// Deviates from AGENTS.md §7 (skipping permitted only for paid/external third-party
+// services; "it spawns child processes" and "it's slow" are named non-reasons) —
+// owner-approved override, recorded.
+// Durable fix: docs/backlog/grooming/test-perf-improvements.md (recs #7, #8).
+// Run: npx vitest run src/test/transport-http-parity.spec.ts
+// ────────────────────────────────────────────────────────────────────────────
+describe.skip('[mcp-adapter.10] sse transport — real SSEClientTransport parity [CPU-THRASH-SKIP: owner-requested]', () => {
   let port: number;
   let controller: AbortController;
   let done: Promise<void>;
@@ -303,7 +314,7 @@ describe('[mcp-adapter.10] sse transport — real SSEClientTransport parity', ()
 // streaming-http
 // ---------------------------------------------------------------------------
 
-describe('[mcp-adapter.10] streaming-http transport — real StreamableHTTPClientTransport parity', () => {
+describe.skip('[mcp-adapter.10] streaming-http transport — real StreamableHTTPClientTransport parity [CPU-THRASH-SKIP: owner-requested — see block note at top of file]', () => {
   let port: number;
   let controller: AbortController;
   let done: Promise<void>;
@@ -390,7 +401,7 @@ describe('[mcp-adapter.10] streaming-http transport — real StreamableHTTPClien
 // session (see module doc). Reuses mcp-adapter.patch's SECOND hunk.
 // ---------------------------------------------------------------------------
 
-describe('[mcp-adapter.10] negative control — sse session routing actually gates', () => {
+describe.skip('[mcp-adapter.10] negative control — sse session routing actually gates [CPU-THRASH-SKIP: owner-requested — see block note at top of file]', () => {
   it(
     'reverting the per-session Server fix (mcp-adapter.patch hunk 2) breaks the SECOND SSE session\'s handshake; reverting the patch fixes it',
     async () => {
