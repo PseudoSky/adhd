@@ -10,7 +10,7 @@
  * `--namespace sandbox` handling, SPEC.md §5c D8) depended entirely on each
  * file's author remembering to wire it correctly, every single time. That is
  * mechanically why the embedding leak recurred across 12+ files (8 in the
- * original sweep, `web-ui.spec.ts` found by profiling, `install.e2e.spec.ts`
+ * original sweep, `web-ui.spec.ts` found by profiling, `install.e2e.ts`
  * + `serve.singleton.spec.ts` + `serve.spec.ts` found by direct isolated-run
  * testing): a local variable literally named `adhdRoot` was minted
  * (`mkdtempSync`) and used only as the spawn's `cwd` — never passed as the
@@ -32,7 +32,7 @@
  * this file does not reinvent it), plus a new stdio-transport variant for
  * the tests that drive a real `@modelcontextprotocol/sdk` `Client` over
  * `StdioClientTransport` instead of a synchronous `spawnSync` round-trip
- * (`serve.spec.ts`, `serve.singleton.spec.ts`, `install.e2e.spec.ts`).
+ * (`serve.spec.ts`, `serve.singleton.spec.ts`, `install.e2e.ts`).
  */
 import { spawnSync } from 'node:child_process';
 import { dirname, join, sep } from 'node:path';
@@ -195,7 +195,7 @@ export interface StdioSpawnOptions {
  * sandbox` store (see `mintBacklogSandbox`) — the stdio-client analogue of
  * `runInBacklogSandbox` for the tests that drive a real
  * `@modelcontextprotocol/sdk` `Client` (`serve.spec.ts`,
- * `serve.singleton.spec.ts`, `install.e2e.spec.ts`) instead of a synchronous
+ * `serve.singleton.spec.ts`, `install.e2e.ts`) instead of a synchronous
  * `spawnSync` round-trip. `tailArgs` is everything after the bin path itself
  * (e.g. `['serve', '--transport', 'mcp']`) — `--namespace sandbox` is always
  * injected before it, and `ADHD_ROOT` is always pinned to the minted
