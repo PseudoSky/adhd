@@ -165,9 +165,11 @@ export const BACKLOG_HOST_COMMANDS: readonly string[] = [
 
 /**
  * SPEC.md §6.7 — the data verbs the whole surface consolidates onto:
- * the nine issue verbs plus `lookup` and §3a's registry CRUD verbs, mounted
- * as `backlog_<verb>`. Pinned here, next to the carve-out it is the
- * complement of, because it is the ONE list four separate surfaces are
+ * the nine issue verbs plus `lookup`, §3a's registry CRUD verbs, and the
+ * three §5 stats/rollup reads (`priority-matrix`/`part-of-rollup`/
+ * `open-curve`), mounted as `backlog_<verb>`. Pinned here, next to the
+ * carve-out it is the complement of, because it is the ONE list four separate
+ * surfaces are
  * checked against: the three apigen mounts derive their names from the
  * operation descriptors via `describeMountedSurface`, and `cli.ts`'s argv
  * parser — which is deliberately NOT an apigen mount, because apigen's
@@ -187,6 +189,9 @@ export const BACKLOG_HOST_COMMANDS: readonly string[] = [
 export const BACKLOG_VERBS: readonly string[] = [
   'get',
   'query',
+  'priority-matrix',
+  'part-of-rollup',
+  'open-curve',
   'lookup',
   'create',
   'update',
