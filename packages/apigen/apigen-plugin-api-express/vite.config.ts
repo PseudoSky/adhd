@@ -16,6 +16,10 @@ export default defineConfig({
     dts({
       entryRoot: 'src',
       tsconfigPath: path.join(__dirname, 'tsconfig.lib.json'),
+      // `*.e2e.ts` suites are resource-consuming tests (see their `.spec.ts`
+      // stubs); like `src/test/**` they must never emit declarations into
+      // dist/.
+      exclude: ['src/test/**', 'src/**/*.e2e.ts'],
     }),
   ],
 
@@ -48,7 +52,15 @@ export default defineConfig({
       dir: '../../../node_modules/.vitest',
     },
     environment: 'node',
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    // `*.spec.ts` ONLY — never `*.e2e.ts`. The resource-consuming suites (real
+    // live-dispatched Express servers on real ports, driven over real HTTP
+    // round-trips) were extracted out of this default target into sibling
+    // `*.e2e.ts` files (see their `.spec.ts` stubs); those must never run under
+    // `nx affected -t test` or the pre-commit/pre-push hooks. This project has
+    // exclusively `*.spec.ts` test files, so narrowing the glob is
+    // behaviour-preserving and makes the `.e2e.ts` exclusion structural rather
+    // than an emergent property of glob semantics.
+    include: ['src/**/*.spec.ts'],
     reporters: ['default'],
     coverage: {
       reportsDirectory: projectCoverage(__dirname),
