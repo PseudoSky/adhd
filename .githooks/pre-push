@@ -57,12 +57,47 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 
   echo "→ pre-push: nx affected -t test  (base=${base:-<default>}  head=$local_sha, ref=$local_ref)"
 
+  # ---------------------------------------------------------------------------
+  # Passive timing capture (no extra run, no reporter to configure).
+  #
+  # vitest's OWN default reporter already prints a per-file duration line for
+  # every spec it runs ("✓ src/x.spec.ts (12 tests) 6238ms"); nx's
+  # `--output-style=stream-without-prefixes` passes those lines through verbatim.
+  # So the data we want is already on stdout — the only missing piece is
+  # persistence. We tee it to a log and keep the newest N.
+  #
+  # WHY NOT `-- --reporter=json`: passing vitest flags through nx's `--`
+  # forwarding makes the task HANG after the work completes (verified
+  # 2026-09-23: the same command without forwarded args exits promptly; with
+  # `--reporter=…` it never exits, even with `--run` and CI=true). Forwarding
+  # is therefore unusable here, and the built-in output is captured instead.
+  #
+  # WHY NOT `nx ... | tee -a log` NAIVELY: a pipeline's exit status is its LAST
+  # command's, so that would make `status` tee's status (always 0) and a FAILING
+  # test run would report success — silently defeating this gate. So nx's real
+  # status is written to a file from INSIDE the piped subshell and read back out
+  # afterwards. This also keeps the gate intact if `tee` itself fails.
+  #
+  # Best-effort throughout: a full disk or unwritable HOME must never block a
+  # push, so every capture step is `|| true` and only `status` can fail the run.
+  # ---------------------------------------------------------------------------
+  timings_dir="${ADHD_TEST_TIMINGS_DIR:-$HOME/.adhd/test-timings}"
+  mkdir -p "$timings_dir" 2>/dev/null || true
+  timings_log="$timings_dir/$(date -u +%Y%m%dT%H%M%SZ)-$$.log"
+  status_file=$(mktemp 2>/dev/null || echo /tmp/adhd-pre-push-status.$$)
+
   if [ -n "$base" ]; then
-    CI=true npx nx affected --target=test --base="$base" --head="$local_sha" --output-style=stream-without-prefixes
+    { CI=true npx nx affected --target=test --base="$base" --head="$local_sha" --output-style=stream-without-prefixes; echo $? > "$status_file"; } 2>&1 | tee "$timings_log"
   else
-    CI=true npx nx affected --target=test --head="$local_sha" --output-style=stream-without-prefixes
+    { CI=true npx nx affected --target=test --head="$local_sha" --output-style=stream-without-prefixes; echo $? > "$status_file"; } 2>&1 | tee "$timings_log"
   fi
-  status=$?
+  # nx's TRUE status (the pipeline's status above is tee's, and is discarded).
+  status=$(cat "$status_file" 2>/dev/null)
+  rm -f "$status_file" 2>/dev/null || true
+
+  # Keep the newest 50 captures; drop the rest. Best-effort.
+  ls -1t "$timings_dir"/*.log 2>/dev/null | tail -n +51 | while IFS= read -r old; do rm -f "$old" 2>/dev/null || true; done
+  echo "  (timings captured: $timings_log)"
 
   if [ "$status" -ne 0 ]; then
     echo ""
