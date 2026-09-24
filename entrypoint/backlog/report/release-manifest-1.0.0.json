@@ -1,0 +1,12 @@
+{
+  "package": "@adhd/backlog",
+  "version": "1.0.0",
+  "sourceSha": "545d70253242d5b1c0571a64d357113da5e40312",
+  "sourceRef": "origin/main (PR #9 squash-merge, 1.0.0)",
+  "builtFromWorktree": ".worktrees/backlog-release (branch release/backlog-1.0.0)",
+  "builtAt": "2026-09-22T22:12:00Z",
+  "distSha256": "a74a180e913c6d177a4485990e0b98fb45e470a20610dee0af6cdb41a8207668",
+  "distBytes": 722074,
+  "distMode": "755",
+  "note": "This is the LIVE-1 clean build record. deploy-verify.sh reads a copy named BUILD-MANIFEST.json (or SOURCE_SHA) placed at the release root after LIVE-2 stages ~/.adhd/backlog/releases/<v>/."
+}
