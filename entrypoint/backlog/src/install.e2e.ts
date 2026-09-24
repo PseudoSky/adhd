@@ -1,5 +1,5 @@
 /**
- * install.e2e.spec.ts — BUG-013, the real proof. Per AGENTS.md "Proving an
+ * install.e2e.ts — BUG-013, the real proof. Per AGENTS.md "Proving an
  * MCP server works — drive the real tools, never a bypass": this test
  * writes a claude-style AND an opencode-style config via the real `install`
  * function, extracts the EXACT command/args (or command-array) `install.ts`
