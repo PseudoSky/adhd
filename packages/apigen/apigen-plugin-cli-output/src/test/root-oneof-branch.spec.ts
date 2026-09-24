@@ -1,4 +1,5 @@
-// root-oneof-branch.spec.ts — BUG-APIGEN-CLI-ROOT-ONEOF-UNSUPPORTED-001.
+// root-oneof-branch.spec.ts — BUG-APIGEN-CLI-ROOT-ONEOF-UNSUPPORTED-001
+// (default lane — in-process, no subprocess).
 //
 // Coverage:
 //   - `resolveRootUnion` (schema-introspect.ts): detects a root-level
@@ -7,104 +8,19 @@
 //   - `generate()`: renders N Commander subcommands (one per discriminator
 //     branch) instead of zero flags; a flat (non-union) operation's emitted
 //     source is completely unaffected (regression guard).
-//   - Real end-to-end proof: the generated `cli.ts` source is written to
-//     disk next to a real target module and driven as a REAL spawned `node`
-//     child process (real argv parsing, real dispatch, real function call) —
-//     not an in-process shortcut.
 //
-// Fixture provenance (BUG-APIGEN-CLI-002 update): this suite's fixture used
-// to be sourced VERBATIM from `@adhd/apigen-core-client`'s real
-// `buildBatchMountedOperations` (`_batch/<kind>`'s actual production schema)
-// specifically because that was, at the time, the one real root-level
-// `oneOf`+`discriminator` domain schema shipping anywhere in this repo.
-// BUG-APIGEN-CLI-002 changed `batch.ts`'s `branchInputSchema` to nest every
-// control-plane field (INCLUDING the `operation` discriminator) under one
-// top-level `input` object, matching the single-JSON-blob convention every
-// other apigen-mounted operation uses — but a discriminator's `propertyName`
-// must, by the OpenAPI/JSON-Schema `discriminator` contract, name a property
-// that sits DIRECTLY on the oneOf'd object; once `operation` moved a level
-// deeper it can no longer serve that role, so `buildBatchKindSchema` no
-// longer emits a `discriminator` at all (see `batch.ts`'s own doc comment on
-// `branchInputSchema`). `_batch/<kind>` is therefore no longer a real
-// root-oneof+discriminator schema to source this fixture from.
-//
-// `resolveRootUnion`/`generate()`'s root-union codegen capability is still
-// real, shipped code — it exists for ANY future operation whose domain
-// schema is itself a discriminated `oneOf` (independent of batch) — so this
-// suite now hand-constructs an equivalent fixture in that exact shape
-// (mirroring what `_batch/<kind>` used to look like pre-fix) rather than
-// asserting nothing is left to test.
+// The real end-to-end proof — the generated `cli.ts` written to disk next to a
+// real target module and driven as a REAL spawned `node` child process — lives
+// in the sibling `root-oneof-branch.e2e.ts` (resource-consuming lane; see its
+// header). It was extracted out of this default target so `nx affected -t test`
+// / the pre-commit + pre-push hooks never spawn a process for it; the shared
+// fixture both lanes import lives in `./fixtures/root-oneof-branch.fixture.ts`.
 
-import { describe, it, expect, afterEach } from 'vitest';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { describe, it, expect } from 'vitest';
 import type { PluginInput } from '@adhd/apigen-core-client';
 import { generate } from '../lib/generate';
 import { resolveRootUnion, dataSchemaProps } from '../lib/schema-introspect';
-
-const execFileAsync = promisify(execFile);
-
-// ---------------------------------------------------------------------------
-// Hand-built root-level `oneOf`+`discriminator` domain schema (BUG-APIGEN-CLI-002
-// update — see file-header note above for why this is no longer sourced from
-// `@adhd/apigen-core-client`'s real batch derivation). Shape mirrors
-// `_batch/<kind>`'s PRE-fix output byte-for-byte: two branches, discriminated
-// by a top-level `operation` literal, each carrying a flat `items` (+ the
-// other batch control-plane fields) directly on the branch.
-// ---------------------------------------------------------------------------
-
-function realBatchDomainSchema(): Record<string, unknown> {
-  return {
-    oneOf: [
-      {
-        type: 'object',
-        required: ['operation', 'items'],
-        properties: {
-          operation: { type: 'string', enum: ['createItem'] },
-          items: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: { name: { type: 'string' } },
-              required: ['name'],
-            },
-          },
-          concurrency: { type: 'number' },
-          mode: { type: 'string', enum: ['parallel', 'serial', 'chained'] },
-          onItemError: { type: 'string', enum: ['continue', 'abort'] },
-          itemTimeoutMs: { type: 'number' },
-        },
-        additionalProperties: true,
-      },
-      {
-        type: 'object',
-        required: ['operation', 'items'],
-        properties: {
-          operation: { type: 'string', enum: ['sendTask'] },
-          items: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: { taskId: { type: 'string' } },
-              required: ['taskId'],
-            },
-          },
-          concurrency: { type: 'number' },
-          mode: { type: 'string', enum: ['parallel', 'serial', 'chained'] },
-          onItemError: { type: 'string', enum: ['continue', 'abort'] },
-          itemTimeoutMs: { type: 'number' },
-        },
-        additionalProperties: true,
-      },
-    ],
-    discriminator: {
-      propertyName: 'operation',
-      mapping: { createItem: '#/oneOf/0', sendTask: '#/oneOf/1' },
-    },
-  };
-}
+import { realBatchDomainSchema } from './fixtures/root-oneof-branch.fixture';
 
 function makeInput(overrides: Partial<PluginInput> = {}): PluginInput {
   return {
@@ -282,178 +198,4 @@ describe('generate() — root-level oneOf+discriminator operation', () => {
     expect(content).not.toContain('_cmd');
     expect(content).not.toContain('::');
   });
-});
-
-// ---------------------------------------------------------------------------
-// Real end-to-end proof — the generated source is written to disk and driven
-// as a REAL spawned `node` child process against a real target module (per
-// AGENTS.md §7: real components, real dispatch, no in-process shortcut).
-// ---------------------------------------------------------------------------
-
-describe('[root-oneof.e2e] real spawned process — the batch-shaped subcommands are genuinely invokable', () => {
-  let tmpDir: string | undefined;
-
-  afterEach(() => {
-    if (tmpDir && fs.existsSync(tmpDir)) {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-      tmpDir = undefined;
-    }
-  });
-
-  function writeFixture(): { cliPath: string; targetPath: string } {
-    // Ephemeral test output lives under this package's own `tmp/` (AGENTS.md
-    // §10) — nested here (rather than the OS temp dir) so Node module
-    // resolution walking up the directory tree finds this package's own
-    // `node_modules/@adhd/*` workspace symlinks (apigen-engine-runtime).
-    const base = path.join(__dirname, '..', '..', 'tmp', 'root-oneof-e2e');
-    fs.mkdirSync(base, { recursive: true });
-    tmpDir = fs.mkdtempSync(path.join(base, 'run-'));
-
-    const domainSchema = realBatchDomainSchema();
-    const pluginInput: PluginInput = {
-      packages: [
-        {
-          id: 'svc',
-          importPath: './target',
-          schemas: {
-            batchAction: {
-              input: {
-                type: 'object',
-                properties: { data: domainSchema },
-                required: ['data'],
-              },
-              output: {},
-            },
-          },
-        },
-      ],
-      outputDir: tmpDir,
-      options: {},
-    };
-    const { content } = generate(pluginInput).files[0];
-
-    const cliPath = path.join(tmpDir, 'cli.ts');
-    fs.writeFileSync(cliPath, content);
-
-    // Real target module — a normal exported TS function, positionally
-    // receiving (operation, items, concurrency, mode, onItemError,
-    // itemTimeoutMs) in the SAME order `branchInputSchema` declares them
-    // (JS object key insertion order), matching what the synthesized
-    // per-branch dispatch schema (`dataParamNames`) resolves.
-    const targetPath = path.join(tmpDir, 'target.ts');
-    fs.writeFileSync(
-      targetPath,
-      [
-        `export function batchAction(`,
-        `  operation: string,`,
-        `  items: unknown[],`,
-        `  concurrency?: number,`,
-        `  mode?: string,`,
-        `  onItemError?: string,`,
-        `  itemTimeoutMs?: number`,
-        `) {`,
-        `  return { operation, items, concurrency, mode, onItemError, itemTimeoutMs };`,
-        `}`,
-      ].join('\n')
-    );
-
-    return { cliPath, targetPath };
-  }
-
-  it(
-    'real subprocess: "svc batchAction create-item --items \'[...]\'" dispatches the real function with the real branch args',
-    { timeout: 30000 },
-    async () => {
-      const { cliPath } = writeFixture();
-
-      const { stdout, stderr } = await execFileAsync(
-        'node',
-        [
-          '-r',
-          '@swc-node/register',
-          cliPath,
-          'batchAction',
-          'create-item',
-          '--items',
-          '[{"name":"widget"}]',
-        ],
-        {
-          env: {
-            ...process.env,
-            NODE_PATH: [
-              path.join(__dirname, '..', '..', 'node_modules'),
-              path.join(__dirname, '..', '..', '..', '..', '..', 'node_modules'),
-            ].join(path.delimiter),
-          },
-        }
-      );
-
-      expect(stderr).toBe('');
-      const result = JSON.parse(stdout.trim().split('\n').pop() as string);
-      expect(result).toEqual({
-        operation: 'createItem',
-        items: [{ name: 'widget' }],
-      });
-    }
-  );
-
-  it(
-    'real subprocess: the OTHER branch ("send-task") is a genuinely distinct, dispatchable subcommand',
-    { timeout: 30000 },
-    async () => {
-      const { cliPath } = writeFixture();
-
-      const { stdout, stderr } = await execFileAsync(
-        'node',
-        [
-          '-r',
-          '@swc-node/register',
-          cliPath,
-          'batchAction',
-          'send-task',
-          '--items',
-          '[{"taskId":"t-1"}]',
-          '--concurrency',
-          '2',
-        ],
-        {
-          env: {
-            ...process.env,
-            NODE_PATH: [
-              path.join(__dirname, '..', '..', 'node_modules'),
-              path.join(__dirname, '..', '..', '..', '..', '..', 'node_modules'),
-            ].join(path.delimiter),
-          },
-        }
-      );
-
-      expect(stderr).toBe('');
-      const result = JSON.parse(stdout.trim().split('\n').pop() as string);
-      expect(result).toEqual({
-        operation: 'sendTask',
-        items: [{ taskId: 't-1' }],
-        concurrency: 2,
-      });
-    }
-  );
-
-  it(
-    '[negative control] pre-fix behavior reproduced: a bare flat-schema reading of the same real batch domain schema yields zero usable flags',
-    () => {
-      // This is the literal bug this backlog item fixes — proven directly
-      // against the SAME real schema used above, via the OLD flat-only
-      // accessor, with no subcommand fallback.
-      const domainSchema = realBatchDomainSchema();
-      const flatOnly = dataSchemaProps({
-        input: {
-          type: 'object',
-          properties: { data: domainSchema },
-          required: ['data'],
-        },
-        output: {},
-      });
-      expect(Object.keys(flatOnly.props)).toEqual([]);
-      expect(flatOnly.required).toEqual([]);
-    }
-  );
 });
