@@ -126,6 +126,31 @@ test('writeReleaseManifest: records runToken from opts.runToken, else from env.R
   });
 });
 
+test('writeReleaseManifest: normalizes a whitespace-padded token at WRITE time so it matches the read-side trim (no silent age-gate degradation)', () => {
+  withTmpDir((dir) => {
+    const now = 2_000_000_000_000;
+    // 2 hours old — far beyond MANIFEST_MAX_AGE_MS, stamped with a PADDED token.
+    writeReleaseManifest(dir, ['pkg-b'], { now: now - 2 * 60 * 60 * 1000, runToken: '  run-padded  ' });
+    assert.equal(
+      readReleaseManifest(dir).runToken,
+      'run-padded',
+      'the token must be stored trimmed, i.e. in the SAME canonical form the read-side comparison uses'
+    );
+
+    // Given the same padded token in env, the run must now MATCH its own
+    // manifest — before the write-side trim it never could (env was trimmed,
+    // the manifest was not), silently degrading to the age gate.
+    const result = checkPublishAllowed({
+      workspaceRoot: dir,
+      projectName: 'pkg-b',
+      env: { RELEASE_RUN_TOKEN: '  run-padded  ' },
+      now,
+    });
+    assert.equal(result.allowed, true, 'a padded token must match its own run once both sides are canonicalized');
+    assert.match(result.reason, /same run token/);
+  });
+});
+
 test('checkPublishAllowed: token MATCH + ancient manifest -> ALLOWED (the age gate is skipped for the same run)', () => {
   withTmpDir((dir) => {
     const now = 2_000_000_000_000;
@@ -139,7 +164,7 @@ test('checkPublishAllowed: token MATCH + ancient manifest -> ALLOWED (the age ga
     });
     assert.equal(result.allowed, true, 'a same-run token must override the stale refusal');
     assert.equal(result.forced, false);
-    assert.match(result.reason, /same release run/);
+    assert.match(result.reason, /same run token/);
   });
 });
 

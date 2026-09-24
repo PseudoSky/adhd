@@ -25,7 +25,19 @@
  * `ADHD_SPAWN_TIMEOUT_MS` overrides the default. It is read at CALL time
  * (not module load), so a spec can set it after import; a caller that passes
  * an explicit timeout keeps full, final control.
+ *
+ * The override is GUARDED, not trusted verbatim: a value that does not parse
+ * to a finite, strictly-positive number (unset, an empty string, a
+ * non-numeric string, `0`, or a negative) falls back to the default. This
+ * matters because both bad parses are actively harmful: an EMPTY string is
+ * not caught by `??` and yields `0`, which means "no timeout" in
+ * `spawnSync` — the bound silently disappears; a NON-NUMERIC string yields
+ * `NaN`, which `spawnSync({ timeout: NaN })` rejects with a synchronous
+ * `ERR_OUT_OF_RANGE` throw.
  */
+export const DEFAULT_SPAWN_TIMEOUT_MS = 120_000;
+
 export function spawnTimeoutMs(): number {
-  return Number(process.env.ADHD_SPAWN_TIMEOUT_MS ?? 120_000);
+  const n = Number(process.env.ADHD_SPAWN_TIMEOUT_MS);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_SPAWN_TIMEOUT_MS;
 }
