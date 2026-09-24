@@ -1,0 +1,550 @@
+diff --git a/.githooks/pre-commit b/.githooks/pre-commit
+index 9899c4c7..2967a851 100755
+--- a/.githooks/pre-commit
++++ b/.githooks/pre-commit
+@@ -143,14 +143,83 @@ fi
+ # `nx test <project>`-only blind spot documented in
+ # DEBT-PROCESS-AFFECTED-TEST-001 — it does NOT close the separate
+ # cross-worktree blind spot also described there; that remains open).
+-CI=true npx nx affected --target=test --files="$files" --output-style=stream-without-prefixes >"$out" 2>&1
++# Failure diagnostics (BUG-GATE-001). On failure, `nx affected` prints only a
++# "Failed tasks:" summary of task NAMES; without the failing task's own output,
++# the first diagnostic step is a manual re-run of the FULL affected set (~8 min
++# / 63 projects). This gate therefore captures the run with
++# `--output-style=static`, which emits each task's output as a contiguous block
++# under its "> nx run <task>" header — the default `stream-without-prefixes`
++# style interleaves concurrent tasks and drops per-line attribution, so the
++# failing block cannot be recovered from it reliably. `print_gate3_failures`
++# then prints the failing task name(s) plus the tail of each captured block,
++# and a NARROW re-run command per task — seconds, not minutes. Diagnostics-only:
++# the run is fully redirected to a file (never watched live), so `static`
++# changes nothing on the passing path, and no gate semantics, gate order, or
++# exit codes change. If the summary/output can't be parsed it falls back to the
++# full captured log so a diagnostic is never lost.
++print_gate3_failures() {
++  _log=$1
++
++  # Task names from Nx's "Failed tasks:" block, e.g. "- data-base-transforms:test".
++  _failed=$(awk '
++    /^Failed tasks:/ { in_list = 1; next }
++    in_list && /^[[:space:]]*-[[:space:]]*[^[:space:]]/ {
++      sub(/^[[:space:]]*-[[:space:]]*/, ""); print; next
++    }
++    in_list && !/^[[:space:]]*$/ { in_list = 0 }
++  ' "$_log")
++
++  if [ -z "$_failed" ]; then
++    echo "  (could not parse Nx's 'Failed tasks:' summary — full captured log follows)"
++    cat "$_log"
++    return
++  fi
++
++  echo "  Failed task(s):"
++  printf '%s\n' "$_failed" | sed 's/^/  - /'
++
++  # Each task's output is a contiguous block between its "> nx run <task>"
++  # header and the next "> nx run ..." header (or Nx's final summary) — see the
++  # `--output-style=static` note above. Print the last 60 lines of that block:
++  # enough to carry the failure, bounded even for a large run.
++  _shown=0
++  for _task in $_failed; do
++    _slice=$(awk -v task="$_task" -v n=60 '
++      BEGIN { hdr = "> nx run " task }
++      !started && ($0 == hdr || index($0, hdr " ") == 1) { started = 1; next }
++      started && (/^> nx run / || $0 ~ /^[[:space:]]*NX[[:space:]]+Running target/) { started = 0 }
++      started { lines[++c] = $0 }
++      END {
++        first = (c > n) ? c - n + 1 : 1
++        for (i = first; i <= c; i++) print lines[i]
++      }
++    ' "$_log")
++    if [ -n "$_slice" ]; then
++      _shown=1
++      echo ""
++      echo "  ── output for $_task (last 60 lines) ──"
++      printf '%s\n' "$_slice" | sed 's/^/  /'
++    fi
++  done
++
++  if [ "$_shown" -eq 0 ]; then
++    echo ""
++    echo "  (no per-task output found in the captured log — full log follows)"
++    cat "$_log"
++  fi
++
++  echo ""
++  echo "  Inspect (re-run ONLY the failing task — seconds, not the full set):"
++  printf '%s\n' "$_failed" | sed 's/^/  npx nx run /'
++}
++
++CI=true npx nx affected --target=test --files="$files" --output-style=static >"$out" 2>&1
+ status=$?
+ 
+ if [ "$status" -ne 0 ]; then
+-  cat "$out"
++  print_gate3_failures "$out"
+   echo ""
+   echo "✖ pre-commit: affected test failed — fix and re-commit."
+-  echo "  Inspect: npx nx affected -t test --files=\"$files\", fix the failure, then commit again."
+   echo "  (bypass in an emergency with: git commit --no-verify)"
+   exit 1
+ fi
+diff --git a/.mcp.json b/.mcp.json
+index a9b2a020..97557d28 100644
+--- a/.mcp.json
++++ b/.mcp.json
+@@ -18,7 +18,7 @@
+     "backlog": {
+       "type": "stdio",
+       "command": "node",
+-      "args": ["/Users/nix/dev/node/adhd/.worktrees/backlog-cutover/entrypoint/backlog/dist/index.js", "serve", "--transport", "mcp"]
++      "args": ["/Users/nix/dev/node/adhd/.worktrees/restore-min/entrypoint/backlog/dist/index.js", "serve", "--transport", "mcp"]
+     }
+   }
+ }
+diff --git a/AGENTS.md b/AGENTS.md
+index dd961b62..f2593ec6 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -23,11 +23,11 @@ You are an expert full-stack engineer operating within a high-scale **Nx Monorep
+ - You never create folders in the repo root without human approval
+ - You never chain file removals in bash commands
+ - You never write fs removals within scripts relying on variables without human approval
+-- You file, claim, transition, and resolve backlog items via the `adhd-backlog` CLI (renamed from the bare `backlog` bin, which collided with the unrelated public npm package `backlog@1.4.56`) / `mcp__backlog__*` tools — never by hand-editing a `BACKLOG.md`. Every `BACKLOG.md` is now a generated projection of the global backlog graph (`@adhd/backlog`, migration phase-3); a hand edit is overwritten on the next render and rejected by the parity gate. Check `adhd-backlog admin --input '{"action":"migration_status"}'` for the authoritative phase. (For this repo, this supersedes the global "store deferrals/bugs to BACKLOG.md" disclosure rule.)
++- You file, claim, transition, and resolve backlog items via the `backlog` CLI / `mcp__backlog__*` tools — never by hand-editing a `BACKLOG.md`. Every `BACKLOG.md` is now a generated projection of the global backlog graph (`@adhd/backlog`, migration phase-3); a hand edit is overwritten on the next render and rejected by the parity gate. Check `backlog admin --input '{"action":"migration_status"}'` for the authoritative phase. (For this repo, this supersedes the global "store deferrals/bugs to BACKLOG.md" disclosure rule.)
+ - You never declare bugs as "pre-existing"
+ - After merging branches or worktrees, you always clean up the branch and write to the apropriate changelogs
+ - You always update relevant docs to include surface features added (add to backlog if the docs do not exist)
+-- **Hard rule — parallel-process enabled is the invariant; any commentary implying single-writer/single-process is FALSE and must be corrected on sight.** Every store, package, and system in this ecosystem is parallel-process enabled: multiple processes may hold concurrent write connections to the same store (ADR-0012 is the authoritative invariant — it supersedes ADR-0007's single-writer claim, and ADR-0015 is a never-accepted proposal). Any code comment, doc, ADR, commit message, or type signature that implies a system is single-writer, single-process, or not safe under concurrent processes is a stale/false claim: surface it for correction the moment you see it — log it via `adhd-backlog` AND fix it. Never repeat the claim, and never reason from it as if it were true. (Precedent: a graph-store `NodeUniquenessPolicy` comment asserted "the store is single-writer… check-then-INSERT is already atomic," citing the superseded ADR-0007 and the unaccepted ADR-0015 — it misled a design review and is filed as BUG-GRAPHSTORE-STALE-SINGLE-WRITER-001.)
++- **Hard rule — parallel-process enabled is the invariant; any commentary implying single-writer/single-process is FALSE and must be corrected on sight.** Every store, package, and system in this ecosystem is parallel-process enabled: multiple processes may hold concurrent write connections to the same store (ADR-0012 is the authoritative invariant — it supersedes ADR-0007's single-writer claim, and ADR-0015 is a never-accepted proposal). Any code comment, doc, ADR, commit message, or type signature that implies a system is single-writer, single-process, or not safe under concurrent processes is a stale/false claim: surface it for correction the moment you see it — log it via `backlog` AND fix it. Never repeat the claim, and never reason from it as if it were true. (Precedent: a graph-store `NodeUniquenessPolicy` comment asserted "the store is single-writer… check-then-INSERT is already atomic," citing the superseded ADR-0007 and the unaccepted ADR-0015 — it misled a design review and is filed as BUG-GRAPHSTORE-STALE-SINGLE-WRITER-001.)
+ 
+ ---
+ 
+diff --git a/entrypoint/backlog/src/client.ts b/entrypoint/backlog/src/client.ts
+index 21bc789c..8ecdeb7e 100644
+--- a/entrypoint/backlog/src/client.ts
++++ b/entrypoint/backlog/src/client.ts
+@@ -40,6 +40,7 @@ import type {
+   ICreateOutcome,
+   IDuplicateCandidate,
+   IEdgeOutcome,
++  IListCandidatesResult,
+   IOutcomeEnvelope,
+   ISplitItemResult,
+   ISupersedeResult,
+@@ -81,6 +82,7 @@ import {
+   transitionStatus as transitionStatusOp,
+   updateItem as updateItemOp,
+ } from './ops-v1.js';
++import { SEMANTIC_DEDUPE_MIN_SCORE, dedupeScan, toDuplicateCandidateCards } from './store/crud.js';
+ 
+ /** The one type apigen special-cases via the `ctx-name-only` invariant. */
+ export interface BacklogCtx {
+@@ -239,18 +241,21 @@ export async function query(ctx: BacklogCtx, input: IBacklogQueryOptions): Promi
+  * `duplicateAction` (default `"abort"`) is the interception knob: `abort`
+  * refuses the write and returns the candidates as the `duplicate_candidate`
+  * error arm (exit 1 — `BACKLOG_EXIT_CODE`), `file` is the confirmed re-file
+- * that bypasses the gate deliberately. The outcome ALWAYS carries a required
++ * that bypasses the gate deliberately, and `list` (BUG-050) is the
++ * non-destructive inspection mode that returns the scored candidates in the
++ * SUCCESS arm without writing anything. The outcome ALWAYS carries a required
+  * `created` boolean, so a variant can never report a write it did not make.
+  *
+  * @param ctx open store + env
+  * @param input `{ item, by, duplicateAction?, splitFrom?, children?, supersedes?, reason? }`
+- * @returns `{ ok: true, data: { created, humanId?, item?, … } }`, or the error
+- *   arm with `duplicate_candidate` / `invalid_argument` / `item_not_found`
++ * @returns `{ ok: true, data: { created, humanId?, item?, … } }` (or the
++ *   `list` dry-run shape), or the error arm with `duplicate_candidate` /
++ *   `invalid_argument` / `item_not_found`
+  */
+ export async function create(
+   ctx: BacklogCtx,
+   input: IBacklogCreateInput
+-): Promise<IOutcomeEnvelope<ICreateOutcome | ISplitItemResult | ISupersedeResult>> {
++): Promise<IOutcomeEnvelope<ICreateOutcome | ISplitItemResult | ISupersedeResult | IListCandidatesResult>> {
+   return envelope(async () => {
+     const by = assertAttribution(input?.by);
+     const repo = requireCreateRepo(input);
+@@ -264,10 +269,26 @@ export async function create(
+       // fabricated outcome field is worse than a typed refusal.
+       throw new InvalidArgumentError(
+         'duplicateAction',
+-        'backlog_create: duplicateAction "comment" needs the FEAT-013 dupe counter, which is not in this build (INTERFACE_v2 §3, plan C-04). Use "abort" to see the candidates, or "file" to re-file deliberately.'
++        'backlog_create: duplicateAction "comment" needs the FEAT-013 dupe counter, which is not in this build (INTERFACE_v2 §3, plan C-04). Use "list" to see the candidates WITHOUT writing, or "file" to re-file deliberately.'
+       );
+     }
+ 
++    // BUG-050 — `list` is a pure dry run: run the SAME dedupe scan the
++    // interception uses, return the scored candidates in the SUCCESS arm, and
++    // write nothing at all (no new item, and deliberately no `dupeHits` bump
++    // — inspection is not demand). Before this, the only way to learn what
++    // the gate had matched was to force past it with `file`.
++    if (action === 'list') {
++      const hits = await dedupeScan(ctx.store, repo, { ...withAuthorDefaults(input.item, by), repo });
++      const candidates = toDuplicateCandidateCards(hits);
++      const result: IListCandidatesResult = {
++        created: false,
++        candidates,
++        ...(candidates.some((candidate) => candidate.score !== undefined) ? { threshold: SEMANTIC_DEDUPE_MIN_SCORE } : {}),
++      };
++      return result;
++    }
++
+     // §5a / GRAPH_MODEL §5.1 — split: N children, each PART_OF the parent.
+     if (input.splitFrom !== undefined) {
+       const children = input.children ?? [];
+@@ -303,7 +324,18 @@ export async function create(
+       // this takes the same path every other typed failure does (error arm,
+       // code `duplicate_candidate`, exit 1 per `BACKLOG_EXIT_CODE`) instead
+       // of a bespoke return shape only this branch understands.
+-      throw new DuplicateCandidateError(input.item.title, toDuplicateCandidates(res.duplicateCandidates));
++      //
++      // BUG-050: prefer the SCORED `duplicateCandidateDetails` the store now
++      // returns (id/title/status + score + reason) over the scoreless v1
++      // `duplicateCandidates`, and report the semantic floor when any
++      // candidate carried a score, so a caller can judge how marginal the
++      // match was instead of guessing.
++      const details = res.duplicateCandidateDetails ?? toDuplicateCandidates(res.duplicateCandidates);
++      throw new DuplicateCandidateError(
++        input.item.title,
++        details,
++        details.some((candidate) => candidate.score !== undefined) ? SEMANTIC_DEDUPE_MIN_SCORE : undefined,
++      );
+     }
+     const outcome: ICreateOutcome = {
+       created: true,
+diff --git a/entrypoint/backlog/src/model.ts b/entrypoint/backlog/src/model.ts
+index 667a5259..94990ec8 100644
+--- a/entrypoint/backlog/src/model.ts
++++ b/entrypoint/backlog/src/model.ts
+@@ -360,6 +360,15 @@ export interface CreateItemResult {
+   item: BacklogItem;
+   created: boolean; // false ⇒ no node written; see duplicateCandidates
+   duplicateCandidates: BacklogItem[];
++  /**
++   * BUG-050 — the SAME candidates as `duplicateCandidates`, but as the §3
++   * `IDuplicateCandidate` card shape carrying each hit's match `score` and
++   * `reason`. `duplicateCandidates` (v1, full `BacklogItem`s, scoreless) stays
++   * for every existing consumer; this additive field is what the `create`
++   * envelope's `details.candidates` is built from, so a caller can see not
++   * just WHICH items matched but HOW strongly.
++   */
++  duplicateCandidateDetails?: IDuplicateCandidate[];
+   /**
+    * BUG-BACKLOG-REPO-LOOKUP-UX-001: set (soft warning, never blocks the
+    * write) when `input.repo` doesn't match any repo value already known to
+@@ -802,6 +811,23 @@ export interface IOutcomeErrorDetails {
+    * own `internalRef` param. Absent on every other error code.
+    */
+   internalRef?: string;
++  /**
++   * BUG-050 — the ranked dedupe candidates a `duplicate_candidate`
++   * interception matched, so the caller can resolve a specific item instead
++   * of guessing. Declared EXPLICITLY (not left to the index signature below)
++   * so the generated schema carries the real `IDuplicateCandidate` shape and
++   * the field can never be silently dropped from the wire envelope again —
++   * see `apigen-base-logical`'s `encodeNode` (the general fix that makes
++   * EVERY open `details` key survive encode, not just this one).
++   */
++  candidates?: IDuplicateCandidate[];
++  /**
++   * BUG-050 — the similarity floor a semantic candidate had to clear to be
++   * surfaced (`SEMANTIC_DEDUPE_MIN_SCORE` at interception time). Present only
++   * when the semantic source ran, so a caller can see how marginal a match
++   * was instead of treating every surfaced candidate as equally damning.
++   */
++  threshold?: number;
+   [key: string]: unknown;
+ }
+ 
+@@ -1019,16 +1045,22 @@ export class StoreBusyError extends Error {
+ /**
+  * INTERFACE_v2 §3 — a `create` was intercepted by the dedupe scan and NOTHING was
+  * written. Carries the candidate cards so the caller can pick one or re-issue with
+- * `action: 'file'` (force). Thrown rather than returned so it takes the same
++ * `duplicateAction: 'file'` (force). Thrown rather than returned so it takes the same
+  * `toOutcomeError` path as every other typed failure.
++ *
++ * BUG-050: the remediation names `duplicateAction` — the REAL field. It used to
++ * say `action:'file'`, which is not an accepted property at all, so following
++ * the message literally produced a validation error instead of a forced file.
+  */
+ export class DuplicateCandidateError extends Error {
+   constructor(
+     title: string,
+-    public readonly candidates: readonly IDuplicateCandidate[]
++    public readonly candidates: readonly IDuplicateCandidate[],
++    /** BUG-050 — the semantic similarity floor in force, when any candidate carried a score. */
++    public readonly threshold?: number
+   ) {
+     super(
+-      `create intercepted: ${candidates.length} possible duplicate${candidates.length === 1 ? '' : 's'} of "${title}" — resolve one, or re-issue with action:'file' to force`
++      `create intercepted: ${candidates.length} possible duplicate${candidates.length === 1 ? '' : 's'} of "${title}" — see details.candidates, then resolve one, or re-issue with duplicateAction:'file' to force past the gate (duplicateAction:'list' inspects without writing)`
+     );
+     this.name = 'DuplicateCandidateError';
+   }
+@@ -1078,7 +1110,14 @@ export function toOutcomeError(err: unknown): IOutcomeError {
+     return { code: 'rag_not_configured', message: err.message };
+   }
+   if (err instanceof DuplicateCandidateError) {
+-    return { code: 'duplicate_candidate', message: err.message, details: { candidates: err.candidates } };
++    return {
++      code: 'duplicate_candidate',
++      message: err.message,
++      details: {
++        candidates: err.candidates,
++        ...(err.threshold !== undefined ? { threshold: err.threshold } : {}),
++      },
++    };
+   }
+   if (err instanceof StoreBusyError) {
+     return { code: 'store_busy', message: err.message, details: { retryable: true, retryAfterMs: err.retryAfterMs } };
+@@ -2450,6 +2489,17 @@ export interface IBacklogItemV2 extends BacklogItem {
+ export type IDuplicateAction =
+   /** DEFAULT — refuse the create and return the candidates. */
+   | 'abort'
++  /**
++   * BUG-050 — INSPECT ONLY: run the dedupe scan and return the ranked
++   * candidates (in the success arm's `candidates`), writing NOTHING and
++   * touching NOTHING — no new item, and no `dupeHits` bump on a match (unlike
++   * `abort`, whose suppression is the FEAT-013 demand signal). This is the
++   * non-destructive "show me what you matched before I decide" mode the
++   * interception previously lacked: without it, the only way to see the
++   * candidates was to force past the gate (`file`), which is exactly the
++   * pollution path BUG-BACKLOG-PROBE-POLLUTION-001 documents.
++   */
++  | 'list'
+   /** Confirmed re-file (idempotent under CAS; counts once). Migrations/backfills pass this to bypass interception deliberately. */
+   | 'file'
+   /** The one-action path: convert the draft into a note on the canonical item and increment its dupe counter. */
+@@ -2511,6 +2561,26 @@ export interface ICreateOutcome {
+   commentedOn?: { humanId: string; noteIndex: number; dupeHits: number };
+ }
+ 
++/**
++ * BUG-050 — `duplicateAction: "list"`'s outcome: the ranked dedupe candidates
++ * for a draft, returned WITHOUT writing anything. The non-destructive
++ * inspection the interception previously lacked — a caller can see exactly
++ * what the scan matched (and how strongly) before choosing to `file` or to
++ * `abort`, instead of being forced to blind-force past the gate.
++ *
++ * `created` is literally `false` and is part of the shape (not just an
++ * implicit contract) so a consumer reading only `created` can never mistake
++ * a dry run for a real write.
++ */
++export interface IListCandidatesResult {
++  /** ALWAYS false — `duplicateAction:"list"` is a pure dry run; it never writes. */
++  created: false;
++  /** The ranked candidates, highest score first. Empty when nothing matched. */
++  candidates: IDuplicateCandidate[];
++  /** The semantic similarity floor in force for this scan (see `IOutcomeErrorDetails.threshold`). */
++  threshold?: number;
++}
++
+ /**
+  * GRAPH_MODEL_v2 §5.1 — `splitItemNode`'s outcome. `PART_OF` is written only
+  * for children that were ACTUALLY created; suppressed children are reported,
+diff --git a/entrypoint/backlog/src/store/crud.ts b/entrypoint/backlog/src/store/crud.ts
+index 0edfcbcb..4ae24802 100644
+--- a/entrypoint/backlog/src/store/crud.ts
++++ b/entrypoint/backlog/src/store/crud.ts
+@@ -6,7 +6,15 @@
+  * DESIGN.md §2.4).
+  */
+ import type { NodeRecord } from '@adhd/sox-graph-store';
+-import type { BacklogItem, CreateItemInput, CreateItemResult, ICreateSuppressionReason, IUpdatePatch } from '../model.js';
++import type {
++  BacklogItem,
++  CreateItemInput,
++  CreateItemResult,
++  IBacklogCard,
++  ICreateSuppressionReason,
++  IDuplicateCandidate,
++  IUpdatePatch,
++} from '../model.js';
+ import { InvalidArgumentError, UnsupportedOperationError, assertKnownPatchKeys, assertNoSilentlyDiscardedPatchKeys } from '../model.js';
+ import type { GraphBacklogStore } from './graph-backlog-store.js';
+ import { allocateHumanIdAndInsert } from './ids.js';
+@@ -164,8 +172,44 @@ export const SEMANTIC_DEDUPE_K = 5;
+  */
+ export const SEMANTIC_DEDUPE_MIN_SCORE = 0.75;
+ 
+-async function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateItemInput): Promise<BacklogItem[]> {
+-  const candidates = new Map<number, NodeRecord>();
++/**
++ * BUG-050 — one scored dedupe candidate. The scan used to return bare
++ * `BacklogItem`s, discarding the similarity score it had already computed to
++ * threshold them, so the interception could report a COUNT but never how
++ * marginal any match was. `score` is absent for a match that is a certainty
++ * (an exact symbol/path/errorText metadata hit, or a keyword-overlap hit with
++ * no relevance number) and present for a dimensional (semantic) hit.
++ */
++export interface DedupeScanHit {
++  item: BacklogItem;
++  /** Match strength, HIGHER-IS-BETTER; comparable within one scan. Absent for an exact/keyword match. */
++  score?: number;
++  /** Human-readable match provenance, e.g. `'semantic similarity'`, `'exact symbol match'`. */
++  reason: string;
++}
++
++/**
++ * Map scored scan hits onto the §3 wire shape (`IDuplicateCandidate`) — the
++ * ONE place a `BacklogItem` becomes a candidate card, shared by the
++ * interception error (`client.ts`) and `duplicateAction:'list'` so the two can
++ * never drift.
++ */
++export function toDuplicateCandidateCards(hits: readonly DedupeScanHit[]): IDuplicateCandidate[] {
++  return hits.map((hit) => ({
++    item: {
++      humanId: hit.item.humanId,
++      kind: hit.item.kind,
++      title: hit.item.title,
++      status: hit.item.status,
++      ...(hit.item.priority !== undefined ? { priority: hit.item.priority } : {}),
++    } as IBacklogCard,
++    ...(hit.score !== undefined ? { score: hit.score } : {}),
++    reason: hit.reason,
++  }));
++}
++
++async function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateItemInput): Promise<DedupeScanHit[]> {
++  const candidates = new Map<number, DedupeScanHit>();
+ 
+   // 1. FTS over title + body — catches "same bug, different words". Sanitized
+   // first (BUG-BACKLOG-DEDUPE-FTS-SYNTAX-CRASH-001) — an unsanitized title
+@@ -189,7 +233,7 @@ async function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateI
+       if (!isLiveBacklogItemNode(hit)) continue;
+       const candidateTitle = (hit.metadata as { title?: string } | null)?.title ?? hit.summary ?? '';
+       if (!titleMeaningfullyOverlaps(newTitleTokens, candidateTitle)) continue;
+-      candidates.set(hit.id, hit);
++      candidates.set(hit.id, { item: toBacklogItem(hit), reason: 'title/body keyword overlap' });
+     }
+   }
+ 
+@@ -202,7 +246,7 @@ async function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateI
+       namespace: repo,
+       metadata: { dedupeSymbol: scan.symbol },
+     })) {
+-      if (isLiveBacklogItemNode(hit)) candidates.set(hit.id, hit);
++      if (isLiveBacklogItemNode(hit)) candidates.set(hit.id, { item: toBacklogItem(hit), reason: 'exact symbol match' });
+     }
+   }
+   if (scan?.path) {
+@@ -212,7 +256,7 @@ async function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateI
+       namespace: repo,
+       metadata: { dedupePath: scan.path },
+     })) {
+-      if (isLiveBacklogItemNode(hit)) candidates.set(hit.id, hit);
++      if (isLiveBacklogItemNode(hit)) candidates.set(hit.id, { item: toBacklogItem(hit), reason: 'exact path match' });
+     }
+   }
+   if (scan?.errorText) {
+@@ -222,7 +266,7 @@ async function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateI
+       namespace: repo,
+       metadata: { dedupeErrorText: scan.errorText },
+     })) {
+-      if (isLiveBacklogItemNode(hit)) candidates.set(hit.id, hit);
++      if (isLiveBacklogItemNode(hit)) candidates.set(hit.id, { item: toBacklogItem(hit), reason: 'exact error-text match' });
+     }
+   }
+ 
+@@ -260,9 +304,16 @@ async function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateI
+         // create in a small repo would surface unrelated items as
+         // "duplicates" and train filers to ignore the gate.
+         if (hit.score < SEMANTIC_DEDUPE_MIN_SCORE) continue;
+-        if (candidates.has(hit.nodeId)) continue;
+         const node = await store.graph.getNode(hit.nodeId);
+-        if (node && isLiveBacklogItemNode(node)) candidates.set(hit.nodeId, node);
++        if (!node || !isLiveBacklogItemNode(node)) continue;
++        const existing = candidates.get(hit.nodeId);
++        if (existing) {
++          // Already surfaced by a keyword/exact match — record the dimensional
++          // score too, so the caller sees the strongest signal behind it.
++          if (existing.score === undefined || hit.score > existing.score) existing.score = hit.score;
++          continue;
++        }
++        candidates.set(hit.nodeId, { item: toBacklogItem(node), score: hit.score, reason: 'semantic similarity' });
+       }
+     } catch (err) {
+       console.error(
+@@ -273,7 +324,9 @@ async function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateI
+     }
+   }
+ 
+-  return [...candidates.values()].map(toBacklogItem);
++  // Highest score first — a caller reading only the top of the list sees the
++  // strongest match, and an unscored (exact) match sorts above a weak one.
++  return [...candidates.values()].sort((a, b) => (b.score ?? Number.POSITIVE_INFINITY) - (a.score ?? Number.POSITIVE_INFINITY));
+ }
+ 
+ /**
+@@ -433,8 +486,8 @@ async function createItemNodeCore(store: GraphBacklogStore, input: CreateItemInp
+     }
+   }
+ 
+-  const duplicateCandidates = input.force ? [] : await dedupeScan(store, input.repo, input);
+-  if (duplicateCandidates.length > 0 && !input.force) {
++  const dedupeHits = input.force ? [] : await dedupeScan(store, input.repo, input);
++  if (dedupeHits.length > 0 && !input.force) {
+     // BUG-BACKLOG-CREATE-ITEM-SILENT-DEDUP-DROP-001 /
+     // BUG-BACKLOG-CREATE-DEDUPE-RETURNS-FOREIGN-ID-001: this is the branch
+     // that used to hand back `{ item: duplicateCandidates[0], created:
+@@ -443,12 +496,17 @@ async function createItemNodeCore(store: GraphBacklogStore, input: CreateItemInp
+     // item's humanId sitting where a caller expects its own new id. Both
+     // fixes are additive fields (`existingHumanId`, `reason`), never a
+     // change to `item`'s presence — see `CreateItemOutcome`'s doc comment.
+-    const matched = duplicateCandidates[0];
++    //
++    // BUG-050: `duplicateCandidateDetails` additionally carries the scored
++    // §3 cards, so the interception error can name WHICH items matched and
++    // how strongly — the count alone was unactionable.
++    const matched = dedupeHits[0].item;
+     await incrementDupeHits(store, matched.nodeId);
+     return {
+       item: matched,
+       created: false,
+-      duplicateCandidates,
++      duplicateCandidates: dedupeHits.map((hit) => hit.item),
++      duplicateCandidateDetails: toDuplicateCandidateCards(dedupeHits),
+       existingHumanId: matched.humanId,
+       reason: 'duplicate-suppressed',
+     };
+diff --git a/packages/apigen/apigen-base-logical/src/lib/runmode.ts b/packages/apigen/apigen-base-logical/src/lib/runmode.ts
+index 0b9e46a8..3ecdb432 100644
+--- a/packages/apigen/apigen-base-logical/src/lib/runmode.ts
++++ b/packages/apigen/apigen-base-logical/src/lib/runmode.ts
+@@ -141,6 +141,33 @@ function encodeNode(
+         });
+       }
+     }
++    // Pass through any host key NOT declared in `properties`, instead of
++    // silently dropping it — the ENCODE-side mirror of `decodeNode`'s own
++    // pass-through (see its comment below / BUG-APIGEN-DECODE-UNKNOWN-KEY-
++    // STRIP-001). Encode has no schema to transcode an undeclared key
++    // against, so it cannot logical-encode it — but deleting it outright is
++    // not an encode step: it silently destroys data a schema explicitly
++    // permits (`additionalProperties: true`, `{}`, or a map-value schema).
++    // Concretely (BUG-050): `@adhd/backlog`'s error envelope declares
++    // `error.details` as an open object (`IOutcomeErrorDetails` has an index
++    // signature → `additionalProperties: {}`) so each error code can attach
++    // its own evidence, yet encode stripped every such key — every
++    // `duplicate_candidate` came back `details:{}`, hiding the very
++    // candidates the caller was told to resolve.
++    //
++    // Gated on `additionalProperties !== false` so a schema that DELIBERATELY
++    // forbids extras (the common `additionalProperties: false` case, e.g. the
++    // `error` wrapper around `details`, or an internal node shape that must
++    // not leak its extra runtime fields) keeps stripping exactly as before.
++    // `false` is the only value that means "reject extras"; `true`, `{}`, and
++    // a value-schema all permit them.
++    if (schema['additionalProperties'] !== false) {
++      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
++        if (!(k in props) && v !== undefined) {
++          result[k] = encodePassthrough(v) as Wire;
++        }
++      }
++    }
+     return result;
+   }
+ 
