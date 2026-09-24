@@ -56,8 +56,7 @@
         "build"
       ],
       "options": {
-        "configFile": "packages/apigen/apigen-plugin-mcp/vitest.e2e.config.ts",
-        "passWithNoTests": true
+        "configFile": "packages/apigen/apigen-plugin-mcp/vitest.e2e.config.ts"
       }
     },
     "nx-release-publish": {
