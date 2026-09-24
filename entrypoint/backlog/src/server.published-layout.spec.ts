@@ -104,9 +104,13 @@ describe('backlog published (rebased-to-root) layout — real npm-install-shape 
     // mounted on any transport. Verified empirically against the real built bin
     // (`node dist/index.js --help`), whose command table is exactly that list
     // plus `apigen-plugin-batch`'s own `batch action` contribution.
+    // BUG-APIGEN-CLI-002: the leading `backlog` segment is bracketed by the
+    // shared cli-output renderer to mark it as an elidable host-prefix UX
+    // convenience (`cliElidablePrefix`, cli.ts), visually distinct from the
+    // mandatory mount-namespace `batch action` (never bracketed).
     expect(result.status).toBe(0);
-    expect(result.stdout).toMatch(/backlog create\b/);
-    expect(result.stdout).toMatch(/backlog get\b/);
+    expect(result.stdout).toMatch(/\[backlog\] create\b/);
+    expect(result.stdout).toMatch(/\[backlog\] get\b/);
   }, 30_000);
 
   // Task B (`client.ts`'s `version()` export) — the "published npm layout"

@@ -160,7 +160,19 @@ function parseCliTable(help: string): { apigen: string[]; special: string[] } {
     const m = /^ {2}(\S+)(?: +(\S+))?/.exec(line);
     if (!m) continue;
     const [, head, next] = m;
-    apigen.push(next && !next.startsWith('{') ? `${head} ${next}` : head);
+    // BUG-APIGEN-CLI-002: a leading `[backlog]` is the shared cli-output
+    // renderer's purely-cosmetic bracket around an ELIDABLE host prefix
+    // (apigen-plugin-cli-output's formatUsage, driven by
+    // options.cliElidablePrefix) — it is never part of the canonical command
+    // identity `entry.cliCommand` (`proj.cli.path.join(' ')`, server.ts:263)
+    // compares against, so strip the brackets when reconstructing the
+    // command string for parity comparison. A mandatory mount-namespace
+    // command (`batch action`) has no brackets and is unaffected.
+    const canonicalHead =
+      head.startsWith('[') && head.endsWith(']') ? head.slice(1, -1) : head;
+    apigen.push(
+      next && !next.startsWith('{') ? `${canonicalHead} ${next}` : canonicalHead
+    );
   }
 
   const special: string[] = [];

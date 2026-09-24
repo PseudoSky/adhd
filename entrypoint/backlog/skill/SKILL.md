@@ -57,33 +57,35 @@ adhd-backlog batch action               --input '<IBatchActionInput json>'
 ```
 
 The `backlog` segment in front of every verb (and `batch` in front of
-`action`) is the CLI namespace each operation is mounted under, and is the
-form `adhd-backlog --help` prints. The leading segment is optional: the CLI
-accepts both `adhd-backlog get --input …` and
-`adhd-backlog backlog get --input …` (identical). Running `adhd-backlog
+`action`) is the CLI namespace each operation is mounted under. The leading
+`backlog` segment is optional: the CLI accepts both
+`adhd-backlog get --input …` and `adhd-backlog backlog get --input …`
+(identical) — so `adhd-backlog --help` renders it bracketed (`[backlog]
+claim`) to mark it elidable, visually distinct from `batch action`, whose
+`batch` segment is mandatory (BUG-APIGEN-CLI-002). Running `adhd-backlog
 --help` (or an unknown command) prints the exact live shape of every input:
 
 ```
 $ adhd-backlog --help
 Available commands:
 
-  backlog claim  { input: { uid: string, by: string, action: 'claim'|'release'|'renew', force?: boolean } }
-  backlog create  { input: { title: string, body: string, project: string, component?: string, kind?: string, status?: string, priority?: string, citations?: object[], author?: string, assignee?: string, gitContext?: string, by: string, duplicateAction?: 'abort'|'force'|'comment', awaitEmbed?: boolean } }
-  backlog delete  { input: { uid: string, reason: string, by: string, awaitEmbed?: boolean } }
-  backlog get  { input: { uid: string, fields?: union[] } | { registry: 'project'|'component'|'location', name: string, filter?: object } }
-  backlog lookup  { input: { q: string } }
-  backlog move  { input: { uid: string, toProject?: string, toComponent?: string, by: string } }
-  backlog open-curve  { input: { filter?: object, at: string[] } }
-  backlog part-of-rollup  { input: { uid: string } }
-  backlog priority-matrix  { input: { filter?: object } }
-  backlog query  { input: { text?: string, filter?: object, fields?: union[], sort?: 'priority'|'updated'|'created'|'relevance'|'textMatch', direction?: 'asc'|'desc', limit?: number, offset?: number, after?: string, view?: 'list'|'ready'|'graph'|'order'|'stale'|'similar'|'overlap'|'projects'|'components'|'locations', format?: 'json'|'markdown', overlapAxis?: 'file'|'project'|'component'|'author', overlapUids?: string[], staleAfterMin?: number } }
-  backlog relate  { input: { sourceUid: string, targetUid: string, rel: 'relates_to'|'supersedes'|'blocks'|'duplicate_of'|'part_of', action: 'add'|'remove', by: string } }
-  backlog rm-location  { input: { uid: string, by: string, reason?: string } }
-  backlog transition  { input: { uid: string, by: string, toStatus: string, note?: string, citations?: object[], gitContext?: string } }
-  backlog update  { input: { uid: string, by: string, title?: string, body?: string, kind?: string, priority?: string, assignee?: string, author?: string, awaitEmbed?: boolean } }
-  backlog upsert-component  { input: { project: string, name: string, path?: string, description?: string, by: string } }
-  backlog upsert-location  { input: { component: string, project?: string, locType: 'path'|'url'|'tool', value: string, by: string } }
-  backlog upsert-project  { input: { name: string, path?: string, repoUrl?: string, monorepo?: boolean, description?: string, by: string } }
+  [backlog] claim  { input: { uid: string, by: string, action: 'claim'|'release'|'renew', force?: boolean } }
+  [backlog] create  { input: { title: string, body: string, project: string, component?: string, kind?: string, status?: string, priority?: string, citations?: object[], author?: string, assignee?: string, gitContext?: string, by: string, duplicateAction?: 'abort'|'force'|'comment', awaitEmbed?: boolean } }
+  [backlog] delete  { input: { uid: string, reason: string, by: string, awaitEmbed?: boolean } }
+  [backlog] get  { input: { uid: string, fields?: union[] } | { registry: 'project'|'component'|'location', name: string, filter?: object } }
+  [backlog] lookup  { input: { q: string } }
+  [backlog] move  { input: { uid: string, toProject?: string, toComponent?: string, by: string } }
+  [backlog] open-curve  { input: { filter?: object, at: string[] } }
+  [backlog] part-of-rollup  { input: { uid: string } }
+  [backlog] priority-matrix  { input: { filter?: object } }
+  [backlog] query  { input: { text?: string, filter?: object, fields?: union[], sort?: 'priority'|'updated'|'created'|'relevance'|'textMatch', direction?: 'asc'|'desc', limit?: number, offset?: number, after?: string, view?: 'list'|'ready'|'graph'|'order'|'stale'|'similar'|'overlap'|'projects'|'components'|'locations', format?: 'json'|'markdown', overlapAxis?: 'file'|'project'|'component'|'author', overlapUids?: string[], staleAfterMin?: number } }
+  [backlog] relate  { input: { sourceUid: string, targetUid: string, rel: 'relates_to'|'supersedes'|'blocks'|'duplicate_of'|'part_of', action: 'add'|'remove', by: string } }
+  [backlog] rm-location  { input: { uid: string, by: string, reason?: string } }
+  [backlog] transition  { input: { uid: string, by: string, toStatus: string, note?: string, citations?: object[], gitContext?: string } }
+  [backlog] update  { input: { uid: string, by: string, title?: string, body?: string, kind?: string, priority?: string, assignee?: string, author?: string, awaitEmbed?: boolean } }
+  [backlog] upsert-component  { input: { project: string, name: string, path?: string, description?: string, by: string } }
+  [backlog] upsert-location  { input: { component: string, project?: string, locType: 'path'|'url'|'tool', value: string, by: string } }
+  [backlog] upsert-project  { input: { name: string, path?: string, repoUrl?: string, monorepo?: boolean, description?: string, by: string } }
   batch action  { input: { operation: 'backlog/get', items: object[], concurrency?: number, mode?: 'parallel'|'serial'|'chained', onItemError?: 'continue'|'abort', itemTimeoutMs?: number } }
 ```
 
