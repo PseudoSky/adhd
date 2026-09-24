@@ -18,15 +18,40 @@
   "targets": {
     "test": {
       "executor": "@nx/vite:test",
+      "//dependsOn": "The default lane is now purely in-process source-level unit tests. The 23 resource-consuming suites (real subprocess spawns of the built dist/index.js, real python/JVM hosts, real HTTP servers, and the CPU-heavy real-extraction suites) moved to sibling *.e2e.ts files with cheap *.spec.ts stubs, so this target no longer spawns the built artifact or a JVM and no longer declares `build` / `apigen-java:package`; those resource prerequisites now live ONLY on the `e2e` target below. This target inherits the workspace targetDefaults.test dependsOn ([\"lint\", \"^build\"]).",
       "outputs": [
         "{workspaceRoot}/coverage/entrypoint/apigen-cli"
       ],
+      "//inputs": "Exclude *.e2e.ts so editing a resource-consuming suite never invalidates the default lane's cache — it never runs those files (its vitest `include` is `src/**/*.spec.ts`, see vite.config.ts). Mirrors the workspace targetDefaults.test inputs plus the negative pattern.",
+      "inputs": [
+        "default",
+        "!{projectRoot}/**/*.e2e.ts",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest",
+            "better-sqlite3",
+            "drizzle-orm"
+          ]
+        }
+      ],
+      "options": {
+        "configFile": "entrypoint/apigen-cli/vite.config.ts"
+      }
+    },
+    "e2e": {
+      "executor": "@nx/vite:test",
+      "//": "RESOURCE-CONSUMING lane. Deliberately NOT part of `affected` and NOT referenced by any target's dependsOn or by targetDefaults — it runs ONLY on an explicit `nx run apigen-cli:e2e` (and nx affected never selects it). It runs the sibling *.e2e.ts suites via vitest.e2e.config.ts. `dependsOn` is exactly the resource prerequisites those suites need: `build` (most spawn the built dist/index.js) and `apigen-java:package` (java-ts-decimal-parity drives the JVM).",
       "dependsOn": [
         "build",
         "apigen-java:package"
       ],
+      "outputs": [
+        "{workspaceRoot}/coverage/entrypoint/apigen-cli-e2e"
+      ],
       "options": {
-        "configFile": "entrypoint/apigen-cli/vite.config.ts"
+        "configFile": "entrypoint/apigen-cli/vitest.e2e.config.ts",
+        "passWithNoTests": true
       }
     },
     "build": {
