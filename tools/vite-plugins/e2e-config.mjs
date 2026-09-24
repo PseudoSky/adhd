@@ -1,4 +1,3 @@
-import * as path from 'node:path';
 import { mergeConfig } from 'vitest/config';
 import {
   projectCacheDir,
@@ -19,8 +18,13 @@ import {
  *
  * It applies exactly three things:
  *   1. Narrows `test.include` to `src/**\/*.e2e.ts` — the resource suites only.
- *   2. Points the vitest transform cache at a DISTINCT `…/e2e` directory.
- *   3. Points coverage at a DISTINCT `…/e2e` `reportsDirectory`.
+ *   2. Points the vitest transform cache at a DISTINCT `<cacheDir>-e2e`.
+ *   3. Points coverage at a DISTINCT `<coverageDir>-e2e` `reportsDirectory`.
+ *
+ * Both DISTINCT suffixes are `${helper(…)}-e2e` — matching each project's
+ * declared `e2e` target `outputs` (`coverage/<pkgrel>-e2e`) and the sibling
+ * `entrypoint/backlog` lane, so the declared output and the directory actually
+ * written never drift apart.
  *
  * `include` REPLACE, not concatenate: vite's `mergeConfig` CONCATENATES array
  * fields (`mergeConfigRecursively`: `[...existing, ...value]`), so merging the
@@ -56,12 +60,12 @@ export function defineE2eConfig(baseConfig, dirname) {
       include: ['src/**/*.e2e.ts'],
       cache: {
         ...sharedCache,
-        dir: path.join(projectCacheDir(dirname), 'e2e'),
+        dir: `${projectCacheDir(dirname)}-e2e`,
       },
       coverage: {
         ...sharedCoverage,
         provider: 'v8',
-        reportsDirectory: path.join(projectCoverage(dirname), 'e2e'),
+        reportsDirectory: `${projectCoverage(dirname)}-e2e`,
       },
     },
   });

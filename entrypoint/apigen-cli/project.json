@@ -50,8 +50,7 @@
         "{workspaceRoot}/coverage/entrypoint/apigen-cli-e2e"
       ],
       "options": {
-        "configFile": "entrypoint/apigen-cli/vitest.e2e.config.ts",
-        "passWithNoTests": true
+        "configFile": "entrypoint/apigen-cli/vitest.e2e.config.ts"
       }
     },
     "build": {
