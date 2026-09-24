@@ -221,3 +221,37 @@ self-reaping — never "daemon").
 - **Environment:** memory MCP's **vector** channel is degraded (`embed() timed out after 3000ms`); the
   scalar store is healthy. The MCP itself is UP — an earlier "it is down" claim was a transient.
 - **14 parked `kind=BL` agents** and `tmp/backlog-run/` (gitignored; nothing cleans it).
+
+---
+
+## 9. ADDENDUM — the BACKLOG branches are this agent's own scope
+
+§3 treated all 46 off-`main` branches as one undifferentiated set. **Wrong: 12 are backlog-owned and
+therefore this agent's to account for**, and of those **5 are LOCAL-ONLY with unique work**:
+
+| backlog branch | ahead/behind | durability |
+|---|---|---|
+| `feat/backlog-hard-replacement` | 137 / 5 | **origin ✅** — holds the corpus AND the register |
+| **`cutover/frozen-build-2118d384`** @ `ab262d8f` | **82 / 14** | **LOCAL-ONLY — the cutover ROLLBACK BUILD, single copy** |
+| `fix/backlog-isolation-followups` | 6 / 7 | origin ✅ |
+| `chore/backlog-post-merge-followups` | 6 / 4 | origin ✅ (PR #13) |
+| `burn/backlog-a` · `burn/backlog-b` | 3 · 2 | **LOCAL-ONLY** |
+| `fix/backlog-test-isolation` | 2 / 8 | origin ✅ |
+| `bl/bl-apigen` · `fix/backlog-lifecycle-cluster` | 1 · 1 | **LOCAL-ONLY** |
+| `feat/backlog-v2-consolidation` · `release/backlog-1.0.0` | 0 ahead | local-only, **nothing unique** — safe |
+| `fix/backlog-funnel-provider-dep` | 0 / 0 | **fully landed on `main` ✅** |
+
+**The wave/gate register is OFF-TRUNK.** `origin/main` carries **4** files under
+`entrypoint/backlog/report/`; `feat/backlog-hard-replacement` carries **24** — including
+`EXECUTION-STRATEGY.md`, `deferral-cleanup-plan.md` (§5 D1-D5), `packets/SEQUENCE.md`, `packets/1-4`
+and `GATE-00-FINDINGS.md`; `fix/live-restore` carries **none**. So any plan citing
+"Waves 1-3 / Wave-4" is referencing a register that **does not exist on trunk** — which is why a
+packetization pass reading `main` reported the register as unresolvable. Decide once: land the
+register on `main`, or reference it by **branch+sha** everywhere (never by bare filename).
+
+**Also unpushed:** `feat/backlog-hard-replacement` is **2 commits ahead of origin** — this handoff is
+**not durable** until those are pushed.
+
+**Census hazard that bit this very audit:** `git cat-file -e "<ref>:entrypoint/…"` returned **false
+for files `git ls-tree` proves are present** — the arg-token-mangling false-empty already reported in
+this session. Cross-check with `ls-tree` before believing an absence.
