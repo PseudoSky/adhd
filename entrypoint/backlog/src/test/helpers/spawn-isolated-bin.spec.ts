@@ -1,222 +1,31 @@
 /**
- * spawn-isolated-bin.spec.ts — the regression guard for the shared
- * HOME-redirect isolation helper (PR #10 review finding `82470ae8`).
+ * STUB (mocked placeholder) — the real, RESOURCE-CONSUMING test lives in the
+ * sibling `spawn-isolated-bin.e2e.ts`.
  *
- * The helper exists to own ONE invariant: a spawned bin must resolve its
- * store under the throwaway temp root, never the real machine's `~/.adhd`.
- * Before the helper that invariant was copy-pasted at many spawn sites with
- * no guard — so a dropped `HOME:` line at any one site silently reopened the
- * production store and no test noticed.
+ * It was moved there so the default `test` target — and therefore
+ * `nx affected -t test` / the pre-commit + pre-push hooks — no longer spawns
+ * subprocesses or loads the real fastembed embedding model. This file spawns
+ * nothing and embeds nothing; it exists so the future MOCKED unit-test version
+ * of this suite has a home that the default target picks up.
  *
- * This spec drives the invariant END-TO-END through the helper and the REAL
- * built bin. `sandbox-path` is the store-free diagnostic `cli.ts` special-
- * cases (verified present on this main: it prints
- * `{ sandbox, adhdRoot, dbPath }` — the resolved store path — WITHOUT ever
- * opening or creating it). Spawned through `runIsolatedBin` with the temp
- * root as both `cwd` and `HOME`, the reported `dbPath` MUST live under that
- * root.
+ * The `it.todo` entries below inventory the original cases (one per real
+ * case in `spawn-isolated-bin.e2e.ts`); they are the contract a mocked version must satisfy
+ * without touching a subprocess or a real model.
  *
- * NEGATIVE CONTROLS — the "would go red if reverted" proof (AGENTS.md §7).
- * Run ONCE during authoring, then restored; they are NOT left in the suite
- * because a permanently-red test is a broken suite, not a guard:
+ * The durability guard case ("every spec/e2e file that spawns
+ * `process.execPath [DIST_INDEX, …]` imports an isolation helper") is NOT
+ * inventoried here: it is a static/parsing check with no subprocess and no
+ * model, so it now runs by default in
+ * `tools/gate/spawn-isolation-gate.mjs` (via the `vocabulary-gate` Nx target)
+ * rather than in the resource lane.
  *
- *   A. In `spawn-isolated-bin.ts`'s `buildIsolatedEnv`, delete the
- *      `HOME: root` entry.
- *      → BOTH the unit and e2e assertions fail (verified 2026-09-22):
- *        - unit: `expected '/Users/nix' to be '/tmp/isolation-unit-root'`
- *        - e2e:  the child falls back to the real machine home and resolves
- *          the real production store (`…/Users/nix/.adhd/backlog/production/
- *          data/backlog.db`), exactly the leak the invariant prevents.
- *      Restore `HOME: root`; green again.
- *
- *   B. In `buildIsolatedEnv`, remove the `AMBIENT_REDIRECT_ENV_KEYS` strip
- *      (i.e. copy the whole `process.env` through).
- *      → the `ambient store-redirect vars do not leak` e2e assertion fails
- *        with the decoy path: `resolved dbPath <decoy>/decoy.db must live
- *        under the isolated root …`. The unit assertion on the stripped keys
- *        also fails. Restore the strip; green again.
- *
- * The `buildIsolatedEnv` unit assertions below are the PERMANENT teeth: they
- * go red the moment the `HOME`/`ADHD_BACKLOG_SCOPE` assignments are removed
- * from the helper OR the ambient-env strip is dropped, so the invariant can
- * never silently regress even on a machine with no global `~/.adhd` config to
- * leak from.
+ * Resource lane: proc — spawns isolated bins as child processes.
  */
-import { afterEach, describe, expect, it } from 'vitest';
-import {
-  existsSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import {
-  AMBIENT_REDIRECT_ENV_KEYS,
-  buildIsolatedEnv,
-  runIsolatedBin,
-} from './spawn-isolated-bin.js';
+import { describe, it } from 'vitest';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const DIST_INDEX = join(HERE, '..', '..', '..', 'dist', 'index.js');
-const SRC_ROOT = join(HERE, '..', '..');
-
-/** Saves, mutates, and restores a set of `process.env` keys. */
-function withEnv(
-  vars: Record<string, string | undefined>,
-  fn: () => void
-): void {
-  const saved = new Map<string, string | undefined>();
-  for (const key of Object.keys(vars)) {
-    saved.set(key, process.env[key]);
-    const value = vars[key];
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
-  }
-  try {
-    fn();
-  } finally {
-    for (const [key, value] of saved) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
-  }
-}
-
-/** Recursively lists every `.spec.ts` under `src/`. */
-function listSpecFiles(dir: string): string[] {
-  const out: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...listSpecFiles(full));
-    else if (entry.name.endsWith('.spec.ts')) out.push(full);
-  }
-  return out;
-}
-
-describe('spawn-isolated-bin — the HOME-redirect invariant is enforced, not just copy-pasted', () => {
-  let root: string | undefined;
-  let decoy: string | undefined;
-
-  afterEach(() => {
-    if (root) rmSync(root, { recursive: true, force: true });
-    if (decoy) rmSync(decoy, { recursive: true, force: true });
-    root = undefined;
-    decoy = undefined;
-  });
-
-  // Permanent teeth: the helper's contract itself. Removing `HOME`/scope from
-  // `buildIsolatedEnv` fails HERE on every machine, whether or not the real
-  // machine home happens to carry a global config for the e2e guard to leak.
-  it('buildIsolatedEnv redirects both HOME and the scope, and lets extraEnv win', () => {
-    const env = buildIsolatedEnv('/tmp/isolation-unit-root', {
-      ADHD_BACKLOG_DATABASE_PATH: '/tmp/override.db',
-    });
-    expect(env['ADHD_BACKLOG_SCOPE']).toBe('project');
-    expect(env['HOME']).toBe('/tmp/isolation-unit-root');
-    expect(env['ADHD_BACKLOG_DATABASE_PATH']).toBe('/tmp/override.db');
-  });
-
-  // Permanent teeth for the ambient-env strip (PR #12 review finding): the
-  // four store-redirect keys are DELETED from the base even when present in
-  // the parent, and a deliberate `extraEnv` override re-adds them.
-  it('buildIsolatedEnv strips ambient store-redirect vars, while extraEnv still wins', () => {
-    const ambient = Object.fromEntries(
-      AMBIENT_REDIRECT_ENV_KEYS.map((key) => [key, `/ambient/${key}`])
-    );
-    withEnv(ambient, () => {
-      const env = buildIsolatedEnv('/tmp/isolation-unit-root');
-      for (const key of AMBIENT_REDIRECT_ENV_KEYS) {
-        expect(
-          env[key],
-          `${key} leaked from the ambient environment`
-        ).toBeUndefined();
-      }
-      // The deliberate channel still wins over the strip.
-      const withOverride = buildIsolatedEnv('/tmp/isolation-unit-root', {
-        ADHD_ROOT: '/deliberate/override',
-      });
-      expect(withOverride['ADHD_ROOT']).toBe('/deliberate/override');
-    });
-  });
-
-  it('a store-free CLI run through the helper resolves dbPath UNDER the temp root', () => {
-    root = mkdtempSync(join(tmpdir(), 'backlog-isolation-guard-'));
-    const res = runIsolatedBin(DIST_INDEX, ['sandbox-path'], root);
-    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
-      0
-    );
-    const body = JSON.parse(res.stdout.trim()) as { dbPath: string };
-    // realpath both sides: on macOS `/var` → `/private/var`, and the child's
-    // own resolved cwd goes through that symlink while `root` here does not.
-    const realRoot = realpathSync(root);
-    expect(
-      body.dbPath.startsWith(realRoot),
-      `resolved dbPath ${body.dbPath} must live under the isolated root ${realRoot}`
-    ).toBe(true);
-    // Store-free: reporting the path must never create it (no leaked artifact
-    // from the guard itself).
-    expect(existsSync(body.dbPath)).toBe(false);
-  });
-
-  // The teeth for the ambient-env leak specifically: with the redirect vars
-  // exported into the PARENT, the child must STILL resolve under the temp
-  // root. Without the strip, `ADHD_BACKLOG_DATABASE_PATH`/`ADHD_ROOT` win and
-  // the resolved path lands under the decoy.
-  it('ambient store-redirect vars (ADHD_ROOT / ADHD_BACKLOG_DATABASE_PATH / SOX_ECOSYSTEM_HOME / APIGEN_IR_CACHE_FILE) do not leak into the child', () => {
-    const isolatedRoot = mkdtempSync(join(tmpdir(), 'backlog-isolation-ambient-'));
-    const decoyRoot = mkdtempSync(join(tmpdir(), 'backlog-isolation-decoy-'));
-    root = isolatedRoot;
-    decoy = decoyRoot;
-    const realRoot = realpathSync(isolatedRoot);
-    const decoyDb = join(decoyRoot, 'decoy.db');
-
-    withEnv(
-      {
-        ADHD_ROOT: decoyRoot,
-        ADHD_BACKLOG_DATABASE_PATH: decoyDb,
-        SOX_ECOSYSTEM_HOME: join(decoyRoot, 'sox'),
-        APIGEN_IR_CACHE_FILE: join(decoyRoot, 'ir.json'),
-      },
-      () => {
-        const res = runIsolatedBin(DIST_INDEX, ['sandbox-path'], isolatedRoot);
-        expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
-          0
-        );
-        const body = JSON.parse(res.stdout.trim()) as { dbPath: string };
-        expect(
-          body.dbPath.startsWith(realRoot),
-          `resolved dbPath ${body.dbPath} must live under the isolated root ${realRoot} (ambient redirect leaked)`
-        ).toBe(true);
-        expect(body.dbPath.startsWith(decoyRoot)).toBe(false);
-      }
-    );
-  });
-
-  // Durability guard (PR #12 review finding `82470ae8`, widened on the merge
-  // with the branch's `--namespace sandbox` architecture): a NEW spec that
-  // spawns the real built bin by `process.execPath [DIST_INDEX, …]` without
-  // routing through an isolation helper silently reintroduces the config-layer
-  // leak. This package now has TWO canonical isolation helpers — this one
-  // (HOME redirect) and `spawn-backlog-bin.ts` (`--namespace sandbox`) — so the
-  // guard accepts a spawn site that imports EITHER. Sites that isolate by a
-  // different mechanism use a different spawn shape (fixtures, `workerData`,
-  // an explicit `HOME`) and are not matched.
-  it('every spec that spawns `process.execPath [DIST_INDEX, …]` imports an isolation helper', () => {
-    const spawnsDistIndex = /(?:spawn|spawnSync)\s*\(\s*process\.execPath\s*,\s*\[\s*DIST_INDEX/;
-    const importsHelper = /from\s+['"][^'"]*(?:spawn-isolated-bin|spawn-backlog-bin)(?:\.js)?['"]/;
-    const offenders = listSpecFiles(SRC_ROOT)
-      .filter((file) => {
-        const content = readFileSync(file, 'utf8');
-        return spawnsDistIndex.test(content) && !importsHelper.test(content);
-      })
-      .map((file) => file.slice(SRC_ROOT.length + 1));
-    expect(
-      offenders,
-      `these specs spawn the real bin without the isolation helper: ${offenders.join(', ')}`
-    ).toEqual([]);
-  });
+describe("mocked: spawn-isolated-bin", () => {
+  it.todo("mocked: buildIsolatedEnv redirects both HOME and the scope, and lets extraEnv win");
+  it.todo("mocked: buildIsolatedEnv strips ambient store-redirect vars, while extraEnv still wins");
+  it.todo("mocked: a store-free CLI run through the helper resolves dbPath UNDER the temp root");
+  it.todo("mocked: ambient store-redirect vars (ADHD_ROOT / ADHD_BACKLOG_DATABASE_PATH / SOX_ECOSYSTEM_HOME / APIGEN_IR_CACHE_FILE) do not leak into the child");
 });
