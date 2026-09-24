@@ -79,9 +79,15 @@ async function requireItem(ctx: BacklogCtx, repo: string, humanId: string): Prom
  * Dedupe-scans (FTS + symbol/path/errorText metadata match) before writing.
  * Allocates humanId as family + next number within (repo, family) unless
  * idOverride is given.
+ *
+ * BUG-BACKLOG-COMPUTENEXTHUMANID-GRAPH-ONLY-SCAN-001 part 2: `ctx.markdownRoot`
+ * (set by `cli.ts`'s real invocation path to the repo root, undefined for
+ * every test/store-only `ctx`) is threaded through so a cold-path counter
+ * seed also considers markdown history, not just the graph — see
+ * `store/ids.ts`'s `scanMaxOrdinalFromMarkdown` for the full rationale.
  */
 export async function createItem(ctx: BacklogCtx, input: CreateItemInput): Promise<CreateItemResult> {
-  return createItemNode(ctx.store, input);
+  return createItemNode(ctx.store, input, { markdownRoot: ctx.markdownRoot });
 }
 
 /**

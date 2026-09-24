@@ -70,11 +70,14 @@
  * real store today. See `id-uniqueness.spec.ts`'s header for the exact
  * queries run and their output.
  */
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { buildNodeFilterClause, type NodeFilter, type NodeRecord } from '@adhd/sox-graph-store';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
 import { AmbiguousHumanIdError, InvalidArgumentError } from '../model.js';
 import { BACKLOG_ITEM_TAG, isLiveBacklogItemNode, type BacklogNodeMeta } from './mapping.js';
 import { withImmediateRetry } from './immediate-retry.js';
+import { parseBacklogMarkdown, parseChangelogIds } from '../markdown.js';
 
 /**
  * DEBT-BACKLOG-HUMANID-NOT-UNIQUE-001's enforcement primitive: a partial
@@ -100,26 +103,101 @@ import { withImmediateRetry } from './immediate-retry.js';
 const HUMAN_ID_LIVE_UNIQUE_INDEX = 'ix_backlog_humanid_live_unique';
 
 /**
- * Idempotently ensures the partial unique index above exists — `IF NOT
- * EXISTS` makes every call after the first a cheap `sqlite_master` lookup,
- * so this is safe to call on every allocation rather than needing its own
- * one-time bootstrap hook (this file does not own `graph-backlog-store.ts`,
- * where `applySchema()` lives, so a call site there is not an option
- * anyway). Always invoked from INSIDE the same retried `.immediate()`
- * transaction as the mint itself (never a separate, unretried DDL call) —
- * DDL is fully transactional in SQLite, so this commits atomically with
- * whatever insert follows it, and a busy/locked contention on the DDL
- * itself is retried by the SAME `withImmediateRetry` wrapper the whole
- * transaction already goes through.
+ * Idempotently ensures the partial unique index above exists — safe to call
+ * on every allocation rather than needing its own one-time bootstrap hook
+ * (this file does not own `graph-backlog-store.ts`, where `applySchema()`
+ * lives, so a call site there is not an option anyway). Always invoked from
+ * INSIDE the same retried `.immediate()` transaction as the mint itself
+ * (never a separate, unretried DDL call) — DDL is fully transactional in
+ * SQLite, so this commits atomically with whatever insert follows it, and a
+ * busy/locked contention on the DDL itself is retried by the SAME
+ * `withImmediateRetry` wrapper the whole transaction already goes through.
+ *
+ * BUG-BACKLOG-HUMANID-FAMILY-CASE-001: the index must compare `humanId`
+ * CASE-INSENSITIVELY (`COLLATE NOCASE`) so `bug-001` and `BUG-001` collide at
+ * the DB layer exactly like the counter fix elsewhere in this file now stops
+ * them from being independently minted in the first place — this is the
+ * backstop for any write path that bypasses `allocateHumanIdAndInsert`
+ * entirely (see the DEBT-BACKLOG-HUMANID-NOT-UNIQUE-001 section above for
+ * why that backstop exists at all).
+ *
+ * `CREATE INDEX IF NOT EXISTS` NEVER alters an already-existing index's
+ * definition — a store created before this fix may already have this exact
+ * index name built in the OLD (BINARY) collation, and re-running the same
+ * `IF NOT EXISTS` statement with `COLLATE NOCASE` added would silently
+ * no-op, leaving the OLD, case-sensitive index in place forever. So this
+ * reads the LIVE index definition out of `sqlite_master` first: if it is
+ * missing, or still BINARY-collated, drop + recreate; if it is already
+ * NOCASE-collated, this is a cheap read-only `sqlite_master` lookup — the
+ * SAME "safe to call on every allocation" cost class the old bare `IF NOT
+ * EXISTS` had — and nothing further happens. (Deliberately NOT an
+ * unconditional DROP+CREATE on every call: that would rebuild a live index
+ * on every single item creation forever, which is exactly the per-call cost
+ * this function's own doc comment above promises callers it does not pay.)
  */
 async function ensureHumanIdUniqueIndex(store: GraphBacklogStore): Promise<void> {
-  await store.adapter.executeRun(`
-    CREATE UNIQUE INDEX IF NOT EXISTS ${HUMAN_ID_LIVE_UNIQUE_INDEX}
-    ON node (namespace, json_extract(meta, '$.humanId'))
+  const { rows: existingRows } = await store.adapter.executeAll<{ sql: string | null }>(
+    `SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?`,
+    [HUMAN_ID_LIVE_UNIQUE_INDEX]
+  );
+  const existingSql = existingRows[0]?.sql ?? null;
+  if (existingSql !== null && /COLLATE\s+NOCASE/i.test(existingSql)) {
+    return; // already migrated to the case-insensitive definition — nothing to do
+  }
+  if (existingSql !== null) {
+    // Pre-existing BINARY-collated index — must be dropped before a
+    // same-named `COLLATE NOCASE` definition can be created below.
+    await store.adapter.executeRun(`DROP INDEX IF EXISTS ${HUMAN_ID_LIVE_UNIQUE_INDEX}`);
+  }
+  try {
+    await store.adapter.executeRun(`
+      CREATE UNIQUE INDEX ${HUMAN_ID_LIVE_UNIQUE_INDEX}
+      ON node (namespace, json_extract(meta, '$.humanId') COLLATE NOCASE)
+      WHERE t_invalid IS NULL
+        AND json_extract(meta, '$.humanId') IS NOT NULL
+        AND instr(tags, '"${BACKLOG_ITEM_TAG}"') > 0
+    `);
+  } catch (err) {
+    if (!/UNIQUE constraint failed/i.test(String((err as Error)?.message ?? err))) throw err;
+    // Every real FAMILY VALUE in the live production store is already
+    // consistently upper-case (2026-08-21 triage), so this branch is not an
+    // expected code path — it is defense-in-depth. This repo's items are
+    // real production data: a migration that could silently drop the
+    // uniqueness guarantee must fail LOUDLY, never leave the OLD
+    // case-sensitive index quietly in place. Name the exact colliding ids so
+    // an operator can resolve them before retrying.
+    const collisions = await findCaseCollidingHumanIdPairs(store);
+    const described =
+      collisions.length > 0
+        ? collisions.map((c) => `${c.namespace}: ${c.variants.join(' vs ')}`).join('; ')
+        : '(doctor scan found none — inspect the store manually; the CREATE itself reported a collision)';
+    throw new Error(
+      `backlog: cannot upgrade ${HUMAN_ID_LIVE_UNIQUE_INDEX} to a case-insensitive (COLLATE NOCASE) unique index — ` +
+        `existing LIVE rows already collide case-insensitively: ${described}. See BUG-BACKLOG-HUMANID-FAMILY-CASE-001. ` +
+        `Resolve the collision(s) (rename or tombstone one side of each pair) and retry.`
+    );
+  }
+}
+
+/**
+ * Doctor-style scan for LIVE, backlog-item-tagged `(namespace, humanId)`
+ * pairs that collide ONLY under case-insensitive comparison — the exact
+ * condition that would make the `COLLATE NOCASE` unique index above reject
+ * its own `CREATE`. Same tag-scoped predicate `ensureHumanIdUniqueIndex`
+ * itself uses (see `HUMAN_ID_LIVE_UNIQUE_INDEX`'s doc comment for why
+ * `instr(tags, ...)` rather than `json_each`).
+ */
+async function findCaseCollidingHumanIdPairs(store: GraphBacklogStore): Promise<Array<{ namespace: string; variants: string[] }>> {
+  const { rows } = await store.adapter.executeAll<{ namespace: string; variants: string | null }>(`
+    SELECT namespace, GROUP_CONCAT(DISTINCT json_extract(meta, '$.humanId')) AS variants
+    FROM node
     WHERE t_invalid IS NULL
       AND json_extract(meta, '$.humanId') IS NOT NULL
       AND instr(tags, '"${BACKLOG_ITEM_TAG}"') > 0
+    GROUP BY namespace, UPPER(json_extract(meta, '$.humanId'))
+    HAVING COUNT(DISTINCT json_extract(meta, '$.humanId')) > 1
   `);
+  return rows.map((r) => ({ namespace: r.namespace, variants: (r.variants ?? '').split(',') }));
 }
 
 /**
@@ -157,6 +235,12 @@ async function scanMaxOrdinal(store: GraphBacklogStore, repo: string, family: st
         `non-empty string, received ${JSON.stringify(family)}. See BUG-BACKLOG-HUMANID-COLLISION-001.`
     );
   }
+  // BUG-BACKLOG-HUMANID-FAMILY-CASE-001: canonicalize BEFORE the scan below
+  // runs, so a cold-seed scan for `family:'bug'` finds the SAME rows a
+  // `family:'BUG'` scan would — every real family value already in the
+  // store is upper-case (BUG/DEBT/FEAT/…), so this only ever changes
+  // behavior for a caller that spells it differently.
+  family = family.toUpperCase();
   // BUG-BACKLOG-COMPUTENEXTHUMANID-GRAPH-ONLY-SCAN-001: this used to be
   // `store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG],
   // namespace: repo, metadata: { family } })` — which ALWAYS excludes
@@ -173,6 +257,112 @@ async function scanMaxOrdinal(store: GraphBacklogStore, repo: string, family: st
     const meta = parseNodeMeta(row.meta);
     const match = /-(\d+)$/.exec(meta?.humanId ?? '');
     if (match) max = Math.max(max, Number(match[1]));
+  }
+  return max;
+}
+
+/**
+ * Directories a repo-root markdown walk must never descend into — heavy
+ * (`node_modules`), VCS-internal (`.git`), or build/scratch output (`dist`,
+ * `.nx`, `tmp`, `.worktrees`, `coverage`, …) that legitimately never holds an
+ * authored `BACKLOG.md`/`CHANGELOG.md` and would otherwise make every
+ * cold-seed walk scan gigabytes of unrelated files (AGENTS.md §10 — the same
+ * set of roots this repo already treats as ephemeral/ignored).
+ */
+const MARKDOWN_SCAN_SKIP_DIRS = new Set(['node_modules', '.git', 'dist', '.nx', 'tmp', '.worktrees', 'coverage', '.turbo', '.cache']);
+
+/** Recursively finds every `BACKLOG.md`/`CHANGELOG.md` under `root`, skipping
+ *  `MARKDOWN_SCAN_SKIP_DIRS`. Defensive: an unreadable directory (permission
+ *  error, TOCTOU race) is skipped rather than aborting the whole walk. */
+function walkMarkdownFiles(root: string): string[] {
+  const found: string[] = [];
+  const stack = [root];
+  while (stack.length > 0) {
+    const dir = stack.pop() as string;
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (MARKDOWN_SCAN_SKIP_DIRS.has(entry)) continue;
+      const full = join(dir, entry);
+      let isDir: boolean;
+      try {
+        isDir = statSync(full).isDirectory();
+      } catch {
+        continue;
+      }
+      if (isDir) {
+        stack.push(full);
+      } else if (entry === 'BACKLOG.md' || entry === 'CHANGELOG.md') {
+        found.push(full);
+      }
+    }
+  }
+  return found;
+}
+
+/**
+ * BUG-BACKLOG-COMPUTENEXTHUMANID-GRAPH-ONLY-SCAN-001, part 2: `scanMaxOrdinal`
+ * above has no visibility into ids that were ONLY ever recorded in markdown —
+ * a `BACKLOG.md` header for a family whose store-side counter row does not
+ * exist yet (this repo's own pre-migration history, or a family whose graph
+ * rows were pruned/never imported), or an id `CHANGELOG.md` retired that
+ * never had (or no longer has) a graph node at all. Without this,
+ * `nextOrdinal`'s cold-path seed can start a family's counter at 0 even
+ * though a markdown file right next to it already used `-001` through
+ * `-042`, silently re-minting an already-published id the first time a fresh
+ * store (or a family new to an existing store) mints into that family.
+ *
+ * Reuses the two purpose-built extractors this package already ships —
+ * `parseBacklogMarkdown` (`##`/`###` id headers) for `BACKLOG.md`,
+ * `parseChangelogIds` (inline-prose id mentions — see that function's own
+ * doc comment in `../markdown.js` for why `CHANGELOG.md` needs a different
+ * extraction shape than `BACKLOG.md`'s header format) for `CHANGELOG.md` —
+ * never a third, hand-rolled id regex.
+ *
+ * `repo` is accepted for signature symmetry with `scanMaxOrdinal`/
+ * `nextOrdinal` but is deliberately NOT used to filter which files are
+ * scanned: a markdown file carries no per-repo namespace signal a generic
+ * directory walk can key on (unlike the graph, which tags every node with
+ * `namespace`). A workspace that needs multi-repo markdown segregation
+ * scopes it via `reposRoot` instead (point it at that repo's own tree).
+ *
+ * Synchronous — matches the cold-path's own call shape (this only ever runs
+ * once per family, exactly when a store already needed a scan anyway) — and
+ * defensive: an unreadable file or malformed markdown degrades to
+ * "contributes nothing to the ceiling", exactly like `scanMaxOrdinal`'s own
+ * per-row `parseNodeMeta` — a single bad file must never abort the scan.
+ */
+export function scanMaxOrdinalFromMarkdown(repo: string, family: string, reposRoot: string = process.cwd()): number {
+  void repo;
+  if (typeof family !== 'string' || family.trim().length === 0) return 0;
+  const canonicalFamily = family.toUpperCase();
+  let max = 0;
+  for (const filePath of walkMarkdownFiles(reposRoot)) {
+    let text: string;
+    try {
+      text = readFileSync(filePath, 'utf8');
+    } catch {
+      continue;
+    }
+    if (filePath.endsWith('BACKLOG.md')) {
+      for (const item of parseBacklogMarkdown(text)) {
+        if (item.family.toUpperCase() !== canonicalFamily) continue;
+        const match = /-(\d+)$/.exec(item.id);
+        if (match) max = Math.max(max, Number(match[1]));
+      }
+    } else {
+      for (const id of parseChangelogIds(text)) {
+        const idMatch = /^(.*)-(\d+)$/.exec(id);
+        if (!idMatch) continue;
+        const [, idFamily, ordinal] = idMatch;
+        if (idFamily.toUpperCase() !== canonicalFamily) continue;
+        max = Math.max(max, Number(ordinal));
+      }
+    }
   }
   return max;
 }
@@ -215,16 +405,26 @@ async function ensureHumanIdCounterTable(store: GraphBacklogStore): Promise<void
   `);
 }
 
+/** Cold-path markdown-history seeding option — see `scanMaxOrdinalFromMarkdown`'s
+ *  doc comment. Absent/undefined (the default for every existing caller and
+ *  every store-only test) skips the markdown scan entirely, preserving
+ *  pre-fix behavior; only a caller that explicitly opts in pays for it. */
+export interface NextOrdinalOpts {
+  markdownRoot?: string;
+}
+
 /**
  * Atomically allocate the next ordinal for `(repo, family)`.
  *
  * Hot path is a SINGLE statement with no scan. The cold path (first item ever
  * minted for a family, including every family already in an existing store)
- * seeds from `scanMaxOrdinal` and then upserts — the `ON CONFLICT ... n + 1`
- * makes the seed itself safe against a concurrent writer that seeded first,
- * so even the cold path cannot hand out a duplicate.
+ * seeds from `scanMaxOrdinal` (and, when `opts.markdownRoot` is supplied,
+ * `scanMaxOrdinalFromMarkdown` too — BUG-BACKLOG-COMPUTENEXTHUMANID-GRAPH-ONLY-
+ * SCAN-001 part 2) and then upserts — the `ON CONFLICT ... n + 1` makes the
+ * seed itself safe against a concurrent writer that seeded first, so even the
+ * cold path cannot hand out a duplicate.
  */
-async function nextOrdinal(store: GraphBacklogStore, repo: string, family: string): Promise<number> {
+async function nextOrdinal(store: GraphBacklogStore, repo: string, family: string, opts?: NextOrdinalOpts): Promise<number> {
   // BUG-BACKLOG-HUMANID-COLLISION-001: this guard used to live in the scan.
   // The scan is now the COLD path only, so it must be re-asserted here or an
   // empty/undefined family would stringify to a colliding `"undefined-001"`
@@ -236,6 +436,12 @@ async function nextOrdinal(store: GraphBacklogStore, repo: string, family: strin
         `non-empty string, received ${JSON.stringify(family)}. See BUG-BACKLOG-HUMANID-COLLISION-001.`
     );
   }
+  // BUG-BACKLOG-HUMANID-FAMILY-CASE-001: this is the single funnel point
+  // EVERY caller of the allocation subsystem reaches (`allocateHumanIdAndInsert`
+  // / `allocateHumanId`) — canonicalize here so `family:'bug'` and
+  // `family:'BUG'` share ONE counter row instead of two disjoint ones that
+  // could each mint the same ordinal.
+  family = family.toUpperCase();
   const bumped = await store.adapter.executeAll<{ n: number }>(
     `UPDATE ${HUMAN_ID_COUNTER_TABLE} SET n = n + 1 WHERE namespace = ? AND family = ? RETURNING n`,
     [repo, family]
@@ -244,7 +450,9 @@ async function nextOrdinal(store: GraphBacklogStore, repo: string, family: strin
   if (typeof hit === 'number') return hit;
 
   // Cold path: no counter row yet — seed from the existing rows ONCE.
-  const seeded = await scanMaxOrdinal(store, repo, family);
+  const seededFromGraph = await scanMaxOrdinal(store, repo, family);
+  const seededFromMarkdown = opts?.markdownRoot !== undefined ? scanMaxOrdinalFromMarkdown(repo, family, opts.markdownRoot) : 0;
+  const seeded = Math.max(seededFromGraph, seededFromMarkdown);
   const created = await store.adapter.executeAll<{ n: number }>(
     `INSERT INTO ${HUMAN_ID_COUNTER_TABLE} (namespace, family, n) VALUES (?, ?, ?)
      ON CONFLICT(namespace, family) DO UPDATE SET n = n + 1
@@ -272,15 +480,32 @@ async function reconcileCounterForOverride(store: GraphBacklogStore, repo: strin
   const match = /^(.*)-(\d+)$/.exec(humanId);
   if (!match) return;
   const [, overrideFamily, ordinal] = match;
+  // BUG-BACKLOG-HUMANID-FAMILY-CASE-001: an `idOverride` spelled in a
+  // different case (e.g. `bug-005`) must bump the SAME canonical counter row
+  // `nextOrdinal`'s auto-mint path keys under — otherwise an override could
+  // silently re-open a second, disjoint counter row for the lower-case
+  // spelling of an already-canonicalized family.
+  const canonicalFamily = overrideFamily.toUpperCase();
   await store.adapter.executeRun(
     `INSERT INTO ${HUMAN_ID_COUNTER_TABLE} (namespace, family, n) VALUES (?, ?, ?)
      ON CONFLICT(namespace, family) DO UPDATE SET n = MAX(n, excluded.n)`,
-    [repo, overrideFamily, Number(ordinal)]
+    [repo, canonicalFamily, Number(ordinal)]
   );
 }
 
+/**
+ * BUG-BACKLOG-HUMANID-FAMILY-CASE-001: canonicalizes `family` to upper-case
+ * independently of `nextOrdinal`'s own canonicalization. `formatHumanId`'s two
+ * real callers (`allocateHumanIdAndInsert`/`allocateHumanId`) invoke it in the
+ * SAME expression as `nextOrdinal(..., family)` — `formatHumanId(family,
+ * await nextOrdinal(store, repo, family))` — each operating on its own copy
+ * of the identical raw `family` argument, evaluated before `nextOrdinal`'s
+ * internal reassignment could ever be observed by the caller. Canonicalizing
+ * independently here guarantees the MINTED TEXT always agrees with which
+ * counter row actually advanced, without requiring the caller to pre-normalize.
+ */
 function formatHumanId(family: string, ordinal: number): string {
-  return `${family}-${String(ordinal).padStart(3, '0')}`;
+  return `${family.toUpperCase()}-${String(ordinal).padStart(3, '0')}`;
 }
 
 async function findLiveByHumanId(store: GraphBacklogStore, repo: string, humanId: string): Promise<NodeRecord | null> {
@@ -334,6 +559,7 @@ export async function allocateHumanIdAndInsert<T>(
   family: string,
   idOverride: string | undefined,
   insert: (humanId: string, existing: NodeRecord | null) => T,
+  opts?: NextOrdinalOpts,
 ): Promise<T> {
   return withImmediateRetry(() =>
     store.adapter.transaction(
@@ -345,7 +571,7 @@ export async function allocateHumanIdAndInsert<T>(
           await reconcileCounterForOverride(store, repo, idOverride);
           return insert(idOverride, existing);
         }
-        const humanId = formatHumanId(family, await nextOrdinal(store, repo, family));
+        const humanId = formatHumanId(family, await nextOrdinal(store, repo, family, opts));
         return insert(humanId, null);
       },
       { mode: 'immediate' }

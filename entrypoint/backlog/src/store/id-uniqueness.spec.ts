@@ -379,3 +379,83 @@ describe('atomic concurrent mint: two REAL, SEPARATE store connections to the SA
     expect(nums).toEqual([2, 3, 4, 5, 6]);
   });
 });
+
+/**
+ * BUG-BACKLOG-HUMANID-FAMILY-CASE-001: `family:'debt'` and `family:'DEBT'`
+ * used to be treated as two disjoint counter rows (each starting its own
+ * `-001`), so they could each mint a colliding id under case-insensitive
+ * comparison — `scanMaxOrdinal`/`nextOrdinal`/`formatHumanId` now
+ * canonicalize `family` to upper-case at every funnel point, and the partial
+ * unique index (`ix_backlog_humanid_live_unique`) now compares `humanId`
+ * with `COLLATE NOCASE` as a DB-level backstop for any write path that
+ * bypasses the counter entirely.
+ */
+describe('fix (C): family is case-folded to upper-case at every allocation funnel point', () => {
+  it('allocating family "bug" then family "BUG" in the SAME repo shares ONE counter — the second call raises the ordinal past the first rather than re-minting the same number', async () => {
+    const first = await createItemNode(tmp.store, { family: 'bug', title: 'lower-case family', body: 'b1', repo: REPO });
+    const second = await createItemNode(tmp.store, { family: 'BUG', title: 'upper-case family', body: 'b2', repo: REPO });
+
+    // The failing condition this proves against: BOTH calls seeing an empty
+    // counter for "their own" family and each minting ordinal 1 — i.e.
+    // `first.item.humanId === second.item.humanId` after uppercasing, or
+    // (equivalently) the second call's ordinal NOT exceeding the first's.
+    const firstOrdinal = Number(/-(\d+)$/.exec(first.item.humanId)?.[1]);
+    const secondOrdinal = Number(/-(\d+)$/.exec(second.item.humanId)?.[1]);
+    expect(secondOrdinal).toBeGreaterThan(firstOrdinal);
+    expect(first.item.humanId).not.toBe(second.item.humanId);
+
+    // Both mints are canonicalized to the SAME (upper-case) family spelling —
+    // the whole point of the fix is that the two calls never diverge onto
+    // two independent counter rows in the first place.
+    expect(first.item.humanId).toBe('BUG-001');
+    expect(second.item.humanId).toBe('BUG-002');
+  });
+
+  it('allocating family "DEBT" then family "debt" (reverse case order) still shares ONE counter', async () => {
+    const first = await createItemNode(tmp.store, { family: 'DEBT-REV', title: 'upper first', body: 'b1', repo: REPO });
+    const second = await createItemNode(tmp.store, { family: 'debt-rev', title: 'lower second', body: 'b2', repo: REPO });
+    expect(first.item.humanId).toBe('DEBT-REV-001');
+    expect(second.item.humanId).toBe('DEBT-REV-002');
+  });
+
+  it('two LIVE nodes whose humanId differs ONLY by family case (e.g. "bug-001" vs "BUG-001") are rejected by the case-insensitive unique index', async () => {
+    // Trigger `ensureHumanIdUniqueIndex`'s migration to the COLLATE NOCASE
+    // definition via a real create first (mirrors fix (B)'s sibling tests).
+    const first = await createItemNode(tmp.store, { family: 'BUG-CASEIDX', title: 'first', body: 'b1', repo: REPO });
+    expect(first.item.humanId).toBe('BUG-CASEIDX-001');
+
+    // Bypasses allocateHumanIdAndInsert deliberately, same convention as fix
+    // (B)'s sibling test above — proves the guarantee lives at the STORE
+    // boundary (a real DB constraint), not merely in application-level
+    // canonicalization a future/other write path could skip.
+    let threw: unknown;
+    try {
+      await tmp.store.graph.writeNode(buildNodeContent(REPO, 'bug-caseidx-001', 'second (differs only by case)', 'b2') + '\n<!-- distinct content case-idx -->', {
+        kind: 'generic',
+        name: buildNodeName(REPO, 'bug-caseidx-001') + '-dup',
+        summary: 'second (differs only by case)',
+        tags: [BACKLOG_ITEM_TAG, 'BUG', 'BUG-CASEIDX'],
+        namespace: REPO,
+        metadata: {
+          humanId: 'bug-caseidx-001',
+          family: 'BUG-CASEIDX',
+          title: 'second (differs only by case)',
+          body: 'b2',
+          status: 'OPEN',
+          repo: REPO,
+          citations: [],
+          notes: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      });
+    } catch (err) {
+      threw = err;
+    }
+    // The failing condition this proves against: the insert silently
+    // succeeding — a BINARY-collated index treats 'bug-caseidx-001' and
+    // 'BUG-CASEIDX-001' as two distinct keys and would accept both.
+    expect(threw).toBeDefined();
+    expect(String((threw as Error)?.message ?? threw)).toMatch(/UNIQUE constraint failed/i);
+  });
+});
