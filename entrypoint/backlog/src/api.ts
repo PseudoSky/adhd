@@ -76,8 +76,13 @@ import {
   StaleSupersedeError,
   WriteContentionError,
 } from './write/errors.js';
-import { bootstrapSemanticStoreMembers } from './write/bootstrap.js';
+import {
+  bootstrapSemanticStoreMembers,
+  peekSemanticStoreMembers,
+  resetSemanticStoreMembers,
+} from './write/bootstrap.js';
 import type { SemanticStoreMembers } from './write/bootstrap.js';
+import type { EmbeddingLiveConfig } from './write/embedding-config.js';
 import { assertRecognizedStoreVocabulary } from './store/vocabulary-guard.js';
 
 import { getIssue } from './query/get.js';
@@ -151,6 +156,18 @@ export interface BacklogCtx {
   store: GraphBacklogStore;
   env: Environment<BacklogConfig>;
   /**
+   * Per-process liveness holder for the `embedding.*` config family
+   * (`write/embedding-config.ts`). Optional and additive: every existing
+   * caller/test that builds a ctx by hand keeps the pre-existing resolve-once
+   * behaviour exactly (`ctx.env.config.embedding` is the effective value).
+   *
+   * `startBacklogServer` attaches one; `ensureSemanticReady` refreshes it
+   * before each semantic verb so an on-disk `config.yaml` edit is adopted
+   * without a restart. `db.*`/`logging.level` are deliberately NOT covered —
+   * they stay restart-required (see the holder's own doc comment).
+   */
+  embeddingConfig?: EmbeddingLiveConfig;
+  /**
    * Test-isolation escape hatch ONLY — mirrors `BuildBacklogEnvOptions.adhdRoot`
    * (the same value passed to `buildBacklogEnv({ adhdRoot })` when constructing
    * `env`). NEVER set this in production code (`server.ts`/`cli.ts` never do).
@@ -161,6 +178,22 @@ export interface BacklogCtx {
 // ---------------------------------------------------------------------------
 // ctx -> store-handle derivation
 // ---------------------------------------------------------------------------
+
+/**
+ * The process's startup config hash (`ctx.env.version.configHash`), or
+ * `undefined` when the ctx was built without one.
+ *
+ * `@adhd/environment`'s `Environment.version` is declared always-present, but
+ * several specs construct a ctx by hand from a zero-config store
+ * (`{ store, env: { config: {} } } as never` — see `envelope-codes.spec.ts`)
+ * and those ctxs flow through this file's write/query path. Guarding here is
+ * the same borrow-tolerance the absent `embedding` block already relies on: a
+ * missing `version` must degrade the loudness metadata, not turn every verb
+ * into an `internal` envelope.
+ */
+function startupConfigHash(ctx: BacklogCtx): string | undefined {
+  return ctx.env.version?.configHash;
+}
 
 /**
  * The one lazy accessor every semantic-needing verb goes through, and the SOLE
@@ -177,14 +210,47 @@ export interface BacklogCtx {
  * failure internally and returns absent members, so a broken embedding backend
  * degrades exactly as before (a `create` still writes with `handle.embedding`
  * absent; a `claim`/`transition` never even attempts the bootstrap).
+ *
+ * ## Live config (`ctx.embeddingConfig`)
+ *
+ * The `embedding.*` family is the one RELOADABLE family: `@adhd/environment`
+ * resolves its whole cascade once at construction, so a long-lived `serve`
+ * would otherwise never observe an operator's `config.yaml` edit. Before each
+ * semantic verb this refreshes the holder — a cheap stat pre-gate, then (only
+ * on change) a fresh resolve whose `embedding.*` slice is adopted. An adoption
+ * `resetSemanticStoreMembers` first, so the DISABLE direction retires the
+ * otherwise process-lifetime member-ful derive; the ENABLE direction needs no
+ * reset (a member-less derive was never retained) but is reset anyway for
+ * symmetry and to make the transition atomic either way.
+ *
+ * `ctx.env` is never reassigned and `db.*`/`logging.level` are never adopted —
+ * only `embedding.*` is passed on, and only from the holder's `current()`.
  */
 async function ensureSemanticReady(
   ctx: BacklogCtx
 ): Promise<SemanticStoreMembers> {
+  const live = ctx.embeddingConfig;
+  if (live !== undefined && live.refresh().changed) {
+    resetSemanticStoreMembers(ctx.store.adapter);
+  }
+  const cfg = live ? live.current() : ctx.env.config.embedding;
   return bootstrapSemanticStoreMembers(
     ctx.store.adapter,
     ctx.store.graph,
-    ctx.env.config.embedding
+    cfg,
+    undefined,
+    {
+      // Loudness signal for the DISABLED branch: `configured` is the on-disk
+      // value (which, absent a refresh, can diverge from the effective one).
+      configuredEnabled: live ? live.configured().enabled : cfg?.enabled,
+      startupHash: startupConfigHash(ctx),
+      configuredHash: live
+        ? live.fingerprint().configHash
+        : startupConfigHash(ctx),
+      configPaths: live
+        ? live.fingerprint().files.map((f) => f.path)
+        : undefined,
+    }
   );
 }
 
@@ -530,6 +596,72 @@ export async function openCurve(
       input
     )
   );
+}
+
+/** The `embedding_status` read op's payload (see {@link embeddingStatus}). */
+export interface IEmbeddingStatusResult {
+  /** The on-disk `embedding.enabled` (observed from the config layers). */
+  readonly configuredEnabled: boolean;
+  /** The value the running process is actually using right now. */
+  readonly effectiveEnabled: boolean;
+  readonly provider: string;
+  readonly model: string;
+  /** Whether the resolved semantic members are currently retained for the store. */
+  readonly membersPresent: {
+    readonly embedding: boolean;
+    readonly search: boolean;
+  };
+  /** `configuredEnabled !== effectiveEnabled` — on-disk enabled, process not (yet) adopted. */
+  readonly divergent: boolean;
+  /** Config hash the process started with (`ctx.env.version.configHash`). */
+  readonly startupHash: string;
+  /** Config hash currently observed on disk. */
+  readonly currentHash: string;
+}
+
+/**
+ * Health/observability read for the semantic layer: EFFECTIVE vs CONFIGURED
+ * `embedding.*`, member presence, and both config hashes.
+ *
+ * A READ op — it never opens the cold semantic backend (`queryHandle` is not
+ * touched), so a caller can ask "is RAG on, and is on-disk ahead of me?"
+ * cheaply. `provider`/`model` are the effective values; `divergent` is the
+ * one non-obvious bit — on-disk says enabled while the process is still
+ * effectively disabled, which normally resolves on the next semantic verb
+ * (see {@link ensureSemanticReady}).
+ *
+ * A first-class read op (rather than a `query` view) because it is a property
+ * of the PROCESS and its config, not of the issue graph — and because the
+ * write path's own loudness net (`write/bootstrap.ts`) reports the same
+ * divergence, so operators can confirm it out-of-band.
+ */
+export async function embeddingStatus(
+  ctx: BacklogCtx
+): Promise<IOutcomeEnvelope<IEmbeddingStatusResult>> {
+  return envelope<IEmbeddingStatusResult>(async () => {
+    const live = ctx.embeddingConfig;
+    // `configured()` observes the disk (adopting nothing), so read it before
+    // `current()`: `divergent` then reflects the freshest on-disk value.
+    const configured = live ? live.configured() : ctx.env.config.embedding;
+    const effective = live ? live.current() : ctx.env.config.embedding;
+    const peek = peekSemanticStoreMembers(ctx.store.adapter);
+    return {
+      configuredEnabled: configured?.enabled === true,
+      effectiveEnabled: effective?.enabled === true,
+      provider: effective?.provider ?? '',
+      model: effective?.model ?? '',
+      membersPresent: {
+        embedding: peek?.embedding ?? false,
+        search: peek?.search ?? false,
+      },
+      divergent:
+        (configured?.enabled === true) !== (effective?.enabled === true),
+      startupHash: startupConfigHash(ctx) ?? '',
+      currentHash: live
+        ? live.fingerprint().configHash
+        : startupConfigHash(ctx) ?? '',
+    };
+  });
 }
 
 /**
