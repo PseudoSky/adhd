@@ -206,7 +206,10 @@ function main() {
   // a caller already provided one (we still re-mint per run; the manifest and
   // the children always agree because both read this same process env).
   process.env.RELEASE_RUN_TOKEN = randomUUID();
-  console.error(`run-release: release run token ${process.env.RELEASE_RUN_TOKEN}`);
+  // Deliberately NOT echoed: the token is a nonce (see release-manifest.js's
+  // "RUN-SCOPED FRESHNESS" header), not a secret and not operationally useful
+  // to a human reading the log — its only job is to be identical in the
+  // step-0 manifest and every spawned publish task.
 
   // Step 0 — compute the changed/affected project scope. NO catch-and-
   // fall-back-to-unscoped here: a failure computing the scope is a hard,
