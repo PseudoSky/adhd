@@ -623,14 +623,20 @@ IMMEDIATE`), which is exactly what makes the CAS design in §3/§4 correct. This
 | Dist-load                  | `nx run backlog:verify-dist-load`                                                                       | Builds real `dist/`, imports it, calls a real verb against a real temp store — not source resolution.                                                                                                                 |
 
 The `*.e2e.ts` paths above are the RESOURCE-CONSUMING suites — every test that
-spawns a subprocess (`child_process`/`StdioClientTransport`/`tsx` workers) or
-loads the real fastembed embedding model. They were extracted out of the
-default `test` target (a cheap `*.spec.ts` STUB is left at each original path)
-so `nx affected -t test` and therefore the pre-commit/pre-push hooks no longer
+spawns a subprocess (`child_process`/`StdioClientTransport`/`tsx` workers),
+loads the real fastembed embedding model, or is a CPU/memory hog (a large
+real-store fixture, a repeated ts-morph extraction, or a measured benchmark;
+e.g. `src/query/views/registry.e2e.ts`'s 1,000-node fixture and
+`src/api.surface.e2e.ts`'s three ts-morph passes over `dist/api.d.ts`, which
+peaks at ~1 GB RSS). They were extracted out of the default `test` target (a
+cheap `*.spec.ts` STUB is left at each original path) so
+`nx affected -t test` and therefore the pre-commit/pre-push hooks no longer
 pay for them; they are not matched by the test target's vitest `include`
-(`src/**/*.spec.ts`) and run only under the separately-invoked e2e suite.
-Rows still citing a `*.spec.ts` path are the cheap, in-process (or explicitly
-faked-embedding) suites that remain in the default run.
+(`src/**/*.spec.ts`) and run only under the separately-invoked e2e suite. Each
+stub header carries a `Resource lane:` tag (`cpu`/`mem`/`disk`/`io`/`proc`/
+`embed`) naming why its sibling is separated, so the lane can be filtered
+later. Rows still citing a `*.spec.ts` path are the cheap, in-process (or
+explicitly faked-embedding) suites that remain in the default run.
 
 Every test above uses a real store under `tmp/backlog/<test-name>/` per
 `AGENTS.md` §10, removed on teardown.

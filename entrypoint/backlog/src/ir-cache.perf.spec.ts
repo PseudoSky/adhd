@@ -11,6 +11,8 @@
  * The `it.todo` entries below inventory the original cases (one per real
  * case in `ir-cache.perf.e2e.ts`); they are the contract a mocked version must satisfy
  * without touching a subprocess or a real model.
+ *
+ * Resource lane: proc, cpu — spawns the built dist/index.js for a measured cache warm-HIT-vs-live benchmark.
  */
 import { describe, it } from 'vitest';
 

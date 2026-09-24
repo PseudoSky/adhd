@@ -11,6 +11,8 @@
  * The `it.todo` entries below inventory the original cases (one per real
  * case in `cross-process-write-safety.e2e.ts`); they are the contract a mocked version must satisfy
  * without touching a subprocess or a real model.
+ *
+ * Resource lane: proc — spawns real OS writers for the 400-op cross-process race.
  */
 import { describe, it } from 'vitest';
 

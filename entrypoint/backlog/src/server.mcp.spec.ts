@@ -11,6 +11,8 @@
  * The `it.todo` entries below inventory the original cases (one per real
  * case in `server.mcp.e2e.ts`); they are the contract a mocked version must satisfy
  * without touching a subprocess or a real model.
+ *
+ * Resource lane: proc — spawns the built server as a real MCP stdio child process.
  */
 import { describe, it } from 'vitest';
 
