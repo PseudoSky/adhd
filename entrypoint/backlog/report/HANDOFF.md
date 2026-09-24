@@ -18,13 +18,14 @@ the job has **not** run.
 ## 0. Durability warning + the two human gates
 
 **This corpus is NOT durable.** `feat/backlog-hard-replacement` — the branch holding
-the wave register, the packets, and this doc — is **3 commits ahead of
-`origin/feat/backlog-hard-replacement`** (remote tip `483fe47e`, local `816fa722`;
-verified `git rev-list --left-right --count` = `0 3`). A `git worktree remove` or
-`git branch -D` loses the register. **Pushing is the only thing that makes it durable;
-pushing needs human approval.** The register is **off-trunk**: `origin/main` carries
-**4** files under `entrypoint/backlog/report/`; this branch carries **24** — so cite
-the register by **branch+sha**, never by bare filename.
+the wave register, the packets, and this doc — carries **local-only commits on no
+remote**: **3 at consolidation time** (remote tip `483fe47e`; local was `816fa722`;
+`git rev-list --left-right --count` = `0 3`), **4 once this consolidation commit
+landed**. **A `git worktree remove` or `git branch -D` loses the register. Pushing is
+the only thing that makes it durable; pushing needs human approval.** The register is
+**off-trunk**: `origin/main` carries **4** files under `entrypoint/backlog/report/`;
+this branch carries **24** — so cite the register by **branch+sha**, never by bare
+filename.
 
 **The two human gates left (everything else is agent-executable):**
 1. **Approval to publish `@adhd/backlog` 1.0.0** and make the machine-global
@@ -230,7 +231,8 @@ census before any deletion/worktree-remove** — every number is a snapshot.
 
 - **Orphan risk (§5)** — the local-only branches, dirty worktrees, `spec-lanes.mjs`,
   and `tmp/backlog-main-reconcile/*` on no ref.
-- **This corpus itself** is 3 commits ahead of `origin` — not durable until pushed.
+- **This corpus itself** carries local-only commits ahead of `origin` (4 at the last
+  commit) — not durable until pushed.
 - **The funnel-spec process leak** (`9434902c`) — root-caused; the fix is uncommitted
   (working tree, primary tree on `fix/backlog-funnel-provider-dep`); **not fixed** until
   it lands and is proven. A **PID-reuse hole** in that fix is filed separately (see §9).
