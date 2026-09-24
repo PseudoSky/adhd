@@ -57,7 +57,13 @@ async function freePort(): Promise<number> {
 // captureGolden + assertParity — driven over a REAL HTTP server via `fetch`
 // ---------------------------------------------------------------------------
 
-describe('captureGolden + assertParity (real HTTP consumer protocol)', () => {
+// CPU-THRASH-SKIP (owner-requested, 2026-09-23): drives the real HTTP transport against
+// a live server to capture and re-capture golden snapshots, including a deliberate
+// negative-control recapture — real network round-trips per assertion.
+// Deviates from AGENTS.md §7 — owner-approved override, recorded.
+// Durable fix: docs/backlog/grooming/test-perf-improvements.md (recs #7, #8).
+// Run: npx vitest run src/test-support/parity-harness.spec.ts -t "captureGolden"
+describe.skip('captureGolden + assertParity (real HTTP consumer protocol) [CPU-THRASH-SKIP: owner-requested]', () => {
   let server: http.Server;
   let port: number;
 
@@ -174,7 +180,13 @@ describe('captureGolden + assertParity (real HTTP consumer protocol)', () => {
 // git repo under os.tmpdir() (BUG-APIGEN-052)
 // ---------------------------------------------------------------------------
 
-describe('proveNegativeControl (real git apply / git apply -R cycle)', () => {
+// CPU-THRASH-SKIP (owner-requested, 2026-09-23): real `git apply` / `git apply -R` cycle
+// against a live repo to prove the negative-control patch mechanism — real process spawns
+// and real tree mutation per assertion.
+// Deviates from AGENTS.md §7 — owner-approved override, recorded.
+// Durable fix: docs/backlog/grooming/test-perf-improvements.md.
+// Run: npx vitest run src/test-support/parity-harness.spec.ts -t "proveNegativeControl"
+describe.skip('proveNegativeControl (real git apply / git apply -R cycle) [CPU-THRASH-SKIP: owner-requested]', () => {
   let repoDir: string;
   let patchPath: string;
   let subjectPath: string;

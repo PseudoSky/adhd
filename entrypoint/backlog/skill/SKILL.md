@@ -12,11 +12,25 @@ skill is the ONLY place the command surface and calling convention are
 documented — `AGENTS.md`/`CLAUDE.md` carry just a pointer to it.
 
 Identity is the global `uid` returned by `create`/`upsertProject`/etc. —
-never a family-scoped human-readable id. Every example below was run against
-the real built binary (`dist/index.js`) and its exact output is what is
-shown.
+never a family-scoped human-readable id. A `uid` is stable for the life of its
+node, but a `body` edit replaces that node: as §3 below spells out, `update`
+with a `body` mints a successor with a fresh `uid` and joins the two with a
+`SUPERSEDES` edge. A uid you persisted earlier therefore stays *resolvable* but
+may no longer be the *live* one — addressing it returns `conflict` and names
+the successor. Never treat a stored uid as immutable across edits.
 
-## 1. Command surface — 14 verbs (plus `batch`), one calling convention
+Every example below was run against `entrypoint/backlog/dist/index.js` — the
+baseline examples on revision `9df2a5c7`, the §8 stats/rollup examples on the
+build that first mounted those ops — and its exact output is what is shown. A
+*globally installed* `adhd-backlog` may be an older build: in particular
+`gitContext` on `create`/`transition` (§6) exists in the `9df2a5c7` build but
+an older installed build rejects it with `invalid_argument`, and the §8 stats
+ops (`priority-matrix`/`part-of-rollup`/`open-curve`) exist only in a build at
+or after the one that mounted them. Compare the `backlog create` and `backlog
+priority-matrix` lines of `adhd-backlog --help` with §1 before relying on a
+field.
+
+## 1. Command surface — 17 verbs (plus `batch`), one calling convention
 
 **Every verb takes a single `--input` flag carrying one JSON object.** There
 are no per-field flags.
@@ -24,6 +38,9 @@ are no per-field flags.
 ```
 adhd-backlog backlog get                --input '<IIssueGetInput json>'
 adhd-backlog backlog query              --input '<IIssueQueryInput json>'
+adhd-backlog backlog priority-matrix    --input '<IPriorityMatrixInput json>'
+adhd-backlog backlog part-of-rollup     --input '<IPartOfRollupInput json>'
+adhd-backlog backlog open-curve         --input '<IOpenCurveInput json>'
 adhd-backlog backlog lookup             --input '{"q": "<tool, file path, or URL>"}'
 adhd-backlog backlog create             --input '<ICreateIssueInput json>'
 adhd-backlog backlog update             --input '<IUpdateIssueInput json>'
@@ -40,29 +57,34 @@ adhd-backlog batch action               --input '<IBatchActionInput json>'
 ```
 
 The `backlog` segment in front of every verb (and `batch` in front of
-`action`) is a real, required part of the command — it is the CLI namespace
-each operation is mounted under, not decoration. Running `adhd-backlog
+`action`) is the CLI namespace each operation is mounted under, and is the
+form `adhd-backlog --help` prints. The leading segment is optional: the CLI
+accepts both `adhd-backlog get --input …` and
+`adhd-backlog backlog get --input …` (identical). Running `adhd-backlog
 --help` (or an unknown command) prints the exact live shape of every input:
 
 ```
 $ adhd-backlog --help
 Available commands:
 
-  backlog claim  { input: { uid: string, by: string, action: enum, force?: boolean } }
-  backlog create  { input: { title: string, body: string, project: string, component?: string, kind?: string, status?: string, priority?: string, citations?: object[], author?: string, assignee?: string, gitContext?: string, by: string, duplicateAction?: enum, awaitEmbed?: boolean } }
+  backlog claim  { input: { uid: string, by: string, action: 'claim'|'release'|'renew', force?: boolean } }
+  backlog create  { input: { title: string, body: string, project: string, component?: string, kind?: string, status?: string, priority?: string, citations?: object[], author?: string, assignee?: string, gitContext?: string, by: string, duplicateAction?: 'abort'|'force'|'comment', awaitEmbed?: boolean } }
   backlog delete  { input: { uid: string, reason: string, by: string, awaitEmbed?: boolean } }
-  backlog get  { input: { uid: string, fields?: union[] } }
+  backlog get  { input: { uid: string, fields?: union[] } | { registry: 'project'|'component'|'location', name: string, filter?: object } }
   backlog lookup  { input: { q: string } }
   backlog move  { input: { uid: string, toProject?: string, toComponent?: string, by: string } }
-  backlog query  { input: { text?: string, filter?: object, fields?: union[], sort?: enum, direction?: enum, limit?: number, offset?: number, after?: string, view?: enum, format?: enum, overlapAxis?: enum, overlapUids?: string[], staleAfterMin?: number } }
-  backlog relate  { input: { sourceUid: string, targetUid: string, rel: enum, action: enum, by: string } }
+  backlog open-curve  { input: { filter?: object, at: string[] } }
+  backlog part-of-rollup  { input: { uid: string } }
+  backlog priority-matrix  { input: { filter?: object } }
+  backlog query  { input: { text?: string, filter?: object, fields?: union[], sort?: 'priority'|'updated'|'created'|'relevance'|'textMatch', direction?: 'asc'|'desc', limit?: number, offset?: number, after?: string, view?: 'list'|'ready'|'graph'|'order'|'stale'|'similar'|'overlap'|'projects'|'components'|'locations', format?: 'json'|'markdown', overlapAxis?: 'file'|'project'|'component'|'author', overlapUids?: string[], staleAfterMin?: number } }
+  backlog relate  { input: { sourceUid: string, targetUid: string, rel: 'relates_to'|'supersedes'|'blocks'|'duplicate_of'|'part_of', action: 'add'|'remove', by: string } }
   backlog rm-location  { input: { uid: string, by: string, reason?: string } }
   backlog transition  { input: { uid: string, by: string, toStatus: string, note?: string, citations?: object[], gitContext?: string } }
   backlog update  { input: { uid: string, by: string, title?: string, body?: string, kind?: string, priority?: string, assignee?: string, author?: string, awaitEmbed?: boolean } }
   backlog upsert-component  { input: { project: string, name: string, path?: string, description?: string, by: string } }
-  backlog upsert-location  { input: { component: string, project?: string, locType: enum, value: string, by: string } }
+  backlog upsert-location  { input: { component: string, project?: string, locType: 'path'|'url'|'tool', value: string, by: string } }
   backlog upsert-project  { input: { name: string, path?: string, repoUrl?: string, monorepo?: boolean, description?: string, by: string } }
-  batch action  { input: { operation: enum, items: object[], concurrency?: number, mode?: enum, onItemError?: enum, itemTimeoutMs?: number } }
+  batch action  { input: { operation: 'backlog/get', items: object[], concurrency?: number, mode?: 'parallel'|'serial'|'chained', onItemError?: 'continue'|'abort', itemTimeoutMs?: number } }
 ```
 
 Trust that output over anything hardcoded here — it is the live schema, not
@@ -70,15 +92,20 @@ a stale copy of it.
 
 ### Special commands — no `--input`, and not verbs
 
-`serve`, `install-skill` (alias `install`), `search`, and `sandbox-path` are
-handled before the command table:
+`serve`, `install-skill` (alias `install`), `search`, `sandbox-path`, and
+`store-check` are handled before the command table:
 
 ```
 adhd-backlog serve [--transport mcp|http|both] [--port N] [--host H]
 adhd-backlog install-skill [--host claude|codex|opencode|all] [--scope user|project]
 adhd-backlog search "<query text>" [--limit n]
 adhd-backlog sandbox-path
+adhd-backlog store-check
 ```
+
+`store-check` reports the store vocabulary this build expects versus the kinds
+actually present in the resolved store, exiting non-zero on a mismatch — useful
+after pointing a build at a store written by a different build.
 
 `sandbox-path` prints the resolved store location and exits without opening
 it — `{"namespace":"production"|"test"|"sandbox","adhdRoot":"…","dbPath":"…","embeddingEnabled":bool}`.
@@ -163,7 +190,8 @@ Success is always exit `0`.
 
 Each verb is also an MCP tool once `.mcp.json` wires the server, named
 `backlog_<verb>` with the verb's own words snake_cased: `backlog_get`,
-`backlog_query`, `backlog_lookup`, `backlog_create`, `backlog_update`,
+`backlog_query`, `backlog_priority_matrix`, `backlog_part_of_rollup`,
+`backlog_open_curve`, `backlog_lookup`, `backlog_create`, `backlog_update`,
 `backlog_transition`, `backlog_claim`, `backlog_relate`, `backlog_move`,
 `backlog_upsert_project`, `backlog_upsert_component`,
 `backlog_upsert_location`, `backlog_rm_location`, `backlog_delete`, plus the
@@ -217,8 +245,12 @@ $ adhd-backlog backlog get --input '{"uid":"a61ff0b6-…","fields":["body","cita
 {"ok":true,"data":{"uid":"a61ff0b6-…","body":"The auth integration test times out intermittently.","citations":[]}}
 ```
 
-(`backlog get`'s own `--help` line prints `{ input: union }` — the one verb
-whose live schema is vaguer than this page. Use the shape above.)
+`get`'s own `--help` now renders its full union —
+`{ uid, fields? } | { registry, name, filter? }`. The second form reads one
+registry entry by name directly, e.g.
+`{"registry":"project","name":"demo-project"}` returns the project's
+`{uid, name, path, components, locations}` — the same data `query`'s
+`view:"projects"`/`"components"`/`"locations"` list in bulk (§4).
 
 The full field vocabulary is `uid, title, kind, status, priority, project,
 component, createdAt, updatedAt, assignee, author, closedAt` (cheap/plain)
@@ -234,7 +266,8 @@ $ adhd-backlog backlog query --input '{"filter":{"project":"demo-project","statu
 ```
 
 `query.view` (default `'list'`) selects the result shape: `list` · `ready` ·
-`graph` · `order` · `stale` · `similar` · `overlap`. `text` is the
+`graph` · `order` · `stale` · `similar` · `overlap` · `projects` · `components`
+· `locations` (the last three are the registry LIST views — §4). `text` is the
 natural-language form — routed to `filter.semantic` when a populated vector
 space can rank it, or `filter.grep` (keyword FTS) otherwise; never set
 `text` alongside `filter.semantic`/`filter.grep` yourself. Pagination is
@@ -242,13 +275,28 @@ truthful: `meta.total` is the count before `limit`/`offset`, `meta.returned`
 is `data.items.length`, and a page cut short for any reason other than your
 own `limit` sets `meta.truncated`.
 
-**Edit an existing issue.** A `body` change supersedes the issue (mints a
-fresh `uid`); every other field edits in place. `status` is not editable
-here — use `transition`:
+**Edit an existing issue.** Every field edits in place **except `body`**: a
+`body` change SUPERSEDES the issue, minting a successor node with a fresh
+`uid` and carrying the old node's edges forward. The response's `uid` is the
+successor; the old `uid` becomes a `SUPERSEDES`-linked history node, and
+addressing it returns `conflict` naming the successor (see the example below).
+A caller that persists uids must follow that pointer after any body edit.
+`status` is not editable here — use `transition`:
 
 ```
 $ adhd-backlog backlog update --input '{"uid":"a61ff0b6-…","by":"claude:1","priority":"CRITICAL"}'
 {"ok":true,"data":{"uid":"a61ff0b6-…","changed":["priority"]}}
+```
+
+A `body` edit returns the successor's `uid`, and the pre-edit `uid` then
+resolves to a redirect (never to the stale record):
+
+```
+$ adhd-backlog backlog update --input '{"uid":"a61ff0b6-…","by":"claude:1","body":"new body"}'
+{"ok":true,"data":{"uid":"e3b32183-…","changed":["body"]}}
+
+$ adhd-backlog backlog get --input '{"uid":"a61ff0b6-…"}'
+{"ok":false,"error":{"code":"conflict","message":"Issue \"a61ff0b6-…\" was superseded by a body edit and is no longer the live issue; it now lives under \"e3b32183-…\"","details":{"retryable":false}}}
 ```
 
 **Move an issue to a new status.** A terminal `toStatus` REQUIRES `citations`
@@ -364,8 +412,8 @@ does. So, before filing:
 3. `create` with both `project` and `component`.
 
 A component-scoped scan is how a repo's own work is found (e.g.
-`filter.component:"entrypoint/backlog"` = 113 items; project `adhd` = 821); an
-item filed on `(root)` is invisible to it.
+`filter.component:"entrypoint/backlog"` for this repo's own items, or project
+`adhd`); an item filed on `(root)` is invisible to it.
 
 ### When to use each registry verb
 
@@ -447,13 +495,13 @@ $ adhd-backlog backlog query --input '{"view":"locations","filter":{"component":
 
 1. **Duplicate project identities.** The same repo can exist as TWO project
    rows — one path-derived, one repo-derived — and an item lands under
-   whichever name you pass. Live split (2026-09-22): `sox-ecosystem` (path,
-   732 items) vs `PseudoSky/sox-ecosystem` (no path, 0); `claude-agents`
-   (path, 47) vs `PseudoSky/claude-agents` (0); `claude-tools` (55) vs
-   `QuSecure/claude-tools` (17); `dot` (1) vs `id8/dot` (2). Prefer the row
-   that carries a `path` (and, for an active repo, the bulk of items) — an
-   item under the other row is invisible to a query scoped to the first.
-   (`adhd` is already reconciled to one row; `PseudoSky/adhd` does not exist.)
+   whichever name you pass. Observed split (2026-09-22): `sox-ecosystem` (path)
+   vs `PseudoSky/sox-ecosystem` (no path); `claude-agents` (path) vs
+   `PseudoSky/claude-agents`; `claude-tools` vs `QuSecure/claude-tools`;
+   `dot` vs `id8/dot`. Prefer the row that carries a `path` (and, for an
+   active repo, the bulk of the items) — an item under the other row is
+   invisible to a query scoped to the first. (`adhd` is already reconciled to
+   one row; `PseudoSky/adhd` does not exist.)
 2. **Store/scope confusion — an item can land in a store nobody reads.**
    `adhd-backlog sandbox-path` reports the store a command will touch. Each
    namespace resolves to its OWN file under `~/.adhd/backlog/<namespace>/data/`
@@ -489,17 +537,21 @@ status:'rejected', reason}` — `value`/`reason` is the SAME outcome envelope
 `error.code` still applies. `mode` (`'parallel'` default · `'serial'` ·
 `'chained'`), `onItemError` (`'continue'` default · `'abort'`), and
 `concurrency`/`itemTimeoutMs` govern how the fan-out runs. The valid
-`operation` values are exactly the 14 issue/registry verbs above, each
+`operation` values are exactly the 17 mounted verbs above (the nine issue
+verbs, the four registry verbs, and the three stats reads of §8), each
 prefixed `backlog/` — passing a bare verb name (`"create"`) is rejected with
 `invalid_argument` naming the full list.
 
 ## 6. Citations — structured, not hand-typed markdown
 
 A citation is `{ file, lines?, context?, symbol? }`. Pass `citations` on
-`create` or on the `transition` that moves an issue into a terminal status —
-required and enforced whenever the project's policy demands it (the
-default): a terminal transition with no citations, or with an unverifiable
-one, is rejected with `precondition_failed`. "Unverifiable" means the file
+`create` or on the `transition` that moves an issue into a terminal status.
+They are required and enforced only when the project's policy demands it:
+`citationRequired` defaults to `false`, so out of the box a terminal
+transition needs no citation (what IS required by default is a `note` —
+`transitionRequiresNote`). When a project HAS turned `citationRequired` on, a
+terminal transition with no citations, or with an unverifiable one, is
+rejected with `precondition_failed`. "Unverifiable" means the file
 could not be confirmed to exist under the project's own registered path —
 never resolved outside it. The verification gate applies only when the
 project HAS a registered path; a project with no `path` cannot hash any
@@ -531,3 +583,46 @@ of that process's own in-memory/uncheckpointed state. After a write you
 care about, verify by running the `adhd-backlog` CLI in a fresh shell — a
 genuinely new process — rather than re-reading through the same live MCP
 session.
+
+## 8. Stats & rollups
+
+Three aggregate read views are first-class mounted ops — `backlog
+priority-matrix`, `backlog part-of-rollup`, `backlog open-curve` (MCP:
+`backlog_priority_matrix` / `backlog_part_of_rollup` / `backlog_open_curve`).
+All three are read-only and take no `by`, and each returns its own shape — a
+matrix, a rollup tree, a time series — so none is a `query.view` member.
+
+**Priority matrix** — per-priority counts, scoped by
+`project`/`component`/`kind`/`status`. An omitted `filter.status` scopes to
+OPEN work (unlike `list`, where an omitted status means no restriction); the
+applied scope is echoed on `data.statusScope`, and `unassigned` counts in-scope
+issues carrying no priority:
+
+```
+$ adhd-backlog backlog priority-matrix --input '{}'
+{"ok":true,"data":{"rows":[{"priority":"HIGH","priorityUid":"fb9d525e-…","rank":0,"count":1}],"unassigned":1,"statusScope":"open"}}
+```
+
+**Part-of rollup** — every TRANSITIVE `part_of` descendant of the root issue
+(not just direct children), counted once each regardless of chain depth, split
+into `childrenOpen`/`childrenClosed` (plus the open descendants' uids):
+
+```
+$ adhd-backlog backlog part-of-rollup --input '{"uid":"74c22c35-…"}'
+{"ok":true,"data":{"uid":"74c22c35-…","childrenTotal":1,"childrenOpen":1,"childrenClosed":0,"childrenOpenUids":["db4587ba-…"]}}
+```
+
+**Open curve** — for each sampled ISO-8601 instant, how many in-scope issues
+EXISTED then (exact, via `validAt`) and, of those, how many were OPEN then
+(reconstructed from the audit trail, never the issue's current status):
+
+```
+$ adhd-backlog backlog open-curve --input '{"at":["2020-01-01T00:00:00.000Z"]}'
+{"ok":true,"data":{"points":[{"at":"2020-01-01T00:00:00.000Z","existed":0,"open":0,"closed":0}]}}
+```
+
+The same three functions are also exported from the package's query layer
+(`src/query/views/stats.ts`, re-exported by `src/query/index.ts`) for
+in-process consumers — `priorityMatrix(handle, { filter? })`,
+`partOfRollup(handle, { uid })`, `openCurve(handle, { filter?, at })`. That
+in-process surface is described in `README.md` → "Library API".

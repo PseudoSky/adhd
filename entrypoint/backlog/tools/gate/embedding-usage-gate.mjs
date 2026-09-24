@@ -62,6 +62,16 @@ const REAL_BY_DESIGN = new Map([
       'synonymy) cannot honestly make.',
   ],
   [
+    'src/store/embed-funnel.spec.ts',
+    'the embedding funnel’s headline invariant — N consumer PROCESSES share EXACTLY ONE self-reaping host, ' +
+      'and constructing the production seam is INERT (zero hosts) — proven against the REAL ' +
+      '@adhd/sox-embedding-provider (no vi.mock). A fake backend is in-process and has no funnel host at all, ' +
+      'so it cannot honestly provide either half: real child consumer processes ' +
+      '(src/test/helpers/embed-funnel-consumer.ts under tsx) are spawned and the parent counts the real ' +
+      'embedding-host processes and sockets they do (not) create. Verified: both assertions go RED on the ' +
+      'pre-funnel provider (0.5.0).',
+  ],
+  [
     'src/store/embed-drain-real-model.spec.ts',
     'the close-time embed drain proven end-to-end against the REAL fastembed model, in-process AND through ' +
       'a spawned dist/index.js `create` — no vi.mock of @adhd/sox-embedding-provider. Its assertion is the ' +

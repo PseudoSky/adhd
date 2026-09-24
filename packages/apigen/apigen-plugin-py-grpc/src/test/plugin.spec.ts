@@ -417,7 +417,15 @@ afterEach(async () => {
 // Live tests
 // ---------------------------------------------------------------------------
 
-describe('py-grpc plugin — LIVE gRPC server', () => {
+// CPU-THRASH-SKIP (owner-requested, 2026-09-23): boots a real Python gRPC server and
+// drives it with `execFileSync('grpcurl', ...)` — an EXTERNAL BINARY that no package
+// manager installs and nothing declares — across ~9 assertions with 10_000-20_000 ms
+// timeouts. (AGENTS.md §7 permits a self-skip for an optional external binary only, and
+// only with a visible warning; this is a whole-block owner-requested skip instead.)
+// Deviates from AGENTS.md §7 — owner-approved override, recorded.
+// Durable fix: docs/backlog/grooming/test-perf-improvements.md (recs #7, #8).
+// Run: npx vitest run src/test/plugin.spec.ts -t "LIVE gRPC server"
+describe.skip('py-grpc plugin — LIVE gRPC server [CPU-THRASH-SKIP: owner-requested]', () => {
   it('grpcurl list → the project()-derived service appears', async () => {
     server = await startServer();
     const result = grpcurl([liveAddr(), 'list']);

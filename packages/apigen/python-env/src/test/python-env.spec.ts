@@ -147,7 +147,17 @@ describe('resolvePythonPkgDir — published (outside-monorepo) layout', () => {
   })
 })
 
-describe('ensurePythonEnv (real venv under tmp/)', () => {
+// CPU-THRASH-SKIP (owner-requested, 2026-09-23): provisions a REAL venv and runs a REAL
+// `pip install` of the local apigen-python package (its own header: "a pure-python
+// `pip install` ... (~seconds)") — resolver + wheel build + network — then leaves the
+// venv behind in tmp/apigen/python-env-test as a stateful shared fixture, and spawns
+// python probes to assert it persists across runs.
+// Deviates from AGENTS.md §7 — owner-approved override, recorded.
+// Durable fix: docs/backlog/grooming/test-perf-improvements.md.
+// NOTE: the sibling blocks (resolvePythonPkgDir, the published-layout checks, the
+// APIGEN_PYTHON override) are pure fs/path logic and are deliberately LEFT RUNNING.
+// Run: npx vitest run src/test/python-env.spec.ts -t "ensurePythonEnv"
+describe.skip('ensurePythonEnv (real venv under tmp/) [CPU-THRASH-SKIP: owner-requested]', () => {
   beforeAll(() => {
     fs.rmSync(TMP_HOME, { recursive: true, force: true })
   })
