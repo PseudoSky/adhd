@@ -16,6 +16,7 @@
     "@adhd/apigen-plugin-openapi": "^0.2.2",
     "@adhd/environment": "^0.1.0",
     "@adhd/environment-base-spec": "^0.1.0",
+    "@adhd/environment-builder": "^0.1.4",
     "@adhd/sox-graph-store": "^0.10.1",
     "@adhd/sox-hybrid-search": "^0.4.6",
     "@adhd/sox-semantic": "^0.1.2",
