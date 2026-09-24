@@ -86,6 +86,7 @@ import {
   type SpawnResult,
   type SandboxPathBody,
 } from './test/helpers/spawn-backlog-bin.js';
+import { spawnTimeoutMs } from './test/helpers/spawn-timeout.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -1017,7 +1018,7 @@ describe('--namespace / sandbox-path — SPEC.md §5c: the CLI must never defaul
       cwd: home,
       env: { ...process.env, HOME: home, ...extraEnv },
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: spawnTimeoutMs(),
     });
     if (result.error) throw new Error(`spawn failed: ${String(result.error)}`);
     return {
