@@ -336,7 +336,9 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
   });
 
   it('BUG-BACKLOG-BATCH-DISCOVERABILITY-001: a per-verb --help surfaces `batch action` as a "see also"', () => {
-    const help = runBin(['backlog', 'create', '--help'], { ADHD_ROOT: sharedRoot });
+    const help = runBin(['backlog', 'create', '--help'], {
+      ADHD_ROOT: sharedRoot,
+    });
     expect(help.status, `stderr:\n${help.stderr}`).toBe(0);
     expect(help.stdout).toContain('batch action');
   });
@@ -345,9 +347,15 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     const topHelp = runBin(['--help'], { ADHD_ROOT: sharedRoot });
     // top-level help already lists `batch action` in the command table itself —
     // assert the SEE-ALSO sentence specifically is absent, not the bare substring.
-    expect(topHelp.stdout).not.toContain('See also: `adhd-backlog batch action`');
-    const batchHelp = runBin(['batch', 'action', '--help'], { ADHD_ROOT: sharedRoot });
-    expect(batchHelp.stdout).not.toContain('See also: `adhd-backlog batch action`');
+    expect(topHelp.stdout).not.toContain(
+      'See also: `adhd-backlog batch action`'
+    );
+    const batchHelp = runBin(['batch', 'action', '--help'], {
+      ADHD_ROOT: sharedRoot,
+    });
+    expect(batchHelp.stdout).not.toContain(
+      'See also: `adhd-backlog batch action`'
+    );
   });
 
   it('BUG-BACKLOG-001: --help and no-args surface the special-cased commands (install-skill/install/serve) that never enter the apigen command table', () => {
@@ -375,7 +383,8 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     // identical scope/cwd/adhdRoot triple `runBin`'s spawned process sees via
     // ADHD_BACKLOG_SCOPE=project + cwd=adhdRoot) — never opened directly here.
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-sandbox-cli-eager-open-'));
-    const expectedDbPath = buildBacklogEnv({ adhdRoot, namespace: 'sandbox' }).files.db;
+    const expectedDbPath = buildBacklogEnv({ adhdRoot, namespace: 'sandbox' })
+      .files.db;
     expect(
       existsSync(expectedDbPath),
       'sanity: no store should exist before the CLI ever runs'
@@ -437,8 +446,11 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
   // dedicated re-run in the `--namespace / sandbox-path` describe block
   // below.
   it('version, --help, no-args, and install-skill --help never create the DB (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001)', () => {
-    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-sandbox-cli-no-store-open-'));
-    const expectedDbPath = buildBacklogEnv({ adhdRoot, namespace: 'sandbox' }).files.db;
+    adhdRoot = mkdtempSync(
+      join(tmpdir(), 'backlog-sandbox-cli-no-store-open-')
+    );
+    const expectedDbPath = buildBacklogEnv({ adhdRoot, namespace: 'sandbox' })
+      .files.db;
     expect(
       existsSync(expectedDbPath),
       'sanity: no store should exist before the CLI ever runs'
@@ -482,7 +494,8 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-sandbox-cli-dbpath-'));
     const redirectDb = join(adhdRoot, 'redirect', 'backlog.db');
 
-    const res = runBin(['query', '--input', '{}'], { ADHD_ROOT: adhdRoot, 
+    const res = runBin(['query', '--input', '{}'], {
+      ADHD_ROOT: adhdRoot,
       ADHD_BACKLOG_DATABASE_PATH: redirectDb,
     });
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
@@ -496,7 +509,8 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     ).toBe(true);
     // …and the scope-root fallback must NOT have been created (pre-fix, this
     // test went red: the bin opened env.files.db and ignored the env var).
-    const fallback = buildBacklogEnv({ adhdRoot, namespace: 'sandbox' }).files.db;
+    const fallback = buildBacklogEnv({ adhdRoot, namespace: 'sandbox' }).files
+      .db;
     expect(
       existsSync(fallback),
       'the scope-root fallback must not be created when the env var is set'
@@ -504,8 +518,11 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
   });
 
   it('BUG-002 regression guard: with ADHD_BACKLOG_DATABASE_PATH unset, the bin still opens the scope-root fallback as before', () => {
-    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-sandbox-cli-dbpath-default-'));
-    const fallback = buildBacklogEnv({ adhdRoot, namespace: 'sandbox' }).files.db;
+    adhdRoot = mkdtempSync(
+      join(tmpdir(), 'backlog-sandbox-cli-dbpath-default-')
+    );
+    const fallback = buildBacklogEnv({ adhdRoot, namespace: 'sandbox' }).files
+      .db;
     expect(
       existsSync(fallback),
       'sanity: no store should exist before the CLI runs'
@@ -526,7 +543,10 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     // file — then close it so the subprocess's own GraphBacklogStore can
     // open it exclusively (identical pattern to server.spec.ts/
     // server.mcp.spec.ts's seeding).
-    const seedEnv = buildBacklogEnv({ adhdRoot: sharedRoot, namespace: 'sandbox' });
+    const seedEnv = buildBacklogEnv({
+      adhdRoot: sharedRoot,
+      namespace: 'sandbox',
+    });
     seedEnv.ensureDirs();
     const seeded = await seedIssue(
       seedEnv.files.db,
@@ -557,7 +577,10 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
   });
 
   it('a fully-prefixed "backlog get …" ALSO resolves — proves prefixCommand is idempotent at the real dispatch, not just in the unit test', async () => {
-    const seedEnv = buildBacklogEnv({ adhdRoot: sharedRoot, namespace: 'sandbox' });
+    const seedEnv = buildBacklogEnv({
+      adhdRoot: sharedRoot,
+      namespace: 'sandbox',
+    });
     seedEnv.ensureDirs();
     const seeded = await seedIssue(
       seedEnv.files.db,
@@ -639,7 +662,10 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
   });
 
   it('"query" (view:list) returns the seeded item, filtered by project', async () => {
-    const seedEnv = buildBacklogEnv({ adhdRoot: sharedRoot, namespace: 'sandbox' });
+    const seedEnv = buildBacklogEnv({
+      adhdRoot: sharedRoot,
+      namespace: 'sandbox',
+    });
     seedEnv.ensureDirs();
     const seeded = await seedIssue(
       seedEnv.files.db,
@@ -684,7 +710,9 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
   });
 
   it('an unknown flag exits with CLI_EXIT_CODE.invalid_argument (2), never 0', () => {
-    const res = runBin(['get', '--this-flag-does-not-exist', 'x'], { ADHD_ROOT: sharedRoot });
+    const res = runBin(['get', '--this-flag-does-not-exist', 'x'], {
+      ADHD_ROOT: sharedRoot,
+    });
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
       2
     );
@@ -819,10 +847,9 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     // ordinary `backlog`-prefixed command path) proves both batch-created
     // items are genuinely persisted in the store — not just echoed back in
     // the batch response.
-    const get1 = runBin(
-      ['get', '--input', JSON.stringify({ uid: firstUid })],
-      { ADHD_ROOT: sharedRoot }
-    );
+    const get1 = runBin(['get', '--input', JSON.stringify({ uid: firstUid })], {
+      ADHD_ROOT: sharedRoot,
+    });
     expect(get1.status, `stderr:\n${get1.stderr}`).toBe(0);
     expect(
       (JSON.parse(get1.stdout.trim()) as { data: { title: string } }).data.title
@@ -880,7 +907,9 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
   });
 
   it('install-skill --host claude --scope project drops the packaged, currently-built SKILL.md under the given cwd — content-hash matches', () => {
-    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-sandbox-cli-install-skill-'));
+    adhdRoot = mkdtempSync(
+      join(tmpdir(), 'backlog-sandbox-cli-install-skill-')
+    );
     // Explicit `cwd` override (3rd arg): `install-skill --scope project`'s own
     // `--scope` flag (unrelated to backlog's `--namespace`) resolves against
     // the spawned process's real `process.cwd()`, so this test's assertion
@@ -942,7 +971,9 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
   // regression needs. `--help`/`install`/`serve` never open the store and
   // are deliberately NOT used here.
   it('a command that OPENS the store then fails still closes it in the finally (WAL truncated, store reopens cleanly)', async () => {
-    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-sandbox-cli-close-on-error-'));
+    adhdRoot = mkdtempSync(
+      join(tmpdir(), 'backlog-sandbox-cli-close-on-error-')
+    );
 
     // Seed real data through a real store BEFORE the CLI subprocess owns the
     // file — then close it so the subprocess's own GraphBacklogStore can open
@@ -1092,7 +1123,7 @@ describe('--namespace / sandbox-path — SPEC.md §5c: the CLI must never defaul
     // actually wins.
     expect(
       body.embeddingEnabled,
-      'D8: a --namespace sandbox invocation must resolve embedding.enabled: false, deliberately, even though this machine\'s real production config has it true'
+      "D8: a --namespace sandbox invocation must resolve embedding.enabled: false, deliberately, even though this machine's real production config has it true"
     ).toBe(false);
 
     // Drive a REAL write (`create`) under --namespace sandbox, then prove the
@@ -1239,7 +1270,7 @@ describe('--namespace / sandbox-path — SPEC.md §5c: the CLI must never defaul
   // resolves to the isolated `'sandbox'` namespace once `--namespace
   // sandbox` is passed, never `'production'` — so the bypass class is
   // closed by TWO independent mechanisms, not one.
-  it('BUG-BACKLOG-SANDBOX-SILENT-BYPASS-001: an already-set ADHD_ROOT (not one of this tool\'s own sandbox dirs) no longer silently defeats --namespace sandbox', () => {
+  it("BUG-BACKLOG-SANDBOX-SILENT-BYPASS-001: an already-set ADHD_ROOT (not one of this tool's own sandbox dirs) no longer silently defeats --namespace sandbox", () => {
     fakeProdHome = mkdtempSync(join(tmpdir(), 'backlog-fakeprod-bypass-'));
     // Deliberately NOT prefixed `backlog-sandbox-` — a real, unrelated
     // directory a caller happened to have ADHD_ROOT pointed at, the exact
@@ -1328,7 +1359,9 @@ describe('--namespace / sandbox-path — SPEC.md §5c: the CLI must never defaul
     const events = readTelemetryEvents(prodSoxHome);
     expect(
       events,
-      `--namespace sandbox must never write telemetry under the (fake) production HOME — found events: ${JSON.stringify(events)}`
+      `--namespace sandbox must never write telemetry under the (fake) production HOME — found events: ${JSON.stringify(
+        events
+      )}`
     ).toHaveLength(0);
   });
 
@@ -1362,7 +1395,7 @@ describe('--namespace / sandbox-path — SPEC.md §5c: the CLI must never defaul
     expect(body.adhdRoot).toBe(ownSandboxRoot);
     expect(
       body.embeddingEnabled,
-      'D8\'s write must overwrite a stray pre-existing config.yaml — a planted embedding.enabled:true must not survive'
+      "D8's write must overwrite a stray pre-existing config.yaml — a planted embedding.enabled:true must not survive"
     ).toBe(false);
   });
 
@@ -1468,7 +1501,9 @@ describe('--namespace / sandbox-path — SPEC.md §5c: the CLI must never defaul
   // same `HOME`-redirect `runGlobalScoped` uses for every other test in this
   // block (never the real machine's `~/.adhd`).
   it('D2: an explicit --namespace production round-trips a real create/get, identically to the omitted-flag default', () => {
-    fakeProdHome = mkdtempSync(join(tmpdir(), 'backlog-fakeprod-explicit-prod-'));
+    fakeProdHome = mkdtempSync(
+      join(tmpdir(), 'backlog-fakeprod-explicit-prod-')
+    );
     const defaultRes = runGlobalScoped(['sandbox-path'], fakeProdHome);
     expect(defaultRes.status, `stderr:\n${defaultRes.stderr}`).toBe(0);
     const defaultBody = JSON.parse(
@@ -1532,9 +1567,10 @@ describe('--namespace / sandbox-path — SPEC.md §5c: the CLI must never defaul
       fakeProdHome
     );
     expect(getRes.status, `stderr:\n${getRes.stderr}`).toBe(0);
-    const got = JSON.parse(
-      getRes.stdout.trim().split('\n').pop() ?? '{}'
-    ) as { ok: boolean; data: { uid: string; title: string } };
+    const got = JSON.parse(getRes.stdout.trim().split('\n').pop() ?? '{}') as {
+      ok: boolean;
+      data: { uid: string; title: string };
+    };
     expect(got.ok).toBe(true);
     expect(got.data.uid).toBe(created.data.uid);
     expect(got.data.title).toBe('explicit production');
@@ -1606,7 +1642,9 @@ describe('--namespace / sandbox-path — SPEC.md §5c: the CLI must never defaul
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ data: { input: { name: project, by: 'cli.spec' } } }),
+          body: JSON.stringify({
+            data: { input: { name: project, by: 'cli.spec' } },
+          }),
         }
       );
       expect(upsertRes.status).toBe(200);
@@ -1685,7 +1723,9 @@ describe('backlog search — natural-language shortcut (real spawned bin)', () =
   let sharedRoot: string;
 
   beforeAll(() => {
-    sharedRoot = mkdtempSync(join(tmpdir(), 'backlog-sandbox-cli-search-shared-'));
+    sharedRoot = mkdtempSync(
+      join(tmpdir(), 'backlog-sandbox-cli-search-shared-')
+    );
   });
 
   afterAll(() => {
@@ -1764,10 +1804,9 @@ describe('backlog search — natural-language shortcut (real spawned bin)', () =
       'Nothing to do with publishing.'
     );
 
-    const res = runBin(
-      ['search', 'publish gate', '--limit', '5'],
-      { ADHD_ROOT: sharedRoot }
-    );
+    const res = runBin(['search', 'publish gate', '--limit', '5'], {
+      ADHD_ROOT: sharedRoot,
+    });
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(
       0
     );
@@ -1826,10 +1865,9 @@ describe('backlog search — natural-language shortcut (real spawned bin)', () =
       'Body text for the anchor probe.'
     );
 
-    const viaShortcut = runBin(
-      ['search', '--anchor', uid, '--limit', '3'],
-      { ADHD_ROOT: sharedRoot }
-    );
+    const viaShortcut = runBin(['search', '--anchor', uid, '--limit', '3'], {
+      ADHD_ROOT: sharedRoot,
+    });
     const viaQuery = runBin(
       [
         'query',
@@ -1862,14 +1900,19 @@ describe('backlog search — natural-language shortcut (real spawned bin)', () =
   });
 
   it('a rejected invocation exits 2 with the invalid_argument envelope on STDERR, and never opens the store', () => {
-    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-sandbox-cli-search-reject-'));
-    const expectedDbPath = buildBacklogEnv({ adhdRoot, namespace: 'sandbox' }).files.db;
+    adhdRoot = mkdtempSync(
+      join(tmpdir(), 'backlog-sandbox-cli-search-reject-')
+    );
+    const expectedDbPath = buildBacklogEnv({ adhdRoot, namespace: 'sandbox' })
+      .files.db;
     expect(
       existsSync(expectedDbPath),
       'sanity: no store should exist before the CLI ever runs'
     ).toBe(false);
 
-    const res = runBin(['search', 'x', '--limitt', '5'], { ADHD_ROOT: adhdRoot });
+    const res = runBin(['search', 'x', '--limitt', '5'], {
+      ADHD_ROOT: adhdRoot,
+    });
     // CLI_EXIT_CODE['invalid_argument'] — the same code the apigen path uses.
     expect(res.status).toBe(2);
     const err = JSON.parse(res.stderr.trim().split('\n').pop() ?? '{}') as {
@@ -1886,7 +1929,8 @@ describe('backlog search — natural-language shortcut (real spawned bin)', () =
 
   it('`search --help` exits 0, prints usage, and never opens the store', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-sandbox-cli-search-help-'));
-    const expectedDbPath = buildBacklogEnv({ adhdRoot, namespace: 'sandbox' }).files.db;
+    const expectedDbPath = buildBacklogEnv({ adhdRoot, namespace: 'sandbox' })
+      .files.db;
 
     const res = runBin(['search', '--help'], { ADHD_ROOT: adhdRoot });
     expect(res.status, `stderr:\n${res.stderr}`).toBe(0);
