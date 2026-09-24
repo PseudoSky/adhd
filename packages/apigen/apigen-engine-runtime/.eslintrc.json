@@ -5,7 +5,8 @@
     "vite.config.js",
     "vite.config.ts",
     "vite.config.mjs",
-    "vite.config.mts"
+    "vite.config.mts",
+    "vitest.e2e.config.ts"
   ],
   "overrides": [
     {

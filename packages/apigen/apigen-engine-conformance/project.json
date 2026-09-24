@@ -51,8 +51,7 @@
         "{workspaceRoot}/coverage/packages/apigen/apigen-engine-conformance-e2e"
       ],
       "options": {
-        "configFile": "packages/apigen/apigen-engine-conformance/vitest.e2e.config.ts",
-        "passWithNoTests": true
+        "configFile": "packages/apigen/apigen-engine-conformance/vitest.e2e.config.ts"
       }
     },
     "build": {

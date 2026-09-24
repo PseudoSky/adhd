@@ -53,8 +53,7 @@
         "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-py-grpc-e2e"
       ],
       "options": {
-        "configFile": "packages/apigen/apigen-plugin-py-grpc/vitest.e2e.config.ts",
-        "passWithNoTests": true
+        "configFile": "packages/apigen/apigen-plugin-py-grpc/vitest.e2e.config.ts"
       }
     },
     "nx-release-publish": {

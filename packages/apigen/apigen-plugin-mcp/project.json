@@ -50,14 +50,13 @@
       "//": "RESOURCE-CONSUMING lane. Runs ONLY the `*.e2e.ts` suites extracted out of the default `test` target (real MCP servers on real ports driven over real HTTP by the SDK client transports, plus their spawnSync negative controls). Opt-in and deliberately NOT wired into any `test.dependsOn` nor into nx.json `targetDefaults`, so `nx affected -t test` / the pre-commit + pre-push hooks never reach it. `dependsOn: [\"build\"]` because it builds the package before exercising its real run() path. Its coverage dir is DISTINCT from the default lane's, and declares no dist-shaped output.",
       "executor": "@nx/vite:test",
       "outputs": [
-        "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-mcp/e2e"
+        "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-mcp-e2e"
       ],
       "dependsOn": [
         "build"
       ],
       "options": {
-        "configFile": "packages/apigen/apigen-plugin-mcp/vitest.e2e.config.ts",
-        "passWithNoTests": true
+        "configFile": "packages/apigen/apigen-plugin-mcp/vitest.e2e.config.ts"
       }
     },
     "nx-release-publish": {

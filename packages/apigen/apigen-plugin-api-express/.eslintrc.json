@@ -30,7 +30,7 @@
           {
             "ignoredFiles": [
               "{projectRoot}/vite.config.{js,ts,mjs,mts}",
-              "{projectRoot}/vitest.e2e.config.ts",
+              "{projectRoot}/vitest.e2e.config.{js,ts,mjs,mts}",
               "{projectRoot}/**/*.e2e.{ts,tsx,mts,cts}"
             ]
           }

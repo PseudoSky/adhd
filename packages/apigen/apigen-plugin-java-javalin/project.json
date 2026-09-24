@@ -60,8 +60,7 @@
         "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-java-javalin-e2e"
       ],
       "options": {
-        "configFile": "packages/apigen/apigen-plugin-java-javalin/vitest.e2e.config.ts",
-        "passWithNoTests": true
+        "configFile": "packages/apigen/apigen-plugin-java-javalin/vitest.e2e.config.ts"
       }
     },
     "nx-release-publish": {
