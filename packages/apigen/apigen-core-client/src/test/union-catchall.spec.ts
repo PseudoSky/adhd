@@ -249,3 +249,109 @@ describe('[BUG-APIGEN-059] union-catchall: oneOf stays unambiguous with a Record
     expect(validate.errors?.some((e) => e.keyword === 'oneOf')).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Fix 1 (backlog f58babc9) — TWO co-resident vacuous catch-alls.
+//
+// `sanitizeCatchAllVariants` used to narrow EACH catch-all against ALL other
+// variants, INCLUDING the other catch-all. With `{}` (OnlyMethods) + a
+// `Record<string,unknown>` catch-all, a catch-all-only object then matched
+// NEITHER sanitized branch (each excluded the other) → oneOf rejected a value
+// the TS union accepts — the same defect class BUG-APIGEN-059 removes.
+// ---------------------------------------------------------------------------
+describe('[BUG f58babc9] union-catchall: two co-resident catch-alls stay a satisfiable oneOf', () => {
+  it('[union-catchall-multi.shape] 3 branches with BOTH catch-alls sanitized (allOf/not)', async () => {
+    const result = await gen(fixture('union-catchall-multi.ts'));
+    const output = result.schemas['classifyPetMulti']?.output as
+      | { oneOf?: unknown[]; ['x-apigen-logical']?: string }
+      | undefined;
+    if (!output) {
+      throw new Error(
+        `operation "classifyPetMulti" must exist; got: ${JSON.stringify(Object.keys(result.schemas))}`
+      );
+    }
+    expect(Array.isArray(output.oneOf)).toBe(true);
+    const oneOf = output.oneOf as Record<string, unknown>[];
+    expect(
+      oneOf,
+      `expected 3 branches (Dog, {}, Record catch-all); got: ${JSON.stringify(oneOf)}`
+    ).toHaveLength(3);
+
+    const sanitizedBranches = oneOf.filter(
+      (v) => Array.isArray(v['allOf']) && (v['allOf'] as unknown[]).length === 2
+    );
+    expect(
+      sanitizedBranches,
+      `expected BOTH catch-alls sanitized; got: ${JSON.stringify(oneOf)}`
+    ).toHaveLength(2);
+    expect(output['x-apigen-logical']).toBe('union');
+  });
+
+  it('[union-catchall-multi.only-catchall] a catch-all-only object validates (was ZERO-match pre-fix)', async () => {
+    const result = await gen(fixture('union-catchall-multi.ts'));
+    const op = result.schemas['classifyPetMulti'];
+    const value = { unrelated: true };
+
+    const validateOut = makeAjv().compile(op.output as Record<string, unknown>);
+    expect(
+      validateOut(value),
+      `catch-all-only output must validate; ajv errors: ${JSON.stringify(validateOut.errors)}`
+    ).toBe(true);
+
+    const validateIn = makeAjv().compile(op.input as Record<string, unknown>);
+    expect(
+      validateIn({ input: value }),
+      `catch-all-only input must validate; ajv errors: ${JSON.stringify(validateIn.errors)}`
+    ).toBe(true);
+  });
+
+  it('[union-catchall-multi.dog] a Dog-shaped value still validates against both input and output', async () => {
+    const result = await gen(fixture('union-catchall-multi.ts'));
+    const op = result.schemas['classifyPetMulti'];
+    const dog = { kind: 'dog', bark: 'woof' };
+
+    const validateOut = makeAjv().compile(op.output as Record<string, unknown>);
+    expect(
+      validateOut(dog),
+      `Dog-shaped output must validate; ajv errors: ${JSON.stringify(validateOut.errors)}`
+    ).toBe(true);
+
+    const validateIn = makeAjv().compile(op.input as Record<string, unknown>);
+    expect(
+      validateIn({ input: dog }),
+      `Dog-shaped input must validate; ajv errors: ${JSON.stringify(validateIn.errors)}`
+    ).toBe(true);
+  });
+
+  // NEGATIVE CONTROL: the exact pre-fix shape — each catch-all narrowed against
+  // the OTHER catch-all — rejects a catch-all-only object (zero matches).
+  it('[union-catchall-multi.NEGATIVE] the pre-fix shape rejects a catch-all-only object (proves teeth)', () => {
+    const dogSchema = {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', enum: ['dog'] },
+        bark: { type: 'string' },
+      },
+      required: ['kind', 'bark'],
+      additionalProperties: false,
+    };
+    const emptyCatchAll = {};
+    const recordCatchAll = { type: 'object', additionalProperties: {} };
+    // Pre-fix: `others` = every other variant, other catch-alls included.
+    const preFix = {
+      oneOf: [
+        dogSchema,
+        { allOf: [emptyCatchAll, { not: { anyOf: [dogSchema, recordCatchAll] } }] },
+        { allOf: [recordCatchAll, { not: { anyOf: [dogSchema, emptyCatchAll] } }] },
+      ],
+    };
+    const validate = makeAjv().compile(preFix);
+    expect(
+      validate({ unrelated: true }),
+      'the pre-fix two-catch-all shape was expected to REJECT a catch-all-only object ' +
+        '(each catch-all excludes the other → zero matches); if this now passes, the ' +
+        'bug class may have changed shape'
+    ).toBe(false);
+    expect(validate.errors?.some((e) => e.keyword === 'oneOf')).toBe(true);
+  });
+});

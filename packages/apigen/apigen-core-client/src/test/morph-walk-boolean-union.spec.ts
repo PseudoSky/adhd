@@ -93,6 +93,17 @@ function propsOf(schema: Schema): Record<string, Schema> {
   return props as Record<string, Schema>;
 }
 
+/** Fetch an operation or fail loudly — keeps the suite free of `!` assertions. */
+function mustOp(ops: Map<string, Op>, name: string): Op {
+  const op = ops.get(name);
+  if (!op) {
+    throw new Error(
+      `operation "${name}" must exist in the union-boolean fixture; got: ${[...ops.keys()].join(', ')}`
+    );
+  }
+  return op;
+}
+
 /** The inner `BooleanShapes` object schema of `booleanShapes`'s input envelope. */
 function shapesOf(op: Op): Record<string, Schema> {
   const wrapped = propsOf(op.input)['input'];
@@ -152,12 +163,11 @@ const BOOLEAN_SHAPES = [
 describe('[BUG 3a3e5884] walkType union branch — no duplicated oneOf branch for a union containing boolean', () => {
   it('[boolean.invariant] no oneOf anywhere in the strict-tsconfig output/input has structurally duplicate variants', async () => {
     const ops = await extractFixture(STRICT_TSCONFIG);
-    const op = ops.get('booleanShapes');
-    expect(op, 'booleanShapes operation must exist').toBeDefined();
+    const op = mustOp(ops, 'booleanShapes');
 
     for (const [label, schema] of [
-      ['booleanShapes.output', op!.output],
-      ['booleanShapes.input', op!.input],
+      ['booleanShapes.output', op.output],
+      ['booleanShapes.input', op.input],
     ] as const) {
       const oneOfs = collectOneOfs(schema);
       expect(
@@ -175,7 +185,7 @@ describe('[BUG 3a3e5884] walkType union branch — no duplicated oneOf branch fo
 
   it('[boolean.shape-matrix] each boolean-containing union collapses to exactly one {type:"boolean"} branch (strict tsconfig)', async () => {
     const ops = await extractFixture(STRICT_TSCONFIG);
-    const shapes = shapesOf(ops.get('booleanShapes')!);
+    const shapes = shapesOf(mustOp(ops, 'booleanShapes'));
 
     const expected: Record<string, string[]> = {
       managed: ['null', 'boolean'],
@@ -201,27 +211,27 @@ describe('[BUG 3a3e5884] walkType union branch — no duplicated oneOf branch fo
 
   it('[boolean.plain] a plain boolean property stays a bare {type:"boolean"} (not a oneOf)', async () => {
     const ops = await extractFixture(STRICT_TSCONFIG);
-    const shapes = shapesOf(ops.get('booleanShapes')!);
+    const shapes = shapesOf(mustOp(ops, 'booleanShapes'));
     expect(shapes['plain']).toEqual({ type: 'boolean' });
   });
 
   it('[boolean.param] direct union parameters (input schema) also collapse (strict tsconfig)', async () => {
     const ops = await extractFixture(STRICT_TSCONFIG);
-    const params = propsOf(ops.get('directBooleanParams')!.input);
+    const params = propsOf(mustOp(ops, 'directBooleanParams').input);
 
     expect(params['on']).toEqual({ type: 'boolean' });
     expect(oneOfTypes(params['maybeOn'])).toEqual(['null', 'boolean']);
     expect(oneOfTypes(params['label'])).toEqual(['string', 'boolean']);
 
     // And the inline object return's property.
-    const outProps = propsOf(ops.get('directBooleanParams')!.output);
+    const outProps = propsOf(mustOp(ops, 'directBooleanParams').output);
     expect(outProps['ok']).toEqual({ type: 'boolean' });
     expect(oneOfTypes(outProps['detail'])).toEqual(['string', 'boolean']);
   });
 
   it('[boolean.ajv] the real emitted schema compiles under AJV and accepts managed:true AND managed:false', async () => {
     const ops = await extractFixture(STRICT_TSCONFIG);
-    const op = ops.get('booleanShapes')!;
+    const op = mustOp(ops, 'booleanShapes');
 
     const ajv = makeAjv();
     const validateOutput = ajv.compile(op.output);
@@ -258,7 +268,7 @@ describe('[BUG 3a3e5884] walkType union branch — no duplicated oneOf branch fo
   // -------------------------------------------------------------------------
   it('[boolean.non-strict] the same fixture WITHOUT a tsconfig is also duplicate-free (mixed unions fixed too)', async () => {
     const ops = await extractFixture();
-    const op = ops.get('booleanShapes')!;
+    const op = mustOp(ops, 'booleanShapes');
 
     for (const schema of [op.output, op.input]) {
       for (const oneOf of collectOneOfs(schema)) {
@@ -277,6 +287,53 @@ describe('[BUG 3a3e5884] walkType union branch — no duplicated oneOf branch fo
     // boolean-only unions collapse to a bare boolean without strictNullChecks.
     expect(shapes['managed']).toEqual({ type: 'boolean' });
     expect(shapes['plain']).toEqual({ type: 'boolean' });
+  });
+
+  // -------------------------------------------------------------------------
+  // Fix 2 (backlog 2f5e64dc) — a LONE boolean literal is not a duplicate, so
+  // the collapse above never touches it; without `const` its arm would silently
+  // accept the OPPOSITE boolean (e.g. the `true` arm of `true | 'x'` accepting
+  // `false`). String/number literal arms already keep a single-value `enum`.
+  // -------------------------------------------------------------------------
+  it('[boolean.lone-literal] a lone boolean-literal arm carries `const`, rejecting the opposite boolean', async () => {
+    const ops = await extractFixture(STRICT_TSCONFIG);
+    const op = mustOp(ops, 'loneBooleanLiterals');
+    const outProps = propsOf(op.output);
+
+    expect(outProps['trueOrString']['oneOf']).toEqual([
+      { type: 'boolean', const: true },
+      { type: 'string', enum: ['x'] },
+    ]);
+    expect(outProps['falseOrNumber']['oneOf']).toEqual([
+      { type: 'boolean', const: false },
+      { type: 'number', enum: [1] },
+    ]);
+
+    const ajv = makeAjv();
+    const validate = ajv.compile(op.output);
+    expect(
+      validate({ trueOrString: true, falseOrNumber: false }),
+      `the matching literals must validate; ajv errors: ${JSON.stringify(validate.errors)}`
+    ).toBe(true);
+    expect(validate({ trueOrString: 'x', falseOrNumber: 1 })).toBe(true);
+    // The opposite boolean must be REJECTED by the lone-literal arm.
+    expect(
+      validate({ trueOrString: false, falseOrNumber: false }),
+      `true | 'x' must reject false; ajv errors: ${JSON.stringify(validate.errors)}`
+    ).toBe(false);
+    expect(
+      validate({ trueOrString: true, falseOrNumber: true }),
+      `false | 1 must reject true; ajv errors: ${JSON.stringify(validate.errors)}`
+    ).toBe(false);
+
+    // Same contract on the input envelope.
+    const validateInput = makeAjv().compile(op.input);
+    expect(
+      validateInput({ input: { trueOrString: true, falseOrNumber: false } })
+    ).toBe(true);
+    expect(
+      validateInput({ input: { trueOrString: false, falseOrNumber: false } })
+    ).toBe(false);
   });
 
   it('[boolean.NEGATIVE] the pre-fix duplicated-oneOf shape is rejected by AJV (proves the failure mode)', () => {
