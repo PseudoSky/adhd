@@ -326,10 +326,22 @@ export class CitationUnverifiableError extends BacklogWriteError {
     public readonly target: string,
     public readonly allowedExternalRoots: readonly string[]
   ) {
-    const roots = allowedExternalRoots.map(displayExternalRoot).join(', ');
+    // An EMPTY allowlist is a distinct, common case (an explicit
+    // `citationAllowedExternalRoots: []` disables the carve-out): rendering it
+    // as the bare `.join(', ')` of nothing left a dangling double space
+    // ("accepted only under:  (project_policy…)"). Say what IS accepted (the
+    // project root) and why there is nothing else.
+    const roots =
+      allowedExternalRoots.length === 0
+        ? 'the project root'
+        : allowedExternalRoots.map(displayExternalRoot).join(', ');
+    const policyNote =
+      allowedExternalRoots.length === 0
+        ? 'project_policy.citationAllowedExternalRoots is empty'
+        : 'project_policy.citationAllowedExternalRoots';
     super(
       `Citation target "${target}" could not be verified and this project requires a real sha — ` +
-        `accepted only under: ${roots} (project_policy.citationAllowedExternalRoots)`
+        `accepted only under: ${roots} (${policyNote})`
     );
   }
 }
