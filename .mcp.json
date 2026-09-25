@@ -1,19 +1,13 @@
 {
   "mcpServers": {
-    "agent-mcp": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["entrypoint/agent-mcp/dist/src/index.js"],
-      "env": {
-        "ADHD_ENV_SCOPE": "project",
-        "ADHD_AGENT_CONFIG": ".adhd/agent-mcp/config.json",
-        "ADHD_AGENT_REGISTRY_DB_PATH": ".adhd/agent-mcp/production/data/registry.db"
-      }
-    },
     "agent-mcp-published": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@adhd/agent-mcp@latest"]
+      "args": ["-y", "@adhd/agent-mcp@latest"],
+      "env": {
+        "ADHD_AGENT_DATABASE_PATH": "/Users/nix/.adhd/agent-mcp/agents.db",
+        "ADHD_AGENT_REGISTRY_DB_PATH": "/Users/nix/.adhd/agent-mcp/registry.db"
+      }
     },
     "backlog": {
       "type": "stdio",

@@ -10,6 +10,37 @@
   },
   "tags": ["layer:logic", "platform:node"],
   "targets": {
+    "test": {
+      "dependsOn": ["lint", "^build"],
+      "//inputs": "Exclude *.e2e.ts so editing the resource-consuming suite never invalidates the default lane's cache — it never runs those files (its vitest `include` is `src/**/*.spec.ts`, see vite.config.ts). Mirrors the workspace targetDefaults.test inputs plus the negative pattern.",
+      "inputs": [
+        "default",
+        "!{projectRoot}/**/*.e2e.ts",
+        "^production",
+        {
+          "externalDependencies": ["vitest", "better-sqlite3", "drizzle-orm"]
+        }
+      ]
+    },
+    "e2e": {
+      "executor": "nx:run-commands",
+      "//": "RESOURCE-CONSUMING lane. Deliberately NOT part of `affected` and NOT referenced by any target's dependsOn or by targetDefaults — it runs ONLY on an explicit `nx run apigen-plugin-cli-output:e2e` (nx affected never selects it). It runs the sibling run-cli-integration.e2e.ts suite via vitest.e2e.config.ts. `dependsOn` is exactly the resource prerequisites those tests need: `build` (the parity harness require()s this package's real built dist/index.js) and `apigen-cli:build` (the run-integration tests execFile the real built entrypoint/apigen-cli/dist/index.js).",
+      "dependsOn": [
+        "build",
+        {
+          "projects": ["apigen-cli"],
+          "target": "build"
+        }
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-cli-output-e2e"
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "vitest run --config {projectRoot}/vitest.e2e.config.ts"
+      },
+      "cache": false
+    },
     "nx-release-publish": {
       "dependsOn": [
         "build",

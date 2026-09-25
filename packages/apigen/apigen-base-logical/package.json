@@ -1,6 +1,6 @@
 {
   "name": "@adhd/apigen-base-logical",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "devDependencies": {
     "ajv": "^8.20.0",
     "ajv-formats": "2.1.1"
