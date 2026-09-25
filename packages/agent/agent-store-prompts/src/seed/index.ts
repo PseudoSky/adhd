@@ -8,6 +8,8 @@
  *   - Prompt types: ComponentStore.upsertType uses ON CONFLICT DO NOTHING.
  *   - Components: read-before-write (SELECT to check existence, conditional INSERT),
  *     not INSERT OR IGNORE — so row counts and versions are never bumped on re-seed.
+ *     Each component's head + version pair is wrapped in ONE BEGIN IMMEDIATE
+ *     transaction, so a mid-pair failure rolls the head back with the version.
  *
  * [inv:version-retained] — seed never calls ComponentStore.version(); it only
  * inserts rows that are absent (read-before-write for components, ON CONFLICT DO
@@ -58,54 +60,71 @@ export function seed(db: BetterSQLite3Database<any>): void {
   //     UNIQUE(slug, version) index would otherwise reject a duplicate, but we skip
   //     proactively so re-seed is a clean no-op (never bumps version).
   //
+  // Atomicity (BUG c757dd2e): each component's head + version pair is written in
+  // ONE transaction. If the version insert fails (process kill, disk error, a
+  // RAISE constraint), the head insert rolls back with it — so a crash can never
+  // leave a head row with no matching version. That partial state is what
+  // permanently poisons re-seeding: the `if (!head)` branch would skip the head
+  // forever and the version would never be written.
+  //
+  // `behavior: 'immediate'` issues BEGIN IMMEDIATE, taking the write lock up front.
+  // That is the correct mode for a read-then-write pair under concurrent seeders:
+  // a deferred transaction could take its read snapshot then fail the write-lock
+  // upgrade with SQLITE_BUSY.
+  //
   // [inv:version-retained] — seed never calls ComponentStore.version(); it only
   // inserts rows that are absent.
   const now = new Date().toISOString();
 
   for (const component of SEED_COMPONENTS) {
-    // Head identity row — insert once per slug.
-    const head = db
-      .select({ slug: componentsTable.slug })
-      .from(componentsTable)
-      .where(eq(componentsTable.slug, component.slug))
-      .get();
+    db.transaction(
+      (tx) => {
+        // Head identity row — insert once per slug.
+        const head = tx
+          .select({ slug: componentsTable.slug })
+          .from(componentsTable)
+          .where(eq(componentsTable.slug, component.slug))
+          .get();
 
-    if (!head) {
-      db.insert(componentsTable)
-        .values({
-          slug: component.slug,
-          type: component.type,
-          isShared: component.isShared,
-          createdAt: now,
-        })
-        .run();
-    }
+        if (!head) {
+          tx.insert(componentsTable)
+            .values({
+              slug: component.slug,
+              type: component.type,
+              isShared: component.isShared,
+              createdAt: now,
+            })
+            .run();
+        }
 
-    // Version history row — insert only if this exact (slug, version) is absent.
-    const existingVersion = db
-      .select({ versionId: componentVersionsTable.versionId })
-      .from(componentVersionsTable)
-      .where(
-        and(
-          eq(componentVersionsTable.slug, component.slug),
-          eq(componentVersionsTable.version, component.version)
-        )
-      )
-      .get();
+        // Version history row — insert only if this exact (slug, version) is absent.
+        const existingVersion = tx
+          .select({ versionId: componentVersionsTable.versionId })
+          .from(componentVersionsTable)
+          .where(
+            and(
+              eq(componentVersionsTable.slug, component.slug),
+              eq(componentVersionsTable.version, component.version)
+            )
+          )
+          .get();
 
-    if (existingVersion) {
-      // Row already seeded — skip; never overwrite content on re-seed.
-      continue;
-    }
+        if (existingVersion) {
+          // Row already seeded — skip; never overwrite content on re-seed.
+          return;
+        }
 
-    db.insert(componentVersionsTable)
-      .values({
-        slug: component.slug,
-        version: component.version,
-        content: component.content,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
+        tx.insert(componentVersionsTable)
+          .values({
+            slug: component.slug,
+            version: component.version,
+            content: component.content,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .run();
+      },
+      { behavior: 'immediate' }
+    );
   }
 }
