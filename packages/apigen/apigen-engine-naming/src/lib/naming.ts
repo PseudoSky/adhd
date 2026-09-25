@@ -456,7 +456,8 @@ export function sanitizeIdentifier(id: string): string {
  * @example uniqueSanitizedIdentifiers(['dispatch-cli'])
  *   // → ['dispatch_cli']
  * @example uniqueSanitizedIdentifiers(['a-b', 'a_b', 'a_b_2'])
- *   // → ['a_b', 'a_b_3', 'a_b_2']  (suffixes skip names already claimed)
+ *   // → ['a_b', 'a_b_2', 'a_b_2_2']  (the suffix is appended to the
+ *   //   colliding sanitized base, so an id already ending in `_2` collides anew)
  */
 export function uniqueSanitizedIdentifiers(ids: string[]): string[] {
   const used = new Set<string>();
