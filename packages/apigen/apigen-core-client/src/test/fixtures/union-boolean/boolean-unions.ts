@@ -37,6 +37,26 @@ export async function booleanShapes(
   return input;
 }
 
+// Fix 2 (backlog 2f5e64dc): a boolean-LITERAL union arm must keep its value.
+// `true` alone is one branch (not a duplicate, so the collapse/dedupe above
+// never touches it); a bare `{type:'boolean'}` would wrongly also accept
+// `false`. A real `boolean` member still collapses to a bare branch — see the
+// matrix above — so these two coexist to prove the distinction.
+export interface LoneBooleanLiteralUnions {
+  /** `true | 'x'` — the boolean arm must reject `false`. */
+  trueOrString: true | 'x';
+  /** `false | 1` — the boolean arm must reject `true`. */
+  falseOrNumber: false | 1;
+}
+
+export async function loneBooleanLiterals(
+  ctx: unknown,
+  input: LoneBooleanLiteralUnions
+): Promise<LoneBooleanLiteralUnions> {
+  void ctx;
+  return input;
+}
+
 /** Direct (non-object) union parameters — covers the input/param schema path. */
 export async function directBooleanParams(
   ctx: unknown,
