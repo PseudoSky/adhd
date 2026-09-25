@@ -14,7 +14,7 @@ The CLI wraps `src/api.ts`, a plain, JSDoc'd TypeScript functions surface where 
 | `optimize --dag-path <p>` | read-only | Snapshot + the greedy `optimize()` — the next batch of `DispatchUnit`s that would be packed. |
 | `eligible --dag-path <p>` | read-only | `DagClient.getEligibleMilestones()` — milestone slugs whose deps are complete per `dispatch_log`. |
 | `status --dag-path <p>` | read-only | Per-milestone `{ status, loggedOperationIds, tokensEstimated, tokensActual }`. |
-| `run --dag-path <p> [--dry-run]` | **writes** the dag | Runs exactly one `@adhd/dispatch-orchestrator` scheduling cycle. |
+| `run --dag-path <p> [--dry-run] [--allow-fs <actions>] [--tools-root <path>]` | **writes** the dag | Runs exactly one `@adhd/dispatch-orchestrator` scheduling cycle. |
 | `calibrate --model-tier <Haiku\|Sonnet\|Opus>` | **writes** `~/.adhd/dispatch-calibration.json` | Fires a null-task dispatch to measure a baseline per-tier token cost ("B"). |
 
 ## Run the CLI
@@ -42,6 +42,42 @@ npx tsx --tsconfig tsconfig.base.json \
 
 (No root `tsconfig.json` exists in this repo — `--tsconfig tsconfig.base.json`
 is required so `tsx` resolves `@adhd/*` workspace imports.)
+
+## The fail-closed fs.* permission gate — `run --allow-fs` / `--tools-root`
+
+**Breaking change (FEAT-DISPATCH-GOVERNANCE-001 / FEAT-DISPATCH-CAPFLOOR-002):**
+`run`'s `@adhd/dispatch-orchestrator` cycle can dispatch destructive
+filesystem tool-call ops (`fs.move`, `fs.delete`, `fs.scaffold`, and the
+surgical-edit `fs.edit`). Previously every one of these executed
+**unconditionally** the moment a dag.json scheduled it — regardless of
+`--dry-run`. As of this fix, `run` is **fail-closed by default**: an
+`fs.move`/`fs.delete`/`fs.scaffold`/`fs.edit` op is now denied with
+`{ ok: false, error: "... denied by policy ..." }` (and the filesystem is
+never touched) unless its exact `OperationAction` is explicitly allowlisted.
+
+- **`--allow-fs <actions>`** — comma-separated `OperationAction` values
+  permitted to actually execute this cycle (e.g. `--allow-fs
+  fs.delete,fs.edit`). Default: empty string, i.e. **every** destructive
+  fs.* action is denied. An unknown action name is rejected up front
+  (before the runner or filesystem are ever touched).
+- **`--tools-root <path>`** — the filesystem root a relative `fs.*` path
+  arg is resolved against. A path that would escape this root — by `..`, by
+  an absolute path, or via an **existing** symlink whose real target lands
+  outside it — is rejected as a failed op (`escapes tools root …`) and never
+  executed; a path that resolves to the root itself is likewise refused, so
+  `fs.delete { path: '.', recursive: true }` cannot wipe the root. (A
+  *dangling* symlink under the root — one whose target does not exist yet —
+  is a known, tracked residual, not part of this existing-target guarantee:
+  see backlog item `64aa2b9b`.) Default: `process.cwd()` — the directory
+  `dispatch-cli` was invoked from, NOT the directory containing
+  `--dag-path`'s dag.json.
+
+An existing consumer that relied on the prior unconditional-execution
+behavior will see previously-silent `fs.*` ops start failing with a
+`denied by policy` error the first time they run `run` after upgrading —
+pass `--allow-fs` (and, if the dag.json's fs.* paths are relative to
+something other than the invocation directory, `--tools-root`) to restore
+the intended effect under the new, explicit opt-in.
 
 ## The paid boundary — `run` and `calibrate`
 
