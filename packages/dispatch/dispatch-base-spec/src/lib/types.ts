@@ -34,7 +34,8 @@ export type OperationAction =
   | 'dag.append-dispatch-log'
   | 'fs.move'
   | 'fs.delete'
-  | 'fs.scaffold';
+  | 'fs.scaffold'
+  | 'fs.edit';
 
 export const WRITE_CLASS_ACTIONS: ReadonlySet<OperationAction> = new Set([
   'create',
