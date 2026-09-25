@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { describe, expect, it, beforeEach, vi } from "vitest";
@@ -340,5 +344,208 @@ describe("windowMessages", () => {
         ];
         const result = windowMessages(msgs, 1);
         expect(result.filter((m) => m.role !== "system").length).toBeGreaterThanOrEqual(1);
+    });
+});
+
+// ──────────────────────────────────────────────────────────────────────
+// Atomic state transitions (S2 / BUG-AGENTMCP-SESSION-STORE-ATOMICITY-001)
+//
+// These tests interleave a concurrent writer DETERMINISTICALLY, with no
+// sleeps: they drive a second connection to flip the session's status to
+// 'closed' from inside a spy on the method's leading `read()` — i.e. in the
+// exact window between the leading read returning and the method issuing its
+// authoritative write. A black-box two-connection race cannot deterministically
+// hit that window against a synchronous method because better-sqlite3 blocks
+// the event loop; the read-hook makes the interleaving reproducible.
+// ──────────────────────────────────────────────────────────────────────
+
+describe("SessionStore — atomic state transitions (S2)", () => {
+    type StoreDb = Parameters<typeof SessionStore.prototype.constructor>[0];
+
+    /** Open a real on-disk DB (WAL) so a second connection can observe/race it. */
+    function makeOnDiskTestDb(dir: string) {
+        const dbPath = path.join(dir, "session-atomicity.db");
+        const sqlite = new Database(dbPath);
+        sqlite.pragma("journal_mode = WAL");
+        sqlite.pragma("foreign_keys = ON");
+        sqlite.exec(CREATE_TABLES_SQL);
+        const db = drizzle(sqlite, { schema });
+        return { dbPath, sqlite, db };
+    }
+
+    /** A timestamp distinguishable from any `nowIso()` value the code would write. */
+    const SENTINEL_CLOSED_AT = "1999-12-31T23:59:59.000Z";
+
+    /**
+     * Install a spy on `store.read` that runs the real read, then (exactly once)
+     * has the second connection close the row — the concurrent deletion/close
+     * the read-then-write code could not survive.
+     */
+    function interleaveCloseAfterLeadingRead(
+        store: SessionStore,
+        other: InstanceType<typeof Database>
+    ): () => void {
+        const originalRead = store.read.bind(store);
+        let flipped = false;
+        const spy = vi.spyOn(store, "read").mockImplementation((id: string) => {
+            const result = originalRead(id);
+            if (!flipped) {
+                flipped = true;
+                other
+                    .prepare(
+                        "UPDATE sessions SET status = 'closed', closed_at = ?, updated_at = ? WHERE id = ?"
+                    )
+                    .run(SENTINEL_CLOSED_AT, SENTINEL_CLOSED_AT, id);
+            }
+            return result;
+        });
+        return () => spy.mockRestore();
+    }
+
+    it("close(): a session closed right after the leading read throws SESSION_CLOSED and closedAt is not rewritten", () => {
+        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "session-close-race-"));
+        const { dbPath, sqlite, db } = makeOnDiskTestDb(tmpDir);
+        try {
+            const store = new SessionStore(db as StoreDb);
+            const agentDef = sampleAgentDefinition();
+            const session = store.create({ agentName: agentDef.name, agentDefinition: agentDef });
+
+            const other = new Database(dbPath);
+            other.pragma("foreign_keys = ON");
+
+            const restore = interleaveCloseAfterLeadingRead(store, other);
+            try {
+                expectToolError(() => store.close(session.id), "SESSION_CLOSED");
+            } finally {
+                restore();
+            }
+
+            // The losing close() must NOT have rewritten closedAt (nor updatedAt).
+            const after = store.read(session.id);
+            expect(after.status).toBe("closed");
+            expect(after.closedAt).toBe(SENTINEL_CLOSED_AT);
+
+            other.close();
+        } finally {
+            sqlite.close();
+            fs.rmSync(tmpDir, { recursive: true, force: true });
+        }
+    });
+
+    it("clearMessages(): a session closed right after the leading read is refused by the in-transaction guard and its messages survive", () => {
+        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "session-clear-race-"));
+        const { dbPath, sqlite, db } = makeOnDiskTestDb(tmpDir);
+        try {
+            const store = new SessionStore(db as StoreDb);
+            const agentDef = sampleAgentDefinition();
+            const session = store.create({ agentName: agentDef.name, agentDefinition: agentDef });
+
+            store.appendMessage(session.id, {
+                id: "msg-keep",
+                sessionId: session.id,
+                role: "user",
+                content: "keep me",
+                createdAt: nowIso(),
+            });
+            expect(store.getMessages(session.id)).toHaveLength(1);
+
+            const other = new Database(dbPath);
+            other.pragma("foreign_keys = ON");
+
+            const restore = interleaveCloseAfterLeadingRead(store, other);
+            try {
+                expectToolError(() => store.clearMessages(session.id), "SESSION_CLOSED");
+            } finally {
+                restore();
+            }
+
+            // The guard ran before the delete: nothing was cleared.
+            expect(store.getMessages(session.id)).toHaveLength(1);
+
+            other.close();
+        } finally {
+            sqlite.close();
+            fs.rmSync(tmpDir, { recursive: true, force: true });
+        }
+    });
+
+    it("clearMessages(): the status guard and the DELETE execute through the same immediate transaction handle", () => {
+        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "session-clear-tx-"));
+        const { sqlite, db } = makeOnDiskTestDb(tmpDir);
+        try {
+            const outerOps: string[] = [];
+            const txOps: string[] = [];
+            let transactionConfig: unknown;
+
+            // Instrument the drizzle handle: record every operation issued
+            // directly on the store's connection, and every operation issued on
+            // the transaction handle it hands the callback. Proves the guard
+            // SELECT and the DELETE are both transaction-scoped (share one tx),
+            // and that the tx is BEGIN IMMEDIATE.
+            const instrumented = new Proxy(db as unknown as Record<string, unknown>, {
+                get(target, prop) {
+                    if (prop === "transaction") {
+                        return (cb: (tx: unknown) => unknown, cfg?: unknown) => {
+                            transactionConfig = cfg;
+                            const run = target["transaction"] as (
+                                cb: (tx: unknown) => unknown,
+                                cfg?: unknown
+                            ) => unknown;
+                            return run.call(target, (tx: unknown) => {
+                                const txProxy = new Proxy(tx as Record<string, unknown>, {
+                                    get(t, p) {
+                                        const value = t[String(p)];
+                                        if (typeof value === "function") {
+                                            return (...args: unknown[]) => {
+                                                txOps.push(String(p));
+                                                return (value as (...a: unknown[]) => unknown).apply(t, args);
+                                            };
+                                        }
+                                        return value;
+                                    },
+                                });
+                                return cb(txProxy);
+                            }, cfg);
+                        };
+                    }
+                    const value = target[String(prop)];
+                    if (typeof value === "function") {
+                        return (...args: unknown[]) => {
+                            outerOps.push(String(prop));
+                            return (value as (...a: unknown[]) => unknown).apply(target, args);
+                        };
+                    }
+                    return value;
+                },
+            }) as unknown as StoreDb;
+
+            const store = new SessionStore(instrumented);
+            const agentDef = sampleAgentDefinition();
+            const session = store.create({ agentName: agentDef.name, agentDefinition: agentDef });
+            store.appendMessage(session.id, {
+                id: "msg-1",
+                sessionId: session.id,
+                role: "user",
+                content: "hi",
+                createdAt: nowIso(),
+            });
+
+            outerOps.length = 0;
+            txOps.length = 0;
+            transactionConfig = undefined;
+
+            const cleared = store.clearMessages(session.id);
+
+            expect(cleared).toBe(1);
+            expect(transactionConfig).toEqual({ behavior: "immediate" });
+            // The guard SELECT and the DELETE both ran on the tx handle ...
+            expect(txOps).toContain("select");
+            expect(txOps).toContain("delete");
+            // ... and the DELETE never escaped to the outer connection.
+            expect(outerOps).not.toContain("delete");
+        } finally {
+            sqlite.close();
+            fs.rmSync(tmpDir, { recursive: true, force: true });
+        }
     });
 });

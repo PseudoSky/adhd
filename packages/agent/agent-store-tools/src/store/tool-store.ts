@@ -89,22 +89,14 @@ export class ToolStore {
 
   /**
    * Create a canonical tool row.
-   * Throws TOOL_ALREADY_EXISTS if the name PK already exists.
+   *
+   * Uniqueness is enforced by the name primary key, not a SELECT pre-check:
+   * `onConflictDoNothing()` lets SQLite arbitrate the race, and zero rows
+   * changed means a row with this name already existed — translated into the
+   * documented `TOOL_ALREADY_EXISTS` so a concurrent duplicate insert can
+   * never surface a raw `SqliteError` to the caller.
    */
   create(input: ToolCreateInput): Tool {
-    const existing = this.db
-      .select()
-      .from(toolsTable)
-      .where(eq(toolsTable.name, input.name))
-      .get();
-
-    if (existing) {
-      throw new ToolStoreError(
-        'TOOL_ALREADY_EXISTS',
-        `Tool '${input.name}' already exists`
-      );
-    }
-
     const tool: Tool = {
       name: input.name,
       type: input.type,
@@ -116,7 +108,7 @@ export class ToolStore {
       capabilities: input.capabilities ?? [],
     };
 
-    this.db
+    const result = this.db
       .insert(toolsTable)
       .values({
         name: tool.name,
@@ -128,7 +120,15 @@ export class ToolStore {
         dependencyToolIds: tool.dependencyToolIds,
         capabilities: tool.capabilities,
       })
+      .onConflictDoNothing()
       .run();
+
+    if (result.changes === 0) {
+      throw new ToolStoreError(
+        'TOOL_ALREADY_EXISTS',
+        `Tool '${input.name}' already exists`
+      );
+    }
 
     return tool;
   }

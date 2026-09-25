@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { runMigrationsOn } from '../db/migrate-runner.js';
 import * as schema from '../db/schema.js';
@@ -355,5 +355,66 @@ describe('ToolStore — persistence (close + reopen proves disk write)', () => {
     expect(byName['file_read'].requiresApproval).toBe(false);
 
     closeDb(sqlite2);
+  });
+});
+
+// ──────────────────────────────────────────────
+// [inv:constraint-arbitrated-uniqueness] — S3
+// (BUG-AGENTMCP-STORE-UNIQUE-CONSTRAINT-001)
+//
+// Uniqueness must be arbitrated by the name primary key, not a SELECT
+// pre-check: a check-then-INSERT leaves a race window in which a concurrent
+// duplicate passes the check and reaches the DB, which then surfaces a raw
+// `SqliteError` instead of the documented `TOOL_ALREADY_EXISTS`.
+// ──────────────────────────────────────────────
+describe('ToolStore — unique-constraint atomicity (S3)', () => {
+  let tmpDir: string;
+  let opened: ReturnType<typeof openDb>;
+  let store: ToolStore;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'agent-tool-atomicity-')
+    );
+    opened = openDb(path.join(tmpDir, 'registry.db'));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    store = new ToolStore(opened.db as any);
+    store.seedToolType(IO_TYPE);
+  });
+
+  afterEach(() => {
+    try {
+      closeDb(opened.sqlite);
+    } catch {
+      /* already closed */
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('duplicate create() yields TOOL_ALREADY_EXISTS (a ToolStoreError), never a raw SqliteError', () => {
+    store.create(SHELL_EXEC_INPUT);
+
+    let caught: unknown;
+    try {
+      store.create(SHELL_EXEC_INPUT);
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(ToolStoreError);
+    expect((caught as ToolStoreError).code).toBe('TOOL_ALREADY_EXISTS');
+    // The whole point: a caller must never see the driver's raw error.
+    expect(caught).not.toBeInstanceOf(Database.SqliteError);
+  });
+
+  it('create() relies on the DB constraint, not a SELECT pre-check (no check-then-INSERT window)', () => {
+    // A SELECT pre-check would show up as an outer `select` call during
+    // `create()`. Its absence is what closes the race window.
+    const selectSpy = vi.spyOn(opened.db, 'select');
+
+    const tool = store.create(FILE_READ_INPUT);
+
+    expect(tool.name).toBe('file_read');
+    expect(selectSpy).not.toHaveBeenCalled();
   });
 });

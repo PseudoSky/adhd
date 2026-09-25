@@ -52,6 +52,7 @@ export interface ModelPlatformBindingCreateInput {
 export type ModelErrorCode =
   | 'MODEL_ALREADY_EXISTS'
   | 'MODEL_NOT_FOUND'
+  | 'MODEL_BINDING_ALREADY_EXISTS'
   | 'MODEL_BINDING_NOT_FOUND';
 
 export class ModelStoreError extends Error {
@@ -79,25 +80,16 @@ export class ModelStore {
 
   /**
    * Insert a new model row.
-   * Throws MODEL_ALREADY_EXISTS if the id is taken.
+   *
+   * Uniqueness is enforced by the id primary key, not a SELECT pre-check:
+   * `onConflictDoNothing()` lets SQLite arbitrate the race, and zero rows
+   * changed means the id was taken — translated into the documented
+   * `MODEL_ALREADY_EXISTS` instead of surfacing a raw `SqliteError`.
    */
   create(input: ModelCreateInput): Model {
     const now = new Date().toISOString();
 
-    const existing = this.db
-      .select()
-      .from(models)
-      .where(eq(models.id, input.id))
-      .get();
-
-    if (existing) {
-      throw new ModelStoreError(
-        'MODEL_ALREADY_EXISTS',
-        `Model '${input.id}' already exists`
-      );
-    }
-
-    this.db
+    const result = this.db
       .insert(models)
       .values({
         id: input.id,
@@ -110,7 +102,15 @@ export class ModelStore {
         createdAt: now,
         updatedAt: now,
       })
+      .onConflictDoNothing()
       .run();
+
+    if (result.changes === 0) {
+      throw new ModelStoreError(
+        'MODEL_ALREADY_EXISTS',
+        `Model '${input.id}' already exists`
+      );
+    }
 
     return this.read(input.id);
   }
@@ -161,16 +161,29 @@ export class ModelStore {
   /**
    * Insert a model-platform binding row.
    * model_id is a logical key (no SQL FK — seeding order flexibility).
+   *
+   * Uniqueness is enforced by the composite (model_id, platform) primary key:
+   * `onConflictDoNothing()` lets SQLite arbitrate a duplicate insert, and zero
+   * rows changed is translated into the documented
+   * `MODEL_BINDING_ALREADY_EXISTS` rather than surfacing a raw `SqliteError`.
    */
   createBinding(input: ModelPlatformBindingCreateInput): ModelPlatformBinding {
-    this.db
+    const result = this.db
       .insert(modelPlatformBindings)
       .values({
         modelId: input.modelId,
         platform: input.platform,
         platformModelId: input.platformModelId,
       })
+      .onConflictDoNothing()
       .run();
+
+    if (result.changes === 0) {
+      throw new ModelStoreError(
+        'MODEL_BINDING_ALREADY_EXISTS',
+        `Binding for model '${input.modelId}' on platform '${input.platform}' already exists`
+      );
+    }
 
     return {
       modelId: input.modelId,

@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -322,6 +322,107 @@ describe('ProviderStore — CRUD', () => {
     const all = store.list();
     expect(all).toHaveLength(2);
     expect(all.map((p) => p.id).sort()).toEqual(['anthropic', 'lmstudio']);
+
+    sqlite.close();
+  });
+});
+
+// ──────────────────────────────────────────────
+// Unique-constraint atomicity (S4) —
+// BUG-AGENTMCP-STORE-UNIQUE-CONSTRAINT-001
+//
+// create() and createBinding() must let the primary key arbitrate uniqueness
+// and translate the zero-row-changed outcome into their typed errors, never
+// surface the driver's raw `SqliteError`.
+// ──────────────────────────────────────────────
+describe('ModelStore — unique-constraint atomicity (S4)', () => {
+  it('duplicate create() yields MODEL_ALREADY_EXISTS (a ModelStoreError), never a raw SqliteError', () => {
+    const { sqlite, db } = openDb(dbPath);
+    const store = new ModelStore(db);
+
+    store.create({
+      id: 'm1',
+      contextWindow: 10_000,
+      outputLimit: 2_000,
+      pricingTier: 'standard',
+    });
+
+    let caught: unknown;
+    try {
+      store.create({
+        id: 'm1',
+        contextWindow: 10_000,
+        outputLimit: 2_000,
+        pricingTier: 'standard',
+      });
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(ModelStoreError);
+    expect((caught as ModelStoreError).code).toBe('MODEL_ALREADY_EXISTS');
+    expect(caught).not.toBeInstanceOf(Database.SqliteError);
+
+    sqlite.close();
+  });
+
+  it('duplicate createBinding() yields MODEL_BINDING_ALREADY_EXISTS (a ModelStoreError), never a raw SqliteError', () => {
+    const { sqlite, db } = openDb(dbPath);
+    const store = new ModelStore(db);
+
+    store.create({
+      id: 'claude_opus_4_8',
+      contextWindow: 200_000,
+      outputLimit: 32_000,
+      pricingTier: 'premium',
+    });
+    store.createBinding({
+      modelId: 'claude_opus_4_8',
+      platform: 'claude_api',
+      platformModelId: 'claude-opus-4-8',
+    });
+
+    let caught: unknown;
+    try {
+      store.createBinding({
+        modelId: 'claude_opus_4_8',
+        platform: 'claude_api',
+        platformModelId: 'claude-opus-4-8',
+      });
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(ModelStoreError);
+    expect((caught as ModelStoreError).code).toBe(
+      'MODEL_BINDING_ALREADY_EXISTS'
+    );
+    expect(caught).not.toBeInstanceOf(Database.SqliteError);
+
+    sqlite.close();
+  });
+
+  it('create() INSERTs before it reads back — uniqueness is the DB constraint, not a SELECT pre-check', () => {
+    const { sqlite, db } = openDb(dbPath);
+    const store = new ModelStore(db);
+
+    const insertSpy = vi.spyOn(db, 'insert');
+    const selectSpy = vi.spyOn(db, 'select');
+
+    store.create({
+      id: 'm_insert_first',
+      contextWindow: 8_000,
+      outputLimit: 1_000,
+      pricingTier: 'economy',
+    });
+
+    expect(insertSpy).toHaveBeenCalledTimes(1);
+    expect(selectSpy).toHaveBeenCalled();
+    // The old code ran a SELECT pre-check first, opening a check-then-INSERT
+    // race window. The constraint-arbitrated version must INSERT first.
+    expect(insertSpy.mock.invocationCallOrder[0]).toBeLessThan(
+      selectSpy.mock.invocationCallOrder[0]
+    );
 
     sqlite.close();
   });

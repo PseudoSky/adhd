@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
@@ -129,51 +129,90 @@ export class SessionStore {
     );
   }
 
+  /**
+   * Close a session.
+   *
+   * The leading `read()` exists only to preserve `SESSION_NOT_FOUND` for a
+   * truly-absent session — a bare conditional UPDATE cannot distinguish
+   * "absent" from "already closed". The authoritative transition is the
+   * single UPDATE below: `WHERE id = ? AND status != 'closed'` folds the
+   * "already closed" guard into the same statement as the write, so of two
+   * concurrent closers exactly one observes a returned row and the other
+   * reliably raises `SESSION_CLOSED` — `closedAt` is written at most once.
+   */
   close(id: string): Session {
-    const session = this.read(id);
-
-    if (session.status === 'closed') {
-      throw new ToolError(
-        'SESSION_CLOSED',
-        `Session '${id}' is already closed`
-      );
-    }
+    this.read(id);
 
     const now = nowIso();
-    this.db
+    const closed: typeof sessionsTable.$inferSelect | undefined = this.db
       .update(sessionsTable)
       .set({
         status: 'closed',
         closedAt: now,
         updatedAt: now,
       })
-      .where(eq(sessionsTable.id, id))
-      .run();
+      .where(and(eq(sessionsTable.id, id), ne(sessionsTable.status, 'closed')))
+      .returning()
+      .get();
+
+    if (closed === undefined) {
+      throw new ToolError(
+        'SESSION_CLOSED',
+        `Session '${id}' is already closed`
+      );
+    }
 
     logger.info({ sessionId: id }, 'Session closed');
     return this.read(id);
   }
 
+  /**
+   * Clear a session's message history.
+   *
+   * The leading `read()` preserves `SESSION_NOT_FOUND`; the authoritative
+   * status guard then re-runs *inside* the same transaction as the DELETE.
+   * `behavior: 'immediate'` (`BEGIN IMMEDIATE`) takes SQLite's write lock at
+   * BEGIN rather than deferring it to the first write, so a concurrent
+   * `close()` cannot commit between the guard and the delete — the two can
+   * never interleave, and a closed session's context cannot be cleared.
+   */
   clearMessages(sessionId: string): number {
-    const session = this.read(sessionId);
+    this.read(sessionId);
 
-    if (session.status === 'closed') {
-      throw new ToolError(
-        'SESSION_CLOSED',
-        `Session '${sessionId}' is closed; cannot clear context`
-      );
-    }
+    const cleared = this.db.transaction(
+      (tx) => {
+        const row: { status: string } | undefined = tx
+          .select({ status: sessionsTable.status })
+          .from(sessionsTable)
+          .where(eq(sessionsTable.id, sessionId))
+          .get();
 
-    const result = this.db
-      .delete(messagesTable)
-      .where(eq(messagesTable.sessionId, sessionId))
-      .run();
+        if (row === undefined) {
+          throw new ToolError(
+            'SESSION_NOT_FOUND',
+            `Session '${sessionId}' not found`
+          );
+        }
 
-    logger.info(
-      { sessionId, cleared: result.changes },
-      'Session context cleared'
+        if (row.status === 'closed') {
+          throw new ToolError(
+            'SESSION_CLOSED',
+            `Session '${sessionId}' is closed; cannot clear context`
+          );
+        }
+
+        const result = tx
+          .delete(messagesTable)
+          .where(eq(messagesTable.sessionId, sessionId))
+          .run();
+
+        return result.changes;
+      },
+      { behavior: 'immediate' }
     );
-    return result.changes;
+
+    logger.info({ sessionId, cleared }, 'Session context cleared');
+    return cleared;
   }
 
   appendMessage(sessionId: string, message: Message): void {
