@@ -116,7 +116,10 @@ of the hardcoded terminal/citation/reason knobs:
 project_policy (project → policy): transition_requires_note (default true),
   citation_required (false), citation_requires_sha (default true — gates
   acceptance of an unverified citation, but only where verification is
-  possible; see below), default_status (catalog
+  possible; see below), citation_allowed_external_roots (default
+  `[]` — no machine-global root; typed, project-scoped external read roots; see
+  below),
+  default_status (catalog
   ref; falls back to a global OPEN-equivalent catalog row when unset),
   default_kind (catalog ref; falls back to the global "issue" catalog row
   when unset), dedupe_scan_enabled (default true, §6.4), dedupe_threshold
@@ -143,6 +146,27 @@ all, so there is nothing for the gate to verify and nothing for it to reject:
 the write succeeds and records `sha:"unverified"` verbatim whether
 `citation_requires_sha` is `true` or `false`, matching the ETL's own
 `computeCitationSha` precedent (§8.5).
+
+A path-PRESENT project resolves a citation target by CANONICAL
+(symlink-resolved) containment against its own `metadata.path` root PLUS every
+root in `citation_allowed_external_roots` (BUG c6d35272). In-project
+resolution stays the DEFAULT; the array names EXTERNAL absolute roots whose
+evidence may also be cited. The runtime default is the EMPTY array — there is
+NO machine-global default root — because the runtime's own data home
+`~/.adhd/backlog` contains only the machine-global backlog store
+(`production/data/backlog-v2.db`) and its `backup-*`/`backups/` snapshots
+(plus a `test/` store): granting it would let a citation resolve INTO the
+shared backlog graph (BUG 62059b57 follow-up). A project opts into specific
+external roots by naming them here; an empty array (the default, or an explicit
+`[]`) leaves the carve-out disabled. This is deliberately typed, per-project
+config — never an environment toggle, and never a blanket "any absolute path".
+A `..` traversal, a symlink inside the root that points outside it (the sibling
+defect c6d90ddf), and an arbitrary absolute path outside every root all
+resolve to `"unverified"` and are rejected by the default
+`citation_requires_sha: true`; `CitationUnverifiableError` names the allowed
+roots (or the project root when the allowlist is empty) and the
+`project_policy.citationAllowedExternalRoots` field that controls them. Only the
+resulting `sha` is persisted — never file content.
 
 `project_status`/`project_kind` are enforced by the SAME write-layer step
 that resolves the `status`/`kind` catalog row (§4c's hand-composed
@@ -2139,11 +2163,14 @@ AC-23),
 `InvalidArgumentError` (missing `title`/`body`/`project`, or `citations[i].file`
 empty), `StaleSupersedeError(uid)` (only when `supersedes` is given — the
 body-change CAS (§4c) lost a race to a concurrent edit of the same target;
-nothing was written, re-`get` and retry), `CitationUnverifiableError(target)`
-(policy-gated via `project_policy.citation_requires_sha`, §2, and only where
-verification is possible — a project with a known `path`; a given citation's
-`file` did not resolve to a real, hashable file and the project requires one.
-A path-less project records `sha:"unverified"` verbatim instead),
+nothing was written, re-`get` and retry),
+`CitationUnverifiableError(target, allowedExternalRoots)` (policy-gated via
+`project_policy.citation_requires_sha`, §2, and only where verification is
+possible — a project with a known `path`; a given citation's `file` did not
+resolve to a real, hashable file INSIDE the project root or any
+`citation_allowed_external_roots` entry, and the project requires one. The
+message names those roots (or the project root when the allowlist is empty). A
+path-less project records `sha:"unverified"` verbatim instead),
 `WriteContentionError`/`WriteIOError`
 (§4c — an exhausted driver-level retry on the underlying `immediate`
 transaction). `DuplicateSuppressedError` is NOT thrown — a suppressed create is a
@@ -2269,11 +2296,14 @@ terminal-only) — together they resolve the three-way
 `requiresCitation`/`requiresReason` split (§6.2) into the single
 `project_policy.citation_required` boolean; there is no more
 terminal-done-vs-terminal-dismissed distinction to error on.
-`CitationUnverifiableError(target)` (policy-gated via
+`CitationUnverifiableError(target, allowedExternalRoots)` (policy-gated via
 `project_policy.citation_requires_sha`, §2, and only where verification is
 possible — a project with a known `path`; a given citation's `sha` resolved
-to the `"unverified"` sentinel, and the project requires a real hash. A
-path-less project records `sha:"unverified"` verbatim instead).
+to the `"unverified"` sentinel because its canonical path lay outside the
+project root AND every `citation_allowed_external_roots` entry, and the
+project requires a real hash. The message names those roots (or the project root
+when the allowlist is empty). A path-less project records `sha:"unverified"`
+verbatim instead).
 `ClaimHeldError(heldBy, heldSince)`: a live claim (§6.3.5) is a real
 concurrency guard, not advisory metadata — a `transition` targeting an issue
 whose `claimedBy` is set to someone OTHER than `input.by` **throws** unless

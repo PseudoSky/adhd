@@ -283,7 +283,7 @@ contract.
 
 ## `catalog.ts` (12 exports)
 
-### `isUidShaped(ref)` — function (`catalog.ts:83`)
+### `isUidShaped(ref)` — function (`catalog.ts:84`)
 
 ```ts
 export function isUidShaped(ref: string): boolean;
@@ -294,7 +294,7 @@ exactly (case-insensitive) — the SOLE disambiguation between "treat as
 `uid`" (exact resolve-or-throw) and "treat as `name`" (find, and for flat
 catalogs, find-then-mint) used everywhere in this file.
 
-### `IResolvedCatalogRow` — interface (`catalog.ts:87`)
+### `IResolvedCatalogRow` — interface (`catalog.ts:88`)
 
 ```ts
 export interface IResolvedCatalogRow {
@@ -308,7 +308,7 @@ Guarantees: the minimal resolved shape every catalog resolution returns —
 `name` is never `null` here (a live catalog row with a null name is treated
 as unresolved and throws before this shape is ever constructed).
 
-### `IResolvedProjectRow` — interface (`catalog.ts:93`)
+### `IResolvedProjectRow` — interface (`catalog.ts:94`)
 
 ```ts
 export interface IResolvedProjectRow extends IResolvedCatalogRow {
@@ -320,7 +320,7 @@ Guarantees: `IResolvedCatalogRow` plus the project's parsed `meta` blob
 (`undefined` if absent or unparsable) — the shape `resolveProjectPolicy`
 reads `metadata.policy` off of.
 
-### `resolveProjectTx(tx, ref)` — function (`catalog.ts:141`)
+### `resolveProjectTx(tx, ref)` — function (`catalog.ts:142`)
 
 ```ts
 export async function resolveProjectTx(tx: AdapterTransaction, ref: string): Promise<IResolvedProjectRow>;
@@ -330,7 +330,7 @@ Guarantees: resolves `ref` (uid or name) to a LIVE `project` row inside `tx`.
 Resolved-ONLY — NEVER mints a project. Throws `CatalogNotFoundError` on no
 match.
 
-### `resolveComponentTx(tx, input)` — function (`catalog.ts:180`)
+### `resolveComponentTx(tx, input)` — function (`catalog.ts:181`)
 
 ```ts
 export async function resolveComponentTx(tx: AdapterTransaction, input: { projectUid: string; ref: string }): Promise<IResolvedCatalogRow>;
@@ -341,7 +341,7 @@ scoped to `input.projectUid` inside `tx`. Resolved-ONLY — an unresolved name,
 or a uid-shaped ref belonging to a DIFFERENT project, throws
 `CatalogNotFoundError('component', ref)` rather than forking a new component.
 
-### `resolveDefaultComponentTx(tx, input)` — function (`catalog.ts:215`)
+### `resolveDefaultComponentTx(tx, input)` — function (`catalog.ts:216`)
 
 ```ts
 export async function resolveDefaultComponentTx(tx: AdapterTransaction, input: { projectRowid: number }): Promise<IResolvedCatalogRow>;
@@ -353,7 +353,7 @@ belonging to a different project can never be mismatched onto this one).
 NEVER mints — throws `CatalogNotFoundError('component', '(root)')` if
 missing (a row `upsertProject` is expected to already guarantee).
 
-### `FlatCatalogKind` — type (`catalog.ts:235`)
+### `FlatCatalogKind` — type (`catalog.ts:236`)
 
 ```ts
 export type FlatCatalogKind = 'kind' | 'status' | 'priority' | 'agent';
@@ -362,7 +362,7 @@ export type FlatCatalogKind = 'kind' | 'status' | 'priority' | 'agent';
 Guarantees: the closed set of catalog kinds that are mintable on an
 unresolved NAME (never on an unresolved uid-shaped ref).
 
-### `IMintOrResolveInput` — interface (`catalog.ts:237`)
+### `IMintOrResolveInput` — interface (`catalog.ts:238`)
 
 ```ts
 export interface IMintOrResolveInput {
@@ -378,7 +378,7 @@ mint, never read or applied when `ref` resolves to an existing row. `at` is
 NOT threaded into `resolveEdgeKindTx`'s own `edge_kind` rows (those keep
 their own clock; see that function's guarantee below).
 
-### `mintOrResolveCatalogTx(tx, input)` — function (`catalog.ts:260`)
+### `mintOrResolveCatalogTx(tx, input)` — function (`catalog.ts:261`)
 
 ```ts
 export async function mintOrResolveCatalogTx(tx: AdapterTransaction, input: IMintOrResolveInput): Promise<IResolvedCatalogRow>;
@@ -389,7 +389,7 @@ uid-shaped `ref` that does not resolve throws `CatalogNotFoundError` (uids
 are never auto-vivified). A name-shaped `ref` that does not resolve is
 minted via `writeNodeTx` inside the SAME `tx`.
 
-### `nextPriorityRankTx(tx)` — function (`catalog.ts:296`)
+### `nextPriorityRankTx(tx)` — function (`catalog.ts:297`)
 
 ```ts
 export async function nextPriorityRankTx(tx: AdapterTransaction): Promise<number>;
@@ -399,7 +399,7 @@ Guarantees: returns one past the current max `priority.meta.rank` (0 if no
 priority rows exist) — a novel priority can never silently outrank an
 existing one.
 
-### `EDGE_KIND_TABLE` — const (`catalog.ts:311`)
+### `EDGE_KIND_TABLE` — const (`catalog.ts:312`)
 
 ```ts
 export const EDGE_KIND_TABLE: readonly IEdgeKindRule[];
@@ -414,7 +414,7 @@ time of this contract: `owns_project`, `owns_component`, `has_kind`,
 of truth `resolveEdgeKindTx` reconciles against the live `edge_kind` catalog
 rows.
 
-### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:452`)
+### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:453`)
 
 ```ts
 export async function resolveEdgeKindTx(tx: AdapterTransaction, rel: string): Promise<IEdgeKindRule>;
@@ -429,13 +429,14 @@ row (corrupt or missing `meta` keys) is invalidated and replaced in the SAME
 `CatalogNotFoundError('edge_kind', rel)` if `rel` isn't in
 `EDGE_KIND_TABLE` at all.
 
-### `IProjectPolicy` — interface (`catalog.ts:520`)
+### `IProjectPolicy` — interface (`catalog.ts:521`)
 
 ```ts
 export interface IProjectPolicy {
   readonly transitionRequiresNote: boolean;
   readonly citationRequired: boolean;
   readonly citationRequiresSha: boolean;
+  readonly citationAllowedExternalRoots: readonly string[];
   readonly defaultStatus?: string;
   readonly defaultKind?: string;
   readonly dedupeScanEnabled: boolean;
@@ -448,9 +449,23 @@ export interface IProjectPolicy {
 ```
 
 Guarantees: every field is `readonly` at the type level. `allowedStatuses`/
-`allowedKinds` empty means "no restriction."
+`allowedKinds` empty means "no restriction." `citationAllowedExternalRoots`
+is external absolute roots a citation may be read from, IN ADDITION to the
+project's own `metadata.path` root (BUG c6d35272): a citation target is
+accepted iff its canonical (symlink-resolved) path lies within the project
+root or one of these roots; a `..` traversal or an escaping symlink stays
+rejected, and only the resulting `sha` is persisted. This array defaults to
+`[]` at the type layer, and `resolveProjectPolicy`'s injected runtime default
+is ALSO `[]` — there is NO machine-global default root, because the runtime's
+own data home `~/.adhd/backlog` contains only the backlog store
+(`production/data/backlog-v2.db`) and its `backup-*`/`backups/` snapshots
+(BUG 62059b57 follow-up). A non-empty array opts the project into the
+carve-out; an empty array (the default, or an explicit `[]`) leaves it
+disabled. A malformed (non-`string[]`) value falls back to the — also empty —
+default rather than being spread. Typed per-project config, never an
+environment toggle.
 
-### `resolveProjectPolicy(project)` — function (`catalog.ts:570`)
+### `resolveProjectPolicy(project)` — function (`catalog.ts:595`)
 
 ```ts
 export function resolveProjectPolicy(project: IResolvedProjectRow): IProjectPolicy;
@@ -466,9 +481,100 @@ from `tx.ts` — it is counted once, under `tx.ts`, above.)_
 
 ---
 
+## `citation-path.ts` (7 exports)
+
+The typed, project-scoped citation-path carve-out (BUG c6d35272) — the module
+behind `IProjectPolicy.citationAllowedExternalRoots`. Pure path resolution:
+no file CONTENT is ever read here; only canonical (`realpath`) paths are
+computed and compared.
+
+### `defaultCitationAllowedExternalRoots()` — function (`citation-path.ts:78`)
+
+```ts
+export function defaultCitationAllowedExternalRoots(): string[];
+```
+
+Returns `[]` — there is NO machine-global default root. The runtime's own data
+home `~/.adhd/backlog` is the STORE's home, not an evidence tree: it contains
+only the machine-global backlog database
+(`production/data/backlog-v2.db`) and its `backup-*`/`backups/` snapshots
+(plus a `test/` store), so granting it would let a citation resolve INTO the
+shared backlog graph (BUG 62059b57 follow-up — the earlier narrowing from
+`~/.adhd` stopped one directory too high). Projects opt into specific external
+roots via `citationAllowedExternalRoots`; the carve-out mechanism is
+unchanged. Read LAZILY on every `resolveProjectPolicy` call (never a
+module-load constant), so the call surface stays stable if a legitimate
+machine-global root is ever re-introduced.
+
+### `displayExternalRoot(root)` — function (`citation-path.ts:89`)
+
+```ts
+export function displayExternalRoot(root: string): string;
+```
+
+`~`-anchors a root under the current home directory; returns the absolute path
+otherwise. Used only to render `CitationUnverifiableError` messages.
+
+### `isPathWithin(root, candidate)` — function (`citation-path.ts:106`)
+
+```ts
+export function isPathWithin(root: string, candidate: string): boolean;
+```
+
+Lexical containment via `path.relative` — never a bare `startsWith`, which a
+name-prefix sibling (`/repo` vs `/repo-evil`) would defeat.
+
+### `isMissingPathError(err)` — function (`citation-path.ts:132`)
+
+```ts
+export function isMissingPathError(err: unknown): boolean;
+```
+
+`true` for exactly `ENOENT`/`ENOTDIR` — the only errnos that mean "the file
+genuinely is not there" and may degrade a citation to `'unverified'`. Every
+other code (`EACCES`, `EISDIR`, `ELOOP`, …) is a real I/O failure. Shared by
+`canonicalizePath` and both write verbs' `computeCitationSha` (BUG c6d35272
+follow-up) so the taxonomy cannot drift. NOT used by `tools/etl/citation.ts`,
+which deliberately also exempts `EISDIR`.
+
+### `canonicalizePath(p)` — function (`citation-path.ts:150`)
+
+```ts
+export async function canonicalizePath(p: string): Promise<string>;
+```
+
+`realpath` of `p`; on ENOENT/ENOTDIR, realpaths the nearest EXISTING ancestor
+and re-joins the non-existent tail. Any other errno propagates untouched.
+
+### `IResolvedCitationTarget` — interface (`citation-path.ts:166`)
+
+```ts
+export interface IResolvedCitationTarget {
+  accepted: boolean;
+  candidate: string;
+}
+```
+
+### `resolveCitationTarget(projectRoot, file, allowedRoots)` — function (`citation-path.ts:184`)
+
+```ts
+export async function resolveCitationTarget(
+  projectRoot: string,
+  file: string,
+  allowedRoots: readonly string[]
+): Promise<IResolvedCitationTarget>;
+```
+
+Canonical containment of `file` against `projectRoot` ∪ `allowedRoots`.
+`projectRoot` and every allowed root are canonicalized through the same pass as
+the candidate, so a `..` traversal or an escaping symlink cannot widen the
+surface.
+
+---
+
 ## `errors.ts` (15 exports)
 
-### `WriteErrorCode` — type (`errors.ts:39`)
+### `WriteErrorCode` — type (`errors.ts:40`)
 
 ```ts
 export type WriteErrorCode = 'E_CONTENTION' | 'E_CONSTRAINT' | 'E_VALIDATION' | 'E_IO';
@@ -476,7 +582,7 @@ export type WriteErrorCode = 'E_CONTENTION' | 'E_CONSTRAINT' | 'E_VALIDATION' | 
 
 Guarantees: the closed code union every `IWriteError` carries.
 
-### `IWriteError` — interface (`errors.ts:53`)
+### `IWriteError` — interface (`errors.ts:54`)
 
 ```ts
 export interface IWriteError {
@@ -493,7 +599,7 @@ failure — never the shape a caller of a write verb receives directly (they
 only ever catch a named `BacklogWriteError` subclass). `cause` is never
 swallowed.
 
-### `BacklogWriteError` — abstract class (`errors.ts:69`)
+### `BacklogWriteError` — abstract class (`errors.ts:70`)
 
 ```ts
 export abstract class BacklogWriteError extends Error implements IWriteError {
@@ -509,7 +615,7 @@ Guarantees: common base for every transport-facing error the write layer
 throws. `tx.ts`'s retry loop uses `instanceof BacklogWriteError` to recognize
 an already-decided, terminal failure and rethrow it untouched.
 
-### `WriteContentionError` — class (`errors.ts:95`)
+### `WriteContentionError` — class (`errors.ts:96`)
 
 ```ts
 export class WriteContentionError extends BacklogWriteError {
@@ -523,7 +629,7 @@ Guarantees: thrown after `E_CONTENTION` exhausts the retry budget (3 total
 attempts). `retryable` stays `true` even on exhaustion — the caller, not the
 write layer, owns any retry beyond this bound.
 
-### `WriteIOError` — class (`errors.ts:124`)
+### `WriteIOError` — class (`errors.ts:125`)
 
 ```ts
 export class WriteIOError extends BacklogWriteError {
@@ -539,7 +645,7 @@ because `writeAudit` rides inside every write transaction as an unguarded
 INSERT and a retry whose earlier attempt actually committed would double the
 audit trail.
 
-### `StaleSupersedeError` — class (`errors.ts:144`)
+### `StaleSupersedeError` — class (`errors.ts:145`)
 
 ```ts
 export class StaleSupersedeError extends BacklogWriteError {
@@ -553,7 +659,7 @@ Guarantees: the one deliberate `E_CONSTRAINT` this spec's own CAS raises —
 thrown when `supersede`'s `is_superseded` guard affects zero rows (a
 concurrent writer already superseded the same target). Never retryable.
 
-### `CatalogNotFoundError` — class (`errors.ts:177`)
+### `CatalogNotFoundError` — class (`errors.ts:178`)
 
 ```ts
 export class CatalogNotFoundError extends BacklogWriteError {
@@ -567,7 +673,7 @@ Guarantees: thrown when a `project`/`component`/`kind`/`status`/`priority`/
 `agent`/`edge_kind` reference did not resolve — a uid-shaped ref with no live
 row, or a `project`/`component` name (neither is ever mint-on-miss).
 
-### `InvalidArgumentError` — class (`errors.ts:190`)
+### `InvalidArgumentError` — class (`errors.ts:191`)
 
 ```ts
 export class InvalidArgumentError extends BacklogWriteError {
@@ -580,7 +686,7 @@ export class InvalidArgumentError extends BacklogWriteError {
 Guarantees: thrown when a caller-supplied argument is missing, blank, or
 fails a project-declared invariant.
 
-### `IssueNotFoundError` — class (`errors.ts:204`)
+### `IssueNotFoundError` — class (`errors.ts:205`)
 
 ```ts
 export class IssueNotFoundError extends BacklogWriteError {
@@ -592,7 +698,7 @@ export class IssueNotFoundError extends BacklogWriteError {
 
 Guarantees: thrown when no live `issue` node carries the given `uid`.
 
-### `ClaimHeldError` — class (`errors.ts:217`)
+### `ClaimHeldError` — class (`errors.ts:218`)
 
 ```ts
 export class ClaimHeldError extends BacklogWriteError {
@@ -605,7 +711,7 @@ export class ClaimHeldError extends BacklogWriteError {
 Guarantees: thrown by `claim` when the lease is held by someone else, not yet
 stale, and the caller did not pass `force: true`.
 
-### `SingleValuedRelationConflictError` — class (`errors.ts:274`)
+### `SingleValuedRelationConflictError` — class (`errors.ts:275`)
 
 ```ts
 export class SingleValuedRelationConflictError extends BacklogWriteError {
@@ -626,22 +732,31 @@ resolve `cappedUid`/`conflictingUid` via different SQL joins, and named
 fields make a source/target field swap a compile error instead of a silent
 message-text bug.
 
-### `CitationUnverifiableError` — class (`errors.ts:313`)
+### `CitationUnverifiableError` — class (`errors.ts:321`)
 
 ```ts
 export class CitationUnverifiableError extends BacklogWriteError {
   readonly code: 'E_VALIDATION';
   readonly retryable: false;
-  constructor(public readonly target: string);
+  constructor(
+    public readonly target: string,
+    public readonly allowedExternalRoots: readonly string[]
+  );
 }
 ```
 
 Guarantees: thrown when a citation's `sha` resolves to the `"unverified"`
 sentinel and `project_policy.citationRequiresSha` (default `true`) rejects
 that. Applies only where verification is possible — a project with a non-empty
-`path`; a path-less project records `sha:"unverified"` verbatim instead.
+`path` whose citation target is missing OR whose canonical path lies outside
+the project root AND every `citationAllowedExternalRoots` entry (BUG
+c6d35272); a path-less project records `sha:"unverified"` verbatim instead.
+The message names the allowed external roots (`~`-anchored) and the
+`project_policy.citationAllowedExternalRoots` field that controls them, so the
+rejection is actionable; with an empty allowlist (the default, or an explicit
+`[]`) it instead names the project root and says the policy array is empty.
 
-### `NoteRequiredError` — class (`errors.ts:325`)
+### `NoteRequiredError` — class (`errors.ts:350`)
 
 ```ts
 export class NoteRequiredError extends BacklogWriteError {
@@ -654,7 +769,7 @@ export class NoteRequiredError extends BacklogWriteError {
 Guarantees: thrown by `transition` when `project_policy.transitionRequiresNote`
 (default `true`) is set and no `note` was given.
 
-### `CitationRequiredError` — class (`errors.ts:337`)
+### `CitationRequiredError` — class (`errors.ts:362`)
 
 ```ts
 export class CitationRequiredError extends BacklogWriteError {
@@ -668,7 +783,7 @@ Guarantees: thrown by `transition` when `project_policy.citationRequired`
 (default `false`) is set, the target status is terminal, and no citation was
 given.
 
-### `BacklogValidationError` — class (`errors.ts:360`)
+### `BacklogValidationError` — class (`errors.ts:385`)
 
 ```ts
 export class BacklogValidationError extends BacklogWriteError {
@@ -683,7 +798,7 @@ or an out-of-range/non-integral `limit`) — deliberately the SAME
 `E_VALIDATION`-class member of this same error union, not a parallel one, so
 a `query`/`get` caller catches it identically to any write-verb error.
 
-### `classifyDriverError(err)` — function (`errors.ts:406`)
+### `classifyDriverError(err)` — function (`errors.ts:431`)
 
 ```ts
 export function classifyDriverError(err: unknown): IWriteError;

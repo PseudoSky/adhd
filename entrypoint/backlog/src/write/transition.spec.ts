@@ -12,7 +12,7 @@
  * disk (a real sha256, never a stubbed one) alongside the unverifiable case.
  */
 import { join } from 'node:path';
-import { writeFileSync } from 'node:fs';
+import { rmSync, writeFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   openTestIssueStore,
@@ -467,6 +467,41 @@ describe('transition — status change (SPEC.md §6.3.4, real store)', () => {
     const citationRow = await readNode(store, citationRows[0].uid);
     expect(citationRow?.metadata?.['sha']).toBeDefined();
     expect(citationRow?.metadata?.['sha']).not.toBe('unverified');
+  });
+
+  it('path-PRESENT project cites a file under an allowed EXTERNAL root — the carve-out also holds on transition (BUG c6d35272)', async () => {
+    const externalRoot = freshTmpDir('transition-carveout-external');
+    const evidence = join(externalRoot, 'evidence.ts');
+    writeFileSync(evidence, 'export const evidence = 1;\n');
+    try {
+      await setProjectPolicy(
+        store,
+        projectUid,
+        { citationAllowedExternalRoots: [externalRoot] },
+        dir
+      );
+      const outcome = await transition(store, {
+        uid: issueUid,
+        by: 'closer',
+        toStatus: 'in-progress',
+        note: 'citing external evidence',
+        citations: [{ file: evidence }],
+      });
+      expect(outcome.toStatus).toBe('in-progress');
+
+      const citationEdges = await liveEdges(store, 'has_citation', {
+        src: issueRowid,
+      });
+      expect(citationEdges).toHaveLength(1);
+      const { rows } = await store.adapter.executeAll<{ uid: string }>(
+        'SELECT uid FROM node WHERE rowid = ?',
+        [citationEdges[0].dst]
+      );
+      const citationRow = await readNode(store, rows[0].uid);
+      expect(citationRow?.metadata?.['sha']).toMatch(/^[0-9a-f]{64}$/);
+    } finally {
+      rmSync(externalRoot, { recursive: true, force: true });
+    }
   });
 
   it('transition.sha is a real sha256 over the canonical {target_uid, from, to, agent, note, at} record — recomputed and compared byte-for-byte', async () => {

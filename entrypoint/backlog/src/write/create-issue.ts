@@ -13,7 +13,6 @@
  */
 
 import { createHash } from 'node:crypto';
-import { isAbsolute, relative, resolve as resolvePath } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import type { GraphBackend } from '@adhd/sox-graph-store';
@@ -36,6 +35,7 @@ import {
   resolveProjectTx,
 } from './catalog.js';
 import { writeAudit } from './audit.js';
+import { isMissingPathError, resolveCitationTarget } from './citation-path.js';
 import {
   composeEmbedText,
   scheduleIssueEmbedding,
@@ -322,63 +322,53 @@ export function assertGitContextWithinCap(value: string | undefined): void {
 /**
  * §8.5's two-branch citation-sha rule, run identically at live-write time
  * (§8.5: "this is also the canonical rule for computing citation.sha on the
- * LIVE write path"). Confined to `project.metadata.path` (BUG blind-review
- * finding 1): a citation whose resolved path lands OUTSIDE the project root
- * — an absolute path anywhere else on the host, or a relative path that
- * walks back out via `../` — is treated identically to "file not found":
- * it returns `'unverified'`, never reads the file, and never throws a third
- * branch. This is a deliberate choice to keep §8.5's rule exactly
- * two-branched (project has no known path → unverified; file not
- * confirmed → unverified) rather than adding an escape-specific throw. It
- * still closes the reported hole: the escape branch is only reachable when
- * the project HAS a known `path` (the first branch returns early otherwise),
- * and for a path-present project the default
- * `project_policy.citation_requires_sha` (`true`) REJECTS `'unverified'` at
- * `createIssue`'s own policy gate below — so an escaping path can never
- * satisfy that policy and can never be used as a file-exists/readable oracle
- * for paths outside the project. The read itself never happens, so no
- * distinguishable success/failure signal about the escaped path ever reaches
- * the caller. (The gate is waived only for a PATH-LESS project — where no
- * escape is even computable — and there `sha:"unverified"` is persisted
- * verbatim, per §8.5.)
+ * LIVE write path").
  *
- * The confinement check uses `path.resolve` + `path.relative` (never a raw
- * string `startsWith` on `projectPath`, which a sibling directory sharing a
- * name prefix — e.g. `/repo` vs `/repo-evil` — would defeat).
+ * Branch 1: a PATH-LESS project cannot content-address anything, so every
+ * citation degrades to the `'unverified'` sentinel up front.
+ *
+ * Branch 2: the target must resolve (canonically) within the project root OR
+ * within one of the project policy's `citationAllowedExternalRoots` — see
+ * `citation-path.ts`'s {@link resolveCitationTarget}. In-project resolution
+ * stays the DEFAULT; the external roots are a TYPED, per-project carve-out
+ * (BUG c6d35272) that makes deliberately-out-of-root evidence citable without
+ * ever opening the read surface to an arbitrary absolute path. Because the
+ * check canonicalizes (realpath) BOTH the candidate and every root, a `..`
+ * traversal cannot widen the surface, and a symlink inside the root that
+ * points outside it is rejected (the sibling defect c6d90ddf, closed here).
+ * A target outside every root resolves to `'unverified'`, identically to a
+ * genuinely missing file — `createIssue`'s policy gate below decides whether
+ * to reject it, and the read is never performed for it.
+ *
+ * The only filesystem read happens AFTER acceptance, against the canonical
+ * candidate. §4c's error taxonomy is preserved exactly (never a parallel
+ * classification): "the cited file genuinely is not there" is the ONLY case
+ * that degrades to `'unverified'` — ENOENT (missing path segment) and ENOTDIR
+ * (a path segment that should be a directory is a file, so the target cannot
+ * exist) both mean exactly that. Any other failure (EACCES, EPERM, EMFILE,
+ * EISDIR, ELOOP, …) — whether from `realpath` or the `readFile` — is a REAL
+ * I/O failure, not a "file doesn't exist" signal, and surfaces as
+ * `WriteIOError` rather than silently masquerading as an absent citation.
  */
 async function computeCitationSha(
   project: IResolvedProjectRow,
-  file: string
+  file: string,
+  allowedExternalRoots: readonly string[]
 ): Promise<string> {
   if (!projectHasKnownPath(project)) return 'unverified';
 
-  const root = resolvePath(project.metadata.path);
-  const candidate = isAbsolute(file)
-    ? resolvePath(file)
-    : resolvePath(root, file);
-  const rel = relative(root, candidate);
-  const escapesRoot =
-    rel === '..' ||
-    rel.startsWith(`..${'/'}`) ||
-    rel.startsWith('..\\') ||
-    isAbsolute(rel);
-  if (escapesRoot) return 'unverified';
-
   try {
+    const { accepted, candidate } = await resolveCitationTarget(
+      project.metadata.path,
+      file,
+      allowedExternalRoots
+    );
+    if (!accepted) return 'unverified';
+
     const content = await readFile(candidate);
     return createHash('sha256').update(content).digest('hex');
   } catch (err) {
-    // §4c's error taxonomy, reused (never a parallel classification, BUG
-    // blind-review finding 3): "the cited file genuinely is not there" is
-    // the ONLY case that legitimately degrades to the `'unverified'`
-    // sentinel — ENOENT (missing path segment) and ENOTDIR (a path segment
-    // that should be a directory is a file, so the target cannot exist)
-    // both mean exactly that. Any other failure (EACCES, EPERM, EMFILE,
-    // EISDIR, ELOOP, …) is a REAL I/O failure, not a "file doesn't exist"
-    // signal, and must surface as `WriteIOError` rather than silently
-    // masquerade as an absent citation.
-    const code = (err as NodeJS.ErrnoException)?.code;
-    if (code === 'ENOENT' || code === 'ENOTDIR') return 'unverified';
+    if (isMissingPathError(err)) return 'unverified';
     throw new WriteIOError(err);
   }
 }
@@ -600,9 +590,12 @@ async function scanForDuplicates(
  * or a blank `citations[i].file`), `CatalogNotFoundError('project'|'component'|
  * 'kind'|'status'|'priority'|'agent', ref)` (`'component'` fires only when a
  * name/uid was GIVEN and did not resolve — omitting `component` never throws
- * it), `CitationUnverifiableError(file)` (policy-gated via
- * `project_policy.citation_requires_sha`, and only when the project has a
- * known `path` — a path-less project records `sha:"unverified"` verbatim),
+ * it), `CitationUnverifiableError(file, allowedExternalRoots)` (policy-gated
+ * via `project_policy.citation_requires_sha`, and only when the project has a
+ * known `path` — a path-less project records `sha:"unverified"` verbatim; a
+ * path-present project still rejects a target whose canonical path lies
+ * outside the project root AND every `citationAllowedExternalRoots` entry —
+ * the carve-out, BUG c6d35272 — and the error names those roots),
  * `InvalidArgumentError('duplicateAction', ...)`
  * (an unrecognized value — §6.4), `WriteContentionError`/
  * `WriteIOError` (§4c — an exhausted driver-level retry on the underlying
@@ -689,13 +682,22 @@ export async function createIssue(
   // the citation is accepted and `sha:"unverified"` is persisted verbatim,
   // exactly as the ETL's own `computeCitationSha` already does. The hard-fail
   // is preserved for a path-PRESENT project whose cited file is missing (or
-  // whose path escapes the project root): both still resolve to `"unverified"`
-  // and still throw.
+  // whose CANONICAL path lies outside the project root AND every
+  // `citationAllowedExternalRoots` entry — the carve-out, BUG c6d35272):
+  // each still resolves to `"unverified"` and still throws, and the message
+  // names the allowed roots.
   for (const citation of citations) {
-    const sha = await computeCitationSha(preResolvedProject, citation.file);
+    const sha = await computeCitationSha(
+      preResolvedProject,
+      citation.file,
+      preResolvedPolicy.citationAllowedExternalRoots
+    );
     if (sha === 'unverified' && preResolvedPolicy.citationRequiresSha) {
       if (projectHasKnownPath(preResolvedProject)) {
-        throw new CitationUnverifiableError(citation.file);
+        throw new CitationUnverifiableError(
+          citation.file,
+          preResolvedPolicy.citationAllowedExternalRoots
+        );
       }
       // Observability for the deliberate path-less waiver (DEBT a934e089).
       // The gate above is enforced only where verification is POSSIBLE, so for
