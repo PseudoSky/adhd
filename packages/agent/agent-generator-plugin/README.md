@@ -26,12 +26,20 @@ Pass the name **without** the `agent-` prefix — `budget` produces the project
 
 ### Options
 
-| Option        | Required | Default                           | Notes                                                            |
-| ------------- | -------- | --------------------------------- | ---------------------------------------------------------------- |
-| `name`        | yes      | —                                 | kebab-case, no `agent-` prefix (e.g. `budget`, `tool-registry`). |
-| `directory`   | no       | `packages/agent/agent-<name>`     | Target directory.                                                |
-| `description` | no       | derived                           | `package.json` description.                                      |
-| `tablePrefix` | no       | `<name>_` (hyphens → underscores) | SQLite table-name prefix; the cross-package collision guard.     |
+| Option        | Required | Default                           | Notes                                                                                     |
+| ------------- | -------- | --------------------------------- | ----------------------------------------------------------------------------------------- |
+| `name`        | yes      | —                                 | kebab-case (`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`), no `agent-` prefix (e.g. `tool-registry`). |
+| `directory`   | no       | `packages/agent/agent-<name>`     | Relative path; each segment `[A-Za-z0-9._-]`, with no `.`/`..` segments.                  |
+| `description` | no       | derived                           | `package.json` description.                                                               |
+| `tablePrefix` | no       | `<name>_` (hyphens → underscores) | SQLite identifier (`^[A-Za-z_][A-Za-z0-9_]*$`); the cross-package collision guard.       |
+
+Every option is validated **before the generator writes anything**: `name`,
+`directory` and `tablePrefix` are constrained by `schema.json` at the Nx CLI
+boundary, and re-asserted in-process by `assertSafeRegistryPackageInputs()` so a
+programmatic caller cannot splice a shell metacharacter into a target command, a
+traversal segment into a path, or SQL into the emitted skeleton test. The
+`typecheck` target runs a fixed command with `cwd`, and the `clean` target
+POSIX-quotes its output path.
 
 ## What it generates
 
@@ -44,12 +52,13 @@ Under `packages/agent/agent-<name>/`:
   `nx.json` `targetDefaults`.
 - `package.json` — `@adhd/agent-<name>`, only the deps the skeleton imports
   (`drizzle-orm`, `better-sqlite3`) to keep `@nx/dependency-checks` green.
-- `.eslintrc.json` extending the workspace base → an inferred `lint` target.
+- `eslint.config.mjs` importing the workspace base → an inferred `lint` target.
 - `vite.config.ts` (vitest, `pool: 'forks'`, `fileParallelism: false` for
   better-sqlite3), `tsconfig.json` / `.lib.json` / `.spec.json`,
   `drizzle.config.ts`.
-- `src/db/{client,schema,migrate,migrate-runner}.ts`, `src/index.ts` barrel,
-  `src/__tests__/skeleton.test.ts` (real DB + close/reopen), a starter
+- `src/db/{schema,migrate-runner}.ts` (no module-scope `client.ts`/`migrate.ts`
+  singleton — connections come from `@adhd/agent-core-env`), `src/index.ts`
+  barrel, `src/__tests__/skeleton.test.ts` (real DB + close/reopen), a starter
   `drizzle/meta/_journal.json`.
 - `README.md` and a `CLAUDE.md` stub linking
   [`REGISTRY-PACKAGE-RULES.md`](./REGISTRY-PACKAGE-RULES.md).
