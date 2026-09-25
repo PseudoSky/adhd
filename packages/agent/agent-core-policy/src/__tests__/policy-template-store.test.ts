@@ -17,7 +17,7 @@ import * as path from 'node:path';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 
 import { runMigrationsOn } from '../db/migrate-runner.js';
 import * as schema from '../db/schema.js';
@@ -193,6 +193,56 @@ describe('PolicyTemplateStore', () => {
 
     expect(caught).toBeInstanceOf(PolicyError);
     expect((caught as PolicyError).code).toBe('POLICY_TEMPLATE_ALREADY_EXISTS');
+
+    fs.unlinkSync(dbPath);
+  });
+
+  it('create throws POLICY_TEMPLATE_READBACK_FAILED — never a bare Error and never ALREADY_EXISTS — when the post-insert read-back is empty', () => {
+    const dbPath = tmpDbPath();
+    const { sqlite, db } = openDb(dbPath);
+    openHandles.push(sqlite);
+
+    runMigrationsOn(sqlite, db);
+    db.insert(schema.policyTypesTable).values(RATE_TYPE_ROW).run();
+
+    const store = new PolicyTemplateStore(db);
+
+    // Force ONLY the post-insert verification read to return undefined. The
+    // insert still runs against the real DB (changes === 1), so the path under
+    // test is the read-back failure — not the duplicate-slug conflict.
+    type SelectReturn = ReturnType<typeof db.select>;
+    const emptyReadChain = {
+      from: () => emptyReadChain,
+      where: () => emptyReadChain,
+      get: () => undefined,
+      all: () => [] as unknown[],
+    } as unknown as SelectReturn;
+    const selectSpy = vi
+      .spyOn(db, 'select')
+      .mockImplementation(() => emptyReadChain);
+
+    let caught: unknown;
+    try {
+      store.create({ ...NO_CREDENTIALS_TEMPLATE });
+    } catch (err) {
+      caught = err;
+    } finally {
+      selectSpy.mockRestore();
+    }
+
+    // A typed store-consistency error — not a bare Error.
+    expect(caught).toBeInstanceOf(PolicyError);
+    expect((caught as Error).name).toBe('PolicyError');
+    expect((caught as PolicyError).code).toBe(
+      'POLICY_TEMPLATE_READBACK_FAILED'
+    );
+    // Must never be conflated with the caller-facing duplicate error.
+    expect((caught as PolicyError).code).not.toBe(
+      'POLICY_TEMPLATE_ALREADY_EXISTS'
+    );
+    expect((caught as PolicyError).data).toEqual({
+      slug: NO_CREDENTIALS_TEMPLATE.slug,
+    });
 
     fs.unlinkSync(dbPath);
   });

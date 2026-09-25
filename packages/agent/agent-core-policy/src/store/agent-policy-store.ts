@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyBetterSQLite3Database = import('drizzle-orm/better-sqlite3').BetterSQLite3Database<any>;
@@ -16,6 +16,7 @@ import { PolicyError } from './policy-template-store.js';
 
 export type AgentPolicyErrorCode =
   | 'AGENT_POLICY_ALREADY_ATTACHED'
+  | 'AGENT_POLICY_READBACK_FAILED'
   | 'CATEGORY_POLICY_ALREADY_ATTACHED'
   | 'AGENT_CATEGORY_ALREADY_JOINED';
 
@@ -146,24 +147,21 @@ export class AgentPolicyStore {
   /**
    * Attach a policy template DIRECTLY to an agent (`inherited_from = null`).
    *
+   * The uniqueness decision is made inside a single atomic
+   * `INSERT … ON CONFLICT DO NOTHING` on the `(agent_slug, policy_slug)`
+   * composite PK rather than a read-then-write pre-check. A `SELECT`-then-
+   * `INSERT` pre-check races under concurrent writers (both read "absent",
+   * both insert); with `ON CONFLICT DO NOTHING` the writer that loses the
+   * race observes `changes === 0` and is translated to
+   * {@link AgentPolicyError} AGENT_POLICY_ALREADY_ATTACHED.
+   *
    * @throws {AgentPolicyError} AGENT_POLICY_ALREADY_ATTACHED when the
    *   (agentSlug, policySlug) pair already exists.
+   * @throws {AgentPolicyError} AGENT_POLICY_READBACK_FAILED when the inserted
+   *   row cannot be read back — a store-consistency failure, distinct from the
+   *   caller-facing duplicate-attach error.
    */
   attach(input: AgentPolicyAttachInput): AgentPolicyRow {
-    const existing = this.db
-      .select()
-      .from(agentPoliciesTable)
-      .where(eq(agentPoliciesTable.agentSlug, input.agentSlug))
-      .all()
-      .find((r: { policySlug: string }) => r.policySlug === input.policySlug);
-
-    if (existing) {
-      throw new AgentPolicyError(
-        'AGENT_POLICY_ALREADY_ATTACHED',
-        `Policy '${input.policySlug}' is already attached to agent '${input.agentSlug}'`
-      );
-    }
-
     const row = {
       agentSlug: input.agentSlug,
       policySlug: input.policySlug,
@@ -177,19 +175,39 @@ export class AgentPolicyStore {
       inheritedFrom: null,
     };
 
-    this.db.insert(agentPoliciesTable).values(row).run();
+    // Atomic insert-or-nothing on the (agent_slug, policy_slug) composite PK.
+    const result = this.db
+      .insert(agentPoliciesTable)
+      .values(row)
+      .onConflictDoNothing()
+      .run();
 
+    if (result.changes === 0) {
+      throw new AgentPolicyError(
+        'AGENT_POLICY_ALREADY_ATTACHED',
+        `Policy '${input.policySlug}' is already attached to agent '${input.agentSlug}'`,
+        { agentSlug: input.agentSlug, policySlug: input.policySlug }
+      );
+    }
+
+    // Read back the exact (agent, policy) row — never a sibling row for the
+    // same agent that happens to differ by policy.
     const insertedRow = this.db
       .select()
       .from(agentPoliciesTable)
-      .where(eq(agentPoliciesTable.agentSlug, input.agentSlug))
-      .all()
-      .find((r: { policySlug: string }) => r.policySlug === input.policySlug);
+      .where(
+        and(
+          eq(agentPoliciesTable.agentSlug, input.agentSlug),
+          eq(agentPoliciesTable.policySlug, input.policySlug)
+        )
+      )
+      .get();
 
     if (!insertedRow) {
       throw new AgentPolicyError(
-        'AGENT_POLICY_ALREADY_ATTACHED',
-        `Failed to read back inserted policy '${input.policySlug}' for agent '${input.agentSlug}'`
+        'AGENT_POLICY_READBACK_FAILED',
+        `Failed to read back inserted policy '${input.policySlug}' for agent '${input.agentSlug}'`,
+        { agentSlug: input.agentSlug, policySlug: input.policySlug }
       );
     }
 

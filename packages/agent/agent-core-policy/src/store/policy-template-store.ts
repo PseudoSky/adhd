@@ -11,7 +11,8 @@ import { policyTemplatesTable } from '../db/schema.js';
 
 export type PolicyErrorCode =
   | 'POLICY_TEMPLATE_NOT_FOUND'
-  | 'POLICY_TEMPLATE_ALREADY_EXISTS';
+  | 'POLICY_TEMPLATE_ALREADY_EXISTS'
+  | 'POLICY_TEMPLATE_READBACK_FAILED';
 
 /**
  * Typed error thrown by policy stores — mirrors the ToolError pattern from
@@ -87,22 +88,19 @@ export class PolicyTemplateStore {
   /**
    * Persist a new policy template.
    *
+   * The uniqueness decision is made inside a single atomic
+   * `INSERT … ON CONFLICT DO NOTHING` rather than a read-then-write
+   * pre-check. A `SELECT`-then-`INSERT` pre-check is a race under concurrent
+   * writers (both read "absent", both insert); with `ON CONFLICT DO NOTHING`
+   * the writer that loses the unique-slug race observes `changes === 0` and
+   * is translated to {@link PolicyError} POLICY_TEMPLATE_ALREADY_EXISTS.
+   *
    * @throws {PolicyError} POLICY_TEMPLATE_ALREADY_EXISTS if the slug is taken.
+   * @throws {PolicyError} POLICY_TEMPLATE_READBACK_FAILED if the inserted row
+   *   cannot be read back — a store-consistency failure, distinct from the
+   *   caller-facing duplicate error.
    */
   create(input: PolicyTemplateCreateInput): PolicyTemplate {
-    const existing = this.db
-      .select()
-      .from(policyTemplatesTable)
-      .where(eq(policyTemplatesTable.slug, input.slug))
-      .get();
-
-    if (existing) {
-      throw new PolicyError(
-        'POLICY_TEMPLATE_ALREADY_EXISTS',
-        `Policy template '${input.slug}' already exists`
-      );
-    }
-
     const row = {
       slug: input.slug,
       type: input.type,
@@ -115,7 +113,21 @@ export class PolicyTemplateStore {
       isSystem: input.isSystem ?? false,
     };
 
-    this.db.insert(policyTemplatesTable).values(row).run();
+    // Atomic insert-or-nothing: the uniqueness check and the write are one
+    // statement, so concurrent writers cannot both commit an insert.
+    const result = this.db
+      .insert(policyTemplatesTable)
+      .values(row)
+      .onConflictDoNothing()
+      .run();
+
+    if (result.changes === 0) {
+      throw new PolicyError(
+        'POLICY_TEMPLATE_ALREADY_EXISTS',
+        `Policy template '${input.slug}' already exists`,
+        { slug: input.slug }
+      );
+    }
 
     const inserted = this.db
       .select()
@@ -124,8 +136,10 @@ export class PolicyTemplateStore {
       .get();
 
     if (!inserted) {
-      throw new Error(
-        `Failed to read back inserted policy template '${input.slug}'`
+      throw new PolicyError(
+        'POLICY_TEMPLATE_READBACK_FAILED',
+        `Failed to read back inserted policy template '${input.slug}'`,
+        { slug: input.slug }
       );
     }
 
