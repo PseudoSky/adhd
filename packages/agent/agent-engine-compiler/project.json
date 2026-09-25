@@ -57,6 +57,10 @@
       "options": {
         "packageRoot": "{projectRoot}/dist"
       }
+    },
+    "test": {
+      "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference). compile-cli*.test.ts spawn the BUILT bin at {projectRoot}/dist/src/cli/compile.js and assert the migration folders exist at {projectRoot}/dist/drizzle — under this workspace's remodel that asset glob is owned by the inferred `assets` target (main's `@nx/js:tsc` `build` copied it inline). targetDefaults.test's `^build` builds only DEPENDENCIES, never this project's OWN dist/ or assets, so `build` + `assets` are declared. `lint`/`^build` repeated because an explicit dependsOn replaces the targetDefault.",
+      "dependsOn": ["lint", "^build", "build", "assets"]
     }
   }
 }
