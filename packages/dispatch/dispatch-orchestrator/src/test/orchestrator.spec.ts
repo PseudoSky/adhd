@@ -985,6 +985,216 @@ describe('orchestrateCycle — real tool-call execution (BUG-DISPATCH-EXEC-001)'
     expect((opResult?.tool_result as { error?: string } | null)?.error).toContain('not found in');
   });
 
+  it('fs.edit: rejects a path that escapes the configured tools root — never executed', async () => {
+    const name = 'tool-call-fs-edit-escape';
+    const dir = path.join(TMP_ROOT, name);
+    fs.mkdirSync(dir, { recursive: true });
+
+    const { dagPath, deps } = await setupScenario(
+      name,
+      makeDag({
+        operations: [
+          makeOp({
+            type: 'tool-call',
+            action: 'fs.edit',
+            args: { path: '../../outside-secret.txt', find: 'SENTINEL', replace: 'PWNED' },
+            shape: null,
+          }),
+        ],
+      })
+    );
+    deps.toolsRoot = dir;
+    deps.allowedFsActions = ['fs.edit'];
+
+    await orchestrateCycle(deps);
+
+    const reloaded = await reload(dagPath);
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('failed');
+    expect((opResult?.tool_result as { error?: string } | null)?.error).toContain('escapes tools root');
+  });
+
+  it('fs.edit: rejects a symlink that resolves OUTSIDE the tools root — the outside file is untouched (containment is real, not lexical)', async () => {
+    const name = 'tool-call-fs-edit-symlink-escape';
+    const dir = path.join(TMP_ROOT, name);
+    const outsideDir = path.join(TMP_ROOT, `${name}-outside`);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(outsideDir, { recursive: true });
+    const outsideFile = path.join(outsideDir, 'secret.txt');
+    fs.writeFileSync(outsideFile, 'SENTINEL', 'utf-8');
+    // A symlink INSIDE the tools root pointing OUTSIDE it. The old, purely
+    // lexical containment test (`resolved.startsWith(root)`) passed this — the
+    // realpath re-assertion must reject it.
+    fs.symlinkSync(outsideDir, path.join(dir, 'link'), 'dir');
+
+    const { dagPath, deps } = await setupScenario(
+      name,
+      makeDag({
+        operations: [
+          makeOp({
+            type: 'tool-call',
+            action: 'fs.edit',
+            args: { path: 'link/secret.txt', find: 'SENTINEL', replace: 'PWNED' },
+            shape: null,
+          }),
+        ],
+      })
+    );
+    deps.toolsRoot = dir;
+    deps.allowedFsActions = ['fs.edit'];
+
+    await orchestrateCycle(deps);
+
+    // CONSUMER-VISIBLE OUTCOME: the file OUTSIDE the root is untouched.
+    expect(fs.readFileSync(outsideFile, 'utf-8')).toBe('SENTINEL');
+    const reloaded = await reload(dagPath);
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('failed');
+    expect((opResult?.tool_result as { error?: string } | null)?.error).toContain('escapes tools root');
+  });
+
+  it('fs.delete: refuses to target the tools root itself — `path: "."` cannot wipe the root', async () => {
+    const name = 'tool-call-fs-delete-root';
+    const dir = path.join(TMP_ROOT, name);
+    fs.mkdirSync(dir, { recursive: true });
+    const sentinel = path.join(dir, 'sentinel.txt');
+    fs.writeFileSync(sentinel, 'root survives', 'utf-8');
+
+    const { dagPath, deps } = await setupScenario(
+      name,
+      makeDag({
+        operations: [
+          makeOp({
+            type: 'tool-call',
+            action: 'fs.delete',
+            args: { path: '.', recursive: true },
+            shape: null,
+          }),
+        ],
+      })
+    );
+    deps.toolsRoot = dir;
+    deps.allowedFsActions = ['fs.delete'];
+
+    await orchestrateCycle(deps);
+
+    // CONSUMER-VISIBLE OUTCOME: the root and its contents survive.
+    expect(fs.existsSync(dir)).toBe(true);
+    expect(fs.readFileSync(sentinel, 'utf-8')).toBe('root survives');
+    const reloaded = await reload(dagPath);
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('failed');
+    expect((opResult?.tool_result as { error?: string } | null)?.error).toContain('tools root itself');
+  });
+
+  it('fs.edit: writes `replace` LITERALLY — `$&` is not expanded as a replacement pattern', async () => {
+    const name = 'tool-call-fs-edit-literal-replacement';
+    const dir = path.join(TMP_ROOT, name);
+    fs.mkdirSync(dir, { recursive: true });
+    const target = path.join(dir, 'edit-me.txt');
+    fs.writeFileSync(target, 'hello', 'utf-8');
+
+    const { dagPath, deps } = await setupScenario(
+      name,
+      makeDag({
+        operations: [
+          makeOp({
+            type: 'tool-call',
+            action: 'fs.edit',
+            args: { path: 'edit-me.txt', find: 'hello', replace: '$& world' },
+            shape: null,
+          }),
+        ],
+      })
+    );
+    deps.toolsRoot = dir;
+    deps.allowedFsActions = ['fs.edit'];
+
+    await orchestrateCycle(deps);
+
+    // Naive `content.replace(find, replace)` would have expanded `$&` to the
+    // matched text and produced 'hello world'. The callback form writes the
+    // replacement verbatim.
+    expect(fs.readFileSync(target, 'utf-8')).toBe('$& world');
+    const reloaded = await reload(dagPath);
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('complete');
+  });
+
+  it('complete mediation: an INJECTED toolCallExec cannot bypass the fail-closed fs policy', async () => {
+    const name = 'injected-exec-mediated';
+    const dir = path.join(TMP_ROOT, name);
+    fs.mkdirSync(dir, { recursive: true });
+    const target = path.join(dir, 'protected.txt');
+    fs.writeFileSync(target, 'must survive', 'utf-8');
+
+    const { dagPath, deps } = await setupScenario(
+      name,
+      makeDag({
+        operations: [
+          makeOp({
+            type: 'tool-call',
+            action: 'fs.delete',
+            args: { path: 'protected.txt' },
+            shape: null,
+          }),
+        ],
+      })
+    );
+    deps.toolsRoot = dir;
+    // A consumer-injected executor that would happily "delete" — proving the
+    // gate lives at the dispatch layer, not only inside the default executor.
+    let injectedCalls = 0;
+    deps.toolCallExec = async () => {
+      injectedCalls += 1;
+      return { ok: true, result: { injected: true } };
+    };
+    // No allowedFsActions -> the gate must deny BEFORE the injected exec runs.
+
+    await orchestrateCycle(deps);
+
+    expect(injectedCalls).toBe(0); // the gate ran first; executor never reached
+    const reloaded = await reload(dagPath);
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('failed');
+    expect((opResult?.tool_result as { error?: string } | null)?.error).toContain('denied by policy');
+  });
+
+  it('complete mediation: the SAME injected toolCallExec runs once fs.delete is allowlisted', async () => {
+    const name = 'injected-exec-mediated-allow';
+    const dir = path.join(TMP_ROOT, name);
+    fs.mkdirSync(dir, { recursive: true });
+
+    const { dagPath, deps } = await setupScenario(
+      name,
+      makeDag({
+        operations: [
+          makeOp({
+            type: 'tool-call',
+            action: 'fs.delete',
+            args: { path: 'x.txt' },
+            shape: null,
+          }),
+        ],
+      })
+    );
+    deps.toolsRoot = dir;
+    deps.allowedFsActions = ['fs.delete'];
+    let injectedCalls = 0;
+    deps.toolCallExec = async () => {
+      injectedCalls += 1;
+      return { ok: true, result: { injected: true } };
+    };
+
+    await orchestrateCycle(deps);
+
+    expect(injectedCalls).toBe(1);
+    const reloaded = await reload(dagPath);
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('complete');
+    expect(opResult?.tool_result).toEqual({ injected: true });
+  });
+
   it('an op missing required args fails cleanly with a real error, never a silent skip', async () => {
     const { dagPath, deps } = await setupScenario(
       'tool-call-missing-args',
