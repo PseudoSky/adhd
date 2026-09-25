@@ -61,10 +61,13 @@ never touched) unless its exact `OperationAction` is explicitly allowlisted.
   fs.* action is denied. An unknown action name is rejected up front
   (before the runner or filesystem are ever touched).
 - **`--tools-root <path>`** — the filesystem root a relative `fs.*` path
-  arg is resolved against (a path that would escape this root is rejected
-  as a failed op, never executed). Default: `process.cwd()` — the
-  directory `dispatch-cli` was invoked from, NOT the directory containing
-  `--dag-path`'s dag.json.
+  arg is resolved against. A path that would escape this root — by `..`, by
+  an absolute path, or via a symlink whose real target lands outside it — is
+  rejected as a failed op (`escapes tools root …`) and never executed; a path
+  that resolves to the root itself is likewise refused, so `fs.delete
+  { path: '.', recursive: true }` cannot wipe the root. Default:
+  `process.cwd()` — the directory `dispatch-cli` was invoked from, NOT the
+  directory containing `--dag-path`'s dag.json.
 
 An existing consumer that relied on the prior unconditional-execution
 behavior will see previously-silent `fs.*` ops start failing with a

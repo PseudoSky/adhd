@@ -521,19 +521,107 @@ function defaultFsOpPolicy(allowedFsActions: ReadonlySet<OperationAction>): FsOp
   return (op) => (allowedFsActions.has(op.action) ? 'allow' : 'deny');
 }
 
+/** The single, shared denial payload a policy-gated `fs.*` op returns. */
+function fsOpDeniedResult(op: OperationDag): ToolCallResult {
+  return {
+    ok: false,
+    error: `fs op '${op.action}' denied by policy — not in allowedFsActions`,
+  };
+}
+
+/**
+ * FEAT-DISPATCH-GOVERNANCE-001 — complete mediation. Wraps ANY `ToolCallExecFn`
+ * — the default executor OR a consumer-injected one — so the fail-closed fs.*
+ * policy is consulted at the op-dispatch layer, *before* the executor is
+ * reached. Previously the gate lived only inside `defaultToolCallExec`, so a
+ * consumer that injected its own `toolCallExec` bypassed it entirely. Applied
+ * once in `resolveDeps`, so every tool-call op flowing through
+ * `orchestrateCycle` is mediated regardless of which executor is wired.
+ *
+ * Only `FS_DESTRUCTIVE_ACTIONS` are consulted; every other action passes
+ * through untouched.
+ */
+function withFsOpPolicy(exec: ToolCallExecFn, policy: FsOpPolicyFn): ToolCallExecFn {
+  return (op, dag) =>
+    FS_DESTRUCTIVE_ACTIONS.has(op.action) && policy(op) !== 'allow'
+      ? Promise.resolve(fsOpDeniedResult(op))
+      : exec(op, dag);
+}
+
 /**
  * Resolves an `fs.*` tool-call path relative to `root`, rejecting anything
- * that escapes it (`..` traversal, absolute paths outside root). A
- * maliciously- or buggily-authored dag.json must never be able to move/
- * delete/scaffold files outside the configured tools root.
+ * that escapes it — by `..` traversal, by an absolute path outside root, OR
+ * by a symlink anywhere along the path (or in `root` itself) whose real target
+ * lands outside root. A maliciously- or buggily-authored dag.json must never be
+ * able to move/delete/scaffold/edit files outside the configured tools root.
+ *
+ * Containment is asserted twice:
+ *
+ *  1. **Lexically**, against `path.resolve(root)` — cheap, and it rejects a
+ *     pure `..`/absolute escape even when the target does not exist yet.
+ *  2. **Against the real path** (`fs.realpath`) of the nearest existing
+ *     ancestor of both `root` and the target — this closes the symlink bypass
+ *     where e.g. `root/link -> /etc` passes a lexical `startsWith(root)` test
+ *     but the filesystem op follows the link outside root. The *nearest
+ *     existing ancestor* is used because `fs.scaffold`/`fs.move` legitimately
+ *     create paths that do not exist yet: we resolve the deepest part that
+ *     does exist and reject if that resolved ancestor is outside root.
+ *
+ * `resolveToolPath` also REFUSES the tools root itself (a `rel` that resolves
+ * to `.`/``). Before this, `fs.delete { path: '.', recursive: true }` passed
+ * containment — `resolved === rootResolved` was explicitly permitted — and
+ * wiped the entire tools root.
+ *
+ * The path returned is the *lexical* resolution, not the realpath, so callers
+ * and persisted results keep stable, human-readable paths; the realpath is used
+ * only as the containment proof.
  */
-function resolveToolPath(root: string, rel: string): string {
+async function resolveToolPath(root: string, rel: string): Promise<string> {
   const rootResolved = nodePath.resolve(root);
   const resolved = nodePath.resolve(rootResolved, rel);
-  if (resolved !== rootResolved && !resolved.startsWith(rootResolved + nodePath.sep)) {
+  if (resolved === rootResolved) {
+    throw new Error(
+      `path '${rel}' resolves to the tools root itself — refusing to operate on the root`
+    );
+  }
+  if (!resolved.startsWith(rootResolved + nodePath.sep)) {
     throw new Error(`path '${rel}' escapes tools root '${root}'`);
   }
+  // Symlink-safe second line of defense: realpath the nearest existing ancestor
+  // of both the root and the target, then re-assert containment on real paths.
+  const rootReal = await realpathNearestExisting(rootResolved);
+  const targetReal = await realpathNearestExisting(resolved);
+  if (!isWithin(rootReal, targetReal)) {
+    throw new Error(
+      `path '${rel}' escapes tools root '${root}' (resolves outside it via a symlink)`
+    );
+  }
   return resolved;
+}
+
+/**
+ * `fs.realpath` of `target` if it exists, otherwise of its nearest existing
+ * ancestor (walking up until something resolves, terminating at the filesystem
+ * root). Every symlink in the portion that exists is fully resolved; a
+ * not-yet-created tail is not invented.
+ */
+async function realpathNearestExisting(target: string): Promise<string> {
+  let current = target;
+  for (;;) {
+    try {
+      return await fsp.realpath(current);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      const parent = nodePath.dirname(current);
+      if (parent === current) return current; // reached the filesystem root
+      current = parent;
+    }
+  }
+}
+
+/** True when `candidate` is `root` or lives underneath it (both already realpath'd). */
+function isWithin(root: string, candidate: string): boolean {
+  return candidate === root || candidate.startsWith(root + nodePath.sep);
 }
 
 /**
@@ -611,29 +699,23 @@ async function defaultToolCallExec(
         return { ok: true, result: { id: entry.id } };
       }
       case 'fs.move': {
-        if (fsOpPolicy(op) !== 'allow') {
-          return { ok: false, error: `fs op '${op.action}' denied by policy — not in allowedFsActions` };
-        }
-        const from = resolveToolPath(toolsRoot, requireStringArg(args, 'from'));
-        const to = resolveToolPath(toolsRoot, requireStringArg(args, 'to'));
+        if (fsOpPolicy(op) !== 'allow') return fsOpDeniedResult(op);
+        const from = await resolveToolPath(toolsRoot, requireStringArg(args, 'from'));
+        const to = await resolveToolPath(toolsRoot, requireStringArg(args, 'to'));
         await fsp.mkdir(nodePath.dirname(to), { recursive: true });
         await fsp.rename(from, to);
         return { ok: true, result: { from, to } };
       }
       case 'fs.delete': {
-        if (fsOpPolicy(op) !== 'allow') {
-          return { ok: false, error: `fs op '${op.action}' denied by policy — not in allowedFsActions` };
-        }
-        const target = resolveToolPath(toolsRoot, requireStringArg(args, 'path'));
+        if (fsOpPolicy(op) !== 'allow') return fsOpDeniedResult(op);
+        const target = await resolveToolPath(toolsRoot, requireStringArg(args, 'path'));
         const recursive = args['recursive'] === true;
         await fsp.rm(target, { recursive, force: false });
         return { ok: true, result: { path: target } };
       }
       case 'fs.scaffold': {
-        if (fsOpPolicy(op) !== 'allow') {
-          return { ok: false, error: `fs op '${op.action}' denied by policy — not in allowedFsActions` };
-        }
-        const target = resolveToolPath(toolsRoot, requireStringArg(args, 'path'));
+        if (fsOpPolicy(op) !== 'allow') return fsOpDeniedResult(op);
+        const target = await resolveToolPath(toolsRoot, requireStringArg(args, 'path'));
         const content = typeof args['content'] === 'string' ? (args['content'] as string) : '';
         await fsp.mkdir(nodePath.dirname(target), { recursive: true });
         await fsp.writeFile(target, content, 'utf8');
@@ -643,17 +725,19 @@ async function defaultToolCallExec(
         };
       }
       case 'fs.edit': {
-        if (fsOpPolicy(op) !== 'allow') {
-          return { ok: false, error: `fs op '${op.action}' denied by policy — not in allowedFsActions` };
-        }
-        const target = resolveToolPath(toolsRoot, requireStringArg(args, 'path'));
+        if (fsOpPolicy(op) !== 'allow') return fsOpDeniedResult(op);
+        const target = await resolveToolPath(toolsRoot, requireStringArg(args, 'path'));
         const find = requireStringArg(args, 'find');
         const replace = requireStringArg(args, 'replace');
         const content = await fsp.readFile(target, 'utf8');
         if (!content.includes(find)) {
           return { ok: false, error: `fs.edit: '${find}' not found in ${target}` };
         }
-        await fsp.writeFile(target, content.replace(find, replace), 'utf8');
+        // Callback form (never the raw string) so `$&`/`$1`/`$$` inside
+        // `replace` are written LITERALLY instead of being expanded as JS
+        // replacement patterns — the documented "replace this text with that
+        // text" contract, not regex substitution.
+        await fsp.writeFile(target, content.replace(find, () => replace), 'utf8');
         return { ok: true, result: { path: target } };
       }
       default:
@@ -697,8 +781,15 @@ async function resolveDeps(deps: OrchestratorDeps): Promise<ResolvedDeps> {
     poll: { ...DEFAULT_POLL, ...deps.poll },
     guardExec: deps.guardExec ?? defaultGuardExec,
     guardTimeoutMs: deps.guardTimeoutMs ?? DEFAULT_GUARD_TIMEOUT_MS,
-    toolCallExec:
-      deps.toolCallExec ?? ((op, dagArg) => defaultToolCallExec(op, dagArg, toolsRoot, fsOpPolicy)),
+    // FEAT-DISPATCH-GOVERNANCE-001: mediate BOTH the default executor and any
+    // consumer-injected `toolCallExec` at the op-dispatch layer — the wrapper is
+    // the authoritative gate; `defaultToolCallExec`'s own inline checks remain
+    // as defense-in-depth for a hypothetical direct caller.
+    toolCallExec: withFsOpPolicy(
+      deps.toolCallExec ??
+        ((op, dagArg) => defaultToolCallExec(op, dagArg, toolsRoot, fsOpPolicy)),
+      fsOpPolicy
+    ),
     continueOnError: deps.continueOnError ?? true,
   };
 }
