@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { runMigrationsOn } from '../db/migrate-runner.js';
 import * as schema from '../db/schema.js';
@@ -356,5 +356,74 @@ describe('McpServerStore — persistence (close + reopen proves disk write)', ()
     expect(server.configSchema).toEqual({});
 
     closeDb(sqlite2);
+  });
+});
+
+// ──────────────────────────────────────────────
+// McpServerStore.create() — unique-constraint atomicity (bd724962)
+//
+// create() must let the mcp_servers.id primary key arbitrate uniqueness and
+// translate the zero-row-changed outcome into the documented
+// MCP_SERVER_ALREADY_EXISTS, never surface the driver's raw SqliteError. The
+// SELECT pre-check it used to run opened a check-then-INSERT race window.
+// ──────────────────────────────────────────────
+
+describe('McpServerStore.create() — unique-constraint atomicity', () => {
+  let tmpDir: string;
+  let dbPath: string;
+  let sqlite: InstanceType<typeof Database>;
+  let db: ReturnType<typeof openDb>['db'];
+  let store: McpServerStore;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'agent-tool-registry-mcp-atomicity-')
+    );
+    dbPath = path.join(tmpDir, 'registry.db');
+    const opened = openDb(dbPath);
+    sqlite = opened.sqlite;
+    db = opened.db;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    store = new McpServerStore(db as any);
+  });
+
+  afterEach(() => {
+    try {
+      closeDb(sqlite);
+    } catch {
+      /* already closed */
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('duplicate create() yields MCP_SERVER_ALREADY_EXISTS (an McpServerStoreError), never a raw SqliteError', () => {
+    store.create(FS_SERVER_INPUT);
+
+    let caught: unknown;
+    try {
+      store.create(FS_SERVER_INPUT);
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(McpServerStoreError);
+    expect((caught as McpServerStoreError).code).toBe(
+      'MCP_SERVER_ALREADY_EXISTS'
+    );
+    // The whole point: a caller must never see the driver's raw error.
+    expect(caught).not.toBeInstanceOf(Database.SqliteError);
+  });
+
+  it('create() never runs a SELECT — uniqueness is the DB constraint, not a read-then-write pre-check', () => {
+    const insertSpy = vi.spyOn(db, 'insert');
+    const selectSpy = vi.spyOn(db, 'select');
+
+    store.create(FS_SERVER_INPUT);
+
+    expect(insertSpy).toHaveBeenCalledTimes(1);
+    // The old code ran a SELECT pre-check before the INSERT, opening a
+    // check-then-INSERT race window. The constraint-arbitrated version takes
+    // the uniqueness decision from the INSERT result and never reads first.
+    expect(selectSpy).not.toHaveBeenCalled();
   });
 });
