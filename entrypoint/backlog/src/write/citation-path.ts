@@ -8,8 +8,8 @@
  * file-exists/readable oracle for an arbitrary absolute path elsewhere on the
  * host. But some genuine evidence lives OUTSIDE that root — a machine-level
  * tool (`~/.local/bin/gx`), a globally-installed package's `dist/**`, a
- * `/tmp` scratch artifact, evidence recorded under this runtime's own data
- * home (`~/.adhd/backlog/…`). Before this module the ONLY way to cite such
+ * `/tmp` scratch artifact, or any root the project explicitly allowlists via
+ * `citationAllowedExternalRoots`. Before this module the ONLY way to cite such
  * evidence on a path-PRESENT project was to omit the citation entirely —
  * which `create`
  * still reported as SUCCESS, silently downgrading a labelled-unverified
@@ -51,27 +51,32 @@ import {
 
 /**
  * The default external roots a project may cite from, used when the project's
- * own policy supplies no `citationAllowedExternalRoots`. The runtime's own
- * BACKLOG data home, `~/.adhd/backlog` (the production store + logs tree) —
- * the one location this toolchain owns outside any single project tree, and
- * where a citation to production logs/artifacts is genuinely useful.
+ * own policy supplies no `citationAllowedExternalRoots`. This is the EMPTY
+ * array: the runtime grants NO machine-global default root.
  *
- * Deliberately NARROWER than `~/.adhd` (BUG 62059b57): the data home's parent
- * also holds the machine-global `~/.adhd/.env` secrets file and every OTHER
- * project's database, so defaulting to the whole tree would expose all of that
- * to the citation sha read/hash surface for EVERY project with no opt-in. A
- * project that genuinely needs an out-of-default root adds it explicitly via
- * `citationAllowedExternalRoots`.
+ * Why: the runtime's own data home, `~/.adhd/backlog`, is the STORE's home,
+ * not an evidence tree. It holds only the machine-global backlog database
+ * (`production/data/backlog-v2.db`) and its snapshots (`production/backup-*`,
+ * top-level `backup-*`/`backups/`), plus the `test/` store. Granting it as a
+ * default root let a citation's `sha` read/hash surface resolve straight INTO
+ * the shared backlog graph — the very graph the citation containment exists to
+ * keep out of citation reads. The earlier narrowing from `~/.adhd` down to
+ * `~/.adhd/backlog` (BUG 62059b57) stopped one directory too high (BUG
+ * 62059b57 follow-up).
+ *
+ * This does NOT gut the carve-out MECHANISM: a project that genuinely needs a
+ * specific external root (a machine tool, a globally-installed package's
+ * `dist/**`) names it explicitly in `project_policy.citationAllowedExternalRoots`,
+ * and that typed, per-project allowlist is unchanged. Only the unearned
+ * machine-global default is gone.
  *
  * Deliberately a FUNCTION, called LAZILY by {@link resolveProjectPolicy} on
- * every policy resolve, never a module-level constant: `homedir()` must be
- * read at CALL time. A module-load-time constant would freeze whatever
- * `$HOME` happened to be when this module was first imported, so a
- * per-invocation sandbox (or a test that redirects `$HOME`) would silently
- * get the wrong root.
+ * every policy resolve, never a module-level constant: the call surface stays
+ * stable if a legitimate machine-global root is ever re-introduced, and every
+ * caller keeps the lazy, per-resolve contract.
  */
 export function defaultCitationAllowedExternalRoots(): string[] {
-  return [join(homedir(), '.adhd', 'backlog')];
+  return [];
 }
 
 /**

@@ -392,41 +392,41 @@ describe('createIssue — citation sha gate applies only where verification is p
 
   // -------------------------------------------------------------------------
   // The citation-path CARVE-OUT (BUG c6d35272). A path-PRESENT project may
-  // cite a target that resolves OUTSIDE its own root when that target lies
-  // under the project's typed `citationAllowedExternalRoots` allowlist
-  // (default `~/.adhd/backlog`). Everything else — a `..` traversal, a symlink that
-  // escapes, an arbitrary absolute path — stays rejected, and the rejection
-  // NAMES the allowed roots. Every assertion drives the REAL verbs and reads
-  // the persisted `sha` back through direct SQL.
+  // cite a target that resolves OUTSIDE its own root ONLY when that target
+  // lies under the project's typed `citationAllowedExternalRoots` allowlist.
+  // The runtime default is EMPTY — there is NO machine-global root, so the
+  // store's `~/.adhd/backlog` data home is not citable by default (BUG 62059b57
+  // follow-up). Everything else — a `..` traversal, a symlink that escapes, an
+  // arbitrary absolute path — stays rejected, and the rejection NAMES the
+  // allowed roots. Every assertion drives the REAL verbs and reads the
+  // persisted `sha` back through direct SQL.
   // -------------------------------------------------------------------------
 
-  it('path-PRESENT project cites a file under the DEFAULT external root (~/.adhd/backlog) — accepted and genuinely hashed', async () => {
+  it('the DEFAULT external roots are EMPTY: a file under the store home ~/.adhd/backlog is rejected (BUG 62059b57 follow-up)', async () => {
     const fakeHome = freshTmpDir('citation-carveout-home');
-    const backlogDir = join(fakeHome, '.adhd', 'backlog');
-    mkdirSync(backlogDir, { recursive: true });
-    const evidence = join(backlogDir, 'evidence.ts');
-    writeFileSync(evidence, 'export const evidence = 1;\n');
+    const storeDir = join(fakeHome, '.adhd', 'backlog', 'production', 'data');
+    mkdirSync(storeDir, { recursive: true });
+    // The shared machine-global store itself — the exact residual a
+    // `[~/.adhd/backlog]` default left readable/citable.
+    const evidence = join(storeDir, 'backlog-v2.db');
+    writeFileSync(evidence, 'store-file-placeholder-bytes\n');
     const originalHome = process.env.HOME;
     process.env.HOME = fakeHome;
     try {
       const project = await upsertProject(store, {
-        name: 'citation-carveout-default-project',
+        name: 'citation-carveout-store-project',
         path: dir,
         by: 'filer',
       });
-      const created = await createIssue(store, {
-        project: project.uid,
-        title: 'default external-root citation',
-        body: 'evidence lives under ~/.adhd/backlog, outside the project root',
-        by: 'filer',
-        citations: [{ file: evidence }],
-      });
-      expect(created.created).toBe(true);
-      const issueRow = await readNode(store, created.uid);
-      if (!issueRow) throw new Error('setup: issue not found after createIssue');
-      const sha = await persistedCitationSha(issueRow.rowid);
-      expect(sha).not.toBe('unverified');
-      expect(sha).toMatch(/^[0-9a-f]{64}$/);
+      await expect(
+        createIssue(store, {
+          project: project.uid,
+          title: 'store-home citation',
+          body: 'the runtime grants no machine-global external root, so the store is not citable',
+          by: 'filer',
+          citations: [{ file: evidence }],
+        })
+      ).rejects.toThrow(CitationUnverifiableError);
     } finally {
       if (originalHome === undefined) delete process.env.HOME;
       else process.env.HOME = originalHome;
@@ -434,13 +434,13 @@ describe('createIssue — citation sha gate applies only where verification is p
     }
   });
 
-  it('BUG 62059b57: a file in the PARENT of the default root (~/.adhd, NOT ~/.adhd/backlog) is rejected — the machine secrets file is not citable', async () => {
+  it('BUG 62059b57: a file under the parent ~/.adhd (the machine secrets home) is rejected — not citable by any project', async () => {
     const fakeHome = freshTmpDir('citation-carveout-narrow-home');
     const adhdDir = join(fakeHome, '.adhd');
     mkdirSync(adhdDir, { recursive: true });
     // A stand-in for the machine-global `~/.adhd/.env` and every other
-    // project's DB: outside the narrowed default root, so it must NOT become a
-    // readable/citable oracle.
+    // project's DB: neither `~/.adhd` nor its `backlog` child is a default
+    // root, so this must NOT become a readable/citable oracle.
     const secret = join(adhdDir, 'env-like-evidence.ts');
     writeFileSync(secret, 'SECRET=1\n');
     const originalHome = process.env.HOME;
@@ -455,7 +455,7 @@ describe('createIssue — citation sha gate applies only where verification is p
         createIssue(store, {
           project: project.uid,
           title: 'parent-of-default-root citation',
-          body: '~/.adhd is no longer a default external root',
+          body: '~/.adhd is not a default external root',
           by: 'filer',
           citations: [{ file: secret }],
         })
@@ -478,8 +478,8 @@ describe('createIssue — citation sha gate applies only where verification is p
         by: 'filer',
       });
       // Overwrite the project's meta with an EXPLICIT policy root — proving
-      // the default `~/.adhd/backlog` is not special-cased: ANY policy-configured
-      // root is accepted.
+      // the (now empty) default is not special-cased: ANY policy-configured
+      // root is accepted, and the carve-out MECHANISM is untouched.
       await store.adapter.executeRun('UPDATE node SET meta = ? WHERE uid = ?', [
         JSON.stringify({
           path: dir,
@@ -569,7 +569,10 @@ describe('createIssue — citation sha gate applies only where verification is p
 
   it('the rejection NAMES the allowed external roots and the policy field (the error is actionable)', async () => {
     const fakeHome = freshTmpDir('citation-carveout-msg-home');
-    mkdirSync(join(fakeHome, '.adhd'), { recursive: true });
+    // A named, `~`-anchored root gives the message something concrete to name;
+    // the empty DEFAULT names the project root instead (see the next test).
+    const externalRoot = join(fakeHome, 'external-evidence');
+    mkdirSync(externalRoot, { recursive: true });
     const originalHome = process.env.HOME;
     process.env.HOME = fakeHome;
     try {
@@ -578,6 +581,13 @@ describe('createIssue — citation sha gate applies only where verification is p
         path: dir,
         by: 'filer',
       });
+      await store.adapter.executeRun('UPDATE node SET meta = ? WHERE uid = ?', [
+        JSON.stringify({
+          path: dir,
+          policy: { citationAllowedExternalRoots: [externalRoot] },
+        }),
+        project.uid,
+      ]);
       let caught: unknown;
       try {
         await createIssue(store, {
@@ -598,7 +608,7 @@ describe('createIssue — citation sha gate applies only where verification is p
       }
       const message = caught.message;
       expect(message).toContain('accepted only under:');
-      expect(message).toContain('~/.adhd/backlog');
+      expect(message).toContain('~/external-evidence');
       expect(message).toContain('project_policy.citationAllowedExternalRoots');
     } finally {
       if (originalHome === undefined) delete process.env.HOME;
@@ -607,7 +617,7 @@ describe('createIssue — citation sha gate applies only where verification is p
     }
   });
 
-  it('with an EXPLICIT empty allowlist, the rejection names the project root and says the policy array is empty — no dangling double space', async () => {
+  it('with an empty allowlist (explicit [], the same as the default), the rejection names the project root and says the policy array is empty — no dangling double space', async () => {
     const project = await upsertProject(store, {
       name: 'citation-carveout-empty-roots-project',
       path: dir,

@@ -531,11 +531,13 @@ export interface IProjectPolicy {
    * rejected, and an arbitrary absolute path outside every root is never
    * readable. Only the resulting `sha` is persisted — never file content.
    *
-   * This layer defaults to the EMPTY array; {@link resolveProjectPolicy}
-   * injects the lazy runtime default (`defaultCitationAllowedExternalRoots()`
-   * → `[~/.adhd/backlog]`) on every resolve. Set an EXPLICIT `[]` in a
-   * project's `policy` to disable the external carve-out entirely. This is
-   * TYPED, per-project config — deliberately never an environment toggle.
+   * This layer defaults to the EMPTY array, and {@link resolveProjectPolicy}'s
+   * injected runtime default (`defaultCitationAllowedExternalRoots()`) is ALSO
+   * empty — there is NO machine-global default root (BUG 62059b57 follow-up:
+   * the store's `~/.adhd/backlog` data home is not citable). A project opts
+   * into the external carve-out by naming roots here; an empty array (the
+   * default, or an explicit `[]`) leaves it disabled. This is TYPED,
+   * per-project config — deliberately never an environment toggle.
    */
   readonly citationAllowedExternalRoots: readonly string[];
   readonly defaultStatus?: string;
@@ -567,11 +569,11 @@ const DEFAULT_PROJECT_POLICY: IProjectPolicy = Object.freeze({
   transitionRequiresNote: true,
   citationRequired: false,
   citationRequiresSha: true,
-  // Frozen empty PLACEHOLDER, not the real default: the `~/.adhd/backlog` root
-  // must be read lazily (from `homedir()` at call time), so
-  // `resolveProjectPolicy` injects it on every resolve rather than baking it
-  // into this module-load constant. An explicitly-empty policy array still
-  // means "no external roots".
+  // Frozen empty PLACEHOLDER, not the real default: `resolveProjectPolicy`
+  // injects `defaultCitationAllowedExternalRoots()` on every resolve rather
+  // than baking it into this module-load constant. The runtime default is also
+  // empty (no machine-global root), so an explicitly-empty policy array and the
+  // default coincide — both mean "no external roots".
   citationAllowedExternalRoots: Object.freeze([]),
   dedupeScanEnabled: true,
   dedupeThreshold: 0.8,
@@ -608,12 +610,10 @@ export function resolveProjectPolicy(
       policy.citationRequired ?? DEFAULT_PROJECT_POLICY.citationRequired,
     citationRequiresSha:
       policy.citationRequiresSha ?? DEFAULT_PROJECT_POLICY.citationRequiresSha,
-    // Validated then injected LAZILY on both branches (this one and the
-    // no-`policy` object branch above): a malformed value falls back to the
-    // runtime default rather than being spread, and
-    // `defaultCitationAllowedExternalRoots()` reads `homedir()` at CALL time,
-    // so a per-invocation `$HOME` is honoured and the default is never frozen
-    // at module load.
+    // Validated then injected on both branches (this one and the no-`policy`
+    // object branch above): a malformed value falls back to the runtime default
+    // rather than being spread, and `defaultCitationAllowedExternalRoots()` is
+    // read at CALL time, never frozen at module load.
     citationAllowedExternalRoots: resolveCitationAllowedExternalRoots(policy),
     defaultStatus: policy.defaultStatus,
     defaultKind: policy.defaultKind,
@@ -637,11 +637,11 @@ export function resolveProjectPolicy(
  * this field can arrive as ANY type. It must be a `string[]`: spreading a bare
  * string would yield its characters (`'abc'` → `['a','b','c']`) and spreading a
  * non-array object would yield nothing, either silently corrupting the
- * carve-out. A malformed value falls back to the lazy runtime default (the
- * NARROW `~/.adhd/backlog` root and nothing wider) — one bad policy field must
- * not brick every operation on an otherwise-valid project, which throwing here
- * would do, and the fallback can never WIDEN the read surface. An explicitly
- * valid `[]` is preserved (it disables the carve-out).
+ * carve-out. A malformed value falls back to the runtime default (the EMPTY
+ * array — no external roots, the narrowest possible surface) — one bad policy
+ * field must not brick every operation on an otherwise-valid project, which
+ * throwing here would do, and the fallback can never WIDEN the read surface. An
+ * explicitly valid `[]` is preserved (it disables the carve-out).
  */
 function resolveCitationAllowedExternalRoots(
   policy: Partial<IProjectPolicy>

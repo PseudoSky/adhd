@@ -117,7 +117,8 @@ project_policy (project → policy): transition_requires_note (default true),
   citation_required (false), citation_requires_sha (default true — gates
   acceptance of an unverified citation, but only where verification is
   possible; see below), citation_allowed_external_roots (default
-  [`~/.adhd/backlog`] — typed, project-scoped external read roots; see below),
+  `[]` — no machine-global root; typed, project-scoped external read roots; see
+  below),
   default_status (catalog
   ref; falls back to a global OPEN-equivalent catalog row when unset),
   default_kind (catalog ref; falls back to the global "issue" catalog row
@@ -150,18 +151,22 @@ A path-PRESENT project resolves a citation target by CANONICAL
 (symlink-resolved) containment against its own `metadata.path` root PLUS every
 root in `citation_allowed_external_roots` (BUG c6d35272). In-project
 resolution stays the DEFAULT; the array names EXTERNAL absolute roots whose
-evidence may also be cited — the runtime default is `[~/.adhd/backlog]` (the
-production store/logs home, deliberately NARROWER than `~/.adhd` so the
-machine-global secrets file and sibling projects stay out), read lazily
-from `$HOME` on each policy resolve, and an EXPLICIT `[]` disables the
-carve-out. This is deliberately typed, per-project config — never an
-environment toggle, and never a blanket "any absolute path". A `..`
-traversal, a symlink inside the root that points outside it (the sibling
+evidence may also be cited. The runtime default is the EMPTY array — there is
+NO machine-global default root — because the runtime's own data home
+`~/.adhd/backlog` contains only the machine-global backlog store
+(`production/data/backlog-v2.db`) and its `backup-*`/`backups/` snapshots
+(plus a `test/` store): granting it would let a citation resolve INTO the
+shared backlog graph (BUG 62059b57 follow-up). A project opts into specific
+external roots by naming them here; an empty array (the default, or an explicit
+`[]`) leaves the carve-out disabled. This is deliberately typed, per-project
+config — never an environment toggle, and never a blanket "any absolute path".
+A `..` traversal, a symlink inside the root that points outside it (the sibling
 defect c6d90ddf), and an arbitrary absolute path outside every root all
 resolve to `"unverified"` and are rejected by the default
 `citation_requires_sha: true`; `CitationUnverifiableError` names the allowed
-roots and the `project_policy.citationAllowedExternalRoots` field that
-controls them. Only the resulting `sha` is persisted — never file content.
+roots (or the project root when the allowlist is empty) and the
+`project_policy.citationAllowedExternalRoots` field that controls them. Only the
+resulting `sha` is persisted — never file content.
 
 `project_status`/`project_kind` are enforced by the SAME write-layer step
 that resolves the `status`/`kind` catalog row (§4c's hand-composed
@@ -2164,8 +2169,8 @@ nothing was written, re-`get` and retry),
 possible — a project with a known `path`; a given citation's `file` did not
 resolve to a real, hashable file INSIDE the project root or any
 `citation_allowed_external_roots` entry, and the project requires one. The
-message names those roots. A path-less project records `sha:"unverified"`
-verbatim instead),
+message names those roots (or the project root when the allowlist is empty). A
+path-less project records `sha:"unverified"` verbatim instead),
 `WriteContentionError`/`WriteIOError`
 (§4c — an exhausted driver-level retry on the underlying `immediate`
 transaction). `DuplicateSuppressedError` is NOT thrown — a suppressed create is a
@@ -2296,8 +2301,9 @@ terminal-done-vs-terminal-dismissed distinction to error on.
 possible — a project with a known `path`; a given citation's `sha` resolved
 to the `"unverified"` sentinel because its canonical path lay outside the
 project root AND every `citation_allowed_external_roots` entry, and the
-project requires a real hash. The message names those roots. A path-less
-project records `sha:"unverified"` verbatim instead).
+project requires a real hash. The message names those roots (or the project root
+when the allowlist is empty). A path-less project records `sha:"unverified"`
+verbatim instead).
 `ClaimHeldError(heldBy, heldSince)`: a live claim (§6.3.5) is a real
 concurrency guard, not advisory metadata — a `transition` targeting an issue
 whose `claimedBy` is set to someone OTHER than `input.by` **throws** unless
