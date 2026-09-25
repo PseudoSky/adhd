@@ -144,6 +144,12 @@ export class BindingStore {
    * `BINDING_ALREADY_EXISTS` so a racing second writer can never surface the
    * driver's raw `SqliteError` to the caller.
    *
+   * NOTE: `ON CONFLICT DO NOTHING` suppresses only uniqueness conflicts. The
+   * real `.references()` FKs on tool_name → tools.name and platform_id →
+   * platforms.id still surface a raw SqliteError (FOREIGN KEY constraint
+   * failed) for an unknown value — callers must validate tool names and
+   * platform ids before binding.
+   *
    * @throws {BindingStoreError} BINDING_ALREADY_EXISTS if the
    *   (toolName, platformId) PK is taken.
    */
