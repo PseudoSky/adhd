@@ -77,15 +77,25 @@ export function escapeStringLiteral(value: string): string {
  * literal is always a bare number.
  *
  * `undefined`/`null` fall back to `fallback` (3000, matching the generators'
- * historical default); a blank string, a non-numeric value, a non-integer, or
- * an out-of-range value throws rather than silently emitting something wrong.
+ * historical default). Only a string or a number is ever coerced — a blank
+ * string, a non-numeric string, a non-string/non-number (`true`, `[]`, an
+ * object), a non-integer, or an out-of-range value throws rather than silently
+ * emitting something wrong. The type gate matters: `Number(true)` is `1` and
+ * `Number([])` is `0`, so without it those values would sneak through as if
+ * they were ports.
  *
  * @example coercePort('8080')  // → 8080
  * @example coercePort(undefined) // → 3000
- * @throws {TypeError} on a blank/non-numeric/non-integer/out-of-range value.
+ * @throws {TypeError} on a blank/non-numeric string, a non-string/non-number,
+ *   a non-integer, or an out-of-range value.
  */
 export function coercePort(value: unknown, fallback = 3000): number {
   if (value === undefined || value === null) return fallback;
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    throw new TypeError(
+      `apigen: invalid port option ${JSON.stringify(value)} — expected an integer in [0, 65535]`
+    );
+  }
   if (typeof value === 'string' && value.trim() === '') {
     throw new TypeError(
       `apigen: invalid port option ${JSON.stringify(value)} — expected an integer in [0, 65535]`
