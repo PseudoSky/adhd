@@ -139,7 +139,14 @@ export async function walkType(
     return { type: 'number' };
   }
   if (type.isBoolean()) return { type: 'boolean' };
-  if (type.isBooleanLiteral()) return { type: 'boolean' };
+  // A LONE boolean literal keeps its value as `const`, mirroring the
+  // single-value `enum` emitted for string/number literals just above; a bare
+  // `{type:'boolean'}` would silently accept the OPPOSITE boolean (e.g. the
+  // `true` arm of `true | 'x'` accepting `false`). `getLiteralValue()` returns
+  // undefined for boolean literals (ts-morph only stamps `.value` on
+  // string/number literals), so read the literal from the type text.
+  if (type.isBooleanLiteral())
+    return { type: 'boolean', const: type.getText() === 'true' };
   if (type.isNull() || type.isUndefined() || type.isVoid())
     return { type: 'null' };
 
@@ -149,13 +156,22 @@ export async function walkType(
     // boolean is internally `true | false`; ts-morph expands a `boolean` union
     // member into BOTH literals (e.g. `boolean | undefined` → [undefined,
     // false, true] under strictNullChecks, and `string | boolean` → [string,
-    // false, true] regardless of strictNullChecks). Both literals map to
-    // `{type:'boolean'}` above, so emitting one variant per member duplicates
-    // that branch — and a `oneOf` with two identical branches is unsatisfiable
-    // (AJV: "must match exactly one schema in oneOf"; surfaced to MCP callers
-    // as -32602). Keep only the FIRST boolean-literal member: the true|false
-    // split is a type-checker artifact, not a real union distinction.
-    // (backlog 3a3e5884)
+    // false, true] regardless of strictNullChecks). A real `boolean` member is
+    // therefore exactly "both literals present" and collapses to ONE bare
+    // `{type:'boolean'}`; a LONE literal (`true | 'x'`) instead carries `const`
+    // so its arm does not also accept the opposite boolean. Emitting one
+    // variant per literal would duplicate the branch, and a `oneOf` with two
+    // identical branches is unsatisfiable (AJV: "must match exactly one schema
+    // in oneOf"; surfaced to MCP callers as -32602). Keep only the FIRST
+    // boolean-literal member: the true|false split is a type-checker artifact,
+    // not a real union distinction. (backlog 3a3e5884)
+    const booleanLiteralMembers = members.filter((m) => m.isBooleanLiteral());
+    const hasTrue = booleanLiteralMembers.some((m) => m.getText() === 'true');
+    const hasFalse = booleanLiteralMembers.some((m) => m.getText() === 'false');
+    // Belt-and-suspenders with `dedupeVariants` below, NOT interchangeable:
+    // this collapse is what yields the single bare boolean branch (removing it
+    // would leave two distinct `const` branches), while `dedupeVariants` is the
+    // general guard for any OTHER duplicate-emitting union member. Keep both.
     let sawBooleanLiteral = false;
     const plannedMembers = members.filter((m) => {
       if (!m.isBooleanLiteral()) return true;
@@ -177,8 +193,15 @@ export async function walkType(
         enum: members.map((m) => m.getLiteralValue() as number),
       };
     }
-    const rawVariants = await Promise.all(
-      plannedMembers.map((m) => walkType(m, recurse, depth + 1))
+    const rawVariants: Record<string, unknown>[] = await Promise.all(
+      plannedMembers.map(async (m) => {
+        if (!m.isBooleanLiteral()) return walkType(m, recurse, depth + 1);
+        // Both literals ⇒ a real `boolean` member ⇒ bare; a lone literal ⇒
+        // `const` (hasTrue flips to `const:false` for the lone-`false` case).
+        return hasTrue && hasFalse
+          ? { type: 'boolean' }
+          : { type: 'boolean', const: hasTrue };
+      })
     );
     // BUG-APIGEN-019: a TS union means the runtime value is EXACTLY ONE of
     // these shapes — `oneOf` (mutually exclusive) is the semantically correct
@@ -406,15 +429,32 @@ function sanitizeCatchAllVariants(
   variants: ReadonlyArray<Record<string, unknown>>
 ): Record<string, unknown>[] {
   if (variants.length < 2) return variants.slice();
+  const isCatchAll = variants.map(isVacuousCatchAll);
   const catchAllIdx = variants
-    .map((v, i) => (isVacuousCatchAll(v) ? i : -1))
+    .map((_, i) => (isCatchAll[i] ? i : -1))
     .filter((i) => i >= 0);
   if (catchAllIdx.length === 0 || catchAllIdx.length === variants.length) {
     return variants.slice();
   }
+  // The more-specific, non-catch-all siblings every catch-all must exclude.
+  const specificIdx = variants
+    .map((_, i) => (isCatchAll[i] ? -1 : i))
+    .filter((i) => i >= 0);
   return variants.map((v, i) => {
-    if (!catchAllIdx.includes(i)) return v;
-    const others = variants.filter((_, j) => j !== i);
+    if (!isCatchAll[i]) return v;
+    // Narrow catch-all i against every MORE SPECIFIC branch: the specific
+    // siblings AND the catch-alls that PRECEDE it. Excluding only the specific
+    // siblings is insufficient — two co-resident catch-alls (e.g. the `{}`
+    // that b6a04e7f emits for an imported optional object property, alongside a
+    // `Record<string,unknown>`) would then BOTH match an ordinary object and
+    // `oneOf` rejects it for matching TWICE — the same consumer-visible failure
+    // as the original zero-match shape, merely inverted. Chaining the
+    // catch-alls in declaration order partitions the catch-all space: each
+    // value is claimed by exactly the FIRST catch-all that accepts it.
+    const others = variants.filter(
+      (_, j) =>
+        j !== i && (specificIdx.includes(j) || (isCatchAll[j] && j < i))
+    );
     return { allOf: [v, { not: { anyOf: others } }] };
   });
 }
