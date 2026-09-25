@@ -120,6 +120,11 @@ export class AgentToolStore {
    * so a racing second writer can never surface the driver's raw `SqliteError`
    * to the caller.
    *
+   * NOTE: `ON CONFLICT DO NOTHING` suppresses only uniqueness conflicts. The
+   * real `.references()` FK on tool_name → tools.name still surfaces a raw
+   * SqliteError (FOREIGN KEY constraint failed) for an unknown tool name —
+   * callers must validate tool names before granting.
+   *
    * @throws {AgentToolStoreError} GRANT_ALREADY_EXISTS if the
    *   (agent_slug, tool_name) pair exists.
    */
