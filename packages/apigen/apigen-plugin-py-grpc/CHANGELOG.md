@@ -1,3 +1,7 @@
+## 0.2.5 (2026-09-24)
+
+This was a version bump only for apigen-plugin-py-grpc to align it with other projects, there were no code changes.
+
 ## 0.2.4 (2026-08-08)
 
 This was a version bump only for apigen-plugin-py-grpc to align it with other projects, there were no code changes.

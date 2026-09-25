@@ -2,14 +2,20 @@
 
 ## End-to-end testing strategy: blind multi-agent real-world tests
 
+> **Status (2026-09-24): the `backlog-e2e-*` scripts are not in the repository.**
+> No `backlog-e2e-*` file exists in the working tree, and none has ever been
+> committed (`git log --all` has no history for those paths). The strategy below
+> is retained as the design for that harness — treat it as intent, not a
+> runnable procedure, until the scripts are re-added.
+
 Unit tests (`src/**/*.spec.ts`) prove the write/query primitives are correct
 in isolation against a real (non-mocked) store. They do not prove the CLI,
 the skill doc, and the tool's discoverability actually work for an agent who
 has never seen this codebase. That gap is what the workflows in
-`.claude/workflows/backlog-e2e-*.js` close, and it has already found real
-defects unit tests could not: a `batch action` primitive nobody discovered, a
-`claim`/`transition` ownership gap, an unbounded terminal-status claim, and
-half a dozen discoverability defects in the live `--help` schema.
+`.claude/workflows/backlog-e2e-*.js` were built to close, and it has already
+found real defects unit tests could not: a `batch action` primitive nobody
+discovered, a `claim`/`transition` ownership gap, an unbounded terminal-status
+claim, and half a dozen discoverability defects in the live `--help` schema.
 
 ### The core principle: agents must be BLIND
 

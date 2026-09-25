@@ -3,7 +3,7 @@
  * the CLI-output LIVE dispatch path (`@adhd/apigen-plugin-cli-output`'s
  * exported `run()`, `packages/apigen/apigen-plugin-cli-output/src/lib/run.ts`).
  *
- * Mirrors `batch-plugin-e2e.spec.ts` (the fastify proof) byte-for-byte on the
+ * Mirrors `batch-plugin-e2e.e2e.ts` (the fastify proof) byte-for-byte on the
  * fixture side — same `catalog.getItem` domain package/Operation/schemas, the
  * same REAL `loadUsePlugins(['batch'])` resolution path — but drives the
  * batch mount through `run()`'s REAL CLI argv → `matchCommand` →
@@ -52,7 +52,7 @@ import { loadUsePlugins } from '../../lib/commands/run';
 
 // ---------------------------------------------------------------------------
 // Real domain package: catalog.getItem(id) — same fixture as the fastify e2e
-// proof (batch-plugin-e2e.spec.ts), copied verbatim so both specs prove the
+// proof (batch-plugin-e2e.e2e.ts), copied verbatim so both specs prove the
 // SAME domain shape over different transports.
 // ---------------------------------------------------------------------------
 
@@ -179,7 +179,7 @@ describe('[BATCH_0.0.1.md §2/§F1] apigen-plugin-batch — real CLI live-dispat
     // (2) rejected — the REAL thrown error surfaced as a per-item rejection,
     // WITHOUT aborting the batch (`--on-item-error continue`), with a real
     // `ApiError` reason shape surviving the round trip (BUG-APIGEN-047
-    // parity — see `batch-plugin-e2e.spec.ts`'s identical assertion).
+    // parity — see `batch-plugin-e2e.e2e.ts`'s identical assertion).
     expect(results[1]).toMatchObject({ index: 1, status: 'rejected' });
     const reason = (results[1] as { reason?: { message?: string; code?: string } })
       .reason;

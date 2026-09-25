@@ -222,3 +222,109 @@ test('RELEASE_FORCE_FULL_PUBLISH set WITHOUT RELEASE_FORCE_REASON is REFUSED, ev
     rmSync(rootDir, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// RUN-SCOPED FRESHNESS through the REAL executor (F1 root fix). Drives the
+// actual `impl.js` with only `spawnSync` mocked (same boundary as every test
+// above), so the real manifest file I/O and the real `checkPublishAllowed`
+// decision are exercised — proving the token path holds end to end, not just
+// in the standalone unit function.
+//
+// The manifest is deliberately 2 HOURS old (far past MANIFEST_MAX_AGE_MS) in
+// every case below: without the fix, all three would refuse as stale, so the
+// positive case has teeth.
+// ---------------------------------------------------------------------------
+
+const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+
+test('(run-scoped) same RELEASE_RUN_TOKEN + a 2-HOUR-OLD manifest -> real npm publish IS attempted (age gate skipped for this run)', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'manifest-backstop-'));
+  const savedToken = process.env.RELEASE_RUN_TOKEN;
+  try {
+    const distPkg = { name: '@adhd/pkg-b', version: '1.0.0' };
+    const { context, distDir } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', distPkg });
+    const RUN_TOKEN = 'run-11111111-2222-3333-4444-555555555555';
+    writeReleaseManifest(rootDir, ['pkg-b', 'some-other-project'], {
+      baseRef: 'HEAD~1',
+      now: Date.now() - TWO_HOURS_MS, // 2h old — stale under the age gate alone
+      runToken: RUN_TOKEN,
+    });
+    process.env.RELEASE_RUN_TOKEN = RUN_TOKEN;
+
+    const state = { calls: [] };
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const publishImpl = loadFreshImpl();
+
+    const result = await publishImpl({}, context);
+    assert.equal(
+      result.success,
+      true,
+      'a same-run token must let a project in scope publish even though the manifest is 2 hours old'
+    );
+    const publishCalls = state.calls.filter((c) => c.cmd === 'npm' && c.args[0] === 'publish');
+    assert.equal(publishCalls.length, 1, 'the same-run path must actually reach the real npm publish attempt');
+    assert.ok(publishCalls[0].args.includes(distDir));
+  } finally {
+    if (savedToken === undefined) delete process.env.RELEASE_RUN_TOKEN;
+    else process.env.RELEASE_RUN_TOKEN = savedToken;
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('(run-scoped) DIFFERENT RELEASE_RUN_TOKEN + a 2-hour-old manifest -> REFUSED, zero npm publish', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'manifest-backstop-'));
+  const savedToken = process.env.RELEASE_RUN_TOKEN;
+  try {
+    const distPkg = { name: '@adhd/pkg-b', version: '1.0.0' };
+    const { context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', distPkg });
+    writeReleaseManifest(rootDir, ['pkg-b'], {
+      now: Date.now() - TWO_HOURS_MS,
+      runToken: 'run-manifest-token',
+    });
+    process.env.RELEASE_RUN_TOKEN = 'run-a-different-token';
+
+    const state = { calls: [] };
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const publishImpl = loadFreshImpl();
+
+    const result = await publishImpl({}, context);
+    assert.equal(result.success, false, 'a non-matching token must fall through to the stale refusal');
+    const publishCalls = state.calls.filter((c) => c.cmd === 'npm' && c.args[0] === 'publish');
+    assert.equal(publishCalls.length, 0, 'must NEVER invoke npm publish on a token mismatch');
+  } finally {
+    if (savedToken === undefined) delete process.env.RELEASE_RUN_TOKEN;
+    else process.env.RELEASE_RUN_TOKEN = savedToken;
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('(run-scoped) NEGATIVE CONTROL: a 2-hour-old TOKENED manifest with NO token in env still FAILS (the age gate was not simply deleted)', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'manifest-backstop-'));
+  const savedToken = process.env.RELEASE_RUN_TOKEN;
+  try {
+    const distPkg = { name: '@adhd/pkg-b', version: '1.0.0' };
+    const { context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', distPkg });
+    writeReleaseManifest(rootDir, ['pkg-b'], {
+      now: Date.now() - TWO_HOURS_MS,
+      runToken: 'run-manifest-token',
+    });
+    delete process.env.RELEASE_RUN_TOKEN; // no inherited token -> cannot prove same-run
+
+    const state = { calls: [] };
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const publishImpl = loadFreshImpl();
+
+    const result = await publishImpl({}, context);
+    assert.equal(
+      result.success,
+      false,
+      'without a matching env token the manifest must still be measured against the age gate and refused when stale'
+    );
+    const publishCalls = state.calls.filter((c) => c.cmd === 'npm' && c.args[0] === 'publish');
+    assert.equal(publishCalls.length, 0, 'the negative control must never reach npm publish');
+  } finally {
+    if (savedToken === undefined) delete process.env.RELEASE_RUN_TOKEN;
+    else process.env.RELEASE_RUN_TOKEN = savedToken;
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});

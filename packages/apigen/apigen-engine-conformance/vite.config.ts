@@ -60,7 +60,14 @@ export default defineConfig({
       dir: '../../../node_modules/.vitest',
     },
     environment: 'node',
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    // `*.spec.ts` ONLY — never `*.e2e.ts`. The resource-consuming live matrix
+    // (real Python subprocess + real JVM) was extracted out of this default
+    // target into the sibling `gate.e2e.ts` (see the `gate.spec.ts` header and
+    // the resource-lane `vitest.e2e.config.ts`, the only place that includes
+    // `.e2e.ts`). It must never run under `nx affected -t test` or the
+    // pre-commit / pre-push hooks; the live matrix runs out-of-band via the
+    // `conformance` target, and the `e2e` target asserts on its report.
+    include: ['src/**/*.spec.ts'],
 
     reporters: ['default'],
     coverage: {

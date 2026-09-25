@@ -1,3 +1,22 @@
+## 2.3.1 (2026-09-24)
+
+
+### 🩹 Fixes
+
+- **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
+
+
+### 🔥 Performance
+
+- **test:** bound vitest thread pools to curb CPU oversubscription (DEBT-TEST-CPU-OVERSUBSCRIBED-001)
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+- Sky
+
 ## 2.2.5 (2026-07-24)
 
 This was a version bump only for data-core-structures to align it with other projects, there were no code changes.
