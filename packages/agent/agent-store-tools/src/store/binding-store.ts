@@ -136,27 +136,18 @@ export class BindingStore {
 
   /**
    * Insert a tool-platform binding.
-   * Throws BINDING_ALREADY_EXISTS if the (toolName, platformId) PK is taken.
+   *
+   * Uniqueness is enforced by the composite `(toolName, platformId)` primary
+   * key, not a `SELECT` pre-check: `onConflictDoNothing()` lets SQLite
+   * arbitrate a concurrent duplicate, and a zero-row-changed result means the
+   * pair was already bound — translated into the documented
+   * `BINDING_ALREADY_EXISTS` so a racing second writer can never surface the
+   * driver's raw `SqliteError` to the caller.
+   *
+   * @throws {BindingStoreError} BINDING_ALREADY_EXISTS if the
+   *   (toolName, platformId) PK is taken.
    */
   createBinding(input: BindingCreateInput): ToolPlatformBinding {
-    const existing = this.db
-      .select()
-      .from(toolPlatformBindingsTable)
-      .where(
-        and(
-          eq(toolPlatformBindingsTable.toolName, input.toolName),
-          eq(toolPlatformBindingsTable.platformId, input.platformId)
-        )
-      )
-      .get();
-
-    if (existing) {
-      throw new BindingStoreError(
-        'BINDING_ALREADY_EXISTS',
-        `Binding for ('${input.toolName}', '${input.platformId}') already exists`
-      );
-    }
-
     const binding: ToolPlatformBinding = {
       toolName: input.toolName,
       platformId: input.platformId,
@@ -166,7 +157,7 @@ export class BindingStore {
       invocationNote: input.invocationNote ?? null,
     };
 
-    this.db
+    const result = this.db
       .insert(toolPlatformBindingsTable)
       .values({
         toolName: binding.toolName,
@@ -176,7 +167,15 @@ export class BindingStore {
         requiresMcp: binding.requiresMcp,
         invocationNote: binding.invocationNote,
       })
+      .onConflictDoNothing()
       .run();
+
+    if (result.changes === 0) {
+      throw new BindingStoreError(
+        'BINDING_ALREADY_EXISTS',
+        `Binding for ('${input.toolName}', '${input.platformId}') already exists`
+      );
+    }
 
     return binding;
   }

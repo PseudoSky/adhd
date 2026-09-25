@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { runMigrationsOn } from '../db/migrate-runner.js';
 import * as schema from '../db/schema.js';
@@ -627,5 +627,91 @@ describe('BindingStore.resolveCanonical — BUG-REGISTRY-002 reverse lookup', ()
     );
 
     closeDb(sqlite);
+  });
+});
+
+// ──────────────────────────────────────────────
+// BindingStore.createBinding — unique-constraint atomicity (c7bc4c0b)
+//
+// createBinding() must let the composite (tool_name, platform_id) primary key
+// arbitrate uniqueness and translate the zero-row-changed outcome into the
+// documented BINDING_ALREADY_EXISTS, never surface the driver's raw
+// SqliteError. The SELECT pre-check it used to run opened a check-then-INSERT
+// race window identical to ToolStore.create()/ModelStore.createBinding().
+// ──────────────────────────────────────────────
+
+describe('BindingStore.createBinding — unique-constraint atomicity', () => {
+  let tmpDir: string;
+  let dbPath: string;
+  let sqlite: InstanceType<typeof Database>;
+  let db: ReturnType<typeof openDb>['db'];
+  let store: BindingStore;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'agent-binding-atomicity-')
+    );
+    dbPath = path.join(tmpDir, 'registry.db');
+    const opened = openDb(dbPath);
+    sqlite = opened.sqlite;
+    db = opened.db;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    store = new BindingStore(db as any);
+    // FK prerequisites for tool_platform_bindings (both are enforced FKs).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const toolStore = new ToolStore(db as any);
+    toolStore.seedToolType(IO_TYPE);
+    toolStore.create(SHELL_EXEC_TOOL);
+    store.seedPlatform(CLAUDE_CODE_PLATFORM);
+  });
+
+  afterEach(() => {
+    try {
+      closeDb(sqlite);
+    } catch {
+      /* already closed */
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('duplicate createBinding() yields BINDING_ALREADY_EXISTS (a BindingStoreError), never a raw SqliteError', () => {
+    store.createBinding({
+      toolName: 'shell_exec',
+      platformId: 'claude_code',
+      platformToolName: 'Bash',
+      availability: 'available',
+    });
+
+    let caught: unknown;
+    try {
+      store.createBinding({
+        toolName: 'shell_exec',
+        platformId: 'claude_code',
+        platformToolName: 'BashDuplicate',
+        availability: 'available',
+      });
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(BindingStoreError);
+    expect((caught as BindingStoreError).code).toBe('BINDING_ALREADY_EXISTS');
+    expect(caught).not.toBeInstanceOf(Database.SqliteError);
+  });
+
+  it('createBinding() relies on the DB constraint, not a SELECT pre-check (no check-then-INSERT window)', () => {
+    // A SELECT pre-check would show up as an outer `select` call during
+    // createBinding(). Its absence is what closes the race window.
+    const selectSpy = vi.spyOn(db, 'select');
+
+    const binding = store.createBinding({
+      toolName: 'shell_exec',
+      platformId: 'claude_code',
+      platformToolName: 'Bash',
+      availability: 'available',
+    });
+
+    expect(binding.toolName).toBe('shell_exec');
+    expect(selectSpy).not.toHaveBeenCalled();
   });
 });

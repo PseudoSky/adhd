@@ -431,3 +431,124 @@ describe('resolveEffectiveRules [Decision 3 — shallow merge]', () => {
     expect(result).toEqual({ max_rework: 3 });
   });
 });
+
+// ── Category junction unique-constraint atomicity (d307442a) ──────────────────
+//
+// attachToCategory() and addAgentToCategory() must let their composite primary
+// keys — category_policies(category_slug, policy_slug) and
+// agent_categories(agent_slug, category_slug) — arbitrate uniqueness and
+// translate the zero-row-changed outcome into the documented typed codes,
+// never surface the driver's raw SqliteError. The SELECT pre-checks they used
+// to run opened a check-then-INSERT race window.
+
+describe('AgentPolicyStore — category junction unique-constraint atomicity', () => {
+  // ── attachToCategory ────────────────────────────────────────────────────
+
+  it('duplicate attachToCategory() yields CATEGORY_POLICY_ALREADY_ATTACHED, never a raw SqliteError', () => {
+    const dbPath = tmpDbPath();
+    const { sqlite, db } = openDb(dbPath);
+    openHandles.push(sqlite);
+
+    runMigrationsOn(sqlite, db);
+    seedTemplateFixtures(db);
+
+    const store = new AgentPolicyStore(db);
+    const categorySlug = 'quality-atomicity';
+
+    store.attachToCategory({
+      categorySlug,
+      policySlug: MAX_REWORK_TEMPLATE.slug,
+    });
+
+    let caught: unknown;
+    try {
+      store.attachToCategory({
+        categorySlug,
+        policySlug: MAX_REWORK_TEMPLATE.slug,
+      });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(AgentPolicyError);
+    expect((caught as AgentPolicyError).code).toBe(
+      'CATEGORY_POLICY_ALREADY_ATTACHED'
+    );
+    expect(caught).not.toBeInstanceOf(Database.SqliteError);
+
+    fs.unlinkSync(dbPath);
+  });
+
+  it('attachToCategory() relies on the DB constraint, not a SELECT pre-check', () => {
+    const dbPath = tmpDbPath();
+    const { sqlite, db } = openDb(dbPath);
+    openHandles.push(sqlite);
+
+    runMigrationsOn(sqlite, db);
+    seedTemplateFixtures(db);
+
+    const store = new AgentPolicyStore(db);
+    // A SELECT pre-check would show up here; its absence closes the race window.
+    const selectSpy = vi.spyOn(db, 'select');
+
+    const row = store.attachToCategory({
+      categorySlug: 'quality-atomicity',
+      policySlug: MAX_REWORK_TEMPLATE.slug,
+    });
+
+    expect(row.policySlug).toBe(MAX_REWORK_TEMPLATE.slug);
+    expect(selectSpy).not.toHaveBeenCalled();
+
+    fs.unlinkSync(dbPath);
+  });
+
+  // ── addAgentToCategory ──────────────────────────────────────────────────
+
+  it('duplicate addAgentToCategory() yields AGENT_CATEGORY_ALREADY_JOINED, never a raw SqliteError', () => {
+    const dbPath = tmpDbPath();
+    const { sqlite, db } = openDb(dbPath);
+    openHandles.push(sqlite);
+
+    runMigrationsOn(sqlite, db);
+
+    const store = new AgentPolicyStore(db);
+    const membership = { agentSlug: TEST_AGENT_SLUG, categorySlug: 'quality' };
+
+    store.addAgentToCategory(membership);
+
+    let caught: unknown;
+    try {
+      store.addAgentToCategory(membership);
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(AgentPolicyError);
+    expect((caught as AgentPolicyError).code).toBe(
+      'AGENT_CATEGORY_ALREADY_JOINED'
+    );
+    expect(caught).not.toBeInstanceOf(Database.SqliteError);
+
+    fs.unlinkSync(dbPath);
+  });
+
+  it('addAgentToCategory() relies on the DB constraint, not a SELECT pre-check', () => {
+    const dbPath = tmpDbPath();
+    const { sqlite, db } = openDb(dbPath);
+    openHandles.push(sqlite);
+
+    runMigrationsOn(sqlite, db);
+
+    const store = new AgentPolicyStore(db);
+    const selectSpy = vi.spyOn(db, 'select');
+
+    store.addAgentToCategory({
+      agentSlug: TEST_AGENT_SLUG,
+      categorySlug: 'quality',
+    });
+
+    expect(selectSpy).not.toHaveBeenCalled();
+
+    fs.unlinkSync(dbPath);
+  });
+});
