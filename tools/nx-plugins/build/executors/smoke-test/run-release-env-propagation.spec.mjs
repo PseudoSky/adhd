@@ -63,7 +63,14 @@ const workspaceRoot = findWorkspaceRoot(here);
 // Reuse THIS workspace's installed nx so the task-runner under test is the
 // real one, not a mock — only the WORKSPACE it runs against is throwaway.
 const repoNxDir = join(workspaceRoot, 'node_modules', 'nx');
-const repoNxBin = join(repoNxDir, 'bin', 'nx.js');
+// Derive the bin from the installed nx package's own `bin.nx` rather than a
+// hardcoded subpath: Nx 23 moved it from `bin/nx.js` to `dist/bin/nx.js`, so a
+// fixed path silently stops existing and turns this positive control into a
+// false failure (`node_modules/.bin/nx` symlinks the same field).
+const repoNxBin = join(
+  repoNxDir,
+  JSON.parse(readFileSync(join(repoNxDir, 'package.json'), 'utf8')).bin.nx
+);
 
 const PROBE_PROJECT = 'probe';
 const PROBE_TARGET = 'echo-release-run-token';
@@ -79,11 +86,22 @@ function makeProbeWorkspace() {
 
   writeFileSync(
     join(dir, 'nx.json'),
-    JSON.stringify({ $schema: './node_modules/nx/schemas/nx-schema.json', defaultBase: 'main' }, null, 2) + '\n'
+    JSON.stringify(
+      {
+        $schema: './node_modules/nx/schemas/nx-schema.json',
+        defaultBase: 'main',
+      },
+      null,
+      2
+    ) + '\n'
   );
   writeFileSync(
     join(dir, 'package.json'),
-    JSON.stringify({ name: 'run-release-env-prop-probe', private: true, version: '0.0.0' }, null, 2) + '\n'
+    JSON.stringify(
+      { name: 'run-release-env-prop-probe', private: true, version: '0.0.0' },
+      null,
+      2
+    ) + '\n'
   );
 
   // The harmless probe: write the inherited token to a file, nothing else.
@@ -95,7 +113,9 @@ function makeProbeWorkspace() {
     JSON.stringify(
       {
         name: PROBE_PROJECT,
-        targets: { [PROBE_TARGET]: { executor: 'nx:run-commands', options: { command } } },
+        targets: {
+          [PROBE_TARGET]: { executor: 'nx:run-commands', options: { command } },
+        },
       },
       null,
       2
@@ -119,7 +139,11 @@ function makeProbeWorkspace() {
 function spawnLikeRunRelease(cwd, env) {
   const opts = { cwd, encoding: 'utf8', shell: false };
   if (env) opts.env = env;
-  return spawnSync('pnpm', ['nx', 'run-many', '-t', PROBE_TARGET, `--projects=${PROBE_PROJECT}`], opts);
+  return spawnSync(
+    'pnpm',
+    ['nx', 'run-many', '-t', PROBE_TARGET, `--projects=${PROBE_PROJECT}`],
+    opts
+  );
 }
 
 test('F1 propagation: a RELEASE_RUN_TOKEN minted in the parent env reaches a spawned nx task through the real pnpm -> nx -> task boundary', () => {
@@ -135,8 +159,15 @@ test('F1 propagation: a RELEASE_RUN_TOKEN minted in the parent env reaches a spa
     process.env.RELEASE_RUN_TOKEN = token;
 
     const res = spawnLikeRunRelease(dir); // no explicit env -> inherit, exactly like run()
-    assert.equal(res.status, 0, `real pnpm -> nx -> task run must succeed; stderr:\n${res.stderr}`);
-    assert.ok(existsSync(outFile), 'the probe target must have run and written its observation file');
+    assert.equal(
+      res.status,
+      0,
+      `real pnpm -> nx -> task run must succeed; stderr:\n${res.stderr}`
+    );
+    assert.ok(
+      existsSync(outFile),
+      'the probe target must have run and written its observation file'
+    );
     assert.equal(
       readFileSync(outFile, 'utf8'),
       token,
@@ -159,8 +190,15 @@ test('F1 propagation NEGATIVE CONTROL: with the token withheld from the parent e
     delete process.env.RELEASE_RUN_TOKEN;
 
     const res = spawnLikeRunRelease(dir); // inherit — token genuinely absent
-    assert.equal(res.status, 0, `real pnpm -> nx -> task run must still succeed; stderr:\n${res.stderr}`);
-    assert.ok(existsSync(outFile), 'the probe target must still run with the token absent');
+    assert.equal(
+      res.status,
+      0,
+      `real pnpm -> nx -> task run must still succeed; stderr:\n${res.stderr}`
+    );
+    assert.ok(
+      existsSync(outFile),
+      'the probe target must still run with the token absent'
+    );
     assert.equal(
       readFileSync(outFile, 'utf8'),
       '',
