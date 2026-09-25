@@ -62,8 +62,13 @@ let adhdRootDir: string;
 let sourcePath: string;
 let call: ExtractCall;
 
-/** The pre-BUG-APIGEN-058 default: a cache file in the invocation cwd. */
-const OLD_CWD_DEFAULT_PATH = path.join(process.cwd(), 'tmp', 'apigen', 'ir-cache', 'default.ir.json');
+/**
+ * The pre-BUG-APIGEN-058 default: a cwd-relative cache file the plugin must
+ * never write. Scoped to a caller-supplied cwd so the assertion below runs
+ * against THIS test's own throwaway cwd, never the shared repo cwd.
+ */
+const oldCwdDefaultPath = (cwd: string): string =>
+  path.join(cwd, 'tmp', 'apigen', 'ir-cache', 'default.ir.json');
 
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'apigen-ir-cache-index-spec-'));
@@ -73,15 +78,22 @@ beforeEach(() => {
   call = { source: sourcePath, host: 'ts', namespace: 'svc', extractorOptions: {} };
   delete process.env['APIGEN_IR_CACHE_FILE'];
   process.env['ADHD_ROOT'] = adhdRootDir;
-  // Self-isolating: a stray prior run's old-default-path artifact (tmp/ is
-  // gitignored/ephemeral, but a leftover file there would make the
-  // "not the default" assertion below flaky depending on execution history).
-  fs.rmSync(OLD_CWD_DEFAULT_PATH, { force: true });
+
+  // HERMETIC cwd (bug ad00d505). Every test runs as if invoked from its OWN
+  // throwaway dir, so the "never writes into the invocation cwd" assertion is
+  // scoped to a directory this test owns and removes in `afterEach` — never the
+  // shared, gitignored `tmp/apigen/` scratch a previous run may have left in the
+  // real repo cwd. Without this, any leftover `cwd/tmp/apigen/` reds the spec
+  // regardless of the plugin's behaviour (the non-hermetic failure this fixes).
+  vi.spyOn(process, 'cwd').mockReturnValue(dir);
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   delete process.env['ADHD_ROOT'];
   delete process.env['APIGEN_IR_CACHE_FILE'];
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(adhdRootDir, { recursive: true, force: true });
 });
 
 describe('irCachePlugin.capabilities.extractLayer.createLayer — --opt cache=<path> is honored', () => {
@@ -174,9 +186,12 @@ describe('irCachePlugin default path — machine-global, environment-namespaced,
     expect(defaultPath.startsWith(path.join(adhdRootDir, 'apigen', 'default', 'cache'))).toBe(true);
     await waitUntil(() => fs.existsSync(defaultPath));
 
-    // No cache artifact may appear in the invocation cwd.
-    expect(fs.existsSync(OLD_CWD_DEFAULT_PATH)).toBe(false);
-    expect(fs.existsSync(path.join(process.cwd(), 'tmp', 'apigen'))).toBe(false);
+    // No cache artifact may appear in the invocation cwd. `process.cwd()` is
+    // mocked to THIS test's own throwaway dir (beforeEach), so this is hermetic:
+    // it fires only if the plugin genuinely writes cwd-relative, never because a
+    // prior run left a `tmp/apigen/` scratch dir in the real repo cwd.
+    expect(fs.existsSync(oldCwdDefaultPath(dir))).toBe(false);
+    expect(fs.existsSync(path.join(dir, 'tmp', 'apigen'))).toBe(false);
   });
 
   it('a repeat extraction of the SAME source HITs its own default file — extractor not re-run (cross-invocation reuse)', async () => {
