@@ -40,6 +40,7 @@ import {
   writeNodeTx,
 } from './tx.js';
 import { writeAudit } from './audit.js';
+import { defaultCitationAllowedExternalRoots } from './citation-path.js';
 import type {
   IComponentSummary,
   ILocationSummary,
@@ -521,6 +522,24 @@ export interface IProjectPolicy {
   readonly transitionRequiresNote: boolean;
   readonly citationRequired: boolean;
   readonly citationRequiresSha: boolean;
+  /**
+   * External filesystem roots (absolute paths) this project may cite from, in
+   * ADDITION to its own `metadata.path` root (BUG c6d35272). A citation target
+   * is accepted iff its CANONICAL (symlink-resolved) path lies within the
+   * project root OR one of these roots (`citation-path.ts`'s
+   * `resolveCitationTarget`); a `..` traversal or a symlink that escapes stays
+   * rejected, and an arbitrary absolute path outside every root is never
+   * readable. Only the resulting `sha` is persisted — never file content.
+   *
+   * This layer defaults to the EMPTY array, and {@link resolveProjectPolicy}'s
+   * injected runtime default (`defaultCitationAllowedExternalRoots()`) is ALSO
+   * empty — there is NO machine-global default root (BUG 62059b57 follow-up:
+   * the store's `~/.adhd/backlog` data home is not citable). A project opts
+   * into the external carve-out by naming roots here; an empty array (the
+   * default, or an explicit `[]`) leaves it disabled. This is TYPED,
+   * per-project config — deliberately never an environment toggle.
+   */
+  readonly citationAllowedExternalRoots: readonly string[];
   readonly defaultStatus?: string;
   readonly defaultKind?: string;
   readonly dedupeScanEnabled: boolean;
@@ -550,6 +569,12 @@ const DEFAULT_PROJECT_POLICY: IProjectPolicy = Object.freeze({
   transitionRequiresNote: true,
   citationRequired: false,
   citationRequiresSha: true,
+  // Frozen empty PLACEHOLDER, not the real default: `resolveProjectPolicy`
+  // injects `defaultCitationAllowedExternalRoots()` on every resolve rather
+  // than baking it into this module-load constant. The runtime default is also
+  // empty (no machine-global root), so an explicitly-empty policy array and the
+  // default coincide — both mean "no external roots".
+  citationAllowedExternalRoots: Object.freeze([]),
   dedupeScanEnabled: true,
   dedupeThreshold: 0.8,
   claimStaleAfterMin: 30,
@@ -572,7 +597,10 @@ export function resolveProjectPolicy(
 ): IProjectPolicy {
   const raw = project.metadata?.policy;
   if (raw === null || typeof raw !== 'object')
-    return { ...DEFAULT_PROJECT_POLICY };
+    return {
+      ...DEFAULT_PROJECT_POLICY,
+      citationAllowedExternalRoots: defaultCitationAllowedExternalRoots(),
+    };
   const policy = raw as Partial<IProjectPolicy>;
   return {
     transitionRequiresNote:
@@ -582,6 +610,11 @@ export function resolveProjectPolicy(
       policy.citationRequired ?? DEFAULT_PROJECT_POLICY.citationRequired,
     citationRequiresSha:
       policy.citationRequiresSha ?? DEFAULT_PROJECT_POLICY.citationRequiresSha,
+    // Validated then injected on both branches (this one and the no-`policy`
+    // object branch above): a malformed value falls back to the runtime default
+    // rather than being spread, and `defaultCitationAllowedExternalRoots()` is
+    // read at CALL time, never frozen at module load.
+    citationAllowedExternalRoots: resolveCitationAllowedExternalRoots(policy),
     defaultStatus: policy.defaultStatus,
     defaultKind: policy.defaultKind,
     dedupeScanEnabled:
@@ -596,6 +629,32 @@ export function resolveProjectPolicy(
     requiredFields:
       policy.requiredFields ?? DEFAULT_PROJECT_POLICY.requiredFields,
   };
+}
+
+/**
+ * Validate `project_policy.citationAllowedExternalRoots` before it is used
+ * (BUG 62059b57 follow-up). The policy blob is operator-supplied JSON (§2), so
+ * this field can arrive as ANY type. It must be a `string[]`: spreading a bare
+ * string would yield its characters (`'abc'` → `['a','b','c']`) and spreading a
+ * non-array object would yield nothing, either silently corrupting the
+ * carve-out. A malformed value falls back to the runtime default (the EMPTY
+ * array — no external roots, the narrowest possible surface) — one bad policy
+ * field must not brick every operation on an otherwise-valid project, which
+ * throwing here would do, and the fallback can never WIDEN the read surface. An
+ * explicitly valid `[]` is preserved (it disables the carve-out).
+ */
+function resolveCitationAllowedExternalRoots(
+  policy: Partial<IProjectPolicy>
+): readonly string[] {
+  // `unknown`, not the declared `readonly string[] | undefined`: the static
+  // type is a LIE at runtime — the value comes from parsed JSON — and this
+  // guard is exactly what makes the runtime match the type.
+  const raw: unknown = policy.citationAllowedExternalRoots;
+  if (raw === undefined) return defaultCitationAllowedExternalRoots();
+  if (!Array.isArray(raw) || !raw.every((root) => typeof root === 'string')) {
+    return defaultCitationAllowedExternalRoots();
+  }
+  return raw;
 }
 
 /**
