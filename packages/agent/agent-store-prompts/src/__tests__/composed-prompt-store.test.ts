@@ -221,6 +221,79 @@ describe('ComposedPromptStore', () => {
       expect(miss).toBeNull();
     });
   });
+
+  // ── lookup(): newest row via ONE indexed DESC LIMIT 1 read ─────────────────
+
+  describe('lookup() — newest entry from a single DESC LIMIT 1 read', () => {
+    /**
+     * Behavioural half: with N cached generations for one key the newest (max
+     * id) must be returned. Shape half: the store must issue a single
+     * `order by id desc limit 1` read, not an unbounded ascending fetch.
+     *
+     * TOOTH: the shape assertions are RED pre-fix — the old query had no desc()
+     * and no LIMIT, so it fetched the whole history and took `.at(-1)`.
+     */
+    it('returns the newest entry and issues ORDER BY id DESC LIMIT 1', () => {
+      const tmpDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'agent-registry-composed-lookup-')
+      );
+      const lookupDbPath = path.join(tmpDir, 'lookup.db');
+      const queries: string[] = [];
+
+      const lookupConn = new Database(lookupDbPath);
+      lookupConn.pragma('journal_mode = WAL');
+      lookupConn.pragma('foreign_keys = OFF');
+      const lookupDb = drizzle(lookupConn, {
+        schema,
+        logger: { logQuery: (query) => queries.push(query) },
+      });
+      migrate(lookupDb, { migrationsFolder: MIGRATIONS_FOLDER });
+      lookupConn.pragma('foreign_keys = ON');
+
+      const lookupStore = new ComposedPromptStore(lookupDb);
+
+      try {
+        const hash = contextHash({ k: 'v' });
+        const ids: number[] = [];
+        for (let i = 0; i < 3; i++) {
+          ids.push(
+            lookupStore.write({
+              agentSlug: 'a',
+              contextHash: hash,
+              content: `c${i}`,
+              componentVersions: {},
+            }).id
+          );
+        }
+
+        queries.length = 0; // capture only the lookup query
+        const got = lookupStore.lookup('a', hash);
+
+        // Behaviour: newest row wins.
+        expect(got).not.toBeNull();
+        expect(got?.id).toBe(Math.max(...ids));
+        expect(got?.content).toBe('c2');
+
+        // Shape: a single indexed `order by … desc limit …` read.
+        const lookupSql = queries
+          .filter(
+            (q) => /registry_composed_prompts/i.test(q) && /select/i.test(q)
+          )
+          .join('\n');
+        expect(lookupSql).toMatch(/order by .*desc/i);
+        expect(lookupSql).toMatch(/limit/i);
+      } finally {
+        lookupConn.close();
+        for (const suffix of ['', '-wal', '-shm']) {
+          try {
+            fs.unlinkSync(lookupDbPath + suffix);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    });
+  });
 });
 
 // ── contextHash helper ────────────────────────────────────────────────────────

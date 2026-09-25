@@ -33,7 +33,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 
 import * as schema from '../db/schema.js';
-import { UseCaseStore } from '../store/usecase-store.js';
+import { UseCaseStore, UseCaseError } from '../store/usecase-store.js';
 import { ComponentStore } from '../store/component-store.js';
 import { AgentStore } from '../store/agent-store.js';
 
@@ -290,6 +290,37 @@ describe('UseCaseStore', () => {
       const components = useCaseStore.componentsFor('no-weight-case');
       expect(components).toHaveLength(1);
       expect(components[0].weight).toBeNull();
+    });
+  });
+
+  // ── createUseCase() duplicate-slug error contract ─────────────────────────
+
+  describe('createUseCase — duplicate slug raises USE_CASE_ALREADY_EXISTS', () => {
+    /**
+     * TOOTH: pre-fix the duplicate insert throws a raw better-sqlite3
+     * SqliteError (UNIQUE constraint), which is not the documented contract.
+     * Post-fix `ON CONFLICT DO NOTHING` reports changes===0 and we translate
+     * that to the typed error.
+     */
+    it('throws a typed UseCaseError (never a raw SqliteError)', () => {
+      useCaseStore.createUseCase({ slug: 'dup-slug', name: 'First' });
+
+      let caught: unknown;
+      try {
+        useCaseStore.createUseCase({ slug: 'dup-slug', name: 'Second' });
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(UseCaseError);
+      expect((caught as UseCaseError).code).toBe('USE_CASE_ALREADY_EXISTS');
+
+      // The raw driver error class must never escape the store boundary.
+      expect((caught as { name?: string }).name).not.toBe('SqliteError');
+
+      // The original row is untouched by the rejected second create.
+      const existing = useCaseStore.getUseCase('dup-slug');
+      expect(existing?.name).toBe('First');
     });
   });
 });

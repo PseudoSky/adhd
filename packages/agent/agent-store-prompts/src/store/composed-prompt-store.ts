@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
 import { composedPromptsTable } from '../db/schema.js';
@@ -132,14 +132,17 @@ export class ComposedPromptStore {
    * Look up a composed prompt by (agent_slug, context_hash).
    *
    * Returns the most recently written row for this cache key, or null if no
-   * entry exists. O(1) via the `registry_composed_prompts_agent_hash_idx` index.
+   * entry exists. A single indexed read: the
+   * `registry_composed_prompts_agent_hash_idx` index narrows to the cache key,
+   * then `ORDER BY id DESC LIMIT 1` returns the newest generation without
+   * fetching the whole history for that key.
    *
    * @param agentSlug   - The agent whose cached prompt to retrieve.
    * @param hash        - The context hash produced by `contextHash()`.
    * @returns The composed prompt row, or null on a cache miss.
    */
   lookup(agentSlug: string, hash: string): ComposedPrompt | null {
-    // Order by id DESC to get the most recently written row first.
+    // Newest first, single row: ORDER BY id DESC LIMIT 1.
     const row = this.db
       .select()
       .from(composedPromptsTable)
@@ -149,9 +152,9 @@ export class ComposedPromptStore {
           eq(composedPromptsTable.contextHash, hash)
         )
       )
-      .orderBy(composedPromptsTable.id)
-      .all()
-      .at(-1); // last (highest id) = most recently written
+      .orderBy(desc(composedPromptsTable.id))
+      .limit(1)
+      .get();
 
     return row ? this._rowToComposedPrompt(row) : null;
   }
