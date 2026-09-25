@@ -251,7 +251,7 @@ export async function resolveLiveIssueTx(
   uid: string
 ): Promise<ITxNodeRow> {
   const row = await getNodeByUidTx(tx, uid);
-  if (!row || row.kind !== 'issue' || row.tInvalid !== null) {
+  if (row?.kind !== 'issue' || row.tInvalid !== null) {
     throw new IssueNotFoundError(uid);
   }
   if (row.isSuperseded) {

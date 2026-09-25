@@ -153,7 +153,7 @@ async function resolveOwningComponentTx(
     );
   }
   const row = await getNodeByRowidTx(tx, edge.src);
-  if (!row || row.kind !== 'component' || row.tInvalid !== null) {
+  if (row?.kind !== 'component' || row.tInvalid !== null) {
     throw new Error(
       `move: resolved component rowid=${edge.src} is missing, invalidated, or not a "component" node — ` +
         'graph invariant violation.'
@@ -186,7 +186,7 @@ async function resolveOwningProjectTx(
     );
   }
   const row = await getNodeByRowidTx(tx, edge.src);
-  if (!row || row.kind !== 'project' || row.tInvalid !== null) {
+  if (row?.kind !== 'project' || row.tInvalid !== null) {
     throw new Error(
       `move: resolved project rowid=${edge.src} is missing, invalidated, or not a "project" node — ` +
         'graph invariant violation.'
