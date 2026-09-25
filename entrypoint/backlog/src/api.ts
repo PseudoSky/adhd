@@ -51,7 +51,10 @@ import type { BacklogConfig } from './env.js';
 import type { GraphBacklogStore } from './store/graph-backlog-store.js';
 import type { IWriteStoreHandle } from './write/tx.js';
 import type { IQueryStoreHandle } from './query/query.js';
-import { queryIssuesWithMeta, queryNeedsSemanticBackend } from './query/query.js';
+import {
+  queryIssuesWithMeta,
+  queryNeedsSemanticBackend,
+} from './query/query.js';
 import type {
   IOutcomeEnvelope,
   IOutcomeFailure,
@@ -76,8 +79,13 @@ import {
   StaleSupersedeError,
   WriteContentionError,
 } from './write/errors.js';
-import { bootstrapSemanticStoreMembers } from './write/bootstrap.js';
+import {
+  bootstrapSemanticStoreMembers,
+  peekSemanticStoreMembers,
+  resetSemanticStoreMembers,
+} from './write/bootstrap.js';
 import type { SemanticStoreMembers } from './write/bootstrap.js';
+import type { EmbeddingLiveConfig } from './write/embedding-config.js';
 import { assertRecognizedStoreVocabulary } from './store/vocabulary-guard.js';
 
 import { getIssue } from './query/get.js';
@@ -85,6 +93,19 @@ import {
   getRegistryDetail,
   lookup as lookupRegistry,
 } from './query/views/registry.js';
+import {
+  priorityMatrix as priorityMatrixView,
+  partOfRollup as partOfRollupView,
+  openCurve as openCurveView,
+} from './query/views/stats.js';
+import type {
+  IPriorityMatrixInput,
+  IPriorityMatrixResult,
+  IPartOfRollupInput,
+  IPartOfRollupResult,
+  IOpenCurveInput,
+  IOpenCurveResult,
+} from './query/views/stats.js';
 import {
   createIssue,
   type IDuplicateScanHandle,
@@ -103,7 +124,6 @@ import {
 } from './write/catalog.js';
 
 import type {
-  IIssueCard,
   IIssueGetInput,
   IIssueGetResult,
   IIssueQueryInput,
@@ -139,6 +159,18 @@ export interface BacklogCtx {
   store: GraphBacklogStore;
   env: Environment<BacklogConfig>;
   /**
+   * Per-process liveness holder for the `embedding.*` config family
+   * (`write/embedding-config.ts`). Optional and additive: every existing
+   * caller/test that builds a ctx by hand keeps the pre-existing resolve-once
+   * behaviour exactly (`ctx.env.config.embedding` is the effective value).
+   *
+   * `startBacklogServer` attaches one; `ensureSemanticReady` refreshes it
+   * before each semantic verb so an on-disk `config.yaml` edit is adopted
+   * without a restart. `db.*`/`logging.level` are deliberately NOT covered —
+   * they stay restart-required (see the holder's own doc comment).
+   */
+  embeddingConfig?: EmbeddingLiveConfig;
+  /**
    * Test-isolation escape hatch ONLY — mirrors `BuildBacklogEnvOptions.adhdRoot`
    * (the same value passed to `buildBacklogEnv({ adhdRoot })` when constructing
    * `env`). NEVER set this in production code (`server.ts`/`cli.ts` never do).
@@ -149,6 +181,22 @@ export interface BacklogCtx {
 // ---------------------------------------------------------------------------
 // ctx -> store-handle derivation
 // ---------------------------------------------------------------------------
+
+/**
+ * The process's startup config hash (`ctx.env.version.configHash`), or
+ * `undefined` when the ctx was built without one.
+ *
+ * `@adhd/environment`'s `Environment.version` is declared always-present, but
+ * several specs construct a ctx by hand from a zero-config store
+ * (`{ store, env: { config: {} } } as never` — see `envelope-codes.spec.ts`)
+ * and those ctxs flow through this file's write/query path. Guarding here is
+ * the same borrow-tolerance the absent `embedding` block already relies on: a
+ * missing `version` must degrade the loudness metadata, not turn every verb
+ * into an `internal` envelope.
+ */
+function startupConfigHash(ctx: BacklogCtx): string | undefined {
+  return ctx.env.version?.configHash;
+}
 
 /**
  * The one lazy accessor every semantic-needing verb goes through, and the SOLE
@@ -165,14 +213,47 @@ export interface BacklogCtx {
  * failure internally and returns absent members, so a broken embedding backend
  * degrades exactly as before (a `create` still writes with `handle.embedding`
  * absent; a `claim`/`transition` never even attempts the bootstrap).
+ *
+ * ## Live config (`ctx.embeddingConfig`)
+ *
+ * The `embedding.*` family is the one RELOADABLE family: `@adhd/environment`
+ * resolves its whole cascade once at construction, so a long-lived `serve`
+ * would otherwise never observe an operator's `config.yaml` edit. Before each
+ * semantic verb this refreshes the holder — a cheap stat pre-gate, then (only
+ * on change) a fresh resolve whose `embedding.*` slice is adopted. An adoption
+ * `resetSemanticStoreMembers` first, so the DISABLE direction retires the
+ * otherwise process-lifetime member-ful derive; the ENABLE direction needs no
+ * reset (a member-less derive was never retained) but is reset anyway for
+ * symmetry and to make the transition atomic either way.
+ *
+ * `ctx.env` is never reassigned and `db.*`/`logging.level` are never adopted —
+ * only `embedding.*` is passed on, and only from the holder's `current()`.
  */
 async function ensureSemanticReady(
   ctx: BacklogCtx
 ): Promise<SemanticStoreMembers> {
+  const live = ctx.embeddingConfig;
+  if (live !== undefined && live.refresh().changed) {
+    resetSemanticStoreMembers(ctx.store.adapter);
+  }
+  const cfg = live ? live.current() : ctx.env.config.embedding;
   return bootstrapSemanticStoreMembers(
     ctx.store.adapter,
     ctx.store.graph,
-    ctx.env.config.embedding
+    cfg,
+    undefined,
+    {
+      // Loudness signal for the DISABLED branch: `configured` is the on-disk
+      // value (which, absent a refresh, can diverge from the effective one).
+      configuredEnabled: live ? live.configured().enabled : cfg?.enabled,
+      startupHash: startupConfigHash(ctx),
+      configuredHash: live
+        ? live.fingerprint().configHash
+        : startupConfigHash(ctx),
+      configPaths: live
+        ? live.fingerprint().files.map((f) => f.path)
+        : undefined,
+    }
   );
 }
 
@@ -446,6 +527,147 @@ export async function query(
 }
 
 /**
+ * SPEC.md §5's status-aware priority matrix (BUG-023) — a per-priority
+ * breakdown of issue counts, scoped by `project`/`component`/`kind`/`status`.
+ *
+ * An omitted `input.filter.status` scopes to OPEN work (a deliberate
+ * divergence from `query`'s `list` default, where an omitted status means "no
+ * restriction"); the applied scope is echoed on `data.statusScope`, so a
+ * default-scoped result can never be mistaken for an all-status one. `{}` is a
+ * valid input.
+ *
+ * A read op, NOT a `query.view` member: it returns a matrix
+ * (`{rows, unassigned, statusScope}`) rather than a `{view, items}` list
+ * permutation, and mounting it as a view would force `IIssueQueryInput` to
+ * carry axes (`at`, an issue root) the other views must reject. Uses only
+ * `handle.graph` — hence `needsSemantic:false`/`probeSpace:false`, so this op
+ * never pays the cold semantic-backend bootstrap (`queryHandle`'s own doc
+ * comment).
+ */
+export async function priorityMatrix(
+  ctx: BacklogCtx,
+  input: IPriorityMatrixInput
+): Promise<IOutcomeEnvelope<IPriorityMatrixResult>> {
+  return envelope(async () =>
+    priorityMatrixView(
+      await queryHandle(ctx, { needsSemantic: false, probeSpace: false }),
+      input
+    )
+  );
+}
+
+/**
+ * SPEC.md §5's `part_of` hierarchy rollup (FEAT-005) — every TRANSITIVE
+ * descendant of the root issue `input.uid` via `part_of` (issue → issue,
+ * `n:1`), counted exactly once each regardless of chain depth, split into
+ * `childrenOpen`/`childrenClosed` (plus the open descendants' uids).
+ *
+ * A read op, NOT a `query.view` member: it is rooted at an issue (`uid`), a
+ * per-op input no list view carries. Uses only `handle.graph` — see
+ * {@link priorityMatrix}'s note on the `queryHandle` gates.
+ */
+export async function partOfRollup(
+  ctx: BacklogCtx,
+  input: IPartOfRollupInput
+): Promise<IOutcomeEnvelope<IPartOfRollupResult>> {
+  return envelope(async () =>
+    partOfRollupView(
+      await queryHandle(ctx, { needsSemantic: false, probeSpace: false }),
+      input
+    )
+  );
+}
+
+/**
+ * SPEC.md §5's `validAt` cumulative-open curve — for each sampled ISO-8601
+ * instant in `input.at`, how many in-scope issues EXISTED then and, of those,
+ * how many were reconstructed as OPEN then (never the issue's current status;
+ * see `openCurve`'s own doc comment for the reconstruction rule).
+ *
+ * A read op, NOT a `query.view` member: it returns a time series
+ * (`{points}`) keyed by a caller-given instant list, an axis no list view has.
+ * Uses only `handle.graph` — see {@link priorityMatrix}'s note on the
+ * `queryHandle` gates.
+ */
+export async function openCurve(
+  ctx: BacklogCtx,
+  input: IOpenCurveInput
+): Promise<IOutcomeEnvelope<IOpenCurveResult>> {
+  return envelope(async () =>
+    openCurveView(
+      await queryHandle(ctx, { needsSemantic: false, probeSpace: false }),
+      input
+    )
+  );
+}
+
+/** The `embedding_status` read op's payload (see {@link embeddingStatus}). */
+export interface IEmbeddingStatusResult {
+  /** The on-disk `embedding.enabled` (observed from the config layers). */
+  readonly configuredEnabled: boolean;
+  /** The value the running process is actually using right now. */
+  readonly effectiveEnabled: boolean;
+  readonly provider: string;
+  readonly model: string;
+  /** Whether the resolved semantic members are currently retained for the store. */
+  readonly membersPresent: {
+    readonly embedding: boolean;
+    readonly search: boolean;
+  };
+  /** `configuredEnabled !== effectiveEnabled` — on-disk enabled, process not (yet) adopted. */
+  readonly divergent: boolean;
+  /** Config hash the process started with (`ctx.env.version.configHash`). */
+  readonly startupHash: string;
+  /** Config hash currently observed on disk. */
+  readonly currentHash: string;
+}
+
+/**
+ * Health/observability read for the semantic layer: EFFECTIVE vs CONFIGURED
+ * `embedding.*`, member presence, and both config hashes.
+ *
+ * A READ op — it never opens the cold semantic backend (`queryHandle` is not
+ * touched), so a caller can ask "is RAG on, and is on-disk ahead of me?"
+ * cheaply. `provider`/`model` are the effective values; `divergent` is the
+ * one non-obvious bit — on-disk says enabled while the process is still
+ * effectively disabled, which normally resolves on the next semantic verb
+ * (see {@link ensureSemanticReady}).
+ *
+ * A first-class read op (rather than a `query` view) because it is a property
+ * of the PROCESS and its config, not of the issue graph — and because the
+ * write path's own loudness net (`write/bootstrap.ts`) reports the same
+ * divergence, so operators can confirm it out-of-band.
+ */
+export async function embeddingStatus(
+  ctx: BacklogCtx
+): Promise<IOutcomeEnvelope<IEmbeddingStatusResult>> {
+  return envelope<IEmbeddingStatusResult>(async () => {
+    const live = ctx.embeddingConfig;
+    // `configured()` observes the disk (adopting nothing), so read it before
+    // `current()`: `divergent` then reflects the freshest on-disk value.
+    const configured = live ? live.configured() : ctx.env.config.embedding;
+    const effective = live ? live.current() : ctx.env.config.embedding;
+    const peek = peekSemanticStoreMembers(ctx.store.adapter);
+    return {
+      configuredEnabled: configured?.enabled === true,
+      effectiveEnabled: effective?.enabled === true,
+      provider: effective?.provider ?? '',
+      model: effective?.model ?? '',
+      membersPresent: {
+        embedding: peek?.embedding ?? false,
+        search: peek?.search ?? false,
+      },
+      divergent:
+        (configured?.enabled === true) !== (effective?.enabled === true),
+      startupHash: startupConfigHash(ctx) ?? '',
+      currentHash: live
+        ? live.fingerprint().configHash
+        : startupConfigHash(ctx) ?? '',
+    };
+  });
+}
+
+/**
  * Resolve a free-text reference to a project, component or location in the
  * registry.
  */
@@ -461,7 +683,9 @@ export async function create(
   ctx: BacklogCtx,
   input: ICreateIssueInput
 ): Promise<IOutcomeEnvelope<ICreateIssueResult>> {
-  return envelope(async () => createIssue(await writeHandle(ctx, { needsSemantic: true }), input));
+  return envelope(async () =>
+    createIssue(await writeHandle(ctx, { needsSemantic: true }), input)
+  );
 }
 
 /**
@@ -475,7 +699,9 @@ export async function update(
   ctx: BacklogCtx,
   input: IUpdateIssueInput
 ): Promise<IOutcomeEnvelope<IUpdateIssueOutcome>> {
-  return envelope(async () => updateIssueOp(await writeHandle(ctx, { needsSemantic: true }), input));
+  return envelope(async () =>
+    updateIssueOp(await writeHandle(ctx, { needsSemantic: true }), input)
+  );
 }
 
 /** Move an issue to a new status, recording the transition in its audit trail. */
@@ -483,7 +709,9 @@ export async function transition(
   ctx: BacklogCtx,
   input: ITransitionInput
 ): Promise<IOutcomeEnvelope<ITransitionOutcome>> {
-  return envelope(async () => transitionIssueOp(await writeHandle(ctx, { needsSemantic: false }), input));
+  return envelope(async () =>
+    transitionIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
 }
 
 /** Take, renew or release an exclusive working lease on an issue. */
@@ -491,7 +719,9 @@ export async function claim(
   ctx: BacklogCtx,
   input: IClaimInput
 ): Promise<IOutcomeEnvelope<IClaimOutcome>> {
-  return envelope(async () => claimIssueOp(await writeHandle(ctx, { needsSemantic: false }), input));
+  return envelope(async () =>
+    claimIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
 }
 
 /** Create or remove a typed relationship between two issues. */
@@ -499,7 +729,9 @@ export async function relate(
   ctx: BacklogCtx,
   input: IRelateInput
 ): Promise<IOutcomeEnvelope<IRelateOutcome>> {
-  return envelope(async () => relateIssueOp(await writeHandle(ctx, { needsSemantic: false }), input));
+  return envelope(async () =>
+    relateIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
 }
 
 /** Re-file an issue under a different project component. */
@@ -507,7 +739,9 @@ export async function move(
   ctx: BacklogCtx,
   input: IMoveIssueInput
 ): Promise<IOutcomeEnvelope<IMoveIssueOutcome>> {
-  return envelope(async () => moveIssueOp(await writeHandle(ctx, { needsSemantic: false }), input));
+  return envelope(async () =>
+    moveIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
 }
 
 /**
@@ -520,7 +754,9 @@ async function remove(
   ctx: BacklogCtx,
   input: IDeleteIssueInput
 ): Promise<IOutcomeEnvelope<IDeleteIssueOutcome>> {
-  return envelope(async () => deleteIssueOp(await writeHandle(ctx, { needsSemantic: false }), input));
+  return envelope(async () =>
+    deleteIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -537,7 +773,9 @@ export async function upsertProject(
   ctx: BacklogCtx,
   input: IUpsertProjectInput
 ): Promise<IOutcomeEnvelope<IUpsertProjectOutcome>> {
-  return envelope(async () => upsertProjectOp(await writeHandle(ctx, { needsSemantic: false }), input));
+  return envelope(async () =>
+    upsertProjectOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
 }
 
 /** Create or update a component by `(project, name)`. */
@@ -545,7 +783,9 @@ export async function upsertComponent(
   ctx: BacklogCtx,
   input: IUpsertComponentInput
 ): Promise<IOutcomeEnvelope<IUpsertComponentOutcome>> {
-  return envelope(async () => upsertComponentOp(await writeHandle(ctx, { needsSemantic: false }), input));
+  return envelope(async () =>
+    upsertComponentOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
 }
 
 /**
@@ -558,7 +798,9 @@ export async function upsertLocation(
   ctx: BacklogCtx,
   input: IUpsertLocationInput
 ): Promise<IOutcomeEnvelope<IUpsertLocationOutcome>> {
-  return envelope(async () => upsertLocationOp(await writeHandle(ctx, { needsSemantic: false }), input));
+  return envelope(async () =>
+    upsertLocationOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
 }
 
 /** Soft-remove a location by `uid`. */
@@ -566,7 +808,9 @@ export async function rmLocation(
   ctx: BacklogCtx,
   input: IRmLocationInput
 ): Promise<IOutcomeEnvelope<IRmLocationOutcome>> {
-  return envelope(async () => rmLocationOp(await writeHandle(ctx, { needsSemantic: false }), input));
+  return envelope(async () =>
+    rmLocationOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
 }
 
 /**

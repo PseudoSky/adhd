@@ -1,3 +1,19 @@
+## 0.1.1 (2026-09-24)
+
+
+### 🩹 Fixes
+
+- **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
+
+- **agent:** typecheck targets no longer fail TS6305 in fresh worktrees (additive typecheck configs + real type fixes)
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+- Sky
+
 ## 0.0.6 (2026-07-25)
 
 

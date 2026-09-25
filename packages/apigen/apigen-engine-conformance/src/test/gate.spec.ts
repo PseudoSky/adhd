@@ -1,13 +1,19 @@
 /**
- * gate.spec.ts — unit tests for the conformance gate logic.
+ * gate.spec.ts — PURE-LOGIC unit tests for the conformance gate logic.
  *
- * Tests (with teeth):
- *   1. A conformant host set passes the full matrix.
- *   2. A host whose supportedIds is missing a canonical id FAILS (⊇ enforcement).
- *   3. A vector whose negativeControl mutation does NOT turn the host RED is
- *      itself flagged (proves the checks aren't vacuous).
- *   4. The discovery mechanism finds both the TS and Python hosts.
+ * This is the default-lane half of a deliberate split. Every test here runs
+ * in-process and spawns nothing (no Python subprocess, no JVM):
+ *   1. checkSupportedIds ⊇ enforcement.
+ *   2. The in-process TS matrix (encode/decode/invariant/negative-control).
+ *   3. constructSeedTs / checkInvariantTs.
+ *   4. Host discovery (fs existence probes).
  *   5. A manifest-only host with empty supportedIds is non-conformant.
+ *
+ * The RESOURCE-CONSUMING half — the live matrix (real Python subprocess +
+ * real JVM) and its negative-control proof — lives in the sibling
+ * `gate.e2e.ts` (lane: proc) and runs only under
+ * `nx run apigen-engine-conformance:e2e`. Run a case that needs a live host
+ * there, never here.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -24,10 +30,8 @@ import {
   getTsHostManifest,
   getPythonHostManifest,
   getJavaHostManifest,
-  runJavaMatrix,
   discoverManifestHosts,
   discoverHosts,
-  runConformanceMatrix,
 } from '../lib/gate';
 import type { HostManifest } from '../lib/gate';
 
@@ -458,60 +462,6 @@ describe('getJavaHostManifest', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// runJavaMatrix — REAL JVM subprocess (ApigenConformanceMatrix), no mock.
-// Slower than the other unit tests (real `mvn`/JVM startup) — this is the
-// load-bearing live proof for FEAT-APIGEN-001 acceptance criterion 2.
-// ---------------------------------------------------------------------------
-
-describe('runJavaMatrix — live JVM subprocess (real ApigenConformanceMatrix)', () => {
-  it(
-    '[Java-pass] every canonical logical-type id passes encode/decode/invariant/negative-control',
-    () => {
-      const results = runJavaMatrix(logicalTypeVectors, WORKSPACE_ROOT);
-      const failures = results.filter((r) => !r.pass);
-      expect(
-        failures,
-        `Java host failures:\n${failures
-          .map((f) => `  ${f.vectorId} (${f.phase}): ${f.error}`)
-          .join('\n')}`
-      ).toHaveLength(0);
-
-      // Every canonical id is covered by at least one vector's encode phase.
-      const coveredTypes = new Set(
-        logicalTypeVectors.map((v) => v.logicalType)
-      );
-      for (const id of CANONICAL_IDS) {
-        expect(coveredTypes.has(id), `no vector exercises "${id}"`).toBe(true);
-      }
-    },
-    120_000
-  );
-
-  it(
-    '[TEETH] negative control genuinely fails when a vector wire is corrupted (proves runJavaMatrix is not vacuous)',
-    () => {
-      // A vector set where the negativeControl mutation is a NO-OP relative
-      // to the real logical type (mutating to the exact same wire value) —
-      // if runJavaMatrix's negative-control phase were vacuous (always
-      // "pass"), this would still show green. It must NOT.
-      const vacuousVector: LogicalTypeVector = {
-        ...logicalTypeVectors[0],
-        negativeControl: { mutate: 'wire', to: logicalTypeVectors[0].wire },
-      };
-      const results = runJavaMatrix([vacuousVector], WORKSPACE_ROOT);
-      const ncResult = results.find((r) => r.phase === 'negative-control');
-      expect(ncResult).toBeDefined();
-      if (!ncResult) throw new Error('expected a negative-control result');
-      expect(
-        ncResult.pass,
-        'runJavaMatrix must flag a no-op negativeControl mutation as a FAILING (vacuous) check'
-      ).toBe(false);
-    },
-    120_000
-  );
-});
-
 describe('discoverManifestHosts', () => {
   it('returns [] when packages/apigen/hosts does not exist', () => {
     const manifests = discoverManifestHosts('/tmp/nonexistent-workspace-root');
@@ -632,41 +582,15 @@ describe('discoverHosts', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 7. Full matrix — integration: TS + Python pass, red host fails gate
+// 7. Gate logic — a host missing canonical ids is non-conforming (pure).
+//
+// The LIVE full-matrix integration that used these helpers (real Python
+// subprocess + real JVM via runConformanceMatrix) moved to `gate.e2e.ts`
+// (lane: proc) — see this file's header.
 // ---------------------------------------------------------------------------
 
-describe('runConformanceMatrix — integration', () => {
-  it('[TS-pass] TS host result has passed=true', () => {
-    const results = runConformanceMatrix(WORKSPACE_ROOT);
-    const ts = results.find((r) => r.host === 'ts');
-    expect(ts).toBeDefined();
-    if (!ts) throw new Error('expected ts result');
-    const failures = ts.results.filter((r) => !r.pass);
-    expect(
-      failures,
-      `TS host failures:\n${failures
-        .map((f) => `  ${f.vectorId} (${f.phase}): ${f.error}`)
-        .join('\n')}`
-    ).toHaveLength(0);
-    expect(ts.passed).toBe(true);
-  });
-
-  it('[Python-pass] Python host result has passed=true', () => {
-    const results = runConformanceMatrix(WORKSPACE_ROOT);
-    const py = results.find((r) => r.host === 'python');
-    expect(py).toBeDefined();
-    if (!py) throw new Error('expected python result');
-    const failures = py.results.filter((r) => !r.pass);
-    expect(
-      failures,
-      `Python host failures:\n${failures
-        .map((f) => `  ${f.vectorId} (${f.phase}): ${f.error}`)
-        .join('\n')}`
-    ).toHaveLength(0);
-    expect(py.passed).toBe(true);
-  });
-
-  it('[red-host TEETH] a red host (missing supportedIds) makes the matrix non-passing', () => {
+describe('gate logic — red host', () => {
+  it('[red-host TEETH] a host with missing supportedIds is non-conforming', () => {
     // Simulate a failing host by running checkSupportedIds on an empty manifest.
     const redManifest = emptyManifest('go');
     const errors = checkSupportedIds(redManifest);
@@ -675,36 +599,5 @@ describe('runConformanceMatrix — integration', () => {
     // We verify the logic directly rather than spinning up a fake workspace.
     const anyError = errors.length > 0;
     expect(anyError).toBe(true);
-  });
-
-  it(
-    '[Java-pass] Java host result has passed=true (runner executed live codec vectors, not manifest-only)',
-    () => {
-      const results = runConformanceMatrix(WORKSPACE_ROOT);
-      const java = results.find((r) => r.host === 'java');
-      expect(java).toBeDefined();
-      if (!java) throw new Error('expected java result');
-      const failures = java.results.filter((r) => !r.pass);
-      expect(
-        failures,
-        `Java host failures:\n${failures
-          .map((f) => `  ${f.vectorId} (${f.phase}): ${f.error}`)
-          .join('\n')}`
-      ).toHaveLength(0);
-      expect(java.passed).toBe(true);
-      // Prove it's a LIVE runner, not the manifest-only supportedIds-only
-      // check: more than just the single 'supported-ids' result must be
-      // present (manifest-only hosts have exactly 1 result).
-      expect(java.results.length).toBeGreaterThan(1);
-    },
-    120_000
-  );
-
-  it('[coverage] TS, Python, and Java hosts are all discovered and present in results', () => {
-    const results = runConformanceMatrix(WORKSPACE_ROOT);
-    const hosts = results.map((r) => r.host);
-    expect(hosts).toContain('ts');
-    expect(hosts).toContain('python');
-    expect(hosts).toContain('java');
   });
 });

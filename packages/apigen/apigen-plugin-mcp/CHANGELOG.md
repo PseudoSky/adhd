@@ -1,3 +1,22 @@
+## 0.2.4 (2026-09-24)
+
+
+### 🚀 Features
+
+- **backlog:** INTERFACE_v2 consolidation — six-verb surface, web UI (search/stats/batch/edit), stats API (citationCount, closedAt, summary scope + window)
+
+
+### 🩹 Fixes
+
+- **backlog:** unblock backlog:build — author/reporter TS2339 + wire MCP identity
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+- Sky
+
 ## 0.2.3 (2026-08-07)
 
 

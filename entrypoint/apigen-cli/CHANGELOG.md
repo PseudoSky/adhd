@@ -1,3 +1,28 @@
+## 0.2.5 (2026-09-24)
+
+
+### 🚀 Features
+
+- **backlog:** INTERFACE_v2 consolidation — six-verb surface, web UI (search/stats/batch/edit), stats API (citationCount, closedAt, summary scope + window)
+
+
+### 🩹 Fixes
+
+- **apigen-cli:** batch nested-input CLI/HTTP wiring, sandbox isolation leaks, morph-walk index-signature regression
+
+- **apigen-cli:** reap the api-fastify host child in serve.spec.ts's own SIGTERM teardown (BUG-007)
+
+- **apigen:** audit fixes — S-18/S-19/C-20/C-21/S-20, java mvn race, union-encoder envelope, lazy heavy-dep loading
+
+- **nx-build:** run-scoped release manifest token + apigen-cli readiness flake + codegen test output
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+- Sky
+
 ## 0.2.4 (2026-08-08)
 
 This was a version bump only for apigen-cli to align it with other projects, there were no code changes.

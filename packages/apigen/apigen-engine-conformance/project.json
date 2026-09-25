@@ -13,8 +13,34 @@
   "tags": ["layer:logic", "platform:shared"],
   "targets": {
     "test": {
-      "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference). `apigen-java:package` is load-bearing: the conformance gate runs a live JVM matrix against the packaged jar (PR #11). `lint`/`^build` mirror the workspace `test` targetDefaults.",
-      "dependsOn": ["lint", "^build", "apigen-java:package"]
+      "//": "Default (in-process) lane. The live JVM/Python conformance matrix moved to gate.e2e.ts under the on-demand `e2e` target (which owns `apigen-java:package` + `apigen-python-env:build`), so this lane no longer needs a JVM. Override of the inferred `test` target carries only `dependsOn` (`lint`/`^build`) plus `inputs` excluding `*.e2e.ts`; executor/cache/outputs come from inference.",
+      "dependsOn": ["lint", "^build"],
+      "//inputs": "Exclude *.e2e.ts so editing a resource-consuming suite never invalidates the default lane's cache — it never runs those files (its vitest `include` is `src/**/*.spec.ts`, see vite.config.ts). Mirrors the workspace targetDefaults.test inputs plus the negative pattern.",
+      "inputs": [
+        "default",
+        "!{projectRoot}/**/*.e2e.ts",
+        "^production",
+        {
+          "externalDependencies": ["vitest", "better-sqlite3", "drizzle-orm"]
+        }
+      ]
+    },
+    "e2e": {
+      "executor": "nx:run-commands",
+      "//": "RESOURCE-CONSUMING lane. Deliberately NOT part of `affected` and NOT referenced by any target's dependsOn or by targetDefaults — it runs ONLY on an explicit `nx run apigen-engine-conformance:e2e` (nx affected never selects it). It runs the sibling *.e2e.ts suite via vitest.e2e.config.ts. `dependsOn` is the resource prerequisites those tests need: `conformance` (the SINGLE live-matrix execution path — its durable report is what gate.e2e.ts asserts against, so the live TS+Python+Java matrix is never duplicated), plus `apigen-java:package` and `apigen-python-env:build` (the JVM/Python host prerequisites the lane's own runJavaMatrix negative-control and the matrix need).",
+      "dependsOn": [
+        "conformance",
+        "apigen-java:package",
+        "apigen-python-env:build"
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/apigen-engine-conformance-e2e"
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "vitest run --config {projectRoot}/vitest.e2e.config.ts"
+      },
+      "cache": false
     },
     "conformance": {
       "executor": "nx:run-commands",
@@ -28,11 +54,11 @@
       "outputs": [
         "{workspaceRoot}/tmp/apigen-engine-conformance/conformance-report.json"
       ],
-      "dependsOn": [],
       "options": {
         "command": "{workspaceRoot}/node_modules/.bin/tsx --tsconfig packages/apigen/apigen-engine-conformance/tsconfig.json packages/apigen/apigen-engine-conformance/src/lib/gate.ts",
         "cwd": "{workspaceRoot}"
-      }
+      },
+      "dependsOn": []
     },
     "nx-release-publish": {
       "dependsOn": [

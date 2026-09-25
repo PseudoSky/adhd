@@ -1,3 +1,7 @@
+## 2.3.1 (2026-09-24)
+
+This was a version bump only for agent-base-types to align it with other projects, there were no code changes.
+
 ## 2.3.0 (2026-08-11)
 
 

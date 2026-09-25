@@ -13,8 +13,28 @@
   "tags": ["layer:entrypoints", "platform:node"],
   "targets": {
     "test": {
-      "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference — the inferred coverage output matches vite.config.ts's reportsDirectory, which main's explicit output did not). Adds the project's OWN `build` — the integration specs (ir-cache-plugin-registration, java-ts-decimal-parity) spawn the built CLI bin — and `apigen-java:package`, which the java-javalin parity host needs (PR #11). `lint`/`^build` mirror the workspace `test` targetDefaults, which an explicit dependsOn otherwise replaces.",
-      "dependsOn": ["lint", "^build", "build", "apigen-java:package"]
+      "//": "Default (in-process, source-level) lane. The resource-consuming specs — the integration suites that spawn the built CLI bin, and the java-javalin parity host that needs `apigen-java:package` — now live in sibling `*.e2e.ts` files and run only under the on-demand `e2e` target, so this lane needs neither. Override of the inferred `test` target carries only `dependsOn` (`lint`/`^build`, mirroring the workspace targetDefaults, which an explicit dependsOn otherwise replaces) plus `inputs` excluding `*.e2e.ts`; executor/cache/outputs come from inference.",
+      "dependsOn": ["lint", "^build"],
+      "//inputs": "Exclude *.e2e.ts so editing a resource-consuming suite never invalidates the default lane's cache — it never runs those files (its vitest `include` is `src/**/*.spec.ts`, see vite.config.ts). Mirrors the workspace targetDefaults.test inputs plus the negative pattern.",
+      "inputs": [
+        "default",
+        "!{projectRoot}/**/*.e2e.ts",
+        "^production",
+        {
+          "externalDependencies": ["vitest", "better-sqlite3", "drizzle-orm"]
+        }
+      ]
+    },
+    "e2e": {
+      "executor": "nx:run-commands",
+      "//": "RESOURCE-CONSUMING lane. Deliberately NOT part of `affected` and NOT referenced by any target's dependsOn or by targetDefaults — it runs ONLY on an explicit `nx run apigen-cli:e2e` (and nx affected never selects it). It runs the sibling *.e2e.ts suites via vitest.e2e.config.ts. `dependsOn` is exactly the resource prerequisites those suites need: `build` (most spawn the built dist/index.js) and `apigen-java:package` (java-ts-decimal-parity drives the JVM).",
+      "dependsOn": ["build", "apigen-java:package"],
+      "outputs": ["{workspaceRoot}/coverage/entrypoint/apigen-cli-e2e"],
+      "options": {
+        "cwd": ".",
+        "command": "vitest run --config {projectRoot}/vitest.e2e.config.ts"
+      },
+      "cache": false
     },
     "generate-api": {
       "executor": "@adhd/apigen-nx:generate",
@@ -42,14 +62,14 @@
     },
     "bench": {
       "executor": "nx:run-commands",
-      "cache": false,
       "options": {
         "command": "node --expose-gc --import tsx packages/apigen/tools/bench-extract.ts",
         "cwd": "{workspaceRoot}",
         "env": {
           "TSX_TSCONFIG_PATH": "tsconfig.base.json"
         }
-      }
+      },
+      "cache": false
     }
   }
 }

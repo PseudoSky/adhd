@@ -17,13 +17,19 @@ import { pathToFileURL } from 'node:url';
 import { initTelemetry } from '@adhd/sox-telemetry';
 import { runBacklogCli, stripNamespaceFlag } from './cli.js';
 
-// The mounted surface: nine issue verbs (SPEC 6.3), `lookup` (3a), and the
-// four registry CRUD verbs (3a). `server.ts` extracts `dist/api.d.ts`, so THIS
-// list and the mounted tool set are the same list by construction -- a verb
-// cannot be exported here and missing from a transport, or vice versa.
+// The mounted surface: nine issue verbs (SPEC 6.3), `lookup` (3a), the four
+// registry CRUD verbs (3a), the three §5 stats/rollup reads
+// (`priorityMatrix`/`partOfRollup`/`openCurve`), and the `embedding_status`
+// health read. `server.ts` extracts `dist/api.d.ts`, so THIS list and the
+// mounted tool set are the same list by construction -- a verb cannot be
+// exported here and missing from a transport, or vice versa.
 export {
   get,
   query,
+  priorityMatrix,
+  partOfRollup,
+  openCurve,
+  embeddingStatus,
   lookup,
   create,
   update,
@@ -37,7 +43,7 @@ export {
   rmLocation,
   delete,
 } from './api.js';
-export type { BacklogCtx } from './api.js';
+export type { BacklogCtx, IEmbeddingStatusResult } from './api.js';
 
 // The response envelope every verb returns, plus its closed error-code union
 // and the exit codes a CLI host keys off.

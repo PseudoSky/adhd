@@ -1,3 +1,17 @@
+## 0.2.1 (2026-09-24)
+
+
+### 🩹 Fixes
+
+- **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+- Sky
+
 ## 0.1.6 (2026-07-25)
 
 

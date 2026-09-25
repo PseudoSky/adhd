@@ -63,6 +63,11 @@ export default [
             'vite.config.ts',
             'vite.config.mjs',
             'vite.config.mts',
+            // The resource lane's parallel config + its `*.e2e.ts` suites
+            // (see the e2e targets): test-only files, so their `vitest`/`jsdom`
+            // imports must not be tallied as production usage.
+            '{projectRoot}/vitest.e2e.config.{js,ts,mjs,mts}',
+            '{projectRoot}/**/*.e2e.{ts,tsx,mts,cts}',
           ],
           includeTransitiveDependencies: true,
           useLocalPathsForWorkspaceDependencies: true,
@@ -258,6 +263,11 @@ export default [
       // `platform:shared` tag constraints forbid for runtime source but not for
       // build config. The relative-path import they use is tracked separately.
       '**/vite.config.*',
+      // The e2e lane's parallel config, same build-tooling category: it
+      // legitimately imports the `platform:node` `workspace-base-vite-paths`
+      // helper via a relative path, which the module-boundary constraints
+      // would otherwise flag.
+      '**/vitest.e2e.config.*',
     ],
   },
 ];

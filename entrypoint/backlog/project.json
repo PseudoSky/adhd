@@ -20,30 +20,45 @@
   ],
   "targets": {
     "test": {
-      "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference — the @nx/vitest plugin replaces main's removed `@nx/vite:test` executor, and its coverage output matches vite.config.ts's reportsDirectory, which main's explicit output did not). Backlog's OWN `build` + `assets` are load-bearing: the MCP-stdio (server.mcp.spec.ts) and published-layout specs spawn/read the real built dist/, and `assets` (BUG-013 FIX A) is what copies dist/skill/SKILL.md in. `vocabulary-gate` (C-22) makes both vocabulary acceptance gates run on every `nx affected -t test`. `lint`/`^build` mirror the workspace `test` targetDefaults, which an explicit dependsOn otherwise replaces.",
-      "dependsOn": ["lint", "^build", "build", "assets", "vocabulary-gate"]
+      "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference — the @nx/vitest plugin replaces main's removed `@nx/vite:test` executor, and its coverage output matches vite.config.ts's reportsDirectory, which main's explicit output did not). Backlog's OWN `build` + `assets` are load-bearing: the remaining default-lane specs (e.g. src/mcp-discoverability-real-ops.spec.ts reads dist/api.d.ts) and the vocabulary-gate pack the real built dist/, and `assets` (BUG-013 FIX A) is what copies dist/skill/SKILL.md in. `vocabulary-gate` (C-22) makes both vocabulary acceptance gates run on every `nx affected -t test`. `lint`/`^build` mirror the workspace `test` targetDefaults, which an explicit dependsOn otherwise replaces.",
+      "dependsOn": ["lint", "^build", "build", "assets", "vocabulary-gate"],
+      "inputs": [
+        "default",
+        "!{projectRoot}/**/*.e2e.ts",
+        "^production",
+        {
+          "externalDependencies": ["vitest", "better-sqlite3", "drizzle-orm"]
+        }
+      ]
+    },
+    "e2e": {
+      "//": "On-demand RESOURCE lane (backlog-e2e-separation): the 33 `src/**/*.e2e.ts` suites extracted out of `test` — real subprocess spawns, the real fastembed model, real bound-port HTTP/MCP servers, and the CPU/mem/disk/io hogs — each paired 1:1 with a cheap `*.spec.ts` stub left in the default lane (see the stub `Resource lane:` tags and vitest.e2e.config.ts). REACHABILITY GUARD: this target is deliberately unreachable from `nx affected` and from a bare `test` run — it appears in NO target's `dependsOn` and is deliberately absent from `nx.json` `targetDefaults`, so ONLY an explicit `nx run backlog:e2e` (or `nx run-many -t e2e`) runs it. Never add it to `test.dependsOn`. `dependsOn:[\"build\"]` is the ONLY dependency the suites need: every one either spawns the built `dist/index.js` or loads the real model/store/server, and the three published-layout/install-skill suites that read `dist/skill/SKILL.md` are satisfied by `build` ALONE — vite.config.ts's copySkillDirPlugin writes it on a bare `nx build backlog` (verified 2026-09-24: dist/skill/SKILL.md present after build, dist/README.md absent) — so `assets` and `vocabulary-gate` are NOT dependencies. No `outputs` declared: a dist-shaped output would let this target's cache restore clobber `build`'s dist/, and coverage is opt-in. TARGET NAME (backlog-e2e-separation review): the lane deliberately KEEPS the name `e2e` for repo-wide consistency — the 12 sibling apigen packages (apigen-cli, -core-client, -engine-conformance, -engine-runtime, -plugin-api-express, -plugin-api-fastify, -plugin-cli-output, -plugin-java-javalin, -plugin-mcp, -plugin-py-flask, -plugin-py-grpc, python-env) name their identical resource lane `e2e` across 5 branches, so renaming only this one would split the same concept into two names. LATENT COLLISION (accepted, documented): `nx.json`'s @nx/cypress/plugin reserves `targetName: \"e2e\"` (and `ciTargetName: \"e2e-ci\"`), so IF a cypress project is ever added (none exists today — zero cypress.config.*, zero *.cy.*) a `nx run-many -t e2e` would sweep both semantics. A global `targetDefaults.e2e` MUST NEVER be added to cross-wire them: `targetDefaults` is keyed by target NAME only (nx-schema.json `targetDefaults.additionalProperties`, no project filter), so it cannot be scoped to this project — the project-scoped home for every default here IS this `targets.e2e` block, which is why the full config lives inline above rather than in nx.json. INVARIANT: never add this target to `test.dependsOn` and never add a global `targetDefaults.e2e`. `passWithNoTests` is deliberately ABSENT so a mis-collected lane (a broken glob, a config/file move) fails loudly instead of exiting green on zero collected files (AGENTS.md §7: never make it quietly skip).",
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "cwd": ".",
+        "command": "vitest run --config {projectRoot}/vitest.e2e.config.ts"
+      },
+      "cache": false
     },
     "vocabulary-gate": {
-      "//": "C-22: both vocabulary acceptance gates, as one Nx task. `tools/gate/vocabulary-gate.mjs` scans src/ (code AND text assets such as src/write/CONTRACT.md) plus the package's top-level markdown (SPEC/DESIGN/DATA_MODEL/RAG-SPEC/README/CHANGELOG); `scripts/check-vocabulary.mjs` npm-packs the REAL artifact (package.json `files`: dist + CHANGELOG.md + skill) and scans the tarball — the only scan that catches a banned token reaching a consumer through dist/*.d.ts, which reproduces source doc comments verbatim and never appears in src/. Wired into test.dependsOn so the PR workflows' `nx affected -t test` runs it on every PR touching this package. dependsOn build+assets so the packed artifact is the real shipped one, never a stale dist/. cache:true mirrors the verify-dist-load convention — deterministic given `inputs: [\"default\"]`: a src/doc change re-runs it, and a dist/ change re-runs it too because nx folds the build/assets dependency task hashes into this task's hash, so dist/ (a dependency OUTPUT, not an input) needs no explicit input entry. NOTE: check-vocabulary.mjs takes NO path arg here deliberately — cwd is already {projectRoot} and the script defaults to process.cwd(); passing {projectRoot} again double-prefixes the path, npm pack spawns with a nonexistent cwd, and the failure surfaces as the misleading 'spawnSync npm ENOENT' (verified while authoring this target).",
+      "//": "C-22: both vocabulary acceptance gates, as one Nx task. `tools/gate/vocabulary-gate.mjs` scans src/ (code AND text assets such as src/write/CONTRACT.md) plus the package's top-level markdown (SPEC/DESIGN/DATA_MODEL/RAG-SPEC/README/CHANGELOG); `scripts/check-vocabulary.mjs` npm-packs the REAL artifact (package.json `files`: dist + CHANGELOG.md + skill) and scans the tarball — the only scan that catches a banned token reaching a consumer through dist/*.d.ts, which reproduces source doc comments verbatim and never appears in src/. Wired into test.dependsOn so the PR workflows' `nx affected -t test` runs it on every PR touching this package. dependsOn build+assets so the packed artifact is the real shipped one, never a stale dist/. cache:true mirrors the verify-dist-load convention — deterministic given `inputs: [\"default\"]`: a src/doc change re-runs it, and a dist/ change re-runs it too because nx folds the build/assets dependency task hashes into this task's hash, so dist/ (a dependency OUTPUT, not an input) needs no explicit input entry. NOTE: check-vocabulary.mjs takes NO path arg here deliberately — cwd is already {projectRoot} and the script defaults to process.cwd(); passing {projectRoot} again double-prefixes the path, npm pack spawns with a nonexistent cwd, and the failure surfaces as the misleading 'spawnSync npm ENOENT' (verified while authoring this target). backlog-e2e-separation review (HIGH finding): two MORE static policy gates run here, so they are default-running and never depend on the resource `e2e` lane — `tools/gate/embedding-usage-gate.mjs` censuses the real-vs-fake embedding policy across BOTH `*.spec.ts` and `*.e2e.ts` (its live assertion had been left in the resource-only `vocabulary-gate.e2e.ts`, with no Nx target at all), and `tools/gate/spawn-isolation-gate.mjs` is the static/parsing half of the spawn-isolation guard (every `spawn(process.execPath, [DIST_INDEX, …]` site must import an isolation helper), which had lost its only default-running executor when `spawn-isolated-bin.e2e.ts` moved to the resource lane. Both are pure reads/regexes with no child spawn and no model load, so they belong in the fast lane; do NOT move either back into an e2e suite.",
       "executor": "nx:run-commands",
-      "dependsOn": [
-        "build",
-        "assets"
-      ],
+      "dependsOn": ["build", "assets"],
       "cache": true,
-      "inputs": [
-        "default"
-      ],
+      "inputs": ["default"],
       "options": {
         "cwd": "{projectRoot}",
         "commands": [
           "node tools/gate/vocabulary-gate.mjs",
-          "node scripts/check-vocabulary.mjs"
+          "node scripts/check-vocabulary.mjs",
+          "node tools/gate/embedding-usage-gate.mjs",
+          "node tools/gate/spawn-isolation-gate.mjs"
         ],
         "parallel": false
       },
       "metadata": {
-        "description": "Runs both vocabulary acceptance gates (src-tree scan + packed-tarball scan); non-zero exit on any banned humanId/migration/sqlite reference anywhere, and on v1/v2 outside generated bundles. Runs on every PR touching the package via test.dependsOn."
+        "description": "Runs the package's static policy gates: the two vocabulary acceptance gates (src-tree scan + packed-tarball scan) — non-zero exit on any banned humanId/migration/sqlite reference anywhere, and on v1/v2 outside generated bundles — plus the embedding-usage census (real-vs-fake) and the spawn-isolation guard. All four are cheap static reads; runs on every PR touching the package via test.dependsOn."
       }
     },
     "typecheck": {

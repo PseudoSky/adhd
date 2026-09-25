@@ -13,8 +13,30 @@
   "tags": ["layer:logic", "platform:shared"],
   "targets": {
     "test": {
-      "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference). Adds the project's OWN `build` because dist-artifact-smoke.spec.ts loads dist/index.mjs through Node's native ESM loader (PR #11) — `^build` alone builds only dependencies, not this package. `lint`/`^build` mirror the workspace `test` targetDefaults, which an explicit dependsOn otherwise replaces.",
-      "dependsOn": ["lint", "^build", "build"]
+      "//": "Default (in-process) lane. The suite that loads this package's OWN built dist/index.mjs (dist-artifact-smoke) moved to a sibling `*.e2e.ts` file under the on-demand `e2e` target, so the default lane no longer builds this package. Override of the inferred `test` target carries only `dependsOn` (`lint`/`^build`) plus `inputs` excluding `*.e2e.ts`; executor/cache/outputs come from inference.",
+      "dependsOn": ["lint", "^build"],
+      "//inputs": "Exclude *.e2e.ts so editing a resource-consuming suite never invalidates the default lane's cache — it never runs those files (its vitest `include` is `src/**/*.spec.ts`, see vite.config.ts). Mirrors the workspace targetDefaults.test inputs plus the negative pattern.",
+      "inputs": [
+        "default",
+        "!{projectRoot}/**/*.e2e.ts",
+        "^production",
+        {
+          "externalDependencies": ["vitest", "better-sqlite3", "drizzle-orm"]
+        }
+      ]
+    },
+    "e2e": {
+      "//": "Resource-consuming lane: runs ONLY the `*.e2e.ts` suites extracted out of the default `test` target (the CPU-heavy real ts-morph/TypeScript compilation suites, plus two spawnSync subprocess specs). Opt-in and deliberately NOT wired into any `test.dependsOn` nor into nx.json `targetDefaults`, so `nx affected -t test` / the pre-commit + pre-push hooks never reach it. `dependsOn: [\"build\"]` because the moved suite spawns the shipped `dist/index.mjs`. Its coverage dir is DISTINCT from the default lane's, and declares no dist-shaped output.",
+      "executor": "nx:run-commands",
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/apigen-core-client-e2e"
+      ],
+      "dependsOn": ["build"],
+      "options": {
+        "cwd": ".",
+        "command": "vitest run --config {projectRoot}/vitest.e2e.config.ts"
+      },
+      "cache": false
     },
     "nx-release-publish": {
       "dependsOn": [

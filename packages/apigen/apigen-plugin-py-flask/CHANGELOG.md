@@ -1,3 +1,17 @@
+## 0.2.5 (2026-09-24)
+
+
+### 🚀 Features
+
+- **backlog:** INTERFACE_v2 consolidation — six-verb surface, web UI (search/stats/batch/edit), stats API (citationCount, closedAt, summary scope + window)
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+- Sky
+
 ## 0.2.4 (2026-08-08)
 
 This was a version bump only for apigen-plugin-py-flask to align it with other projects, there were no code changes.

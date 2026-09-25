@@ -69,6 +69,10 @@ import {
   resolveBacklogDbPath,
   resolveIrCacheFile,
 } from './env.js';
+import {
+  backlogConfigLayerFiles,
+  createEmbeddingLiveConfig,
+} from './write/embedding-config.js';
 import { readBacklogVersionInfo } from './version-info.js';
 import type { Logger, OutputPlugin, RunInput } from '@adhd/apigen-core-client';
 
@@ -165,9 +169,11 @@ export const BACKLOG_HOST_COMMANDS: readonly string[] = [
 
 /**
  * SPEC.md §6.7 — the data verbs the whole surface consolidates onto:
- * the nine issue verbs plus `lookup` and §3a's registry CRUD verbs, mounted
- * as `backlog_<verb>`. Pinned here, next to the carve-out it is the
- * complement of, because it is the ONE list four separate surfaces are
+ * the nine issue verbs plus `lookup`, §3a's registry CRUD verbs, and the
+ * three §5 stats/rollup reads (`priority-matrix`/`part-of-rollup`/
+ * `open-curve`), mounted as `backlog_<verb>`. Pinned here, next to the
+ * carve-out it is the complement of, because it is the ONE list four separate
+ * surfaces are
  * checked against: the three apigen mounts derive their names from the
  * operation descriptors via `describeMountedSurface`, and `cli.ts`'s argv
  * parser — which is deliberately NOT an apigen mount, because apigen's
@@ -187,6 +193,9 @@ export const BACKLOG_HOST_COMMANDS: readonly string[] = [
 export const BACKLOG_VERBS: readonly string[] = [
   'get',
   'query',
+  'priority-matrix',
+  'part-of-rollup',
+  'open-curve',
   'lookup',
   'create',
   'update',
@@ -199,6 +208,7 @@ export const BACKLOG_VERBS: readonly string[] = [
   'upsert-location',
   'rm-location',
   'delete',
+  'embedding-status',
 ];
 
 /**
@@ -813,7 +823,38 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
     signalCleanup?.dispose();
     throw err;
   }
-  const ctx: BacklogCtx = { store, env };
+  // The `embedding.*` config family is the one RELOADABLE family: the
+  // `Environment` above resolved its whole cascade once at construction, so a
+  // long-lived server would otherwise never see an operator's `config.yaml`
+  // edit. The holder re-resolves ONLY `embedding.*` — `db.*`/`logging.level`
+  // stay resolve-once (swapping the whole env mid-process would move an
+  // already-open store) and `ctx.env` is never reassigned. See
+  // `write/embedding-config.ts` and `api.ts`'s `ensureSemanticReady`.
+  const ctx: BacklogCtx = {
+    store,
+    env,
+    embeddingConfig: createEmbeddingLiveConfig({
+      baseline: env,
+      rebuild: () =>
+        buildBacklogEnv({
+          scope: opts.scope,
+          adhdRoot: opts.adhdRoot,
+          cwd: opts.cwd,
+          namespace: opts.namespace,
+        }),
+      layerFiles: () =>
+        backlogConfigLayerFiles({
+          scope: opts.scope,
+          adhdRoot: opts.adhdRoot,
+          cwd: opts.cwd,
+          namespace: opts.namespace,
+        }),
+      // The write layer's only sink is stderr (`write/bootstrap.ts`'s own
+      // latched notices); a structured logger is out of scope for this slice.
+      // eslint-disable-next-line no-console
+      log: (_level, message) => console.error(message),
+    }),
+  };
 
   // Everything from here on runs inside the try/finally below, NOT just the
   // `Promise.all(runs)` it originally wrapped. `buildBacklogApigenPackage`

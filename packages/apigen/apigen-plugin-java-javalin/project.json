@@ -11,8 +11,30 @@
   "tags": ["domain:apigen", "pkg-kind:plugin", "layer:logic", "platform:node"],
   "targets": {
     "test": {
-      "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference). `apigen-java:package` is preserved from PR #11: the javalin plugin resolves the packaged `packages/apigen/java` module and its shaded jar. `lint`/`^build` mirror the workspace `test` targetDefaults, which an explicit dependsOn otherwise replaces.",
-      "dependsOn": ["lint", "^build", "apigen-java:package"]
+      "//": "Default (in-process) lane. The live `mvn`/`javac`/`java` Javalin suite and the child-process hygiene suite moved to sibling `*.e2e.ts` files under the on-demand `e2e` target, which owns `apigen-java:package`; so this lane no longer spawns a JVM. Override of the inferred `test` target carries only `dependsOn` (`lint`/`^build`) plus `inputs` excluding `*.e2e.ts`; executor/cache/outputs come from inference.",
+      "dependsOn": ["lint", "^build"],
+      "//inputs": "Exclude *.e2e.ts so editing a resource-consuming suite never invalidates the default lane's cache — it never runs those files (its vitest `include` is `src/**/*.spec.ts`, see vite.config.ts). Mirrors the workspace targetDefaults.test inputs plus the negative pattern.",
+      "inputs": [
+        "default",
+        "!{projectRoot}/**/*.e2e.ts",
+        "^production",
+        {
+          "externalDependencies": ["vitest", "better-sqlite3", "drizzle-orm"]
+        }
+      ]
+    },
+    "e2e": {
+      "executor": "nx:run-commands",
+      "//": "RESOURCE-CONSUMING lane. Deliberately NOT part of `affected` and NOT referenced by any target's dependsOn or by targetDefaults — it runs ONLY on an explicit `nx run apigen-plugin-java-javalin:e2e` (nx affected never selects it). It runs the sibling *.e2e.ts suites via vitest.e2e.config.ts. `dependsOn` is exactly the resource prerequisites those suites need: `build` (the plugin's own built artifact) and `apigen-java:package` (the real JVM pipeline the plugin drives).",
+      "dependsOn": ["build", "apigen-java:package"],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-java-javalin-e2e"
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "vitest run --config {projectRoot}/vitest.e2e.config.ts"
+      },
+      "cache": false
     },
     "nx-release-publish": {
       "dependsOn": [

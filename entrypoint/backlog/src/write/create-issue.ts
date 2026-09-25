@@ -551,6 +551,18 @@ async function scanForDuplicates(
   for (const r of results) {
     const node = byId.get(r.id);
     if (!node) continue; // raced away (invalidated) between search and this lookup — never surfaced as a candidate
+    // §6.4: candidates MUST be LIVE issues. `getNodesByIds`'s default
+    // `liveOnly` omits soft-deleted rows (`t_invalid` set) but NOT superseded
+    // ones — a superseded node keeps `t_invalid IS NULL` (the supersede CAS
+    // sets `is_superseded` ONLY; see `tx.ts`'s `resolveLiveIssueTx` doc). A
+    // superseded node can still be reachable through a live `owns_component`
+    // edge, and its vector can outlive the edit that superseded it (the
+    // vector delete is fire-and-forget, `embedding-observer.ts`). Left
+    // unfiltered, that stale candidate suppresses a re-file of the very issue
+    // it superseded. Assert BOTH liveness axes explicitly rather than trusting
+    // the fetch's default, so a future `getNodesByIds` default change cannot
+    // silently reopen this.
+    if (node.tInvalid !== undefined || node.isSuperseded) continue;
     // `vecScore` is the ONLY calibrated similarity available. It is absent
     // when the vector channel did not run at all — §6.4 point 4's degraded
     // (no `embedQuery`) mode, or no vector space matching the query's

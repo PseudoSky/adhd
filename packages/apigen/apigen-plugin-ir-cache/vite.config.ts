@@ -60,6 +60,14 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
 
+    // `computeCacheKey`'s spec (ir-cache-layer.spec.ts) times out at vitest's
+    // 5s default under the CI `nx affected -t test --parallel=5` run (load
+    // 100-222 on 10 cores -> up to 22x CPU oversubscription), which reds the
+    // release test gate. 120_000 matches the sibling apigen package
+    // (apigen-plugin-java-javalin) and tools/etl — headroom for the whole
+    // suite, no assertion weakened.
+    testTimeout: 120_000,
+
     reporters: ['default'],
     coverage: {
       reportsDirectory:
