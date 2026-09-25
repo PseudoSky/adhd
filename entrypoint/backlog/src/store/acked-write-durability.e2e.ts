@@ -6,14 +6,15 @@
  *
  * ── What this file exists to close ──────────────────────────────────────────
  *
- * A prior debug pass verified the SINGLE-holder case, the `>2MB`-WAL cap
- * branch, and the content-dead `-tshm` branch against
- * `@adhd/sox-store-adapter` (all passed → "mitigated, does not reproduce").
- * But the ORIGINAL incident happened under **5 concurrent MCP `serve`
- * processes** (the item's own §MECHANISM: "every `backlog` CLI call and every
- * stdio MCP client is its own short-lived process opening the store directly,
- * so uncheckpointed-WAL windows are constant and numerous"). That exact
- * topology was never exercised. This suite does.
+ * A prior debug pass verified the SINGLE-holder case, the WAL-cap branch
+ * (`DEFAULT_WAL_CAP_HEADROOM_BYTES = 262_144` — 256 KiB, ceiling
+ * `DEFAULT_WAL_CAP_CEILING_BYTES = 1_048_576` — 1 MiB), and the content-dead
+ * `-tshm` branch against `@adhd/sox-store-adapter` (all passed → "mitigated,
+ * does not reproduce"). But the ORIGINAL incident happened under **5 concurrent
+ * MCP `serve` processes** (the item's own §MECHANISM: "every `backlog` CLI call
+ * and every stdio MCP client is its own short-lived process opening the store
+ * directly, so uncheckpointed-WAL windows are constant and numerous"). That
+ * exact topology was never exercised. This suite does.
  *
  * ── The property under test (the consumer-visible outcome) ─────────────────
  *
@@ -23,42 +24,58 @@
  * are **SIGKILLed (no clean close)** and the store is reopened from a
  * **fresh OS process**. Zero acknowledged-write loss.
  *
- * ── Why a clean shutdown is NOT what we test ───────────────────────────────
+ * ── The live-peer topology (the incident's actual surface) ─────────────────
  *
  * The historical loss mechanism (item §MECHANISM, BL-512 class) was a later
- * STALE-`-tshm` reconciliation discarding uncheckpointed WAL frames while a
- * peer still held the store — i.e. a write acked, then discarded by a
- * *different* process. `store-lease.ts`'s live-peer gate ("a store with a live
- * peer is never reconciled, never truncated") is the fix. A clean close would
- * exercise the gated TRUNCATE; SIGKILL leaves the messy multi-lease /
- * `-tshm` / `-wal` post-crash state on disk and forces the FRESH opener to do
- * the recovery — exactly the surface the incident lived on.
+ * STALE-`-tshm` reconciliation discarding uncheckpointed WAL frames **while a
+ * peer still held the store** — a write acked, then discarded by a *different*
+ * process. `store-lease.ts`'s live-peer gate ("a store with a live peer is
+ * never reconciled, never truncated") is the fix. The LIVE-PEER test below
+ * exercises exactly that surface: a holder stays ALIVE (still holding its
+ * store lease) while a fresh process opens and reads, and the acked rows must
+ * still be there. The GREEN test then covers the crash topology: SIGKILL
+ * leaves the messy multi-lease / `-tshm` / `-wal` post-crash state on disk and
+ * forces the fresh opener to recover it.
  *
  * ── Real components only, no bypass ────────────────────────────────────────
  *
- * Spawns the REAL BUILT `dist/index.js serve --transport mcp` (what
- * `.mcp.json` invokes) as 5 genuine child OS processes, drives each with a
- * real `@modelcontextprotocol/sdk` `Client`, and reads back through a fresh
- * 6th process. Never a mock, never an in-process import of the server. The
- * write acknowledgement is the latch (the create tool returns only after the
- * transaction commits) — no `sleep`, no wall-clock timing.
+ * Spawns the REAL BUILT `dist/index.js serve --transport mcp` as genuine child
+ * OS processes, drives each with a real `@modelcontextprotocol/sdk` `Client`,
+ * and reads back through a fresh process. Never a mock, never an in-process
+ * import of the server. (`.mcp.json` points at a DIFFERENT checkout —
+ * `.worktrees/backlog-cutover/entrypoint/backlog/dist/index.js` — so it is NOT
+ * the artifact this suite spawns; the suite spawns THIS repo's own built
+ * `dist/index.js`.)
+ *
+ * The write acknowledgement is the latch (the create tool returns only after
+ * the transaction commits). No unconditional sleeps — only bounded deadlines
+ * (`waitPidGone`'s 15 s cap, the co-residency sample loop's 4000 iterations).
  *
  * ── Teeth (CONTROL test at the bottom) ─────────────────────────────────────
  *
- * A test that only ever passes proves nothing, so the CONTROL test proves the
- * fresh-process counter can detect a lost acknowledged row: it writes a small
- * batch, SIGKILLs the holder, confirms the fresh reopen still sees every acked
- * row (durable across the crash), then INJECTS the absence of one
- * acknowledged issue through the real `backlog_delete` verb from a fresh
- * process and asserts the counter drops by exactly one. If the counter could
- * not notice a dropped row, the CONTROL would fail.
+ * A test that only ever passes proves nothing. The CONTROL injects the
+ * incident's consumer-visible outcome directly at the durable layer: after
+ * proving the acked rows survive the crash (`=== acked`), it restores the
+ * store's PRE-WRITE on-disk image — the acked rows genuinely absent from
+ * durable storage — and asserts the fresh-process count drops BELOW the acked
+ * count. If the counter could not notice acked-but-not-persisted rows, the
+ * CONTROL would fail — so the GREEN `count === acked` assertion has teeth.
  *
- * Resource lane: proc — 5 real concurrently-running `serve` child processes +
- * a fresh reopen process against the same store, plus a crash + injected-
- * absence control.
+ * Why not literally truncate the `-wal`? On the CURRENT substrate
+ * (`STORE_ADAPTER` defaults to `turso`) that is not a loss vector: turso's
+ * committed rows are durable in the MAIN DB FILE, independent of the `-wal`.
+ * Truncating the `-wal` and removing the sidecars did NOT drop the
+ * fresh-process count (verified while authoring this control — the issue rows
+ * were already in `db`). So the loss is injected by replacing the recovered
+ * store image with its pre-write bytes: the same "acknowledged writes absent
+ * from durable storage" outcome, applied at the layer the fresh opener reads.
+ *
+ * Resource lane: proc — real concurrently-running `serve` child processes + a
+ * fresh reopen process against the same store, plus a crash + durable-loss
+ * control.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { rmSync, statSync } from 'node:fs';
+import { readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { storeQuiescence } from '@adhd/sox-store-adapter';
@@ -79,8 +96,8 @@ import type { IIssueQueryResult } from '../query/types.js';
 /** The incident topology: five concurrent holders of the same store. */
 const N_HOLDERS = 5;
 /** Writes each holder fires concurrently. Bodies are large so the shared WAL
- *  grows past the adapter's 256 KiB cap and the multi-holder cap-flush/defer
- *  path is genuinely exercised. */
+ *  grows past the adapter's 256 KiB cap (`DEFAULT_WAL_CAP_HEADROOM_BYTES`) and
+ *  the multi-holder cap-flush/defer path is genuinely exercised. */
 const N_PER_HOLDER = 24;
 const BODY_BYTES = 80_000;
 const PROJECT_NAME = 'backlog-acked-write-durability-multiholder';
@@ -138,7 +155,7 @@ async function createIssues(
     }).then((env) => (env.ok === true ? 1 : 0))
   );
   const outcomes = await Promise.all(calls);
-  return outcomes.reduce((a, b) => a + b, 0);
+  return outcomes.reduce<number>((a, b) => a + b, 0);
 }
 
 function errCode(err: unknown): string | undefined {
@@ -164,7 +181,7 @@ async function sigkill(conn: ServerConn): Promise<void> {
   }
 }
 
-/** Bounded, tick-driven wait for a process to actually die — never a wall-clock sleep. */
+/** Bounded, tick-driven wait for a process to actually die — no unconditional sleep. */
 async function waitPidGone(pid: number, deadlineMs = 15_000): Promise<void> {
   const end = Date.now() + deadlineMs;
   for (;;) {
@@ -200,6 +217,36 @@ function describeSidecars(dbPath: string): Record<string, number | null> {
 }
 
 /**
+ * Snapshots the durable store image (the main db file bytes) so the CONTROL
+ * can later restore it — standing in for "the acknowledged writes never
+ * reached durable storage". Used ONLY by the CONTROL test: the GREEN and
+ * LIVE-PEER tests must never mutate the store out from under the mechanism
+ * they prove.
+ */
+function snapshotStoreBytes(dbPath: string): Buffer {
+  return readFileSync(dbPath);
+}
+
+/**
+ * Restores a pre-write durable image over the store and drops the coordination
+ * sidecars, so the next fresh opener reads exactly the snapshot's state. Returns
+ * how many sidecar files it removed (evidence for the control's own report).
+ */
+function restoreStoreBytes(dbPath: string, image: Buffer): number {
+  writeFileSync(dbPath, image);
+  let removed = 0;
+  for (const suffix of ['-wal', '-shm', '-tshm']) {
+    try {
+      unlinkSync(dbPath + suffix);
+      removed++;
+    } catch {
+      /* absent is fine */
+    }
+  }
+  return removed;
+}
+
+/**
  * Reads the live issue count under `projectUid` through a FRESH real
  * `serve --transport mcp` process/connection — never a writer's own
  * in-process view (the item's §VERIFICATION TRAP: a same-process read is
@@ -221,42 +268,25 @@ async function freshStoredCount(
   }
 }
 
-/** Unwraps a `view:'list'` issue page, failing loudly on anything else. */
+/**
+ * Unwraps a `view:'list'` issue page, failing loudly on anything else.
+ *
+ * Narrowing is by SHAPE (`'items' in … && 'hasMore' in …`), not by
+ * `view !== 'list'`: `IIssueMarkdownResult`'s `view` union includes `'list'`
+ * (the markdown member is selected by `format`, not by `view`), so a
+ * `view`-only discriminant does NOT exclude it and `.items` does not
+ * type-check against the residual `IIssueListResult | IIssueMarkdownResult`.
+ * Only `IIssueListResult` carries BOTH `items` and `hasMore` (the registry
+ * views carry `items` alone), so the shape test is the precise discriminant.
+ */
 function assertIssuePage(env: IOutcomeEnvelope<IIssueQueryResult>): Array<{ uid: string }> {
   if (!env.ok) throw new Error(`backlog_query failed: ${JSON.stringify(env)}`);
-  if (env.data.view !== 'list') throw new Error(`expected view:'list', got ${env.data.view}`);
-  if (env.data.hasMore) throw new Error('issue page truncated: more than 1000 — widen the limit');
-  return env.data.items;
-}
-
-/**
- * Deletes ONE acknowledged issue through the REAL `backlog_delete` verb from a
- * fresh process, then re-reads the count in that same fresh process. Returns
- * the post-delete count. Used by the CONTROL to inject an acknowledged row's
- * absence — the same consumer-visible effect as a write that never landed.
- */
-async function deleteOneFresh(sandbox: SandboxHandle, projectUid: string): Promise<number> {
-  const conn = await spawnHolder(sandbox, 'control-delete');
-  try {
-    const before = assertIssuePage(
-      await callTool<IIssueQueryResult>(conn, 'backlog_query', {
-        data: { input: { filter: { project: projectUid }, limit: 1000 } },
-      })
-    );
-    const victim = before[0]?.uid;
-    if (!victim) throw new Error('control: no acknowledged issue to delete');
-    const del = await callTool(conn, 'backlog_delete', {
-      data: { input: { uid: victim, reason: 'control: injected absence', by: 'control-delete' } },
-    });
-    if (!del.ok) throw new Error(`backlog_delete failed: ${JSON.stringify(del)}`);
-    return assertIssuePage(
-      await callTool<IIssueQueryResult>(conn, 'backlog_query', {
-        data: { input: { filter: { project: projectUid }, limit: 1000 } },
-      })
-    ).length;
-  } finally {
-    await closeQuiet(conn);
+  const data = env.data;
+  if ('items' in data && 'hasMore' in data) {
+    if (data.hasMore) throw new Error('issue page truncated: more than 1000 — widen the limit');
+    return data.items;
   }
+  throw new Error(`expected a view:'list' issue page, got ${JSON.stringify(data)}`);
 }
 
 /** Mint one isolated sandbox store seeded with exactly one project. */
@@ -266,13 +296,22 @@ async function mintSeededSandbox(): Promise<{
   projectUid: string;
 }> {
   const sandbox = mintBacklogSandbox();
-  const seedEnv = buildBacklogEnv({ adhdRoot: sandbox.adhdRoot, namespace: 'sandbox' });
-  seedEnv.ensureDirs();
-  const dbPath = resolveBacklogDbPath(seedEnv);
-  const seedStore = await openTestIssueStore(dbPath);
-  const { projectUid } = await seedProject(seedStore, PROJECT_NAME);
-  await seedStore.close();
-  return { sandbox, dbPath, projectUid };
+  try {
+    const seedEnv = buildBacklogEnv({ adhdRoot: sandbox.adhdRoot, namespace: 'sandbox' });
+    seedEnv.ensureDirs();
+    const dbPath = resolveBacklogDbPath(seedEnv);
+    const seedStore = await openTestIssueStore(dbPath);
+    const { projectUid } = await seedProject(seedStore, PROJECT_NAME);
+    await seedStore.close();
+    return { sandbox, dbPath, projectUid };
+  } catch (err) {
+    // `mintBacklogSandbox()` already created `sandbox.adhdRoot`; if seeding
+    // throws before we return the handle, the caller never assigns it and its
+    // `afterEach` would see `undefined` and leak the directory. Remove it here
+    // so the mint's own finally is total, regardless of caller ordering.
+    rmSync(sandbox.adhdRoot, { recursive: true, force: true });
+    throw err;
+  }
 }
 
 describe('backlog acked-write durability — 5 concurrent MCP holders, crash-exit, fresh reopen', () => {
@@ -300,12 +339,13 @@ describe('backlog acked-write durability — 5 concurrent MCP holders, crash-exi
           .filter((p): p is number => p != null);
         expect(pids.length, 'every holder must expose its child pid').toBe(N_HOLDERS);
 
-        // CO-RESIDENCY LATCH (no sleep): all 5 child processes are alive at the
-        // same instant. The adapter's per-connection lease registry is sampled
-        // live while the concurrent writes are in flight; its PEAK proves the
-        // 5 holders genuinely overlapped on the store (an idle `serve` process
-        // voluntarily releases its lease after ~2 s — `releaseIdleConnection()`
-        // — so a single pre-write snapshot is not the right latch).
+        // CO-RESIDENCY LATCH (no unconditional sleep): all 5 child processes
+        // are alive at the same instant. The adapter's per-connection lease
+        // registry is sampled live while the concurrent writes are in flight;
+        // its PEAK proves the 5 holders genuinely overlapped on the store (an
+        // idle `serve` process voluntarily releases its lease after ~2 s —
+        // `releaseIdleConnection()` — so a single pre-write snapshot is not the
+        // right latch).
         for (const pid of pids) expect(pidAlive(pid), `holder pid ${pid} not alive`).toBe(true);
 
         const writesPromise = Promise.all(
@@ -322,7 +362,7 @@ describe('backlog acked-write durability — 5 concurrent MCP holders, crash-exi
           if (done) break;
         }
         const ackedPerHolder = await writesPromise;
-        const acked = ackedPerHolder.reduce((a, b) => a + b, 0);
+        const acked = ackedPerHolder.reduce<number>((a, b) => a + b, 0);
         const sidecarsBeforeCrash = describeSidecars(dbPath);
 
         // Every holder must still be alive immediately before the crash, and
@@ -377,25 +417,91 @@ describe('backlog acked-write durability — 5 concurrent MCP holders, crash-exi
   );
 
   it(
-    'CONTROL (teeth): after the crash the fresh process still sees every acked row; injecting the absence of one acknowledged row through the real delete verb drops the count by exactly one',
+    'LIVE-PEER: a holder that is STILL ALIVE (store lease held) does not lose its acked writes when a FRESH process opens and reads the same store — the live-peer gate is exercised at recovery',
     async () => {
       const seeded = await mintSeededSandbox();
       sandbox = seeded.sandbox;
       const { dbPath, projectUid } = seeded;
 
-      // ONE holder, a SMALL batch (fast, and the point is the counter's teeth,
-      // not the multi-holder topology the GREEN test already covers).
-      const SMALL = 6;
       const holders: ServerConn[] = [];
+      const PER_HOLDER = 8;
       try {
+        const holder = await spawnHolder(sandbox, 'live-peer-holder');
+        holders.push(holder);
+        const holderPid = holder.transport.pid;
+        expect(holderPid, 'live-peer holder must expose its child pid').not.toBeNull();
+        if (holderPid == null) return;
+
+        const acked = await createIssues(holder, PER_HOLDER, projectUid, 'LIVE', 2048);
+        expect(acked).toBe(PER_HOLDER);
+
+        // Sample the lease registry IMMEDIATELY after the ack (well inside the
+        // ~2 s idle-release window), while the holder is a genuine live peer —
+        // the gate would decline any destructive reconcile against this store.
+        const quiescence = storeQuiescence(dbPath);
+        expect(pidAlive(holderPid), 'live-peer holder died before the fresh open').toBe(true);
+        expect(
+          quiescence.livePeers.length,
+          `expected the live holder to hold a store lease (quiescence: ${JSON.stringify(quiescence)})`
+        ).toBeGreaterThanOrEqual(1);
+
+        // A FRESH process opens and reads WHILE the holder is still alive. If
+        // the live-peer gate were absent and this open reconciled/truncated the
+        // store, the acked rows would be gone and this assertion would fail.
+        const { count: whilePeerLive } = await freshStoredCount(sandbox, projectUid);
+        expect(pidAlive(holderPid), 'live-peer holder died during the fresh open').toBe(true);
+        expect(
+          whilePeerLive,
+          `a fresh process read ${whilePeerLive} while a live holder had acked ${acked}`
+        ).toBe(acked);
+
+        // Then crash the holder; the same rows must survive a fresh reopen too.
+        await sigkill(holder);
+        await waitPidGone(holderPid);
+        const { count: afterCrash } = await freshStoredCount(sandbox, projectUid);
+
+        console.log(
+          `[durability-live-peer] ${JSON.stringify({
+            acked,
+            livePeersAtAck: quiescence.livePeers.length,
+            persistedWhilePeerLive: whilePeerLive,
+            persistedAfterCrash: afterCrash,
+          })}`
+        );
+
+        expect(afterCrash).toBe(acked);
+      } finally {
+        await disposeHolders(holders);
+      }
+    },
+    120_000
+  );
+
+  it(
+    'CONTROL (teeth): the acked rows survive the crash (=== acked); restoring the pre-write durable image — the acked rows absent from durable storage — drops the fresh-process count below acked',
+    async () => {
+      const seeded = await mintSeededSandbox();
+      sandbox = seeded.sandbox;
+      const { dbPath, projectUid } = seeded;
+
+      const holders: ServerConn[] = [];
+      const SMALL = 6;
+      const BODY_BYTES_SMALL = 512;
+      try {
+        // Snapshot the durable store BEFORE any acked write (the seed-only
+        // image). Restoring it later reproduces "the acked writes never reached
+        // durable storage".
+        const preWriteImage = snapshotStoreBytes(dbPath);
+
         const holder = await spawnHolder(sandbox, 'control-holder');
         holders.push(holder);
-        const acked = await createIssues(holder, SMALL, projectUid, 'CTRL', 200);
+        const acked = await createIssues(holder, SMALL, projectUid, 'CTRL', BODY_BYTES_SMALL);
         expect(acked).toBe(SMALL);
-        const sidecarsAtCrash = describeSidecars(dbPath);
 
+        // Crash: SIGKILL with no clean close.
         await sigkill(holder);
         if (holder.transport.pid != null) await waitPidGone(holder.transport.pid);
+        const sidecarsAtCrash = describeSidecars(dbPath);
 
         // 1) Durable across the crash: the fresh process sees every acked row.
         const { count: afterCrash } = await freshStoredCount(sandbox, projectUid);
@@ -405,21 +511,26 @@ describe('backlog acked-write durability — 5 concurrent MCP holders, crash-exi
             `(sidecars at crash ${JSON.stringify(sidecarsAtCrash)})`
         ).toBe(SMALL);
 
-        // 2) Teeth: remove ONE acknowledged row through the real API and
-        //    confirm the same counter notices.
-        const afterDelete = await deleteOneFresh(sandbox, projectUid);
+        // 2) Teeth: with the acked rows absent from durable storage (the
+        //    pre-write image restored), the SAME fresh-process read must drop
+        //    below acked. If it could not, GREEN's `count === acked` would be
+        //    toothless.
+        const removedSidecars = restoreStoreBytes(dbPath, preWriteImage);
+        const { count: afterRestore } = await freshStoredCount(sandbox, projectUid);
         console.log(
           `[durability-control] ${JSON.stringify({
             acked,
             sidecarsAtCrash,
             persistedAfterCrash: afterCrash,
-            persistedAfterInjectedAbsence: afterDelete,
+            removedSidecars,
+            persistedAfterPreWriteRestore: afterRestore,
           })}`
         );
         expect(
-          afterDelete,
-          `control expected the injected absence to drop the count below ${SMALL}, but the fresh read still saw ${afterDelete}`
-        ).toBe(SMALL - 1);
+          afterRestore,
+          `control expected restoring the pre-write durable image to drop the fresh-process count below ` +
+            `the ${acked} acked rows, but it still read ${afterRestore}`
+        ).toBeLessThan(acked);
       } finally {
         await disposeHolders(holders);
       }
