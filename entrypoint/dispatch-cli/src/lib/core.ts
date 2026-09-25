@@ -26,6 +26,7 @@ import type {
   IOptimizerDeps,
   MilestoneStatus,
   ModelTier,
+  OperationAction,
   OperationDag,
   ValidationResult,
 } from '@adhd/dispatch-base-spec';
@@ -41,6 +42,7 @@ import {
   DEFAULT_B_PER_TIER,
   DEFAULT_CONTEXT_WINDOW_PER_TIER,
   DEFAULT_POLL,
+  FS_DESTRUCTIVE_ACTIONS,
   MockAgentRunner,
   orchestrateCycle,
   pollUntilTerminal,
@@ -227,13 +229,39 @@ export const DEFAULT_RUN_DEBUG_DIR = join(process.cwd(), 'tmp', 'dispatch-cli', 
  *   entirely (lets a test inject its own `MockAgentRunner` instance — e.g.
  *   scoped to a test-local debug dir — and inspect `firedUnits`/
  *   `ensureAgentCalls` afterwards). Never supplied by `api.ts`.
+ * @param allowedFsActions - FEAT-DISPATCH-GOVERNANCE-001: comma-parsed
+ *   `OperationAction` names (from `--allow-fs`) permitted to actually
+ *   execute their `fs.move`/`fs.delete`/`fs.scaffold`/`fs.edit` tool-call op
+ *   this cycle. Default: `[]` — every destructive fs op is denied unless
+ *   explicitly opted in. Rejects (throws, before ever touching a runner or
+ *   the filesystem) any entry that is not one of
+ *   `@adhd/dispatch-orchestrator`'s `FS_DESTRUCTIVE_ACTIONS`.
+ * @param toolsRoot - BUG-DISPATCH-CLI-TOOLSROOT-001 (found during
+ *   FEAT-DISPATCH-GOVERNANCE-001's code review): before this parameter
+ *   existed, `runCycleCore` never set `OrchestratorDeps.toolsRoot` at all, so
+ *   `@adhd/dispatch-orchestrator`'s `resolveToolPath` fell back to its own
+ *   default of `process.cwd()` — wherever the CLI happened to be invoked
+ *   from — rather than any path scoped to the plan being run. From
+ *   `--tools-root` (`bin/cli.ts`) via `api.ts`'s `run`. Optional; defaults to
+ *   `process.cwd()`, matching `@adhd/dispatch-orchestrator`'s own default so
+ *   omitting the flag is a no-op change in behavior.
  */
 export async function runCycleCore(
   dagPath: string,
   dryRun: boolean,
-  runnerOverride?: IDispatchAgentRunner
+  runnerOverride?: IDispatchAgentRunner,
+  allowedFsActions: string[] = [],
+  toolsRoot?: string
 ): Promise<CycleResult> {
   await guardDagExists(dagPath);
+  for (const action of allowedFsActions) {
+    if (!FS_DESTRUCTIVE_ACTIONS.has(action as OperationAction)) {
+      throw new Error(
+        `runCycleCore: unknown --allow-fs action '${action}' — expected one of ` +
+          `${[...FS_DESTRUCTIVE_ACTIONS].join(', ')}`
+      );
+    }
+  }
   const runner =
     runnerOverride ??
     (dryRun
@@ -246,6 +274,8 @@ export async function runCycleCore(
     runner,
     bPerTier: DEFAULT_B_PER_TIER,
     contextWindowPerTier: DEFAULT_CONTEXT_WINDOW_PER_TIER,
+    allowedFsActions: allowedFsActions as OperationAction[],
+    ...(toolsRoot !== undefined ? { toolsRoot } : {}),
   };
   return orchestrateCycle(deps);
 }
