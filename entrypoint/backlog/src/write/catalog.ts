@@ -40,6 +40,7 @@ import {
   writeNodeTx,
 } from './tx.js';
 import { writeAudit } from './audit.js';
+import { defaultCitationAllowedExternalRoots } from './citation-path.js';
 import type {
   IComponentSummary,
   ILocationSummary,
@@ -521,6 +522,22 @@ export interface IProjectPolicy {
   readonly transitionRequiresNote: boolean;
   readonly citationRequired: boolean;
   readonly citationRequiresSha: boolean;
+  /**
+   * External filesystem roots (absolute paths) this project may cite from, in
+   * ADDITION to its own `metadata.path` root (BUG c6d35272). A citation target
+   * is accepted iff its CANONICAL (symlink-resolved) path lies within the
+   * project root OR one of these roots (`citation-path.ts`'s
+   * `resolveCitationTarget`); a `..` traversal or a symlink that escapes stays
+   * rejected, and an arbitrary absolute path outside every root is never
+   * readable. Only the resulting `sha` is persisted — never file content.
+   *
+   * This layer defaults to the EMPTY array; {@link resolveProjectPolicy}
+   * injects the lazy runtime default (`defaultCitationAllowedExternalRoots()`
+   * → `[~/.adhd]`) on every resolve. Set an EXPLICIT `[]` in a project's
+   * `policy` to disable the external carve-out entirely. This is TYPED,
+   * per-project config — deliberately never an environment toggle.
+   */
+  readonly citationAllowedExternalRoots: readonly string[];
   readonly defaultStatus?: string;
   readonly defaultKind?: string;
   readonly dedupeScanEnabled: boolean;
@@ -550,6 +567,11 @@ const DEFAULT_PROJECT_POLICY: IProjectPolicy = Object.freeze({
   transitionRequiresNote: true,
   citationRequired: false,
   citationRequiresSha: true,
+  // Frozen empty PLACEHOLDER, not the real default: the `~/.adhd` root must be
+  // read lazily (from `homedir()` at call time), so `resolveProjectPolicy`
+  // injects it on every resolve rather than baking it into this module-load
+  // constant. An explicitly-empty policy array still means "no external roots".
+  citationAllowedExternalRoots: Object.freeze([]),
   dedupeScanEnabled: true,
   dedupeThreshold: 0.8,
   claimStaleAfterMin: 30,
@@ -572,7 +594,10 @@ export function resolveProjectPolicy(
 ): IProjectPolicy {
   const raw = project.metadata?.policy;
   if (raw === null || typeof raw !== 'object')
-    return { ...DEFAULT_PROJECT_POLICY };
+    return {
+      ...DEFAULT_PROJECT_POLICY,
+      citationAllowedExternalRoots: defaultCitationAllowedExternalRoots(),
+    };
   const policy = raw as Partial<IProjectPolicy>;
   return {
     transitionRequiresNote:
@@ -582,6 +607,13 @@ export function resolveProjectPolicy(
       policy.citationRequired ?? DEFAULT_PROJECT_POLICY.citationRequired,
     citationRequiresSha:
       policy.citationRequiresSha ?? DEFAULT_PROJECT_POLICY.citationRequiresSha,
+    // Injected LAZILY on both branches (this one and the no-`policy` object
+    // branch above): `defaultCitationAllowedExternalRoots()` reads
+    // `homedir()` at CALL time, so a per-invocation `$HOME` is honoured and
+    // the default is never frozen at module load.
+    citationAllowedExternalRoots:
+      policy.citationAllowedExternalRoots ??
+      defaultCitationAllowedExternalRoots(),
     defaultStatus: policy.defaultStatus,
     defaultKind: policy.defaultKind,
     dedupeScanEnabled:
