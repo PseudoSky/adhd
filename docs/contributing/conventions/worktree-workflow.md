@@ -1,6 +1,8 @@
 # Worktree Workflow — dependency setup, merge-safety checks, and merging onto a dirty main
 
-**Status:** proposed convention (research + design only — nothing in this document has been implemented) · **Written:** 2026-07-17
+**Status:** partially implemented — the §3.1.3 hash gate exists as [`scripts/worktree-setup.sh`](../../../scripts/worktree-setup.sh) (built 2026-09-25, on the pnpm migration that has since landed); the §3.2 merge-check script and the §3.1.2 `WorktreeCreate` hook remain **proposed / unimplemented**. · **Written:** 2026-07-17 · **Updated:** 2026-09-25
+
+> **Obligation — any agent working in a worktree, read this first.** Before running `nx`, `test`, `lint`, or any build gate in a worktree, run `scripts/worktree-setup.sh` for that worktree. It is safe and idempotent; a second run on an already-provisioned worktree is a ~0.3 s no-op. In particular, **a reviewer must not report a branch as "unverifiable for lack of `node_modules`" until it has run the script and retried the gate** — an unprovisioned worktree is a fixable setup state, not a verdict on the code under review. This is the obligation the §1.1 incident motivates: an agent that could not run a single `nx` target could not verify the branch it was reviewing.
 
 Companion to [`package-naming.md`](./package-naming.md) — same directory, same house style: every
 non-obvious claim is tagged with how it was established, so a human reviewer can tell a verified
@@ -131,7 +133,7 @@ Across Devin/Cursor/Copilot-style agent products, auto-merge without human revie
 | Shared literal `node_modules` (current) | **None** — one inode for every worktree; the exact cause of the §1.1 incident | Zero (symlink) | Rejected — already proven to fail catastrophically |
 | Fresh per-worktree install (`npm ci`/`yarn install` per worktree) | Full | Full install cost every time (this repo's `node_modules` is 1.2GB `[REPO, §1.1]`) | Rejected — violates the stated "≈0 time for unchanged deps" goal |
 | pnpm + `enableGlobalVirtualStore`, via `pnpm install` directly | Per-worktree `node_modules` (own directory), backed by one shared content store | **18.6s measured** for a warm-store second worktree, vs. 31.7s cold `[REPO, §2.1.1]` — real, not "nearly instant" | Isolation chosen (§3.1.1 below); speed claim corrected — see §3.1.3 |
-| pnpm global virtual store + hash-gated skip of `pnpm install` entirely | Same as above | **Near-zero when hash unchanged** — bypasses pnpm's CLI overhead via direct filesystem copy/link, not measured by pnpm's own install path `[SYNTHESIS, §3.1.3]` | **Chosen** |
+| pnpm global virtual store + hash-gated skip of `pnpm install` entirely | Same as above | **Measured false** — a direct filesystem copy/link of the main checkout's `node_modules` is *slower* than a warm `pnpm install` on this repo's 163,538-file hoisted tree; see the §3.1.3 implementation note (2026-09-25) | Superseded — the fast path is a true no-op only when the worktree is already provisioned (§3.1.3) |
 | Yarn Berry PnP / zero-installs | Per-worktree `.pnp.cjs` (or committed cache) | Near-zero, but only after a second migration decision this repo hasn't made | Rejected *for now* — real, undecided native-module and repo-size risk (§2.2); revisit only after a dedicated spike |
 
 pnpm wins because it is the only option that gets **both** properties the owner asked for simultaneously — real per-worktree isolation *and* near-zero marginal install cost — without requiring a second, riskier ecosystem-compatibility decision (PnP) on top of it, and without carrying the native-module risk that specifically threatens this repo's `better-sqlite3` dependency `[REPO, §1.1]`. It also directly eliminates the *class* of failure in §1.1: because `pnpm install` for a new worktree only ever writes into that worktree's own `node_modules`, an agent never needs to write into the main checkout's `node_modules` from a worktree-scoped session — which is exactly the operation Claude Code's permission classifier blocked mid-incident (§1.1). `[SYNTHESIS]`
@@ -139,8 +141,8 @@ pnpm wins because it is the only option that gets **both** properties the owner 
 #### 3.1.2 What would need to change (named, not implemented)
 
 - **Package-manager migration, human-approved.** AGENTS.md requires human approval before installing external tools (`"You always get human approval before installing external tools"` `[REPO: AGENTS.md:21]`) and evaluating best-of-class 3rd-party tools before authoring (`AGENTS.md:20`) — this document is that evaluation; the migration itself still needs explicit sign-off. Concretely: add `pnpm-workspace.yaml` at repo root with `packages: ['packages/*/*', 'entrypoint/*']` (matching the existing `<domain>/<domain>-<tier>-<name>` layout) and `enableGlobalVirtualStore: true`; retire `yarn.lock` **and** `package-lock.json` (the latter is already stray junk, §1.1/§3.4) in favor of `pnpm-lock.yaml`; update `package.json`'s `packageManager` field to a pinned `pnpm@<version>`; update `.yarnrc.yml` removal and any CI/`PUBLISHING.md` references to `npm`/`yarn install` (`PUBLISHING.md` currently documents `npm login`/`npm publish`/`npm version` flows `[REPO: PUBLISHING.md]` — these are npm-registry commands, not npm-the-package-manager, and are unaffected by a client-side pnpm switch, but should be re-verified once pnpm is in place).
-- **A worktree setup script**, e.g. `scripts/worktree-setup.sh` (not yet written — named per convention; per `package-naming.md` this is correctly a `scripts/` entry, not a `packages/` library, since it has zero importers by construction `[REPO: package-naming.md "Where things do NOT go"]`). It performs §3.1.3's hash gate, then either no-ops or runs `pnpm install` inside the target worktree.
-- **A `WorktreeCreate` hook** in `.claude/settings.json` wiring worktree creation to `git worktree add .worktrees/<name>` (not Claude Code's own `.claude/worktrees/` default — see §3.1.5) followed by invoking the setup script. **Not implemented here** — `update-config` is the skill that owns `settings.json` edits, and this document is scoped to research + a written proposal only.
+- **A worktree setup script** — [`scripts/worktree-setup.sh`](../../../scripts/worktree-setup.sh) — **implemented 2026-09-25.** It performs §3.1.3's hash gate, then either no-ops (already provisioned at the current dependency hash) or provisions the worktree (see the §3.1.3 implementation note for the measured choice of provisioning primitive). Per `package-naming.md` this is correctly a `scripts/` entry, not a `packages/` library, since it has zero importers by construction `[REPO: package-naming.md "Where things do NOT go"]`.
+- **A `WorktreeCreate` hook** in `.claude/settings.json` wiring worktree creation to `git worktree add .worktrees/<name>` (not Claude Code's own `.claude/worktrees/` default — see §3.1.5) followed by invoking the setup script. **Still unimplemented (2026-09-25)** — `update-config` is the skill that owns `settings.json` edits; until that hook lands, the script is invoked manually per the Obligation at the top of this document.
 - **BACKLOG entry** (added live in §3.4) tracking the migration as a single coordinated piece of work, since it touches the lockfile, CI, `PUBLISHING.md`, and every worktree simultaneously.
 
 #### 3.1.3 The hash-gated fast path (complementary, package-manager-agnostic)
@@ -153,6 +155,17 @@ Independent of the pnpm decision, `scripts/worktree-setup.sh` should implement a
 4. **Changed:** run a real `pnpm install` (real cost, ~20-35s per §2.1.1 — cannot be avoided when dependencies genuinely changed), then update the stored hash.
 
 This gives the owner's literal ask — "0 consumed time for changes that don't change `node_modules`" — as a mechanical, unconditional check rather than something an agent has to remember or judge, and it does not depend on pnpm's own install path being fast, because measurement showed it isn't.
+
+**Implementation note (2026-09-25 — measured; corrects step 3's premise).** The script now exists, and implementing it surfaced a measurement that contradicts step 3 above: a full-tree filesystem copy/link of a built `node_modules` is **not** cheaper than invoking pnpm on this repo. `node_modules` is a hoisted layout (`.npmrc` `node-linker=hoisted`) of **163,538 files / 3.2 GB**, so any clone/hardlink pays roughly one syscall per file:
+
+| Provision method (whole tree) | Measured |
+|---|---|
+| `cp -cR` (APFS clone) | >120 s (killed) |
+| `cp -al` (hardlink) | 2 m 26 s |
+| `pnpm install --frozen-lockfile --prefer-offline` (warm store) | 37–56 s |
+| Second run on a provisioned worktree (the hash-gate no-op) | ~0.3 s |
+
+Consequence: the hash gate's real "0 consumed time" win is the **no-op when a worktree is already provisioned** (step 2), not a filesystem shortcut for provisioning a fresh one. The script therefore **defaults to `pnpm install --frozen-lockfile`** and keeps step 3's reuse path behind an explicit `--reuse` (with `--clone` / `--hardlink` / `--copy`) for offline or no-pnpm use. Note too that `--hardlink` shares file inodes with the main checkout (observable as `.modules.yaml` link-count 2) — the isolation property §3.1.1 chose pnpm for is only preserved by clone/copy, which are the slowest of the three. `[REPO: measured 2026-09-25 against this repo's real tree, via `scripts/worktree-setup.sh`]`
 
 #### 3.1.4 Nx worktree-aware caching — tracked, not bundled
 
