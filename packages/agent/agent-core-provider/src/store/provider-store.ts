@@ -55,25 +55,19 @@ export class ProviderStore {
 
   /**
    * Insert a new provider row.
-   * Throws PROVIDER_ALREADY_EXISTS if the id is taken.
+   *
+   * Uniqueness is enforced by the `id` primary key, not a `SELECT` pre-check:
+   * `onConflictDoNothing()` lets SQLite arbitrate a concurrent duplicate, and
+   * a zero-row-changed result means the id was already taken — translated into
+   * the documented `PROVIDER_ALREADY_EXISTS` so a racing second writer can
+   * never surface the driver's raw `SqliteError` to the caller.
+   *
+   * @throws {ProviderStoreError} PROVIDER_ALREADY_EXISTS if the id is taken.
    */
   create(input: ProviderCreateInput): Provider {
     const now = new Date().toISOString();
 
-    const existing = this.db
-      .select()
-      .from(providers)
-      .where(eq(providers.id, input.id))
-      .get();
-
-    if (existing) {
-      throw new ProviderStoreError(
-        'PROVIDER_ALREADY_EXISTS',
-        `Provider '${input.id}' already exists`
-      );
-    }
-
-    this.db
+    const result = this.db
       .insert(providers)
       .values({
         id: input.id,
@@ -84,7 +78,15 @@ export class ProviderStore {
         createdAt: now,
         updatedAt: now,
       })
+      .onConflictDoNothing()
       .run();
+
+    if (result.changes === 0) {
+      throw new ProviderStoreError(
+        'PROVIDER_ALREADY_EXISTS',
+        `Provider '${input.id}' already exists`
+      );
+    }
 
     return this.read(input.id);
   }

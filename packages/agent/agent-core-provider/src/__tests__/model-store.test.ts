@@ -427,3 +427,61 @@ describe('ModelStore — unique-constraint atomicity (S4)', () => {
     sqlite.close();
   });
 });
+
+// ──────────────────────────────────────────────
+// ProviderStore — unique-constraint atomicity (c7bc4c0b)
+//
+// create() must let the `provider_providers.id` primary key arbitrate
+// uniqueness and translate the zero-row-changed outcome into the documented
+// PROVIDER_ALREADY_EXISTS, never surface the driver's raw SqliteError. The
+// SELECT pre-check it used to run opened a check-then-INSERT race window.
+// ──────────────────────────────────────────────
+
+describe('ProviderStore — unique-constraint atomicity', () => {
+  it('duplicate create() yields PROVIDER_ALREADY_EXISTS (a ProviderStoreError), never a raw SqliteError', () => {
+    const { sqlite, db } = openDb(dbPath);
+    const store = new ProviderStore(db);
+
+    store.create({ id: 'openai', transport: 'HTTP', authPattern: 'bearer' });
+
+    let caught: unknown;
+    try {
+      store.create({ id: 'openai', transport: 'HTTP', authPattern: 'bearer' });
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(ProviderStoreError);
+    expect((caught as ProviderStoreError).code).toBe('PROVIDER_ALREADY_EXISTS');
+    // The whole point: a caller must never see the driver's raw error.
+    expect(caught).not.toBeInstanceOf(Database.SqliteError);
+
+    sqlite.close();
+  });
+
+  it('create() INSERTs before it reads back — uniqueness is the DB constraint, not a SELECT pre-check', () => {
+    const { sqlite, db } = openDb(dbPath);
+    const store = new ProviderStore(db);
+
+    const insertSpy = vi.spyOn(db, 'insert');
+    const selectSpy = vi.spyOn(db, 'select');
+
+    store.create({
+      id: 'insert_first',
+      transport: 'HTTP',
+      authPattern: 'none',
+    });
+
+    expect(insertSpy).toHaveBeenCalledTimes(1);
+    // create() legitimately selects once — the read-back of the inserted row.
+    expect(selectSpy).toHaveBeenCalled();
+    // The old code ran a SELECT pre-check FIRST, opening a check-then-INSERT
+    // race window. The constraint-arbitrated version must INSERT first; the
+    // only SELECT is the post-insert read-back.
+    expect(insertSpy.mock.invocationCallOrder[0]).toBeLessThan(
+      selectSpy.mock.invocationCallOrder[0]
+    );
+
+    sqlite.close();
+  });
+});
