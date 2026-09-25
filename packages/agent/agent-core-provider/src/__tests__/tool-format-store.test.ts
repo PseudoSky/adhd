@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -387,6 +387,78 @@ describe('ToolFormatStore — CRUD', () => {
     expect(row.emitShape).toBe('custom');
     expect(row.typeTag).toBeNull();
     expect(row.note).toBeNull();
+
+    sqlite.close();
+  });
+});
+
+// ──────────────────────────────────────────────
+// ToolFormatStore.create() — unique-constraint atomicity (bd724962)
+//
+// create() must let the provider_tool_formats(provider_id, canonical_tool)
+// composite primary key arbitrate uniqueness and translate the zero-row-changed
+// outcome into the documented TOOL_FORMAT_ALREADY_EXISTS, never surface the
+// driver's raw SqliteError. The SELECT pre-check it used to run opened a
+// check-then-INSERT race window.
+// ──────────────────────────────────────────────
+
+describe('ToolFormatStore.create() — unique-constraint atomicity', () => {
+  it('duplicate create() yields TOOL_FORMAT_ALREADY_EXISTS (a ToolFormatStoreError), never a raw SqliteError', () => {
+    const { sqlite, db } = openDb(dbPath);
+    const store = new ToolFormatStore(db);
+
+    store.create({
+      providerId: 'anthropic',
+      canonicalTool: 'web_search',
+      emitShape: 'server_side',
+      typeTag: 'web_search_20250305',
+    });
+
+    let caught: unknown;
+    try {
+      store.create({
+        providerId: 'anthropic',
+        canonicalTool: 'web_search',
+        emitShape: 'server_side',
+        typeTag: 'web_search_20250305',
+      });
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(ToolFormatStoreError);
+    expect((caught as ToolFormatStoreError).code).toBe(
+      'TOOL_FORMAT_ALREADY_EXISTS'
+    );
+    // The whole point: a caller must never see the driver's raw error.
+    expect(caught).not.toBeInstanceOf(Database.SqliteError);
+
+    sqlite.close();
+  });
+
+  it('create() INSERTs before it reads back — uniqueness is the DB constraint, not a SELECT pre-check', () => {
+    const { sqlite, db } = openDb(dbPath);
+    const store = new ToolFormatStore(db);
+
+    const insertSpy = vi.spyOn(db, 'insert');
+    const selectSpy = vi.spyOn(db, 'select');
+
+    store.create({
+      providerId: 'anthropic',
+      canonicalTool: 'web_search',
+      emitShape: 'server_side',
+      typeTag: 'web_search_20250305',
+    });
+
+    expect(insertSpy).toHaveBeenCalledTimes(1);
+    // create() legitimately selects once — the read-back of the inserted row.
+    expect(selectSpy).toHaveBeenCalled();
+    // The old code ran a SELECT pre-check FIRST, opening a check-then-INSERT
+    // race window. The constraint-arbitrated version must INSERT first; the
+    // only SELECT is the post-insert read-back.
+    expect(insertSpy.mock.invocationCallOrder[0]).toBeLessThan(
+      selectSpy.mock.invocationCallOrder[0]
+    );
 
     sqlite.close();
   });

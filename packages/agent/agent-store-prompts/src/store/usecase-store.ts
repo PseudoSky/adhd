@@ -159,8 +159,14 @@ export class UseCaseStore {
    * Uniqueness is enforced by the `(component_slug, use_case_slug)` composite
    * primary key: `INSERT ... ON CONFLICT DO NOTHING` lets SQLite arbitrate a
    * duplicate, and a zero-row-changed result is translated into the typed
-   * {@link UseCaseError} `COMPONENT_LINK_ALREADY_EXISTS` — a raw better-sqlite3
-   * `SqliteError` never escapes the documented contract.
+   * {@link UseCaseError} `COMPONENT_LINK_ALREADY_EXISTS` — a duplicate-key
+   * better-sqlite3 `SqliteError` never escapes the documented contract.
+   *
+   * NOTE: `ON CONFLICT DO NOTHING` suppresses only uniqueness conflicts. The
+   * real `.references()` FKs on component_slug → registry_components.slug and
+   * use_case_slug → registry_use_cases.slug still surface a raw SqliteError
+   * (FOREIGN KEY constraint failed) for an unknown slug — callers must
+   * validate slugs before linking.
    *
    * @param componentSlug - The component to annotate (logical FK).
    * @param useCaseSlug   - The use-case to associate with (FK → registry_use_cases).

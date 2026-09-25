@@ -113,27 +113,17 @@ export class AgentToolStore {
    * ('full') — see `AgentToolGrantInput.permission` for the rationale
    * (BUG-REGISTRY-002). When supplied, it is persisted verbatim.
    *
-   * Throws GRANT_ALREADY_EXISTS if the (agent_slug, tool_name) pair exists.
+   * Uniqueness is enforced by the `(agent_slug, tool_name)` composite primary
+   * key, not a `SELECT` pre-check: `onConflictDoNothing()` lets SQLite
+   * arbitrate a concurrent duplicate, and a zero-row-changed result means the
+   * grant already exists — translated into the documented `GRANT_ALREADY_EXISTS`
+   * so a racing second writer can never surface the driver's raw `SqliteError`
+   * to the caller.
+   *
+   * @throws {AgentToolStoreError} GRANT_ALREADY_EXISTS if the
+   *   (agent_slug, tool_name) pair exists.
    */
   grant(input: AgentToolGrantInput): AgentToolGrant {
-    const existing = this.db
-      .select()
-      .from(agentToolsTable)
-      .where(
-        and(
-          eq(agentToolsTable.agentSlug, input.agentSlug),
-          eq(agentToolsTable.toolName, input.toolName)
-        )
-      )
-      .get();
-
-    if (existing) {
-      throw new AgentToolStoreError(
-        'GRANT_ALREADY_EXISTS',
-        `Grant for agent '${input.agentSlug}' on tool '${input.toolName}' already exists`
-      );
-    }
-
     const grant: AgentToolGrant = {
       agentSlug: input.agentSlug,
       toolName: input.toolName,
@@ -144,7 +134,7 @@ export class AgentToolStore {
       contextCondition: input.contextCondition ?? null,
     };
 
-    this.db
+    const result = this.db
       .insert(agentToolsTable)
       .values({
         agentSlug: grant.agentSlug,
@@ -152,7 +142,15 @@ export class AgentToolStore {
         permission: grant.permission,
         contextCondition: grant.contextCondition,
       })
+      .onConflictDoNothing()
       .run();
+
+    if (result.changes === 0) {
+      throw new AgentToolStoreError(
+        'GRANT_ALREADY_EXISTS',
+        `Grant for agent '${input.agentSlug}' on tool '${input.toolName}' already exists`
+      );
+    }
 
     return grant;
   }
