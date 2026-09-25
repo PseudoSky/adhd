@@ -23,7 +23,7 @@ import * as path from 'node:path';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 
 import { runMigrationsOn } from '../db/migrate-runner.js';
 import * as schema from '../db/schema.js';
@@ -310,6 +310,62 @@ describe('AgentPolicyStore — agent_policies junction', () => {
     expect((caught as AgentPolicyError).code).toBe(
       'AGENT_POLICY_ALREADY_ATTACHED'
     );
+
+    fs.unlinkSync(dbPath);
+  });
+
+  // ── read-back failure error contract ──────────────────────────────────────
+
+  it('attach throws AGENT_POLICY_READBACK_FAILED — never a bare Error and never ALREADY_ATTACHED — when the post-insert read-back is empty', () => {
+    const dbPath = tmpDbPath();
+    const { sqlite, db } = openDb(dbPath);
+    openHandles.push(sqlite);
+
+    runMigrationsOn(sqlite, db);
+    seedTemplateFixtures(db);
+
+    const store = new AgentPolicyStore(db);
+
+    // Force ONLY the post-insert verification read to return undefined. The
+    // insert still runs against the real DB (changes === 1), so the path under
+    // test is the read-back failure — not the duplicate-attach conflict.
+    type SelectReturn = ReturnType<typeof db.select>;
+    const emptyReadChain = {
+      from: () => emptyReadChain,
+      where: () => emptyReadChain,
+      get: () => undefined,
+      all: () => [] as unknown[],
+    } as unknown as SelectReturn;
+    const selectSpy = vi
+      .spyOn(db, 'select')
+      .mockImplementation(() => emptyReadChain);
+
+    let caught: unknown;
+    try {
+      store.attach({
+        agentSlug: TEST_AGENT_SLUG,
+        policySlug: MAX_REWORK_TEMPLATE.slug,
+      });
+    } catch (err) {
+      caught = err;
+    } finally {
+      selectSpy.mockRestore();
+    }
+
+    // A typed store-consistency error — not a bare Error.
+    expect(caught).toBeInstanceOf(AgentPolicyError);
+    expect((caught as Error).name).toBe('AgentPolicyError');
+    expect((caught as AgentPolicyError).code).toBe(
+      'AGENT_POLICY_READBACK_FAILED'
+    );
+    // Must never be conflated with the caller-facing duplicate-attach error.
+    expect((caught as AgentPolicyError).code).not.toBe(
+      'AGENT_POLICY_ALREADY_ATTACHED'
+    );
+    expect((caught as AgentPolicyError).data).toEqual({
+      agentSlug: TEST_AGENT_SLUG,
+      policySlug: MAX_REWORK_TEMPLATE.slug,
+    });
 
     fs.unlinkSync(dbPath);
   });
