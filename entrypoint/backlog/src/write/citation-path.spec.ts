@@ -11,11 +11,12 @@
  *   containment resolves the link — this is also the sibling defect
  *   c6d90ddf);
  * - an arbitrary absolute path outside every root is rejected;
- * - the default root is `~/.adhd/backlog`, read from `$HOME` at CALL time.
+ * - the default external roots are EMPTY, so the machine-global backlog store
+ *   under `~/.adhd/backlog` is not citable (BUG 62059b57 follow-up).
  */
 import { mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
 import {
@@ -28,18 +29,19 @@ import {
 } from './citation-path.js';
 
 describe('citation-path — defaultCitationAllowedExternalRoots', () => {
-  it('is [~/.adhd/backlog], read from $HOME at CALL time (lazy, never frozen at module load)', () => {
-    expect(defaultCitationAllowedExternalRoots()).toEqual([
-      join(homedir(), '.adhd', 'backlog'),
-    ]);
+  it('is [] — the runtime grants NO machine-global default external root', () => {
+    expect(defaultCitationAllowedExternalRoots()).toEqual([]);
+  });
 
+  it('is $HOME-INDEPENDENT: redirecting $HOME does not conjure a default root', () => {
+    // The default no longer reads `homedir()` (it is the empty array), so a
+    // per-invocation sandbox sees exactly the same surface. The function stays
+    // lazy so the call contract is unchanged if a root is ever re-introduced.
     const original = process.env.HOME;
     const fake = freshTmpDir('citation-path-home');
     process.env.HOME = fake;
     try {
-      expect(defaultCitationAllowedExternalRoots()).toEqual([
-        join(fake, '.adhd', 'backlog'),
-      ]);
+      expect(defaultCitationAllowedExternalRoots()).toEqual([]);
     } finally {
       if (original === undefined) delete process.env.HOME;
       else process.env.HOME = original;
@@ -47,13 +49,15 @@ describe('citation-path — defaultCitationAllowedExternalRoots', () => {
     }
   });
 
-  it('does NOT default to the whole ~/.adhd tree (BUG 62059b57 — ~/.adhd/.env and sibling projects stay out)', () => {
-    // The narrow default is the security property: the parent of the default
-    // root holds the machine-global secrets file and every other project's DB,
-    // so neither may ever be inside it. Asserted on the VALUE, not the shape.
-    const [root] = defaultCitationAllowedExternalRoots();
-    expect(root).not.toBe(join(homedir(), '.adhd'));
-    expect(root).toBe(join(homedir(), '.adhd', 'backlog'));
+  it('does NOT default to ~/.adhd, nor to the store home ~/.adhd/backlog (BUG 62059b57 + the store carve-out)', () => {
+    // Neither the machine-global secrets parent (`~/.adhd/.env`, every other
+    // project's DB) NOR the store's own data home (`~/.adhd/backlog`, which
+    // holds `production/data/backlog-v2.db` + its backups) may be inside the
+    // default surface. Asserted on the VALUE, not the shape.
+    const roots = defaultCitationAllowedExternalRoots();
+    expect(roots).not.toContain(join(homedir(), '.adhd'));
+    expect(roots).not.toContain(join(homedir(), '.adhd', 'backlog'));
+    expect(roots).toEqual([]);
   });
 });
 
@@ -177,5 +181,57 @@ describe('citation-path — resolveCitationTarget (canonical containment against
   it('accepts a missing file inside the project root — existence is the caller readFile\'s concern', async () => {
     const r = await resolveCitationTarget(projectRoot, 'not-yet.ts', []);
     expect(r.accepted).toBe(true);
+  });
+
+  it('REJECTS the shared backlog store + its backups under the DEFAULT roots (BUG 62059b57 follow-up — negative control)', async () => {
+    // The residual this change closes: with the OLD default
+    // (`[~/.adhd/backlog]`) a citation could resolve INTO the machine-global
+    // backlog graph — `production/data/backlog-v2.db` and the `backup-*`
+    // snapshots beside it. $HOME is redirected to a hermetic tree so the store
+    // paths are built deterministically (the real machine's ~/.adhd/backlog
+    // need not exist, and this test never reads the real store). With the old
+    // default each candidate lies INSIDE the root, so the `false` assertion
+    // goes RED; the empty default is what makes it GREEN.
+    const fakeHome = freshTmpDir('citation-store-home');
+    const original = process.env.HOME;
+    process.env.HOME = fakeHome;
+    try {
+      const storePath = join(
+        fakeHome,
+        '.adhd',
+        'backlog',
+        'production',
+        'data',
+        'backlog-v2.db'
+      );
+      const backupPath = join(
+        fakeHome,
+        '.adhd',
+        'backlog',
+        'backup-20260808',
+        'data',
+        'backlog.db'
+      );
+      mkdirSync(dirname(storePath), { recursive: true });
+      mkdirSync(dirname(backupPath), { recursive: true });
+      writeFileSync(storePath, 'store-file-placeholder-bytes\n');
+      writeFileSync(backupPath, 'store-file-placeholder-bytes\n');
+
+      for (const target of [storePath, backupPath]) {
+        const r = await resolveCitationTarget(
+          projectRoot,
+          target,
+          defaultCitationAllowedExternalRoots()
+        );
+        expect(r.accepted).toBe(false);
+        // The candidate is still RESOLVED — containment was computed against
+        // the real path, it simply is not accepted.
+        expect(r.candidate).toBe(realpathSync(target));
+      }
+    } finally {
+      if (original === undefined) delete process.env.HOME;
+      else process.env.HOME = original;
+      rmSync(fakeHome, { recursive: true, force: true });
+    }
   });
 });

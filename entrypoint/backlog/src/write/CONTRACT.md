@@ -455,12 +455,17 @@ project's own `metadata.path` root (BUG c6d35272): a citation target is
 accepted iff its canonical (symlink-resolved) path lies within the project
 root or one of these roots; a `..` traversal or an escaping symlink stays
 rejected, and only the resulting `sha` is persisted. This array defaults to
-`[]` at the type layer; `resolveProjectPolicy` injects the lazy runtime default
-`[~/.adhd/backlog]`. An explicit `[]` disables the carve-out. A malformed
-(non-`string[]`) value falls back to the default rather than being spread.
-Typed per-project config, never an environment toggle.
+`[]` at the type layer, and `resolveProjectPolicy`'s injected runtime default
+is ALSO `[]` — there is NO machine-global default root, because the runtime's
+own data home `~/.adhd/backlog` contains only the backlog store
+(`production/data/backlog-v2.db`) and its `backup-*`/`backups/` snapshots
+(BUG 62059b57 follow-up). A non-empty array opts the project into the
+carve-out; an empty array (the default, or an explicit `[]`) leaves it
+disabled. A malformed (non-`string[]`) value falls back to the — also empty —
+default rather than being spread. Typed per-project config, never an
+environment toggle.
 
-### `resolveProjectPolicy(project)` — function (`catalog.ts:593`)
+### `resolveProjectPolicy(project)` — function (`catalog.ts:595`)
 
 ```ts
 export function resolveProjectPolicy(project: IResolvedProjectRow): IProjectPolicy;
@@ -483,19 +488,25 @@ behind `IProjectPolicy.citationAllowedExternalRoots`. Pure path resolution:
 no file CONTENT is ever read here; only canonical (`realpath`) paths are
 computed and compared.
 
-### `defaultCitationAllowedExternalRoots()` — function (`citation-path.ts:73`)
+### `defaultCitationAllowedExternalRoots()` — function (`citation-path.ts:78`)
 
 ```ts
 export function defaultCitationAllowedExternalRoots(): string[];
 ```
 
-Returns `[join(homedir(), '.adhd', 'backlog')]` — the production store/logs
-home, deliberately NARROWER than `~/.adhd` so the machine-global secrets file
-and sibling projects stay out (BUG 62059b57). Read LAZILY on every
-`resolveProjectPolicy` call (never a module-load constant), so `$HOME` is
-honoured at call time.
+Returns `[]` — there is NO machine-global default root. The runtime's own data
+home `~/.adhd/backlog` is the STORE's home, not an evidence tree: it contains
+only the machine-global backlog database
+(`production/data/backlog-v2.db`) and its `backup-*`/`backups/` snapshots
+(plus a `test/` store), so granting it would let a citation resolve INTO the
+shared backlog graph (BUG 62059b57 follow-up — the earlier narrowing from
+`~/.adhd` stopped one directory too high). Projects opt into specific external
+roots via `citationAllowedExternalRoots`; the carve-out mechanism is
+unchanged. Read LAZILY on every `resolveProjectPolicy` call (never a
+module-load constant), so the call surface stays stable if a legitimate
+machine-global root is ever re-introduced.
 
-### `displayExternalRoot(root)` — function (`citation-path.ts:84`)
+### `displayExternalRoot(root)` — function (`citation-path.ts:89`)
 
 ```ts
 export function displayExternalRoot(root: string): string;
@@ -504,7 +515,7 @@ export function displayExternalRoot(root: string): string;
 `~`-anchors a root under the current home directory; returns the absolute path
 otherwise. Used only to render `CitationUnverifiableError` messages.
 
-### `isPathWithin(root, candidate)` — function (`citation-path.ts:101`)
+### `isPathWithin(root, candidate)` — function (`citation-path.ts:106`)
 
 ```ts
 export function isPathWithin(root: string, candidate: string): boolean;
@@ -513,7 +524,7 @@ export function isPathWithin(root: string, candidate: string): boolean;
 Lexical containment via `path.relative` — never a bare `startsWith`, which a
 name-prefix sibling (`/repo` vs `/repo-evil`) would defeat.
 
-### `isMissingPathError(err)` — function (`citation-path.ts:127`)
+### `isMissingPathError(err)` — function (`citation-path.ts:132`)
 
 ```ts
 export function isMissingPathError(err: unknown): boolean;
@@ -526,7 +537,7 @@ other code (`EACCES`, `EISDIR`, `ELOOP`, …) is a real I/O failure. Shared by
 follow-up) so the taxonomy cannot drift. NOT used by `tools/etl/citation.ts`,
 which deliberately also exempts `EISDIR`.
 
-### `canonicalizePath(p)` — function (`citation-path.ts:145`)
+### `canonicalizePath(p)` — function (`citation-path.ts:150`)
 
 ```ts
 export async function canonicalizePath(p: string): Promise<string>;
@@ -535,7 +546,7 @@ export async function canonicalizePath(p: string): Promise<string>;
 `realpath` of `p`; on ENOENT/ENOTDIR, realpaths the nearest EXISTING ancestor
 and re-joins the non-existent tail. Any other errno propagates untouched.
 
-### `IResolvedCitationTarget` — interface (`citation-path.ts:161`)
+### `IResolvedCitationTarget` — interface (`citation-path.ts:166`)
 
 ```ts
 export interface IResolvedCitationTarget {
@@ -544,7 +555,7 @@ export interface IResolvedCitationTarget {
 }
 ```
 
-### `resolveCitationTarget(projectRoot, file, allowedRoots)` — function (`citation-path.ts:179`)
+### `resolveCitationTarget(projectRoot, file, allowedRoots)` — function (`citation-path.ts:184`)
 
 ```ts
 export async function resolveCitationTarget(
@@ -742,8 +753,8 @@ the project root AND every `citationAllowedExternalRoots` entry (BUG
 c6d35272); a path-less project records `sha:"unverified"` verbatim instead.
 The message names the allowed external roots (`~`-anchored) and the
 `project_policy.citationAllowedExternalRoots` field that controls them, so the
-rejection is actionable; with an EXPLICIT empty allowlist it instead names the
-project root and says the policy array is empty.
+rejection is actionable; with an empty allowlist (the default, or an explicit
+`[]`) it instead names the project root and says the policy array is empty.
 
 ### `NoteRequiredError` — class (`errors.ts:350`)
 
