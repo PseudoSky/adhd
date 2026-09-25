@@ -1,8 +1,10 @@
 import type { PluginInput, PluginOutput } from '@adhd/apigen-core-client';
 import {
+  coercePort,
   envelopeKey,
+  escapeLineTerminators,
   escapeStringLiteral,
-  sanitizeIdentifier,
+  uniqueSanitizedIdentifiers,
 } from '@adhd/apigen-engine-naming';
 import { HTTP_STATUS } from '@adhd/apigen-base-errors';
 import { buildOpPlan } from '@adhd/apigen-engine-runtime';
@@ -50,10 +52,20 @@ function envelopeHeaders(
 }
 
 export function generate(input: PluginInput): PluginOutput {
-  const port = (input.options['port'] as number) ?? 3000;
+  // Coerce the (untyped) port option to a validated integer before it is
+  // spliced as a numeric literal — never splices a caller-controlled string.
+  const port = coercePort(input.options['port']);
   const routePrefix = (input.options['routePrefix'] as string) ?? '';
   const projection =
     (input.options['projection'] as ProjectionConfig | undefined) ?? {};
+
+  // One unique, codegen-safe identifier per package, collision-resolved in
+  // input order (`a-b` + `a_b` → `a_b`, `a_b_2`) so two distinct package ids
+  // that sanitize the same never emit duplicate `import * as …_ns` /
+  // `const …_fns` declarations. See `uniqueSanitizedIdentifiers`.
+  const varNames = uniqueSanitizedIdentifiers(
+    input.packages.map((p) => p.id)
+  );
 
   // Resolve the (pkgId, fnName) → Operation identity ONCE for the whole
   // descriptor set. Previously the per-fn loop called the linear
@@ -68,8 +80,8 @@ export function generate(input: PluginInput): PluginOutput {
     `import express, { Router } from 'express'`,
     `import { dispatch, buildFnTable, coerceQueryParams } from '@adhd/apigen-engine-runtime'`,
   ];
-  for (const pkg of input.packages) {
-    const varName = sanitizeIdentifier(pkg.id);
+  for (const [i, pkg] of input.packages.entries()) {
+    const varName = varNames[i];
     lines.push(
       `import * as ${varName}_ns from ${escapeStringLiteral(pkg.importPath)}`
     );
@@ -81,14 +93,20 @@ export function generate(input: PluginInput): PluginOutput {
   // Compact (no pretty-print): the blob is machine-emitted and re-parsed, not
   // read by a human, and every key/value is already JSON-escaped by
   // `JSON.stringify` itself. Pretty-printing only inflated generated files.
+  // `JSON.stringify` leaves U+2028/U+2029 raw (valid JSON, a parse error in an
+  // es2018 JS string literal), so the serialized blob is post-processed with
+  // the shared line-terminator escape — an adversarial `description` inside a
+  // discovered schema cannot break out.
   lines.push(
-    `const schemas: Record<string, unknown> = ${JSON.stringify(
-      Object.fromEntries(
-        input.packages.flatMap((p) =>
-          Object.entries(p.schemas).map(([fn, s]) => [
-            `${p.id}:${fn}`,
-            { schema: s, pkgId: p.id },
-          ])
+    `const schemas: Record<string, unknown> = ${escapeLineTerminators(
+      JSON.stringify(
+        Object.fromEntries(
+          input.packages.flatMap((p) =>
+            Object.entries(p.schemas).map(([fn, s]) => [
+              `${p.id}:${fn}`,
+              { schema: s, pkgId: p.id },
+            ])
+          )
         )
       )
     )}`
@@ -99,8 +117,8 @@ export function generate(input: PluginInput): PluginOutput {
   lines.push(`const router = Router()`);
   lines.push(``);
 
-  for (const pkg of input.packages) {
-    const varName = sanitizeIdentifier(pkg.id);
+  for (const [i, pkg] of input.packages.entries()) {
+    const varName = varNames[i];
     for (const [fnName, fnSchema] of Object.entries(pkg.schemas)) {
       // Index lookup, falling back to `operationFor`'s single-segment
       // synthesis only when the descriptor set carries no match (the
@@ -124,11 +142,13 @@ export function generate(input: PluginInput): PluginOutput {
       const headerMap = envelopeHeaders(fnSchema as Record<string, unknown>);
       const headerEntries = Object.entries(headerMap);
 
-      // BUG-APIGEN-032 family: every dynamic value spliced into generated
-      // source is routed through the shared emit primitive — identifiers via
-      // `sanitizeIdentifier` (above), string literals via
-      // `escapeStringLiteral` — so an id/route/header/fn-name containing a
-      // quote, backslash or line terminator can never break out of its literal.
+      // BUG-APIGEN-032 family: each dynamic value is spliced through the
+      // context-correct shared emit primitive — identifiers (import namespace
+      // / fn-table, above) via `uniqueSanitizedIdentifiers`; the route, the
+      // `fnName` dispatch argument, envelope field/header names and the import
+      // path via `escapeStringLiteral`; the port via `coercePort`; the schema
+      // blob via `escapeLineTerminators`. So a value carrying a quote,
+      // backslash or line terminator can never break out of its literal.
       const schemaKeyLiteral = escapeStringLiteral(`${pkg.id}:${fnName}`);
       const fnNameLiteral = escapeStringLiteral(fnName);
 

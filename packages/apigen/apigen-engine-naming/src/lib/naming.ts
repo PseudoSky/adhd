@@ -434,6 +434,47 @@ export function sanitizeIdentifier(id: string): string {
   return s;
 }
 
+/**
+ * Assigns each raw id a **unique** codegen-safe identifier, disambiguating
+ * sanitisation collisions deterministically.
+ *
+ * {@link sanitizeIdentifier} is lossy: several distinct raw ids can collapse to
+ * the same identifier (`a-b`, `a_b`, `a.b` → `a_b`). A generator that emits one
+ * `import * as <id>_ns` / `const <id>_fns` pair **per package** would then emit
+ * duplicate declarations for a project holding two such packages — a hard
+ * `routes.ts` parse error (`Identifier 'a_b_ns' has already been declared`),
+ * or, worse, a silent last-writer-wins alias.
+ *
+ * This resolves the collision by appending a stable `_2`, `_3`, … suffix in
+ * input order: the FIRST id to claim a name keeps it (so a collision-free
+ * input is byte-identical to before), and each subsequent collision gets the
+ * next free suffix. The result is deterministic for a given input order, so
+ * generated output stays reproducible.
+ *
+ * @example uniqueSanitizedIdentifiers(['a-b', 'a_b', 'a.b'])
+ *   // → ['a_b', 'a_b_2', 'a_b_3']
+ * @example uniqueSanitizedIdentifiers(['dispatch-cli'])
+ *   // → ['dispatch_cli']
+ * @example uniqueSanitizedIdentifiers(['a-b', 'a_b', 'a_b_2'])
+ *   // → ['a_b', 'a_b_3', 'a_b_2']  (suffixes skip names already claimed)
+ */
+export function uniqueSanitizedIdentifiers(ids: string[]): string[] {
+  const used = new Set<string>();
+  const result: string[] = [];
+  for (const id of ids) {
+    const base = sanitizeIdentifier(id);
+    let candidate = base;
+    let suffix = 2;
+    while (used.has(candidate)) {
+      candidate = `${base}_${suffix}`;
+      suffix += 1;
+    }
+    used.add(candidate);
+    result.push(candidate);
+  }
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
