@@ -3,6 +3,7 @@ import { defineConfig } from 'vite';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { importMetaUrlCjs } from '../../tools/vite-plugins/import-meta-url-cjs.mjs';
 import { projectCacheDir, projectCoverage } from '../../packages/workspace/workspace-base-vite-paths/src/index';
+import { vitestTestDefaults } from '../../tools/vite-plugins/vitest-pool-defaults.mjs';
 
 export default defineConfig({
   root: __dirname,
@@ -39,6 +40,13 @@ export default defineConfig({
   },
 
   test: {
+    // Shared worker cap + 30s test timeout (DEBT-TEST-CPU-OVERSUSCRIBED-001).
+    // Without this agent-mcp ran on Vitest's 5s default and a config
+    // scope-resolution integration test (config.scope-resolution.test.ts, test 4)
+    // timed out under a full `nx affected -t test` parallel run (63 projects),
+    // reding the gate nondeterministically while passing in isolation — the
+    // same class of load-only timeout already fixed for apigen-plugin-ir-cache.
+    ...vitestTestDefaults,
     globals: true,
     cache: {
       dir: '../../../node_modules/.vitest',

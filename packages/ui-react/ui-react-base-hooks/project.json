@@ -22,6 +22,10 @@
       "options": {
         "packageRoot": "{projectRoot}/dist"
       }
+    },
+    "test": {
+      "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference). src/lib/use-file-download/import-meta-url.spec.ts reads the BUILT bundles at {projectRoot}/dist (index.js/index.umd.js/index.mjs) to prove the browser-embedding contract — a source-level test would pass while the shipped CJS/UMD artifact is broken. targetDefaults.test's `^build` builds only DEPENDENCIES, never this project's OWN dist, so an explicit `build` is declared. `lint`/`^build` are repeated because an explicit dependsOn replaces the targetDefault (same shape as agent-engine-compiler). Without this the spec asserts against whatever stale dist/ happens to be on disk: after the Vite 6→8 upgrade a leftover Vite-6/Rollup artifact carried `pathToFileURL(__filename)` and reded the gate, even though Vite 8 + importMetaUrlBrowserCjs emits a browser-only shim.",
+      "dependsOn": ["lint", "^build", "build"]
     }
   }
 }
