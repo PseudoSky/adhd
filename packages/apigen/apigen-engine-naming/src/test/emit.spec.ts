@@ -8,9 +8,12 @@
 import { describe, it, expect } from 'vitest';
 
 import {
+  coercePort,
+  escapeLineTerminators,
   escapeStringLiteral,
   toPosixPath,
   sanitizeIdentifier as sanitizeFromEmit,
+  uniqueSanitizedIdentifiers as uniqueFromEmit,
 } from '../lib/emit';
 import { sanitizeIdentifier } from '../lib/naming';
 
@@ -106,5 +109,65 @@ describe('emit re-exports sanitizeIdentifier', () => {
     // second, drift-prone copy.
     expect(sanitizeFromEmit).toBe(sanitizeIdentifier);
     expect(sanitizeFromEmit('dispatch-cli')).toBe('dispatch_cli');
+  });
+
+  it('[emit.sanitize.reexport2] the emit module re-exports uniqueSanitizedIdentifiers too', () => {
+    expect(uniqueFromEmit(['a-b', 'a_b'])).toEqual(['a_b', 'a_b_2']);
+  });
+});
+
+describe('escapeLineTerminators', () => {
+  it('[emit.linesep.1] U+2028 / U+2029 become their escape sequences', () => {
+    expect(escapeLineTerminators('a\u2028b')).toBe('a\\u2028b');
+    expect(escapeLineTerminators('a\u2029b')).toBe('a\\u2029b');
+  });
+
+  it('[emit.linesep.2] text without separators is untouched', () => {
+    const s = '{"a":1}\nconst x = 2';
+    expect(escapeLineTerminators(s)).toBe(s);
+  });
+
+  it('[emit.linesep.3] escaping a JSON blob keeps it parseable and round-trips', () => {
+    // Mirrors the generator's schema-blob splice: JSON.stringify leaves the
+    // separators raw (valid JSON), the escape makes the outer source literal
+    // safe, and JSON.parse still recovers the original value.
+    const blob = JSON.stringify({ description: 'line\u2028break\u2029end' });
+    const escaped = escapeLineTerminators(blob);
+    expect(escaped).not.toContain('\u2028');
+    expect(escaped).not.toContain('\u2029');
+    expect(JSON.parse(escaped)).toEqual({
+      description: 'line\u2028break\u2029end',
+    });
+  });
+});
+
+describe('coercePort', () => {
+  it('[emit.port.1] nullish falls back to the default (3000)', () => {
+    expect(coercePort(undefined)).toBe(3000);
+    expect(coercePort(null)).toBe(3000);
+    expect(coercePort(undefined, 8080)).toBe(8080);
+  });
+
+  it('[emit.port.2] a numeric string (the CLI option shape) is coerced', () => {
+    expect(coercePort('8080')).toBe(8080);
+    expect(coercePort('0')).toBe(0);
+    expect(coercePort(3001)).toBe(3001);
+  });
+
+  it('[emit.port.3] an injection-shaped string is rejected, never spliced', () => {
+    // The exact hazard: a raw `await app.listen({ port: ${port} })` splice.
+    expect(() => coercePort('3000); process.exit(1); //')).toThrow(TypeError);
+  });
+
+  it('[emit.port.4] blank / non-numeric / non-integer / out-of-range all throw', () => {
+    expect(() => coercePort('')).toThrow(TypeError);
+    expect(() => coercePort('   ')).toThrow(TypeError);
+    expect(() => coercePort('abc')).toThrow(TypeError);
+    expect(() => coercePort('80.5')).toThrow(TypeError);
+    expect(() => coercePort(3.14)).toThrow(TypeError);
+    expect(() => coercePort(-1)).toThrow(TypeError);
+    expect(() => coercePort(65536)).toThrow(TypeError);
+    expect(() => coercePort(Infinity)).toThrow(TypeError);
+    expect(() => coercePort(NaN)).toThrow(TypeError);
   });
 });

@@ -28,7 +28,14 @@ function schemaWith(
 ): Record<string, unknown> {
   return {
     input: { type: 'object', properties, required: [] },
-    output: { type: 'object', properties: { ok: { type: 'boolean' } } },
+    // The output description carries U+2028/U+2029: `JSON.stringify` leaves
+    // them raw in the emitted `schemas` blob, so this proves the blob is
+    // post-processed by the same line-terminator escape as every other splice.
+    output: {
+      type: 'object',
+      description: 'ok\u2028line\u2029end',
+      properties: { ok: { type: 'boolean' } },
+    },
     ...(safe ? { 'x-apigen-safe': true } : {}),
   };
 }
@@ -96,6 +103,10 @@ describe('generate() — codegen injection hardening', () => {
     expect(c).toContain('"fn\\nline"'); // escaped newline fn name
     expect(c).toContain('"ses\'sion"'); // escaped envelope field key
     expect(c).toContain('"x-adhd-ses\'sion"'); // escaped envelope header value
+    // The schemas JSON blob carries a U+2028-bearing description — it must be
+    // escaped in place (`\u2028`), not emitted raw.
+    expect(c).toContain('\\u2028');
+    expect(c).toContain('\\u2029');
   });
 
   it('[inject-fastify.5] negative control — the raw splices are genuine parse errors', () => {
@@ -128,5 +139,46 @@ describe('generate() — generated host lifecycle (b7bb606d)', () => {
     // The old shape was a top-level bare call; the new one is `await`ed inside
     // `main()`, so no line starts with `app.listen(`.
     expect(c).not.toMatch(/^app\.listen\(/m);
+  });
+});
+
+describe('generate() — sanitized-identifier collision (cd9a5d6c)', () => {
+  // `a-b` and `a_b` are DISTINCT package ids that both sanitize to `a_b`. A
+  // per-package `import * as ${id}_ns` / `const ${id}_fns` would then emit the
+  // same binding twice — a hard `routes.ts` parse error. The generator must
+  // disambiguate them deterministically (`a_b`, `a_b_2`).
+  function collidingInput(): PluginInput {
+    const pkg = (id: string, importPath: string) => ({
+      id,
+      importPath,
+      schemas: { ping: schemaWith(objectData) },
+      fns: { ping: () => ({ ok: true }) },
+    });
+    return {
+      packages: [pkg('a-b', '@test/a-b'), pkg('a_b', '@test/a_b')],
+      outputDir: '/tmp/out',
+      options: {},
+    };
+  }
+
+  it('[inject-fastify.collision.1] colliding sanitized ids get distinct bindings and parse', () => {
+    const c = generate(collidingInput()).files[0].content;
+    expect(c).toContain('import * as a_b_ns from "@test/a-b"');
+    expect(c).toContain('import * as a_b_2_ns from "@test/a_b"');
+    expect(c).toContain('const a_b_fns = buildFnTable(a_b_ns');
+    expect(c).toContain('const a_b_2_fns = buildFnTable(a_b_2_ns');
+    expect(() => esbuild.transformSync(c, { loader: 'ts' })).not.toThrow();
+  });
+
+  it('[inject-fastify.collision.2] negative control — the un-disambiguated output is a genuine parse error', () => {
+    // The exact pre-fix shape for two colliding ids: a duplicated namespace
+    // import AND a duplicated `const …_fns` declaration. esbuild (like the JS
+    // parser) rejects the redeclared `const`.
+    const dup =
+      `import * as a_b_ns from "@test/a-b"\n` +
+      `import * as a_b_ns from "@test/a_b"\n` +
+      `const a_b_fns = buildFnTable(a_b_ns)\n` +
+      `const a_b_fns = buildFnTable(a_b_ns)\n`;
+    expect(() => esbuild.transformSync(dup, { loader: 'ts' })).toThrow();
   });
 });

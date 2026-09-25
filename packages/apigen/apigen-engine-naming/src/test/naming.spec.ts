@@ -16,6 +16,7 @@ import {
   envelopeEnvVar,
   envelopeMetaKey,
   sanitizeIdentifier,
+  uniqueSanitizedIdentifiers,
 } from '../lib/naming';
 
 // ---------------------------------------------------------------------------
@@ -562,5 +563,52 @@ describe('sanitizeIdentifier edge cases', () => {
     // need a binding name must not rely on this alone — see the BACKLOG note.
     expect(sanitizeIdentifier('class')).toBe('class');
     expect(sanitizeIdentifier('return')).toBe('return');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// uniqueSanitizedIdentifiers — collision-free identifier sets (the fix for
+// sanitisation collisions: `a-b` / `a_b` / `a.b` all sanitize to `a_b`, so a
+// per-package `import * as ${id}_ns` would emit duplicate declarations).
+// ---------------------------------------------------------------------------
+
+describe('uniqueSanitizedIdentifiers', () => {
+  it('[naming.unique.1] a collision-free input is a byte-for-byte sanitizeIdentifier pass', () => {
+    const ids = ['dispatch-cli', 'myPkg', '@scope/pkg'];
+    expect(uniqueSanitizedIdentifiers(ids)).toEqual(ids.map(sanitizeIdentifier));
+  });
+
+  it('[naming.unique.2] distinct ids that sanitize the same get stable _2/_3 suffixes in input order', () => {
+    // The exact hazard: `a-b`, `a_b`, `a.b` → all `a_b`.
+    expect(uniqueSanitizedIdentifiers(['a-b', 'a_b', 'a.b'])).toEqual([
+      'a_b',
+      'a_b_2',
+      'a_b_3',
+    ]);
+  });
+
+  it('[naming.unique.3] output is always unique (no duplicate declaration)', () => {
+    const out = uniqueSanitizedIdentifiers(['a-b', 'a_b', 'a.b', 'a/b']);
+    expect(new Set(out).size).toBe(out.length);
+  });
+
+  it('[naming.unique.4] a suffix skips a base name already claimed by a later-safe id', () => {
+    // `a_b_2` is claimed verbatim before the collision is resolved, so the
+    // colliding `a_b` must skip to `a_b_3` — never reuse a taken name.
+    expect(uniqueSanitizedIdentifiers(['a-b', 'a_b_2', 'a_b'])).toEqual([
+      'a_b',
+      'a_b_2',
+      'a_b_3',
+    ]);
+  });
+
+  it('[naming.unique.5] every result is a valid identifier (splice-safe)', () => {
+    for (const id of uniqueSanitizedIdentifiers(['a-b', 'a_b', '1x', '@s/p'])) {
+      expect(id).toMatch(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/);
+    }
+  });
+
+  it('[naming.unique.6] empty input → empty output', () => {
+    expect(uniqueSanitizedIdentifiers([])).toEqual([]);
   });
 });
