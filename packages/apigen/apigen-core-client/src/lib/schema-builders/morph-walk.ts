@@ -146,9 +146,23 @@ export async function walkType(
   // --- unions (incl. string-literal enums) ----------------------------------
   if (type.isUnion()) {
     const members = type.getUnionTypes();
-    // boolean is internally `true | false`; ts-morph already collapses it via
-    // isBoolean() above, but a union containing booleanLiterals can slip
-    // through — drop the synthetic split.
+    // boolean is internally `true | false`; ts-morph expands a `boolean` union
+    // member into BOTH literals (e.g. `boolean | undefined` → [undefined,
+    // false, true] under strictNullChecks, and `string | boolean` → [string,
+    // false, true] regardless of strictNullChecks). Both literals map to
+    // `{type:'boolean'}` above, so emitting one variant per member duplicates
+    // that branch — and a `oneOf` with two identical branches is unsatisfiable
+    // (AJV: "must match exactly one schema in oneOf"; surfaced to MCP callers
+    // as -32602). Keep only the FIRST boolean-literal member: the true|false
+    // split is a type-checker artifact, not a real union distinction.
+    // (backlog 3a3e5884)
+    let sawBooleanLiteral = false;
+    const plannedMembers = members.filter((m) => {
+      if (!m.isBooleanLiteral()) return true;
+      if (sawBooleanLiteral) return false;
+      sawBooleanLiteral = true;
+      return true;
+    });
     const allStringLiterals = members.every((m) => m.isStringLiteral());
     if (allStringLiterals && members.length > 0) {
       return {
@@ -164,7 +178,7 @@ export async function walkType(
       };
     }
     const rawVariants = await Promise.all(
-      members.map((m) => walkType(m, recurse, depth + 1))
+      plannedMembers.map((m) => walkType(m, recurse, depth + 1))
     );
     // BUG-APIGEN-019: a TS union means the runtime value is EXACTLY ONE of
     // these shapes — `oneOf` (mutually exclusive) is the semantically correct
@@ -181,7 +195,13 @@ export async function walkType(
     // a sibling branch's values. Discriminator detection itself must run on the RAW
     // (pre-sanitized) variants — sanitizeCatchAllVariants's allOf/not wrapping would
     // make a catch-all branch's `type` field indistinguishable from an object branch.
-    const variants = sanitizeCatchAllVariants(rawVariants);
+    // backlog 3a3e5884: structurally dedupe BEFORE the catch-all sanitize — a
+    // general guard so ANY duplicate-emitting union member (not only the
+    // boolean-literal split collapsed above) cannot leave the `oneOf`
+    // unsatisfiable. Dedupe runs on the unwrapped variants so identical shapes
+    // are still recognised after sanitizeCatchAllVariants rewrites a catch-all
+    // into an allOf/not wrapper.
+    const variants = sanitizeCatchAllVariants(dedupeVariants(rawVariants));
     return {
       oneOf: variants,
       ...(discriminator ? { discriminator } : {}),
@@ -345,6 +365,30 @@ function isVacuousCatchAll(schema: Record<string, unknown>): boolean {
     (schema['properties'] === undefined ||
       Object.keys(schema['properties'] as Record<string, unknown>).length === 0)
   );
+}
+
+/**
+ * Structurally dedupe union variants by `JSON.stringify` equality, preserving
+ * the first occurrence's position. A general guard for the defect class where
+ * two union members resolve to the SAME schema fragment: ts-morph's synthetic
+ * `true | false` boolean-literal expansion is the one known emitter (it is
+ * also collapsed up-front in `walkType`'s union branch), but any future
+ * duplicate-emitting member would otherwise produce a `oneOf` with two
+ * identical branches — which no value can satisfy under AJV's
+ * exactly-one-match rule (backlog 3a3e5884 / MCP -32602).
+ */
+function dedupeVariants(
+  variants: ReadonlyArray<Record<string, unknown>>
+): Record<string, unknown>[] {
+  const seen = new Set<string>();
+  const out: Record<string, unknown>[] = [];
+  for (const v of variants) {
+    const key = JSON.stringify(v);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(v);
+  }
+  return out;
 }
 
 /**
