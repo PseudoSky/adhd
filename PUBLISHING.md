@@ -144,7 +144,26 @@ pnpm release:commit       # stage + commit ONLY the bumped package.json + CHANGE
 ```
 `release-commit` (`tools/nx-plugins/build/executors/publish/release-commit.mjs`) stages explicit pathspecs only — never `git add -A`/`.` — so unrelated concurrent work in the tree is never swept in. Then `git push` (human-approved). No tag push is needed; the registry itself records what's released. (Leaving them uncommitted is still coherent — next release sees source == npm/cache and re-detects from the artifact — but committing keeps git, npm, and the cache aligned for the next contributor/CI run.)
 
-**Step 3.5 — global-CLI sync (advisory, runs inside `pnpm release`).** After publish (and before GATE 2), `sync-global.mjs` flips any stale global link shims — a `~/Library/pnpm/<bin>` whose content still execs local workspace source (the `pnpm link -g` shape) — to the published artifacts via `pnpm add -g <name>@<exact-version>`, gated on the exact version being on the registry. Sync failures print `ERROR` but never fail the release (BUG-003 exit-capture pattern) — retry manually with `pnpm release:sync-global` (preview: `pnpm release:sync-global:dry`).
+**Step 3.5 — global-CLI sync (runs inside `pnpm release`; NOT advisory).** After publish (and before GATE 2), `sync-global.mjs` reconciles every global install of this workspace's bin-shipping entrypoints. It enumerates every global root (`discoverGlobalRoots`): the **pnpm** global bin dir (`pnpm config get global-bin-dir` → `~/Library/pnpm`), the **npm** global prefix (`npm prefix -g`), and **every NVM node version** (`{NVM_DIR||~/.nvm}/versions/node/*/{bin,lib/node_modules}`) — so a stale/broken CLI installed by nvm's npm is no longer invisible (DEBT `ab4d0864`).
+
+For each `(package, root)` pair it:
+
+1. **Detects** stale source-link shims — content that execs local workspace source (the `pnpm link -g` shape) — under ANY name the package is known by: its declared `bin` names, the names recorded in the root's installed manifest, or a **legacy** name whose content references this package (the production `backlog` shim for a package that now declares `adhd-backlog`; BUG `f1dece41`). Detection is by the **entrypoint path in the shim content** (`.../entrypoint/<dir>/dist/...`), so a shim execing a **sibling worktree** or the main checkout — not just the checkout the release runs from — is also caught (review HIGH-1); the old `content.includes(workspaceRoot)` test missed exactly that.
+2. **Asserts currency from the INSTALLED tree only** — `current` requires the root's `<modulesDir>/<pkg.name>/package.json` to be readable, its path NOT to resolve into a source worktree, AND its version to equal the source version. A `<modulesDir>/<pkg.name>` symlink into a worktree is a dev link, not an install, and is repaired rather than reported `current` (review MEDIUM-3). A shim that EXISTS but is unreadable, or a shim present with a missing/unreadable manifest, is `unverifiable` — never a false `current` (BUG `bea4bfe1`; review LOW-7). Every summary row prints `installed=` and `target=` in **separate** columns so the two can never be conflated in one, and a `not-installed` row carries no `installed=` value at all (review LOW-8).
+3. Gates on the exact version being on the registry, then on the BUG-004 content hash, **backs up** each stale shim to `<shim>.pre-sync-<ts>`, runs the **root's manager install** (`pnpm add -g <name>@<ver>` for pnpm roots; `npm i -g <name>@<ver>` with the root's `npm_config_prefix`/PATH for npm & NVM roots), and **re-verifies** the package's **declared** bin names (shim no longer references a workspace source tree, the store is not a source link, AND the root's store version matches). **Which bins are verified vs left pending:** only the package's DECLARED bin names are ever rewritten and verified — the manager install cannot touch any other name. A **legacy**-named stale shim is therefore left pending and reported as its own unresolved state (next paragraph). On any failure of a declared-bin verification every backup is restored.
+
+**Per-manager repair.** If the release reports a package stale/unresolved, repair the root it names, not a hand-picked one:
+
+```bash
+pnpm add -g <name>@<version>    # pnpm root  (summary label pnpm:…)
+npm  i  -g <name>@<version>    # npm prefix / NVM root (labels npm:… / nvm:…)
+```
+
+For an NVM root, activate that node first (or run `<nvm-node>/bin/npm i -g …`) so `npm_config_prefix` targets that version's store rather than the caller's.
+
+**Legacy bin-name quarantine (WARN + FAIL).** A **legacy** shim — e.g. the bare `backlog`, left over from before the package declared `adhd-backlog` — **cannot be repaired by a manager install**: `pnpm add -g` / `npm i -g` only ever write the package's CURRENT declared name (`adhd-backlog`), so the old shim survives and keeps shadowing. `sync-global` prints a `WARNING` naming the legacy shim(s) **and reports that row as `legacy-pending` with `verified:false` — which fails Step 3.5** (review HIGH-2). It never claims them fixed; they must be **quarantined (renamed)** after human approval — e.g. `mv ~/Library/pnpm/backlog ~/Library/pnpm/backlog.quarantined-<date>` — and any consumer that invokes the old name (`~/.claude.json`, `.mcp.json`) re-pointed at the canonical one. (A **dry-run** also reports `legacy-pending` so the preview cannot read as success, but a dry-run never fails the exit code — it changes nothing.)
+
+**Exit code.** Unlike the old advisory step, Step 3.5 now fails the release (`computeExitCode`, folded into `run-release`'s compound verdict): a package ending `refused`, `unverifiable`, `legacy-pending`, or `synced` with `verified:false` is a non-zero exit (BUG-027 / review HIGH-2) — a release must never report success while the operator's global CLI is stale. Retry manually with `pnpm release:sync-global` (preview: `pnpm release:sync-global:dry`).
 
 ---
 
@@ -475,7 +494,7 @@ package-specific verification steps. Check there for the full smoke-test procedu
 
 ## Running a global CLI against local source (dev mode)
 
-Sometimes you want the globally-installed `backlog` / `apigen` / `agent-mcp` binary to run **this
+Sometimes you want the globally-installed `adhd-backlog` / `apigen` / `agent-mcp` binary to run **this
 worktree's** code rather than the published artifact — to exercise a fix before it ships, or because
 the published version is behind a commit you need. That is the `pnpm link -g` shape the
 `sync-global` step calls a "stale link shim".
@@ -492,11 +511,17 @@ readlink -f "$(which <bin>)"            # or: cat "$(which <bin>)" | grep exec
 <bin> --version
 ```
 
-**Step 3.5 of `pnpm release` will silently undo this.** `sync-global.mjs` detects a shim whose
-content embeds the workspace root and flips it back to the published artifact via
-`pnpm add -g <name>@<exact-version>` — that is its entire purpose (see line 147 above). So after any
-release, a dev-mode link is gone and the global CLI is on the registry build again, with no warning
-beyond the release log. Re-link with the commands above if you still want local source.
+**Step 3.5 of `pnpm release` will undo this.** `sync-global.mjs` detects a shim whose content execs
+local workspace source — **any** checkout's `entrypoint/<dir>/dist` (this worktree, a sibling
+worktree, or the main checkout), in **any** discovered root (pnpm, npm prefix, or an NVM node
+version) — and flips it back to the published artifact via that root's manager install (`pnpm add -g
+<name>@<exact-version>` for a pnpm root, `npm i -g <name>@<exact-version>` for an npm/NVM root) —
+that is its entire purpose (see Step 3.5 above). So after any release, a dev-mode link is gone and
+the global CLI is on the registry build again (the release log names the root and the command it
+ran). Re-link with the commands above if you still want local source. A **legacy**-named dev link
+(e.g. a bare `backlog` for a package that now declares `adhd-backlog`) is the one case the install
+cannot flip — it is reported `legacy-pending` and **fails Step 3.5**; quarantine it with human
+approval, see Step 3.5.
 
 **Know which build answered you.** The global bin and a repo-relative
 `node <entrypoint>/dist/index.js` are *different artifacts* and can be different versions while
