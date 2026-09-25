@@ -1336,10 +1336,6 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
         version: 1.29.0(zod@4.4.3)
-    devDependencies:
-      esbuild:
-        specifier: 0.18.20
-        version: 0.18.20
 
   packages/apigen/apigen-plugin-openapi:
     dependencies:
