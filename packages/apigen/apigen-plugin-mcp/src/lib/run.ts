@@ -168,8 +168,10 @@ export const __toolTableBuildCount = { count: 0 };
  * module-level instance (not a fresh `{ type:'object', properties:{} }` literal
  * per tool per call) so `listTools()` never allocates a new object for every
  * schema-less tool on every request (DEBT-APIGEN-MCP-LISTTOOLS-CACHE-001).
+ * Frozen: it is handed out to consumers by reference via the memoized
+ * projection, so it must not be mutable.
  */
-const DEFAULT_INPUT_SCHEMA = { type: 'object', properties: {} };
+const DEFAULT_INPUT_SCHEMA = Object.freeze({ type: 'object', properties: {} });
 
 /** One entry of the `tools/list` response — the shape `listTools()` returns
  * and memoizes (DEBT-APIGEN-MCP-LISTTOOLS-CACHE-001). Internal only; the
@@ -206,8 +208,9 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
   private readonly schemasByOpId = new Map<string, ComposedSchemas[string]>();
   /** plan.mcp.name → list-facing metadata, computed ONCE ([mcp-adapter.8]). */
   private readonly toolMeta = new Map<string, ToolListMeta>();
-  /** Memoized result of `listTools()`. `registerRoute()` is the ONLY mutation
-   * point for the tool set, so the cache is invalidated there and nowhere else
+  /** Memoized result of `listTools()`. BOTH mutation points that can change the
+   * projection invalidate it: `bindToolMeta()` (metadata) and
+   * `registerRoute()` (the tool set itself)
    * (DEBT-APIGEN-MCP-LISTTOOLS-CACHE-001). */
   private cachedList: McpToolListEntry[] | undefined;
 
@@ -216,6 +219,9 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
   }
 
   bindToolMeta(name: string, meta: ToolListMeta): void {
+    // List-facing metadata is an input to the `tools/list` projection, so this
+    // is a cache-invalidating mutation point alongside `registerRoute()`.
+    this.cachedList = undefined;
     this.toolMeta.set(name, meta);
   }
 
@@ -225,8 +231,9 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
       call: Omit<RuntimeCall, 'operation' | 'ctx'>
     ) => Promise<LayerResult>
   ): void {
-    // First statement: any route mutation invalidates the memoized tools/list
-    // projection. `registerRoute` is the only way a plan enters `this.plans`.
+    // Any route mutation invalidates the memoized tools/list projection.
+    // `registerRoute` is the only way a plan enters `this.plans`;
+    // `bindToolMeta` invalidates the metadata half the same way.
     this.cachedList = undefined;
     this.plans.set(plan.mcp.name, plan);
     this.dispatchers.set(plan.mcp.name, dispatch);
@@ -243,9 +250,11 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
   }
 
   /** The `tools/list` projection — cheap; reads the already-hoisted metadata.
-   * Memoized: the result is rebuilt only after `registerRoute()` invalidates
-   * it, so successive calls return the SAME array reference
-   * (DEBT-APIGEN-MCP-LISTTOOLS-CACHE-001). */
+   * Memoized: the result is rebuilt only after `bindToolMeta()`/
+   * `registerRoute()` invalidate it, so successive calls return the SAME
+   * (frozen) array reference (DEBT-APIGEN-MCP-LISTTOOLS-CACHE-001). The array,
+   * each entry, and the shared `DEFAULT_INPUT_SCHEMA` are frozen so a consumer
+   * cannot corrupt the memoized projection in place. */
   listTools(): Array<{
     name: string;
     description: string;
@@ -253,15 +262,16 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
     outputSchema?: Record<string, unknown>;
   }> {
     if (this.cachedList) return this.cachedList;
-    this.cachedList = [...this.plans.keys()].map((name) => {
+    const list: McpToolListEntry[] = [...this.plans.keys()].map((name) => {
       const meta = this.toolMeta.get(name);
-      return {
+      return Object.freeze({
         name,
         description: meta?.description ?? name,
         inputSchema: meta?.inputSchema ?? DEFAULT_INPUT_SCHEMA,
         ...(meta?.outputSchema ? { outputSchema: meta.outputSchema } : {}),
-      };
+      });
     });
+    this.cachedList = Object.freeze(list) as McpToolListEntry[];
     return this.cachedList;
   }
 
@@ -795,6 +805,13 @@ function listenOrReject(
       const shutdown = () => {
         logger.info('mcp server shutting down');
         httpServer.close(() => resolve());
+        // `close(cb)` stops accepting new connections but WAITS for existing
+        // ones to end. An open SSE/streaming-http response IS an active
+        // connection, so a client holding a stream open would keep the
+        // close-callback (and therefore `run()`) pending indefinitely.
+        // `closeAllConnections()` (Node >=18.2) force-destroys those sockets so
+        // the callback fires and `run()` always settles on abort.
+        httpServer.closeAllConnections();
       };
       if (signal.aborted) {
         shutdown();
@@ -806,35 +823,65 @@ function listenOrReject(
 }
 
 /**
- * Settle the `stdio` transport's `run()` promise. Unlike the HTTP transports,
- * stdio has a natural shutdown signal — EOF on stdin, surfaced by the SDK as
- * `onclose`. So NO AbortSignal is required: `onclose` resolves unconditionally,
- * and a caller that ALSO supplies a signal additionally resolves on abort.
+ * Settle the `stdio` transport's `run()` promise. stdio has no server-side
+ * "stop" call of its own, so it settles on any of three independent
+ * out-of-band signals — two of which exist WITHOUT an AbortSignal:
+ *   - EOF on stdin (the MCP client closing its end). The SDK's
+ *     `StdioServerTransport` does NOT surface this as `onclose` itself (verified
+ *     against @modelcontextprotocol/sdk 1.29.0: it only listens for
+ *     `data`/`error`), so we watch the stdin stream directly.
+ *   - the transport's `onclose` (e.g. `server.close()`), which the SDK DOES
+ *     raise.
+ *   - `signal` abort, when one IS supplied (additive, never required).
  * The resolve is therefore never inside an `if (signal)` guard.
+ *
+ * CHAIN, never replace: by the time this runs, `server.connect(t)` has already
+ * installed the SDK's own `onclose` (`Protocol.connect()` assigns
+ * `t.onclose = () => { _onclose?.(); this._onclose(); }`). A bare assignment
+ * would silently drop `Protocol._onclose()`, which clears response/progress/
+ * timeout state and aborts every in-flight request-handler abort controller.
+ * We capture and invoke the previous handler first.
  */
 export function awaitStdioClose(
   t: Pick<StdioServerTransport, 'onclose'>,
   logger: Logger,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  stdin: NodeJS.ReadableStream = process.stdin
 ): Promise<void> {
   return new Promise<void>((resolve) => {
-    t.onclose = () => {
-      logger.info('stdio transport closed (stdin EOF)');
+    let done = false;
+    function settle(message: string): void {
+      if (done) return;
+      done = true;
+      stdin.off('end', onEnd);
+      stdin.off('close', onEnd);
+      signal?.removeEventListener('abort', onAbort);
+      logger.info(message);
       resolve();
+    }
+    function onEnd(): void {
+      settle('stdio transport closed (stdin EOF)');
+    }
+    function onAbort(): void {
+      settle('mcp server shutting down');
+    }
+
+    const prev = t.onclose;
+    t.onclose = () => {
+      prev?.();
+      settle('stdio transport closed');
     };
+    // A client closing its end of stdin is the canonical stdio shutdown
+    // (`close` also fires on abrupt teardown); watch directly since the SDK
+    // transport does not.
+    stdin.once('end', onEnd);
+    stdin.once('close', onEnd);
     if (signal) {
       if (signal.aborted) {
-        resolve();
+        settle('mcp server shutting down');
         return;
       }
-      signal.addEventListener(
-        'abort',
-        () => {
-          logger.info('mcp server shutting down');
-          resolve();
-        },
-        { once: true }
-      );
+      signal.addEventListener('abort', onAbort, { once: true });
     }
   });
 }
@@ -881,8 +928,8 @@ export async function run(input: RunInput): Promise<void> {
     const t = new StdioServerTransport();
     await server.connect(t);
     logger.info('stdio transport ready');
-    // stdio has a natural shutdown (stdin EOF → onclose), so no signal is
-    // required; a supplied one is an additional out-of-band stop.
+    // stdio has a natural shutdown (stdin EOF, or transport close), so no
+    // signal is required; a supplied one is an additional out-of-band stop.
     return awaitStdioClose(t, logger, input.signal);
   }
 
