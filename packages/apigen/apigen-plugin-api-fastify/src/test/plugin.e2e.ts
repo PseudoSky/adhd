@@ -153,8 +153,8 @@ describe('generate()', () => {
     // (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001) — NOT the raw camelCase
     // fn name — so it is byte-identical to what `apigen-plugin-openapi` would
     // advertise for the same operation.
-    expect(content).toContain("app.post('/test-pkg/get-user'");
-    expect(content).toContain("app.post('/test-pkg/list-users'");
+    expect(content).toContain('app.post("/test-pkg/get-user"');
+    expect(content).toContain('app.post("/test-pkg/list-users"');
   });
 
   it('[plugin-api-fastify.2] generated routes.ts imports dispatch from @adhd/apigen-engine-runtime', () => {
@@ -169,7 +169,7 @@ describe('generate()', () => {
 
   it('respects routePrefix option', () => {
     const out = generate({ ...baseInput, options: { routePrefix: '/v1' } });
-    expect(out.files[0].content).toContain("app.post('/v1/test-pkg/get-user'");
+    expect(out.files[0].content).toContain('app.post("/v1/test-pkg/get-user"');
   });
 
   it('[plugin-api-fastify.4] no schema body attachment in generate output', () => {
@@ -195,15 +195,15 @@ describe('generate()', () => {
       options: {},
     };
     const { content } = generate(input).files[0];
-    expect(content).toContain("app.get('/svc/ping'");
+    expect(content).toContain('app.get("/svc/ping"');
     // Must NOT emit app.post for a safe operation
-    expect(content).not.toContain("app.post('/svc/ping'");
+    expect(content).not.toContain('app.post("/svc/ping"');
   });
 
   it('[v2-fastify.verb.2] unsafe op (no x-apigen-safe) → app.post()', () => {
     const { content } = generate(baseInput).files[0];
-    expect(content).toContain("app.post('/test-pkg/get-user'");
-    expect(content).not.toContain("app.get('/test-pkg/get-user'");
+    expect(content).toContain('app.post("/test-pkg/get-user"');
+    expect(content).not.toContain('app.get("/test-pkg/get-user"');
   });
 
   it('[v2-fastify.verb.3] projection override flips unsafe→GET', () => {
@@ -220,8 +220,8 @@ describe('generate()', () => {
       },
     };
     const { content } = generate(input).files[0];
-    expect(content).toContain("app.get('/test-pkg/get-user'");
-    expect(content).not.toContain("app.post('/test-pkg/get-user'");
+    expect(content).toContain('app.get("/test-pkg/get-user"');
+    expect(content).not.toContain('app.post("/test-pkg/get-user"');
   });
 
   // ---- [v2-proj-transport] envelope from headers (§9.1) ----
@@ -940,18 +940,20 @@ describe('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] generate() route/verb par
     for (const op of parityOperations) {
       const { route, verb } = project(op, {}).http;
       const method = verb.toLowerCase();
-      expect(content).toContain(`app.${method}('${route}'`);
+      expect(content).toContain(`app.${method}("${route}"`);
     }
 
     // Explicit ground-truth routes (guards against a vacuous project() call
     // that happened to agree with itself but not with the actual literal
     // strings the OpenAPI doc would emit for the same operations).
-    expect(content).toContain("app.get('/utils/ping'");
-    expect(content).toContain("app.post('/utils/create-thing'");
-    expect(content).toContain("app.post('/backlog/client-d/get-item'");
+    expect(content).toContain('app.get("/utils/ping"');
+    expect(content).toContain('app.post("/utils/create-thing"');
+    expect(content).toContain('app.post("/backlog/client-d/get-item"');
     // The OLD (buggy) derivation would have produced these — must be absent.
-    expect(content).not.toContain("'/utils/createThing'");
-    expect(content).not.toContain("'/backlog/getItem'");
+    // Quoted delimiter-agnostically so the check still has teeth now that
+    // emitted route literals are double-quoted.
+    expect(content).not.toContain('/utils/createThing');
+    expect(content).not.toContain('/backlog/getItem');
   });
 });
 
@@ -1356,7 +1358,9 @@ describe('[fastify-parity] TransportAdapter/OpPlan golden-snapshot parity gate',
           id: 'env-pkg',
           schemas: parityEnvelopeSchema,
           importPath: '@test/env-pkg',
-          fns: { getUser: (userId: unknown) => parityGetUser(userId as string) },
+          fns: {
+            getUser: (userId: unknown) => parityGetUser(userId as string),
+          },
         },
         {
           id: 'mutate-pkg',

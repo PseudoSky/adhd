@@ -15,6 +15,7 @@ import {
   envelopeCliFlag,
   envelopeEnvVar,
   envelopeMetaKey,
+  sanitizeIdentifier,
 } from '../lib/naming';
 
 // ---------------------------------------------------------------------------
@@ -494,9 +495,7 @@ describe('httpVerb — shared ComposedSchemas-based verb resolver', () => {
 
   it('[naming.httpVerb.3] override wins over x-apigen-safe:true', () => {
     const config = { http: { verb: { 'pkg:fn': 'POST' as const } } };
-    expect(httpVerb('pkg:fn', { 'x-apigen-safe': true }, config)).toBe(
-      'POST'
-    );
+    expect(httpVerb('pkg:fn', { 'x-apigen-safe': true }, config)).toBe('POST');
   });
 
   it('[naming.httpVerb.4] override wins over x-apigen-safe:false/absent', () => {
@@ -507,5 +506,61 @@ describe('httpVerb — shared ComposedSchemas-based verb resolver', () => {
   it('[naming.httpVerb.5] override only affects the specified fnId', () => {
     const config = { http: { verb: { 'pkg:other': 'GET' as const } } };
     expect(httpVerb('pkg:fn', {}, config)).toBe('POST');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// sanitizeIdentifier — edge cases (characterization guard)
+//
+// These pin the EXACT current behavior so a future refactor cannot silently
+// change the identifier projection. They are intentionally characterizations,
+// not an endorsement: `sanitizeIdentifier` does NOT consult the reserved-word
+// list, so `sanitizeIdentifier('class') === 'class'` (a valid PROPERTY name but
+// not a valid binding NAME). Every call site in this repo suffixes the result
+// (`${varName}_ns`, `${varName}_fns`) which makes that safe there; the gap is
+// characterized here and tracked separately.
+// ---------------------------------------------------------------------------
+
+describe('sanitizeIdentifier edge cases', () => {
+  it('[naming.sanitize.1] hyphenated repo-convention id → underscored', () => {
+    expect(sanitizeIdentifier('dispatch-cli')).toBe('dispatch_cli');
+    expect(sanitizeIdentifier('pkg-a')).toBe('pkg_a');
+  });
+
+  it('[naming.sanitize.2] leading digit gets an underscore prefix', () => {
+    expect(sanitizeIdentifier('123abc')).toBe('_123abc');
+  });
+
+  it('[naming.sanitize.3] empty string is prefixed to a lone underscore', () => {
+    expect(sanitizeIdentifier('')).toBe('_');
+  });
+
+  it('[naming.sanitize.4] scope/path punctuation → underscores', () => {
+    expect(sanitizeIdentifier('@scope/some-package-name')).toBe(
+      '_scope_some_package_name'
+    );
+  });
+
+  it('[naming.sanitize.5] underscore and dollar are preserved (valid identifier chars)', () => {
+    expect(sanitizeIdentifier('_ok')).toBe('_ok');
+    expect(sanitizeIdentifier('$x')).toBe('$x');
+    expect(sanitizeIdentifier('a_b$c')).toBe('a_b$c');
+  });
+
+  it('[naming.sanitize.6] separators are replaced one-for-one, never collapsed', () => {
+    expect(sanitizeIdentifier('a--b')).toBe('a__b');
+    expect(sanitizeIdentifier("a'b")).toBe('a_b');
+  });
+
+  it('[naming.sanitize.7] an already-valid identifier is a no-op', () => {
+    expect(sanitizeIdentifier('myPkg')).toBe('myPkg');
+    expect(sanitizeIdentifier('humanizeBytes')).toBe('humanizeBytes');
+  });
+
+  it('[naming.sanitize.8] characterization: reserved words are NOT rewritten', () => {
+    // Documents current behavior (no reserved-word handling). Callers that
+    // need a binding name must not rely on this alone — see the BACKLOG note.
+    expect(sanitizeIdentifier('class')).toBe('class');
+    expect(sanitizeIdentifier('return')).toBe('return');
   });
 });

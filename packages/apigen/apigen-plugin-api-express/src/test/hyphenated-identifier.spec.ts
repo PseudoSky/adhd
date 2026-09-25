@@ -54,7 +54,7 @@ describe('generate() — hyphenated package id sanitization (unit)', () => {
     expect(content).not.toContain('import * as pkg-a_ns');
     expect(content).not.toContain('pkg-a_fns');
 
-    expect(content).toContain("import * as pkg_a_ns from '@test/pkg-a'");
+    expect(content).toContain('import * as pkg_a_ns from "@test/pkg-a"');
     expect(content).toContain('const pkg_a_fns = buildFnTable(pkg_a_ns');
   });
 
@@ -84,7 +84,7 @@ describe('generate() — hyphenated package id sanitization (unit)', () => {
   it('[hyphen-express.3] the raw hyphenated id is preserved verbatim as a schema-key STRING', () => {
     const { content } = generate(hyphenatedInput).files[0];
     expect(content).toContain('"pkg-a:ping"');
-    expect(content).toContain("schemas['pkg-a:ping']");
+    expect(content).toContain('schemas["pkg-a:ping"]');
   });
 
   it('[hyphen-express.4] is a no-op for an already-valid identifier', () => {
@@ -101,7 +101,7 @@ describe('generate() — hyphenated package id sanitization (unit)', () => {
       options: {},
     };
     const { content } = generate(input).files[0];
-    expect(content).toContain("import * as myPkg_ns from '@acme/my-pkg'");
+    expect(content).toContain('import * as myPkg_ns from "@acme/my-pkg"');
     expect(content).toContain('const myPkg_fns = buildFnTable(myPkg_ns');
   });
 });

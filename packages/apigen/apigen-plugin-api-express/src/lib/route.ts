@@ -20,6 +20,47 @@ function makeSegment(raw: string): Segment {
 }
 
 /**
+ * Composite index key for a `(pkgId, fnName)` identity pair.
+ *
+ * Uses `U+0000` as the separator: `operationFor`'s identity is
+ * `namespace.raw === pkgId` AND `last-path-segment.raw === fnName`, and a NUL
+ * cannot occur inside a tokenized segment in practice while `:` / `/` can, so
+ * this key cannot be forged by a `pkgId` that itself contains the separator.
+ */
+export function operationKey(pkgId: string, fnName: string): string {
+  return `${pkgId}\u0000${fnName}`;
+}
+
+/**
+ * Builds the `(namespace.raw, last-path-segment.raw) → Operation` index once
+ * for the whole descriptor set.
+ *
+ * `generate()` previously called the linear `operationFor` scan for EVERY
+ * `(pkgId, fnName)` pair, making route resolution O(operations × pairs). This
+ * index preserves `operationFor`'s EXACT first-match-wins semantics (a later
+ * duplicate identity never overwrites an earlier one) so emitted routes stay
+ * byte-identical, while collapsing the per-pair lookup to O(1).
+ *
+ * `operations === undefined` (a bare `PluginInput`/`RunInput` with no
+ * descriptor — e.g. a unit test) yields an empty index; callers then take
+ * `operationFor`'s documented single-segment synthesis fallback.
+ */
+export function buildOperationIndex(
+  operations: Operation[] | undefined
+): Map<string, Operation> {
+  const index = new Map<string, Operation>();
+  for (const op of operations ?? []) {
+    const lastSeg = op.path[op.path.length - 1];
+    // No last segment ⇒ `operationFor`'s condition can never match; skip.
+    if (!lastSeg) continue;
+    const key = operationKey(op.namespace.raw, lastSeg.raw);
+    // First match wins — mirrors the linear scan's early `return op`.
+    if (!index.has(key)) index.set(key, op);
+  }
+  return index;
+}
+
+/**
  * Resolves the canonical {@link Operation} for a served/generated
  * `(pkgId, fnName)` pair — the input `buildOpPlan()` (`@adhd/apigen-engine-
  * runtime`) projects to route/verb/envelope/streaming/mount facts.

@@ -136,8 +136,8 @@ describe('generate()', () => {
     expect(content).toContain('Router');
     expect(content).toContain("from 'express'");
     // unsafe ops → POST
-    expect(content).toContain("router.post('/test-pkg/get-user'");
-    expect(content).toContain("router.post('/test-pkg/list-users'");
+    expect(content).toContain('router.post("/test-pkg/get-user"');
+    expect(content).toContain('router.post("/test-pkg/list-users"');
   });
 
   it('[plugin-api-express.2] generated routes.ts imports dispatch from @adhd/apigen-engine-runtime', () => {
@@ -153,8 +153,8 @@ describe('generate()', () => {
   it('[plugin-api-express.4] route shape is POST /<packageId>/<fnName> for unsafe ops', () => {
     const out = generate(baseInput);
     const content = out.files[0].content;
-    expect(content).toContain("router.post('/test-pkg/get-user'");
-    expect(content).toContain("router.post('/test-pkg/list-users'");
+    expect(content).toContain('router.post("/test-pkg/get-user"');
+    expect(content).toContain('router.post("/test-pkg/list-users"');
   });
 
   it('generated routes.ts calls res.json(result) not return', () => {
@@ -168,7 +168,7 @@ describe('generate()', () => {
   it('respects routePrefix option', () => {
     const out = generate({ ...baseInput, options: { routePrefix: '/v1' } });
     expect(out.files[0].content).toContain(
-      "router.post('/v1/test-pkg/get-user'"
+      'router.post("/v1/test-pkg/get-user"'
     );
   });
 
@@ -188,14 +188,14 @@ describe('generate()', () => {
       options: {},
     };
     const { content } = generate(input).files[0];
-    expect(content).toContain("router.get('/svc/ping'");
-    expect(content).not.toContain("router.post('/svc/ping'");
+    expect(content).toContain('router.get("/svc/ping"');
+    expect(content).not.toContain('router.post("/svc/ping"');
   });
 
   it('[v2-express.verb.2] unsafe op (no x-apigen-safe) → router.post()', () => {
     const { content } = generate(baseInput).files[0];
-    expect(content).toContain("router.post('/test-pkg/get-user'");
-    expect(content).not.toContain("router.get('/test-pkg/get-user'");
+    expect(content).toContain('router.post("/test-pkg/get-user"');
+    expect(content).not.toContain('router.get("/test-pkg/get-user"');
   });
 
   it('[v2-express.verb.3] projection override flips unsafe→GET', () => {
@@ -210,8 +210,8 @@ describe('generate()', () => {
       },
     };
     const { content } = generate(input).files[0];
-    expect(content).toContain("router.get('/test-pkg/get-user'");
-    expect(content).not.toContain("router.post('/test-pkg/get-user'");
+    expect(content).toContain('router.get("/test-pkg/get-user"');
+    expect(content).not.toContain('router.post("/test-pkg/get-user"');
   });
 
   // ---- [v2-proj-transport] envelope from headers (§9.1) ----
