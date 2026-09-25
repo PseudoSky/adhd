@@ -14,7 +14,10 @@ import {
 
 export class UseCaseError extends Error {
   constructor(
-    public readonly code: 'USE_CASE_NOT_FOUND' | 'USE_CASE_ALREADY_EXISTS',
+    public readonly code:
+      | 'USE_CASE_NOT_FOUND'
+      | 'USE_CASE_ALREADY_EXISTS'
+      | 'COMPONENT_LINK_ALREADY_EXISTS',
     message: string
   ) {
     super(message);
@@ -152,12 +155,17 @@ export class UseCaseStore {
    * Link a prompt component to a use-case with an optional weight.
    *
    * ANNOTATION ONLY — this has no effect on resolveComposition's hot path.
-   * Duplicate (component_slug, use_case_slug) pairs will cause a unique-constraint
-   * violation if the migration creates a unique index; callers should guard.
+   *
+   * Uniqueness is enforced by the `(component_slug, use_case_slug)` composite
+   * primary key: `INSERT ... ON CONFLICT DO NOTHING` lets SQLite arbitrate a
+   * duplicate, and a zero-row-changed result is translated into the typed
+   * {@link UseCaseError} `COMPONENT_LINK_ALREADY_EXISTS` — a raw better-sqlite3
+   * `SqliteError` never escapes the documented contract.
    *
    * @param componentSlug - The component to annotate (logical FK).
    * @param useCaseSlug   - The use-case to associate with (FK → registry_use_cases).
    * @param weight        - Optional numeric weight for suggestion ranking.
+   * @throws {UseCaseError} COMPONENT_LINK_ALREADY_EXISTS when the pair is taken.
    */
   linkComponent(
     componentSlug: string,
@@ -170,7 +178,19 @@ export class UseCaseStore {
       weight: weight ?? null,
     };
 
-    this.db.insert(componentUsageTable).values(row).run();
+    const result = this.db
+      .insert(componentUsageTable)
+      .values(row)
+      .onConflictDoNothing()
+      .run();
+
+    if (result.changes === 0) {
+      throw new UseCaseError(
+        'COMPONENT_LINK_ALREADY_EXISTS',
+        `Component '${componentSlug}' is already linked to use case '${useCaseSlug}'`
+      );
+    }
+
     return row;
   }
 

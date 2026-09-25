@@ -323,4 +323,42 @@ describe('UseCaseStore', () => {
       expect(existing?.name).toBe('First');
     });
   });
+
+  // ── linkComponent unique-constraint atomicity (d307442a) ──────────────────
+
+  describe('linkComponent — unique-constraint atomicity', () => {
+    /**
+     * linkComponent() must let the composite
+     * (component_slug, use_case_slug) primary key arbitrate uniqueness via
+     * INSERT ... ON CONFLICT DO NOTHING, translating the zero-row-changed
+     * outcome into a typed UseCaseError — a duplicate must NEVER surface the
+     * driver's raw SqliteError (the old bare INSERT threw exactly that).
+     */
+    it('duplicate linkComponent() yields a typed UseCaseError, never a raw SqliteError', () => {
+      componentStore.create({
+        slug: 'dup-link-comp',
+        type: 'system',
+        content: 'Duplicate-link component',
+      });
+      useCaseStore.createUseCase({
+        slug: 'dup-link-case',
+        name: 'Duplicate Link Case',
+      });
+
+      useCaseStore.linkComponent('dup-link-comp', 'dup-link-case', 10);
+
+      let caught: unknown;
+      try {
+        useCaseStore.linkComponent('dup-link-comp', 'dup-link-case', 10);
+      } catch (e) {
+        caught = e;
+      }
+
+      expect(caught).toBeInstanceOf(UseCaseError);
+      expect((caught as UseCaseError).code).toBe(
+        'COMPONENT_LINK_ALREADY_EXISTS'
+      );
+      expect(caught).not.toBeInstanceOf(Database.SqliteError);
+    });
+  });
 });

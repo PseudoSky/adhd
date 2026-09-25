@@ -242,31 +242,36 @@ export class AgentPolicyStore {
    * individual agents.  Any agent already in or later added to the category
    * inherits this policy at the next `resolveForAgent` call. [Decision 1]
    *
+   * The uniqueness decision is made inside a single atomic
+   * `INSERT … ON CONFLICT DO NOTHING` on the `(category_slug, policy_slug)`
+   * composite PK rather than a read-then-write pre-check: a `SELECT`-then-
+   * `INSERT` pre-check races under concurrent writers (both read "absent",
+   * both insert), whereas the losing writer here observes `changes === 0`.
+   *
    * @throws {AgentPolicyError} CATEGORY_POLICY_ALREADY_ATTACHED when the
    *   (categorySlug, policySlug) pair already exists.
    */
   attachToCategory(input: CategoryPolicyAttachInput): CategoryPolicyRow {
-    const existing = this.db
-      .select()
-      .from(categoryPoliciesTable)
-      .where(eq(categoryPoliciesTable.categorySlug, input.categorySlug))
-      .all()
-      .find((r: { policySlug: string }) => r.policySlug === input.policySlug);
-
-    if (existing) {
-      throw new AgentPolicyError(
-        'CATEGORY_POLICY_ALREADY_ATTACHED',
-        `Policy '${input.policySlug}' is already attached to category '${input.categorySlug}'`
-      );
-    }
-
     const row = {
       categorySlug: input.categorySlug,
       policySlug: input.policySlug,
       isMandatory: input.isMandatory ?? false,
     };
 
-    this.db.insert(categoryPoliciesTable).values(row).run();
+    // Atomic insert-or-nothing on the (category_slug, policy_slug) composite PK.
+    const result = this.db
+      .insert(categoryPoliciesTable)
+      .values(row)
+      .onConflictDoNothing()
+      .run();
+
+    if (result.changes === 0) {
+      throw new AgentPolicyError(
+        'CATEGORY_POLICY_ALREADY_ATTACHED',
+        `Policy '${input.policySlug}' is already attached to category '${input.categorySlug}'`,
+        { categorySlug: input.categorySlug, policySlug: input.policySlug }
+      );
+    }
 
     return {
       categorySlug: row.categorySlug,
@@ -282,30 +287,28 @@ export class AgentPolicyStore {
    * policies attached to the category — no re-fanout or migration needed.
    * This is the "agent added AFTER the category-attach" case from Decision 1.
    *
+   * Membership uniqueness is enforced by the `(agent_slug, category_slug)`
+   * composite PK via a single atomic `INSERT … ON CONFLICT DO NOTHING`, not a
+   * read-then-write pre-check, so two racing writers cannot both observe
+   * "absent" and race the insert.
+   *
    * @throws {AgentPolicyError} AGENT_CATEGORY_ALREADY_JOINED when the
    *   (agentSlug, categorySlug) pair already exists.
    */
   addAgentToCategory(input: AgentCategoryInput): void {
-    const existing = this.db
-      .select()
-      .from(agentCategoriesTable)
-      .where(eq(agentCategoriesTable.agentSlug, input.agentSlug))
-      .all()
-      .find(
-        (r: { categorySlug: string }) => r.categorySlug === input.categorySlug
-      );
-
-    if (existing) {
-      throw new AgentPolicyError(
-        'AGENT_CATEGORY_ALREADY_JOINED',
-        `Agent '${input.agentSlug}' is already in category '${input.categorySlug}'`
-      );
-    }
-
-    this.db
+    const result = this.db
       .insert(agentCategoriesTable)
       .values({ agentSlug: input.agentSlug, categorySlug: input.categorySlug })
+      .onConflictDoNothing()
       .run();
+
+    if (result.changes === 0) {
+      throw new AgentPolicyError(
+        'AGENT_CATEGORY_ALREADY_JOINED',
+        `Agent '${input.agentSlug}' is already in category '${input.categorySlug}'`,
+        { agentSlug: input.agentSlug, categorySlug: input.categorySlug }
+      );
+    }
   }
 
   /**
