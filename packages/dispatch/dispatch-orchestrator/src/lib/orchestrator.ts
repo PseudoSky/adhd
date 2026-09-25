@@ -236,11 +236,15 @@ export interface OrchestratorDeps {
   allowedFsActions?: OperationAction[];
   /**
    * FEAT-DISPATCH-GOVERNANCE-001 — the fail-closed permission gate itself.
-   * Default: `defaultFsOpPolicy(allowedFsActions)`. Only consumed by the
-   * default `toolCallExec` (`defaultToolCallExec`) — ignored if
-   * `toolCallExec` is injected, exactly like `toolsRoot`. Inject this
-   * directly for a policy richer than a flat allowlist (e.g. per-path rules)
-   * without having to reimplement the rest of `defaultToolCallExec`.
+   * Default: `defaultFsOpPolicy(allowedFsActions)`. **Complete mediation:**
+   * this policy governs the default executor AND any consumer-injected
+   * `toolCallExec`, because `resolveDeps` wraps whichever executor is wired in
+   * `withFsOpPolicy(exec, fsOpPolicy)`. Unlike `toolsRoot` — which genuinely
+   * only reaches the default executor — injecting `toolCallExec` does NOT
+   * bypass this gate, and a `fs.move`/`fs.delete`/`fs.scaffold`/`fs.edit` op
+   * is still mediated at the op-dispatch layer before the injected executor
+   * sees it. Inject a policy directly for richer rules (e.g. per-path) without
+   * reimplementing the rest of `defaultToolCallExec`.
    */
   fsOpPolicy?: FsOpPolicyFn;
   /**
@@ -549,11 +553,12 @@ function withFsOpPolicy(exec: ToolCallExecFn, policy: FsOpPolicyFn): ToolCallExe
 }
 
 /**
- * Resolves an `fs.*` tool-call path relative to `root`, rejecting anything
- * that escapes it — by `..` traversal, by an absolute path outside root, OR
- * by a symlink anywhere along the path (or in `root` itself) whose real target
- * lands outside root. A maliciously- or buggily-authored dag.json must never be
- * able to move/delete/scaffold/edit files outside the configured tools root.
+ * Resolves an `fs.*` tool-call path relative to `root`, rejecting a path that
+ * escapes it — by `..` traversal, by an absolute path outside root, OR by an
+ * *existing* symlink anywhere along the path (or in `root` itself) whose real
+ * target lands outside root. This is what stops a maliciously- or
+ * buggily-authored dag.json from moving/deleting/scaffolding/editing files
+ * outside the configured tools root through the ordinary symlink bypass.
  *
  * Containment is asserted twice:
  *
@@ -571,6 +576,19 @@ function withFsOpPolicy(exec: ToolCallExecFn, policy: FsOpPolicyFn): ToolCallExe
  * to `.`/``). Before this, `fs.delete { path: '.', recursive: true }` passed
  * containment — `resolved === rootResolved` was explicitly permitted — and
  * wiped the entire tools root.
+ *
+ * KNOWN RESIDUAL (tracked: `64aa2b9b`): when the final path component is a
+ * *dangling* symlink whose target does not exist, `fs.realpath` throws ENOENT,
+ * step 2 walks up to the (in-root) nearest existing ancestor, and the check
+ * therefore reports "inside root" — `fs.scaffold`'s `writeFile` would then
+ * follow the dangling link and create the file at its outside target. The
+ * guard above covers the `existing-target` case only; this dangling-symlink
+ * case is deliberately NOT covered here.
+ * Exploitation needs a pre-existing/checked-out dangling symlink under
+ * `toolsRoot` (dag.json has no `fs.symlink` action) and only `fs.scaffold`
+ * follows the link (`fs.move`/`fs.delete` act on the link itself). A
+ * same-locus TOCTOU window (the op is performed on the lexical path after the
+ * realpath check) remains open in the same tracked item.
  *
  * The path returned is the *lexical* resolution, not the realpath, so callers
  * and persisted results keep stable, human-readable paths; the realpath is used
