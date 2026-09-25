@@ -27,11 +27,32 @@ const { createNodes } = require('./plugin.js');
 // createNodes is `['**/package.json', handler]` — the nx CreateNodes tuple shape.
 const [, handler] = createNodes;
 
+/**
+ * Drive the v2 handler for a single config file and return that file's result.
+ * The v2 `createNodes` handler receives the ARRAY of matched config files and
+ * returns `[configFile, result]` tuples (Nx 23 unified on the v2 plugin API);
+ * this helper preserves the single-file call shape these tests assert against.
+ */
+function runFor(pkgPathRel, ctx) {
+  const tuples = handler([pkgPathRel], {}, ctx);
+  const hit = tuples.find(([file]) => file === pkgPathRel);
+  assert.ok(hit, `createNodes returned no tuple for ${pkgPathRel}`);
+  return hit[1];
+}
+
 /** Build a throwaway publishable-project fixture (project.json + build target + non-private package.json). */
-function makeFixtureProject({ workspaceRoot, projectRoot, name, isPrivate = false }) {
+function makeFixtureProject({
+  workspaceRoot,
+  projectRoot,
+  name,
+  isPrivate = false,
+}) {
   const abs = join(workspaceRoot, projectRoot);
   mkdirSync(abs, { recursive: true });
-  writeFileSync(join(abs, 'project.json'), JSON.stringify({ name, targets: { build: {} } }));
+  writeFileSync(
+    join(abs, 'project.json'),
+    JSON.stringify({ name, targets: { build: {} } })
+  );
   const pkg = { name, version: '1.0.0' };
   if (isPrivate) pkg.private = true;
   writeFileSync(join(abs, 'package.json'), JSON.stringify(pkg));
@@ -48,11 +69,14 @@ test('createNodes: publish target dependsOn includes ^publish (topological depen
     });
     const pkgPathRel = pkgPath.slice(workspaceRoot.length + 1);
 
-    const result = handler(pkgPathRel, {}, { workspaceRoot });
+    const result = runFor(pkgPathRel, { workspaceRoot });
 
     const projectRoot = 'packages/fixture/fixture-core-widget';
     const targets = result.projects[projectRoot].targets;
-    assert.ok(targets.publish, 'expected a publish target to be attached to a publishable project');
+    assert.ok(
+      targets.publish,
+      'expected a publish target to be attached to a publishable project'
+    );
     assert.ok(
       Array.isArray(targets.publish.dependsOn),
       'publish.dependsOn must be an array'
@@ -66,10 +90,19 @@ test('createNodes: publish target dependsOn includes ^publish (topological depen
     // Guard against a false-positive teeth test: prove the OTHER real
     // dependencies are still present too — this must ADD the edge, not
     // replace the existing gate chain.
-    for (const dep of ['test', '^test', 'version', 'dist-manifest', 'verify-dist-load', 'publish-hygiene']) {
+    for (const dep of [
+      'test',
+      '^test',
+      'version',
+      'dist-manifest',
+      'verify-dist-load',
+      'publish-hygiene',
+    ]) {
       assert.ok(
         targets.publish.dependsOn.includes(dep),
-        `publish.dependsOn must still include "${dep}" — got: ${JSON.stringify(targets.publish.dependsOn)}`
+        `publish.dependsOn must still include "${dep}" — got: ${JSON.stringify(
+          targets.publish.dependsOn
+        )}`
       );
     }
   } finally {
@@ -81,7 +114,14 @@ test('RED-equivalent: a publish.dependsOn WITHOUT ^publish is exactly the shape 
   // Simulates the pre-fix array literal cited in the bug report
   // (tools/nx-plugins/build/plugin.js:72 at filing time) to prove the
   // assertion above actually has teeth: it must fail against the broken shape.
-  const brokenDependsOn = ['test', '^test', 'version', 'dist-manifest', 'verify-dist-load', 'publish-hygiene'];
+  const brokenDependsOn = [
+    'test',
+    '^test',
+    'version',
+    'dist-manifest',
+    'verify-dist-load',
+    'publish-hygiene',
+  ];
   assert.equal(
     brokenDependsOn.includes('^publish'),
     false,
@@ -90,7 +130,9 @@ test('RED-equivalent: a publish.dependsOn WITHOUT ^publish is exactly the shape 
 });
 
 test('createNodes: a private (non-publishable) project gets no publish/version/dist-manifest targets at all', () => {
-  const workspaceRoot = mkdtempSync(join(tmpdir(), 'nx-build-plugin-fixture-private-'));
+  const workspaceRoot = mkdtempSync(
+    join(tmpdir(), 'nx-build-plugin-fixture-private-')
+  );
   try {
     const pkgPath = makeFixtureProject({
       workspaceRoot,
@@ -100,16 +142,22 @@ test('createNodes: a private (non-publishable) project gets no publish/version/d
     });
     const pkgPathRel = pkgPath.slice(workspaceRoot.length + 1);
 
-    const result = handler(pkgPathRel, {}, { workspaceRoot });
+    const result = runFor(pkgPathRel, { workspaceRoot });
 
-    assert.deepEqual(result, {}, 'a private package must get no publish-related targets attached');
+    assert.deepEqual(
+      result,
+      {},
+      'a private package must get no publish-related targets attached'
+    );
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
   }
 });
 
 test('createNodes: version target still carries ^version (topological dependency-version-first ordering — must not regress alongside the ^publish fix)', () => {
-  const workspaceRoot = mkdtempSync(join(tmpdir(), 'nx-build-plugin-fixture-version-'));
+  const workspaceRoot = mkdtempSync(
+    join(tmpdir(), 'nx-build-plugin-fixture-version-')
+  );
   try {
     const pkgPath = makeFixtureProject({
       workspaceRoot,
@@ -118,7 +166,7 @@ test('createNodes: version target still carries ^version (topological dependency
     });
     const pkgPathRel = pkgPath.slice(workspaceRoot.length + 1);
 
-    const result = handler(pkgPathRel, {}, { workspaceRoot });
+    const result = runFor(pkgPathRel, { workspaceRoot });
 
     const projectRoot = 'packages/fixture/fixture-core-widget2';
     const targets = result.projects[projectRoot].targets;
