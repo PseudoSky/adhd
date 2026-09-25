@@ -61,11 +61,21 @@ export function seed(db: BetterSQLite3Database<any>): void {
   //     proactively so re-seed is a clean no-op (never bumps version).
   //
   // Atomicity (BUG c757dd2e): each component's head + version pair is written in
-  // ONE transaction. If the version insert fails (process kill, disk error, a
-  // RAISE constraint), the head insert rolls back with it — so a crash can never
-  // leave a head row with no matching version. That partial state is what
-  // permanently poisons re-seeding: the `if (!head)` branch would skip the head
-  // forever and the version would never be written.
+  // ONE transaction, for two reasons:
+  //   1. Concurrent readers never observe a head-without-version window. Without
+  //      the transaction the head insert autocommits before the version insert,
+  //      and in that gap another process (this store is parallel-process enabled —
+  //      ADR-0012) can read a head row whose version does not exist yet, an
+  //      inconsistent identity.
+  //   2. All-or-nothing crash semantics: a failure on the version insert (process
+  //      kill, disk error, a RAISE constraint) rolls the head back with it, so the
+  //      pair is never left partially written.
+  //
+  // The transaction is NOT what makes re-seed recover from a partial row: the
+  // version insert is gated on the version's own absence, independent of the head
+  // check, so a later seed() writes the missing version on its own. (Measured on
+  // the pre-fix source: a mid-pair failure leaves head=1/version=0, and the next
+  // seed() self-heals to head=1/version=1.)
   //
   // `behavior: 'immediate'` issues BEGIN IMMEDIATE, taking the write lock up front.
   // That is the correct mode for a read-then-write pair under concurrent seeders:
