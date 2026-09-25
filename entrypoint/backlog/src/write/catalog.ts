@@ -533,9 +533,9 @@ export interface IProjectPolicy {
    *
    * This layer defaults to the EMPTY array; {@link resolveProjectPolicy}
    * injects the lazy runtime default (`defaultCitationAllowedExternalRoots()`
-   * → `[~/.adhd]`) on every resolve. Set an EXPLICIT `[]` in a project's
-   * `policy` to disable the external carve-out entirely. This is TYPED,
-   * per-project config — deliberately never an environment toggle.
+   * → `[~/.adhd/backlog]`) on every resolve. Set an EXPLICIT `[]` in a
+   * project's `policy` to disable the external carve-out entirely. This is
+   * TYPED, per-project config — deliberately never an environment toggle.
    */
   readonly citationAllowedExternalRoots: readonly string[];
   readonly defaultStatus?: string;
@@ -567,10 +567,11 @@ const DEFAULT_PROJECT_POLICY: IProjectPolicy = Object.freeze({
   transitionRequiresNote: true,
   citationRequired: false,
   citationRequiresSha: true,
-  // Frozen empty PLACEHOLDER, not the real default: the `~/.adhd` root must be
-  // read lazily (from `homedir()` at call time), so `resolveProjectPolicy`
-  // injects it on every resolve rather than baking it into this module-load
-  // constant. An explicitly-empty policy array still means "no external roots".
+  // Frozen empty PLACEHOLDER, not the real default: the `~/.adhd/backlog` root
+  // must be read lazily (from `homedir()` at call time), so
+  // `resolveProjectPolicy` injects it on every resolve rather than baking it
+  // into this module-load constant. An explicitly-empty policy array still
+  // means "no external roots".
   citationAllowedExternalRoots: Object.freeze([]),
   dedupeScanEnabled: true,
   dedupeThreshold: 0.8,
@@ -607,13 +608,13 @@ export function resolveProjectPolicy(
       policy.citationRequired ?? DEFAULT_PROJECT_POLICY.citationRequired,
     citationRequiresSha:
       policy.citationRequiresSha ?? DEFAULT_PROJECT_POLICY.citationRequiresSha,
-    // Injected LAZILY on both branches (this one and the no-`policy` object
-    // branch above): `defaultCitationAllowedExternalRoots()` reads
-    // `homedir()` at CALL time, so a per-invocation `$HOME` is honoured and
-    // the default is never frozen at module load.
-    citationAllowedExternalRoots:
-      policy.citationAllowedExternalRoots ??
-      defaultCitationAllowedExternalRoots(),
+    // Validated then injected LAZILY on both branches (this one and the
+    // no-`policy` object branch above): a malformed value falls back to the
+    // runtime default rather than being spread, and
+    // `defaultCitationAllowedExternalRoots()` reads `homedir()` at CALL time,
+    // so a per-invocation `$HOME` is honoured and the default is never frozen
+    // at module load.
+    citationAllowedExternalRoots: resolveCitationAllowedExternalRoots(policy),
     defaultStatus: policy.defaultStatus,
     defaultKind: policy.defaultKind,
     dedupeScanEnabled:
@@ -628,6 +629,32 @@ export function resolveProjectPolicy(
     requiredFields:
       policy.requiredFields ?? DEFAULT_PROJECT_POLICY.requiredFields,
   };
+}
+
+/**
+ * Validate `project_policy.citationAllowedExternalRoots` before it is used
+ * (BUG 62059b57 follow-up). The policy blob is operator-supplied JSON (§2), so
+ * this field can arrive as ANY type. It must be a `string[]`: spreading a bare
+ * string would yield its characters (`'abc'` → `['a','b','c']`) and spreading a
+ * non-array object would yield nothing, either silently corrupting the
+ * carve-out. A malformed value falls back to the lazy runtime default (the
+ * NARROW `~/.adhd/backlog` root and nothing wider) — one bad policy field must
+ * not brick every operation on an otherwise-valid project, which throwing here
+ * would do, and the fallback can never WIDEN the read surface. An explicitly
+ * valid `[]` is preserved (it disables the carve-out).
+ */
+function resolveCitationAllowedExternalRoots(
+  policy: Partial<IProjectPolicy>
+): readonly string[] {
+  // `unknown`, not the declared `readonly string[] | undefined`: the static
+  // type is a LIE at runtime — the value comes from parsed JSON — and this
+  // guard is exactly what makes the runtime match the type.
+  const raw: unknown = policy.citationAllowedExternalRoots;
+  if (raw === undefined) return defaultCitationAllowedExternalRoots();
+  if (!Array.isArray(raw) || !raw.every((root) => typeof root === 'string')) {
+    return defaultCitationAllowedExternalRoots();
+  }
+  return raw;
 }
 
 /**

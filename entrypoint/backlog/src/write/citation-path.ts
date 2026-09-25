@@ -9,8 +9,9 @@
  * host. But some genuine evidence lives OUTSIDE that root — a machine-level
  * tool (`~/.local/bin/gx`), a globally-installed package's `dist/**`, a
  * `/tmp` scratch artifact, evidence recorded under this runtime's own data
- * home (`~/.adhd/…`). Before this module the ONLY way to cite such evidence on
- * a path-PRESENT project was to omit the citation entirely — which `create`
+ * home (`~/.adhd/backlog/…`). Before this module the ONLY way to cite such
+ * evidence on a path-PRESENT project was to omit the citation entirely —
+ * which `create`
  * still reported as SUCCESS, silently downgrading a labelled-unverified
  * citation to an unlabelled absence (exactly what "No citation, no claim"
  * forbids).
@@ -50,9 +51,17 @@ import {
 
 /**
  * The default external roots a project may cite from, used when the project's
- * own policy supplies no `citationAllowedExternalRoots`. Currently the
- * runtime's own data home, `~/.adhd` — the one location this toolchain
- * legitimately owns outside any single project tree.
+ * own policy supplies no `citationAllowedExternalRoots`. The runtime's own
+ * BACKLOG data home, `~/.adhd/backlog` (the production store + logs tree) —
+ * the one location this toolchain owns outside any single project tree, and
+ * where a citation to production logs/artifacts is genuinely useful.
+ *
+ * Deliberately NARROWER than `~/.adhd` (BUG 62059b57): the data home's parent
+ * also holds the machine-global `~/.adhd/.env` secrets file and every OTHER
+ * project's database, so defaulting to the whole tree would expose all of that
+ * to the citation sha read/hash surface for EVERY project with no opt-in. A
+ * project that genuinely needs an out-of-default root adds it explicitly via
+ * `citationAllowedExternalRoots`.
  *
  * Deliberately a FUNCTION, called LAZILY by {@link resolveProjectPolicy} on
  * every policy resolve, never a module-level constant: `homedir()` must be
@@ -62,7 +71,7 @@ import {
  * get the wrong root.
  */
 export function defaultCitationAllowedExternalRoots(): string[] {
-  return [join(homedir(), '.adhd')];
+  return [join(homedir(), '.adhd', 'backlog')];
 }
 
 /**
@@ -100,6 +109,27 @@ export function isPathWithin(root: string, candidate: string): boolean {
 }
 
 /**
+ * The §4c "the file genuinely is not there" error taxonomy, in ONE place.
+ *
+ * `ENOENT` (a path segment does not exist) and `ENOTDIR` (a path segment that
+ * should be a directory is in fact a file, so the target cannot exist) both
+ * mean exactly "not there" — the ONLY case any caller may degrade to the
+ * `'unverified'` sentinel. Every other errno (`EACCES`, `EPERM`, `EMFILE`,
+ * `EISDIR`, `ELOOP`, …) is a REAL I/O failure and must never be masked as an
+ * absent file. Shared by {@link canonicalizePath} and both write verbs'
+ * `computeCitationSha` (BUG c6d35272 follow-up) so that taxonomy is
+ * single-source and cannot drift between its three call sites.
+ *
+ * NOT used by `tools/etl/citation.ts`: that frozen tool deliberately ALSO
+ * exempts `EISDIR` (its own documented, corpus-driven divergence), so folding
+ * it into this narrower ENOENT/ENOTDIR predicate would regress it.
+ */
+export function isMissingPathError(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException)?.code;
+  return code === 'ENOENT' || code === 'ENOTDIR';
+}
+
+/**
  * Resolve `p` to its real, symlink-free absolute path.
  *
  * `p` need not exist. On `ENOENT`/`ENOTDIR` the nearest EXISTING ancestor is
@@ -117,8 +147,7 @@ export async function canonicalizePath(p: string): Promise<string> {
   try {
     return await realpath(abs);
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException)?.code;
-    if (code !== 'ENOENT' && code !== 'ENOTDIR') throw err;
+    if (!isMissingPathError(err)) throw err;
     const parent = dirname(abs);
     // Reached the filesystem root (or a relative form that cannot be
     // resolved further) — nothing left to walk up to; surface the original

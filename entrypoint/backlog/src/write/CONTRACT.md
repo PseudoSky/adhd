@@ -456,10 +456,11 @@ accepted iff its canonical (symlink-resolved) path lies within the project
 root or one of these roots; a `..` traversal or an escaping symlink stays
 rejected, and only the resulting `sha` is persisted. This array defaults to
 `[]` at the type layer; `resolveProjectPolicy` injects the lazy runtime default
-`[~/.adhd]`. An explicit `[]` disables the carve-out. Typed per-project config,
-never an environment toggle.
+`[~/.adhd/backlog]`. An explicit `[]` disables the carve-out. A malformed
+(non-`string[]`) value falls back to the default rather than being spread.
+Typed per-project config, never an environment toggle.
 
-### `resolveProjectPolicy(project)` — function (`catalog.ts:592`)
+### `resolveProjectPolicy(project)` — function (`catalog.ts:593`)
 
 ```ts
 export function resolveProjectPolicy(project: IResolvedProjectRow): IProjectPolicy;
@@ -475,24 +476,26 @@ from `tx.ts` — it is counted once, under `tx.ts`, above.)_
 
 ---
 
-## `citation-path.ts` (6 exports)
+## `citation-path.ts` (7 exports)
 
 The typed, project-scoped citation-path carve-out (BUG c6d35272) — the module
 behind `IProjectPolicy.citationAllowedExternalRoots`. Pure path resolution:
 no file CONTENT is ever read here; only canonical (`realpath`) paths are
 computed and compared.
 
-### `defaultCitationAllowedExternalRoots()` — function (`citation-path.ts:64`)
+### `defaultCitationAllowedExternalRoots()` — function (`citation-path.ts:73`)
 
 ```ts
 export function defaultCitationAllowedExternalRoots(): string[];
 ```
 
-Returns `[join(homedir(), '.adhd')]`. Read LAZILY on every
+Returns `[join(homedir(), '.adhd', 'backlog')]` — the production store/logs
+home, deliberately NARROWER than `~/.adhd` so the machine-global secrets file
+and sibling projects stay out (BUG 62059b57). Read LAZILY on every
 `resolveProjectPolicy` call (never a module-load constant), so `$HOME` is
 honoured at call time.
 
-### `displayExternalRoot(root)` — function (`citation-path.ts:75`)
+### `displayExternalRoot(root)` — function (`citation-path.ts:84`)
 
 ```ts
 export function displayExternalRoot(root: string): string;
@@ -501,7 +504,7 @@ export function displayExternalRoot(root: string): string;
 `~`-anchors a root under the current home directory; returns the absolute path
 otherwise. Used only to render `CitationUnverifiableError` messages.
 
-### `isPathWithin(root, candidate)` — function (`citation-path.ts:92`)
+### `isPathWithin(root, candidate)` — function (`citation-path.ts:101`)
 
 ```ts
 export function isPathWithin(root: string, candidate: string): boolean;
@@ -510,7 +513,20 @@ export function isPathWithin(root: string, candidate: string): boolean;
 Lexical containment via `path.relative` — never a bare `startsWith`, which a
 name-prefix sibling (`/repo` vs `/repo-evil`) would defeat.
 
-### `canonicalizePath(p)` — function (`citation-path.ts:115`)
+### `isMissingPathError(err)` — function (`citation-path.ts:127`)
+
+```ts
+export function isMissingPathError(err: unknown): boolean;
+```
+
+`true` for exactly `ENOENT`/`ENOTDIR` — the only errnos that mean "the file
+genuinely is not there" and may degrade a citation to `'unverified'`. Every
+other code (`EACCES`, `EISDIR`, `ELOOP`, …) is a real I/O failure. Shared by
+`canonicalizePath` and both write verbs' `computeCitationSha` (BUG c6d35272
+follow-up) so the taxonomy cannot drift. NOT used by `tools/etl/citation.ts`,
+which deliberately also exempts `EISDIR`.
+
+### `canonicalizePath(p)` — function (`citation-path.ts:145`)
 
 ```ts
 export async function canonicalizePath(p: string): Promise<string>;
@@ -519,7 +535,7 @@ export async function canonicalizePath(p: string): Promise<string>;
 `realpath` of `p`; on ENOENT/ENOTDIR, realpaths the nearest EXISTING ancestor
 and re-joins the non-existent tail. Any other errno propagates untouched.
 
-### `IResolvedCitationTarget` — interface (`citation-path.ts:132`)
+### `IResolvedCitationTarget` — interface (`citation-path.ts:161`)
 
 ```ts
 export interface IResolvedCitationTarget {
@@ -528,7 +544,7 @@ export interface IResolvedCitationTarget {
 }
 ```
 
-### `resolveCitationTarget(projectRoot, file, allowedRoots)` — function (`citation-path.ts:150`)
+### `resolveCitationTarget(projectRoot, file, allowedRoots)` — function (`citation-path.ts:179`)
 
 ```ts
 export async function resolveCitationTarget(
@@ -726,9 +742,10 @@ the project root AND every `citationAllowedExternalRoots` entry (BUG
 c6d35272); a path-less project records `sha:"unverified"` verbatim instead.
 The message names the allowed external roots (`~`-anchored) and the
 `project_policy.citationAllowedExternalRoots` field that controls them, so the
-rejection is actionable.
+rejection is actionable; with an EXPLICIT empty allowlist it instead names the
+project root and says the policy array is empty.
 
-### `NoteRequiredError` — class (`errors.ts:338`)
+### `NoteRequiredError` — class (`errors.ts:350`)
 
 ```ts
 export class NoteRequiredError extends BacklogWriteError {
@@ -741,7 +758,7 @@ export class NoteRequiredError extends BacklogWriteError {
 Guarantees: thrown by `transition` when `project_policy.transitionRequiresNote`
 (default `true`) is set and no `note` was given.
 
-### `CitationRequiredError` — class (`errors.ts:350`)
+### `CitationRequiredError` — class (`errors.ts:362`)
 
 ```ts
 export class CitationRequiredError extends BacklogWriteError {
@@ -755,7 +772,7 @@ Guarantees: thrown by `transition` when `project_policy.citationRequired`
 (default `false`) is set, the target status is terminal, and no citation was
 given.
 
-### `BacklogValidationError` — class (`errors.ts:373`)
+### `BacklogValidationError` — class (`errors.ts:385`)
 
 ```ts
 export class BacklogValidationError extends BacklogWriteError {
@@ -770,7 +787,7 @@ or an out-of-range/non-integral `limit`) — deliberately the SAME
 `E_VALIDATION`-class member of this same error union, not a parallel one, so
 a `query`/`get` caller catches it identically to any write-verb error.
 
-### `classifyDriverError(err)` — function (`errors.ts:419`)
+### `classifyDriverError(err)` — function (`errors.ts:431`)
 
 ```ts
 export function classifyDriverError(err: unknown): IWriteError;
