@@ -3,12 +3,19 @@
  *
  * Proves the prompts seeder writes each component's head + version pair
  * atomically (BUG c757dd2e): a failure on the version insert must roll the head
- * back with it, and a later re-seed must complete cleanly.
+ * back with it.
  *
- * Red→green: on the pre-fix code the head insert commits before the version
- * insert aborts, leaving a head row with no version — `headCount === 1`, not 0.
- * That permanent head-without-version state is what poisons re-seeding (the
- * `if (!head)` branch would skip the slug forever).
+ * Negative-control tooth: the rollback assertion (`headCount === 0`,
+ * `versionCount === 0`). On the pre-fix code the head insert autocommits before
+ * the version insert aborts, leaving a head row with no version — `headCount ===
+ * 1` — so this assertion is RED pre-fix.
+ *
+ * Forward guard (NOT a red→green tooth): the recovery assertion at the end
+ * (drop the trigger, re-seed → head 1 / version 1). It also PASSES on the pre-fix
+ * code, because the version insert is keyed on the version's own absence and is
+ * independent of the head check, so a later seed() heals a partial row on its
+ * own. It guards the invariant that a failed seed does not wedge future seeds —
+ * it does not show that the transaction is what makes recovery possible.
  *
  * Real on-disk temp DB + real migrations; no mocks. Gate on the vitest EXIT
  * code, not stdout.
@@ -92,12 +99,15 @@ describe('seed() — head+version atomicity', () => {
 
     expect(() => seed(db)).toThrow();
 
-    // TOOTH: the head must NOT survive the failed version insert.
-    // Pre-fix this is 1 (committed head, aborted version) → test is RED.
+    // TOOTH (negative control): the head must NOT survive the failed version
+    // insert. Pre-fix this is 1 (committed head, aborted version) → test is RED.
     expect(headCount(targetSlug)).toBe(0);
     expect(versionCount(targetSlug)).toBe(0);
 
-    // ── Recover: drop the trigger and re-seed — the pair must now land ──────
+    // ── Forward guard: drop the trigger and re-seed — the pair must land ─────
+    // This also passes on the pre-fix code (the version insert is keyed on the
+    // version's own absence, independent of the head check); only the rollback
+    // assertions above are the red→green tooth.
     conn.exec('DROP TRIGGER seed_boom');
     expect(() => seed(db)).not.toThrow();
 
