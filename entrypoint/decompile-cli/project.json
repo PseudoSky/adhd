@@ -30,6 +30,10 @@
       "options": {
         "packageRoot": "{projectRoot}/dist"
       }
+    },
+    "test": {
+      "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference). The suite reads this project's OWN built dist/ (including the manifest/package.json emitted by `assets` via `dist-manifest`), which targetDefaults.test's `^build` never provides. `lint`/`^build` repeated because an explicit dependsOn replaces the targetDefault.",
+      "dependsOn": ["lint", "^build", "build", "dist-manifest"]
     }
   }
 }
