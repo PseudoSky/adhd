@@ -80,7 +80,6 @@
  */
 
 import { createHash } from 'node:crypto';
-import { isAbsolute, relative, resolve as resolvePath } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import {
@@ -95,6 +94,7 @@ import {
   resolveProjectPolicy,
 } from './catalog.js';
 import { writeAudit } from './audit.js';
+import { resolveCitationTarget } from './citation-path.js';
 import {
   CitationRequiredError,
   CitationUnverifiableError,
@@ -232,28 +232,32 @@ async function resolveIssueProjectTx(
 /**
  * §8.5's two-branch citation-sha rule, identical to `create-issue.ts`'s own
  * (private, unexported) `computeCitationSha` — duplicated here per this
- * package's established per-file convention (see this file's own doc
- * comment on {@link resolveIssueProjectTx}).
+ * package's established per-file convention (see this file's own doc comment
+ * on {@link resolveIssueProjectTx}).
+ *
+ * `allowedExternalRoots` is the project policy's typed carve-out (BUG
+ * c6d35272): in-project resolution stays the DEFAULT, and a target outside the
+ * root is accepted only under an allowlisted external root, decided by
+ * canonical (symlink-resolved) containment in `citation-path.ts`'s
+ * {@link resolveCitationTarget}. The read itself happens only after
+ * acceptance; ENOENT/ENOTDIR degrades to `'unverified'`, any other errno is a
+ * real `WriteIOError` (same §4c taxonomy as `create-issue.ts`).
  */
 async function computeCitationSha(
   project: IResolvedProjectRow,
-  file: string
+  file: string,
+  allowedExternalRoots: readonly string[]
 ): Promise<string> {
   if (!projectHasKnownPath(project)) return 'unverified';
 
-  const root = resolvePath(project.metadata.path);
-  const candidate = isAbsolute(file)
-    ? resolvePath(file)
-    : resolvePath(root, file);
-  const rel = relative(root, candidate);
-  const escapesRoot =
-    rel === '..' ||
-    rel.startsWith(`..${'/'}`) ||
-    rel.startsWith('..\\') ||
-    isAbsolute(rel);
-  if (escapesRoot) return 'unverified';
-
   try {
+    const { accepted, candidate } = await resolveCitationTarget(
+      project.metadata.path,
+      file,
+      allowedExternalRoots
+    );
+    if (!accepted) return 'unverified';
+
     const content = await readFile(candidate);
     return createHash('sha256').update(content).digest('hex');
   } catch (err) {
@@ -312,11 +316,15 @@ function enforceRequiredFields(
  * §6.1), a project-declared `requiredFields` entry (§2 — here, always just
  * `status`, see this file's own doc comment) left blank,
  * `NoteRequiredError` (policy-gated), `CitationRequiredError`
- * (policy-gated, terminal-only), `CitationUnverifiableError(target)`
- * (policy-gated via `project_policy.citation_requires_sha` — a given
- * citation's `sha` resolved to the `"unverified"` sentinel and the project
- * requires a real hash; the gate applies only when the project has a known
- * `path`, so a path-less project records `sha:"unverified"` verbatim),
+ * (policy-gated, terminal-only), `CitationUnverifiableError(target,
+ * allowedExternalRoots)` (policy-gated via
+ * `project_policy.citation_requires_sha` — a given citation's `sha` resolved
+ * to the `"unverified"` sentinel and the project requires a real hash; the
+ * gate applies only when the project has a known `path`, so a path-less
+ * project records `sha:"unverified"` verbatim. A path-present project still
+ * rejects a target whose canonical path lies outside the project root AND
+ * every `citationAllowedExternalRoots` entry — BUG c6d35272 — and the error
+ * names those roots),
  * `ClaimHeldError(heldBy, heldSince)` (§6.3.5 — a
  * live, non-stale claim held by someone other than `input.by` blocks the
  * status change; see claim-lease.ts), `WriteContentionError`/`WriteIOError`
@@ -359,15 +367,23 @@ export async function transition(
     );
     const prePolicy = resolveProjectPolicy(preProject);
     for (const citation of citations) {
-      const sha = await computeCitationSha(preProject, citation.file);
+      const sha = await computeCitationSha(
+        preProject,
+        citation.file,
+        prePolicy.citationAllowedExternalRoots
+      );
       // Same contract as `create-issue.ts`'s identical gate: enforce
       // `citationRequiresSha` only where verification is POSSIBLE (a project
       // with a known `path`). A path-less project records `sha:"unverified"`
-      // verbatim; a path-present project citing a missing/escaping file still
-      // hard-fails.
+      // verbatim; a path-present project citing a missing file — or a target
+      // outside the project root and every `citationAllowedExternalRoots`
+      // entry (BUG c6d35272) — still hard-fails, and the error names the roots.
       if (sha === 'unverified' && prePolicy.citationRequiresSha) {
         if (projectHasKnownPath(preProject)) {
-          throw new CitationUnverifiableError(citation.file);
+          throw new CitationUnverifiableError(
+            citation.file,
+            prePolicy.citationAllowedExternalRoots
+          );
         }
         // Observability for the deliberate path-less waiver (DEBT a934e089) —
         // same rationale as `create-issue.ts`'s identical log; never a second
