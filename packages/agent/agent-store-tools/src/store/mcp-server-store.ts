@@ -64,22 +64,17 @@ export class McpServerStore {
 
   /**
    * Register an MCP server.
-   * Throws MCP_SERVER_ALREADY_EXISTS if the id PK already exists.
+   *
+   * Uniqueness is enforced by the `id` primary key, not a `SELECT` pre-check:
+   * `onConflictDoNothing()` lets SQLite arbitrate a concurrent duplicate, and a
+   * zero-row-changed result means the id was already registered — translated
+   * into the documented `MCP_SERVER_ALREADY_EXISTS` so a racing second writer
+   * can never surface the driver's raw `SqliteError` to the caller.
+   *
+   * @throws {McpServerStoreError} MCP_SERVER_ALREADY_EXISTS if the id PK
+   *   already exists.
    */
   create(input: McpServerCreateInput): McpServer {
-    const existing = this.db
-      .select()
-      .from(mcpServersTable)
-      .where(eq(mcpServersTable.id, input.id))
-      .get();
-
-    if (existing) {
-      throw new McpServerStoreError(
-        'MCP_SERVER_ALREADY_EXISTS',
-        `MCP server '${input.id}' already exists`
-      );
-    }
-
     const server: McpServer = {
       id: input.id,
       transport: input.transport,
@@ -88,7 +83,7 @@ export class McpServerStore {
       configSchema: input.configSchema ?? {},
     };
 
-    this.db
+    const result = this.db
       .insert(mcpServersTable)
       .values({
         id: server.id,
@@ -97,7 +92,15 @@ export class McpServerStore {
         providedToolIds: server.providedToolIds,
         configSchema: server.configSchema,
       })
+      .onConflictDoNothing()
       .run();
+
+    if (result.changes === 0) {
+      throw new McpServerStoreError(
+        'MCP_SERVER_ALREADY_EXISTS',
+        `MCP server '${input.id}' already exists`
+      );
+    }
 
     return server;
   }

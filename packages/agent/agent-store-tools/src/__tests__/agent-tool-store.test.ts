@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { runMigrationsOn } from '../db/migrate-runner.js';
 import * as schema from '../db/schema.js';
@@ -484,5 +484,85 @@ describe('AgentToolStore — [inv:no-cross-pkg-fk] agent_slug is a logical refer
     );
 
     closeDb(sqlite);
+  });
+});
+
+// ──────────────────────────────────────────────
+// AgentToolStore.grant() — unique-constraint atomicity (bd724962)
+//
+// grant() must let the agent_tools(agent_slug, tool_name) composite primary key
+// arbitrate uniqueness and translate the zero-row-changed outcome into the
+// documented GRANT_ALREADY_EXISTS, never surface the driver's raw SqliteError.
+// The SELECT pre-check it used to run opened a check-then-INSERT race window.
+// ──────────────────────────────────────────────
+
+describe('AgentToolStore.grant() — unique-constraint atomicity', () => {
+  let tmpDir: string;
+  let dbPath: string;
+  let sqlite: InstanceType<typeof Database>;
+  let db: ReturnType<typeof openDb>['db'];
+  let store: AgentToolStore;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'agent-tool-registry-atomicity-')
+    );
+    dbPath = path.join(tmpDir, 'registry.db');
+    const opened = openDb(dbPath);
+    sqlite = opened.sqlite;
+    db = opened.db;
+    seedToolAndType(db);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    store = new AgentToolStore(db as any);
+  });
+
+  afterEach(() => {
+    try {
+      closeDb(sqlite);
+    } catch {
+      /* already closed */
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('duplicate grant() yields GRANT_ALREADY_EXISTS (an AgentToolStoreError), never a raw SqliteError', () => {
+    store.grant({
+      agentSlug: 'agent-x',
+      toolName: 'file_read',
+      permission: 'full',
+    });
+
+    let caught: unknown;
+    try {
+      store.grant({
+        agentSlug: 'agent-x',
+        toolName: 'file_read',
+        permission: 'read_only',
+      });
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(AgentToolStoreError);
+    expect((caught as AgentToolStoreError).code).toBe('GRANT_ALREADY_EXISTS');
+    // The whole point: a caller must never see the driver's raw error.
+    expect(caught).not.toBeInstanceOf(Database.SqliteError);
+  });
+
+  it('grant() never runs a SELECT — uniqueness is the DB constraint, not a read-then-write pre-check', () => {
+    const insertSpy = vi.spyOn(db, 'insert');
+    const selectSpy = vi.spyOn(db, 'select');
+
+    store.grant({
+      agentSlug: 'agent-y',
+      toolName: 'file_read',
+      permission: 'full',
+    });
+
+    expect(insertSpy).toHaveBeenCalledTimes(1);
+    // The old code ran a SELECT pre-check before the INSERT, opening a
+    // check-then-INSERT race window. The constraint-arbitrated version takes
+    // the uniqueness decision from the INSERT result and never reads first.
+    expect(selectSpy).not.toHaveBeenCalled();
   });
 });

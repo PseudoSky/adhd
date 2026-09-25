@@ -69,28 +69,19 @@ export class ToolFormatStore {
 
   /**
    * Insert a new provider_tool_formats row.
-   * Throws TOOL_FORMAT_ALREADY_EXISTS if (providerId, canonicalTool) is taken.
+   *
+   * Uniqueness is enforced by the `(provider_id, canonical_tool)` composite
+   * primary key, not a `SELECT` pre-check: `onConflictDoNothing()` lets SQLite
+   * arbitrate a concurrent duplicate, and a zero-row-changed result means the
+   * pair was already registered — translated into the documented
+   * `TOOL_FORMAT_ALREADY_EXISTS` so a racing second writer can never surface
+   * the driver's raw `SqliteError` to the caller.
+   *
+   * @throws {ToolFormatStoreError} TOOL_FORMAT_ALREADY_EXISTS if
+   *   (providerId, canonicalTool) is taken.
    */
   create(input: ToolFormatCreateInput): ToolFormat {
-    const existing = this.db
-      .select()
-      .from(providerToolFormats)
-      .where(
-        and(
-          eq(providerToolFormats.providerId, input.providerId),
-          eq(providerToolFormats.canonicalTool, input.canonicalTool)
-        )
-      )
-      .get();
-
-    if (existing) {
-      throw new ToolFormatStoreError(
-        'TOOL_FORMAT_ALREADY_EXISTS',
-        `Tool format for '${input.canonicalTool}' on provider '${input.providerId}' already exists`
-      );
-    }
-
-    this.db
+    const result = this.db
       .insert(providerToolFormats)
       .values({
         providerId: input.providerId,
@@ -99,7 +90,15 @@ export class ToolFormatStore {
         typeTag: input.typeTag ?? null,
         note: input.note ?? null,
       })
+      .onConflictDoNothing()
       .run();
+
+    if (result.changes === 0) {
+      throw new ToolFormatStoreError(
+        'TOOL_FORMAT_ALREADY_EXISTS',
+        `Tool format for '${input.canonicalTool}' on provider '${input.providerId}' already exists`
+      );
+    }
 
     return this.read(input.providerId, input.canonicalTool);
   }
