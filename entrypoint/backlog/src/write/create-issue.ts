@@ -35,7 +35,7 @@ import {
   resolveProjectTx,
 } from './catalog.js';
 import { writeAudit } from './audit.js';
-import { resolveCitationTarget } from './citation-path.js';
+import { isMissingPathError, resolveCitationTarget } from './citation-path.js';
 import {
   composeEmbedText,
   scheduleIssueEmbedding,
@@ -368,8 +368,7 @@ async function computeCitationSha(
     const content = await readFile(candidate);
     return createHash('sha256').update(content).digest('hex');
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException)?.code;
-    if (code === 'ENOENT' || code === 'ENOTDIR') return 'unverified';
+    if (isMissingPathError(err)) return 'unverified';
     throw new WriteIOError(err);
   }
 }

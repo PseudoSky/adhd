@@ -394,17 +394,17 @@ describe('createIssue — citation sha gate applies only where verification is p
   // The citation-path CARVE-OUT (BUG c6d35272). A path-PRESENT project may
   // cite a target that resolves OUTSIDE its own root when that target lies
   // under the project's typed `citationAllowedExternalRoots` allowlist
-  // (default `~/.adhd`). Everything else — a `..` traversal, a symlink that
+  // (default `~/.adhd/backlog`). Everything else — a `..` traversal, a symlink that
   // escapes, an arbitrary absolute path — stays rejected, and the rejection
   // NAMES the allowed roots. Every assertion drives the REAL verbs and reads
   // the persisted `sha` back through direct SQL.
   // -------------------------------------------------------------------------
 
-  it('path-PRESENT project cites a file under the DEFAULT external root (~/.adhd) — accepted and genuinely hashed', async () => {
+  it('path-PRESENT project cites a file under the DEFAULT external root (~/.adhd/backlog) — accepted and genuinely hashed', async () => {
     const fakeHome = freshTmpDir('citation-carveout-home');
-    const adhdDir = join(fakeHome, '.adhd');
-    mkdirSync(adhdDir, { recursive: true });
-    const evidence = join(adhdDir, 'evidence.ts');
+    const backlogDir = join(fakeHome, '.adhd', 'backlog');
+    mkdirSync(backlogDir, { recursive: true });
+    const evidence = join(backlogDir, 'evidence.ts');
     writeFileSync(evidence, 'export const evidence = 1;\n');
     const originalHome = process.env.HOME;
     process.env.HOME = fakeHome;
@@ -417,7 +417,7 @@ describe('createIssue — citation sha gate applies only where verification is p
       const created = await createIssue(store, {
         project: project.uid,
         title: 'default external-root citation',
-        body: 'evidence lives under ~/.adhd, outside the project root',
+        body: 'evidence lives under ~/.adhd/backlog, outside the project root',
         by: 'filer',
         citations: [{ file: evidence }],
       });
@@ -427,6 +427,39 @@ describe('createIssue — citation sha gate applies only where verification is p
       const sha = await persistedCitationSha(issueRow.rowid);
       expect(sha).not.toBe('unverified');
       expect(sha).toMatch(/^[0-9a-f]{64}$/);
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+      removeTestIssueStoreDir(fakeHome);
+    }
+  });
+
+  it('BUG 62059b57: a file in the PARENT of the default root (~/.adhd, NOT ~/.adhd/backlog) is rejected — the machine secrets file is not citable', async () => {
+    const fakeHome = freshTmpDir('citation-carveout-narrow-home');
+    const adhdDir = join(fakeHome, '.adhd');
+    mkdirSync(adhdDir, { recursive: true });
+    // A stand-in for the machine-global `~/.adhd/.env` and every other
+    // project's DB: outside the narrowed default root, so it must NOT become a
+    // readable/citable oracle.
+    const secret = join(adhdDir, 'env-like-evidence.ts');
+    writeFileSync(secret, 'SECRET=1\n');
+    const originalHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+    try {
+      const project = await upsertProject(store, {
+        name: 'citation-carveout-narrow-project',
+        path: dir,
+        by: 'filer',
+      });
+      await expect(
+        createIssue(store, {
+          project: project.uid,
+          title: 'parent-of-default-root citation',
+          body: '~/.adhd is no longer a default external root',
+          by: 'filer',
+          citations: [{ file: secret }],
+        })
+      ).rejects.toThrow(CitationUnverifiableError);
     } finally {
       if (originalHome === undefined) delete process.env.HOME;
       else process.env.HOME = originalHome;
@@ -445,7 +478,7 @@ describe('createIssue — citation sha gate applies only where verification is p
         by: 'filer',
       });
       // Overwrite the project's meta with an EXPLICIT policy root — proving
-      // the default `~/.adhd` is not special-cased: ANY policy-configured
+      // the default `~/.adhd/backlog` is not special-cased: ANY policy-configured
       // root is accepted.
       await store.adapter.executeRun('UPDATE node SET meta = ? WHERE uid = ?', [
         JSON.stringify({
@@ -565,13 +598,49 @@ describe('createIssue — citation sha gate applies only where verification is p
       }
       const message = caught.message;
       expect(message).toContain('accepted only under:');
-      expect(message).toContain('~/.adhd');
+      expect(message).toContain('~/.adhd/backlog');
       expect(message).toContain('project_policy.citationAllowedExternalRoots');
     } finally {
       if (originalHome === undefined) delete process.env.HOME;
       else process.env.HOME = originalHome;
       removeTestIssueStoreDir(fakeHome);
     }
+  });
+
+  it('with an EXPLICIT empty allowlist, the rejection names the project root and says the policy array is empty — no dangling double space', async () => {
+    const project = await upsertProject(store, {
+      name: 'citation-carveout-empty-roots-project',
+      path: dir,
+      by: 'filer',
+    });
+    // An explicit `[]` disables the carve-out; the rejection must still be
+    // actionable (name what IS accepted: the project root).
+    await store.adapter.executeRun('UPDATE node SET meta = ? WHERE uid = ?', [
+      JSON.stringify({
+        path: dir,
+        policy: { citationAllowedExternalRoots: [] },
+      }),
+      project.uid,
+    ]);
+    let caught: unknown;
+    try {
+      await createIssue(store, {
+        project: project.uid,
+        title: 'empty-allowlist citation message',
+        body: 'the error must name the project root when no external roots are allowed',
+        by: 'filer',
+        citations: [{ file: '/etc/hosts' }],
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(CitationUnverifiableError);
+    if (!(caught instanceof Error)) {
+      throw new Error('expected the rejection to be an Error instance');
+    }
+    expect(caught.message).toContain(
+      'accepted only under: the project root (project_policy.citationAllowedExternalRoots is empty)'
+    );
   });
 });
 

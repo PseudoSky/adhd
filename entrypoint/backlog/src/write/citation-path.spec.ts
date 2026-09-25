@@ -11,7 +11,7 @@
  *   containment resolves the link — this is also the sibling defect
  *   c6d90ddf);
  * - an arbitrary absolute path outside every root is rejected;
- * - the default root is `~/.adhd`, read from `$HOME` at CALL time.
+ * - the default root is `~/.adhd/backlog`, read from `$HOME` at CALL time.
  */
 import { mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -22,14 +22,15 @@ import {
   canonicalizePath,
   defaultCitationAllowedExternalRoots,
   displayExternalRoot,
+  isMissingPathError,
   isPathWithin,
   resolveCitationTarget,
 } from './citation-path.js';
 
 describe('citation-path — defaultCitationAllowedExternalRoots', () => {
-  it('is [~/.adhd], read from $HOME at CALL time (lazy, never frozen at module load)', () => {
+  it('is [~/.adhd/backlog], read from $HOME at CALL time (lazy, never frozen at module load)', () => {
     expect(defaultCitationAllowedExternalRoots()).toEqual([
-      join(homedir(), '.adhd'),
+      join(homedir(), '.adhd', 'backlog'),
     ]);
 
     const original = process.env.HOME;
@@ -37,13 +38,35 @@ describe('citation-path — defaultCitationAllowedExternalRoots', () => {
     process.env.HOME = fake;
     try {
       expect(defaultCitationAllowedExternalRoots()).toEqual([
-        join(fake, '.adhd'),
+        join(fake, '.adhd', 'backlog'),
       ]);
     } finally {
       if (original === undefined) delete process.env.HOME;
       else process.env.HOME = original;
       rmSync(fake, { recursive: true, force: true });
     }
+  });
+
+  it('does NOT default to the whole ~/.adhd tree (BUG 62059b57 — ~/.adhd/.env and sibling projects stay out)', () => {
+    // The narrow default is the security property: the parent of the default
+    // root holds the machine-global secrets file and every other project's DB,
+    // so neither may ever be inside it. Asserted on the VALUE, not the shape.
+    const [root] = defaultCitationAllowedExternalRoots();
+    expect(root).not.toBe(join(homedir(), '.adhd'));
+    expect(root).toBe(join(homedir(), '.adhd', 'backlog'));
+  });
+});
+
+describe('citation-path — isMissingPathError (the shared ENOENT/ENOTDIR taxonomy)', () => {
+  it('is true for ENOENT and ENOTDIR, false for every other errno (EACCES/EISDIR/ELOOP/…), and false for a non-error', () => {
+    expect(isMissingPathError({ code: 'ENOENT' })).toBe(true);
+    expect(isMissingPathError({ code: 'ENOTDIR' })).toBe(true);
+    expect(isMissingPathError({ code: 'EACCES' })).toBe(false);
+    expect(isMissingPathError({ code: 'EISDIR' })).toBe(false);
+    expect(isMissingPathError({ code: 'ELOOP' })).toBe(false);
+    expect(isMissingPathError(new Error('no code'))).toBe(false);
+    expect(isMissingPathError(undefined)).toBe(false);
+    expect(isMissingPathError('ENOENT')).toBe(false);
   });
 });
 

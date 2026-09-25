@@ -117,7 +117,7 @@ project_policy (project → policy): transition_requires_note (default true),
   citation_required (false), citation_requires_sha (default true — gates
   acceptance of an unverified citation, but only where verification is
   possible; see below), citation_allowed_external_roots (default
-  [`~/.adhd`] — typed, project-scoped external read roots; see below),
+  [`~/.adhd/backlog`] — typed, project-scoped external read roots; see below),
   default_status (catalog
   ref; falls back to a global OPEN-equivalent catalog row when unset),
   default_kind (catalog ref; falls back to the global "issue" catalog row
@@ -150,7 +150,9 @@ A path-PRESENT project resolves a citation target by CANONICAL
 (symlink-resolved) containment against its own `metadata.path` root PLUS every
 root in `citation_allowed_external_roots` (BUG c6d35272). In-project
 resolution stays the DEFAULT; the array names EXTERNAL absolute roots whose
-evidence may also be cited — the runtime default is `[~/.adhd]`, read lazily
+evidence may also be cited — the runtime default is `[~/.adhd/backlog]` (the
+production store/logs home, deliberately NARROWER than `~/.adhd` so the
+machine-global secrets file and sibling projects stay out), read lazily
 from `$HOME` on each policy resolve, and an EXPLICIT `[]` disables the
 carve-out. This is deliberately typed, per-project config — never an
 environment toggle, and never a blanket "any absolute path". A `..`
