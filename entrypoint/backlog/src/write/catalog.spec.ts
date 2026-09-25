@@ -11,8 +11,10 @@
  * (a path-less project can never verify, so the gate has nothing to reject).
  */
 import { describe, expect, it } from 'vitest';
+import { defaultCitationAllowedExternalRoots } from './citation-path.js';
 import {
   projectHasKnownPath,
+  resolveProjectPolicy,
   type IResolvedProjectRow,
 } from './catalog.js';
 
@@ -68,5 +70,53 @@ describe('projectHasKnownPath — the shared citation-verification precondition'
     // `.length` read is the runtime half of the same guarantee.
     const path = p.metadata.path satisfies string;
     expect(path.length).toBeGreaterThan(0);
+  });
+});
+
+describe('resolveProjectPolicy — citationAllowedExternalRoots is validated, never spread from a malformed value (BUG 62059b57 follow-up)', () => {
+  it('preserves an explicitly valid string[] — including an explicit [] that disables the carve-out', () => {
+    expect(
+      resolveProjectPolicy(
+        project({ policy: { citationAllowedExternalRoots: ['/a', '/b'] } })
+      ).citationAllowedExternalRoots
+    ).toEqual(['/a', '/b']);
+    expect(
+      resolveProjectPolicy(
+        project({ policy: { citationAllowedExternalRoots: [] } })
+      ).citationAllowedExternalRoots
+    ).toEqual([]);
+  });
+
+  it('falls back to the narrow runtime default when the field is a bare string (never char-spread)', () => {
+    // `'abc'` spread would be `['a','b','c']` — assert the DEFAULT, which is
+    // what proves the value was validated and replaced.
+    expect(
+      resolveProjectPolicy(
+        project({ policy: { citationAllowedExternalRoots: '/etc' } })
+      ).citationAllowedExternalRoots
+    ).toEqual(defaultCitationAllowedExternalRoots());
+  });
+
+  it('falls back to the default when the field is a non-array object', () => {
+    expect(
+      resolveProjectPolicy(
+        project({ policy: { citationAllowedExternalRoots: { 0: '/etc' } } })
+      ).citationAllowedExternalRoots
+    ).toEqual(defaultCitationAllowedExternalRoots());
+  });
+
+  it('falls back to the default when ANY element is not a string', () => {
+    expect(
+      resolveProjectPolicy(
+        project({ policy: { citationAllowedExternalRoots: ['/ok', 42] } })
+      ).citationAllowedExternalRoots
+    ).toEqual(defaultCitationAllowedExternalRoots());
+  });
+
+  it('defaults (lazily) when no policy object is present at all', () => {
+    expect(
+      resolveProjectPolicy(project({ path: '/repo' }))
+        .citationAllowedExternalRoots
+    ).toEqual(defaultCitationAllowedExternalRoots());
   });
 });
