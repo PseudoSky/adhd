@@ -37,17 +37,17 @@ describe("<%= projectName %> skeleton persistence", () => {
         const write = new Database(dbPath);
         write.pragma("journal_mode = WAL");
         write.exec(
-            "CREATE TABLE <%= tablePrefix %>probe (slug TEXT PRIMARY KEY, label TEXT NOT NULL)"
+            `CREATE TABLE "<%= tablePrefix %>probe" (slug TEXT PRIMARY KEY, label TEXT NOT NULL)`
         );
         write
-            .prepare("INSERT INTO <%= tablePrefix %>probe (slug, label) VALUES (?, ?)")
+            .prepare(`INSERT INTO "<%= tablePrefix %>probe" (slug, label) VALUES (?, ?)`)
             .run("alpha", "hello");
         write.close();
 
         // Reopen from the SAME path — proves the row hit disk, not just memory.
         const read = new Database(dbPath);
         const row = read
-            .prepare("SELECT label FROM <%= tablePrefix %>probe WHERE slug = ?")
+            .prepare(`SELECT label FROM "<%= tablePrefix %>probe" WHERE slug = ?`)
             .get("alpha") as { label: string } | undefined;
         read.close();
 
