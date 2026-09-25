@@ -3,7 +3,11 @@ import type {
   PluginOutput,
   Operation,
 } from '@adhd/apigen-core-client';
-import { envelopeKey, sanitizeIdentifier } from '@adhd/apigen-engine-naming';
+import {
+  envelopeKey,
+  escapeStringLiteral,
+  sanitizeIdentifier,
+} from '@adhd/apigen-engine-naming';
 import { HTTP_STATUS } from '@adhd/apigen-base-errors';
 import { buildOpPlan } from '@adhd/apigen-engine-runtime';
 import type { ProjectionConfig } from '@adhd/apigen-engine-naming';
@@ -77,7 +81,9 @@ export function generate(input: GenerateInput): PluginOutput {
   ];
   for (const pkg of input.packages) {
     const varName = sanitizeIdentifier(pkg.id);
-    lines.push(`import * as ${varName}_ns from '${pkg.importPath}'`);
+    lines.push(
+      `import * as ${varName}_ns from ${escapeStringLiteral(pkg.importPath)}`
+    );
     lines.push(
       `const ${varName}_fns = buildFnTable(${varName}_ns as Record<string, unknown>)`
     );
@@ -123,20 +129,32 @@ export function generate(input: GenerateInput): PluginOutput {
       const headerMap = envelopeHeaders(fnSchema as Record<string, unknown>);
       const headerEntries = Object.entries(headerMap);
 
+      // BUG-APIGEN-032 family: every dynamic value spliced into generated
+      // source is routed through the shared emit primitive — identifiers via
+      // `sanitizeIdentifier` (above), string literals via
+      // `escapeStringLiteral` — so an id/route/header/fn-name containing a
+      // quote, backslash or line terminator can never break out of its literal.
+      const schemaKeyLiteral = escapeStringLiteral(`${pkg.id}:${fnName}`);
+      const fnNameLiteral = escapeStringLiteral(fnName);
+
       if (verb === 'GET') {
         // safe op: domain args from query string, envelope from request headers
-        lines.push(`app.get('${route}', async (req) => {`);
+        lines.push(`app.get(${escapeStringLiteral(route)}, async (req) => {`);
         // FEAT-APIGEN-022: query strings are always strings — coerce to the
         // domain schema's declared number/integer/boolean types before
         // dispatch (never touches POST/body — see coerce-query.ts).
         lines.push(
-          `  const query = coerceQueryParams(req.query as Record<string, unknown>, schemas['${pkg.id}:${fnName}']['schema'] as any)`
+          `  const query = coerceQueryParams(req.query as Record<string, unknown>, schemas[${schemaKeyLiteral}]['schema'] as any)`
         );
         if (headerEntries.length > 0) {
           const envParts = headerEntries
             .map(
               ([field, hdr]) =>
-                `'${field}': (req.headers as Record<string, unknown>)['${hdr}']`
+                `${escapeStringLiteral(
+                  field
+                )}: (req.headers as Record<string, unknown>)[${escapeStringLiteral(
+                  hdr
+                )}]`
             )
             .join(', ');
           lines.push(
@@ -146,12 +164,12 @@ export function generate(input: GenerateInput): PluginOutput {
           lines.push(`  const envelope: Record<string, unknown> = {}`);
         }
         lines.push(
-          `  return dispatch(${varName}_fns as any, undefined, schemas['${pkg.id}:${fnName}']['schema'] as any, '${fnName}', envelope, query as any)`
+          `  return dispatch(${varName}_fns as any, undefined, schemas[${schemaKeyLiteral}]['schema'] as any, ${fnNameLiteral}, envelope, query as any)`
         );
         lines.push(`})`);
       } else {
         // unsafe op: domain args from body.data, envelope from request headers
-        lines.push(`app.post('${route}', async (req) => {`);
+        lines.push(`app.post(${escapeStringLiteral(route)}, async (req) => {`);
         lines.push(
           `  const { data = {} } = req.body as Record<string, unknown>`
         );
@@ -159,7 +177,11 @@ export function generate(input: GenerateInput): PluginOutput {
           const envParts = headerEntries
             .map(
               ([field, hdr]) =>
-                `'${field}': (req.headers as Record<string, unknown>)['${hdr}']`
+                `${escapeStringLiteral(
+                  field
+                )}: (req.headers as Record<string, unknown>)[${escapeStringLiteral(
+                  hdr
+                )}]`
             )
             .join(', ');
           lines.push(
@@ -169,15 +191,38 @@ export function generate(input: GenerateInput): PluginOutput {
           lines.push(`  const envelope: Record<string, unknown> = {}`);
         }
         lines.push(
-          `  return dispatch(${varName}_fns as any, undefined, schemas['${pkg.id}:${fnName}']['schema'] as any, '${fnName}', envelope, data as any)`
+          `  return dispatch(${varName}_fns as any, undefined, schemas[${schemaKeyLiteral}]['schema'] as any, ${fnNameLiteral}, envelope, data as any)`
         );
         lines.push(`})`);
       }
     }
   }
 
+  // Generated-host lifecycle (b7bb606d): a bare `app.listen(...)` is a floating
+  // promise — a bind failure (e.g. EADDRINUSE) becomes an unhandled rejection
+  // and the process neither serves nor exits. Await it in `main()` and exit
+  // non-zero on failure, with a framework-level fallback error handler for
+  // throws that occur before a route handler runs.
   lines.push(``);
-  lines.push(`app.listen({ port: ${port} })`);
+  lines.push(`app.setErrorHandler((err, _req, reply) => {`);
+  lines.push(`  reply.status(500).send({`);
+  lines.push(`    code: 'internal',`);
+  lines.push(
+    `    message: err instanceof Error ? err.message : 'Internal error',`
+  );
+  lines.push(`  })`);
+  lines.push(`})`);
+  lines.push(``);
+  lines.push(`async function main(): Promise<void> {`);
+  lines.push(`  try {`);
+  lines.push(`    await app.listen({ port: ${port} })`);
+  lines.push(`  } catch (err) {`);
+  lines.push(`    app.log.error(err)`);
+  lines.push(`    process.exit(1)`);
+  lines.push(`  }`);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`main()`);
 
   return { files: [{ path: 'routes.ts', content: lines.join('\n') }] };
 }
