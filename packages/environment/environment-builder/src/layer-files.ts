@@ -10,8 +10,18 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { parse as parseYamlDocument } from 'yaml';
+import yaml from 'yaml';
 import { CONFIG_FILENAME, LOCAL_CONFIG_FILENAME } from '@adhd/environment-base-spec';
+
+// `yaml@1.10.3` is CommonJS-only (type: "commonjs", no ESM build), so a named
+// import (`import { parse } from 'yaml'`) is emitted verbatim into this
+// package's OWN `dist/index.mjs` and into every consumer bundle that inlines
+// this source (e.g. `apigen-plugin-ir-cache`). Node cannot statically resolve a
+// named export off a CJS module, so that ESM entry throws on load. The default
+// import binds `module.exports` and is the interop form Node guarantees —
+// destructure off it instead. (Same remedy 2ea64778 applied to @adhd/backlog;
+// this is the shared source that fix missed.)
+const { parse: parseYamlDocument } = yaml;
 
 import type { Roots } from './roots';
 
