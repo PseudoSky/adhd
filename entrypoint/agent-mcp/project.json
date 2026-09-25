@@ -37,6 +37,10 @@
       "options": {
         "packageRoot": "{projectRoot}/dist"
       }
+    },
+    "test": {
+      "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference). main-entry-symlink.test.ts spawns the BUILT dist/src/server.js, which `require`s ../package.json — emitted by the inferred `assets` target and reached transitively through `dist-manifest` ([build, assets]). targetDefaults.test builds only DEPENDENCIES (`^build`) plus `lint`, never this project's OWN dist/, so `build` + `dist-manifest` are declared here. `lint`/`^build` are repeated because an explicit dependsOn replaces the targetDefault rather than merging with it.",
+      "dependsOn": ["lint", "^build", "build", "dist-manifest"]
     }
   }
 }
