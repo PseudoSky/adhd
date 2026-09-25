@@ -645,6 +645,74 @@ describe('buildTranscoder', () => {
       expect(transcoder.encode(issueValue, schema)).toEqual(issueValue);
     });
 
+    it('BUG-APIGEN-RUNMODE-IMPLICIT-DISCRIMINATOR-ADMISSIBILITY-001: an implicit discriminator never selects a branch the value structurally cannot inhabit (markdown member of IIssueQueryResult)', () => {
+      // Reproduces `@adhd/backlog`'s `IIssueQueryResult` markdown path. Two
+      // branches pin `view` to a single literal (`'list'`, `'projects'`), which
+      // makes `view` look like an unambiguous implicit discriminator — but a
+      // third branch (markdown) declares `view` as the MULTI-valued enum
+      // `['list','ready','stale','similar']` plus the literal `format:'markdown'`.
+      // A markdown value `{view:'list', format:'markdown', markdown}` therefore
+      // matches BOTH the `view:'list'` branch (by literal tag) and the markdown
+      // branch. Before the fix the literal tag won, the value was re-encoded
+      // through the `view:'list'` branch, and `format`/`markdown` were dropped
+      // — the raw result `{"view":"list"}`, which then failed the MCP client's
+      // output-schema validation (`-32602`) because it satisfies none of the
+      // `data` oneOf members.
+      const transcoder = buildTranscoder(createRegistry().freeze());
+
+      const schema: SchemaNode = {
+        oneOf: [
+          {
+            type: 'object',
+            properties: {
+              view: { type: 'string', enum: ['list'] },
+              items: { type: 'array', items: { type: 'object' } },
+              hasMore: { type: 'boolean' },
+            },
+            required: ['view', 'items', 'hasMore'],
+          },
+          {
+            type: 'object',
+            properties: {
+              view: { type: 'string', enum: ['projects'] },
+              items: { type: 'array', items: { type: 'object' } },
+            },
+            required: ['view', 'items'],
+          },
+          {
+            type: 'object',
+            properties: {
+              view: { type: 'string', enum: ['list', 'ready', 'stale', 'similar'] },
+              format: { type: 'string', enum: ['markdown'] },
+              markdown: { type: 'string' },
+            },
+            required: ['view', 'format', 'markdown'],
+          },
+        ],
+      };
+
+      // The markdown value must round-trip intact and route to the markdown
+      // branch — NOT be truncated to `{view:'list'}`.
+      const markdownValue = { view: 'list', format: 'markdown', markdown: '# hello' };
+      expect(transcoder.encode(markdownValue, schema)).toEqual(markdownValue);
+
+      // NEGATIVE CONTROL: the registry branch (`view:'projects'`) still routes
+      // by its literal tag — proving the fix is an admissibility guard, not a
+      // blanket disable of the implicit discriminator (which would make the
+      // `view:'ready'`/`view:'projects'` branches tie structurally and re-open
+      // BUG-BACKLOG-QUERY-REGISTRY-VIEW-STRIPPED-001).
+      const projectsValue = {
+        view: 'projects',
+        items: [{ uid: 'p1', name: 'demo-project', path: '/tmp/demo' }],
+      };
+      expect(transcoder.encode(projectsValue, schema)).toEqual(projectsValue);
+
+      // A non-markdown `view:'list'` value (with its required `items`/`hasMore`)
+      // is still admissible for the `view:'list'` branch and routes there.
+      const listValue = { view: 'list', items: [{ uid: 'i1' }], hasMore: false };
+      expect(transcoder.encode(listValue, schema)).toEqual(listValue);
+    });
+
     // ── S-18: implicit-discriminator tag must be PRESENT to match ─────────────
     //
     // `findImplicitDiscriminatorBranch` builds `literalsByBranch[i]` as "the
