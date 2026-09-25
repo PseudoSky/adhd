@@ -212,8 +212,8 @@ describe('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] route/verb parity with pr
         options: {},
       };
       const { content } = generate(input).files[0];
-      expect(content).toContain(`router.post('${expected.route}'`);
-      expect(content).not.toContain(`router.get('${expected.route}'`);
+      expect(content).toContain(`router.post("${expected.route}"`);
+      expect(content).not.toContain(`router.get("${expected.route}"`);
     });
 
     it('[positive] safe op → GET at exactly project(op).http.route', () => {
@@ -235,8 +235,8 @@ describe('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] route/verb parity with pr
         options: {},
       };
       const { content } = generate(input).files[0];
-      expect(content).toContain(`router.get('${expected.route}'`);
-      expect(content).not.toContain(`router.post('${expected.route}'`);
+      expect(content).toContain(`router.get("${expected.route}"`);
+      expect(content).not.toContain(`router.post("${expected.route}"`);
     });
 
     it('[negative control] the pre-fix `${pkgId}/${fnName}` formula diverges from project(op).http.route — proves this test has teeth', () => {
@@ -259,8 +259,9 @@ describe('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] route/verb parity with pr
         options: {},
       };
       const { content } = generate(input).files[0];
-      expect(content).not.toContain(`'${oldRoute}'`);
-      expect(content).toContain(`'${expected.route}'`);
+      // Delimiter-agnostic: the emitted route literal is double-quoted now.
+      expect(content).not.toContain(oldRoute);
+      expect(content).toContain(`"${expected.route}"`);
     });
   });
 
@@ -325,10 +326,9 @@ describe('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] route/verb parity with pr
       const deadline = Date.now() + 10000;
       while (Date.now() < deadline) {
         try {
-          const r = await fetch(
-            `${baseUrl}${project(safeOp, {}).http.route}`,
-            { method: 'GET' }
-          );
+          const r = await fetch(`${baseUrl}${project(safeOp, {}).http.route}`, {
+            method: 'GET',
+          });
           if (r.status < 500) break;
         } catch {
           await new Promise((r) => setTimeout(r, 50));
@@ -691,7 +691,9 @@ describe('[express-parity] TransportAdapter/OpPlan golden-snapshot parity gate',
           id: 'env-pkg',
           schemas: parityEnvelopeSchema,
           importPath: '@test/env-pkg',
-          fns: { getUser: (userId: unknown) => parityGetUser(userId as string) },
+          fns: {
+            getUser: (userId: unknown) => parityGetUser(userId as string),
+          },
         },
         {
           id: 'mutate-pkg',

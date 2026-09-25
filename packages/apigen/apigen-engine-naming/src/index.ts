@@ -28,6 +28,12 @@ export {
   sanitizeIdentifier,
 } from './lib/naming';
 
+// Shared codegen emit primitives (BUG-APIGEN-032 family): the single,
+// context-correct escape/identifier/path surface every generator splices
+// through. `sanitizeIdentifier` is re-exported from `./lib/emit` too, but is
+// already exported above from its single definition in `./lib/naming`.
+export { escapeStringLiteral, toPosixPath } from './lib/emit';
+
 export type {
   TransportProjection,
   HttpVerb,
