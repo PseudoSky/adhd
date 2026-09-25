@@ -216,6 +216,11 @@ export default [
       '**/*.config.ts',
       '**/*.config.mts',
       '**/*.config.cts',
+      // Standalone tooling (e.g. `entrypoint/backlog/tools/etl/*.spec.ts`) lives
+      // outside every project's `tsconfig` `include`, so the project service
+      // cannot resolve it. Same treatment as the other tsconfig-less scopes
+      // above: kept linted by the non-type-aware preset, just not this one rule.
+      '**/tools/**',
     ],
     languageOptions: {
       parserOptions: {

@@ -297,7 +297,7 @@ export async function priorityMatrix(
   );
 
   const placementScope = await resolvePlacementScope(graph, input.filter);
-  if (placementScope && placementScope.size === 0) {
+  if (placementScope?.size === 0) {
     return {
       rows: [],
       unassigned: 0,
@@ -312,7 +312,7 @@ export async function priorityMatrix(
       (s): s is Set<number> => s !== undefined
     )
   );
-  if (rawScoped && rawScoped.size === 0)
+  if (rawScoped?.size === 0)
     return { rows: [], unassigned: 0, statusScope };
 
   // `placementScope`/`statusScoped` are both derived purely from EDGE
@@ -712,7 +712,7 @@ export async function openCurve(
   });
 
   const placementScope = await resolvePlacementScope(graph, input.filter);
-  if (placementScope && placementScope.size === 0) {
+  if (placementScope?.size === 0) {
     return {
       points: instants.map((at) => ({ at, existed: 0, open: 0, closed: 0 })),
     };

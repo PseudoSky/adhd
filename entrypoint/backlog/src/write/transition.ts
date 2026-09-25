@@ -212,8 +212,7 @@ async function resolveIssueProjectTx(
   }
   const projectRow = await getNodeByRowidTx(tx, projectEdge.src);
   if (
-    !projectRow ||
-    projectRow.kind !== 'project' ||
+    projectRow?.kind !== 'project' ||
     projectRow.tInvalid !== null
   ) {
     throw new Error(
@@ -347,8 +346,7 @@ export async function transition(
   if (citations.length > 0) {
     const preIssueRow = await getNodeByUidTx(handle.adapter, input.uid);
     if (
-      !preIssueRow ||
-      preIssueRow.kind !== 'issue' ||
+      preIssueRow?.kind !== 'issue' ||
       preIssueRow.tInvalid !== null
     ) {
       throw new IssueNotFoundError(input.uid);

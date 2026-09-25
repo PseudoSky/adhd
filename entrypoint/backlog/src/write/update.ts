@@ -259,8 +259,7 @@ async function resolveIssueProjectTx(
   }
   const projectRow = await getNodeByRowidTx(tx, projectEdge.src);
   if (
-    !projectRow ||
-    projectRow.kind !== 'project' ||
+    projectRow?.kind !== 'project' ||
     projectRow.tInvalid !== null
   ) {
     throw new Error(
@@ -416,7 +415,7 @@ async function rewireOutgoingEdgeTx(
   let target: IResolvedEdgeTarget | undefined = params.override;
   if (!target && existing) {
     const row = await getNodeByRowidTx(tx, existing.dst);
-    if (row && row.tInvalid === null)
+    if (row?.tInvalid === null)
       target = {
         rowid: row.rowid,
         uid: row.uid,
@@ -493,8 +492,7 @@ async function rewireOwnsComponentTx(
   }
   const componentRow = await getNodeByRowidTx(tx, existing.src);
   if (
-    !componentRow ||
-    componentRow.kind !== 'component' ||
+    componentRow?.kind !== 'component' ||
     componentRow.tInvalid !== null
   ) {
     throw new Error(

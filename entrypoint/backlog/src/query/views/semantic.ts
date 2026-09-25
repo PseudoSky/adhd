@@ -489,7 +489,7 @@ export async function rankByFusedRelevance(
       'semantic search is not configured for this store (no embedding/vector backend injected)'
     );
   }
-  if (opts.candidateIds && opts.candidateIds.size === 0) return [];
+  if (opts.candidateIds?.size === 0) return [];
 
   const filters: Record<string, unknown> = opts.candidateIds
     ? { ids: [...opts.candidateIds] }
@@ -582,7 +582,7 @@ export async function querySimilarView(
 
   const candidateIds = await resolveSimilarFilterIds(graph, input.filter);
   if (candidateIds && anchor) candidateIds.delete(anchor.id);
-  if (candidateIds && candidateIds.size === 0) return [];
+  if (candidateIds?.size === 0) return [];
 
   const vec = await handle.search.embedQuery(text);
   // Fetch one extra candidate when anchored so dropping the anchor post-search

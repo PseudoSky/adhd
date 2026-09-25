@@ -123,7 +123,7 @@ async function resolveByUidTx(
   uid: string
 ): Promise<IResolvedTxNodeRow> {
   const row = await getNodeByUidTx(tx, uid);
-  if (!row || row.tInvalid !== null || row.kind !== expectedKind) {
+  if (row?.tInvalid !== null || row.kind !== expectedKind) {
     throw new CatalogNotFoundError(expectedKind, uid);
   }
   const { name } = row;
@@ -1224,7 +1224,7 @@ export async function rmLocation(
         : undefined;
     if (componentUid !== undefined) {
       const component = await getNodeByUidTx(tx, componentUid);
-      if (component && component.tInvalid === null) {
+      if (component?.tInvalid === null) {
         await invalidateEdgeTx(tx, {
           srcRowid: component.rowid,
           dstRowid: row.rowid,

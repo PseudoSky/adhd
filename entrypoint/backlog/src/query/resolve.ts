@@ -66,7 +66,7 @@ export async function resolveIssueByUid(
   uid: string
 ): Promise<NodeRecord> {
   const record = await graph.getNodeByUid(uid);
-  if (!record || record.kind !== 'issue' || record.tInvalid) {
+  if (record?.kind !== 'issue' || record.tInvalid) {
     throw new IssueNotFoundError(uid);
   }
   if (record.isSuperseded) {
@@ -138,7 +138,7 @@ export async function tryResolveRef(
 ): Promise<IResolvedRef | null> {
   if (isUidShaped(ref)) {
     const record = await graph.getNodeByUid(ref);
-    if (!record || record.kind !== expectedKind || record.tInvalid) return null;
+    if (record?.kind !== expectedKind || record.tInvalid) return null;
     return { id: record.id, uid: record.uid, name: record.name ?? ref, record };
   }
   const matches = await graph.queryNodes({
