@@ -53,6 +53,8 @@ export default [
                 "error",
                 {
                     ignoredFiles: [
+                        "{projectRoot}/vitest.e2e.config.{js,ts,mjs,mts}",
+                        "{projectRoot}/**/*.e2e.{ts,tsx,mts,cts}",
                         "{projectRoot}/vite.config.{js,ts,mjs,mts}"
                     ]
                 }

@@ -35,7 +35,7 @@ export async function resolveIssueStatusTx(
     );
   }
   const statusRow = await getNodeByRowidTx(tx, statusEdge.dst);
-  if (!statusRow || statusRow.kind !== 'status' || statusRow.tInvalid !== null) {
+  if (statusRow?.kind !== 'status' || statusRow.tInvalid !== null) {
     throw new Error(
       `${caller}: resolved status rowid=${statusEdge.dst} is missing, invalidated, or not a "status" node — ` +
         'graph invariant violation.'

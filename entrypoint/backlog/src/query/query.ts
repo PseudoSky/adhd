@@ -428,7 +428,7 @@ async function queryList(
   }
 
   const candidateIds = await resolveEdgeScopedFilterIds(graph, input.filter);
-  if (candidateIds && candidateIds.size === 0) {
+  if (candidateIds?.size === 0) {
     // An edge-scoped filter resolved to nothing — zero matches, not an error (§6.1).
     return {
       page: { items: [], hasMore: false },
@@ -922,7 +922,7 @@ async function queryOverlap(
   const groups = new Map<string, Set<string>>();
   for (const uid of uids) {
     const issue = await graph.getNodeByUid(uid);
-    if (!issue || issue.kind !== 'issue') continue;
+    if (issue?.kind !== 'issue') continue;
 
     if (axis === 'file') {
       const outgoing = await getOutgoingEdges(graph, issue.id);

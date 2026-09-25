@@ -136,8 +136,7 @@ async function resolveIssueProjectPolicyTx(
 
   const projectRow = await getNodeByRowidTx(tx, projectEdge.src);
   if (
-    !projectRow ||
-    projectRow.kind !== 'project' ||
+    projectRow?.kind !== 'project' ||
     projectRow.tInvalid !== null
   ) {
     throw new Error(

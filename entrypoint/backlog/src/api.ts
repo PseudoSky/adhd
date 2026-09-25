@@ -233,7 +233,7 @@ async function ensureSemanticReady(
   ctx: BacklogCtx
 ): Promise<SemanticStoreMembers> {
   const live = ctx.embeddingConfig;
-  if (live !== undefined && live.refresh().changed) {
+  if (live?.refresh().changed) {
     resetSemanticStoreMembers(ctx.store.adapter);
   }
   const cfg = live ? live.current() : ctx.env.config.embedding;

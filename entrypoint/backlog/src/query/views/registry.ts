@@ -303,7 +303,7 @@ export async function getRegistryDetail(
       'a location has no name — pass its uid'
     );
   const location = await graph.getNodeByUid(input.name);
-  if (!location || location.kind !== 'location' || location.tInvalid)
+  if (location?.kind !== 'location' || location.tInvalid)
     throw new CatalogNotFoundError('location', input.name);
   const componentUid =
     typeof location.metadata?.componentUid === 'string'
