@@ -528,7 +528,36 @@ function findImplicitDiscriminatorBranch(
     // `tag`; `tag !== undefined` guarantees the match is a DECLARED entry,
     // never one of the `undefined` "does not declare this property" slots.
     const matchIndex = literalsByBranch.findIndex((v) => v === tag);
-    if (matchIndex !== -1) return oneOf[matchIndex];
+    if (matchIndex === -1) continue;
+
+    // BUG-APIGEN-RUNMODE-IMPLICIT-DISCRIMINATOR-ADMISSIBILITY-001: an implicit
+    // discriminator is only a TIE-BREAKER among branches the value could
+    // actually inhabit — it must never override structural scoring to select a
+    // branch the value provably does NOT satisfy. The distinctness gate above
+    // deliberately tolerates a branch that declares the candidate property
+    // NON-literally (it is dropped from `declared` rather than disqualifying the
+    // candidate): `@adhd/backlog`'s `IIssueQueryResult` needs exactly that, so a
+    // single-valued `view` on the ten standard members still discriminates
+    // among them even though the markdown member declares `view` as the
+    // multi-valued enum `['list','ready','stale','similar']`. But that same
+    // tolerance means a value whose `view` is `'list'` resolves here to the
+    // FIRST single-literal `view:'list'` branch even when the value is really
+    // the markdown member `{view:'list', format:'markdown', markdown}` — whose
+    // declaring branch requires `format`/`markdown` and whose `view` enum also
+    // accepts `'list'`. The literal match is then structurally IMPOSSIBLE
+    // (`scoreUnionBranch` returns `null` for the matched branch: it lacks the
+    // required `items`/`hasMore`), yet returning it makes `encodeNode`'s
+    // projection silently drop `format`/`markdown` — every real
+    // `backlog_query` with `format:'markdown'` over MCP then serializes to
+    // `{"view":"list"}`, which fails the client's structuredContent validation
+    // (`-32602`). So: only trust the literal match when the matched branch is
+    // structurally admissible for this value; otherwise the heuristic has
+    // misfired for this value and we fall through to structural scoring, which
+    // selects the markdown member correctly.
+    if (scoreUnionBranch(value, resolvedBranches[matchIndex]!, ctx) === null) {
+      continue;
+    }
+    return oneOf[matchIndex];
   }
   return undefined;
 }
