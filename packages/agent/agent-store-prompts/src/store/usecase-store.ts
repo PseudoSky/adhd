@@ -96,6 +96,11 @@ export class UseCaseStore {
   /**
    * Create a new use-case row. Throws USE_CASE_ALREADY_EXISTS if the slug
    * is already taken (slug is the PK).
+   *
+   * Concurrency-safe: `INSERT ... ON CONFLICT DO NOTHING` is a single atomic
+   * statement, so two racing writers cannot both succeed — the loser observes
+   * `changes === 0` and is translated to the typed error, never a raw
+   * better-sqlite3 SqliteError escaping the documented contract.
    */
   createUseCase(input: UseCaseCreateInput): UseCase {
     const row = {
@@ -104,7 +109,19 @@ export class UseCaseStore {
       description: input.description ?? '',
     };
 
-    this.db.insert(useCasesTable).values(row).run();
+    const result = this.db
+      .insert(useCasesTable)
+      .values(row)
+      .onConflictDoNothing()
+      .run();
+
+    if (result.changes === 0) {
+      throw new UseCaseError(
+        'USE_CASE_ALREADY_EXISTS',
+        `Use case '${input.slug}' already exists`
+      );
+    }
+
     return row;
   }
 
