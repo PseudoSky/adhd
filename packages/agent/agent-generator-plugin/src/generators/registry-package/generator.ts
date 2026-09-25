@@ -8,6 +8,8 @@ import {
   updateJson,
 } from '@nx/devkit';
 import * as path from 'node:path';
+import { shellQuote } from '../../lib/shell-quote';
+import { assertSafeRegistryPackageInputs } from '../../lib/safe-inputs';
 
 export interface RegistryPackageGeneratorSchema {
   /** kebab-case name WITHOUT the `agent-` prefix, e.g. `budget`, `tool-registry`. */
@@ -36,6 +38,18 @@ export async function registryPackageGenerator(
     `Registry-family store for ${projectName}: drizzle-backed SQLite tables sharing the one registry database.`;
 
   const outputPath = `dist/${projectDir}`;
+
+  // 0. Validate every input before touching the Tree. `projectDir`/`outputPath`
+  //    are spliced into paths, `tablePrefix` into generated SQL, and the target
+  //    commands below are handed to a shell — a rejected value must never leave
+  //    a half-written package behind.
+  assertSafeRegistryPackageInputs({
+    name: options.name,
+    baseName,
+    projectDir,
+    outputPath,
+    tablePrefix,
+  });
 
   // 1. project.json. Targets are named `build`/`test`/`typecheck` so they
   //    INHERIT cache + `^build` from nx.json targetDefaults (@nx/js:tsc, test).
@@ -84,7 +98,10 @@ export async function registryPackageGenerator(
       typecheck: {
         executor: 'nx:run-commands',
         options: {
-          command: `tsc -p ${projectDir}/tsconfig.json --noEmit`,
+          // Fixed command + `cwd` (mirrors db:generate/db:migrate) — the
+          // directory is never spliced into the shell string.
+          command: 'tsc -p tsconfig.json --noEmit',
+          cwd: projectDir,
         },
       },
       'db:generate': {
@@ -104,7 +121,9 @@ export async function registryPackageGenerator(
       clean: {
         executor: 'nx:run-commands',
         options: {
-          command: `rm -rf ${outputPath}`,
+          // POSIX-quoted path, no `cwd` — so it stays idempotent (running it
+          // when `outputPath` does not exist must still succeed).
+          command: `rm -rf ${shellQuote(outputPath)}`,
         },
       },
       'nx-release-publish': {

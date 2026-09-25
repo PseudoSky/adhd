@@ -13,7 +13,7 @@ and resolved at compile time. Get a connection via `@adhd/agent-core-env`'s
 lazy `openRegistryDb()` — never a module-scope singleton; importing this
 package must never open/create a file as a side effect.
 
-Scaffolded by `@adhd/agent-nx` (`nx g @adhd/agent-nx:registry-package <%= baseName %>`).
+Scaffolded by `@adhd/agent-generator-plugin` (`nx g @adhd/agent-generator-plugin:registry-package <%= baseName %>`).
 The rules every registry package must follow live in
 [`../agent-generator-plugin/REGISTRY-PACKAGE-RULES.md`](../agent-generator-plugin/REGISTRY-PACKAGE-RULES.md);
 this package's local copy of the invariants is in [`./CLAUDE.md`](./CLAUDE.md).

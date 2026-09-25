@@ -1,6 +1,6 @@
 # <%= packageName %> — agent registry package rules
 
-This is a **golden-path agent registry package** scaffolded by `@adhd/agent-nx`.
+This is a **golden-path agent registry package** scaffolded by `@adhd/agent-generator-plugin`.
 The full, authoritative invariants live in
 **[`../agent-generator-plugin/REGISTRY-PACKAGE-RULES.md`](../agent-generator-plugin/REGISTRY-PACKAGE-RULES.md)** —
 read it before changing this package. The non-negotiables, in brief:

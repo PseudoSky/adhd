@@ -2,8 +2,8 @@
 
 These are the invariants distilled from the four shipped registry packages
 (`agent-registry`, `agent-tool-registry`, `agent-provider`, `agent-policy`) and
-their `contexts/_shared.md` design docs. `@adhd/agent-nx`'s `registry-package`
-generator emits a package that satisfies every rule here on day one; this
+their `contexts/_shared.md` design docs. `@adhd/agent-generator-plugin`'s
+`registry-package` generator emits a package that satisfies every rule here on day one; this
 document is the standard the package must keep meeting as it grows.
 
 > **A registry package is a `platform:node` Drizzle store over one shared SQLite
