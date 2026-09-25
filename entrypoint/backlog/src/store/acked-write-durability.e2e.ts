@@ -31,11 +31,12 @@
  * peer still held the store** — a write acked, then discarded by a *different*
  * process. `store-lease.ts`'s live-peer gate ("a store with a live peer is
  * never reconciled, never truncated") is the fix. The LIVE-PEER test below
- * exercises exactly that surface: a holder stays ALIVE (still holding its
- * store lease) while a fresh process opens and reads, and the acked rows must
- * still be there. The GREEN test then covers the crash topology: SIGKILL
- * leaves the messy multi-lease / `-tshm` / `-wal` post-crash state on disk and
- * forces the fresh opener to recover it.
+ * exercises that topology at the process level: a holder stays ALIVE — its
+ * store lease observed live immediately after the writes — while a fresh
+ * process opens and reads, and the acked rows must still be there. The GREEN
+ * test then covers the crash topology: SIGKILL leaves the messy multi-lease /
+ * `-tshm` / `-wal` post-crash state on disk and forces the fresh opener to
+ * recover it.
  *
  * ── Real components only, no bypass ────────────────────────────────────────
  *
@@ -417,7 +418,7 @@ describe('backlog acked-write durability — 5 concurrent MCP holders, crash-exi
   );
 
   it(
-    'LIVE-PEER: a holder that is STILL ALIVE (store lease held) does not lose its acked writes when a FRESH process opens and reads the same store — the live-peer gate is exercised at recovery',
+    'LIVE-PEER: a holder that is STILL ALIVE (a live store peer) does not lose its acked writes when a FRESH process opens and reads the same store — the incident\'s peer-still-holds-the-store topology',
     async () => {
       const seeded = await mintSeededSandbox();
       sandbox = seeded.sandbox;
