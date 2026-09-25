@@ -13,8 +13,8 @@
   "tags": ["layer:entrypoints", "platform:node"],
   "targets": {
     "test": {
-      "//": "Default (in-process, source-level) lane. The resource-consuming specs — the integration suites that spawn the built CLI bin, and the java-javalin parity host that needs `apigen-java:package` — now live in sibling `*.e2e.ts` files and run only under the on-demand `e2e` target, so this lane needs neither. Override of the inferred `test` target carries only `dependsOn` (`lint`/`^build`, mirroring the workspace targetDefaults, which an explicit dependsOn otherwise replaces) plus `inputs` excluding `*.e2e.ts`; executor/cache/outputs come from inference.",
-      "dependsOn": ["lint", "^build"],
+      "//": "Default (in-process, source-level) lane. Most resource-consuming specs — the integration suites that spawn the built CLI bin, and the java-javalin parity host that needs `apigen-java:package` — live in sibling `*.e2e.ts` files under the on-demand `e2e` target. One exception remains here and is why this target also builds itself: `src/test/e2e/cjs-import-meta-url.spec.ts` reads and spawns this package's own built `dist/index.js` (BUG-BUILD-002 acceptance), so `build` (not just `^build`, which builds only upstream deps) is a hard dependency — without it the spec ENOENTs on a clean checkout. Override of the inferred `test` target carries only `dependsOn` (`lint`/`build`/`^build`) plus `inputs` excluding `*.e2e.ts`; executor/cache/outputs come from inference.",
+      "dependsOn": ["lint", "build", "^build"],
       "//inputs": "Exclude *.e2e.ts so editing a resource-consuming suite never invalidates the default lane's cache — it never runs those files (its vitest `include` is `src/**/*.spec.ts`, see vite.config.ts). Mirrors the workspace targetDefaults.test inputs plus the negative pattern.",
       "inputs": [
         "default",
