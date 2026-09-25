@@ -170,4 +170,15 @@ describe('coercePort', () => {
     expect(() => coercePort(Infinity)).toThrow(TypeError);
     expect(() => coercePort(NaN)).toThrow(TypeError);
   });
+
+  it('[emit.port.5] non-string/non-number values are rejected (no Number() coercion)', () => {
+    // `Number(true) === 1` and `Number([]) === 0` would otherwise pass the
+    // integer/range gate and be spliced as a legitimate port literal.
+    expect(() => coercePort(true)).toThrow(TypeError);
+    expect(() => coercePort(false)).toThrow(TypeError);
+    expect(() => coercePort([])).toThrow(TypeError);
+    expect(() => coercePort([8080])).toThrow(TypeError);
+    expect(() => coercePort({})).toThrow(TypeError);
+    expect(() => coercePort({ valueOf: () => 8080 })).toThrow(TypeError);
+  });
 });
