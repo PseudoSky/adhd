@@ -7,12 +7,14 @@
     "name": {
       "type": "string",
       "description": "Package name in kebab-case, WITHOUT the agent- prefix (e.g. 'budget', 'tool-registry'). The package becomes @adhd/agent-<name>.",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
       "$default": { "$source": "argv", "index": 0 },
       "x-prompt": "What name for the registry package (without the agent- prefix)?"
     },
     "directory": {
       "type": "string",
-      "description": "Target directory (default: packages/agent/agent-<name>)"
+      "description": "Target directory (default: packages/agent/agent-<name>)",
+      "pattern": "^(?!.*(?:^|/)\\.\\.?(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
     },
     "description": {
       "type": "string",
@@ -20,7 +22,8 @@
     },
     "tablePrefix": {
       "type": "string",
-      "description": "SQLite table-name prefix for this package's tables (default: <name with - replaced by _>_). Enforces the no-cross-package-collision invariant."
+      "description": "SQLite table-name prefix for this package's tables (default: <name with - replaced by _>_). Enforces the no-cross-package-collision invariant.",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
     }
   },
   "required": ["name"]
