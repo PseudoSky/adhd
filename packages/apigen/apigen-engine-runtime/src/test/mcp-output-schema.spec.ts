@@ -14,10 +14,16 @@ import {
   wrapMcpStructuredContent,
 } from '../lib/mcp-output-schema';
 
-// ---------- BUG-APIGEN-019 (MCP transport half): buildMcpOutputSchema ----------
+// ---------- ADR-0004: buildMcpOutputSchema — no `{result}` envelope ----------
+//
+// `outputSchema` (and therefore `structuredContent`) is emitted ONLY for a
+// return that is already a top-level `type:'object'`. Every non-object return
+// (union/array/scalar/void) is passed through flat — no schema, no envelope.
+// These assertions replace the ones that enshrined the old `{result}` wrapper
+// (BUG-APIGEN-019's transport half, reversed by ADR-0004).
 
-describe('[BUG-APIGEN-019] buildMcpOutputSchema', () => {
-  it('passes an already type:"object" schema through unchanged', () => {
+describe('[ADR-0004] buildMcpOutputSchema', () => {
+  it('passes an already type:"object" schema through and marks it emit-eligible', () => {
     const output = {
       type: 'object',
       properties: { id: { type: 'string' } },
@@ -25,46 +31,33 @@ describe('[BUG-APIGEN-019] buildMcpOutputSchema', () => {
     };
     const { outputSchema, wrapped } = buildMcpOutputSchema(output);
     expect(outputSchema).toEqual(output);
-    expect(wrapped).toBe(false);
+    // `wrapped` == "emit structuredContent" post-ADR-0004; true for objects.
+    expect(wrapped).toBe(true);
   });
 
-  it('wraps a oneOf+discriminator union return type under "result"', () => {
+  it('omits outputSchema for a oneOf+discriminator union return (no envelope)', () => {
     const output = {
       oneOf: [{ $ref: '#/$defs/SearchResponse' }, { type: 'object' }],
       discriminator: { propertyName: 'outcome' },
       'x-apigen-logical': 'union',
     };
     const { outputSchema, wrapped } = buildMcpOutputSchema(output);
-    expect(wrapped).toBe(true);
-    expect(outputSchema).toEqual({
-      type: 'object',
-      properties: { result: output },
-      required: ['result'],
-    });
-    // MCP protocol requires the top-level type literal to be "object".
-    expect((outputSchema as Record<string, unknown>)['type']).toBe('object');
+    expect(outputSchema).toBeUndefined();
+    expect(wrapped).toBe(false);
   });
 
-  it('wraps a bare array return type under "result"', () => {
+  it('omits outputSchema for a bare array return (no envelope)', () => {
     const output = { type: 'array', items: { type: 'string' } };
     const { outputSchema, wrapped } = buildMcpOutputSchema(output);
-    expect(wrapped).toBe(true);
-    expect(outputSchema).toEqual({
-      type: 'object',
-      properties: { result: output },
-      required: ['result'],
-    });
+    expect(outputSchema).toBeUndefined();
+    expect(wrapped).toBe(false);
   });
 
-  it('wraps a bare scalar return type under "result"', () => {
+  it('omits outputSchema for a bare scalar return (no envelope)', () => {
     const output = { type: 'string' };
     const { outputSchema, wrapped } = buildMcpOutputSchema(output);
-    expect(wrapped).toBe(true);
-    expect(outputSchema).toEqual({
-      type: 'object',
-      properties: { result: output },
-      required: ['result'],
-    });
+    expect(outputSchema).toBeUndefined();
+    expect(wrapped).toBe(false);
   });
 
   it('returns undefined for an empty/void output schema', () => {
@@ -82,26 +75,26 @@ describe('[BUG-APIGEN-019] buildMcpOutputSchema', () => {
   });
 });
 
-// ---------- BUG-APIGEN-019 (MCP transport half): wrapMcpStructuredContent ----------
+// ---------- ADR-0004: wrapMcpStructuredContent — flat object or nothing ----------
 
-describe('[BUG-APIGEN-019] wrapMcpStructuredContent', () => {
-  it('passes an object value through unchanged when not wrapped', () => {
+describe('[ADR-0004] wrapMcpStructuredContent', () => {
+  it('emits an object value unchanged when emit is true (never wrapped under result)', () => {
     const value = { id: 'u1', name: 'Alice' };
-    expect(wrapMcpStructuredContent(false, value)).toEqual(value);
+    expect(wrapMcpStructuredContent(true, value)).toEqual(value);
+    // The `{result}` envelope must never be produced.
+    expect(wrapMcpStructuredContent(true, value)).not.toHaveProperty('result');
   });
 
-  it('wraps a non-object value under "result" when wrapped', () => {
-    expect(wrapMcpStructuredContent(true, ['alice', 'bob'])).toEqual({
-      result: ['alice', 'bob'],
-    });
-    expect(wrapMcpStructuredContent(true, 'hello')).toEqual({
-      result: 'hello',
-    });
+  it('returns undefined for a non-object value even when emit is true', () => {
+    // `structuredContent` is constrained to a plain object by the SDK, so an
+    // array/scalar must never be emitted there — and never as `{result: …}`.
+    expect(wrapMcpStructuredContent(true, ['alice', 'bob'])).toBeUndefined();
+    expect(wrapMcpStructuredContent(true, 'hello')).toBeUndefined();
+    expect(wrapMcpStructuredContent(true, null)).toBeUndefined();
   });
 
-  it('returns undefined when not wrapped but the actual value is not a plain object', () => {
-    // Defensive case: outputSchema said type:"object" but the real value isn't
-    // one (e.g. an upstream bug) — must not throw or emit an invalid structuredContent.
+  it('returns undefined when emit is false (non-object return → no structuredContent)', () => {
+    expect(wrapMcpStructuredContent(false, { id: 'u1' })).toBeUndefined();
     expect(wrapMcpStructuredContent(false, ['not', 'an', 'object'])).toBeUndefined();
     expect(wrapMcpStructuredContent(false, 'not-an-object')).toBeUndefined();
     expect(wrapMcpStructuredContent(false, null)).toBeUndefined();
@@ -117,8 +110,15 @@ describe('[BUG-APIGEN-019] wrapMcpStructuredContent', () => {
 // `union-catchall.ts` fixture apigen-core-client's own regression suite
 // uses (cross-package fixture reuse — no second hand-written copy), takes
 // the real extracted `output` fragment, runs it through the real
-// `buildMcpOutputSchema`, then AJV-compiles the resulting `outputSchema`
-// and validates a real `wrapMcpStructuredContent`-wrapped Dog value.
+// `buildMcpOutputSchema`, and AJV-validates a real Dog value directly
+// against the composed `output` schema.
+//
+// ADR-0004: the extracted output IS a non-object union, so the MCP adapter
+// advertises NO `outputSchema` and emits NO `structuredContent` — the Dog
+// value travels flat on `content`. This replaces the pre-ADR-0004 assertion
+// that AJV-validated a `{ result: dog }` envelope against a manufactured
+// `{type:'object', properties:{result:…}}` schema (the exact contract
+// ADR-0004 deletes; ADR-0004 D5 names this file as a required flip site).
 
 const UNION_CATCHALL_FIXTURE = path.join(
   __dirname,
@@ -146,7 +146,7 @@ function makeAjv(): Ajv {
 }
 
 describe('[BUG-APIGEN-059] real catch-all union output end-to-end', () => {
-  it('a real extracted Dog|Cat|Record<string,unknown> output schema, adapted for MCP, validates a real Dog structuredContent', async () => {
+  it('a real extracted Dog|Cat|Record<string,unknown> union output advertises no MCP outputSchema and validates a real Dog value directly', async () => {
     const operations = await extract({
       sourceFile: UNION_CATCHALL_FIXTURE,
       namespace: 'union-catchall',
@@ -158,24 +158,32 @@ describe('[BUG-APIGEN-059] real catch-all union output end-to-end', () => {
       );
     }
 
-    // The real extracted output fragment is the sanitized oneOf union
-    // itself (not type:"object") — buildMcpOutputSchema must wrap it under
-    // "result" for MCP's Tool.outputSchema contract.
-    const { outputSchema, wrapped } = buildMcpOutputSchema(op.output);
-    expect(outputSchema).toBeDefined();
-    expect(wrapped).toBe(true);
-    expect((outputSchema as Record<string, unknown>)['type']).toBe('object');
+    // Guard the positive assertion below against passing VACUOUSLY: the real
+    // extracted output must actually be the non-object union (a `oneOf`), or
+    // `buildMcpOutputSchema` would not be exercising ADR-0004's non-object
+    // branch at all.
+    expect(
+      Array.isArray((op.output as Record<string, unknown>)['oneOf']),
+      `expected the extracted output to be a oneOf union; got: ${JSON.stringify(op.output)}`
+    ).toBe(true);
 
-    const ajv = makeAjv();
-    const validate = ajv.compile(outputSchema as Record<string, unknown>);
+    // ADR-0004: a non-object (union) return emits NO outputSchema and NO
+    // structuredContent — it is passed through FLAT on `content`.
+    const { outputSchema, wrapped } = buildMcpOutputSchema(op.output);
+    expect(outputSchema).toBeUndefined();
+    expect(wrapped).toBe(false);
 
     const dog = { kind: 'dog', bark: 'woof' };
-    const structuredContent = wrapMcpStructuredContent(wrapped, dog);
-    expect(structuredContent).toEqual({ result: dog });
+    // No `{result}` envelope, ever — a union return has no structuredContent.
+    expect(wrapMcpStructuredContent(wrapped, dog)).toBeUndefined();
 
+    // The Dog value is validated DIRECTLY against the real composed output
+    // schema (the same schema `content` now carries), never an envelope.
+    const ajv = makeAjv();
+    const validate = ajv.compile(op.output as Record<string, unknown>);
     expect(
-      validate(structuredContent),
-      `real MCP-adapted output schema must accept a Dog-shaped structuredContent unambiguously; ` +
+      validate(dog),
+      `real composed output schema must accept a Dog-shaped value unambiguously; ` +
         `ajv errors: ${JSON.stringify(validate.errors)}`
     ).toBe(true);
   });

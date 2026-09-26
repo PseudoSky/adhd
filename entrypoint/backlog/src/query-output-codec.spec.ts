@@ -7,8 +7,9 @@
  * success arm carries `data: IIssueQueryResult`, itself a `oneOf` over every
  * `view` member. `composeSchemas()` publishes that output schema unchanged
  * (only the INPUT is `data`-wrapped), so the run-mode transcoder must select
- * the correct union member for every result shape — and the MCP host then
- * re-validates the transcoded value against the SAME schema.
+ * the correct union member for every result shape. (ADR-0004: a union return
+ * advertises no MCP `outputSchema`, so this spec validates the transcoded value
+ * against the SAME schema directly rather than through a `{result}` envelope.)
  *
  * This test drives the REAL production composition path
  * (`buildBacklogApigenPackage`, the function `startBacklogServer` mounts),
@@ -67,11 +68,14 @@ describe('BUG-APIGEN-RUNMODE-IMPLICIT-DISCRIMINATOR-ADMISSIBILITY-001 — backlo
     const transcoder = buildTranscoder(registry.freeze());
 
     const { outputSchema, wrapped } = buildMcpOutputSchema(queryOutput);
-    // The union root is not `type:'object'`, so the MCP adapter wraps it under
-    // `result` on BOTH the declared schema and the emitted structuredContent.
-    expect(wrapped).toBe(true);
+    // ADR-0004: the union root is not `type:'object'`, so the MCP adapter
+    // advertises NO outputSchema and emits NO structuredContent — `content`
+    // carries the flat payload. Validate the encoded value directly against
+    // the real schema instead of an envelope.
+    expect(outputSchema).toBeUndefined();
+    expect(wrapped).toBe(false);
     const ajv = sdkAjv();
-    const validate = ajv.compile(outputSchema);
+    const validate = ajv.compile(queryOutput);
 
     const envelopes: Record<string, unknown>[] = [
       // The bug: markdown member — `view` is a multi-valued enum here, and it
@@ -113,12 +117,13 @@ describe('BUG-APIGEN-RUNMODE-IMPLICIT-DISCRIMINATOR-ADMISSIBILITY-001 — backlo
       // No field pruning: the value the function returned is what goes on the wire.
       expect(encoded, `encoded envelope drifted: ${JSON.stringify(encoded)}`).toEqual(env);
 
+      // ADR-0004: a union return emits no structuredContent.
       const structuredContent = wrapMcpStructuredContent(wrapped, encoded);
-      expect(structuredContent).toBeTruthy();
-      const valid = validate(structuredContent);
+      expect(structuredContent).toBeUndefined();
+      const valid = validate(encoded);
       expect(
         valid,
-        `structuredContent must match the real MCP outputSchema; ajv: ${ajv.errorsText(
+        `encoded envelope must match the real output schema; ajv: ${ajv.errorsText(
           validate.errors ?? []
         )}`
       ).toBe(true);

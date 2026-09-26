@@ -690,36 +690,27 @@ describe.skip('[plugin-mcp.7] run() — BUG-APIGEN-019 MCP outputSchema + struct
     expect(getUserTool?.outputSchema).toEqual(outputSchemaTestSchema.getUser.output);
   });
 
-  it('union-return output: tools/list outputSchema is wrapped under "result" with oneOf+discriminator intact', async () => {
+  it('union-return output: tools/list advertises NO outputSchema (ADR-0004 — no {result} envelope)', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const resp = (await rpc('tools/list', {})) as any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tools: Array<{ name: string; outputSchema?: any }> =
       resp?.result?.tools ?? resp?.tools ?? [];
     const searchTool = tools.find((t) => t.name === outPkgSearchName);
-    expect(searchTool?.outputSchema?.type).toBe('object');
-    expect(searchTool?.outputSchema?.required).toEqual(['result']);
-    expect(searchTool?.outputSchema?.properties?.result).toEqual(
-      unionOutputSchema
-    );
-    expect(searchTool?.outputSchema?.properties?.result?.oneOf).toHaveLength(2);
-    expect(searchTool?.outputSchema?.properties?.result?.discriminator).toEqual(
-      { propertyName: 'outcome' }
-    );
+    // A union return is not a top-level type:"object", so it carries no
+    // outputSchema at all — there is nothing to validate against, and the
+    // flat `content` payload is the canonical channel.
+    expect(searchTool?.outputSchema).toBeUndefined();
   });
 
-  it('array-return output: tools/list outputSchema is wrapped under "result"', async () => {
+  it('array-return output: tools/list advertises NO outputSchema (ADR-0004)', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const resp = (await rpc('tools/list', {})) as any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tools: Array<{ name: string; outputSchema?: any }> =
       resp?.result?.tools ?? resp?.tools ?? [];
     const listTool = tools.find((t) => t.name === outPkgListUsersArrayName);
-    expect(listTool?.outputSchema?.type).toBe('object');
-    expect(listTool?.outputSchema?.properties?.result).toEqual({
-      type: 'array',
-      items: { type: 'string' },
-    });
+    expect(listTool?.outputSchema).toBeUndefined();
   });
 
   it('object-shaped output: tools/call structuredContent equals the raw result (no wrapping)', async () => {
@@ -736,22 +727,19 @@ describe.skip('[plugin-mcp.7] run() — BUG-APIGEN-019 MCP outputSchema + struct
     expect(result.structuredContent).toEqual(getUser('u1'));
   });
 
-  it('union-return output: tools/call structuredContent is wrapped as { result: <value> }', async () => {
+  it('union-return output: tools/call has NO structuredContent; content carries the flat payload', async () => {
     const resp = (await rpc('tools/call', {
       name: outPkgSearchName,
       arguments: { data: {} },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as any;
     const result = resp?.result ?? resp;
-    // content (backward-compat text) is still emitted alongside structuredContent.
     const content: Array<{ type: string; text: string }> = result.content ?? [];
     const dispatched = JSON.parse(content[0].text);
-    // structuredContent must be the SAME value dispatch() produced (whatever
-    // transcoding it applied), just wrapped under "result" since the union
-    // schema isn't top-level type:"object".
-    expect(result.structuredContent).toEqual({ result: dispatched });
-    expect(dispatched.outcome).toBeDefined();
-    expect(dispatched.hits).toEqual(['result-1']);
+    // ADR-0004: a non-object return is passed through flat — `content` is the
+    // only channel; there is no structuredContent (and never a `{result}`).
+    expect(result.structuredContent).toBeUndefined();
+    expect(dispatched).toEqual(search());
   });
 });
 
