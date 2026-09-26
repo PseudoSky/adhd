@@ -145,8 +145,9 @@ interface OptVectorStoreModule {
 
 // Structural mirror of the additive existence-probe capability the pinned
 // `AsyncVectorBackend` contract deliberately does NOT carry (it arrives on the
-// concrete backends as a separately-declared optional interface, added in
-// sox-vector-store 0.7.0 — see the store's CHANGELOG). Mirrored locally, NOT
+// concrete backends as `@adhd/sox-vector-store`'s `AsyncVectorExistenceProbe`,
+// a separately-declared optional interface added in sox-vector-store 0.7.0 —
+// see the store's CHANGELOG). Mirrored locally, NOT
 // imported by name, for the SAME reason the value slice above is: this module
 // must compile against the pinned `AsyncVectorBackend` contract alone, so an
 // optional package whose installed version LAGS the declared range (or whose
@@ -246,7 +247,6 @@ export async function isVectorSpacePopulated(
     // harmless — there is no cross-copy state to keep consistent here.)
     if (!warnedMissingVectorProbe) {
       warnedMissingVectorProbe = true;
-      // eslint-disable-next-line no-console -- the write layer's only log sink.
       console.error(
         `isVectorSpacePopulated: vector backend exposes no hasVectors() probe — treating the space as EMPTY (modelId="${modelId}"). Bare \`text:\` queries will not route to the semantic ranker until the backend provides the probe.`
       );
