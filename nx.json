@@ -284,7 +284,8 @@
       "workspaceChangelog": false
     },
     "version": {
-      "preVersionCommand": "pnpm dlx nx run-many -t build"
+      "preVersionCommand": "pnpm dlx nx run-many -t build",
+      "fallbackCurrentVersionResolver": "disk"
     },
     "releaseTag": {
       "pattern": "{projectName}@{version}"
