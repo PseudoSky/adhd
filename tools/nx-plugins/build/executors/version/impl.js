@@ -113,8 +113,14 @@ const { pathToFileURL } = require('node:url');
 const semver = require('semver');
 const { bumpVersion, normalizedHash } = require('./compare-published');
 const { writeDistManifest } = require('../manifest/generate-manifest');
-const { readState, updatePublishedState } = require('../../lib/published-state');
-const { reconcilePackage, describeNetworkCalls } = require('../reconcile/reconcile-core');
+const {
+  readState,
+  updatePublishedState,
+} = require('../../lib/published-state');
+const {
+  reconcilePackage,
+  describeNetworkCalls,
+} = require('../reconcile/reconcile-core');
 const { withMetrics } = require('../../../lib/metrics');
 
 /**
@@ -154,7 +160,9 @@ const NX_BIN = require.resolve('nx/bin/nx.js');
 function lastChangelogCommit(context, changelogRelPath, rec) {
   const cmd = ['git', 'log', '-1', '--format=%H', '--', changelogRelPath];
   const res = rec
-    ? rec.time(cmd.join(' '), () => sh('git', cmd.slice(1), { cwd: context.root }))
+    ? rec.time(cmd.join(' '), () =>
+        sh('git', cmd.slice(1), { cwd: context.root })
+      )
     : sh('git', cmd.slice(1), { cwd: context.root });
   const sha = (res.stdout || '').trim();
   return res.status === 0 && sha ? sha : null;
@@ -202,7 +210,10 @@ async function scrubGeneratedChangelog(context, projectRoot) {
     projectJson = JSON.parse(readFileSync(projectJsonPath, 'utf8'));
   } catch (err) {
     console.error(
-      `version: could not parse ${relative(context.root, projectJsonPath)} to read a changelog vocabulary policy: ${err.message}`
+      `version: could not parse ${relative(
+        context.root,
+        projectJsonPath
+      )} to read a changelog vocabulary policy: ${err.message}`
     );
     return false;
   }
@@ -212,14 +223,20 @@ async function scrubGeneratedChangelog(context, projectRoot) {
 
   let scrubChangelog;
   try {
-    if (!existsSync(policyAbs)) throw new Error(`no such file: ${relative(context.root, policyAbs)}`);
+    if (!existsSync(policyAbs))
+      throw new Error(`no such file: ${relative(context.root, policyAbs)}`);
     // The policy is a package-local ESM module; load it by absolute file URL.
     const mod = await import(pathToFileURL(policyAbs).href);
-    if (typeof mod.scrubChangelog !== 'function') throw new Error('module does not export scrubChangelog()');
+    if (typeof mod.scrubChangelog !== 'function')
+      throw new Error('module does not export scrubChangelog()');
     scrubChangelog = mod.scrubChangelog;
   } catch (err) {
     console.error(
-      `version: changelog vocabulary policy for ${context.projectName} could not be loaded (${relative(context.root, policyAbs)}): ${err.message}`
+      `version: changelog vocabulary policy for ${
+        context.projectName
+      } could not be loaded (${relative(context.root, policyAbs)}): ${
+        err.message
+      }`
     );
     return false;
   }
@@ -227,7 +244,12 @@ async function scrubGeneratedChangelog(context, projectRoot) {
   const changelogPath = join(context.root, projectRoot, 'CHANGELOG.md');
   if (!existsSync(changelogPath)) {
     console.error(
-      `version: ${context.projectName} declares a changelog vocabulary policy but ${relative(context.root, changelogPath)} does not exist to scrub.`
+      `version: ${
+        context.projectName
+      } declares a changelog vocabulary policy but ${relative(
+        context.root,
+        changelogPath
+      )} does not exist to scrub.`
     );
     return false;
   }
@@ -236,13 +258,18 @@ async function scrubGeneratedChangelog(context, projectRoot) {
   try {
     after = scrubChangelog(before);
   } catch (err) {
-    console.error(`version: changelog vocabulary scrub FAILED for ${context.projectName}: ${err.message}`);
+    console.error(
+      `version: changelog vocabulary scrub FAILED for ${context.projectName}: ${err.message}`
+    );
     return false;
   }
   if (after !== before) {
     writeFileSync(changelogPath, after);
     console.error(
-      `version: neutralised forbidden vocabulary in ${relative(context.root, changelogPath)} (the generated changelog must satisfy the package's own vocabulary gate)`
+      `version: neutralised forbidden vocabulary in ${relative(
+        context.root,
+        changelogPath
+      )} (the generated changelog must satisfy the package's own vocabulary gate)`
     );
   }
   return true;
@@ -266,26 +293,44 @@ async function scrubGeneratedChangelog(context, projectRoot) {
  * @returns {Promise<boolean>} success
  */
 async function writeChangelogEntry(context, projectRoot, version, dryRun, rec) {
-  const changelogRelPath = join(projectRoot, 'CHANGELOG.md').split('\\').join('/');
+  const changelogRelPath = join(projectRoot, 'CHANGELOG.md')
+    .split('\\')
+    .join('/');
   const fromSha = lastChangelogCommit(context, changelogRelPath, rec);
   const args = [
-    'release', 'changelog', version,
-    '--projects', context.projectName,
-    '--to', 'HEAD',
-    '--git-commit', 'false',
-    '--git-tag', 'false',
+    'release',
+    'changelog',
+    version,
+    '--projects',
+    context.projectName,
+    '--to',
+    'HEAD',
+    '--git-commit',
+    'false',
+    '--git-tag',
+    'false',
   ];
   if (fromSha) args.push('--from', fromSha);
   else args.push('--first-release');
   if (dryRun) args.push('--dry-run');
   const res = rec
-    ? rec.time(`node ${NX_BIN} ${args.join(' ')}`, () => sh(process.execPath, [NX_BIN, ...args], { cwd: context.root }))
+    ? rec.time(`node ${NX_BIN} ${args.join(' ')}`, () =>
+        sh(process.execPath, [NX_BIN, ...args], { cwd: context.root })
+      )
     : sh(process.execPath, [NX_BIN, ...args], { cwd: context.root });
   if (res.status !== 0) {
-    console.error(`version: changelog generation FAILED for ${context.projectName}:\n${res.stderr || res.stdout}`);
+    console.error(
+      `version: changelog generation FAILED for ${context.projectName}:\n${
+        res.stderr || res.stdout
+      }`
+    );
     return false;
   }
-  console.error(`version: ${dryRun ? '[dry-run] would update' : 'updated'} ${changelogRelPath}`);
+  console.error(
+    `version: ${
+      dryRun ? '[dry-run] would update' : 'updated'
+    } ${changelogRelPath}`
+  );
   // On a dry run, `nx release changelog --dry-run`'s own diff preview is the
   // only visibility into what would actually be written — without echoing it,
   // a dry run reports NOTHING about content, unlike the version bump's own
@@ -295,7 +340,8 @@ async function writeChangelogEntry(context, projectRoot, version, dryRun, rec) {
   }
   // A dry run writes nothing, so there is nothing to scrub — the preview stays
   // a faithful echo of what `nx release changelog` would produce.
-  if (!dryRun && !(await scrubGeneratedChangelog(context, projectRoot))) return false;
+  if (!dryRun && !(await scrubGeneratedChangelog(context, projectRoot)))
+    return false;
   return true;
 }
 
@@ -334,20 +380,25 @@ async function writeChangelogEntry(context, projectRoot, version, dryRun, rec) {
  * @returns {{success: boolean}}
  */
 function reconcileInternalRangesFromDisk(context, dryRun) {
-  const projectRoot = context.projectsConfigurations.projects[context.projectName].root;
+  const projectRoot =
+    context.projectsConfigurations.projects[context.projectName].root;
   const pkgPath = join(context.root, projectRoot, 'package.json');
   let raw;
   try {
     raw = readFileSync(pkgPath, 'utf8');
   } catch (err) {
-    console.error(`version: [internal-range] could not read ${pkgPath}: ${err.message}`);
+    console.error(
+      `version: [internal-range] could not read ${pkgPath}: ${err.message}`
+    );
     return { success: false };
   }
   let pkg;
   try {
     pkg = JSON.parse(raw);
   } catch (err) {
-    console.error(`version: [internal-range] could not parse ${pkgPath}: ${err.message}`);
+    console.error(
+      `version: [internal-range] could not parse ${pkgPath}: ${err.message}`
+    );
     return { success: false };
   }
 
@@ -363,7 +414,12 @@ function reconcileInternalRangesFromDisk(context, dryRun) {
   // map is now keyed `"<field>::<depName>"`, and the replace is applied only
   // within THIS field's own `{ ... }` block of the raw text — never spilling
   // into a sibling field that happens to share a dependency name.
-  const depFields = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
+  const depFields = [
+    'dependencies',
+    'devDependencies',
+    'peerDependencies',
+    'optionalDependencies',
+  ];
   const desiredRanges = new Map(); // "<field>::<depName>" -> desired range string
   for (const field of depFields) {
     const deps = pkg[field];
@@ -371,7 +427,8 @@ function reconcileInternalRangesFromDisk(context, dryRun) {
     for (const [depName, currentRange] of Object.entries(deps)) {
       if (!depName.startsWith('@adhd/')) continue;
       const depProjectName = depName.slice('@adhd/'.length);
-      const depProject = context.projectsConfigurations.projects[depProjectName];
+      const depProject =
+        context.projectsConfigurations.projects[depProjectName];
       if (!depProject) continue; // not a workspace project — leave whatever's there alone
       const depPkgPath = join(context.root, depProject.root, 'package.json');
       let depVersion;
@@ -411,14 +468,19 @@ function reconcileInternalRangesFromDisk(context, dryRun) {
         if (already === desiredRange) return match;
         changed = true;
         console.error(
-          `version: [internal-range] ${dryRun ? 'would fix' : 'fixing'} ${context.projectName}'s "${field}.${depName}" ` +
-          `${already} -> ${desiredRange} (direct on-disk read, bypassing cached project graph)`
+          `version: [internal-range] ${dryRun ? 'would fix' : 'fixing'} ${
+            context.projectName
+          }'s "${field}.${depName}" ` +
+            `${already} -> ${desiredRange} (direct on-disk read, bypassing cached project graph)`
         );
         return `${pre}${desiredRange}${post}`;
       });
     }
     if (updatedBlock !== blockContent) {
-      next = next.slice(0, blockStart) + updatedBlock + next.slice(blockStart + blockContent.length);
+      next =
+        next.slice(0, blockStart) +
+        updatedBlock +
+        next.slice(blockStart + blockContent.length);
     }
   }
 
@@ -428,7 +490,9 @@ function reconcileInternalRangesFromDisk(context, dryRun) {
   try {
     writeFileSync(pkgPath, next);
   } catch (err) {
-    console.error(`version: [internal-range] FAILED to write ${pkgPath}: ${err.message}`);
+    console.error(
+      `version: [internal-range] FAILED to write ${pkgPath}: ${err.message}`
+    );
     return { success: false };
   }
   return { success: true };
@@ -462,7 +526,9 @@ function reconcileInternalRangesFromDisk(context, dryRun) {
  */
 async function reconcileOwnInternalRanges(context, dryRun) {
   if (dryRun) {
-    console.error('version: [dry-run] checking internal @adhd/* range drift (on-disk, not applying)…');
+    console.error(
+      'version: [dry-run] checking internal @adhd/* range drift (on-disk, not applying)…'
+    );
   }
   const disk = reconcileInternalRangesFromDisk(context, dryRun);
   return { success: disk.success };
@@ -490,10 +556,16 @@ function sh(cmd, args, opts = {}) {
  * @returns {Promise<{entry: {version:string,normalizedHash:string,publishedIntegrity:string}|null, error?: string}>}
  */
 async function backfillOnMiss(context, name, version, distDir, rec) {
-  const workDir = join(context.root, 'tmp', 'nx-build-version-backfill', context.projectName);
+  const workDir = join(
+    context.root,
+    'tmp',
+    'nx-build-version-backfill',
+    context.projectName
+  );
   try {
-    const result = rec.time('reconcilePackage (npm view/pack, offline pack, maybe tar)', () =>
-      reconcilePackage({ name, version, distDir, workDir })
+    const result = rec.time(
+      'reconcilePackage (npm view/pack, offline pack, maybe tar)',
+      () => reconcilePackage({ name, version, distDir, workDir })
     );
     for (const label of describeNetworkCalls(result)) rec.network(label);
     if (result.status === 'pending') return { entry: null };
@@ -513,7 +585,9 @@ async function backfillOnMiss(context, name, version, distDir, rec) {
 }
 
 async function run(options, context) {
-  return withMetrics('version', context, (rec) => runVersion(options, context, rec));
+  return withMetrics('version', context, (rec) =>
+    runVersion(options, context, rec)
+  );
 }
 
 async function runVersion(options, context, rec) {
@@ -533,14 +607,21 @@ async function runVersion(options, context, rec) {
   // invocation (nx's task workers inherit the parent process's env), so a
   // wrapping `ADHD_NX_VERSION_DRY_RUN=1` covers dependency tasks the CLI
   // flag alone cannot reach. `pnpm release:dry` sets it; see PUBLISHING.md.
-  const dryRun = !!options.dryRun || process.env.ADHD_NX_VERSION_DRY_RUN === '1';
-  const projectRoot = context.projectsConfigurations.projects[context.projectName].root;
+  const dryRun =
+    !!options.dryRun || process.env.ADHD_NX_VERSION_DRY_RUN === '1';
+  const projectRoot =
+    context.projectsConfigurations.projects[context.projectName].root;
   const pkgRoot = join(context.root, projectRoot);
   const distDir = join(pkgRoot, 'dist');
   const srcPkgPath = join(pkgRoot, 'package.json');
 
   if (!existsSync(distDir)) {
-    console.error(`version: no built dist at ${relative(context.root, distDir)} — this target dependsOn build.`);
+    console.error(
+      `version: no built dist at ${relative(
+        context.root,
+        distDir
+      )} — this target dependsOn build.`
+    );
     return { success: false };
   }
 
@@ -560,7 +641,12 @@ async function runVersion(options, context, rec) {
 
   const raw = readFileSync(srcPkgPath, 'utf8');
   const { name, version } = JSON.parse(raw);
-  if (!name || !version) { console.error(`version: ${relative(context.root, srcPkgPath)} missing name/version.`); return { success: false }; }
+  if (!name || !version) {
+    console.error(
+      `version: ${relative(context.root, srcPkgPath)} missing name/version.`
+    );
+    return { success: false };
+  }
 
   // ZERO-NETWORK read: the committed published-state cache.
   let cached = readState(context.root)[name];
@@ -572,10 +658,14 @@ async function runVersion(options, context, rec) {
     // same logic `nx run <project>:reconcile` uses), then decide from the
     // now-populated entry. This is the ONLY network this task ever performs,
     // and it costs exactly one package, never the whole graph.
-    console.error(`version: ${name} not in published-state.json — backfilling from npm (single-package, cache miss)…`);
+    console.error(
+      `version: ${name} not in published-state.json — backfilling from npm (single-package, cache miss)…`
+    );
     const backfill = await backfillOnMiss(context, name, version, distDir, rec);
     if (backfill.error) {
-      console.error(`version: backfill FAILED for ${name}: ${backfill.error} — leaving version as-is (verify manually).`);
+      console.error(
+        `version: backfill FAILED for ${name}: ${backfill.error} — leaving version as-is (verify manually).`
+      );
       const sync = await reconcileOwnInternalRanges(context, dryRun);
       return { success: sync.success };
     }
@@ -583,7 +673,9 @@ async function runVersion(options, context, rec) {
   }
 
   if (!cached) {
-    console.error(`version: ${name}@${version} not yet on npm — release pending, no bump.`);
+    console.error(
+      `version: ${name}@${version} not yet on npm — release pending, no bump.`
+    );
     const sync = await reconcileOwnInternalRanges(context, dryRun);
     return { success: sync.success };
   }
@@ -609,12 +701,12 @@ async function runVersion(options, context, rec) {
     if (semver.lt(version, cached.version)) {
       console.error(
         `version: ERROR — ${name}'s source version (${version}) is BEHIND the published-state cache's ` +
-        `recorded version (${cached.version}). This looks like a version REGRESSION (a revert, a stale ` +
-        `branch, or a bad merge) rather than a pending release. Refusing to proceed: continuing would let ` +
-        `'publish' attempt to (re-)publish the OLD version and, on npm's "already published" rejection, ` +
-        `write-through-cache the CURRENT (regressed) dist's hash under the OLD version number — permanently ` +
-        `poisoning published-state.json and silently stalling the real release. Fix the source version (it ` +
-        `must be >= ${cached.version}) before re-running.`
+          `recorded version (${cached.version}). This looks like a version REGRESSION (a revert, a stale ` +
+          `branch, or a bad merge) rather than a pending release. Refusing to proceed: continuing would let ` +
+          `'publish' attempt to (re-)publish the OLD version and, on npm's "already published" rejection, ` +
+          `write-through-cache the CURRENT (regressed) dist's hash under the OLD version number — permanently ` +
+          `poisoning published-state.json and silently stalling the real release. Fix the source version (it ` +
+          `must be >= ${cached.version}) before re-running.`
       );
       return { success: false };
     }
@@ -637,15 +729,24 @@ async function runVersion(options, context, rec) {
   const localHash = normalizedHash(distDir);
   rec.phase('normalizedHash');
   if (cached.normalizedHash === localHash) {
-    console.error(`version: ${name}@${version} unchanged vs published (cache hit, zero network) — no bump.`);
+    console.error(
+      `version: ${name}@${version} unchanged vs published (cache hit, zero network) — no bump.`
+    );
     const sync = await reconcileOwnInternalRanges(context, dryRun);
     return { success: sync.success };
   }
 
   const next = bumpVersion(version, level);
-  console.error(`version: ${name} changed since ${version} -> bumping to ${next} (${level}) [cache hit, zero network]`);
+  console.error(
+    `version: ${name} changed since ${version} -> bumping to ${next} (${level}) [cache hit, zero network]`
+  );
   if (dryRun) {
-    console.error(`version: [dry-run] would write ${next} to ${relative(context.root, srcPkgPath)}`);
+    console.error(
+      `version: [dry-run] would write ${next} to ${relative(
+        context.root,
+        srcPkgPath
+      )}`
+    );
     await writeChangelogEntry(context, projectRoot, next, true, rec);
     const sync = await reconcileOwnInternalRanges(context, dryRun);
     return { success: sync.success };
@@ -653,9 +754,13 @@ async function runVersion(options, context, rec) {
 
   // Targeted replace of the version field only — preserve file formatting.
   const replaced = raw.replace(/("version"\s*:\s*")[^"]+(")/, `$1${next}$2`);
-  if (replaced === raw) { console.error(`version: FAILED to rewrite version field in ${srcPkgPath}.`); return { success: false }; }
+  if (replaced === raw) {
+    console.error(`version: FAILED to rewrite version field in ${srcPkgPath}.`);
+    return { success: false };
+  }
   writeFileSync(srcPkgPath, replaced);
-  if (!(await writeChangelogEntry(context, projectRoot, next, false, rec))) return { success: false };
+  if (!(await writeChangelogEntry(context, projectRoot, next, false, rec)))
+    return { success: false };
   // Own bump is applied; now reconcile dependency ranges against the
   // (topologically) already-settled versions of internal deps. Order is
   // safe either way — the fix only touches dependency-range fields, never
@@ -668,4 +773,10 @@ module.exports = run;
 module.exports.default = run;
 // Test-only introspection seam (mirrors compare-published.js exporting its
 // pure helpers). Not used by Nx (which only calls the default export).
-module.exports.__internals = { reconcileOwnInternalRanges, reconcileInternalRangesFromDisk, lastChangelogCommit, writeChangelogEntry, scrubGeneratedChangelog };
+module.exports.__internals = {
+  reconcileOwnInternalRanges,
+  reconcileInternalRangesFromDisk,
+  lastChangelogCommit,
+  writeChangelogEntry,
+  scrubGeneratedChangelog,
+};
