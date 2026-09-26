@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-plugin-sanitize",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Sub-agent output sanitization plugin for @adhd/agent-mcp — configurable strategies (prefix, wrap, none) to defend against prompt injection across agent boundaries",
   "type": "module",
   "publishConfig": {
@@ -21,7 +21,7 @@
     "CHANGELOG.md"
   ],
   "peerDependencies": {
-    "@adhd/agent-base-types": "^2.3.1"
+    "@adhd/agent-base-types": "^2.3.2"
   },
   "dependencies": {
     "zod": "*"

@@ -1,3 +1,20 @@
+## 2.3.4 (2026-09-26)
+
+### 🚀 Features
+
+- **vite-plugins:** absorb perf/test-resolve-fix — test-time @adhd/* source resolution ([3e344506](https://github.com/PseudoSky/adhd/commit/3e344506))
+
+### 🩹 Fixes
+
+- **test:** make the full affected gate green (3 latent test-hermeticity fixes) ([734f756d](https://github.com/PseudoSky/adhd/commit/734f756d))
+- **ui-react-base-hooks:** stop emitting Rolldown's empty import.meta token in the browser bundles ([c1af25ef](https://github.com/PseudoSky/adhd/commit/c1af25ef))
+- **ui-react-base-hooks:** conform the hooks to the installed React 19 types ([213e1439](https://github.com/PseudoSky/adhd/commit/213e1439))
+- **nx:** finish the ESLint v9 flat-config migration and unblock the gate ([53f4ff3e](https://github.com/PseudoSky/adhd/commit/53f4ff3e))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.3 (2026-09-24)
 
 This was a version bump only for ui-react-base-hooks to align it with other projects, there were no code changes.

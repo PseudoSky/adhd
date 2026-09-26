@@ -1,3 +1,22 @@
+## 0.3.2 (2026-09-26)
+
+### 🚀 Features
+
+- **vite-plugins:** absorb perf/test-resolve-fix — test-time @adhd/* source resolution ([3e344506](https://github.com/PseudoSky/adhd/commit/3e344506))
+
+### 🩹 Fixes
+
+- **apigen-core-client:** canonicalise union dedupe; cover standalone boolean literals ([0999daa7](https://github.com/PseudoSky/adhd/commit/0999daa7))
+- **apigen-core-client:** keep co-resident catch-alls and lone boolean literals satisfiable in oneOf unions ([1fc9df24](https://github.com/PseudoSky/adhd/commit/1fc9df24))
+- **apigen-core-client:** collapse duplicated boolean oneOf branch in union schemas (3a3e5884) ([1ee5b0b0](https://github.com/PseudoSky/adhd/commit/1ee5b0b0))
+- **apigen-core-client:** sanitize vacuous catch-all branches in union schemas (BUG-APIGEN-059) ([e5887bb8](https://github.com/PseudoSky/adhd/commit/e5887bb8))
+- **vite:** restore import.meta.url in CJS output under vite 8 ([7916e639](https://github.com/PseudoSky/adhd/commit/7916e639))
+- **nx:** finish the ESLint v9 flat-config migration and unblock the gate ([53f4ff3e](https://github.com/PseudoSky/adhd/commit/53f4ff3e))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.3.1 (2026-09-24)
 
 

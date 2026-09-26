@@ -1,3 +1,20 @@
+## 2.3.3 (2026-09-26)
+
+### 🚀 Features
+
+- **vite-plugins:** absorb perf/test-resolve-fix — test-time @adhd/* source resolution ([3e344506](https://github.com/PseudoSky/adhd/commit/3e344506))
+
+### 🩹 Fixes
+
+- **test:** make the full affected gate green (3 latent test-hermeticity fixes) ([734f756d](https://github.com/PseudoSky/adhd/commit/734f756d))
+- **nx:** restore main's load-bearing test.dependsOn the remodel silently dropped ([cff62c50](https://github.com/PseudoSky/adhd/commit/cff62c50))
+- **vite:** restore import.meta.url in CJS output under vite 8 ([7916e639](https://github.com/PseudoSky/adhd/commit/7916e639))
+- **nx:** finish the ESLint v9 flat-config migration and unblock the gate ([53f4ff3e](https://github.com/PseudoSky/adhd/commit/53f4ff3e))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.2 (2026-09-24)
 
 This was a version bump only for agent-mcp to align it with other projects, there were no code changes.
