@@ -128,6 +128,17 @@ async function caseTwinCount(
   return [...byFold.values()].filter((n) => n > 1).length;
 }
 
+/** How many LIVE rows of `kind` fold to `fold` — the direct "exactly one open-folding row" count. */
+async function liveRowsFolding(
+  store: TestIssueStore,
+  kind: 'status' | 'priority',
+  fold: string
+): Promise<number> {
+  return (await liveCatalogRows(store, kind)).filter(
+    (r) => catalogNameFold(r.name) === fold
+  ).length;
+}
+
 /** Mint a bare catalog row with caller-chosen metadata — the same `writeNodeTx` primitive every verb uses. */
 async function mintCatalog(
   store: TestIssueStore,
@@ -624,7 +635,7 @@ describe('catalog-merge — status/priority case-fragment collapse', () => {
     await mintCatalog(store, 'status', 'OPEN', { terminal: false });
 
     await applyCaseFragmentMerge(store, await planNow(store));
-    expect(await caseTwinCount(store, 'status')).toBe(0);
+    expect(await liveRowsFolding(store, 'status', 'open')).toBe(1);
 
     // An ordinary create with NO explicit status — the exact path that emits
     // lowercase 'open'. If the merge canonicalized to 'OPEN', this exact lookup
@@ -636,6 +647,8 @@ describe('catalog-merge — status/priority case-fragment collapse', () => {
       by: 'agent:t',
     });
 
+    // THE ASSERTION: still exactly ONE open-folding row after the ordinary write.
+    expect(await liveRowsFolding(store, 'status', 'open')).toBe(1);
     expect(await caseTwinCount(store, 'status')).toBe(0);
   });
 
@@ -645,7 +658,7 @@ describe('catalog-merge — status/priority case-fragment collapse', () => {
     await mintCatalog(store, 'status', 'OPEN', { terminal: false });
 
     const journal = await applyCaseFragmentMerge(store, await planNow(store));
-    expect(await caseTwinCount(store, 'status')).toBe(0);
+    expect(await liveRowsFolding(store, 'status', 'open')).toBe(1);
 
     // Force the survivor back to the write-path-divergent spelling — exactly
     // what the pre-fix canonical selection did.
@@ -664,9 +677,9 @@ describe('catalog-merge — status/priority case-fragment collapse', () => {
       by: 'agent:t',
     });
     // The regression assertion (exactly one open-folding row) now FAILS: the
-    // create re-minted the lowercase twin. This is the teeth of the regression
-    // above — a divergent canonical DOES regenerate, so `toBe(0)` there is a
-    // real, breakable assertion.
-    expect(await caseTwinCount(store, 'status')).toBe(1);
+    // create re-minted the lowercase twin, so the count is 2 — not 1. This is
+    // the teeth of the regression above: a divergent canonical DOES regenerate,
+    // so `toBe(1)` there is a real, breakable assertion.
+    expect(await liveRowsFolding(store, 'status', 'open')).toBe(2);
   });
 });
