@@ -1,6 +1,6 @@
 {
   "name": "@adhd/apigen-engine-naming",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "dependencies": {
     "@adhd/apigen-core-client": "^0.3.2"
   },

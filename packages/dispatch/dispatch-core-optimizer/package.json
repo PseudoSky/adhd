@@ -1,6 +1,6 @@
 {
   "name": "@adhd/dispatch-core-optimizer",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "dependencies": {
     "@adhd/dispatch-base-spec": "^0.1.4"
   },

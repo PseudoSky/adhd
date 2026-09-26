@@ -1,6 +1,6 @@
 {
   "name": "@adhd/workspace-base-vite-paths",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "dependencies": {},
   "main": "./index.js",
   "module": "./index.mjs",

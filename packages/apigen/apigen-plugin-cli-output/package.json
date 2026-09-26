@@ -1,6 +1,6 @@
 {
   "name": "@adhd/apigen-plugin-cli-output",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "main": "./dist/index.js",
   "dependencies": {
     "@adhd/apigen-core-client": "^0.3.2",

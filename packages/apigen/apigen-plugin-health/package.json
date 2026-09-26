@@ -1,6 +1,6 @@
 {
   "name": "@adhd/apigen-plugin-health",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "main": "./dist/index.js",
   "dependencies": {
     "@adhd/apigen-core-client": "^0.3.2"
