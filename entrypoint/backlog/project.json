@@ -3,6 +3,8 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "entrypoint/backlog/src",
   "projectType": "library",
+  "changelogVocabulary": "tools/vocabulary-policy.mjs",
+  "//changelogVocabulary": "Consumed by the `version` executor (tools/nx-plugins/build/executors/version/impl.js, `scrubGeneratedChangelog`): a path (relative to this project root) to a module exporting `scrubChangelog(text)`, applied to the GENERATED CHANGELOG.md after `nx release changelog` writes it. The changelog is a projection of git commit subjects, so a commit that REMOVES a banned term names it — which this package's own vocabulary-gate then scans. Fixing it at the generator keeps the shipped changelog clean while the gate keeps scanning it in full (no exemption). The same module is the SINGLE SOURCE both gates import (tools/gate/vocabulary-gate.mjs, scripts/check-vocabulary.mjs), so the term list cannot drift. Declared for @adhd/backlog ONLY — other packages whose changelogs legitimately name such terms as external dependencies are deliberately left untouched.",
   "release": {
     "version": {
       "currentVersionResolver": "git-tag",

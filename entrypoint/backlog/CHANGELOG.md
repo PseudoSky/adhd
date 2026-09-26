@@ -1,3 +1,51 @@
+## 1.0.1 (2026-09-26)
+
+### 🚀 Features
+
+- **backlog:** skill §9 — hard rule to file a feature request when the tool is friction ([cf42c407](https://github.com/PseudoSky/adhd/commit/cf42c407))
+- **backlog:** live embedding config + embedding-status verb ([#23](https://github.com/PseudoSky/adhd/pull/23))
+- **backlog:** mount the three stats/rollup reads as apigen ops ([1859a5ae](https://github.com/PseudoSky/adhd/commit/1859a5ae))
+- **backlog:** deliver the embedding funnel on the successor line ([b985215a](https://github.com/PseudoSky/adhd/commit/b985215a))
+- **vite-plugins:** absorb perf/test-resolve-fix — test-time @adhd/* source resolution ([3e344506](https://github.com/PseudoSky/adhd/commit/3e344506))
+
+### 🩹 Fixes
+
+- ⚠️  **apigen:** regenerate the ADR-0004 golden snapshot, add the MAJOR release note, clear the format gate ([1fea3c2f](https://github.com/PseudoSky/adhd/commit/1fea3c2f))
+- **backlog:** mirror the optional store's additive probe type locally, decoupling the build from a lagging install ([c15c4cdf](https://github.com/PseudoSky/adhd/commit/c15c4cdf))
+- **apigen:** ADR-0004 — MCP tool output is the flat content payload ([7896594d](https://github.com/PseudoSky/adhd/commit/7896594d))
+- **backlog:** directory citation is E_VALIDATION, not a retryable E_IO; log raw E_IO cause (56a2133e) ([f538387c](https://github.com/PseudoSky/adhd/commit/f538387c))
+- **backlog:** close the baked-IR freshness gate's transitive-import hole ([182ae496](https://github.com/PseudoSky/adhd/commit/182ae496))
+- **backlog:** exclude the backlog store from the citation default root ([715f3f97](https://github.com/PseudoSky/adhd/commit/715f3f97))
+- **backlog:** narrow citation default external root + single-source missing-path taxonomy ([b86e98d5](https://github.com/PseudoSky/adhd/commit/b86e98d5))
+- **backlog:** allow citations under configured external roots (c6d35272) ([69e475ae](https://github.com/PseudoSky/adhd/commit/69e475ae))
+- **nx:** reconcile main's e2e lane with the flat ESLint config + fix missing-deps ([cf72a2ab](https://github.com/PseudoSky/adhd/commit/cf72a2ab))
+- **backlog:** format PR #23 files; ignore pnpm-lock.yaml in prettier ([#24](https://github.com/PseudoSky/adhd/pull/24), [#23](https://github.com/PseudoSky/adhd/issues/23))
+- **nx-build:** run-scoped release manifest token + apigen-cli readiness flake + codegen test output ([#15](https://github.com/PseudoSky/adhd/pull/15))
+- **backlog:** self-watchdog + detached group reap so a killed test can't strand funnel consumers ([f3755c3d](https://github.com/PseudoSky/adhd/commit/f3755c3d))
+- **backlog:** drop the forbidden 'store-engine' term from the CPU-THRASH-SKIP comment ([4dae6ee2](https://github.com/PseudoSky/adhd/commit/4dae6ee2))
+- **vite:** restore import.meta.url in CJS output under vite 8 ([7916e639](https://github.com/PseudoSky/adhd/commit/7916e639))
+- **nx:** finish the ESLint v9 flat-config upgrade and unblock the gate ([53f4ff3e](https://github.com/PseudoSky/adhd/commit/53f4ff3e))
+
+### 🔥 Performance
+
+- **backlog:** bake the IR artifact at build; startup never loads ts-morph ([da81f673](https://github.com/PseudoSky/adhd/commit/da81f673))
+
+### ⚠️  Breaking Changes
+
+- **apigen:** regenerate the ADR-0004 golden snapshot, add the MAJOR release note, clear the format gate  ([1fea3c2f](https://github.com/PseudoSky/adhd/commit/1fea3c2f))
+  McpOutputAdapter.wrapped (exported from
+  @adhd/apigen-engine-runtime and @adhd/apigen-plugin-mcp) kept its name but
+  inverted its meaning (true now means "the return is already a top-level object,
+  emit the value as flat structuredContent", not "wrapped under result"), and an
+  MCP tool return that is not a top-level object no longer emits an outputSchema
+  or structuredContent. This is semver-MAJOR for those two packages; republish
+  them first per ADR-0004 D6.
+
+### ❤️ Thank You
+
+- pseudosky
+- Sky
+
 ## 1.0.0 (Unreleased)
 
 The first stable release. `@adhd/backlog` is a self-contained backlog system: one store, mounted live to a CLI, an MCP server, and an HTTP surface with zero duplicated logic across hosts. Every operation returns an outcome envelope — `{ok:true, data}` or `{ok:false, error:{code,message,details}}` — so a caller never has to guess whether a call succeeded from a thrown exception.

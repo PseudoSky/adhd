@@ -40,6 +40,7 @@
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
+import { SRC_TERMS } from '../vocabulary-policy.mjs';
 
 // Defaults to this package. An explicit path argument overrides it so a test
 // can point the gate at a fixture instead of the live tree (C-22).
@@ -49,60 +50,16 @@ const PKG = process.argv[2]
 const ROOT = join(PKG, 'src');
 
 /**
- * Each term carries its own rationale, so a future reader knows what the gate
- * is actually protecting rather than guessing from a bare regex.
+ * The term table lives in the package's single-source policy module
+ * (`tools/vocabulary-policy.mjs`). The SAME terms must also drive the
+ * packed-tarball gate and the version executor's generated-CHANGELOG scrub;
+ * two hand-synchronised copies already existed, and a third would guarantee
+ * drift. Importing from one source keeps this gate's DETECTION byte-identical
+ * while making a newly-added term automatically enforced on authored prose
+ * AND scrubbed out of generated prose. Each term still carries its own
+ * rationale in that module.
  */
-const TERMS = [
-  // The lookbehind is [a-z0-9] rather than \b so an `UNDERSCORE_v2`-shaped
-  // document name is CAUGHT -- `_` is a word character, so \b treats `_v2` as
-  // mid-word and misses it, which is how a whole set of stale spec-document
-  // references survived an earlier sweep.
-  // `(?!\.\d)` exempts a THIRD-PARTY version string -- an embedding model id
-  // like `bge-base-en-v1.5` is a real external identifier, not this package
-  // naming its own surface. `server.v2.spec.ts` is NOT exempted: `v2` there is
-  // followed by `.s`, not by a digit, so the two cases separate cleanly
-  // without a hand-maintained allowlist that would rot.
-  // `(?!\.db\b)` MIRRORS the tarball gate's carve-out
-  // (`scripts/check-vocabulary.mjs`), kept here for consistency across the two
-  // gates and for future `src/` use. It is deliberately NOT load-bearing for
-  // THIS gate today: no file in this gate's scope (`src/` plus the package's
-  // top-level markdown) contains a `.db` data-file name. The hit the carve-out
-  // actually protects is the shipped `skill/SKILL.md`, which reproduces the
-  // live production store's filename verbatim and is packed-and-scanned ONLY
-  // by the tarball gate (`package.json` `files` includes `skill`). Should a
-  // `src/` file ever need to name that store
-  // (`~/.adhd/backlog/production/data/backlog-v2.db`, declared by config.yaml
-  // `db.path` and reported by `sandbox-path`) — an operational identifier, not
-  // this package naming its own surface `v2` — this exemption keeps that
-  // possible rather than forcing the docs to lie about the path or go silent.
-  // The exemption is exactly `.db` (word-bounded), so bare `v2` prose,
-  // `server.v2.spec.ts`, and `v2.dbx`-like names all still fail.
-  {
-    name: 'v1',
-    re: /(?<![a-z0-9])v1\b(?!\.\d)(?!\.db\b)/i,
-    why: 'there is no v1 to contrast against — only backlog',
-  },
-  {
-    name: 'v2',
-    re: /(?<![a-z0-9])v2\b(?!\.\d)(?!\.db\b)/i,
-    why: 'the replacement IS backlog; calling it v2 implies a v1 still exists',
-  },
-  {
-    name: 'humanId',
-    re: /human[_-]?id/i,
-    why: 'human ids were removed from the data model entirely',
-  },
-  {
-    name: 'migration',
-    re: /\bmigrat(e|ed|ing|ion|ions)\b/i,
-    why: 'a hard replacement has no migration path by construction',
-  },
-  {
-    name: 'sqlite',
-    re: /sqlite|better[_-]?sqlite/i,
-    why: 'the store adapter is the only DB seam; no direct sqlite dependency, import, or reference',
-  },
-];
+const TERMS = SRC_TERMS;
 
 /**
  * Extensions whose contents are text the term regexes can meaningfully scan.
