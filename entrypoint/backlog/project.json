@@ -19,6 +19,22 @@
     "access:domain"
   ],
   "targets": {
+    "build": {
+      "//": "OVERRIDE of the @nx/vite-inferred `build` so ONE target emits BOTH `dist/api.d.ts` (vite/dts) and `dist/api.ir.json` (the bake-at-build IR artifact, design doc Revision 3). The second command runs the built bin's hidden `ir-artifact` subcommand, which extracts the just-written `api.d.ts` and writes the artifact beside it in the SAME `dist/`. A SEPARATE target would have to declare the same `{projectRoot}/dist` output and could clobber this one's cache snapshot; keeping both in one target makes `dist/` a single atomic output. Mirrors the inferred target otherwise: `executor: nx:run-commands` + `cwd: {projectRoot}` + `vite build` (main's inferred `cwd` was the literal `entrypoint/backlog`; `{projectRoot}` is the equivalent, path-independent form), `cache: true`, `outputs: [{projectRoot}/dist]`, `dependsOn: [^build, typecheck]`, `inputs: [production, ^production]` — `typecheck` is kept because the artifact step runs the built bin, so a type error must fail the build before it does. `parallel: false` is REQUIRED: the artifact command depends on `vite build` having finished writing `api.d.ts`.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "outputs": ["{projectRoot}/dist"],
+      "dependsOn": ["^build", "typecheck"],
+      "inputs": ["production", "^production"],
+      "options": {
+        "cwd": "{projectRoot}",
+        "commands": [
+          "vite build",
+          "node dist/index.js ir-artifact --out dist/api.ir.json"
+        ],
+        "parallel": false
+      }
+    },
     "test": {
       "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference — the @nx/vitest plugin replaces main's removed `@nx/vite:test` executor, and its coverage output matches vite.config.ts's reportsDirectory, which main's explicit output did not). Backlog's OWN `build` + `assets` are load-bearing: the remaining default-lane specs (e.g. src/mcp-discoverability-real-ops.spec.ts reads dist/api.d.ts) and the vocabulary-gate pack the real built dist/, and `assets` (BUG-013 FIX A) is what copies dist/skill/SKILL.md in. `vocabulary-gate` (C-22) makes both vocabulary acceptance gates run on every `nx affected -t test`. `lint`/`^build` mirror the workspace `test` targetDefaults, which an explicit dependsOn otherwise replaces.",
       "dependsOn": ["lint", "^build", "build", "assets", "vocabulary-gate"],

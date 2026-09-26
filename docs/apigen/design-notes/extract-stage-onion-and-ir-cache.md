@@ -907,3 +907,99 @@ general pattern this revision is proposing repo-wide.
    stage equivalent of envelope fields is proposed here, because no concrete plugin need for one
    has surfaced yet (YAGNI, consistent with the original design's own §3 closing paragraph on not
    over-building `composeOnion` ahead of a second real consumer).
+
+## Revision 3 (2026-09-25): bake the IR at build; make the MISS write awaited + durable
+
+### R3.1 — The problem Revision 2 left open
+
+Measured on the real hot path: **every** `backlog` CLI/MCP spawn paid
+**11.4–16.3 s wall / ~13.5 s USER CPU** in `extract()` (`entrypoint/backlog/src/server.ts`
+called it synchronously before `run()`), because it runs ts-morph over the built
+`dist/api.d.ts` on first touch. An MCP `initialize` therefore exceeded the
+client deadline (`-32001`). Revision 2's runtime IR cache helps on the *second*
+run (MISS 16.1–29.5 s → HIT 1.6–3.6 s) but is not self-healing: every cold
+cache, every fresh checkout, and every sandbox pays the full extraction, and a
+missing/corrupt cache entry silently degrades to the slow path.
+
+### R3.2 — Decision: bake at build, not pre-warm
+
+`nx build backlog` now emits `dist/api.ir.json` — the extracted `Operation[]`
+for `dist/api.d.ts` — inside the SAME `build` target that emits the `.d.ts`.
+Server/CLI/MCP startup reads that pre-built artifact behind a content-hash
+freshness gate and never loads ts-morph. The runtime cache survives only as a
+FALLBACK for a missing/stale artifact.
+
+**Chosen over pre-warming the runtime cache at build time** because the artifact
+travels *with* the shipped package: a consumer that installs the tarball gets
+the fast path immediately, with no build step of their own. Pre-warm populates a
+machine-local cache file that (a) does not travel, (b) can still be cold/corrupt,
+and (c) would need a separate build-time extraction invocation that could drift
+from the runtime call. The artifact is produced by the exact same extraction
+call the fallback uses, so it cannot drift.
+
+### R3.3 — The artifact and its freshness gate
+
+- Filename `api.ir.json`, a `CachedExtractEntry` (R2.5) plus a new optional
+  `artifactSource: { path, sha256, bytes }` recording the source `.d.ts`, its
+  sha256, and its byte length at bake time.
+- `readBakedIrArtifact(distDir)` NEVER throws; it returns `undefined` (a miss)
+  on a missing/unreadable/ corrupt artifact, a format-version mismatch, an
+  **extractor-version mismatch**, or a **source-hash mismatch** — the last
+  re-hashing the CURRENT `dist/api.d.ts`, never the recorded bake-time path (a
+  shipped artifact lands on machines where that path does not exist). This is
+  the never-serve-stale gate.
+- `writeBakedIrArtifact` emits it through the plugin's shared `atomicWriteJson`,
+  so a build killed mid-write can never publish a half-written artifact.
+
+### R3.4 — Module split that keeps ts-morph off the hot path
+
+- `entrypoint/backlog/src/ir-artifact.ts` — the ts-morph-FREE reader/writer
+  (and the moved `backlogDistDir`). Imported statically by `server.ts`.
+- `entrypoint/backlog/src/extract-live.ts` — the ONLY module importing
+  extractor-touching code; reached exclusively through a dynamic
+  `import('./extract-live.js')` from `server.ts`/`cli.ts`'s fallback.
+- `server.ts`'s `extractApiOperations()` is a three-step read: `api.d.ts` must
+  exist → `readBakedIrArtifact` → on a miss, the dynamic import + the runtime
+  IR-cache fallback.
+
+The hidden `ir-artifact --out <path>` subcommand authors the artifact at build
+time. It is a subcommand of the shipped bin (not a separate script) precisely so
+its extraction semantics (namespace, `dropFileSegment: true`) are byte-identical
+to the runtime fallback — a separate script would have to re-derive both and
+could diverge. It is store-free and never writes under `~/.adhd`.
+
+### R3.5 — The MISS write is now awaited and durable
+
+`IrCacheBackend.put`'s contract changed from "may fire-and-forget" to "the layer
+AWAITS `put` on the MISS path; `put` MUST resolve only once the entry is
+durably published". `atomicWriteJson` now writes the temp file through a
+`FileHandle`, `fsync`s it BEFORE `rename`, then best-effort `fsync`s the parent
+directory (guarded for `ENOTSUP`/`EISDIR`/`EINVAL`/`EPERM`/`EACCES`). Both MISS
+branches `await writeThrough(...)` inside a `try/catch` (failure still
+non-fatal). The slow-gate mtime-refresh write stays fire-and-forget — it is a
+pure optimization of a HIT, not a correctness path. The determinism teeth live
+in `ir-cache-layer.spec.ts` (a latched `rename`); the end-to-end corroboration
+is `ir-cache.durability.e2e.ts` (SIGKILL on the child's first stdout byte).
+
+### R3.6 — `APIGEN_IR_CACHE_ENABLED` scope
+
+`APIGEN_IR_CACHE_ENABLED=0` continues to govern ONLY the runtime cache. It does
+NOT bypass the baked artifact: the artifact is the correctness/startup path,
+produced by the same build as the `.d.ts` it describes, and has no opt-out.
+
+### R3.7 — Build wiring
+
+ONE `build` target owns both `dist/api.d.ts` and `dist/api.ir.json` (a sibling
+target declaring the same `{projectRoot}/dist` output could clobber this one's
+cache snapshot). `vite.config.ts` sets `output.inlineDynamicImports: true`,
+which is load-bearing: without it the dynamic `import('./extract-live.js')`
+makes rollup code-split the entry into a facade plus a shared chunk, moving the
+bin entry-guard's `import.meta.url` into the chunk so `node dist/index.js …`
+silently stops running the CLI.
+
+### R3.8 — Measured result
+
+On the same built package: a baked `--help` cold start is **0.73 s** (run 2:
+0.36 s) and the require-probe confirms **zero** `ts-morph` loads and **no**
+runtime-cache write; with the artifact removed or its source mutated, the same
+run falls back to a live extraction at **~15.8–16.5 s** and DOES load ts-morph.
