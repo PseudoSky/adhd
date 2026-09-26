@@ -101,6 +101,22 @@ export type { GraphBacklogStore } from './store/graph-backlog-store.js';
 
 export { readBacklogVersionInfo } from './version-info.js';
 
+// Library-only surface (NEVER mounted): the one-shot, reversible repair of the
+// `status` catalog's `terminal` flag. Exported here, not in `api.ts`, so the
+// CLI/MCP/HTTP/OpenAPI surface an agent holds in its head stays unchanged
+// (`api.ts`'s own header states the rule).
+export {
+  RESERVED_TERMINAL_STATUS_NAMES,
+  catalogNameFold,
+  planTerminalBackfill,
+  applyTerminalBackfill,
+  reverseTerminalBackfill,
+} from './write/catalog-repair.js';
+export type {
+  ITerminalBackfillPlan,
+  ITerminalBackfillJournal,
+} from './write/catalog-repair.js';
+
 // ---------------------------------------------------------------------------
 // `bin` entry-guard — replicates `entrypoint/apigen-cli/src/index.ts`'s
 // proven bin mechanism (shebang via a rollup `output.banner`, `bin: {
