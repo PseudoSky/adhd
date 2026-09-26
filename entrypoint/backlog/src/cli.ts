@@ -19,9 +19,9 @@
  * lazy `() => BacklogCtx` thunk for exactly this reason — see its own doc
  * comment.
  */
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, sep } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import type { Scope } from '@adhd/environment-base-spec';
 import { cliPlugin } from '@adhd/apigen-plugin-cli-output';
 import { batchPlugin } from '@adhd/apigen-plugin-batch';
@@ -48,6 +48,11 @@ import { runInstallSkillCommand } from './install-skill.js';
 import { runInstallCommand } from './install.js';
 import { runServeCommand } from './serve.js';
 import { readBacklogVersionInfo } from './version-info.js';
+import {
+  backlogDistDir,
+  EXPECTED_EXTRACTOR_VERSION,
+  writeBakedIrArtifact,
+} from './ir-artifact.js';
 import { errorEnvelope, exitCodeForEnvelope, isOutcomeEnvelope } from './envelope.js';
 import { buildSearchArgv } from './search-shortcut.js';
 import { suggestClosestCatalogNames } from './query/resolve.js';
@@ -315,6 +320,77 @@ export function stripNamespaceFlag(argv: readonly string[]): {
   };
 }
 
+/**
+ * `ir-artifact` — the HIDDEN, build-time artifact subcommand (design doc
+ * Revision 3). `nx build backlog` invokes it as the second command of the
+ * build target:
+ *
+ *     node dist/index.js ir-artifact --out dist/api.ir.json
+ *
+ * It extracts `dist/api.d.ts` DETERMINISTICALLY (no cache) and writes
+ * `outFile` as the baked IR artifact. Deliberately absent from the `--help`
+ * listing — it is a build step, not a user command — and store-free: it never
+ * opens the graph store and never resolves a path under `~/.adhd`.
+ *
+ * Living here (rather than a standalone build script) is what makes the
+ * artifact BYTE-IDENTICAL to the runtime fallback: it calls the same
+ * `buildBakedOperations` (`./extract-live.js`, dynamically imported so the hot
+ * path never loads it) that mirrors `extractApiOperationsLive`'s extraction
+ * call exactly. A separate script would have to re-derive
+ * `namespace`/`dropFileSegment: true` and could drift.
+ */
+async function runIrArtifactCommand(argv: readonly string[]): Promise<void> {
+  let out: string | undefined;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === undefined) continue;
+    if (arg === '--out' || arg === '-o') {
+      const next = argv[i + 1];
+      if (next !== undefined && !next.startsWith('-')) {
+        out = next;
+        i++;
+      }
+    } else if (arg.startsWith('--out=')) {
+      const value = arg.slice('--out='.length);
+      if (value !== '') out = value;
+    }
+  }
+  if (!out) {
+    const env = errorEnvelope(
+      'invalid_argument',
+      'ir-artifact: --out <path> is required'
+    );
+    console.error(JSON.stringify(env));
+    process.exitCode = exitCodeForEnvelope(env);
+    return;
+  }
+  const apiDts = join(backlogDistDir(), 'api.d.ts');
+  if (!existsSync(apiDts)) {
+    const env = errorEnvelope(
+      'internal',
+      `ir-artifact: ${apiDts} does not exist — run "nx build backlog" first`
+    );
+    console.error(JSON.stringify(env));
+    process.exitCode = exitCodeForEnvelope(env);
+    return;
+  }
+  const outFile = resolve(out);
+  // Dynamic import: keeps this subcommand's own module graph (and the whole
+  // `--help`/serve/verb path) free of extractor-touching code until the build
+  // step actually runs.
+  const { buildBakedOperations } = await import('./extract-live.js');
+  const operations = await buildBakedOperations(apiDts);
+  await writeBakedIrArtifact({
+    apiDts,
+    outFile,
+    extractorVersion: EXPECTED_EXTRACTOR_VERSION,
+    operations,
+  });
+  console.log(
+    JSON.stringify({ ok: true, out: outFile, operations: operations.length })
+  );
+}
+
 export async function runBacklogCli(
   argvIn?: string[],
   optsIn: RunBacklogCliOpts = {}
@@ -517,6 +593,16 @@ export async function runBacklogCli(
         embeddingEnabled: env.config.embedding.enabled,
       })
     );
+    return;
+  }
+  // `ir-artifact` (design doc Revision 3) — the HIDDEN build-time subcommand.
+  // Intercepted here, BEFORE the apigen package/command table is ever built
+  // (mirroring `sandbox-path` above), so a bare `node dist/index.js ir-artifact
+  // --out …` never extracts the mounted surface for its own sake and never
+  // opens the store. Store-free by construction: it touches only the build
+  // output under `dist/`, never anything under `~/.adhd`.
+  if (userArgvEarly[0] === 'ir-artifact') {
+    await runIrArtifactCommand(userArgvEarly.slice(1));
     return;
   }
   // `store-check` (BUG-BACKLOG-005) — the explicit, operator-facing diagnostic for
