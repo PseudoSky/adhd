@@ -19,12 +19,14 @@
 //
 // Fixtures: the canonical Dog|Cat example from DESIGN.md §4.1.
 
+import path from 'node:path';
 import { describe, it, expect } from 'vitest';
 import {
   buildUnionSchema,
   type UnionInfo,
   type UnionVariant,
 } from '../lib/schema-builders/union';
+import { extract } from '../index';
 import { X_APIGEN_LOGICAL } from '@adhd/apigen-base-logical';
 
 // ---------------------------------------------------------------------------
@@ -234,5 +236,76 @@ describe('buildUnionSchema — [inv:hints-advisory]: structural schema survives 
     delete stripped[X_APIGEN_LOGICAL];
     const discriminator = stripped['discriminator'] as { propertyName: string };
     expect(discriminator.propertyName).toBe('kind');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// [union.boolean] — boolean-in-union coverage (backlog 3a3e5884).
+//
+// LANE RULING (2026-09-25, dispatcher) — the real-ts-morph extraction cases in
+// this describe deliberately run in the DEFAULT `test` lane, NOT the `.e2e.ts`
+// lane. `vite.config.ts:64-72` / `project.json` split `*.e2e.ts` out of
+// `nx affected -t test` and the pre-commit/pre-push hooks, but AGENTS.md §7
+// makes default-running behavioral tests mandatory and the e2e lane currently
+// has NO CI runner (backlog c05e598e). Moving these there would make them
+// unrunnable — strictly worse than the extra seconds in the default lane. The
+// durable remedy is fixing that lane runner (c05e598e / 53023ba0); that is a
+// separate follow-up, not this branch's job. Do not re-litigate.
+//
+// This file previously had ZERO boolean coverage. A union containing `boolean`
+// is the one shape `buildUnionSchema` never sees (it models NOMINAL,
+// $ref-based unions) but which `morph-walk.ts`'s inline `walkType` union branch
+// DOES emit — and where ts-morph's synthetic `true | false` expansion used to
+// produce a duplicated `{type:'boolean'}` branch. The full shape matrix and
+// AJV semantics live in `morph-walk-boolean-union.spec.ts`; these two assert
+// the core contract on the real extractor output.
+// ---------------------------------------------------------------------------
+
+describe('boolean-in-union extraction — no duplicated oneOf branch (3a3e5884)', () => {
+  const dir = path.resolve(__dirname, 'fixtures/union-boolean');
+  const fixture = path.join(dir, 'boolean-unions.ts');
+  const strictConfig = path.join(dir, 'strict.json');
+
+  const booleanBranchCount = (fragment: Record<string, unknown>): number => {
+    const oneOf = fragment['oneOf'];
+    if (!Array.isArray(oneOf)) return 0;
+    return oneOf.filter(
+      (v) => (v as Record<string, unknown>)['type'] === 'boolean'
+    ).length;
+  };
+
+  async function shapesOf(tsconfig?: string): Promise<Record<string, Record<string, unknown>>> {
+    const ops = await extract({
+      sourceFile: fixture,
+      ...(tsconfig ? { tsconfig } : {}),
+    });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'booleanShapes');
+    if (!op) {
+      throw new Error('booleanShapes operation must exist in the union-boolean fixture');
+    }
+    const output = op.output as Record<string, unknown>;
+    const props = output['properties'] as Record<string, Record<string, unknown>>;
+    return props;
+  }
+
+  it('[union.boolean.1] strict tsconfig — textOrBool is exactly [string, boolean] (one boolean branch)', async () => {
+    const shapes = await shapesOf(strictConfig);
+    expect(shapes['textOrBool']['oneOf']).toEqual([
+      { type: 'string' },
+      { type: 'boolean' },
+    ]);
+    expect(booleanBranchCount(shapes['textOrBool'])).toBe(1);
+    expect(shapes['textOrBool'][X_APIGEN_LOGICAL]).toBe('union');
+  });
+
+  it('[union.boolean.2] no tsconfig — mixed boolean|number union still collapses to one boolean branch', async () => {
+    // Doubled pre-fix even with strictNullChecks off; guards against a
+    // strict-only fix.
+    const shapes = await shapesOf();
+    expect(shapes['numOrBool']['oneOf']).toEqual([
+      { type: 'number' },
+      { type: 'boolean' },
+    ]);
+    expect(booleanBranchCount(shapes['numOrBool'])).toBe(1);
   });
 });
