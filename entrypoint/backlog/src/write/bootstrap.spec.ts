@@ -28,7 +28,7 @@
  * way `cli.spec.ts` pins it OFF for its own determinism.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { rmSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { StoreAdapter } from '@adhd/sox-store-adapter';
 import {
@@ -162,7 +162,7 @@ describe('write/bootstrap.ts — search/embedding wired through the real api.ts 
 });
 
 describe('write/bootstrap.ts — isVectorSpacePopulated uses the bounded capability probe', () => {
-  it('delegates to the backend\'s hasVectors: empty space ⇒ false, one vector ⇒ true', async () => {
+  it("delegates to the backend's hasVectors: empty space ⇒ false, one vector ⇒ true", async () => {
     const opened = await openBootstrapTestCtx('is-vector-space-populated');
     const { store, dir } = opened;
     try {
@@ -186,6 +186,36 @@ describe('write/bootstrap.ts — isVectorSpacePopulated uses the bounded capabil
       await store.adapter.close();
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  // Placement decision: this compile-time-coupling guard lives here, beside
+  // its sibling `isVectorSpacePopulated` probes — NOT in
+  // `rag-optional-deps.spec.ts`. That file's charter is the MANIFEST (optional
+  // specifiers surviving `sync-deps`), a runtime hazard; this is compile-time
+  // type coupling, a hard build-break hazard — different failure modes.
+  it("does not statically import the optional store's additive probe interface by name", () => {
+    // REGRESSION GUARD with teeth. The build broke (TS2305 "no exported
+    // member") on a machine whose hoisted `@adhd/sox-vector-store` lagged the
+    // declared range, because `bootstrap.ts` imported the additive
+    // existence-probe interface BY NAME from that optional package. The module
+    // now mirrors the capability locally (`OptVectorExistenceProbe`), so it
+    // compiles against the pinned `AsyncVectorBackend` contract alone — the
+    // same decoupling `loadOptional()` already gives it at RUNTIME. This reads
+    // the source (the offending line is erased at compile time, so no runtime
+    // assertion can observe it) and fails if the by-name IMPORT returns. The
+    // pattern is deliberately narrowed to import shape rather than the bare
+    // identifier, so PROSE may name the upstream interface (as the mirror's own
+    // doc comment does) while an actual by-name import still fails — otherwise
+    // the natural act of documenting the mirror would trip the gate. The
+    // line-anchored `^import` (`m` flag) keeps a prose mention from matching.
+    const source = readFileSync(
+      new URL('./bootstrap.ts', import.meta.url),
+      'utf8'
+    );
+    expect(
+      /^import\b[^;]*AsyncVectorExistenceProbe/m.test(source),
+      "bootstrap.ts must not import the optional store's additive probe interface by name — it breaks the build against a lagging install; mirror it locally (OptVectorExistenceProbe) instead."
+    ).toBe(false);
   });
 
   it('degrades to false when the backend lacks the additive hasVectors capability (never falls back to an unbounded scan)', async () => {
