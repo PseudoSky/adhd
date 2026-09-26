@@ -574,7 +574,7 @@ surface.
 
 ## `errors.ts` (15 exports)
 
-### `WriteErrorCode` — type (`errors.ts:40`)
+### `WriteErrorCode` — type (`errors.ts:41`)
 
 ```ts
 export type WriteErrorCode = 'E_CONTENTION' | 'E_CONSTRAINT' | 'E_VALIDATION' | 'E_IO';
@@ -582,7 +582,7 @@ export type WriteErrorCode = 'E_CONTENTION' | 'E_CONSTRAINT' | 'E_VALIDATION' | 
 
 Guarantees: the closed code union every `IWriteError` carries.
 
-### `IWriteError` — interface (`errors.ts:54`)
+### `IWriteError` — interface (`errors.ts:55`)
 
 ```ts
 export interface IWriteError {
@@ -599,7 +599,7 @@ failure — never the shape a caller of a write verb receives directly (they
 only ever catch a named `BacklogWriteError` subclass). `cause` is never
 swallowed.
 
-### `BacklogWriteError` — abstract class (`errors.ts:70`)
+### `BacklogWriteError` — abstract class (`errors.ts:71`)
 
 ```ts
 export abstract class BacklogWriteError extends Error implements IWriteError {
@@ -615,7 +615,7 @@ Guarantees: common base for every transport-facing error the write layer
 throws. `tx.ts`'s retry loop uses `instanceof BacklogWriteError` to recognize
 an already-decided, terminal failure and rethrow it untouched.
 
-### `WriteContentionError` — class (`errors.ts:96`)
+### `WriteContentionError` — class (`errors.ts:97`)
 
 ```ts
 export class WriteContentionError extends BacklogWriteError {
@@ -629,12 +629,14 @@ Guarantees: thrown after `E_CONTENTION` exhausts the retry budget (3 total
 attempts). `retryable` stays `true` even on exhaustion — the caller, not the
 write layer, owns any retry beyond this bound.
 
-### `WriteIOError` — class (`errors.ts:125`)
+### `WriteIOError` — class (`errors.ts:126`)
 
 ```ts
 export class WriteIOError extends BacklogWriteError {
   readonly code: 'E_IO';
   readonly retryable: true;
+  readonly causeMessage: string;
+  readonly causeCode?: string;
   constructor(cause: unknown);
 }
 ```
@@ -643,9 +645,16 @@ Guarantees: thrown on the FIRST (and only) occurrence of a
 recognized-but-otherwise-unclassified database error — never auto-retried,
 because `writeAudit` rides inside every write transaction as an unguarded
 INSERT and a retry whose earlier attempt actually committed would double the
-audit trail.
+audit trail. Also thrown for a citation read that fails with an errno other
+than ENOENT/ENOTDIR/EISDIR (e.g. EACCES). `message` ends with the raw
+underlying error's message, which is also exposed verbatim as `causeMessage`
+(and its `code`, when present, as `causeCode`); `cause` is the original
+error object (56a2133e). Every `E_IO` is also recorded at `error` level as
+the `backlog.write.io_failure` telemetry event with `origin`
+(`transaction`|`citation_sha`), `retryable`, `error`, `error_code` and
+`stack`.
 
-### `StaleSupersedeError` — class (`errors.ts:145`)
+### `StaleSupersedeError` — class (`errors.ts:215`)
 
 ```ts
 export class StaleSupersedeError extends BacklogWriteError {
@@ -659,7 +668,7 @@ Guarantees: the one deliberate `E_CONSTRAINT` this spec's own CAS raises —
 thrown when `supersede`'s `is_superseded` guard affects zero rows (a
 concurrent writer already superseded the same target). Never retryable.
 
-### `CatalogNotFoundError` — class (`errors.ts:178`)
+### `CatalogNotFoundError` — class (`errors.ts:248`)
 
 ```ts
 export class CatalogNotFoundError extends BacklogWriteError {
@@ -673,7 +682,7 @@ Guarantees: thrown when a `project`/`component`/`kind`/`status`/`priority`/
 `agent`/`edge_kind` reference did not resolve — a uid-shaped ref with no live
 row, or a `project`/`component` name (neither is ever mint-on-miss).
 
-### `InvalidArgumentError` — class (`errors.ts:191`)
+### `InvalidArgumentError` — class (`errors.ts:261`)
 
 ```ts
 export class InvalidArgumentError extends BacklogWriteError {
@@ -686,7 +695,7 @@ export class InvalidArgumentError extends BacklogWriteError {
 Guarantees: thrown when a caller-supplied argument is missing, blank, or
 fails a project-declared invariant.
 
-### `IssueNotFoundError` — class (`errors.ts:205`)
+### `IssueNotFoundError` — class (`errors.ts:275`)
 
 ```ts
 export class IssueNotFoundError extends BacklogWriteError {
@@ -698,7 +707,7 @@ export class IssueNotFoundError extends BacklogWriteError {
 
 Guarantees: thrown when no live `issue` node carries the given `uid`.
 
-### `ClaimHeldError` — class (`errors.ts:218`)
+### `ClaimHeldError` — class (`errors.ts:288`)
 
 ```ts
 export class ClaimHeldError extends BacklogWriteError {
@@ -711,7 +720,7 @@ export class ClaimHeldError extends BacklogWriteError {
 Guarantees: thrown by `claim` when the lease is held by someone else, not yet
 stale, and the caller did not pass `force: true`.
 
-### `SingleValuedRelationConflictError` — class (`errors.ts:275`)
+### `SingleValuedRelationConflictError` — class (`errors.ts:345`)
 
 ```ts
 export class SingleValuedRelationConflictError extends BacklogWriteError {
@@ -732,7 +741,7 @@ resolve `cappedUid`/`conflictingUid` via different SQL joins, and named
 fields make a source/target field swap a compile error instead of a silent
 message-text bug.
 
-### `CitationUnverifiableError` — class (`errors.ts:321`)
+### `CitationUnverifiableError` — class (`errors.ts:391`)
 
 ```ts
 export class CitationUnverifiableError extends BacklogWriteError {
@@ -756,7 +765,23 @@ The message names the allowed external roots (`~`-anchored) and the
 rejection is actionable; with an empty allowlist (the default, or an explicit
 `[]`) it instead names the project root and says the policy array is empty.
 
-### `NoteRequiredError` — class (`errors.ts:350`)
+### `CitationTargetIsDirectoryError` — class (`errors.ts:429`)
+
+```ts
+export class CitationTargetIsDirectoryError extends BacklogWriteError {
+  readonly code: 'E_VALIDATION';
+  readonly retryable: false;
+  constructor(target: string);
+}
+```
+
+Guarantees: thrown by `createIssue` and `transition` when a citation's
+target resolves to a directory (`readFile` fails with `EISDIR`). A directory
+has no content to hash, so the payload can never succeed as-is; nothing is
+written. The mapping from a citation read error to this class or to
+`WriteIOError` lives in `errors.ts`'s `citationReadError` (56a2133e).
+
+### `NoteRequiredError` — class (`errors.ts:459`)
 
 ```ts
 export class NoteRequiredError extends BacklogWriteError {
@@ -769,7 +794,7 @@ export class NoteRequiredError extends BacklogWriteError {
 Guarantees: thrown by `transition` when `project_policy.transitionRequiresNote`
 (default `true`) is set and no `note` was given.
 
-### `CitationRequiredError` — class (`errors.ts:362`)
+### `CitationRequiredError` — class (`errors.ts:471`)
 
 ```ts
 export class CitationRequiredError extends BacklogWriteError {
@@ -783,7 +808,7 @@ Guarantees: thrown by `transition` when `project_policy.citationRequired`
 (default `false`) is set, the target status is terminal, and no citation was
 given.
 
-### `BacklogValidationError` — class (`errors.ts:385`)
+### `BacklogValidationError` — class (`errors.ts:494`)
 
 ```ts
 export class BacklogValidationError extends BacklogWriteError {
@@ -798,7 +823,7 @@ or an out-of-range/non-integral `limit`) — deliberately the SAME
 `E_VALIDATION`-class member of this same error union, not a parallel one, so
 a `query`/`get` caller catches it identically to any write-verb error.
 
-### `classifyDriverError(err)` — function (`errors.ts:431`)
+### `classifyDriverError(err)` — function (`errors.ts:540`)
 
 ```ts
 export function classifyDriverError(err: unknown): IWriteError;
