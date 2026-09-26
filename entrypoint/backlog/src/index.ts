@@ -117,6 +117,20 @@ export type {
   ITerminalBackfillJournal,
 } from './write/catalog-repair.js';
 
+// Library-only surface (NEVER mounted), same rule as D1 above: the one-shot,
+// reversible collapse of the status/priority catalog's case-fragment
+// duplicates (the same token living as two rows that differ only in case).
+export {
+  planCaseFragmentMerge,
+  applyCaseFragmentMerge,
+  reverseCaseFragmentMerge,
+} from './write/catalog-merge.js';
+export type {
+  IMergePlan,
+  IMergeJournal,
+  IMergeJournalEntry,
+} from './write/catalog-merge.js';
+
 // ---------------------------------------------------------------------------
 // `bin` entry-guard — replicates `entrypoint/apigen-cli/src/index.ts`'s
 // proven bin mechanism (shebang via a rollup `output.banner`, `bin: {

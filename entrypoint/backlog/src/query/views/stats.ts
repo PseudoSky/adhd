@@ -69,6 +69,18 @@ import {
 import type { IIssueAuditEntry, IIssueFilter } from '../types.js';
 import type { IQueryStoreHandle } from '../query.js';
 
+/**
+ * The string members of a `status.meta.aliases` value, in order — the map a
+ * case-fragment collapse writes onto a canonical row so a historical audit
+ * naming a merged-away spelling still classifies. Guarded: a missing,
+ * non-array, or non-string entry contributes nothing rather than throwing out
+ * of a read view.
+ */
+function asAliasList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((v): v is string => typeof v === 'string' && v.length > 0);
+}
+
 // ---------------------------------------------------------------------------
 // Shared scoping helpers (project / component / kind — the dimensions every
 // view below composes with; `status` is handled per-view, since its default
@@ -719,9 +731,20 @@ export async function openCurve(
   }
 
   const statuses = await graph.queryNodes({ kind: 'status', liveOnly: true });
-  const terminalByName = new Map(
-    statuses.map((s) => [s.name ?? '', isStatusTerminal(s)])
-  );
+  // Index each canonical status row's `meta.aliases` to its OWN terminality, so
+  // a historical audit `to`/`from` naming a spelling that a case-fragment
+  // collapse merged away (and therefore is no longer a LIVE `status` row)
+  // still classifies. The alias map is DATA on the canonical row — never a
+  // hardcoded read-time fallback (ADR-0002 D5: repair the source, not the
+  // reader).
+  const terminalByName = new Map<string, boolean>();
+  for (const s of statuses) {
+    const t = isStatusTerminal(s);
+    if (s.name) terminalByName.set(s.name, t);
+    for (const alias of asAliasList(s.metadata?.aliases)) {
+      terminalByName.set(alias, t);
+    }
+  }
 
   // Per-ISSUE data (never per (issue, instant)) — fetched once for the whole
   // relation and reused across every sampled instant. See this function's own
