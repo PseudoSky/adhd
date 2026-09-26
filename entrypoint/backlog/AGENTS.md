@@ -29,9 +29,11 @@ miss, a DYNAMIC `import('./extract-live.js')`.
 - `src/extract-live.ts` is the ONLY module importing extractor-touching code.
   It is reached solely through a dynamic import — never add a static import of
   it from `server.ts` or `cli.ts`.
-- The artifact is validated against a hash of the CURRENT `api.d.ts`, never the
-  bake-time absolute path (a shipped artifact lands on machines where that path
-  does not exist).
+- The artifact is validated against hashes of the CURRENT built declarations —
+  never the bake-time absolute paths (a shipped artifact lands on machines where
+  those paths do not exist). The gate covers the WHOLE `dist/**.d.ts` surface,
+  not only `api.d.ts`: extraction resolves types THROUGH `api.d.ts`'s sibling
+  imports, so a drifted imported `.d.ts` must invalidate the artifact too.
 
 ## `ir-artifact` is store-free
 

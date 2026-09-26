@@ -61,7 +61,7 @@ export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
     // `ADHD_BACKLOG_SCOPE`/`opts.scope` — the IR cache caches backlog's own
     // generated client, not per-repo data, so it must stay at one stable
     // machine-wide location no matter which scope a given invocation
-    // resolved its backlog *data* to. See `server.ts`'s `irCacheFile()`.
+    // resolved its backlog *data* to. See `extract-live.ts`'s `irCacheFile()`.
     cache: { kind: 'cache' },
   },
   files: {

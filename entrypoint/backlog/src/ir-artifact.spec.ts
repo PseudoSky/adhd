@@ -9,10 +9,18 @@
  * stale operations) so `server.ts` falls back to a live extraction. A reader
  * that returned the artifact unconditionally would keep this test green while
  * shipping stale schemas — which is exactly why the mismatch case exists.
+ *
+ * SURFACE-HASH-MISMATCH extends that to the WHOLE `.d.ts` surface: extraction
+ * resolves types THROUGH `api.d.ts`'s sibling imports, so a drifted imported
+ * `dist/write/*.d.ts` with a byte-identical `api.d.ts` must ALSO return
+ * `undefined`. A gate that hashed only `api.d.ts` would serve that drift as a
+ * HIT, violating the design's never-serve-stale guarantee (R3.3) while the
+ * original mismatch case stayed green.
  */
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import {
   appendFileSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -128,6 +136,76 @@ describe('ir-artifact — readBakedIrArtifact freshness gate', () => {
     expect(readBakedIrArtifact(distDir)).toEqual(OPS);
 
     appendFileSync(apiDts, '// a later edit the artifact does not describe\n');
+    expect(readBakedIrArtifact(distDir)).toBeUndefined();
+  });
+
+  it('SURFACE-HASH-MISMATCH (an IMPORTED dist/write/*.d.ts changed while api.d.ts stays byte-identical) → undefined — never serve stale', async () => {
+    // Mirror the real built layout: `api.d.ts` imports a sibling declaration
+    // (the real one imports `./write/*.js` type modules), and extraction
+    // resolves types THROUGH that sibling — so its content is part of the
+    // extracted surface even though `api.d.ts` never changes.
+    writeFileSync(
+      apiDts,
+      "import type { IInput } from './write/thing.js';\n" +
+        'export declare function get(input: IInput): Promise<void>;\n'
+    );
+    mkdirSync(join(distDir, 'write'), { recursive: true });
+    const importedDts = join(distDir, 'write', 'thing.d.ts');
+    writeFileSync(importedDts, 'export interface IInput { a: string }\n');
+
+    await bake();
+    // Sanity: a hit before the imported declaration drifts.
+    expect(readBakedIrArtifact(distDir)).toEqual(OPS);
+
+    // Mutate ONLY the imported module; `api.d.ts` must remain byte-identical
+    // (a source-hash-only gate would still see a matching entry here).
+    const apiBefore = readFileSync(apiDts);
+    appendFileSync(importedDts, 'export interface IExtra { b: number }\n');
+    expect(readFileSync(apiDts)).toEqual(apiBefore);
+
+    expect(readBakedIrArtifact(distDir)).toBeUndefined();
+  });
+
+  it('records a deps map covering the FULL dist .d.ts surface (relative paths, sha256 each)', async () => {
+    writeFileSync(
+      apiDts,
+      "import type { IInput } from './write/thing.js';\n" +
+        'export declare function get(input: IInput): Promise<void>;\n'
+    );
+    mkdirSync(join(distDir, 'write'), { recursive: true });
+    writeFileSync(join(distDir, 'write', 'thing.d.ts'), 'export interface IInput { a: string }\n');
+
+    await bake();
+    const entry = JSON.parse(readFileSync(artifactPath, 'utf8')) as {
+      artifactSource: { deps?: Record<string, string> };
+    };
+    expect(Object.keys(entry.artifactSource.deps ?? {}).sort()).toEqual([
+      'api.d.ts',
+      'write/thing.d.ts',
+    ]);
+    expect(entry.artifactSource.deps?.['api.d.ts']).toMatch(/^[0-9a-f]{64}$/);
+    expect(entry.artifactSource.deps?.['write/thing.d.ts']).toMatch(
+      /^[0-9a-f]{64}$/
+    );
+  });
+
+  it('an artifact whose artifactSource omits the deps surface map → undefined (unvalidatable)', async () => {
+    await bake();
+    const entry = JSON.parse(readFileSync(artifactPath, 'utf8')) as {
+      artifactSource: { deps?: Record<string, string> };
+    };
+    delete entry.artifactSource.deps;
+    writeFileSync(artifactPath, JSON.stringify(entry));
+    expect(readBakedIrArtifact(distDir)).toBeUndefined();
+  });
+
+  it('an artifact whose operations array is EMPTY → undefined (never mount an empty surface)', async () => {
+    await writeBakedIrArtifact({
+      apiDts,
+      outFile: artifactPath,
+      extractorVersion: EXPECTED_EXTRACTOR_VERSION,
+      operations: [],
+    });
     expect(readBakedIrArtifact(distDir)).toBeUndefined();
   });
 

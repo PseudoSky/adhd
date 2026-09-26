@@ -539,21 +539,22 @@ export async function runBacklogCli(
   }
   // BUG-BACKLOG-SANDBOX-IRCACHE-LEAK-001: `--namespace sandbox`'s promise is
   // "diverts the store away from the (fake) production HOME entirely, and
-  // never creates anything under it" (`cli.spec.ts`) — but `server.ts`'s
-  // `irCacheFile()` calls `resolveIrCacheFile()` with no arguments, so its
-  // module-level lazy singleton (`getExtractInvoke`, built on first
-  // extraction) always resolves the REAL, HOME-anchored default
-  // (`~/.adhd/backlog/production/cache/apigen/ir-cache/backlog-client.ir.json`)
-  // regardless of `opts.adhdRoot`. `server.ts`'s own doc comment on that
-  // singleton documents exactly this escape hatch — "Built LAZILY on first
-  // use so callers/tests can point `APIGEN_IR_CACHE_FILE`… at test values
-  // before the first extraction" — so this redirects it into the same
-  // sandbox tmpdir rather than inventing a second isolation mechanism.
-  // Guarded on `adhdRoot` (not the namespace name) so an explicit
-  // `runBacklogCli(argv, {adhdRoot})` caller (tests) gets the same
+  // never creates anything under it" (`cli.spec.ts`) — including the
+  // extract-stage IR cache. The cache file is resolved by
+  // `extract-live.ts`'s `irCacheFile({ adhdRoot, instanceId })` (moved there
+  // from `server.ts` by the bake-at-build work), which now forwards BOTH to
+  // `resolveIrCacheFile`, so a sandbox run that threads `adhdRoot` would
+  // already resolve its cache under the sandbox root. This standalone env pin
+  // is kept as the stronger, EARLIER guarantee: `getExtractInvoke`'s memoized
+  // singleton is configured from whichever `opts` the FIRST extraction in this
+  // process passes (that function's own doc names this constraint), so pinning
+  // `APIGEN_IR_CACHE_FILE` here — before any extraction can run — guarantees
+  // the isolated path even for a caller that reaches extraction without
+  // threading `adhdRoot`. Guarded on `adhdRoot` (not the namespace name) so an
+  // explicit `runBacklogCli(argv, {adhdRoot})` caller (tests) gets the same
   // isolation `--namespace sandbox` gets on the CLI. Never overrides an
-  // already-set `APIGEN_IR_CACHE_FILE` — an explicit caller override (e.g.
-  // an integration test pointing at its own throwaway file) always wins.
+  // already-set `APIGEN_IR_CACHE_FILE` — an explicit caller override (e.g. an
+  // integration test pointing at its own throwaway file) always wins.
   if (
     opts.adhdRoot !== undefined &&
     process.env['APIGEN_IR_CACHE_FILE'] === undefined

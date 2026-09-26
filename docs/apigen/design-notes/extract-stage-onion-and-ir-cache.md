@@ -940,14 +940,22 @@ call the fallback uses, so it cannot drift.
 ### R3.3 — The artifact and its freshness gate
 
 - Filename `api.ir.json`, a `CachedExtractEntry` (R2.5) plus a new optional
-  `artifactSource: { path, sha256, bytes }` recording the source `.d.ts`, its
-  sha256, and its byte length at bake time.
+  `artifactSource: { path, sha256, bytes, deps }` recording the source `.d.ts`,
+  its sha256, its byte length at bake time, and a per-file sha256 map of EVERY
+  `dist/**.d.ts` at bake time.
 - `readBakedIrArtifact(distDir)` NEVER throws; it returns `undefined` (a miss)
-  on a missing/unreadable/ corrupt artifact, a format-version mismatch, an
-  **extractor-version mismatch**, or a **source-hash mismatch** — the last
-  re-hashing the CURRENT `dist/api.d.ts`, never the recorded bake-time path (a
-  shipped artifact lands on machines where that path does not exist). This is
-  the never-serve-stale gate.
+  on a missing/unreadable/corrupt artifact, a format-version mismatch, an
+  **extractor-version mismatch**, a **source-hash mismatch**, or a
+  **surface-hash mismatch**. It re-hashes the CURRENT built declarations, never
+  the recorded bake-time paths (a shipped artifact lands on machines where those
+  paths do not exist). The gate covers the WHOLE `dist/**.d.ts` surface, not
+  only `api.d.ts`: extraction resolves types through `api.d.ts`'s local sibling
+  imports, so a drifted imported declaration (e.g. `dist/write/*.d.ts`) must
+  invalidate the artifact even when `api.d.ts` is byte-identical — otherwise the
+  drift would be served as a HIT, violating never-serve-stale. An artifact
+  whose `deps` map is absent/malformed is unvalidatable and therefore a miss.
+  This mirrors what the runtime FALLBACK already does via `computeCacheKey`'s
+  `collectLocalImportPaths` dep hashes.
 - `writeBakedIrArtifact` emits it through the plugin's shared `atomicWriteJson`,
   so a build killed mid-write can never publish a half-written artifact.
 
@@ -972,9 +980,13 @@ could diverge. It is store-free and never writes under `~/.adhd`.
 
 `IrCacheBackend.put`'s contract changed from "may fire-and-forget" to "the layer
 AWAITS `put` on the MISS path; `put` MUST resolve only once the entry is
-durably published". `atomicWriteJson` now writes the temp file through a
-`FileHandle`, `fsync`s it BEFORE `rename`, then best-effort `fsync`s the parent
-directory (guarded for `ENOTSUP`/`EISDIR`/`EINVAL`/`EPERM`/`EACCES`). Both MISS
+published and its bytes `fsync(2)`'d". `atomicWriteJson` now writes the temp
+file through a `FileHandle`, `fsync`s it BEFORE `rename`, then best-effort
+`fsync`s the parent directory (the dir sync is extra credit — EVERY failure of
+it is swallowed, not an allow-listed subset; the file-content fsync is the
+guarantee). This is a crash-of-process / crash-of-OS guarantee, not a power-loss
+one: Node exposes no `fdatasync` (the write is `fsync`), and on some platforms
+`fsync(2)` does not force the drive cache to media. Both MISS
 branches `await writeThrough(...)` inside a `try/catch` (failure still
 non-fatal). The slow-gate mtime-refresh write stays fire-and-forget — it is a
 pure optimization of a HIT, not a correctness path. The determinism teeth live

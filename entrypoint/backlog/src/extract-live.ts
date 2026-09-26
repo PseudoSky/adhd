@@ -23,6 +23,7 @@ import {
   extract,
   createExtractInvokerFromPlugins,
   type ExtractCall,
+  type ExtractOptions,
   type Operation,
   type Plugin,
 } from '@adhd/apigen-core-client';
@@ -43,6 +44,48 @@ import { backlogDistDir, EXPECTED_EXTRACTOR_VERSION } from './ir-artifact.js';
  * the version a baked artifact is validated against can never disagree.
  */
 const CORE_CLIENT_VERSION: string = EXPECTED_EXTRACTOR_VERSION;
+
+/**
+ * The namespace every backlog extraction runs under. Exported so the shared
+ * options builder and any caller that needs the same value read ONE constant
+ * rather than a repeated string literal.
+ */
+export const BACKLOG_EXTRACT_NAMESPACE = 'backlog';
+
+/**
+ * The SINGLE source of truth for the extraction OPTIONS this host always runs
+ * (design doc Revision 3's "baked ops are byte-identical to the fallback's"
+ * guarantee). Both extraction sites consume it:
+ *
+ *  - {@link buildBakedOperations} — the BAKE step (no invoker, no cache).
+ *  - the terminal `extract()` inside {@link getExtractInvoke} — the runtime
+ *    FALLBACK's cache-MISS path.
+ *
+ * Previously each hand-wrote the same `{ namespace: 'backlog',
+ * dropFileSegment: true, tsconfig }` literal, so the "cannot drift" claim held
+ * only until someone edited one and not the other — at which point the baked
+ * surface would silently stop matching the fallen-back surface. One builder
+ * makes a change to any of these options impossible to apply to only one path.
+ *
+ * `dropFileSegment: true` (`ExtractOptions`, `@adhd/apigen-core-client`):
+ * without it every op's `path` would start with the source file's basename
+ * (`'api-d'`), leaking into every transport's name (`backlog api_d get-item`
+ * instead of `backlog get-item`). Safe here because every backlog operation is
+ * extracted from the ONE `api.d.ts`, so there is no cross-file name to
+ * disambiguate against; a genuine same-name collision would still be caught at
+ * extract time by `checkCollisions` (`@adhd/apigen-engine-naming`).
+ */
+export function buildBacklogExtractOptions(
+  source: string,
+  tsconfig?: string
+): ExtractOptions {
+  return {
+    sourceFile: source,
+    namespace: BACKLOG_EXTRACT_NAMESPACE,
+    tsconfig,
+    dropFileSegment: true,
+  };
+}
 
 /**
  * FEAT-002 Revision 2 (design doc R2.2/R2.3, implementation spec R2-4):
@@ -174,15 +217,14 @@ function getExtractInvoke(
   extractInvoke ??= createExtractInvokerFromPlugins(
     irCacheEnabled() ? [backlogIrCachePlugin(opts)] : [],
     (call: ExtractCall) =>
-      extract({
-        sourceFile: call.source,
-        namespace: call.namespace,
-        tsconfig:
+      extract(
+        buildBacklogExtractOptions(
+          call.source,
           typeof call.extractorOptions?.tsconfig === 'string'
             ? call.extractorOptions.tsconfig
-            : undefined,
-        dropFileSegment: true,
-      })
+            : undefined
+        )
+      )
   );
   return extractInvoke;
 }
@@ -191,22 +233,18 @@ function getExtractInvoke(
  * DETERMINISTIC, cache-bypassing extraction of `apiDts`.
  *
  * Runs the EXACT extraction {@link extractApiOperationsLive} would run on a
- * cache MISS — same `namespace`, same `dropFileSegment: true`, same (absent)
- * `tsconfig` — with no invoker and no cache in the path. Used by the
- * `ir-artifact` build subcommand to author `dist/api.ir.json`; the artifact's
- * operations are therefore byte-identical to what the runtime fallback would
- * produce for the same file, which is what lets `server.ts` prefer the artifact
- * without changing downstream schema composition.
+ * cache MISS — the SAME {@link buildBacklogExtractOptions} literal, so this
+ * host has ONE definition of its extraction options (see that builder) — with
+ * no invoker and no cache in the path. Used by the `ir-artifact` build
+ * subcommand to author `dist/api.ir.json`; the artifact's operations are
+ * therefore byte-identical to what the runtime fallback would produce for the
+ * same file, which is what lets `server.ts` prefer the artifact without
+ * changing downstream schema composition.
  */
 export async function buildBakedOperations(
   apiDts: string
 ): Promise<Operation[]> {
-  return extract({
-    sourceFile: apiDts,
-    namespace: 'backlog',
-    tsconfig: undefined,
-    dropFileSegment: true,
-  });
+  return extract(buildBacklogExtractOptions(apiDts));
 }
 
 /**
@@ -220,21 +258,16 @@ export async function extractApiOperationsLive(
   opts: { adhdRoot?: string; instanceId?: string } = {}
 ): Promise<Operation[]> {
   const clientDts = join(backlogDistDir(), 'api.d.ts');
-  // `dropFileSegment: true` (`ExtractOptions`, `@adhd/apigen-core-client`):
-  // without it every op's `path` would unconditionally start with the
-  // `api.d.ts` extraction FILENAME artifact (`normalizeFileName` →
-  // `'client-d'`), leaking into every transport's name — `backlog client-d
-  // create-item` / `backlog_client_d_create_item` instead of the intended
-  // `backlog create-item` / `backlog_create_item`. Safe here because every
-  // `client.ts` export is extracted from this ONE file, so there is no
-  // cross-file name to disambiguate against; a genuine same-name collision
-  // would still be caught at extract time by `checkCollisions`
-  // (`@adhd/apigen-engine-naming`). `buildBakedOperations` uses the identical
-  // call, so the baked and fallen-back operation sets match byte-for-byte.
+  // The extraction OPTIONS (`namespace`, `dropFileSegment`, `tsconfig`) come
+  // from ONE shared builder — see `buildBacklogExtractOptions`'s doc for why
+  // `dropFileSegment: true` is required and why baking and falling back must
+  // never hand-write two copies of this literal. `namespace` is ALSO carried on
+  // the `ExtractCall` itself: the IR-cache layer folds it into the cache key
+  // (`computeCacheKey`), so it must stay the same value the builder uses.
   return getExtractInvoke(opts)({
     source: clientDts,
     host: 'ts',
-    namespace: 'backlog',
+    namespace: BACKLOG_EXTRACT_NAMESPACE,
     extractorOptions: {},
   });
 }
