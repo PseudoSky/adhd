@@ -11,7 +11,7 @@
  * `tools/etl`'s own bootstrap mints — is therefore read as NON-terminal, and
  * `queryIssues({filter:{status:'open'}})` returns items that are closed by
  * name. The flag, not the name, is the single source of truth for closedness
- * (ADR-0002 D5: an unfixed-source gap is repaired at the SOURCE, never papered
+ * (ADR-0002 D1: an unfixed-source gap is repaired at the SOURCE, never papered
  * over with a read-time name fallback — a fallback would be a second, drifting
  * source of truth).
  *
@@ -26,7 +26,7 @@
  * exactly that).
  *
  * It does NOT read the query layer and does NOT change it: `isStatusTerminal`
- * stays name-blind (ADR-0002 D5).
+ * stays name-blind (ADR-0002 D1).
  */
 
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
@@ -155,8 +155,9 @@ export async function planTerminalBackfill(
  *
  * A rowid that is no longer a LIVE `status` row between plan and apply is
  * skipped (nothing to repair, nothing journaled); a planned rowid that IS a
- * live non-`status` row is a plan/DB mismatch and throws loudly (ADR-0002 D5's
- * error-loudly posture) rather than silently rewriting an unrelated node.
+ * live non-`status` row is a plan/DB mismatch and throws loudly (ADR-0002 D5
+ * step 4's error-loudly posture) rather than silently rewriting an unrelated
+ * node.
  */
 export async function applyTerminalBackfill(
   handle: IWriteStoreHandle,

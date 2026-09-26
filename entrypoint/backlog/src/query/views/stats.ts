@@ -735,7 +735,7 @@ export async function openCurve(
   // a historical audit `to`/`from` naming a spelling that a case-fragment
   // collapse merged away (and therefore is no longer a LIVE `status` row)
   // still classifies. The alias map is DATA on the canonical row — never a
-  // hardcoded read-time fallback (ADR-0002 D5: repair the source, not the
+  // hardcoded read-time fallback (ADR-0002 D1: repair the source, not the
   // reader).
   const terminalByName = new Map<string, boolean>();
   for (const s of statuses) {

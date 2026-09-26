@@ -64,7 +64,7 @@
  *
  * Like D1, this repairs the SOURCE. It does not read the query layer and does
  * not change it (`isStatusTerminal`/`card.ts` stay name-blind, adhd ADR-0002
- * D5). Only `terminalByName` learns to expand the DATA alias map, because a
+ * D1). Only `terminalByName` learns to expand the DATA alias map, because a
  * historical audit legitimately names a row that is no longer live.
  *
  * The "one logical repair, one timestamp" rule is honoured: every write in an
