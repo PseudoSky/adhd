@@ -18,6 +18,16 @@
         "cwd": ".",
         "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.lib.json --outDir {projectRoot}/dist --rootDir {projectRoot} --baseUrl {projectRoot} --composite false --noEmitOnError && cp {projectRoot}/*.md {projectRoot}/package.json {projectRoot}/dist/"
       }
+    },
+    "verify-dist-load": {
+      "//": "Explicit, because the shared mechanism deliberately does not attach here. The inferred `verify-dist-load` (tools/nx-plugins/build/plugin.js) is publish-oriented and skipped for any package.json with `private: true` (tools/nx-plugins/build/detect-target.js:55-73 names environment-cli as the example), and its executor loads a dist `main`/`module`/`exports`/`bin` entry that this raw-`tsc` build never declares. This target keeps the SAME name so `nx affected -t verify-dist-load` (CI: .github/workflows/ci.yml, pull-request.yml) still covers environment-cli, but runs a narrow checker over the emitted ESM instead: it links every emitted module's bare-specifier imports and fails on a named import from a CJS-only package (backlog 788c57a5 / b8db4e3c) — the defect `nx build`/`nx test` cannot see because vitest resolves straight to source.",
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "cache": false,
+      "options": {
+        "cwd": ".",
+        "command": "node tools/nx-plugins/build/executors/verify/verify-emitted-esm-interop.mjs entrypoint/environment-cli"
+      }
     }
   }
 }
