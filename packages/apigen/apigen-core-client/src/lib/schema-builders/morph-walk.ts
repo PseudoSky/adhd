@@ -139,16 +139,46 @@ export async function walkType(
     return { type: 'number' };
   }
   if (type.isBoolean()) return { type: 'boolean' };
-  if (type.isBooleanLiteral()) return { type: 'boolean' };
+  // A LONE boolean literal keeps its value as `const`, mirroring the
+  // single-value `enum` emitted for string/number literals just above; a bare
+  // `{type:'boolean'}` would silently accept the OPPOSITE boolean (e.g. the
+  // `true` arm of `true | 'x'` accepting `false`). `getLiteralValue()` returns
+  // undefined for boolean literals (ts-morph only stamps `.value` on
+  // string/number literals), so read the literal from the type text.
+  if (type.isBooleanLiteral())
+    return { type: 'boolean', const: type.getText() === 'true' };
   if (type.isNull() || type.isUndefined() || type.isVoid())
     return { type: 'null' };
 
   // --- unions (incl. string-literal enums) ----------------------------------
   if (type.isUnion()) {
     const members = type.getUnionTypes();
-    // boolean is internally `true | false`; ts-morph already collapses it via
-    // isBoolean() above, but a union containing booleanLiterals can slip
-    // through — drop the synthetic split.
+    // boolean is internally `true | false`; ts-morph expands a `boolean` union
+    // member into BOTH literals (e.g. `boolean | undefined` → [undefined,
+    // false, true] under strictNullChecks, and `string | boolean` → [string,
+    // false, true] regardless of strictNullChecks). A real `boolean` member is
+    // therefore exactly "both literals present" and collapses to ONE bare
+    // `{type:'boolean'}`; a LONE literal (`true | 'x'`) instead carries `const`
+    // so its arm does not also accept the opposite boolean. Emitting one
+    // variant per literal would duplicate the branch, and a `oneOf` with two
+    // identical branches is unsatisfiable (AJV: "must match exactly one schema
+    // in oneOf"; surfaced to MCP callers as -32602). Keep only the FIRST
+    // boolean-literal member: the true|false split is a type-checker artifact,
+    // not a real union distinction. (backlog 3a3e5884)
+    const booleanLiteralMembers = members.filter((m) => m.isBooleanLiteral());
+    const hasTrue = booleanLiteralMembers.some((m) => m.getText() === 'true');
+    const hasFalse = booleanLiteralMembers.some((m) => m.getText() === 'false');
+    // Belt-and-suspenders with `dedupeVariants` below, NOT interchangeable:
+    // this collapse is what yields the single bare boolean branch (removing it
+    // would leave two distinct `const` branches), while `dedupeVariants` is the
+    // general guard for any OTHER duplicate-emitting union member. Keep both.
+    let sawBooleanLiteral = false;
+    const plannedMembers = members.filter((m) => {
+      if (!m.isBooleanLiteral()) return true;
+      if (sawBooleanLiteral) return false;
+      sawBooleanLiteral = true;
+      return true;
+    });
     const allStringLiterals = members.every((m) => m.isStringLiteral());
     if (allStringLiterals && members.length > 0) {
       return {
@@ -163,8 +193,15 @@ export async function walkType(
         enum: members.map((m) => m.getLiteralValue() as number),
       };
     }
-    const variants = await Promise.all(
-      members.map((m) => walkType(m, recurse, depth + 1))
+    const rawVariants: Record<string, unknown>[] = await Promise.all(
+      plannedMembers.map(async (m) => {
+        if (!m.isBooleanLiteral()) return walkType(m, recurse, depth + 1);
+        // Both literals ⇒ a real `boolean` member ⇒ bare; a lone literal ⇒
+        // `const` (hasTrue flips to `const:false` for the lone-`false` case).
+        return hasTrue && hasFalse
+          ? { type: 'boolean' }
+          : { type: 'boolean', const: hasTrue };
+      })
     );
     // BUG-APIGEN-019: a TS union means the runtime value is EXACTLY ONE of
     // these shapes — `oneOf` (mutually exclusive) is the semantically correct
@@ -174,7 +211,33 @@ export async function walkType(
     // literal-discriminant property (the `{ kind: 'dog' } | { kind: 'cat' }`
     // shape), attach an advisory `discriminator` so consumers don't have to
     // structurally diff the branches to know which one matched.
-    const discriminator = detectDiscriminator(variants);
+    const discriminator = detectDiscriminator(rawVariants);
+    // BUG-APIGEN-059: detectDiscriminator correctly declines a discriminator for a
+    // union with a vacuous catch-all branch (by design) — but the returned `oneOf`
+    // must use the SANITIZED variants, or that catch-all still ambiguously matches
+    // a sibling branch's values. Discriminator detection itself must run on the RAW
+    // (pre-sanitized) variants — sanitizeCatchAllVariants's allOf/not wrapping would
+    // make a catch-all branch's `type` field indistinguishable from an object branch.
+    // backlog 3a3e5884: structurally dedupe BEFORE the catch-all sanitize — a
+    // general guard so ANY duplicate-emitting union member (not only the
+    // boolean-literal split collapsed above) cannot leave the `oneOf`
+    // unsatisfiable. Dedupe runs on the unwrapped variants so identical shapes
+    // are still recognised after sanitizeCatchAllVariants rewrites a catch-all
+    // into an allOf/not wrapper.
+    //
+    // Invariant keeping the raw-index discriminator mapping safe (see the
+    // info-level review note): `detectDiscriminator(rawVariants)` builds its
+    // `mapping` as `#/oneOf/<i>` from the RAW indices, while the emitted array
+    // is the deduped+reordered `variants`. That is only sound because a
+    // discriminator is returned solely when EVERY variant is an object carrying
+    // a single-literal `enum` discriminant that is pairwise DISTINCT across
+    // variants — structurally-equal variants would share that discriminant
+    // value, so detectDiscriminator would already have declined. Hence whenever
+    // `discriminator` is set, `dedupeVariants` removes nothing and
+    // `sanitizeCatchAllVariants` is 1:1 and order-preserving, so
+    // `variants.length === rawVariants.length` and `#/oneOf/<i>` still points at
+    // the branch it was computed from.
+    const variants = sanitizeCatchAllVariants(dedupeVariants(rawVariants));
     return {
       oneOf: variants,
       ...(discriminator ? { discriminator } : {}),
@@ -313,6 +376,156 @@ export async function walkType(
   // Anything else (intersections we can't frame, `unknown`, `any`, etc.) →
   // permissive empty schema, preserving the prior generator's behaviour.
   return {};
+}
+
+/**
+ * True when a schema fragment is a "vacuous catch-all" — one that places no
+ * constraint distinguishing it from an arbitrary object (or, for a bare `{}`,
+ * from ANY value at all). Two shapes reach here looking like this:
+ *   - `{ type: 'object', additionalProperties: <schema> }` with no (or empty)
+ *     `properties` — an index-signature-only / `Record<string, V>` object
+ *     (see `walkType`'s object branch, `indexValue && namedProps.length === 0`).
+ *   - `{}` — the permissive fallback for an unresolved/opaque/all-method type.
+ * A branch shaped like this inside a `oneOf` union matches virtually any value
+ * that ALSO matches a sibling, more specific branch — which breaks `oneOf`'s
+ * exactly-one-match semantics: AJV rejects an otherwise-valid, specifically-shaped
+ * value because it satisfies BOTH its own branch and the catch-all
+ * (BUG-APIGEN-059).
+ */
+function isVacuousCatchAll(schema: Record<string, unknown>): boolean {
+  if (Object.keys(schema).length === 0) return true;
+  return (
+    schema['type'] === 'object' &&
+    schema['additionalProperties'] !== undefined &&
+    schema['additionalProperties'] !== false &&
+    (schema['properties'] === undefined ||
+      Object.keys(schema['properties'] as Record<string, unknown>).length === 0)
+  );
+}
+
+/**
+ * JSON-Schema keywords whose array value is an UNORDERED SET, so two variants
+ * that differ only in the element order of one of these are semantically the
+ * same schema and must compare equal in {@link canonicalJson}. `required` is an
+ * explicit JSON-Schema set; `enum` and an array-valued `type` are matched by
+ * membership, not position. Every OTHER array (`items`/`prefixItems`/`allOf`/…)
+ * is positional and is left in order.
+ */
+const UNORDERED_SET_KEYWORDS = new Set(['required', 'enum', 'type']);
+
+/**
+ * Deterministic canonical JSON text for a schema fragment, used to compare two
+ * union variants STRUCTURALLY rather than by their incidental key order.
+ *
+ * `JSON.stringify` is INSERTION-ORDER sensitive: two object schemas that are
+ * semantically identical but whose `properties` keys were declared in a
+ * different order stringify differently. A dedupe keyed on raw
+ * `JSON.stringify` would then keep BOTH branches, and a `oneOf` with two
+ * semantically-identical branches is unsatisfiable (AJV "must match exactly one
+ * schema in oneOf"; MCP -32602) — the exact failure class this guard exists to
+ * remove.
+ *
+ * Normalisations applied (recursively, at every depth):
+ *   - object keys are sorted, so `{a,b}` and `{b,a}` compare equal;
+ *   - the unordered-set keywords above are sorted, so e.g.
+ *     `required:["a","b"]` and `required:["b","a"]` compare equal (the object
+ *     branch emits `properties` AND `required` in declaration order, so both
+ *     reorder together for two same-shape interfaces declared differently);
+ *   - `undefined`-valued object keys are dropped, matching `JSON.stringify`.
+ *
+ * LIMITS — this is structural, NOT full semantic equivalence. Positional arrays
+ * (`items`/`prefixItems`) and the ORDER of combinator branches inside a nested
+ * `oneOf`/`anyOf`/`allOf` are not normalised, so two variants differing only
+ * there are treated as distinct. That is a deliberately conservative choice:
+ * a false "distinct" merely leaves a redundant branch, whereas a false "equal"
+ * would wrongly collapse a genuinely different schema.
+ */
+function canonicalJson(value: unknown, key?: string): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value) ?? 'undefined';
+  }
+  if (Array.isArray(value)) {
+    const items = value.map((entry) => canonicalJson(entry));
+    if (key !== undefined && UNORDERED_SET_KEYWORDS.has(key)) items.sort();
+    return `[${items.join(',')}]`;
+  }
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj)
+    .filter((k) => obj[k] !== undefined)
+    .sort();
+  return `{${keys
+    .map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k], k)}`)
+    .join(',')}}`;
+}
+
+/**
+ * Structurally dedupe union variants by {@link canonicalJson} equality
+ * (key-order- and set-element-order-insensitive), preserving the first
+ * occurrence's position. A general guard for the defect class where two union
+ * members resolve to the SAME schema fragment: ts-morph's synthetic
+ * `true | false` boolean-literal expansion is the one known emitter (it is also
+ * collapsed up-front in `walkType`'s union branch), but any future
+ * duplicate-emitting member would otherwise produce a `oneOf` with two
+ * canonically-identical branches — which no value can satisfy under AJV's
+ * exactly-one-match rule (backlog 3a3e5884 / MCP -32602).
+ */
+function dedupeVariants(
+  variants: ReadonlyArray<Record<string, unknown>>
+): Record<string, unknown>[] {
+  const seen = new Set<string>();
+  const out: Record<string, unknown>[] = [];
+  for (const v of variants) {
+    const key = canonicalJson(v);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(v);
+  }
+  return out;
+}
+
+/**
+ * Restores `oneOf` mutual-exclusivity when one or more variants is a vacuous
+ * catch-all (see {@link isVacuousCatchAll}): each catch-all variant is rewritten
+ * to `{ allOf: [ <catch-all>, { not: { anyOf: <every OTHER variant> } } ] }` so a
+ * value already covered by a more specific sibling branch no longer ALSO matches
+ * the catch-all (BUG-APIGEN-059). Skipped (variants returned unchanged) when
+ * there are fewer than 2 variants, when NO variant is a catch-all (nothing to
+ * fix), or when EVERY variant is a catch-all (nothing more specific to exclude
+ * against — narrowing would leave zero possible catch-all match, worse than a
+ * merely-ambiguous schema).
+ */
+function sanitizeCatchAllVariants(
+  variants: ReadonlyArray<Record<string, unknown>>
+): Record<string, unknown>[] {
+  if (variants.length < 2) return variants.slice();
+  const isCatchAll = variants.map(isVacuousCatchAll);
+  const catchAllIdx = variants
+    .map((_, i) => (isCatchAll[i] ? i : -1))
+    .filter((i) => i >= 0);
+  if (catchAllIdx.length === 0 || catchAllIdx.length === variants.length) {
+    return variants.slice();
+  }
+  // The more-specific, non-catch-all siblings every catch-all must exclude.
+  const specificIdx = variants
+    .map((_, i) => (isCatchAll[i] ? -1 : i))
+    .filter((i) => i >= 0);
+  return variants.map((v, i) => {
+    if (!isCatchAll[i]) return v;
+    // Narrow catch-all i against every MORE SPECIFIC branch: the specific
+    // siblings AND the catch-alls that PRECEDE it. Excluding only the specific
+    // siblings is insufficient — two co-resident catch-alls (e.g. the `{}`
+    // that b6a04e7f emits for an imported optional object property, alongside a
+    // `Record<string,unknown>`) would then BOTH match an ordinary object and
+    // `oneOf` rejects it for matching TWICE — the same consumer-visible failure
+    // as the original zero-match shape, merely inverted. Chaining the
+    // catch-alls in declaration order partitions the catch-all space: each
+    // value is claimed by exactly the FIRST catch-all that accepts it.
+    const others = variants.filter(
+      (_, j) =>
+        j !== i && (specificIdx.includes(j) || (isCatchAll[j] && j < i))
+    );
+    return { allOf: [v, { not: { anyOf: others } }] };
+  });
 }
 
 // ---------------------------------------------------------------------------
