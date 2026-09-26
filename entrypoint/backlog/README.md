@@ -271,7 +271,9 @@ code alone.
 
 A citation is `{ file, lines?, context?, symbol? }`. Pass `citations` on
 `create`, or on the `transition` that moves an issue into a terminal status
-when the project's policy requires it.
+when the project's policy requires it. `file` must name a file, not a
+directory: a directory target is rejected as a non-retryable `validation`
+error.
 
 The item-level **`gitContext`** is separate from a citation's own `context`:
 it records the repo disclosure contract's `<active git context>` — the first

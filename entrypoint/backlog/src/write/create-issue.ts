@@ -43,7 +43,7 @@ import {
 import {
   CitationUnverifiableError,
   InvalidArgumentError,
-  WriteIOError,
+  citationReadError,
   assertNotBareRoleLiteral,
 } from './errors.js';
 import {
@@ -345,10 +345,14 @@ export function assertGitContextWithinCap(value: string | undefined): void {
  * classification): "the cited file genuinely is not there" is the ONLY case
  * that degrades to `'unverified'` — ENOENT (missing path segment) and ENOTDIR
  * (a path segment that should be a directory is a file, so the target cannot
- * exist) both mean exactly that. Any other failure (EACCES, EPERM, EMFILE,
- * EISDIR, ELOOP, …) — whether from `realpath` or the `readFile` — is a REAL
- * I/O failure, not a "file doesn't exist" signal, and surfaces as
- * `WriteIOError` rather than silently masquerading as an absent citation.
+ * exist) both mean exactly that. `EISDIR` (the target is a directory) is a
+ * caller mistake and surfaces as `CitationTargetIsDirectoryError`
+ * (`E_VALIDATION`, 56a2133e). Any other failure (EACCES, EPERM, EMFILE,
+ * ELOOP, …) — whether from `realpath` or the `readFile` — is a REAL I/O
+ * failure, not a "file doesn't exist" signal, and surfaces as `WriteIOError`
+ * (raw errno message attached and logged) rather than silently masquerading
+ * as an absent citation. Both mappings live in `errors.ts`'s
+ * `citationReadError`.
  */
 async function computeCitationSha(
   project: IResolvedProjectRow,
@@ -369,7 +373,7 @@ async function computeCitationSha(
     return createHash('sha256').update(content).digest('hex');
   } catch (err) {
     if (isMissingPathError(err)) return 'unverified';
-    throw new WriteIOError(err);
+    throw citationReadError(err, file);
   }
 }
 
@@ -492,8 +496,10 @@ async function scanForDuplicates(
   // doc comment for why the two call sites import one shared composer
   // instead of each keeping its own copy.
   const text = composeEmbedText(title, body);
-  const canEmbed = typeof search.embedQuery === 'function';
-  const vec = canEmbed ? await search.embedQuery!(text) : undefined;
+  const vec =
+    typeof search.embedQuery === 'function'
+      ? await search.embedQuery(text)
+      : undefined;
 
   const signals: SignalSpec[] = vec
     ? [{ kind: 'text' }, { kind: 'vec' }]
@@ -708,7 +714,6 @@ export async function createIssue(
       // did not apply. A log is the whole fix: NOT a second audit row, which
       // SPEC §4a's one-audit-node-per-state-change contract forbids for a
       // branch that changes no state.
-      // eslint-disable-next-line no-console -- the write layer's only log sink; mirrors embedding-observer.ts's degrade logs.
       console.error(
         `createIssue: citation_requires_sha waived for path-less project uid="${preResolvedProject.uid}" — cannot verify citation "${citation.file}", persisting sha:"unverified" (set the project's metadata.path to make citation_requires_sha enforceable).`
       );
