@@ -21,7 +21,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve as resolvePath } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import yaml from 'yaml';
 
 import type { EnvironmentSpec, Scope, SnapshotData } from '@adhd/environment-base-spec';
 import { CONFIG_FILENAME, LOCAL_CONFIG_FILENAME } from '@adhd/environment-base-spec';
@@ -34,6 +34,15 @@ import {
   writeSnapshot,
   type EnvironmentContext,
 } from '@adhd/environment-builder';
+
+// `yaml@1.10.3`'s ROOT entry is CommonJS-only (its `exports["."]` has no
+// `import` condition; only `./util`/`./types` ship `.mjs`), so a named import
+// (`import { parse } from 'yaml'`) is emitted verbatim into this package's raw
+// `tsc` ESM output and throws `SyntaxError: Named export 'parse' not found`
+// when Node links it. The default import binds `module.exports` — the interop
+// form Node guarantees — so destructure off it instead. (Same remedy as
+// environment-builder's `layer-files.ts`; see backlog 788c57a5 / b8db4e3c.)
+const { parse: parseYaml, stringify: stringifyYaml } = yaml;
 
 export { resolveSnapshotPath };
 
