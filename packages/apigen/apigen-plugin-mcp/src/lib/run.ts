@@ -202,9 +202,10 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
     string,
     (call: Omit<RuntimeCall, 'operation' | 'ctx'>) => Promise<LayerResult>
   >();
-  /** op.id → composed schema — used by `writeResult` to resolve BUG-APIGEN-019
-   * structuredContent wrapping for THIS op's output shape. Mount ops carry no
-   * composed schema and are never bound (mirrors fastify's `bindSchema`). */
+  /** op.id → composed schema — used by `writeResult` to resolve whether THIS
+   * op's output shape is an already-object return and therefore emits a
+   * `structuredContent` (ADR-0004). Mount ops carry no composed schema and are
+   * never bound (mirrors fastify's `bindSchema`). */
   private readonly schemasByOpId = new Map<string, ComposedSchemas[string]>();
   /** plan.mcp.name → list-facing metadata, computed ONCE ([mcp-adapter.8]). */
   private readonly toolMeta = new Map<string, ToolListMeta>();
@@ -311,8 +312,11 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
       return;
     }
 
-    // BUG-APIGEN-019: pair the declared outputSchema with a matching
-    // structuredContent value (wrapped under `result` iff the schema was).
+    // ADR-0004: `content` is the canonical FLAT payload. Emit a matching
+    // `structuredContent` only when the op's return is already a top-level
+    // object (`wrapped === true` == emit), and then it is the value itself —
+    // never `{result: value}`. A union/array/scalar return gets neither an
+    // `outputSchema` nor a `structuredContent`.
     const schema = this.schemasByOpId.get(plan.op.id);
     const { wrapped } = buildMcpOutputSchema(
       (schema as { output?: unknown } | undefined)?.output
@@ -513,9 +517,11 @@ function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
       const plan = buildOpPlan({ op, schema: fnSchema, transport: 'mcp', projection });
       adapter.bindSchema(op.id, fnSchema);
 
-      // Only `outputSchema` is needed for the `tools/list` projection here —
-      // `wrapped` is re-derived per-result inside `writeResult` from the SAME
-      // schema (bound via `bindSchema` just above), so it isn't stored here.
+      // `outputSchema` (ADR-0004: present ONLY for an already-object return) is
+      // what the `tools/list` projection advertises. The matching
+      // `structuredContent` decision (`wrapped`) is re-derived per-result inside
+      // `writeResult` from the SAME schema (bound via `bindSchema` just above),
+      // so it isn't stored here.
       const { outputSchema } = buildMcpOutputSchema(
         (fnSchema as { output?: unknown }).output
       );

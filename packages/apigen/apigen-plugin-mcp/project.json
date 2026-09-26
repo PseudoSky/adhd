@@ -11,7 +11,8 @@
   "tags": ["layer:logic", "platform:node"],
   "targets": {
     "test": {
-      "dependsOn": ["lint", "^build"],
+      "dependsOn": ["lint", "^build", "build"],
+      "//dependsOn": "`build` (own, after `^build`) is required by the default-running `flat-content-payload.spec.ts`, which spawns the BUILT `dist/` entry as a real stdio MCP server (ADR-0004 D5). Without it the lane could exercise a stale dist. Mirrors entrypoint/backlog's own test.dependsOn.",
       "//inputs": "Exclude *.e2e.ts so editing a resource-consuming suite never invalidates the default lane's cache — it never runs those files (its vitest `include` is `src/**/*.spec.ts`, see vite.config.ts). Mirrors the workspace targetDefaults.test inputs plus the negative pattern.",
       "inputs": [
         "default",
