@@ -28,7 +28,7 @@
  * way `cli.spec.ts` pins it OFF for its own determinism.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { rmSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { StoreAdapter } from '@adhd/sox-store-adapter';
 import {
@@ -186,6 +186,22 @@ describe('write/bootstrap.ts — isVectorSpacePopulated uses the bounded capabil
       await store.adapter.close();
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it('does not statically import the optional store\'s additive probe interface by name', () => {
+    // REGRESSION GUARD with teeth. The build broke (TS2305 "no exported
+    // member") on a machine whose hoisted `@adhd/sox-vector-store` lagged the
+    // declared range, because `bootstrap.ts` imported the additive
+    // existence-probe interface BY NAME from that optional package. The module
+    // now mirrors the capability locally (`OptVectorExistenceProbe`), so it
+    // compiles against the pinned `AsyncVectorBackend` contract alone — the
+    // same decoupling `loadOptional()` already gives it at RUNTIME. This reads
+    // the source (the offending line is erased at compile time, so no runtime
+    // assertion can observe it) and fails if the by-name import returns, even
+    // in a comment — coupling the build to the optional package's churn-prone
+    // additive type surface must be a deliberate, reviewed act.
+    const source = readFileSync(new URL('./bootstrap.ts', import.meta.url), 'utf8');
+    expect(source).not.toMatch(/AsyncVectorExistenceProbe/);
   });
 
   it('degrades to false when the backend lacks the additive hasVectors capability (never falls back to an unbounded scan)', async () => {

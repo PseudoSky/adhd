@@ -43,10 +43,7 @@
  *    built for), not an availability signal, so it is defined locally.
  */
 import { StoreSearchBackend } from '@adhd/sox-hybrid-search';
-import type {
-  AsyncVectorBackend,
-  AsyncVectorExistenceProbe,
-} from '@adhd/sox-vector-store';
+import type { AsyncVectorBackend } from '@adhd/sox-vector-store';
 import type { GraphBackend } from '@adhd/sox-graph-store';
 import type { StoreAdapter } from '@adhd/sox-store-adapter';
 import type { BacklogConfig } from '../env.js';
@@ -146,6 +143,25 @@ interface OptVectorStoreModule {
   ): Promise<AsyncVectorBackend>;
 }
 
+// Structural mirror of the additive existence-probe capability the pinned
+// `AsyncVectorBackend` contract deliberately does NOT carry (it arrives on the
+// concrete backends as a separately-declared optional interface, added in
+// sox-vector-store 0.7.0 — see the store's CHANGELOG). Mirrored locally, NOT
+// imported by name, for the SAME reason the value slice above is: this module
+// must compile against the pinned `AsyncVectorBackend` contract alone, so an
+// optional package whose installed version LAGS the declared range (or whose
+// additive type surface is later renamed) can never break the BUILD. That is
+// not hypothetical — it happened: a machine whose hoisted node_modules still
+// held an older store failed `backlog:typecheck` with TS2305 ("no exported
+// member") on the by-name import this mirror replaces, while the runtime below
+// ALREADY degrades correctly when the method is absent. Mirroring makes the
+// compile-time surface consistent with that runtime contract: the probe is
+// called only after a `typeof … === 'function'` narrow, so a structural shape
+// is sufficient.
+interface OptVectorExistenceProbe {
+  hasVectors(modelId: string): Promise<boolean>;
+}
+
 /** One-shot latch for {@link isVectorSpacePopulated}'s capability-miss warning — see the note there. */
 let warnedMissingVectorProbe = false;
 
@@ -210,14 +226,17 @@ const membersPresence = new WeakMap<
  * so a backend predating it (or a structural test double) narrows to
  * `undefined`; absence degrades to `false` — the honest conservative answer,
  * and a backend that cannot answer cheaply must not fall back to the unbounded
- * scan this probe exists to avoid. An absent table (a space never
+ * scan this probe exists to avoid. The narrowing is typed against this
+ * module's LOCAL structural mirror ({@link OptVectorExistenceProbe}), not a
+ * by-name import of the optional package's additive interface, so the build
+ * stays coupled only to the pinned contract. An absent table (a space never
  * `ensureSpace`d) is likewise "empty", not an error (`hasVectors` tolerates it).
  */
 export async function isVectorSpacePopulated(
   vectorBackend: AsyncVectorBackend,
   modelId: string
 ): Promise<boolean> {
-  const probe = vectorBackend as Partial<AsyncVectorExistenceProbe>;
+  const probe = vectorBackend as Partial<OptVectorExistenceProbe>;
   if (typeof probe.hasVectors !== 'function') {
     // Observability only (DEBT 2b1d8a22) — the `false` return is unchanged.
     // This runs PER QUERY, so a backend that lacks the probe would otherwise
