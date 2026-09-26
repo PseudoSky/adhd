@@ -224,6 +224,19 @@ export async function walkType(
     // unsatisfiable. Dedupe runs on the unwrapped variants so identical shapes
     // are still recognised after sanitizeCatchAllVariants rewrites a catch-all
     // into an allOf/not wrapper.
+    //
+    // Invariant keeping the raw-index discriminator mapping safe (see the
+    // info-level review note): `detectDiscriminator(rawVariants)` builds its
+    // `mapping` as `#/oneOf/<i>` from the RAW indices, while the emitted array
+    // is the deduped+reordered `variants`. That is only sound because a
+    // discriminator is returned solely when EVERY variant is an object carrying
+    // a single-literal `enum` discriminant that is pairwise DISTINCT across
+    // variants — structurally-equal variants would share that discriminant
+    // value, so detectDiscriminator would already have declined. Hence whenever
+    // `discriminator` is set, `dedupeVariants` removes nothing and
+    // `sanitizeCatchAllVariants` is 1:1 and order-preserving, so
+    // `variants.length === rawVariants.length` and `#/oneOf/<i>` still points at
+    // the branch it was computed from.
     const variants = sanitizeCatchAllVariants(dedupeVariants(rawVariants));
     return {
       oneOf: variants,
@@ -391,13 +404,69 @@ function isVacuousCatchAll(schema: Record<string, unknown>): boolean {
 }
 
 /**
- * Structurally dedupe union variants by `JSON.stringify` equality, preserving
- * the first occurrence's position. A general guard for the defect class where
- * two union members resolve to the SAME schema fragment: ts-morph's synthetic
- * `true | false` boolean-literal expansion is the one known emitter (it is
- * also collapsed up-front in `walkType`'s union branch), but any future
+ * JSON-Schema keywords whose array value is an UNORDERED SET, so two variants
+ * that differ only in the element order of one of these are semantically the
+ * same schema and must compare equal in {@link canonicalJson}. `required` is an
+ * explicit JSON-Schema set; `enum` and an array-valued `type` are matched by
+ * membership, not position. Every OTHER array (`items`/`prefixItems`/`allOf`/…)
+ * is positional and is left in order.
+ */
+const UNORDERED_SET_KEYWORDS = new Set(['required', 'enum', 'type']);
+
+/**
+ * Deterministic canonical JSON text for a schema fragment, used to compare two
+ * union variants STRUCTURALLY rather than by their incidental key order.
+ *
+ * `JSON.stringify` is INSERTION-ORDER sensitive: two object schemas that are
+ * semantically identical but whose `properties` keys were declared in a
+ * different order stringify differently. A dedupe keyed on raw
+ * `JSON.stringify` would then keep BOTH branches, and a `oneOf` with two
+ * semantically-identical branches is unsatisfiable (AJV "must match exactly one
+ * schema in oneOf"; MCP -32602) — the exact failure class this guard exists to
+ * remove.
+ *
+ * Normalisations applied (recursively, at every depth):
+ *   - object keys are sorted, so `{a,b}` and `{b,a}` compare equal;
+ *   - the unordered-set keywords above are sorted, so e.g.
+ *     `required:["a","b"]` and `required:["b","a"]` compare equal (the object
+ *     branch emits `properties` AND `required` in declaration order, so both
+ *     reorder together for two same-shape interfaces declared differently);
+ *   - `undefined`-valued object keys are dropped, matching `JSON.stringify`.
+ *
+ * LIMITS — this is structural, NOT full semantic equivalence. Positional arrays
+ * (`items`/`prefixItems`) and the ORDER of combinator branches inside a nested
+ * `oneOf`/`anyOf`/`allOf` are not normalised, so two variants differing only
+ * there are treated as distinct. That is a deliberately conservative choice:
+ * a false "distinct" merely leaves a redundant branch, whereas a false "equal"
+ * would wrongly collapse a genuinely different schema.
+ */
+function canonicalJson(value: unknown, key?: string): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value) ?? 'undefined';
+  }
+  if (Array.isArray(value)) {
+    const items = value.map((entry) => canonicalJson(entry));
+    if (key !== undefined && UNORDERED_SET_KEYWORDS.has(key)) items.sort();
+    return `[${items.join(',')}]`;
+  }
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj)
+    .filter((k) => obj[k] !== undefined)
+    .sort();
+  return `{${keys
+    .map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k], k)}`)
+    .join(',')}}`;
+}
+
+/**
+ * Structurally dedupe union variants by {@link canonicalJson} equality
+ * (key-order- and set-element-order-insensitive), preserving the first
+ * occurrence's position. A general guard for the defect class where two union
+ * members resolve to the SAME schema fragment: ts-morph's synthetic
+ * `true | false` boolean-literal expansion is the one known emitter (it is also
+ * collapsed up-front in `walkType`'s union branch), but any future
  * duplicate-emitting member would otherwise produce a `oneOf` with two
- * identical branches — which no value can satisfy under AJV's
+ * canonically-identical branches — which no value can satisfy under AJV's
  * exactly-one-match rule (backlog 3a3e5884 / MCP -32602).
  */
 function dedupeVariants(
@@ -406,7 +475,7 @@ function dedupeVariants(
   const seen = new Set<string>();
   const out: Record<string, unknown>[] = [];
   for (const v of variants) {
-    const key = JSON.stringify(v);
+    const key = canonicalJson(v);
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(v);

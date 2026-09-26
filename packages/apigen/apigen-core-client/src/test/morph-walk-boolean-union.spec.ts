@@ -1,6 +1,16 @@
 // morph-walk-boolean-union.spec.ts — regression for the duplicated-`oneOf`-
 // boolean defect (backlog 3a3e5884).
 //
+// LANE RULING (2026-09-25, dispatcher) — this real-ts-morph extraction suite
+// deliberately runs in the DEFAULT `test` lane, NOT the `.e2e.ts` lane.
+// `vite.config.ts:64-72` / `project.json` split `*.e2e.ts` out of
+// `nx affected -t test` and the pre-commit/pre-push hooks, but AGENTS.md §7
+// makes default-running behavioral tests mandatory and the e2e lane currently
+// has NO CI runner (backlog c05e598e). Moving this suite there would make it
+// unrunnable — strictly worse than the extra ~14s in the default lane. The
+// durable remedy is fixing that lane runner (c05e598e / 53023ba0); that is a
+// separate follow-up, not this branch's job. Do not re-litigate.
+//
 // Root cause: morph-walk.ts's union branch (`walkType`) walked EVERY ts-morph
 // union member independently. ts-morph expands a `boolean` union member into
 // its synthetic `true | false` literals — `boolean | undefined` is
@@ -333,6 +343,45 @@ describe('[BUG 3a3e5884] walkType union branch — no duplicated oneOf branch fo
     ).toBe(true);
     expect(
       validateInput({ input: { trueOrString: false, falseOrNumber: false } })
+    ).toBe(false);
+  });
+
+  // -------------------------------------------------------------------------
+  // Fix 2 (review remediation) — a STANDALONE boolean-literal property (NOT a
+  // union member) reaches `walkType`'s primitive `isBooleanLiteral()` branch
+  // directly; the union branch handles union-member literals itself (see the
+  // `[boolean.lone-literal]` case above), so without this case a regression on
+  // morph-walk.ts:148-149 stays green.
+  // -------------------------------------------------------------------------
+  it('[boolean.standalone-literal] a standalone boolean-literal property keeps its `const` (primitive branch, not the union branch)', async () => {
+    const ops = await extractFixture(STRICT_TSCONFIG);
+    const op = mustOp(ops, 'standaloneBooleanLiterals');
+    const outProps = propsOf(op.output);
+
+    expect(outProps['always']).toEqual({ type: 'boolean', const: true });
+    expect(outProps['never']).toEqual({ type: 'boolean', const: false });
+
+    const validate = makeAjv().compile(op.output);
+    expect(
+      validate({ always: true, never: false }),
+      `the matching literals must validate; ajv errors: ${JSON.stringify(validate.errors)}`
+    ).toBe(true);
+    expect(
+      validate({ always: false, never: false }),
+      'standalone `true` must reject false; ajv errors: ' +
+        JSON.stringify(validate.errors)
+    ).toBe(false);
+    expect(
+      validate({ always: true, never: true }),
+      'standalone `false` must reject true; ajv errors: ' +
+        JSON.stringify(validate.errors)
+    ).toBe(false);
+
+    // Same contract on the input envelope.
+    const validateInput = makeAjv().compile(op.input);
+    expect(validateInput({ input: { always: true, never: false } })).toBe(true);
+    expect(
+      validateInput({ input: { always: false, never: false } })
     ).toBe(false);
   });
 
