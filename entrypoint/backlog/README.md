@@ -308,12 +308,13 @@ derives the mounted surface from it **without loading the type extractor**, so
 a cold start is fast without any warm cache — the fix for a startup path that
 previously paid a multi-second synchronous extraction on every invocation.
 
-`api.ir.json` is trusted only while it still matches the `api.d.ts` beside it:
-the artifact records a content hash of its source, and startup re-hashes the
-current `.d.ts` before using it. A missing, corrupt, or stale artifact (source
-changed since the bake) is refused, and startup falls back to a live
-extraction through the extract-stage IR cache, which persists the result for
-the next run.
+`api.ir.json` is trusted only while it still matches the built declarations
+beside it: the artifact records content hashes of the WHOLE `dist/**.d.ts`
+surface it was extracted from (not just `api.d.ts` — extraction resolves types
+through `api.d.ts`'s sibling imports), and startup re-hashes that surface
+before using it. A missing, corrupt, or stale artifact (any `.d.ts` changed
+since the bake) is refused, and startup falls back to a live extraction through
+the extract-stage IR cache, which persists the result for the next run.
 
 `ir-artifact` is a build step, not a user command — it is absent from `--help`
 and store-free (it never opens the graph store and never writes under
