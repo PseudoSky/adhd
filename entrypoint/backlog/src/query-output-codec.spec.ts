@@ -61,7 +61,10 @@ describe('BUG-APIGEN-RUNMODE-IMPLICIT-DISCRIMINATOR-ADMISSIBILITY-001 — backlo
       throw new Error('ctx must not be opened for schema derivation');
     });
     const queryOutput = pkg.schemas['query']?.output as Record<string, unknown>;
-    expect(queryOutput, 'backlog/query output schema must be present').toBeTruthy();
+    expect(
+      queryOutput,
+      'backlog/query output schema must be present'
+    ).toBeTruthy();
 
     const registry = createRegistry();
     registerWellKnown(registry);
@@ -90,9 +93,7 @@ describe('BUG-APIGEN-RUNMODE-IMPLICIT-DISCRIMINATOR-ADMISSIBILITY-001 — backlo
         ok: true,
         data: {
           view: 'list',
-          items: [
-            { uid: 'i1', title: 't', kind: 'issue', status: 'open' },
-          ],
+          items: [{ uid: 'i1', title: 't', kind: 'issue', status: 'open' }],
           hasMore: false,
         },
         meta: { total: 1, returned: 1, limit: 50 },
@@ -108,14 +109,21 @@ describe('BUG-APIGEN-RUNMODE-IMPLICIT-DISCRIMINATOR-ADMISSIBILITY-001 — backlo
       // The failure arm — must remain selectable.
       {
         ok: false,
-        error: { code: 'validation', message: 'bad', details: { retryable: false } },
+        error: {
+          code: 'validation',
+          message: 'bad',
+          details: { retryable: false },
+        },
       },
     ];
 
     for (const env of envelopes) {
       const encoded = transcoder.encode(env, queryOutput);
       // No field pruning: the value the function returned is what goes on the wire.
-      expect(encoded, `encoded envelope drifted: ${JSON.stringify(encoded)}`).toEqual(env);
+      expect(
+        encoded,
+        `encoded envelope drifted: ${JSON.stringify(encoded)}`
+      ).toEqual(env);
 
       // ADR-0004: a union return emits no structuredContent.
       const structuredContent = wrapMcpStructuredContent(wrapped, encoded);

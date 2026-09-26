@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { generate } from '../lib/generate';
 import { mcpPlugin } from '../lib/plugin';
-import type { Operation, PluginInput, RunInput, Segment } from '@adhd/apigen-core-client';
+import type {
+  Operation,
+  PluginInput,
+  RunInput,
+  Segment,
+} from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
 import { operationFor } from '../lib/tool-naming';
 
@@ -256,7 +261,11 @@ describe('[plugin-mcp.7] generated server.ts — MCP schema-hardening wiring', (
     const out = generate({
       ...baseInput,
       packages: [
-        { id: 'test-pkg', schemas: restrictiveSchema, importPath: '@test/test-pkg' },
+        {
+          id: 'test-pkg',
+          schemas: restrictiveSchema,
+          importPath: '@test/test-pkg',
+        },
       ],
     });
     const idx = out.files.find((f) => f.path === 'index.ts');
@@ -293,7 +302,11 @@ describe('[plugin-mcp.7] generated server.ts — MCP schema-hardening wiring', (
     const out = generate({
       ...baseInput,
       packages: [
-        { id: 'test-pkg', schemas: schemaWithDefault, importPath: '@test/test-pkg' },
+        {
+          id: 'test-pkg',
+          schemas: schemaWithDefault,
+          importPath: '@test/test-pkg',
+        },
       ],
     });
     const idx = out.files.find((f) => f.path === 'index.ts');
@@ -309,7 +322,9 @@ describe('[plugin-mcp.7] generated server.ts — MCP schema-hardening wiring', (
       search: {
         input: {
           type: 'object',
-          properties: { data: { type: 'object', properties: {}, required: [] } },
+          properties: {
+            data: { type: 'object', properties: {}, required: [] },
+          },
           required: ['data'],
           description:
             'apigen calling convention: all domain parameters go inside a "data" envelope.',
@@ -320,7 +335,11 @@ describe('[plugin-mcp.7] generated server.ts — MCP schema-hardening wiring', (
     const out = generate({
       ...baseInput,
       packages: [
-        { id: 'test-pkg', schemas: schemaWithEnvelopeDoc, importPath: '@test/test-pkg' },
+        {
+          id: 'test-pkg',
+          schemas: schemaWithEnvelopeDoc,
+          importPath: '@test/test-pkg',
+        },
       ],
     });
     const idx = out.files.find((f) => f.path === 'index.ts');
@@ -432,7 +451,7 @@ describe('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] generate() derives canoni
     expect(idx.content).not.toMatch(/\n\s*listUsers:\s*\{/);
   });
 
-  it('matches run()\'s EXACT-path derivation when given the same real Operation[] (cross-transport / generate-vs-run consistency)', () => {
+  it("matches run()'s EXACT-path derivation when given the same real Operation[] (cross-transport / generate-vs-run consistency)", () => {
     const namespaceSeg: Segment = { raw: 'catalog', words: ['catalog'] };
     const fileSeg: Segment = { raw: 'itemApi', words: ['item', 'api'] };
     const getItemOp: Operation = {

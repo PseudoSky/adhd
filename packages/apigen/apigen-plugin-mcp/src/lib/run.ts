@@ -246,7 +246,9 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
 
   getDispatch(
     name: string
-  ): ((call: Omit<RuntimeCall, 'operation' | 'ctx'>) => Promise<LayerResult>) | undefined {
+  ):
+    | ((call: Omit<RuntimeCall, 'operation' | 'ctx'>) => Promise<LayerResult>)
+    | undefined {
     return this.dispatchers.get(name);
   }
 
@@ -295,7 +297,7 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
     // `{operation, items, …}`) needs the raw `args` object itself, unwrapped.
     const domainArgs = plan.isMount
       ? raw.args
-      : ((raw.args['data'] as Record<string, unknown> | undefined) ?? {});
+      : (raw.args['data'] as Record<string, unknown> | undefined) ?? {};
     return { envelope, domainArgs };
   }
 
@@ -367,7 +369,9 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
  * `oneOf`-rooted schema down to an empty `{type:'object', properties:{}}`
  * unless there is genuinely nothing to recover.
  */
-export function deriveMcpMountInputSchema(input: unknown): Record<string, unknown> {
+export function deriveMcpMountInputSchema(
+  input: unknown
+): Record<string, unknown> {
   if (
     input &&
     typeof input === 'object' &&
@@ -514,7 +518,12 @@ function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
       // F3 [fix:transport-stamping]: stamp `transport: 'mcp'` here — the
       // MECHANISM is generic (`dispatchForPlan` reads `plan.transport` back),
       // never a hardcoded literal inside the shared primitives.
-      const plan = buildOpPlan({ op, schema: fnSchema, transport: 'mcp', projection });
+      const plan = buildOpPlan({
+        op,
+        schema: fnSchema,
+        transport: 'mcp',
+        projection,
+      });
       adapter.bindSchema(op.id, fnSchema);
 
       // `outputSchema` (ADR-0004: present ONLY for an already-object return) is
@@ -699,7 +708,15 @@ function createMcpServer(
       // stack trace with local absolute filesystem paths — only a genuine
       // `code: 'internal'` fault (or a non-`ApiError` throw) does.
       if (isApiError(err) && err.code !== 'internal') {
-        logger.error({ tool: name, ms: Date.now() - start, code: err.code, message: err.message }, `✗ ${name}`);
+        logger.error(
+          {
+            tool: name,
+            ms: Date.now() - start,
+            code: err.code,
+            message: err.message,
+          },
+          `✗ ${name}`
+        );
       } else {
         logger.error({ tool: name, ms: Date.now() - start, err }, `✗ ${name}`);
       }
@@ -806,7 +823,9 @@ function listenOrReject(
       // persistent logger so later server-level errors are observability, not
       // a process-killing unhandled event.
       httpServer.removeListener('error', onError);
-      httpServer.on('error', (err) => logger.error({ err }, 'mcp http server error'));
+      httpServer.on('error', (err) =>
+        logger.error({ err }, 'mcp http server error')
+      );
       logger.info({ host, port }, `listening on http://${host}:${port}`);
       const shutdown = () => {
         logger.info('mcp server shutting down');
@@ -927,7 +946,10 @@ export async function run(input: RunInput): Promise<void> {
   }
 
   const identity = resolveMcpServerIdentity(input);
-  logger.info({ identity }, `mcp handshake identity: ${identity.name}@${identity.version}`);
+  logger.info(
+    { identity },
+    `mcp handshake identity: ${identity.name}@${identity.version}`
+  );
 
   if (transport === 'stdio') {
     const server = createMcpServer(adapter, logger, identity);
