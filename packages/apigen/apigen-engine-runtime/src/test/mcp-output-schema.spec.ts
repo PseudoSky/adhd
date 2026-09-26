@@ -14,10 +14,16 @@ import {
   wrapMcpStructuredContent,
 } from '../lib/mcp-output-schema';
 
-// ---------- BUG-APIGEN-019 (MCP transport half): buildMcpOutputSchema ----------
+// ---------- ADR-0004: buildMcpOutputSchema — no `{result}` envelope ----------
+//
+// `outputSchema` (and therefore `structuredContent`) is emitted ONLY for a
+// return that is already a top-level `type:'object'`. Every non-object return
+// (union/array/scalar/void) is passed through flat — no schema, no envelope.
+// These assertions replace the ones that enshrined the old `{result}` wrapper
+// (BUG-APIGEN-019's transport half, reversed by ADR-0004).
 
-describe('[BUG-APIGEN-019] buildMcpOutputSchema', () => {
-  it('passes an already type:"object" schema through unchanged', () => {
+describe('[ADR-0004] buildMcpOutputSchema', () => {
+  it('passes an already type:"object" schema through and marks it emit-eligible', () => {
     const output = {
       type: 'object',
       properties: { id: { type: 'string' } },
@@ -25,46 +31,33 @@ describe('[BUG-APIGEN-019] buildMcpOutputSchema', () => {
     };
     const { outputSchema, wrapped } = buildMcpOutputSchema(output);
     expect(outputSchema).toEqual(output);
-    expect(wrapped).toBe(false);
+    // `wrapped` == "emit structuredContent" post-ADR-0004; true for objects.
+    expect(wrapped).toBe(true);
   });
 
-  it('wraps a oneOf+discriminator union return type under "result"', () => {
+  it('omits outputSchema for a oneOf+discriminator union return (no envelope)', () => {
     const output = {
       oneOf: [{ $ref: '#/$defs/SearchResponse' }, { type: 'object' }],
       discriminator: { propertyName: 'outcome' },
       'x-apigen-logical': 'union',
     };
     const { outputSchema, wrapped } = buildMcpOutputSchema(output);
-    expect(wrapped).toBe(true);
-    expect(outputSchema).toEqual({
-      type: 'object',
-      properties: { result: output },
-      required: ['result'],
-    });
-    // MCP protocol requires the top-level type literal to be "object".
-    expect((outputSchema as Record<string, unknown>)['type']).toBe('object');
+    expect(outputSchema).toBeUndefined();
+    expect(wrapped).toBe(false);
   });
 
-  it('wraps a bare array return type under "result"', () => {
+  it('omits outputSchema for a bare array return (no envelope)', () => {
     const output = { type: 'array', items: { type: 'string' } };
     const { outputSchema, wrapped } = buildMcpOutputSchema(output);
-    expect(wrapped).toBe(true);
-    expect(outputSchema).toEqual({
-      type: 'object',
-      properties: { result: output },
-      required: ['result'],
-    });
+    expect(outputSchema).toBeUndefined();
+    expect(wrapped).toBe(false);
   });
 
-  it('wraps a bare scalar return type under "result"', () => {
+  it('omits outputSchema for a bare scalar return (no envelope)', () => {
     const output = { type: 'string' };
     const { outputSchema, wrapped } = buildMcpOutputSchema(output);
-    expect(wrapped).toBe(true);
-    expect(outputSchema).toEqual({
-      type: 'object',
-      properties: { result: output },
-      required: ['result'],
-    });
+    expect(outputSchema).toBeUndefined();
+    expect(wrapped).toBe(false);
   });
 
   it('returns undefined for an empty/void output schema', () => {
@@ -82,26 +75,26 @@ describe('[BUG-APIGEN-019] buildMcpOutputSchema', () => {
   });
 });
 
-// ---------- BUG-APIGEN-019 (MCP transport half): wrapMcpStructuredContent ----------
+// ---------- ADR-0004: wrapMcpStructuredContent — flat object or nothing ----------
 
-describe('[BUG-APIGEN-019] wrapMcpStructuredContent', () => {
-  it('passes an object value through unchanged when not wrapped', () => {
+describe('[ADR-0004] wrapMcpStructuredContent', () => {
+  it('emits an object value unchanged when emit is true (never wrapped under result)', () => {
     const value = { id: 'u1', name: 'Alice' };
-    expect(wrapMcpStructuredContent(false, value)).toEqual(value);
+    expect(wrapMcpStructuredContent(true, value)).toEqual(value);
+    // The `{result}` envelope must never be produced.
+    expect(wrapMcpStructuredContent(true, value)).not.toHaveProperty('result');
   });
 
-  it('wraps a non-object value under "result" when wrapped', () => {
-    expect(wrapMcpStructuredContent(true, ['alice', 'bob'])).toEqual({
-      result: ['alice', 'bob'],
-    });
-    expect(wrapMcpStructuredContent(true, 'hello')).toEqual({
-      result: 'hello',
-    });
+  it('returns undefined for a non-object value even when emit is true', () => {
+    // `structuredContent` is constrained to a plain object by the SDK, so an
+    // array/scalar must never be emitted there — and never as `{result: …}`.
+    expect(wrapMcpStructuredContent(true, ['alice', 'bob'])).toBeUndefined();
+    expect(wrapMcpStructuredContent(true, 'hello')).toBeUndefined();
+    expect(wrapMcpStructuredContent(true, null)).toBeUndefined();
   });
 
-  it('returns undefined when not wrapped but the actual value is not a plain object', () => {
-    // Defensive case: outputSchema said type:"object" but the real value isn't
-    // one (e.g. an upstream bug) — must not throw or emit an invalid structuredContent.
+  it('returns undefined when emit is false (non-object return → no structuredContent)', () => {
+    expect(wrapMcpStructuredContent(false, { id: 'u1' })).toBeUndefined();
     expect(wrapMcpStructuredContent(false, ['not', 'an', 'object'])).toBeUndefined();
     expect(wrapMcpStructuredContent(false, 'not-an-object')).toBeUndefined();
     expect(wrapMcpStructuredContent(false, null)).toBeUndefined();

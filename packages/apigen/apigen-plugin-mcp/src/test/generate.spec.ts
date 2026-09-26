@@ -214,7 +214,7 @@ describe('[plugin-mcp.5] no inline dispatch logic in generate output', () => {
 // ---------- [plugin-mcp.7] BUG-APIGEN-017/018/019/020 — generated server.ts wiring ----------
 
 describe('[plugin-mcp.7] generated server.ts — MCP schema-hardening wiring', () => {
-  it('BUG-APIGEN-019: stdio/sse/streaming-http server.ts all import and call buildMcpOutputSchema + wrapMcpStructuredContent', () => {
+  it('ADR-0004: stdio/sse/streaming-http server.ts wire outputSchema + structuredContent, never a {result} envelope', () => {
     for (const transport of ['stdio', 'sse', 'streaming-http'] as const) {
       const out = generate({ ...baseInput, options: { transport } });
       const server = out.files.find((f) => f.path === 'server.ts');
@@ -227,6 +227,10 @@ describe('[plugin-mcp.7] generated server.ts — MCP schema-hardening wiring', (
       // structuredContent field, not just imported-and-unused.
       expect(server.content).toContain('outputSchema');
       expect(server.content).toContain('structuredContent');
+      // ADR-0004: the generated host must NOT manufacture the old wrap schema
+      // (`{type:'object', properties:{ result: <output> }, …}`) — non-object
+      // returns are passed through flat on `content`.
+      expect(server.content).not.toMatch(/properties:\s*\{\s*result/);
     }
   });
 
