@@ -32,23 +32,17 @@
  * `src/server.ts` under vitest's transform (tests) — either way `dist/`
  * has already been built by the time this runs (nx `dependsOn`).
  */
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { existsSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import type { Scope } from '@adhd/environment-base-spec';
 import {
-  extract,
   composeSchemas,
-  createExtractInvokerFromPlugins,
-  type ExtractCall,
   type Operation,
   type Plugin,
   type Descriptor,
 } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
 import type { HttpVerb } from '@adhd/apigen-engine-naming';
-import { createIrCacheLayer } from '@adhd/apigen-plugin-ir-cache';
 import { apiFastifyPlugin } from '@adhd/apigen-plugin-api-fastify';
 import { openapiPlugin } from '@adhd/apigen-plugin-openapi';
 import { mcpPlugin } from '@adhd/apigen-plugin-mcp';
@@ -64,11 +58,12 @@ import {
   hasExternalSignalHandling,
   installSignalCleanup,
 } from './store/signal-cleanup.js';
-import {
-  buildBacklogEnv,
-  resolveBacklogDbPath,
-  resolveIrCacheFile,
-} from './env.js';
+import { buildBacklogEnv, resolveBacklogDbPath } from './env.js';
+// The BAKE-AT-BUILD artifact reader (design doc Revision 3). Deliberately
+// ts-morph-free: this is the module `extractApiOperations` prefers on the hot
+// startup path, so importing it must never drag the extractor in. The
+// ts-morph-touching fallback lives behind a dynamic `import()` instead.
+import { backlogDistDir, readBakedIrArtifact } from './ir-artifact.js';
 import {
   backlogConfigLayerFiles,
   createEmbeddingLiveConfig,
@@ -362,43 +357,6 @@ export interface StartOpts {
 }
 
 /**
- * Resolves the directory that actually contains the built `api.d.ts` /
- * `api.js` artifacts, by PROBING for `api.d.ts` rather than assuming a
- * fixed relative path — because this module executes from THREE genuinely
- * different layouts and a single `../dist` computation cannot satisfy all
- * three (BUG confirmed live via `npm install @adhd/backlog@0.1.0`: it
- * crashed at mount with `.../node_modules/@adhd/dist/api.d.ts does not
- * exist`):
- *
- *  1. PUBLISHED (`node_modules/@adhd/backlog/…`): `@adhd/nx-build`'s
- *     `dist-manifest`/`publish` executors run `npm publish <distDir>` —
- *     `dist/` IS packed as the package root, so the shipped tarball has
- *     `index.js` and `api.d.ts` as SIBLINGS at the package root (there is
- *     no `dist/` subdirectory at all once installed). `dirname(import.meta.url)`
- *     here is already that root, so the OLD `join(here, '..', 'dist')` escaped
- *     one level too far, past the package root into
- *     `node_modules/@adhd/dist` — nonexistent.
- *  2. DEV-BUILT (`entrypoint/backlog/dist/index.{js,mjs}`, e.g. this repo's
- *     own `nx build backlog` output before packing): `api.d.ts` is ALSO a
- *     sibling of `index.js`, both living directly under `dist/`.
- *  3. VITEST (`src/server.ts` transformed and run in place): `api.d.ts`
- *     has not moved next to `src/` — it's still only in the built `dist/`,
- *     one level up and back down from `src/`.
- *
- * Layouts 1 and 2 are identical in shape (api.d.ts is a sibling of the
- * running module) and differ from layout 3 only in WHERE that sibling lives
- * relative to the module — so probing "is api.d.ts sitting right next to
- * me?" before falling back to the vitest-only `../dist` shape correctly
- * covers all three without needing to distinguish "published" from
- * "dev-built" explicitly.
- */
-function backlogDistDir(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
-  if (existsSync(join(here, 'api.d.ts'))) return here;
-  return join(here, '..', 'dist');
-}
-
-/**
  * DEVIATION / real bug worked around here (filed as
  * BUG-APIGEN-RUNMODE-REF-UNRESOLVABLE-001): `client.ts`'s return types
  * (`CreateItemResult`, `BacklogItem[]`, ...) reference NAMED exported types
@@ -485,187 +443,53 @@ function dereferenceSchema(schema: unknown): unknown {
   return inline(schema, new Set());
 }
 
-const requirePkg = createRequire(import.meta.url);
-
 /**
- * FEAT-002: the extractor version stamped into every IR-cache entry — the
- * `@adhd/apigen-core-client` package version. Any change to the extractor's
- * output for the same input (a bug fix, new TS feature support, or a future
- * DEBT-003 fix making Path 2 correct for cross-referencing named types) bumps
- * this version, which changes the cache key and busts every stale entry — the
- * mechanism that keeps this cache from ever becoming a reason to defer DEBT-003.
- */
-const CORE_CLIENT_VERSION: string = requirePkg(
-  '@adhd/apigen-core-client/package.json'
-).version;
-
-/**
- * FEAT-002 Revision 2 (design doc R2.2/R2.3, implementation spec R2-4):
- * RUNTIME CACHE mode targets a single, literal file — not a directory of
- * many content-addressed entries. Env-overridable (the integration spec
- * points it at a fresh throwaway file); default resolves through
- * `resolveIrCacheFile` (`env.ts`) to a single stable absolute path under
- * `~/.adhd/backlog/production/cache/apigen/ir-cache/backlog-client.ir.json`
- * — NEVER `process.cwd()` (BUG-CACHE-CWD-001: the prior `join(process.cwd(),
- * 'tmp', 'apigen', 'ir-cache', ...)` default scattered a fresh, permanently-
- * cold cache directory into every repo/worktree `backlog` was ever run from).
- * `APIGEN_IR_CACHE_FILE` replaces the Revision-1 `APIGEN_IR_CACHE_DIR`.
- */
-/**
- * BUG-BACKLOG-SANDBOX-IRCACHE-001: previously took no arguments and always
- * called `resolveIrCacheFile()` bare — which, absent an explicit `adhdRoot`,
- * resolves against the process's real `HOME`. That is correct isolation
- * ONLY along the `scope` axis (project vs global data — see this file's own
- * comment above about the cache staying "one stable machine-wide location
- * no matter which scope a given invocation resolved its backlog *data*
- * to"). It is NOT correct along the `--namespace sandbox`/test-isolation axis:
- * `cli.ts`'s `runBacklogCli` and `startBacklogServer` both already thread an
- * `adhdRoot` override through `buildBacklogEnv` for every OTHER path (the
- * real store, `env.ensureDirs()`), but this cache file's own
- * `resolveIrCacheFile({ adhdRoot, instanceId })` parameters were simply never
- * wired to it — so a `--namespace sandbox` invocation, despite reporting
- * (and genuinely using) an isolated store root, would still create
- * `~/.adhd/backlog/production/cache/apigen/ir-cache/...` on the real
- * machine `HOME` on its first extraction, defeating the isolation guarantee
- * `--namespace sandbox` advertises (caught by `cli.spec.ts`'s
- * "--namespace sandbox diverts the store away from the (fake) production
- * HOME entirely, and never creates anything under it" — a fake HOME stands
- * in for the real one there, but the bug is identical against a real HOME).
- * Now accepts the same `{ adhdRoot, instanceId }` test-isolation pair every
- * other resolver in this file already takes, and forwards it verbatim.
- */
-function irCacheFile(
-  opts: { adhdRoot?: string; instanceId?: string } = {}
-): string {
-  return resolveIrCacheFile(opts);
-}
-
-/**
- * FEAT-002 Revision 2 (design doc R2.7): opt-out kill switch. Backlog's
- * three transports (HTTP/MCP/CLI) are a live mount, not a `--use`-flag-
- * parsed `apigen-cli` invocation, so there is no CLI surface for a human to
- * omit the plugin here — this env var is that surface for this host
- * specifically. Default enabled (`'1'`/unset); `'0'` disables caching
- * entirely (every call is a real extraction, no cache read/write at all).
- */
-function irCacheEnabled(): boolean {
-  return process.env['APIGEN_IR_CACHE_ENABLED'] !== '0';
-}
-
-/**
- * FEAT-002 Revision 2 (design doc R2.6 item 4 / implementation spec R2.7):
- * a `Plugin` object carrying ONLY the `extractLayer` capability, built from
- * `@adhd/apigen-plugin-ir-cache`'s `createIrCacheLayer(opts)` factory —
- * NOT the package's static `irCachePlugin` export, because that singleton's
- * `extractLayer.layer` resolves its cache file / extractor version lazily
- * from `APIGEN_IR_CACHE_FILE`/`APIGEN_IR_CACHE_EXTRACTOR_VERSION` env vars
- * with no per-call configuration hook (see that package's own `src/index.ts`
- * module doc) — backlog needs a DIFFERENT, fixed default file
- * (`backlog-client.ir.json` at one known path, not the plugin's per-source
- * hashed default files under `~/.adhd/apigen/default/cache/`)
- * and a specific `extractorVersion` (`CORE_CLIENT_VERSION`, the actual
- * installed `@adhd/apigen-core-client` version, not an env-var-overridable
- * value), so it builds its own `Plugin`-shaped instance around the factory
- * instead — exactly the escape hatch that module doc describes for a caller
- * wanting non-default configuration in the same process.
- */
-function backlogIrCachePlugin(
-  opts: { adhdRoot?: string; instanceId?: string } = {}
-): Plugin {
-  return {
-    id: 'ir-cache',
-    description:
-      'Extract-stage IR cache, configured for the backlog hot path (BUG-019).',
-    language: 'ts',
-    capabilities: {
-      extractLayer: {
-        layer: createIrCacheLayer({
-          cache: irCacheFile(opts),
-          extractorVersion: CORE_CLIENT_VERSION,
-        }),
-      },
-    },
-  };
-}
-
-/**
- * FEAT-002 Revision 2 (design doc R2.6 item 4): the extract-stage invoker,
- * composed through the GENERIC `createExtractInvokerFromPlugins` mechanism
- * (the same one `apigen-cli`'s orchestrator uses for `--use`-loaded plugins)
- * rather than hand-constructing a middleware array — the plugin list is
- * either `[backlogIrCachePlugin()]` (caching enabled, the default) or `[]`
- * (R2.7's `APIGEN_IR_CACHE_ENABLED=0` opt-out: extraction always runs live,
- * no cache read/write of any kind — `createExtractInvokerFromPlugins`
- * degrades to a pure pass-through to `runExtractor` on an empty/non-matching
- * plugin list). On a cache HIT the terminal `extract()` is never called (the
- * cached `Operation[]` is returned); on a MISS the result is written through
- * fire-and-forget. Built LAZILY on first use so callers/tests can point
- * `APIGEN_IR_CACHE_FILE`/`APIGEN_IR_CACHE_ENABLED` at test values before the
- * first extraction.
+ * Derives `client.ts`'s mounted operations for the hot startup path.
  *
- * BUG-BACKLOG-SANDBOX-IRCACHE-001: the memoized `extractInvoke` is
- * configured from whichever `opts` the FIRST caller in this process passes
- * — a pre-existing, unchanged constraint of the "lazy singleton" design
- * described above. This is safe for `runBacklogCli` (one-shot process, one
- * `adhdRoot` for its whole lifetime) and for `startBacklogServer` (long-
- * lived but likewise fixed to one `adhdRoot`/scope for its whole lifetime);
- * it is a latent hazard only for a hypothetical caller that invoked this
- * function twice, in the same process, with two DIFFERENT `adhdRoot`s — no
- * such caller exists today.
+ * BAKE-AT-BUILD (design doc Revision 3,
+ * `docs/apigen/design-notes/extract-stage-onion-and-ir-cache.md`): `nx build
+ * backlog` emits `dist/api.ir.json` — the `Operation[]` for `dist/api.d.ts` —
+ * in the SAME build target that emits the `.d.ts`. This function prefers that
+ * pre-built artifact and never loads the extractor, so `backlog --help` / an
+ * MCP `initialize` no longer pay the synchronous ts-morph extraction that made
+ * startup exceed the MCP client deadline. Only a missing or STALE artifact
+ * falls back to a live extraction.
+ *
+ * Three-step read:
+ *  1. `dist/api.d.ts` MUST exist — nothing can be derived without the built
+ *     declarations (`nx build backlog` produces it).
+ *  2. `readBakedIrArtifact(distDir)` returns the baked `Operation[]` on a
+ *     content-hash-validated hit. `./ir-artifact.js` is ts-morph-free by
+ *     construction, so the baked path's module graph never reaches the
+ *     extractor.
+ *  3. On a miss, DYNAMICALLY import `./extract-live.js` — the only module in
+ *     this package that statically imports extractor-touching code — and run
+ *     the runtime IR-cache fallback there. The dynamic import is what keeps
+ *     ts-morph out of the baked path entirely.
+ *
+ * The baked `operations` are byte-identical to the fallback's (both go through
+ * the same `dropFileSegment: true` / `namespace: 'backlog'` call — see
+ * `extract-live.ts`'s `buildBakedOperations`), so downstream
+ * `composeSchemas`/`dereferenceSchema` behavior is unchanged either way.
  */
-let extractInvoke: ((call: ExtractCall) => Promise<Operation[]>) | undefined;
-function getExtractInvoke(
-  opts: { adhdRoot?: string; instanceId?: string } = {}
-): (call: ExtractCall) => Promise<Operation[]> {
-  extractInvoke ??= createExtractInvokerFromPlugins(
-    irCacheEnabled() ? [backlogIrCachePlugin(opts)] : [],
-    (call: ExtractCall) =>
-      extract({
-        sourceFile: call.source,
-        namespace: call.namespace,
-        tsconfig:
-          typeof call.extractorOptions?.tsconfig === 'string'
-            ? call.extractorOptions.tsconfig
-            : undefined,
-        dropFileSegment: true,
-      })
-  );
-  return extractInvoke;
-}
-
 async function extractApiOperations(
   opts: { adhdRoot?: string; instanceId?: string } = {}
 ): Promise<Operation[]> {
-  const clientDts = join(backlogDistDir(), 'api.d.ts');
+  const distDir = backlogDistDir();
+  const clientDts = join(distDir, 'api.d.ts');
   if (!existsSync(clientDts)) {
     throw new Error(
       `@adhd/backlog: cannot mount — ${clientDts} does not exist. ` +
-        `Run "nx build backlog" first (extract() needs the built .d.ts for type information).`
+        `Run "nx build backlog" first (the mounted surface is derived from the built .d.ts).`
     );
   }
-  // `dropFileSegment: true` (`ExtractOptions`, `@adhd/apigen-core-client`):
-  // without it every op's `path` would unconditionally start with the
-  // `api.d.ts` extraction FILENAME artifact (`normalizeFileName` →
-  // `'client-d'`), leaking into every transport's name — `backlog client-d
-  // create-item` / `backlog_client_d_create_item` instead of the intended
-  // `backlog create-item` / `backlog_create_item`. Safe here because every
-  // `client.ts` export is extracted from this ONE file, so there is no
-  // cross-file name to disambiguate against; a genuine same-name collision
-  // would still be caught at extract time by `checkCollisions`
-  // (`@adhd/apigen-engine-naming`).
-  //
-  // FEAT-002: extraction flows through the extract-stage invoker (BUG-019 hot
-  // path) with the IR-cache layer — a cache HIT returns the cached
-  // `Operation[]` without re-running `extract()`; a MISS runs `extract()` as
-  // before and writes the result through to the cache fire-and-forget. The
-  // cached value is byte-identical to what `extract()` would produce, so the
-  // downstream `composeSchemas`/`dereferenceSchema` behavior is unchanged.
-  return getExtractInvoke(opts)({
-    source: clientDts,
-    host: 'ts',
-    namespace: 'backlog',
-    extractorOptions: {},
-  });
+  // Prefer the baked artifact. `readBakedIrArtifact` never throws and returns
+  // `undefined` on missing/corrupt/format-mismatch/extractor-mismatch/
+  // source-hash-mismatch, so ANY doubt degrades to the live fallback rather
+  // than serving stale operations.
+  const baked = readBakedIrArtifact(distDir);
+  if (baked) return baked;
+  return (await import('./extract-live.js')).extractApiOperationsLive(opts);
 }
 
 /**
