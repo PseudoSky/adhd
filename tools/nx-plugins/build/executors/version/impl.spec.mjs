@@ -45,7 +45,8 @@ import child_process from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 
 // BUG (flaky CPU-guard trips under real machine load, test:build-tools):
 // this file exercises the real `version` executor end-to-end, which wraps
@@ -190,6 +191,13 @@ function makeSpawnSyncMock(state) {
     // resolved nx bin path; the actual CLI argv starts at `args[1]`.
     if (cmd === process.execPath && args[0] === NX_BIN && args[1] === 'release' && args[2] === 'changelog') {
       state.changelogCalls.push(args.slice(1));
+      // A real `nx release changelog` writes CHANGELOG.md; tests that need the
+      // scrub path to have a file to act on provide `state.changelogWrite`
+      // (an { absolutePath: contents } map). Absent -> write nothing (the
+      // default, mirroring a no-op mock).
+      if (state.changelogWrite) {
+        for (const [abs, contents] of Object.entries(state.changelogWrite)) writeFileSync(abs, contents);
+      }
       return { status: state.changelogStatus ?? 0, stdout: '', stderr: state.changelogStatus ? 'boom' : '' };
     }
     throw new Error(`unexpected spawnSync in test mock: ${cmd} ${JSON.stringify(args)}`);
@@ -1232,5 +1240,166 @@ test('DEBT-002 #5 dry run: reports BOTH fields\' fixes with their own prefixes, 
     assert.equal(after, before, 'a dry run must never write package.json, even with multi-field drift');
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Generated-CHANGELOG forbidden-vocabulary scrub.
+//
+// The changelog is a projection of git commit subjects; a commit that REMOVES
+// a package's forbidden term must name it, so the term lands in the shipped
+// changelog and the package's own vocabulary gate then fails on the fix's own
+// commit (the live incident: `backlog:vocabulary-gate` failed on
+// CHANGELOG.md:25/27 and blocked `backlog@1.0.1`). The fix is at the generator:
+// a package that declares `changelogVocabulary` has its generated CHANGELOG
+// scrubbed in place. These tests drive THAT path through the real executor.
+// ---------------------------------------------------------------------------
+
+const SCRUB_POLICY_SRC = [
+  'export function scrubChangelog(text) {',
+  "  return text.replace(/sqlite/gi, 'store-engine');",
+  '}',
+  '',
+].join('\n');
+
+test('changelog scrub: a package declaring `changelogVocabulary` has its GENERATED CHANGELOG.md scrubbed in place (real executor, real fs, real dynamic import)', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: {} };
+    const { pkgRoot, context } = makeProject({
+      rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b',
+      srcPkg: localPkg,
+      distFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 2;\n' }, // NEW code -> real bump
+    });
+    // The package opts in via its project.json; the policy module is loaded by
+    // absolute file URL from the project root.
+    makeFiles(pkgRoot, {
+      'project.json': JSON.stringify({ name: 'pkg-b', changelogVocabulary: 'tools/vocabulary-policy.mjs' }),
+      'tools/vocabulary-policy.mjs': SCRUB_POLICY_SRC,
+    });
+    const changelogPath = join(pkgRoot, 'CHANGELOG.md');
+    const dirtyEntry = '## 1.0.1\n\n### 🩹 Fixes\n\n- **backlog:** drop the forbidden sqlite term\n';
+
+    const state = newState({
+      publishedVersions: ['1.0.0'],
+      publishedFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 1;\n' },
+      lastChangelogSha: '',
+      changelogWrite: { [changelogPath]: dirtyEntry }, // what the real nx renderer would have written
+    });
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
+
+    const result = await versionImpl({}, context);
+    assert.equal(result.success, true, 'a successful generate+scrub must not fail the task');
+    const after = readFileSync(changelogPath, 'utf8');
+    assert.ok(!/sqlite/i.test(after), `the generated entry must carry no forbidden term\n---\n${after}`);
+    assert.ok(/store-engine/i.test(after), 'the forbidden term must be rewritten to its neutral paraphrase, not deleted');
+    assert.ok(after.startsWith('## 1.0.1'), 'the entry structure must survive the scrub');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('changelog scrub: a package with NO `changelogVocabulary` declaration is left untouched (other packages legitimately name such terms)', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: {} };
+    const { pkgRoot, context } = makeProject({
+      rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b',
+      srcPkg: localPkg,
+      distFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 2;\n' },
+    });
+    const changelogPath = join(pkgRoot, 'CHANGELOG.md');
+    const entry = '## 1.0.1\n\n### 🩹 Fixes\n\n- fix the sqlite thing\n';
+
+    const state = newState({
+      publishedVersions: ['1.0.0'],
+      publishedFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 1;\n' },
+      lastChangelogSha: '',
+      changelogWrite: { [changelogPath]: entry },
+    });
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
+
+    const result = await versionImpl({}, context);
+    assert.equal(result.success, true);
+    assert.equal(readFileSync(changelogPath, 'utf8'), entry, 'no declaration -> the historical record must be byte-identical');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('changelog scrub: a declared-but-BROKEN policy fails the task loudly (never silently ships a dirty changelog)', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: {} };
+    const { pkgRoot, context } = makeProject({
+      rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b',
+      srcPkg: localPkg,
+      distFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 2;\n' },
+    });
+    makeFiles(pkgRoot, {
+      'project.json': JSON.stringify({ name: 'pkg-b', changelogVocabulary: 'tools/missing-policy.mjs' }),
+    });
+    const changelogPath = join(pkgRoot, 'CHANGELOG.md');
+
+    const state = newState({
+      publishedVersions: ['1.0.0'],
+      publishedFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 1;\n' },
+      lastChangelogSha: '',
+      changelogWrite: { [changelogPath]: '## 1.0.1\n\n- a change\n' },
+    });
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
+
+    const result = await versionImpl({}, context);
+    assert.equal(result.success, false, 'a declared policy that cannot be loaded must fail the task, never be silently skipped');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('changelog policy (single source of truth): the REAL @adhd/backlog policy scrubs every term BOTH gates enforce, and the live incident lines', async () => {
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..');
+  const policy = await import(
+    pathToFileURL(join(repoRoot, 'entrypoint/backlog/tools/vocabulary-policy.mjs')).href
+  );
+
+  assert.deepEqual(
+    policy.uncoveredTerms(),
+    [],
+    'every term a gate enforces must have a scrubbed paraphrase — a gate term the scrub ignores would hand the gate a guaranteed-dirty changelog'
+  );
+
+  const samples = {
+    v1: 'this replaced the old backlog v1 era',
+    v2: 'the backlog v2 store',
+    humanId: 'the humanId column',
+    migration: 'a migration and a migrator and a migrating path',
+    migrat: 'a migration',
+    sqlite: 'the better-sqlite3 binding',
+  };
+  for (const term of [...policy.SRC_TERMS, ...policy.TARBALL_TERMS]) {
+    const sample = samples[term.name] ?? `x ${term.name} y`;
+    assert.ok(term.re.test(sample), `test sample for '${term.name}' must match that gate's own detection regex`);
+    const scrubbed = policy.scrubChangelog(sample);
+    assert.deepEqual(
+      policy.findBannedHits(scrubbed),
+      [],
+      `scrubChangelog must neutralise '${term.name}': ${JSON.stringify(scrubbed)}`
+    );
+    assert.equal(policy.scrubChangelog(scrubbed), scrubbed, 'scrub must be idempotent');
+  }
+
+  // The exact generated lines that failed the 2026-09-26 release.
+  const incidentLines = [
+    "- **backlog:** drop the forbidden 'sqlite' term from the CPU-THRASH-SKIP comment ([4dae6ee2](https://github.com/PseudoSky/adhd/commit/4dae6ee2))",
+    '- **nx:** finish the ESLint v9 flat-config migration and unblock the gate ([53f4ff3e](https://github.com/PseudoSky/adhd/commit/53f4ff3e))',
+  ];
+  for (const line of incidentLines) {
+    assert.deepEqual(policy.findBannedHits(policy.scrubChangelog(line)), [], `incident line must scrub clean: ${line}`);
   }
 });

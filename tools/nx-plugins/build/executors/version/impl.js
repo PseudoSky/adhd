@@ -91,10 +91,22 @@
  * "never commits" contract as the version bump itself. A dry run previews
  * via `--dry-run` (never writes); a changelog-generation failure fails the
  * whole task, same as a `sync-deps` reconciliation failure does below.
+ *
+ * FORBIDDEN-VOCABULARY SCRUB (immediately after a REAL changelog write): the
+ * changelog is a GENERATED projection of commit subjects, and a commit that
+ * removes a package's forbidden term must NAME it — landing the term in the
+ * shipped changelog, which that package's own vocabulary gate scans. A package
+ * opts into a fix at the generator by declaring `changelogVocabulary` in its
+ * `project.json` (a module exporting `scrubChangelog`); `@adhd/backlog` points
+ * it at `tools/vocabulary-policy.mjs`, the single source its gates share. No
+ * declaration -> no scrub (packages whose changelogs legitimately name such
+ * terms are untouched). See `scrubGeneratedChangelog` for the full rationale
+ * and the loud-failure contract.
  */
 const { spawnSync } = require('node:child_process');
 const { existsSync, readFileSync, writeFileSync, rmSync } = require('node:fs');
 const { join, relative } = require('node:path');
+const { pathToFileURL } = require('node:url');
 // semver is a transitive dep of nx, resolved from the workspace root
 // node_modules (confirmed: `require.resolve('semver')` from this exact file
 // location resolves cleanly — no vendoring/inline-compare fallback needed).
@@ -149,6 +161,94 @@ function lastChangelogCommit(context, changelogRelPath, rec) {
 }
 
 /**
+ * Neutralise a package's own forbidden vocabulary in its GENERATED
+ * `{projectRoot}/CHANGELOG.md`, after `nx release changelog` has written it.
+ *
+ * WHY (the defect this closes): the changelog is a GENERATED projection of git
+ * commit subjects. A commit whose *purpose* is to remove a forbidden term must
+ * NAME that term to describe itself — so the term lands, verbatim, in the
+ * shipped changelog. The package's own vocabulary gate (e.g. `@adhd/backlog`'s
+ * `vocabulary-gate`) then scans that changelog and fails on the fix's own
+ * commit message; the failure recurs for every such commit, and no hand-reword
+ * is durable because the next `nx release changelog` regenerates the section
+ * from history. Fixing it here — the one durable seam — keeps the SHIPPED
+ * changelog clean while the gate keeps scanning it in full. It is deliberately
+ * NOT a changelog exemption: a shipped changelog IS user-facing prose, and the
+ * gate's purpose is to keep forbidden vocabulary out of it.
+ *
+ * SCOPE — a package opts in by declaring `changelogVocabulary` in its
+ * `project.json`, a path (relative to the project root) to a module exporting
+ * `scrubChangelog(text) -> text`. Nothing is declared for packages whose
+ * changelogs legitimately name such terms as external dependencies (e.g.
+ * `better-sqlite3` in `@adhd/agent-mcp` / `@adhd/apigen-cli`), so their
+ * historical record is untouched. `@adhd/backlog` declares
+ * `tools/vocabulary-policy.mjs`, which is also the single source its two
+ * vocabulary gates import — one policy, never able to drift.
+ *
+ * FAILURE IS LOUD, never a silent skip: a declared-but-unloadable policy, a
+ * missing changelog, or a scrub that cannot produce a clean string fails the
+ * whole task (same contract as a changelog-generation failure), so a dirty
+ * changelog is never written past this step.
+ *
+ * @param {import('@nx/devkit').ExecutorContext} context
+ * @param {string} projectRoot
+ * @returns {Promise<boolean>} success
+ */
+async function scrubGeneratedChangelog(context, projectRoot) {
+  const projectJsonPath = join(context.root, projectRoot, 'project.json');
+  if (!existsSync(projectJsonPath)) return true; // no project.json -> no declared policy
+  let projectJson;
+  try {
+    projectJson = JSON.parse(readFileSync(projectJsonPath, 'utf8'));
+  } catch (err) {
+    console.error(
+      `version: could not parse ${relative(context.root, projectJsonPath)} to read a changelog vocabulary policy: ${err.message}`
+    );
+    return false;
+  }
+  const policyRel = projectJson.changelogVocabulary;
+  if (!policyRel) return true; // package declares no policy -> nothing to scrub
+  const policyAbs = join(context.root, projectRoot, policyRel);
+
+  let scrubChangelog;
+  try {
+    if (!existsSync(policyAbs)) throw new Error(`no such file: ${relative(context.root, policyAbs)}`);
+    // The policy is a package-local ESM module; load it by absolute file URL.
+    const mod = await import(pathToFileURL(policyAbs).href);
+    if (typeof mod.scrubChangelog !== 'function') throw new Error('module does not export scrubChangelog()');
+    scrubChangelog = mod.scrubChangelog;
+  } catch (err) {
+    console.error(
+      `version: changelog vocabulary policy for ${context.projectName} could not be loaded (${relative(context.root, policyAbs)}): ${err.message}`
+    );
+    return false;
+  }
+
+  const changelogPath = join(context.root, projectRoot, 'CHANGELOG.md');
+  if (!existsSync(changelogPath)) {
+    console.error(
+      `version: ${context.projectName} declares a changelog vocabulary policy but ${relative(context.root, changelogPath)} does not exist to scrub.`
+    );
+    return false;
+  }
+  const before = readFileSync(changelogPath, 'utf8');
+  let after;
+  try {
+    after = scrubChangelog(before);
+  } catch (err) {
+    console.error(`version: changelog vocabulary scrub FAILED for ${context.projectName}: ${err.message}`);
+    return false;
+  }
+  if (after !== before) {
+    writeFileSync(changelogPath, after);
+    console.error(
+      `version: neutralised forbidden vocabulary in ${relative(context.root, changelogPath)} (the generated changelog must satisfy the package's own vocabulary gate)`
+    );
+  }
+  return true;
+}
+
+/**
  * Generate/update THIS project's `{projectRoot}/CHANGELOG.md` by shelling
  * out to the REAL `nx release changelog` — reusing Nx's own conventional-
  * commits parser + renderer (already configured via `nx.json`
@@ -163,9 +263,9 @@ function lastChangelogCommit(context, changelogRelPath, rec) {
  *                         just-decided version — matches the header nx renders)
  * @param {boolean} dryRun
  * @param {import('../../../lib/metrics').MetricsRecorder} [rec]
- * @returns {boolean} success
+ * @returns {Promise<boolean>} success
  */
-function writeChangelogEntry(context, projectRoot, version, dryRun, rec) {
+async function writeChangelogEntry(context, projectRoot, version, dryRun, rec) {
   const changelogRelPath = join(projectRoot, 'CHANGELOG.md').split('\\').join('/');
   const fromSha = lastChangelogCommit(context, changelogRelPath, rec);
   const args = [
@@ -193,6 +293,9 @@ function writeChangelogEntry(context, projectRoot, version, dryRun, rec) {
   if (dryRun && res.stdout && res.stdout.trim()) {
     console.error(res.stdout.trim());
   }
+  // A dry run writes nothing, so there is nothing to scrub — the preview stays
+  // a faithful echo of what `nx release changelog` would produce.
+  if (!dryRun && !(await scrubGeneratedChangelog(context, projectRoot))) return false;
   return true;
 }
 
@@ -543,7 +646,7 @@ async function runVersion(options, context, rec) {
   console.error(`version: ${name} changed since ${version} -> bumping to ${next} (${level}) [cache hit, zero network]`);
   if (dryRun) {
     console.error(`version: [dry-run] would write ${next} to ${relative(context.root, srcPkgPath)}`);
-    writeChangelogEntry(context, projectRoot, next, true, rec);
+    await writeChangelogEntry(context, projectRoot, next, true, rec);
     const sync = await reconcileOwnInternalRanges(context, dryRun);
     return { success: sync.success };
   }
@@ -552,7 +655,7 @@ async function runVersion(options, context, rec) {
   const replaced = raw.replace(/("version"\s*:\s*")[^"]+(")/, `$1${next}$2`);
   if (replaced === raw) { console.error(`version: FAILED to rewrite version field in ${srcPkgPath}.`); return { success: false }; }
   writeFileSync(srcPkgPath, replaced);
-  if (!writeChangelogEntry(context, projectRoot, next, false, rec)) return { success: false };
+  if (!(await writeChangelogEntry(context, projectRoot, next, false, rec))) return { success: false };
   // Own bump is applied; now reconcile dependency ranges against the
   // (topologically) already-settled versions of internal deps. Order is
   // safe either way — the fix only touches dependency-range fields, never
@@ -565,4 +668,4 @@ module.exports = run;
 module.exports.default = run;
 // Test-only introspection seam (mirrors compare-published.js exporting its
 // pure helpers). Not used by Nx (which only calls the default export).
-module.exports.__internals = { reconcileOwnInternalRanges, reconcileInternalRangesFromDisk, lastChangelogCommit, writeChangelogEntry };
+module.exports.__internals = { reconcileOwnInternalRanges, reconcileInternalRangesFromDisk, lastChangelogCommit, writeChangelogEntry, scrubGeneratedChangelog };

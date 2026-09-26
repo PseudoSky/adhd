@@ -28,36 +28,16 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, extname } from 'node:path';
+import { TARBALL_TERMS } from '../tools/vocabulary-policy.mjs';
 
 /**
- * The banned stems. `migrat` and `sqlite` are deliberately STEMS, not words:
- * `migrat` catches migrate/migrated/migrating/migration/migrator in one rule,
- * and `sqlite` catches `better-sqlite3` and every casing. `v1`/`v2` are
- * word-bounded and must not be followed by `.<digit>`, so genuine dependency
- * and model versions (`bge-base-en-v1.5`) are not false positives. They are
- * likewise not followed by `.db`: `backlog-v2.db` is the live production
- * store's real filename (config.yaml `db.path` / `sandbox-path`), an
- * operational identifier the docs must reproduce verbatim, not this package
- * naming its own surface. The carve-out is exactly `.db` (word-bounded), so
- * bare `v2` prose and `v2.dbx`-shaped names still fail.
- *
- * `minifiable` marks the two terms a JavaScript minifier can FABRICATE out of
- * nothing. A bundler renaming locals emits `v1`, `V1`, `function v2(t,e)` by
- * the dozen, and third-party sources ship their own `// TODO: remove in v2`.
- * Matching those in a generated bundle reports 14 violations that say nothing
- * about this package's vocabulary — a gate that cries wolf is a gate that gets
- * ignored. `humanid`/`migrat`/`sqlite` are NOT minifiable: no renamer invents
- * them, so they stay in force everywhere, bundles included. That is the half
- * of the rule that actually protects the criterion, and it is the half that
- * would have caught a real leak (verified: both bundles contain zero).
+ * The banned stems live in the package's single-source policy module
+ * (`tools/vocabulary-policy.mjs`), shared with the source-tree gate and the
+ * version executor's generated-CHANGELOG scrub — so a term added for one gate
+ * can never be missing from the others. Detection is unchanged; the
+ * stem/`.db`-carve-out/minifiable rationale is documented in that module.
  */
-const BANNED = [
-  { name: 'humanId', re: /humanid/i, minifiable: false },
-  { name: 'migrat', re: /migrat/i, minifiable: false },
-  { name: 'sqlite', re: /sqlite/i, minifiable: false },
-  { name: 'v1', re: /\bv1\b(?!\.\d)(?!\.db\b)/i, minifiable: true },
-  { name: 'v2', re: /\bv2\b(?!\.\d)(?!\.db\b)/i, minifiable: true },
-];
+const BANNED = TARBALL_TERMS;
 
 /** Source maps embed original source verbatim and are not human-facing shipped
  *  prose. Excluded deliberately, and COUNTED, so the exclusion can never
