@@ -1,6 +1,6 @@
 {
   "name": "@adhd/apigen-plugin-api-express",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "main": "./dist/index.js",
   "dependencies": {
     "express": "^5.2.1",

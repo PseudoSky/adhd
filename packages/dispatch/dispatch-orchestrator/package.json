@@ -1,6 +1,6 @@
 {
   "name": "@adhd/dispatch-orchestrator",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
     "@adhd/dispatch-base-spec": "^0.1.4",

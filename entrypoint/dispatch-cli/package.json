@@ -1,6 +1,6 @@
 {
   "name": "@adhd/dispatch-cli",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "bin": {
     "dispatch-cli": "./dist/bin/cli.js"
   },
