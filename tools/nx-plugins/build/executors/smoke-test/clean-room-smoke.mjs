@@ -621,7 +621,18 @@ function looksLikeCrashOnLoad(stderr) {
  * @returns {Promise<boolean>} true if `version` is present in the registry's `versions[]` for `name`
  */
 export async function probeVersionExistsOnRegistry(name, version, opts = {}) {
-  const args = ['view', name, 'versions', '--json'];
+  // `--prefer-online` is MANDATORY here for exactly the reason stated in
+  // `buildNpmInstallArgs` above: this probe reads the same packument
+  // `versions[]` that a POST-publish gate must not trust from npm's local
+  // cache. Without the flag a version published seconds ago is invisible, so
+  // the caller takes the loud NOT-PUBLISHED branch and reports a healthy
+  // release as a FAILED PUBLISH. Observed live 2026-09-26 — 4 packages
+  // (`agent-mcp@2.3.4`, `backlog@1.0.2`, `dispatch-cli@0.1.5`,
+  // `agent-generator-plugin@0.1.4`) all reported "NOT PUBLISHED … This is a
+  // FAILED PUBLISH, not propagation lag" while every one of them was on the
+  // registry; the same gate then passed standalone (exit 0). Same mechanism
+  // as the 2026-09-24 repro on item 72bb2203 (successor 8c62416b).
+  const args = ['view', name, 'versions', '--json', '--prefer-online'];
   if (opts.registryUrl) args.push('--registry', opts.registryUrl);
   const res = await run('npm', args, { timeoutMs: INSTALL_TIMEOUT_MS, cwd: workspaceRoot });
   if (res.code !== 0) {
