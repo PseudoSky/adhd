@@ -6,7 +6,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@adhd/data-base-transforms": "^2.3.2"
+    "@adhd/data-base-transforms": "^2.3.3"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

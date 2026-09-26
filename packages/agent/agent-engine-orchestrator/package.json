@@ -20,10 +20,10 @@
     "typecheck": "tsc -p tsconfig.lib.json --noEmit"
   },
   "dependencies": {
-    "@adhd/agent-base-types": "^2.3.2",
-    "@adhd/agent-core-provider": "^2.2.2",
-    "@adhd/agent-store-prompts": "^2.2.2",
-    "@adhd/agent-store-runtime": "^2.2.2",
+    "@adhd/agent-base-types": "^2.3.3",
+    "@adhd/agent-core-provider": "^2.2.3",
+    "@adhd/agent-store-prompts": "^2.2.3",
+    "@adhd/agent-store-runtime": "^2.2.3",
     "@anthropic-ai/sdk": "^0.96.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "better-sqlite3": "12.10.0",
@@ -36,7 +36,7 @@
     "zod": "4.4.3"
   },
   "peerDependencies": {
-    "@adhd/agent-engine-compiler": "^2.2.3"
+    "@adhd/agent-engine-compiler": "^2.2.4"
   },
   "peerDependenciesMeta": {
     "@adhd/agent-engine-compiler": {

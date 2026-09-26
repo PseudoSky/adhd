@@ -4,8 +4,8 @@
   "main": "./dist/index.js",
   "dependencies": {
     "pino": "10.3.1",
-    "@adhd/apigen-core-client": "^0.3.2",
-    "@adhd/apigen-base-errors": "^0.2.2"
+    "@adhd/apigen-core-client": "^0.3.3",
+    "@adhd/apigen-base-errors": "^0.2.3"
   },
   "publishConfig": {
     "access": "public"

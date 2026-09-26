@@ -20,7 +20,7 @@
     "typecheck": "tsc -p tsconfig.lib.json --noEmit"
   },
   "dependencies": {
-    "@adhd/agent-base-types": "^2.3.2",
+    "@adhd/agent-base-types": "^2.3.3",
     "better-sqlite3": "12.10.0",
     "drizzle-orm": "0.45.2",
     "uuid": "14.0.0",

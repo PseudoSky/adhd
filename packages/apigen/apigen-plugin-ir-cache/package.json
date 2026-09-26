@@ -2,7 +2,7 @@
   "name": "@adhd/apigen-plugin-ir-cache",
   "version": "0.1.3",
   "dependencies": {
-    "@adhd/apigen-core-client": "^0.3.2",
+    "@adhd/apigen-core-client": "^0.3.3",
     "@adhd/environment": "^0.1.5"
   },
   "main": "./dist/index.js",
