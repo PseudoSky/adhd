@@ -53,8 +53,16 @@ function deriveToolName(
  * lock (atomic `mkdir` as the exclusive-acquire primitive) so only one
  * negative-control check runs at a time.
  */
-async function withNegControlLock<T>(repoRoot: string, fn: () => Promise<T>): Promise<T> {
-  const lockPath = path.join(repoRoot, 'tmp', 'apigen-plugin-mcp', 'neg-control-run-ts.lock');
+async function withNegControlLock<T>(
+  repoRoot: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  const lockPath = path.join(
+    repoRoot,
+    'tmp',
+    'apigen-plugin-mcp',
+    'neg-control-run-ts.lock'
+  );
   fs.mkdirSync(path.dirname(lockPath), { recursive: true });
   const deadline = Date.now() + 30000;
   for (;;) {
@@ -63,7 +71,9 @@ async function withNegControlLock<T>(repoRoot: string, fn: () => Promise<T>): Pr
       break;
     } catch {
       if (Date.now() > deadline) {
-        throw new Error(`withNegControlLock: timed out waiting for lock at ${lockPath}`);
+        throw new Error(
+          `withNegControlLock: timed out waiting for lock at ${lockPath}`
+        );
       }
       await new Promise((r) => setTimeout(r, 100));
     }
@@ -82,7 +92,9 @@ function findRepoRoot(startDir: string): string {
     if (fs.existsSync(path.join(dir, '.git'))) return dir;
     const parent = path.dirname(dir);
     if (parent === dir) {
-      throw new Error(`findRepoRoot: no ".git" found walking up from ${startDir}`);
+      throw new Error(
+        `findRepoRoot: no ".git" found walking up from ${startDir}`
+      );
     }
     dir = parent;
   }
@@ -320,7 +332,7 @@ describe.skip('[plugin-mcp.4] run() streaming-http — tools/list + callTool via
     const resp = (await rpc('tools/call', {
       name: testPkgGetUserName,
       arguments: { data: { userId: 'u99' } },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as any;
     const content: Array<{ type: string; text: string }> =
       resp?.result?.content ?? resp?.content ?? [];
@@ -334,7 +346,7 @@ describe.skip('[plugin-mcp.4] run() streaming-http — tools/list + callTool via
     const resp = (await rpc('tools/call', {
       name: testPkgListUsersName,
       arguments: { data: {} },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as any;
     const content: Array<{ type: string; text: string }> =
       resp?.result?.content ?? resp?.content ?? [];
@@ -347,7 +359,7 @@ describe.skip('[plugin-mcp.4] run() streaming-http — tools/list + callTool via
     const resp = (await rpc('tools/call', {
       name: 'getUser',
       arguments: { data: { userId: 'u99' } },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as any;
     // The MCP SDK surfaces "Unknown tool" via a JSON-RPC error or an
     // isError:true result — either way it must NOT be the success shape a
@@ -503,7 +515,7 @@ describe.skip('[v2-proj-transport] run() — MCP envelope from _meta (§9.1) [CP
         _meta: { 'x-auth-session': 'tok-mcp' }, // §9.1 MCP carrier
         data: { userId: 'u-meta' },
       },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as any;
     const content: Array<{ type: string; text: string }> =
       resp?.result?.content ?? resp?.content ?? [];
@@ -522,7 +534,7 @@ describe.skip('[v2-proj-transport] run() — MCP envelope from _meta (§9.1) [CP
         session: 'wrong-carrier', // wrong carrier — should be in _meta
         data: { userId: 'u-body' },
       },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as any;
     const content: Array<{ type: string; text: string }> =
       resp?.result?.content ?? resp?.content ?? [];
@@ -687,46 +699,39 @@ describe.skip('[plugin-mcp.7] run() — BUG-APIGEN-019 MCP outputSchema + struct
     const tools: Array<{ name: string; outputSchema?: unknown }> =
       resp?.result?.tools ?? resp?.tools ?? [];
     const getUserTool = tools.find((t) => t.name === outPkgGetUserName);
-    expect(getUserTool?.outputSchema).toEqual(outputSchemaTestSchema.getUser.output);
+    expect(getUserTool?.outputSchema).toEqual(
+      outputSchemaTestSchema.getUser.output
+    );
   });
 
-  it('union-return output: tools/list outputSchema is wrapped under "result" with oneOf+discriminator intact', async () => {
+  it('union-return output: tools/list advertises NO outputSchema (ADR-0004 — no {result} envelope)', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const resp = (await rpc('tools/list', {})) as any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tools: Array<{ name: string; outputSchema?: any }> =
       resp?.result?.tools ?? resp?.tools ?? [];
     const searchTool = tools.find((t) => t.name === outPkgSearchName);
-    expect(searchTool?.outputSchema?.type).toBe('object');
-    expect(searchTool?.outputSchema?.required).toEqual(['result']);
-    expect(searchTool?.outputSchema?.properties?.result).toEqual(
-      unionOutputSchema
-    );
-    expect(searchTool?.outputSchema?.properties?.result?.oneOf).toHaveLength(2);
-    expect(searchTool?.outputSchema?.properties?.result?.discriminator).toEqual(
-      { propertyName: 'outcome' }
-    );
+    // A union return is not a top-level type:"object", so it carries no
+    // outputSchema at all — there is nothing to validate against, and the
+    // flat `content` payload is the canonical channel.
+    expect(searchTool?.outputSchema).toBeUndefined();
   });
 
-  it('array-return output: tools/list outputSchema is wrapped under "result"', async () => {
+  it('array-return output: tools/list advertises NO outputSchema (ADR-0004)', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const resp = (await rpc('tools/list', {})) as any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tools: Array<{ name: string; outputSchema?: any }> =
       resp?.result?.tools ?? resp?.tools ?? [];
     const listTool = tools.find((t) => t.name === outPkgListUsersArrayName);
-    expect(listTool?.outputSchema?.type).toBe('object');
-    expect(listTool?.outputSchema?.properties?.result).toEqual({
-      type: 'array',
-      items: { type: 'string' },
-    });
+    expect(listTool?.outputSchema).toBeUndefined();
   });
 
   it('object-shaped output: tools/call structuredContent equals the raw result (no wrapping)', async () => {
     const resp = (await rpc('tools/call', {
       name: outPkgGetUserName,
       arguments: { data: { userId: 'u1' } },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as any;
     const result = resp?.result ?? resp;
     const content: Array<{ type: string; text: string }> = result.content ?? [];
@@ -736,22 +741,19 @@ describe.skip('[plugin-mcp.7] run() — BUG-APIGEN-019 MCP outputSchema + struct
     expect(result.structuredContent).toEqual(getUser('u1'));
   });
 
-  it('union-return output: tools/call structuredContent is wrapped as { result: <value> }', async () => {
+  it('union-return output: tools/call has NO structuredContent; content carries the flat payload', async () => {
     const resp = (await rpc('tools/call', {
       name: outPkgSearchName,
       arguments: { data: {} },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as any;
     const result = resp?.result ?? resp;
-    // content (backward-compat text) is still emitted alongside structuredContent.
     const content: Array<{ type: string; text: string }> = result.content ?? [];
     const dispatched = JSON.parse(content[0].text);
-    // structuredContent must be the SAME value dispatch() produced (whatever
-    // transcoding it applied), just wrapped under "result" since the union
-    // schema isn't top-level type:"object".
-    expect(result.structuredContent).toEqual({ result: dispatched });
-    expect(dispatched.outcome).toBeDefined();
-    expect(dispatched.hits).toEqual(['result-1']);
+    // ADR-0004: a non-object return is passed through flat — `content` is the
+    // only channel; there is no structuredContent (and never a `{result}`).
+    expect(result.structuredContent).toBeUndefined();
+    expect(dispatched).toEqual(search());
   });
 });
 
@@ -776,7 +778,10 @@ const projNamespaceSeg: Segment = { raw: 'proj-pkg', words: ['proj', 'pkg'] };
 // Intermediate "file" segment — present in every real extracted Operation
 // (`opPath = [fileSeg, exportSeg]`, apigen-core-client/extract.ts) but NOT
 // derivable from `(pkg.id, fnName)` alone.
-const catalogFileSeg: Segment = { raw: 'catalogApi', words: ['catalog', 'api'] };
+const catalogFileSeg: Segment = {
+  raw: 'catalogApi',
+  words: ['catalog', 'api'],
+};
 
 function makeProjOp(exportName: string, exportWords: string[]): Operation {
   return {
@@ -926,7 +931,7 @@ describe.skip('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] run() derives tool n
     const resp = (await rpc('tools/call', {
       name: expectedGetItemName,
       arguments: { data: { itemId: 'sku-1' } },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as any;
     const content: Array<{ type: string; text: string }> =
       resp?.result?.content ?? resp?.content ?? [];
@@ -939,7 +944,7 @@ describe.skip('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] run() derives tool n
     const resp = (await rpc('tools/call', {
       name: expectedListItemsName,
       arguments: { data: {} },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as any;
     const content: Array<{ type: string; text: string }> =
       resp?.result?.content ?? resp?.content ?? [];
@@ -952,7 +957,7 @@ describe.skip('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] run() derives tool n
     const resp = (await rpc('tools/call', {
       name: 'getItem',
       arguments: { data: { itemId: 'sku-1' } },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as any;
     const content: Array<{ type: string; text: string }> =
       resp?.result?.content ?? resp?.content ?? [];
@@ -1071,7 +1076,10 @@ const parityErrSchema = {
   },
 };
 
-const parityNamespaceSeg: Segment = { raw: 'parity-pkg', words: ['parity', 'pkg'] };
+const parityNamespaceSeg: Segment = {
+  raw: 'parity-pkg',
+  words: ['parity', 'pkg'],
+};
 function makeParityOp(exportName: string, exportWords: string[]): Operation {
   return {
     id: `parity-pkg/${exportName}`,
@@ -1195,7 +1203,9 @@ describe.skip('[mcp-adapter] TransportAdapter/OpPlan golden-snapshot parity gate
           id: 'parity-env-pkg',
           schemas: parityEnvSchema,
           importPath: '@test/parity-env-pkg',
-          fns: { getUser: (userId: unknown) => parityGetUser(userId as string) },
+          fns: {
+            getUser: (userId: unknown) => parityGetUser(userId as string),
+          },
         },
         {
           id: 'parity-err-pkg',
@@ -1204,7 +1214,12 @@ describe.skip('[mcp-adapter] TransportAdapter/OpPlan golden-snapshot parity gate
           fns: { getThing: (id: unknown) => parityGetThing(id as string) },
         },
       ],
-      operations: [parityGetUserOp, parityListUsersOp, parityEnvGetUserOp, parityGetThingOp],
+      operations: [
+        parityGetUserOp,
+        parityListUsersOp,
+        parityEnvGetUserOp,
+        parityGetThingOp,
+      ],
       outputDir: '/tmp/out',
       options: { transport: 'streaming-http', port },
       signal: controller.signal,
@@ -1224,13 +1239,30 @@ describe.skip('[mcp-adapter] TransportAdapter/OpPlan golden-snapshot parity gate
         await client.connect(transport);
         break;
       } catch {
-        if (Date.now() > deadline) throw new Error('server did not become ready in 10s');
+        if (Date.now() > deadline)
+          throw new Error('server did not become ready in 10s');
         await new Promise((r) => setTimeout(r, 50));
       }
     }
 
     driver = {
-      async invoke(fixture: GoldenFixture<McpFixtureInput>): Promise<McpFixtureOutput> {
+      async invoke(
+        fixture: GoldenFixture<McpFixtureInput>
+      ): Promise<McpFixtureOutput> {
+        // JSON-FAITHFUL SHAPE — every optional field is spread in only when
+        // defined. `captureGolden` writes the snapshot through
+        // `JSON.stringify` (which DROPS a key whose value is `undefined`), but
+        // `assertParity` re-captures IN MEMORY and compares with
+        // `isDeepStrictEqual`, which is own-enumerable-key sensitive
+        // (`{a: undefined}` !== `{}`, deliberately — see parity-harness.ts).
+        // So an always-present `{ outputSchema: undefined }` (or
+        // `structuredContent`/`errorCode`) round-trips to key-absent in the
+        // committed file and then fails to compare equal to the in-memory
+        // recapture. ADR-0004 makes this observable for the first time: a
+        // non-object (union/array) return legitimately advertises NO
+        // `outputSchema` and emits NO `structuredContent`, so those keys must
+        // be ABSENT here, not present-and-undefined, for the gate to be
+        // self-consistent.
         if (fixture.input.kind === 'tools-list') {
           const { tools } = await client.listTools();
           return {
@@ -1239,7 +1271,9 @@ describe.skip('[mcp-adapter] TransportAdapter/OpPlan golden-snapshot parity gate
               .map((t) => ({
                 name: t.name,
                 description: t.description,
-                outputSchema: t.outputSchema,
+                ...(t.outputSchema !== undefined
+                  ? { outputSchema: t.outputSchema }
+                  : {}),
               }))
               .sort((a, b) => a.name.localeCompare(b.name)),
           };
@@ -1252,11 +1286,17 @@ describe.skip('[mcp-adapter] TransportAdapter/OpPlan golden-snapshot parity gate
           return {
             ok: true,
             content: result.content,
-            structuredContent: result.structuredContent,
+            ...(result.structuredContent !== undefined
+              ? { structuredContent: result.structuredContent }
+              : {}),
           };
         } catch (err) {
           const e = err as { code?: number; message?: string };
-          return { ok: false, errorCode: e.code, errorMessage: e.message };
+          return {
+            ok: false,
+            ...(e.code !== undefined ? { errorCode: e.code } : {}),
+            ...(e.message !== undefined ? { errorMessage: e.message } : {}),
+          };
         }
       },
     };
@@ -1377,13 +1417,19 @@ describe.skip('[mcp-adapter.1] BUG-APIGEN-SERVE-CORE-001 — malformed input is 
     const deadline = Date.now() + 10000;
     for (;;) {
       try {
-        client = new Client({ name: 'mcp-adapter-malformed', version: '1.0.0' });
+        client = new Client({
+          name: 'mcp-adapter-malformed',
+          version: '1.0.0',
+        });
         await client.connect(
-          new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`))
+          new StreamableHTTPClientTransport(
+            new URL(`http://127.0.0.1:${port}/mcp`)
+          )
         );
         break;
       } catch {
-        if (Date.now() > deadline) throw new Error('server did not become ready in 10s');
+        if (Date.now() > deadline)
+          throw new Error('server did not become ready in 10s');
         await new Promise((r) => setTimeout(r, 50));
       }
     }
@@ -1407,11 +1453,14 @@ describe.skip('[mcp-adapter.1] BUG-APIGEN-SERVE-CORE-001 — malformed input is 
     expect(calls).toBe(0);
   });
 
-  it('the rejection surfaces the validate-Layer\'s own message text (the invalid_argument ApiError, not a generic/unknown-tool error)', async () => {
+  it("the rejection surfaces the validate-Layer's own message text (the invalid_argument ApiError, not a generic/unknown-tool error)", async () => {
     calls = 0;
     let thrown: unknown;
     try {
-      await client.callTool({ name: malformedToolName, arguments: { data: {} } });
+      await client.callTool({
+        name: malformedToolName,
+        arguments: { data: {} },
+      });
     } catch (err) {
       thrown = err;
     }
@@ -1548,11 +1597,14 @@ describe.skip('[mcp-adapter.7] dod.11 — mcp composes --use layer + mount via c
       try {
         client = new Client({ name: 'mcp-adapter-use', version: '1.0.0' });
         await client.connect(
-          new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`))
+          new StreamableHTTPClientTransport(
+            new URL(`http://127.0.0.1:${port}/mcp`)
+          )
         );
         break;
       } catch {
-        if (Date.now() > deadline) throw new Error('server did not become ready in 10s');
+        if (Date.now() > deadline)
+          throw new Error('server did not become ready in 10s');
         await new Promise((r) => setTimeout(r, 50));
       }
     }
@@ -1570,7 +1622,10 @@ describe.skip('[mcp-adapter.7] dod.11 — mcp composes --use layer + mount via c
   });
 
   it('callTool(_meta/status mount) dispatches to the mount handler and returns its value', async () => {
-    const result = await client.callTool({ name: 'meta_status', arguments: {} });
+    const result = await client.callTool({
+      name: 'meta_status',
+      arguments: {},
+    });
     const content = result.content as Array<{ type: string; text: string }>;
     expect(JSON.parse(content[0].text)).toEqual({ status: 'ok' });
   });
@@ -1627,11 +1682,14 @@ describe.skip('[mcp-adapter.8] dod.12 — toolMetas build count stays 1 across m
       try {
         client = new Client({ name: 'mcp-adapter-hoist', version: '1.0.0' });
         await client.connect(
-          new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`))
+          new StreamableHTTPClientTransport(
+            new URL(`http://127.0.0.1:${port}/mcp`)
+          )
         );
         break;
       } catch {
-        if (Date.now() > deadline) throw new Error('server did not become ready in 10s');
+        if (Date.now() > deadline)
+          throw new Error('server did not become ready in 10s');
         await new Promise((r) => setTimeout(r, 50));
       }
     }
@@ -1641,14 +1699,20 @@ describe.skip('[mcp-adapter.8] dod.12 — toolMetas build count stays 1 across m
       // per-request rebuild would already show up as > before+1 here.
       expect(__toolTableBuildCount.count).toBe(before + 1);
 
-      const toolName = deriveToolName({ id: 'hoist-pkg', importPath: '@test/hoist-pkg' }, 'getUser');
+      const toolName = deriveToolName(
+        { id: 'hoist-pkg', importPath: '@test/hoist-pkg' },
+        'getUser'
+      );
       // MULTIPLE CallTool requests against the SAME stateless streaming-http
       // server (each streaming-http request gets its own fresh `Server`
       // instance per the SDK's stateless-mode contract — but that per-request
       // `createMcpServer()` call must NOT re-invoke the expensive
       // `buildToolTable()`).
       for (let i = 0; i < 5; i++) {
-        await client.callTool({ name: toolName, arguments: { data: { userId: `u${i}` } } });
+        await client.callTool({
+          name: toolName,
+          arguments: { data: { userId: `u${i}` } },
+        });
       }
 
       expect(__toolTableBuildCount.count).toBe(before + 1);
@@ -1695,43 +1759,42 @@ describe.skip('[mcp-adapter.8] dod.12 — toolMetas build count stays 1 across m
 // gate is UNVERIFIED — neither the gate nor its teeth run. Re-enable BOTH together.
 // Run: npx vitest run src/test/run.spec.ts -t "mcp-adapter.6"
 describe.skip('[mcp-adapter.6] negative control — the parity gate actually gates [CPU-THRASH-SKIP: owner-requested — DEPENDENT on the skipped parity gate]', () => {
-  it(
-    'applying neg-control/mcp-adapter.patch turns the golden-parity check RED; reverting turns it GREEN',
-    async () => {
-      const repoRoot = findRepoRoot(__dirname);
-      const patchPath = path.join(
-        repoRoot,
-        'docs/plan/apigen-serve-core/neg-control/mcp-adapter.patch'
-      );
+  it('applying neg-control/mcp-adapter.patch turns the golden-parity check RED; reverting turns it GREEN', async () => {
+    const repoRoot = findRepoRoot(__dirname);
+    const patchPath = path.join(
+      repoRoot,
+      'docs/plan/apigen-serve-core/neg-control/mcp-adapter.patch'
+    );
 
-      function runGoldenParityCheckInFreshProcess(): void {
-        const result = spawnSync(
-          process.execPath,
-          [
-            path.join(repoRoot, 'node_modules/vitest/vitest.mjs'),
-            'run',
-            '--config',
-            path.join(repoRoot, 'packages/apigen/apigen-plugin-mcp/vitest.e2e.config.ts'),
-            '-t',
-            'recapture deep-equals the committed golden snapshot',
-          ],
-          { cwd: repoRoot, encoding: 'utf8' }
+    function runGoldenParityCheckInFreshProcess(): void {
+      const result = spawnSync(
+        process.execPath,
+        [
+          path.join(repoRoot, 'node_modules/vitest/vitest.mjs'),
+          'run',
+          '--config',
+          path.join(
+            repoRoot,
+            'packages/apigen/apigen-plugin-mcp/vitest.e2e.config.ts'
+          ),
+          '-t',
+          'recapture deep-equals the committed golden snapshot',
+        ],
+        { cwd: repoRoot, encoding: 'utf8' }
+      );
+      if (result.status !== 0) {
+        throw new Error(
+          `golden-parity check failed (exit ${result.status}):\n${result.stdout}\n${result.stderr}`
         );
-        if (result.status !== 0) {
-          throw new Error(
-            `golden-parity check failed (exit ${result.status}):\n${result.stdout}\n${result.stderr}`
-          );
-        }
       }
+    }
 
-      await withNegControlLock(repoRoot, () =>
-        proveNegativeControl(runGoldenParityCheckInFreshProcess, patchPath, {
-          cwd: repoRoot,
-        })
-      );
-    },
-    60000
-  );
+    await withNegControlLock(repoRoot, () =>
+      proveNegativeControl(runGoldenParityCheckInFreshProcess, patchPath, {
+        cwd: repoRoot,
+      })
+    );
+  }, 60000);
 });
 
 // ---------------------------------------------------------------------------

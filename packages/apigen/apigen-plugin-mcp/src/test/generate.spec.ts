@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { generate } from '../lib/generate';
 import { mcpPlugin } from '../lib/plugin';
-import type { Operation, PluginInput, RunInput, Segment } from '@adhd/apigen-core-client';
+import type {
+  Operation,
+  PluginInput,
+  RunInput,
+  Segment,
+} from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
 import { operationFor } from '../lib/tool-naming';
 
@@ -214,7 +219,7 @@ describe('[plugin-mcp.5] no inline dispatch logic in generate output', () => {
 // ---------- [plugin-mcp.7] BUG-APIGEN-017/018/019/020 — generated server.ts wiring ----------
 
 describe('[plugin-mcp.7] generated server.ts — MCP schema-hardening wiring', () => {
-  it('BUG-APIGEN-019: stdio/sse/streaming-http server.ts all import and call buildMcpOutputSchema + wrapMcpStructuredContent', () => {
+  it('ADR-0004: stdio/sse/streaming-http server.ts wire outputSchema + structuredContent, never a {result} envelope', () => {
     for (const transport of ['stdio', 'sse', 'streaming-http'] as const) {
       const out = generate({ ...baseInput, options: { transport } });
       const server = out.files.find((f) => f.path === 'server.ts');
@@ -227,6 +232,10 @@ describe('[plugin-mcp.7] generated server.ts — MCP schema-hardening wiring', (
       // structuredContent field, not just imported-and-unused.
       expect(server.content).toContain('outputSchema');
       expect(server.content).toContain('structuredContent');
+      // ADR-0004: the generated host must NOT manufacture the old wrap schema
+      // (`{type:'object', properties:{ result: <output> }, …}`) — non-object
+      // returns are passed through flat on `content`.
+      expect(server.content).not.toMatch(/properties:\s*\{\s*result/);
     }
   });
 
@@ -252,7 +261,11 @@ describe('[plugin-mcp.7] generated server.ts — MCP schema-hardening wiring', (
     const out = generate({
       ...baseInput,
       packages: [
-        { id: 'test-pkg', schemas: restrictiveSchema, importPath: '@test/test-pkg' },
+        {
+          id: 'test-pkg',
+          schemas: restrictiveSchema,
+          importPath: '@test/test-pkg',
+        },
       ],
     });
     const idx = out.files.find((f) => f.path === 'index.ts');
@@ -289,7 +302,11 @@ describe('[plugin-mcp.7] generated server.ts — MCP schema-hardening wiring', (
     const out = generate({
       ...baseInput,
       packages: [
-        { id: 'test-pkg', schemas: schemaWithDefault, importPath: '@test/test-pkg' },
+        {
+          id: 'test-pkg',
+          schemas: schemaWithDefault,
+          importPath: '@test/test-pkg',
+        },
       ],
     });
     const idx = out.files.find((f) => f.path === 'index.ts');
@@ -305,7 +322,9 @@ describe('[plugin-mcp.7] generated server.ts — MCP schema-hardening wiring', (
       search: {
         input: {
           type: 'object',
-          properties: { data: { type: 'object', properties: {}, required: [] } },
+          properties: {
+            data: { type: 'object', properties: {}, required: [] },
+          },
           required: ['data'],
           description:
             'apigen calling convention: all domain parameters go inside a "data" envelope.',
@@ -316,7 +335,11 @@ describe('[plugin-mcp.7] generated server.ts — MCP schema-hardening wiring', (
     const out = generate({
       ...baseInput,
       packages: [
-        { id: 'test-pkg', schemas: schemaWithEnvelopeDoc, importPath: '@test/test-pkg' },
+        {
+          id: 'test-pkg',
+          schemas: schemaWithEnvelopeDoc,
+          importPath: '@test/test-pkg',
+        },
       ],
     });
     const idx = out.files.find((f) => f.path === 'index.ts');
@@ -428,7 +451,7 @@ describe('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] generate() derives canoni
     expect(idx.content).not.toMatch(/\n\s*listUsers:\s*\{/);
   });
 
-  it('matches run()\'s EXACT-path derivation when given the same real Operation[] (cross-transport / generate-vs-run consistency)', () => {
+  it("matches run()'s EXACT-path derivation when given the same real Operation[] (cross-transport / generate-vs-run consistency)", () => {
     const namespaceSeg: Segment = { raw: 'catalog', words: ['catalog'] };
     const fileSeg: Segment = { raw: 'itemApi', words: ['item', 'api'] };
     const getItemOp: Operation = {
