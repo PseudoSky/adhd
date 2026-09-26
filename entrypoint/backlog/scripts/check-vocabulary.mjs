@@ -65,6 +65,26 @@ const BANNED = [
 const EXCLUDED_EXT = new Set(['.map']);
 
 /**
+ * A GENERATED ARTIFACT whose text is derived verbatim from an AUTHORED file
+ * this same gate already scans under the full rule.
+ *
+ * `dist/api.ir.json` is the bake-at-build IR artifact (design doc Revision 3,
+ * `docs/apigen/design-notes/extract-stage-onion-and-ir-cache.md`): `nx build
+ * backlog` extracts `dist/api.d.ts` and writes the resulting `Operation[]` —
+ * operation descriptions, `typeText`, and type/schema names all ORIGINATE in
+ * `api.d.ts` (and its authored `src/`). Exempting the derived copy is not a
+ * hole: the authored `api.d.ts` ships in the same tarball and is scanned here
+ * under the FULL rule, so any banned token in the artifact is already caught at
+ * its source. This mirrors the `.map` exclusion's rationale exactly — generated
+ * output is skipped only because its inputs are scanned.
+ *
+ * The exemption is exactly this ONE path, and SKIPPED HITS ARE COUNTED so the
+ * exclusion can never silently grow or hide a real, new leak. A new/renamed
+ * artifact must be added here deliberately, with this same justification.
+ */
+const GENERATED_ARTIFACT = /^dist\/api\.ir\.json$/;
+
+/**
  * A GENERATED bundle: minifier output, where identifier names are invented by
  * the tool and carry no authorial intent. Only the non-minifiable terms apply
  * here. Everything else in the tarball — every `.d.ts` (which carries source
@@ -137,6 +157,7 @@ function main() {
     const violations = [];
     let excludedHits = 0;
     let minifiedHits = 0;
+    let generatedArtifactHits = 0;
 
     for (const file of files) {
       const rel = relative(root, file);
@@ -148,6 +169,9 @@ function main() {
       }
       const excluded = EXCLUDED_EXT.has(extname(file));
       const generated = GENERATED_BUNDLE.test(rel);
+      // A generated artifact derived from an already-scanned authored source
+      // (see GENERATED_ARTIFACT): skip its hits, but COUNT them.
+      const generatedArtifact = GENERATED_ARTIFACT.test(rel);
       text.split('\n').forEach((line, i) => {
         for (const { name, re, minifiable } of BANNED) {
           if (!re.test(line)) continue;
@@ -158,6 +182,7 @@ function main() {
             continue;
           }
           if (excluded) excludedHits++;
+          else if (generatedArtifact) generatedArtifactHits++;
           else
             violations.push({
               file: rel,
@@ -201,6 +226,9 @@ function main() {
     console.log(`  .map hits (excluded, informational): ${excludedHits}`);
     console.log(
       `  minifier-identifier v1/v2 hits in generated bundles (excluded, informational): ${minifiedHits}`
+    );
+    console.log(
+      `  generated-artifact hits derived from already-scanned authored source (excluded, informational): ${generatedArtifactHits}`
     );
     console.log(
       '  humanId/migrat/sqlite were enforced everywhere, generated bundles included.'

@@ -292,6 +292,38 @@ and is rejected with `invalid_argument`, and the stats/rollup ops
 priority-matrix` lines against this page if a documented field or verb is
 refused.
 
+## Build & startup
+
+`nx build backlog` emits TWO things into `dist/`: the compiled
+`index.js` + `api.d.ts`, and `api.ir.json` — the extracted operation
+descriptors for `api.d.ts`, produced by the build's own hidden `ir-artifact`
+subcommand:
+
+```bash
+node dist/index.js ir-artifact --out dist/api.ir.json
+```
+
+Startup (the CLI, an MCP `initialize`, `--help`) reads `api.ir.json` and
+derives the mounted surface from it **without loading the type extractor**, so
+a cold start is fast without any warm cache — the fix for a startup path that
+previously paid a multi-second synchronous extraction on every invocation.
+
+`api.ir.json` is trusted only while it still matches the `api.d.ts` beside it:
+the artifact records a content hash of its source, and startup re-hashes the
+current `.d.ts` before using it. A missing, corrupt, or stale artifact (source
+changed since the bake) is refused, and startup falls back to a live
+extraction through the extract-stage IR cache, which persists the result for
+the next run.
+
+`ir-artifact` is a build step, not a user command — it is absent from `--help`
+and store-free (it never opens the graph store and never writes under
+`~/.adhd`).
+
+| Setting          | Env var                    | Default                              | Notes                                                                                                                                    |
+| ---------------- | -------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| IR cache enabled | `APIGEN_IR_CACHE_ENABLED`  | `1`                                  | Governs ONLY the **runtime fallback** cache. It does **not** bypass the baked `api.ir.json` artifact — that artifact is the startup path, not a cache |
+| IR cache file    | `APIGEN_IR_CACHE_FILE`     | a machine-global path under `~/.adhd` | Where a fallback extraction's result is cached                                                                                            |
+
 ## Library API
 
 Beyond the CLI/MCP/HTTP surface, the package exports its query layer
