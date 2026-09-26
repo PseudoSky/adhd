@@ -95,7 +95,9 @@ describe('[ADR-0004] wrapMcpStructuredContent', () => {
 
   it('returns undefined when emit is false (non-object return → no structuredContent)', () => {
     expect(wrapMcpStructuredContent(false, { id: 'u1' })).toBeUndefined();
-    expect(wrapMcpStructuredContent(false, ['not', 'an', 'object'])).toBeUndefined();
+    expect(
+      wrapMcpStructuredContent(false, ['not', 'an', 'object'])
+    ).toBeUndefined();
     expect(wrapMcpStructuredContent(false, 'not-an-object')).toBeUndefined();
     expect(wrapMcpStructuredContent(false, null)).toBeUndefined();
   });
@@ -164,7 +166,9 @@ describe('[BUG-APIGEN-059] real catch-all union output end-to-end', () => {
     // branch at all.
     expect(
       Array.isArray((op.output as Record<string, unknown>)['oneOf']),
-      `expected the extracted output to be a oneOf union; got: ${JSON.stringify(op.output)}`
+      `expected the extracted output to be a oneOf union; got: ${JSON.stringify(
+        op.output
+      )}`
     ).toBe(true);
 
     // ADR-0004: a non-object (union) return emits NO outputSchema and NO

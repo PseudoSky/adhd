@@ -25,21 +25,7 @@
       },
       {
         "name": "parity_pkg_list_users",
-        "description": "Example: {\"data\":{}}",
-        "outputSchema": {
-          "type": "object",
-          "properties": {
-            "result": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          "required": [
-            "result"
-          ]
-        }
+        "description": "Example: {\"data\":{}}"
       }
     ]
   },
@@ -63,13 +49,7 @@
         "type": "text",
         "text": "[\"alice\",\"bob\"]"
       }
-    ],
-    "structuredContent": {
-      "result": [
-        "alice",
-        "bob"
-      ]
-    }
+    ]
   },
   "call-session-envelope": {
     "ok": true,

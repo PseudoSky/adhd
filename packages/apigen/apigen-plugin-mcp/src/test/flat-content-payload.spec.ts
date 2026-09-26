@@ -44,7 +44,11 @@ const PKG = { id: 'flat-content-pkg', importPath: '@test/flat-content-pkg' };
 const getUserName = project(operationFor(PKG, 'getUser')).mcp.name;
 const searchName = project(operationFor(PKG, 'search')).mcp.name;
 
-const fixturePath = path.join(__dirname, 'fixtures', 'flat-content-mcp-entry.js');
+const fixturePath = path.join(
+  __dirname,
+  'fixtures',
+  'flat-content-mcp-entry.js'
+);
 const distEntry = path.join(__dirname, '..', '..', 'dist', 'index.js');
 
 interface McpTextContent {
@@ -115,7 +119,9 @@ describe('[ADR-0004] flat-content payload — real MCP stdio client vs the BUILT
     });
     const content = (result.content ?? []) as McpTextContent[];
 
-    expect(result.structuredContent).toEqual(JSON.parse(content[0]?.text ?? 'null'));
+    expect(result.structuredContent).toEqual(
+      JSON.parse(content[0]?.text ?? 'null')
+    );
     expect(result.structuredContent).toEqual({ id: 'u1', name: 'User-u1' });
   });
 });

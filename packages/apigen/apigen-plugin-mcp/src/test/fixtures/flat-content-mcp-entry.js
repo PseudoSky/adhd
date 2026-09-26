@@ -20,6 +20,24 @@ process.env.VITEST = 'true';
 const distEntry = path.join(__dirname, '..', '..', '..', 'dist', 'index.js');
 const { mcpPlugin } = require(distEntry);
 
+// `outputDir` is a REQUIRED field of `PluginInput`/`RunInput`
+// (`@adhd/apigen-core-client` types.ts: `outputDir: string`), but the MCP
+// plugin's `run()` never reads it — it writes no files on any transport (the
+// stdio path is pure JSON-RPC on stdout/stdin; sse/streaming-http only bind a
+// socket). Keep it pointing at this repo's ephemeral scratch root
+// (`tmp/<package>/…`, gitignored — AGENTS.md §10) rather than a hardcoded
+// system `/tmp/out` path; the value is inert either way.
+const workspaceRoot = path.resolve(
+  __dirname,
+  '..',
+  '..',
+  '..',
+  '..',
+  '..',
+  '..'
+);
+const outputDir = path.join(workspaceRoot, 'tmp', 'apigen-plugin-mcp');
+
 // Silent logger: the run() path would otherwise emit tool-registration lines
 // on stderr. stdout is the JSON-RPC channel either way.
 const noop = () => undefined;
@@ -103,7 +121,7 @@ mcpPlugin
         fns,
       },
     ],
-    outputDir: '/tmp/out',
+    outputDir,
     options: { transport: 'stdio' },
     logger: silentLogger,
     signal: controller.signal,
