@@ -8,13 +8,24 @@
  * `catalogNameFold`, so `priorityMatrix` splits one priority across two rows
  * and a name-keyed consumer double-counts.
  *
- * THE REPAIR. `applyCaseFragmentMerge` groups LIVE rows by fold, makes the
- * uppercase-spelled member canonical (renaming a member to uppercase when the
- * group has none), re-points every incoming catalog edge onto it, records the
- * merged-away spellings as `meta.aliases` on the survivor, and invalidates
- * each fragment (`t_invalid`, reversible). It is idempotent (a folded-clean
- * store plans nothing) and reversible (the journal restores fragments, edges,
- * and any rename).
+ * THE REPAIR. `applyCaseFragmentMerge` groups LIVE rows by fold and picks the
+ * canonical PER KIND — the spelling the write path emits: lowercase for
+ * `status` (`create-issue.ts`'s default `'open'`), uppercase for `priority`
+ * (`HIGH`/`MEDIUM`, every product sample). It re-points every incoming catalog
+ * edge onto the canonical, records the merged-away spellings as `meta.aliases`
+ * on the survivor, and invalidates each fragment (`t_invalid`, reversible). A
+ * status name is NEVER rewritten; a priority group with no uppercase member is
+ * renamed to uppercase (journaled). A status group with no lowercase member
+ * cannot be merged — it would regenerate — and is surfaced in `unmergeable`.
+ * The repair is idempotent (a folded-clean store plans nothing) and reversible
+ * (the journal restores fragments, edges, and any rename).
+ *
+ * THE SELF-REGENERATION DEFECT (why the canonical is per-kind): the status
+ * write path emits lowercase `'open'`. A merge that canonicalized `open`→`OPEN`
+ * would leave the next ordinary `createIssue` — which emits `'open'` — to
+ * exact-match miss and mint a FRESH `open` row, regenerating the twin the merge
+ * just removed. The regression below proves it: RED against the old uppercase
+ * directive, GREEN after the per-kind fix.
  *
  * Every assertion drives the REAL verbs (`seedProject`/`createIssue`/
  * `priorityMatrix`/`openCurve`/`queryIssues`) against a REAL store opened via
@@ -27,7 +38,6 @@
  */
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { NodeRecord } from '@adhd/sox-graph-store';
 import {
   openTestIssueStore,
   removeTestIssueStoreDir,
@@ -169,10 +179,6 @@ async function repointIssueEdge(
   });
 }
 
-async function liveStatuses(store: TestIssueStore): Promise<NodeRecord[]> {
-  return store.graph.queryNodes({ kind: 'status', liveOnly: true });
-}
-
 async function planNow(store: TestIssueStore): Promise<IMergePlan> {
   const statuses = await store.graph.queryNodes({ kind: 'status', liveOnly: true });
   const priorities = await store.graph.queryNodes({ kind: 'priority', liveOnly: true });
@@ -191,6 +197,37 @@ describe('catalog-merge — status/priority case-fragment collapse', () => {
   afterEach(async () => {
     await store.close();
     removeTestIssueStoreDir(dir);
+  });
+
+  it('CANONICAL SPELLING per kind: status collapses to lowercase (write path), priority to uppercase', async () => {
+    await seedProject(store, 'case-merge-canonical');
+    const openLower = await mintCatalog(store, 'status', 'open', { terminal: false });
+    const openUpper = await mintCatalog(store, 'status', 'OPEN', { terminal: false });
+    const highLower = await mintCatalog(store, 'priority', 'high', { rank: 2 });
+    const highUpper = await mintCatalog(store, 'priority', 'HIGH', { rank: 1 });
+    const medLower = await mintCatalog(store, 'priority', 'medium', { rank: 4 });
+    const medUpper = await mintCatalog(store, 'priority', 'MEDIUM', { rank: 3 });
+
+    const plan = await planNow(store);
+    expect(plan.unmergeable).toEqual([]);
+
+    // status: the LOWERCASE member is canonical.
+    const openGroup = plan.groups.find((g) => g.canonicalUid === openLower.uid);
+    expect(openGroup?.fragmentUids).toEqual([openUpper.uid]);
+    // priority: the UPPERCASE member is canonical.
+    const highGroup = plan.groups.find((g) => g.canonicalUid === highUpper.uid);
+    expect(highGroup?.fragmentUids).toEqual([highLower.uid]);
+    const medGroup = plan.groups.find((g) => g.canonicalUid === medUpper.uid);
+    expect(medGroup?.fragmentUids).toEqual([medLower.uid]);
+
+    await applyCaseFragmentMerge(store, plan);
+
+    expect((await liveCatalogRows(store, 'status')).map((r) => r.name)).toEqual([
+      'open',
+    ]);
+    expect(
+      (await liveCatalogRows(store, 'priority')).map((r) => r.name).sort()
+    ).toEqual(['HIGH', 'MEDIUM']);
   });
 
   it('RED then GREEN: a HIGH/high case twin is two rows before, one after — uppercase survives, both issues resolve to it, rank wins', async () => {
@@ -280,30 +317,83 @@ describe('catalog-merge — status/priority case-fragment collapse', () => {
     expect(journal.entries[0]!.repointedEdges.length).toBe(2);
   });
 
-  it('UPPERCASE directive: a group with no uppercase member is renamed to uppercase, and the rename is journaled', async () => {
-    await seedProject(store, 'case-merge-rename');
-    await mintCatalog(store, 'status', 'Open', { terminal: false });
-    await mintCatalog(store, 'status', 'open', { terminal: false });
+  it('STATUS canonical is lowercase: a non-lowercase member is merged away, NEVER renamed, and reverse restores both spellings', async () => {
+    await seedProject(store, 'case-merge-status-canon');
+    const openLower = await mintCatalog(store, 'status', 'open', { terminal: false });
+    const openMixed = await mintCatalog(store, 'status', 'Open', { terminal: false });
+
+    const plan = await planNow(store);
+    expect(plan.groups.length).toBe(1);
+    expect(plan.groups[0]!.canonicalUid).toBe(openLower.uid);
+
+    const journal = await applyCaseFragmentMerge(store, plan);
+
+    const live = await liveCatalogRows(store, 'status');
+    expect(live.map((r) => r.name)).toEqual(['open']);
+    // A status name is NEVER rewritten — no rename was journaled.
+    expect(journal.entries[0]!.renamed).toBeUndefined();
+    // The merged-away spelling is recorded as a data alias instead.
+    expect(live[0]!.meta.aliases).toContain('Open');
+    // The fragment keeps its own spelling, invalidated not renamed.
+    const fragment = await rowByUidAny(store, openMixed.uid);
+    expect(fragment?.name).toBe('Open');
+    expect(fragment?.t_invalid).not.toBeNull();
+
+    await reverseCaseFragmentMerge(store, journal);
+    expect(
+      (await liveCatalogRows(store, 'status')).map((r) => r.name).sort()
+    ).toEqual(['Open', 'open']);
+  });
+
+  it('PRIORITY canonical is uppercase: a group with no uppercase member is renamed, and the rename is journaled', async () => {
+    await seedProject(store, 'case-merge-priority-rename');
+    await mintCatalog(store, 'priority', 'Low', { rank: 1 });
+    await mintCatalog(store, 'priority', 'low', { rank: 2 });
 
     const plan = await planNow(store);
     expect(plan.groups.length).toBe(1);
 
     const journal = await applyCaseFragmentMerge(store, plan);
 
-    const live = await liveCatalogRows(store, 'status');
-    const canonical = live.find((r) => r.uid === plan.groups[0]!.canonicalUid);
-    expect(canonical?.name).toBe('OPEN');
-
-    // EVERY live status name with letters is now uppercase-spelled.
-    for (const row of live) {
-      if (/\p{L}/u.test(row.name)) expect(row.name).toBe(row.name.toUpperCase());
-    }
-
+    const live = await liveCatalogRows(store, 'priority');
+    expect(live.map((r) => r.name)).toEqual(['LOW']);
+    // A priority rename is journaled so it can be reversed.
     expect(journal.entries[0]!.renamed).toBeDefined();
-    expect(journal.entries[0]!.renamed!.from).toBe('Open');
-    expect(journal.entries[0]!.renamed!.to).toBe('OPEN');
+    expect(journal.entries[0]!.renamed!.from).toBe('Low');
+    expect(journal.entries[0]!.renamed!.to).toBe('LOW');
     // The renamed-FROM spelling is also recorded as an alias.
-    expect(canonical?.meta.aliases).toContain('Open');
+    expect(live[0]!.meta.aliases).toContain('Low');
+  });
+
+  it('REFUSED: a status group with no lowercase (write-spelling) member is NOT merged and is surfaced', async () => {
+    await seedProject(store, 'case-merge-unmergeable');
+    const openUpper = await mintCatalog(store, 'status', 'OPEN', { terminal: false });
+    const openMixed = await mintCatalog(store, 'status', 'Open', { terminal: false });
+
+    const plan = await planNow(store);
+    // Neither spelling is what the write path emits, so there is no safe
+    // canonical: the group is surfaced, not merged, not renamed.
+    expect(plan.groups.length).toBe(0);
+    expect(plan.unmergeable.length).toBe(1);
+    expect(plan.unmergeable[0]!.kind).toBe('status');
+    expect([...plan.unmergeable[0]!.names].sort()).toEqual(['OPEN', 'Open']);
+
+    const journal = await applyCaseFragmentMerge(store, plan);
+    expect(journal.entries).toEqual([]);
+    expect(
+      (await liveCatalogRows(store, 'status')).map((r) => r.name).sort()
+    ).toEqual(['OPEN', 'Open']);
+
+    // A hand-built plan that WOULD merge into the divergent `OPEN` canonical is
+    // refused by the status-spelling guard, changing nothing.
+    const badPlan: IMergePlan = {
+      groups: [{ canonicalUid: openUpper.uid, fragmentUids: [openMixed.uid] }],
+      unmergeable: [],
+      at: nowISO(),
+    };
+    await expect(applyCaseFragmentMerge(store, badPlan)).rejects.toThrow(
+      /lowercase spelling/i
+    );
   });
 
   it('HISTORICAL resolution: an audit naming a merged-away spelling still classifies because the survivor carries the alias', async () => {
@@ -314,12 +404,14 @@ describe('catalog-merge — status/priority case-fragment collapse', () => {
     const issue = await createIssue(store, {
       project: projectUid,
       title: 'historical item',
-      body: 'transitioned to a lowercase spelling',
+      body: 'transitioned to an uppercase spelling',
       by: 'agent:t',
     });
+    // Point the issue at the UPPERCASE fragment — the spelling the merge will
+    // merge away and alias, so only the alias can resolve the audit below.
     await repointIssueEdge(store, createdUid(issue), 'has_status', {
-      rowid: doneLower.rowid,
-      uid: doneLower.uid,
+      rowid: doneUpper.rowid,
+      uid: doneUpper.uid,
       kind: 'status',
     });
 
@@ -336,24 +428,26 @@ describe('catalog-merge — status/priority case-fragment collapse', () => {
         actor: 'agent:t',
         action: 'transitioned',
         from: 'open',
-        to: 'done',
+        to: 'DONE',
         at: t1,
       });
     });
 
     await applyCaseFragmentMerge(store, await planNow(store));
 
-    // The alias is genuinely in DATA on the survivor.
+    // The canonical is the LOWERCASE member; the alias is the merged-away
+    // uppercase spelling, and it lives in DATA on the survivor.
     const survivor = (await liveCatalogRows(store, 'status')).find(
-      (r) => r.uid === doneUpper.uid
+      (r) => r.uid === doneLower.uid
     );
-    expect(survivor?.meta.aliases).toContain('done');
+    expect(survivor?.name).toBe('done');
+    expect(survivor?.meta.aliases).toContain('DONE');
     // ...and the merged-away row is no longer live.
-    expect((await rowByUidAny(store, doneLower.uid))?.t_invalid).not.toBeNull();
+    expect((await rowByUidAny(store, doneUpper.uid))?.t_invalid).not.toBeNull();
 
-    // The real `openCurve` view classifies the historical `to:'done'` as
+    // The real `openCurve` view classifies the historical `to:'DONE'` as
     // CLOSED via the alias. Without the alias this reads OPEN — which is the
-    // teeth: `done` is not a live status name, so only the survivor's
+    // teeth: `DONE` is not a live status name, so only the survivor's
     // `meta.aliases` can resolve it.
     const t2 = new Date(Date.now() + 120_000).toISOString();
     const curve = await openCurve(store, { filter: { project: projectUid }, at: [t2] });
@@ -387,6 +481,7 @@ describe('catalog-merge — status/priority case-fragment collapse', () => {
 
     const secondPlan = await planNow(store);
     expect(secondPlan.groups).toEqual([]);
+    expect(secondPlan.unmergeable).toEqual([]);
     const secondJournal = await applyCaseFragmentMerge(store, secondPlan);
     expect(secondJournal.entries).toEqual([]);
   });
@@ -442,20 +537,20 @@ describe('catalog-merge — status/priority case-fragment collapse', () => {
     expect(bEdges[0]!.dst).toBe(highLower.rowid);
   });
 
-  it('REVERSIBLE (rename): reverse restores the exact original spelling of a renamed survivor', async () => {
+  it('REVERSIBLE (rename): reverse restores the exact original spelling of a renamed PRIORITY survivor', async () => {
     await seedProject(store, 'case-merge-reverse-rename');
-    await mintCatalog(store, 'status', 'Open', { terminal: false });
-    await mintCatalog(store, 'status', 'open', { terminal: false });
+    await mintCatalog(store, 'priority', 'Low', { rank: 1 });
+    await mintCatalog(store, 'priority', 'low', { rank: 2 });
 
     const journal = await applyCaseFragmentMerge(store, await planNow(store));
-    expect(
-      (await liveCatalogRows(store, 'status')).map((r) => r.name).sort()
-    ).toEqual(['OPEN']);
+    expect((await liveCatalogRows(store, 'priority')).map((r) => r.name)).toEqual([
+      'LOW',
+    ]);
 
     await reverseCaseFragmentMerge(store, journal);
     expect(
-      (await liveCatalogRows(store, 'status')).map((r) => r.name).sort()
-    ).toEqual(['Open', 'open']);
+      (await liveCatalogRows(store, 'priority')).map((r) => r.name).sort()
+    ).toEqual(['Low', 'low']);
   });
 
   it('RANK: a fragment rank is adopted ONLY when the survivor has none', async () => {
@@ -493,6 +588,7 @@ describe('catalog-merge — status/priority case-fragment collapse', () => {
     // the fold check in `applyCaseFragmentMerge` and this `rejects` fails.
     const badPlan: IMergePlan = {
       groups: [{ canonicalUid: closed.uid, fragmentUids: [done.uid] }],
+      unmergeable: [],
       at: nowISO(),
     };
     await expect(applyCaseFragmentMerge(store, badPlan)).rejects.toThrow(
@@ -518,5 +614,59 @@ describe('catalog-merge — status/priority case-fragment collapse', () => {
     expect(open.view).toBe('list');
     if (!('items' in open)) throw new Error('expected a list-shaped result');
     expect(open.items.map((i) => i.uid)).toContain(createdUid(issue));
+  });
+
+  it('SELF-REGENERATION REGRESSION: after merging an open/OPEN pair, an ordinary create must NOT mint a fresh open', async () => {
+    const { projectUid } = await seedProject(store, 'case-merge-selfregen');
+    // The write path emits lowercase 'open' (create-issue.ts), so 'open' is the
+    // canonical and 'OPEN' the fragment.
+    await mintCatalog(store, 'status', 'open', { terminal: false });
+    await mintCatalog(store, 'status', 'OPEN', { terminal: false });
+
+    await applyCaseFragmentMerge(store, await planNow(store));
+    expect(await caseTwinCount(store, 'status')).toBe(0);
+
+    // An ordinary create with NO explicit status — the exact path that emits
+    // lowercase 'open'. If the merge canonicalized to 'OPEN', this exact lookup
+    // misses and mints a fresh 'open' row, regenerating the twin.
+    await createIssue(store, {
+      project: projectUid,
+      title: 'post-merge create',
+      body: 'b',
+      by: 'agent:t',
+    });
+
+    expect(await caseTwinCount(store, 'status')).toBe(0);
+  });
+
+  it('NEGATIVE CONTROL: forcing the canonical to the divergent spelling makes the regression fail', async () => {
+    const { projectUid } = await seedProject(store, 'case-merge-negctl');
+    await mintCatalog(store, 'status', 'open', { terminal: false });
+    await mintCatalog(store, 'status', 'OPEN', { terminal: false });
+
+    const journal = await applyCaseFragmentMerge(store, await planNow(store));
+    expect(await caseTwinCount(store, 'status')).toBe(0);
+
+    // Force the survivor back to the write-path-divergent spelling — exactly
+    // what the pre-fix canonical selection did.
+    await executeWriteTransaction(store, async (tx) => {
+      const survivor = await getNodeByUidTx(tx, journal.entries[0]!.canonicalUid);
+      if (!survivor) throw new Error('test setup: canonical vanished');
+      await tx.executeRun(
+        'UPDATE node SET name = ? WHERE rowid = ? AND t_invalid IS NULL',
+        ['OPEN', survivor.rowid]
+      );
+    });
+    await createIssue(store, {
+      project: projectUid,
+      title: 'post-merge create',
+      body: 'b',
+      by: 'agent:t',
+    });
+    // The regression assertion (exactly one open-folding row) now FAILS: the
+    // create re-minted the lowercase twin. This is the teeth of the regression
+    // above — a divergent canonical DOES regenerate, so `toBe(0)` there is a
+    // real, breakable assertion.
+    expect(await caseTwinCount(store, 'status')).toBe(1);
   });
 });

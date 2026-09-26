@@ -22,16 +22,25 @@
  * never `SQL lower()`/`NOCASE`, which are ASCII-only and would desync from the
  * JS fold), and for every fold shared by two or more live rows it:
  *
- *   1. picks the **uppercase-spelled member as canonical, unconditionally**
- *      (owner directive — not chosen by incoming-edge count). A group with no
- *      uppercase member has ONE member renamed to uppercase; that rename is
- *      journaled so it can be reversed.
+ *   1. picks the canonical member **per kind** — the spelling the WRITE PATH
+ *      emits for that catalog, never chosen by incoming-edge count:
+ *      - **status → lowercase.** The write path emits the lowercase literal
+ *        (`create-issue.ts`'s default `'open'`; the skill's conventional
+ *        `open`/`claimed`/`closed`). A status group with NO lowercase member is
+ *        therefore left UNMERGED and surfaced in the plan's `unmergeable` list:
+ *        renaming one to the write spelling is impossible (there is none), and
+ *        merging into any other spelling would be self-defeating — the next
+ *        ordinary `create` would exact-match miss and re-mint the fragment this
+ *        collapse just removed. A status `name` is NEVER rewritten.
+ *      - **priority → uppercase** (`HIGH`/`MEDIUM`, every product sample). A
+ *        priority group with no uppercase member has its canonical renamed to
+ *        uppercase; that rename is journaled so it can be reversed.
  *   2. re-points every incoming `has_status`/`has_priority` edge from each
  *      fragment onto the canonical row, inside ONE transaction
  *      (`invalidateEdgeTx` the old + `writeEdgeTx` the new).
- *   3. appends every spelling that was merged away — and, in the rename case,
- *      the spelling renamed FROM — to `canonical.meta.aliases`, so a
- *      historical audit `to`/`from` naming the old spelling still classifies
+ *   3. appends every spelling that was merged away — and, in the priority
+ *      rename case, the spelling renamed FROM — to `canonical.meta.aliases`, so
+ *      a historical audit `to`/`from` naming the old spelling still classifies
  *      (`query/views/stats.ts`'s `terminalByName` expands these — the alias
  *      map lives in DATA, never as a read-time fallback table).
  *   4. invalidates each fragment node (`t_invalid`, reversible — the fragment
@@ -42,7 +51,7 @@
  * (that is the live-writer integer-renumber antipattern the `priorityMatrix`
  * read view is built to tolerate).
  *
- * ## Refusal (the `closed`/`DONE` guard)
+ * ## Refusal (the `closed`/`DONE` guard and the status-spelling guard)
  *
  * A fold group is the ONLY grouping this module ever trusts. Two DISTINCT
  * tokens that happen to be related — `closed` and `DONE` — fold to different
@@ -50,7 +59,9 @@
  * {@link applyCaseFragmentMerge} re-checks that invariant itself and REFUSES
  * (throws, changing nothing) any plan whose fragment does not fold to its
  * canonical's name, so a hand-built or buggy plan can never collapse an item
- * `closed`-to-`DONE`.
+ * `closed`-to-`DONE`. It ALSO refuses a status group whose canonical does not
+ * already carry the write path's lowercase spelling: merging INTO a divergent
+ * spelling would let the next ordinary `create` re-mint the fragment.
  *
  * ## Idempotent and reversible
  *
@@ -86,7 +97,7 @@ import {
 } from './tx.js';
 
 /** The two catalog kinds this repair collapses (D3's whole scope). */
-type CatalogKind = 'status' | 'priority';
+export type CatalogKind = 'status' | 'priority';
 
 /** The edge rel an issue uses to point at a {@link CatalogKind} row. */
 function edgeRelForKind(kind: CatalogKind): 'has_status' | 'has_priority' {
@@ -94,14 +105,35 @@ function edgeRelForKind(kind: CatalogKind): 'has_status' | 'has_priority' {
 }
 
 /**
- * True for a name whose canonical spelling IS its uppercase form
- * (`OPEN`, `HIGH`) — the spelling the owner directive makes canonical. A name
- * with no letters (`''`, `'123'`) is never "upper-spelled", so a group of
- * such names is handled by the rename branch (a no-op rename, since
+ * True for a name whose spelling IS its uppercase form (`HIGH`, `MEDIUM`) —
+ * the canonical spelling for `priority`. A name with no letters (`''`,
+ * `'123'`) is never "upper-spelled", so a priority group of such names is
+ * handled by the rename branch (a no-op rename, since
  * `s.toUpperCase() === s`).
  */
 function isUpperSpelled(name: string): boolean {
   return /\p{L}/u.test(name) && name === name.toUpperCase();
+}
+
+/**
+ * True for a name whose spelling already equals its own lowercase form — the
+ * canonical spelling for `status`, i.e. the literal the write path emits
+ * (`create-issue.ts`'s `'open'`). A letterless name is trivially included
+ * (`'123' === '123'.toLowerCase()`): there is no case to diverge from, so it
+ * can never be a write-path miss.
+ */
+function isLowerSpelled(name: string): boolean {
+  return name === name.toLowerCase();
+}
+
+/**
+ * The per-kind canonical predicate. The two catalogs disagree by design: the
+ * status write path emits lowercase (`'open'`), the priority write path emits
+ * uppercase (`'HIGH'`), so a canonical that is spelled the OTHER way is an
+ * exact-match miss the next write would re-mint.
+ */
+function isCanonicalSpelling(kind: CatalogKind, name: string): boolean {
+  return kind === 'status' ? isLowerSpelled(name) : isUpperSpelled(name);
 }
 
 /**
@@ -162,11 +194,29 @@ async function getNodeByUidAnyTx(
 }
 
 /**
+ * A status fold group that CANNOT be safely collapsed: two or more LIVE rows
+ * share a fold, yet none carries the write path's lowercase spelling. Merging
+ * would have to pick a non-lowercase canonical (or rename one to a spelling no
+ * write emits), and the next ordinary `create` would exact-match miss and
+ * re-mint the fragment. Surfaced, never merged, never renamed.
+ */
+export interface IUnmergeableGroup {
+  kind: CatalogKind;
+  names: string[];
+}
+
+/**
  * A planned merge: the fold groups to collapse, by uid. `groups` is EMPTY when
  * the store has no live case-variant group — the idempotency signal.
+ *
+ * `unmergeable` carries the status groups deliberately LEFT ALONE (no
+ * write-spelling member). It is a diagnostic, never an action: the plan is
+ * incomplete-by-refusal for those groups, so a caller that treats a zero-group
+ * plan as "the store is clean" must also check this list.
  */
 export interface IMergePlan {
   groups: Array<{ canonicalUid: string; fragmentUids: string[] }>;
+  unmergeable: IUnmergeableGroup[];
   at: string;
 }
 
@@ -194,7 +244,7 @@ export interface IMergeJournalEntry {
   }>;
   /** The fragment's numeric `rank` at apply time, when it had one — the value the survivor did NOT adopt unless it had none of its own. */
   retainedRank?: number;
-  /** Present only when this fragment's group had no upper-spelled member: the canonical row was renamed, and this is how to undo it. */
+  /** Present only when a PRIORITY group had no upper-spelled member: the canonical row was renamed to uppercase, and this is how to undo it. A status canonical is never renamed. */
   renamed?: { uid: string; from: string; to: string };
   /** The canonical row's full prior `meta`, for exact reversal of the appended aliases / adopted rank. */
   canonicalMetaBefore?: unknown;
@@ -208,21 +258,32 @@ export interface IMergeJournal {
 /**
  * Build the collapse plan from the LIVE catalog rows. Pure over node records —
  * it never reads edges, so a fragment with more incoming edges than the
- * uppercase canonical loses anyway (owner directive: spelling decides, not
- * edge count).
+ * canonical loses anyway (owner directive: spelling decides, not edge count).
  *
  * Grouping is by {@link catalogNameFold} alone. Within a fold group the
- * canonical is the (at most one) upper-spelled member, else the lowest-rowid
- * member (deterministically renamed at apply). Fragments are every other
- * member.
+ * canonical is the member already carrying the write path's spelling for that
+ * kind — lowercase for `status`, uppercase for `priority`.
+ *
+ * A `priority` group with no upper-spelled member falls back to its
+ * lowest-rowid member (deterministically renamed to uppercase at apply, as
+ * before). A `status` group with no lower-spelled member is NOT planned at all:
+ * any canonical would carry a spelling the write path never emits, so merging
+ * would regenerate the fragment on the next ordinary `create`. It is surfaced
+ * in `unmergeable` instead.
  */
 export function planCaseFragmentMerge(
   liveStatuses: readonly NodeRecord[],
   livePriorities: readonly NodeRecord[]
 ): IMergePlan {
   const groups: IMergePlan['groups'] = [];
+  const unmergeable: IMergePlan['unmergeable'] = [];
 
-  for (const rows of [liveStatuses, livePriorities]) {
+  const kinds: ReadonlyArray<readonly [CatalogKind, readonly NodeRecord[]]> = [
+    ['status', liveStatuses],
+    ['priority', livePriorities],
+  ];
+
+  for (const [kind, rows] of kinds) {
     const byFold = new Map<string, NodeRecord[]>();
     for (const row of rows) {
       const key = catalogNameFold(row.name ?? '');
@@ -234,8 +295,20 @@ export function planCaseFragmentMerge(
     for (const members of byFold.values()) {
       if (members.length < 2) continue;
       const sorted = [...members].sort((a, b) => a.id - b.id);
-      const canonical =
-        sorted.find((m) => isUpperSpelled(m.name ?? '')) ?? sorted[0]!;
+      const writeSpelled = sorted.find((m) =>
+        isCanonicalSpelling(kind, m.name ?? '')
+      );
+      if (writeSpelled === undefined) {
+        // No member carries the write path's spelling. For `status` the merge
+        // would be self-defeating (never rename one to it — there is nothing to
+        // rename TO); for `priority` the canonical is lowest-rowid and is
+        // renamed to uppercase at apply.
+        if (kind === 'status') {
+          unmergeable.push({ kind, names: sorted.map((m) => m.name ?? '') });
+          continue;
+        }
+      }
+      const canonical = writeSpelled ?? sorted[0]!;
       const fragmentUids = sorted
         .filter((m) => m.uid !== canonical.uid)
         .map((m) => m.uid);
@@ -244,7 +317,7 @@ export function planCaseFragmentMerge(
     }
   }
 
-  return { groups, at: nowISO() };
+  return { groups, unmergeable, at: nowISO() };
 }
 
 /** A catalog kind this repair refuses to treat as a case-group target. */
@@ -270,7 +343,12 @@ function assertMergeableKind(kind: string, uid: string): asserts kind is Catalog
  * REFUSES (throws, rolling the whole apply back) any group whose fragment does
  * not fold to the canonical's live name, or whose kind differs — the
  * `closed`/`DONE` guard: two distinct tokens are never case-variants and can
- * never be collapsed here.
+ * never be collapsed here. It also REFUSES a `status` group whose canonical is
+ * not already lowercase-spelled — merging INTO a spelling the write path never
+ * emits would let the next ordinary `create` re-mint the fragment.
+ *
+ * Only a `priority` group is ever renamed (to uppercase, when it had no
+ * uppercase member). A `status` `name` is NEVER rewritten.
  *
  * A planned fragment that is no longer LIVE (a concurrent writer invalidated
  * it between plan and apply) is tolerated — it is skipped, exactly as D1's
@@ -291,6 +369,22 @@ export async function applyCaseFragmentMerge(
       const rule = await resolveEdgeKindTx(tx, rel);
       const canonicalFold = catalogNameFold(canonical.name ?? '');
       const canonicalMetaBefore = parseMetaObject(canonical.meta);
+      const canonicalName = canonical.name ?? '';
+
+      // A status canonical must already carry the write path's lowercase
+      // spelling. Merging into anything else would be self-defeating: the next
+      // ordinary `create` emits the lowercase literal, exact-match misses, and
+      // mints a fresh fragment. (The planner never emits such a group; this
+      // re-guards a hand-built or buggy plan, the same posture as the fold
+      // check below.)
+      if (
+        canonical.kind === 'status' &&
+        !isCanonicalSpelling('status', canonicalName)
+      ) {
+        throw new Error(
+          `applyCaseFragmentMerge: refusing to merge into status uid ${canonical.uid} named "${canonicalName}" — a status canonical must carry the write path's lowercase spelling.`
+        );
+      }
 
       // First pass: validate + collect LIVE fragments (guard BEFORE any write).
       const fragments: IRawNodeRow[] = [];
@@ -312,12 +406,14 @@ export async function applyCaseFragmentMerge(
       }
       if (fragments.length === 0) continue;
 
-      // Rename the canonical to uppercase when its group had no upper spelling.
-      const canonicalName = canonical.name ?? '';
+      // Rename a PRIORITY canonical to uppercase when its group had no upper
+      // spelling. A STATUS name is never rewritten: the write path emits the
+      // lowercase literal, and a lowercase canonical is guaranteed here by the
+      // guard above.
       let renamed: { uid: string; from: string; to: string } | undefined;
       const aliasesToAdd: string[] = [];
       let nextCanonicalMeta = canonicalMetaBefore;
-      if (!isUpperSpelled(canonicalName)) {
+      if (canonical.kind === 'priority' && !isUpperSpelled(canonicalName)) {
         const to = canonicalName.toUpperCase();
         if (to !== canonicalName) {
           await tx.executeRun(

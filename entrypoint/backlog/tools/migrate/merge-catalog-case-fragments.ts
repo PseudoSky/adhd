@@ -149,6 +149,11 @@ function printPlan(dbPath: string, view: IPlanView): void {
       lines.push(`    [${kind}] ${from} -> ${canonical}`);
     }
   }
+  for (const group of view.plan.unmergeable) {
+    lines.push(
+      `    [${group.kind}] REFUSED (no write-spelling member, not merged): ${group.names.join(' / ')}`
+    );
+  }
   lines.push(`PLAN ${JSON.stringify(view.plan)}`);
   process.stdout.write(`${lines.join('\n')}\n`);
 }
@@ -175,6 +180,14 @@ async function verify(store: IEtlStoreHandle): Promise<IVerifyResult> {
     return {
       clean: false,
       detail: `case-variant groups still live: ${remaining.plan.groups.length}`,
+    };
+  }
+  if (remaining.plan.unmergeable.length > 0) {
+    return {
+      clean: false,
+      detail: `status group(s) with no lowercase (write-spelling) member, refused: ${remaining.plan.unmergeable
+        .map((g) => g.names.join('/'))
+        .join(', ')}`,
     };
   }
 
@@ -243,7 +256,9 @@ async function run(args: IParsedArgs): Promise<number> {
     const view = await buildPlan(store);
     if (args.mode === 'dry-run') {
       printPlan(args.dbPath, view);
-      return view.plan.groups.length === 0 ? 0 : 1;
+      return view.plan.groups.length === 0 && view.plan.unmergeable.length === 0
+        ? 0
+        : 1;
     }
 
     const journal = await applyCaseFragmentMerge(store, view.plan);
