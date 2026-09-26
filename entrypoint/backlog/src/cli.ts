@@ -54,6 +54,10 @@ import {
   writeBakedIrArtifact,
 } from './ir-artifact.js';
 import { errorEnvelope, exitCodeForEnvelope, isOutcomeEnvelope } from './envelope.js';
+import {
+  detectCliInputEnvelopeViolation,
+  renderCliInputEnvelopeMessage,
+} from './cli-input-envelope.js';
 import { buildSearchArgv } from './search-shortcut.js';
 import { suggestClosestCatalogNames } from './query/resolve.js';
 import {
@@ -836,6 +840,30 @@ export async function runBacklogCli(
       pkg.id
     );
 
+    const prefixedArgv = prefixCommand(userArgv, prefix, reservedNamespaces);
+
+    // The MCP envelope shape (`{input:{…}}` / `{data:{input:{…}}}`) is a
+    // natural mistake on a CLI whose `--input` actually takes the BARE params
+    // object, and it previously surfaced only as the shared validate-Layer's
+    // AJV union dump — which names a path this CLI does not have and never
+    // says what to type instead. Reject it here, before dispatch, with the
+    // verb's own concrete example. This is a loud rejection, not a second
+    // accepted shape: the envelope is never unwrapped into the CLI contract.
+    const inputEnvelope = detectCliInputEnvelopeViolation(
+      prefixedArgv,
+      operations,
+      pkg.schemas
+    );
+    if (inputEnvelope) {
+      const env = errorEnvelope(
+        'invalid_argument',
+        renderCliInputEnvelopeMessage(inputEnvelope)
+      );
+      console.error(JSON.stringify(env));
+      process.exitCode = exitCodeForEnvelope(env);
+      return;
+    }
+
     await requireRun(cliPlugin)({
       packages: [pkg],
       operations,
@@ -848,7 +876,7 @@ export async function runBacklogCli(
       // CLI, since `@adhd/apigen-plugin-cli-output`'s `run()` only mounts
       // plugins it's explicitly handed via `readUsePlugins(input.options)`.
       options: {
-        argv: prefixCommand(userArgv, prefix, reservedNamespaces),
+        argv: prefixedArgv,
         usePlugins: [...USE_PLUGINS],
         // The issue verbs (api.ts's `IOutcomeEnvelope` shape) REPORT failure in the envelope
         // rather than throwing, so without this hook every `{ok:false}` still
