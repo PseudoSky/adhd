@@ -170,24 +170,33 @@ if (
   // does — this file peeks at it ONLY to redirect telemetry's `logDir`; the
   // actual flag-stripping/dispatch still happens exactly once, inside
   // `runBacklogCli` below.
-  const { namespace } = stripNamespaceFlag(process.argv.slice(2));
+  const { namespace, argv: binArgv } = stripNamespaceFlag(process.argv.slice(2));
+  // `ir-artifact` (design doc Revision 3) is the hidden, build-time artifact
+  // subcommand. It is store-free and must not touch `~/.adhd` at all — and
+  // `initTelemetry`'s default file sink is exactly `~/.adhd/sox-ecosystem/
+  // backlog/logs`, which this call would create before `runBacklogCli` ever
+  // dispatches. Skip telemetry for that one subcommand so the guarantee the
+  // artifact step advertises is real, not merely "the store wasn't opened".
+  const isIrArtifact = binArgv[0] === 'ir-artifact';
   const sandboxLogDir =
     namespace === 'sandbox'
       ? mkdtempSync(join(tmpdir(), 'backlog-sandbox-logs-'))
       : undefined;
-  try {
-    initTelemetry({
-      service: 'backlog',
-      role: 'cli',
-      logSink: 'file',
-      ...(sandboxLogDir !== undefined ? { logDir: sandboxLogDir } : {}),
-    });
-  } catch (err) {
-    console.error(
-      `[sox-telemetry] WARNING: initTelemetry failed (${
-        err instanceof Error ? err.message : String(err)
-      }); telemetry records will be silently dropped this process`
-    );
+  if (!isIrArtifact) {
+    try {
+      initTelemetry({
+        service: 'backlog',
+        role: 'cli',
+        logSink: 'file',
+        ...(sandboxLogDir !== undefined ? { logDir: sandboxLogDir } : {}),
+      });
+    } catch (err) {
+      console.error(
+        `[sox-telemetry] WARNING: initTelemetry failed (${
+          err instanceof Error ? err.message : String(err)
+        }); telemetry records will be silently dropped this process`
+      );
+    }
   }
   runBacklogCli().catch((err) => {
     console.error(

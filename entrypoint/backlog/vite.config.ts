@@ -116,6 +116,21 @@ export default defineConfig({
         // ANY `.js`/`.mjs` file it compiles, not only the process's main
         // module.
         banner: '#!/usr/bin/env node',
+        // BAKE-AT-BUILD (design doc Revision 3): `src/index.ts` now contains a
+        // DYNAMIC `import('./extract-live.js')` (the fallback path). Left
+        // alone, rollup CODE-SPLITS the entry into a facade `index.js` that
+        // merely re-exports a shared `index-<hash>.js` chunk — and the bin
+        // entry-guard (`import.meta.url === pathToFileURL(realpathSync(
+        // process.argv[1])).href`) lands in that CHUNK, where `import.meta.url`
+        // resolves to `index-<hash>.js`, never the invoked `index.js`, so the
+        // guard stops matching and the CLI silently does nothing (measured:
+        // `node dist/index.js ir-artifact …` exited 0 and wrote no artifact).
+        // `inlineDynamicImports` keeps every format a SINGLE file — the shape
+        // this package already shipped — so the guard lives in `index.js`. The
+        // dynamic import still defers `extract-live`'s module evaluation until
+        // the fallback actually runs; ts-morph stays lazily required, so the
+        // baked startup path never loads it.
+        inlineDynamicImports: true,
       },
     },
   },
