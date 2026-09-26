@@ -6,11 +6,11 @@
 - **backlog:** live embedding config + embedding-status verb ([#23](https://github.com/PseudoSky/adhd/pull/23))
 - **backlog:** mount the three stats/rollup reads as apigen ops ([1859a5ae](https://github.com/PseudoSky/adhd/commit/1859a5ae))
 - **backlog:** deliver the embedding funnel on the successor line ([b985215a](https://github.com/PseudoSky/adhd/commit/b985215a))
-- **vite-plugins:** absorb perf/test-resolve-fix — test-time @adhd/* source resolution ([3e344506](https://github.com/PseudoSky/adhd/commit/3e344506))
+- **vite-plugins:** absorb perf/test-resolve-fix — test-time @adhd/\* source resolution ([3e344506](https://github.com/PseudoSky/adhd/commit/3e344506))
 
 ### 🩹 Fixes
 
-- ⚠️  **apigen:** regenerate the ADR-0004 golden snapshot, add the MAJOR release note, clear the format gate ([1fea3c2f](https://github.com/PseudoSky/adhd/commit/1fea3c2f))
+- ⚠️ **apigen:** regenerate the ADR-0004 golden snapshot, add the MAJOR release note, clear the format gate ([1fea3c2f](https://github.com/PseudoSky/adhd/commit/1fea3c2f))
 - **backlog:** mirror the optional store's additive probe type locally, decoupling the build from a lagging install ([c15c4cdf](https://github.com/PseudoSky/adhd/commit/c15c4cdf))
 - **apigen:** ADR-0004 — MCP tool output is the flat content payload ([7896594d](https://github.com/PseudoSky/adhd/commit/7896594d))
 - **backlog:** directory citation is E_VALIDATION, not a retryable E_IO; log raw E_IO cause (56a2133e) ([f538387c](https://github.com/PseudoSky/adhd/commit/f538387c))
@@ -30,9 +30,9 @@
 
 - **backlog:** bake the IR artifact at build; startup never loads ts-morph ([da81f673](https://github.com/PseudoSky/adhd/commit/da81f673))
 
-### ⚠️  Breaking Changes
+### ⚠️ Breaking Changes
 
-- **apigen:** regenerate the ADR-0004 golden snapshot, add the MAJOR release note, clear the format gate  ([1fea3c2f](https://github.com/PseudoSky/adhd/commit/1fea3c2f))
+- **apigen:** regenerate the ADR-0004 golden snapshot, add the MAJOR release note, clear the format gate ([1fea3c2f](https://github.com/PseudoSky/adhd/commit/1fea3c2f))
   McpOutputAdapter.wrapped (exported from
   @adhd/apigen-engine-runtime and @adhd/apigen-plugin-mcp) kept its name but
   inverted its meaning (true now means "the return is already a top-level object,
