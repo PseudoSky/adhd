@@ -378,7 +378,30 @@ mint, never read or applied when `ref` resolves to an existing row. `at` is
 NOT threaded into `resolveEdgeKindTx`'s own `edge_kind` rows (those keep
 their own clock; see that function's guarantee below).
 
-### `mintOrResolveCatalogTx(tx, input)` — function (`catalog.ts:261`)
+### `RESERVED_TERMINAL_STATUS_NAMES` — const (`catalog.ts:281`)
+
+```ts
+export const RESERVED_TERMINAL_STATUS_NAMES: ReadonlySet<string>;
+```
+
+Guarantees: the ONE in-code definition of the reserved terminal status
+vocabulary (`closed`, `DONE`, `FIXED`, `RESOLVED`, `INVALID`, `SUPERSEDED`),
+case-sensitive. The mint layer seeds a `status` row's `terminal` flag from it
+(`mintOrResolveStatusTx`); `query/card.ts`'s `isStatusTerminal` stays
+name-blind (ADR-0002 D1). `catalog-repair.ts` re-exports this SAME set rather
+than declaring its own.
+
+### `isReservedTerminalStatusName(name)` — function (`catalog.ts:291`)
+
+```ts
+export function isReservedTerminalStatusName(name: string): boolean;
+```
+
+Guarantees: exact, case-sensitive membership in
+`RESERVED_TERMINAL_STATUS_NAMES` — the same predicate the `(kind,name)`
+resolve uses.
+
+### `mintOrResolveCatalogTx(tx, input)` — function (`catalog.ts:300`)
 
 ```ts
 export async function mintOrResolveCatalogTx(tx: AdapterTransaction, input: IMintOrResolveInput): Promise<IResolvedCatalogRow>;
@@ -389,7 +412,21 @@ uid-shaped `ref` that does not resolve throws `CatalogNotFoundError` (uids
 are never auto-vivified). A name-shaped `ref` that does not resolve is
 minted via `writeNodeTx` inside the SAME `tx`.
 
-### `nextPriorityRankTx(tx)` — function (`catalog.ts:297`)
+### `mintOrResolveStatusTx(tx, input)` — function (`catalog.ts:360`)
+
+```ts
+export async function mintOrResolveStatusTx(tx: AdapterTransaction, input: { ref: string; at?: string }): Promise<IResolvedCatalogRow>;
+```
+
+Guarantees: the ONE sanctioned status mint path. On a miss it SEEDS
+`terminal` from `RESERVED_TERMINAL_STATUS_NAMES` — `true` for an exact
+reserved name, `false` for every other name (SPEC.md §6.3.2) — never from a
+call-site literal and never at read time. Idempotent (`resolveEdgeKindTx`-style
+self-heal): an existing row is resolved, never re-minted, so no duplicate rows
+accumulate. A uid-shaped `ref` that does not resolve throws
+`CatalogNotFoundError`.
+
+### `nextPriorityRankTx(tx)` — function (`catalog.ts:375`)
 
 ```ts
 export async function nextPriorityRankTx(tx: AdapterTransaction): Promise<number>;
@@ -399,7 +436,7 @@ Guarantees: returns one past the current max `priority.meta.rank` (0 if no
 priority rows exist) — a novel priority can never silently outrank an
 existing one.
 
-### `EDGE_KIND_TABLE` — const (`catalog.ts:312`)
+### `EDGE_KIND_TABLE` — const (`catalog.ts:390`)
 
 ```ts
 export const EDGE_KIND_TABLE: readonly IEdgeKindRule[];
@@ -414,7 +451,7 @@ time of this contract: `owns_project`, `owns_component`, `has_kind`,
 of truth `resolveEdgeKindTx` reconciles against the live `edge_kind` catalog
 rows.
 
-### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:453`)
+### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:531`)
 
 ```ts
 export async function resolveEdgeKindTx(tx: AdapterTransaction, rel: string): Promise<IEdgeKindRule>;
@@ -429,7 +466,7 @@ row (corrupt or missing `meta` keys) is invalidated and replaced in the SAME
 `CatalogNotFoundError('edge_kind', rel)` if `rel` isn't in
 `EDGE_KIND_TABLE` at all.
 
-### `IProjectPolicy` — interface (`catalog.ts:521`)
+### `IProjectPolicy` — interface (`catalog.ts:599`)
 
 ```ts
 export interface IProjectPolicy {
@@ -465,7 +502,7 @@ disabled. A malformed (non-`string[]`) value falls back to the — also empty �
 default rather than being spread. Typed per-project config, never an
 environment toggle.
 
-### `resolveProjectPolicy(project)` — function (`catalog.ts:595`)
+### `resolveProjectPolicy(project)` — function (`catalog.ts:673`)
 
 ```ts
 export function resolveProjectPolicy(project: IResolvedProjectRow): IProjectPolicy;

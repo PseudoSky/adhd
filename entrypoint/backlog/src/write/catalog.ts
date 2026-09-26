@@ -254,6 +254,45 @@ export interface IMintOrResolveInput {
 }
 
 /**
+ * The reserved TERMINAL status vocabulary — the ONE in-code definition
+ * (SPEC.md §2: `status.terminal` drives closedness). Modelled directly on
+ * {@link EDGE_KIND_TABLE} further down this file: a frozen in-code table the
+ * mint layer seeds from, exactly as {@link resolveEdgeKindTx} seeds
+ * `edge_kind` from §3's fixed edge table.
+ *
+ * The flag, never the name, is the read-time source of truth —
+ * `query/card.ts`'s `isStatusTerminal` stays name-blind (ADR-0002 D1: an
+ * unfixed-source gap is repaired at the SOURCE, never papered over with a
+ * read-time name fallback, which would be a second, drifting source of
+ * truth). This table is that source fix: a name listed here that has no live
+ * `status` row is SEEDED `terminal:true` by {@link mintOrResolveStatusTx}, so
+ * minting `closed` (or any other reserved name) can no longer produce a row
+ * that reads as non-terminal — the drift `catalog-repair.ts` exists to clean
+ * up is not regenerated on the next mint.
+ *
+ * Membership is EXACT and case-sensitive — the same predicate the `(kind,name)`
+ * lookup uses (`WHERE name = ?`). A case-variant (`Closed`) is deliberately
+ * NOT a member: it is an exact miss, self-heals into its own row (never a
+ * throw), and is left to the separately-owned case-fragment repair, which
+ * folds names. Spelling the canonical rows here is what pins them; there is
+ * exactly ONE such table in the codebase (`catalog-repair.ts` re-exports
+ * this set rather than declaring its own).
+ */
+export const RESERVED_TERMINAL_STATUS_NAMES: ReadonlySet<string> = new Set([
+  'closed',
+  'DONE',
+  'FIXED',
+  'RESOLVED',
+  'INVALID',
+  'SUPERSEDED',
+]);
+
+/** Whether `name` is EXACTLY one of {@link RESERVED_TERMINAL_STATUS_NAMES} — case-sensitive, the same predicate the `(kind,name)` resolve uses. */
+export function isReservedTerminalStatusName(name: string): boolean {
+  return RESERVED_TERMINAL_STATUS_NAMES.has(name);
+}
+
+/**
  * The flat-catalog find-then-create (§1, §4c, §6.1): `kind`/`status`/
  * `priority`/`agent` are mintable on an unresolved NAME; a uid-shaped `ref`
  * that does not resolve instead throws — minting NEVER applies to a uid.
@@ -291,6 +330,45 @@ export async function mintOrResolveCatalogTx(
     at: input.at,
   });
   return { rowid: minted.rowid, uid: minted.uid, name: input.ref };
+}
+
+/**
+ * Resolve-or-seed a `status` catalog row (§2, §6.1, §6.3.2, §6.3.4) — the
+ * ONE sanctioned status mint path, and the write-side counterpart of the
+ * read-side `query/card.ts`'s `isStatusTerminal`.
+ *
+ * Unlike the generic {@link mintOrResolveCatalogTx}, it SEEDS `terminal` from
+ * the frozen {@link RESERVED_TERMINAL_STATUS_NAMES} table on a miss — never
+ * from a call-site literal (`terminal:false` hardcoded at the call site was
+ * the drift's root cause) and never from a read-time name heuristic
+ * (`isStatusTerminal` stays name-blind, ADR-0002 D1). A name in the table
+ * seeds `terminal:true`; every other name seeds the pre-existing
+ * `terminal:false` default (§6.3.2: a novel or mistyped name must never
+ * silently close or exclude an item).
+ *
+ * Self-healing and idempotent, exactly like {@link resolveEdgeKindTx}: the
+ * exact `(kind,name)` lookup inside {@link mintOrResolveCatalogTx} finds the
+ * seeded row on every subsequent call, so reseeding never duplicates — the
+ * store converges to one live `status` row per name. A case-variant name
+ * (`Closed` vs a seeded `closed`) is an exact miss, so it self-heals into its
+ * own row rather than throwing — the pre-existing resolution property, not a
+ * terminality decision (the case-fragment repair folds those separately).
+ *
+ * A uid-shaped `ref` that does not resolve still throws
+ * `CatalogNotFoundError` — minting never applies to a uid (§6.1).
+ */
+export async function mintOrResolveStatusTx(
+  tx: AdapterTransaction,
+  input: { ref: string; at?: string }
+): Promise<IResolvedCatalogRow> {
+  return mintOrResolveCatalogTx(tx, {
+    catalogKind: 'status',
+    ref: input.ref,
+    at: input.at,
+    mintMetadata: async () => ({
+      terminal: isReservedTerminalStatusName(input.ref),
+    }),
+  });
 }
 
 /** `priority`'s mint rule (§6.3.2): "rank set to one past the current max rank (i.e. lowest urgency) — a novel priority can never silently outrank an existing one." */

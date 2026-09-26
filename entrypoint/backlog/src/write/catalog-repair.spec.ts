@@ -1,14 +1,22 @@
 /**
- * catalog-repair.spec.ts — proof for `write/catalog-repair.ts`, the D1 repair
- * of the `terminal`-flag drift, and the RED reproduction of that drift.
+ * catalog-repair.spec.ts — proof for `write/catalog-repair.ts`, the one-shot
+ * D1 repair of the `terminal`-flag drift.
  *
- * THE DEFECT. `query/card.ts`'s `isStatusTerminal` reads
+ * THE DRIFT. `query/card.ts`'s `isStatusTerminal` reads
  * `status.metadata.terminal === true`, defaulting FALSE when the key is
  * absent. A `status` catalog row named `closed` (or any other reserved
- * terminal name) that was minted WITHOUT that flag — `create-issue.ts`'s
- * `mintMetadata: async () => ({ terminal: false })` — is therefore treated as
- * NON-terminal, so `queryIssues({filter:{status:'open'}})` returns items that
- * are, by name, closed.
+ * terminal name) that carries a non-true flag — a row written before the
+ * `create-issue.ts`/`transition.ts` mint sites were fixed to seed from
+ * `catalog.ts`'s reserved table, or by any other non-seeding writer — is
+ * therefore treated as NON-terminal, so `queryIssues({filter:{status:'open'}})`
+ * returns items that are, by name, closed.
+ *
+ * The SOURCE fix (mint-time seeding of terminality) is proven separately in
+ * `catalog-mint-terminal.spec.ts`; its RED→GREEN there is what stops the drift
+ * recurring. THIS suite proves the REPAIR still cleans up drift already on
+ * disk, so each case PLANTS the pre-fix shape directly (a non-true-flag
+ * `closed` row, exactly what the old mint wrote) and drives the real repair
+ * against it.
  *
  * THE REPAIR. `applyTerminalBackfill` sets `meta.terminal = true` on exactly
  * those live `status` rows whose folded name is a reserved terminal name and
@@ -106,12 +114,17 @@ describe('catalog-repair — terminal status flag drift', () => {
     removeTestIssueStoreDir(dir);
   });
 
-  it('NEGATIVE CONTROL: without the backfill, a `closed`-status issue IS returned under filter.status:"open" — the drift, reproduced', async () => {
+  it('NEGATIVE CONTROL: without the backfill, a `closed`-status issue carrying a non-true flag IS returned under filter.status:"open" — the drift, reproduced', async () => {
     const { projectUid } = await seedProject(store, 'catalog-repair-negctl');
+    // Plant the PRE-FIX shape directly — the exact `{ terminal: false }` the
+    // old mint stamped — so the repair is exercised against drift already on
+    // disk (its real remaining job now the source is fixed). `createIssue`
+    // then RESOLVES this row by name (never re-mints it).
+    await mintStatusRow(store, 'closed', { terminal: false });
     const closed = await createIssue(store, {
       project: projectUid,
       title: 'negative-control closed item',
-      body: 'status name is reserved-terminal but minted without the flag',
+      body: 'status name is reserved-terminal but the row carries a non-true flag',
       status: 'closed',
       by: 'repair-test',
     });
@@ -131,10 +144,11 @@ describe('catalog-repair — terminal status flag drift', () => {
 
   it('GREEN: after applyTerminalBackfill, the item leaves `open` and appears under `closed`', async () => {
     const { projectUid } = await seedProject(store, 'catalog-repair-green');
+    await mintStatusRow(store, 'closed', { terminal: false });
     const closed = await createIssue(store, {
       project: projectUid,
       title: 'green closed item',
-      body: 'status name is reserved-terminal, backfill will flag it',
+      body: 'status name is reserved-terminal; backfill will flag the planted row',
       status: 'closed',
       by: 'repair-test',
     });
@@ -155,17 +169,21 @@ describe('catalog-repair — terminal status flag drift', () => {
     expect(await listedUids(store, { status: 'closed' })).toContain(closed.uid);
   });
 
-  it('IDEMPOTENT: a re-run after apply plans nothing and writes nothing', async () => {
+  it('IDEMPOTENT: after a real apply, a re-run plans nothing and writes nothing', async () => {
     const { projectUid } = await seedProject(store, 'catalog-repair-idem');
+    await mintStatusRow(store, 'closed', { terminal: false });
     await createIssue(store, {
       project: projectUid,
       title: 'idempotency closed item',
-      body: 'first apply flags the status row',
+      body: 'first apply flags the planted status row',
       status: 'closed',
       by: 'repair-test',
     });
 
-    await applyTerminalBackfill(store, await planTerminalBackfill(store));
+    const firstPlan = await planTerminalBackfill(store);
+    expect(firstPlan.setTerminalRowids.length).toBeGreaterThanOrEqual(1);
+    const firstJournal = await applyTerminalBackfill(store, firstPlan);
+    expect(firstJournal.entries.length).toBeGreaterThanOrEqual(1);
 
     const secondPlan = await planTerminalBackfill(store);
     expect(secondPlan.setTerminalRowids).toEqual([]);
@@ -202,6 +220,7 @@ describe('catalog-repair — terminal status flag drift', () => {
 
   it('reverses exactly: the journal restores the prior flag and the item returns to `open`', async () => {
     const { projectUid } = await seedProject(store, 'catalog-repair-reverse');
+    await mintStatusRow(store, 'closed', { terminal: false });
     const closed = await createIssue(store, {
       project: projectUid,
       title: 'reverse closed item',

@@ -6,14 +6,22 @@
  *
  * `isStatusTerminal(statusRecord)` is `status.metadata.terminal === true`,
  * defaulting FALSE when the key is absent. A `status` row whose NAME is one
- * of the reserved terminal vocabulary but which was minted WITHOUT that flag
- * — `create-issue.ts`'s `mintMetadata: async () => ({ terminal: false })`, and
- * `tools/etl`'s own bootstrap mints — is therefore read as NON-terminal, and
+ * of the reserved terminal vocabulary but which carries a non-true flag — a
+ * row minted before the `catalog.ts` source fix, or by any other writer that
+ * did not seed it — is therefore read as NON-terminal, and
  * `queryIssues({filter:{status:'open'}})` returns items that are closed by
  * name. The flag, not the name, is the single source of truth for closedness
  * (ADR-0002 D1: an unfixed-source gap is repaired at the SOURCE, never papered
  * over with a read-time name fallback — a fallback would be a second, drifting
  * source of truth).
+ *
+ * The SOURCE is now fixed: `catalog.ts`'s `mintOrResolveStatusTx` seeds a
+ * reserved terminal name `terminal:true` (see `catalog-mint-terminal.spec.ts`),
+ * so the drift is no longer regenerated on a fresh mint. THIS module remains
+ * the one-shot, reversible REPAIR of drift already on disk (pre-fix rows, the
+ * ETL's import, any other writer) — and because its classifier folds names, it
+ * also catches case-variant rows the exact-case mint deliberately leaves to
+ * the case-fragment repair.
  *
  * ## What this module does — and deliberately does NOT
  *
@@ -35,20 +43,16 @@ import {
   executeWriteTransaction,
   nowISO,
 } from './tx.js';
+import { RESERVED_TERMINAL_STATUS_NAMES } from './catalog.js';
 
 /**
- * The reserved terminal vocabulary — SINGLE SOURCE. Imported by the repair
- * (here) AND the (later) guard; a drift test asserts they agree. Case-sensitive
- * canonical spellings.
+ * The reserved terminal vocabulary — SINGLE SOURCE, owned by
+ * `write/catalog.ts` (the mint path that seeds from it) and re-exported here
+ * so this module's consumers keep one import site. A drift test
+ * (`catalog-mint-terminal.spec.ts`) asserts this is the SAME object the mint
+ * path uses, i.e. that exactly ONE definition exists in the codebase.
  */
-export const RESERVED_TERMINAL_STATUS_NAMES: ReadonlySet<string> = new Set([
-  'closed',
-  'DONE',
-  'FIXED',
-  'RESOLVED',
-  'INVALID',
-  'SUPERSEDED',
-]);
+export { RESERVED_TERMINAL_STATUS_NAMES };
 
 /**
  * Unicode fold used by BOTH duplicate detection and JS-side grouping — never

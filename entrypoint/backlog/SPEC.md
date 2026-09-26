@@ -2037,7 +2037,7 @@ interface ICreateIssueInput {
   project: string; // uid or name — resolved per §6.1; REQUIRED (every issue has a component chain)
   component?: string; // uid or name, scoped within `project`; RESOLVED ONLY, never created — the write layer's hand-composed find-then-create (§4c) runs its find-half alone here: a name that resolves to an existing component under `project` is used as-is, and an unresolved name throws CatalogNotFoundError('component', name) rather than silently forking a new component (see §6.1's project-vs-component asymmetry: components are NOT auto-vivified by createIssue, use upsertComponent first). OMITTED (undefined) is a distinct third case, never an error: it resolves to `project`'s reserved default component `(root)`, already guaranteed live by `upsertProject` (§3/§4/§6.1) — every issue gets exactly one `owns_component` edge whether or not the caller names a component (§8 AC-23).
   kind?: string; // catalog name or uid; default catalog row "issue" if the project defines no default; an unresolved NAME mints a new kind catalog row (§2/§6.1's general rule — kind is open vocabulary, no allowlist) with no extra metadata beyond `name`; a uid-shaped `kind` that does not resolve instead throws CatalogNotFoundError('kind', ref) — minting never applies to a uid (§6.1)
-  status?: string; // catalog name or uid; default is the project's configured initial status (project_policy — falls back to a global default "OPEN"-equivalent catalog row); an unresolved name MINTS a new status catalog row (§2, unlike `component` above) with terminal:false — a novel status name is presumed non-terminal until an operator deliberately reconciles it, so a typo can never silently close or exclude items under an unrecognized status; a uid-shaped `status` that does not resolve instead throws CatalogNotFoundError('status', ref) — minting never applies to a uid (§6.1)
+  status?: string; // catalog name or uid; default is the project's configured initial status (project_policy — falls back to a global default "OPEN"-equivalent catalog row); an unresolved name MINTS a new status catalog row (§2, unlike `component` above) with `terminal` SEEDED from the frozen reserved-terminal table (`RESERVED_TERMINAL_STATUS_NAMES`, `catalog.ts`): a name in that table seeds `terminal:true`, every other name seeds `terminal:false` — a novel status name is presumed non-terminal until an operator deliberately reconciles it, so a typo can never silently close or exclude items under an unrecognized status; a uid-shaped `status` that does not resolve instead throws CatalogNotFoundError('status', ref) — minting never applies to a uid (§6.1)
   priority?: string; // catalog name or uid; optional; an unresolved name mints a new priority catalog row (§2) with rank set to one past the current max rank (i.e. lowest urgency) — a novel priority can never silently outrank an existing one; a uid-shaped `priority` that does not resolve instead throws CatalogNotFoundError('priority', ref) — minting never applies to a uid (§6.1)
   citations?: Citation[];
   author?: string; // catalog agent name/uid; defaults to `by`; an unresolved NAME mints a new `agent` catalog row (§6.1's general rule), exactly like `kind`/`status`/`priority` above; a uid-shaped `author` that does not resolve instead throws CatalogNotFoundError('agent', ref) — minting never applies to a uid (§6.1)
@@ -2287,10 +2287,11 @@ still closed).
 
 Errors: `IssueNotFoundError`, `CatalogNotFoundError('status', toStatus)`
 (uid-shaped `toStatus` only — an unresolved NAME instead auto-mints a new
-status catalog row with `terminal:false`, exactly as `create`'s `status`
-field (§6.3.2) and §6.1's general rule — a novel status reached via
-`transition` can no more silently close/exclude items than one reached via
-`create`),
+status catalog row with `terminal` SEEDED from the SAME frozen
+reserved-terminal table `create`'s `status` field uses (§6.3.2): a reserved
+terminal name seeds `terminal:true`, every other name `terminal:false` — a
+novel status reached via `transition` can no more silently close/exclude items
+than one reached via `create`),
 `NoteRequiredError` (policy-gated), `CitationRequiredError` (policy-gated,
 terminal-only) — together they resolve the three-way
 `requiresCitation`/`requiresReason` split (§6.2) into the single

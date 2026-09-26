@@ -49,10 +49,11 @@ import { queryIssues } from './query.js';
 import { BacklogValidationError } from '../write/errors.js';
 
 /**
- * Mints a status row with `terminal: true`. `transition` mints an unresolved
- * status NAME with `terminal: false` (§6.1), so a terminal status cannot be
- * created through a verb — it has to be seeded, exactly as a real project's
- * catalog seeding would.
+ * Seeds a `status` row with `terminal: true` directly. A reserved terminal
+ * NAME minted through a verb already seeds `terminal: true`; `done` (this
+ * suite's name) is NOT in the canonical-case reserved table, so it is seeded
+ * here exactly as a real project's catalog seeding would — a NON-reserved
+ * unresolved NAME still mints `terminal: false` (§6.1/§6.3.2).
  */
 async function seedTerminalStatus(
   store: TestIssueStore,

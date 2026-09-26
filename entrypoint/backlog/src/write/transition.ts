@@ -88,7 +88,7 @@ import {
 } from './create-issue.js';
 import {
   type IResolvedProjectRow,
-  mintOrResolveCatalogTx,
+  mintOrResolveStatusTx,
   projectHasKnownPath,
   resolveEdgeKindTx,
   resolveProjectPolicy,
@@ -126,7 +126,7 @@ export interface ITransitionInput {
   uid: string;
   /** The identity of the acting agent or person (§6.3's opening rule). REQUIRED. */
   by: string;
-  /** catalog name or uid. An unresolved NAME mints a new status row with `terminal:false` (exactly like `create`'s own `status` field, §6.3.2/§6.1); a uid-shaped ref that does not resolve throws `CatalogNotFoundError('status', ref)`. */
+  /** catalog name or uid. An unresolved NAME is minted via `mintOrResolveStatusTx` (exactly like `create`'s own `status` field, §6.3.2/§6.1): a name in the frozen reserved terminal table (`RESERVED_TERMINAL_STATUS_NAMES`, `catalog.ts`) seeds `terminal:true`, every other name seeds `terminal:false`; a uid-shaped ref that does not resolve throws `CatalogNotFoundError('status', ref)`. */
   toStatus: string;
   /** REQUIRED unless `project_policy.transition_requires_note` is `false` (default `true`) — optional in the type; enforced at runtime (`NoteRequiredError`), never at the TS level. */
   note?: string;
@@ -311,8 +311,9 @@ function enforceRequiredFields(
  * `update` — this file's own doc comment on `update.ts` explains why that
  * reuses this error class rather than a new one), `CatalogNotFoundError('status',
  * toStatus)` (uid-shaped `toStatus` only — an unresolved NAME instead
- * auto-mints with `terminal:false`, exactly as `create`'s own `status` field,
- * §6.1), a project-declared `requiredFields` entry (§2 — here, always just
+ * auto-mints via `mintOrResolveStatusTx`, seeding `terminal` from the frozen
+ * reserved table exactly as `create`'s own `status` field does (§6.1), a
+ * project-declared `requiredFields` entry (§2 — here, always just
  * `status`, see this file's own doc comment) left blank,
  * `NoteRequiredError` (policy-gated), `CitationRequiredError`
  * (policy-gated, terminal-only), `CitationUnverifiableError(target,
@@ -427,11 +428,9 @@ export async function transition(
     );
     const fromStatusName = currentStatusRow.name ?? '';
 
-    const toStatusRow = await mintOrResolveCatalogTx(tx, {
-      catalogKind: 'status',
+    const toStatusRow = await mintOrResolveStatusTx(tx, {
       ref: input.toStatus,
       at: now,
-      mintMetadata: async () => ({ terminal: false }),
     });
     enforceAllowedStatus(policy.allowedStatuses, toStatusRow.name);
     enforceRequiredFields(policy.requiredFields, {

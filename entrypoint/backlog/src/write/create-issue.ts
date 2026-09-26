@@ -26,6 +26,7 @@ import {
   type IResolvedCatalogRow,
   type IResolvedProjectRow,
   mintOrResolveCatalogTx,
+  mintOrResolveStatusTx,
   nextPriorityRankTx,
   projectHasKnownPath,
   resolveComponentTx,
@@ -89,7 +90,7 @@ export interface ICreateIssueInput {
   component?: string;
   /** catalog name or uid; default is the project's configured `policy.defaultKind`, falling back to the global `"issue"` row. An unresolved NAME mints; a uid-shaped ref that does not resolve throws (§6.1). */
   kind?: string;
-  /** catalog name or uid; default is `policy.defaultStatus`, falling back to the global `"open"` row (minted with `terminal:false` if it does not yet exist). An unresolved NAME mints with `terminal:false`; a uid-shaped ref that does not resolve throws (§6.1). */
+  /** catalog name or uid; default is `policy.defaultStatus`, falling back to the global `"open"` row. An unresolved NAME is minted via `mintOrResolveStatusTx`: a name in the frozen reserved terminal table (`RESERVED_TERMINAL_STATUS_NAMES`, `catalog.ts`) seeds `terminal:true`, every other name seeds `terminal:false` (a novel/typo name must never silently close an item, §6.3.2); a uid-shaped ref that does not resolve throws (§6.1). */
   status?: string;
   /** catalog name or uid; genuinely OPTIONAL — §6.3.2 states minting behavior for a GIVEN unresolved name but, unlike `kind`/`status`, states no fallback for the omitted case; omitted therefore writes no `has_priority` edge at all (a deliberate reading of §6.3.2's more precise per-field text over §4's summary prose — see this project's own README/CHANGELOG note on this slice for the citation). An unresolved NAME mints with `rank` = one past the current max (lowest urgency); a uid-shaped ref that does not resolve throws. */
   priority?: string;
@@ -824,11 +825,15 @@ export async function createIssue(
       enforceAllowedSet(policy.allowedKinds, 'kind', kindRow.name);
 
       const statusName = input.status ?? policy.defaultStatus ?? 'open';
-      const statusRow = await mintOrResolveCatalogTx(tx, {
-        catalogKind: 'status',
+      // `mintOrResolveStatusTx` seeds `terminal` from the frozen reserved table
+      // (`catalog.ts`) on a miss — never a hardcoded `terminal:false` here. A
+      // reserved terminal name (`closed`, …) seeds `terminal:true`; every other
+      // name keeps the `terminal:false` default (SPEC.md §6.3.2). See that
+      // function's doc comment for why the seed, not a read-time name, is the
+      // source of truth (ADR-0002 D1).
+      const statusRow = await mintOrResolveStatusTx(tx, {
         ref: statusName,
         at: now,
-        mintMetadata: async () => ({ terminal: false }),
       });
       enforceAllowedSet(policy.allowedStatuses, 'status', statusRow.name);
 

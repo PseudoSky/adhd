@@ -42,7 +42,7 @@ import {
 } from './errors.js';
 import { getNodeByUidTx, nowISO, writeNodeTx, type ITxNodeRow } from './tx.js';
 
-/** Seeds a `status` catalog row directly so `transition` RESOLVES it (name already exists) rather than minting a fresh `terminal:false` row — mirrors transition.spec.ts's own helper (per-file-duplication convention). */
+/** Seeds a `status` catalog row directly so `transition` RESOLVES it (name already exists) rather than minting a fresh row — mirrors transition.spec.ts's own helper (per-file-duplication convention). */
 async function seedStatus(
   store: TestIssueStore,
   name: string,

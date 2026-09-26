@@ -109,7 +109,7 @@ async function readAuditTrail(
   });
 }
 
-/** Seeds a `status` catalog row directly (so `mintOrResolveCatalogTx` RESOLVES it — name already exists — never mints, which would always force `terminal:false`). */
+/** Seeds a `status` catalog row directly so `mintOrResolveStatusTx` RESOLVES it (name already exists) rather than minting; a minted NON-reserved name would seed `terminal:false`, and a reserved one `terminal:true`. */
 async function seedStatus(
   store: TestIssueStore,
   name: string,
