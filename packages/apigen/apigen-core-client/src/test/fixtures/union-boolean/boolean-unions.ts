@@ -57,6 +57,29 @@ export async function loneBooleanLiterals(
   return input;
 }
 
+// Fix 2 (review remediation) — a STANDALONE boolean-literal property. This is
+// NOT a union member, so the union branch (which handles `isBooleanLiteral()`
+// itself) never sees it: the property type text is a bare `true`/`false`, which
+// Path 1 (ts-json-schema-generator) cannot resolve as a type name, so it routes
+// through Path 2 (`withResolvedType` → `walkType`) and hits morph-walk.ts's
+// `isBooleanLiteral()` PRIMITIVE branch directly. The `[boolean.lone-literal]`
+// case above only exercises boolean literals INSIDE a union, so a regression on
+// this primitive branch would otherwise stay green.
+export interface StandaloneBooleanLiterals {
+  /** Standalone `true` — must keep `const:true`, rejecting `false`. */
+  always: true;
+  /** Standalone `false` — must keep `const:false`, rejecting `true`. */
+  never: false;
+}
+
+export async function standaloneBooleanLiterals(
+  ctx: unknown,
+  input: StandaloneBooleanLiterals
+): Promise<StandaloneBooleanLiterals> {
+  void ctx;
+  return input;
+}
+
 /** Direct (non-object) union parameters — covers the input/param schema path. */
 export async function directBooleanParams(
   ctx: unknown,

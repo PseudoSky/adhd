@@ -242,6 +242,16 @@ describe('buildUnionSchema — [inv:hints-advisory]: structural schema survives 
 // ---------------------------------------------------------------------------
 // [union.boolean] — boolean-in-union coverage (backlog 3a3e5884).
 //
+// LANE RULING (2026-09-25, dispatcher) — the real-ts-morph extraction cases in
+// this describe deliberately run in the DEFAULT `test` lane, NOT the `.e2e.ts`
+// lane. `vite.config.ts:64-72` / `project.json` split `*.e2e.ts` out of
+// `nx affected -t test` and the pre-commit/pre-push hooks, but AGENTS.md §7
+// makes default-running behavioral tests mandatory and the e2e lane currently
+// has NO CI runner (backlog c05e598e). Moving these there would make them
+// unrunnable — strictly worse than the extra seconds in the default lane. The
+// durable remedy is fixing that lane runner (c05e598e / 53023ba0); that is a
+// separate follow-up, not this branch's job. Do not re-litigate.
+//
 // This file previously had ZERO boolean coverage. A union containing `boolean`
 // is the one shape `buildUnionSchema` never sees (it models NOMINAL,
 // $ref-based unions) but which `morph-walk.ts`'s inline `walkType` union branch

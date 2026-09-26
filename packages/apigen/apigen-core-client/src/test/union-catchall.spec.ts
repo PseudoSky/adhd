@@ -1,5 +1,15 @@
 // union-catchall.spec.ts — BUG-APIGEN-059 regression.
 //
+// LANE RULING (2026-09-25, dispatcher) — this real-ts-morph extraction suite
+// deliberately runs in the DEFAULT `test` lane, NOT the `.e2e.ts` lane.
+// `vite.config.ts:64-72` / `project.json` split `*.e2e.ts` out of
+// `nx affected -t test` and the pre-commit/pre-push hooks, but AGENTS.md §7
+// makes default-running behavioral tests mandatory and the e2e lane currently
+// has NO CI runner (backlog c05e598e). Moving this suite there would make it
+// unrunnable — strictly worse than the extra seconds in the default lane. The
+// durable remedy is fixing that lane runner (c05e598e / 53023ba0); that is a
+// separate follow-up, not this branch's job. Do not re-litigate.
+//
 // Root cause: morph-walk.ts's union branch (`walkType`) built each union
 // member's schema, then unconditionally emitted `{oneOf: variants, ...}`.
 // When one variant is a "vacuous catch-all" (a `Record<string, unknown>` /
