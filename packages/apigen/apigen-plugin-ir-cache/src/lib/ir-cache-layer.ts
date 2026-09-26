@@ -115,8 +115,22 @@ export interface CachedExtractEntry {
    * and compares that hash, never the recorded path. Additive and optional:
    * an artifact that predates this field simply has no provenance and is
    * treated as unvalidatable (a miss) by the bake reader.
+   *
+   * `deps` is the FULL extracted surface, not just the entry file: a map from
+   * `dist`-relative POSIX `.d.ts` path to sha256, covering every sibling
+   * declaration extraction resolves a type through. `api.d.ts` alone is
+   * insufficient — a drifted imported `.d.ts` (e.g. `dist/write/*.d.ts`)
+   * changes the extracted operations while `api.d.ts` stays byte-identical.
+   * Optional at the type level (older writers omit it) but the bake reader
+   * treats its absence as unvalidatable (a miss), mirroring how it treats a
+   * missing `artifactSource` itself.
    */
-  artifactSource?: { path: string; sha256: string; bytes: number };
+  artifactSource?: {
+    path: string;
+    sha256: string;
+    bytes: number;
+    deps?: Record<string, string>;
+  };
 }
 
 /**
@@ -131,13 +145,24 @@ export interface IrCacheBackend {
   get(key: string): Promise<CachedExtractEntry | undefined>;
   /**
    * Store an entry. The layer AWAITS this on the MISS path, so it MUST resolve
-   * only once the entry is durably published (bytes on stable storage, rename
-   * complete) — not merely once a buffered write was issued. A backend whose
-   * `put` resolves early defeats the durability guarantee the bake-at-build
-   * work depends on (design doc Revision 3); the single-file backend achieves
-   * it via `atomicWriteJson`'s fdatasync-before-rename. A `put` rejection is
-   * still non-fatal to the extraction: the layer swallows it and serves the
-   * freshly-computed operations.
+   * only once the entry is published and its bytes have been fsync(2)'d — not
+   * merely once a buffered write was issued (temp file + fsync + rename
+   * complete). A backend whose `put` resolves early defeats the guarantee the
+   * bake-at-build work depends on (design doc Revision 3); the single-file
+   * backend achieves it via `atomicWriteJson`'s fsync-before-rename.
+   *
+   * SCOPE — this is a crash-of-PROCESS / crash-of-OS guarantee, NOT a
+   * power-loss one. `FileHandle.sync()` is `fsync(2)` (Node exposes no
+   * `fdatasync`), which pushes the file's content+metadata into the kernel's
+   * buffers; on some platforms (e.g. macOS/APFS) `fsync(2)` does not force the
+   * drive's own write cache to media — that needs `F_FULLFSYNC`, which Node
+   * does not expose. So a successful write is proven against the process being
+   * SIGKILLed or the OS crashing, but not against a sudden power cut. That is
+   * exactly the failure the awaited-write fix closes
+   * (`ir-cache.durability.e2e.ts`).
+   *
+   * A `put` rejection is still non-fatal to the extraction: the layer swallows
+   * it and serves the freshly-computed operations.
    */
   put(key: string, entry: CachedExtractEntry): Promise<void>;
 }
@@ -276,12 +301,14 @@ async function fastGateHits(
  *   compare; match → HIT (+ fire-and-forget mtime-refresh write so the next
  *   read is fast again); mismatch → MISS.
  * - MISS → `next()` runs the real extractor; the result is written through
- *   ATOMICALLY and DURABLY (temp file + fsync + `rename()`), and the layer
+ *   ATOMICALLY and DURABLY (temp file + fsync + `rename()`; process/OS-crash
+ *   scope — see `put`'s contract above), and the layer
  *   AWAITS that write before resolving (design doc Revision 3). A failing
  *   backend is still non-fatal — the failure is swallowed and the freshly
  *   computed operations are returned — but a SUCCESSFUL write is guaranteed
- *   complete and durable by the time the caller sees the result, so a process
- *   killed immediately afterwards cannot lose it (`ir-cache.durability.e2e.ts`).
+ *   complete and its bytes fsync'd by the time the caller sees the result, so a
+ *   process killed immediately afterwards cannot lose it
+ *   (`ir-cache.durability.e2e.ts`).
  *   The slow-gate mtime-refresh write below stays fire-and-forget: it is a
  *   pure optimization of a HIT, not a correctness path.
  *
@@ -344,9 +371,10 @@ export function createIrCacheLayer(
     ) {
       const result = await next();
       try {
-        // AWAITED (design doc Revision 3): the entry is durably published by
-        // the time this resolves, so a caller that exits (or is killed) right
-        // after seeing the result cannot lose the write.
+        // AWAITED (design doc Revision 3): the entry is published and its
+        // bytes fsync(2)'d by the time this resolves, so a caller that exits
+        // (or is killed) right after seeing the result cannot lose the write
+        // (process/OS-crash durability — see `put`'s contract above).
         await writeThrough(call, result);
       } catch {
         // Cache write failures are non-fatal — a failed put must never fail
