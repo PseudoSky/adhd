@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
-    "@adhd/agent-base-types": "^2.3.2"
+    "@adhd/agent-base-types": "^2.3.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

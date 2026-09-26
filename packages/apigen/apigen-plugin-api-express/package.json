@@ -5,10 +5,10 @@
   "dependencies": {
     "express": "^5.2.1",
     "pino-http": "11.0.0",
-    "@adhd/apigen-core-client": "^0.3.2",
-    "@adhd/apigen-base-errors": "^0.2.2",
-    "@adhd/apigen-engine-runtime": "^0.3.0",
-    "@adhd/apigen-engine-naming": "^0.2.4"
+    "@adhd/apigen-core-client": "^0.3.3",
+    "@adhd/apigen-base-errors": "^0.2.3",
+    "@adhd/apigen-engine-runtime": "^0.3.1",
+    "@adhd/apigen-engine-naming": "^0.2.5"
   },
   "publishConfig": {
     "access": "public"

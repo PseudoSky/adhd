@@ -5,8 +5,8 @@
   "module": "./dist/index.mjs",
   "typings": "./dist/index.d.ts",
   "dependencies": {
-    "@adhd/apigen-base-errors": "^0.2.2",
-    "@adhd/apigen-core-client": "^0.3.2"
+    "@adhd/apigen-base-errors": "^0.2.3",
+    "@adhd/apigen-core-client": "^0.3.3"
   },
   "publishConfig": {
     "access": "public"

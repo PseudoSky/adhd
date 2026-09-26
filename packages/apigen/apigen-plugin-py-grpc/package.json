@@ -13,9 +13,9 @@
     "protobuf"
   ],
   "dependencies": {
-    "@adhd/apigen-python-env": "^0.2.6",
-    "@adhd/apigen-core-client": "^0.3.2",
-    "@adhd/apigen-engine-naming": "^0.2.4"
+    "@adhd/apigen-python-env": "^0.2.7",
+    "@adhd/apigen-core-client": "^0.3.3",
+    "@adhd/apigen-engine-naming": "^0.2.5"
   },
   "publishConfig": {
     "access": "public"

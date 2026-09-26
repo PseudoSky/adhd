@@ -27,11 +27,11 @@
   "dependencies": {
     "better-sqlite3": "12.10.0",
     "drizzle-orm": "0.45.2",
-    "@adhd/agent-store-prompts": "^2.2.2",
-    "@adhd/agent-store-tools": "^2.2.2",
-    "@adhd/agent-core-provider": "^2.2.2",
-    "@adhd/agent-core-policy": "^2.2.2",
-    "@adhd/agent-core-env": "^0.1.1"
+    "@adhd/agent-store-prompts": "^2.2.3",
+    "@adhd/agent-store-tools": "^2.2.3",
+    "@adhd/agent-core-provider": "^2.2.3",
+    "@adhd/agent-core-policy": "^2.2.3",
+    "@adhd/agent-core-env": "^0.1.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
