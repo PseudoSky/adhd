@@ -26,9 +26,10 @@ const server = new Server({ name: 'apigen-mcp', version: '1.0.0' }, { capabiliti
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: Object.entries(toolMetas).map(([name, meta]) => {
-    // BUG-APIGEN-019: publish the function's return-type schema (oneOf+discriminator
-    // for unions) as MCP's outputSchema — wrapped under \`result\` when it isn't
-    // top-level type:"object", since the MCP protocol requires that shape.
+    // ADR-0004: publish the function's return-type schema as MCP's outputSchema
+    // ONLY when it is already a top-level type:"object". A union/array/scalar
+    // return carries no outputSchema (it is optional in MCP) and is passed
+    // through flat — never wrapped under \`result\`.
     const { outputSchema } = buildMcpOutputSchema((meta.schema as any).output)
     return {
       name,
@@ -60,7 +61,9 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     envelope,
     ((args as any)['data'] ?? {}) as Record<string, unknown>,
   )
-  // BUG-APIGEN-019: pair outputSchema with a matching structuredContent value.
+  // ADR-0004: \`content\` is the canonical flat payload. \`structuredContent\` is
+  // emitted only for an already-object return (\`wrapped === true\` == emit),
+  // and then it is the value itself — never \`{ result: value }\`.
   const { wrapped } = buildMcpOutputSchema((meta.schema as any).output)
   const structuredContent = wrapMcpStructuredContent(wrapped, result)
   return {
