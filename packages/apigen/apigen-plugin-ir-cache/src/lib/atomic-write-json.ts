@@ -14,19 +14,25 @@
 // independently for byte-identical input, so losing one temp write costs
 // nothing but a redundant (already-completed) extraction, never corruption.
 //
-// ATOMIC is documented for the temp-file content; DURABLE (surviving a crash
-// or a `SIGKILL` immediately after `put()` resolves) additionally requires the
-// bytes to have reached stable storage BEFORE the rename is published, which
-// is why the temp file is written through a real `FileHandle` and `sync()`ed
-// before `rename()`. Without that fsync, a host that resolves its `put()`
-// promise and is then killed can leave a rename pointing at a temp file whose
-// page-cache contents were never flushed — the exact
+// ATOMIC is documented for the temp-file content; DURABLE — meaning it
+// survives the PROCESS being SIGKILLed or the OS crashing immediately after
+// `put()` resolves (not a power cut; see the scope note below) — additionally
+// requires the bytes to have been fsync(2)'d BEFORE the rename is published,
+// which is why the temp file is written through a real `FileHandle` and
+// `sync()`ed before `rename()`. Without that fsync, a host that resolves its
+// `put()` promise and is then killed can leave a rename pointing at a temp file
+// whose contents were never flushed past the writer — the exact
 // `ir-cache.durability.e2e.ts` failure this closes. The parent DIRECTORY is
-// then synced best-effort so the rename's directory entry is itself durable;
-// that second sync is guarded because it is genuinely optional (some
-// filesystems refuse to open/fsync a directory: `EISDIR`/`EINVAL` on Windows,
-// `EPERM` under some containers, `ENOTSUP`/`EACCES` elsewhere) and a filesystem
-// that cannot fsync a directory still gets the file-content guarantee above.
+// then synced best-effort so the rename's directory entry itself is published;
+// that second sync is genuinely optional (some filesystems refuse to open/fsync
+// a directory) and ALL of its failures are swallowed — the file-content fsync is
+// the guarantee, the dir sync is extra credit.
+//
+// SCOPE — `FileHandle.sync()` is `fsync(2)` (Node exposes no `fdatasync`), and
+// on some platforms (e.g. macOS/APFS) `fsync(2)` does not force the drive's own
+// write cache to media — that needs `F_FULLFSYNC`, which Node does not expose.
+// The guarantee here is therefore crash-of-PROCESS / crash-of-OS, not
+// power-loss.
 //
 // Uses namespace imports (`import * as fsPromises`) rather than destructured
 // named imports so a test can `vi.spyOn(fsPromises, 'rename' | 'open' |
@@ -39,43 +45,25 @@ import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 /**
- * Filesystem error codes that mean "this platform/filesystem cannot fsync a
- * directory", not "the write failed". The entry-content fsync above has
- * already succeeded by the time this runs, so a directory-sync refusal is a
- * documented, non-fatal degradation — never a reason to fail the write.
- */
-const DIR_SYNC_UNSUPPORTED_CODES = new Set([
-  'ENOTSUP',
-  'EISDIR',
-  'EINVAL',
-  'EPERM',
-  'EACCES',
-]);
-
-/**
  * Best-effort fsync of the directory a rename just published into, so the new
- * directory entry itself survives a crash. Never throws: an unsupported
- * directory fsync is swallowed, and any other failure is swallowed too (the
- * file-content fsync already ran, and a caller's `put()` contract is about the
- * entry being complete and its bytes flushed — the dir-sync is extra credit).
+ * directory entry itself is published. NEVER throws: every failure — including
+ * the ones platforms routinely raise when a directory cannot be fsync'd
+ * (`ENOTSUP`/`EISDIR`/`EINVAL`/`EPERM`/`EACCES`, plus anything else) — is
+ * swallowed, because the entry's own content fsync already ran and a caller's
+ * `put()` contract is about the entry's bytes, not the directory entry. There
+ * is deliberately no allow-list of "expected" codes: distinguishing them would
+ * not change the control flow (both would fall through to the same return), so
+ * an allow-list here is an honest no-op dressed up as a decision.
  */
 async function fsyncParentDirBestEffort(dir: string): Promise<void> {
   let handle: fsPromises.FileHandle | undefined;
   try {
     handle = await fsPromises.open(dir, 'r');
     await handle.sync();
-  } catch (err) {
-    // Best-effort and never fatal. ENOTSUP/EISDIR/EINVAL/EPERM/EACCES are the
-    // documented "this platform/filesystem refuses to fsync a directory" cases
-    // and return explicitly; any other error falls through (implicitly
-    // returning) and is equally non-fatal, because the entry's own bytes were
-    // already fsync'd before the rename — failing here would turn a successful
-    // durable write into a spurious error.
-    if (
-      DIR_SYNC_UNSUPPORTED_CODES.has((err as NodeJS.ErrnoException).code ?? '')
-    ) {
-      return;
-    }
+  } catch {
+    // Intentionally swallowed in full — see this function's doc. The
+    // entry-content fsync is the durability guarantee; failing here would turn
+    // a successful durable write into a spurious error.
   } finally {
     if (handle) {
       await handle.close().catch(() => {
@@ -86,15 +74,15 @@ async function fsyncParentDirBestEffort(dir: string): Promise<void> {
 }
 
 /**
- * Atomically AND durably write `data` (JSON-serialized) to `path`: write to a
+ * Atomically AND durably (against process/OS crash — see the scope note at the
+ * top of this file) write `data` (JSON-serialized) to `path`: write to a
  * unique temp file alongside `path` through a `FileHandle`, `fsync` that
- * handle so the bytes are on stable storage, then `rename()` it into place,
- * then best-effort `fsync` the parent directory so the rename itself is
- * durable. The returned promise resolves only once all of that has happened —
- * callers may treat it as "the entry is durably published", which is exactly
- * the guarantee `IrCacheBackend.put`'s contract now requires (design doc
- * Revision 3). On any failure the temp file is removed best-effort and the
- * original error is re-thrown — never masked.
+ * handle, then `rename()` it into place, then best-effort `fsync` the parent
+ * directory. The returned promise resolves only once all of that has happened
+ * — callers may treat it as "the entry is published with its bytes fsync'd",
+ * which is exactly the guarantee `IrCacheBackend.put`'s contract now requires
+ * (design doc Revision 3). On any failure the temp file is removed best-effort
+ * and the original error is re-thrown — never masked.
  */
 export async function atomicWriteJson(
   path: string,
@@ -107,9 +95,11 @@ export async function atomicWriteJson(
   try {
     handle = await fsPromises.open(tmp, 'w');
     await handle.writeFile(JSON.stringify(data), 'utf8');
-    // Flush content+metadata to stable storage BEFORE the rename publishes it,
-    // so a crash right after `rename` can never leave a temp file whose bytes
-    // were only ever in the page cache.
+    // fsync the content+metadata BEFORE the rename publishes the file, so a
+    // process killed (or OS crash) right after `rename` cannot leave a temp
+    // file whose bytes were never written past the writer. This is the
+    // process/OS-crash guarantee; see the scope note at the top of this file
+    // for why it is not a power-loss guarantee.
     await handle.sync();
     await handle.close();
     handle = undefined;
