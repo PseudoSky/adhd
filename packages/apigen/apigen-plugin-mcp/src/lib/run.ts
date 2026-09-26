@@ -1,6 +1,7 @@
 import {
   createServer,
   type IncomingMessage,
+  type Server as HttpServer,
   type ServerResponse,
 } from 'node:http';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -44,7 +45,7 @@ import {
   readUsePlugins,
   wrapMcpStructuredContent,
 } from '@adhd/apigen-engine-runtime';
-import { MCP_ERROR_KIND, isApiError } from '@adhd/apigen-base-errors';
+import { ApiError, MCP_ERROR_KIND, isApiError } from '@adhd/apigen-base-errors';
 import { operationFor } from './tool-naming';
 import { projectStreamMcp } from './stream';
 import type { McpCallToolResult } from './stream';
@@ -162,6 +163,27 @@ interface ToolListMeta {
  */
 export const __toolTableBuildCount = { count: 0 };
 
+/**
+ * Shared default `inputSchema` for a tool with no bound metadata. A single
+ * module-level instance (not a fresh `{ type:'object', properties:{} }` literal
+ * per tool per call) so `listTools()` never allocates a new object for every
+ * schema-less tool on every request (DEBT-APIGEN-MCP-LISTTOOLS-CACHE-001).
+ * Frozen: it is handed out to consumers by reference via the memoized
+ * projection, so it must not be mutable.
+ */
+const DEFAULT_INPUT_SCHEMA = Object.freeze({ type: 'object', properties: {} });
+
+/** One entry of the `tools/list` response — the shape `listTools()` returns
+ * and memoizes (DEBT-APIGEN-MCP-LISTTOOLS-CACHE-001). Internal only; the
+ * package public barrel (`src/index.ts`) re-exports only `./lib/plugin`, so
+ * this type never widens the published API surface. */
+type McpToolListEntry = {
+  name: string;
+  description: string;
+  inputSchema: unknown;
+  outputSchema?: Record<string, unknown>;
+};
+
 // ---------------------------------------------------------------------------
 // McpTransportAdapter — the mcp `TransportAdapter<McpRaw>` port implementation.
 // ---------------------------------------------------------------------------
@@ -174,7 +196,7 @@ export const __toolTableBuildCount = { count: 0 };
  * `buildToolTable()`) that every per-connection `Server` (`createMcpServer()`)
  * shares.
  */
-class McpTransportAdapter implements TransportAdapter<McpRaw> {
+export class McpTransportAdapter implements TransportAdapter<McpRaw> {
   private readonly plans = new Map<string, OpPlan>();
   private readonly dispatchers = new Map<
     string,
@@ -186,12 +208,20 @@ class McpTransportAdapter implements TransportAdapter<McpRaw> {
   private readonly schemasByOpId = new Map<string, ComposedSchemas[string]>();
   /** plan.mcp.name → list-facing metadata, computed ONCE ([mcp-adapter.8]). */
   private readonly toolMeta = new Map<string, ToolListMeta>();
+  /** Memoized result of `listTools()`. BOTH mutation points that can change the
+   * projection invalidate it: `bindToolMeta()` (metadata) and
+   * `registerRoute()` (the tool set itself)
+   * (DEBT-APIGEN-MCP-LISTTOOLS-CACHE-001). */
+  private cachedList: McpToolListEntry[] | undefined;
 
   bindSchema(opId: string, schema: ComposedSchemas[string]): void {
     this.schemasByOpId.set(opId, schema);
   }
 
   bindToolMeta(name: string, meta: ToolListMeta): void {
+    // List-facing metadata is an input to the `tools/list` projection, so this
+    // is a cache-invalidating mutation point alongside `registerRoute()`.
+    this.cachedList = undefined;
     this.toolMeta.set(name, meta);
   }
 
@@ -201,6 +231,10 @@ class McpTransportAdapter implements TransportAdapter<McpRaw> {
       call: Omit<RuntimeCall, 'operation' | 'ctx'>
     ) => Promise<LayerResult>
   ): void {
+    // Any route mutation invalidates the memoized tools/list projection.
+    // `registerRoute` is the only way a plan enters `this.plans`;
+    // `bindToolMeta` invalidates the metadata half the same way.
+    this.cachedList = undefined;
     this.plans.set(plan.mcp.name, plan);
     this.dispatchers.set(plan.mcp.name, dispatch);
   }
@@ -215,22 +249,30 @@ class McpTransportAdapter implements TransportAdapter<McpRaw> {
     return this.dispatchers.get(name);
   }
 
-  /** The `tools/list` projection — cheap; reads the already-hoisted metadata. */
+  /** The `tools/list` projection — cheap; reads the already-hoisted metadata.
+   * Memoized: the result is rebuilt only after `bindToolMeta()`/
+   * `registerRoute()` invalidate it, so successive calls return the SAME
+   * (frozen) array reference (DEBT-APIGEN-MCP-LISTTOOLS-CACHE-001). The array,
+   * each entry, and the shared `DEFAULT_INPUT_SCHEMA` are frozen so a consumer
+   * cannot corrupt the memoized projection in place. */
   listTools(): Array<{
     name: string;
     description: string;
     inputSchema: unknown;
     outputSchema?: Record<string, unknown>;
   }> {
-    return [...this.plans.keys()].map((name) => {
+    if (this.cachedList) return this.cachedList;
+    const list: McpToolListEntry[] = [...this.plans.keys()].map((name) => {
       const meta = this.toolMeta.get(name);
-      return {
+      return Object.freeze({
         name,
         description: meta?.description ?? name,
-        inputSchema: meta?.inputSchema ?? { type: 'object', properties: {} },
+        inputSchema: meta?.inputSchema ?? DEFAULT_INPUT_SCHEMA,
         ...(meta?.outputSchema ? { outputSchema: meta.outputSchema } : {}),
-      };
+      });
     });
+    this.cachedList = Object.freeze(list) as McpToolListEntry[];
+    return this.cachedList;
   }
 
   readCall(raw: McpRaw, plan: OpPlan): Omit<RuntimeCall, 'operation' | 'ctx'> {
@@ -691,6 +733,160 @@ function guardHttpTransport(
 }
 
 // ---------------------------------------------------------------------------
+// Transport lifecycle — shutdown + bind-failure reporting
+// (BUG a4b5bad6 — promise never settles without an AbortSignal; BUG d6fd726f —
+// no 'error' listener before listen() so bind failures never reach the caller).
+//
+// Every transport branch below terminates through ONE of these helpers, and
+// none of them constructs a Promise whose resolve() is guarded by
+// `if (input.signal)` — that guard is exactly what left `run()` pending
+// forever when a caller omitted a signal.
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the mandatory AbortSignal for an HTTP transport. `sse`/
+ * `streaming-http` have no natural EOF (unlike stdio's stdin close), so an
+ * AbortSignal is the ONLY way their `run()` promise can ever settle. Rejecting
+ * up front — with a typed `invalid_argument` naming the transport — beats
+ * binding a server that can never be stopped and hanging the caller.
+ */
+function requireSignal(input: RunInput, transport: string): AbortSignal {
+  const signal = input.signal;
+  if (!signal) {
+    throw new ApiError(
+      'invalid_argument',
+      `apigen mcp transport "${transport}" requires RunInput.signal (an AbortSignal) to shut down; none was supplied`
+    );
+  }
+  return signal;
+}
+
+/**
+ * Bind an HTTP server and translate its lifecycle into a `run()`-settling
+ * promise:
+ *
+ *  - a bind failure (e.g. `EADDRINUSE`) REJECTS with a typed `internal`
+ *    `ApiError` naming `host:port`, instead of emitting an unhandled `'error'`
+ *    event that crashes the process and never reaches the caller. The
+ *    `once('error')` listener is attached BEFORE `listen()` so the failure
+ *    cannot race past it.
+ *  - a successful bind swaps the one-shot reject-listener for a persistent
+ *    error logger (post-bind server errors are logged, never fatal), then
+ *    resolves when `signal` aborts and `server.close()` drains.
+ */
+function listenOrReject(
+  httpServer: HttpServer,
+  port: number,
+  host: string,
+  transport: string,
+  logger: Logger,
+  signal: AbortSignal
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const onError = (cause: Error) => {
+      reject(
+        new ApiError(
+          'internal',
+          `failed to bind mcp ${transport} server on ${host}:${port}: ${cause.message}`,
+          { cause }
+        )
+      );
+    };
+    // Attach BEFORE listen(): a synchronous EADDRINUSE must never escape as an
+    // unhandled 'error' event.
+    httpServer.once('error', onError);
+    httpServer.listen(port, host, () => {
+      // Bind succeeded — drop the one-shot reject-listener and install a
+      // persistent logger so later server-level errors are observability, not
+      // a process-killing unhandled event.
+      httpServer.removeListener('error', onError);
+      httpServer.on('error', (err) => logger.error({ err }, 'mcp http server error'));
+      logger.info({ host, port }, `listening on http://${host}:${port}`);
+      const shutdown = () => {
+        logger.info('mcp server shutting down');
+        httpServer.close(() => resolve());
+        // `close(cb)` stops accepting new connections but WAITS for existing
+        // ones to end. An open SSE/streaming-http response IS an active
+        // connection, so a client holding a stream open would keep the
+        // close-callback (and therefore `run()`) pending indefinitely.
+        // `closeAllConnections()` (Node >=18.2) force-destroys those sockets so
+        // the callback fires and `run()` always settles on abort.
+        httpServer.closeAllConnections();
+      };
+      if (signal.aborted) {
+        shutdown();
+        return;
+      }
+      signal.addEventListener('abort', shutdown, { once: true });
+    });
+  });
+}
+
+/**
+ * Settle the `stdio` transport's `run()` promise. stdio has no server-side
+ * "stop" call of its own, so it settles on any of three independent
+ * out-of-band signals — two of which exist WITHOUT an AbortSignal:
+ *   - EOF on stdin (the MCP client closing its end). The SDK's
+ *     `StdioServerTransport` does NOT surface this as `onclose` itself (verified
+ *     against @modelcontextprotocol/sdk 1.29.0: it only listens for
+ *     `data`/`error`), so we watch the stdin stream directly.
+ *   - the transport's `onclose` (e.g. `server.close()`), which the SDK DOES
+ *     raise.
+ *   - `signal` abort, when one IS supplied (additive, never required).
+ * The resolve is therefore never inside an `if (signal)` guard.
+ *
+ * CHAIN, never replace: by the time this runs, `server.connect(t)` has already
+ * installed the SDK's own `onclose` (`Protocol.connect()` assigns
+ * `t.onclose = () => { _onclose?.(); this._onclose(); }`). A bare assignment
+ * would silently drop `Protocol._onclose()`, which clears response/progress/
+ * timeout state and aborts every in-flight request-handler abort controller.
+ * We capture and invoke the previous handler first.
+ */
+export function awaitStdioClose(
+  t: Pick<StdioServerTransport, 'onclose'>,
+  logger: Logger,
+  signal?: AbortSignal,
+  stdin: NodeJS.ReadableStream = process.stdin
+): Promise<void> {
+  return new Promise<void>((resolve) => {
+    let done = false;
+    function settle(message: string): void {
+      if (done) return;
+      done = true;
+      stdin.off('end', onEnd);
+      stdin.off('close', onEnd);
+      signal?.removeEventListener('abort', onAbort);
+      logger.info(message);
+      resolve();
+    }
+    function onEnd(): void {
+      settle('stdio transport closed (stdin EOF)');
+    }
+    function onAbort(): void {
+      settle('mcp server shutting down');
+    }
+
+    const prev = t.onclose;
+    t.onclose = () => {
+      prev?.();
+      settle('stdio transport closed');
+    };
+    // A client closing its end of stdin is the canonical stdio shutdown
+    // (`close` also fires on abrupt teardown); watch directly since the SDK
+    // transport does not.
+    stdin.once('end', onEnd);
+    stdin.once('close', onEnd);
+    if (signal) {
+      if (signal.aborted) {
+        settle('mcp server shutting down');
+        return;
+      }
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
 // run
 // ---------------------------------------------------------------------------
 
@@ -732,16 +928,15 @@ export async function run(input: RunInput): Promise<void> {
     const t = new StdioServerTransport();
     await server.connect(t);
     logger.info('stdio transport ready');
-    return new Promise<void>((resolve) => {
-      if (input.signal)
-        input.signal.addEventListener('abort', () => {
-          logger.info('mcp server shutting down');
-          resolve();
-        });
-    });
+    // stdio has a natural shutdown (stdin EOF, or transport close), so no
+    // signal is required; a supplied one is an additional out-of-band stop.
+    return awaitStdioClose(t, logger, input.signal);
   }
 
   if (transport === 'sse') {
+    // `sse` has no natural EOF — require an AbortSignal up front so run() can
+    // always settle, and never binds a server the caller cannot stop.
+    const signal = requireSignal(input, transport);
     // SSEServerTransport is per-connection: instantiate per GET request, route
     // POSTs by sessionId. A fresh `Server` per session (via `createMcpServer`,
     // cheap — it shares the hoisted `adapter`) — the MCP SDK's
@@ -782,17 +977,7 @@ export async function run(input: RunInput): Promise<void> {
       })
     );
 
-    httpServer.listen(port, host, () => {
-      logger.info({ host, port }, `listening on http://${host}:${port}`);
-    });
-    return new Promise<void>((resolve) => {
-      if (input.signal) {
-        input.signal.addEventListener('abort', () => {
-          logger.info('mcp server shutting down');
-          httpServer.close(() => resolve());
-        });
-      }
-    });
+    return listenOrReject(httpServer, port, host, transport, logger, signal);
   }
 
   // streaming-http transport — stateless mode. The StreamableHTTPServerTransport
@@ -803,6 +988,10 @@ export async function run(input: RunInput): Promise<void> {
   // (cheap: two closures over the hoisted `adapter`) runs per request now —
   // the EXPENSIVE `buildToolTable()` work above ran exactly once
   // ([mcp-adapter.8]).
+  //
+  // `streaming-http`, like `sse`, has no natural EOF — require an AbortSignal
+  // up front so run() can always settle.
+  const signal = requireSignal(input, transport);
   const httpServer = createServer(
     guardHttpTransport(logger, async (req, res) => {
       const server = createMcpServer(adapter, logger, identity);
@@ -813,15 +1002,5 @@ export async function run(input: RunInput): Promise<void> {
       await mcpTransport.handleRequest(req, res);
     })
   );
-  httpServer.listen(port, host, () => {
-    logger.info({ host, port }, `listening on http://${host}:${port}`);
-  });
-  return new Promise<void>((resolve) => {
-    if (input.signal) {
-      input.signal.addEventListener('abort', () => {
-        logger.info('mcp server shutting down');
-        httpServer.close(() => resolve());
-      });
-    }
-  });
+  return listenOrReject(httpServer, port, host, transport, logger, signal);
 }
