@@ -51,15 +51,18 @@
  * Both tests go RED on the pre-funnel pin (`@adhd/sox-embedding-provider`
  * `^0.5.0`): test 1 because construction eagerly forked a `fastembedProcessHost`
  * child, test 2 because the pre-funnel topology has no machine-wide shared UDS
- * host at all (zero sockets in the isolated run dir). See the branch's report
+ * host at all (no funnel host names a consumer as its spawner). See the branch's report
  * for the observed raw output.
  *
  * ## Process lifecycle — the tests must never outlive an externally-killed run
  *
- * These consumers HOLD a persistent funnel UDS client connection, and the shared
- * host correctly refuses to reap while any client is attached. So a consumer
- * that outlives this test process would pin the host (and its ONNX child)
- * indefinitely. Two independent guards make that impossible:
+ * These consumers HOLD a persistent funnel UDS client connection. The shared
+ * host (`@adhd/sox-embedding-provider` >= 0.6, sox ADR-0022) retires on WORK,
+ * not connections — it exits its idle window after the last completed embed
+ * even while clients stay attached — but a stranded consumer that keeps
+ * embedding would still keep a host (and its ONNX child) alive, and a stranded
+ * consumer is a leak in its own right. Two independent guards make that
+ * impossible:
  *
  *   - the consumers are spawned **`detached`** (own process group) and
  *     `afterEach` reaps the whole group, on the normal path; and
@@ -213,6 +216,51 @@ function descendantsOf(rootPid: number): ProcLine[] {
   return out;
 }
 
+/** A live funnel host, as described by its own argv. */
+interface FunnelHost {
+  pid: number;
+  /** The UDS the host bound — its `--socket=` flag, verbatim. */
+  socket: string;
+}
+
+/**
+ * Every live funnel host (`embedHostMain`) whose `--spawner-pid=` is one of
+ * `spawnerPids`. The host is spawned DETACHED, so it is never a descendant of
+ * the consumer; its argv is the only authoritative link back to who spawned it.
+ *
+ * The socket path is read from the host's own `--socket=` flag rather than
+ * assumed to live under `<SOX_ECOSYSTEM_HOME>/run`: `@adhd/sox-service-proxy`
+ * >= 0.4.4 (`backendSocketPath`, BL-578) relocates a socket whose full path
+ * would exceed the 104-byte `sun_path` budget to `os.tmpdir()/sox-uds/`, keyed
+ * on a digest of `(socketDir, singletonKey)` — still unique to this test's run
+ * dir, but no longer INSIDE it. A scratch root nested in a git worktree crosses
+ * that budget, so a directory listing alone reports zero sockets there.
+ */
+function funnelHostsSpawnedBy(spawnerPids: ReadonlySet<number>): FunnelHost[] {
+  const hosts: FunnelHost[] = [];
+  for (const p of listProcesses()) {
+    if (!/embedHostMain\.js/.test(p.command)) continue;
+    const spawner = /--spawner-pid=(\d+)/.exec(p.command);
+    const socket = /--socket=(\S+)/.exec(p.command);
+    if (spawner && socket && spawnerPids.has(Number(spawner[1]))) {
+      hosts.push({ pid: p.pid, socket: socket[1]! });
+    }
+  }
+  return hosts;
+}
+
+/** Each consumer's pid plus every descendant (the `tsx` CLI forks the real node). */
+function consumerPidSet(consumers: readonly Consumer[]): Set<number> {
+  const pids = new Set<number>();
+  for (const c of consumers) {
+    const pid = c.child.pid;
+    if (pid === undefined) continue;
+    pids.add(pid);
+    for (const d of descendantsOf(pid)) pids.add(d.pid);
+  }
+  return pids;
+}
+
 /** PIDs holding `socketPath` open (via `lsof`); `[]` if none do. */
 function socketOwnerPids(socketPath: string): number[] {
   try {
@@ -292,7 +340,14 @@ describe('embedding funnel — real components, real consumer processes', () => 
           'bootstrapping must not spawn an embedding host — construction is inert'
         ).toEqual([]);
 
-        // Corroboration: no funnel host bound a socket in this isolated run dir.
+        // Corroboration: no funnel host names this consumer as its spawner, and
+        // none bound a socket in this isolated run dir. (The host is detached, so
+        // the descendant scan above cannot see it; its argv can.)
+        const hosts = funnelHostsSpawnedBy(consumerPidSet([consumer]));
+        expect(
+          hosts.map((h) => `${h.pid} ${h.socket}`),
+          'bootstrapping must not spawn a funnel host — construction is inert'
+        ).toEqual([]);
         const runDir = join(soxHome, 'run');
         const sockets = existsSync(runDir)
           ? readdirSync(runDir).filter((f) => f.endsWith('.sock'))
@@ -352,23 +407,26 @@ describe('embedding funnel — real components, real consumer processes', () => 
         // All N really embedded the real 768-dim model …
         expect(dims).toEqual([768, 768, 768]);
 
-        // … onto EXACTLY ONE peer-spawned host, isolated to this test's run dir.
-        const runDir = join(soxHome, 'run');
-        const sockets = existsSync(runDir)
-          ? readdirSync(runDir).filter((f) => f.endsWith('.sock'))
-          : [];
+        // … onto EXACTLY ONE peer-spawned host, spawned by one of THIS test's
+        // consumers (isolated by its private SOX_ECOSYSTEM_HOME run dir).
+        const hosts = funnelHostsSpawnedBy(consumerPidSet(consumers));
+        const sockets = [...new Set(hosts.map((h) => h.socket))];
         expect(
           sockets.length,
-          `expected exactly one funnel host socket in ${runDir}, found ${sockets.length}: ${sockets.join(
-            ', '
-          )}`
+          `expected exactly one funnel host socket for this test's consumers, found ${
+            sockets.length
+          }: ${sockets.join(', ')}`
         ).toBe(1);
+        expect(
+          existsSync(sockets[0]!),
+          `the funnel host socket must exist on disk: ${sockets[0]}`
+        ).toBe(true);
 
         // The socket is owned by exactly one host process …
         const procByPid = new Map(listProcesses().map((p) => [p.pid, p]));
         const hostPids = new Set<number>();
         for (const socket of sockets) {
-          for (const pid of socketOwnerPids(join(runDir, socket))) {
+          for (const pid of socketOwnerPids(socket)) {
             if (EMBED_HOST_CMD.test(procByPid.get(pid)?.command ?? '')) {
               hostPids.add(pid);
             }

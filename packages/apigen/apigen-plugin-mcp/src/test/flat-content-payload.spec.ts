@@ -21,6 +21,16 @@
  * under test is always freshly built. RED-provable: restore the pre-ADR-0004
  * `buildMcpOutputSchema` wrap and the union case fails with the envelope
  * present (demonstrated in the ADR-0004 completion report).
+ *
+ * LANE RULING (2026-09-26) — this real-child-process suite deliberately runs
+ * in the DEFAULT `test` lane, NOT the `*.e2e.ts` lane. ADR-0004 D5 REQUIRES a
+ * default-running real-client test (the prior guard sat inside a
+ * `describe.skip`, so nothing default-running protected this behaviour), and
+ * `vite.config.ts` / `project.json` split `*.e2e.ts` out of `nx affected -t
+ * test` with no CI runner for that lane (backlog c05e598e) — moving it there
+ * would make it unrunnable. The child `node` process (the built stdio server)
+ * is the setup cost of driving the real JSON-RPC seam; do NOT "fix" it back
+ * into the e2e lane. Same ruling as union-catchall.spec.ts's own header.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'node:fs';

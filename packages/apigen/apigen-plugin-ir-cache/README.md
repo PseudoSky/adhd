@@ -39,7 +39,7 @@ flowchart TD
     Slow -->|real content change| Miss2["MISS"]
     Miss1 --> Run["next() — real extractor"]
     Miss2 --> Run
-    Run --> Write["atomic write: temp file + rename()"]
+    Run --> Write["durable write: temp file + fsync + rename()"]
 ```
 
 1. **Missing file**, or a mismatched `formatVersion`/`extractorVersion` → MISS.
@@ -55,14 +55,24 @@ flowchart TD
    — the entry's `staleness` mtimes are then rewritten fire-and-forget so the
    NEXT read takes the fast path again. Mismatch → MISS.
 4. **No `staleness` snapshot at all** (an ARTIFACT-mode-written entry, or a
-   legacy pre-Revision-2 entry) — `formatVersion`/`extractorVersion` already
-   gate correctness, so the entry is trusted as a HIT rather than MISSed on
-   absent metadata; a `staleness` snapshot is opportunistically computed and
-   backfilled fire-and-forget so the NEXT read gets the fast path.
+   legacy pre-Revision-2 entry) — `formatVersion`/`extractorVersion` alone
+   cannot prove the source content hasn't drifted (there is no stored content
+   key to compare against), so trusting the entry would permanently launder
+   stale data as "fresh". This is a **MISS**: the real extractor runs once to
+   revalidate, and the fresh result is written through WITH a `staleness`
+   snapshot so every subsequent read gets the fast/slow gate.
 5. **MISS** in any case → `next()` runs the real extractor; the result is
-   written through **atomically** (temp file + `rename()`) and
-   fire-and-forget — a slow or failing backend can never add latency to a
-   MISS or fail the run.
+   written through **atomically AND durably** (temp file → `fsync` → `rename()`
+   → best-effort parent-dir `fsync`) and the layer **awaits** that write before
+   resolving. A failing backend is still non-fatal (the failure is swallowed and
+   the fresh operations are returned), but a SUCCESSFUL write is complete and its
+   bytes `fsync(2)`'d by the time the caller sees the result — so a process
+   killed, or the OS crashing, immediately afterwards cannot lose it. This is a
+   **crash-of-process / crash-of-OS** guarantee, **not** a power-loss one: Node
+   exposes no `fdatasync` (the write is an `fsync`), and on some platforms
+   (e.g. macOS/APFS) `fsync(2)` does not force the drive's own cache to media.
+   The slow-gate mtime-refresh in step 3 remains fire-and-forget: it is a pure
+   optimization of a HIT, not a correctness path.
 
 ```ts
 import { createExtractInvoker } from '@adhd/apigen-core-client';
@@ -155,12 +165,15 @@ factory, exactly as before — `createLayer`/`opts` only matters for a
 
 - `createSingleFileBackend(path)` — the RUNTIME CACHE mode backend: one
   literal file is the entire cache, `get`/`put` ignore the `key` parameter
-  entirely. Writes atomically (temp file + `rename()`).
+  entirely. Writes atomically and durably (temp file → `fsync` → `rename()` →
+  best-effort parent-dir `fsync`; a crash-of-process/OS guarantee, not
+  power-loss), and `put` resolves only once the entry is published and its
+  bytes `fsync`'d.
 - `createLocalFsBackend(dir)` — content-addressed directory
   (`<dir>/<key>.json`), one file per key. Kept for a possible future
   multi-key/shared backend (e.g. an Nx-remote-cache-style HTTP store keyed by
   content hash); not used by either of this plugin's two default modes today.
-  Also writes atomically.
+  Also writes atomically and durably (via the same `atomicWriteJson` helper).
 - **Shared/remote backend (not built):** `IrCacheBackend` (`get`/`put` by
   key) is the seam; an HTTP content-addressed store is a same-shape
   implementation swap. Note the inherited trust model — a shared cache

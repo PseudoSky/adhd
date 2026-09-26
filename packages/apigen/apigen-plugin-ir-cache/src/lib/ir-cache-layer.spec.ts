@@ -26,7 +26,7 @@
 // polling a real file's content — a bounded-deadline wait on a real
 // observable state change, never a wall-clock guess.
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import * as os from 'node:os';
@@ -39,11 +39,22 @@ import * as path from 'node:path';
 // function still does its real work — the fast/slow-gate tests below depend
 // on genuine file I/O) wrapped in a `vi.fn` so call counts/args are
 // observable via `vi.mocked(fsPromises.readFile)`.
+// `vi.mock` factories are hoisted above imports, so a plain module-scope
+// `let` is not yet initialised when the factory runs — `vi.hoisted` is the
+// documented escape hatch. `hoisted.rename` captures the untampered `rename`.
+const hoisted = vi.hoisted(() => ({
+  rename: undefined as typeof import('node:fs/promises').rename | undefined,
+}));
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
+  hoisted.rename = actual.rename;
   return {
     ...actual,
     readFile: vi.fn(actual.readFile),
+    // Wrapped so the durability test can latch the MISS write's publication
+    // point (rename) and prove the layer's promise waits for it. Real by
+    // default for every other test.
+    rename: vi.fn(actual.rename),
   };
 });
 import type { ExtractCall, Operation } from '@adhd/apigen-core-client';
@@ -120,15 +131,12 @@ function readCacheFile(): CachedExtractEntry | undefined {
 }
 
 /**
- * `createIrCacheLayer`'s writes are DELIBERATELY fire-and-forget (design doc
- * R2.3: "the layer never blocks on put") — a MISS's `invoke()` call resolves
- * with the fresh operations before the write to disk necessarily lands. A
- * real subprocess consumer (e.g. `entrypoint/backlog`'s `--help` path) is
- * safe because Node only exits once every pending I/O drains; an in-process
- * test issuing a SECOND `invoke()` call immediately after the first would
- * otherwise race that same pending write. This waits for the write's real,
- * observable effect (the cache file existing) via a bounded-deadline poll —
- * never a raw sleep/wall-clock guess.
+ * Bounded-deadline wait for the cache file to exist. Since the bake-at-build
+ * work (design doc Revision 3) a MISS's `put()` is AWAITED by the layer, so
+ * this normally resolves immediately; it is kept as a real, observable wait
+ * (never a raw sleep) so the tests remain robust to any future backend whose
+ * publication is asynchronous, and so the cross-mode tests below can await a
+ * fire-and-forget refresh write without a wall-clock guess.
  */
 async function waitForCacheWrite(): Promise<void> {
   await vi.waitFor(
@@ -145,6 +153,11 @@ beforeEach(() => {
   importPath = path.join(dir, 'imported.ts');
   cachePath = path.join(dir, 'cache', 'ir-cache.json');
   writeSources();
+});
+
+afterEach(() => {
+  vi.mocked(fsPromises.rename).mockImplementation(hoisted.rename!);
+  vi.mocked(fsPromises.rename).mockClear();
 });
 
 describe('computeCacheKey', () => {
@@ -372,7 +385,7 @@ describe('createIrCacheLayer — RUNTIME CACHE mode HIT/MISS semantics', () => {
     expect(runExtractor).toHaveBeenCalledTimes(2);
   });
 
-  it('a failing backend write never fails the extraction (fire-and-forget write)', async () => {
+  it('a failing backend write never fails the extraction (awaited write, failure swallowed)', async () => {
     const unwritableCache = path.join(dir, 'no', 'such', 'deeply', 'nested', 'dir', 'cache.json');
     // Simulate an unwritable target by pointing the cache file at a path
     // whose parent is actually a FILE, not a directory — mkdir(recursive)
@@ -476,5 +489,55 @@ describe('createIrCacheLayer — cross-mode compatibility (R2.5)', () => {
     );
     await expect(invoke(makeCall())).resolves.toEqual(FRESH_OPS);
     expect(runExtractor).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('createIrCacheLayer — durability (design doc Revision 3)', () => {
+  // THE TEETH for the awaited/durable write contract. The spec deliberately
+  // latches the exact point the entry becomes visible (`rename`) and asserts
+  // the layer's promise has NOT settled while that latch is held. Pre-fix
+  // (fire-and-forget `void writeThrough(...)`), the layer resolved as soon as
+  // `next()` returned — so `settled` would be true here and this test RED.
+  it('does not settle a MISS until the write is published (rename), then settles with the file present', async () => {
+    let releaseRename!: () => void;
+    const renameGate = new Promise<void>((resolve) => {
+      releaseRename = resolve;
+    });
+    let renameReached!: () => void;
+    const enteredRename = new Promise<void>((resolve) => {
+      renameReached = resolve;
+    });
+
+    vi.mocked(fsPromises.rename).mockImplementationOnce(async (from, to) => {
+      renameReached();
+      await renameGate;
+      return hoisted.rename!(from, to);
+    });
+
+    const runExtractor = vi.fn(async () => FIXTURE_OPS);
+    const invoke = createExtractInvoker(
+      [createIrCacheLayer({ cache: cachePath, extractorVersion: EXTRACTOR_VERSION })],
+      runExtractor
+    );
+
+    let settled = false;
+    const invocation = invoke(makeCall()).then((ops) => {
+      settled = true;
+      return ops;
+    });
+
+    // Wait until the write has reached its publication point (rename), still
+    // latched — the extractor has run and the file handle fsync'd, but the
+    // entry is not yet published.
+    await enteredRename;
+    expect(runExtractor).toHaveBeenCalledTimes(1);
+    // The layer MUST still be pending: it awaits the durable write.
+    expect(settled).toBe(false);
+
+    releaseRename();
+    await expect(invocation).resolves.toEqual(FIXTURE_OPS);
+    expect(settled).toBe(true);
+    expect(fs.existsSync(cachePath)).toBe(true);
+    expect(readCacheFile()?.operations).toEqual(FIXTURE_OPS);
   });
 });

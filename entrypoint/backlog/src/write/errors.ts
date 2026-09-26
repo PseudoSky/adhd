@@ -34,6 +34,7 @@ import {
   isForeignKeyError,
   isUniqueConstraintError,
 } from '@adhd/sox-store-adapter';
+import { log } from '@adhd/sox-telemetry';
 import { displayExternalRoot } from './citation-path.js';
 
 /** The closed code union every {@link IWriteError} carries (SPEC.md §4c). */
@@ -125,13 +126,82 @@ export class WriteContentionError extends BacklogWriteError {
 export class WriteIOError extends BacklogWriteError {
   readonly code = 'E_IO' as const;
   readonly retryable = true;
+  /**
+   * (56a2133e) The raw underlying error's own message, verbatim. The fixed
+   * prefix of {@link Error.message} alone is identical for every `E_IO`, so
+   * without this an operator reading the CLI/MCP envelope cannot tell a
+   * driver fault from, say, an `EACCES` on a cited file.
+   */
+  readonly causeMessage: string;
+  /** (56a2133e) The raw underlying error's `code` (the driver's own code such as `GenericFailure`, or an errno), when it has one. */
+  readonly causeCode?: string;
 
   constructor(cause: unknown) {
+    const raw = describeRawError(cause);
     super(
-      'Write I/O failure: an unclassified driver/connection error surfaced from the underlying transaction',
+      `Write I/O failure: an unclassified driver/connection error surfaced from the underlying transaction: ${raw.message}`,
       cause
     );
+    this.causeMessage = raw.message;
+    if (raw.code !== undefined) this.causeCode = raw.code;
   }
+}
+
+/** The raw, driver- or OS-native identity of an arbitrary thrown value. */
+export interface IRawErrorDescription {
+  message: string;
+  code?: string;
+  stack?: string;
+}
+
+/**
+ * (56a2133e) Extract message/code/stack from ANY thrown value without
+ * assuming it is an `Error` — a native driver can reject with a plain object.
+ */
+export function describeRawError(err: unknown): IRawErrorDescription {
+  if (err instanceof Error) {
+    const code = (err as { code?: unknown }).code;
+    return {
+      message: err.message,
+      ...(typeof code === 'string' ? { code } : {}),
+      ...(err.stack !== undefined ? { stack: err.stack } : {}),
+    };
+  }
+  if (typeof err === 'object' && err !== null) {
+    const rec = err as { message?: unknown; code?: unknown };
+    return {
+      message:
+        typeof rec.message === 'string' ? rec.message : JSON.stringify(err),
+      ...(typeof rec.code === 'string' ? { code: rec.code } : {}),
+    };
+  }
+  return { message: String(err) };
+}
+
+/** Telemetry event emitted for every failure the write layer classifies as `E_IO`. */
+export const WRITE_IO_FAILURE_EVENT = 'backlog.write.io_failure';
+
+/**
+ * (56a2133e) Record the RAW error behind an `E_IO` at `error` level through
+ * `@adhd/sox-telemetry` — the same sink the store substrate writes its own
+ * records to (`~/.adhd/sox-ecosystem/backlog/logs/*.jsonl`). Before this, an
+ * `E_IO` left no trace anywhere but the generic envelope string, so a
+ * failure that repeated 5/5 on one payload was indistinguishable from a
+ * driver/connection fault. `origin` names the call site that decided `E_IO`.
+ */
+export function reportWriteIOFailure(
+  err: unknown,
+  origin: 'transaction' | 'citation_sha',
+  retryable: boolean
+): void {
+  const raw = describeRawError(err);
+  log.error(WRITE_IO_FAILURE_EVENT, {
+    origin,
+    retryable,
+    error: raw.message,
+    ...(raw.code !== undefined ? { error_code: raw.code } : {}),
+    ...(raw.stack !== undefined ? { stack: raw.stack } : {}),
+  });
 }
 
 /**
@@ -346,6 +416,45 @@ export class CitationUnverifiableError extends BacklogWriteError {
   }
 }
 
+/**
+ * (56a2133e) A citation's target resolved to a DIRECTORY. A directory has no
+ * content to hash (§8.5), so it can never become a verified citation. It is a
+ * caller-input mistake, not an I/O fault: retrying the same payload fails the
+ * same way every time. Before this class existed, `readFile` on the directory
+ * threw `EISDIR` and both `computeCitationSha` copies wrapped it in
+ * {@link WriteIOError}, which reported "unclassified driver/connection error",
+ * `retryable: true`. That was the production symptom: one create citing
+ * `libs/data/store/store-adapter` failed 5/5 while every other write succeeded.
+ */
+export class CitationTargetIsDirectoryError extends BacklogWriteError {
+  readonly code = 'E_VALIDATION' as const;
+  readonly retryable = false;
+
+  constructor(public readonly target: string) {
+    super(
+      `Citation target "${target}" is a directory, not a file — a citation must name a file ` +
+        'inside it (use the citation\'s `lines` field for a range) so its content can be hashed'
+    );
+  }
+}
+
+/**
+ * (56a2133e) The single mapping of a citation-read failure that is NOT "the
+ * file is missing" (callers handle `isMissingPathError` first). `EISDIR` is a
+ * validation error; every other errno stays a real `E_IO` and is reported to
+ * telemetry with its raw message before being thrown.
+ */
+export function citationReadError(
+  err: unknown,
+  target: string
+): BacklogWriteError {
+  if ((err as NodeJS.ErrnoException | null)?.code === 'EISDIR') {
+    return new CitationTargetIsDirectoryError(target);
+  }
+  reportWriteIOFailure(err, 'citation_sha', true);
+  return new WriteIOError(err);
+}
+
 /** `transition` (§6.3.4): `project_policy.transition_requires_note` (default `true`) and no `note` was given. */
 export class NoteRequiredError extends BacklogWriteError {
   readonly code = 'E_VALIDATION' as const;
@@ -439,10 +548,12 @@ export function classifyDriverError(err: unknown): IWriteError {
   if (isDatabaseError(err)) {
     // Recognized-but-otherwise-unclassified database error — the SPEC.md
     // §4c table's actual `E_IO` case.
+    reportWriteIOFailure(err, 'transaction', true);
     return { code: 'E_IO', retryable: true, message, cause: err };
   }
   // Genuinely unrecognized, non-database-shaped failure (never reached the
   // driver at all) — deliberately NOT retryable. See doc comment above.
+  reportWriteIOFailure(err, 'transaction', false);
   return { code: 'E_IO', retryable: false, message, cause: err };
 }
 

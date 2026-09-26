@@ -34,6 +34,7 @@ This is what makes `AGENTS.md`'s parallel-process hard rule unambiguous: its `AD
 | [0001](./0001-adhd-stores-migrate-to-sox-store-adapter.md) | Every adhd store migrates to the sox store adapter (Turso) | ACCEPTED (2026-09-24) |
 | [0002](./0002-correct-the-source-never-work-around.md) | Correct the source, never work around a functional gap (adhd ↔ sox) | ACCEPTED (2026-09-24) |
 | [0003](./0003-adhd-packages-publish-commonjs-only.md) | `@adhd/*` packages publish CommonJS-only | ACCEPTED (2026-09-25) |
+| [0004](./0004-mcp-tool-output-is-the-flat-content-payload.md) | MCP tool output is the flat payload on `content`; no `{result}` envelope | ACCEPTED (2026-09-25) |
 
 ---
 

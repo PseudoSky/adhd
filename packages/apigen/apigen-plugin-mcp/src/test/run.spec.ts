@@ -31,10 +31,10 @@ describe('mocked: run', () => {
   it.todo('[v2-mcp.env.1] envelope field bound from _meta["x-<pluginId>-<field>"]');
   it.todo("[v2-mcp.env.2] (negative) envelope field in args body (not _meta) is NOT picked up as envelope");
   it.todo("object-shaped output: tools/list outputSchema passes through unwrapped");
-  it.todo('union-return output: tools/list outputSchema is wrapped under "result" with oneOf+discriminator intact');
-  it.todo('array-return output: tools/list outputSchema is wrapped under "result"');
+  it.todo("union-return output: tools/list advertises NO outputSchema (no `result` envelope)");
+  it.todo("array-return output: tools/list advertises NO outputSchema (no `result` envelope)");
   it.todo("object-shaped output: tools/call structuredContent equals the raw result (no wrapping)");
-  it.todo("union-return output: tools/call structuredContent is wrapped as { result: <value> }");
+  it.todo("union-return output: tools/call emits NO structuredContent — content carries the flat payload");
   it.todo("[parity] registered tool names equal project(op).mcp.name for every op in a representative set");
   it.todo("[round-trip] callTool(<canonical getItem name>) dispatches to the real getItem fn");
   it.todo("[round-trip] callTool(<canonical listItems name>) dispatches to the real listItems fn");

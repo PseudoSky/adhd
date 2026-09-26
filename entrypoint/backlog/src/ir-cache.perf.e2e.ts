@@ -1,21 +1,23 @@
 /**
- * ir-cache.perf.e2e.ts — FEAT-002's real, measured performance proof: BUG-019
- * was "backlog CLI startup is slow because it live-re-extracts on every
- * invocation" — this measures the REAL wall-clock cost with the cache
- * disabled (the BUG-019 baseline: always live-extract) vs. a warm cache HIT
- * (`APIGEN_IR_CACHE_ENABLED=1`, entry already populated), driving the REAL
- * BUILT `dist/index.js` exactly like `ir-cache.integration.spec.ts` and
- * `cli.spec.ts` do (AGENTS.md §7 — never an in-process bypass).
+ * ir-cache.perf.e2e.ts — the real, measured performance proof for the
+ * BAKE-AT-BUILD design (Revision 3).
  *
- * Threshold is deliberately generous (HIT must be at least 3x faster than a
- * disabled/MISS run) rather than an absolute ms ceiling, so this doesn't
- * flake under CI/shared-machine load — the whole point of BUG-019 was a
- * multi-second live-extraction cost (~3.4s cold), so a real HIT (a handful of
- * `stat()` calls) should be at least an order of magnitude faster in
- * practice; 3x is a safety margin, not the expected real ratio.
+ * The baseline is a FORCED FALLBACK run — `api.ir.json` renamed away so the
+ * live extractor runs (the literal BUG-019 cost) — NOT `APIGEN_IR_CACHE_ENABLED=0`
+ * (which, after Revision 3, no longer bypasses the baked artifact at all and
+ * would therefore be a meaningless "slow" baseline whenever the artifact is
+ * present). The fast arm is a normal run against the baked artifact.
+ *
+ * Threshold is deliberately generous (>=3x) rather than an absolute ms ceiling,
+ * so this does not flake under CI/shared-machine load. In practice the baked
+ * run is ~20x faster (a fresh cold start in well under a second vs. the 11-16s
+ * live extraction); 3x is a safety margin.
+ *
+ * The renamed artifact is restored in a `finally`. Real numbers are printed,
+ * not just a pass/fail.
  */
 import { describe, expect, it, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, renameSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,73 +25,75 @@ import { runIsolatedBin } from './test/helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
+const API_IR = join(HERE, '..', 'dist', 'api.ir.json');
 
 function timedRun(env: Record<string, string>, cwd: string): number {
   const start = performance.now();
-  // Routed through the shared HOME-redirect isolation helper (the temp `cwd`
-  // is also the child's `HOME`); this spec's own cache vars layer over it via
-  // `extraEnv`.
   const r = runIsolatedBin(DIST_INDEX, ['--help'], cwd, {
     extraEnv: env,
-    timeoutMs: 60_000,
+    timeoutMs: 120_000,
   });
   const elapsed = performance.now() - start;
   expect(r.status, `stderr:\n${r.stderr}`).toBe(0);
   return elapsed;
 }
 
-describe('FEAT-002 — real measured runtime, cache disabled vs. warm HIT', () => {
+function assertBuilt(): void {
+  for (const p of [DIST_INDEX, API_IR]) {
+    expect(
+      (() => {
+        try {
+          return statSync(p).isFile();
+        } catch {
+          return false;
+        }
+      })(),
+      `built artifact missing — run "nx build backlog" first: ${p}`
+    ).toBe(true);
+  }
+}
+
+describe('BAKE-AT-BUILD — baked `--help` vs. forced live fallback, real measured numbers', () => {
   let cwd: string;
-  let cacheFile: string;
 
   afterEach(() => {
-    rmSync(cwd, { recursive: true, force: true });
-    // The cache file lives in its own throwaway dir; remove it too so the
-    // suite leaves no artifact behind (AGENTS.md §10).
-    if (cacheFile) rmSync(dirname(cacheFile), { recursive: true, force: true });
+    if (cwd) rmSync(cwd, { recursive: true, force: true });
   });
 
-  it('a warm cache HIT is measurably (>=3x) faster than a live/disabled-cache run, real numbers', () => {
+  it('a baked run is measurably (>=3x) faster than a forced live/fallback run', () => {
+    assertBuilt();
     cwd = mkdtempSync(join(tmpdir(), 'apigen-ir-cache-perf-'));
-    const cacheDir = mkdtempSync(join(tmpdir(), 'apigen-ir-cache-perf-file-'));
-    cacheFile = join(cacheDir, 'backlog-client.ir.json');
 
-    // Baseline: caching disabled entirely — every run live-extracts. This is
-    // the literal BUG-019 cost. Run it 3x, take the median to smooth out
-    // process-spawn/JIT-warmup noise unrelated to the thing being measured.
-    const disabledTimes = [1, 2, 3].map(() =>
-      timedRun({ APIGEN_IR_CACHE_ENABLED: '0' }, cwd)
-    );
-    disabledTimes.sort((a, b) => a - b);
-    const disabledMedian = disabledTimes[1];
+    // Baseline: force the fallback (artifact renamed) with the runtime cache
+    // disabled, so every run live-extracts — the literal BUG-019 cost.
+    const backup = `${API_IR}.perf-backup`;
+    renameSync(API_IR, backup);
+    let fallbackTimes: number[];
+    try {
+      fallbackTimes = [1, 2, 3].map(() =>
+        timedRun({ APIGEN_IR_CACHE_ENABLED: '0' }, cwd)
+      );
+    } finally {
+      renameSync(backup, API_IR);
+    }
+    fallbackTimes.sort((a, b) => a - b);
+    const fallbackMedian = fallbackTimes[1] as number;
 
-    // Populate the cache (1 MISS, real extraction, real write).
-    const missTime = timedRun(
-      { APIGEN_IR_CACHE_ENABLED: '1', APIGEN_IR_CACHE_FILE: cacheFile },
-      cwd
-    );
+    // Fast arm: the baked artifact, default settings.
+    const bakedTimes = [1, 2, 3].map(() => timedRun({}, cwd));
+    bakedTimes.sort((a, b) => a - b);
+    const bakedMedian = bakedTimes[1] as number;
 
-    // Warm HIT: 3 runs against the now-populated cache, median.
-    const hitTimes = [1, 2, 3].map(() =>
-      timedRun(
-        { APIGEN_IR_CACHE_ENABLED: '1', APIGEN_IR_CACHE_FILE: cacheFile },
-        cwd
-      )
-    );
-    hitTimes.sort((a, b) => a - b);
-    const hitMedian = hitTimes[1];
-
-    // eslint-disable-next-line no-console -- deliberate: real measured
-    // numbers must be visible in test output, not just a pass/fail.
+    // eslint-disable-next-line no-console -- deliberate: real measured numbers
+    // must be visible in test output, not just a pass/fail.
     console.log(
-      `[ir-cache perf] disabled/live median: ${disabledMedian.toFixed(1)}ms ` +
-        `(runs: ${disabledTimes.map((t) => t.toFixed(1)).join(', ')}ms) | ` +
-        `cold MISS (cache population): ${missTime.toFixed(1)}ms | ` +
-        `warm HIT median: ${hitMedian.toFixed(1)}ms ` +
-        `(runs: ${hitTimes.map((t) => t.toFixed(1)).join(', ')}ms) | ` +
-        `speedup: ${(disabledMedian / hitMedian).toFixed(2)}x`
+      `[ir-cache perf] forced fallback/live median: ${fallbackMedian.toFixed(1)}ms ` +
+        `(runs: ${fallbackTimes.map((t) => t.toFixed(1)).join(', ')}ms) | ` +
+        `baked median: ${bakedMedian.toFixed(1)}ms ` +
+        `(runs: ${bakedTimes.map((t) => t.toFixed(1)).join(', ')}ms) | ` +
+        `speedup: ${(fallbackMedian / bakedMedian).toFixed(2)}x`
     );
 
-    expect(hitMedian).toBeLessThan(disabledMedian / 3);
-  }, 120_000);
+    expect(bakedMedian).toBeLessThan(fallbackMedian / 3);
+  }, 300_000);
 });
