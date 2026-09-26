@@ -64,6 +64,11 @@ export { createLocalFsBackend } from './lib/backends/fs-backend';
 export { createSingleFileBackend } from './lib/backends/single-file-backend';
 export { buildIrCacheArtifact } from './lib/target';
 export { readDefaultExtractorVersion } from './lib/version';
+// The shared atomic+durable JSON writer. Exported (additive) because the
+// bake-at-build consumer (`entrypoint/backlog`'s `ir-artifact` CLI subcommand)
+// must emit `dist/api.ir.json` with the SAME durability guarantee the IR cache
+// relies on, rather than hand-rolling a second writer that could drift.
+export { atomicWriteJson } from './lib/atomic-write-json';
 
 /**
  * Lazily built default `extractLayer` middleware, memoized PER resolved

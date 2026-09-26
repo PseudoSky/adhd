@@ -39,7 +39,7 @@ flowchart TD
     Slow -->|real content change| Miss2["MISS"]
     Miss1 --> Run["next() — real extractor"]
     Miss2 --> Run
-    Run --> Write["atomic write: temp file + rename()"]
+    Run --> Write["durable write: temp file + fsync + rename()"]
 ```
 
 1. **Missing file**, or a mismatched `formatVersion`/`extractorVersion` → MISS.
@@ -60,9 +60,14 @@ flowchart TD
    absent metadata; a `staleness` snapshot is opportunistically computed and
    backfilled fire-and-forget so the NEXT read gets the fast path.
 5. **MISS** in any case → `next()` runs the real extractor; the result is
-   written through **atomically** (temp file + `rename()`) and
-   fire-and-forget — a slow or failing backend can never add latency to a
-   MISS or fail the run.
+   written through **atomically AND durably** (temp file → `fsync` → `rename()`
+   → best-effort parent-dir `fsync`) and the layer **awaits** that write before
+   resolving. A failing backend is still non-fatal (the failure is swallowed and
+   the fresh operations are returned), but a SUCCESSFUL write is complete and on
+   stable storage by the time the caller sees the result — so a process killed
+   immediately afterwards cannot lose it. The slow-gate mtime-refresh in step 3
+   remains fire-and-forget: it is a pure optimization of a HIT, not a
+   correctness path.
 
 ```ts
 import { createExtractInvoker } from '@adhd/apigen-core-client';
@@ -155,12 +160,14 @@ factory, exactly as before — `createLayer`/`opts` only matters for a
 
 - `createSingleFileBackend(path)` — the RUNTIME CACHE mode backend: one
   literal file is the entire cache, `get`/`put` ignore the `key` parameter
-  entirely. Writes atomically (temp file + `rename()`).
+  entirely. Writes atomically and durably (temp file → `fsync` → `rename()` →
+  best-effort parent-dir `fsync`), and `put` resolves only once the entry is
+  durably published.
 - `createLocalFsBackend(dir)` — content-addressed directory
   (`<dir>/<key>.json`), one file per key. Kept for a possible future
   multi-key/shared backend (e.g. an Nx-remote-cache-style HTTP store keyed by
   content hash); not used by either of this plugin's two default modes today.
-  Also writes atomically.
+  Also writes atomically and durably (via the same `atomicWriteJson` helper).
 - **Shared/remote backend (not built):** `IrCacheBackend` (`get`/`put` by
   key) is the seam; an HTTP content-addressed store is a same-shape
   implementation swap. Note the inherited trust model — a shared cache
