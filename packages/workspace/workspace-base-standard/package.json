@@ -1,6 +1,6 @@
 {
   "name": "@adhd/workspace-base-standard",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Platform-agnostic checkers and provenance schema for the adhd monorepo's per-package workspace standard",
   "keywords": [
     "monorepo",

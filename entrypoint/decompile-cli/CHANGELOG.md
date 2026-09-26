@@ -1,3 +1,18 @@
+## 0.2.2 (2026-09-26)
+
+### 🚀 Features
+
+- **vite-plugins:** absorb perf/test-resolve-fix — test-time @adhd/* source resolution ([3e344506](https://github.com/PseudoSky/adhd/commit/3e344506))
+
+### 🩹 Fixes
+
+- **nx:** restore main's load-bearing test.dependsOn the remodel silently dropped ([cff62c50](https://github.com/PseudoSky/adhd/commit/cff62c50))
+- **nx:** finish the ESLint v9 flat-config migration and unblock the gate ([53f4ff3e](https://github.com/PseudoSky/adhd/commit/53f4ff3e))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.2.1 (2026-09-24)
 
 

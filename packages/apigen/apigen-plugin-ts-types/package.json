@@ -1,9 +1,9 @@
 {
   "name": "@adhd/apigen-plugin-ts-types",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "dependencies": {
-    "@adhd/apigen-core-client": "^0.3.1",
-    "@adhd/apigen-engine-naming": "^0.2.3"
+    "@adhd/apigen-core-client": "^0.3.2",
+    "@adhd/apigen-engine-naming": "^0.2.4"
   },
   "devDependencies": {
     "esbuild": "^0.25.12"
