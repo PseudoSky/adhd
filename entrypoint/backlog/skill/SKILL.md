@@ -559,6 +559,12 @@ project HAS a registered path; a project with no `path` cannot hash any
 citation target at all, so its citations are accepted and recorded with
 `sha: "unverified"`.
 
+`file` must name a FILE, never a directory. In a project with a registered
+path, a directory target is rejected with `validation` (not retryable); the
+message names the target. Cite a file inside it instead, with `lines` if you
+can. A citation that exists but cannot be read (e.g. permissions) is an
+`internal` error whose message ends with the raw OS error.
+
 Name a `symbol` on a citation to get best-effort blast-radius enrichment for
 free — the store shells out to `gitnexus impact <symbol>` at write time
 (bounded timeout, never blocks or fails the write) and stamps the citation's

@@ -102,8 +102,7 @@ import {
   InvalidArgumentError,
   IssueNotFoundError,
   NoteRequiredError,
-  StaleSupersedeError,
-  WriteIOError,
+  citationReadError,
   assertNotBareRoleLiteral,
 } from './errors.js';
 import {
@@ -239,8 +238,10 @@ async function resolveIssueProjectTx(
  * root is accepted only under an allowlisted external root, decided by
  * canonical (symlink-resolved) containment in `citation-path.ts`'s
  * {@link resolveCitationTarget}. The read itself happens only after
- * acceptance; ENOENT/ENOTDIR degrades to `'unverified'`, any other errno is a
- * real `WriteIOError` (same §4c taxonomy as `create-issue.ts`).
+ * acceptance; ENOENT/ENOTDIR degrades to `'unverified'`, EISDIR is a
+ * `CitationTargetIsDirectoryError`, and any other errno is a real
+ * `WriteIOError` (same §4c taxonomy as `create-issue.ts`, via `errors.ts`'s
+ * `citationReadError`, 56a2133e).
  */
 async function computeCitationSha(
   project: IResolvedProjectRow,
@@ -261,7 +262,7 @@ async function computeCitationSha(
     return createHash('sha256').update(content).digest('hex');
   } catch (err) {
     if (isMissingPathError(err)) return 'unverified';
-    throw new WriteIOError(err);
+    throw citationReadError(err, file);
   }
 }
 
@@ -385,7 +386,6 @@ export async function transition(
         // Observability for the deliberate path-less waiver (DEBT a934e089) —
         // same rationale as `create-issue.ts`'s identical log; never a second
         // audit row (SPEC §4a's one-audit-node-per-state-change contract).
-        // eslint-disable-next-line no-console -- the write layer's only log sink.
         console.error(
           `transition: citation_requires_sha waived for path-less project uid="${preProject.uid}" — cannot verify citation "${citation.file}", persisting sha:"unverified" (set the project's metadata.path to make citation_requires_sha enforceable).`
         );
