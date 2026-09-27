@@ -204,6 +204,8 @@ export const BACKLOG_VERBS: readonly string[] = [
   'rm-location',
   'delete',
   'embedding-status',
+  'merge-project',
+  'rm-project',
 ];
 
 /**

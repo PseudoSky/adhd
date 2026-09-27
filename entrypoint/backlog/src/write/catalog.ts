@@ -982,6 +982,62 @@ export async function upsertProjectTx(
     };
   }
 
+  // C1 (AC5, advisory half) — repoUrl de-duplication at MINT time. The
+  // business key is `name`, so registering the same repository under a second
+  // name would mint a second `project` and split every `owns_project` read.
+  // Before minting, look for a LIVE project whose `meta.repoUrl` equals the
+  // supplied one; on a hit, UPDATE that row instead (merge business fields,
+  // audit `'updated'`) and return it. This is ADVISORY de-duplication, never an
+  // automatic MERGE: no component is re-pointed and no row is retired — the
+  // reviewed `merge-project` verb owns that. An existing drifted pair that
+  // already shares a repoUrl is not rewritten here.
+  if (input.repoUrl !== undefined && input.repoUrl.trim().length > 0) {
+    const { rows } = await tx.executeAll<{
+      rowid: number;
+      uid: string;
+      name: string | null;
+      meta: string | null;
+    }>(
+      "SELECT rowid, uid, name, meta FROM node WHERE kind = 'project' AND t_invalid IS NULL ORDER BY rowid ASC"
+    );
+    const duplicate = rows.find(
+      (row) => parseMetaObject(row.meta)?.repoUrl === input.repoUrl
+    );
+    if (duplicate) {
+      const mergedMeta = mergeBusinessFields(
+        parseMetaObject(duplicate.meta) ?? {},
+        patch
+      );
+      await tx.executeRun('UPDATE node SET meta = ? WHERE rowid = ?', [
+        JSON.stringify(mergedMeta),
+        duplicate.rowid,
+      ]);
+      await writeAudit({
+        tx,
+        typePolicy: handle.typePolicy,
+        subjectRowid: duplicate.rowid,
+        subjectUid: duplicate.uid,
+        subjectKind: 'project',
+        actor: input.by,
+        action: 'updated',
+        note: 'repo-url-dedupe',
+        at: now,
+      });
+      return {
+        uid: duplicate.uid,
+        created: false,
+        project: {
+          uid: duplicate.uid,
+          name: duplicate.name ?? input.name,
+          path: mergedMeta.path as string | undefined,
+          repoUrl: mergedMeta.repoUrl as string | undefined,
+          monorepo: mergedMeta.monorepo as boolean | undefined,
+          description: mergedMeta.description as string | undefined,
+        },
+      };
+    }
+  }
+
   const metadata = mergeBusinessFields({}, patch);
   const project = await writeNodeTx(tx, {
     kind: 'project',

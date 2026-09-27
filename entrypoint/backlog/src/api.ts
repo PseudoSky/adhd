@@ -155,6 +155,15 @@ import type {
   IRmLocationInput,
   IRmLocationOutcome,
 } from './write/catalog.js';
+import {
+  mergeProject as mergeProjectOp,
+  rmProject as rmProjectOp,
+} from './write/merge-project.js';
+import type {
+  IMergeProjectInput,
+  IMergeProjectOutcome,
+  IRmProjectInput,
+} from './write/merge-project.js';
 
 /** The one type apigen special-cases via the `ctx-name-only` invariant. */
 export interface BacklogCtx {
@@ -694,9 +703,9 @@ export async function embeddingStatus(
  */
 export async function lookup(
   ctx: BacklogCtx,
-  input: { q: string }
+  input: { q: string; kind?: string }
 ): Promise<IOutcomeEnvelope<ILookupResult>> {
-  return envelope(() => lookupRegistry(ctx.store.graph, input.q));
+  return envelope(() => lookupRegistry(ctx.store.graph, input));
 }
 
 /** File a new issue, minting its `uid` and linking it to a project component. */
@@ -831,6 +840,35 @@ export async function rmLocation(
 ): Promise<IOutcomeEnvelope<IRmLocationOutcome>> {
   return envelope(async () =>
     rmLocationOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
+}
+
+/**
+ * Merge duplicate project `fromUid` into the canonical survivor `toUid` (C1).
+ *
+ * One `BEGIN IMMEDIATE` transaction re-points every component the duplicate
+ * owned onto the survivor, soft-retires the duplicate with a one-hop
+ * `meta.redirectTo`, and audits. Idempotent on a repeat `(from,to)` call.
+ */
+export async function mergeProject(
+  ctx: BacklogCtx,
+  input: IMergeProjectInput
+): Promise<IOutcomeEnvelope<IMergeProjectOutcome>> {
+  return envelope(async () =>
+    mergeProjectOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
+}
+
+/**
+ * Soft-retire a project by `uid` WITHOUT a survivor (C1): stamps `t_invalid`
+ * with a reason and audits; no `redirectTo` is written.
+ */
+export async function rmProject(
+  ctx: BacklogCtx,
+  input: IRmProjectInput
+): Promise<IOutcomeEnvelope<{ uid: string; retired: true }>> {
+  return envelope(async () =>
+    rmProjectOp(await writeHandle(ctx, { needsSemantic: false }), input)
   );
 }
 

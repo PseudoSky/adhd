@@ -82,6 +82,16 @@ const EXPECTED = [
     cli: 'backlog rm-location',
   },
   {
+    id: 'backlog/merge-project',
+    mcp: 'backlog_merge_project',
+    cli: 'backlog merge-project',
+  },
+  {
+    id: 'backlog/rm-project',
+    mcp: 'backlog_rm_project',
+    cli: 'backlog rm-project',
+  },
+  {
     id: 'backlog/priority-matrix',
     mcp: 'backlog_priority_matrix',
     cli: 'backlog priority-matrix',

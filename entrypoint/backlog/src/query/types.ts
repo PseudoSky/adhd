@@ -436,6 +436,20 @@ export interface ILookupResult {
   location?: { uid: string; locType: ILocationType; value: string };
   /** Present when only a partial (project-level, or path-prefix) match was found — never a silent null (§3a). */
   hint?: string;
+  /**
+   * C1 — a resolved-by-token hint. When `lookup` recognises `q` as a uid/uid
+   * prefix or a unique issue title, the registry shape does not apply; instead
+   * the caller is told which verb to re-issue (`get`) and with which uid, so a
+   * transport can forward exactly one canonical request rather than guessing.
+   */
+  redirect?: { verb: 'get' | 'query'; uid?: string; query?: string };
+  /**
+   * C1 — the candidate set behind an ambiguity this read CHOSE to surface
+   * rather than fail on. (A `lookup` whose title grep matches ≥2 issues still
+   * throws `AmbiguousReferenceError`; this field exists for callers that
+   * surface candidates alongside a chosen primary.)
+   */
+  candidates?: Array<{ uid: string; kind: string; name: string }>;
 }
 
 /**

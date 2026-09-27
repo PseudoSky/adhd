@@ -1100,3 +1100,30 @@ export function tooShortUidError(ref: string): InvalidArgumentError;
 ```
 
 Guarantees: the refusal for a uid attempt below `MIN_UID_PREFIX_LENGTH`.
+
+---
+
+## C1 Reference — soft-retire redirect semantics (additive; outside the frozen four)
+
+`merge-project` soft-retires a duplicate `project` row rather than deleting it.
+The row keeps its `uid` FOREVER, is stamped `t_invalid` (so it is invisible to
+every live-only list view), and gains two `meta` keys: `redirectTo` (the
+canonical survivor's uid) and `retiredAt`. `query/resolve.ts`'s `tryResolveRef`
+falls back to a ONE-HOP redirect on a live-name miss, so the retired NAME still
+resolves to the survivor — `query {filter:{project:"<retired name>"}}` returns
+the survivor's union. The fallback runs ONLY after a live-name miss, so it can
+never change the result of a name that resolves to a live row.
+
+`query/redirect.ts`'s `followRedirect(graph, record)` is the read half: it
+returns the live survivor a row points at, or `null` when the row carries no
+`redirectTo`. A redirect pointing at a missing/retired row, or a
+redirect→redirect chain longer than one hop, THROWS `InvalidArgumentError`
+rather than chaining silently. `rm-project` retires a project without a
+survivor and writes NO `redirectTo`, so a removed name resolves to nothing.
+
+`query/resolve.ts`'s `resolveLogicalIssue(graph, ref)` is the non-throwing
+logical-id resolver: one redirect hop, then the `SUPERSEDES` chain to its head
+(via the now-exported `currentUidOf`). Contrast `resolveIssueByUid`, which still
+THROWS `StaleSupersedeError` on a superseded uid — the split is deliberate:
+`get`/`card`/`stats` want the stale-reference signal, while an attestation
+subject wants the same logical item back.

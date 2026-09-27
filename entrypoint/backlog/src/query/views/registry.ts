@@ -16,6 +16,7 @@
 
 import type { GraphBackend, NodeRecord } from '@adhd/sox-graph-store';
 import {
+  AmbiguousReferenceError,
   CatalogNotFoundError,
   InvalidArgumentError,
 } from '../../write/errors.js';
@@ -370,17 +371,33 @@ function classifyLookupQuery(q: string): ILocationType {
 }
 
 /**
- * `query --input '{"view":"lookup", "lookup": "<tool|file|url>"}'` (§3a) —
- * classify → match → walk `location → component → project`. Never a silent
- * null: an unresolved query throws `CatalogNotFoundError('location', q)`
- * rather than returning an empty/undefined result, since "no match" is a
- * distinct, actionable outcome from "found, but only a hint" (the `hint`
- * field below).
+ * The optional kind HINT `lookup` accepts (C1, §3a). `q` is the token to
+ * resolve; `kind` narrows which routing branch runs, so a caller that already
+ * knows it is holding an issue uid or a project name can suppress the other
+ * branches instead of relying on the default precedence.
  */
-export async function lookup(
+export interface ILookupInput {
+  q: string;
+  /** optional: `'location' | 'project' | 'component' | 'issue'` */
+  kind?: string;
+}
+
+/** The outcome of the location-classify→match→walk branch: a match, or a miss that carries whether the path fallback was truncated. */
+type LocationLookupOutcome =
+  | { ok: true; result: ILookupResult }
+  | { ok: false; truncated: boolean };
+
+/**
+ * The `location` branch of {@link lookup} — classify → match → walk
+ * `location → component → project` (§3a). Returns `{ ok: false }` on a miss
+ * (rather than throwing) so `lookup` can fall through to its later branches;
+ * the truncation flag is carried so the final not-found error can preserve the
+ * existing "a match may exist beyond this cap" caveat.
+ */
+async function lookupLocation(
   graph: GraphBackend,
   q: string
-): Promise<ILookupResult> {
+): Promise<LocationLookupOutcome> {
   const locType = classifyLookupQuery(q);
 
   let location = (
@@ -427,15 +444,7 @@ export async function lookup(
   }
 
   if (!location) {
-    // A truncated fallback scan that found nothing is NOT the same claim as an
-    // exhaustive "not found" — surface that distinction rather than silently
-    // reporting a false negative as though every path location had been checked.
-    throw new CatalogNotFoundError(
-      'location',
-      pathFallbackTruncated
-        ? `${q} (path suffix/prefix fallback scanned only the first ${MAX_QUERY_LIMIT} live path locations; a match may exist beyond this cap)`
-        : q
-    );
+    return { ok: false, truncated: pathFallbackTruncated };
   }
 
   const componentUid =
@@ -462,42 +471,171 @@ export async function lookup(
   const project = projectRaw && !projectRaw.tInvalid ? projectRaw : null;
   if (!project) {
     return {
-      project: { uid: '', name: '' },
-      component: { uid: component.uid, name: component.name ?? '' },
-      location: { uid: location.uid, locType, value: q },
-      hint: 'component resolved but its owning project could not be found — data integrity gap, not a query error',
+      ok: true,
+      result: {
+        project: { uid: '', name: '' },
+        component: { uid: component.uid, name: component.name ?? '' },
+        location: { uid: location.uid, locType, value: q },
+        hint: 'component resolved but its owning project could not be found — data integrity gap, not a query error',
+      },
     };
   }
 
   return {
-    project: {
-      uid: project.uid,
-      name: project.name ?? '',
-      path:
-        typeof project.metadata?.path === 'string'
-          ? project.metadata.path
-          : undefined,
-      repoUrl:
-        typeof project.metadata?.repoUrl === 'string'
-          ? project.metadata.repoUrl
-          : undefined,
+    ok: true,
+    result: {
+      project: {
+        uid: project.uid,
+        name: project.name ?? '',
+        path:
+          typeof project.metadata?.path === 'string'
+            ? project.metadata.path
+            : undefined,
+        repoUrl:
+          typeof project.metadata?.repoUrl === 'string'
+            ? project.metadata.repoUrl
+            : undefined,
+      },
+      component: {
+        uid: component.uid,
+        name: component.name ?? '',
+        path:
+          typeof component.metadata?.path === 'string'
+            ? component.metadata.path
+            : undefined,
+      },
+      location: {
+        uid: location.uid,
+        locType,
+        value:
+          typeof location.metadata?.value === 'string'
+            ? location.metadata.value
+            : q,
+      },
+      hint,
     },
-    component: {
-      uid: component.uid,
-      name: component.name ?? '',
-      path:
-        typeof component.metadata?.path === 'string'
-          ? component.metadata.path
-          : undefined,
-    },
-    location: {
-      uid: location.uid,
-      locType,
-      value:
-        typeof location.metadata?.value === 'string'
-          ? location.metadata.value
-          : q,
-    },
-    hint,
   };
+}
+
+/**
+ * `query --input '{"view":"lookup", "lookup": "<tool|file|url|uid|title|project>"}'`
+ * (§3a, C1 AC4) — resolve ANY token a consumer holds to exactly one canonical
+ * answer, or fail loudly naming what was searched.
+ *
+ * Routing order (C1 spec, fixed):
+ *  1. a uid or uid PREFIX → a `redirect` to `get` (the registry shape does not
+ *     apply to a node reached by identity);
+ *  2. an issue TITLE → exactly one hit redirects to `get`; ≥2 is
+ *     `AmbiguousReferenceError`; zero falls through;
+ *  3. the existing location classify→match→walk;
+ *  4. a project `name`/`repoUrl` match;
+ *  then `CatalogNotFoundError('location', q)` — `lookup` is never a silent null.
+ *
+ * Existing location-only consumers keep working: their exact-path query misses
+ * the uid/title/project branches and is served by step 3 unchanged.
+ */
+export async function lookup(
+  graph: GraphBackend,
+  input: string | ILookupInput
+): Promise<ILookupResult> {
+  const q = typeof input === 'string' ? input : input.q;
+  const kind = typeof input === 'string' ? undefined : input.kind;
+  const wantIssue = kind === undefined || kind === 'issue';
+  const wantLocation = kind === undefined || kind === 'location';
+  const wantProject = kind === undefined || kind === 'project';
+  const wantComponent = kind === undefined || kind === 'component';
+
+  // (1) uid / uid prefix → forward to `get`. A uid is identity, not registry
+  // shape, so the project/component/location fields stay empty (the established
+  // "no registry match" sentinel) and the caller is told where to look.
+  if (isUidShaped(q) || isUidPrefixShaped(q)) {
+    const record = await resolveUidPrefix(graph, q);
+    return {
+      project: { uid: '', name: '' },
+      redirect: { verb: 'get', uid: record.uid },
+    };
+  }
+
+  // (2) issue title — a unique FTS hit redirects to `get`; several are refused.
+  if (wantIssue) {
+    const hits = await graph.searchNodes(q, {
+      filter: { kind: 'issue', liveOnly: true, isSuperseded: false },
+      limit: 20,
+    });
+    if (hits.length === 1) {
+      return {
+        project: { uid: '', name: '' },
+        redirect: { verb: 'get', uid: hits[0].uid },
+      };
+    }
+    if (hits.length > 1) {
+      throw new AmbiguousReferenceError(
+        q,
+        hits.map((h) => ({ uid: h.uid, kind: h.kind, name: h.name ?? '' }))
+      );
+    }
+  }
+
+  // (3) location classify→match→walk (the original behaviour, preserved).
+  let locationTruncated = false;
+  if (wantLocation) {
+    const loc = await lookupLocation(graph, q);
+    if (loc.ok) return loc.result;
+    locationTruncated = loc.truncated;
+  }
+
+  // (4) project by exact `name`, else by `repoUrl`.
+  if (wantProject) {
+    const byName = await graph.queryNodes({
+      kind: 'project',
+      name: q,
+      liveOnly: true,
+      limit: 1,
+    });
+    const project =
+      byName[0] ??
+      (
+        await graph.queryNodes({
+          kind: 'project',
+          liveOnly: true,
+          metadata: { repoUrl: { eq: q } },
+          limit: 1,
+        })
+      )[0];
+    if (project) {
+      return {
+        project: toProjectSummary(project),
+        hint: 'matched a project by name/repoUrl — no component or location was requested',
+      };
+    }
+  }
+
+  // (4b) component by name/uid (the `kind:'component'` hint's natural analogue).
+  if (wantComponent && kind === 'component') {
+    const component = await tryResolveRef(graph, 'component', q);
+    if (component) {
+      const projectUid =
+        typeof component.record.metadata?.projectUid === 'string'
+          ? component.record.metadata.projectUid
+          : undefined;
+      const projectNode = projectUid
+        ? await graph.getNodeByUid(projectUid)
+        : null;
+      return {
+        project:
+          projectNode && !projectNode.tInvalid
+            ? toProjectSummary(projectNode)
+            : { uid: '', name: '' },
+        component: toComponentSummary(component.record),
+        hint: 'matched a component by name/uid',
+      };
+    }
+  }
+
+  throw new CatalogNotFoundError(
+    'location',
+    locationTruncated
+      ? `${q} (path suffix/prefix fallback scanned only the first ${MAX_QUERY_LIMIT} live path locations; a match may exist beyond this cap)`
+      : q
+  );
 }
