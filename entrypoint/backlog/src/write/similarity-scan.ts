@@ -201,8 +201,16 @@ async function resolveCandidateIds(
   return resolveSameProjectIds(graph, projectUid);
 }
 
-/** Citation-derived structural tokens + owning component path for one issue. */
-async function structuralContextFor(
+/**
+ * Citation-derived structural tokens + owning component path for one issue.
+ *
+ * Exported so BOTH scan callers can supply the A-side of the AC7 structural
+ * signal from a real stored item: the `view:'similar'` cluster block derives
+ * its seed's context with this directly (the seed is already written), while
+ * the create-time gate derives the not-yet-written filing item's context from
+ * its input in `write/create-issue.ts`.
+ */
+export async function structuralContextFor(
   graph: GraphBackend,
   issueId: number
 ): Promise<{ citationTokens: string[]; componentPath?: string }> {

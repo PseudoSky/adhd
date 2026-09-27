@@ -61,7 +61,7 @@ import {
 // transaction opens (see `scanForDuplicates`'s own doc comment), so it has no
 // `tx` to hand a `resolveLiveIssueTx`, and `resolveIssueByUid` is documented
 // safe to run standalone.
-import { resolveIssueByUid } from '../query/resolve.js';
+import { resolveIssueByUid, tryResolveComponentRef } from '../query/resolve.js';
 // C9 — the ONE shared advisory similarity scan (create gate + `view:'similar'`
 // cluster block run the identical scan). The former in-file `scanForDuplicates`
 // scan body moved there verbatim; `scanForDuplicates` below is now a thin
@@ -590,6 +590,65 @@ async function resolveDedupeExcludeIds(
 }
 
 /**
+ * C9 AC7 — the filing item's own (the "A") side of the cross-project
+ * structural signal: its citation tokens plus its resolved owning component's
+ * `meta.path`. The candidate ("B") side is read off a stored issue by
+ * {@link structuralContextFor}; this derives the not-yet-written subject from
+ * `createIssue`'s own input, using the SAME citation fields the B-side
+ * derivation reads (`file`→`target`, `symbol`, `blastRadius`) so the two sides
+ * can never disagree on what a citation token is.
+ *
+ * The component path is resolved READ-ONLY and best-effort: an explicit
+ * `component` ref resolves scoped to `project` (a uid belonging to another
+ * project never matches), and an omitted ref mirrors the write path's reserved
+ * `(root)` default. The structural signal is only ever ADDITIVE evidence gating
+ * an already-thresholded cosine, so a resolution miss contributes no path
+ * rather than failing a filing.
+ */
+async function filingStructuralContext(
+  graph: GraphBackend,
+  project: IResolvedProjectRow,
+  citations: readonly ICitationInput[],
+  componentRef: string | undefined
+): Promise<{ citationTokens: string[]; componentPath?: string }> {
+  const citationTokens: string[] = [];
+  for (const citation of citations) {
+    citationTokens.push(citation.file);
+    if (typeof citation.symbol === 'string')
+      citationTokens.push(citation.symbol);
+    if (typeof citation.blastRadius === 'string')
+      citationTokens.push(citation.blastRadius);
+  }
+
+  let componentPath: unknown;
+  if (componentRef !== undefined) {
+    const resolved = await tryResolveComponentRef(
+      graph,
+      project.uid,
+      componentRef
+    );
+    componentPath = resolved?.record.metadata?.path;
+  } else {
+    const ownsProjectEdges = await graph.getEdges({
+      src: project.rowid,
+      rel: 'owns_project',
+    });
+    const components = await graph.getNodesByIds(
+      ownsProjectEdges.map((e) => e.dst)
+    );
+    const root = components.find(
+      (c) => c.tInvalid === undefined && c.name === '(root)'
+    );
+    componentPath = root?.metadata?.path;
+  }
+
+  return {
+    citationTokens,
+    ...(typeof componentPath === 'string' ? { componentPath } : {}),
+  };
+}
+
+/**
  * §6.4 point 1: `createIssue`'s app-level pre-write similarity scan — never
  * the library's disabled content-hash path (§1's `skipDedupe:true` is
  * untouched by this function). Runs `StoreSearchBackend.search` scoped to
@@ -667,6 +726,8 @@ async function scanForDuplicates(
   policy: IProjectPolicy,
   title: string,
   body: string,
+  citations: readonly ICitationInput[],
+  componentRef: string | undefined,
   dedupeExcludeUid?: string
 ): Promise<IDuplicateScanOutcome> {
   // The scan itself now lives in the SHARED `write/similarity-scan.ts` — the
@@ -685,6 +746,21 @@ async function scanForDuplicates(
   if (!policy.dedupeScanEnabled)
     return { candidates: [], similarCandidates: [], degraded: false };
 
+  // C9 AC7 — the filing item's own ("A") structural context. Without it the
+  // cross-project guard's only usable signal is title-token Jaccard, so a
+  // genuine cross-project twin that shares a cited file or a nested component
+  // path but is worded differently would never surface even at cosine 1.0.
+  // Best-effort: a graph-less handle simply contributes no structural signal.
+  const structuralA =
+    handle.graph !== undefined
+      ? await filingStructuralContext(
+          handle.graph,
+          project,
+          citations,
+          componentRef
+        )
+      : undefined;
+
   const outcome = await scanSimilarCandidatesWithMeta(handle, {
     title,
     body,
@@ -694,6 +770,8 @@ async function scanForDuplicates(
     crossProjectThreshold: policy.similarityCrossProjectThreshold,
     margin: policy.similarityCrossProjectMargin,
     tokenOverlapMin: policy.similarityCrossProjectTokenOverlap,
+    citationTokens: structuralA?.citationTokens,
+    componentPath: structuralA?.componentPath,
     excludeIds: dedupeExcludeIds,
   });
 
@@ -867,6 +945,8 @@ export async function createIssue(
     preResolvedPolicy,
     input.title,
     input.body,
+    citations,
+    input.component,
     input.dedupeExcludeUid
   );
   const { candidates: duplicateCandidates } = scan;

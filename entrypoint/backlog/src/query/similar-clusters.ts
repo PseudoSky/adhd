@@ -15,7 +15,10 @@
 
 import type { GraphBackend, NodeRecord } from '@adhd/sox-graph-store';
 import type { ISimilarityScanHandle } from '../write/similarity-scan.js';
-import { scanSimilarCandidates } from '../write/similarity-scan.js';
+import {
+  scanSimilarCandidates,
+  structuralContextFor,
+} from '../write/similarity-scan.js';
 import {
   resolveProjectPolicy,
   type IResolvedProjectRow,
@@ -164,6 +167,11 @@ export async function buildSimilarClusterBlock(
   let scanned = 0;
   if (handle.search) {
     for (const seed of scopedNodes.slice(0, limit)) {
+      // C9 AC7 — the seed's own ("A") structural context (citations + owning
+      // component path). The seed IS a stored issue here, so it is derived
+      // with the same helper the scan uses for candidates; without it the
+      // cross-project structural signal could never fire.
+      const seedStructural = await structuralContextFor(graph, seed.id);
       const candidates = await scanSimilarCandidates(handle, {
         title: seed.name ?? '',
         body: seed.content ?? '',
@@ -175,6 +183,8 @@ export async function buildSimilarClusterBlock(
         margin: loaded?.policy.similarityCrossProjectMargin ?? 0.05,
         tokenOverlapMin:
           loaded?.policy.similarityCrossProjectTokenOverlap ?? 0.5,
+        citationTokens: seedStructural.citationTokens,
+        componentPath: seedStructural.componentPath,
         limit,
         // The seed itself is already in the store (unlike the create-time
         // scan, whose subject is not yet written) — a KNN would return it as

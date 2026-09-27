@@ -12,6 +12,7 @@
  */
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SearchQuery, StoreSearchBackend } from '@adhd/sox-hybrid-search';
 import type { BacklogConfig } from '../env.js';
 import { resolveProjectPolicy } from './catalog.js';
 import { createIssue, type ICreateIssueResult } from './create-issue.js';
@@ -58,6 +59,39 @@ async function openStore(
     embedding: members.embedding,
   };
   return { handle, store };
+}
+
+type ScanHandle = TestIssueStore & {
+  search: NonNullable<TestIssueStore['search']>;
+};
+
+/**
+ * A controlled similarity backend: returns exactly the chosen `vecScore` per
+ * rowid, so the cosine is a chosen input rather than a function of the text a
+ * deterministic embedder happens to produce. This lets a test drive the
+ * create-time gate through the REAL `createIssue` → `scanForDuplicates` path
+ * with a forced ~1.0 cosine while the two items are WORDED DIFFERENTLY — the
+ * exact shape that isolates the AC7 structural signal.
+ */
+function controlledScanHandle(
+  store: TestIssueStore,
+  rowScores: ReadonlyMap<number, number>
+): ScanHandle {
+  const backend = {
+    async search(_query: SearchQuery, _limit: number) {
+      return [...rowScores].map(([id, vecScore]) => ({
+        id,
+        vecScore,
+        score: vecScore,
+        fields: {},
+      }));
+    },
+  } as unknown as StoreSearchBackend;
+  return {
+    ...store,
+    graph: store.graph,
+    search: { backend, embedQuery: async () => new Float32Array([1]) },
+  } as unknown as ScanHandle;
 }
 
 async function file(
@@ -209,5 +243,81 @@ describe('C9 AC3 — the scan is advisory and writes nothing', () => {
         duplicateAction: 'comment',
       })
     ).rejects.toThrow(/duplicateAction/);
+  });
+});
+
+describe('C9 AC7 — the filing item A-side wires the cross-project structural signal', () => {
+  it('a differently-worded cosine~1.0 cross-project pair sharing a cited file is surfaced with a structural signal', async () => {
+    const a = await seedProject(store, 'ac7-struct-a', {
+      policy: { similarityScope: 'multi-project' },
+    });
+    const b = await seedProject(store, 'ac7-struct-b');
+
+    // The existing candidate in B cites the shared locus.
+    const seeded = await file(
+      handle,
+      b.projectUid,
+      'zulu yankee xray whiskey',
+      'candidate body',
+      { citations: [{ file: 'src/shared/locus.ts' }] }
+    );
+    expect(seeded.created).toBe(true);
+    const seededNode = await store.graph.getNodeByUid(seeded.uid!);
+    if (!seededNode) throw new Error('seeded candidate row missing');
+
+    // Cosine ~1.0 to exactly the seeded candidate. The titles share NO tokens,
+    // so the ONLY signal that can surface the pair cross-project is the
+    // structural one — supplied by the filing item's own citation.
+    const created = await createIssue(
+      controlledScanHandle(store, new Map([[seededNode.id, 0.99]])),
+      {
+        project: a.projectUid,
+        title: 'alpha bravo charlie delta',
+        body: 'filing body',
+        by: 'filer',
+        citations: [{ file: 'src/shared/locus.ts' }],
+      }
+    );
+
+    expect(created.created).toBe(true);
+    const found = created.similarCandidates?.find((c) => c.uid === seeded.uid);
+    expect(found).toBeDefined();
+    expect(found?.scope).toBe('cross-project');
+    expect(found?.signals).toContain('structural');
+  });
+
+  it('a nested component path alone (no citations) surfaces a differently-worded cross-project twin', async () => {
+    const a = await seedProject(store, 'ac7-path-a', {
+      componentPath: 'packages/agent',
+      policy: { similarityScope: 'multi-project' },
+    });
+    const b = await seedProject(store, 'ac7-path-b', {
+      componentPath: 'packages/agent/agent-engine-compiler',
+    });
+
+    const seeded = await file(
+      handle,
+      b.projectUid,
+      'zulu yankee xray whiskey',
+      'candidate body'
+    );
+    expect(seeded.created).toBe(true);
+    const seededNode = await store.graph.getNodeByUid(seeded.uid!);
+    if (!seededNode) throw new Error('seeded candidate row missing');
+
+    const created = await createIssue(
+      controlledScanHandle(store, new Map([[seededNode.id, 0.99]])),
+      {
+        project: a.projectUid,
+        title: 'alpha bravo charlie delta',
+        body: 'filing body',
+        by: 'filer',
+      }
+    );
+
+    expect(created.created).toBe(true);
+    const found = created.similarCandidates?.find((c) => c.uid === seeded.uid);
+    expect(found).toBeDefined();
+    expect(found?.signals).toContain('structural');
   });
 });
