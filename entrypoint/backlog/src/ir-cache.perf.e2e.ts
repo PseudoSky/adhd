@@ -13,8 +13,14 @@
  * run is ~20x faster (a fresh cold start in well under a second vs. the 11-16s
  * live extraction); 3x is a safety margin.
  *
- * The renamed artifact is restored in a `finally`. Real numbers are printed,
- * not just a pass/fail.
+ * ISOLATION (2026-09-26): the bin runs from a PRIVATE copy of `dist/`
+ * (`createIsolatedDist`, under the gitignored `tmp/`), so the `api.ir.json`
+ * renamed away for the baseline is this suite's OWN. It previously renamed the
+ * SHARED in-tree `entrypoint/backlog/dist/api.ir.json`, which a concurrent
+ * `vite build` (`emptyOutDir: true`) or nx directory-output cache restore
+ * deletes wholesale — the backup could vanish and the `finally` restore throw
+ * `ENOENT` (the red-gate defect). The private copy is removed in `afterEach`.
+ * Real numbers are printed, not just a pass/fail.
  */
 import { describe, expect, it, afterEach } from 'vitest';
 import { mkdtempSync, renameSync, rmSync, statSync } from 'node:fs';
@@ -22,14 +28,23 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runIsolatedBin } from './test/helpers/spawn-isolated-bin.js';
+import {
+  createIsolatedDist,
+  type IsolatedDist,
+} from './test/helpers/isolated-dist.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
-const API_IR = join(HERE, '..', 'dist', 'api.ir.json');
+const SHARED_DIST = join(HERE, '..', 'dist');
+const SHARED_INDEX = join(SHARED_DIST, 'index.js');
+const SHARED_API_IR = join(SHARED_DIST, 'api.ir.json');
 
-function timedRun(env: Record<string, string>, cwd: string): number {
+function timedRun(
+  binPath: string,
+  env: Record<string, string>,
+  cwd: string
+): number {
   const start = performance.now();
-  const r = runIsolatedBin(DIST_INDEX, ['--help'], cwd, {
+  const r = runIsolatedBin(binPath, ['--help'], cwd, {
     extraEnv: env,
     timeoutMs: 120_000,
   });
@@ -39,7 +54,7 @@ function timedRun(env: Record<string, string>, cwd: string): number {
 }
 
 function assertBuilt(): void {
-  for (const p of [DIST_INDEX, API_IR]) {
+  for (const p of [SHARED_INDEX, SHARED_API_IR]) {
     expect(
       (() => {
         try {
@@ -55,32 +70,37 @@ function assertBuilt(): void {
 
 describe('BAKE-AT-BUILD — baked `--help` vs. forced live fallback, real measured numbers', () => {
   let cwd: string;
+  let iso: IsolatedDist | undefined;
 
   afterEach(() => {
     if (cwd) rmSync(cwd, { recursive: true, force: true });
+    iso?.cleanup();
+    iso = undefined;
   });
 
   it('a baked run is measurably (>=3x) faster than a forced live/fallback run', () => {
     assertBuilt();
     cwd = mkdtempSync(join(tmpdir(), 'apigen-ir-cache-perf-'));
+    iso = createIsolatedDist(SHARED_DIST, 'perf');
+    const binPath = iso.indexPath;
 
     // Baseline: force the fallback (artifact renamed) with the runtime cache
     // disabled, so every run live-extracts — the literal BUG-019 cost.
-    const backup = `${API_IR}.perf-backup`;
-    renameSync(API_IR, backup);
+    const backup = `${iso.apiIrPath}.perf-backup`;
+    renameSync(iso.apiIrPath, backup);
     let fallbackTimes: number[];
     try {
       fallbackTimes = [1, 2, 3].map(() =>
-        timedRun({ APIGEN_IR_CACHE_ENABLED: '0' }, cwd)
+        timedRun(binPath, { APIGEN_IR_CACHE_ENABLED: '0' }, cwd)
       );
     } finally {
-      renameSync(backup, API_IR);
+      renameSync(backup, iso.apiIrPath);
     }
     fallbackTimes.sort((a, b) => a - b);
     const fallbackMedian = fallbackTimes[1] as number;
 
     // Fast arm: the baked artifact, default settings.
-    const bakedTimes = [1, 2, 3].map(() => timedRun({}, cwd));
+    const bakedTimes = [1, 2, 3].map(() => timedRun(binPath, {}, cwd));
     bakedTimes.sort((a, b) => a - b);
     const bakedMedian = bakedTimes[1] as number;
 

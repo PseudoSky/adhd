@@ -17,8 +17,17 @@
  * unchanged, which is only possible if no `put` happened (the terminal
  * extractor never ran).
  *
- * The renamed artifact is restored in a `finally`; the temp cache/cwd are
- * removed afterwards. Nothing under `~/.adhd` is touched (isolated HOME).
+ * ISOLATION (2026-09-26): this suite runs the REAL built bin from a PRIVATE
+ * copy of `dist/` (`createIsolatedDist`, under the gitignored `tmp/`), so the
+ * `api.ir.json` it renames away is its OWN. It previously renamed the SHARED
+ * in-tree `entrypoint/backlog/dist/api.ir.json`; a concurrent `vite build`
+ * (`emptyOutDir: true`) or nx directory-output cache restore deletes the whole
+ * `dist/` dir, which could remove the renamed-away backup between the rename
+ * and the `finally` restore and make the restore throw `ENOENT` — the red-gate
+ * defect this closes. The copy is a faithful stand-in because
+ * `backlogDistDir()` resolves the artifact from the RUNNING module's own
+ * directory. The temp cache/cwd and the private copy are removed afterwards,
+ * and nothing under `~/.adhd` is touched (isolated HOME).
  */
 import { describe, expect, it, afterEach } from 'vitest';
 import { spawn } from 'node:child_process';
@@ -37,24 +46,32 @@ import {
   isolatedSpawnOptions,
   runIsolatedBin,
 } from './test/helpers/spawn-isolated-bin.js';
+import {
+  createIsolatedDist,
+  type IsolatedDist,
+} from './test/helpers/isolated-dist.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
-const API_DTS = join(HERE, '..', 'dist', 'api.d.ts');
-const API_IR = join(HERE, '..', 'dist', 'api.ir.json');
+const SHARED_DIST = join(HERE, '..', 'dist');
+const SHARED_INDEX = join(SHARED_DIST, 'index.js');
+const SHARED_API_DTS = join(SHARED_DIST, 'api.d.ts');
+const SHARED_API_IR = join(SHARED_DIST, 'api.ir.json');
 
 let root: string;
 let cacheDir: string;
+let iso: IsolatedDist | undefined;
 
 afterEach(() => {
   if (root) rmSync(root, { recursive: true, force: true });
   if (cacheDir) rmSync(cacheDir, { recursive: true, force: true });
+  iso?.cleanup();
+  iso = undefined;
 });
 
 describe('IR-cache durability — a SIGKILL right after stdout still leaves a valid entry', () => {
   it('never loses the MISS write: the entry is complete and durable, and a respawn HITs', async () => {
     // Fail loudly if the built dist is missing — never silently skip.
-    for (const p of [DIST_INDEX, API_DTS, API_IR]) {
+    for (const p of [SHARED_INDEX, SHARED_API_DTS, SHARED_API_IR]) {
       expect(
         (() => {
           try {
@@ -66,6 +83,12 @@ describe('IR-cache durability — a SIGKILL right after stdout still leaves a va
         `built artifact missing — run "nx build backlog" first: ${p}`
       ).toBe(true);
     }
+
+    // Run against a PRIVATE copy of the built dist — never the shared in-tree
+    // output that sibling suites read and a concurrent build may wipe.
+    iso = createIsolatedDist(SHARED_DIST, 'durability');
+    const DIST_INDEX = iso.indexPath;
+    const API_IR = iso.apiIrPath;
 
     root = mkdtempSync(join(tmpdir(), 'backlog-ircache-durability-'));
     cacheDir = mkdtempSync(join(tmpdir(), 'backlog-ircache-durability-cache-'));

@@ -21,8 +21,16 @@
  * refuses it → the SAME run MUST log ts-morph. Proves "never serve stale",
  * end-to-end, not just at the unit level.
  *
- * Any `dist/` file this test renames/mutates is restored in a `finally`, so a
- * FAILING run still leaves the shared build output exactly as it found it.
+ * ISOLATION (2026-09-26): the bin runs from a PRIVATE copy of `dist/`
+ * (`createIsolatedDist`, under the gitignored `tmp/`), so the `api.ir.json`
+ * renamed away and the `api.d.ts` mutated are this suite's OWN. It previously
+ * renamed/mutated the SHARED in-tree `entrypoint/backlog/dist/`; because the
+ * `finally` restore races a concurrent `vite build` (`emptyOutDir: true`) or nx
+ * directory-output cache restore — which deletes the whole `dist/` dir — the
+ * backup could vanish and the restore throw `ENOENT` (the red-gate defect),
+ * and while the shared artifact was renamed away every sibling saw it missing.
+ * The private copy is removed in `afterEach`, so a FAILING run still leaves the
+ * shared build output untouched.
  */
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import {
@@ -37,15 +45,20 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runIsolatedBin } from './test/helpers/spawn-isolated-bin.js';
+import {
+  createIsolatedDist,
+  type IsolatedDist,
+} from './test/helpers/isolated-dist.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
-const API_DTS = join(HERE, '..', 'dist', 'api.d.ts');
-const API_IR = join(HERE, '..', 'dist', 'api.ir.json');
+const SHARED_DIST = join(HERE, '..', 'dist');
+const SHARED_INDEX = join(SHARED_DIST, 'index.js');
+const SHARED_API_DTS = join(SHARED_DIST, 'api.d.ts');
+const SHARED_API_IR = join(SHARED_DIST, 'api.ir.json');
 
 /** Fail LOUDLY (never silently skip) if the built artifacts are missing. */
 function assertBuilt(): void {
-  for (const p of [DIST_INDEX, API_DTS, API_IR]) {
+  for (const p of [SHARED_INDEX, SHARED_API_DTS, SHARED_API_IR]) {
     expect(
       (() => {
         try {
@@ -74,16 +87,22 @@ Module._load = function (request, parent, isMain) {
 let root: string;
 let probePath: string;
 let probeLog: string;
+let iso: IsolatedDist | undefined;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'backlog-startup-path-e2e-'));
   probePath = join(root, 'tsmorph-probe.cjs');
   probeLog = join(root, 'probe.log');
   writeFileSync(probePath, PROBE_SOURCE);
+  // Private dist copy — the artifact contract is exercised against THIS, never
+  // the shared in-tree build output a concurrent build may wipe.
+  iso = createIsolatedDist(SHARED_DIST, 'startup-path');
 });
 
 afterEach(() => {
   rmSync(root, { recursive: true, force: true });
+  iso?.cleanup();
+  iso = undefined;
 });
 
 function probeEnv(): Record<string, string> {
@@ -101,7 +120,7 @@ function probeLogText(): string {
 describe('server startup path — baked artifact vs. live extraction (design doc Revision 3)', () => {
   it('BAKED: `--help` reads api.ir.json and never loads ts-morph', () => {
     assertBuilt();
-    const r = runIsolatedBin(DIST_INDEX, ['--help'], root, {
+    const r = runIsolatedBin(iso!.indexPath, ['--help'], root, {
       extraEnv: probeEnv(),
       timeoutMs: 60_000,
     });
@@ -111,33 +130,33 @@ describe('server startup path — baked artifact vs. live extraction (design doc
 
   it('NEGATIVE CONTROL: with api.ir.json removed, the same run DOES load ts-morph (fallback)', () => {
     assertBuilt();
-    const backup = `${API_IR}.e2e-backup`;
-    renameSync(API_IR, backup);
+    const backup = `${iso!.apiIrPath}.e2e-backup`;
+    renameSync(iso!.apiIrPath, backup);
     try {
-      const r = runIsolatedBin(DIST_INDEX, ['--help'], root, {
+      const r = runIsolatedBin(iso!.indexPath, ['--help'], root, {
         extraEnv: probeEnv(),
         timeoutMs: 120_000,
       });
       expect(r.status, r.stderr).toBe(0);
       expect(probeLogText()).toContain('ts-morph');
     } finally {
-      renameSync(backup, API_IR);
+      renameSync(backup, iso!.apiIrPath);
     }
   });
 
   it('STALE CONTROL: mutating api.d.ts invalidates the artifact, so the run loads ts-morph', () => {
     assertBuilt();
-    const original = readFileSync(API_DTS, 'utf8');
+    const original = readFileSync(iso!.apiDtsPath, 'utf8');
     try {
-      writeFileSync(API_DTS, `${original}\n// stale-source probe\n`);
-      const r = runIsolatedBin(DIST_INDEX, ['--help'], root, {
+      writeFileSync(iso!.apiDtsPath, `${original}\n// stale-source probe\n`);
+      const r = runIsolatedBin(iso!.indexPath, ['--help'], root, {
         extraEnv: probeEnv(),
         timeoutMs: 120_000,
       });
       expect(r.status, r.stderr).toBe(0);
       expect(probeLogText()).toContain('ts-morph');
     } finally {
-      writeFileSync(API_DTS, original);
+      writeFileSync(iso!.apiDtsPath, original);
     }
   });
 });
