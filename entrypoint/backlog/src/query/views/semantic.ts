@@ -525,21 +525,51 @@ export async function rankByFusedRelevance(
 }
 
 /**
+ * `view:'similar'`'s result when the caller also needs completeness truth
+ * (`has_more`/`limit`) — see {@link querySimilarViewWithMeta}. `hasMore` is
+ * derived by fetching one row beyond the page, never fabricated.
+ */
+export interface ISimilarViewResult {
+  items: IIssueCard[];
+  hasMore: boolean;
+  /** The caller-facing page size actually applied. */
+  limit: number;
+}
+
+/**
+ * `view:'similar'` (SPEC.md §5a) — the plain `IIssueCard[]` every existing
+ * caller (and `semantic.spec.ts`) already reads. Thin wrapper over
+ * {@link querySimilarViewWithMeta}, which also yields the completeness flag
+ * the C7 envelope attaches.
+ */
+export async function querySimilarView(
+  handle: IQueryStoreHandle,
+  input: IIssueQueryInput
+): Promise<IIssueCard[]> {
+  return (await querySimilarViewWithMeta(handle, input)).items;
+}
+
+/**
  * `view:'similar'` (SPEC.md §5a) — `filter.anchor` (item-anchored) or
  * `filter.semantic` (free text), fused text+vec ranked via
- * {@link rankByFusedRelevance}, projected to `IIssueCard`s with `_score`
- * populated when requested (`card.ts`'s existing
- * `IAssembleIssueCardOptions.score` seam — SPEC.md §5a's `_score` exposure).
+ * {@link rankByFusedRelevance}, projected to `IIssueCard`s with `_score`/`_score_kind`
+ * populated when requested (`card.ts`'s `IAssembleIssueCardOptions` seam — SPEC.md
+ * §5a's `_score` exposure; `_score_kind:'rrf'` per DESIGN §2 Invariant 5).
  *
  * The anchor issue is EXCLUDED from its own results (RAG-SPEC.md §3.2's
  * carried-forward "the query item itself is excluded" — SPEC.md §5a does not
  * restate this explicitly, a genuine spec gap this implementation fills per
  * that precedent rather than silently, since "similar to X" trivially
  * self-matching X at rank 1 is a real usability defect, not a feature).
- * Exclusion is done POST-search (fetch one extra candidate, drop the anchor,
+ * Exclusion is done POST-search (fetch beyond the page, drop the anchor,
  * slice to `limit`) rather than by enumerating the whole issue table to
  * subtract one id up front — far cheaper for the common "no other filter"
  * case, and still exactly correct.
+ *
+ * **Completeness (`hasMore`):** the fetch is one row beyond the page — plus
+ * one MORE when anchored, since the anchor consumes a slot when it appears in
+ * the window — so `hasMore` is genuinely "a live row exists beyond this page",
+ * not an inference from `items.length === limit`.
  *
  * Errors: `IssueNotFoundError(anchor)` (SPEC.md §6.1's general `uid`-
  * addressing convention — `anchor` is `uid`-typed per §6.1's own statement
@@ -550,10 +580,10 @@ export async function rankByFusedRelevance(
  * `InvalidArgumentError('filter', ...)` (neither `anchor` nor `semantic`
  * given). `BacklogValidationError('limit', ...)` (out-of-range `limit`).
  */
-export async function querySimilarView(
+export async function querySimilarViewWithMeta(
   handle: IQueryStoreHandle,
   input: IIssueQueryInput
-): Promise<IIssueCard[]> {
+): Promise<ISimilarViewResult> {
   const { graph } = handle;
   if (!handle.search) {
     throw new InvalidArgumentError(
@@ -582,30 +612,26 @@ export async function querySimilarView(
 
   const candidateIds = await resolveSimilarFilterIds(graph, input.filter);
   if (candidateIds && anchor) candidateIds.delete(anchor.id);
-  if (candidateIds?.size === 0) return [];
+  if (candidateIds?.size === 0) return { items: [], hasMore: false, limit };
 
   const vec = await handle.search.embedQuery(text);
-  // Fetch one extra candidate when anchored so dropping the anchor post-search
-  // still leaves `limit` results. NOT capped at MAX_QUERY_LIMIT: that cap
-  // bounds the CALLER-FACING `limit` (assertSimilarLimit, above), but this is
-  // an internal fetch size handed straight to `searchRanked(query, limit:
-  // number)`, which the installed `@adhd/sox-hybrid-search` contract
-  // (`dist/index.d.ts:204`) declares as a plain unbounded `number` — no
-  // documented upper bound. Clamping it here previously silently dropped one
-  // result whenever `limit === MAX_QUERY_LIMIT` and the anchor placed inside
-  // the fetched window (verified: `Math.min(1001, 1000) === 1000`, so the
-  // anchor's removal left only 999 rows for a caller that asked for 1000).
-  const fetchLimit = anchor ? limit + 1 : limit;
+  // One extra candidate to probe `has_more`, plus one more when anchored so
+  // dropping the anchor post-search still leaves the page intact. NOT capped at
+  // MAX_QUERY_LIMIT: that cap bounds the CALLER-FACING `limit`
+  // (assertSimilarLimit, above), but this is an internal fetch size handed
+  // straight to `searchRanked(query, limit: number)`, which the installed
+  // `@adhd/sox-hybrid-search` contract declares as a plain unbounded `number`.
+  const fetchLimit = anchor ? limit + 2 : limit + 1;
   const results = await rankByFusedRelevance(handle, {
     text,
     vec,
     candidateIds,
     limit: fetchLimit,
   });
-  const page = (
-    anchor ? results.filter((r) => r.id !== anchor!.id) : results
-  ).slice(0, limit);
-  if (page.length === 0) return [];
+  const ranked = anchor ? results.filter((r) => r.id !== anchor!.id) : results;
+  const hasMore = ranked.length > limit;
+  const page = ranked.slice(0, limit);
+  if (page.length === 0) return { items: [], hasMore: false, limit };
 
   const nodes = await graph.getNodesByIds(page.map((r) => r.id));
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -617,5 +643,18 @@ export async function querySimilarView(
       .map((r) => [byId.get(r.id)?.uid, r.score] as const)
       .filter((e): e is [string, number] => e[0] !== undefined)
   );
-  return assembleIssueCards(graph, ordered, fields, scoreByUid);
+  // `view:'similar'`'s score is the RRF/temporal fused score
+  // (`rankByFusedRelevance`), never a similarity — tag it so a consumer can
+  // never read it as one (DESIGN §2 Invariant 5).
+  const scoreKindByUid = new Map<string, 'rrf'>(
+    [...scoreByUid.keys()].map((uid) => [uid, 'rrf'] as const)
+  );
+  const items = await assembleIssueCards(
+    graph,
+    ordered,
+    fields,
+    scoreByUid,
+    scoreKindByUid
+  );
+  return { items, hasMore, limit };
 }

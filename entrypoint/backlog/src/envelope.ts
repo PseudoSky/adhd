@@ -129,13 +129,35 @@ export interface IOutcomeError {
 }
 
 /**
+ * How exact a labelled count is. `eq` — the value is the true count; `gte` —
+ * the value is a LOWER BOUND (the Elasticsearch `hits.total.relation`
+ * pattern): more rows exist than could be counted at the cost the caller's
+ * request allowed. A count whose exactness is unstated is the defect this
+ * names (DESIGN §2 Invariant 5).
+ */
+export type CountRelation = 'eq' | 'gte';
+
+/**
+ * A count labelled for what it counts, carrying its own exactness — the
+ * DESIGN §2 Invariant 5 primitive ("a count named for what it counts (with an
+ * exactness relation, or omitted)"). Kept as its own shape rather than
+ * flattened into {@link IQueryEnvelopeMeta} as a bare number so a consumer can
+ * always tell a lower bound from an exact total.
+ */
+export interface ILabelledCount {
+  value: number;
+  /** How exact `value` is: `eq` exact, `gte` a lower bound. */
+  relation: CountRelation;
+}
+
+/**
  * Pagination truth carried beside the data. `total` is the count BEFORE
  * `limit`/`offset`; `returned` is `data.length`. A silently-truncated list is
  * indistinguishable from a complete one unless the envelope says how many
  * there really were.
  */
 export interface IQueryEnvelopeMeta {
-  /** Matching rows before limit/offset — the TRUE count. */
+  /** Matching rows before limit/offset. Exact unless `total_relation` says otherwise (`gte` ⇒ a lower bound). */
   total: number;
   /** Rows actually in `data`. */
   returned: number;
@@ -146,6 +168,20 @@ export interface IQueryEnvelopeMeta {
    * own `limit`. A silent cap is forbidden — if it happens, it is stated here.
    */
   truncated?: boolean;
+  /**
+   * Exactness of `total`: `eq` (or absent) — exact; `gte` — a lower bound
+   * (a capped scan, or a page whose true total is unknowable at list cost).
+   */
+  total_relation?: CountRelation;
+  /**
+   * True iff more rows exist beyond this page. The preferred spelling for the
+   * item-list views (`ready`/`stale`/`similar`) where a true pre-limit `total`
+   * is unknowable at bounded cost — derived by fetching `limit + 1`, never
+   * fabricated.
+   */
+  has_more?: boolean;
+  /** Opaque continuation token for cursor-paged views that are not keyset-paged today. */
+  next_cursor?: string;
 }
 
 /** The success arm. `data` is always present (never `null` as a stand-in for "missing"). */

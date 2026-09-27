@@ -50,10 +50,11 @@ import {
   type ILocationSummary,
   type IOverlapGroup,
   type IProjectSummary,
+  type IScoreKind,
   type ITopoOrderResult,
   MAX_QUERY_LIMIT,
 } from './types.js';
-import { querySimilarView } from './views/semantic.js';
+import { querySimilarViewWithMeta } from './views/semantic.js';
 import { renderIssueCardsMarkdown } from './markdown.js';
 import {
   listComponents,
@@ -410,6 +411,30 @@ async function sortByPriorityRank(
 }
 
 /**
+ * The honest `meta` for an item-list page whose true pre-limit `total` is
+ * either unknowable at bounded cost (`ready`/`stale`/`similar`) or genuinely
+ * enumerated. When `hasMore` is true the scan stopped after finding one row
+ * beyond the page, so the true total is only known to be at least
+ * `returned + 1` — emitted as `total_relation:'gte'`, the ES
+ * `hits.total.relation` pattern, never a fabricated exact number
+ * (DESIGN §2 Invariant 5, §7 condition 2). When `hasMore` is false the whole
+ * candidate set was enumerated, so `total === returned` exactly.
+ */
+function itemListMeta(
+  returned: number,
+  limit: number,
+  hasMore: boolean
+): IQueryEnvelopeMeta {
+  return {
+    total: hasMore ? returned + 1 : returned,
+    total_relation: hasMore ? 'gte' : 'eq',
+    returned,
+    limit,
+    has_more: hasMore,
+  };
+}
+
+/**
  * `view:'list'` (default) — SPEC.md §6.5's full pagination/composition
  * algorithm, plus `meta` (`envelope.ts`'s {@link IQueryEnvelopeMeta}), the
  * pre-limit truth the transport envelope exposes alongside the page.
@@ -546,7 +571,21 @@ async function queryList(
         .map((r) => [byId.get(r.id)?.uid, r.score] as const)
         .filter((e): e is [string, number] => e[0] !== undefined)
     );
-    const items = await assembleIssueCards(graph, ordered, fields, scoreByUid);
+    // Score provenance (DESIGN §2 Invariant 5): a `grep`-only read's score is
+    // the FTS/BM25 magnitude `graph.searchNodes` returns; anything touching
+    // the semantic channel is the RRF/temporal fused score `searchRanked`
+    // returns. Never left untagged — a bare `_score` cannot be read safely.
+    const scoreKind: IScoreKind = semantic !== undefined ? 'rrf' : 'bm25';
+    const scoreKindByUid = new Map<string, IScoreKind>(
+      [...scoreByUid.keys()].map((uid) => [uid, scoreKind] as const)
+    );
+    const items = await assembleIssueCards(
+      graph,
+      ordered,
+      fields,
+      scoreByUid,
+      scoreKindByUid
+    );
 
     // `grep` is a genuine boolean match condition, so it narrows the
     // countable set (`countNodesFts`, run against the SAME `baseFilter` the
@@ -588,6 +627,14 @@ async function queryList(
         limit,
         ...(input.offset !== undefined ? { offset: input.offset } : {}),
         ...(truncated ? { truncated: true } : {}),
+        // AC6: `total` is the `baseFilter` count (semantic reranks, never
+        // narrows) — the honest match/candidate count, NOT the whole corpus.
+        // `has_more` tells a caller whether rows remain beyond this window; a
+        // ranked window that could not hold the whole rerank set reports
+        // `total_relation:'gte'` so "matches" is never conflated with
+        // "corpus" (DESIGN §2 Invariant 5).
+        has_more: hasMore,
+        total_relation: truncated ? 'gte' : 'eq',
       },
     };
   }
@@ -665,7 +712,7 @@ async function queryList(
 async function queryReady(
   handle: IQueryStoreHandle,
   input: IIssueQueryInput
-): Promise<IIssueCard[]> {
+): Promise<{ items: IIssueCard[]; meta: IQueryEnvelopeMeta }> {
   const { graph } = handle;
   const limit = assertQueryLimit(input.limit);
   const fields = (input.fields ??
@@ -675,7 +722,8 @@ async function queryReady(
   const scoped = candidates
     ? [...openIds].filter((id) => candidates.has(id))
     : [...openIds];
-  if (scoped.length === 0) return [];
+  if (scoped.length === 0)
+    return { items: [], meta: itemListMeta(0, limit, false) };
 
   const issues = await graph.getNodesByIds(scoped);
 
@@ -725,7 +773,10 @@ async function queryReady(
 
   const ready: NodeRecord[] = [];
   for (const issue of issues) {
-    if (ready.length >= limit) break;
+    // Stop after finding one row BEYOND the page — that extra row is the
+    // honest proof of `hasMore` (never a fabricated total, never a full-store
+    // scan; the cost model this view's doc comment describes is preserved).
+    if (ready.length >= limit + 1) break;
     if (typeof issue.metadata?.claimedBy === 'string') continue; // currently claimed — not ready
     const blockerIds = (blockerSrcsByIssue.get(issue.id) ?? []).filter((id) =>
       existingBlockerIds.has(id)
@@ -742,14 +793,17 @@ async function queryReady(
     });
     if (allBlockersTerminal) ready.push(issue);
   }
-  return assembleIssueCards(graph, ready, fields);
+  const hasMore = ready.length > limit;
+  const page = hasMore ? ready.slice(0, limit) : ready;
+  const items = await assembleIssueCards(graph, page, fields);
+  return { items, meta: itemListMeta(items.length, limit, hasMore) };
 }
 
 /** `view:'stale'` — SPEC.md §6.3.5: `staleClaims` becomes `query`'s `view:'stale'`, `NodeFilter.metadata: {claimedAt:{lt:...}, claimedBy:{exists:true}}`. `staleAfterMin` defaults to 30 (`project_policy.claim_stale_after_min`'s own default — this read path has no per-project policy row threaded through it, so it uses the GLOBAL default; a caller that knows the project's configured threshold passes `staleAfterMin` explicitly). `limit` is validated and applied via `assertQueryLimit`/`DEFAULT_QUERY_LIMIT`, matching every sibling view (`queryList`/`queryReady`/`queryGraph`/`queryOrder`) — it was previously ignored entirely, so this view returned every stale claim in the store regardless of what the caller asked for. */
 async function queryStale(
   handle: IQueryStoreHandle,
   input: IIssueQueryInput
-): Promise<IIssueCard[]> {
+): Promise<{ items: IIssueCard[]; meta: IQueryEnvelopeMeta }> {
   const { graph } = handle;
   const limit = assertQueryLimit(input.limit);
   const fields = (input.fields ??
@@ -763,10 +817,14 @@ async function queryStale(
     isSuperseded: false,
     ...(candidateIds ? { ids: [...candidateIds] } : {}),
     metadata: { claimedBy: { exists: true }, claimedAt: { lt: threshold } },
-    limit,
+    // One beyond the page — the fetch that makes `hasMore` honest.
+    limit: limit + 1,
   };
   const nodes = await graph.queryNodes(nodeFilter as unknown as NodeFilter);
-  return assembleIssueCards(graph, nodes, fields);
+  const hasMore = nodes.length > limit;
+  const page = hasMore ? nodes.slice(0, limit) : nodes;
+  const items = await assembleIssueCards(graph, page, fields);
+  return { items, meta: itemListMeta(items.length, limit, hasMore) };
 }
 
 /** The three relations `view:'graph'` projects. Declared once so the runtime check and
@@ -1128,19 +1186,19 @@ export function resolveTextInput(
 export interface IQueryIssuesOutcome {
   result: IIssueQueryResult;
   /**
-   * Present only for `view:'list'` — the only view whose result is a
-   * filtered/paginated row set with an honestly countable pre-limit total
-   * (`envelope.ts`'s {@link IQueryEnvelopeMeta}). `view:'ready'` computes
-   * readiness in-memory and stops enumerating once `limit` candidates are
-   * found (`queryReady`'s own doc comment: removing that early exit to count
-   * a true pre-limit total would reintroduce the O(candidates) cost its
-   * grouped-relation-fetch design exists to avoid), `view:'stale'` applies no
-   * limit at all so every row it returns already IS the total, and
-   * `view:'similar'`/`'graph'`/`'order'`/`'overlap'` are a ranking, a graph
-   * projection, a topological order, and an axis grouping respectively — none
-   * of them a filtered row set with a "how many matched" count. Adding a
-   * `meta` to any of those would mean inventing a number this module cannot
-   * stand behind.
+   * Present for the four ITEM-LIST views (`list`/`ready`/`stale`/`similar`) —
+   * the only views whose result is a filtered row set with an honestly
+   * reportable completeness flag (`envelope.ts`'s {@link IQueryEnvelopeMeta}).
+   *
+   * `list` reports an exact pre-limit `total`; the other three derive `has_more`
+   * by fetching one row beyond the page and, when more exist, report `total`
+   * with `total_relation:'gte'` — an honest lower bound, never a fabricated
+   * exact number (DESIGN §2 Invariant 5, §7 condition 2). `graph`/`order`/
+   * `overlap` deliberately carry NO `meta`: they are a graph, a topological
+   * order, and an axis grouping — none a filtered row set with a "how many
+   * matched" count. Adding a `meta` to any of those would mean inventing a
+   * number this module cannot stand behind (see `meta-wire.e2e.ts`, whose
+   * `view:'graph'`-has-no-`meta` assertion is load-bearing).
    */
   meta?: IQueryEnvelopeMeta;
 }
@@ -1162,10 +1220,10 @@ async function dispatchQueryView(
       const { page, meta } = await queryList(handle, input);
       return { result: { view: 'list', ...page }, meta };
     }
-    case 'ready':
-      return {
-        result: { view: 'ready', items: await queryReady(handle, input) },
-      };
+    case 'ready': {
+      const { items, meta } = await queryReady(handle, input);
+      return { result: { view: 'ready', items }, meta };
+    }
     case 'graph':
       return {
         result: { view: 'graph', graph: await queryGraph(handle, input) },
@@ -1174,17 +1232,20 @@ async function dispatchQueryView(
       return {
         result: { view: 'order', order: await queryOrder(handle, input) },
       };
-    case 'stale':
+    case 'stale': {
+      const { items, meta } = await queryStale(handle, input);
+      return { result: { view: 'stale', items }, meta };
+    }
+    case 'similar': {
+      const { items, hasMore, limit } = await querySimilarViewWithMeta(
+        handle,
+        input
+      );
       return {
-        result: { view: 'stale', items: await queryStale(handle, input) },
+        result: { view: 'similar', items },
+        meta: itemListMeta(items.length, limit, hasMore),
       };
-    case 'similar':
-      return {
-        result: {
-          view: 'similar',
-          items: await querySimilarView(handle, input),
-        },
-      };
+    }
     case 'overlap':
       return {
         result: { view: 'overlap', groups: await queryOverlap(handle, input) },

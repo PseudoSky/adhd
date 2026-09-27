@@ -27,6 +27,7 @@ import {
   type IIssueField,
   type IIssueNote,
   type IIssueRef,
+  type IScoreKind,
   ISSUE_PLAIN_FIELDS,
   ISSUE_PSEUDO_FIELDS,
   isKnownIssueField,
@@ -373,6 +374,17 @@ async function resolveStatusesFor(
 export interface IAssembleIssueCardOptions {
   /** Score from a `searchRanked`/`searchNodes` response — populates `_score` when requested (§5a). */
   score?: number;
+  /** Provenance of `score` — populates `_score_kind` alongside `_score` (DESIGN §2 Invariant 5). */
+  scoreKind?: IScoreKind;
+  /**
+   * Bounds the sub-collection pseudo fields (`auditTrail`/`citations`/
+   * `related`/`blockers`) — `lastN` takes the LAST N rows, `after` is an
+   * opaque cursor naming a uid to resume strictly after. Applied HERE (at the
+   * card-assembly call site), never inside `resolveAuditTrail` itself: the
+   * `openCurve` view (`views/stats.ts`) calls an independent batched audit
+   * reader that needs the FULL trail and must not be bounded.
+   */
+  bounds?: { lastN?: number; after?: string };
   /** Pre-fetched outgoing edges (`getEdges({src: issue.id})`) — pass when the caller already has them (e.g. a batch `query` page) to avoid a redundant round trip. */
   outgoingEdges?: EdgeRecord[];
   /**
@@ -382,6 +394,26 @@ export interface IAssembleIssueCardOptions {
    * consulted when `fields` requests `dependents`.
    */
   scope?: ReadonlySet<number>;
+}
+
+/**
+ * Apply an optional `{lastN, after}` bound to an ordered sub-collection.
+ * `after` drops every row up to and including the one whose `uid` matches
+ * (a resume cursor); `lastN` then keeps the tail. Passing neither returns the
+ * collection unchanged, so every existing caller is byte-for-byte unaffected.
+ */
+function boundSubCollection<T extends { uid: string }>(
+  rows: T[],
+  bounds: { lastN?: number; after?: string } | undefined
+): T[] {
+  if (!bounds) return rows;
+  let out = rows;
+  if (bounds.after !== undefined) {
+    const idx = out.findIndex((r) => r.uid === bounds.after);
+    if (idx >= 0) out = out.slice(idx + 1);
+  }
+  if (bounds.lastN !== undefined) out = out.slice(-bounds.lastN);
+  return out;
 }
 
 /**
@@ -461,14 +493,27 @@ export async function assembleIssueCard(
   }
 
   if (needsCitations && outgoing)
-    card.citations = await resolveCitations(graph, issue.id, outgoing);
+    card.citations = boundSubCollection(
+      await resolveCitations(graph, issue.id, outgoing),
+      opts.bounds
+    );
   if (needsNotes && outgoing)
     card.notes = await resolveNotes(graph, issue.id, outgoing);
   if (needsAuditTrail && outgoing)
-    card.auditTrail = await resolveAuditTrail(graph, issue.id, outgoing);
-  if (needsBlockers) card.blockers = await resolveBlockers(graph, issue.id);
+    card.auditTrail = boundSubCollection(
+      await resolveAuditTrail(graph, issue.id, outgoing),
+      opts.bounds
+    );
+  if (needsBlockers)
+    card.blockers = boundSubCollection(
+      await resolveBlockers(graph, issue.id),
+      opts.bounds
+    );
   if (needsRelated && outgoing)
-    card.related = await resolveRelated(graph, issue.id, outgoing);
+    card.related = boundSubCollection(
+      await resolveRelated(graph, issue.id, outgoing),
+      opts.bounds
+    );
   if (needsBlocksOut && outgoing)
     card.blocksOut = await resolveBlocksOut(graph, issue.id, outgoing);
   if (needsDependents)
@@ -476,7 +521,13 @@ export async function assembleIssueCard(
   if (needsPartOf && outgoing)
     card.partOf = await resolvePartOf(graph, issue.id, outgoing);
 
-  if (want('_score') && opts.score !== undefined) card._score = opts.score;
+  if (want('_score') && opts.score !== undefined) {
+    card._score = opts.score;
+    // Provenance is emitted alongside the score it describes, never on its
+    // own — a `_score_kind` with no `_score` would claim a score that is not
+    // there (DESIGN §2 Invariant 5).
+    if (opts.scoreKind !== undefined) card._score_kind = opts.scoreKind;
+  }
   // `_vector` (§6.5's pseudo field) only exists on a raw vector-search response, which this
   // card assembler never sees directly (StoreSearchBackend.searchRanked returns fused
   // SearchResult, not the raw embedding) — never populated here; a future embedding-surfacing
@@ -498,13 +549,15 @@ export async function assembleIssueCards(
   graph: GraphBackend,
   issues: NodeRecord[],
   fields: readonly IIssueField[],
-  scoreByUid?: ReadonlyMap<string, number>
+  scoreByUid?: ReadonlyMap<string, number>,
+  scoreKindByUid?: ReadonlyMap<string, IScoreKind>
 ): Promise<IIssueCard[]> {
   const scope = new Set(issues.map((i) => i.id));
   return Promise.all(
     issues.map((issue) =>
       assembleIssueCard(graph, issue, fields, {
         score: scoreByUid?.get(issue.uid),
+        scoreKind: scoreKindByUid?.get(issue.uid),
         scope,
       })
     )

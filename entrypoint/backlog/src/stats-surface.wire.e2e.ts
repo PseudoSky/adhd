@@ -213,4 +213,30 @@ describe('SPEC.md §5 stats reads at the wire (real built bin)', () => {
     expect(points[0]?.['open']).toBe(0);
     expect(points[0]?.['closed']).toBe(0);
   });
+
+  it('backlog report: the grouped rollup (C7) survives encoding with every field present and computed', () => {
+    const data = okData(['report', '--input', JSON.stringify({})]);
+
+    // Presence/type FIRST (the absent-key defect class), then values with
+    // teeth: the seeded HIGH root must be counted, and the two open issues
+    // must appear in the OPEN-scoped status histogram.
+    expect(data['statusScope']).toBe('open');
+    expect(Array.isArray(data['byKind'])).toBe(true);
+    expect(Array.isArray(data['byPriority'])).toBe(true);
+    expect(Array.isArray(data['byStatus'])).toBe(true);
+    expect(typeof data['avgAgeDays']).toBe('number');
+    expect(typeof data['computedAt']).toBe('string');
+
+    const byPriority = data['byPriority'] as Array<Record<string, unknown>>;
+    const high = byPriority.find((r) => r['priority'] === 'HIGH');
+    expect(high?.['count']).toBe(1);
+
+    const byStatus = data['byStatus'] as Array<Record<string, unknown>>;
+    const open = byStatus.find((r) => r['status'] === 'open');
+    expect(open?.['count']).toBe(2);
+    expect(open?.['terminal']).toBe(false);
+
+    const byKind = data['byKind'] as Array<Record<string, unknown>>;
+    expect(byKind).toEqual([{ kind: 'issue', count: 2 }]);
+  });
 });

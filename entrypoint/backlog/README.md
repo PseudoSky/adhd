@@ -190,7 +190,7 @@ resolve to the wrong record.
 ## Command surface
 
 Every verb but `embedding-status` takes a single `--input` flag carrying one JSON
-object; there are no per-field flags. Nineteen operations (the 18 verbs plus
+object; there are no per-field flags. Twenty operations (the 19 verbs plus
 `batch`):
 
 | Verb              | CLI                             | MCP tool                   |
@@ -200,6 +200,7 @@ object; there are no per-field flags. Nineteen operations (the 18 verbs plus
 | `priorityMatrix`  | `adhd-backlog priority-matrix`  | `backlog_priority_matrix`  |
 | `partOfRollup`    | `adhd-backlog part-of-rollup`   | `backlog_part_of_rollup`   |
 | `openCurve`       | `adhd-backlog open-curve`       | `backlog_open_curve`       |
+| `report`          | `adhd-backlog report`           | `backlog_report`           |
 | `embeddingStatus` | `adhd-backlog embedding-status` | `backlog_embedding_status` |
 | `lookup`          | `adhd-backlog lookup`           | `backlog_lookup`           |
 | `create`          | `adhd-backlog create`           | `backlog_create`           |
@@ -239,14 +240,37 @@ simultaneously true everywhere:
 Every verb call returns one of two shapes, on every transport:
 
 ```ts
-{ ok: true,  data: T, warnings?: string[], meta?: { total, returned, limit?, offset?, truncated? } }
+{ ok: true,  data: T, warnings?: string[],
+  meta?: { total, returned, limit?, offset?, truncated?, total_relation?, has_more?, next_cursor? } }
 { ok: false, error: { code, message, details? }, warnings?: string[] }
 ```
 
-`meta` is present on list-shaped reads (`query`) and its `total` is the true
-match count _before_ `limit`/`offset` are applied; a truncated page sets
-`data.hasMore: true` and `data.nextCursor`, so a short result never silently
-looks complete.
+`meta` is present on the four **item-list** reads (`query`'s `list`/`ready`/
+`stale`/`similar` views). `total` is the match count; on `list` it is the exact
+count _before_ `limit`/`offset`, while on `ready`/`stale`/`similar` a true
+pre-limit total is unknowable at bounded cost, so `meta` reports
+`has_more` (derived by fetching one row beyond the page) and labels `total`
+with `total_relation: 'gte'` — a lower bound, never a fabricated exact number
+(`'eq'` means exact). `graph`/`order`/`overlap` are a graph, a topological
+order, and an axis grouping — they deliberately carry **no** `meta`, because
+none of them is a filtered row set with an honest "how many matched" count.
+
+A derived `_score` always carries its provenance: `_score_kind` is `'rrf'`
+(the fused text+vec rank `view:'similar'` and semantic list reads use),
+`'bm25'` (a grep-only FTS score), `'cosine'`, `'rank'`, or `'priority'`. A
+rank-derived `_score` is **ordinal** — never read it as a similarity or a
+confidence.
+
+Sub-collections can be bounded: `get { fields:["auditTrail"], lastN:5 }`
+returns at most the newest 5 audit rows (oldest-first order preserved);
+`part-of-rollup { uid, countOnly:true }` returns the counts and omits
+`childrenOpenUids` entirely, while `part-of-rollup { uid, limit, after }` pages
+the open-descendant uid list (`nextCursor`/`hasMore`).
+
+The `report` verb is a grouped rollup whose every number is computed from the
+store in that call: `byKind`, `byPriority` (composed from `priority-matrix`),
+`byStatus`, and `avgAgeDays` of open in-scope items, with `statusScope` naming
+exactly what was counted (`'open'` when the filter omits `status`).
 
 ### Error codes
 
@@ -284,12 +308,13 @@ the item's `Citations:` block. Omit it and nothing is stored.
 
 ### Which build these docs describe
 
-These docs describe `entrypoint/backlog/dist/index.js` built from revision
-`9df2a5c7`, whose `create`/`transition` inputs include `gitContext`. A
+These docs describe `entrypoint/backlog/dist/index.js` built from the current
+revision (at or after `9df2a5c7`), whose `create`/`transition` inputs include
+`gitContext` and which mounts the `report` verb. A
 **globally installed** `adhd-backlog` may be an older build (it is whatever was
 last published/installed); on such a build `gitContext` is not in the schema
 and is rejected with `invalid_argument`, and the stats/rollup ops
-(`priority-matrix` / `part-of-rollup` / `open-curve`) are absent. Run
+(`priority-matrix` / `part-of-rollup` / `open-curve` / `report`) are absent. Run
 `adhd-backlog --help` and compare the `backlog create` / `backlog
 priority-matrix` lines against this page if a documented field or verb is
 refused.
@@ -330,21 +355,24 @@ and store-free (it never opens the graph store and never writes under
 ## Library API
 
 Beyond the CLI/MCP/HTTP surface, the package exports its query layer
-(`src/query/index.ts`), including three rollup/stats read views that are **not**
+(`src/query/index.ts`), including four rollup/stats read ops that are **not**
 members of `query.view`:
 
 - `priorityMatrix(handle, { filter? })` — a status-aware per-priority count
   breakdown (defaults to open work; `filter.status` may be `'open'`, `'closed'`,
   `'all'`, or a status name).
-- `partOfRollup(handle, { uid })` — transitive `part_of` descendants of an
-  issue, counted once each regardless of chain depth.
+- `partOfRollup(handle, { uid, countOnly?, limit?, after? })` — transitive
+  `part_of` descendants of an issue, counted once each regardless of chain
+  depth; `countOnly` omits the uid list, `limit`/`after` page it.
 - `openCurve(handle, { filter?, at })` — per-sampled-instant counts of issues
   that existed and how many were open, reconstructed from the audit trail.
+- `report(handle, { filter? })` — a grouped rollup (`byKind`/`byPriority`/
+  `byStatus`/`avgAgeDays`) composed from live reads in the same call.
 
-Reach them by importing `@adhd/backlog` in-process. The same three are also
-mounted as operations — `priority-matrix` / `part-of-rollup` / `open-curve` on
-the CLI (`backlog_priority_matrix` / `backlog_part_of_rollup` /
-`backlog_open_curve` on MCP); see the command surface above.
+Reach them by importing `@adhd/backlog` in-process. The same four are also
+mounted as operations — `priority-matrix` / `part-of-rollup` / `open-curve` /
+`report` on the CLI (`backlog_priority_matrix` / `backlog_part_of_rollup` /
+`backlog_open_curve` / `backlog_report` on MCP); see the command surface above.
 
 ## Configuration
 

@@ -191,6 +191,7 @@ export const BACKLOG_VERBS: readonly string[] = [
   'priority-matrix',
   'part-of-rollup',
   'open-curve',
+  'report',
   'lookup',
   'create',
   'update',
