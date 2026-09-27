@@ -64,5 +64,6 @@ export * from './get.js';
 export * from './query.js';
 export * from './views/registry.js';
 export * from './views/stats.js';
+export * from './views/report.js';
 export * from './views/semantic.js';
 export * from './markdown.js';

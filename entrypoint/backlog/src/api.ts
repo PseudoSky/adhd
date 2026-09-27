@@ -100,6 +100,7 @@ import {
   partOfRollup as partOfRollupView,
   openCurve as openCurveView,
 } from './query/views/stats.js';
+import { report as reportView } from './query/views/report.js';
 import type {
   IPriorityMatrixInput,
   IPriorityMatrixResult,
@@ -108,6 +109,7 @@ import type {
   IOpenCurveInput,
   IOpenCurveResult,
 } from './query/views/stats.js';
+import type { IReportInput, IReportResult } from './query/views/report.js';
 import {
   createIssue,
   type IDuplicateScanHandle,
@@ -616,6 +618,28 @@ export async function openCurve(
 ): Promise<IOutcomeEnvelope<IOpenCurveResult>> {
   return envelope(async () =>
     openCurveView(
+      await queryHandle(ctx, { needsSemantic: false, probeSpace: false }),
+      input
+    )
+  );
+}
+
+/**
+ * SPEC.md §5 / DESIGN §5 AC7's grouped rollup — counts by kind, by priority
+ * (composed from `priorityMatrix`), and by status, plus the average age of
+ * open in-scope items, every number computed from the store in THIS call.
+ *
+ * A read op, NOT a `query.view` member: it returns a named-scope aggregate
+ * (`statusScope` names what was counted) keyed by no list cursor. Uses only
+ * `handle.graph` — see {@link priorityMatrix}'s note on the `queryHandle`
+ * gates.
+ */
+export async function report(
+  ctx: BacklogCtx,
+  input: IReportInput
+): Promise<IOutcomeEnvelope<IReportResult>> {
+  return envelope(async () =>
+    reportView(
       await queryHandle(ctx, { needsSemantic: false, probeSpace: false }),
       input
     )

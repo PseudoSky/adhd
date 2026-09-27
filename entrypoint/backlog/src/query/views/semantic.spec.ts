@@ -61,7 +61,11 @@ import {
 } from '../../test/helpers/open-test-issue-store.js';
 import { freshTmpDir } from '../../test/helpers/tmp-store.js';
 import { resolveEdgeScopedCandidates } from '../resolve.js';
-import { queryIssues, type IQueryStoreHandle } from '../query.js';
+import {
+  queryIssues,
+  queryIssuesWithMeta,
+  type IQueryStoreHandle,
+} from '../query.js';
 import { MAX_QUERY_LIMIT } from '../types.js';
 import {
   DEFAULT_TEMPORAL_DECAY_PER_HOUR,
@@ -396,7 +400,7 @@ describe('querySimilarView — input validation', () => {
 });
 
 describe('querySimilarView — anchor fetch-size boundary (MAX_QUERY_LIMIT, off-by-one)', () => {
-  it('requests limit+1 from searchRanked when anchored, uncapped at MAX_QUERY_LIMIT — instruments the real searchRanked call, delegates to the unmodified implementation', async () => {
+  it('requests limit+2 from searchRanked when anchored (page probe + anchor loss), uncapped at MAX_QUERY_LIMIT — instruments the real searchRanked call, delegates to the unmodified implementation', async () => {
     const { projectUid } = await seedProject(s.writeHandle, 'proj-a');
     const anchor = await s.createIssueFixture({
       title: 'boundary-anchor',
@@ -418,13 +422,15 @@ describe('querySimilarView — anchor fetch-size boundary (MAX_QUERY_LIMIT, off-
       });
       expect(spy).toHaveBeenCalledTimes(1);
       const [, calledLimit] = spy.mock.calls[0]!;
-      // The previous implementation clamped this to `Math.min(limit+1,
-      // MAX_QUERY_LIMIT)`, which AT limit===MAX_QUERY_LIMIT collapses back to
-      // `limit` (`Math.min(1001,1000)===1000`) — silently losing the one
-      // extra candidate needed to survive the anchor's post-search removal.
-      // This assertion is red under that old clamp (1000) and green only
-      // when the fetch is genuinely `limit+1` (1001).
-      expect(calledLimit).toBe(MAX_QUERY_LIMIT + 1);
+      // The fetch is `limit + 1` for the `has_more` probe, PLUS one more when
+      // anchored (the anchor consumes a slot when it appears in the window).
+      // The previous implementation clamped this to
+      // `Math.min(limit+1, MAX_QUERY_LIMIT)`, which AT limit===MAX_QUERY_LIMIT
+      // collapses back to `limit` (`Math.min(1001,1000)===1000`) — silently
+      // losing the one extra candidate needed to survive the anchor's
+      // post-search removal. This assertion is red under that old clamp
+      // (1000) and green only when the fetch is genuinely `limit+2` (1002).
+      expect(calledLimit).toBe(MAX_QUERY_LIMIT + 2);
     } finally {
       spy.mockRestore();
     }
@@ -729,5 +735,72 @@ describe('rankByFusedRelevance — the shared relevance-ranking primitive (reusa
         limit: 10,
       })
     ).rejects.toBeInstanceOf(InvalidArgumentError);
+  });
+});
+
+describe('C7 AC5/AC6 — score provenance and an honest semantic meta', () => {
+  it("every ranked similar result's _score carries _score_kind:'rrf' — a bare _score is never shipped", async () => {
+    const { projectUid } = await seedProject(s.writeHandle, 'proj-a');
+    const near = await s.createIssueFixture({
+      title: 'near',
+      body: 'aaacontent-near',
+      project: projectUid,
+    });
+    const far = await s.createIssueFixture({
+      title: 'far',
+      body: 'aaacontent-far',
+      project: projectUid,
+    });
+    await s.indexIssue(near.uid, [1, 0, 0]);
+    await s.indexIssue(far.uid, [0, 1, 0]);
+    s.pinEmbedding('zzrrfprobe', [1, 0, 0]);
+
+    const items = await querySimilarView(s.handle, {
+      view: 'similar',
+      filter: { semantic: 'zzrrfprobe' },
+      fields: ['uid', '_score'],
+    });
+    expect(items.length).toBeGreaterThan(0);
+    for (const c of items) {
+      expect(c._score).toBeTypeOf('number');
+      /** The score is the RRF fused rank — ordinal, never similarity/confidence. */
+      expect(c._score_kind).toBe('rrf');
+    }
+  });
+
+  it('filter.semantic meta reports the FILTERED match count (never the whole corpus) and has_more false on the final page', async () => {
+    const { projectUid: projA } = await seedProject(s.writeHandle, 'proj-a');
+    const { projectUid: projB } = await seedProject(s.writeHandle, 'proj-b');
+    const a1 = await s.createIssueFixture({
+      title: 'a1',
+      body: 'aaamatchbody1',
+      project: projA,
+    });
+    const a2 = await s.createIssueFixture({
+      title: 'a2',
+      body: 'aaamatchbody2',
+      project: projA,
+    });
+    const b1 = await s.createIssueFixture({
+      title: 'b1',
+      body: 'aaamatchbody3',
+      project: projB,
+    });
+    await s.indexIssue(a1.uid, [1, 0, 0]);
+    await s.indexIssue(a2.uid, [0.9, 0.1, 0]);
+    await s.indexIssue(b1.uid, [0.8, 0.2, 0]);
+
+    s.pinEmbedding('zzmetaprobe', [1, 0, 0]);
+    const out = await queryIssuesWithMeta(s.handle, {
+      view: 'list',
+      filter: { semantic: 'zzmetaprobe', project: projA },
+    });
+    expect(out.meta).toBeDefined();
+    // corpus (all live issues) = 3; matches scoped to projA = 2 — the meta
+    // must report the MATCH count, never the corpus.
+    expect(out.meta!.total).toBe(2);
+    expect(out.meta!.total).not.toBe(3);
+    expect(out.meta!.returned).toBe(2);
+    expect(out.meta!.has_more).toBe(false);
   });
 });

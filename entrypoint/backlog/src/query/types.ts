@@ -150,6 +150,16 @@ export interface IIssueRef {
 }
 
 /**
+ * Provenance of an `IIssueCard._score` (DESIGN §2 Invariant 5: "a `score_kind`
+ * provenance tag on every derived score"). A rank-derived score (`rrf`) is
+ * ORDINAL — never to be labelled or read as a similarity/confidence; `bm25`
+ * is likewise corpus-relative. A consumer that sees a bare `_score` with no
+ * `_score_kind` cannot know which regime produced it, which is exactly the
+ * conflation this tag prevents.
+ */
+export type IScoreKind = 'rrf' | 'bm25' | 'cosine' | 'rank' | 'priority';
+
+/**
  * The projected issue card (SPEC.md §6.5's `IIssueCard`). Every field is
  * OPTIONAL here because the shape is fields-projected: a caller that asked
  * for `['uid','title']` gets a card with only those two keys populated.
@@ -186,6 +196,8 @@ export interface IIssueCard {
   blockers?: IIssueRef[];
   related?: IIssueRef[];
   _score?: number;
+  /** Provenance tag for `_score` (DESIGN §2 Invariant 5). Present iff `_score` is; a rank-derived score is ordinal, never similarity/confidence. */
+  _score_kind?: IScoreKind;
   _vector?: number[];
 }
 
@@ -199,6 +211,10 @@ export interface IIssueCard {
 export interface IIssueGetByUidInput {
   uid: IssueUid;
   fields?: readonly IIssueField[];
+  /** Bounds the `auditTrail`/`citations`/`related`/`blockers` pseudo fields to the LAST N rows (preserving each resolver's own order — the audit trail's oldest-first order is sliced to its tail). */
+  lastN?: number;
+  /** Cursor for the bounded sub-collection (opaque; from the previous page's last returned uid). */
+  after?: string;
 }
 
 /** SPEC.md §6.5's `IIssueFilter`. */

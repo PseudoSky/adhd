@@ -97,6 +97,11 @@ const EXPECTED = [
     cli: 'backlog open-curve',
   },
   {
+    id: 'backlog/report',
+    mcp: 'backlog_report',
+    cli: 'backlog report',
+  },
+  {
     id: 'backlog/embedding-status',
     mcp: 'backlog_embedding_status',
     cli: 'backlog embedding-status',

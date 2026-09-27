@@ -60,6 +60,7 @@ import type {
   NodeRecord,
 } from '@adhd/sox-graph-store';
 import { InvalidArgumentError } from '../../write/errors.js';
+import { BacklogValidationError } from '../../write/errors.js';
 import { isStatusTerminal } from '../card.js';
 import {
   resolveIssueByUid,
@@ -296,6 +297,69 @@ async function resolvePriorityMatrixStatusScope(
   };
 }
 
+/**
+ * An `IIssueFilter`'s placement/kind/status dimensions resolved to the
+ * concrete set of LIVE, non-superseded issue nodes they match — the exact
+ * scoping `priorityMatrix` counts over. See
+ * {@link resolveScopedLiveIssueNodes}.
+ */
+export interface IScopedLiveIssues {
+  nodes: NodeRecord[];
+  statusScope: NonNullable<IIssueFilter['status']>;
+}
+
+/**
+ * Resolve an `IIssueFilter`'s placement/kind/status dimensions to the concrete
+ * set of LIVE, non-superseded issue NODES they match — the exact scoping
+ * `priorityMatrix` (and, via it, `report`) counts over. Exported so `report`
+ * composes this ONE implementation rather than re-deriving it (ADR-0002).
+ *
+ * `nodes: []` (never `undefined`) when a placement dimension resolved to an
+ * empty set or the status scope matched nothing, so callers branch on one
+ * shape. `statusScope` always names the scope applied — `'open'` when the
+ * filter omitted `status`, mirroring `priorityMatrix`'s BUG-023 default.
+ */
+export async function resolveScopedLiveIssueNodes(
+  graph: GraphBackend,
+  filter: IIssueFilter | undefined
+): Promise<IScopedLiveIssues> {
+  const placementScope = await resolvePlacementScope(graph, filter);
+  const { candidates: statusScoped, scope: statusScope } =
+    await resolvePriorityMatrixStatusScope(graph, filter?.status);
+  const rawScoped = intersect(
+    [placementScope, statusScoped].filter(
+      (s): s is Set<number> => s !== undefined
+    )
+  );
+  if (
+    placementScope?.size === 0 ||
+    statusScoped?.size === 0 ||
+    rawScoped?.size === 0
+  ) {
+    return { nodes: [], statusScope };
+  }
+
+  // `placementScope`/`statusScoped` are both derived purely from EDGE
+  // existence (`owns_component`/`has_kind`/`has_status`), never from the
+  // candidate issue node's own liveness — and `deleteIssue` (write/delete.ts)
+  // invalidates ONLY the issue's node row, never its edges, so a soft-deleted
+  // issue's edges stay live forever. `query.ts`'s own `list` view never hits
+  // this trap because it always ends in one more `queryNodes({kind:'issue',
+  // ids:[...candidateIds]})` call, whose `liveOnly` default (true) is what
+  // actually filters a deleted issue out. Reproduce that exact final step
+  // here — never trust an edge-derived id as "a live issue" on its own — so a
+  // deleted issue is "neither open work nor closed work, it is gone" (the
+  // same principle `partOfRollup` applies via `!n.tInvalid`).
+  const nodes = await graph.queryNodes({
+    kind: 'issue',
+    liveOnly: true,
+    // Current rows only — see `queryList`'s `baseFilter` (query.ts).
+    isSuperseded: false,
+    ...(rawScoped ? { ids: [...rawScoped] } : {}),
+  } as NodeFilter);
+  return { nodes, statusScope };
+}
+
 /** SPEC.md §5's status-aware priority matrix (BUG-023). */
 export async function priorityMatrix(
   handle: IQueryStoreHandle,
@@ -308,47 +372,13 @@ export async function priorityMatrix(
     'priorityMatrix'
   );
 
-  const placementScope = await resolvePlacementScope(graph, input.filter);
-  if (placementScope?.size === 0) {
-    return {
-      rows: [],
-      unassigned: 0,
-      statusScope: input.filter?.status ?? 'open',
-    };
-  }
-
-  const { candidates: statusScoped, scope: statusScope } =
-    await resolvePriorityMatrixStatusScope(graph, input.filter?.status);
-  const rawScoped = intersect(
-    [placementScope, statusScoped].filter(
-      (s): s is Set<number> => s !== undefined
-    )
+  const { nodes: scopedNodes, statusScope } = await resolveScopedLiveIssueNodes(
+    graph,
+    input.filter
   );
-  if (rawScoped?.size === 0)
+  if (scopedNodes.length === 0)
     return { rows: [], unassigned: 0, statusScope };
-
-  // `placementScope`/`statusScoped` are both derived purely from EDGE
-  // existence (`owns_component`/`has_kind`/`has_status`), never from the
-  // candidate issue node's own liveness — and `deleteIssue` (write/delete.ts)
-  // invalidates ONLY the issue's node row, never its edges, so a soft-deleted
-  // issue's edges stay live forever. `query.ts`'s own `list` view never hits
-  // this trap because it always ends in one more `queryNodes({kind:'issue',
-  // ids:[...candidateIds]})` call, whose `liveOnly` default (true) is what
-  // actually filters a deleted issue out. Reproduce that exact final step
-  // here — never trust an edge-derived id as "a live issue" on its own — so a
-  // deleted issue is "neither open work nor closed work, it is gone" (the
-  // same principle `partOfRollup` above already applies via `!n.tInvalid`).
-  const scoped = new Set(
-    (
-      await graph.queryNodes({
-        kind: 'issue',
-        liveOnly: true,
-        // Current rows only — see `queryList`'s `baseFilter` (query.ts).
-        isSuperseded: false,
-        ...(rawScoped ? { ids: [...rawScoped] } : {}),
-      } as NodeFilter)
-    ).map((n) => n.id)
-  );
+  const scoped = new Set(scopedNodes.map((n) => n.id));
 
   const priorities = await graph.queryNodes({
     kind: 'priority',
@@ -399,6 +429,12 @@ export async function priorityMatrix(
 export interface IPartOfRollupInput {
   /** The root issue's `uid` (§6.1). Throws `IssueNotFoundError` if it does not resolve to a live issue. */
   uid: string;
+  /** Count-only mode: return the counts, omit the `childrenOpenUids` uid list entirely. */
+  countOnly?: boolean;
+  /** Max uids in `childrenOpenUids` when not count-only (default 50, max 1000). */
+  limit?: number;
+  /** Opaque cursor for the paged uid list — pass the previous page's `nextCursor`. */
+  after?: string;
 }
 
 export interface IPartOfRollupResult {
@@ -407,9 +443,17 @@ export interface IPartOfRollupResult {
   childrenTotal: number;
   childrenOpen: number;
   childrenClosed: number;
-  /** `uid`s of the still-open descendants — the actionable half, mirroring the `IIssueRef`-shaped convention `card.ts`'s `blockers`/`related` already use. */
-  childrenOpenUids: readonly string[];
+  /** `uid`s of the still-open descendants — the actionable half, mirroring the `IIssueRef`-shaped convention `card.ts`'s `blockers`/`related` already use. Absent in count-only mode, or present and bounded by `limit`. */
+  childrenOpenUids?: readonly string[];
+  /** Pass back as `after` for the next page; absent ⇒ no further open-descendant uids. */
+  nextCursor?: string;
+  /** True iff more open-descendant uids exist beyond this page. */
+  hasMore?: boolean;
 }
+
+/** Default/maximum uid-list page size for {@link partOfRollup}'s non-count-only mode. */
+export const DEFAULT_PART_OF_ROLLUP_LIMIT = 50;
+export const MAX_PART_OF_ROLLUP_LIMIT = 1000;
 
 /** Batch-resolve `has_status` targets for a set of already-fetched issue nodes — one `getEdges` per node (the same N-round-trip shape `card.ts`'s own unexported `resolveStatusesFor` uses; not importable from here, see this file's own doc comment), then one batched `getNodesByIds`. */
 async function resolveStatusesForNodes(
@@ -464,6 +508,20 @@ export async function partOfRollup(
   const { graph } = handle;
   const root = await resolveIssueByUid(graph, input.uid);
 
+  if (input.limit !== undefined) {
+    if (
+      !Number.isInteger(input.limit) ||
+      input.limit <= 0 ||
+      input.limit > MAX_PART_OF_ROLLUP_LIMIT
+    ) {
+      throw new BacklogValidationError(
+        'limit',
+        `must be a positive integer ≤ ${MAX_PART_OF_ROLLUP_LIMIT}, got ${input.limit}`
+      );
+    }
+  }
+  const limit = input.limit ?? DEFAULT_PART_OF_ROLLUP_LIMIT;
+
   const subgraph = await graph.getSubgraph(root.id, {
     rel: 'part_of',
     direction: 'in',
@@ -486,12 +544,34 @@ export async function partOfRollup(
     }
   }
 
-  return {
+  const counts = {
     uid: root.uid,
     childrenTotal: descendants.length,
     childrenOpen,
     childrenClosed,
-    childrenOpenUids,
+  };
+
+  // Count-only mode: the uid list is omitted ENTIRELY (never an empty array
+  // standing in for "not asked for") — the whole point of the mode is that the
+  // caller does not pay for, or receive, the uid materialization.
+  if (input.countOnly) return counts;
+
+  // Paged mode: `after` resumes strictly after the named uid; `limit` caps the
+  // page; `hasMore`/`nextCursor` describe whether a further page exists.
+  let remaining = childrenOpenUids;
+  if (input.after !== undefined) {
+    const idx = remaining.findIndex((u) => u === input.after);
+    if (idx >= 0) remaining = remaining.slice(idx + 1);
+  }
+  const page = remaining.slice(0, limit);
+  const hasMore = remaining.length > limit;
+  return {
+    ...counts,
+    childrenOpenUids: page,
+    hasMore,
+    ...(hasMore && page.length > 0
+      ? { nextCursor: page[page.length - 1] }
+      : {}),
   };
 }
 
