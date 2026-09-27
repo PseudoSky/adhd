@@ -94,7 +94,12 @@ import {
   resolveProjectPolicy,
 } from './catalog.js';
 import { writeAudit } from './audit.js';
-import { isMissingPathError, resolveCitationTarget } from './citation-path.js';
+import {
+  isMissingPathError,
+  resolveCitationTarget,
+  resolveSiblingProjectRootsTx,
+  toolOwnedCitationRoots,
+} from './citation-path.js';
 import {
   CitationRequiredError,
   CitationUnverifiableError,
@@ -245,7 +250,8 @@ async function resolveIssueProjectTx(
 async function computeCitationSha(
   project: IResolvedProjectRow,
   file: string,
-  allowedExternalRoots: readonly string[]
+  allowedExternalRoots: readonly string[],
+  siblingRoots: readonly string[] = []
 ): Promise<string> {
   if (!projectHasKnownPath(project)) return 'unverified';
 
@@ -253,7 +259,11 @@ async function computeCitationSha(
     const { accepted, candidate } = await resolveCitationTarget(
       project.metadata.path,
       file,
-      allowedExternalRoots
+      [
+        ...allowedExternalRoots,
+        ...toolOwnedCitationRoots(),
+        ...siblingRoots,
+      ]
     );
     if (!accepted) return 'unverified';
 
@@ -363,11 +373,18 @@ export async function transition(
       preIssueRow.rowid
     );
     const prePolicy = resolveProjectPolicy(preProject);
+    // Sibling registered projects contribute their own roots (AC4): a
+    // cross-repo citation verifies against the project that owns the file.
+    const preSiblingRoots = await resolveSiblingProjectRootsTx(
+      handle.adapter,
+      preProject.uid
+    );
     for (const citation of citations) {
       const sha = await computeCitationSha(
         preProject,
         citation.file,
-        prePolicy.citationAllowedExternalRoots
+        prePolicy.citationAllowedExternalRoots,
+        preSiblingRoots
       );
       // Same contract as `create-issue.ts`'s identical gate: enforce
       // `citationRequiresSha` only where verification is POSSIBLE (a project

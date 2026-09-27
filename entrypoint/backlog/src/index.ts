@@ -35,6 +35,8 @@ export {
   create,
   update,
   transition,
+  attest,
+  recheck,
   claim,
   relate,
   move,
@@ -52,6 +54,17 @@ export type {
   IMergeProjectOutcome,
   IRmProjectInput,
 } from './write/merge-project.js';
+export type {
+  IAttestInput,
+  IAttestOutcome,
+  IAttestClaim,
+  IAttestCheck,
+  IAttestationAnchor,
+  AttestRevisionRef,
+  AttestationCheckState,
+  IRecheckInput,
+  IRecheckOutcome,
+} from './write/attestation.js';
 
 // The response envelope every verb returns, plus its closed error-code union
 // and the exit codes a CLI host keys off.

@@ -35,7 +35,7 @@ import {
   isUniqueConstraintError,
 } from '@adhd/sox-store-adapter';
 import { log } from '@adhd/sox-telemetry';
-import { displayExternalRoot } from './citation-path.js';
+import { displayExternalRoot, toolOwnedCitationRoots } from './citation-path.js';
 
 /** The closed code union every {@link IWriteError} carries (SPEC.md §4c). */
 export type WriteErrorCode =
@@ -496,9 +496,17 @@ export class CitationUnverifiableError extends BacklogWriteError {
       allowedExternalRoots.length === 0
         ? 'project_policy.citationAllowedExternalRoots is empty'
         : 'project_policy.citationAllowedExternalRoots';
+    // The tool-owned roots are always accepted (C3), so a rejection that
+    // omits them is not actionable — append them to the diagnostic. Appended,
+    // never substituted: the existing prefix (and every assertion on it) is
+    // byte-for-byte preserved.
+    const toolRoots = toolOwnedCitationRoots()
+      .map(displayExternalRoot)
+      .join(', ');
     super(
       `Citation target "${target}" could not be verified and this project requires a real sha — ` +
-        `accepted only under: ${roots} (${policyNote})`
+        `accepted only under: ${roots} (${policyNote}). ` +
+        `Tool-owned roots are always accepted: ${toolRoots}`
     );
   }
 }

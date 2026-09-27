@@ -17,6 +17,7 @@
  * either verb's own returned outcome object (mirrors `move.spec.ts`'s
  * `countLiveOwnsComponentEdges` discipline for the same edge kind).
  */
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -29,6 +30,7 @@ import { freshTmpDir } from '../test/helpers/tmp-store.js';
 import { createIssue, MAX_GIT_CONTEXT_LENGTH } from './create-issue.js';
 import { upsertProject } from './catalog.js';
 import { CitationUnverifiableError, InvalidArgumentError } from './errors.js';
+import { resolveCitationTarget } from './citation-path.js';
 import { getNodeByUidTx, type ITxNodeRow } from './tx.js';
 import { queryIssues } from '../query/query.js';
 
@@ -787,5 +789,136 @@ describe('createIssue — item-level gitContext disclosure provenance (SPEC.md �
       by: 'filer',
     });
     expect(atCap.created).toBe(true);
+  });
+});
+
+describe('C3 — tool-owned and sibling-repo citation roots (AC3/AC4)', () => {
+  let dir: string;
+  let store: TestIssueStore;
+  let originalHome: string | undefined;
+
+  beforeEach(async () => {
+    dir = freshTmpDir('c3-citation-roots');
+    store = await openTestIssueStore(join(dir, 'backlog.db'));
+  });
+
+  afterEach(async () => {
+    if (originalHome === undefined) delete process.env.HOME;
+    else process.env.HOME = originalHome;
+    await store.close();
+    removeTestIssueStoreDir(dir);
+  });
+
+  async function citationShaFor(issueUid: string): Promise<unknown> {
+    const issue = await store.adapter.transaction((tx) =>
+      getNodeByUidTx(tx, issueUid)
+    );
+    if (!issue) throw new Error('fixture: issue not found');
+    const { rows } = await store.adapter.executeAll<{ dst: number }>(
+      `SELECT dst FROM edge WHERE src = ? AND rel = 'has_citation' AND t_invalid IS NULL`,
+      [issue.rowid]
+    );
+    const dst = rows[0]?.dst;
+    if (dst === undefined) throw new Error('fixture: no live citation edge');
+    const citationRow = await store.adapter.executeGet<{ uid: string }>(
+      'SELECT uid FROM node WHERE rowid = ?',
+      [dst]
+    );
+    if (!citationRow) throw new Error('fixture: citation node not found');
+    const node = await store.adapter.transaction((tx) =>
+      getNodeByUidTx(tx, citationRow.uid)
+    );
+    return node?.metadata?.['sha'];
+  }
+
+  it('AC3 — the tool-owned skill root is citable by default (a real sha, never `unverified`)', async () => {
+    const fakeHome = freshTmpDir('c3-ac3-home');
+    originalHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+    try {
+      const skillDir = join(fakeHome, '.claude', 'skills', 'backlog');
+      mkdirSync(skillDir, { recursive: true });
+      const content = '# backlog skill\n';
+      const skillFile = join(skillDir, 'SKILL.md');
+      writeFileSync(skillFile, content);
+
+      const project = await upsertProject(store, {
+        name: 'c3-ac3-project',
+        path: dir,
+        by: 'filer',
+      });
+      const created = await createIssue(store, {
+        project: project.uid,
+        title: 'tool-root citation',
+        body: 'cites the tool\'s own installed skill doc',
+        by: 'filer',
+        citations: [{ file: skillFile }],
+      });
+      expect(created.created).toBe(true);
+      if (created.uid === undefined) throw new Error('createIssue returned no uid');
+      const sha = await citationShaFor(created.uid);
+      expect(sha).toBe(createHash('sha256').update(content).digest('hex'));
+      expect(sha).not.toBe('unverified');
+    } finally {
+      removeTestIssueStoreDir(fakeHome);
+    }
+  });
+
+  it('AC3 NEGATIVE CONTROL (direct) — with only the project root, the tool-skill target is rejected by resolveCitationTarget', async () => {
+    const fakeHome = freshTmpDir('c3-ac3-neg-home');
+    const skillDir = join(fakeHome, '.claude', 'skills', 'backlog');
+    mkdirSync(skillDir, { recursive: true });
+    const skillFile = join(skillDir, 'SKILL.md');
+    writeFileSync(skillFile, '# skill\n');
+    try {
+      const r = await resolveCitationTarget(dir, skillFile, []);
+      expect(r.accepted).toBe(false);
+    } finally {
+      removeTestIssueStoreDir(fakeHome);
+    }
+  });
+
+  it('AC4 — a citation into a SIBLING registered project verifies against that project\'s own root', async () => {
+    const dirA = join(dir, 'a');
+    const dirB = join(dir, 'b');
+    mkdirSync(dirA, { recursive: true });
+    mkdirSync(dirB, { recursive: true });
+    const content = 'sibling evidence\n';
+    const fileB = join(dirB, 'evidence.txt');
+    writeFileSync(fileB, content);
+
+    const projectA = await upsertProject(store, {
+      name: 'c3-ac4-a',
+      path: dirA,
+      by: 'filer',
+    });
+    await upsertProject(store, {
+      name: 'c3-ac4-b',
+      path: dirB,
+      by: 'filer',
+    });
+
+    const created = await createIssue(store, {
+      project: projectA.uid,
+      title: 'cross-repo citation',
+      body: 'cites a file owned by a sibling project',
+      by: 'filer',
+      citations: [{ file: fileB }],
+    });
+    expect(created.created).toBe(true);
+    if (created.uid === undefined) throw new Error('createIssue returned no uid');
+    const sha = await citationShaFor(created.uid);
+    expect(sha).toBe(createHash('sha256').update(content).digest('hex'));
+    expect(sha).not.toBe('unverified');
+  });
+
+  it('AC4 NEGATIVE CONTROL (direct) — without sibling roots, the cross-project target is rejected', async () => {
+    const dirA = join(dir, 'a2');
+    const dirB = join(dir, 'b2');
+    mkdirSync(dirA, { recursive: true });
+    mkdirSync(dirB, { recursive: true });
+    writeFileSync(join(dirB, 'e.txt'), 'x');
+    const r = await resolveCitationTarget(dirA, join(dirB, 'e.txt'), []);
+    expect(r.accepted).toBe(false);
   });
 });

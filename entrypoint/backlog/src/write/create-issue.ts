@@ -36,7 +36,12 @@ import {
   resolveProjectTx,
 } from './catalog.js';
 import { writeAudit } from './audit.js';
-import { isMissingPathError, resolveCitationTarget } from './citation-path.js';
+import {
+  isMissingPathError,
+  resolveCitationTarget,
+  resolveSiblingProjectRootsTx,
+  toolOwnedCitationRoots,
+} from './citation-path.js';
 import {
   composeEmbedText,
   scheduleIssueEmbedding,
@@ -466,7 +471,8 @@ export function assertGitContextWithinCap(value: string | undefined): void {
 async function computeCitationSha(
   project: IResolvedProjectRow,
   file: string,
-  allowedExternalRoots: readonly string[]
+  allowedExternalRoots: readonly string[],
+  siblingRoots: readonly string[] = []
 ): Promise<string> {
   if (!projectHasKnownPath(project)) return 'unverified';
 
@@ -474,7 +480,11 @@ async function computeCitationSha(
     const { accepted, candidate } = await resolveCitationTarget(
       project.metadata.path,
       file,
-      allowedExternalRoots
+      [
+        ...allowedExternalRoots,
+        ...toolOwnedCitationRoots(),
+        ...siblingRoots,
+      ]
     );
     if (!accepted) return 'unverified';
 
@@ -964,6 +974,13 @@ export async function createIssue(
     input.project
   );
   const preResolvedPolicy = resolveProjectPolicy(preResolvedProject);
+  // Sibling registered projects contribute their own roots so a cross-repo
+  // citation is probed against the project that owns the file (AC4), never
+  // falsely `unverified`.
+  const preSiblingRoots = await resolveSiblingProjectRootsTx(
+    handle.adapter,
+    preResolvedProject.uid
+  );
   const citationShas: string[] = [];
   // The `citationRequiresSha` gate applies only where verification is
   // POSSIBLE: a project with a known `path`. A path-less project can never
@@ -980,7 +997,8 @@ export async function createIssue(
     const sha = await computeCitationSha(
       preResolvedProject,
       citation.file,
-      preResolvedPolicy.citationAllowedExternalRoots
+      preResolvedPolicy.citationAllowedExternalRoots,
+      preSiblingRoots
     );
     if (sha === 'unverified' && preResolvedPolicy.citationRequiresSha) {
       if (projectHasKnownPath(preResolvedProject)) {

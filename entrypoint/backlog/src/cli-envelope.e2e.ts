@@ -29,7 +29,7 @@
  *
  * ## What is no longer testable here
  *
- * The application layer's mounted surface is exactly the 21 verbs `api.ts`
+ * The application layer's mounted surface is exactly the 23 verbs `api.ts`
  * exports (`get, query, priorityMatrix, partOfRollup, openCurve, report,
  * embeddingStatus, lookup, create, update, transition, claim, relate, move,
  * upsertProject, upsertComponent, upsertLocation, rmLocation, mergeProject,

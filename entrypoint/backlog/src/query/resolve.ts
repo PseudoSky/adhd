@@ -208,6 +208,22 @@ export async function resolveLogicalIssue(
 }
 
 /**
+ * Normalise any issue uid (possibly superseded) to its SUPERSEDES-chain HEAD
+ * uid. Returns the input unchanged for an already-live uid.
+ *
+ * ONE concept, ONE implementation: this delegates to {@link resolveLogicalIssue}
+ * (which returns the head `NodeRecord`) — it is NOT a second chain walk
+ * (ADR-0002). Used by C3's attestation read path so an attestation filed
+ * against a uid a later body edit superseded still names the SAME logical item.
+ */
+export async function resolveLogicalIssueId(
+  graph: GraphBackend,
+  uid: string
+): Promise<string> {
+  return (await resolveLogicalIssue(graph, uid)).uid;
+}
+
+/**
  * Walk the `SUPERSEDES` chain forward from a superseded node to the uid the
  * issue lives under NOW.
  *

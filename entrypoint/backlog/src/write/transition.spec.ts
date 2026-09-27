@@ -11,8 +11,9 @@
  * `project_policy`. Citation verification is proven against a REAL file on
  * disk (a real sha256, never a stubbed one) alongside the unverifiable case.
  */
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   openTestIssueStore,
@@ -25,6 +26,7 @@ import { createIssue, MAX_GIT_CONTEXT_LENGTH } from './create-issue.js';
 import { update } from './update.js';
 import { transition } from './transition.js';
 import { claim } from './claim.js';
+import { upsertProject } from './catalog.js';
 import { queryIssues } from '../query/query.js';
 import {
   CatalogNotFoundError,
@@ -772,5 +774,69 @@ describe('transition — status change (SPEC.md §6.3.4, real store)', () => {
       });
       expect(outcome.toStatus).toBe('in-progress');
     });
+  });
+});
+
+describe('C3 — transition citation into a sibling registered project root (post-fix AC4)', () => {
+  let dir: string;
+  let store: TestIssueStore;
+  let issueUid: string;
+
+  beforeEach(async () => {
+    dir = freshTmpDir('c3-transition-citation');
+    store = await openTestIssueStore(join(dir, 'backlog.db'));
+    const dirA = join(dir, 'a');
+    const dirB = join(dir, 'b');
+    mkdirSync(dirA, { recursive: true });
+    mkdirSync(dirB, { recursive: true });
+    writeFileSync(join(dirB, 'e.txt'), 'sibling evidence');
+    const projectA = await upsertProject(store, {
+      name: 'c3-tr-a',
+      path: dirA,
+      by: 'filer',
+    });
+    await upsertProject(store, {
+      name: 'c3-tr-b',
+      path: dirB,
+      by: 'filer',
+    });
+    const created = await createIssue(store, {
+      project: projectA.uid,
+      title: 'transition sibling citation',
+      body: 'body',
+      by: 'filer',
+    });
+    if (created.uid === undefined) throw new Error('createIssue returned no uid');
+    issueUid = created.uid;
+  });
+
+  afterEach(async () => {
+    await store.close();
+    removeTestIssueStoreDir(dir);
+  });
+
+  it('verifies a citation into sibling project B (a real sha), never a false CitationUnverifiableError', async () => {
+    const out = await transition(store, {
+      uid: issueUid,
+      by: 'closer:1',
+      toStatus: 'in-progress',
+      note: 'starting work',
+      citations: [{ file: join(dir, 'b', 'e.txt') }],
+    });
+    expect(out.toStatus).toBe('in-progress');
+
+    const issue = await readNode(store, issueUid);
+    const { rows } = await store.adapter.executeAll<{ dst: number }>(
+      "SELECT dst FROM edge WHERE src = ? AND rel = 'has_citation' AND t_invalid IS NULL",
+      [issue!.rowid]
+    );
+    const citationUid = await store.adapter.executeGet<{ uid: string }>(
+      'SELECT uid FROM node WHERE rowid = ?',
+      [rows[0]!.dst]
+    );
+    const citation = await readNode(store, citationUid!.uid);
+    expect(citation?.metadata?.['sha']).toBe(
+      createHash('sha256').update('sibling evidence').digest('hex')
+    );
   });
 });

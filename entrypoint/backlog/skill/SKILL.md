@@ -30,7 +30,7 @@ or after the one that mounted them. Compare the `backlog create` and `backlog
 priority-matrix` lines of `adhd-backlog --help` with §1 before relying on a
 field.
 
-## 1. Command surface — 21 verbs (plus `batch`), one calling convention
+## 1. Command surface — 23 verbs (plus `batch`), one calling convention
 
 **Every verb takes a single `--input` flag carrying one JSON object.** There
 are no per-field flags.
@@ -52,6 +52,8 @@ adhd-backlog backlog lookup             --input '{"q": "<tool, file path, URL, u
 adhd-backlog backlog create             --input '<ICreateIssueInput json>'
 adhd-backlog backlog update             --input '<IUpdateIssueInput json>'
 adhd-backlog backlog transition         --input '<ITransitionInput json>'
+adhd-backlog backlog attest             --input '<IAttestInput json>'
+adhd-backlog backlog recheck            --input '<IRecheckInput json>'
 adhd-backlog backlog claim              --input '<IClaimInput json>'
 adhd-backlog backlog relate             --input '<IRelateInput json>'
 adhd-backlog backlog move               --input '<IMoveIssueInput json>'
@@ -94,6 +96,8 @@ Available commands:
   backlog rm-location  { input: { uid: string, by: string, reason?: string } }
   backlog rm-project  { input: { uid: string, reason: string, by: string } }
   backlog transition  { input: { uid: string, by: string, toStatus: string, note?: string, citations?: object[], gitContext?: string } }
+  backlog attest  { input: { subject: { id: string, revision: number|string }, claim: { kind: string, body?: string }, anchor: { locator: string, digest: string }, by: string } }
+  backlog recheck  { input: { attestationUid: string, by: string } }
   backlog update  { input: { uid: string, by: string, title?: string, body?: string, kind?: string, priority?: string, assignee?: string, author?: string, awaitEmbed?: boolean } }
   backlog upsert-component  { input: { project: string, name: string, path?: string, description?: string, by: string } }
   backlog upsert-location  { input: { component: string, project?: string, locType: 'path'|'url'|'tool', value: string, by: string } }
@@ -206,7 +210,7 @@ Each verb is also an MCP tool once `.mcp.json` wires the server, named
 `backlog_<verb>` with the verb's own words snake_cased: `backlog_get`,
 `backlog_query`, `backlog_priority_matrix`, `backlog_part_of_rollup`,
 `backlog_open_curve`, `backlog_lookup`, `backlog_create`, `backlog_update`,
-`backlog_transition`, `backlog_claim`, `backlog_relate`, `backlog_move`,
+`backlog_transition`, `backlog_attest`, `backlog_recheck`, `backlog_claim`, `backlog_relate`, `backlog_move`,
 `backlog_upsert_project`, `backlog_upsert_component`,
 `backlog_upsert_location`, `backlog_rm_location`, `backlog_merge_project`,
 `backlog_rm_project`, `backlog_embedding_status`, `backlog_delete`, plus the
@@ -401,6 +405,21 @@ pointing at it remain readable:
 ```
 $ adhd-backlog backlog delete --input '{"uid":"777c5e33-…","reason":"duplicate of tracked work","by":"claude:1"}'
 {"ok":true,"data":{"uid":"777c5e33-…","invalidated":true}}
+```
+
+**Attest anchored evidence.** `attest` creates a SEPARATE `attestation` node
+keyed to an issue — it never changes the issue's `uid` or revision. The anchor
+is a `locator` (`path:<file>[:<line>]`, `url:<url>`, `query:<cql>`,
+`registry:<ref>`) plus a `digest`; a `path:` anchor is checked against the
+project's git tree by a cheap-first ladder and its `check.state` is one of
+`verified` / `stale` / `unknown` / `unverified` (always present, with a
+`reason`). `recheck` APPENDS a fresh check to the record's `checks[]` history:
+
+```
+$ adhd-backlog backlog attest --input '{"subject":{"id":"777c5e33-…","revision":0},"claim":{"kind":"published-artifact"},"anchor":{"locator":"path:dist/index.js","digest":"<sha256>"},"by":"claude:1"}'
+{"ok":true,"data":{"attestationUid":"…","subject":{"id":"777c5e33-…","revision":0},"check":{"state":"verified","method":"changed_since","checked_at":"…","checked_by":"claude:1"}}}
+$ adhd-backlog backlog recheck --input '{"attestationUid":"<attestationUid>","by":"claude:1"}'
+{"ok":true,"data":{"attestationUid":"…","checks":[{"state":"verified",…},{"state":"stale",…}]}}
 ```
 
 ## 4. Registry — project / component / location

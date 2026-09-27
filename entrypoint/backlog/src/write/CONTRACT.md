@@ -856,7 +856,7 @@ The message names the allowed external roots (`~`-anchored) and the
 rejection is actionable; with an empty allowlist (the default, or an explicit
 `[]`) it instead names the project root and says the policy array is empty.
 
-### `CitationTargetIsDirectoryError` — class (`errors.ts:516`)
+### `CitationTargetIsDirectoryError` — class (`errors.ts:524`)
 
 ```ts
 export class CitationTargetIsDirectoryError extends BacklogWriteError {
@@ -872,7 +872,7 @@ has no content to hash, so the payload can never succeed as-is; nothing is
 written. The mapping from a citation read error to this class or to
 `WriteIOError` lives in `errors.ts`'s `citationReadError` (56a2133e).
 
-### `NoteRequiredError` — class (`errors.ts:546`)
+### `NoteRequiredError` — class (`errors.ts:554`)
 
 ```ts
 export class NoteRequiredError extends BacklogWriteError {
@@ -885,7 +885,7 @@ export class NoteRequiredError extends BacklogWriteError {
 Guarantees: thrown by `transition` when `project_policy.transitionRequiresNote`
 (default `true`) is set and no `note` was given.
 
-### `CitationRequiredError` — class (`errors.ts:558`)
+### `CitationRequiredError` — class (`errors.ts:566`)
 
 ```ts
 export class CitationRequiredError extends BacklogWriteError {
@@ -899,7 +899,7 @@ Guarantees: thrown by `transition` when `project_policy.citationRequired`
 (default `false`) is set, the target status is terminal, and no citation was
 given.
 
-### `BacklogValidationError` — class (`errors.ts:581`)
+### `BacklogValidationError` — class (`errors.ts:589`)
 
 ```ts
 export class BacklogValidationError extends BacklogWriteError {
@@ -914,7 +914,7 @@ or an out-of-range/non-integral `limit`) — deliberately the SAME
 `E_VALIDATION`-class member of this same error union, not a parallel one, so
 a `query`/`get` caller catches it identically to any write-verb error.
 
-### `AnchorLocatorInvalidError` — class (`errors.ts:596`)
+### `AnchorLocatorInvalidError` — class (`errors.ts:604`)
 
 ```ts
 export class AnchorLocatorInvalidError extends BacklogWriteError {
@@ -929,7 +929,7 @@ Guarantees: a supplied anchor locator is outside the closed grammar
 is a bare `path:line` with no `digest`. A caller-input mistake — `E_VALIDATION`,
 never retryable; nothing is written.
 
-### `AttestationNotFoundError` — class (`errors.ts:615`)
+### `AttestationNotFoundError` — class (`errors.ts:623`)
 
 ```ts
 export class AttestationNotFoundError extends BacklogWriteError {
@@ -944,7 +944,7 @@ node. Distinct from `IssueNotFoundError` (an `issue` uid) and
 `CatalogNotFoundError`, so a caller can branch on the missing record kind;
 `E_VALIDATION`, never retryable.
 
-### `classifyDriverError(err)` — function (`errors.ts:661`)
+### `classifyDriverError(err)` — function (`errors.ts:669`)
 
 ```ts
 export function classifyDriverError(err: unknown): IWriteError;

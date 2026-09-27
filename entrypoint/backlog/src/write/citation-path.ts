@@ -199,3 +199,72 @@ export async function resolveCitationTarget(
   );
   return { accepted, candidate: canonicalCandidate };
 }
+
+/**
+ * The TOOL's OWN installed evidence roots — where this package installs its
+ * skill (`install-skill.ts`'s host table: `.claude/skills/backlog`,
+ * `$CODEX_HOME/skills/backlog`, `~/.config/opencode/skills/backlog`).
+ *
+ * These are citable by DEFAULT, and deliberately NARROWER than the
+ * machine-global `~/.adhd/backlog` store home this module's header rejects:
+ * they grant only the tool's own installed docs (a stable, versioned,
+ * human-authored evidence tree), never the store. Typed and always-on, so a
+ * project does not have to allowlist the tool it is using in order to cite
+ * the tool's own documentation.
+ *
+ * `home` is injectable for tests; it defaults to the real home directory.
+ */
+export function toolOwnedCitationRoots(home?: string): string[] {
+  const h = home ?? homedir();
+  // Mirrors `install-skill.ts`'s `hostSkillsDir('…','user', …)` resolution
+  // exactly, including its `$CODEX_HOME` override — inlined rather than
+  // imported so this module (which `errors.ts` imports) never pulls the
+  // installer's `node:fs`/`node:url` graph in for three path joins.
+  return [
+    join(h, '.claude', 'skills', 'backlog'),
+    join(process.env['CODEX_HOME'] ?? join(h, '.codex'), 'skills', 'backlog'),
+    join(h, '.config', 'opencode', 'skills', 'backlog'),
+  ];
+}
+
+/** The minimal read-only executor {@link resolveSiblingProjectRootsTx} needs — satisfied structurally by `AdapterTransaction` and the bare `StoreAdapter`. */
+export interface ISiblingRootExecutor {
+  executeAll<T = Record<string, unknown>>(
+    sql: string,
+    args?: unknown[]
+  ): Promise<{ rows: T[] }>;
+}
+
+/**
+ * The `metadata.path` of every LIVE `project` row EXCEPT `excludeProjectUid`.
+ *
+ * A citation into a *sibling registered project* must be probed against that
+ * project's OWN root, not the citing item's — otherwise a legitimate
+ * cross-repo citation falsely resolves to `unverified` and the write is
+ * refused (AC4). Path-less sibling projects contribute nothing (there is no
+ * root to check against).
+ */
+export async function resolveSiblingProjectRootsTx(
+  exec: ISiblingRootExecutor,
+  excludeProjectUid: string
+): Promise<string[]> {
+  const { rows } = await exec.executeAll<{
+    uid: string;
+    meta: string | null;
+  }>("SELECT uid, meta FROM node WHERE kind = 'project' AND t_invalid IS NULL");
+  const roots: string[] = [];
+  for (const row of rows) {
+    if (row.uid === excludeProjectUid) continue;
+    if (row.meta === null) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(row.meta);
+    } catch {
+      continue;
+    }
+    if (parsed === null || typeof parsed !== 'object') continue;
+    const path = (parsed as Record<string, unknown>)['path'];
+    if (typeof path === 'string' && path.length > 0) roots.push(path);
+  }
+  return roots;
+}

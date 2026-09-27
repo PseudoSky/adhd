@@ -68,6 +68,8 @@ import {
 import {
   BacklogWriteError,
   AmbiguousReferenceError,
+  AnchorLocatorInvalidError,
+  AttestationNotFoundError,
   CatalogNotFoundError,
   CitationRequiredError,
   CitationUnverifiableError,
@@ -126,6 +128,13 @@ import {
   upsertLocation as upsertLocationOp,
   rmLocation as rmLocationOp,
 } from './write/catalog.js';
+import { attest as attestOp, recheck as recheckOp } from './write/attestation.js';
+import type {
+  IAttestInput,
+  IAttestOutcome,
+  IRecheckInput,
+  IRecheckOutcome,
+} from './write/attestation.js';
 
 import type {
   IIssueGetInput,
@@ -405,9 +414,11 @@ const ERROR_CLASS_TO_ENVELOPE_CODE: ReadonlyArray<
   readonly [new (...args: never[]) => Error, BacklogErrorCode]
 > = [
   [IssueNotFoundError, 'item_not_found'],
+  [AttestationNotFoundError, 'item_not_found'],
   [AmbiguousReferenceError, 'ambiguous_reference'],
   [CatalogNotFoundError, 'not_found'],
   [InvalidArgumentError, 'invalid_argument'],
+  [AnchorLocatorInvalidError, 'invalid_argument'],
   [ClaimHeldError, 'conflict'],
   [SingleValuedRelationConflictError, 'conflict'],
   [StaleSupersedeError, 'conflict'],
@@ -765,6 +776,33 @@ export async function transition(
 ): Promise<IOutcomeEnvelope<ITransitionOutcome>> {
   return envelope(async () =>
     transitionIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
+}
+
+/**
+ * Create a first-class attestation — a separate record keyed to an issue by
+ * `{id, revision}`, never written into the issue. The subject's `uid` and
+ * revision are unchanged.
+ */
+export async function attest(
+  ctx: BacklogCtx,
+  input: IAttestInput
+): Promise<IOutcomeEnvelope<IAttestOutcome>> {
+  return envelope(async () =>
+    attestOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
+}
+
+/**
+ * Re-run an attestation's anchor ladder and APPEND the new check to its
+ * append-only `checks[]` history (never overwriting earlier checks).
+ */
+export async function recheck(
+  ctx: BacklogCtx,
+  input: IRecheckInput
+): Promise<IOutcomeEnvelope<IRecheckOutcome>> {
+  return envelope(async () =>
+    recheckOp(await writeHandle(ctx, { needsSemantic: false }), input)
   );
 }
 
