@@ -34,7 +34,7 @@ Special commands (handled before the apigen command table):
 Available commands:
 
   backlog claim  { input: { uid: string, by: string, action: enum, force?: boolean } }
-  backlog create  { input: { title: string, body: string, project: string, component?: string, kind?: string, status?: string, priority?: string, citations?: object[], author?: string, assignee?: string, by: string, duplicateAction?: enum, awaitEmbed?: boolean } }
+  backlog create  { input: { title: string, body: string, project: string, component?: string, kind?: string, status?: string, priority?: string, citations?: object[], author?: string, assignee?: string, dedupeExcludeUid?: string, by: string, duplicateAction?: enum, awaitEmbed?: boolean } }
   backlog delete  { input: { uid: string, reason: string, by: string, awaitEmbed?: boolean } }
   backlog get  { input: union }
   backlog lookup  { input: { q: string } }

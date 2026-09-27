@@ -68,7 +68,7 @@ $ adhd-backlog --help
 Available commands:
 
   backlog claim  { input: { uid: string, by: string, action: 'claim'|'release'|'renew', force?: boolean } }
-  backlog create  { input: { title: string, body: string, project: string, component?: string, kind?: string, status?: string, priority?: string, citations?: object[], author?: string, assignee?: string, gitContext?: string, by: string, duplicateAction?: 'abort'|'force'|'comment', awaitEmbed?: boolean } }
+  backlog create  { input: { title: string, body: string, project: string, component?: string, kind?: string, status?: string, priority?: string, citations?: object[], author?: string, assignee?: string, gitContext?: string, dedupeExcludeUid?: string, by: string, duplicateAction?: 'abort'|'force'|'comment', awaitEmbed?: boolean } }
   backlog delete  { input: { uid: string, reason: string, by: string, awaitEmbed?: boolean } }
   backlog get  { input: { uid: string, fields?: union[] } | { registry: 'project'|'component'|'location', name: string, filter?: object } }
   backlog lookup  { input: { q: string } }

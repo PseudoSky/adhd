@@ -704,22 +704,22 @@ describe('createIssue — degraded scan fails `abort` CLOSED (BUG 4e8fce2a)', ()
 
 /**
  * Defect c5460239 — a child filed under a declared parent must not be
- * suppressed as a duplicate OF that parent. `ICreateIssueInput.partOf` is a
+ * suppressed as a duplicate OF that parent. `ICreateIssueInput.dedupeExcludeUid` is a
  * read-side dedupe-scoping declaration only (it never writes a `part_of`
  * edge); the scan excludes the declared parent AND its `part_of` ancestor
  * chain from the candidate set.
  *
  * **The writer's negative control.** The whole point is that the exclusion is
  * what changes the outcome: the SAME byte-identical child text the parent
- * carries is SUPPRESSED with `partOf` omitted, and CREATED with `partOf`
- * naming the parent. Removing `resolvePartOfExclusionIds` from the scan (or
- * its call site) turns the `partOf`-create assertions RED while leaving the
- * no-`partOf` suppression green — which is why both are asserted here, in one
+ * carries is SUPPRESSED with `dedupeExcludeUid` omitted, and CREATED with `dedupeExcludeUid`
+ * naming the parent. Removing `resolveDedupeExcludeIds` from the scan (or
+ * its call site) turns the `dedupeExcludeUid`-create assertions RED while leaving the
+ * no-`dedupeExcludeUid` suppression green — which is why both are asserted here, in one
  * test, against the real store and the real scan.
  */
 describe('createIssue — declared parent + ancestry excluded from the dedupe scan (c5460239)', () => {
   it(
-    'a child restating its declared parent WITH `partOf` creates; the SAME text WITHOUT `partOf` is suppressed (the exclusion is what changed)',
+    'a child restating its declared parent WITH `dedupeExcludeUid` creates; the SAME text WITHOUT `dedupeExcludeUid` is suppressed (the exclusion is what changed)',
     async () => {
       const title = 'parent intent, restated verbatim by its child';
       const body =
@@ -727,7 +727,7 @@ describe('createIssue — declared parent + ancestry excluded from the dedupe sc
       const parent = await file(handle, projectUid, title, body, 'filer');
       assertCreated(parent);
 
-      // WITHOUT `partOf`: a genuine duplicate of the parent (cosine 1.0) — the
+      // WITHOUT `dedupeExcludeUid`: a genuine duplicate of the parent (cosine 1.0) — the
       // pre-fix behavior, and the premise the fix must beat.
       const suppressed = await file(handle, projectUid, title, body, 'filer');
       expect(suppressed.created).toBe(false);
@@ -735,11 +735,11 @@ describe('createIssue — declared parent + ancestry excluded from the dedupe sc
       expect(suppressed.duplicateCandidates?.[0]?.uid).toBe(parent.uid);
       const issuesAfterSuppression = await countIssueNodes(store, projectUid);
 
-      // WITH `partOf` = the parent: the parent is excluded from the candidate
+      // WITH `dedupeExcludeUid` = the parent: the parent is excluded from the candidate
       // set, so the child creates — and no `duplicateCandidates` are reported
       // (the project had no other issue to compare against).
       const child = await file(handle, projectUid, title, body, 'filer', {
-        partOf: parent.uid,
+        dedupeExcludeUid: parent.uid,
       });
       assertCreated(child);
       expect(child.uid).not.toBe(parent.uid);
@@ -768,7 +768,7 @@ describe('createIssue — declared parent + ancestry excluded from the dedupe sc
 
       // The parent carries DISTINCT text (so it is not itself a duplicate of
       // the grandparent) and is linked to it by a real `part_of` edge —
-      // written by `relate`, never by `createIssue` (see the `partOf` field's
+      // written by `relate`, never by `createIssue` (see the `dedupeExcludeUid` field's
       // own doc comment).
       const parent = await file(
         handle,
@@ -776,7 +776,7 @@ describe('createIssue — declared parent + ancestry excluded from the dedupe sc
         'parent intent, distinct from the grandparent',
         'parent body, distinct from the grandparent, long enough to fts-match strongly',
         'filer',
-        { partOf: grandparent.uid }
+        { dedupeExcludeUid: grandparent.uid }
       );
       assertCreated(parent);
       const linked = await relate(handle, {
@@ -793,7 +793,7 @@ describe('createIssue — declared parent + ancestry excluded from the dedupe sc
       // exclusion. With the chain excluded the child creates; drop the
       // ancestor walk and the grandparent (cosine 1.0) suppresses it.
       const child = await file(handle, projectUid, gTitle, gBody, 'filer', {
-        partOf: parent.uid,
+        dedupeExcludeUid: parent.uid,
       });
       assertCreated(child);
       expect(child.duplicateCandidates).toBeUndefined();
@@ -802,7 +802,7 @@ describe('createIssue — declared parent + ancestry excluded from the dedupe sc
   );
 
   it(
-    'a `partOf` that does not resolve to a live issue throws IssueNotFoundError and writes nothing — fail loud, never silently ignored',
+    'a `dedupeExcludeUid` that does not resolve to a live issue throws IssueNotFoundError and writes nothing — fail loud, never silently ignored',
     async () => {
       const issuesBefore = await countIssueNodes(store, projectUid);
       await expect(
@@ -811,7 +811,7 @@ describe('createIssue — declared parent + ancestry excluded from the dedupe sc
           title: 'child of a parent that does not exist',
           body: 'body',
           by: 'filer',
-          partOf: randomUUID(),
+          dedupeExcludeUid: randomUUID(),
         })
       ).rejects.toBeInstanceOf(IssueNotFoundError);
       expect(await countIssueNodes(store, projectUid)).toBe(issuesBefore);

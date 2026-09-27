@@ -65,8 +65,9 @@ import {
 // nominally, compatible.
 import { resolveSimilarFilterIds } from '../query/views/semantic.js';
 // Read-only reuse of the query layer's own uid→live-issue resolver for the
-// declared-parent resolution this gate now needs (`partOf`, c5460239). Like
-// `resolveSimilarFilterIds` above, this is an IMPORT of a read-only module,
+// declared-parent resolution this gate now needs (`dedupeExcludeUid`,
+// c5460239). Like `resolveSimilarFilterIds` above, this is an IMPORT of a
+// read-only module,
 // never a write-path `tx.ts` call: the duplicate scan runs BEFORE the write
 // transaction opens (see `scanForDuplicates`'s own doc comment), so it has no
 // `tx` to hand a `resolveLiveIssueTx`, and `resolveIssueByUid` is documented
@@ -122,26 +123,26 @@ export interface ICreateIssueInput {
    */
   gitContext?: string;
   /**
-   * The **uid of the parent issue** this item is filed under — uid ONLY, never
-   * a name (matching `relate`'s `sourceUid`/`targetUid` uid convention, §1/§6.1).
+   * A **dedupe-scoping hint only**: the uid of the item this one is being
+   * filed under. It names a parent so the pre-write similarity scan (§6.4
+   * point 1) EXCLUDES that item AND its `part_of` ancestor chain from the
+   * duplicate candidate set, so a child that deliberately restates its
+   * parent's intent is not suppressed as a duplicate OF that parent (defect
+   * c5460239: a child of C7 reproduced `created:false`/
+   * `duplicate-suppressed` with its own parent as the top candidate at
+   * 0.9811). A child restating its GRANDPARENT is likewise not suppressed,
+   * because the ancestry walk spans the whole `part_of` chain.
    *
-   * This is a READ-SIDE DEDUPE-SCOPING declaration, not a write: it tells the
-   * pre-write similarity scan (§6.4 point 1) to EXCLUDE the declared parent
-   * AND its `part_of` ancestor chain from the duplicate candidate set, so a
-   * child that deliberately restates its parent's intent is not suppressed as
-   * a duplicate OF that parent (defect c5460239: a child of C7 reproduced
-   * `created:false`/`duplicate-suppressed` with its own parent as the top
-   * candidate at 0.9811). A child restating its GRANDPARENT is likewise not
-   * suppressed, because the ancestry walk spans the whole `part_of` chain.
+   * It writes NO `part_of` edge — `relate` is the sole `part_of` writer
+   * (§6.3.6). Because it only scopes the read-side scan, it is invisible on
+   * the emitted card and nothing new is persisted; it has no effect once a
+   * create is not a duplicate. An unresolvable uid throws
+   * `IssueNotFoundError` (fail loud, ADR-0002 D5), never silently ignored.
    *
-   * It does NOT write the `part_of` edge — that edge stays owned by `relate`
-   * (§6.3.6), and `createIssue` writes no edge for this field. A `partOf` that
-   * does not resolve to a LIVE `issue` throws `IssueNotFoundError` (fail loud,
-   * ADR-0002 D5), never silently ignored. Because it only scopes the scan, it
-   * has no effect once a create is not a duplicate — the emitted card never
-   * carries it, and nothing new is persisted.
+   * A uid ONLY, never a name (matching `relate`'s `sourceUid`/`targetUid` uid
+   * convention, §1/§6.1).
    */
-  partOf?: string;
+  dedupeExcludeUid?: string;
   /** The acting identity — agent or person (§6.3's opening rule) — REQUIRED on every mutating verb. A missing/blank value throws `InvalidArgumentError('by', ...)` before any write runs. */
   by: string;
   /**
@@ -525,9 +526,9 @@ function enforceRequiredFields(
 }
 
 /**
- * Resolves {@link ICreateIssueInput.partOf} (a parent uid) to the set of issue
- * rowids the duplicate scan must EXCLUDE: the declared parent itself PLUS its
- * `part_of` ancestor chain (defect c5460239).
+ * Resolves {@link ICreateIssueInput.dedupeExcludeUid} (a parent uid) to the
+ * set of issue rowids the duplicate scan must EXCLUDE: the declared parent
+ * itself PLUS its `part_of` ancestor chain (defect c5460239).
  *
  * `part_of` is declared `issue → issue` and `n:1` on its source — one parent
  * per item (`relate.ts`, `catalog.ts`'s `EDGE_KIND_TABLE`) — so the walk is
@@ -537,16 +538,21 @@ function enforceRequiredFields(
  * `part_of` edge may name a node that is later soft-deleted; a missing or
  * `t_invalid` ancestor simply ends the walk.
  *
- * Errors: `IssueNotFoundError` (via `query/resolve.ts`'s `resolveIssueByUid`)
- * when `partOf` names no live `issue` — the declaration is a caller assertion,
- * and failing loud is what stops a typo'd parent from silently re-enabling the
- * very suppression this field exists to avoid (ADR-0002 D5).
+ * Errors: `resolveIssueByUid` resolves the uid through
+ * `query/resolve.ts`'s `resolveUidPrefix`, so this can throw
+ * `IssueNotFoundError` (no live `issue` matches), `AmbiguousReferenceError`
+ * (a uid prefix matching ≥2 live issues), `InvalidArgumentError` (a uid
+ * attempt shorter than the minimum prefix length, via `tooShortUidError`), or
+ * `StaleSupersedeError` (the uid names a superseded issue). The declaration is
+ * a caller assertion, and failing loud (rather than silently ignoring the
+ * hint) is what stops a typo'd parent from re-enabling the very suppression
+ * this field exists to avoid (ADR-0002 D5).
  */
-async function resolvePartOfExclusionIds(
+async function resolveDedupeExcludeIds(
   graph: GraphBackend,
-  partOf: string
+  dedupeExcludeUid: string
 ): Promise<Set<number>> {
-  const parent = await resolveIssueByUid(graph, partOf);
+  const parent = await resolveIssueByUid(graph, dedupeExcludeUid);
   const excluded = new Set<number>([parent.id]);
   let cursor = parent;
   for (;;) {
@@ -604,16 +610,21 @@ async function resolvePartOfExclusionIds(
  *    the unwired `no-search-backend` — rather than blocking a legitimate
  *    create on a state that is not a detectable duplicate.
  *
- * `partOf` (when supplied) is resolved and excluded FIRST, before any return
- * path below: the declared parent and every `part_of` ancestor are removed
- * from the candidate set, and the ONE error this function can throw —
- * `IssueNotFoundError` for a `partOf` that names no live `issue` — fires
- * whether or not the project holds any other issue (c5460239). Treating a
- * resolved-but-now-empty candidate set as a COMPLETE scan of zero candidates
- * (never a degraded one) is what lets a child that restates its parent create.
+ * `dedupeExcludeUid` (when supplied) is resolved and excluded FIRST, before
+ * any return path below: the declared parent and every `part_of` ancestor are
+ * removed from the candidate set, and the resolution failure fires whether or
+ * not the project holds any other issue (c5460239). Resolving that uid runs
+ * through `resolveIssueByUid` → `resolveUidPrefix`, so it can throw
+ * `IssueNotFoundError` (no live `issue` matches), `AmbiguousReferenceError` (a
+ * uid prefix matching ≥2 live issues), `InvalidArgumentError` (a too-short uid
+ * prefix, via `tooShortUidError`), or `StaleSupersedeError` (a superseded
+ * issue) — NOT only `IssueNotFoundError`. Treating a resolved-but-now-empty
+ * candidate set as a COMPLETE scan of zero candidates (never a degraded one)
+ * is what lets a child that restates its parent create.
  *
- * Returns `{candidates:[], degraded:false}` (throws only `IssueNotFoundError`
- * for an unresolvable `partOf`) when: the scan is
+ * Returns `{candidates:[], degraded:false}` (the `dedupeExcludeUid`
+ * resolution errors above are its only throws, and only when a uid was
+ * supplied) when: the scan is
  * a COMPLETE scan of nothing — `project_policy.dedupe_scan_enabled` is
  * `false`, or the project has zero existing issues to compare against, or
  * every existing candidate was the declared parent/ancestor.
@@ -634,18 +645,19 @@ async function scanForDuplicates(
   policy: IProjectPolicy,
   title: string,
   body: string,
-  partOf?: string
+  dedupeExcludeUid?: string
 ): Promise<IDuplicateScanOutcome> {
   const { search, graph } = handle;
   // Resolve the declared parent (and its ancestor chain) BEFORE any early
-  // return — a non-resolving `partOf` must fail loud regardless of whether
-  // the scan itself is enabled, and regardless of whether the project happens
-  // to hold any other issue (an empty candidate set is what the exclusion most
-  // often produces). Only possible with a `graph` to resolve against: no
-  // graph already means "no scan" (the `no-search-backend` degrade below).
-  const partOfExclusionIds =
-    partOf !== undefined && graph !== undefined
-      ? await resolvePartOfExclusionIds(graph, partOf)
+  // return — an unresolvable `dedupeExcludeUid` must fail loud regardless of
+  // whether the scan itself is enabled, and regardless of whether the project
+  // happens to hold any other issue (an empty candidate set is what the
+  // exclusion most often produces). Only possible with a `graph` to resolve
+  // against: no graph already means "no scan" (the `no-search-backend`
+  // degrade below).
+  const dedupeExcludeIds =
+    dedupeExcludeUid !== undefined && graph !== undefined
+      ? await resolveDedupeExcludeIds(graph, dedupeExcludeUid)
       : undefined;
   // A COMPLETE (if empty) scan, never a degraded one: an explicit operator
   // opt-out is a deliberate "do not scan", not a scan that failed to run.
@@ -689,8 +701,8 @@ async function scanForDuplicates(
   // the scan is a COMPLETE scan of zero remaining candidates — exactly the
   // documented zero-candidate case `abort` proceeds on (§6.4 point 3) — never
   // a degraded one.
-  if (partOfExclusionIds !== undefined) {
-    for (const id of partOfExclusionIds) candidateIds.delete(id);
+  if (dedupeExcludeIds !== undefined) {
+    for (const id of dedupeExcludeIds) candidateIds.delete(id);
     if (candidateIds.size === 0) return { candidates: [], degraded: false };
   }
 
@@ -860,8 +872,12 @@ async function scanForDuplicates(
  * outside the project root AND every `citationAllowedExternalRoots` entry —
  * the carve-out, BUG c6d35272 — and the error names those roots),
  * `InvalidArgumentError('duplicateAction', ...)`
- * (an unrecognized value — §6.4), `IssueNotFoundError` (`partOf` was supplied
- * but does not name a live `issue` — fail loud, ADR-0002 D5; c5460239),
+ * (an unrecognized value — §6.4), the `dedupeExcludeUid` resolution errors
+ * (`IssueNotFoundError` / `AmbiguousReferenceError` / `InvalidArgumentError` /
+ * `StaleSupersedeError` — via `resolveIssueByUid`, see
+ * {@link resolveDedupeExcludeIds}) when a `dedupeExcludeUid` was supplied but
+ * does not resolve to a live, non-superseded `issue` — fail loud, ADR-0002 D5;
+ * c5460239),
  * `WriteContentionError`/
  * `WriteIOError` (§4c — an exhausted driver-level retry on the underlying
  * `immediate` transaction).
@@ -992,7 +1008,7 @@ export async function createIssue(
     preResolvedPolicy,
     input.title,
     input.body,
-    input.partOf
+    input.dedupeExcludeUid
   );
   const { candidates: duplicateCandidates } = scan;
 
