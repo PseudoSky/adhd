@@ -67,6 +67,7 @@ import {
 } from './envelope.js';
 import {
   BacklogWriteError,
+  AmbiguousReferenceError,
   CatalogNotFoundError,
   CitationRequiredError,
   CitationUnverifiableError,
@@ -384,6 +385,7 @@ const ERROR_CLASS_TO_ENVELOPE_CODE: ReadonlyArray<
   readonly [new (...args: never[]) => Error, BacklogErrorCode]
 > = [
   [IssueNotFoundError, 'item_not_found'],
+  [AmbiguousReferenceError, 'ambiguous_reference'],
   [CatalogNotFoundError, 'not_found'],
   [InvalidArgumentError, 'invalid_argument'],
   [ClaimHeldError, 'conflict'],

@@ -30,6 +30,7 @@ import {
   assertNotBareRoleLiteral,
 } from './errors.js';
 import { catalogNameFold } from './catalog-repair.js';
+import { isUidShaped } from './uid-prefix.js';
 import {
   type IEdgeKindRule,
   type IWriteStoreHandle,
@@ -38,6 +39,7 @@ import {
   getNodeByUidTx,
   invalidateEdgeTx,
   nowISO,
+  resolveUidPrefixTx,
   writeEdgeTx,
   writeNodeTx,
 } from './tx.js';
@@ -77,15 +79,12 @@ function parseMetaObject(
 
 /**
  * Disambiguation by SHAPE, not a second field (§6.1): a 36-character
- * version-4-UUID-formatted string is a `uid`; anything else is a `name`.
+ * version-4-UUID-formatted string is a `uid`; anything else is a `name`. The
+ * single definition lives in `write/uid-prefix.ts` (which also owns prefix
+ * classification); re-exported here so every existing `isUidShaped` importer
+ * keeps its path unchanged.
  */
-const UUID_V4_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-/** Whether `ref` should be treated as a `uid` (exact resolve-or-throw) rather than a business `name` (find, and for the flat catalogs, find-then-mint). */
-export function isUidShaped(ref: string): boolean {
-  return UUID_V4_RE.test(ref);
-}
+export { isUidShaped };
 
 export interface IResolvedCatalogRow {
   rowid: number;
@@ -125,10 +124,10 @@ async function resolveByUidTx(
   expectedKind: string,
   uid: string
 ): Promise<IResolvedTxNodeRow> {
-  const row = await getNodeByUidTx(tx, uid);
-  if (row?.tInvalid !== null || row.kind !== expectedKind) {
-    throw new CatalogNotFoundError(expectedKind, uid);
-  }
+  // Accepts an exact uid or a UNIQUE uid prefix (`rmLocation` unions the
+  // latter; `resolveUidPrefixTx` throws `AmbiguousReferenceError` on a
+  // multi-match and the kind-appropriate not-found on a miss).
+  const row = await resolveUidPrefixTx(tx, uid, { expectedKind });
   const { name } = row;
   if (name === null) {
     throw new CatalogNotFoundError(expectedKind, uid);

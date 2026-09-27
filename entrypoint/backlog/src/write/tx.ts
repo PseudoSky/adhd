@@ -28,13 +28,20 @@ import type { TypePolicy } from '@adhd/sox-graph-store';
 import { randomUUID, createHash } from 'node:crypto';
 import {
   BacklogWriteError,
-  IssueNotFoundError,
   SingleValuedRelationConflictError,
   StaleSupersedeError,
   WriteContentionError,
   WriteIOError,
   classifyDriverError,
 } from './errors.js';
+import {
+  type INodeReadExecutor,
+  classifyUidRef,
+  missingUidError,
+  queryLiveUidPrefixCandidates,
+  selectUniqueUidCandidate,
+  tooShortUidError,
+} from './uid-prefix.js';
 
 /**
  * The on-write embedding substrate (§4b, FEAT-021) — the narrow slice of
@@ -199,7 +206,7 @@ function sortDeep(value: unknown): unknown {
  * call itself, which always runs against `this.adapter` (§4c).
  */
 export async function getNodeByUidTx(
-  tx: AdapterTransaction,
+  tx: INodeReadExecutor,
   uid: string
 ): Promise<ITxNodeRow | null> {
   const row = await tx.executeGet<IRawNodeRow>(
@@ -207,6 +214,62 @@ export async function getNodeByUidTx(
     [uid]
   );
   return row ? mapNodeRow(row) : null;
+}
+
+/**
+ * uid reference → LIVE `issue`/catalog node row, inside a tx, accepting a
+ * UNIQUE uid PREFIX as well as an exact uid. This is the single write-side
+ * funnel every issue verb ({@link resolveLiveIssueTx}) and catalog
+ * uid-resolution (`catalog.ts`'s `resolveByUidTx`, hence `rm-location`) goes
+ * through, so the prefix contract is defined once rather than per verb.
+ *
+ * Exact match is the fast path and keeps winning: a full uid is looked up
+ * directly, and only when that misses is a prefix scan attempted. A prefix
+ * below `MIN_UID_PREFIX_LENGTH` throws an "too short" argument error; a prefix
+ * that matches zero rows throws the kind-appropriate not-found; a prefix that
+ * matches two or more throws {@link AmbiguousReferenceError} naming every
+ * candidate — never an arbitrary pick.
+ *
+ * @throws IssueNotFoundError (kind `issue`) / CatalogNotFoundError (any other
+ *   kind) when nothing live matches.
+ * @throws AmbiguousReferenceError when a prefix matches more than one live row.
+ */
+export async function resolveUidPrefixTx(
+  exec: INodeReadExecutor,
+  ref: string,
+  opts?: { expectedKind?: string }
+): Promise<ITxNodeRow> {
+  const expectedKind = opts?.expectedKind;
+
+  const exact = await getNodeByUidTx(exec, ref);
+  if (exact) {
+    if (
+      exact.tInvalid !== null ||
+      (expectedKind !== undefined && exact.kind !== expectedKind)
+    ) {
+      throw missingUidError(expectedKind, ref, false);
+    }
+    return exact;
+  }
+
+  const refKind = classifyUidRef(ref);
+  if (refKind === 'too-short') throw tooShortUidError(ref);
+  if (refKind !== 'prefix') throw missingUidError(expectedKind, ref, false);
+
+  const candidates = await queryLiveUidPrefixCandidates(exec, ref);
+  const narrowed =
+    expectedKind !== undefined
+      ? candidates.filter((c) => c.kind === expectedKind)
+      : candidates;
+  const chosen = selectUniqueUidCandidate(ref, narrowed);
+  if (!chosen) throw missingUidError(expectedKind, ref, true);
+
+  const row = await getNodeByUidTx(exec, chosen.uid);
+  if (!row) throw missingUidError(expectedKind, ref, true);
+  if (row.tInvalid !== null) {
+    throw missingUidError(expectedKind, ref, true);
+  }
+  return row;
 }
 
 /**
@@ -250,10 +313,9 @@ export async function resolveLiveIssueTx(
   tx: AdapterTransaction,
   uid: string
 ): Promise<ITxNodeRow> {
-  const row = await getNodeByUidTx(tx, uid);
-  if (row?.kind !== 'issue' || row.tInvalid !== null) {
-    throw new IssueNotFoundError(uid);
-  }
+  // `resolveUidPrefixTx` already enforces kind `issue` + live-only; what
+  // remains here is the supersession CAS check (see this function's doc).
+  const row = await resolveUidPrefixTx(tx, uid, { expectedKind: 'issue' });
   if (row.isSuperseded) {
     throw new StaleSupersedeError(uid);
   }

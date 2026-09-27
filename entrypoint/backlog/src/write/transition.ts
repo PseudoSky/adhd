@@ -100,7 +100,6 @@ import {
   CitationUnverifiableError,
   ClaimHeldError,
   InvalidArgumentError,
-  IssueNotFoundError,
   NoteRequiredError,
   citationReadError,
   assertNotBareRoleLiteral,
@@ -110,13 +109,13 @@ import {
   canonicalJSONStringify,
   executeWriteTransaction,
   getNodeByRowidTx,
-  getNodeByUidTx,
   invalidateEdgeTx,
   nowISO,
   sha256Hex,
   writeEdgeTx,
   writeNodeTx,
   resolveLiveIssueTx,
+  resolveUidPrefixTx,
 } from './tx.js';
 import { extractClaimMeta, isClaimStale } from './claim-lease.js';
 import { resolveIssueStatusTx } from './issue-status.js';
@@ -353,13 +352,12 @@ export async function transition(
   // lock across `fs.readFile`" discipline (§4c/§4b).
   const citationShas: string[] = [];
   if (citations.length > 0) {
-    const preIssueRow = await getNodeByUidTx(handle.adapter, input.uid);
-    if (
-      preIssueRow?.kind !== 'issue' ||
-      preIssueRow.tInvalid !== null
-    ) {
-      throw new IssueNotFoundError(input.uid);
-    }
+    // Accepts an exact uid or a UNIQUE uid prefix — the same reference shape
+    // `resolveLiveIssueTx` accepts inside the transaction below, so a caller
+    // does not have to widen a short reference merely to pass citations.
+    const preIssueRow = await resolveUidPrefixTx(handle.adapter, input.uid, {
+      expectedKind: 'issue',
+    });
     const preProject = await resolveIssueProjectTx(
       handle.adapter,
       preIssueRow.rowid

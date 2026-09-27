@@ -39,10 +39,17 @@ import type {
 import {
   BacklogValidationError,
   CatalogNotFoundError,
-  IssueNotFoundError,
   StaleSupersedeError,
 } from '../write/errors.js';
 import { isUidShaped } from '../write/catalog.js';
+import {
+  classifyUidRef,
+  isUidPrefixShaped,
+  missingUidError,
+  queryLiveUidPrefixCandidates,
+  selectUniqueUidCandidate,
+  tooShortUidError,
+} from '../write/uid-prefix.js';
 
 export { isUidShaped };
 
@@ -55,20 +62,111 @@ export interface IResolvedRef {
 }
 
 /**
+ * The shared core of uid resolution on the READ path: exact match, else a
+ * UNIQUE uid prefix (via `write/uid-prefix.ts`'s candidate query). Returns
+ * `null` when nothing live matches the expected kind — the caller decides
+ * whether that is a hard error ({@link resolveUidPrefix}) or an
+ * unresolved-name fallback ({@link tryResolveUidPrefix}). A prefix matching
+ * two or more live nodes throws `AmbiguousReferenceError` from
+ * {@link selectUniqueUidCandidate}, naming every candidate; it never
+ * auto-selects.
+ *
+ * The prefix candidate read runs inside a read-only `graph.transaction`, which
+ * is the only way to issue raw SQL through a `GraphBackend` without reaching
+ * into its private adapter (`GraphTransaction` is a documented structural
+ * superset of the raw transaction surface).
+ */
+async function resolveUidPrefixImpl(
+  graph: GraphBackend,
+  ref: string,
+  expectedKind: string | undefined
+): Promise<NodeRecord | null> {
+  const exact = await graph.getNodeByUid(ref);
+  if (exact) {
+    if (
+      exact.tInvalid !== undefined ||
+      (expectedKind !== undefined && exact.kind !== expectedKind)
+    ) {
+      return null;
+    }
+    return exact;
+  }
+
+  if (classifyUidRef(ref) !== 'prefix') return null;
+
+  const candidates = await graph.transaction((tx) =>
+    queryLiveUidPrefixCandidates(tx, ref)
+  );
+  const narrowed =
+    expectedKind !== undefined
+      ? candidates.filter((c) => c.kind === expectedKind)
+      : candidates;
+  const chosen = selectUniqueUidCandidate(ref, narrowed);
+  if (!chosen) return null;
+
+  const record = await graph.getNodeByUid(chosen.uid);
+  return record && record.tInvalid === undefined ? record : null;
+}
+
+/**
+ * Resolve `ref` to exactly one LIVE node, by exact uid or by a UNIQUE uid
+ * prefix. Exact match is the fast path and always wins.
+ *
+ * Errors: `AmbiguousReferenceError` when a prefix matches ≥2 live nodes (the
+ * candidates are carried on the error and named in its message);
+ * `IssueNotFoundError` (kind `issue`) / `CatalogNotFoundError` (any other
+ * kind) when an exact uid or prefix matches nothing; `InvalidArgumentError`
+ * when `ref` is a uid attempt shorter than the minimum prefix length.
+ */
+export async function resolveUidPrefix(
+  graph: GraphBackend,
+  ref: string,
+  opts?: { expectedKind?: string }
+): Promise<NodeRecord> {
+  if (classifyUidRef(ref) === 'too-short') throw tooShortUidError(ref);
+  const record = await resolveUidPrefixImpl(graph, ref, opts?.expectedKind);
+  if (!record) {
+    throw missingUidError(
+      opts?.expectedKind,
+      ref,
+      classifyUidRef(ref) === 'prefix'
+    );
+  }
+  return record;
+}
+
+/**
+ * Like {@link resolveUidPrefix}, but `null` instead of a not-found error when
+ * nothing matches — for callers that treat a uid miss as "fall through to a
+ * name lookup." An AMBIGUOUS prefix still throws (never silently picks one),
+ * and a too-short uid attempt returns `null` so a genuine short business name
+ * is not swallowed.
+ */
+export async function tryResolveUidPrefix(
+  graph: GraphBackend,
+  ref: string,
+  opts?: { expectedKind?: string }
+): Promise<NodeRecord | null> {
+  if (classifyUidRef(ref) === 'too-short') return null;
+  return resolveUidPrefixImpl(graph, ref, opts?.expectedKind);
+}
+
+/**
  * Resolve `uid` → the live `issue` node, or throw {@link IssueNotFoundError}
  * (SPEC.md §6.1: "a `uid` with no matching live node throws
  * `IssueNotFoundError(uid)`"). This is the READ-PATH counterpart of
  * `write/tx.ts`'s `getNodeByUidTx` — safe to call standalone because it is
  * not composing a check-then-act write around the result.
+ *
+ * Accepts an exact uid or a UNIQUE uid prefix (see {@link resolveUidPrefix});
+ * a superseded node — whether reached by exact uid or prefix — throws the same
+ * {@link StaleSupersedeError} pointing at the chain head.
  */
 export async function resolveIssueByUid(
   graph: GraphBackend,
   uid: string
 ): Promise<NodeRecord> {
-  const record = await graph.getNodeByUid(uid);
-  if (record?.kind !== 'issue' || record.tInvalid) {
-    throw new IssueNotFoundError(uid);
-  }
+  const record = await resolveUidPrefix(graph, uid, { expectedKind: 'issue' });
   if (record.isSuperseded) {
     throw new StaleSupersedeError(uid, await currentUidOf(graph, record));
   }
@@ -136,10 +234,15 @@ export async function tryResolveRef(
   expectedKind: string,
   ref: string
 ): Promise<IResolvedRef | null> {
-  if (isUidShaped(ref)) {
-    const record = await graph.getNodeByUid(ref);
-    if (record?.kind !== expectedKind || record.tInvalid) return null;
-    return { id: record.id, uid: record.uid, name: record.name ?? ref, record };
+  if (isUidShaped(ref) || isUidPrefixShaped(ref)) {
+    const record = await tryResolveUidPrefix(graph, ref, { expectedKind });
+    if (record) {
+      return { id: record.id, uid: record.uid, name: record.name ?? ref, record };
+    }
+    // A full uid that matches nothing is NOT a business name — never fall
+    // through. A prefix-shaped ref with no uid match MAY be a genuine
+    // business name that happens to read as hex, so it falls through.
+    if (isUidShaped(ref)) return null;
   }
   const matches = await graph.queryNodes({
     kind: expectedKind,
@@ -169,7 +272,7 @@ export async function tryResolveComponentRef(
   projectUid: string,
   ref: string
 ): Promise<IResolvedRef | null> {
-  if (isUidShaped(ref)) {
+  if (isUidShaped(ref) || isUidPrefixShaped(ref)) {
     const resolved = await tryResolveRef(graph, 'component', ref);
     if (!resolved || resolved.record.metadata?.projectUid !== projectUid)
       return null;

@@ -258,6 +258,42 @@ export class CatalogNotFoundError extends BacklogWriteError {
 }
 
 /**
+ * A uid reference matched MORE THAN ONE live node by prefix. Carries the
+ * candidate set (`uid` + `kind` + `name`) as structured data so a caller can
+ * disambiguate and re-run, and renders every candidate into the message.
+ *
+ * The resolver NEVER auto-selects among the candidates — silently returning
+ * the wrong item is strictly worse than refusing. Distinct from
+ * `IssueNotFoundError` (an exact uid that is genuinely absent) so a caller can
+ * branch structurally: an ambiguous reference is actionable (re-run with a
+ * longer prefix or the full uid), a missing one is not.
+ *
+ * `E_VALIDATION`, never retryable — retrying the identical short reference
+ * resolves to the identical candidate set.
+ */
+export class AmbiguousReferenceError extends BacklogWriteError {
+  readonly code = 'E_VALIDATION' as const;
+  readonly retryable = false;
+
+  constructor(
+    public readonly ref: string,
+    public readonly candidates: ReadonlyArray<{
+      uid: string;
+      kind: string;
+      name: string;
+    }>
+  ) {
+    super(
+      `uid prefix "${ref}" is ambiguous — ${candidates.length} items match: ` +
+        candidates
+          .map((c) => `${c.uid} (${c.kind} "${c.name}")`)
+          .join(', ') +
+        '. Re-run with a longer prefix or the full uid.'
+    );
+  }
+}
+
+/**
  * A flat-catalog write named a token that differs from an EXISTING LIVE row of
  * the SAME kind only by letter case (`IN_PROGRESS` vs `in_progress`, `high` vs
  * `HIGH`). Catalog identity is EXACT-case (`DATA_MODEL.md:70-78`; the
@@ -314,8 +350,21 @@ export class IssueNotFoundError extends BacklogWriteError {
   readonly code = 'E_VALIDATION' as const;
   readonly retryable = false;
 
-  constructor(public readonly uid: string) {
-    super(`No live issue found for uid "${uid}"`);
+  /**
+   * @param uid The uid (or uid prefix) the caller passed in.
+   * @param asPrefix Set by the prefix resolver when `uid` was a short prefix
+   *   rather than a full uid, so the message says "no item matches" instead of
+   *   implying the caller passed a complete uid that is simply absent.
+   */
+  constructor(
+    public readonly uid: string,
+    public readonly asPrefix = false
+  ) {
+    super(
+      asPrefix
+        ? `No live issue found — no item matches the uid prefix "${uid}"`
+        : `No live issue found for uid "${uid}"`
+    );
   }
 }
 

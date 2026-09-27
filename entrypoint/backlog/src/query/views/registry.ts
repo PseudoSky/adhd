@@ -21,9 +21,11 @@ import {
 } from '../../write/errors.js';
 import {
   isUidShaped,
+  resolveUidPrefix,
   tryResolveComponentRef,
   tryResolveRef,
 } from '../resolve.js';
+import { isUidPrefixShaped } from '../../write/uid-prefix.js';
 import {
   type IComponentDetail,
   type IComponentSummary,
@@ -296,15 +298,18 @@ export async function getRegistryDetail(
     };
   }
 
-  // location — uid only (no independent business name, §3a)
-  if (!isUidShaped(input.name))
+  // location — uid only (no independent business name, §3a). An exact uid or
+  // a UNIQUE uid prefix resolves; `resolveUidPrefix` throws
+  // `AmbiguousReferenceError` on a multi-match and `CatalogNotFoundError` on a
+  // miss, exactly as the previous exact-only read did.
+  if (!isUidShaped(input.name) && !isUidPrefixShaped(input.name))
     throw new InvalidArgumentError(
       'name',
       'a location has no name — pass its uid'
     );
-  const location = await graph.getNodeByUid(input.name);
-  if (location?.kind !== 'location' || location.tInvalid)
-    throw new CatalogNotFoundError('location', input.name);
+  const location = await resolveUidPrefix(graph, input.name, {
+    expectedKind: 'location',
+  });
   const componentUid =
     typeof location.metadata?.componentUid === 'string'
       ? location.metadata.componentUid

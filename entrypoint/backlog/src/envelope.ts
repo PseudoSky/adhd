@@ -38,6 +38,13 @@ export const BACKLOG_ERROR_CODES = [
    * must be able to tell those three apart by `code` alone. Exit 1.
    */
   'item_not_found',
+  /**
+   * A uid reference matched more than one live node by prefix —
+   * `AmbiguousReferenceError`. Distinct from `item_not_found` so a caller can
+   * branch: a short reference is actionable (re-run with a longer prefix or
+   * the full uid), whereas a genuinely absent uid is not. Exit 1.
+   */
+  'ambiguous_reference',
   /** Malformed flag or parameter shape — `InvalidArgumentError`. Exit 2. */
   'invalid_argument',
   /** Schema rejection: unknown filter key, unknown projection field, over-limit — `BacklogValidationError`. Exit 2. */
@@ -85,6 +92,7 @@ export function isBacklogErrorCode(value: unknown): value is BacklogErrorCode {
 export const BACKLOG_EXIT_CODE: Readonly<Record<BacklogErrorCode, number>> = {
   not_found: 4,
   item_not_found: 1,
+  ambiguous_reference: 1,
   invalid_argument: 2,
   validation: 2,
   store_busy: 1,

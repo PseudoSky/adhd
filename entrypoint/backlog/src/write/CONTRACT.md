@@ -19,7 +19,7 @@ exports. **Total: 54 exports.**
 
 ## `tx.ts` (24 exports)
 
-### `IWriteStoreHandle` — interface (`tx.ts:82`)
+### `IWriteStoreHandle` — interface (`tx.ts:89`)
 
 ```ts
 export interface IWriteStoreHandle {
@@ -34,7 +34,7 @@ Guarantees: the two dependencies every write verb needs — the raw
 `GraphBackend` was constructed with. Constructed once at store-open time and
 threaded through every write verb.
 
-### `ITxNodeRow` — interface (`tx.ts:108`)
+### `ITxNodeRow` — interface (`tx.ts:115`)
 
 ```ts
 export interface ITxNodeRow {
@@ -53,7 +53,7 @@ Guarantees: the shape every node row read back inside a transaction is mapped
 onto — `metadata` is always either a parsed object or `undefined` (never a
 raw JSON string, never a thrown parse error).
 
-### `nowISO()` — function (`tx.ts:161`)
+### `nowISO()` — function (`tx.ts:168`)
 
 ```ts
 export function nowISO(): string;
@@ -62,7 +62,7 @@ export function nowISO(): string;
 Guarantees: returns the current UTC timestamp in the exact ISO-8601 shape
 `@adhd/sox-graph-store` stamps every row with.
 
-### `sha256Hex(input)` — function (`tx.ts:166`)
+### `sha256Hex(input)` — function (`tx.ts:173`)
 
 ```ts
 export function sha256Hex(input: string | Buffer): string;
@@ -72,7 +72,7 @@ Guarantees: `sha256` hex digest of the given content — used for citation and
 audit content-addressing; NEVER the library's own dedupe hash (that is
 trim+lowercase, computed separately inside `writeNodeTx`).
 
-### `canonicalJSONStringify(value)` — function (`tx.ts:178`)
+### `canonicalJSONStringify(value)` — function (`tx.ts:185`)
 
 ```ts
 export function canonicalJSONStringify(value: Record<string, unknown>): string;
@@ -83,18 +83,40 @@ nesting level and `undefined` values omitted (never serialized as `null`) —
 the one canonical form both `audit.sha` and `transition.sha` are computed
 over.
 
-### `getNodeByUidTx(tx, uid)` — function (`tx.ts:201`)
+### `getNodeByUidTx(tx, uid)` — function (`tx.ts:208`)
 
 ```ts
-export async function getNodeByUidTx(tx: AdapterTransaction, uid: string): Promise<ITxNodeRow | null>;
+export async function getNodeByUidTx(tx: INodeReadExecutor, uid: string): Promise<ITxNodeRow | null>;
 ```
 
 Guarantees: `uid` → node, issued against the caller's own open `tx` (never
 the bare adapter) — mirrors the library's `getNodeByUid` SELECT exactly.
 Returns `null` for no match; does not filter on `t_invalid` itself (callers
-that need "live only" check `row.tInvalid === null` themselves).
+that need "live only" check `row.tInvalid === null` themselves). The
+`INodeReadExecutor` parameter accepts any `{ executeGet, executeAll }` handle
+— an `AdapterTransaction`, a `StoreAdapter`, or graph-store's
+`GraphTransaction`.
 
-### `getNodeByRowidTx(tx, rowid)` — function (`tx.ts:264`)
+### `resolveUidPrefixTx(exec, ref, opts?)` — function (`tx.ts:237`)
+
+```ts
+export async function resolveUidPrefixTx(
+  exec: INodeReadExecutor,
+  ref: string,
+  opts?: { expectedKind?: string }
+): Promise<ITxNodeRow>;
+```
+
+Guarantees: the single write-side uid funnel. Exact match wins (fast path);
+otherwise a UNIQUE uid prefix resolves. An exact/prefix miss throws
+`IssueNotFoundError` (kind `issue`) or `CatalogNotFoundError` (any other
+kind); a prefix below `MIN_UID_PREFIX_LENGTH` throws `InvalidArgumentError`;
+a prefix matching ≥2 live rows of the expected kind throws
+`AmbiguousReferenceError` naming every candidate — never an arbitrary pick.
+`resolveLiveIssueTx` and `catalog.ts`'s `resolveByUidTx` both delegate here,
+so every issue verb and `rm-location` share ONE prefix contract.
+
+### `getNodeByRowidTx(tx, rowid)` — function (`tx.ts:325`)
 
 ```ts
 export async function getNodeByRowidTx(tx: AdapterTransaction, rowid: number): Promise<ITxNodeRow | null>;
@@ -103,7 +125,7 @@ export async function getNodeByRowidTx(tx: AdapterTransaction, rowid: number): P
 Guarantees: same as `getNodeByUidTx`, keyed by internal `rowid` instead —
 used to resolve an edge endpoint's kind without a redundant round trip.
 
-### `IWriteNodeTxInput` — interface (`tx.ts:275`)
+### `IWriteNodeTxInput` — interface (`tx.ts:336`)
 
 ```ts
 export interface IWriteNodeTxInput {
@@ -125,7 +147,7 @@ atomic instant. `skipDedupe` is typed `never` — declaring it on an input
 object literal is a compile error; see `writeNodeTx`'s own guarantee below
 for why.
 
-### `writeNodeTx(tx, input)` — function (`tx.ts:418`)
+### `writeNodeTx(tx, input)` — function (`tx.ts:479`)
 
 ```ts
 export async function writeNodeTx(tx: AdapterTransaction, input: IWriteNodeTxInput): Promise<{ rowid: number; uid: string }>;
@@ -140,7 +162,7 @@ the library's content-hash-SELECT-then-maybe-insert behavior. SPEC.md §1/§4
 this function never runs that SELECT for any kind at all: always a fresh
 INSERT, always a fresh `crypto.randomUUID()` uid.
 
-### `EdgeMultiplicity` — type (`tx.ts:496`)
+### `EdgeMultiplicity` — type (`tx.ts:557`)
 
 ```ts
 export type EdgeMultiplicity = 'n:1' | '1:n' | 'n:m';
@@ -150,7 +172,7 @@ Guarantees: the closed set of multiplicity values every `edge_kind` rule
 declares. `n:1` caps the edge's SOURCE out-degree at one; `1:n` caps the
 TARGET in-degree at one; `n:m` is uncapped on both sides.
 
-### `IEdgeKindRule` — interface (`tx.ts:498`)
+### `IEdgeKindRule` — interface (`tx.ts:559`)
 
 ```ts
 export interface IEdgeKindRule {
@@ -165,7 +187,7 @@ Guarantees: the resolved shape of one `rel`'s declared endpoint-kind and
 multiplicity rule. `sourceKind: '*'` is the one declared sentinel (`audits`)
 that skips the source-kind match.
 
-### `IWriteEdgeTxInput` — interface (`tx.ts:506`)
+### `IWriteEdgeTxInput` — interface (`tx.ts:567`)
 
 ```ts
 export interface IWriteEdgeTxInput {
@@ -190,7 +212,7 @@ one call — `rule` must be the caller's own already-resolved `edge_kind` rule
 follows the same one-logical-write-one-timestamp rule as
 `IWriteNodeTxInput.at`.
 
-### `writeEdgeTx(tx, input)` — function (`tx.ts:610`)
+### `writeEdgeTx(tx, input)` — function (`tx.ts:671`)
 
 ```ts
 export async function writeEdgeTx(tx: AdapterTransaction, input: IWriteEdgeTxInput): Promise<void>;
@@ -204,7 +226,7 @@ mismatch), enforces `checkMultiplicityTx`'s capped-side conflict check
 CONFLICT(src, dst, rel) DO UPDATE` / re-livening (`t_invalid = NULL`) as the
 library's own `writeEdgeInternal`, issued against `tx`.
 
-### `BacklogEdgeKindMismatchError` — class (`tx.ts:673`)
+### `BacklogEdgeKindMismatchError` — class (`tx.ts:734`)
 
 ```ts
 export class BacklogEdgeKindMismatchError extends BacklogWriteError {
@@ -219,7 +241,7 @@ does not match the actual endpoint being written — a write-layer composition
 defect, expected to be unreachable in practice; fails loudly rather than
 writing a mismatched edge.
 
-### `IInvalidateEdgeTxInput` — interface (`tx.ts:689`)
+### `IInvalidateEdgeTxInput` — interface (`tx.ts:750`)
 
 ```ts
 export interface IInvalidateEdgeTxInput {
@@ -234,7 +256,7 @@ export interface IInvalidateEdgeTxInput {
 Guarantees: everything `invalidateEdgeTx` needs to invalidate one live edge,
 with an optional human-readable `reason` merged into the edge's `meta`.
 
-### `invalidateEdgeTx(tx, input)` — function (`tx.ts:708`)
+### `invalidateEdgeTx(tx, input)` — function (`tx.ts:769`)
 
 ```ts
 export async function invalidateEdgeTx(tx: AdapterTransaction, input: IInvalidateEdgeTxInput): Promise<void>;
@@ -245,7 +267,7 @@ no-op if the edge is already invalidated or absent; otherwise sets
 `t_invalid` and merges `invalidatedAt`/`invalidatedReason` into `meta`,
 issued against `tx`.
 
-### `executeWriteTransaction(handle, fn)` — function (`tx.ts:823`)
+### `executeWriteTransaction(handle, fn)` — function (`tx.ts:884`)
 
 ```ts
 export async function executeWriteTransaction<T>(handle: IWriteStoreHandle, fn: (tx: AdapterTransaction) => Promise<T>): Promise<T>;
@@ -283,7 +305,7 @@ contract.
 
 ## `catalog.ts` (12 exports)
 
-### `isUidShaped(ref)` — function (`catalog.ts:86`)
+### `isUidShaped(ref)` — function (`uid-prefix.ts:47`)
 
 ```ts
 export function isUidShaped(ref: string): boolean;
@@ -292,9 +314,11 @@ export function isUidShaped(ref: string): boolean;
 Guarantees: `true` iff `ref` matches the 36-character version-4-UUID shape
 exactly (case-insensitive) — the SOLE disambiguation between "treat as
 `uid`" (exact resolve-or-throw) and "treat as `name`" (find, and for flat
-catalogs, find-then-mint) used everywhere in this file.
+catalogs, find-then-mint). The definition lives in `write/uid-prefix.ts`
+(which also owns the uid-PREFIX classification) and is re-exported from
+`catalog.ts` so existing importers keep their path.
 
-### `IResolvedCatalogRow` — interface (`catalog.ts:90`)
+### `IResolvedCatalogRow` — interface (`catalog.ts:89`)
 
 ```ts
 export interface IResolvedCatalogRow {
@@ -308,7 +332,7 @@ Guarantees: the minimal resolved shape every catalog resolution returns —
 `name` is never `null` here (a live catalog row with a null name is treated
 as unresolved and throws before this shape is ever constructed).
 
-### `IResolvedProjectRow` — interface (`catalog.ts:96`)
+### `IResolvedProjectRow` — interface (`catalog.ts:95`)
 
 ```ts
 export interface IResolvedProjectRow extends IResolvedCatalogRow {
@@ -320,7 +344,7 @@ Guarantees: `IResolvedCatalogRow` plus the project's parsed `meta` blob
 (`undefined` if absent or unparsable) — the shape `resolveProjectPolicy`
 reads `metadata.policy` off of.
 
-### `resolveProjectTx(tx, ref)` — function (`catalog.ts:144`)
+### `resolveProjectTx(tx, ref)` — function (`catalog.ts:143`)
 
 ```ts
 export async function resolveProjectTx(tx: AdapterTransaction, ref: string): Promise<IResolvedProjectRow>;
@@ -330,7 +354,7 @@ Guarantees: resolves `ref` (uid or name) to a LIVE `project` row inside `tx`.
 Resolved-ONLY — NEVER mints a project. Throws `CatalogNotFoundError` on no
 match.
 
-### `resolveComponentTx(tx, input)` — function (`catalog.ts:183`)
+### `resolveComponentTx(tx, input)` — function (`catalog.ts:182`)
 
 ```ts
 export async function resolveComponentTx(tx: AdapterTransaction, input: { projectUid: string; ref: string }): Promise<IResolvedCatalogRow>;
@@ -341,7 +365,7 @@ scoped to `input.projectUid` inside `tx`. Resolved-ONLY — an unresolved name,
 or a uid-shaped ref belonging to a DIFFERENT project, throws
 `CatalogNotFoundError('component', ref)` rather than forking a new component.
 
-### `resolveDefaultComponentTx(tx, input)` — function (`catalog.ts:218`)
+### `resolveDefaultComponentTx(tx, input)` — function (`catalog.ts:217`)
 
 ```ts
 export async function resolveDefaultComponentTx(tx: AdapterTransaction, input: { projectRowid: number }): Promise<IResolvedCatalogRow>;
@@ -353,7 +377,7 @@ belonging to a different project can never be mismatched onto this one).
 NEVER mints — throws `CatalogNotFoundError('component', '(root)')` if
 missing (a row `upsertProject` is expected to already guarantee).
 
-### `FlatCatalogKind` — type (`catalog.ts:238`)
+### `FlatCatalogKind` — type (`catalog.ts:237`)
 
 ```ts
 export type FlatCatalogKind = 'kind' | 'status' | 'priority' | 'agent';
@@ -362,7 +386,7 @@ export type FlatCatalogKind = 'kind' | 'status' | 'priority' | 'agent';
 Guarantees: the closed set of catalog kinds that are mintable on an
 unresolved NAME (never on an unresolved uid-shaped ref).
 
-### `IMintOrResolveInput` — interface (`catalog.ts:240`)
+### `IMintOrResolveInput` — interface (`catalog.ts:239`)
 
 ```ts
 export interface IMintOrResolveInput {
@@ -378,7 +402,7 @@ mint, never read or applied when `ref` resolves to an existing row. `at` is
 NOT threaded into `resolveEdgeKindTx`'s own `edge_kind` rows (those keep
 their own clock; see that function's guarantee below).
 
-### `RESERVED_TERMINAL_STATUS_NAMES` — const (`catalog.ts:286`)
+### `RESERVED_TERMINAL_STATUS_NAMES` — const (`catalog.ts:285`)
 
 ```ts
 export const RESERVED_TERMINAL_STATUS_NAMES: ReadonlySet<string>;
@@ -391,7 +415,7 @@ case-sensitive. The mint layer seeds a `status` row's `terminal` flag from it
 name-blind (ADR-0002 D1). `catalog-repair.ts` re-exports this SAME set rather
 than declaring its own.
 
-### `isReservedTerminalStatusName(name)` — function (`catalog.ts:301`)
+### `isReservedTerminalStatusName(name)` — function (`catalog.ts:300`)
 
 ```ts
 export function isReservedTerminalStatusName(name: string): boolean;
@@ -401,7 +425,7 @@ Guarantees: exact, case-sensitive membership in
 `RESERVED_TERMINAL_STATUS_NAMES` — the same predicate the `(kind,name)`
 resolve uses.
 
-### `mintOrResolveCatalogTx(tx, input)` — function (`catalog.ts:354`)
+### `mintOrResolveCatalogTx(tx, input)` — function (`catalog.ts:353`)
 
 ```ts
 export async function mintOrResolveCatalogTx(tx: AdapterTransaction, input: IMintOrResolveInput): Promise<IResolvedCatalogRow>;
@@ -412,7 +436,7 @@ uid-shaped `ref` that does not resolve throws `CatalogNotFoundError` (uids
 are never auto-vivified). A name-shaped `ref` that does not resolve is
 minted via `writeNodeTx` inside the SAME `tx`.
 
-### `mintOrResolveStatusTx(tx, input)` — function (`catalog.ts:428`)
+### `mintOrResolveStatusTx(tx, input)` — function (`catalog.ts:427`)
 
 ```ts
 export async function mintOrResolveStatusTx(tx: AdapterTransaction, input: { ref: string; at?: string }): Promise<IResolvedCatalogRow>;
@@ -426,7 +450,7 @@ self-heal): an existing row is resolved, never re-minted, so no duplicate rows
 accumulate. A uid-shaped `ref` that does not resolve throws
 `CatalogNotFoundError`.
 
-### `nextPriorityRankTx(tx)` — function (`catalog.ts:443`)
+### `nextPriorityRankTx(tx)` — function (`catalog.ts:442`)
 
 ```ts
 export async function nextPriorityRankTx(tx: AdapterTransaction): Promise<number>;
@@ -436,7 +460,7 @@ Guarantees: returns one past the current max `priority.meta.rank` (0 if no
 priority rows exist) — a novel priority can never silently outrank an
 existing one.
 
-### `EDGE_KIND_TABLE` — const (`catalog.ts:458`)
+### `EDGE_KIND_TABLE` — const (`catalog.ts:457`)
 
 ```ts
 export const EDGE_KIND_TABLE: readonly IEdgeKindRule[];
@@ -451,7 +475,7 @@ time of this contract: `owns_project`, `owns_component`, `has_kind`,
 of truth `resolveEdgeKindTx` reconciles against the live `edge_kind` catalog
 rows.
 
-### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:599`)
+### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:598`)
 
 ```ts
 export async function resolveEdgeKindTx(tx: AdapterTransaction, rel: string): Promise<IEdgeKindRule>;
@@ -466,7 +490,7 @@ row (corrupt or missing `meta` keys) is invalidated and replaced in the SAME
 `CatalogNotFoundError('edge_kind', rel)` if `rel` isn't in
 `EDGE_KIND_TABLE` at all.
 
-### `IProjectPolicy` — interface (`catalog.ts:667`)
+### `IProjectPolicy` — interface (`catalog.ts:666`)
 
 ```ts
 export interface IProjectPolicy {
@@ -502,7 +526,7 @@ disabled. A malformed (non-`string[]`) value falls back to the — also empty �
 default rather than being spread. Typed per-project config, never an
 environment toggle.
 
-### `resolveProjectPolicy(project)` — function (`catalog.ts:741`)
+### `resolveProjectPolicy(project)` — function (`catalog.ts:740`)
 
 ```ts
 export function resolveProjectPolicy(project: IResolvedProjectRow): IProjectPolicy;
@@ -719,7 +743,26 @@ Guarantees: thrown when a `project`/`component`/`kind`/`status`/`priority`/
 `agent`/`edge_kind` reference did not resolve — a uid-shaped ref with no live
 row, or a `project`/`component` name (neither is ever mint-on-miss).
 
-### `InvalidArgumentError` — class (`errors.ts:299`)
+### `AmbiguousReferenceError` — class (`errors.ts:274`)
+
+```ts
+export class AmbiguousReferenceError extends BacklogWriteError {
+  readonly code: 'E_VALIDATION';
+  readonly retryable: false;
+  constructor(
+    public readonly ref: string,
+    public readonly candidates: ReadonlyArray<{ uid: string; kind: string; name: string }>
+  );
+}
+```
+
+Guarantees: thrown when a uid PREFIX resolves to two or more live nodes.
+Carries every candidate (`uid` + `kind` + `name`) so the caller can
+disambiguate; the resolver NEVER auto-selects. Maps to the distinct envelope
+code `ambiguous_reference` (exit 1) — not `item_not_found` — so a caller can
+branch: a short reference is actionable, an absent uid is not.
+
+### `InvalidArgumentError` — class (`errors.ts:335`)
 
 ```ts
 export class InvalidArgumentError extends BacklogWriteError {
@@ -732,7 +775,7 @@ export class InvalidArgumentError extends BacklogWriteError {
 Guarantees: thrown when a caller-supplied argument is missing, blank, or
 fails a project-declared invariant.
 
-### `IssueNotFoundError` — class (`errors.ts:313`)
+### `IssueNotFoundError` — class (`errors.ts:349`)
 
 ```ts
 export class IssueNotFoundError extends BacklogWriteError {
@@ -744,7 +787,7 @@ export class IssueNotFoundError extends BacklogWriteError {
 
 Guarantees: thrown when no live `issue` node carries the given `uid`.
 
-### `ClaimHeldError` — class (`errors.ts:326`)
+### `ClaimHeldError` — class (`errors.ts:375`)
 
 ```ts
 export class ClaimHeldError extends BacklogWriteError {
@@ -757,7 +800,7 @@ export class ClaimHeldError extends BacklogWriteError {
 Guarantees: thrown by `claim` when the lease is held by someone else, not yet
 stale, and the caller did not pass `force: true`.
 
-### `SingleValuedRelationConflictError` — class (`errors.ts:383`)
+### `SingleValuedRelationConflictError` — class (`errors.ts:432`)
 
 ```ts
 export class SingleValuedRelationConflictError extends BacklogWriteError {
@@ -778,7 +821,7 @@ resolve `cappedUid`/`conflictingUid` via different SQL joins, and named
 fields make a source/target field swap a compile error instead of a silent
 message-text bug.
 
-### `CitationUnverifiableError` — class (`errors.ts:429`)
+### `CitationUnverifiableError` — class (`errors.ts:478`)
 
 ```ts
 export class CitationUnverifiableError extends BacklogWriteError {
@@ -802,7 +845,7 @@ The message names the allowed external roots (`~`-anchored) and the
 rejection is actionable; with an empty allowlist (the default, or an explicit
 `[]`) it instead names the project root and says the policy array is empty.
 
-### `CitationTargetIsDirectoryError` — class (`errors.ts:467`)
+### `CitationTargetIsDirectoryError` — class (`errors.ts:516`)
 
 ```ts
 export class CitationTargetIsDirectoryError extends BacklogWriteError {
@@ -818,7 +861,7 @@ has no content to hash, so the payload can never succeed as-is; nothing is
 written. The mapping from a citation read error to this class or to
 `WriteIOError` lives in `errors.ts`'s `citationReadError` (56a2133e).
 
-### `NoteRequiredError` — class (`errors.ts:497`)
+### `NoteRequiredError` — class (`errors.ts:546`)
 
 ```ts
 export class NoteRequiredError extends BacklogWriteError {
@@ -831,7 +874,7 @@ export class NoteRequiredError extends BacklogWriteError {
 Guarantees: thrown by `transition` when `project_policy.transitionRequiresNote`
 (default `true`) is set and no `note` was given.
 
-### `CitationRequiredError` — class (`errors.ts:509`)
+### `CitationRequiredError` — class (`errors.ts:558`)
 
 ```ts
 export class CitationRequiredError extends BacklogWriteError {
@@ -845,7 +888,7 @@ Guarantees: thrown by `transition` when `project_policy.citationRequired`
 (default `false`) is set, the target status is terminal, and no citation was
 given.
 
-### `BacklogValidationError` — class (`errors.ts:532`)
+### `BacklogValidationError` — class (`errors.ts:581`)
 
 ```ts
 export class BacklogValidationError extends BacklogWriteError {
@@ -860,7 +903,7 @@ or an out-of-range/non-integral `limit`) — deliberately the SAME
 `E_VALIDATION`-class member of this same error union, not a parallel one, so
 a `query`/`get` caller catches it identically to any write-verb error.
 
-### `classifyDriverError(err)` — function (`errors.ts:578`)
+### `classifyDriverError(err)` — function (`errors.ts:627`)
 
 ```ts
 export function classifyDriverError(err: unknown): IWriteError;
@@ -933,3 +976,127 @@ here: the embedding audit row (`embedding_upserted`/`embedding_deleted`/
 `embedding_failed`), which necessarily runs in its own follow-up transaction
 after the subject transaction has already committed — out of scope for this
 foundation.
+
+---
+
+## `uid-prefix.ts` (11 exports)
+
+The uid-REFERENCE resolution primitives — exact match or UNIQUE prefix —
+shared by the read path (`GraphBackend`, consumed by `query/resolve.ts`) and
+the write path (`resolveUidPrefixTx`). `isUidShaped` is defined here as well
+and documented under `catalog.ts`, which re-exports it.
+
+### `MIN_UID_PREFIX_LENGTH` — const (`uid-prefix.ts:56`)
+
+```ts
+export const MIN_UID_PREFIX_LENGTH = 8;
+```
+
+Guarantees: the shortest uid prefix accepted — eight hex characters, the
+first UUID block and 32 bits of address space. A shorter uid ATTEMPT is
+refused as too short rather than allowed to match broadly.
+
+### `isUidPrefixShaped(ref)` — function (`uid-prefix.ts:68`)
+
+```ts
+export function isUidPrefixShaped(ref: string): boolean;
+```
+
+Guarantees: `true` iff `ref` is a proper prefix (`>= 8`, `< 36` characters)
+of a canonical uid string — hex characters with hyphens only at the canonical
+`8-4-4-4-12` boundary positions.
+
+### `UidRefKind` — type (`uid-prefix.ts:83`)
+
+```ts
+export type UidRefKind = 'exact' | 'prefix' | 'too-short' | 'not-uid';
+```
+
+Guarantees: how a reference reads — an exact uid, a uid prefix, a too-short
+uid attempt, or not uid-shaped at all.
+
+### `classifyUidRef(ref)` — function (`uid-prefix.ts:91`)
+
+```ts
+export function classifyUidRef(ref: string): UidRefKind;
+```
+
+Guarantees: classifies a reference into `UidRefKind`; a strict uid context
+rejects `too-short` while a uid-or-name context falls back to a name lookup,
+so a genuine short value that is itself a valid name is never swallowed.
+
+### `IUidCandidate` — interface (`uid-prefix.ts:105`)
+
+```ts
+export interface IUidCandidate {
+  uid: string;
+  kind: string;
+  name: string | null;
+  isSuperseded: boolean;
+}
+```
+
+Guarantees: one live node matching a uid prefix, projected to the fields the
+ambiguity decision and its error need.
+
+### `IUidPrefixQueryExecutor` — interface (`uid-prefix.ts:117`)
+
+```ts
+export interface IUidPrefixQueryExecutor {
+  executeAll<T = Record<string, unknown>>(sql: string, args?: unknown[]): Promise<{ rows: T[] }>;
+}
+```
+
+Guarantees: the minimal structural executor a prefix read needs — satisfied
+by an `AdapterTransaction`, graph-store's `GraphTransaction`, or a bare
+`StoreAdapter` alike.
+
+### `INodeReadExecutor` — interface (`uid-prefix.ts:129`)
+
+```ts
+export interface INodeReadExecutor extends IUidPrefixQueryExecutor {
+  executeGet<T = Record<string, unknown>>(sql: string, args?: unknown[]): Promise<T | null>;
+}
+```
+
+Guarantees: the executor a full uid resolution needs — the prefix candidate
+read plus the exact single-row read.
+
+### `queryLiveUidPrefixCandidates(exec, prefix)` — function (`uid-prefix.ts:155`)
+
+```ts
+export async function queryLiveUidPrefixCandidates(exec: IUidPrefixQueryExecutor, prefix: string): Promise<IUidCandidate[]>;
+```
+
+Guarantees: every LIVE node whose uid starts with `prefix`. The range
+predicate is an indexed prefix scan; the input is lower-cased once (uids are
+minted lowercase), so callers never reason about collation. Soft-deleted rows
+are excluded in SQL; a superseded row is returned with its flag carried.
+
+### `selectUniqueUidCandidate(ref, candidates)` — function (`uid-prefix.ts:178`)
+
+```ts
+export function selectUniqueUidCandidate(ref: string, candidates: readonly IUidCandidate[]): IUidCandidate | null;
+```
+
+Guarantees: the sole candidate, or `null` when none. Two or more candidates
+throw `AmbiguousReferenceError` naming every one — the resolver NEVER
+auto-selects.
+
+### `missingUidError(expectedKind, ref, asPrefix)` — function (`uid-prefix.ts:196`)
+
+```ts
+export function missingUidError(expectedKind: string | undefined, ref: string, asPrefix: boolean): Error;
+```
+
+Guarantees: the kind-appropriate not-found error (`IssueNotFoundError` for
+`issue`, `CatalogNotFoundError` otherwise); `asPrefix` selects the
+"no item matches the uid prefix" wording over the exact-uid wording.
+
+### `tooShortUidError(ref)` — function (`uid-prefix.ts:206`)
+
+```ts
+export function tooShortUidError(ref: string): InvalidArgumentError;
+```
+
+Guarantees: the refusal for a uid attempt below `MIN_UID_PREFIX_LENGTH`.
