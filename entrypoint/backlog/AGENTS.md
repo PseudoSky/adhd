@@ -56,3 +56,25 @@ entry into a facade plus a shared chunk, which moves the bin entry-guard's
 `import.meta.url` into the chunk — and the guard then never matches the invoked
 `dist/index.js`, so `node dist/index.js …` silently does nothing. Removing that
 setting re-breaks the built binary.
+
+## The shared `dist/` is lock-serialised
+
+`entrypoint/backlog/dist/` is ONE shared, in-tree build output. `build` writes
+it — a real `vite build` (`emptyOutDir: true`) wipes the whole dir, and nx's
+restore of the bare `{projectRoot}/dist` output is a destructive
+`remove(dist); copy(cached, dist)` swap that ALWAYS runs here because `nx.json`
+disables the daemon (`useDaemonProcess: false`), so a pure cache HIT still
+transiently unlinks `dist/index.js` / `api.ir.json` / `api.d.ts`. Meanwhile the
+`e2e` lane spawns `dist/index.js` (and renames `api.ir.json`), and the default
+`test` lane reads `dist/api.ir.json` / `dist/api.d.ts`. Under this repo's
+concurrent `nx affected -t test` invocations, a build swapping `dist/` mid-suite
+kills the reader with `ENOENT dist/index.js` / `built artifact missing`.
+
+Invariant: `build`, `e2e`, and `test` all run through
+`tools/with-dist-lock.mjs`, which takes the workspace-wide `backlog-dist` file
+lock (`.adhd/tmp/backlog-dist.lock`). `build` is `cache: false` so its
+cache-restore can never bypass the lock. Do NOT remove a wrapper, re-enable
+`build.cache`, or add a task that reads/writes `dist/` without taking the lock.
+(`assets` / `chmod-bin` / `vocabulary-gate` touch `dist/` but are deliberately
+NOT locked — locking a fast sibling behind the ~5-min `e2e` lane would blow up
+the critical path; their residual exposure is tracked in the backlog.)

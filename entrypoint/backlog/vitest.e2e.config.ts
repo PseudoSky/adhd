@@ -67,8 +67,8 @@ const repoRoot = path.resolve(__dirname, '../..');
  * (`dist/api.ir.json`, `dist/api.d.ts`, the built bin), so running them
  * concurrently races and flakes the whole lane. The base config's
  * `fileParallelism: false` was not sufficient on Vitest 4's fork pool;
- * `maxWorkers: 1` (set in the base vite.config.ts, inherited here) pins one
- * worker and makes the lane deterministic.
+ * `maxWorkers: 1` (set in THIS config's `test` block below) pins one worker
+ * and makes the lane deterministic.
  */
 const e2eConfig = mergeConfig(
   baseConfig,
