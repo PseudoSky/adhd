@@ -30,10 +30,16 @@ or after the one that mounted them. Compare the `backlog create` and `backlog
 priority-matrix` lines of `adhd-backlog --help` with §1 before relying on a
 field.
 
-## 1. Command surface — 18 verbs (plus `batch`), one calling convention
+## 1. Command surface — 21 verbs (plus `batch`), one calling convention
 
 **Every verb takes a single `--input` flag carrying one JSON object.** There
 are no per-field flags.
+
+Any verb that takes a `uid` also accepts a **unique uid prefix** (8+ hex
+characters — the first UUID block, e.g. `4fc3704e`). An exact uid always wins;
+a prefix matching two or more live nodes is refused with `ambiguous_reference`
+(exit 1) naming every candidate, and an unmatched prefix is `item_not_found`.
+A prefix shorter than 8 characters is refused as too short.
 
 ```
 adhd-backlog backlog get                --input '<IIssueGetInput json>'
@@ -42,7 +48,7 @@ adhd-backlog backlog priority-matrix    --input '<IPriorityMatrixInput json>'
 adhd-backlog backlog part-of-rollup     --input '<IPartOfRollupInput json>'
 adhd-backlog backlog open-curve         --input '<IOpenCurveInput json>'
 adhd-backlog backlog report             --input '<IReportInput json>'
-adhd-backlog backlog lookup             --input '{"q": "<tool, file path, or URL>"}'
+adhd-backlog backlog lookup             --input '{"q": "<tool, file path, URL, uid, title, or project>"}'
 adhd-backlog backlog create             --input '<ICreateIssueInput json>'
 adhd-backlog backlog update             --input '<IUpdateIssueInput json>'
 adhd-backlog backlog transition         --input '<ITransitionInput json>'
@@ -54,6 +60,9 @@ adhd-backlog backlog upsert-component   --input '<IUpsertComponentInput json>'
 adhd-backlog backlog upsert-location    --input '<IUpsertLocationInput json>'
 adhd-backlog backlog rm-location        --input '<IRmLocationInput json>'
 adhd-backlog backlog delete             --input '<IDeleteIssueInput json>'
+adhd-backlog backlog embedding-status   --input '{}'
+adhd-backlog backlog merge-project      --input '{"fromUid": string, "toUid": string, "by": string}'
+adhd-backlog backlog rm-project         --input '{"uid": string, "reason": string, "by": string}'
 adhd-backlog batch action               --input '<IBatchActionInput json>'
 ```
 
@@ -71,8 +80,10 @@ Available commands:
   backlog claim  { input: { uid: string, by: string, action: 'claim'|'release'|'renew', force?: boolean } }
   backlog create  { input: { title: string, body: string, project: string, component?: string, kind?: string, status?: string, priority?: string, citations?: object[], author?: string, assignee?: string, gitContext?: string, dedupeExcludeUid?: string, by: string, duplicateAction?: 'abort'|'force'|'comment', awaitEmbed?: boolean } }
   backlog delete  { input: { uid: string, reason: string, by: string, awaitEmbed?: boolean } }
+  backlog embedding-status  { input: {} }
   backlog get  { input: { uid: string, fields?: union[] } | { registry: 'project'|'component'|'location', name: string, filter?: object } }
-  backlog lookup  { input: { q: string } }
+  backlog lookup  { input: { q: string, kind?: 'location'|'project'|'component'|'issue' } }
+  backlog merge-project  { input: { fromUid: string, toUid: string, by: string } }
   backlog move  { input: { uid: string, toProject?: string, toComponent?: string, by: string } }
   backlog open-curve  { input: { filter?: object, at: string[] } }
   backlog part-of-rollup  { input: { uid: string, countOnly?: boolean, limit?: number, after?: string } }
@@ -81,6 +92,7 @@ Available commands:
   backlog query  { input: { text?: string, filter?: object, fields?: union[], sort?: 'priority'|'updated'|'created'|'relevance'|'textMatch', direction?: 'asc'|'desc', limit?: number, offset?: number, after?: string, view?: 'list'|'ready'|'graph'|'order'|'stale'|'similar'|'overlap'|'projects'|'components'|'locations', format?: 'json'|'markdown', overlapAxis?: 'file'|'project'|'component'|'author', overlapUids?: string[], staleAfterMin?: number } }
   backlog relate  { input: { sourceUid: string, targetUid: string, rel: 'relates_to'|'supersedes'|'blocks'|'duplicate_of'|'part_of', action: 'add'|'remove', by: string } }
   backlog rm-location  { input: { uid: string, by: string, reason?: string } }
+  backlog rm-project  { input: { uid: string, reason: string, by: string } }
   backlog transition  { input: { uid: string, by: string, toStatus: string, note?: string, citations?: object[], gitContext?: string } }
   backlog update  { input: { uid: string, by: string, title?: string, body?: string, kind?: string, priority?: string, assignee?: string, author?: string, awaitEmbed?: boolean } }
   backlog upsert-component  { input: { project: string, name: string, path?: string, description?: string, by: string } }
@@ -196,7 +208,8 @@ Each verb is also an MCP tool once `.mcp.json` wires the server, named
 `backlog_open_curve`, `backlog_lookup`, `backlog_create`, `backlog_update`,
 `backlog_transition`, `backlog_claim`, `backlog_relate`, `backlog_move`,
 `backlog_upsert_project`, `backlog_upsert_component`,
-`backlog_upsert_location`, `backlog_rm_location`, `backlog_delete`, plus the
+`backlog_upsert_location`, `backlog_rm_location`, `backlog_merge_project`,
+`backlog_rm_project`, `backlog_embedding_status`, `backlog_delete`, plus the
 un-namespaced `batch_action`.
 
 ## 3. Issue verbs — worked examples
@@ -435,9 +448,13 @@ A component-scoped scan is how a repo's own work is found (e.g.
 | `upsert-component` | registering/updating a path _inside_ an already-registered project               | `(project, name)`             |
 | `upsert-location`  | pointing a tool/file/URL at its owning component so `lookup` resolves it         | `(component, locType, value)` |
 | `rm-location`      | retiring a location (soft-invalidate)                                            | `uid`                         |
+| `merge-project`    | collapsing a DUPLICATE project into the canonical one (reviewed, one-way)        | `(fromUid, toUid)`            |
+| `rm-project`       | retiring a project with no survivor (reviewed, one-way)                          | `uid`                         |
 
-All four are create-or-update by that key — never a duplicate row — and all
-require `by`.
+The four `upsert*`/`rm-location` rows are create-or-update by that key — never a
+duplicate row — and all require `by`. The two project-retirement verbs are
+explicit, reviewed, one-way operations (see "Consolidating duplicate projects"
+below).
 
 **Register or update a project** (create-or-update by `name`; also mints the
 project's reserved default component `(root)` on first creation):
@@ -472,12 +489,35 @@ $ adhd-backlog backlog lookup --input '{"q":"packages/auth/src/index.ts"}'
 {"ok":true,"data":{"project":{"uid":"020e87f2-…","name":"demo-project","path":"/tmp/demo"},"component":{"uid":"41a61c6d-…","name":"auth-service","path":"packages/auth"},"location":{"uid":"a4b0dd6b-…","locType":"path","value":"packages/auth/src/index.ts"}}}
 ```
 
-`lookup` classifies `q` automatically as a tool name, file path, or URL —
-it only resolves against LOCATIONS already registered via `upsert-location`,
-never against a bare project/component name. An unregistered value returns
-`not_found` (exit 4); a path miss falls back to a suffix/prefix scan before
-giving up, and reports a `hint` when only a partial match was found — never
-a silent empty result.
+`lookup` routes `q` by shape, in order: (1) a **uid or unique uid prefix**
+returns `{"redirect":{"verb":"get","uid":…}}`; (2) an **issue title** with
+exactly one match returns the same `get` redirect, and a title matching two or
+more issues is refused (`ambiguous_reference`); (3) a **location** is
+classified as a tool name / file path / URL and resolved as before; (4) a
+**project name or `repoUrl`** resolves to its project. Pass an optional
+`"kind":"location"|"project"|"component"|"issue"` to force one branch. Only an
+unregistered location is still a bare `not_found` (exit 4); a path miss falls
+back to a suffix/prefix scan before giving up, and reports a `hint` when only a
+partial match was found — never a silent empty result.
+
+**Consolidating duplicate projects** — two rows registered for the same repo
+(same `repoUrl`, different `name`) split every `owns_project` read. Merge the
+duplicate INTO the canonical survivor (one `BEGIN IMMEDIATE`; every component
+is re-pointed, the duplicate is soft-retired with a one-hop redirect so its old
+NAME still resolves, and its id is never reused):
+
+```
+$ adhd-backlog backlog merge-project --input '{"fromUid":"020e87f2-…","toUid":"41a61c6d-…","by":"claude:1"}'
+{"ok":true,"data":{"survivorUid":"41a61c6d-…","retiredUid":"020e87f2-…","movedIssues":7,"retired":true}}
+```
+
+A second identical `merge-project` is an idempotent no-op. Retire a project
+with no survivor (its old name then resolves to nothing) with:
+
+```
+$ adhd-backlog backlog rm-project --input '{"uid":"020e87f2-…","reason":"stale duplicate","by":"claude:1"}'
+{"ok":true,"data":{"uid":"020e87f2-…","retired":true}}
+```
 
 **Remove a location** (soft-invalidate by `uid`):
 
@@ -550,8 +590,9 @@ status:'rejected', reason}` — `value`/`reason` is the SAME outcome envelope
 `error.code` still applies. `mode` (`'parallel'` default · `'serial'` ·
 `'chained'`), `onItemError` (`'continue'` default · `'abort'`), and
 `concurrency`/`itemTimeoutMs` govern how the fan-out runs. The valid
-`operation` values are exactly the 17 mounted verbs above (the nine issue
-verbs, the four registry verbs, and the three stats reads of §8), each
+`operation` values are exactly the 21 mounted verbs above (the nine issue
+verbs, the six registry verbs, the three stats reads of §8, `report`,
+`query`, and `embedding-status`), each
 prefixed `backlog/` — passing a bare verb name (`"create"`) is rejected with
 `invalid_argument` naming the full list.
 

@@ -29,10 +29,11 @@
  *
  * ## What is no longer testable here
  *
- * The application layer's mounted surface is exactly the 18 verbs `api.ts`
- * exports (`get, query, priorityMatrix, partOfRollup, openCurve,
+ * The application layer's mounted surface is exactly the 21 verbs `api.ts`
+ * exports (`get, query, priorityMatrix, partOfRollup, openCurve, report,
  * embeddingStatus, lookup, create, update, transition, claim, relate, move,
- * upsertProject, upsertComponent, upsertLocation, rmLocation, delete`,
+ * upsertProject, upsertComponent, upsertLocation, rmLocation, mergeProject,
+ * rmProject, delete`,
  * projected onto the CLI's kebab-case command names). There is no `admin`
  * verb anywhere in that surface — it is not exported by `api.ts`, it is not
  * in `server.ts`'s pinned `BACKLOG_VERBS` list, and `cli.ts` mounts no such

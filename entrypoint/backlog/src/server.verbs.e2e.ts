@@ -408,7 +408,7 @@ describe('SPEC.md §6.7 — one apigen package composed once, mounted to four tr
       .sort();
     expect(liveLeaves).toEqual([...BACKLOG_VERBS].sort());
     expect(live.surface.length).toBe(BACKLOG_VERBS.length);
-    expect(BACKLOG_VERBS.length).toBe(19);
+    expect(BACKLOG_VERBS.length).toBe(21);
   });
 });
 

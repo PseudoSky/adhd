@@ -42,9 +42,16 @@ export {
   upsertComponent,
   upsertLocation,
   rmLocation,
+  mergeProject,
+  rmProject,
   delete,
 } from './api.js';
 export type { BacklogCtx, IEmbeddingStatusResult } from './api.js';
+export type {
+  IMergeProjectInput,
+  IMergeProjectOutcome,
+  IRmProjectInput,
+} from './write/merge-project.js';
 
 // The response envelope every verb returns, plus its closed error-code union
 // and the exit codes a CLI host keys off.

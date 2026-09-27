@@ -42,6 +42,7 @@ import {
   StaleSupersedeError,
 } from '../write/errors.js';
 import { isUidShaped } from '../write/catalog.js';
+import { followRedirect } from './redirect.js';
 import {
   classifyUidRef,
   isUidPrefixShaped,
@@ -174,6 +175,39 @@ export async function resolveIssueByUid(
 }
 
 /**
+ * Resolve a token to the LOGICAL node it names TODAY: follow a one-hop merge
+ * redirect (C1's soft-retired project/component rows), then walk the
+ * `SUPERSEDES` chain to its head. NEVER throws on a superseded uid — that is
+ * the whole point of the split from {@link resolveIssueByUid}, which throws
+ * `StaleSupersedeError` because its callers (`get`, `card` blockers, `stats`)
+ * want to be told a reference is stale, not silently forwarded.
+ *
+ * This is the non-throwing resolver C3's attestation `subject.id` uses: an
+ * attestation written against a uid that a later body-edit superseded must
+ * still name the SAME logical item, and a caller holding a stale citation
+ * wants today's issue, not the next-oldest corpse.
+ *
+ * Delegates the chain walk to {@link currentUidOf} rather than re-implementing
+ * it (ADR-0002 — one concept, one implementation). Returns the head
+ * `NodeRecord`; when the chain dead-ends with no live successor it returns the
+ * node it started from, which is the most useful answer available.
+ */
+export async function resolveLogicalIssue(
+  graph: GraphBackend,
+  ref: string
+): Promise<NodeRecord> {
+  const record = await resolveUidPrefix(graph, ref);
+  const redirected = await followRedirect(graph, record);
+  const current = redirected ?? record;
+  if (!current.isSuperseded) return current;
+
+  const headUid = await currentUidOf(graph, current);
+  if (headUid === undefined) return current;
+  const head = await graph.getNodeByUid(headUid);
+  return head && head.tInvalid === undefined ? head : current;
+}
+
+/**
  * Walk the `SUPERSEDES` chain forward from a superseded node to the uid the
  * issue lives under NOW.
  *
@@ -191,7 +225,7 @@ export async function resolveIssueByUid(
  * chain that dead-ends immediately yields `undefined` — which
  * {@link StaleSupersedeError} documents as "not known here".
  */
-async function currentUidOf(
+export async function currentUidOf(
   graph: GraphBackend,
   superseded: NodeRecord
 ): Promise<string | undefined> {
@@ -251,8 +285,37 @@ export async function tryResolveRef(
     limit: 1,
   });
   const record = matches[0];
-  if (!record) return null;
-  return { id: record.id, uid: record.uid, name: record.name ?? ref, record };
+  if (record) {
+    return { id: record.id, uid: record.uid, name: record.name ?? ref, record };
+  }
+  // C1 (AC5) — a soft-RETIRED project/component's old name must still resolve
+  // to its canonical survivor via a ONE-HOP redirect. This runs ONLY after the
+  // live-name lookup missed, so it can never change the result of a name that
+  // resolves to a live row (the blast-radius audit condition on `tryResolveRef`).
+  // The retired row is `t_invalid`-stamped, so it is invisible to every list
+  // view; it is reachable here by name, and `followRedirect` hands back the
+  // live survivor (a redirect→redirect chain throws, never chains silently).
+  if (expectedKind === 'project' || expectedKind === 'component') {
+    const retired = await graph.queryNodes({
+      kind: expectedKind,
+      name: ref,
+      liveOnly: false,
+      metadata: { redirectTo: { exists: true } },
+      limit: 5,
+    });
+    for (const row of retired) {
+      const target = await followRedirect(graph, row);
+      if (target) {
+        return {
+          id: target.id,
+          uid: target.uid,
+          name: target.name ?? ref,
+          record: target,
+        };
+      }
+    }
+  }
+  return null;
 }
 
 /** Like {@link tryResolveRef}, but throws {@link CatalogNotFoundError} on a miss — for call sites that need "this reference must already exist." */

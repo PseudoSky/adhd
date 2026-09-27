@@ -387,6 +387,15 @@ export interface ICreateIssueResult {
   duplicateScanDegradedReason?: DuplicateScanDegradedReason;
   supersededUid?: string;
   commentedOn?: { uid: string; noteId: string };
+  /**
+   * C1 AC8 — how the issue's component was resolved. `'explicit'` when the
+   * caller supplied `component` and it resolved; `'default-root'` when the
+   * caller supplied none and the project's reserved `(root)` default was used.
+   * Makes "silently defaulted" distinguishable from "resolved": a supplied
+   * component that does NOT resolve still throws `CatalogNotFoundError` and
+   * never reaches this field.
+   */
+  placementResolved?: 'explicit' | 'default-root';
 }
 
 function assertNonBlank(
@@ -1150,6 +1159,11 @@ export async function createIssue(
           : await resolveDefaultComponentTx(tx, {
               projectRowid: project.rowid,
             });
+      // C1 AC8 — a supplied component that resolved is 'explicit'; none
+      // supplied means the reserved `(root)` default was used. A supplied
+      // component that failed to resolve threw above, so it is never here.
+      const placementResolved: 'explicit' | 'default-root' =
+        input.component !== undefined ? 'explicit' : 'default-root';
 
       const kindName = input.kind ?? policy.defaultKind ?? 'issue';
       const kindRow = await mintOrResolveCatalogTx(tx, {
@@ -1357,6 +1371,7 @@ export async function createIssue(
         // `ICreateIssueResult` doc comment.
         ...(duplicateCandidates.length > 0 ? { duplicateCandidates } : {}),
         ...degradedSignal,
+        placementResolved,
       };
     }
   );
