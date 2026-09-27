@@ -56,16 +56,16 @@
   },
   "unknown-command": {
     "stdout": "",
-    "stderr": "{\"code\":\"not_found\",\"message\":\"Unknown command: harness nope\\n\\nAvailable commands:\\n\\n  harness boom\\n  harness delete-item  { id: string }\\n  harness get-item  { id: string, includeArchived?: boolean }\\n  harness list-items  { tags?: string[] }\\n  harness stream-nums\\n  harness who-am-i\"}\n",
+    "stderr": "{\"code\":\"not_found\",\"message\":\"Unknown command: harness nope\\n\\nAvailable commands:\\n\\nNamespaced verbs (namespace + verb, per-field flags):\\n  (none)\\n\\nVerbs (one-token, --input JSON envelope):\\n  harness boom\\n  harness delete-item  { id: string }\\n  harness get-item  { id: string, includeArchived?: boolean }\\n  harness list-items  { tags?: string[] }\\n  harness stream-nums\\n  harness who-am-i\\n\\nCalling convention: <verb> --input '{\\\"field\\\":\\\"value\\\"}'  (per-field flags are also accepted; run `<verb> --help` for a verb's own flags)\"}\n",
     "code": 4
   },
   "help-listing-empty-argv": {
-    "stdout": "Available commands:\n\n  harness boom\n  harness delete-item  { id: string }\n  harness get-item  { id: string, includeArchived?: boolean }\n  harness list-items  { tags?: string[] }\n  harness stream-nums\n  harness who-am-i\n",
+    "stdout": "Available commands:\n\nNamespaced verbs (namespace + verb, per-field flags):\n  (none)\n\nVerbs (one-token, --input JSON envelope):\n  harness boom\n  harness delete-item  { id: string }\n  harness get-item  { id: string, includeArchived?: boolean }\n  harness list-items  { tags?: string[] }\n  harness stream-nums\n  harness who-am-i\n\nCalling convention: <verb> --input '{\"field\":\"value\"}'  (per-field flags are also accepted; run `<verb> --help` for a verb's own flags)\n",
     "stderr": "",
     "code": 0
   },
   "help-flag": {
-    "stdout": "Available commands:\n\n  harness boom\n  harness delete-item  { id: string }\n  harness get-item  { id: string, includeArchived?: boolean }\n  harness list-items  { tags?: string[] }\n  harness stream-nums\n  harness who-am-i\n",
+    "stdout": "Available commands:\n\nNamespaced verbs (namespace + verb, per-field flags):\n  (none)\n\nVerbs (one-token, --input JSON envelope):\n  harness boom\n  harness delete-item  { id: string }\n  harness get-item  { id: string, includeArchived?: boolean }\n  harness list-items  { tags?: string[] }\n  harness stream-nums\n  harness who-am-i\n\nCalling convention: <verb> --input '{\"field\":\"value\"}'  (per-field flags are also accepted; run `<verb> --help` for a verb's own flags)\n",
     "stderr": "",
     "code": 0
   },

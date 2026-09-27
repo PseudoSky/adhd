@@ -69,6 +69,7 @@ import {
   createEmbeddingLiveConfig,
 } from './write/embedding-config.js';
 import { readBacklogVersionInfo } from './version-info.js';
+import { BACKLOG_VERBS } from './vocabulary.js';
 import type { Logger, OutputPlugin, RunInput } from '@adhd/apigen-core-client';
 
 /**
@@ -185,29 +186,12 @@ export const BACKLOG_HOST_COMMANDS: readonly string[] = [
  *
  * Order is the SPEC.md §4/§6 declaration order, not alphabetical; compare as sets.
  */
-export const BACKLOG_VERBS: readonly string[] = [
-  'get',
-  'query',
-  'priority-matrix',
-  'part-of-rollup',
-  'open-curve',
-  'report',
-  'lookup',
-  'create',
-  'update',
-  'transition',
-  'claim',
-  'relate',
-  'move',
-  'upsert-project',
-  'upsert-component',
-  'upsert-location',
-  'rm-location',
-  'delete',
-  'embedding-status',
-  'merge-project',
-  'rm-project',
-];
+// The pinned data-verb list now lives in `./vocabulary.ts` (a leaf module with
+// zero imports) so `query/views/catalog.ts` can enumerate the SAME binding
+// without dragging the server's fastify/MCP plugin graph into the query layer.
+// Re-exported here so every existing `from './server.js'` importer resolves
+// unchanged.
+export { BACKLOG_VERBS };
 
 /**
  * One mounted operation, projected to all four transports backlog serves.
@@ -343,6 +327,98 @@ export function resolveExpectedMcpToolNames(
     }
   }
   return [...names].sort();
+}
+
+/**
+ * Synthesize the canonical `Operation` descriptor for one pinned data verb.
+ *
+ * `describeBacklogSurface` derives its published surface from
+ * {@link BACKLOG_VERBS} — not from a hand-written second list — by projecting
+ * each verb through the SAME naming authority (`project`) every real mount
+ * uses. `namespace`/`path` are the exact `['backlog', verb]` shape extraction
+ * produces for an `api.ts` export (see `api.surface.e2e.ts`), so the projected
+ * id/mcpTool/cliCommand are byte-identical to the real mounted operation's.
+ * `http.verb` may differ from a given real op's (it is derived from
+ * `safe`/input shape, which this synthetic descriptor leaves at its default) —
+ * callers compare by identity (`id`), never by that projection detail.
+ */
+function synthesizeBacklogOperation(verb: string): Operation {
+  return {
+    id: `backlog/${verb}`,
+    host: 'ts',
+    namespace: { raw: 'backlog', words: ['backlog'] },
+    path: [{ raw: verb, words: verb.split('-') }],
+    kind: 'action',
+    async: false,
+    streaming: false,
+    safe: false,
+    input: {},
+    output: {},
+    envelope: {},
+    typeText: null,
+  };
+}
+
+/**
+ * The full advertised surface, one entry per pinned data verb, each projecting
+ * to the identical `id`/`mcpTool`/`cliCommand` a real mounted operation has.
+ *
+ * Derived from {@link BACKLOG_VERBS} (the single pinned list) so it can never
+ * drift from what `server.verbs.spec.ts` checks; {@link assertSurfaceIsReal}
+ * proves each entry is actually present in the built package.
+ */
+export function describeBacklogSurface(): IMountedOperationSurface[] {
+  return BACKLOG_VERBS.map(synthesizeBacklogOperation)
+    .flatMap((op) => describeMountedSurface([op]))
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/**
+ * Assert that every advertised verb is a REAL mounted operation in the built
+ * package — the AC3 mechanism, and the fix for the `enrich` class of defect
+ * (an agent spec that advertises a verb this tool does not implement).
+ *
+ * Reads the baked operation descriptors (`dist/api.ir.json`, the SAME artifact
+ * every real mount composes from) and compares its projected surface against
+ * {@link describeBacklogSurface} **both ways**: a verb advertised but absent
+ * from the build throws (naming it), and an operation mounted but absent from
+ * the pinned list also throws (a split brain). The artifact reader is
+ * synchronous and content-hash validated; a missing/stale artifact is a hard
+ * failure, never a silent pass (an unverifiable surface is not a real one).
+ *
+ * Library-only / NEVER mounted (`index.ts` re-exports it): it opens no store.
+ */
+export function assertSurfaceIsReal(): void {
+  const baked = readBakedIrArtifact(backlogDistDir());
+  if (!baked) {
+    throw new Error(
+      '@adhd/backlog: assertSurfaceIsReal cannot verify the surface — no valid baked IR artifact at ' +
+        `${backlogDistDir()} (run "nx build backlog" first). Refusing to pass an unverifiable surface.`
+    );
+  }
+  const real = describeMountedSurface(baked);
+  const advertised = describeBacklogSurface();
+  const realIds = new Set(real.map((entry) => entry.id));
+  const advertisedIds = new Set(advertised.map((entry) => entry.id));
+  const absentFromBuild = [...advertisedIds].filter((id) => !realIds.has(id)).sort();
+  const absentFromCatalog = [...realIds]
+    .filter((id) => !advertisedIds.has(id))
+    .sort();
+  if (absentFromBuild.length === 0 && absentFromCatalog.length === 0) return;
+  const lines = [
+    '@adhd/backlog: mounted-surface self-check failed — an advertised verb is not the surface the built package mounts.',
+  ];
+  if (absentFromBuild.length > 0) {
+    lines.push(
+      `  advertised but absent from the built package (the \`enrich\` class): ${absentFromBuild.join(', ')}`
+    );
+  }
+  if (absentFromCatalog.length > 0) {
+    lines.push(
+      `  mounted but not in the pinned BACKLOG_VERBS list (split brain): ${absentFromCatalog.join(', ')}`
+    );
+  }
+  throw new Error(lines.join('\n'));
 }
 
 export interface StartOpts {

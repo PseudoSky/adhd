@@ -61,6 +61,8 @@ export {
   startBacklogServer,
   buildBacklogApigenPackage,
   resolveExpectedMcpToolNames,
+  describeBacklogSurface,
+  assertSurfaceIsReal,
 } from './server.js';
 export type { StartOpts } from './server.js';
 

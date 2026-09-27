@@ -84,8 +84,8 @@ import type { StoreAdapter } from '@adhd/sox-store-adapter';
 import { RESERVED_TERMINAL_STATUS_NAMES } from '../write/catalog.js';
 import { catalogNameFold } from '../write/catalog-repair.js';
 
-/** The catalog kinds this guard reads — a status/priority rows-only read, never the issue graph. */
-const GUARDED_CATALOG_KINDS = ['status', 'priority'] as const;
+/** The catalog kinds this guard reads — a status/priority/kind rows-only read, never the issue graph. */
+const GUARDED_CATALOG_KINDS = ['status', 'priority', 'kind'] as const;
 
 /**
  * One way the catalog can violate an invariant. Carried as structured data on
@@ -240,7 +240,7 @@ export async function inspectCatalogInvariants(
   adapter: StoreAdapter
 ): Promise<CatalogInvariantViolation[]> {
   const { rows } = await adapter.executeAll<IRawCatalogRow>(
-    'SELECT rowid, uid, kind, name, meta FROM node WHERE kind IN (?, ?) AND t_invalid IS NULL ORDER BY kind ASC, rowid ASC',
+    'SELECT rowid, uid, kind, name, meta FROM node WHERE kind IN (?, ?, ?) AND t_invalid IS NULL ORDER BY kind ASC, rowid ASC',
     [...GUARDED_CATALOG_KINDS]
   );
 

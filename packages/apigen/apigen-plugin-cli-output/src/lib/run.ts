@@ -260,14 +260,51 @@ function paramsText(params: ParamInfo[] | undefined): string {
     .join(', ');
 }
 
-/** Human-readable command listing, derived from the live OpPlan-keyed route table (never hardcoded). */
-function formatUsage(routes: Map<string, CliRoute>): string {
-  const lines = ['Available commands:', ''];
+/**
+ * Human-readable command listing, derived from the live OpPlan-keyed route
+ * table (never hardcoded) — rendered as TWO labelled sections so the help text
+ * reflects the SAME dispatch distinction `matchCommand` already makes:
+ *
+ *  - **Namespaced verbs** (`namespace + verb`) — a `--use` MOUNT plugin's
+ *    synthetic operations (`plan.isMount`), e.g. `batch action`. Additive:
+ *    every apigen host that mounts a plugin gains this section.
+ *  - **Verbs** (one-token) — the host package's own source operations, whose
+ *    calling convention is the `--input '<json>'` envelope (per-field flags are
+ *    also accepted; `--help` on a verb prints those).
+ *
+ * The classification is `plan.isMount`, not `cli.path.length`: a host's own
+ * verbs also carry their package namespace as the first path segment
+ * (`backlog get`), so a length test cannot distinguish them from a mount's
+ * `namespace verb` — `isMount` is the structural fact.
+ */
+export function formatUsage(routes: Map<string, CliRoute>): string {
   const sorted = [...routes.entries()].sort(([a], [b]) => a.localeCompare(b));
-  for (const [key, { plan }] of sorted) {
-    const text = paramsText(plan.params);
-    lines.push(`  ${key}${text ? `  { ${text} }` : ''}`);
+  const namespaced: Array<[string, CliRoute]> = [];
+  const verbs: Array<[string, CliRoute]> = [];
+  for (const entry of sorted) {
+    (entry[1].plan.isMount ? namespaced : verbs).push(entry);
   }
+
+  const render = ([key, { plan }]: [string, CliRoute]): string => {
+    const text = paramsText(plan.params);
+    return `  ${key}${text ? `  { ${text} }` : ''}`;
+  };
+
+  const lines = [
+    'Available commands:',
+    '',
+    'Namespaced verbs (namespace + verb, per-field flags):',
+  ];
+  if (namespaced.length === 0) lines.push('  (none)');
+  else for (const entry of namespaced) lines.push(render(entry));
+  lines.push('');
+  lines.push('Verbs (one-token, --input JSON envelope):');
+  if (verbs.length === 0) lines.push('  (none)');
+  else for (const entry of verbs) lines.push(render(entry));
+  lines.push('');
+  lines.push(
+    "Calling convention: <verb> --input '{\"field\":\"value\"}'  (per-field flags are also accepted; run `<verb> --help` for a verb's own flags)"
+  );
   return lines.join('\n');
 }
 
@@ -421,7 +458,7 @@ export interface CliRawCall {
 }
 
 /** One registered command: its `OpPlan` plus the dispatch closure bound to it (`(call) => dispatchForPlan(plan, invoke, call, opts)`). */
-interface CliRoute {
+export interface CliRoute {
   plan: OpPlan;
   dispatch: (call: Omit<RuntimeCall, 'operation' | 'ctx'>) => Promise<LayerResult>;
 }

@@ -12,8 +12,64 @@ other eight agents building in parallel.
 
 Every export below was read directly out of the current file (paths and line
 numbers are cited per-export). Nothing here is guessed. Counts: `tx.ts` — 24
-exports, `catalog.ts` — 12 exports, `errors.ts` — 17 exports, `audit.ts` — 3
-exports. **Total: 56 exports.**
+exports, `catalog.ts` — 17 exports, `errors.ts` — 17 exports, `audit.ts` — 3
+exports. **Total: 61 exports.**
+
+---
+
+## The five-part promotion gate (vocabulary governance)
+
+A word becomes a **primitive** only when **all five** hold:
+
+1. **Not expressible by existing primitives.**
+2. **Demanded by ≥2 independent in-repo consumers** — a distinct actor that
+   must act on the item, never prior art that solved the problem elsewhere.
+3. **Carries a rename-proof id.**
+4. **Validatable by the closed grammar** (the write layer's `EDGE_KIND_TABLE`
+   / mint rules).
+5. **Discoverable on a catalog surface** — it appears in the generated
+   `query {view:"kinds"}` / `{view:"catalogs"}` view
+   (`src/query/views/catalog.ts`), never only in prose.
+
+The catalog is a **generated view over the validating registry** — never a
+hand-maintained list. Every non-`store` term is derived from its in-code
+source at call time (`EDGE_KIND_TABLE`, the issue-field union, the error-code
+union, `VALID_LOCATION_TYPES`, `BACKLOG_VERBS`); store-backed `kind`/`status`/
+`priority` terms are the live rows with their caller counts.
+
+### Governed extension namespace
+
+Extensions are governed, not free: a namespace is **registered by an owner
+through a registration verb**; each extension declares a **type** and a
+**lifecycle** (`active`/`deprecated`, with `replacedBy`); extensions are
+**discoverable on the same catalog surface**; and an extension may not be
+**promoted to the core** without the five-part gate above. The lighter bar for
+an extension is an explicit decision, stated so extension sprawl cannot
+silently reproduce the custom-field failure.
+
+### The `kind` canonical rule
+
+`kind` is an **open** vocabulary (`src/query/resolve.ts`) with no write-path
+canonical spelling. Its canonical is **NFC-fold, lowercase**: the in-code
+`EDGE_KIND_TABLE`/verb vocabulary and the dominant live spellings are
+lowercase, and a lowercase canonical is the one a case-insensitive mint guard
+(`mintOrResolveCatalogTx`'s folded lookup, `findCaseFoldedCatalogRowTx`) can
+reliably re-find, so the next ordinary `create` cannot re-mint a fragment a
+one-shot repair collapsed. The case-fragment repair
+(`planCaseFragmentMerge`/`applyCaseFragmentMerge`) groups `kind` by the same
+`catalogNameFold` as `status`/`priority`; a group with no lowercase member is
+surfaced `unmergeable` rather than merged into a spelling the fold lookup
+would not re-find. `status` stays lowercase and `priority` uppercase — their
+write paths emit those spellings.
+
+### Deprecated vocabulary
+
+A deprecated catalog term (`meta.lifecycle === 'deprecated'`, or a `kind` in
+the frozen `DEPRECATED_KIND_NAMES` set) is **refused on mint** unless the
+caller passes `allowDeprecated: true` (a typed caller decision, never an env
+var). The error names the replacement (`meta.replacedBy`, or the in-code
+`DEPRECATED_KIND_REPLACEMENTS`), and the term is still discoverable on the
+catalog surface with `lifecycle:"deprecated"` + `replacedBy`.
 
 ---
 
@@ -303,7 +359,7 @@ contract.
 
 ---
 
-## `catalog.ts` (12 exports)
+## `catalog.ts` (17 exports)
 
 ### `isUidShaped(ref)` — function (`uid-prefix.ts:47`)
 
@@ -394,6 +450,8 @@ export interface IMintOrResolveInput {
   ref: string;
   mintMetadata?: (tx: AdapterTransaction) => Promise<Record<string, unknown>>;
   at?: string;
+  /** A DEPRECATED catalog name is refused on mint unless true (a typed caller decision, never an env var). */
+  allowDeprecated?: boolean;
 }
 ```
 
@@ -402,7 +460,7 @@ mint, never read or applied when `ref` resolves to an existing row. `at` is
 NOT threaded into `resolveEdgeKindTx`'s own `edge_kind` rows (those keep
 their own clock; see that function's guarantee below).
 
-### `RESERVED_TERMINAL_STATUS_NAMES` — const (`catalog.ts:285`)
+### `RESERVED_TERMINAL_STATUS_NAMES` — const (`catalog.ts:295`)
 
 ```ts
 export const RESERVED_TERMINAL_STATUS_NAMES: ReadonlySet<string>;
@@ -415,7 +473,7 @@ case-sensitive. The mint layer seeds a `status` row's `terminal` flag from it
 name-blind (ADR-0002 D1). `catalog-repair.ts` re-exports this SAME set rather
 than declaring its own.
 
-### `isReservedTerminalStatusName(name)` — function (`catalog.ts:300`)
+### `isReservedTerminalStatusName(name)` — function (`catalog.ts:310`)
 
 ```ts
 export function isReservedTerminalStatusName(name: string): boolean;
@@ -425,7 +483,59 @@ Guarantees: exact, case-sensitive membership in
 `RESERVED_TERMINAL_STATUS_NAMES` — the same predicate the `(kind,name)`
 resolve uses.
 
-### `mintOrResolveCatalogTx(tx, input)` — function (`catalog.ts:353`)
+### `DEPRECATED_KIND_NAMES` — const (`catalog.ts:325`)
+
+```ts
+export const DEPRECATED_KIND_NAMES: ReadonlySet<string>;
+```
+
+Guarantees: the frozen in-code set of RETIRED `kind` terms (`EPIC`), modelled
+on `RESERVED_TERMINAL_STATUS_NAMES`. Membership is decided on the case fold, so
+`EPIC`/`epic` are one term. A `kind` in this set is REFUSED on mint (naming
+`DEPRECATED_KIND_REPLACEMENTS`'s replacement) unless the caller passes
+`allowDeprecated`, and is reported `lifecycle:"deprecated"` on the generated
+catalog view (`query/views/catalog.ts`).
+
+### `DEPRECATED_KIND_REPLACEMENTS` — const (`catalog.ts:333`)
+
+```ts
+export const DEPRECATED_KIND_REPLACEMENTS: ReadonlyMap<string, string>;
+```
+
+Guarantees: the term to use INSTEAD of each `DEPRECATED_KIND_NAMES` entry
+(`EPIC` → `FEAT`). A row's live `meta.replacedBy` is preferred when present;
+this map is the in-code fallback the error and the catalog both name.
+
+### `isDeprecatedKindName(name)` — function (`catalog.ts:348`)
+
+```ts
+export function isDeprecatedKindName(name: string): boolean;
+```
+
+Guarantees: case-fold membership in `DEPRECATED_KIND_NAMES` — `EPIC` and `epic`
+both count.
+
+### `deprecatedKindReplacement(name)` — function (`catalog.ts:353`)
+
+```ts
+export function deprecatedKindReplacement(name: string): string | undefined;
+```
+
+Guarantees: the case-folded in-code replacement for a deprecated `kind` name,
+or `undefined` when the name is not one of `DEPRECATED_KIND_NAMES`.
+
+### `VALID_LOCATION_TYPES` — const (`catalog.ts:1463`)
+
+```ts
+export const VALID_LOCATION_TYPES: readonly ILocationType[];
+```
+
+Guarantees: the closed `location_type` vocabulary (`path`/`url`/`tool`) the
+`upsertLocation` write validates against, exported so the generated
+`location_type` catalog (`query/views/catalog.ts`) projects from the SAME
+source rather than a second, hand-maintained copy.
+
+### `mintOrResolveCatalogTx(tx, input)` — function (`catalog.ts:491`)
 
 ```ts
 export async function mintOrResolveCatalogTx(tx: AdapterTransaction, input: IMintOrResolveInput): Promise<IResolvedCatalogRow>;
@@ -436,7 +546,7 @@ uid-shaped `ref` that does not resolve throws `CatalogNotFoundError` (uids
 are never auto-vivified). A name-shaped `ref` that does not resolve is
 minted via `writeNodeTx` inside the SAME `tx`.
 
-### `mintOrResolveStatusTx(tx, input)` — function (`catalog.ts:427`)
+### `mintOrResolveStatusTx(tx, input)` — function (`catalog.ts:614`)
 
 ```ts
 export async function mintOrResolveStatusTx(tx: AdapterTransaction, input: { ref: string; at?: string }): Promise<IResolvedCatalogRow>;
@@ -450,7 +560,7 @@ self-heal): an existing row is resolved, never re-minted, so no duplicate rows
 accumulate. A uid-shaped `ref` that does not resolve throws
 `CatalogNotFoundError`.
 
-### `nextPriorityRankTx(tx)` — function (`catalog.ts:442`)
+### `nextPriorityRankTx(tx)` — function (`catalog.ts:629`)
 
 ```ts
 export async function nextPriorityRankTx(tx: AdapterTransaction): Promise<number>;
@@ -460,7 +570,7 @@ Guarantees: returns one past the current max `priority.meta.rank` (0 if no
 priority rows exist) — a novel priority can never silently outrank an
 existing one.
 
-### `EDGE_KIND_TABLE` — const (`catalog.ts:457`)
+### `EDGE_KIND_TABLE` — const (`catalog.ts:644`)
 
 ```ts
 export const EDGE_KIND_TABLE: readonly IEdgeKindRule[];
@@ -486,7 +596,7 @@ gate `supersedes`/`duplicate_of` use, with no `part_of`-specific code path.
 Re-adding the SAME parent is a no-op (`noop: true`). A multi-parent model would
 require changing this row's multiplicity, not special-casing `part_of`.
 
-### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:616`)
+### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:803`)
 
 ```ts
 export async function resolveEdgeKindTx(tx: AdapterTransaction, rel: string): Promise<IEdgeKindRule>;
@@ -501,7 +611,7 @@ row (corrupt or missing `meta` keys) is invalidated and replaced in the SAME
 `CatalogNotFoundError('edge_kind', rel)` if `rel` isn't in
 `EDGE_KIND_TABLE` at all.
 
-### `IProjectPolicy` — interface (`catalog.ts:684`)
+### `IProjectPolicy` — interface (`catalog.ts:871`)
 
 ```ts
 export interface IProjectPolicy {
@@ -537,7 +647,7 @@ disabled. A malformed (non-`string[]`) value falls back to the — also empty �
 default rather than being spread. Typed per-project config, never an
 environment toggle.
 
-### `resolveProjectPolicy(project)` — function (`catalog.ts:758`)
+### `resolveProjectPolicy(project)` — function (`catalog.ts:945`)
 
 ```ts
 export function resolveProjectPolicy(project: IResolvedProjectRow): IProjectPolicy;

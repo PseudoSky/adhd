@@ -252,6 +252,16 @@ export interface IMintOrResolveInput {
    * of any one issue's logical write, so they keep their own clock.
    */
   at?: string;
+  /**
+   * A DEPRECATED catalog name
+   * (`meta.lifecycle === 'deprecated'`, or a `kind` in the frozen
+   * {@link DEPRECATED_KIND_NAMES} set) is REFUSED on mint/resolve unless this
+   * is `true` — a typed caller decision, never an env var. Refusal throws
+   * `InvalidArgumentError('kind', …)` naming `meta.replacedBy` (or the in-code
+   * {@link DEPRECATED_KIND_REPLACEMENTS} fallback), so the caller is told the
+   * term to use instead. Only `kind` currently has a deprecated vocabulary.
+   */
+  allowDeprecated?: boolean;
 }
 
 /**
@@ -302,6 +312,49 @@ export function isReservedTerminalStatusName(name: string): boolean {
 }
 
 /**
+ * The RETIRED `kind` vocabulary — the borrowed terms the C8 spec retires with
+ * a replacement, modelled on {@link RESERVED_TERMINAL_STATUS_NAMES}: a frozen
+ * in-code set, so a retired term is refused on mint even before (or without) a
+ * row-level `meta.lifecycle:'deprecated'` data change. Membership is decided on
+ * the FOLDED name ({@link catalogNameFold}), so `EPIC`/`epic` are one term.
+ *
+ * `EPIC` is the one entry: it is a borrowed Jira primitive re-expressed by the
+ * existing `FEAT` kind (DESIGN §2 Invariant 6 / §6 "re-express in place, never
+ * re-key"). The replacement lives in {@link DEPRECATED_KIND_REPLACEMENTS}.
+ */
+export const DEPRECATED_KIND_NAMES: ReadonlySet<string> = new Set(['EPIC']);
+
+/**
+ * The term to use instead of each {@link DEPRECATED_KIND_NAMES} entry. Kept
+ * separate from the name set so a row's live `meta.replacedBy` (a reviewed
+ * repair's own decision) is preferred when present, with this map as the
+ * in-code fallback the error and the generated catalog both name.
+ */
+export const DEPRECATED_KIND_REPLACEMENTS: ReadonlyMap<string, string> = new Map([
+  ['EPIC', 'FEAT'],
+]);
+
+/** {@link DEPRECATED_KIND_NAMES}, folded once at module load — the membership key {@link isDeprecatedKindName} tests a folded name against. */
+const FOLDED_DEPRECATED_KIND_NAMES: ReadonlySet<string> = new Set(
+  [...DEPRECATED_KIND_NAMES].map((name) => catalogNameFold(name))
+);
+
+/** {@link DEPRECATED_KIND_REPLACEMENTS}, folded once at module load. */
+const FOLDED_DEPRECATED_KIND_REPLACEMENTS: ReadonlyMap<string, string> = new Map(
+  [...DEPRECATED_KIND_REPLACEMENTS].map(([from, to]) => [catalogNameFold(from), to])
+);
+
+/** Whether `name` is a RETIRED `kind` term under the case fold — `EPIC`/`epic` both count. */
+export function isDeprecatedKindName(name: string): boolean {
+  return FOLDED_DEPRECATED_KIND_NAMES.has(catalogNameFold(name));
+}
+
+/** The in-code replacement for a deprecated `kind` name, or `undefined` when it is not one. */
+export function deprecatedKindReplacement(name: string): string | undefined {
+  return FOLDED_DEPRECATED_KIND_REPLACEMENTS.get(catalogNameFold(name));
+}
+
+/**
  * Find a LIVE row of `catalogKind` whose name folds to the same token as `ref`
  * but is not spelled identically — the case-variant the write path refuses.
  *
@@ -338,6 +391,91 @@ async function findCaseVariantCatalogRowTx(
 }
 
 /**
+ * Find the LIVE row of `catalogKind` whose name case-folds to `ref` — a
+ * FOLD-RESOLUTION lookup for the one OPEN catalog with no write-path canonical
+ * spelling (`kind`).
+ *
+ * Unlike {@link findCaseVariantCatalogRowTx} (which REFUSES the variant),
+ * this returns the live row so a differently-cased spelling can be
+ * fold-RESOLVED onto it. That is the self-defeat guard for `kind`: without it,
+ * the next ordinary `create` with `BUG` would exact-match miss a live `bug`,
+ * miss the (kind-only) variant refusal, and re-mint the fragment a one-shot
+ * merge just collapsed. The exact-name SELECT has already missed when this
+ * runs, so a fold match is necessarily a different spelling.
+ *
+ * Bounded identically to the variant lookup: one statement over one kind's
+ * live rows, folding in JS, inside the caller's own `immediate` transaction.
+ */
+async function findCaseFoldedCatalogRowTx(
+  tx: AdapterTransaction,
+  catalogKind: FlatCatalogKind,
+  ref: string
+): Promise<
+  | {
+      rowid: number;
+      uid: string;
+      name: string;
+      metadata: Record<string, unknown> | undefined;
+    }
+  | undefined
+> {
+  const refFold = catalogNameFold(ref);
+  const { rows } = await tx.executeAll<{
+    rowid: number;
+    uid: string;
+    name: string | null;
+    meta: string | null;
+  }>(
+    'SELECT rowid, uid, name, meta FROM node WHERE kind = ? AND t_invalid IS NULL ORDER BY rowid ASC',
+    [catalogKind]
+  );
+  for (const row of rows) {
+    if (row.name === null) continue;
+    if (catalogNameFold(row.name) === refFold) {
+      return {
+        rowid: row.rowid,
+        uid: row.uid,
+        name: row.name,
+        metadata: parseMetaObject(row.meta),
+      };
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Refuse a DEPRECATED `kind` on mint/resolve unless the caller opted in
+ * (`allowDeprecated`). `kind` is the only catalog with a deprecated vocabulary
+ * today, so every other catalog is a no-op. A row is deprecated when its
+ * `meta.lifecycle === 'deprecated'`, OR when its NAME is in the frozen
+ * {@link DEPRECATED_KIND_NAMES} set — the latter so a retired borrowed term is
+ * refused even before (or without) a row-level metadata change, and even
+ * for a brand-new mint that has no row to read. Throws
+ * `InvalidArgumentError('kind', …)` (a caller error, exit 2) naming the
+ * replacement, so the caller can fix the payload without opening source.
+ */
+function assertKindNotDeprecated(
+  catalogKind: FlatCatalogKind,
+  name: string,
+  meta: Record<string, unknown> | undefined,
+  allowDeprecated: boolean | undefined
+): void {
+  if (catalogKind !== 'kind' || allowDeprecated === true) return;
+  const metaDeprecated = meta?.['lifecycle'] === 'deprecated';
+  if (!metaDeprecated && !isDeprecatedKindName(name)) return;
+  const replacedBy =
+    (typeof meta?.['replacedBy'] === 'string'
+      ? (meta['replacedBy'] as string)
+      : undefined) ?? deprecatedKindReplacement(name);
+  throw new InvalidArgumentError(
+    'kind',
+    `"${name}" is a deprecated kind${
+      replacedBy ? ` — use "${replacedBy}" instead` : ''
+    }. Pass allowDeprecated:true only for a reviewed repair that must still write it.`
+  );
+}
+
+/**
  * The flat-catalog find-then-create (§1, §4c, §6.1): `kind`/`status`/
  * `priority`/`agent` are mintable on an unresolved NAME; a uid-shaped `ref`
  * that does not resolve instead throws — minting NEVER applies to a uid.
@@ -356,6 +494,12 @@ export async function mintOrResolveCatalogTx(
 ): Promise<IResolvedCatalogRow> {
   if (isUidShaped(input.ref)) {
     const row = await resolveByUidTx(tx, input.catalogKind, input.ref);
+    assertKindNotDeprecated(
+      input.catalogKind,
+      row.name,
+      row.metadata,
+      input.allowDeprecated
+    );
     return { rowid: row.rowid, uid: row.uid, name: row.name };
   }
 
@@ -363,30 +507,73 @@ export async function mintOrResolveCatalogTx(
     rowid: number;
     uid: string;
     name: string | null;
+    meta: string | null;
   }>(
-    'SELECT rowid, uid, name FROM node WHERE kind = ? AND name = ? AND t_invalid IS NULL LIMIT 1',
+    'SELECT rowid, uid, name, meta FROM node WHERE kind = ? AND name = ? AND t_invalid IS NULL LIMIT 1',
     [input.catalogKind, input.ref]
   );
   if (existing) {
-    return {
-      rowid: existing.rowid,
-      uid: existing.uid,
-      name: existing.name ?? input.ref,
-    };
+    const name = existing.name ?? input.ref;
+    assertKindNotDeprecated(
+      input.catalogKind,
+      name,
+      parseMetaObject(existing.meta),
+      input.allowDeprecated
+    );
+    return { rowid: existing.rowid, uid: existing.uid, name };
   }
 
-  // The exact-name SELECT missed. Before minting, refuse a case-variant of an
-  // existing live row — still inside the SAME immediate transaction, so no
-  // concurrent writer can slip a colliding row in between this check and the
-  // INSERT below.
-  const variant = await findCaseVariantCatalogRowTx(
-    tx,
-    input.catalogKind,
-    input.ref
-  );
-  if (variant) {
-    throw new CaseVariantNameError(input.catalogKind, variant.name, input.ref);
+  // The exact-name SELECT missed, still inside the SAME immediate transaction,
+  // so no concurrent writer can slip a colliding row in between this check and
+  // the INSERT below.
+  //
+  // `kind` is an OPEN vocabulary (`resolve.ts`) with NO write-path canonical
+  // spelling — the writer emits whatever the caller passes — so a
+  // differently-cased spelling that folds to a live row is FOLD-RESOLVED onto
+  // it, never refused and never minted as a twin. That fold-resolution is the
+  // self-defeat guard: without it the next ordinary `create` with `BUG` would
+  // exact-miss a live `bug` and re-mint the fragment a one-shot merge just
+  // collapsed.
+  //
+  // `status`/`priority` KEEP their exact-case refusal
+  // (`CaseVariantNameError`): their write spelling is fixed (lowercase /
+  // uppercase), and their pre-existing drift is repaired by the merge, not by
+  // folding at the mint.
+  if (input.catalogKind === 'kind') {
+    const folded = await findCaseFoldedCatalogRowTx(
+      tx,
+      input.catalogKind,
+      input.ref
+    );
+    if (folded) {
+      assertKindNotDeprecated(
+        input.catalogKind,
+        folded.name,
+        folded.metadata,
+        input.allowDeprecated
+      );
+      return { rowid: folded.rowid, uid: folded.uid, name: folded.name };
+    }
+  } else {
+    const variant = await findCaseVariantCatalogRowTx(
+      tx,
+      input.catalogKind,
+      input.ref
+    );
+    if (variant) {
+      throw new CaseVariantNameError(input.catalogKind, variant.name, input.ref);
+    }
   }
+
+  // A brand-new `kind` whose NAME is itself a retired term (`EPIC`) is refused
+  // even with no live row to resolve: the in-code deprecation set is the
+  // authority, not the presence of a row.
+  assertKindNotDeprecated(
+    input.catalogKind,
+    input.ref,
+    undefined,
+    input.allowDeprecated
+  );
 
   const metadata = input.mintMetadata ? await input.mintMetadata(tx) : {};
   const minted = await writeNodeTx(tx, {
@@ -1267,7 +1454,17 @@ export async function upsertComponentTx(
   };
 }
 
-const VALID_LOCATION_TYPES: readonly ILocationType[] = ['path', 'url', 'tool'];
+/**
+ * The closed `location_type` vocabulary (§3, §3a). The ONE in-code definition:
+ * `upsertLocation` validates against it, and `query/views/catalog.ts`'s
+ * generated `location_type` catalog projects from it. Exported (rather than a
+ * private const) so the catalog cannot become a second, hand-maintained copy.
+ */
+export const VALID_LOCATION_TYPES: readonly ILocationType[] = [
+  'path',
+  'url',
+  'tool',
+];
 
 export interface IUpsertLocationInput {
   /**

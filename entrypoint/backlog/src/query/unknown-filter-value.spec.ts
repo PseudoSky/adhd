@@ -88,22 +88,23 @@ describe('query — unknown kind/status/priority filter values (real store)', ()
     // Mint a second, genuinely real but currently-unused priority row by
     // filing a second issue under it, then filter for a DIFFERENT real value
     // that legitimately has zero issues: 'issue' kind exists but nothing has
-    // kind 'epic' yet — minting 'epic' via `update`'s catalog-mint rule so it
-    // is a REAL catalog row with zero owning issues.
+    // kind 'observation' yet — minting 'observation' via `update`'s catalog-mint rule
+    // so it is a REAL catalog row with zero owning issues. (Not 'epic': that
+    // term was RETIRED by C8 and is refused on mint.)
     const { update } = await import('../write/update.js');
     const created = await createIssue(store, {
       project: projectUid,
       title: 'second issue',
       body: 'body',
       by: 'filer',
-      kind: 'epic',
+      kind: 'observation',
     });
     // Mint a THIRD real kind ('task') that ends up owning zero issues: rewrite
     // this issue's kind to 'task' (minting the row), then rewrite it straight
-    // back to 'epic' — the 'task' catalog row persists even though no issue
+    // back to 'observation' — the 'task' catalog row persists even though no issue
     // currently carries it.
     await update(store, { uid: created.uid, by: 'filer', kind: 'task' });
-    await update(store, { uid: created.uid, by: 'filer', kind: 'epic' });
+    await update(store, { uid: created.uid, by: 'filer', kind: 'observation' });
 
     const result = await queryIssues(store, { filter: { kind: 'task' } });
     if (result.view !== 'list') throw new Error('expected list view');
