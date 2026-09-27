@@ -56,7 +56,10 @@ export type IIssuePseudoField =
   | 'blockers'
   | 'related'
   | '_score'
-  | '_vector';
+  | '_vector'
+  | 'blocksOut' // NEW (C2): issues THIS one blocks (outbound `blocks`), live only
+  | 'dependents' // NEW (C2): transitive count (number of nodes that reach this one via `blocks`)
+  | 'partOf'; // NEW (C2): the single parent this item is `part_of` (or null)
 
 export type IIssueField = IIssuePlainField | IIssuePseudoField;
 
@@ -85,6 +88,9 @@ export const ISSUE_PSEUDO_FIELDS: readonly IIssuePseudoField[] = [
   'related',
   '_score',
   '_vector',
+  'blocksOut',
+  'dependents',
+  'partOf',
 ];
 
 const ISSUE_FIELD_SET: ReadonlySet<string> = new Set<string>([
@@ -147,6 +153,22 @@ export interface IIssueRef {
   uid: string;
   title: string;
   status: string;
+  /**
+   * Which live relation produced this ref (C2 — structural legibility).
+   * ADDITIVE — existing consumers reading `uid`/`title`/`status` are
+   * unaffected. `related` now surfaces every live relation type: `relates_to`
+   * and `part_of` in both directions, and `blocks` (outbound, tagged
+   * `blocks`) / incoming (tagged `blocked_by`). `similar_to` (C9's reviewed
+   * similarity link) and the reserved `duplicate_of` are declared here for
+   * the same ref shape's future producers.
+   */
+  rel?:
+    | 'relates_to'
+    | 'part_of'
+    | 'blocks'
+    | 'blocked_by'
+    | 'similar_to'
+    | 'duplicate_of';
 }
 
 /**
@@ -187,6 +209,20 @@ export interface IIssueCard {
   related?: IIssueRef[];
   _score?: number;
   _vector?: number[];
+  // --- C2 (structural legibility) — ADDITIVE opt-in pseudo fields; the default
+  // card is byte-for-byte unchanged because each is populated only when
+  // explicitly requested via `fields`. ---
+  /** Outbound `blocks` — issues that cannot start until this one is terminal. */
+  blocksOut?: IIssueRef[];
+  /**
+   * Transitive dependent count: how many nodes reach THIS node via `blocks`
+   * (inclusive of direct dependents). Deterministic, scope-bounded (bounded to
+   * a page's candidate id set on a list read; unbounded but cycle-safe on a
+   * single `get`).
+   */
+  dependents?: number;
+  /** The `part_of` parent, if any (`n:1` — at most one). */
+  partOf?: IIssueRef | null;
 }
 
 /**

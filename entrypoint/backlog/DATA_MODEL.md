@@ -248,6 +248,31 @@ single-valued-rel rejection for `supersedes`/`duplicate_of`/`part_of` (all
 three `n:1`) is this same generic `edge_kind.multiplicity` gate, applied to
 those three rows.
 
+**`part_of` cardinality — the second-write error (C2, AC6).** `part_of` is
+`n:1`: an item has at most one parent. A second `part_of` write on the same
+source (a DIFFERENT target) throws `SingleValuedRelationConflictError` with
+`side: "source"`, `rel: "part_of"`, and `conflictingUid` naming the
+pre-existing parent. Re-adding the SAME parent is a no-op. There is no
+`part_of`-specific code path — the generic `checkMultiplicityTx` gate
+(`write/tx.ts`) enforces it from the table row above.
+
+**Read shape — structural legibility (C2, Wave 1).** `get`/`query`
+`fields:["related"]` surfaces every live relation type touching the item, each
+ref carrying a `rel` tag: `relates_to` (both directions), `part_of` (both
+directions), and `blocks` outbound (tagged `blocks`) / incoming (tagged
+`blocked_by`), deduplicated by uid. `blockers` is unchanged — it remains the
+non-terminal INCOMING subset. Three opt-in pseudo fields expose the same
+structure directly: `blocksOut` (outbound `blocks` refs), `dependents` (the
+transitive outbound dependent count, bounded to a page's candidate id set on a
+list read and cycle-safe), and `partOf` (the single parent, or `null`).
+
+`view:"order"` returns a Kahn topological order over EVERY member kind the
+filter selects: when the filter carries a `plan`/`project`/`component`/`kind`
+dimension the `kind:'issue'` hard-scope is dropped, so non-`issue` members are
+included; only an UNFILTERED order stays bounded to `kind:'issue'`. The
+deterministic dependent-count → priority-rank → uid tiebreak is a later wave
+(today the queue is FIFO among equal in-degree nodes).
+
 ## 6. Integrity rules (hard requirements)
 
 1. **Every transition requires** an agent, a `note` (unless the owning
