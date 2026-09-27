@@ -257,11 +257,13 @@ registry entry by name directly, e.g.
 The full field vocabulary is `uid, title, kind, status, priority, project,
 component, createdAt, updatedAt, assignee, author, closedAt` (cheap/plain)
 plus `body, citations, notes, auditTrail, blockers, related, _score,
-_score_kind, _vector` (opt-in only — each costs a genuine extra read, so none
-is in the default card). `_score` is always accompanied by `_score_kind`
-(`'rrf'` for a fused semantic rank, `'bm25'` for a grep-only FTS score,
-`'cosine'`/`'rank'`/`'priority'` otherwise) — a rank-derived score is ordinal,
-never a similarity. `get { fields:["auditTrail"], lastN:5 }` bounds the
+_vector` (opt-in only — each costs a genuine extra read, so none is in the
+default card). `_score_kind` is **not** a requestable field — it is a
+provenance tag emitted automatically alongside `_score` whenever a score is
+requested (`'rrf'` for a fused semantic rank, `'bm25'` for a grep-only FTS
+score, `'cosine'`/`'rank'`/`'priority'` otherwise); passing it in `fields`
+rejects as an unknown field. A rank-derived score is ordinal, never a
+similarity. `get { fields:["auditTrail"], lastN:5 }` bounds the
 sub-collection to its newest tail.
 
 **Search/filter/page issues:**

@@ -34,6 +34,7 @@ import { queryIssues, queryIssuesWithMeta } from './query.js';
 import { getIssue } from './get.js';
 import { partOfRollup } from './views/stats.js';
 import { report } from './views/report.js';
+import type { IIssueField } from './types.js';
 
 /** Seeds a `status` row with `terminal: true` directly (a non-reserved terminal NAME, as a real catalog seed would). */
 async function seedTerminalStatus(
@@ -361,6 +362,82 @@ describe('C7 AC5 (grep branch) — a grep-only _score is tagged bm25, never unta
       expect(c._score).toBeTypeOf('number');
       expect(c._score_kind).toBe('bm25');
     }
+  });
+});
+
+describe('C7 AC5 (vocabulary) — `_score_kind` accompanies `_score`, never requested alone (real store)', () => {
+  let dir: string;
+  let store: TestIssueStore;
+  let projectUid: string;
+
+  beforeEach(async () => {
+    dir = freshTmpDir('c7-score-kind-vocab');
+    store = await openTestIssueStore(join(dir, 'backlog.db'));
+    projectUid = (await seedProject(store, 'c7-score-kind-vocab-project'))
+      .projectUid;
+  });
+  afterEach(async () => {
+    await store.close();
+    removeTestIssueStoreDir(dir);
+  });
+
+  // The spec adds `_score_kind` to `IIssueCard`, never to `IIssuePseudoField`
+  // (C7 spec "Interface changes"), and the card projection emits it only
+  // alongside a requested `_score` ("`_score_kind` is opt-in (only set when
+  // `_score` requested + kind known)"). So `fields:["_score_kind"]` is an
+  // unknown field, rejected by the same `assertKnownIssueFields` gate as any
+  // other typo — which is what SKILL.md now documents. This test pins BOTH
+  // halves: the request rejects, and the tag still rides along with `_score`.
+  it('rejects `fields:["_score_kind"]` on query and get, naming it unknown', async () => {
+    const created = await createIssue(store, {
+      project: projectUid,
+      title: 'score-kind vocabulary probe',
+      body: 'body',
+      by: 'filer',
+    });
+    if (created.uid === undefined)
+      throw new Error('fixture: createIssue was suppressed');
+
+    // A transport caller's payload is untyped JSON, so the compile time
+    // vocabulary cannot catch `_score_kind` — the runtime gate must. Cast to
+    // simulate exactly that caller.
+    const rawScoreKindFields = ['uid', '_score', '_score_kind'] as unknown as readonly IIssueField[];
+
+    // The exact payload from the blocking review finding.
+    await expect(
+      queryIssues(store, {
+        view: 'list',
+        fields: rawScoreKindFields,
+      })
+    ).rejects.toThrow(/unknown field "_score_kind"/);
+
+    await expect(
+      getIssue(store.graph, {
+        uid: created.uid,
+        fields: rawScoreKindFields,
+      })
+    ).rejects.toBeInstanceOf(BacklogValidationError);
+  });
+
+  it('still emits `_score_kind` automatically whenever `_score` is requested', async () => {
+    await createIssue(store, {
+      project: projectUid,
+      title: 'scorekindneedle token',
+      body: 'scorekindneedle body',
+      by: 'filer',
+      duplicateAction: 'force',
+    });
+
+    const result = await queryIssues(store, {
+      view: 'list',
+      filter: { grep: 'scorekindneedle' },
+      fields: ['uid', '_score'],
+    });
+    if (result.view !== 'list' || !('items' in result))
+      throw new Error('expected json list');
+    const scored = result.items.filter((c) => c._score !== undefined);
+    expect(scored.length).toBeGreaterThan(0);
+    for (const c of scored) expect(c._score_kind).toBe('bm25');
   });
 });
 
