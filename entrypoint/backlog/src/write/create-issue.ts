@@ -64,6 +64,14 @@ import {
 // comment for why the two packages' handle shapes are structurally, not
 // nominally, compatible.
 import { resolveSimilarFilterIds } from '../query/views/semantic.js';
+// Read-only reuse of the query layer's own uid→live-issue resolver for the
+// declared-parent resolution this gate now needs (`partOf`, c5460239). Like
+// `resolveSimilarFilterIds` above, this is an IMPORT of a read-only module,
+// never a write-path `tx.ts` call: the duplicate scan runs BEFORE the write
+// transaction opens (see `scanForDuplicates`'s own doc comment), so it has no
+// `tx` to hand a `resolveLiveIssueTx`, and `resolveIssueByUid` is documented
+// safe to run standalone.
+import { resolveIssueByUid } from '../query/resolve.js';
 import type { IIssueFilter } from '../query/types.js';
 
 /**
@@ -113,6 +121,27 @@ export interface ICreateIssueInput {
    * every read/render path is byte-for-byte unchanged.
    */
   gitContext?: string;
+  /**
+   * The **uid of the parent issue** this item is filed under — uid ONLY, never
+   * a name (matching `relate`'s `sourceUid`/`targetUid` uid convention, §1/§6.1).
+   *
+   * This is a READ-SIDE DEDUPE-SCOPING declaration, not a write: it tells the
+   * pre-write similarity scan (§6.4 point 1) to EXCLUDE the declared parent
+   * AND its `part_of` ancestor chain from the duplicate candidate set, so a
+   * child that deliberately restates its parent's intent is not suppressed as
+   * a duplicate OF that parent (defect c5460239: a child of C7 reproduced
+   * `created:false`/`duplicate-suppressed` with its own parent as the top
+   * candidate at 0.9811). A child restating its GRANDPARENT is likewise not
+   * suppressed, because the ancestry walk spans the whole `part_of` chain.
+   *
+   * It does NOT write the `part_of` edge — that edge stays owned by `relate`
+   * (§6.3.6), and `createIssue` writes no edge for this field. A `partOf` that
+   * does not resolve to a LIVE `issue` throws `IssueNotFoundError` (fail loud,
+   * ADR-0002 D5), never silently ignored. Because it only scopes the scan, it
+   * has no effect once a create is not a duplicate — the emitted card never
+   * carries it, and nothing new is persisted.
+   */
+  partOf?: string;
   /** The acting identity — agent or person (§6.3's opening rule) — REQUIRED on every mutating verb. A missing/blank value throws `InvalidArgumentError('by', ...)` before any write runs. */
   by: string;
   /**
@@ -496,6 +525,43 @@ function enforceRequiredFields(
 }
 
 /**
+ * Resolves {@link ICreateIssueInput.partOf} (a parent uid) to the set of issue
+ * rowids the duplicate scan must EXCLUDE: the declared parent itself PLUS its
+ * `part_of` ancestor chain (defect c5460239).
+ *
+ * `part_of` is declared `issue → issue` and `n:1` on its source — one parent
+ * per item (`relate.ts`, `catalog.ts`'s `EDGE_KIND_TABLE`) — so the walk is
+ * LINEAR: from the parent, follow its own outgoing `part_of` edge to the
+ * grandparent, and so on. A `seen` set bounds the loop so a cycle (impossible
+ * by construction, not DB-enforced) terminates rather than spins. A live
+ * `part_of` edge may name a node that is later soft-deleted; a missing or
+ * `t_invalid` ancestor simply ends the walk.
+ *
+ * Errors: `IssueNotFoundError` (via `query/resolve.ts`'s `resolveIssueByUid`)
+ * when `partOf` names no live `issue` — the declaration is a caller assertion,
+ * and failing loud is what stops a typo'd parent from silently re-enabling the
+ * very suppression this field exists to avoid (ADR-0002 D5).
+ */
+async function resolvePartOfExclusionIds(
+  graph: GraphBackend,
+  partOf: string
+): Promise<Set<number>> {
+  const parent = await resolveIssueByUid(graph, partOf);
+  const excluded = new Set<number>([parent.id]);
+  let cursor = parent;
+  for (;;) {
+    const edges = await graph.getEdges({ src: cursor.id, rel: 'part_of' });
+    const ancestorId = edges[0]?.dst;
+    if (ancestorId === undefined || excluded.has(ancestorId)) break;
+    const [ancestor] = await graph.getNodesByIds([ancestorId]);
+    if (!ancestor || ancestor.tInvalid !== undefined) break;
+    excluded.add(ancestor.id);
+    cursor = ancestor;
+  }
+  return excluded;
+}
+
+/**
  * §6.4 point 1: `createIssue`'s app-level pre-write similarity scan — never
  * the library's disabled content-hash path (§1's `skipDedupe:true` is
  * untouched by this function). Runs `StoreSearchBackend.search` scoped to
@@ -538,9 +604,19 @@ function enforceRequiredFields(
  *    the unwired `no-search-backend` — rather than blocking a legitimate
  *    create on a state that is not a detectable duplicate.
  *
- * Returns `{candidates:[], degraded:false}` (never throws) when: the scan is
+ * `partOf` (when supplied) is resolved and excluded FIRST, before any return
+ * path below: the declared parent and every `part_of` ancestor are removed
+ * from the candidate set, and the ONE error this function can throw —
+ * `IssueNotFoundError` for a `partOf` that names no live `issue` — fires
+ * whether or not the project holds any other issue (c5460239). Treating a
+ * resolved-but-now-empty candidate set as a COMPLETE scan of zero candidates
+ * (never a degraded one) is what lets a child that restates its parent create.
+ *
+ * Returns `{candidates:[], degraded:false}` (throws only `IssueNotFoundError`
+ * for an unresolvable `partOf`) when: the scan is
  * a COMPLETE scan of nothing — `project_policy.dedupe_scan_enabled` is
- * `false`, or the project has zero existing issues to compare against.
+ * `false`, or the project has zero existing issues to compare against, or
+ * every existing candidate was the declared parent/ancestor.
  * Returns `{candidates:[], degraded:true, degradedReason}` when the scan could
  * not run a calibrated comparison despite issues to compare against: no
  * search backend mounted (`'no-search-backend'`), no `embedQuery`
@@ -557,12 +633,23 @@ async function scanForDuplicates(
   project: IResolvedProjectRow,
   policy: IProjectPolicy,
   title: string,
-  body: string
+  body: string,
+  partOf?: string
 ): Promise<IDuplicateScanOutcome> {
+  const { search, graph } = handle;
+  // Resolve the declared parent (and its ancestor chain) BEFORE any early
+  // return — a non-resolving `partOf` must fail loud regardless of whether
+  // the scan itself is enabled, and regardless of whether the project happens
+  // to hold any other issue (an empty candidate set is what the exclusion most
+  // often produces). Only possible with a `graph` to resolve against: no
+  // graph already means "no scan" (the `no-search-backend` degrade below).
+  const partOfExclusionIds =
+    partOf !== undefined && graph !== undefined
+      ? await resolvePartOfExclusionIds(graph, partOf)
+      : undefined;
   // A COMPLETE (if empty) scan, never a degraded one: an explicit operator
   // opt-out is a deliberate "do not scan", not a scan that failed to run.
   if (!policy.dedupeScanEnabled) return { candidates: [], degraded: false };
-  const { search, graph } = handle;
   // Resolve the in-scope candidate issue set FIRST — it needs only the graph,
   // never the semantic backend — so a brand-new project with nothing to
   // compare against is correctly a COMPLETE (empty) scan even when the
@@ -594,6 +681,18 @@ async function scanForDuplicates(
   // it is NOT degraded.
   if (!candidateIds || candidateIds.size === 0)
     return { candidates: [], degraded: false };
+
+  // Defect c5460239: a declared parent (and its `part_of` ancestry) must never
+  // be scored as a duplicate of the child that is being filed UNDER it. Drop
+  // those ids from the candidate set BEFORE the vector scan, so a parent a
+  // child legitimately restates cannot suppress it. If this empties the set,
+  // the scan is a COMPLETE scan of zero remaining candidates — exactly the
+  // documented zero-candidate case `abort` proceeds on (§6.4 point 3) — never
+  // a degraded one.
+  if (partOfExclusionIds !== undefined) {
+    for (const id of partOfExclusionIds) candidateIds.delete(id);
+    if (candidateIds.size === 0) return { candidates: [], degraded: false };
+  }
 
   if (!search) {
     // Issues EXIST to compare against, but no semantic backend is mounted, so
@@ -761,7 +860,9 @@ async function scanForDuplicates(
  * outside the project root AND every `citationAllowedExternalRoots` entry —
  * the carve-out, BUG c6d35272 — and the error names those roots),
  * `InvalidArgumentError('duplicateAction', ...)`
- * (an unrecognized value — §6.4), `WriteContentionError`/
+ * (an unrecognized value — §6.4), `IssueNotFoundError` (`partOf` was supplied
+ * but does not name a live `issue` — fail loud, ADR-0002 D5; c5460239),
+ * `WriteContentionError`/
  * `WriteIOError` (§4c — an exhausted driver-level retry on the underlying
  * `immediate` transaction).
  */
@@ -890,7 +991,8 @@ export async function createIssue(
     preResolvedProject,
     preResolvedPolicy,
     input.title,
-    input.body
+    input.body,
+    input.partOf
   );
   const { candidates: duplicateCandidates } = scan;
 

@@ -42,6 +42,7 @@
  * read the real `node`/`edge` tables directly (never trust the return value
  * alone) before and after every suppressed/commented call.
  */
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BacklogConfig } from '../env.js';
@@ -65,7 +66,8 @@ import {
   type ICreateIssueResult,
   type IDuplicateScanHandle,
 } from './create-issue.js';
-import { InvalidArgumentError } from './errors.js';
+import { InvalidArgumentError, IssueNotFoundError } from './errors.js';
+import { relate } from './relate.js';
 import type { IWriteStoreHandle } from './tx.js';
 
 /** No cold ONNX model init anymore — the fake never touches disk/network — but the real Turso vector-store round-trip still needs headroom. */
@@ -694,6 +696,124 @@ describe('createIssue — degraded scan fails `abort` CLOSED (BUG 4e8fce2a)', ()
       expect(second.duplicateScanDegraded).toBe(true);
       expect(second.duplicateScanDegradedReason).toBe('no-embed-query');
       expect(second.uid).toBeUndefined();
+      expect(await countIssueNodes(store, projectUid)).toBe(issuesBefore);
+    },
+    DUP_GATE_TIMEOUT
+  );
+});
+
+/**
+ * Defect c5460239 — a child filed under a declared parent must not be
+ * suppressed as a duplicate OF that parent. `ICreateIssueInput.partOf` is a
+ * read-side dedupe-scoping declaration only (it never writes a `part_of`
+ * edge); the scan excludes the declared parent AND its `part_of` ancestor
+ * chain from the candidate set.
+ *
+ * **The writer's negative control.** The whole point is that the exclusion is
+ * what changes the outcome: the SAME byte-identical child text the parent
+ * carries is SUPPRESSED with `partOf` omitted, and CREATED with `partOf`
+ * naming the parent. Removing `resolvePartOfExclusionIds` from the scan (or
+ * its call site) turns the `partOf`-create assertions RED while leaving the
+ * no-`partOf` suppression green — which is why both are asserted here, in one
+ * test, against the real store and the real scan.
+ */
+describe('createIssue — declared parent + ancestry excluded from the dedupe scan (c5460239)', () => {
+  it(
+    'a child restating its declared parent WITH `partOf` creates; the SAME text WITHOUT `partOf` is suppressed (the exclusion is what changed)',
+    async () => {
+      const title = 'parent intent, restated verbatim by its child';
+      const body =
+        'the exact parent body the child deliberately restates, long enough to fts-match strongly';
+      const parent = await file(handle, projectUid, title, body, 'filer');
+      assertCreated(parent);
+
+      // WITHOUT `partOf`: a genuine duplicate of the parent (cosine 1.0) — the
+      // pre-fix behavior, and the premise the fix must beat.
+      const suppressed = await file(handle, projectUid, title, body, 'filer');
+      expect(suppressed.created).toBe(false);
+      expect(suppressed.reason).toBe('duplicate-suppressed');
+      expect(suppressed.duplicateCandidates?.[0]?.uid).toBe(parent.uid);
+      const issuesAfterSuppression = await countIssueNodes(store, projectUid);
+
+      // WITH `partOf` = the parent: the parent is excluded from the candidate
+      // set, so the child creates — and no `duplicateCandidates` are reported
+      // (the project had no other issue to compare against).
+      const child = await file(handle, projectUid, title, body, 'filer', {
+        partOf: parent.uid,
+      });
+      assertCreated(child);
+      expect(child.uid).not.toBe(parent.uid);
+      expect(child.duplicateCandidates).toBeUndefined();
+      expect(await countIssueNodes(store, projectUid)).toBe(
+        issuesAfterSuppression + 1
+      );
+    },
+    DUP_GATE_TIMEOUT
+  );
+
+  it(
+    'the WHOLE `part_of` ancestor chain is excluded — a child restating its GRANDPARENT still creates',
+    async () => {
+      const gTitle = 'grandparent intent, restated by a grandchild';
+      const gBody =
+        'grandparent body the grandchild restates, long enough to fts-match strongly';
+      const grandparent = await file(
+        handle,
+        projectUid,
+        gTitle,
+        gBody,
+        'filer'
+      );
+      assertCreated(grandparent);
+
+      // The parent carries DISTINCT text (so it is not itself a duplicate of
+      // the grandparent) and is linked to it by a real `part_of` edge —
+      // written by `relate`, never by `createIssue` (see the `partOf` field's
+      // own doc comment).
+      const parent = await file(
+        handle,
+        projectUid,
+        'parent intent, distinct from the grandparent',
+        'parent body, distinct from the grandparent, long enough to fts-match strongly',
+        'filer',
+        { partOf: grandparent.uid }
+      );
+      assertCreated(parent);
+      const linked = await relate(handle, {
+        sourceUid: parent.uid,
+        targetUid: grandparent.uid,
+        rel: 'part_of',
+        action: 'add',
+        by: 'filer',
+      });
+      expect(linked.noop).toBe(false);
+
+      // The child restates its GRANDPARENT — reached only by walking the
+      // parent's own `part_of` chain, never by the single-hop parent
+      // exclusion. With the chain excluded the child creates; drop the
+      // ancestor walk and the grandparent (cosine 1.0) suppresses it.
+      const child = await file(handle, projectUid, gTitle, gBody, 'filer', {
+        partOf: parent.uid,
+      });
+      assertCreated(child);
+      expect(child.duplicateCandidates).toBeUndefined();
+    },
+    DUP_GATE_TIMEOUT
+  );
+
+  it(
+    'a `partOf` that does not resolve to a live issue throws IssueNotFoundError and writes nothing — fail loud, never silently ignored',
+    async () => {
+      const issuesBefore = await countIssueNodes(store, projectUid);
+      await expect(
+        createIssue(handle, {
+          project: projectUid,
+          title: 'child of a parent that does not exist',
+          body: 'body',
+          by: 'filer',
+          partOf: randomUUID(),
+        })
+      ).rejects.toBeInstanceOf(IssueNotFoundError);
       expect(await countIssueNodes(store, projectUid)).toBe(issuesBefore);
     },
     DUP_GATE_TIMEOUT
