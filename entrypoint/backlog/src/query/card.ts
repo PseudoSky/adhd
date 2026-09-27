@@ -32,7 +32,11 @@ import {
   isKnownIssueField,
 } from './types.js';
 import { BacklogValidationError } from '../write/errors.js';
-import { getOutgoingEdges, resolveIssuePlacement } from './resolve.js';
+import {
+  getIncomingEdges,
+  getOutgoingEdges,
+  resolveIssuePlacement,
+} from './resolve.js';
 
 /** SPEC.md §6.5's `assertKnownFields` — unknown name → `BacklogValidationError` naming it, never a silent drop. */
 export function assertKnownIssueFields(
@@ -197,28 +201,139 @@ export async function resolveBlockers(
     }));
 }
 
-/** `related` — both directions of `relates_to` (an `n:m` symmetric-in-practice rel, §3), deduplicated. */
+/**
+ * `related` — every live relation type that touches this issue, deduplicated
+ * by node and tagged with the relation that produced it (C2 — structural
+ * legibility; SPEC.md §5/§6.5, DESIGN §5 AC2):
+ *
+ * - `relates_to` (both directions — an `n:m` symmetric-in-practice rel, §3),
+ *   tagged `relates_to`;
+ * - `part_of` (both directions: the parent when this item is the child, the
+ *   children when it is the parent), tagged `part_of`;
+ * - `blocks` outbound (this item blocks the target), tagged `blocks`; and
+ *   `blocks` incoming (the source blocks this item), tagged `blocked_by`.
+ *
+ * `blockers` (the non-terminal INCOMING subset) is deliberately NOT removed —
+ * it stays as the "what's actually blocking me right now" view; `related` is
+ * the structural superset. Widening this result is additive ROWS, never a
+ * signature change: a consumer reading `uid`/`title`/`status` is unaffected.
+ * Dedup is by node id, first-seen wins, in the deterministic order above.
+ */
 export async function resolveRelated(
   graph: GraphBackend,
   issueId: number,
   outgoing?: EdgeRecord[]
 ): Promise<IIssueRef[]> {
-  const out = (outgoing ?? (await getOutgoingEdges(graph, issueId))).filter(
-    (e) => e.rel === 'relates_to' && e.src === issueId
-  );
-  const incoming = await graph.getEdges({ dst: issueId, rel: 'relates_to' });
-  const otherIds = new Set<number>([
-    ...out.map((e) => e.dst),
-    ...incoming.map((e) => e.src),
-  ]);
-  if (otherIds.size === 0) return [];
-  const others = await graph.getNodesByIds([...otherIds]);
+  const out = outgoing ?? (await getOutgoingEdges(graph, issueId));
+  const incoming = await getIncomingEdges(graph, issueId);
+
+  const relById = new Map<number, NonNullable<IIssueRef['rel']>>();
+  const add = (id: number, rel: NonNullable<IIssueRef['rel']>): void => {
+    if (!relById.has(id)) relById.set(id, rel);
+  };
+  for (const e of out) {
+    if (e.rel === 'relates_to') add(e.dst, 'relates_to');
+    else if (e.rel === 'part_of') add(e.dst, 'part_of');
+    else if (e.rel === 'blocks') add(e.dst, 'blocks');
+  }
+  for (const e of incoming) {
+    if (e.rel === 'relates_to') add(e.src, 'relates_to');
+    else if (e.rel === 'part_of') add(e.src, 'part_of');
+    else if (e.rel === 'blocks') add(e.src, 'blocked_by');
+  }
+  if (relById.size === 0) return [];
+  const others = await graph.getNodesByIds([...relById.keys()]);
   const statuses = await resolveStatusesFor(graph, others);
   return others.map((n) => ({
     uid: n.uid,
     title: n.name ?? '',
     status: statuses.get(n.id)?.name ?? '',
+    rel: relById.get(n.id),
   }));
+}
+
+/**
+ * Outbound `blocks` (C2) — the issues THIS one blocks, live targets only.
+ * Mirrors {@link resolveBlockers}'s shape but for the other direction: that
+ * function returns the non-terminal INCOMING blockers ("what stops me"),
+ * this one returns everything this item unblocks ("what I am stopping").
+ */
+export async function resolveBlocksOut(
+  graph: GraphBackend,
+  issueId: number,
+  outgoing?: EdgeRecord[]
+): Promise<IIssueRef[]> {
+  const edges = (outgoing ?? (await getOutgoingEdges(graph, issueId))).filter(
+    (e) => e.rel === 'blocks' && e.src === issueId
+  );
+  if (edges.length === 0) return [];
+  const targets = await graph.getNodesByIds(edges.map((e) => e.dst));
+  if (targets.length === 0) return [];
+  const statuses = await resolveStatusesFor(graph, targets);
+  return targets.map((n) => ({
+    uid: n.uid,
+    title: n.name ?? '',
+    status: statuses.get(n.id)?.name ?? '',
+    rel: 'blocks',
+  }));
+}
+
+/**
+ * Transitive outbound dependent count (C2, AC3): how many nodes reach
+ * `issueId` via `blocks` (inclusive of direct dependents — the nodes this one
+ * blocks, directly or through a chain). A cycle-safe BFS over the outgoing
+ * `blocks` edges: a `visited` set counts each node once and terminates a cycle
+ * (the reachability set is finite even when the edge set is cyclic).
+ *
+ * `scope`, when given, restricts the walk to node ids in the set — a list page
+ * passes its own candidate id set so an N-item page costs N bounded walks, not
+ * N whole-graph walks. On a single `get`, `scope` is omitted and the walk is
+ * unbounded but still cycle-safe.
+ */
+export async function resolveDependents(
+  graph: GraphBackend,
+  issueId: number,
+  scope?: ReadonlySet<number>
+): Promise<number> {
+  const visited = new Set<number>();
+  const queue: number[] = [issueId];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    const edges = await graph.getEdges({ src: id, rel: 'blocks' });
+    for (const e of edges) {
+      if (e.dst === issueId || visited.has(e.dst)) continue;
+      if (scope && !scope.has(e.dst)) continue;
+      visited.add(e.dst);
+      queue.push(e.dst);
+    }
+  }
+  return visited.size;
+}
+
+/**
+ * The single `part_of` parent of this item, or `null` (C2, AC3). `part_of` is
+ * declared `n:1` (one parent per item, DATA_MODEL.md §3 / `EDGE_KIND_TABLE`),
+ * so at most one live outgoing `part_of` edge can exist; the multiplicity gate
+ * (`checkMultiplicityTx`) enforces that at write time.
+ */
+export async function resolvePartOf(
+  graph: GraphBackend,
+  issueId: number,
+  outgoing?: EdgeRecord[]
+): Promise<IIssueRef | null> {
+  const edge = (outgoing ?? (await getOutgoingEdges(graph, issueId))).find(
+    (e) => e.rel === 'part_of' && e.src === issueId
+  );
+  if (!edge) return null;
+  const [parent] = await graph.getNodesByIds([edge.dst]);
+  if (!parent) return null;
+  const statuses = await resolveStatusesFor(graph, [parent]);
+  return {
+    uid: parent.uid,
+    title: parent.name ?? '',
+    status: statuses.get(parent.id)?.name ?? '',
+    rel: 'part_of',
+  };
 }
 
 /**
@@ -260,6 +375,13 @@ export interface IAssembleIssueCardOptions {
   score?: number;
   /** Pre-fetched outgoing edges (`getEdges({src: issue.id})`) — pass when the caller already has them (e.g. a batch `query` page) to avoid a redundant round trip. */
   outgoingEdges?: EdgeRecord[];
+  /**
+   * The candidate id set a `dependents` walk is bounded to (C2). A list page
+   * passes its own page id set so an N-item page costs N bounded walks; a
+   * single `get` omits it, leaving the walk unbounded (but cycle-safe). Only
+   * consulted when `fields` requests `dependents`.
+   */
+  scope?: ReadonlySet<number>;
 }
 
 /**
@@ -283,6 +405,9 @@ export async function assembleIssueCard(
   const needsAuditTrail = want('auditTrail');
   const needsBlockers = want('blockers');
   const needsRelated = want('related');
+  const needsBlocksOut = want('blocksOut');
+  const needsDependents = want('dependents');
+  const needsPartOf = want('partOf');
 
   const outgoing =
     opts.outgoingEdges ??
@@ -290,7 +415,9 @@ export async function assembleIssueCard(
     needsCitations ||
     needsNotes ||
     needsAuditTrail ||
-    needsRelated
+    needsRelated ||
+    needsBlocksOut ||
+    needsPartOf
       ? await getOutgoingEdges(graph, issue.id)
       : undefined);
 
@@ -342,6 +469,12 @@ export async function assembleIssueCard(
   if (needsBlockers) card.blockers = await resolveBlockers(graph, issue.id);
   if (needsRelated && outgoing)
     card.related = await resolveRelated(graph, issue.id, outgoing);
+  if (needsBlocksOut && outgoing)
+    card.blocksOut = await resolveBlocksOut(graph, issue.id, outgoing);
+  if (needsDependents)
+    card.dependents = await resolveDependents(graph, issue.id, opts.scope);
+  if (needsPartOf && outgoing)
+    card.partOf = await resolvePartOf(graph, issue.id, outgoing);
 
   if (want('_score') && opts.score !== undefined) card._score = opts.score;
   // `_vector` (§6.5's pseudo field) only exists on a raw vector-search response, which this
@@ -352,17 +485,27 @@ export async function assembleIssueCard(
   return card;
 }
 
-/** Batch-assemble cards for a page of issue nodes, sharing one `getNodesByIds`-batched catalog/placement resolution pass where possible. Falls back to per-issue assembly (still batches internally) — a cross-issue batch would require a different, `getEdges`-list API this file's dependency (`GraphBackend`) does not expose. */
+/** Batch-assemble cards for a page of issue nodes, sharing one `getNodesByIds`-batched catalog/placement resolution pass where possible. Falls back to per-issue assembly (still batches internally) — a cross-issue batch would require a different, `getEdges`-list API this file's dependency (`GraphBackend`) does not expose.
+ *
+ * The page's own node ids are handed to each card as the `dependents` walk's
+ * `scope` (C2): a list read bounds each transitive-dependent count to the page
+ * it is rendering, so an N-item page costs N bounded walks rather than N walks
+ * over the whole `blocks` graph. A single `get` (which calls
+ * {@link assembleIssueCard} directly, not this function) leaves the walk
+ * unbounded but cycle-safe. `scope` is inert unless `fields` requests
+ * `dependents`. */
 export async function assembleIssueCards(
   graph: GraphBackend,
   issues: NodeRecord[],
   fields: readonly IIssueField[],
   scoreByUid?: ReadonlyMap<string, number>
 ): Promise<IIssueCard[]> {
+  const scope = new Set(issues.map((i) => i.id));
   return Promise.all(
     issues.map((issue) =>
       assembleIssueCard(graph, issue, fields, {
         score: scoreByUid?.get(issue.uid),
+        scope,
       })
     )
   );

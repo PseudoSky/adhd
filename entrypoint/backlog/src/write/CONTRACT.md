@@ -475,6 +475,15 @@ time of this contract: `owns_project`, `owns_component`, `has_kind`,
 of truth `resolveEdgeKindTx` reconciles against the live `edge_kind` catalog
 rows.
 
+**`part_of` is `n:1` — one parent per item (C2, AC6).** An item has at most ONE
+`part_of` parent. A second `part_of` write on the same source (a DIFFERENT
+target) is rejected by the generic `checkMultiplicityTx` gate with a
+`SingleValuedRelationConflictError` whose `side` is `source`, whose `rel` is
+`part_of`, and whose `conflictingUid` names the pre-existing parent — the SAME
+gate `supersedes`/`duplicate_of` use, with no `part_of`-specific code path.
+Re-adding the SAME parent is a no-op (`noop: true`). A multi-parent model would
+require changing this row's multiplicity, not special-casing `part_of`.
+
 ### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:598`)
 
 ```ts

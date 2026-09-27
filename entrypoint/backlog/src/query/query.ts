@@ -843,7 +843,20 @@ async function resolveStatusMap(
   return out;
 }
 
-/** `view:'order'` — SPEC.md §5's `topoOrder`, remapped onto `blocks` (X `blocks` Y ⇒ X must come before Y in a dependency-first order). Kahn's algorithm; a non-empty remainder after exhausting all zero-in-degree nodes is a cycle, reported in full (SPEC.md §7 clause 5: "must return `{ok:false, cycle:[...]}` naming all three ids"). */
+/** `view:'order'` — SPEC.md §5's `topoOrder`, remapped onto `blocks` (X `blocks` Y ⇒ X must come before Y in a dependency-first order). Kahn's algorithm; a non-empty remainder after exhausting all zero-in-degree nodes is a cycle, reported in full (SPEC.md §7 clause 5: "must return `{ok:false, cycle:[...]}` naming all three ids").
+ *
+ * C2 AC2 — KIND-SCOPE. The base node filter derives from the filter exactly as
+ * `queryList`'s does (via `resolveEdgeScopedFilterIds` above) and DROPS the
+ * `kind:'issue'` hard-scope whenever a kind-scoping dimension
+ * (`plan`/`project`/`component`/`kind`) is present — so `view:'order'` returns
+ * an order over EVERY member kind the filter selects, not only `kind:'issue'`.
+ * Only an UNFILTERED order keeps `kind:'issue'`, the bound a whole-store read
+ * needs. `blocks` edges are considered only when both endpoints are in-set.
+ *
+ * The queue is plain FIFO (insertion / catalog order among equal in-degree
+ * nodes): the deterministic dependent-count → priority-rank → uid tiebreak
+ * (DESIGN §5 AC2, ticket 08102d9a) is C2's Wave-3 half and is deliberately NOT
+ * applied here — Wave 1 ships the kind-scope half only (DESIGN §4). */
 async function queryOrder(
   handle: IQueryStoreHandle,
   input: IIssueQueryInput
@@ -851,9 +864,23 @@ async function queryOrder(
   const { graph } = handle;
   const limit = assertQueryLimit(input.limit ?? MAX_QUERY_LIMIT);
   const candidateIds = await resolveEdgeScopedFilterIds(graph, input.filter);
+  // C2 AC2 — see this function's doc comment. Drop `kind:'issue'` when the
+  // filter itself scopes the kind; keep it only for an unfiltered whole-store
+  // order (no plan/project/component/kind dimension present).
+  const kindScopedByFilter =
+    input.filter?.plan !== undefined ||
+    input.filter?.project !== undefined ||
+    input.filter?.component !== undefined ||
+    input.filter?.kind !== undefined;
+  if (candidateIds?.size === 0) {
+    // A kind-scoping filter resolved to nothing — an empty order, not a cycle
+    // (mirrors `queryList`'s empty-candidate short-circuit; `ids: []` must
+    // never be passed through as an unconstrained read).
+    return { ok: true, order: [] };
+  }
   // Current rows only — see `queryList`'s `baseFilter`.
   const nodeFilter: Record<string, unknown> = {
-    kind: 'issue',
+    ...(kindScopedByFilter ? {} : { kind: 'issue' }),
     isSuperseded: false,
     ...(candidateIds ? { ids: [...candidateIds] } : {}),
     limit,
