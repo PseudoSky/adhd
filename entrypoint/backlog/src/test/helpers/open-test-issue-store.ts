@@ -122,21 +122,40 @@ export function removeTestIssueStoreDir(dir: string): void {
  */
 export async function seedProject(
   handle: Pick<TestIssueStore, 'adapter' | 'typePolicy'>,
-  name: string
+  name: string,
+  options?: {
+    /** Raw `project.meta.metadata.policy` blob (C9 tests set `similarityScope`/thresholds here). */
+    policy?: Record<string, unknown>;
+    /** `project.meta.metadata.repoUrl` — drives C9's shared-repo sibling resolution. */
+    repoUrl?: string;
+    /** Reserved `(root)` component's `meta.metadata.path` — drives C9's shared-path sibling resolution. */
+    componentPath?: string;
+    /** Reserved `(root)` component's name (default `(root)`). */
+    componentName?: string;
+  }
 ): Promise<{ projectUid: string }> {
   const projectUid = await handle.adapter.transaction(
     async (tx) => {
       const now = nowISO();
+      const projectMetadata: Record<string, unknown> = {};
+      if (options?.policy !== undefined) projectMetadata.policy = options.policy;
+      if (options?.repoUrl !== undefined)
+        projectMetadata.repoUrl = options.repoUrl;
       const project = await writeNodeTx(tx, {
         kind: 'project',
         name,
-        metadata: {},
+        metadata: projectMetadata,
         at: now,
       });
+      const componentMetadata: Record<string, unknown> = {
+        projectUid: project.uid,
+      };
+      if (options?.componentPath !== undefined)
+        componentMetadata.path = options.componentPath;
       const component = await writeNodeTx(tx, {
         kind: 'component',
-        name: '(root)',
-        metadata: { projectUid: project.uid },
+        name: options?.componentName ?? '(root)',
+        metadata: componentMetadata,
         at: now,
       });
       const rule = await resolveEdgeKindTx(tx, 'owns_project');

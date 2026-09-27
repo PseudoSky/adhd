@@ -55,6 +55,7 @@ import {
   MAX_QUERY_LIMIT,
 } from './types.js';
 import { querySimilarViewWithMeta } from './views/semantic.js';
+import { buildSimilarClusterBlock } from './similar-clusters.js';
 import { renderIssueCardsMarkdown } from './markdown.js';
 import {
   listComponents,
@@ -281,6 +282,24 @@ async function resolveEdgeScopedFilterIds(
         refs: [filter.author],
       })
     );
+  }
+
+  // C9 — `similarTo` (source side of `similar_to` edges into X) and
+  // `hasSimilar` (the `dst` side of every live `similar_to` edge). `similar_to`
+  // is `issue → issue`, so both are plain edge traversals — mirrors
+  // `views/semantic.ts`'s `resolveSimilarFilterIds` branch exactly.
+  if (filter.similarTo !== undefined) {
+    const target = await tryResolveRef(graph, 'issue', filter.similarTo);
+    if (!target) return new Set(); // unresolved ref ⇒ zero matches (§6.1)
+    const edges = await graph.getEdges({
+      dst: target.id,
+      rel: 'similar_to',
+    });
+    perDimension.push(new Set(edges.map((e) => e.src)));
+  }
+  if (filter.hasSimilar === true) {
+    const edges = await graph.getEdges({ rel: 'similar_to' });
+    perDimension.push(new Set(edges.map((e) => e.dst)));
   }
 
   if (filter.plan !== undefined) {
@@ -1237,12 +1256,42 @@ async function dispatchQueryView(
       return { result: { view: 'stale', items }, meta };
     }
     case 'similar': {
+      // C9 — the additive cluster block is produced only for a SCOPED read
+      // (`filter.project`/`filter.component`); an anchor/semantic-only call is
+      // byte-for-byte unchanged (no extra work, same result shape).
+      const hasScope =
+        input.filter?.project !== undefined ||
+        input.filter?.component !== undefined;
+      const hasAnchorOrSemantic =
+        input.filter?.anchor !== undefined ||
+        input.filter?.semantic !== undefined;
+      const clusters = hasScope
+        ? await buildSimilarClusterBlock(handle, input)
+        : undefined;
+      // A scoped read with no anchor/semantic is the C9 cluster-block query:
+      // return it (empty `items`) rather than throwing. Every other shape keeps
+      // `querySimilarViewWithMeta`'s existing behaviour and errors.
+      if (hasScope && !hasAnchorOrSemantic) {
+        const limit = input.limit ?? DEFAULT_QUERY_LIMIT;
+        return {
+          result: {
+            view: 'similar',
+            items: [],
+            ...(clusters ? { clusters } : {}),
+          },
+          meta: itemListMeta(0, limit, false),
+        };
+      }
       const { items, hasMore, limit } = await querySimilarViewWithMeta(
         handle,
         input
       );
       return {
-        result: { view: 'similar', items },
+        result: {
+          view: 'similar',
+          items,
+          ...(clusters ? { clusters } : {}),
+        },
         meta: itemListMeta(items.length, limit, hasMore),
       };
     }

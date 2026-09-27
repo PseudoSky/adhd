@@ -89,7 +89,8 @@ export type RelateRel =
   | 'supersedes'
   | 'blocks'
   | 'duplicate_of'
-  | 'part_of';
+  | 'part_of'
+  | 'similar_to';
 
 const RELATE_RELS: readonly RelateRel[] = [
   'relates_to',
@@ -97,6 +98,7 @@ const RELATE_RELS: readonly RelateRel[] = [
   'blocks',
   'duplicate_of',
   'part_of',
+  'similar_to',
 ];
 
 export interface IRelateInput {
