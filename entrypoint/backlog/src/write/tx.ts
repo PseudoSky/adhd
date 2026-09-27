@@ -335,7 +335,7 @@ export async function getNodeByRowidTx(
 }
 
 export interface IWriteNodeTxInput {
-  /** The entity-type discriminator — `project`/`component`/`location`/`issue`/`kind`/`edge_kind`/`status`/`priority`/`agent`/`note`/`citation`/`transition`/`audit` (§3). NEVER validated against a closed vocabulary here — the schema is open by design (§0 anti-antipattern 3); the write layer is the only composer of these literals. */
+  /** The entity-type discriminator — `project`/`component`/`location`/`issue`/`kind`/`edge_kind`/`status`/`priority`/`agent`/`note`/`citation`/`transition`/`audit`/`attestation`/`obligation` (§3). NEVER validated against a closed vocabulary here — the schema is open by design (§0 anti-antipattern 3); the write layer is the only composer of these literals. */
   kind: string;
   /** The business name (`issue.title`, a catalog row's name, …). Omit for a node with no name (none currently exist in §3's table, but the column is nullable). */
   name?: string;

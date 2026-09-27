@@ -588,6 +588,40 @@ export class BacklogValidationError extends BacklogWriteError {
 }
 
 /**
+ * A supplied anchor locator is outside the closed grammar (`path:<file>[:<line>]`
+ * | `url:<url>` | `query:<cql>` | `registry:<ref>`), or is a bare `path:line`
+ * with no `digest`. A caller-input mistake, so `E_VALIDATION`, never retryable —
+ * nothing is written and retrying the identical locator fails identically.
+ */
+export class AnchorLocatorInvalidError extends BacklogWriteError {
+  readonly code = 'E_VALIDATION' as const;
+  readonly retryable = false;
+
+  constructor(public readonly locator: string, detail?: string) {
+    super(
+      detail
+        ? `Invalid anchor locator "${locator}": ${detail}`
+        : `Invalid anchor locator "${locator}"`
+    );
+  }
+}
+
+/**
+ * `recheck` named an `attestation` uid that is not a live `attestation` node.
+ * Distinct from {@link IssueNotFoundError} (an `issue` uid) and
+ * {@link CatalogNotFoundError} so a caller can branch on the missing record
+ * kind; `E_VALIDATION`, never retryable.
+ */
+export class AttestationNotFoundError extends BacklogWriteError {
+  readonly code = 'E_VALIDATION' as const;
+  readonly retryable = false;
+
+  constructor(public readonly uid: string) {
+    super(`No live attestation found for uid "${uid}"`);
+  }
+}
+
+/**
  * Classify a caught, RAW driver-level error (never one of our own
  * {@link BacklogWriteError} subclasses — those are already decided and must
  * never reach this function) into the internal {@link IWriteError} envelope,

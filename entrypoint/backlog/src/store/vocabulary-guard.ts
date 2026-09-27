@@ -74,6 +74,8 @@ export const RECOGNIZED_NODE_KINDS: ReadonlySet<string> = new Set([
   'citation',
   'transition',
   'audit',
+  'attestation',
+  'obligation',
 ]);
 
 /** One row of the live-node kind histogram. */

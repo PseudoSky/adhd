@@ -552,6 +552,24 @@ export const EDGE_KIND_TABLE: readonly IEdgeKindRule[] = [
     targetKind: 'issue',
     multiplicity: 'n:1',
   },
+  {
+    rel: 'attests',
+    sourceKind: 'issue',
+    targetKind: 'attestation',
+    multiplicity: '1:n',
+  },
+  {
+    rel: 'has_obligation',
+    sourceKind: 'issue',
+    targetKind: 'obligation',
+    multiplicity: '1:n',
+  },
+  {
+    rel: 'satisfies',
+    sourceKind: 'obligation',
+    targetKind: 'attestation',
+    multiplicity: 'n:m',
+  },
 ] as const;
 
 const EDGE_KIND_BY_REL: ReadonlyMap<string, IEdgeKindRule> = new Map(

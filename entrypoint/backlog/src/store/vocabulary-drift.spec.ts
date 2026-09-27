@@ -3,10 +3,11 @@
  * source of truth so the two can never silently diverge.
  *
  * `store/vocabulary-guard.ts`'s `RECOGNIZED_NODE_KINDS` hand-duplicates the
- * 13-kind node vocabulary whose documented source of truth is
+ * 15-kind node vocabulary whose documented source of truth is
  * `write/tx.ts`'s `IWriteNodeTxInput.kind` doc comment ("The entity-type
  * discriminator — `project`/`component`/`location`/`issue`/`kind`/`edge_kind`/
- * `status`/`priority`/`agent`/`note`/`citation`/`transition`/`audit` (§3)").
+ * `status`/`priority`/`agent`/`note`/`citation`/`transition`/`audit`/
+ * `attestation`/`obligation` (§3)").
  *
  * That duplication is a fail-CLOSED drift risk: the guard refuses a store
  * whose live nodes are entirely outside `RECOGNIZED_NODE_KINDS`. So if
@@ -58,10 +59,10 @@ function documentedWriteNodeKinds(): string[] {
 }
 
 describe('RECOGNIZED_NODE_KINDS ↔ write/tx.ts vocabulary pin (fail-closed drift guard)', () => {
-  it('is exactly the 13-kind vocabulary documented at IWriteNodeTxInput.kind', () => {
+  it('is exactly the 15-kind vocabulary documented at IWriteNodeTxInput.kind', () => {
     const documented = documentedWriteNodeKinds();
-    expect(documented).toHaveLength(13);
-    expect(RECOGNIZED_NODE_KINDS.size).toBe(13);
+    expect(documented).toHaveLength(15);
+    expect(RECOGNIZED_NODE_KINDS.size).toBe(15);
 
     // BOTH directions, so drift on either side is red: a kind added to tx.ts
     // but not the guard, AND a kind in the guard that tx.ts no longer names.

@@ -12,8 +12,8 @@ other eight agents building in parallel.
 
 Every export below was read directly out of the current file (paths and line
 numbers are cited per-export). Nothing here is guessed. Counts: `tx.ts` — 24
-exports, `catalog.ts` — 12 exports, `errors.ts` — 15 exports, `audit.ts` — 3
-exports. **Total: 54 exports.**
+exports, `catalog.ts` — 12 exports, `errors.ts` — 17 exports, `audit.ts` — 3
+exports. **Total: 56 exports.**
 
 ---
 
@@ -467,13 +467,15 @@ export const EDGE_KIND_TABLE: readonly IEdgeKindRule[];
 ```
 
 Guarantees: the fixed, complete `(rel, source_kind, target_kind,
-multiplicity)` table for every declared `rel` in the schema (17 rows at the
+multiplicity)` table for every declared `rel` in the schema (20 rows at the
 time of this contract: `owns_project`, `owns_component`, `has_kind`,
 `has_status`, `has_priority`, `authored_by`, `has_note`, `has_citation`,
 `has_transition`, `audits`, `depends_on`, `has_location`, `relates_to`,
-`supersedes`, `blocks`, `duplicate_of`, `part_of`). This is the single source
-of truth `resolveEdgeKindTx` reconciles against the live `edge_kind` catalog
-rows.
+`supersedes`, `blocks`, `duplicate_of`, `part_of`, `attests`,
+`has_obligation`, `satisfies`). `attests`, `has_obligation` and `satisfies`
+are INTERNAL rels (C3/C4/C5) — they are deliberately NOT members of
+`relate`'s public `RelateRel` union. This is the single source of truth
+`resolveEdgeKindTx` reconciles against the live `edge_kind` catalog rows.
 
 **`part_of` is `n:1` — one parent per item (C2, AC6).** An item has at most ONE
 `part_of` parent. A second `part_of` write on the same source (a DIFFERENT
@@ -484,7 +486,7 @@ gate `supersedes`/`duplicate_of` use, with no `part_of`-specific code path.
 Re-adding the SAME parent is a no-op (`noop: true`). A multi-parent model would
 require changing this row's multiplicity, not special-casing `part_of`.
 
-### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:598`)
+### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:616`)
 
 ```ts
 export async function resolveEdgeKindTx(tx: AdapterTransaction, rel: string): Promise<IEdgeKindRule>;
@@ -499,7 +501,7 @@ row (corrupt or missing `meta` keys) is invalidated and replaced in the SAME
 `CatalogNotFoundError('edge_kind', rel)` if `rel` isn't in
 `EDGE_KIND_TABLE` at all.
 
-### `IProjectPolicy` — interface (`catalog.ts:666`)
+### `IProjectPolicy` — interface (`catalog.ts:684`)
 
 ```ts
 export interface IProjectPolicy {
@@ -535,7 +537,7 @@ disabled. A malformed (non-`string[]`) value falls back to the — also empty �
 default rather than being spread. Typed per-project config, never an
 environment toggle.
 
-### `resolveProjectPolicy(project)` — function (`catalog.ts:740`)
+### `resolveProjectPolicy(project)` — function (`catalog.ts:758`)
 
 ```ts
 export function resolveProjectPolicy(project: IResolvedProjectRow): IProjectPolicy;
@@ -642,7 +644,7 @@ surface.
 
 ---
 
-## `errors.ts` (16 exports)
+## `errors.ts` (18 exports)
 
 ### `WriteErrorCode` — type (`errors.ts:41`)
 
@@ -912,7 +914,37 @@ or an out-of-range/non-integral `limit`) — deliberately the SAME
 `E_VALIDATION`-class member of this same error union, not a parallel one, so
 a `query`/`get` caller catches it identically to any write-verb error.
 
-### `classifyDriverError(err)` — function (`errors.ts:627`)
+### `AnchorLocatorInvalidError` — class (`errors.ts:596`)
+
+```ts
+export class AnchorLocatorInvalidError extends BacklogWriteError {
+  readonly code: 'E_VALIDATION';
+  readonly retryable: false;
+  constructor(public readonly locator: string, detail?: string);
+}
+```
+
+Guarantees: a supplied anchor locator is outside the closed grammar
+(`path:<file>[:<line>]` | `url:<url>` | `query:<cql>` | `registry:<ref>`), or
+is a bare `path:line` with no `digest`. A caller-input mistake — `E_VALIDATION`,
+never retryable; nothing is written.
+
+### `AttestationNotFoundError` — class (`errors.ts:615`)
+
+```ts
+export class AttestationNotFoundError extends BacklogWriteError {
+  readonly code: 'E_VALIDATION';
+  readonly retryable: false;
+  constructor(public readonly uid: string);
+}
+```
+
+Guarantees: thrown by `recheck` when the named uid is not a live `attestation`
+node. Distinct from `IssueNotFoundError` (an `issue` uid) and
+`CatalogNotFoundError`, so a caller can branch on the missing record kind;
+`E_VALIDATION`, never retryable.
+
+### `classifyDriverError(err)` — function (`errors.ts:661`)
 
 ```ts
 export function classifyDriverError(err: unknown): IWriteError;
