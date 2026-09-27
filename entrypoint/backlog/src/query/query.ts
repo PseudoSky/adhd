@@ -116,7 +116,8 @@ export interface IQueryStoreHandle {
    * that WANTS to assert explicitly can call `handle.assertCatalogInvariants?.()`
    * — but no read ever does so implicitly. (Earlier this was awaited inside
    * `queryIssuesWithMeta`; that abort turned one drifted row into a total read
-   * outage and was removed. The write path is where this invariant is enforced.)
+   * outage and was removed. The write path's per-verb abort was removed the
+   * same way, so neither ordinary path is gated.)
    */
   readonly assertCatalogInvariants?: () => Promise<void>;
 }
@@ -1224,10 +1225,11 @@ export async function queryIssuesWithMeta(
   await handle.assertVocabulary?.();
   // NOTHING here consults the status/priority catalog invariant guard. A
   // drifted catalog is a bounded data problem and must never turn every read
-  // into an outage; it is enforced on the write path and surfaced as a NAMED,
-  // non-zero check by the `store-check` CLI verb. The optional
-  // `IQueryStoreHandle.assertCatalogInvariants` member remains for a caller
-  // that wants to assert explicitly — the read path never does so implicitly.
+  // into an outage; it is PREVENTED at the write by the mint's case-variant
+  // refusal and surfaced as a NAMED, non-zero check by the `store-check` CLI
+  // verb. The optional `IQueryStoreHandle.assertCatalogInvariants` member
+  // remains for a caller that wants to assert explicitly — the read path never
+  // does so implicitly.
   const input = resolveTextInput(handle, rawInput);
   const outcome = await dispatchQueryView(handle, input);
 

@@ -122,12 +122,12 @@ export async function openGraphBacklogStore(
   // The CATALOG invariant guard is deliberately NOT run here. A store with a
   // drifted status/priority catalog (an unflagged reserved terminal status, or
   // a same-kind case-fragment duplicate) is a bounded data problem, not a
-  // reason to make every read fail — so it must not stand between a bad write
-  // and the data. It is enforced on the WRITE path (`api.ts`'s `writeHandle`,
-  // plus `mintOrResolveCatalogTx`'s case-variant refusal) and surfaced as a
-  // NAMED, non-zero check by the `store-check` CLI verb
-  // (`store/catalog-invariant-guard.ts`), never as a read abort. Reads of a
-  // drifted store succeed; the drift is reported loudly by the check.
+  // reason to make every read or unrelated write fail — so it must not stand
+  // between a bad write and the data. It is PREVENTED at the write by
+  // `mintOrResolveCatalogTx`'s case-variant refusal and DETECTED loudly by the
+  // NAMED, non-zero `store-check` CLI verb (`store/catalog-invariant-guard.ts`),
+  // never as a read or write abort. Reads AND ordinary writes of a drifted
+  // store succeed; the drift is reported loudly by the check.
   try {
     await assertRecognizedStoreVocabulary(adapter);
   } catch (err) {

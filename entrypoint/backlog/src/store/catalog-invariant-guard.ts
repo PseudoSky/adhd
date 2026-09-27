@@ -2,27 +2,30 @@
  * catalog-invariant-guard.ts — DETECT LOUDLY when the status/priority catalog
  * violates an invariant this build's read layer depends on, and REPORT it.
  *
- * ## The posture: detected loudly, never a read abort
+ * ## The posture: prevented at the write, detected loudly, never a gate
  *
- * Violations are DETECTED and REPORTED, and are never allowed to take the read
- * path down. Concretely:
+ * A violation is PREVENTED where it is created and DETECTED where an operator
+ * asks — and it is never allowed to take down reads OR unrelated writes.
+ * Concretely:
  *
- *  - The WRITE path enforces the invariants: `api.ts`'s `writeHandle` calls
- *    {@link assertCatalogInvariants} per write verb, and `mintOrResolveCatalogTx`
- *    (`write/catalog.ts`) refuses a case-variant catalog name outright
- *    (`CaseVariantNameError`), so a bad write cannot create the drift in the
- *    first place.
- *  - The `store-check` CLI verb runs {@link assertCatalogInvariants} and exits
- *    NON-ZERO with this module's self-explaining message on a violation — a
- *    NAMED, opt-in check an operator runs deliberately.
- *  - The ordinary READ path does NOT run it. A drifted catalog is a bounded
- *    data problem, and aborting every read over it is an unbounded availability
- *    failure (it caused two total outages). A read of a drifted store SUCCEEDS.
+ *  - PREVENTION — `mintOrResolveCatalogTx` (`write/catalog.ts`) refuses a
+ *    case-variant catalog name outright (`CaseVariantNameError`, naming both
+ *    spellings), so a bad write cannot CREATE the drift in the first place.
+ *    That is per-write, specific and targeted: it stops the one call that
+ *    would mint the bad row, never an unrelated one.
+ *  - DETECTION — the `store-check` CLI verb runs {@link assertCatalogInvariants}
+ *    and exits NON-ZERO with this module's self-explaining message on a
+ *    violation: a NAMED check an operator runs deliberately.
+ *  - NOT A GATE — neither the ordinary READ path (`queryIssuesWithMeta`) nor
+ *    the WRITE path (`api.ts`'s `writeHandle`) runs it. A drifted catalog is a
+ *    bounded data problem; refusing every read over it is an unbounded
+ *    availability failure (it caused two total outages), and refusing every
+ *    write over it is the identical defect on the other side of the store.
+ *    BOTH a read and an ordinary write of a drifted store SUCCEED.
  *
- * This is a named check, NOT a silent degrade and NOT a read-time fallback: no
- * name-keyed shim is installed and no violation is swallowed — it is reported
- * verbatim by the check. For the identical reason it is deliberately NOT an
- * unconditional read-abort.
+ * This is a named check, NOT a silent degrade and NOT a fallback: no name-keyed
+ * shim is installed and no violation is swallowed — it is reported verbatim by
+ * the check. It is deliberately NOT an unconditional read- or write-abort.
  *
  * ## The two invariants
  *
@@ -64,8 +67,8 @@
  * The catalog is a handful of rows. Both checks are answered by ONE read of
  * every live `status`/`priority` row (`kind IN (...)`, `t_invalid IS NULL`),
  * folding names in JS. This never scans the issue graph and never runs a
- * `GROUP BY` over it, so it is cheap enough for the write hot path and for the
- * operator-run check.
+ * `GROUP BY` over it, so it stays cheap for the operator-run check and for any
+ * caller that asserts deliberately.
  * Folding is done in JS via {@link catalogNameFold} — never SQL `lower()`/
  * `NOCASE`, which folds only ASCII `A`–`Z` and would desync from the JS fold
  * the repair uses.
@@ -137,10 +140,10 @@ export function renderCatalogInvariantViolations(
   );
 
   const lines: string[] = [
-    'backlog: status/priority catalog invariant violated — refusing to read or write this store (ADR-0002: correct the source, never work around it).',
+    'backlog: status/priority catalog invariant violated (ADR-0002: correct the source, never work around it).',
   ];
   lines.push(
-    '  Every row below must be repaired before this store can be served; neither condition may be papered over with a read-time fallback.'
+    '  This is a NAMED check: it reports the rows below and the repair. It never gates reads or unrelated writes — a drifted catalog is a bounded data problem, never an availability outage — and neither condition may be papered over with a read-time fallback.'
   );
 
   if (unflagged.length > 0) {
@@ -294,15 +297,16 @@ export async function inspectCatalogInvariants(
  * Throws {@link CatalogInvariantError}, naming every offending row and the
  * repair that resolves it, otherwise.
  *
- * WHERE IT RUNS: on the WRITE path (`api.ts`'s `writeHandle`, per write verb)
- * and in the `store-check` CLI verb — a NAMED, non-zero check an operator runs
- * deliberately. It is deliberately NOT run on the ordinary read path
- * (`queryIssuesWithMeta`) or at store open (`openGraphBacklogStore`): a
- * violation must be detected loudly and REPORTED, never allowed to turn every
- * read into an outage.
+ * WHERE IT RUNS: the `store-check` CLI verb — a NAMED, non-zero check an
+ * operator runs deliberately — plus any caller that asserts deliberately via
+ * `IQueryStoreHandle.assertCatalogInvariants`. It is deliberately NOT run on
+ * the ordinary read path (`queryIssuesWithMeta`), on the write path (`api.ts`'s
+ * `writeHandle`), or at store open (`openGraphBacklogStore`): a violation must
+ * be detected loudly and REPORTED, never allowed to turn every read — or every
+ * unrelated write — into an outage.
  *
- * BOUNDED BY CONSTRUCTION: because it runs per write verb, it must not scan
- * the store per call. It reads only the (small) status/priority catalog — see
+ * BOUNDED BY CONSTRUCTION: it must not scan the issue graph per call. It reads
+ * only the (small) status/priority catalog — see
  * {@link inspectCatalogInvariants}.
  */
 export async function assertCatalogInvariants(

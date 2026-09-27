@@ -287,15 +287,16 @@ async function writeHandle(
   // this build cannot address, rather than let the write fail downstream with
   // a misleading "project not found" caused by an unrecognized vocabulary.
   await assertRecognizedStoreVocabulary(ctx.store.adapter);
-  // Catalog invariant guard (store/catalog-invariant-guard.ts): refuse to WRITE
-  // into a store whose status/priority catalog already mis-classifies reads (an
-  // unflagged reserved terminal status, or a same-kind case-fragment duplicate)
-  // — the fail-loud posture, on the WRITE path only. Reads deliberately do NOT
-  // run this: a drifted catalog is a bounded data problem and must never make
-  // every read fail (the read-path abort that caused two total outages). The
-  // same invariant is surfaced as a named, non-zero check by the `store-check`
-  // CLI verb; the write path is where it is enforced.
-  await assertCatalogInvariants(ctx.store.adapter);
+  // The CATALOG invariant guard (store/catalog-invariant-guard.ts) is
+  // deliberately NOT run here. A drifted status/priority catalog is a bounded
+  // data problem, and refusing EVERY write over it — this verb, or an
+  // unrelated registry write, for EVERY caller — is an unbounded availability
+  // failure. It is the same shape that caused two total read outages before
+  // 7c941505 moved the read abort off; the write path kept it. Prevention now
+  // lives at the mint instead: `mintOrResolveCatalogTx` refuses a case-variant
+  // of a live row (`CaseVariantNameError`), so a bad write cannot CREATE the
+  // drift, and the `store-check` CLI verb reports an existing one loudly and
+  // non-zero. A write to an already-drifted store SUCCEEDS.
   const { search, embedding } = opts.needsSemantic
     ? await ensureSemanticReady(ctx)
     : {};
@@ -349,9 +350,10 @@ async function queryHandle(
     // `IQueryStoreHandle.assertVocabulary` and store/vocabulary-guard.ts.
     assertVocabulary: () => assertRecognizedStoreVocabulary(ctx.store.adapter),
     // Catalog invariant check — OPT-IN, deliberately NOT consulted by
-    // `queryIssuesWithMeta` (so it is never on the ordinary read path). Wired
-    // here only so a caller that explicitly wants to assert the catalog can;
-    // the read path serves a drifted store regardless. See
+    // `queryIssuesWithMeta` (so it is never on the ordinary read path) NOR by
+    // `writeHandle` (so it is never on the write path). Wired here only so a
+    // caller that explicitly wants to assert the catalog can; both ordinary
+    // paths serve a drifted store regardless. See
     // `IQueryStoreHandle.assertCatalogInvariants` and
     // store/catalog-invariant-guard.ts.
     assertCatalogInvariants: () => assertCatalogInvariants(ctx.store.adapter),
