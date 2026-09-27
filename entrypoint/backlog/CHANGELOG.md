@@ -1,3 +1,13 @@
+## 1.0.4 (2026-09-27)
+
+### 🩹 Fixes
+
+- **backlog:** refuse a case-variant of a live catalog name at write time ([5da73f7b](https://github.com/PseudoSky/adhd/commit/5da73f7b))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 1.0.3 (2026-09-27)
 
 ### 🚀 Features
