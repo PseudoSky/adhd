@@ -1,5 +1,5 @@
 /**
- * catalog-invariant-guard.ts — DETECT LOUDLY when the status/priority catalog
+ * catalog-invariant-guard.ts — DETECT LOUDLY when the status/priority/kind catalog
  * violates an invariant this build's read layer depends on, and REPORT it.
  *
  * ## The posture: prevented at the write, detected loudly, never a gate
@@ -38,8 +38,8 @@
  *    layer is deliberately name-blind (ADR-0002 D1), so the flag must be
  *    correct on disk — the guard is not a read-time name fallback.
  *
- * 2. UNIQUENESS. No two live rows of the same catalog kind (`status` or
- *    `priority`) may share a case-folded name. The read layer groups by NAME,
+ * 2. UNIQUENESS. No two live rows of the same catalog kind (`status`,
+ *    `priority` or `kind`) may share a case-folded name. The read layer groups by NAME,
  *    never by fold, so a `HIGH`/`high` pair splits one priority across two
  *    rows and a name-keyed consumer double-counts. A fold collision within a
  *    kind is the signature of that case-fragment defect.
@@ -140,7 +140,7 @@ export function renderCatalogInvariantViolations(
   );
 
   const lines: string[] = [
-    'backlog: status/priority catalog invariant violated (ADR-0002: correct the source, never work around it).',
+    'backlog: status/priority/kind catalog invariant violated (ADR-0002: correct the source, never work around it).',
   ];
   lines.push(
     '  This is a NAMED check: it reports the rows below and the repair. It never gates reads or unrelated writes — a drifted catalog is a bounded data problem, never an availability outage — and neither condition may be papered over with a read-time fallback.'
@@ -173,7 +173,7 @@ export function renderCatalogInvariantViolations(
 }
 
 /**
- * The status/priority catalog violates an invariant this build's read layer
+ * The status/priority/kind catalog violates an invariant this build's read layer
  * depends on. Carries the offending rows as structured fields so a caller can
  * render them; the message itself names every row AND the repair.
  */
@@ -227,7 +227,7 @@ function parseMetaObject(
 }
 
 /**
- * Read every live status/priority row and return the invariant violations.
+ * Read every live status/priority/kind row and return the invariant violations.
  * A pure read — it never writes, so it is safe against any store, including
  * the live one.
  *
@@ -290,7 +290,7 @@ export async function inspectCatalogInvariants(
 }
 
 /**
- * Assert the store's status/priority catalog satisfies both invariants.
+ * Assert the store's status/priority/kind catalog satisfies both invariants.
  *
  * Passes (no throw) on an empty store, and on a catalog whose reserved
  * terminal statuses are flagged and whose same-kind names are fold-unique.
@@ -306,7 +306,7 @@ export async function inspectCatalogInvariants(
  * unrelated write — into an outage.
  *
  * BOUNDED BY CONSTRUCTION: it must not scan the issue graph per call. It reads
- * only the (small) status/priority catalog — see
+ * only the (small) status/priority/kind catalog — see
  * {@link inspectCatalogInvariants}.
  */
 export async function assertCatalogInvariants(
