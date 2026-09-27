@@ -20,8 +20,10 @@
  * so the drift is no longer regenerated on a fresh mint. THIS module remains
  * the one-shot, reversible REPAIR of drift already on disk (pre-fix rows, the
  * ETL's import, any other writer) — and because its classifier folds names, it
- * also catches case-variant rows the exact-case mint deliberately leaves to
- * the case-fragment repair.
+ * also catches a case-variant row already on disk from before the write path
+ * began refusing new ones (the write path now rejects a case-variant of a live
+ * row rather than minting a twin; that refusal is not a substitute for
+ * repairing the rows that predate it).
  *
  * ## What this module does — and deliberately does NOT
  *
@@ -65,10 +67,25 @@ export function catalogNameFold(name: string): string {
   return name.normalize('NFKC').toLowerCase();
 }
 
-/** {@link RESERVED_TERMINAL_STATUS_NAMES}, folded once at module load — the grouping key set the planner matches a folded row name against. */
-const FOLDED_RESERVED_TERMINAL_STATUS_NAMES: ReadonlySet<string> = new Set(
-  [...RESERVED_TERMINAL_STATUS_NAMES].map((name) => catalogNameFold(name))
-);
+/**
+ * {@link RESERVED_TERMINAL_STATUS_NAMES}, folded through {@link catalogNameFold}.
+ *
+ * Computed INSIDE the planner, not at module load, for a load-order reason:
+ * `write/catalog.ts` imports {@link catalogNameFold} from THIS module (its mint
+ * path folds a candidate name against the reserved vocabulary), while this
+ * module re-exports {@link RESERVED_TERMINAL_STATUS_NAMES} FROM `catalog.ts`.
+ * That is a module cycle, and a module-load read of the reserved set here would
+ * hit `catalog.ts`'s not-yet-initialized binding (a TDZ `ReferenceError`)
+ * whenever `catalog.ts` is the first of the two evaluated. Deferring the read
+ * to call time removes the only load-time cross-reference, so the cycle is
+ * inert. The set is tiny (the reserved vocabulary), so rebuilding it per plan
+ * is free.
+ */
+function foldedReservedTerminalStatusNames(): ReadonlySet<string> {
+  return new Set(
+    [...RESERVED_TERMINAL_STATUS_NAMES].map((name) => catalogNameFold(name))
+  );
+}
 
 /**
  * Guarded `JSON.parse` for a `node.meta` column value — the SAME
@@ -138,9 +155,10 @@ export async function planTerminalBackfill(
   );
 
   const setTerminalRowids: number[] = [];
+  const foldedReserved = foldedReservedTerminalStatusNames();
   for (const row of rows) {
     const folded = catalogNameFold(row.name ?? '');
-    if (!FOLDED_RESERVED_TERMINAL_STATUS_NAMES.has(folded)) continue;
+    if (!foldedReserved.has(folded)) continue;
     const meta = parseMetaObject(row.meta);
     if (meta?.terminal === true) continue; // already correct — idempotent
     setTerminalRowids.push(row.rowid);

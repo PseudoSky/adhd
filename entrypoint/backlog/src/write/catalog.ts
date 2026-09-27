@@ -24,10 +24,12 @@
 
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import {
+  CaseVariantNameError,
   CatalogNotFoundError,
   InvalidArgumentError,
   assertNotBareRoleLiteral,
 } from './errors.js';
+import { catalogNameFold } from './catalog-repair.js';
 import {
   type IEdgeKindRule,
   type IWriteStoreHandle,
@@ -270,13 +272,16 @@ export interface IMintOrResolveInput {
  * that reads as non-terminal — the drift `catalog-repair.ts` exists to clean
  * up is not regenerated on the next mint.
  *
- * Membership is EXACT and case-sensitive — the same predicate the `(kind,name)`
- * lookup uses (`WHERE name = ?`). A case-variant (`Closed`) is deliberately
- * NOT a member: it is an exact miss, self-heals into its own row (never a
- * throw), and is left to the separately-owned case-fragment repair, which
- * folds names. Spelling the canonical rows here is what pins them; there is
- * exactly ONE such table in the codebase (`catalog-repair.ts` re-exports
- * this set rather than declaring its own).
+ * Membership is decided on the FOLDED name ({@link catalogNameFold}) — the
+ * same Unicode fold the duplicate guard and the case-fragment repair use, never
+ * SQL `lower()`/`NOCASE`, which fold only ASCII `A`–`Z`. The spellings below
+ * are the canonical catalog rows, but the PREDICATE folds, so `Closed`,
+ * `fixed`, `resolved` and `done` all count as reserved. This matters because a
+ * first-ever lowercase `fixed`/`resolved`/`done` has no uppercase row to
+ * collide against; under an exact-case predicate it would seed
+ * `terminal:false` — a closed status the read layer returns as open (backlog
+ * b4525bc3 / d7ec2c50). There is exactly ONE such table in the codebase
+ * (`catalog-repair.ts` re-exports this set rather than declaring its own).
  */
 export const RESERVED_TERMINAL_STATUS_NAMES: ReadonlySet<string> = new Set([
   'closed',
@@ -287,15 +292,64 @@ export const RESERVED_TERMINAL_STATUS_NAMES: ReadonlySet<string> = new Set([
   'SUPERSEDED',
 ]);
 
-/** Whether `name` is EXACTLY one of {@link RESERVED_TERMINAL_STATUS_NAMES} — case-sensitive, the same predicate the `(kind,name)` resolve uses. */
+/** {@link RESERVED_TERMINAL_STATUS_NAMES}, folded once at module load — the membership key {@link isReservedTerminalStatusName} tests a folded name against. */
+const FOLDED_RESERVED_TERMINAL_STATUS_NAMES: ReadonlySet<string> = new Set(
+  [...RESERVED_TERMINAL_STATUS_NAMES].map((name) => catalogNameFold(name))
+);
+
+/** Whether `name` is one of {@link RESERVED_TERMINAL_STATUS_NAMES} under the case fold — so any spelling of the reserved terminal vocabulary (`closed`/`Closed`/`CLOSED`, `fixed`/`FIXED`) counts. */
 export function isReservedTerminalStatusName(name: string): boolean {
-  return RESERVED_TERMINAL_STATUS_NAMES.has(name);
+  return FOLDED_RESERVED_TERMINAL_STATUS_NAMES.has(catalogNameFold(name));
+}
+
+/**
+ * Find a LIVE row of `catalogKind` whose name folds to the same token as `ref`
+ * but is not spelled identically — the case-variant the write path refuses.
+ *
+ * Folding is done in JS via {@link catalogNameFold}, never SQL `lower()`/
+ * `NOCASE` (ASCII-only, would desync from the fold the guard and the repair
+ * use). The read is BOUNDED by the catalog: one statement over the live rows of
+ * one kind (a handful of rows), not the issue graph. It runs against the
+ * caller's own `immediate`-mode `tx`, so it is race-safe with the mint that
+ * follows: two concurrent processes cannot both hold the transaction, and the
+ * one that commits first makes the other's exact SELECT a hit (or its fold
+ * check a genuine collision) before either can insert.
+ *
+ * `ORDER BY rowid ASC` makes the reported `canonicalName` deterministic when a
+ * store somehow holds several folded variants at once (the state the guard
+ * refuses to serve); we still name the lowest-rowid live row.
+ */
+async function findCaseVariantCatalogRowTx(
+  tx: AdapterTransaction,
+  catalogKind: FlatCatalogKind,
+  ref: string
+): Promise<{ uid: string; name: string } | undefined> {
+  const refFold = catalogNameFold(ref);
+  const { rows } = await tx.executeAll<{ uid: string; name: string | null }>(
+    'SELECT uid, name FROM node WHERE kind = ? AND t_invalid IS NULL ORDER BY rowid ASC',
+    [catalogKind]
+  );
+  for (const row of rows) {
+    if (row.name === null || row.name === ref) continue;
+    if (catalogNameFold(row.name) === refFold) {
+      return { uid: row.uid, name: row.name };
+    }
+  }
+  return undefined;
 }
 
 /**
  * The flat-catalog find-then-create (§1, §4c, §6.1): `kind`/`status`/
  * `priority`/`agent` are mintable on an unresolved NAME; a uid-shaped `ref`
  * that does not resolve instead throws — minting NEVER applies to a uid.
+ *
+ * A NAME that case-folds to an EXISTING LIVE row of the same kind but is
+ * spelled differently (`IN_PROGRESS` when `in_progress` is live) is REFUSED
+ * with {@link CaseVariantNameError} — never fold-resolved onto the existing
+ * row, never minted as a twin. Identity is exact-case (`WHERE name = ?`), so a
+ * variant is neither the same row nor a genuinely new name; it is ambiguous,
+ * and the ambiguity is stopped here rather than allowed to grow a duplicate
+ * the catalog-invariant guard would then abort every read over.
  */
 export async function mintOrResolveCatalogTx(
   tx: AdapterTransaction,
@@ -320,6 +374,19 @@ export async function mintOrResolveCatalogTx(
       uid: existing.uid,
       name: existing.name ?? input.ref,
     };
+  }
+
+  // The exact-name SELECT missed. Before minting, refuse a case-variant of an
+  // existing live row — still inside the SAME immediate transaction, so no
+  // concurrent writer can slip a colliding row in between this check and the
+  // INSERT below.
+  const variant = await findCaseVariantCatalogRowTx(
+    tx,
+    input.catalogKind,
+    input.ref
+  );
+  if (variant) {
+    throw new CaseVariantNameError(input.catalogKind, variant.name, input.ref);
   }
 
   const metadata = input.mintMetadata ? await input.mintMetadata(tx) : {};
@@ -350,9 +417,10 @@ export async function mintOrResolveCatalogTx(
  * exact `(kind,name)` lookup inside {@link mintOrResolveCatalogTx} finds the
  * seeded row on every subsequent call, so reseeding never duplicates — the
  * store converges to one live `status` row per name. A case-variant name
- * (`Closed` vs a seeded `closed`) is an exact miss, so it self-heals into its
- * own row rather than throwing — the pre-existing resolution property, not a
- * terminality decision (the case-fragment repair folds those separately).
+ * (`Closed` vs a seeded `closed`) is REFUSED by {@link mintOrResolveCatalogTx}
+ * with {@link CaseVariantNameError} rather than folded onto the existing row or
+ * minted as a twin — the same exact-case stop every other flat catalog takes
+ * (see that function's doc comment).
  *
  * A uid-shaped `ref` that does not resolve still throws
  * `CatalogNotFoundError` — minting never applies to a uid (§6.1).

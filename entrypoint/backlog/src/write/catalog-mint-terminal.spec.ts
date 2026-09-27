@@ -16,10 +16,10 @@
  * THE FIX. Terminality is SEEDED from the frozen
  * {@link RESERVED_TERMINAL_STATUS_NAMES} table, never stamped at the call
  * site and never derived at read time (`query/card.ts`'s `isStatusTerminal`
- * stays name-blind). An exact reserved name with no live row is seeded
- * `terminal:true`; every other name keeps the pre-existing `terminal:false`
- * default (SPEC.md §6.3.2: a novel/typo name must never silently close an
- * item).
+ * stays name-blind). A reserved name (any spelling — membership is decided on
+ * the folded name) with no live row is seeded `terminal:true`; every other name
+ * keeps the pre-existing `terminal:false` default (SPEC.md §6.3.2: a
+ * novel/typo name must never silently close an item).
  *
  * Every assertion drives the REAL verbs (`seedProject`/`createIssue`/
  * `transition`/`queryIssues`) against a REAL store opened via
@@ -241,36 +241,37 @@ describe('status mint — reserved terminal names seed terminal:true at the sour
     expect(rows[0]!.meta.terminal).toBe(true);
   });
 
-  it('CASE SENSITIVITY: minting a case-variant reserved name (`Closed`) does not throw — it self-heals as a distinct, exact-name row', async () => {
+  it('CASE FOLD: minting a non-canonical reserved spelling (`Closed`) seeds terminal:true (reserved terminality is decided on the folded name)', async () => {
     const created = await createIssue(store, {
       project: projectUid,
       title: 'case variant closed',
-      body: 'exact case-sensitive resolution, self-heal never throws',
+      body: 'reserved terminality is decided on the folded name',
       status: 'Closed',
       by: 'mint-test',
     });
     expect(created.created).toBe(true);
 
-    // Exact, case-sensitive resolution: `Closed` is a DISTINCT row from the
-    // canonical `closed` (catalog.ts's `WHERE name = ?`), never merged here.
+    // No `closed` row exists in this fresh store, so `Closed` is an exact miss
+    // and mints a row of its own (a distinct spelling). The write path refuses
+    // only a case-variant of an EXISTING live row, never a first-ever spelling.
     const rows = await liveStatusRows(store, 'Closed');
     expect(rows).toHaveLength(1);
 
-    // Documented exact-case behaviour: `Closed` is NOT an exact member of the
-    // reserved table, so it seeds the pre-existing non-terminal default and
-    // the item stays OPEN. The case-fragment residual is the separately-owned
-    // D1/D3 repair + guard's job, deliberately NOT this mint path's (see this
-    // file's header): the mitigation here is "self-heal, never abort", not a
-    // folded terminality decision.
-    expect(rows[0]!.meta.terminal).toBe(false);
-    expect(await listedUids(store, { status: 'open' })).toContain(created.uid);
+    // Terminality is decided on the FOLDED name, so `Closed` folds to the
+    // reserved `closed` and seeds the flag — no longer a closed-by-name row
+    // that reads as open.
+    expect(rows[0]!.meta.terminal).toBe(true);
+    expect(await listedUids(store, { status: 'open' })).not.toContain(
+      created.uid
+    );
+    expect(await listedUids(store, { status: 'closed' })).toContain(created.uid);
   });
 
-  it('CASE SENSITIVITY: transition to a case-variant reserved name does not throw (self-heal, never abort)', async () => {
+  it('CASE FOLD: transition to a non-canonical reserved spelling (`Closed`) seeds terminal:true', async () => {
     const created = await createIssue(store, {
       project: projectUid,
       title: 'transition case variant',
-      body: 'an ordinary transition to a case variant must not break',
+      body: 'transitioning onto a reserved spelling must close the item',
       by: 'mint-test',
     });
 
@@ -281,10 +282,13 @@ describe('status mint — reserved terminal names seed terminal:true at the sour
       note: 'case variant transition',
     });
     expect(outcome.toStatus).toBe('Closed');
-    expect((await statusRow(store, 'Closed')).meta.terminal).toBe(false);
+    expect((await statusRow(store, 'Closed')).meta.terminal).toBe(true);
+    expect(await listedUids(store, { status: 'open' })).not.toContain(
+      created.uid
+    );
   });
 
-  it('DRIFT (one definition): `catalog-repair` re-exports the `catalog.ts` reserved table by identity, and membership is exact', () => {
+  it('DRIFT (one definition): `catalog-repair` re-exports the `catalog.ts` reserved table by identity, and membership is case-folded', () => {
     // Reference identity => there is exactly ONE definition of the reserved
     // set in the codebase, not two copies that merely agree today.
     expect(RESERVED_FROM_REPAIR).toBe(RESERVED_TERMINAL_STATUS_NAMES);
@@ -293,7 +297,13 @@ describe('status mint — reserved terminal names seed terminal:true at the sour
       expect(isReservedTerminalStatusName(name)).toBe(true);
     }
     expect(isReservedTerminalStatusName('open')).toBe(false);
-    expect(isReservedTerminalStatusName('Closed')).toBe(false); // exact, case-sensitive
+    // Membership folds: every spelling of a reserved terminal token counts, so
+    // a first-ever lowercase `fixed`/`resolved`/`done` seeds terminal:true
+    // instead of reading as open (backlog b4525bc3 / d7ec2c50).
+    expect(isReservedTerminalStatusName('Closed')).toBe(true);
+    expect(isReservedTerminalStatusName('fixed')).toBe(true);
+    expect(isReservedTerminalStatusName('RESOLVED')).toBe(true);
+    expect(isReservedTerminalStatusName('done')).toBe(true);
     expect(RESERVED_TERMINAL_STATUS_NAMES.size).toBeGreaterThan(0);
   });
 });

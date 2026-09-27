@@ -40,6 +40,7 @@ import {
   CatalogInvariantError,
 } from './catalog-invariant-guard.js';
 import { executeWriteTransaction, writeNodeTx } from '../write/tx.js';
+import { CaseVariantNameError } from '../write/errors.js';
 import { createIssue } from '../write/create-issue.js';
 import { transition } from '../write/transition.js';
 import { queryIssuesWithMeta, type IQueryStoreHandle } from '../query/query.js';
@@ -224,13 +225,15 @@ describe('assertCatalogInvariants — the two catalog invariants', () => {
     );
   });
 
-  it('FINDING: an ordinary createIssue with a non-canonical case status spelling mints a twin and trips check 2 (no write-time fold-resolve)', async () => {
-    // CHARACTERIZATION of a live gap, not an endorsement. The mint resolves by
-    // EXACT `(kind, name)` (`write/catalog.ts` `mintOrResolveCatalogTx`), so a
-    // caller-typed `status:'Open'` is an exact miss and mints a second live row
-    // alongside `open` — the very case-fragment the D3 collapse removes. There
-    // is no write-time fold-resolve yet; the guard would fire on this ordinary
-    // write until that (or the merge) is in place. Filed as a backlog finding.
+  it('FINDING FIXED: an ordinary createIssue with a non-canonical case status spelling is REFUSED at write time (no write-time twin)', async () => {
+    // The write-time gap this test used to characterize is closed. The mint
+    // resolves by EXACT `(kind, name)` (`write/catalog.ts` `mintOrResolveCatalogTx`),
+    // and now, on that exact miss, it runs a fold-collision check over the live
+    // rows of the SAME kind inside the SAME immediate transaction: a
+    // caller-typed `status:'Open'` that folds to the live `open` is REFUSED
+    // with `CaseVariantNameError` (naming both spellings) rather than minting a
+    // second live row. The guard's check 2 can no longer be tripped by an
+    // ordinary write.
     const { projectUid } = await seedProject(store, 'guard-finding');
     await createIssue(store, {
       project: projectUid,
@@ -238,22 +241,34 @@ describe('assertCatalogInvariants — the two catalog invariants', () => {
       body: 'mints status open',
       by: 'agent:t',
     });
-    await createIssue(store, {
+
+    const err = await createIssue(store, {
       project: projectUid,
       title: 'non-canonical spelling',
-      body: 'mints a second status Open',
+      body: 'must be refused, not minted as a second status row',
       status: 'Open',
       by: 'agent:t',
-    });
+    }).then(
+      () => undefined,
+      (e: unknown) => e
+    );
+    expect(err).toBeInstanceOf(CaseVariantNameError);
+    const variantErr = err as CaseVariantNameError;
+    expect(variantErr.catalogKind).toBe('status');
+    expect(variantErr.canonicalName).toBe('open');
+    expect(variantErr.offendingName).toBe('Open');
+    expect((err as Error).message).toContain('"Open"');
+    expect((err as Error).message).toContain('"open"');
 
-    const violations = await inspectCatalogInvariants(store.adapter);
-    const duplicate = violations.find(
-      (v) => v.kind === 'case-fragment-duplicate'
+    // Exactly one live row per folded token: the canonical `open` only, no
+    // `Open` twin. The catalog invariant holds, so the guard serves this store
+    // instead of aborting every read (the outage).
+    const live = await store.adapter.executeAll<{ name: string }>(
+      "SELECT name FROM node WHERE kind = 'status' AND t_invalid IS NULL ORDER BY rowid ASC"
     );
-    expect(duplicate?.fold).toBe('open');
-    await expect(assertCatalogInvariants(store.adapter)).rejects.toBeInstanceOf(
-      CatalogInvariantError
-    );
+    expect(live.rows.map((r) => r.name)).toEqual(['open']);
+    expect(await inspectCatalogInvariants(store.adapter)).toEqual([]);
+    await expect(assertCatalogInvariants(store.adapter)).resolves.toBeUndefined();
   });
 
   it('WIRING (store open): openGraphBacklogStore refuses to open a catalog-violating store and closes the adapter it opened', async () => {

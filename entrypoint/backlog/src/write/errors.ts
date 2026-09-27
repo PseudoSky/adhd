@@ -18,7 +18,7 @@
  * All named classes here are `E_VALIDATION`- or `E_CONSTRAINT`-class
  * members of the same union (SPEC.md §4c, "Two failure-signaling shapes,
  * reconciled into one contract") — `IssueNotFoundError`, `InvalidArgumentError`,
- * `CatalogNotFoundError`, `ClaimHeldError`, `SingleValuedRelationConflictError`,
+ * `CatalogNotFoundError`, `CaseVariantNameError`, `ClaimHeldError`, `SingleValuedRelationConflictError`,
  * `NoteRequiredError`, `CitationRequiredError`, `CitationUnverifiableError` are
  * `E_VALIDATION` (never retryable — thrown before any driver call runs);
  * `StaleSupersedeError` is the one deliberate `E_CONSTRAINT` this spec's own
@@ -254,6 +254,44 @@ export class CatalogNotFoundError extends BacklogWriteError {
     public readonly ref: string
   ) {
     super(`${catalogKind} "${ref}" was not found`);
+  }
+}
+
+/**
+ * A flat-catalog write named a token that differs from an EXISTING LIVE row of
+ * the SAME kind only by letter case (`IN_PROGRESS` vs `in_progress`, `high` vs
+ * `HIGH`). Catalog identity is EXACT-case (`DATA_MODEL.md:70-78`; the
+ * `(kind, name)` resolve in `write/catalog.ts` is `WHERE name = ?`), so the
+ * write path REFUSES the variant rather than fold-resolving it onto the
+ * existing row or minting a twin. Accepting it would grow a second live row
+ * that case-folds to the first — the case-fragment defect the uniqueness guard
+ * (`store/catalog-invariant-guard.ts`) exists to catch, which is exactly how
+ * the store wedged (BUG: a mixed-case write minted a twin, then the guard
+ * refused every read).
+ *
+ * The message names BOTH spellings and tells the caller which one to use: the
+ * one already live. The ambiguity is stopped here, at the single write call
+ * site, instead of aborting every read.
+ *
+ * `E_VALIDATION`, never retryable — this is a before-any-mint decision, so
+ * retrying the identical payload fails identically.
+ */
+export class CaseVariantNameError extends BacklogWriteError {
+  readonly code = 'E_VALIDATION' as const;
+  readonly retryable = false;
+
+  constructor(
+    /** The flat-catalog kind (`status`, `priority`, `kind`, `agent`). */
+    public readonly catalogKind: string,
+    /** The name of the row ALREADY LIVE for this kind — the spelling to use. */
+    public readonly canonicalName: string,
+    /** The differing name the caller supplied — the spelling that was refused. */
+    public readonly offendingName: string
+  ) {
+    super(
+      `${catalogKind} "${offendingName}" differs only by letter case from the existing live ${catalogKind} "${canonicalName}"; ` +
+        `catalog identity is exact-case, so accepting it would mint a duplicate row. Use the existing spelling "${canonicalName}".`
+    );
   }
 }
 
