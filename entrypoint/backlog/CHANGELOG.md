@@ -1,3 +1,22 @@
+## 1.0.3 (2026-09-27)
+
+### 🚀 Features
+
+- **backlog:** fail-loud status/priority catalog invariant guard ([1f0363d7](https://github.com/PseudoSky/adhd/commit/1f0363d7))
+
+### 🩹 Fixes
+
+- **backlog:** canonicalize status case-fragments to lowercase and priority to uppercase (D3) ([40fa9b54](https://github.com/PseudoSky/adhd/commit/40fa9b54))
+- **backlog:** canonicalize status case-fragments to lowercase and priority to uppercase (D3) ([f4df9997](https://github.com/PseudoSky/adhd/commit/f4df9997))
+- **backlog:** reject the MCP envelope shape on CLI --input with actionable guidance ([b313945c](https://github.com/PseudoSky/adhd/commit/b313945c))
+- **backlog:** seed terminal status flag from a frozen reserved table at the mint source ([62ec232e](https://github.com/PseudoSky/adhd/commit/62ec232e))
+- **backlog:** collapse status/priority case-fragment duplicates at the source (D3) ([1c9562c2](https://github.com/PseudoSky/adhd/commit/1c9562c2))
+- **backlog:** repair status terminal-flag drift at the source (D1) ([781b0fe7](https://github.com/PseudoSky/adhd/commit/781b0fe7))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 1.0.1 (2026-09-26)
 
 ### 🚀 Features
