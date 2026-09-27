@@ -17,7 +17,7 @@ exports. **Total: 54 exports.**
 
 ---
 
-## `tx.ts` (24 exports)
+## `tx.ts` (25 exports)
 
 ### `IWriteStoreHandle` — interface (`tx.ts:89`)
 
@@ -116,7 +116,7 @@ a prefix matching ≥2 live rows of the expected kind throws
 `resolveLiveIssueTx` and `catalog.ts`'s `resolveByUidTx` both delegate here,
 so every issue verb and `rm-location` share ONE prefix contract.
 
-### `getNodeByRowidTx(tx, rowid)` — function (`tx.ts:325`)
+### `getNodeByRowidTx(tx, rowid)` — function (`tx.ts:326`)
 
 ```ts
 export async function getNodeByRowidTx(tx: AdapterTransaction, rowid: number): Promise<ITxNodeRow | null>;
@@ -125,7 +125,7 @@ export async function getNodeByRowidTx(tx: AdapterTransaction, rowid: number): P
 Guarantees: same as `getNodeByUidTx`, keyed by internal `rowid` instead —
 used to resolve an edge endpoint's kind without a redundant round trip.
 
-### `IWriteNodeTxInput` — interface (`tx.ts:336`)
+### `IWriteNodeTxInput` — interface (`tx.ts:337`)
 
 ```ts
 export interface IWriteNodeTxInput {
@@ -147,7 +147,7 @@ atomic instant. `skipDedupe` is typed `never` — declaring it on an input
 object literal is a compile error; see `writeNodeTx`'s own guarantee below
 for why.
 
-### `writeNodeTx(tx, input)` — function (`tx.ts:479`)
+### `writeNodeTx(tx, input)` — function (`tx.ts:480`)
 
 ```ts
 export async function writeNodeTx(tx: AdapterTransaction, input: IWriteNodeTxInput): Promise<{ rowid: number; uid: string }>;
@@ -162,7 +162,7 @@ the library's content-hash-SELECT-then-maybe-insert behavior. SPEC.md §1/§4
 this function never runs that SELECT for any kind at all: always a fresh
 INSERT, always a fresh `crypto.randomUUID()` uid.
 
-### `EdgeMultiplicity` — type (`tx.ts:557`)
+### `EdgeMultiplicity` — type (`tx.ts:558`)
 
 ```ts
 export type EdgeMultiplicity = 'n:1' | '1:n' | 'n:m';
@@ -172,7 +172,7 @@ Guarantees: the closed set of multiplicity values every `edge_kind` rule
 declares. `n:1` caps the edge's SOURCE out-degree at one; `1:n` caps the
 TARGET in-degree at one; `n:m` is uncapped on both sides.
 
-### `IEdgeKindRule` — interface (`tx.ts:559`)
+### `IEdgeKindRule` — interface (`tx.ts:560`)
 
 ```ts
 export interface IEdgeKindRule {
@@ -187,7 +187,7 @@ Guarantees: the resolved shape of one `rel`'s declared endpoint-kind and
 multiplicity rule. `sourceKind: '*'` is the one declared sentinel (`audits`)
 that skips the source-kind match.
 
-### `IWriteEdgeTxInput` — interface (`tx.ts:567`)
+### `IWriteEdgeTxInput` — interface (`tx.ts:568`)
 
 ```ts
 export interface IWriteEdgeTxInput {
@@ -212,7 +212,7 @@ one call — `rule` must be the caller's own already-resolved `edge_kind` rule
 follows the same one-logical-write-one-timestamp rule as
 `IWriteNodeTxInput.at`.
 
-### `writeEdgeTx(tx, input)` — function (`tx.ts:671`)
+### `writeEdgeTx(tx, input)` — function (`tx.ts:672`)
 
 ```ts
 export async function writeEdgeTx(tx: AdapterTransaction, input: IWriteEdgeTxInput): Promise<void>;
@@ -226,7 +226,7 @@ mismatch), enforces `checkMultiplicityTx`'s capped-side conflict check
 CONFLICT(src, dst, rel) DO UPDATE` / re-livening (`t_invalid = NULL`) as the
 library's own `writeEdgeInternal`, issued against `tx`.
 
-### `BacklogEdgeKindMismatchError` — class (`tx.ts:734`)
+### `BacklogEdgeKindMismatchError` — class (`tx.ts:735`)
 
 ```ts
 export class BacklogEdgeKindMismatchError extends BacklogWriteError {
@@ -241,7 +241,7 @@ does not match the actual endpoint being written — a write-layer composition
 defect, expected to be unreachable in practice; fails loudly rather than
 writing a mismatched edge.
 
-### `IInvalidateEdgeTxInput` — interface (`tx.ts:750`)
+### `IInvalidateEdgeTxInput` — interface (`tx.ts:751`)
 
 ```ts
 export interface IInvalidateEdgeTxInput {
@@ -256,7 +256,7 @@ export interface IInvalidateEdgeTxInput {
 Guarantees: everything `invalidateEdgeTx` needs to invalidate one live edge,
 with an optional human-readable `reason` merged into the edge's `meta`.
 
-### `invalidateEdgeTx(tx, input)` — function (`tx.ts:769`)
+### `invalidateEdgeTx(tx, input)` — function (`tx.ts:770`)
 
 ```ts
 export async function invalidateEdgeTx(tx: AdapterTransaction, input: IInvalidateEdgeTxInput): Promise<void>;
@@ -267,7 +267,7 @@ no-op if the edge is already invalidated or absent; otherwise sets
 `t_invalid` and merges `invalidatedAt`/`invalidatedReason` into `meta`,
 issued against `tx`.
 
-### `executeWriteTransaction(handle, fn)` — function (`tx.ts:884`)
+### `executeWriteTransaction(handle, fn)` — function (`tx.ts:885`)
 
 ```ts
 export async function executeWriteTransaction<T>(handle: IWriteStoreHandle, fn: (tx: AdapterTransaction) => Promise<T>): Promise<T>;
@@ -633,7 +633,7 @@ surface.
 
 ---
 
-## `errors.ts` (15 exports)
+## `errors.ts` (16 exports)
 
 ### `WriteErrorCode` — type (`errors.ts:41`)
 
