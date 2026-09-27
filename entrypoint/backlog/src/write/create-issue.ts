@@ -123,7 +123,16 @@ export interface ICreateIssueInput {
    * value (§6.4 point 3, first sentence).
    *
    * - `'abort'` — nothing is written; `{created:false,
-   *   reason:'duplicate-suppressed', duplicateCandidates}`.
+   *   reason:'duplicate-suppressed', duplicateCandidates}`. If the scan was
+   *   degraded in the ONE way that can NEVER resolve on its own —
+   *   `no-embed-query`, the backend wired without `embedQuery` so the
+   *   calibrated channel can never run — it also fails closed with
+   *   `{created:false, reason:'duplicate-scan-degraded',
+   *   duplicateScanDegraded:true, duplicateScanDegradedReason:'no-embed-query'}`
+   *   (BUG 4e8fce2a). A `no-vector-scores` degrade (indistinguishable at read
+   *   time from benign on-write embedding lag) or a `no-search-backend`
+   *   degrade (dedupe never mounted) instead PROCEEDS and carries the
+   *   `duplicateScanDegraded` signal.
    * - `'force'` — the write proceeds to a genuinely new, distinct `uid`
    *   despite the match; `duplicateCandidates` is still reported.
    * - `'comment'` — no new issue node is written; a `note` node is attached
@@ -166,6 +175,47 @@ export interface IDuplicateCandidate {
 }
 
 /**
+ * Why {@link scanForDuplicates} could not produce a calibrated comparison —
+ * i.e. why the gate did NOT actually scan for duplicates despite being asked
+ * to. See {@link IDuplicateScanOutcome.degraded}.
+ */
+export type DuplicateScanDegradedReason =
+  | 'no-search-backend'
+  | 'no-embed-query'
+  | 'no-vector-scores';
+
+/**
+ * The result of {@link scanForDuplicates}. Its `candidates` arm is the
+ * pre-existing return value; `degraded` is the missing signal this type now
+ * carries (BUG 4e8fce2a).
+ *
+ * **`degraded` is the distinction the gate previously could not make.**
+ * Before this type existed, `scanForDuplicates` returned only
+ * `IDuplicateCandidate[]`, so an empty array meant EITHER "the scan ran and
+ * genuinely found nothing" OR "the scan could not run at all" — two states
+ * with opposite safety meanings that the caller had no way to tell apart. The
+ * abort branch (`createIssue`) then treated both as "no duplicates" and wrote
+ * the item, so `duplicateAction:'abort'` silently FAILED OPEN whenever the
+ * semantic substrate was degraded (no search backend, no `embedQuery`, or an
+ * empty/mismatched vector space). See {@link scanForDuplicates}'s own doc
+ * comment for exactly which conditions set this flag.
+ */
+export interface IDuplicateScanOutcome {
+  candidates: IDuplicateCandidate[];
+  /**
+   * `true` iff the scan could NOT perform a calibrated duplicate comparison
+   * for the in-scope issues — no vector channel ran, so `candidates` is empty
+   * because the gate is blind, NOT because the store is clean. Always `false`
+   * when the project genuinely has zero issues to compare against, or when
+   * `dedupeScanEnabled` is off: those are complete (if empty) scans, not
+   * degraded ones.
+   */
+  degraded: boolean;
+  /** Set iff `degraded` — the concrete reason, never a generic "unavailable". */
+  degradedReason?: DuplicateScanDegradedReason;
+}
+
+/**
  * The search substrate `createIssue`'s duplicate gate needs (§6.4 point 1),
  * threaded alongside {@link IWriteStoreHandle} rather than folded into it:
  * `IWriteStoreHandle` (tx.ts) is the write layer's OWN minimal dependency
@@ -180,19 +230,22 @@ export interface IDuplicateCandidate {
  *
  * `search.embedQuery` is declared OPTIONAL here (unlike
  * `IQueryStoreHandle.search.embedQuery`, which is mandatory) specifically to
- * express §6.4 point 4's degraded case: a `StoreSearchBackend` can be wired
- * (FTS/text always available, since it runs off the graph store directly)
- * while no embedding model/vector space is configured — the search
- * itself stays callable, just scoped to `signals:[{text}]` rather than
- * `signals:[{text},{vec}]` (and, having no vector channel, surfacing no
- * duplicate candidates — see {@link scanForDuplicates}). `search` itself stays OPTIONAL (no backend
+ * express §6.4 point 4's `no-embed-query` degraded case: a `StoreSearchBackend`
+ * can be wired (FTS/text runs off the graph store directly) while no embedding
+ * model/vector space is configured, so the CALIBRATED (vector) channel can
+ * never run. `scanForDuplicates` reports that as `degradedReason:
+ * 'no-embed-query'`, and `createIssue`'s `abort` FAILS CLOSED on it — a
+ * persistent configuration absence the operator must fix, never a transient.
+ * (It deliberately does NOT fall back to a text-only scan: BM25 is
+ * uncalibrated and would reintroduce the false-positive class — see
+ * {@link scanForDuplicates}.) `search` itself stays OPTIONAL (no backend
  * mounted at all) for the same "never silently go dark" posture §6.4 point 4
- * states, but applied one layer further out: `scanForDuplicates` treats a
- * wholly-absent backend as "scan unavailable" (zero candidates, `create`
- * proceeds normally) rather than throwing — filing an issue must never hard-
- * fail because the product-feature-only dedupe UX (§6.4's own framing: "a
- * missed warning, not a correctness defect") happens to be unwired in a given
- * environment.
+ * states, but applied one layer further out: `scanForDuplicates` reports a
+ * wholly-absent backend as `no-search-backend` (zero candidates, `create`
+ * PROCEEDS and carries the signal) rather than throwing — filing an issue must
+ * never hard-fail because the product-feature-only dedupe UX (§6.4's own
+ * framing: "a missed warning, not a correctness defect") happens to be
+ * unwired in a given environment.
  */
 export interface IDuplicateScanHandle {
   readonly graph?: GraphBackend;
@@ -275,7 +328,19 @@ export interface ICreateIssueCard {
  *   `duplicateAction` — this is NOT an empty array in that case (§6.4 point
  *   3, first sentence).
  * - `reason` — present iff `!created` and the gate suppressed the write
- *   (`duplicateAction:'abort'`, the default).
+ *   (`duplicateAction:'abort'`, the default) OR refused it because the scan
+ *   was degraded in the never-resolvable `no-embed-query` way
+ *   (`'duplicate-scan-degraded'`, BUG 4e8fce2a — see
+ *   {@link IDuplicateScanOutcome}).
+ * - `duplicateScanDegraded`/`duplicateScanDegradedReason` — present iff the
+ *   pre-write scan could not run a calibrated comparison
+ *   ({@link scanForDuplicates}'s `degraded`), on EVERY outcome: on the
+ *   `'abort'` refusal for the never-resolvable `no-embed-query` degrade
+ *   (`created:false`, `reason:'duplicate-scan-degraded'`), and on
+ *   `'force'`/`'comment'`/the `no-vector-scores` and `no-search-backend`
+ *   `'abort'` paths where the write proceeded anyway.
+ *   This is the field that makes a degraded scan non-silent: absent on a
+ *   healthy scan (the common case), so byte-for-byte unchanged there.
  * - `commentedOn` — present iff `duplicateAction:'comment'` fired.
  * - `supersededUid` — always absent from `createIssue` alone; only the
  *   `supersedes` composition (§6.3.2, not yet built here) would set it.
@@ -285,7 +350,11 @@ export interface ICreateIssueResult {
   uid?: string;
   item?: ICreateIssueCard;
   duplicateCandidates?: IDuplicateCandidate[];
-  reason?: 'duplicate-suppressed';
+  reason?: 'duplicate-suppressed' | 'duplicate-scan-degraded';
+  /** Present iff the pre-write scan was degraded — see this interface's own doc comment. Paired with {@link duplicateScanDegradedReason}. */
+  duplicateScanDegraded?: boolean;
+  /** Why the scan was degraded. Present iff {@link duplicateScanDegraded}. */
+  duplicateScanDegradedReason?: DuplicateScanDegradedReason;
   supersededUid?: string;
   commentedOn?: { uid: string; noteId: string };
 }
@@ -449,22 +518,39 @@ function enforceRequiredFields(
  *    from it. That rescaling produced a rank ladder (rank 1 → 1.0, rank 2 →
  *    ~0.984, rank 5 → ~0.938) sitting entirely above the 0.8 default, which
  *    suppressed every create into a project holding any prior issue.
- * 2. **Degraded (no-embedding) mode.** §6.4 point 4: when the search
- *    substrate cannot embed (`search.embedQuery` absent — see
- *    {@link IDuplicateScanHandle}'s own doc comment), the scan still RUNS
- *    (`signals:[{text}]`, never skipped) rather than going dark. It simply
- *    surfaces no candidates, because with no vector channel there is no
- *    calibrated similarity to compare against the threshold — §6.4's own "a
- *    missed warning, not a correctness defect" trade, taken in the only
- *    direction that cannot produce false positives.
+ * 2. **Degraded (no calibrated vector channel) mode is REPORTED, never
+ *    silently empty.** §6.4 point 4 anticipates the semantic substrate being
+ *    unavailable and asks the gate not to "go dark" silently. This gate can
+ *    only ever compare a candidate against `dedupe_threshold` with a
+ *    calibrated cosine (`vecScore`), so when the vector channel cannot run
+ *    there is no comparable score at all — BM25 is deliberately NOT
+ *    substituted (see bullet 1's false-positive class). The previous
+ *    implementation collapsed "could not scan" into the same empty
+ *    `IDuplicateCandidate[]` as "scanned and found nothing", so
+ *    `duplicateAction:'abort'` FAILED OPEN whenever the substrate was
+ *    degraded (BUG 4e8fce2a). The scan now returns an
+ *    {@link IDuplicateScanOutcome} whose `degraded` flag (with a concrete
+ *    {@link DuplicateScanDegradedReason}) distinguishes the two, and
+ *    `createIssue` discriminates on the REASON: it fails `'abort'` closed only
+ *    for `no-embed-query` (a configuration absence that can never resolve),
+ *    and PROCEEDS with the signal for the transient `no-vector-scores` (at
+ *    read time indistinguishable from benign on-write embedding lag) and for
+ *    the unwired `no-search-backend` — rather than blocking a legitimate
+ *    create on a state that is not a detectable duplicate.
  *
- * Returns `[]` (never throws) when: `project_policy.dedupe_scan_enabled` is
- * `false`; no search backend is mounted at all (§6.4's "a missed warning,
- * not a correctness defect" framing, extended one layer further — see
- * {@link IDuplicateScanHandle}); or the project has zero existing issues to
- * compare against. Returns only candidates AT OR ABOVE
+ * Returns `{candidates:[], degraded:false}` (never throws) when: the scan is
+ * a COMPLETE scan of nothing — `project_policy.dedupe_scan_enabled` is
+ * `false`, or the project has zero existing issues to compare against.
+ * Returns `{candidates:[], degraded:true, degradedReason}` when the scan could
+ * not run a calibrated comparison despite issues to compare against: no
+ * search backend mounted (`'no-search-backend'`), no `embedQuery`
+ * (`'no-embed-query'`), or the vector channel yielded no `vecScore` at all
+ * (`'no-vector-scores'` — an empty or `modelId`-mismatched space). Only
+ * `'no-embed-query'` makes `createIssue`'s `'abort'` fail closed; the other
+ * two carry the signal and proceed. On a
+ * healthy scan, returns the candidates AT OR ABOVE
  * `project_policy.dedupe_threshold`, best-first — never the raw, unfiltered
- * top-N.
+ * top-N — with `degraded:false`.
  */
 async function scanForDuplicates(
   handle: IDuplicateScanHandle,
@@ -472,11 +558,26 @@ async function scanForDuplicates(
   policy: IProjectPolicy,
   title: string,
   body: string
-): Promise<IDuplicateCandidate[]> {
-  if (!policy.dedupeScanEnabled) return [];
+): Promise<IDuplicateScanOutcome> {
+  // A COMPLETE (if empty) scan, never a degraded one: an explicit operator
+  // opt-out is a deliberate "do not scan", not a scan that failed to run.
+  if (!policy.dedupeScanEnabled) return { candidates: [], degraded: false };
   const { search, graph } = handle;
-  if (!search || !graph) return [];
-
+  // Resolve the in-scope candidate issue set FIRST — it needs only the graph,
+  // never the semantic backend — so a brand-new project with nothing to
+  // compare against is correctly a COMPLETE (empty) scan even when the
+  // semantic substrate is absent. Without this ordering, `abort` would refuse
+  // the very first create into any fresh project on an unconfigured store,
+  // breaking §6.4 point 3's documented zero-candidate behavior. `graph` is
+  // always present on the production handle; an absent one cannot be scoped,
+  // so it is (conservatively) degraded rather than assumed clean.
+  if (!graph) {
+    return {
+      candidates: [],
+      degraded: true,
+      degradedReason: 'no-search-backend',
+    };
+  }
   // §6.4 point 1: scoped to `project` only — reuses the query layer's own
   // direction-bug-fixed `owns_project`/`owns_component` traversal
   // (`resolveSimilarFilterIds`) rather than a second, hand-rolled one here.
@@ -488,8 +589,41 @@ async function scanForDuplicates(
   // project with no prior issues) short-circuits — see this module's own
   // "empty ids means unfiltered, never match-nothing" hazard doc comment in
   // `query/views/semantic.ts`, which this guard exists specifically to avoid
-  // tripping.
-  if (!candidateIds || candidateIds.size === 0) return [];
+  // tripping. This is a COMPLETE scan of zero issues — nothing to compare
+  // against, so `abort` legitimately proceeds (§6.4 point 3, first sentence);
+  // it is NOT degraded.
+  if (!candidateIds || candidateIds.size === 0)
+    return { candidates: [], degraded: false };
+
+  if (!search) {
+    // Issues EXIST to compare against, but no semantic backend is mounted, so
+    // the gate cannot run its calibrated (vector) comparison. DEGRADED — and
+    // reporting it is what stops `duplicateAction:'abort'` from silently
+    // failing open (BUG 4e8fce2a). This is the wholly-UNCONFIGURED shape, so
+    // `createIssue` still PROCEEDS (filing must not hard-fail on an unwired
+    // feature) but carries `duplicateScanDegraded` on the result.
+    return {
+      candidates: [],
+      degraded: true,
+      degradedReason: 'no-search-backend',
+    };
+  }
+
+  // The vector channel is the ONLY calibrated similarity this gate accepts
+  // (`vecScore`, a raw cosine). With no `embedQuery` there is no query vector,
+  // so no candidate can carry a comparable score — the scan is DEGRADED, not
+  // empty. (§6.4 point 4's FTS-only degrade is deliberately NOT substituted
+  // here: BM25 is an uncalibrated, corpus-relative magnitude and comparing it
+  // to `dedupeThreshold` would reintroduce the false-positive class this gate
+  // was fixed away from — so the honest answer is "could not scan", which the
+  // caller now receives instead of a silent empty list.)
+  if (typeof search.embedQuery !== 'function') {
+    return {
+      candidates: [],
+      degraded: true,
+      degradedReason: 'no-embed-query',
+    };
+  }
 
   // MUST stay byte-identical to `embedding-observer.ts`'s `composeEmbedText`
   // — both this scan's query vector and the on-write vector populate/query
@@ -497,14 +631,9 @@ async function scanForDuplicates(
   // doc comment for why the two call sites import one shared composer
   // instead of each keeping its own copy.
   const text = composeEmbedText(title, body);
-  const vec =
-    typeof search.embedQuery === 'function'
-      ? await search.embedQuery(text)
-      : undefined;
+  const vec = await search.embedQuery(text);
 
-  const signals: SignalSpec[] = vec
-    ? [{ kind: 'text' }, { kind: 'vec' }]
-    : [{ kind: 'text' }];
+  const signals: SignalSpec[] = [{ kind: 'text' }, { kind: 'vec' }];
   const query: SearchQuery = {
     text,
     vec,
@@ -539,12 +668,28 @@ async function scanForDuplicates(
   // "a similarity score, HIGHER-IS-BETTER") — a genuinely calibrated [0,1]
   // quantity that IS comparable to `dedupeThreshold`.
   const results = await search.backend.search(query, FETCH_LIMIT);
-  if (results.length === 0) return [];
+  // A vector-backed KNN always returns its nearest neighbours, so an EMPTY
+  // result set with a query vector in hand means the vector channel itself
+  // produced nothing (an empty or `modelId`-mismatched space) — DEGRADED, not
+  // a clean store. Returning "no candidates" here is exactly the silent
+  // fail-open this fix exists to close (BUG 4e8fce2a).
+  if (results.length === 0) {
+    return {
+      candidates: [],
+      degraded: true,
+      degradedReason: 'no-vector-scores',
+    };
+  }
 
   const nodes = await graph.getNodesByIds(results.map((r) => r.id));
   const byId = new Map(nodes.map((n) => [n.id, n] as const));
 
   const candidates: IDuplicateCandidate[] = [];
+  // Tracks whether the calibrated (vector) channel actually answered for ANY
+  // row. Text-only results — every row's `vecScore` is `undefined` — mean the
+  // vector space did not contain the project's issues, so the scan is blind
+  // even though `backend.search` returned rows. See the post-loop guard.
+  let sawVecScore = false;
   for (const r of results) {
     const node = byId.get(r.id);
     if (!node) continue; // raced away (invalidated) between search and this lookup — never surfaced as a candidate
@@ -571,6 +716,7 @@ async function scanForDuplicates(
     // exact false-positive class described above under a different name.
     const score = r.vecScore;
     if (score === undefined) continue;
+    sawVecScore = true;
     // Defence in depth on scoping: `filters.ids` IS a first-class
     // `buildFilterClause` key, so the backend honours it on both channels —
     // but a duplicate gate that silently widened to the whole store would be
@@ -581,12 +727,23 @@ async function scanForDuplicates(
       candidates.push({ uid: node.uid, title: node.name ?? '', score });
     }
   }
+  // Rows came back, but not one carried a calibrated vector score: the vector
+  // channel is dark (empty or `modelId`-mismatched space), so `candidates` is
+  // empty because the gate is BLIND, not because the store is clean. Report
+  // it as degraded rather than as an indistinguishable "no duplicates".
+  if (!sawVecScore) {
+    return {
+      candidates: [],
+      degraded: true,
+      degradedReason: 'no-vector-scores',
+    };
+  }
   // `backend.search` returns merge-map INSERTION order, not best-first (that
   // is `searchRanked`'s contract, and this no longer calls it) — so the sort
   // is what makes `candidates[0]` the top-scoring match that
   // `duplicateAction:'comment'` (§6.4 point 3) attaches its note to.
   candidates.sort((a, b) => b.score - a.score);
-  return candidates.slice(0, SCAN_LIMIT);
+  return { candidates: candidates.slice(0, SCAN_LIMIT), degraded: false };
 }
 
 /**
@@ -728,13 +885,59 @@ export async function createIssue(
   // would stall every other concurrent writer for its duration. Deliberately
   // NOT a CAS (§6.4 point 1's own accepted-gap framing) — see
   // `scanForDuplicates`'s doc comment.
-  const duplicateCandidates = await scanForDuplicates(
+  const scan = await scanForDuplicates(
     handle,
     preResolvedProject,
     preResolvedPolicy,
     input.title,
     input.body
   );
+  const { candidates: duplicateCandidates } = scan;
+
+  // BUG 4e8fce2a — a DEGRADED scan must never be silently treated as "no
+  // candidates" when the caller asked to be protected from duplicates.
+  // `duplicateAction:'abort'` is exactly that request. The degraded shapes are
+  // discriminated by REASON, because only one of them is a persistent
+  // configuration absence that can never resolve on its own:
+  //
+  //  - `no-embed-query`: the backend is mounted but wired WITHOUT
+  //    `embedQuery`, so the calibrated (vector) channel can NEVER run — a
+  //    persistent configuration absence the operator must fix. `abort` fails
+  //    CLOSED: nothing is written and the refusal is surfaced
+  //    (`reason:'duplicate-scan-degraded'`).
+  //  - `no-vector-scores`: the calibrated channel ran but no in-scope
+  //    candidate carried a `vecScore` (an empty or `modelId`-mismatched
+  //    space). At read time this is INDISTINGUISHABLE from benign on-write
+  //    embedding lag — on-write embedding is fire-and-forget by default
+  //    (`awaitEmbed` is opt-in and no production caller sets it), so a rapid
+  //    second create into a not-yet-embedded project is a normal transient,
+  //    NOT a broken install. Filing therefore PROCEEDS and carries the
+  //    `duplicateScanDegraded` signal below; refusing here would wrongly block
+  //    a legitimate create (§6.4: the miss is "a missed warning, not a
+  //    correctness defect").
+  //  - `no-search-backend`: the operator never mounted semantic dedupe at all.
+  //    Filing must not hard-fail merely because the feature is unwired (§6.4
+  //    point 4 and `IDuplicateScanHandle`'s own posture), so it also PROCEEDS
+  //    — carrying the signal, so it is never SILENT about it.
+  //
+  // Either way this leaves the genuine zero-candidate case (an empty project,
+  // `degraded:false`) proceeding exactly as §6.4 point 3 specifies.
+  // `'force'`/`'comment'` are explicit "write anyway"/"attach anyway" intents
+  // and proceed, but still carry the degradation signal.
+  if (
+    scan.degraded &&
+    scan.degradedReason === 'no-embed-query' &&
+    duplicateAction === 'abort'
+  ) {
+    return {
+      created: false,
+      reason: 'duplicate-scan-degraded',
+      duplicateScanDegraded: true,
+      ...(scan.degradedReason !== undefined
+        ? { duplicateScanDegradedReason: scan.degradedReason }
+        : {}),
+    };
+  }
 
   // §6.4 point 3: `'abort'` (default) with ≥1 candidate at/above threshold —
   // nothing is written, not even inside a transaction that immediately rolls
@@ -747,6 +950,19 @@ export async function createIssue(
       duplicateCandidates,
     };
   }
+
+  // The degradation signal carried onto every PROCEEDING outcome (force,
+  // comment, and the unconfigured-backend abort path) so a caller always
+  // learns the scan did not actually run a calibrated comparison. Empty on a
+  // healthy scan, so those results are byte-for-byte unchanged.
+  const degradedSignal = scan.degraded
+    ? {
+        duplicateScanDegraded: true as const,
+        ...(scan.degradedReason !== undefined
+          ? { duplicateScanDegradedReason: scan.degradedReason }
+          : {}),
+      }
+    : {};
 
   // §4b/§8 AC-4 — captured from INSIDE the transaction closure (the only
   // place the freshly-minted issue's rowid is ever in scope) but read only
@@ -800,6 +1016,7 @@ export async function createIssue(
           created: false,
           commentedOn: { uid: targetIssue.uid, noteId: noteNode.uid },
           duplicateCandidates,
+          ...degradedSignal,
         };
       }
 
@@ -1021,6 +1238,7 @@ export async function createIssue(
         // proceeded) — absent on a zero-candidate scan, per this file's own
         // `ICreateIssueResult` doc comment.
         ...(duplicateCandidates.length > 0 ? { duplicateCandidates } : {}),
+        ...degradedSignal,
       };
     }
   );

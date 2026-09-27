@@ -495,3 +495,207 @@ describe('createIssue — live-path identical-content, force produces distinct u
     DUP_GATE_TIMEOUT
   );
 });
+
+/**
+ * BUG 4e8fce2a — a DEGRADED candidate scan must never be silently treated as
+ * "no candidates" when `duplicateAction:'abort'` was requested.
+ *
+ * The two degraded shapes are deliberately handled differently:
+ *  - backend PRESENT but its calibrated channel dark (`no-vector-scores`) →
+ *    `abort` fails CLOSED (nothing written, refusal surfaced);
+ *  - backend wholly ABSENT (`no-search-backend`, the unconfigured install) →
+ *    filing must not hard-fail, so it proceeds but CARRIES the
+ *    `duplicateScanDegraded` signal.
+ * Both are driven through the REAL `createIssue` path over a real store, and
+ * the empty-store sibling proves the documented zero-candidate scan is
+ * untouched.
+ *
+ * NEGATIVE CONTROL: neutering `scanForDuplicates`' `degraded` flag (the
+ * pre-fix return of a bare candidate list) makes every `duplicateScanDegraded`
+ * assertion here fail — proving these tests have teeth.
+ */
+describe('createIssue — degraded scan fails `abort` CLOSED (BUG 4e8fce2a)', () => {
+  /** A handle that can WRITE and scope the scan but has no semantic backend at all — the `no-search-backend` degrade. */
+  function withoutSearch(store: TestIssueStore): DupGateHandle {
+    return { ...store, graph: store.graph } as DupGateHandle;
+  }
+
+  it(
+    'genuinely empty store (no prior issues): a degraded backend still proceeds — the documented zero-candidate create is preserved',
+    async () => {
+      const noSearch = withoutSearch(store);
+      const result = await createIssue(noSearch, {
+        project: projectUid,
+        title: 'first ever issue in a brand-new project',
+        body: 'no prior issue exists to compare against, so this is a complete (empty) scan',
+        by: 'filer',
+      });
+      assertCreated(result);
+      // A complete scan of zero issues is NOT degraded — no marker at all.
+      expect(result.duplicateScanDegraded).toBeUndefined();
+      expect(result.duplicateScanDegradedReason).toBeUndefined();
+    },
+    DUP_GATE_TIMEOUT
+  );
+
+  it(
+    'no search backend (unconfigured) + prior issue exists: `abort` PROCEEDS (the documented unwired posture) but REPORTS the degradation — never silently',
+    async () => {
+      const noSearch = withoutSearch(store);
+      const title = 'degraded-scan exact duplicate title';
+      const body = 'degraded-scan exact duplicate body, byte for byte';
+
+      const first = await createIssue(noSearch, {
+        project: projectUid,
+        title,
+        body,
+        by: 'filer',
+      });
+      assertCreated(first);
+
+      const issuesBefore = await countIssueNodes(store, projectUid);
+      const second = await createIssue(noSearch, {
+        project: projectUid,
+        title,
+        body,
+        by: 'filer',
+        // duplicateAction omitted → the default 'abort'.
+      });
+
+      // A wholly-unwired semantic backend must not hard-fail filing (§6.4
+      // point 4 / `IDuplicateScanHandle`) — but the caller now LEARNS the scan
+      // was blind instead of receiving an indistinguishable empty result.
+      assertCreated(second);
+      expect(second.duplicateScanDegraded).toBe(true);
+      expect(second.duplicateScanDegradedReason).toBe('no-search-backend');
+      expect(second.uid).not.toBe(first.uid);
+      expect(await countIssueNodes(store, projectUid)).toBe(issuesBefore + 1);
+    },
+    DUP_GATE_TIMEOUT
+  );
+
+  it(
+    'no search backend + prior issue exists + `force`: proceeds (explicit write-anyway) but still REPORTS the degradation',
+    async () => {
+      const noSearch = withoutSearch(store);
+      const title = 'degraded-scan force title';
+      const body = 'degraded-scan force body, byte for byte';
+
+      const first = await createIssue(noSearch, {
+        project: projectUid,
+        title,
+        body,
+        by: 'filer',
+      });
+      assertCreated(first);
+
+      const second = await createIssue(noSearch, {
+        project: projectUid,
+        title,
+        body,
+        by: 'filer',
+        duplicateAction: 'force',
+      });
+      assertCreated(second);
+      expect(second.duplicateScanDegraded).toBe(true);
+      expect(second.duplicateScanDegradedReason).toBe('no-search-backend');
+      expect(await countIssueNodes(store, projectUid)).toBe(2);
+    },
+    DUP_GATE_TIMEOUT
+  );
+
+  it(
+    'search backend mounted but the vector space is EMPTY: `abort` PROCEEDS (indistinguishable from on-write embedding lag) but REPORTS `no-vector-scores` — never silently',
+    async () => {
+      // `handle` (openDupGateStore) carries a real search+embedQuery over a
+      // real Turso vector space. `handle.embedding` exists too, so an
+      // `awaitEmbed` create would populate the space — deliberately DON'T use
+      // it for the prior issue, leaving the space empty while an issue with a
+      // live `owns_component` edge exists. That is the production incident's
+      // shape: the gate can scope the project but the vector channel is dark.
+      const noEmbed: DupGateHandle = {
+        ...store,
+        graph: store.graph,
+        search: handle.search,
+      } as DupGateHandle;
+      const title = 'empty-vector-space exact duplicate title';
+      const body = 'empty-vector-space exact duplicate body, byte for byte';
+
+      const first = await createIssue(noEmbed, {
+        project: projectUid,
+        title,
+        body,
+        by: 'filer',
+      });
+      assertCreated(first);
+
+      const issuesBefore = await countIssueNodes(store, projectUid);
+      // The vector space is empty because `noEmbed` skipped the on-write
+      // embed — exactly the shape a RAPID second create sees while the
+      // first's fire-and-forget embed is still in flight. That is
+      // indistinguishable from benign embedding lag, so `abort` must NOT
+      // refuse: the create proceeds and carries the degradation signal.
+      // `awaitEmbed:true` here just drains the round-trip deterministically
+      // (the scan runs BEFORE the write, so the space is still empty at scan
+      // time and `no-vector-scores` still fires).
+      const second = await createIssue(handle, {
+        project: projectUid,
+        title,
+        body,
+        by: 'filer',
+        awaitEmbed: true,
+        // default 'abort'
+      });
+
+      assertCreated(second);
+      expect(second.uid).toBeDefined();
+      expect(second.duplicateScanDegraded).toBe(true);
+      expect(second.duplicateScanDegradedReason).toBe('no-vector-scores');
+      expect(await countIssueNodes(store, projectUid)).toBe(issuesBefore + 1);
+    },
+    DUP_GATE_TIMEOUT
+  );
+
+  it(
+    'search backend mounted but WITHOUT `embedQuery` (the calibrated channel can never run): `abort` FAILS CLOSED with `no-embed-query`',
+    async () => {
+      // A persistent CONFIGURATION absence — unlike the empty-vector-space
+      // case above, this can never resolve on its own: the backend is present
+      // but wired with no embedding model, so no calibrated comparison is
+      // possible. `abort` must refuse rather than write a duplicate it could
+      // not detect.
+      const noEmbedQuery: DupGateHandle = {
+        ...store,
+        graph: store.graph,
+        search: { backend: handle.search!.backend },
+      } as DupGateHandle;
+      const title = 'no-embed-query exact duplicate title';
+      const body = 'no-embed-query exact duplicate body, byte for byte';
+
+      const first = await createIssue(noEmbedQuery, {
+        project: projectUid,
+        title,
+        body,
+        by: 'filer',
+      });
+      assertCreated(first);
+
+      const issuesBefore = await countIssueNodes(store, projectUid);
+      const second = await createIssue(noEmbedQuery, {
+        project: projectUid,
+        title,
+        body,
+        by: 'filer',
+        // default 'abort'
+      });
+
+      expect(second.created).toBe(false);
+      expect(second.reason).toBe('duplicate-scan-degraded');
+      expect(second.duplicateScanDegraded).toBe(true);
+      expect(second.duplicateScanDegradedReason).toBe('no-embed-query');
+      expect(second.uid).toBeUndefined();
+      expect(await countIssueNodes(store, projectUid)).toBe(issuesBefore);
+    },
+    DUP_GATE_TIMEOUT
+  );
+});
