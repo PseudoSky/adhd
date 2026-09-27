@@ -207,6 +207,28 @@ describe('C1 Reference — canonical identity & resolution (real store, mounted 
     expect(none.error.message).toContain('location');
   });
 
+  it('AC4b — a body-only FTS match never shadows the project registry answer', async () => {
+    // NEGATIVE CONTROL for the C1 lookup precedence: the issue's TITLE does
+    // not contain "adhd", only its BODY does. `searchNodes` FTS-indexes an
+    // issue's BODY (node `content`), so a query for the project name "adhd"
+    // used to return a redirect to this issue — or `AmbiguousReferenceError`
+    // when several bodies matched — *before* the project branch ever ran,
+    // silently hiding the registry answer. It must resolve to the PROJECT.
+    const project = await mkProject('adhd');
+    await mkIssue(
+      project,
+      'shadow-candidate title',
+      'this body mentions adhd and must never win the lookup'
+    );
+
+    const resolved = await lookup(ctx, { q: 'adhd' });
+    expect(isOutcomeOk(resolved)).toBe(true);
+    if (!isOutcomeOk(resolved)) return;
+    expect(resolved.data.redirect).toBeUndefined();
+    expect(resolved.data.project.uid).toBe(project);
+    expect(resolved.data.project.name).toBe('adhd');
+  });
+
   it('AC5 — `merge-project` unifies the project query; the retired name resolves by one-hop redirect', async () => {
     const survivor = await mkProject('proj-a');
     const retiring = await mkProject('proj-b');

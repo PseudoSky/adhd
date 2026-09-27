@@ -556,12 +556,30 @@ export async function lookup(
     };
   }
 
-  // (2) issue title — a unique FTS hit redirects to `get`; several are refused.
+  // (2) issue TITLE — match the issue's `name` column only, never its BODY.
+  // `graph.searchNodes` hard-codes its FTS columns to `content`/`name`/`summary`
+  // (`@adhd/sox-graph-store` dist/index.js `searchNodes`), and an ISSUE's
+  // `content` is its BODY (`write/create-issue.ts` writes `content: input.body`).
+  // A raw FTS hit can therefore come from the body alone; treating every hit as
+  // a title match let a body-only match shadow the location/project branches
+  // below — `lookup({q:'adhd'})` redirected to an issue whose body merely
+  // mentioned "adhd", or threw `AmbiguousReferenceError` when two bodies did.
+  // The store exposes no name-scoped FTS, so re-filter the (already token-OR'd)
+  // hits by title: a hit counts only when one of `q`'s whitespace tokens — the
+  // same tokenization `searchNodes` applies — appears in its `name`.
   if (wantIssue) {
-    const hits = await graph.searchNodes(q, {
-      filter: { kind: 'issue', liveOnly: true, isSuperseded: false },
-      limit: 20,
-    });
+    const titleTokens = q
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((t) => t.length > 0);
+    const hits = (
+      await graph.searchNodes(q, {
+        filter: { kind: 'issue', liveOnly: true, isSuperseded: false },
+        limit: 20,
+      })
+    ).filter((h) =>
+      titleTokens.some((t) => (h.name ?? '').toLowerCase().includes(t))
+    );
     if (hits.length === 1) {
       return {
         project: { uid: '', name: '' },
