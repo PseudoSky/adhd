@@ -177,7 +177,6 @@ describe('assertServerArtifact (AC2 load-time drift check)', () => {
     expect(() =>
       assertServerArtifact({
         command: file,
-        args: [],
         identity: { kind: 'path', sha256 },
       })
     ).not.toThrow();
@@ -189,7 +188,6 @@ describe('assertServerArtifact (AC2 load-time drift check)', () => {
     try {
       assertServerArtifact({
         command: missing,
-        args: [],
         identity: { kind: 'path', sha256: 'deadbeef' },
       });
       throw new Error('expected ArtifactDriftError');
@@ -207,7 +205,6 @@ describe('assertServerArtifact (AC2 load-time drift check)', () => {
     expect(() =>
       assertServerArtifact({
         command: file,
-        args: [],
         identity: { kind: 'path', sha256: 'not-the-hash' },
       })
     ).toThrow(ArtifactDriftError);
@@ -215,7 +212,7 @@ describe('assertServerArtifact (AC2 load-time drift check)', () => {
 
   it('is a no-op when no server command is configured', () => {
     expect(() =>
-      assertServerArtifact({ command: '', args: [], identity: { kind: 'path' } })
+      assertServerArtifact({ command: '', identity: { kind: 'path' } })
     ).not.toThrow();
   });
 });

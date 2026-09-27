@@ -102,9 +102,12 @@ Starts the long-lived backlog server (MCP and/or HTTP), matching one of the
 process's own configured transports to the way an agent host or a script
 expects to reach it.
 
-  --transport <name>  mcp | http | both (default: mcp)
-  --port <N>           HTTP listen port (default: 3300; ignored for mcp-only)
-  --host <name>         HTTP listen host (default: 127.0.0.1; ignored for mcp-only)
+  --transport <name>  mcp | http | both (default: from ADHD_BACKLOG_SERVICE_TRANSPORT
+                      / the service.* config, else mcp)
+  --port <N>           HTTP listen port (default: from ADHD_BACKLOG_SERVICE_PORT
+                      / the service.* config, else 3300; ignored for mcp-only)
+  --host <name>         HTTP listen host (default: from ADHD_BACKLOG_SERVICE_HOST
+                      / the service.* config, else 127.0.0.1; ignored for mcp-only)
   --ready-file <path>   Write the service report to <path> once the server is
                         READY (the serving path answered), atomically, and
                         again on every state change.
@@ -120,7 +123,16 @@ Examples:
 `;
 
 interface ParsedServe {
-  transport: StartOpts['transport'];
+  /**
+   * ABSENT unless the operator typed `--transport`. Deliberately NOT
+   * defaulted to `'mcp'` (D-A apply-fix): a materialised default here became
+   * an explicit `StartOpts.transport`, and explicit opts outrank the
+   * `service.*` cascade — so `ADHD_BACKLOG_SERVICE_TRANSPORT=http backlog
+   * serve` mounted MCP and ignored the operator's env var. Leaving it
+   * `undefined` lets `resolveServiceConfig` apply the documented precedence
+   * (flag > env > layer file > `'mcp'` default).
+   */
+  transport?: StartOpts['transport'];
   port?: number;
   host?: string;
   readyFile?: string;
@@ -128,7 +140,7 @@ interface ParsedServe {
 }
 
 function parseArgs(argv: string[]): ParsedServe {
-  let transport: StartOpts['transport'] = 'mcp';
+  let transport: StartOpts['transport'] | undefined;
   let port: number | undefined;
   let host: string | undefined;
   let readyFile: string | undefined;
@@ -145,12 +157,18 @@ function parseArgs(argv: string[]): ParsedServe {
         `backlog serve: unknown argument "${arg}" (expected --transport/--port/--host/--ready-file/--probe)`
       );
   }
-  if (transport !== 'mcp' && transport !== 'http' && transport !== 'both') {
+  if (
+    transport !== undefined &&
+    transport !== 'mcp' &&
+    transport !== 'http' &&
+    transport !== 'both'
+  ) {
     throw new BacklogUsageError(
       `backlog serve: --transport must be mcp|http|both, got "${transport}"`
     );
   }
-  const opts: ParsedServe = { transport, probe };
+  const opts: ParsedServe = { probe };
+  if (transport !== undefined) opts.transport = transport;
   if (port !== undefined) opts.port = port;
   if (host !== undefined) opts.host = host;
   if (readyFile !== undefined) opts.readyFile = readyFile;
@@ -189,7 +207,10 @@ export async function runServeCommand(
   process.on('SIGINT', () => controller.abort());
 
   const startOpts: StartOpts = {
-    transport: parsed.transport,
+    // Omitted (not `undefined`-valued) when no `--transport` flag was typed,
+    // so `resolveServiceConfig`'s explicit-opts precedence step skips it and
+    // the env/config cascade is free to win (D-A apply-fix).
+    ...(parsed.transport !== undefined ? { transport: parsed.transport } : {}),
     ...(parsed.port !== undefined ? { port: parsed.port } : {}),
     ...(parsed.host !== undefined ? { host: parsed.host } : {}),
     ...opts,

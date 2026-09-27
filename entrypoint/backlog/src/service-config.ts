@@ -61,17 +61,15 @@ export interface IServiceConfig {
   port: number;
   host: string;
   scope: Scope;
-  namespace: string;
   /** MUST be absolute (or the literal ':memory:' test path). */
   dbPath: string;
   busyTimeoutMs: number;
   server: {
     /** Absolute path, or a PATH-resolvable bin (`npx`/`node`). `''` = unset. */
     command: string;
-    args: string[];
     identity: IArtifactIdentity;
   };
-  readiness: { timeoutMs: number; intervalMs: number; maxMissedTicks: number };
+  readiness: { timeoutMs: number };
   connect: {
     /** Pre-connect deadline extension — the cold-start grace window. */
     graceMs: number;
@@ -89,19 +87,34 @@ export interface IServiceConfig {
  * The schema owner for the `service.*` subtree — the allow-list unknown keys
  * are checked against. The keys are FULL dot-paths; `env.ts`'s spec declares
  * exactly this set and a unit test asserts the two cannot drift.
+ *
+ * D-A apply-fix (2026-09-27): four keys that were RESOLVED but consumed by
+ * nothing were REMOVED rather than shipped as silent no-ops (the finding's
+ * "wire it, or stop declaring it" rule):
+ *   - `service.namespace` — directly contradicts `env.ts`'s own contract that
+ *     namespace selection is explicit-parameter-only
+ *     (`BuildBacklogEnvOptions.namespace`), never resolved from an env var or
+ *     config file; a key that can never be honored only misleads.
+ *   - `service.serverArgs` — this process IS the server; nothing ever LAUNCHES
+ *     `server.command` (its sole consumer is the load-time artifact-drift
+ *     check, which ignores args), so args had no role.
+ *   - `service.readinessIntervalMs` / `service.readinessMaxMissedTicks` — they
+ *     describe a serving-loop watchdog TICK, but no such tick exists here and
+ *     a same-process watchdog cannot observe its own frozen event loop;
+ *     genuinely a later (external-supervisor) slice.
+ * The remaining keys are all APPLIED: transport/port/host mount the server,
+ * `serverCommand` drives `assertServerArtifact`, `connect*` drives
+ * `withResilience` around the serving-path readiness probe, and
+ * `readinessTimeoutMs` caps one probe.
  */
 export const SERVICE_CONFIG_KEYS: readonly string[] = Object.freeze([
   'service.transport',
   'service.port',
   'service.host',
-  'service.namespace',
   'service.serverCommand',
-  'service.serverArgs',
   'service.connectGraceMs',
   'service.connectBudgetMs',
   'service.readinessTimeoutMs',
-  'service.readinessIntervalMs',
-  'service.readinessMaxMissedTicks',
 ]);
 
 /** The `service.*` subgroup an unknown key's suffix is checked within. */
@@ -111,14 +124,10 @@ const DEFAULT_SERVICE: Readonly<Record<string, unknown>> = {
   'service.transport': 'mcp',
   'service.port': 3300,
   'service.host': '127.0.0.1',
-  'service.namespace': 'production',
   'service.serverCommand': '',
-  'service.serverArgs': [],
   'service.connectGraceMs': 20000,
   'service.connectBudgetMs': 60000,
   'service.readinessTimeoutMs': 30000,
-  'service.readinessIntervalMs': 1000,
-  'service.readinessMaxMissedTicks': 3,
 };
 
 /**
@@ -210,16 +219,12 @@ export function resolveServiceConfig(
   if (opts.transport !== undefined) resolved['service.transport'] = opts.transport;
   if (opts.port !== undefined) resolved['service.port'] = opts.port;
   if (opts.host !== undefined) resolved['service.host'] = opts.host;
-  if (opts.namespace !== undefined) resolved['service.namespace'] = opts.namespace;
 
   const dbPath = resolveBacklogDbPath(env);
   assertAcceptablePath('service.dbPath', dbPath);
 
   const command = String(resolved['service.serverCommand'] ?? '');
   assertAcceptablePath('server.command', command);
-
-  const rawArgs = resolved['service.serverArgs'];
-  const args = Array.isArray(rawArgs) ? rawArgs.map(String) : [];
 
   const transport = resolved['service.transport'] as IServiceTransport;
   if (transport !== 'mcp' && transport !== 'http' && transport !== 'both') {
@@ -234,14 +239,11 @@ export function resolveServiceConfig(
     port: Number(resolved['service.port']),
     host: String(resolved['service.host']),
     scope: resolveBacklogScope(opts.scope),
-    namespace: String(resolved['service.namespace'] ?? 'production'),
     dbPath,
     busyTimeoutMs: env.config.db.busyTimeoutMs,
-    server: { command, args, identity: { kind: 'path' } },
+    server: { command, identity: { kind: 'path' } },
     readiness: {
       timeoutMs: Number(resolved['service.readinessTimeoutMs']),
-      intervalMs: Number(resolved['service.readinessIntervalMs']),
-      maxMissedTicks: Number(resolved['service.readinessMaxMissedTicks']),
     },
     connect: {
       graceMs: Number(resolved['service.connectGraceMs']),

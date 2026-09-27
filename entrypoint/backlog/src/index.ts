@@ -73,8 +73,6 @@ export type {
   IServiceReport,
   IServiceState,
 } from './lifecycle.js';
-export { createWatchdog } from './watchdog.js';
-export type { IWatchdog, ITimer } from './watchdog.js';
 export { probeReadiness } from './readiness.js';
 export type {
   IReadinessHandle,

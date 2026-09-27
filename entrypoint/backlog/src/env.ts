@@ -143,12 +143,6 @@ export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
       default: '127.0.0.1',
       description: 'HTTP listen host (ignored for mcp-only).',
     },
-    'service.namespace': {
-      type: 'string',
-      env: 'ADHD_BACKLOG_SERVICE_NAMESPACE',
-      default: 'production',
-      description: 'Resolved store namespace the service reports against.',
-    },
     'service.serverCommand': {
       type: 'string',
       env: 'ADHD_BACKLOG_SERVICE_SERVER_COMMAND',
@@ -156,12 +150,6 @@ export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
       description:
         'Absolute path (or PATH-resolvable bin) of the server artifact to ' +
         'verify at load time. Unset ⇒ no drift check (backlog serving itself).',
-    },
-    'service.serverArgs': {
-      type: 'array',
-      env: 'ADHD_BACKLOG_SERVICE_SERVER_ARGS',
-      default: [],
-      description: 'Arguments for service.serverCommand.',
     },
     'service.connectGraceMs': {
       type: 'integer',
@@ -183,19 +171,6 @@ export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
       env: 'ADHD_BACKLOG_SERVICE_READINESS_TIMEOUT_MS',
       default: 30000,
       description: 'Timeout for ONE serving-path readiness probe.',
-    },
-    'service.readinessIntervalMs': {
-      type: 'integer',
-      env: 'ADHD_BACKLOG_SERVICE_READINESS_INTERVAL_MS',
-      default: 1000,
-      description: 'Expected interval between serving-loop watchdog ticks.',
-    },
-    'service.readinessMaxMissedTicks': {
-      type: 'integer',
-      env: 'ADHD_BACKLOG_SERVICE_READINESS_MAX_MISSED_TICKS',
-      default: 3,
-      description:
-        'Missed ticks that constitute a hung-but-alive (LIVENESS) failure.',
     },
   },
 };
