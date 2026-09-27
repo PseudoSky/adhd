@@ -1,28 +1,56 @@
 /**
  * constants.ts — closed vocabularies the ETL seeds up front (SPEC.md §8.6
- * step 2), copied verbatim from `src/model.ts`'s `BacklogStatus` union /
- * `TERMINAL_STATUSES` and `src/store/query.ts`'s `PRIORITY_RANK`. This is
- * documentation-derived, read-only reference data — copying a closed,
- * frozen TypeScript union's literal values is not "reading the old store
- * through in-tree code" (no old-store module is imported or executed); it is
- * the same kind of citation SPEC.md itself makes throughout §8 (e.g.
- * "model.ts:56-68").
+ * step 2). This is documentation-derived, read-only reference data: the
+ * status/priority token sets below are the ETL's own copy of the closed
+ * vocabulary (no old-store module is imported or executed), the same kind of
+ * citation SPEC.md itself makes throughout §8.
+ *
+ * STATUS SPELLING — canonical is LOWERCASE. The written store's `status`
+ * catalog is canonical lowercase: the shipped write path mints lowercase
+ * literals (`create-issue.ts` defaults to `'open'`) and catalog identity is
+ * exact-case, so the mint refuses a name that differs from a live row only by
+ * letter case. The frozen source corpus spells statuses UPPERCASE, so every
+ * status token the ETL seeds, mints, or persists is folded through
+ * {@link canonicalStatusName} to the ONE canonical lowercase spelling.
+ *
+ * PRIORITY SPELLING — canonical is UPPERCASE, left as-is below.
  */
 
-/** `src/model.ts`'s full `BacklogStatus` union, verbatim. */
+/**
+ * The full status vocabulary, in its canonical (lowercase) spelling. The
+ * member SET is the same as the source union — only letter case is
+ * normalized (`open` ↔ `OPEN`), never the meaning.
+ */
 export const ALL_STATUSES: readonly string[] = [
-  'OPEN', 'IN_PROGRESS', 'PARTIAL', 'OUTSTANDING', 'DEFERRED', 'BLOCKED', 'MIXED', 'UNKNOWN',
-  'FIXED', 'RESOLVED', 'DONE', 'SHIPPED', 'VERIFIED', 'REMOVED',
-  'MITIGATED',
-  'SUPERSEDED', 'INVALID', 'DUPLICATE', 'WONTFIX',
+  'open', 'in_progress', 'partial', 'outstanding', 'deferred', 'blocked', 'mixed', 'unknown',
+  'fixed', 'resolved', 'done', 'shipped', 'verified', 'removed',
+  'mitigated',
+  'superseded', 'invalid', 'duplicate', 'wontfix',
 ] as const;
 
-/** `src/model.ts`'s `TERMINAL_STATUSES`, verbatim (union of done + workaround + dismissed). */
+/**
+ * The ETL's own terminal-status set (the states that mean the item is closed),
+ * canonical lowercase. Membership is the same eleven names as before —
+ * deliberately NOT the six-name reserved-terminal set the write layer seeds
+ * from (`RESERVED_TERMINAL_STATUS_NAMES`, `src/write/catalog.ts`); that
+ * divergence is a separate, tracked decision and is not changed here.
+ */
 export const TERMINAL_STATUSES: ReadonlySet<string> = new Set([
-  'FIXED', 'RESOLVED', 'DONE', 'SHIPPED', 'VERIFIED', 'REMOVED',
-  'MITIGATED',
-  'SUPERSEDED', 'INVALID', 'DUPLICATE', 'WONTFIX',
+  'fixed', 'resolved', 'done', 'shipped', 'verified', 'removed',
+  'mitigated',
+  'superseded', 'invalid', 'duplicate', 'wontfix',
 ]);
+
+/**
+ * Fold a raw status token to its canonical catalog spelling (lowercase) — the
+ * ONE place status case is normalized, so no call site mints or compares a
+ * status in any other case. Idempotent for an already-canonical name; the
+ * frozen corpus's UPPERCASE spellings (`OPEN`, `FIXED`, …) fold to `open`,
+ * `fixed`, …. Never used for priority names (canonical UPPERCASE).
+ */
+export function canonicalStatusName(raw: string): string {
+  return raw.toLowerCase();
+}
 
 /** `src/store/query.ts`'s `PRIORITY_RANK`, verbatim — reused so every pre-existing sort-by-urgency comparator ports unchanged (SPEC.md §8.1). */
 export const PRIORITY_RANK: Readonly<Record<string, number>> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };

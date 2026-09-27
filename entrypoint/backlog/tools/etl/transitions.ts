@@ -7,7 +7,7 @@
  * double-writes it).
  */
 import type { IRawAuditMeta, IRawItemMeta } from './corpus-types.js';
-import { TERMINAL_STATUSES } from './constants.js';
+import { TERMINAL_STATUSES, canonicalStatusName } from './constants.js';
 
 export interface IReconstructedTransition {
   from_status: string | null;
@@ -59,7 +59,7 @@ export function reconstructTransitions(item: IRawItemMeta, events: readonly IRaw
 
   if (events.length === 0) {
     // Point 4: exactly one synthesized transition, from_status genuinely unknown.
-    const status = item.status ?? 'UNKNOWN';
+    const status = canonicalStatusName(item.status ?? 'unknown');
     const agent = item.author ?? 'unknown';
     const at = item.createdAt ?? '';
     let note = NOTE_SYNTHESIZED_ZERO_HISTORY(status);
@@ -73,8 +73,8 @@ export function reconstructTransitions(item: IRawItemMeta, events: readonly IRaw
 
   for (const event of events) {
     const detail = event.detail ?? {};
-    const from = detail.from ?? 'UNKNOWN';
-    const to = detail.to ?? 'UNKNOWN';
+    const from = canonicalStatusName(detail.from ?? 'unknown');
+    const to = canonicalStatusName(detail.to ?? 'unknown');
     const by = detail.by ?? 'unknown';
     const at = event.at ?? '';
 
@@ -109,7 +109,7 @@ export function reconstructTransitions(item: IRawItemMeta, events: readonly IRaw
   // is a genuine SPEC.md gap (§8.1's fallback rule vs. §8.2 point 4's
   // suffix placement never jointly address this combination), disclosed in
   // the ETL run report rather than invented around silently.
-  if (firstTerminalTransitionAt === undefined && item.status && TERMINAL_STATUSES.has(item.status)) {
+  if (firstTerminalTransitionAt === undefined && item.status && TERMINAL_STATUSES.has(canonicalStatusName(item.status))) {
     firstTerminalTransitionAt = item.updatedAt ?? undefined;
   }
 

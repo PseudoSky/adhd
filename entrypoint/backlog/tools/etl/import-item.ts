@@ -25,7 +25,7 @@ import { upsertComponentTx } from './catalog-upsert.js';
 import { computeCitationSha, citationTargetType, parseStartLine } from './citation.js';
 import { reconstructTransitions } from './transitions.js';
 import { buildProvenance } from './identity.js';
-import { ETL_ACTOR, IMPORTED_ACTION, MISSING_CITATION_FILE, PRIORITY_RANK, TERMINAL_STATUSES } from './constants.js';
+import { ETL_ACTOR, IMPORTED_ACTION, MISSING_CITATION_FILE, PRIORITY_RANK, TERMINAL_STATUSES, canonicalStatusName } from './constants.js';
 import type { IItemRow, IRawAuditMeta } from './corpus-types.js';
 
 export interface IImportItemInput {
@@ -77,7 +77,7 @@ export async function importItem(input: IImportItemInput): Promise<IImportItemRe
     const kindName = meta.kind ?? 'issue';
     const kindRow = await mintOrResolveCatalogTx(tx, { catalogKind: 'kind', ref: kindName, at: now });
 
-    const statusName = meta.status ?? 'UNKNOWN';
+    const statusName = canonicalStatusName(meta.status ?? 'unknown');
     const statusRow = await mintOrResolveCatalogTx(tx, {
       catalogKind: 'status',
       ref: statusName,
@@ -218,7 +218,7 @@ export async function importItem(input: IImportItemInput): Promise<IImportItemRe
         const transitionNode = await writeNodeTx(tx, {
           at: now,
           kind: 'transition',
-          name: `${t.from_status ?? 'UNKNOWN'} → ${t.to_status}`,
+          name: `${t.from_status ?? 'unknown'} → ${t.to_status}`,
           content: t.note,
           metadata: { ...canonicalFields, sha },
         });
