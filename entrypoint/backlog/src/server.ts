@@ -70,6 +70,12 @@ import {
 } from './write/embedding-config.js';
 import { readBacklogVersionInfo } from './version-info.js';
 import type { Logger, OutputPlugin, RunInput } from '@adhd/apigen-core-client';
+import { createLifecycle, type IServiceReport } from './lifecycle.js';
+import { probeReadiness } from './readiness.js';
+import {
+  resolveServiceConfig,
+  assertServerArtifact,
+} from './service-config.js';
 
 /**
  * Guards a live-mount `plugin.run()` call. Exported (not local to this file)
@@ -599,11 +605,40 @@ export async function buildBacklogApigenPackage(
 }
 
 /**
+ * The long-lived server handle (D-A, Segment D). Additive: existing callers
+ * keep using {@link startBacklogServer} (unchanged `Promise<void>` signature).
+ */
+export interface IBacklogServerHandle {
+  report(): IServiceReport;
+  whenReady(): Promise<void>;
+  /** Resolves when the server has fully closed (store released). Additive. */
+  whenClosed(): Promise<void>;
+  /** Abort the transports and release the store. Idempotent. */
+  close(): Promise<void>;
+}
+
+/**
  * Opens (or reuses) the backlog store + env, mounts every `client.ts` export
  * live via `@adhd/apigen-plugin-api-fastify` and/or `@adhd/apigen-plugin-mcp`
- * — no code generation.
+ * — no code generation — and returns a lifecycle handle.
+ *
+ * D-A additions: resolves + validates `service.*` config, runs the load-time
+ * artifact drift check, and drives the `starting → live → ready` lifecycle
+ * with a serving-path readiness probe. `startBacklogServer` (below) is the
+ * unchanged-signature wrapper over this function.
  */
-export async function startBacklogServer(opts: StartOpts): Promise<void> {
+export async function createBacklogServer(
+  opts: StartOpts & {
+    onStateChange?: (r: IServiceReport) => void;
+    /**
+     * `--probe` mode: compose the serving path but do NOT mount a network
+     * transport. The readiness probe drives the SAME composed invoker the
+     * tools use, so a live socket is not required — and skipping the mount
+     * avoids a one-shot probe process being kept alive by a listening socket.
+     */
+    probeOnly?: boolean;
+  }
+): Promise<IBacklogServerHandle> {
   const env = buildBacklogEnv({
     scope: opts.scope,
     adhdRoot: opts.adhdRoot,
@@ -611,6 +646,23 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
     namespace: opts.namespace,
   });
   env.ensureDirs();
+
+  // D-A: resolve + validate the service.* config (unknown key = hard error,
+  // relative path = refusal) and run the load-time artifact drift check
+  // BEFORE opening the store. A configured-but-missing artifact must refuse
+  // to start, naming the resolved path — never launch a phantom.
+  const serviceConfig = resolveServiceConfig(opts, env);
+  assertServerArtifact(serviceConfig.server);
+  const lifecycle = createLifecycle();
+  const notify = (): void => opts.onStateChange?.(lifecycle.report());
+  // The internal controller is what `close()` aborts; the caller's signal is
+  // linked to it so existing `AbortSignal`-driven callers drain unchanged.
+  const internal = new AbortController();
+  if (opts.signal.aborted) internal.abort();
+  else
+    opts.signal.addEventListener('abort', () => internal.abort(), {
+      once: true,
+    });
 
   // BUG-BACKLOG-NO-SIGNAL-HANDLERS-001: `serve.ts`'s `runServeCommand`
   // registers its OWN SIGINT/SIGTERM handling (→ `AbortController.abort()`,
@@ -712,7 +764,7 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
     // OpenAPI paths cannot drift from the routes fastify registered. There is
     // no per-transport operation list anywhere in this function — that
     // absence is the contract.
-    if (opts.transport === 'http' || opts.transport === 'both') {
+    if (!opts.probeOnly && (opts.transport === 'http' || opts.transport === 'both')) {
       runs.push(
         requireRun(apiFastifyPlugin)({
           packages: [pkg],
@@ -722,7 +774,7 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
             host: opts.host ?? '127.0.0.1',
             usePlugins: [openapiPlugin, batchPlugin],
           },
-          signal: opts.signal,
+          signal: internal.signal,
           // SPEC.md §6.7 — the SAME `operations` array the MCP
           // mount below receives. A per-transport operation list is exactly
           // what §6.7 forbids, because it lets the REST surface drift from
@@ -740,22 +792,81 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
         })
       );
     }
-    if (opts.transport === 'mcp' || opts.transport === 'both') {
+    if (!opts.probeOnly && (opts.transport === 'mcp' || opts.transport === 'both')) {
       runs.push(
         requireRun(mcpPlugin)({
           packages: [pkg],
           outputDir: '',
           options: { transport: 'stdio', usePlugins: [batchPlugin] },
-          signal: opts.signal,
+          signal: internal.signal,
           operations,
           logger,
         })
       );
     }
 
-    await Promise.all(runs);
-  } finally {
+    // `live`: every transport has been asked to mount (stdio connected /
+    // socket bound). We cannot await `runs` — each resolves only on close —
+    // so `live` is marked once the mounts are initiated.
+    lifecycle.markLive();
+    notify();
+
+    // `ready` iff the SERVING path answers (not a ping, not a socket accept).
+    // A readiness failure is REPORT ONLY: state is unchanged and no restart
+    // is requested (only a liveness failure restarts).
+    const probe = await probeReadiness(
+      { pkg, operations, store },
+      { timeoutMs: serviceConfig.readiness.timeoutMs }
+    );
+    if (probe.ready) {
+      lifecycle.markReady();
+    } else if (probe.failure) {
+      lifecycle.fail(probe.failure);
+    }
+    notify();
+
+    const done = Promise.all(runs);
+    let closed: Promise<void> | undefined;
+    const close = (): Promise<void> => {
+      if (!closed) {
+        internal.abort();
+        closed = (async () => {
+          try {
+            await done;
+          } catch {
+            // surfaced by whenClosed() / startBacklogServer()
+          }
+          signalCleanup?.dispose();
+          await closeStoreOnce();
+        })();
+      }
+      return closed;
+    };
+    return {
+      report: () => lifecycle.report(),
+      whenReady: () => lifecycle.whenReady(),
+      whenClosed: async () => {
+        try {
+          await done;
+        } finally {
+          await close();
+        }
+      },
+      close,
+    };
+  } catch (err) {
+    internal.abort();
     signalCleanup?.dispose();
     await closeStoreOnce();
+    throw err;
   }
+}
+
+/**
+ * UNCHANGED public signature (`Promise<void>`, resolves on close) — a thin
+ * wrapper over {@link createBacklogServer} for existing callers.
+ */
+export async function startBacklogServer(opts: StartOpts): Promise<void> {
+  const handle = await createBacklogServer(opts);
+  await handle.whenClosed();
 }

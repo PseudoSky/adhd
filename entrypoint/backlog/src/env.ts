@@ -118,6 +118,85 @@ export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
         'changing this after items are embedded orphans existing vectors under the old model id rather than silently truncating; ' +
         're-embed via admin(embedding_backfill).',
     },
+    // D-A `service.*` — legitimate PROCESS config (ports, paths, timeouts),
+    // not feature toggles. The cascade resolves these exactly like every
+    // other field; `resolveServiceConfig` (service-config.ts) then validates
+    // the resolved result (unknown key = hard error, path must be absolute).
+    // `SERVICE_CONFIG_KEYS` is the frozen mirror of this list and a unit test
+    // asserts the two cannot drift.
+    'service.transport': {
+      type: 'string',
+      env: 'ADHD_BACKLOG_SERVICE_TRANSPORT',
+      default: 'mcp',
+      enum: ['mcp', 'http', 'both'],
+      description: 'Transport(s) `serve` mounts: mcp | http | both.',
+    },
+    'service.port': {
+      type: 'integer',
+      env: 'ADHD_BACKLOG_SERVICE_PORT',
+      default: 3300,
+      description: 'HTTP listen port (ignored for mcp-only).',
+    },
+    'service.host': {
+      type: 'string',
+      env: 'ADHD_BACKLOG_SERVICE_HOST',
+      default: '127.0.0.1',
+      description: 'HTTP listen host (ignored for mcp-only).',
+    },
+    'service.namespace': {
+      type: 'string',
+      env: 'ADHD_BACKLOG_SERVICE_NAMESPACE',
+      default: 'production',
+      description: 'Resolved store namespace the service reports against.',
+    },
+    'service.serverCommand': {
+      type: 'string',
+      env: 'ADHD_BACKLOG_SERVICE_SERVER_COMMAND',
+      default: '',
+      description:
+        'Absolute path (or PATH-resolvable bin) of the server artifact to ' +
+        'verify at load time. Unset ⇒ no drift check (backlog serving itself).',
+    },
+    'service.serverArgs': {
+      type: 'array',
+      env: 'ADHD_BACKLOG_SERVICE_SERVER_ARGS',
+      default: [],
+      description: 'Arguments for service.serverCommand.',
+    },
+    'service.connectGraceMs': {
+      type: 'integer',
+      env: 'ADHD_BACKLOG_SERVICE_CONNECT_GRACE_MS',
+      default: 20000,
+      description:
+        'Pre-connect deadline extension applied to the FIRST attempt — the ' +
+        'cold-start grace window (the fix for host-deadline < cold-start).',
+    },
+    'service.connectBudgetMs': {
+      type: 'integer',
+      env: 'ADHD_BACKLOG_SERVICE_CONNECT_BUDGET_MS',
+      default: 60000,
+      description:
+        'Total wall-clock budget across all connect/handshake attempts (bounded).',
+    },
+    'service.readinessTimeoutMs': {
+      type: 'integer',
+      env: 'ADHD_BACKLOG_SERVICE_READINESS_TIMEOUT_MS',
+      default: 30000,
+      description: 'Timeout for ONE serving-path readiness probe.',
+    },
+    'service.readinessIntervalMs': {
+      type: 'integer',
+      env: 'ADHD_BACKLOG_SERVICE_READINESS_INTERVAL_MS',
+      default: 1000,
+      description: 'Expected interval between serving-loop watchdog ticks.',
+    },
+    'service.readinessMaxMissedTicks': {
+      type: 'integer',
+      env: 'ADHD_BACKLOG_SERVICE_READINESS_MAX_MISSED_TICKS',
+      default: 3,
+      description:
+        'Missed ticks that constitute a hung-but-alive (LIVENESS) failure.',
+    },
   },
 };
 

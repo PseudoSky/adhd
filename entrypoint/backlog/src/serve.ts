@@ -60,12 +60,16 @@
  * its own and is preserved here.) See `serve.telemetry-role.spec.ts`'s
  * ordering test for the regression proof.
  */
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import type { Scope } from '@adhd/environment-base-spec';
 import { initTelemetry } from '@adhd/sox-telemetry';
-import { startBacklogServer, type StartOpts } from './server.js';
+import {
+  createBacklogServer,
+  type StartOpts,
+} from './server.js';
+import type { IServiceReport } from './lifecycle.js';
 import { BacklogUsageError, failUsage } from './install-skill.js';
 
 export interface RunServeCommandOpts {
@@ -101,27 +105,44 @@ expects to reach it.
   --transport <name>  mcp | http | both (default: mcp)
   --port <N>           HTTP listen port (default: 3300; ignored for mcp-only)
   --host <name>         HTTP listen host (default: 127.0.0.1; ignored for mcp-only)
+  --ready-file <path>   Write the service report to <path> once the server is
+                        READY (the serving path answered), atomically, and
+                        again on every state change.
+  --probe               Run the serving-path readiness probe once, print the
+                        report as JSON, and exit 0 (ready) / 1 (not ready).
 
 Examples:
   backlog serve
   backlog serve --transport http --port 3300
   backlog serve --transport both --host 0.0.0.0
+  backlog serve --transport mcp --ready-file /run/backlog/ready.json
+  backlog serve --probe
 `;
 
-function parseArgs(
-  argv: string[]
-): Pick<StartOpts, 'transport' | 'port' | 'host'> {
+interface ParsedServe {
+  transport: StartOpts['transport'];
+  port?: number;
+  host?: string;
+  readyFile?: string;
+  probe: boolean;
+}
+
+function parseArgs(argv: string[]): ParsedServe {
   let transport: StartOpts['transport'] = 'mcp';
   let port: number | undefined;
   let host: string | undefined;
+  let readyFile: string | undefined;
+  let probe = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--transport') transport = argv[++i] as StartOpts['transport'];
     else if (arg === '--port') port = Number(argv[++i]);
     else if (arg === '--host') host = argv[++i];
+    else if (arg === '--ready-file') readyFile = argv[++i];
+    else if (arg === '--probe') probe = true;
     else
       throw new BacklogUsageError(
-        `backlog serve: unknown argument "${arg}" (expected --transport/--port/--host)`
+        `backlog serve: unknown argument "${arg}" (expected --transport/--port/--host/--ready-file/--probe)`
       );
   }
   if (transport !== 'mcp' && transport !== 'http' && transport !== 'both') {
@@ -129,10 +150,19 @@ function parseArgs(
       `backlog serve: --transport must be mcp|http|both, got "${transport}"`
     );
   }
-  const opts: Pick<StartOpts, 'transport' | 'port' | 'host'> = { transport };
+  const opts: ParsedServe = { transport, probe };
   if (port !== undefined) opts.port = port;
   if (host !== undefined) opts.host = host;
+  if (readyFile !== undefined) opts.readyFile = readyFile;
   return opts;
+}
+
+/** Atomic report write: temp file beside the target, then one rename. */
+function writeReadyFile(report: IServiceReport, path: string): void {
+  mkdirSync(dirname(path), { recursive: true });
+  const tmp = `${path}.tmp-${process.pid}`;
+  writeFileSync(tmp, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+  renameSync(tmp, path);
 }
 
 /** Runs until the process receives SIGTERM/SIGINT (the normal way a host
@@ -146,7 +176,7 @@ export async function runServeCommand(
     console.log(SERVE_HELP_TEXT);
     return;
   }
-  let parsed: Pick<StartOpts, 'transport' | 'port' | 'host'>;
+  let parsed: ParsedServe;
   try {
     parsed = parseArgs(argv);
   } catch (err) {
@@ -157,17 +187,53 @@ export async function runServeCommand(
   const controller = new AbortController();
   process.on('SIGTERM', () => controller.abort());
   process.on('SIGINT', () => controller.abort());
-  // BUG-014-LOCK-ORDER: kick off `startBacklogServer` FIRST, unawaited.
+
+  const startOpts: StartOpts = {
+    transport: parsed.transport,
+    ...(parsed.port !== undefined ? { port: parsed.port } : {}),
+    ...(parsed.host !== undefined ? { host: parsed.host } : {}),
+    ...opts,
+    signal: controller.signal,
+  };
+
+  // Hidden `--probe` mode: boot, read the lifecycle report (the serving-path
+  // probe already ran during boot), print it, close, and exit 0/1. This is
+  // the readiness contract a supervisor keys off — distinct from "the port
+  // is bound".
+  if (parsed.probe) {
+    const handle = await createBacklogServer({ ...startOpts, probeOnly: true });
+    const report = handle.report();
+    console.log(JSON.stringify(report));
+    await handle.close();
+    if (report.state !== 'ready') process.exitCode = 1;
+    return;
+  }
+
+  // BUG-014-LOCK-ORDER: kick off `createBacklogServer` FIRST, unawaited.
   // Its synchronous prefix (env resolution + `env.ensureDirs()` + signal-
   // cleanup registration, all in server.ts, ahead of its own first `await`)
   // runs to completion in THIS tick, before this function ever reaches the
   // `initTelemetry` call below — so telemetry's best-effort, non-fatal file
   // I/O can never precede or delay the server's real startup work. See the
   // file-level doc comment.
-  const serverPromise = startBacklogServer({
-    ...parsed,
-    ...opts,
-    signal: controller.signal,
+  const readyFile = parsed.readyFile;
+  const serverPromise = createBacklogServer({
+    ...startOpts,
+    ...(readyFile !== undefined
+      ? {
+          onStateChange: (r: IServiceReport): void => {
+            try {
+              writeReadyFile(r, readyFile);
+            } catch (err) {
+              console.error(
+                `[backlog] WARNING: failed to write --ready-file ${readyFile}: ${
+                  err instanceof Error ? err.message : String(err)
+                }`
+              );
+            }
+          },
+        }
+      : {}),
   });
   // BUG-014: re-stamp this process as the live-service population before
   // any request handling starts — see the file-level doc comment above.
@@ -204,5 +270,10 @@ export async function runServeCommand(
       }); telemetry records will be silently dropped this process`
     );
   }
-  await serverPromise;
+  const handle = await serverPromise;
+  try {
+    await handle.whenClosed();
+  } finally {
+    await handle.close();
+  }
 }

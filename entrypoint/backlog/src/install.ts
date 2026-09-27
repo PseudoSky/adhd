@@ -39,6 +39,7 @@ import {
   type InstallSkillResult,
   type SkillHost,
   type SkillScope, BacklogUsageError, failUsage,} from './install-skill.js';
+import { assertMcpEntryValid } from './service-config.js';
 
 export type McpHost = SkillHost;
 export type McpScope = SkillScope;
@@ -160,20 +161,26 @@ function tomlStringArray(values: readonly string[]): string {
 
 function registerMcpClaude(scope: McpScope, cwd: string, homeOverride?: string): McpInstallResult {
   const configPath = claudeConfigPath(scope, cwd, homeOverride);
-  upsertJsonMcpEntry(configPath, 'mcpServers', 'backlog', {
+  const entry = {
     type: 'stdio',
     command: 'npx',
     args: [...BACKLOG_MCP_NPX_ARGS],
-  });
+  };
+  // D-A: validate what we WRITE (write-time). An unknown host-entry key is a
+  // hard error, so install can never write a shape a host silently ignores.
+  assertMcpEntryValid(entry, configPath);
+  upsertJsonMcpEntry(configPath, 'mcpServers', 'backlog', entry);
   return { host: 'claude', scope, configPath, status: 'written' };
 }
 
 function registerMcpOpencode(scope: McpScope, cwd: string, homeOverride?: string): McpInstallResult {
   const configPath = opencodeConfigPath(scope, cwd, homeOverride);
-  upsertJsonMcpEntry(configPath, 'mcp', 'backlog', {
+  const entry = {
     type: 'local',
     command: ['npx', ...BACKLOG_MCP_NPX_ARGS],
-  });
+  };
+  assertMcpEntryValid(entry, configPath);
+  upsertJsonMcpEntry(configPath, 'mcp', 'backlog', entry);
   return { host: 'opencode', scope, configPath, status: 'written' };
 }
 
