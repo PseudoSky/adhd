@@ -77,6 +77,15 @@ const e2eConfig = mergeConfig(
     cacheDir: `${projectCacheDir(__dirname)}-e2e`,
     test: {
       include: ['src/**/*.e2e.ts'],
+      // SERIAL, and only this lane: the base config's `fileParallelism: false`
+      // is not honoured across Vitest 4's fork pool, so these 37 suites were
+      // running CONCURRENTLY and racing on shared on-disk state (dist/api.ir.json,
+      // dist/api.d.ts, the built bin). `maxWorkers: 1` pins one worker and makes
+      // the lane deterministic (measured: flaky -> 271/271 green). Scoped to
+      // THIS config on purpose — forcing it onto the default spec lane exposed
+      // an unrelated latent spec-isolation leak, so the default lane keeps its
+      // own concurrency.
+      maxWorkers: 1,
       // Distinct from the default lane's shared `…/node_modules/.vitest`.
       cache: { dir: path.join(repoRoot, 'node_modules/.vitest-e2e') },
       // Distinct from the default lane's `…/coverage/entrypoint/backlog`.

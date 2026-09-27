@@ -142,24 +142,14 @@ export default defineConfig({
     },
     environment: 'node',
     pool: 'forks',
-    // `fileParallelism: false` alone is NOT enough on Vitest 4 across the
-    // `forks` pool: the suites were observed running CONCURRENTLY (the full
-    // `.e2e.ts` lane was flaky-red across runs — 2 different files each time)
-    // and racing on shared on-disk state (`ir-cache.*` rename
-    // `dist/api.ir.json` away; another suite touching `dist/` in the overlap
-    // window makes the restore rename ENOENT). Pin ONE worker explicitly so
-    // both lanes are strictly serial and deterministic; `maxWorkers` is the
-    // option Vitest 4 actually honours here (measured: the whole e2e lane goes
-    // from flaky to 271/271 green with it set).
     fileParallelism: false,
-    maxWorkers: 1,
     // `*.spec.ts` ONLY. The resource-consuming suites (real subprocess spawns,
     // the real fastembed embedding model, real HTTP servers bound to ports)
     // live in sibling `*.e2e.ts` files and run in their OWN config
     // (vitest.e2e.config.ts) — which IS wired into `test.dependsOn`, so
-    // `nx affected -t test` does run them, serially. Keeping this default lane
-    // spec-only preserves the fast inner loop; the `.e2e.ts` exclusion is
-    // structural (the glob), not an emergent property of glob semantics.
+    // `nx affected -t test` does run them. Keeping this default lane spec-only
+    // preserves the fast inner loop; the `.e2e.ts` exclusion is structural
+    // (the glob), not an emergent property of glob semantics.
     include: ['src/**/*.spec.ts'],
     testTimeout: 30000,
     hookTimeout: 30000,
