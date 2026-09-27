@@ -23,9 +23,11 @@
  * THE SELF-REGENERATION DEFECT (why the canonical is per-kind): the status
  * write path emits lowercase `'open'`. A merge that canonicalized `open`→`OPEN`
  * would leave the next ordinary `createIssue` — which emits `'open'` — to
- * exact-match miss and mint a FRESH `open` row, regenerating the twin the merge
- * just removed. The regression below proves it: RED against the old uppercase
- * directive, GREEN after the per-kind fix.
+ * exact-match miss. The write path's case-variant refusal then REJECTS that
+ * write (it folds to the live `OPEN`), so the twin is never silently
+ * regenerated; the negative control below proves exactly that. The per-kind
+ * canonical rule is still the right merge target (it is the spelling an
+ * ordinary write resolves exactly).
  *
  * Every assertion drives the REAL verbs (`seedProject`/`createIssue`/
  * `priorityMatrix`/`openCurve`/`queryIssues`) against a REAL store opened via
@@ -46,6 +48,7 @@ import {
 } from '../test/helpers/open-test-issue-store.js';
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
 import { createIssue } from './create-issue.js';
+import { CaseVariantNameError } from './errors.js';
 import { writeAudit } from './audit.js';
 import { resolveEdgeKindTx } from './catalog.js';
 import {
@@ -652,7 +655,7 @@ describe('catalog-merge — status/priority case-fragment collapse', () => {
     expect(await caseTwinCount(store, 'status')).toBe(0);
   });
 
-  it('NEGATIVE CONTROL: forcing the canonical to the divergent spelling makes the regression fail', async () => {
+  it('NEGATIVE CONTROL: a divergent canonical no longer regenerates silently — the ordinary create is now REFUSED', async () => {
     const { projectUid } = await seedProject(store, 'case-merge-negctl');
     await mintCatalog(store, 'status', 'open', { terminal: false });
     await mintCatalog(store, 'status', 'OPEN', { terminal: false });
@@ -670,16 +673,22 @@ describe('catalog-merge — status/priority case-fragment collapse', () => {
         ['OPEN', survivor.rowid]
       );
     });
-    await createIssue(store, {
-      project: projectUid,
-      title: 'post-merge create',
-      body: 'b',
-      by: 'agent:t',
-    });
-    // The regression assertion (exactly one open-folding row) now FAILS: the
-    // create re-minted the lowercase twin, so the count is 2 — not 1. This is
-    // the teeth of the regression above: a divergent canonical DOES regenerate,
-    // so `toBe(1)` there is a real, breakable assertion.
-    expect(await liveRowsFolding(store, 'status', 'open')).toBe(2);
+
+    // An ordinary create emits the lowercase 'open'. Before the write-path
+    // case-variant refusal this was an exact miss that re-minted a lowercase
+    // twin (the pre-fix regression); now it folds onto the live `OPEN` and is
+    // REFUSED. Either way no second folded row can exist — the positive
+    // regression above can never reach 2.
+    await expect(
+      createIssue(store, {
+        project: projectUid,
+        title: 'post-merge create',
+        body: 'b',
+        by: 'agent:t',
+      })
+    ).rejects.toBeInstanceOf(CaseVariantNameError);
+
+    expect(await liveRowsFolding(store, 'status', 'open')).toBe(1);
+    expect(await caseTwinCount(store, 'status')).toBe(0);
   });
 });

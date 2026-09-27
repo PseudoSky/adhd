@@ -283,7 +283,7 @@ contract.
 
 ## `catalog.ts` (12 exports)
 
-### `isUidShaped(ref)` — function (`catalog.ts:84`)
+### `isUidShaped(ref)` — function (`catalog.ts:86`)
 
 ```ts
 export function isUidShaped(ref: string): boolean;
@@ -294,7 +294,7 @@ exactly (case-insensitive) — the SOLE disambiguation between "treat as
 `uid`" (exact resolve-or-throw) and "treat as `name`" (find, and for flat
 catalogs, find-then-mint) used everywhere in this file.
 
-### `IResolvedCatalogRow` — interface (`catalog.ts:88`)
+### `IResolvedCatalogRow` — interface (`catalog.ts:90`)
 
 ```ts
 export interface IResolvedCatalogRow {
@@ -308,7 +308,7 @@ Guarantees: the minimal resolved shape every catalog resolution returns —
 `name` is never `null` here (a live catalog row with a null name is treated
 as unresolved and throws before this shape is ever constructed).
 
-### `IResolvedProjectRow` — interface (`catalog.ts:94`)
+### `IResolvedProjectRow` — interface (`catalog.ts:96`)
 
 ```ts
 export interface IResolvedProjectRow extends IResolvedCatalogRow {
@@ -320,7 +320,7 @@ Guarantees: `IResolvedCatalogRow` plus the project's parsed `meta` blob
 (`undefined` if absent or unparsable) — the shape `resolveProjectPolicy`
 reads `metadata.policy` off of.
 
-### `resolveProjectTx(tx, ref)` — function (`catalog.ts:142`)
+### `resolveProjectTx(tx, ref)` — function (`catalog.ts:144`)
 
 ```ts
 export async function resolveProjectTx(tx: AdapterTransaction, ref: string): Promise<IResolvedProjectRow>;
@@ -330,7 +330,7 @@ Guarantees: resolves `ref` (uid or name) to a LIVE `project` row inside `tx`.
 Resolved-ONLY — NEVER mints a project. Throws `CatalogNotFoundError` on no
 match.
 
-### `resolveComponentTx(tx, input)` — function (`catalog.ts:181`)
+### `resolveComponentTx(tx, input)` — function (`catalog.ts:183`)
 
 ```ts
 export async function resolveComponentTx(tx: AdapterTransaction, input: { projectUid: string; ref: string }): Promise<IResolvedCatalogRow>;
@@ -341,7 +341,7 @@ scoped to `input.projectUid` inside `tx`. Resolved-ONLY — an unresolved name,
 or a uid-shaped ref belonging to a DIFFERENT project, throws
 `CatalogNotFoundError('component', ref)` rather than forking a new component.
 
-### `resolveDefaultComponentTx(tx, input)` — function (`catalog.ts:216`)
+### `resolveDefaultComponentTx(tx, input)` — function (`catalog.ts:218`)
 
 ```ts
 export async function resolveDefaultComponentTx(tx: AdapterTransaction, input: { projectRowid: number }): Promise<IResolvedCatalogRow>;
@@ -353,7 +353,7 @@ belonging to a different project can never be mismatched onto this one).
 NEVER mints — throws `CatalogNotFoundError('component', '(root)')` if
 missing (a row `upsertProject` is expected to already guarantee).
 
-### `FlatCatalogKind` — type (`catalog.ts:236`)
+### `FlatCatalogKind` — type (`catalog.ts:238`)
 
 ```ts
 export type FlatCatalogKind = 'kind' | 'status' | 'priority' | 'agent';
@@ -362,7 +362,7 @@ export type FlatCatalogKind = 'kind' | 'status' | 'priority' | 'agent';
 Guarantees: the closed set of catalog kinds that are mintable on an
 unresolved NAME (never on an unresolved uid-shaped ref).
 
-### `IMintOrResolveInput` — interface (`catalog.ts:238`)
+### `IMintOrResolveInput` — interface (`catalog.ts:240`)
 
 ```ts
 export interface IMintOrResolveInput {
@@ -378,7 +378,7 @@ mint, never read or applied when `ref` resolves to an existing row. `at` is
 NOT threaded into `resolveEdgeKindTx`'s own `edge_kind` rows (those keep
 their own clock; see that function's guarantee below).
 
-### `RESERVED_TERMINAL_STATUS_NAMES` — const (`catalog.ts:281`)
+### `RESERVED_TERMINAL_STATUS_NAMES` — const (`catalog.ts:286`)
 
 ```ts
 export const RESERVED_TERMINAL_STATUS_NAMES: ReadonlySet<string>;
@@ -391,7 +391,7 @@ case-sensitive. The mint layer seeds a `status` row's `terminal` flag from it
 name-blind (ADR-0002 D1). `catalog-repair.ts` re-exports this SAME set rather
 than declaring its own.
 
-### `isReservedTerminalStatusName(name)` — function (`catalog.ts:291`)
+### `isReservedTerminalStatusName(name)` — function (`catalog.ts:301`)
 
 ```ts
 export function isReservedTerminalStatusName(name: string): boolean;
@@ -401,7 +401,7 @@ Guarantees: exact, case-sensitive membership in
 `RESERVED_TERMINAL_STATUS_NAMES` — the same predicate the `(kind,name)`
 resolve uses.
 
-### `mintOrResolveCatalogTx(tx, input)` — function (`catalog.ts:300`)
+### `mintOrResolveCatalogTx(tx, input)` — function (`catalog.ts:354`)
 
 ```ts
 export async function mintOrResolveCatalogTx(tx: AdapterTransaction, input: IMintOrResolveInput): Promise<IResolvedCatalogRow>;
@@ -412,7 +412,7 @@ uid-shaped `ref` that does not resolve throws `CatalogNotFoundError` (uids
 are never auto-vivified). A name-shaped `ref` that does not resolve is
 minted via `writeNodeTx` inside the SAME `tx`.
 
-### `mintOrResolveStatusTx(tx, input)` — function (`catalog.ts:360`)
+### `mintOrResolveStatusTx(tx, input)` — function (`catalog.ts:428`)
 
 ```ts
 export async function mintOrResolveStatusTx(tx: AdapterTransaction, input: { ref: string; at?: string }): Promise<IResolvedCatalogRow>;
@@ -426,7 +426,7 @@ self-heal): an existing row is resolved, never re-minted, so no duplicate rows
 accumulate. A uid-shaped `ref` that does not resolve throws
 `CatalogNotFoundError`.
 
-### `nextPriorityRankTx(tx)` — function (`catalog.ts:375`)
+### `nextPriorityRankTx(tx)` — function (`catalog.ts:443`)
 
 ```ts
 export async function nextPriorityRankTx(tx: AdapterTransaction): Promise<number>;
@@ -436,7 +436,7 @@ Guarantees: returns one past the current max `priority.meta.rank` (0 if no
 priority rows exist) — a novel priority can never silently outrank an
 existing one.
 
-### `EDGE_KIND_TABLE` — const (`catalog.ts:390`)
+### `EDGE_KIND_TABLE` — const (`catalog.ts:458`)
 
 ```ts
 export const EDGE_KIND_TABLE: readonly IEdgeKindRule[];
@@ -451,7 +451,7 @@ time of this contract: `owns_project`, `owns_component`, `has_kind`,
 of truth `resolveEdgeKindTx` reconciles against the live `edge_kind` catalog
 rows.
 
-### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:531`)
+### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:599`)
 
 ```ts
 export async function resolveEdgeKindTx(tx: AdapterTransaction, rel: string): Promise<IEdgeKindRule>;
@@ -466,7 +466,7 @@ row (corrupt or missing `meta` keys) is invalidated and replaced in the SAME
 `CatalogNotFoundError('edge_kind', rel)` if `rel` isn't in
 `EDGE_KIND_TABLE` at all.
 
-### `IProjectPolicy` — interface (`catalog.ts:599`)
+### `IProjectPolicy` — interface (`catalog.ts:667`)
 
 ```ts
 export interface IProjectPolicy {
@@ -502,7 +502,7 @@ disabled. A malformed (non-`string[]`) value falls back to the — also empty �
 default rather than being spread. Typed per-project config, never an
 environment toggle.
 
-### `resolveProjectPolicy(project)` — function (`catalog.ts:673`)
+### `resolveProjectPolicy(project)` — function (`catalog.ts:741`)
 
 ```ts
 export function resolveProjectPolicy(project: IResolvedProjectRow): IProjectPolicy;
@@ -719,7 +719,7 @@ Guarantees: thrown when a `project`/`component`/`kind`/`status`/`priority`/
 `agent`/`edge_kind` reference did not resolve — a uid-shaped ref with no live
 row, or a `project`/`component` name (neither is ever mint-on-miss).
 
-### `InvalidArgumentError` — class (`errors.ts:261`)
+### `InvalidArgumentError` — class (`errors.ts:299`)
 
 ```ts
 export class InvalidArgumentError extends BacklogWriteError {
@@ -732,7 +732,7 @@ export class InvalidArgumentError extends BacklogWriteError {
 Guarantees: thrown when a caller-supplied argument is missing, blank, or
 fails a project-declared invariant.
 
-### `IssueNotFoundError` — class (`errors.ts:275`)
+### `IssueNotFoundError` — class (`errors.ts:313`)
 
 ```ts
 export class IssueNotFoundError extends BacklogWriteError {
@@ -744,7 +744,7 @@ export class IssueNotFoundError extends BacklogWriteError {
 
 Guarantees: thrown when no live `issue` node carries the given `uid`.
 
-### `ClaimHeldError` — class (`errors.ts:288`)
+### `ClaimHeldError` — class (`errors.ts:326`)
 
 ```ts
 export class ClaimHeldError extends BacklogWriteError {
@@ -757,7 +757,7 @@ export class ClaimHeldError extends BacklogWriteError {
 Guarantees: thrown by `claim` when the lease is held by someone else, not yet
 stale, and the caller did not pass `force: true`.
 
-### `SingleValuedRelationConflictError` — class (`errors.ts:345`)
+### `SingleValuedRelationConflictError` — class (`errors.ts:383`)
 
 ```ts
 export class SingleValuedRelationConflictError extends BacklogWriteError {
@@ -778,7 +778,7 @@ resolve `cappedUid`/`conflictingUid` via different SQL joins, and named
 fields make a source/target field swap a compile error instead of a silent
 message-text bug.
 
-### `CitationUnverifiableError` — class (`errors.ts:391`)
+### `CitationUnverifiableError` — class (`errors.ts:429`)
 
 ```ts
 export class CitationUnverifiableError extends BacklogWriteError {
@@ -802,7 +802,7 @@ The message names the allowed external roots (`~`-anchored) and the
 rejection is actionable; with an empty allowlist (the default, or an explicit
 `[]`) it instead names the project root and says the policy array is empty.
 
-### `CitationTargetIsDirectoryError` — class (`errors.ts:429`)
+### `CitationTargetIsDirectoryError` — class (`errors.ts:467`)
 
 ```ts
 export class CitationTargetIsDirectoryError extends BacklogWriteError {
@@ -818,7 +818,7 @@ has no content to hash, so the payload can never succeed as-is; nothing is
 written. The mapping from a citation read error to this class or to
 `WriteIOError` lives in `errors.ts`'s `citationReadError` (56a2133e).
 
-### `NoteRequiredError` — class (`errors.ts:459`)
+### `NoteRequiredError` — class (`errors.ts:497`)
 
 ```ts
 export class NoteRequiredError extends BacklogWriteError {
@@ -831,7 +831,7 @@ export class NoteRequiredError extends BacklogWriteError {
 Guarantees: thrown by `transition` when `project_policy.transitionRequiresNote`
 (default `true`) is set and no `note` was given.
 
-### `CitationRequiredError` — class (`errors.ts:471`)
+### `CitationRequiredError` — class (`errors.ts:509`)
 
 ```ts
 export class CitationRequiredError extends BacklogWriteError {
@@ -845,7 +845,7 @@ Guarantees: thrown by `transition` when `project_policy.citationRequired`
 (default `false`) is set, the target status is terminal, and no citation was
 given.
 
-### `BacklogValidationError` — class (`errors.ts:494`)
+### `BacklogValidationError` — class (`errors.ts:532`)
 
 ```ts
 export class BacklogValidationError extends BacklogWriteError {
@@ -860,7 +860,7 @@ or an out-of-range/non-integral `limit`) — deliberately the SAME
 `E_VALIDATION`-class member of this same error union, not a parallel one, so
 a `query`/`get` caller catches it identically to any write-verb error.
 
-### `classifyDriverError(err)` — function (`errors.ts:540`)
+### `classifyDriverError(err)` — function (`errors.ts:578`)
 
 ```ts
 export function classifyDriverError(err: unknown): IWriteError;
