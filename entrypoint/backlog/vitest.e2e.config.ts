@@ -24,10 +24,14 @@ const repoRoot = path.resolve(__dirname, '../..');
  * `test.cache.dir`, and a DISTINCT coverage `reportsDirectory` — so the `test`
  * and `e2e` lanes can never cross-read each other's cache or coverage output.
  *
- * REACHABILITY GUARD: this target is deliberately unreachable from `affected`
- * and from a bare `nx run backlog:test`. `e2e` appears in NO target's
- * `dependsOn` and is absent from `nx.json` `targetDefaults`, so only an
- * explicit invocation runs it. Never add it to `test.dependsOn`.
+ * REACHABILITY (FIXED 2026-09-26, backlog 98142eab instance 2): this lane is
+ * now wired into the ordinary gate via `test.dependsOn` in project.json, so
+ * `nx affected -t test` (and the commit-range-scoped `.githooks/pre-push`
+ * closure) run it. It USED to be deliberately unreachable — `e2e` appeared in
+ * no target's `dependsOn` — which made all 37 `.e2e.ts` suites dead config and
+ * let e2e regressions report green. The separation that matters (resource-
+ * heavy suites, distinct cache/coverage, own config) is unchanged; do not
+ * remove it from `test.dependsOn`.
  *
  * TARGET NAME (backlog-e2e-separation review): the lane KEEPS the name `e2e`
  * for repo-wide consistency with the 12 sibling apigen packages that name the
@@ -43,19 +47,28 @@ const repoRoot = path.resolve(__dirname, '../..');
  * the `Resource lane:` tags (proc|embed|cpu|mem|disk|io) live in the sibling
  * `*.spec.ts` STUB doc-comments, NOT in any test NAME, so vitest's
  * `--testNamePattern` cannot select them; and narrowing `include` by lane would
- * need a lane->file map that either duplicates those 33 tags or scrapes stub
+ * need a lane->file map that either duplicates those tags or scrapes stub
  * prose — exactly the kind of machinery that rots silently, so it is
- * deliberately not built. Run a chosen subset through the executor's own
- * `testFiles` filter instead, e.g.
+ * deliberately not built. Run a chosen subset with vitest's POSITIONAL file
+ * filter (there is NO `--testFiles` flag — passing it errors `CACError: Unknown
+ * option \`--testFiles\``; an earlier version of this comment documented a
+ * `nx run backlog:e2e --testFiles=…` form that never worked):
  *
- *   nx run backlog:e2e --testFiles=src/store/vocabulary-guard.e2e.ts
  *   npx vitest run --config entrypoint/backlog/vitest.e2e.config.ts \
  *     src/store/vocabulary-guard.e2e.ts
  *
  * ...or derive the file list for a lane from the stubs in the shell:
  *
- *   nx run backlog:e2e --testFiles="$(rg -l 'Resource lane: cpu' \
- *     -g '*.spec.ts' entrypoint/backlog/src | sed 's/\.spec\.ts$/.e2e.ts/')"
+ *   npx vitest run --config entrypoint/backlog/vitest.e2e.config.ts \
+ *     $(rg -l 'Resource lane: cpu' -g '*.spec.ts' entrypoint/backlog/src \
+ *       | sed 's/\.spec\.ts$/.e2e.ts/')
+ *
+ * SERIAL EXECUTION IS LOAD-BEARING: these suites mutate shared on-disk state
+ * (`dist/api.ir.json`, `dist/api.d.ts`, the built bin), so running them
+ * concurrently races and flakes the whole lane. The base config's
+ * `fileParallelism: false` was not sufficient on Vitest 4's fork pool;
+ * `maxWorkers: 1` (set in the base vite.config.ts, inherited here) pins one
+ * worker and makes the lane deterministic.
  */
 const e2eConfig = mergeConfig(
   baseConfig,

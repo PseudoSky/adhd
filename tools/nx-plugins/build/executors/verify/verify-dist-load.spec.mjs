@@ -49,8 +49,12 @@ function plantFixture(label) {
   return rel;
 }
 
-function runScript(projectRoot) {
-  return spawnSync('node', [SCRIPT, projectRoot], { cwd: REPO_ROOT, encoding: 'utf8' });
+function runScript(projectRoot, env = {}) {
+  return spawnSync('node', [SCRIPT, projectRoot], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    env: { ...process.env, ...env },
+  });
 }
 
 test('exit 2: no dist/ directory at all (unchanged setup-error behavior)', () => {
@@ -146,6 +150,64 @@ test('a dist manifest with a WRONG bin path (rebased incorrectly) fails the exis
     writeFileSync(join(REPO_ROOT, rel, 'dist', 'package.json'), JSON.stringify({ name: '@adhd/cli', version: '1.0.0', bin: { 'adhd-cli': 'dist/cli.js' } }));
     const res = runScript(rel);
     assert.equal(res.status, 1);
+  } finally {
+    rmSync(join(REPO_ROOT, rel), { recursive: true, force: true });
+  }
+});
+
+// ── BUG-BUILD-VERIFY-DIST-LOAD-BIN-SKIPS-LIB teeth ──────────────────────────
+// The old gate set `existenceOnly = hasBin`, so declaring ANY bin made the
+// whole package (including its LIBRARY entry) existence-only. These tests
+// pin the fix: a bin-bearing package's library entry must still be LOADED,
+// and a broken/hanging library entry must FAIL the gate — the defect the gate
+// exists to catch, previously masked by the bin.
+
+test('a bin-bearing package with a THROWING library entry FAILS (the bin no longer masks the library load)', () => {
+  const rel = plantFixture('bin-plus-throwing-lib');
+  try {
+    writeFileSync(join(REPO_ROOT, rel, 'package.json'), JSON.stringify({ name: '@adhd/cli', version: '1.0.0', type: 'module', main: './dist/src/index.js', bin: { 'adhd-cli': './dist/src/cli.js' } }));
+    mkdirSync(join(REPO_ROOT, rel, 'dist', 'src'), { recursive: true });
+    writeFileSync(join(REPO_ROOT, rel, 'dist', 'src', 'index.js'), 'throw new Error("LIB_ENTRY_THREW");\n');
+    writeFileSync(join(REPO_ROOT, rel, 'dist', 'src', 'cli.js'), '#!/usr/bin/env node\nprocess.exit(1);\n');
+    writeFileSync(join(REPO_ROOT, rel, 'dist', 'package.json'), JSON.stringify({ name: '@adhd/cli', version: '1.0.0', type: 'module', main: './src/index.js', bin: { 'adhd-cli': 'src/cli.js' } }));
+    const res = runScript(rel);
+    assert.equal(res.status, 1, `must FAIL (exit 1) — got ${res.status}; stdout: ${res.stdout}, stderr: ${res.stderr}`);
+    assert.match(res.stdout + res.stderr, /LIB_ENTRY_THREW/, 'the child\'s real error must be surfaced, not swallowed');
+  } finally {
+    rmSync(join(REPO_ROOT, rel), { recursive: true, force: true });
+  }
+});
+
+test('a bin-bearing package with a CLEAN library entry PASSES and reports the library as LOADED (not existence-only)', () => {
+  const rel = plantFixture('bin-plus-clean-lib');
+  try {
+    writeFileSync(join(REPO_ROOT, rel, 'package.json'), JSON.stringify({ name: '@adhd/cli', version: '1.0.0', type: 'module', main: './dist/src/index.js', bin: { 'adhd-cli': './dist/src/cli.js' } }));
+    mkdirSync(join(REPO_ROOT, rel, 'dist', 'src'), { recursive: true });
+    writeFileSync(join(REPO_ROOT, rel, 'dist', 'src', 'index.js'), 'export const ok = true;\n');
+    writeFileSync(join(REPO_ROOT, rel, 'dist', 'src', 'cli.js'), '#!/usr/bin/env node\nprocess.exit(1);\n');
+    writeFileSync(join(REPO_ROOT, rel, 'dist', 'package.json'), JSON.stringify({ name: '@adhd/cli', version: '1.0.0', type: 'module', main: './src/index.js', bin: { 'adhd-cli': 'src/cli.js' } }));
+    const res = runScript(rel);
+    assert.equal(res.status, 0, `expected a clean load; stdout: ${res.stdout}, stderr: ${res.stderr}`);
+    assert.match(res.stdout, /main .* loaded cleanly/, 'the library entry must be LOADED, not merely present');
+    assert.match(res.stdout, /bin .* present \(CLI\/server entry — not executed\)/, 'the bin FILE stays existence-only');
+  } finally {
+    rmSync(join(REPO_ROOT, rel), { recursive: true, force: true });
+  }
+});
+
+test('a bin-bearing package with a HANGING library entry FAILS via the bounded subprocess probe (never hangs the gate)', () => {
+  const rel = plantFixture('bin-plus-hanging-lib');
+  try {
+    writeFileSync(join(REPO_ROOT, rel, 'package.json'), JSON.stringify({ name: '@adhd/cli', version: '1.0.0', bin: { 'adhd-cli': './dist/index.js' } }));
+    mkdirSync(join(REPO_ROOT, rel, 'dist'), { recursive: true });
+    // Synchronous infinite loop: the child never returns from require(), so
+    // only the parent's SIGKILL timeout can stop it. Proves the gate fails
+    // loudly instead of hanging.
+    writeFileSync(join(REPO_ROOT, rel, 'dist', 'index.js'), 'while (true) {}\n');
+    writeFileSync(join(REPO_ROOT, rel, 'dist', 'package.json'), JSON.stringify({ name: '@adhd/cli', version: '1.0.0', main: './index.js', bin: { 'adhd-cli': 'index.js' } }));
+    const res = runScript(rel, { VERIFY_DIST_LOAD_TIMEOUT_MS: '1500' });
+    assert.equal(res.status, 1, `must FAIL (exit 1) — got ${res.status}; stdout: ${res.stdout}, stderr: ${res.stderr}`);
+    assert.match(res.stdout + res.stderr, /never finished loading within 1500ms/);
   } finally {
     rmSync(join(REPO_ROOT, rel), { recursive: true, force: true });
   }
