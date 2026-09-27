@@ -65,6 +65,10 @@ import {
   RECOGNIZED_NODE_KINDS,
   StoreVocabularyMismatchError,
 } from './store/vocabulary-guard.js';
+import {
+  assertCatalogInvariants,
+  CatalogInvariantError,
+} from './store/catalog-invariant-guard.js';
 
 /**
  * Derives the internal command-path PREFIX every `client.ts` operation
@@ -611,13 +615,21 @@ export async function runBacklogCli(
     return;
   }
   // `store-check` (BUG-BACKLOG-005) — the explicit, operator-facing diagnostic for
-  // a store whose node vocabulary this build does not recognize. It opens the
-  // store (read-only) and reports the expected vocabulary against the kinds
-  // actually present, exiting non-zero on a mismatch. Without it a full store
-  // whose items sit under another build's vocabulary reads as
-  // `{ok:true, total:0}`, leaving an operator guessing why a healthy store
-  // looks empty. `openGraphBacklogStore` runs the same guard, so a mismatch
-  // surfaces here as a structured report rather than an open-time stack trace.
+  // a store whose node vocabulary this build does not recognize, AND the NAMED
+  // check for a store whose status/priority catalog violates a read-critical
+  // invariant. It opens the store (read-only), reports the expected vocabulary
+  // against the kinds actually present, and runs `assertCatalogInvariants` —
+  // exiting non-zero on either a vocabulary mismatch or a catalog violation.
+  // Without the vocabulary half a full store whose items sit under another
+  // build's vocabulary reads as `{ok:true, total:0}`, leaving an operator
+  // guessing why a healthy store looks empty. Without the catalog half a
+  // drifted catalog (an unflagged reserved terminal status, or a same-kind
+  // case-fragment duplicate) is invisible until it mis-classifies a read. The
+  // catalog violation's message is the guard's OWN — it names every offending
+  // row (uid + name; fold + both spellings) and the exact repair — printed
+  // VERBATIM here so an operator can act without opening source. This is the
+  // deliberate counterpart to the removed read-path abort: the drift is
+  // reported loudly and named, while ordinary reads keep serving the store.
   if (userArgvEarly[0] === 'store-check') {
     const env = buildBacklogEnv({
       scope: opts.scope,
@@ -630,6 +642,9 @@ export async function runBacklogCli(
     let store: GraphBacklogStore | undefined;
     try {
       store = await openGraphBacklogStore(dbPath, env.config.db.busyTimeoutMs);
+      // Named catalog check, BEFORE reporting ok — a violation must exit
+      // non-zero rather than print a misleading success.
+      await assertCatalogInvariants(store.adapter);
       const { total, observed } = await inspectStoreVocabulary(store.adapter);
       console.log(
         JSON.stringify({
@@ -650,6 +665,24 @@ export async function runBacklogCli(
             error: { code: 'store_vocabulary_mismatch', message: err.message },
             observed: err.observed,
             expectedKinds: err.recognized,
+          })
+        );
+        process.exitCode = 1;
+        return;
+      }
+      if (err instanceof CatalogInvariantError) {
+        // The guard's message verbatim: it names every offending row and the
+        // repair, so printing it unmodified is the whole point.
+        console.error(err.message);
+        console.error(
+          JSON.stringify({
+            ok: false,
+            dbPath,
+            error: {
+              code: 'catalog_invariant_violation',
+              message: err.message,
+            },
+            violations: err.violations,
           })
         );
         process.exitCode = 1;
@@ -685,7 +718,7 @@ export async function runBacklogCli(
       '  sandbox-path             Report the resolved store path (store-free) — see --namespace below'
     );
     console.log(
-      '  store-check              Report the store vocabulary this build expects vs. the kinds present; non-zero on a mismatch'
+      '  store-check              Report the store vocabulary this build expects vs. the kinds present, and assert the status/priority catalog invariants; non-zero on a mismatch or a catalog violation'
     );
     console.log('');
     console.log(

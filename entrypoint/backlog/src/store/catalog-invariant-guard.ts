@@ -1,6 +1,28 @@
 /**
- * catalog-invariant-guard.ts — fail LOUDLY when the status/priority catalog
- * violates an invariant this build's read layer depends on.
+ * catalog-invariant-guard.ts — DETECT LOUDLY when the status/priority catalog
+ * violates an invariant this build's read layer depends on, and REPORT it.
+ *
+ * ## The posture: detected loudly, never a read abort
+ *
+ * Violations are DETECTED and REPORTED, and are never allowed to take the read
+ * path down. Concretely:
+ *
+ *  - The WRITE path enforces the invariants: `api.ts`'s `writeHandle` calls
+ *    {@link assertCatalogInvariants} per write verb, and `mintOrResolveCatalogTx`
+ *    (`write/catalog.ts`) refuses a case-variant catalog name outright
+ *    (`CaseVariantNameError`), so a bad write cannot create the drift in the
+ *    first place.
+ *  - The `store-check` CLI verb runs {@link assertCatalogInvariants} and exits
+ *    NON-ZERO with this module's self-explaining message on a violation — a
+ *    NAMED, opt-in check an operator runs deliberately.
+ *  - The ordinary READ path does NOT run it. A drifted catalog is a bounded
+ *    data problem, and aborting every read over it is an unbounded availability
+ *    failure (it caused two total outages). A read of a drifted store SUCCEEDS.
+ *
+ * This is a named check, NOT a silent degrade and NOT a read-time fallback: no
+ * name-keyed shim is installed and no violation is swallowed — it is reported
+ * verbatim by the check. For the identical reason it is deliberately NOT an
+ * unconditional read-abort.
  *
  * ## The two invariants
  *
@@ -29,20 +51,21 @@
  * guard must never do (ADR-0002 D5 step 4: a loud failure must name a real
  * open item, never manufacture one).
  *
- * ## The posture: name the row, name the repair (ADR-0002 D1 + D5 step 4)
+ * ## Name the row, name the repair (ADR-0002 D1 + D5 step 4)
  *
- * This is NOT a bare abort. {@link CatalogInvariantError} names every offending
- * row (uid + name; for a duplicate, the fold and both spellings) and states the
- * repair that resolves it, so a reader who hits it can act without opening
- * source. It never silently degrades and never installs a read-time shim: a
- * name fallback would be a second, drifting source of truth (D1).
+ * {@link CatalogInvariantError} names every offending row (uid + name; for a
+ * duplicate, the fold and both spellings) and states the repair that resolves
+ * it, so an operator who runs the check can act without opening source. It
+ * never silently degrades and never installs a read-time shim: a name fallback
+ * would be a second, drifting source of truth (D1).
  *
  * ## Bounded by the catalog, never by the store
  *
  * The catalog is a handful of rows. Both checks are answered by ONE read of
  * every live `status`/`priority` row (`kind IN (...)`, `t_invalid IS NULL`),
  * folding names in JS. This never scans the issue graph and never runs a
- * `GROUP BY` over it, so it is cheap enough for the read and write hot paths.
+ * `GROUP BY` over it, so it is cheap enough for the write hot path and for the
+ * operator-run check.
  * Folding is done in JS via {@link catalogNameFold} — never SQL `lower()`/
  * `NOCASE`, which folds only ASCII `A`–`Z` and would desync from the JS fold
  * the repair uses.
@@ -271,10 +294,15 @@ export async function inspectCatalogInvariants(
  * Throws {@link CatalogInvariantError}, naming every offending row and the
  * repair that resolves it, otherwise.
  *
- * BOUNDED BY CONSTRUCTION: this runs on every write verb (`api.ts`'s
- * `writeHandle`), every query (`api.ts`'s `queryHandle` → `query.ts`), and
- * store open (`openGraphBacklogStore`), so it must not scan the store per
- * call. It reads only the (small) status/priority catalog — see
+ * WHERE IT RUNS: on the WRITE path (`api.ts`'s `writeHandle`, per write verb)
+ * and in the `store-check` CLI verb — a NAMED, non-zero check an operator runs
+ * deliberately. It is deliberately NOT run on the ordinary read path
+ * (`queryIssuesWithMeta`) or at store open (`openGraphBacklogStore`): a
+ * violation must be detected loudly and REPORTED, never allowed to turn every
+ * read into an outage.
+ *
+ * BOUNDED BY CONSTRUCTION: because it runs per write verb, it must not scan
+ * the store per call. It reads only the (small) status/priority catalog — see
  * {@link inspectCatalogInvariants}.
  */
 export async function assertCatalogInvariants(

@@ -11,9 +11,14 @@
  *  2. UNIQUENESS. No two live rows of the SAME catalog kind may share a
  *     case-folded name (`HIGH`/`high` are one priority split across two rows).
  *
- * THE POSTURE. A violation throws `CatalogInvariantError` naming EVERY
- * offending row (uid + name; fold + both spellings for a duplicate) AND the
- * repair that resolves it — never a bare abort, never a read-time shim.
+ * THE POSTURE. A violation is DETECTED LOUDLY and REPORTED — `assertCatalogInvariants`
+ * still throws `CatalogInvariantError` naming EVERY offending row (uid + name;
+ * fold + both spellings for a duplicate) AND the repair that resolves it. But
+ * that throw is a NAMED CHECK, not a read abort: the write path and the
+ * `store-check` CLI verb invoke it and exit/refuse loudly, while the ordinary
+ * READ path never consults it and always serves the store — a bounded data
+ * defect must never become an unbounded availability failure (never a bare
+ * abort on read, never a silent read-time shim).
  *
  * TEETH. Each assertion drives the REAL guard against a REAL store opened via
  * `openTestIssueStore` (or the real `openGraphBacklogStore` for the open-path
@@ -75,6 +80,20 @@ async function seedFlaglessReserved(
 ): Promise<string> {
   const row = await mintCatalog(store, 'status', name, {});
   return row.uid;
+}
+
+/**
+ * The exact handle shape `api.ts`'s `queryHandle` builds for every real host —
+ * catalog guard WIRED, not merely absent. Wiring it here (rather than omitting
+ * the optional member) is what makes the regression below drive the REAL read
+ * abort: with the member absent, `queryIssuesWithMeta`'s optional call is a
+ * no-op and the test would pass even on the unfixed code.
+ */
+function hostQueryHandle(store: TestIssueStore): IQueryStoreHandle {
+  return {
+    graph: store.graph,
+    assertCatalogInvariants: () => assertCatalogInvariants(store.adapter),
+  };
 }
 
 describe('assertCatalogInvariants — the two catalog invariants', () => {
@@ -213,16 +232,68 @@ describe('assertCatalogInvariants — the two catalog invariants', () => {
     );
   });
 
-  it('WIRING (query path): queryIssuesWithMeta rejects through the guard instead of serving a mis-classified read', async () => {
+  it('REGRESSION (the outage): an ordinary READ of a catalog-drifted store SUCCEEDS — a data defect never takes reads down', async () => {
+    const { projectUid } = await seedProject(store, 'read-through-drift');
+    const uid = createdUid(
+      await createIssue(store, {
+        project: projectUid,
+        title: 'still readable',
+        body: 'b',
+        by: 'agent:t',
+      })
+    );
+    // Seed the exact drift the guard detects: a live reserved-named status
+    // whose `metadata.terminal` is absent.
     await seedFlaglessReserved(store, 'closed');
-    // The exact handle shape `api.ts`'s `queryHandle` builds for every host.
+    // The invariant IS violated on disk ...
+    expect(await inspectCatalogInvariants(store.adapter)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'unflagged-terminal', name: 'closed' }),
+      ])
+    );
+    // ... yet a NORMAL read — through the REAL host handle shape — still
+    // SERVES the store. Before this fix the read below threw
+    // `CatalogInvariantError`, so every read of the backlog failed.
+    const outcome = await queryIssuesWithMeta(hostQueryHandle(store), {
+      filter: { status: 'open' },
+      limit: 100,
+    });
+    expect(outcome.result.view).toBe('list');
+    const items = (outcome.result as { items: Array<{ uid: string }> }).items;
+    expect(items.map((i) => i.uid)).toContain(uid);
+  });
+
+  it('REGRESSION: a same-kind case-fragment duplicate (HIGH/high) does not block reads either', async () => {
+    await mintCatalog(store, 'priority', 'HIGH', { rank: 1 });
+    await mintCatalog(store, 'priority', 'high', { rank: 2 });
+    expect(
+      (await inspectCatalogInvariants(store.adapter)).some(
+        (v) => v.kind === 'case-fragment-duplicate'
+      )
+    ).toBe(true);
+    const outcome = await queryIssuesWithMeta(hostQueryHandle(store), {});
+    expect(outcome.result.view).toBe('list');
+  });
+
+  it('the ordinary read path NEVER consults `assertCatalogInvariants` — reintroducing the read abort turns this RED', async () => {
+    await seedFlaglessReserved(store, 'closed');
+    let consulted = 0;
+    // A handle carrying a THROWING guard stub — the exact read-path abort this
+    // change removes. If `queryIssuesWithMeta` were wired back to the guard,
+    // this stub would run and the read below would reject; it is never
+    // consulted, so the read serves and `consulted` stays 0.
     const handle: IQueryStoreHandle = {
       graph: store.graph,
-      assertCatalogInvariants: () => assertCatalogInvariants(store.adapter),
+      assertCatalogInvariants: async () => {
+        consulted += 1;
+        throw new CatalogInvariantError(
+          await inspectCatalogInvariants(store.adapter)
+        );
+      },
     };
-    await expect(queryIssuesWithMeta(handle, {})).rejects.toBeInstanceOf(
-      CatalogInvariantError
-    );
+    const outcome = await queryIssuesWithMeta(handle, {});
+    expect(outcome.result.view).toBe('list');
+    expect(consulted).toBe(0);
   });
 
   it('FINDING FIXED: an ordinary createIssue with a non-canonical case status spelling is REFUSED at write time (no write-time twin)', async () => {
@@ -271,18 +342,24 @@ describe('assertCatalogInvariants — the two catalog invariants', () => {
     await expect(assertCatalogInvariants(store.adapter)).resolves.toBeUndefined();
   });
 
-  it('WIRING (store open): openGraphBacklogStore refuses to open a catalog-violating store and closes the adapter it opened', async () => {
+  it('WIRING (store open): openGraphBacklogStore OPENS a catalog-drifted store — reads are never aborted at open', async () => {
     const openDir = freshTmpDir('catalog-invariant-open');
     const dbPath = join(openDir, 'backlog.db');
     const raw = await openTestIssueStore(dbPath);
     await seedFlaglessReserved(raw, 'closed');
     await raw.close();
 
+    let opened: Awaited<ReturnType<typeof openGraphBacklogStore>> | undefined;
     try {
-      await expect(openGraphBacklogStore(dbPath)).rejects.toBeInstanceOf(
-        CatalogInvariantError
-      );
+      // Before this fix this rejected with `CatalogInvariantError`, so EVERY
+      // read of a store with one drifted row failed. It must simply open ...
+      opened = await openGraphBacklogStore(dbPath);
+      expect(opened.graph).toBeDefined();
+      // ... and serve a read.
+      const outcome = await queryIssuesWithMeta({ graph: opened.graph }, {});
+      expect(outcome.result.view).toBe('list');
     } finally {
+      if (opened) await opened.adapter.close();
       removeTestIssueStoreDir(openDir);
     }
   });

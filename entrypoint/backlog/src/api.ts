@@ -290,7 +290,11 @@ async function writeHandle(
   // Catalog invariant guard (store/catalog-invariant-guard.ts): refuse to WRITE
   // into a store whose status/priority catalog already mis-classifies reads (an
   // unflagged reserved terminal status, or a same-kind case-fragment duplicate)
-  // — the same fail-loud posture, per write verb.
+  // — the fail-loud posture, on the WRITE path only. Reads deliberately do NOT
+  // run this: a drifted catalog is a bounded data problem and must never make
+  // every read fail (the read-path abort that caused two total outages). The
+  // same invariant is surfaced as a named, non-zero check by the `store-check`
+  // CLI verb; the write path is where it is enforced.
   await assertCatalogInvariants(ctx.store.adapter);
   const { search, embedding } = opts.needsSemantic
     ? await ensureSemanticReady(ctx)
@@ -344,7 +348,10 @@ async function queryHandle(
     // Fail-loud vocabulary guard, re-run per query (never latched) — see
     // `IQueryStoreHandle.assertVocabulary` and store/vocabulary-guard.ts.
     assertVocabulary: () => assertRecognizedStoreVocabulary(ctx.store.adapter),
-    // Fail-loud catalog invariant guard, same re-run-per-query posture — see
+    // Catalog invariant check — OPT-IN, deliberately NOT consulted by
+    // `queryIssuesWithMeta` (so it is never on the ordinary read path). Wired
+    // here only so a caller that explicitly wants to assert the catalog can;
+    // the read path serves a drifted store regardless. See
     // `IQueryStoreHandle.assertCatalogInvariants` and
     // store/catalog-invariant-guard.ts.
     assertCatalogInvariants: () => assertCatalogInvariants(ctx.store.adapter),

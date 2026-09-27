@@ -38,6 +38,14 @@ import {
 } from './test/helpers/open-test-issue-store.js';
 import { writeNodeTx, nowISO } from './write/tx.js';
 import {
+  planTerminalBackfill,
+  applyTerminalBackfill,
+} from './write/catalog-repair.js';
+import {
+  planCaseFragmentMerge,
+  applyCaseFragmentMerge,
+} from './write/catalog-merge.js';
+import {
   mintBacklogSandbox,
   runInBacklogSandbox,
 } from './test/helpers/spawn-backlog-bin.js';
@@ -61,6 +69,47 @@ async function seedForeignNode(
   await store.adapter.transaction(
     async (tx) => {
       await writeNodeTx(tx, { kind, name: 'legacy-item', at: nowISO() });
+    },
+    { mode: 'immediate' }
+  );
+}
+
+/**
+ * Seed the two catalog violations the check detects, through the REAL
+ * `writeNodeTx` primitive (the same hand-composed path every write verb uses):
+ *  - a live `status` named `closed` with NO `metadata.terminal`;
+ *  - a `priority` pair `HIGH`/`high` that folds to one token.
+ * Returns the uids so the assertions can name the exact offending rows.
+ */
+async function seedCatalogViolation(store: TestIssueStore): Promise<{
+  closedUid: string;
+  upperUid: string;
+  lowerUid: string;
+}> {
+  return store.adapter.transaction(
+    async (tx) => {
+      const closed = await writeNodeTx(tx, {
+        kind: 'status',
+        name: 'closed',
+        at: nowISO(),
+      });
+      const upper = await writeNodeTx(tx, {
+        kind: 'priority',
+        name: 'HIGH',
+        metadata: { rank: 1 },
+        at: nowISO(),
+      });
+      const lower = await writeNodeTx(tx, {
+        kind: 'priority',
+        name: 'high',
+        metadata: { rank: 2 },
+        at: nowISO(),
+      });
+      return {
+        closedUid: closed.uid,
+        upperUid: upper.uid,
+        lowerUid: lower.uid,
+      };
     },
     { mode: 'immediate' }
   );
@@ -131,5 +180,72 @@ describe('store-check special command — real spawned dist/index.js bin', () =>
         { kind: 'entity', count: 1 },
       ])
     );
+  });
+
+  it('exits non-zero naming every offending row on a catalog-violating store, then goes green once the NAMED remediation is run', async () => {
+    const sandbox = mintBacklogSandbox();
+    dirs.push(sandbox.adhdRoot);
+
+    const store = await openTestIssueStore(sandbox.dbPath);
+    let seeded: { closedUid: string; upperUid: string; lowerUid: string };
+    try {
+      seeded = await seedCatalogViolation(store);
+    } finally {
+      await store.close();
+    }
+
+    // The check MUST fail loudly and non-zero, printing the guard's OWN message
+    // verbatim: uid + name; fold + both spellings; and the exact remediation.
+    const res = runInBacklogSandbox(sandbox, ['store-check']);
+    expect(res.status, `stdout:\n${res.stdout}\nstderr:\n${res.stderr}`).toBe(
+      1
+    );
+    expect(res.stderr).toContain('unflagged-terminal (1)');
+    expect(res.stderr).toContain('status "closed"');
+    expect(res.stderr).toContain(`uid ${seeded.closedUid}`);
+    expect(res.stderr).toContain('planTerminalBackfill');
+    expect(res.stderr).toContain('applyTerminalBackfill');
+    expect(res.stderr).toContain('case-fragment-duplicate (1)');
+    expect(res.stderr).toContain('fold "high"');
+    expect(res.stderr).toContain(`"HIGH" (uid ${seeded.upperUid})`);
+    expect(res.stderr).toContain(`"high" (uid ${seeded.lowerUid})`);
+    expect(res.stderr).toContain('planCaseFragmentMerge');
+    expect(res.stderr).toContain('applyCaseFragmentMerge');
+    // ... plus a machine-readable failure envelope on the last line.
+    const body = lastJson(res.stderr);
+    expect(body['ok']).toBe(false);
+    expect((body['error'] as { code: string }).code).toBe(
+      'catalog_invariant_violation'
+    );
+
+    // NEGATIVE CONTROL — same store, run the EXACT remediation the message
+    // names (`planTerminalBackfill`/`applyTerminalBackfill` and
+    // `planCaseFragmentMerge`/`applyCaseFragmentMerge`), and the check goes
+    // GREEN. This makes the check falsifiable rather than decorative: the only
+    // change between the two spawns is the repair.
+    const repair = await openTestIssueStore(sandbox.dbPath);
+    try {
+      await applyTerminalBackfill(repair, await planTerminalBackfill(repair));
+      const statuses = await repair.graph.queryNodes({
+        kind: 'status',
+        liveOnly: true,
+      });
+      const priorities = await repair.graph.queryNodes({
+        kind: 'priority',
+        liveOnly: true,
+      });
+      await applyCaseFragmentMerge(
+        repair,
+        planCaseFragmentMerge(statuses, priorities)
+      );
+    } finally {
+      await repair.close();
+    }
+
+    const green = runInBacklogSandbox(sandbox, ['store-check']);
+    expect(green.status, `stdout:\n${green.stdout}\nstderr:\n${green.stderr}`).toBe(
+      0
+    );
+    expect(lastJson(green.stdout)['ok']).toBe(true);
   });
 });

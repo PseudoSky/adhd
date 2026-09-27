@@ -106,15 +106,17 @@ export interface IQueryStoreHandle {
    */
   readonly assertVocabulary?: () => Promise<void>;
   /**
-   * Fail-loud status/priority catalog invariant guard
-   * (`store/catalog-invariant-guard.ts`). When present, `queryIssuesWithMeta`
-   * awaits it alongside {@link IQueryStoreHandle.assertVocabulary} before
-   * dispatching any view: a catalog carrying an unflagged reserved terminal
-   * status, or two same-kind rows sharing a case fold, must fail loudly rather
-   * than serve a mis-classified read. OPTIONAL so a hand-built handle (tests,
-   * the ETL) is unaffected — `api.ts`'s `queryHandle` wires it for every real
-   * host, and it is deliberately re-run per query (not latched at open), like
-   * the vocabulary guard.
+   * Status/priority catalog invariant check (`store/catalog-invariant-guard.ts`),
+   * exposed OPT-IN — deliberately NOT consulted by `queryIssuesWithMeta`, and
+   * therefore NEVER on the ordinary read path. A drifted catalog (an unflagged
+   * reserved terminal status, or two same-kind rows sharing a case fold) is a
+   * bounded data problem: the read path serves the store regardless, and the
+   * drift is surfaced as a NAMED, non-zero check by the `store-check` CLI verb.
+   * `api.ts`'s `queryHandle` still wires it for every real host, so a caller
+   * that WANTS to assert explicitly can call `handle.assertCatalogInvariants?.()`
+   * — but no read ever does so implicitly. (Earlier this was awaited inside
+   * `queryIssuesWithMeta`; that abort turned one drifted row into a total read
+   * outage and was removed. The write path is where this invariant is enforced.)
    */
   readonly assertCatalogInvariants?: () => Promise<void>;
 }
@@ -1220,11 +1222,12 @@ export async function queryIssuesWithMeta(
   // `queryList` (and every other view) report a misleading zero. Optional —
   // see `IQueryStoreHandle.assertVocabulary`.
   await handle.assertVocabulary?.();
-  // Catalog invariant guard, same point and same rationale: an unflagged
-  // reserved terminal status or a same-kind case-fragment duplicate would make
-  // every view mis-classify. Optional — see
-  // `IQueryStoreHandle.assertCatalogInvariants`.
-  await handle.assertCatalogInvariants?.();
+  // NOTHING here consults the status/priority catalog invariant guard. A
+  // drifted catalog is a bounded data problem and must never turn every read
+  // into an outage; it is enforced on the write path and surfaced as a NAMED,
+  // non-zero check by the `store-check` CLI verb. The optional
+  // `IQueryStoreHandle.assertCatalogInvariants` member remains for a caller
+  // that wants to assert explicitly — the read path never does so implicitly.
   const input = resolveTextInput(handle, rawInput);
   const outcome = await dispatchQueryView(handle, input);
 

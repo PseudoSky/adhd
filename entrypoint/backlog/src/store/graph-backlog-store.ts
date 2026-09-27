@@ -22,7 +22,6 @@ import { dirname } from 'node:path';
 import { OPEN_TYPE_POLICY } from './type-policy.js';
 import { withImmediateRetry } from './immediate-retry.js';
 import { assertRecognizedStoreVocabulary } from './vocabulary-guard.js';
-import { assertCatalogInvariants } from './catalog-invariant-guard.js';
 import {
   embedDrainFor,
   type IEmbedDrainOptions,
@@ -120,13 +119,17 @@ export async function openGraphBacklogStore(
   // throw would otherwise leak — an open store that failed its own open must
   // not leave a live connection behind.
   //
-  // Catalog invariant guard (store/catalog-invariant-guard.ts): a status whose
-  // reserved terminal name is unflagged, or a same-kind case-fragment
-  // duplicate, mis-classifies reads. Same fail-loud posture, same pure read,
-  // and the same `catch` closes the adapter on its throw.
+  // The CATALOG invariant guard is deliberately NOT run here. A store with a
+  // drifted status/priority catalog (an unflagged reserved terminal status, or
+  // a same-kind case-fragment duplicate) is a bounded data problem, not a
+  // reason to make every read fail — so it must not stand between a bad write
+  // and the data. It is enforced on the WRITE path (`api.ts`'s `writeHandle`,
+  // plus `mintOrResolveCatalogTx`'s case-variant refusal) and surfaced as a
+  // NAMED, non-zero check by the `store-check` CLI verb
+  // (`store/catalog-invariant-guard.ts`), never as a read abort. Reads of a
+  // drifted store succeed; the drift is reported loudly by the check.
   try {
     await assertRecognizedStoreVocabulary(adapter);
-    await assertCatalogInvariants(adapter);
   } catch (err) {
     await adapter.close().catch(() => undefined);
     throw err;
