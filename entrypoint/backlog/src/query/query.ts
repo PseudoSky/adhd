@@ -105,6 +105,18 @@ export interface IQueryStoreHandle {
    * open) so a long-lived process notices a store rewritten under it.
    */
   readonly assertVocabulary?: () => Promise<void>;
+  /**
+   * Fail-loud status/priority catalog invariant guard
+   * (`store/catalog-invariant-guard.ts`). When present, `queryIssuesWithMeta`
+   * awaits it alongside {@link IQueryStoreHandle.assertVocabulary} before
+   * dispatching any view: a catalog carrying an unflagged reserved terminal
+   * status, or two same-kind rows sharing a case fold, must fail loudly rather
+   * than serve a mis-classified read. OPTIONAL so a hand-built handle (tests,
+   * the ETL) is unaffected — `api.ts`'s `queryHandle` wires it for every real
+   * host, and it is deliberately re-run per query (not latched at open), like
+   * the vocabulary guard.
+   */
+  readonly assertCatalogInvariants?: () => Promise<void>;
 }
 
 function assertQueryLimit(limit: number | undefined): number {
@@ -1208,6 +1220,11 @@ export async function queryIssuesWithMeta(
   // `queryList` (and every other view) report a misleading zero. Optional —
   // see `IQueryStoreHandle.assertVocabulary`.
   await handle.assertVocabulary?.();
+  // Catalog invariant guard, same point and same rationale: an unflagged
+  // reserved terminal status or a same-kind case-fragment duplicate would make
+  // every view mis-classify. Optional — see
+  // `IQueryStoreHandle.assertCatalogInvariants`.
+  await handle.assertCatalogInvariants?.();
   const input = resolveTextInput(handle, rawInput);
   const outcome = await dispatchQueryView(handle, input);
 

@@ -87,6 +87,7 @@ import {
 import type { SemanticStoreMembers } from './write/bootstrap.js';
 import type { EmbeddingLiveConfig } from './write/embedding-config.js';
 import { assertRecognizedStoreVocabulary } from './store/vocabulary-guard.js';
+import { assertCatalogInvariants } from './store/catalog-invariant-guard.js';
 
 import { getIssue } from './query/get.js';
 import {
@@ -285,6 +286,11 @@ async function writeHandle(
   // this build cannot address, rather than let the write fail downstream with
   // a misleading "project not found" caused by an unrecognized vocabulary.
   await assertRecognizedStoreVocabulary(ctx.store.adapter);
+  // Catalog invariant guard (store/catalog-invariant-guard.ts): refuse to WRITE
+  // into a store whose status/priority catalog already mis-classifies reads (an
+  // unflagged reserved terminal status, or a same-kind case-fragment duplicate)
+  // — the same fail-loud posture, per write verb.
+  await assertCatalogInvariants(ctx.store.adapter);
   const { search, embedding } = opts.needsSemantic
     ? await ensureSemanticReady(ctx)
     : {};
@@ -337,6 +343,10 @@ async function queryHandle(
     // Fail-loud vocabulary guard, re-run per query (never latched) — see
     // `IQueryStoreHandle.assertVocabulary` and store/vocabulary-guard.ts.
     assertVocabulary: () => assertRecognizedStoreVocabulary(ctx.store.adapter),
+    // Fail-loud catalog invariant guard, same re-run-per-query posture — see
+    // `IQueryStoreHandle.assertCatalogInvariants` and
+    // store/catalog-invariant-guard.ts.
+    assertCatalogInvariants: () => assertCatalogInvariants(ctx.store.adapter),
     ...(search !== undefined ? { search } : {}),
     ...(spacePopulated !== undefined ? { spacePopulated } : {}),
   };

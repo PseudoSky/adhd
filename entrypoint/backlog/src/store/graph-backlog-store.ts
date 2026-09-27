@@ -22,6 +22,7 @@ import { dirname } from 'node:path';
 import { OPEN_TYPE_POLICY } from './type-policy.js';
 import { withImmediateRetry } from './immediate-retry.js';
 import { assertRecognizedStoreVocabulary } from './vocabulary-guard.js';
+import { assertCatalogInvariants } from './catalog-invariant-guard.js';
 import {
   embedDrainFor,
   type IEmbedDrainOptions,
@@ -118,8 +119,14 @@ export async function openGraphBacklogStore(
   // exists, and is a pure read. The `catch` closes the adapter the guard's
   // throw would otherwise leak — an open store that failed its own open must
   // not leave a live connection behind.
+  //
+  // Catalog invariant guard (store/catalog-invariant-guard.ts): a status whose
+  // reserved terminal name is unflagged, or a same-kind case-fragment
+  // duplicate, mis-classifies reads. Same fail-loud posture, same pure read,
+  // and the same `catch` closes the adapter on its throw.
   try {
     await assertRecognizedStoreVocabulary(adapter);
+    await assertCatalogInvariants(adapter);
   } catch (err) {
     await adapter.close().catch(() => undefined);
     throw err;
