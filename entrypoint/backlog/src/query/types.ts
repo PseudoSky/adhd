@@ -13,6 +13,13 @@
  * top-level doc comment in `index.ts` for the reconciliation note).
  */
 
+import type {
+  IObligationAppliesTo,
+  IObligationOverride,
+  IObligationSeverity,
+  IPredicate,
+} from '../write/obligation.js';
+
 /** Identity is the global `uid` (SPEC.md §6.1) — a single scalar, never a composite key. */
 export type IssueUid = string;
 
@@ -59,7 +66,8 @@ export type IIssuePseudoField =
   | '_vector'
   | 'blocksOut' // NEW (C2): issues THIS one blocks (outbound `blocks`), live only
   | 'dependents' // NEW (C2): transitive count (number of nodes that reach this one via `blocks`)
-  | 'partOf'; // NEW (C2): the single parent this item is `part_of` (or null)
+  | 'partOf' // NEW (C2): the single parent this item is `part_of` (or null)
+  | 'obligations'; // NEW (C4): the declared, typed requirements on this item
 
 export type IIssueField = IIssuePlainField | IIssuePseudoField;
 
@@ -91,6 +99,7 @@ export const ISSUE_PSEUDO_FIELDS: readonly IIssuePseudoField[] = [
   'blocksOut',
   'dependents',
   'partOf',
+  'obligations',
 ];
 
 const ISSUE_FIELD_SET: ReadonlySet<string> = new Set<string>([
@@ -172,6 +181,25 @@ export interface IIssueRef {
 }
 
 /**
+ * A declared obligation, projected for read (C4). This is the STORED shape,
+ * never an evaluation: `requirement` is the predicate as written, and nothing
+ * on the read path resolves it (that is C5's gate / C6's verdict). `on_fail` is
+ * returned verbatim so a caller can see the declared severity.
+ *
+ * The predicate/applies-to/override types are imported `import type`-only from
+ * `write/obligation.ts` — the grammar is declared in exactly one place, and a
+ * type-only import introduces no runtime dependency from `query/**` onto
+ * `write/**` (the two are already coupled on `write/errors.js`).
+ */
+export interface IObligationView {
+  uid: string;
+  applies_to: IObligationAppliesTo;
+  requirement: IPredicate;
+  on_fail: IObligationSeverity;
+  override?: IObligationOverride;
+}
+
+/**
  * Provenance of an `IIssueCard._score` (DESIGN §2 Invariant 5: "a `score_kind`
  * provenance tag on every derived score"). A rank-derived score (`rrf`) is
  * ORDINAL — never to be labelled or read as a similarity/confidence; `bm25`
@@ -235,6 +263,11 @@ export interface IIssueCard {
   dependents?: number;
   /** The `part_of` parent, if any (`n:1` — at most one). */
   partOf?: IIssueRef | null;
+  // --- C4 (obligation) — ADDITIVE opt-in pseudo field; populated only when
+  // explicitly requested via `fields`, so the default card is byte-for-byte
+  // unchanged. The read path NEVER evaluates the predicate. ---
+  /** The declared obligations on this item, in `has_obligation` edge order. */
+  obligations?: IObligationView[];
 }
 
 /**

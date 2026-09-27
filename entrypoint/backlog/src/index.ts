@@ -37,6 +37,8 @@ export {
   transition,
   attest,
   recheck,
+  obligate,
+  unobligate,
   claim,
   relate,
   move,
@@ -65,6 +67,23 @@ export type {
   IRecheckInput,
   IRecheckOutcome,
 } from './write/attestation.js';
+export {
+  assertValidPredicate,
+  evaluatePredicate,
+} from './write/obligation.js';
+export type { IObligationView } from './query/types.js';
+export type {
+  IObligationSeverity,
+  IRelationDirection,
+  IPredicate,
+  IObligationAppliesTo,
+  IObligationOverride,
+  IObligateInput,
+  IObligateOutcome,
+  IUnobligateInput,
+  IUnobligateOutcome,
+  IPredicateResolver,
+} from './write/obligation.js';
 
 // The response envelope every verb returns, plus its closed error-code union
 // and the exit codes a CLI host keys off.

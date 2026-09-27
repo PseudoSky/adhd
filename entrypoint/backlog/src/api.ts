@@ -75,9 +75,11 @@ import {
   CitationUnverifiableError,
   ClaimHeldError,
   InvalidArgumentError,
+  InvalidPredicateError,
   IssueNotFoundError,
   IssueTerminalError,
   NoteRequiredError,
+  ObligationNotFoundError,
   SingleValuedRelationConflictError,
   StaleSupersedeError,
   WriteContentionError,
@@ -135,6 +137,16 @@ import type {
   IRecheckInput,
   IRecheckOutcome,
 } from './write/attestation.js';
+import {
+  obligate as obligateOp,
+  unobligate as unobligateOp,
+} from './write/obligation.js';
+import type {
+  IObligateInput,
+  IObligateOutcome,
+  IUnobligateInput,
+  IUnobligateOutcome,
+} from './write/obligation.js';
 
 import type {
   IIssueGetInput,
@@ -415,10 +427,12 @@ const ERROR_CLASS_TO_ENVELOPE_CODE: ReadonlyArray<
 > = [
   [IssueNotFoundError, 'item_not_found'],
   [AttestationNotFoundError, 'item_not_found'],
+  [ObligationNotFoundError, 'item_not_found'],
   [AmbiguousReferenceError, 'ambiguous_reference'],
   [CatalogNotFoundError, 'not_found'],
   [InvalidArgumentError, 'invalid_argument'],
   [AnchorLocatorInvalidError, 'invalid_argument'],
+  [InvalidPredicateError, 'invalid_argument'],
   [ClaimHeldError, 'conflict'],
   [SingleValuedRelationConflictError, 'conflict'],
   [StaleSupersedeError, 'conflict'],
@@ -803,6 +817,33 @@ export async function recheck(
 ): Promise<IOutcomeEnvelope<IRecheckOutcome>> {
   return envelope(async () =>
     recheckOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
+}
+
+/**
+ * Declare a typed requirement on an issue.
+ *
+ * The requirement is drawn from a closed predicate core
+ * (`evidence`/`blockers_terminal`/`relation`/`all_of`/`any_of`/`not`);
+ * `applies_to.to` is required. Nothing is evaluated here — the C5 gate reads
+ * it at a transition and the C6 verdict predicts it on read.
+ */
+export async function obligate(
+  ctx: BacklogCtx,
+  input: IObligateInput
+): Promise<IOutcomeEnvelope<IObligateOutcome>> {
+  return envelope(async () =>
+    obligateOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
+}
+
+/** Retire an obligation (bi-temporal; never a hard delete). */
+export async function unobligate(
+  ctx: BacklogCtx,
+  input: IUnobligateInput
+): Promise<IOutcomeEnvelope<IUnobligateOutcome>> {
+  return envelope(async () =>
+    unobligateOp(await writeHandle(ctx, { needsSemantic: false }), input)
   );
 }
 

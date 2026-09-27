@@ -27,11 +27,18 @@ import {
   type IIssueField,
   type IIssueNote,
   type IIssueRef,
+  type IObligationView,
   type IScoreKind,
   ISSUE_PLAIN_FIELDS,
   ISSUE_PSEUDO_FIELDS,
   isKnownIssueField,
 } from './types.js';
+import type {
+  IObligationAppliesTo,
+  IObligationOverride,
+  IObligationSeverity,
+  IPredicate,
+} from '../write/obligation.js';
 import { BacklogValidationError } from '../write/errors.js';
 import {
   getIncomingEdges,
@@ -338,6 +345,51 @@ export async function resolvePartOf(
 }
 
 /**
+ * `obligations` (C4) — the declared, typed requirements on this issue, read
+ * from its live `has_obligation` targets. PURE PROJECTION: each node's stored
+ * `metadata` maps straight onto an {@link IObligationView}; the predicate is
+ * NEVER evaluated here (evaluation belongs to the C5 gate at transition time
+ * and the C6 verdict on read). One batched `getNodesByIds`; the returned order
+ * follows the edge order, and an edge whose target no longer resolves (a
+ * concurrently-invalidated row) is simply skipped rather than yielding a
+ * partial view.
+ */
+export async function resolveObligations(
+  graph: GraphBackend,
+  issueId: number,
+  outgoing?: EdgeRecord[]
+): Promise<IObligationView[]> {
+  const edges = (outgoing ?? (await getOutgoingEdges(graph, issueId))).filter(
+    (e) => e.rel === 'has_obligation' && e.src === issueId
+  );
+  if (edges.length === 0) return [];
+  const nodes = await graph.getNodesByIds(edges.map((e) => e.dst));
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const views: IObligationView[] = [];
+  for (const e of edges) {
+    const n = byId.get(e.dst);
+    if (!n) continue;
+    const meta = n.metadata;
+    const appliesTo = meta?.['applies_to'];
+    const requirement = meta?.['requirement'];
+    const onFail = meta?.['on_fail'];
+    if (appliesTo === undefined || requirement === undefined || onFail === undefined) {
+      continue;
+    }
+    const view: IObligationView = {
+      uid: n.uid,
+      applies_to: appliesTo as IObligationAppliesTo,
+      requirement: requirement as IPredicate,
+      on_fail: onFail as IObligationSeverity,
+    };
+    const override = meta?.['override'];
+    if (override !== undefined) view.override = override as IObligationOverride;
+    views.push(view);
+  }
+  return views;
+}
+
+/**
  * Batch-resolve `has_status` targets for a set of issue nodes — one
  * `getEdges({rel:'has_status'})` covering every `has_status` edge in the
  * store, filtered down to `issues` in memory, plus one `getNodesByIds` for
@@ -440,6 +492,7 @@ export async function assembleIssueCard(
   const needsBlocksOut = want('blocksOut');
   const needsDependents = want('dependents');
   const needsPartOf = want('partOf');
+  const needsObligations = want('obligations');
 
   const outgoing =
     opts.outgoingEdges ??
@@ -449,7 +502,8 @@ export async function assembleIssueCard(
     needsAuditTrail ||
     needsRelated ||
     needsBlocksOut ||
-    needsPartOf
+    needsPartOf ||
+    needsObligations
       ? await getOutgoingEdges(graph, issue.id)
       : undefined);
 
@@ -520,6 +574,8 @@ export async function assembleIssueCard(
     card.dependents = await resolveDependents(graph, issue.id, opts.scope);
   if (needsPartOf && outgoing)
     card.partOf = await resolvePartOf(graph, issue.id, outgoing);
+  if (needsObligations && outgoing)
+    card.obligations = await resolveObligations(graph, issue.id, outgoing);
 
   if (want('_score') && opts.score !== undefined) {
     card._score = opts.score;

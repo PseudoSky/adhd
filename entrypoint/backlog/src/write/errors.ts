@@ -630,6 +630,43 @@ export class AttestationNotFoundError extends BacklogWriteError {
 }
 
 /**
+ * `obligate` (C4, DESIGN §2 Primitive 3) was handed a `requirement` outside the
+ * CLOSED predicate core — an unknown `op`, a missing/ill-typed leaf
+ * (`evidence.kind`, `relation.type`/`direction`, a non-array `all_of`/`any_of`
+ * `of`, a `not` whose `of` is not a predicate), an unexpected extra key, or an
+ * `evidence.min < 1`. Raised by `assertValidPredicate` BEFORE any transaction
+ * opens, so an invalid predicate never holds a write lock.
+ *
+ * `E_VALIDATION`, never retryable — nothing is written, and retrying the
+ * identical predicate fails identically. Distinct from `InvalidArgumentError`
+ * so a caller can tell "the argument envelope was malformed" from "the
+ * predicate grammar was violated".
+ */
+export class InvalidPredicateError extends BacklogWriteError {
+  readonly code = 'E_VALIDATION' as const;
+  readonly retryable = false;
+
+  constructor(public readonly detail: string) {
+    super(`Invalid predicate: ${detail}`);
+  }
+}
+
+/**
+ * `unobligate` named a uid that is not a live `obligation` node. Distinct from
+ * {@link IssueNotFoundError} (an `issue` uid) and {@link CatalogNotFoundError}
+ * so a caller can branch on the missing record kind; `E_VALIDATION`, never
+ * retryable.
+ */
+export class ObligationNotFoundError extends BacklogWriteError {
+  readonly code = 'E_VALIDATION' as const;
+  readonly retryable = false;
+
+  constructor(public readonly uid: string) {
+    super(`No live obligation found for uid "${uid}"`);
+  }
+}
+
+/**
  * Classify a caught, RAW driver-level error (never one of our own
  * {@link BacklogWriteError} subclasses — those are already decided and must
  * never reach this function) into the internal {@link IWriteError} envelope,

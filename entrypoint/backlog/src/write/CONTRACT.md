@@ -944,7 +944,36 @@ node. Distinct from `IssueNotFoundError` (an `issue` uid) and
 `CatalogNotFoundError`, so a caller can branch on the missing record kind;
 `E_VALIDATION`, never retryable.
 
-### `classifyDriverError(err)` — function (`errors.ts:669`)
+### `InvalidPredicateError` — class (`errors.ts:645`)
+
+```ts
+export class InvalidPredicateError extends BacklogWriteError {
+  readonly code: 'E_VALIDATION';
+  readonly retryable: false;
+  constructor(public readonly detail: string);
+}
+```
+
+Guarantees: thrown by `obligate` when a `requirement` is outside the CLOSED
+predicate core — an unknown `op`, a missing/ill-typed leaf, an unexpected extra
+key, or `evidence.min < 1`. Raised before any transaction opens, so an invalid
+predicate never holds a write lock; `E_VALIDATION`, never retryable.
+
+### `ObligationNotFoundError` — class (`errors.ts:660`)
+
+```ts
+export class ObligationNotFoundError extends BacklogWriteError {
+  readonly code: 'E_VALIDATION';
+  readonly retryable: false;
+  constructor(public readonly uid: string);
+}
+```
+
+Guarantees: thrown by `unobligate` when the named uid is not a live `obligation`
+node. Distinct from `IssueNotFoundError` / `AttestationNotFoundError`, so a
+caller can branch on the missing record kind; `E_VALIDATION`, never retryable.
+
+### `classifyDriverError(err)` — function (`errors.ts:706`)
 
 ```ts
 export function classifyDriverError(err: unknown): IWriteError;

@@ -59,6 +59,16 @@ const EXPECTED = [
   },
   { id: 'backlog/attest', mcp: 'backlog_attest', cli: 'backlog attest' },
   { id: 'backlog/recheck', mcp: 'backlog_recheck', cli: 'backlog recheck' },
+  {
+    id: 'backlog/obligate',
+    mcp: 'backlog_obligate',
+    cli: 'backlog obligate',
+  },
+  {
+    id: 'backlog/unobligate',
+    mcp: 'backlog_unobligate',
+    cli: 'backlog unobligate',
+  },
   { id: 'backlog/claim', mcp: 'backlog_claim', cli: 'backlog claim' },
   { id: 'backlog/relate', mcp: 'backlog_relate', cli: 'backlog relate' },
   { id: 'backlog/move', mcp: 'backlog_move', cli: 'backlog move' },
