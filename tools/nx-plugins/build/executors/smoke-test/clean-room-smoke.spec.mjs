@@ -31,6 +31,9 @@ import {
   compareSemver,
   isInstallStale,
   looksLikeTransientRegistryError,
+  probeVersionExistsOnRegistry,
+  fetchVersionDocExists,
+  describeStaleVersionReason,
 } from './clean-room-smoke.mjs';
 
 function makeWorkspace(entrypoints) {
@@ -511,4 +514,109 @@ test('looksLikeTransientRegistryError: detects ETARGET/E404-shaped npm install f
   assert.equal(looksLikeTransientRegistryError('npm ERR! code EACCES\npermission denied'), false);
   assert.equal(looksLikeTransientRegistryError(''), false);
   assert.equal(looksLikeTransientRegistryError(undefined), false);
+});
+
+// --- origin-truth post-publish existence probe (BUG-022 regression fix) ---
+//
+// Live 2026-09-26: `pnpm release` published @adhd/backlog@1.0.5 — the publish
+// executor genuinely ran `npm publish` (metrics.json: success=true, real
+// `npm publish .../backlog/dist` subprocess), and the registry exposes the
+// version ~125 s later (npm's async post-publish processing + Cloudflare's
+// 5-minute packument TTL). GATE 2's old probe read the packument `versions[]`
+// via `npm view --prefer-online` (conditional revalidation — a 304 keeps the
+// stale body), saw the version absent, and loudly misreported a SUCCESSFUL
+// publish as "FAILED PUBLISH". These tests pin the fix: the edge-uncached
+// version document (`cf-cache-status: DYNAMIC`) is now primary evidence, with
+// a bounded re-check, and a genuine absence still fails loudly.
+
+function fakeFetch(status) {
+  return async () => ({ status });
+}
+
+function packumentRun(versions) {
+  return () => ({ code: 0, stdout: JSON.stringify(versions), stderr: '' });
+}
+
+test('fetchVersionDocExists: HTTP 200 -> true, 404 -> false, other/network-error -> null (never manufactures a verdict)', async () => {
+  assert.equal(await fetchVersionDocExists('@adhd/backlog', '1.0.5', { fetchImpl: fakeFetch(200) }), true);
+  assert.equal(await fetchVersionDocExists('@adhd/backlog', '1.0.5', { fetchImpl: fakeFetch(404) }), false);
+  assert.equal(await fetchVersionDocExists('@adhd/backlog', '1.0.5', { fetchImpl: fakeFetch(500) }), null);
+  assert.equal(await fetchVersionDocExists('@adhd/backlog', '1.0.5', { fetchImpl: async () => { throw new Error('boom'); } }), null);
+});
+
+test('fetchVersionDocExists: scoped package name is URL-escaped into the version-document path', async () => {
+  let seen = null;
+  const fetchImpl = async (url) => { seen = url; return { status: 200 }; };
+  await fetchVersionDocExists('@adhd/backlog', '1.0.5', { fetchImpl, registryUrl: 'https://registry.npmjs.org/' });
+  assert.equal(seen, 'https://registry.npmjs.org/@adhd%2Fbacklog/1.0.5');
+});
+
+test('probeVersionExistsOnRegistry: stale packument + present origin version-doc -> true (the @adhd/backlog@1.0.5 false-negative fix)', async () => {
+  const opts = {
+    propagationTimeoutMs: 0,
+    fetchImpl: fakeFetch(200),
+    runImpl: packumentRun(['1.0.3', '1.0.4']), // packument stale — 1.0.5 absent
+  };
+  assert.equal(await probeVersionExistsOnRegistry('@adhd/backlog', '1.0.5', opts), true);
+});
+
+test('probeVersionExistsOnRegistry TEETH: with the origin-truth read removed (fetch unavailable) the SAME stale packument is a false negative', async () => {
+  // Pre-fix behaviour: packument stale (1.0.5 absent) and no origin-truth
+  // evidence. This is the exact state that produced the live "FAILED
+  // PUBLISH". The test above resolving true from the identical packument is
+  // what the added origin-truth read buys; revert that read and it goes red.
+  const opts = {
+    propagationTimeoutMs: 0,
+    fetchImpl: async () => null,
+    runImpl: packumentRun(['1.0.3', '1.0.4']),
+  };
+  assert.equal(await probeVersionExistsOnRegistry('@adhd/backlog', '1.0.5', opts), false);
+});
+
+test('probeVersionExistsOnRegistry: present in the packument alone is still sufficient (packument fallback preserved)', async () => {
+  const opts = {
+    propagationTimeoutMs: 0,
+    fetchImpl: fakeFetch(404),
+    runImpl: packumentRun(['1.0.4', '1.0.5']),
+  };
+  assert.equal(await probeVersionExistsOnRegistry('@adhd/backlog', '1.0.5', opts), true);
+});
+
+test('probeVersionExistsOnRegistry: absent from BOTH origin truth and packument -> false (a genuine no-op publish still fails loudly)', async () => {
+  const opts = {
+    propagationTimeoutMs: 0,
+    fetchImpl: fakeFetch(404),
+    runImpl: packumentRun(['1.0.3', '1.0.4']),
+  };
+  assert.equal(await probeVersionExistsOnRegistry('@adhd/backlog', '1.0.5', opts), false);
+});
+
+test('probeVersionExistsOnRegistry: re-checks within the window (origin appears on a later poll) -> true', async () => {
+  let calls = 0;
+  const opts = {
+    propagationTimeoutMs: 10_000,
+    propagationPollMs: 1,
+    delayFn: async () => {},
+    fetchImpl: async () => { calls += 1; return { status: calls < 2 ? 404 : 200 }; },
+    runImpl: packumentRun(['1.0.4']),
+  };
+  assert.equal(await probeVersionExistsOnRegistry('@adhd/backlog', '1.0.5', opts), true);
+  assert.ok(calls >= 2, 'expected the probe to re-check at least once before succeeding');
+});
+
+test('describeStaleVersionReason: present-origin version -> propagation-lag wording, NOT any failed-publish verdict', async () => {
+  const opts = { propagationTimeoutMs: 0, fetchImpl: fakeFetch(200), runImpl: packumentRun(['1.0.4']) };
+  const reason = await describeStaleVersionReason('@adhd/backlog', { attemptsMade: 4, resolvedVersion: '1.0.4', onDiskVersion: '1.0.5' }, opts);
+  assert.match(reason, /propagation lag/);
+  assert.doesNotMatch(reason, /NOT PUBLISHED/);
+  assert.doesNotMatch(reason, /FAILED PUBLISH/);
+});
+
+test('describeStaleVersionReason: absent everywhere -> NOT PUBLISHED / FAILED PUBLISH, naming package, version and what was checked', async () => {
+  const opts = { propagationTimeoutMs: 0, fetchImpl: fakeFetch(404), runImpl: packumentRun(['1.0.4']) };
+  const reason = await describeStaleVersionReason('@adhd/backlog', { attemptsMade: 4, resolvedVersion: '1.0.4', onDiskVersion: '1.0.5' }, opts);
+  assert.match(reason, /NOT PUBLISHED: @adhd\/backlog@1\.0\.5/);
+  assert.match(reason, /FAILED PUBLISH/);
+  assert.match(reason, /version document/);
+  assert.match(reason, /packument versions\[\]/);
 });

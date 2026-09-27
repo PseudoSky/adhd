@@ -108,6 +108,35 @@ const SMOKE_CONCURRENCY = Number(process.env.ADHD_SMOKE_CONCURRENCY) || 8;
 const INSTALL_RETRIES = Number(process.env.ADHD_SMOKE_INSTALL_RETRIES) || 3;
 /** Backoff between bounded stale-install retries (see `INSTALL_RETRIES`). */
 const INSTALL_RETRY_DELAY_MS = Number(process.env.ADHD_SMOKE_INSTALL_RETRY_DELAY_MS) || 5000;
+/**
+ * The public npm registry base URL, used when no explicit `registryUrl` is
+ * configured — the origin-truth existence probe (`fetchVersionDocExists`)
+ * needs a real URL, unlike the `npm view`/`npm install` subprocesses which
+ * inherit npm's own configured registry.
+ */
+const DEFAULT_REGISTRY_URL = 'https://registry.npmjs.org';
+/**
+ * How long `probeVersionExistsOnRegistry` keeps re-checking an initially
+ * "absent" version before it lets the caller declare a `NOT PUBLISHED`
+ * (FAILED PUBLISH) verdict.
+ *
+ * WHY THIS EXISTS (BUG-022 regression, observed live 2026-09-26): `npm
+ * publish` exiting 0 means the registry ACCEPTED the upload — NOT that the
+ * version is immediately queryable. npm's own post-publish notice says the
+ * package "is being processed and may take a few minutes to become
+ * available"; independently, packument GETs are served through Cloudflare
+ * with `cache-control: public, max-age=300`. Measured on this repo's own
+ * releases, the gap between `npm publish` exit 0 and the registry exposing
+ * the version was 74 s (backlog@1.0.3), 98 s (backlog@1.0.4) and 125 s
+ * (backlog@1.0.5) — all three EXCEEDED the gate's then-current tolerance, so
+ * a genuinely-published version was loudly reported as a FAILED PUBLISH.
+ * Defaulting the re-check window to the same 5-minute ceiling the registry's
+ * own CDN advertises covers the documented common case; override via
+ * `ADHD_SMOKE_REGISTRY_PROPAGATION_MS` for a slower registry/mirror.
+ */
+const REGISTRY_PROPAGATION_TIMEOUT_MS = Number(process.env.ADHD_SMOKE_REGISTRY_PROPAGATION_MS) || 300_000;
+/** Poll interval between origin-truth existence re-checks (see `REGISTRY_PROPAGATION_TIMEOUT_MS`). */
+const REGISTRY_PROPAGATION_POLL_MS = Number(process.env.ADHD_SMOKE_REGISTRY_POLL_MS) || 15_000;
 
 /**
  * Discover every publishable, `bin`-shipping project directly under
@@ -595,51 +624,117 @@ function looksLikeCrashOnLoad(stderr) {
  * `--prefer-online` + the retry loop in `cleanRoomInstall` already rule out
  * "npm trusted a stale LOCAL packument cache" (that's exactly what
  * `--prefer-online` forces past). Once retries are exhausted there are only
- * two possible remaining explanations, and they are decisive because CDN/dist-
- * tag propagation lag can serve a stale `latest` pointer but it CANNOT hide a
- * version that has genuinely been published — a published version is
- * permanently present in the packument's `versions[]` the instant `npm
- * publish` succeeds, regardless of `dist-tags.latest` propagation:
+ * two possible remaining explanations, and they are decisive once they are
+ * read from ORIGIN TRUTH rather than from a stale edge:
  *
- *   - the on-disk version DOES exist in `versions[]` on the registry -> this
- *     really is propagation lag (`dist-tags.latest` hasn't caught up yet).
- *     Genuinely transient, genuinely non-fatal-in-tone (will resolve itself).
- *   - the on-disk version is ABSENT from `versions[]` -> `npm publish` never
- *     actually happened for this version (e.g. the publish task graph bailed
- *     on red tests upstream). This is a FAILED PUBLISH being misreported as
- *     "will resolve in a few minutes" — confirmed live: `@adhd/agent-mcp@2.2.2`
- *     and `@adhd/apigen-cli@0.2.3` were both reported as transient CDN lag
- *     when they had never been published at all.
+ *   - the on-disk version IS on the registry (proven by the edge-uncached
+ *     version-specific document `GET /<name>/<version>` -> 200) -> this
+ *     really is propagation/processing lag (the packument's `versions[]` /
+ *     `dist-tags.latest` just haven't caught up yet). Genuinely transient.
+ *   - the on-disk version is ABSENT from that origin-truth read (404), even
+ *     after the bounded re-check window -> `npm publish` never actually
+ *     landed this version (e.g. the publish task graph bailed on red tests
+ *     upstream). This is a FAILED PUBLISH being misreported as "will resolve
+ *     in a few minutes" — confirmed live: `@adhd/agent-mcp@2.2.2` and
+ *     `@adhd/apigen-cli@0.2.3` were both reported as transient CDN lag when
+ *     they had never been published at all.
  *
- * One extra `npm view` call per stale-resolving package (rare — only fires
- * once retries in `cleanRoomInstall` are already exhausted) removes an entire
- * class of false-success reporting.
+ * CORRECTION (BUG-022 regression, observed live 2026-09-26): the earlier
+ * assumption that "a published version is permanently present in the
+ * packument's `versions[]` the instant `npm publish` succeeds" is FALSE.
+ * `npm publish` exit 0 means ACCEPTED (the registry itself says the package
+ * "may take a few minutes to become available"), and packuments are served
+ * through Cloudflare with `max-age=300`. So the packument alone can hide a
+ * genuinely-published version for minutes. `npm view --prefer-online` does
+ * NOT fix this: it only forces CONDITIONAL revalidation (`no-cache`), and a
+ * `304 Not Modified` keeps the stale cached body. The version-specific
+ * document (`cf-cache-status: DYNAMIC` — never edge-cached) is the read that
+ * actually reflects origin state, so it is now the primary evidence, with a
+ * bounded re-poll to absorb origin-processing lag.
  *
  * @param {string} name npm package name
- * @param {string} version exact version to check membership for
- * @param {{ registryUrl?: string }} [opts]
- * @returns {Promise<boolean>} true if `version` is present in the registry's `versions[]` for `name`
+ * @param {string} version exact version to check for
+ * @param {{ registryUrl?: string, propagationTimeoutMs?: number, propagationPollMs?: number, fetchImpl?: typeof fetch, runImpl?: typeof run, delayFn?: (ms: number) => Promise<void> }} [opts]
+ * @returns {Promise<boolean>} true if `version` is proven present on the registry (origin-truth or packument)
  */
 export async function probeVersionExistsOnRegistry(name, version, opts = {}) {
-  // `--prefer-online` is MANDATORY here for exactly the reason stated in
-  // `buildNpmInstallArgs` above: this probe reads the same packument
-  // `versions[]` that a POST-publish gate must not trust from npm's local
-  // cache. Without the flag a version published seconds ago is invisible, so
-  // the caller takes the loud NOT-PUBLISHED branch and reports a healthy
-  // release as a FAILED PUBLISH. Observed live 2026-09-26 — 4 packages
-  // (`agent-mcp@2.3.4`, `backlog@1.0.2`, `dispatch-cli@0.1.5`,
-  // `agent-generator-plugin@0.1.4`) all reported "NOT PUBLISHED … This is a
-  // FAILED PUBLISH, not propagation lag" while every one of them was on the
-  // registry; the same gate then passed standalone (exit 0). Same mechanism
-  // as the 2026-09-24 repro on item 72bb2203 (successor 8c62416b).
+  const deadline = Date.now() + (opts.propagationTimeoutMs ?? REGISTRY_PROPAGATION_TIMEOUT_MS);
+  const pollMs = opts.propagationPollMs ?? REGISTRY_PROPAGATION_POLL_MS;
+  const wait = opts.delayFn ?? delay;
+  // Bounded re-check: a version accepted by `npm publish` can take minutes to
+  // become visible (origin processing + the registry's 5-minute CDN TTL). We
+  // only reach the caller's loud `NOT PUBLISHED` branch once BOTH an
+  // origin-truth read and the packument agree it is absent, at the deadline.
+  for (;;) {
+    // (1) ORIGIN TRUTH, edge-uncached: the version-specific document. This is
+    //     immune to both npm's local cacache and the packument CDN cache.
+    const origin = await fetchVersionDocExists(name, version, opts);
+    if (origin === true) return true;
+    // (2) Packument membership (kept for compatibility / environments where
+    //     the direct fetch is unavailable). `--prefer-online` forces
+    //     revalidation; note a 304 still serves a stale body, so this alone
+    //     is NOT sufficient — it can only ever ADD evidence of presence.
+    if (await packumentHasVersion(name, version, opts)) return true;
+    if (Date.now() >= deadline) return false;
+    await wait(pollMs);
+  }
+}
+
+/**
+ * ORIGIN-TRUTH existence check for `name@version` via the registry's
+ * VERSION-SPECIFIC document (`GET <registry>/<escaped-name>/<version>`).
+ *
+ * Verified live 2026-09-26 against registry.npmjs.org: the packument
+ * (`GET /<name>`) returns `cf-cache-status: HIT` with
+ * `cache-control: public, max-age=300`, while the version document returns
+ * `cf-cache-status: DYNAMIC` (never edge-cached) — so this read reflects
+ * origin state even immediately after a publish, and bypasses npm's local
+ * cacache entirely (no `npm view` involved).
+ *
+ * @param {string} name npm package name (scoped or not)
+ * @param {string} version exact version
+ * @param {{ registryUrl?: string, fetchImpl?: typeof fetch }} [opts]
+ * @returns {Promise<boolean|null>} true = present (HTTP 200), false =
+ *   definitively absent (HTTP 404), null = indeterminate (network error,
+ *   non-200/404 status, or no fetch available) — a `null` is deliberately
+ *   NOT treated as absence, so an indeterminate read can never manufacture a
+ *   FAILED PUBLISH verdict.
+ */
+export async function fetchVersionDocExists(name, version, opts = {}) {
+  const base = (opts.registryUrl || DEFAULT_REGISTRY_URL).replace(/\/+$/, '');
+  const url = `${base}/${name.replace('/', '%2F')}/${version}`;
+  const fetchImpl = opts.fetchImpl || globalThis.fetch;
+  if (typeof fetchImpl !== 'function') return null;
+  try {
+    const res = await fetchImpl(url, { headers: { accept: 'application/json' } });
+    if (res.status === 200) return true;
+    if (res.status === 404) return false;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `name`'s packument `versions[]` membership, read through `npm view`.
+ * Extracted from the old inline body of `probeVersionExistsOnRegistry` so it
+ * can be injected/mocked in tests (`opts.runImpl`) and so the origin-truth
+ * read above can be the primary evidence.
+ *
+ * @param {string} name
+ * @param {string} version
+ * @param {{ registryUrl?: string, runImpl?: typeof run }} [opts]
+ * @returns {Promise<boolean>}
+ */
+async function packumentHasVersion(name, version, opts = {}) {
+  const runFn = opts.runImpl || run;
   const args = ['view', name, 'versions', '--json', '--prefer-online'];
   if (opts.registryUrl) args.push('--registry', opts.registryUrl);
-  const res = await run('npm', args, { timeoutMs: INSTALL_TIMEOUT_MS, cwd: workspaceRoot });
+  const res = await runFn('npm', args, { timeoutMs: INSTALL_TIMEOUT_MS, cwd: workspaceRoot });
   if (res.code !== 0) {
     // `npm view` itself failed (network blip, unknown package, etc). We can't
-    // prove existence either way here — treat as "not provably published" so
-    // the caller falls through to the loud NOT-PUBLISHED branch rather than
-    // silently reporting a possibly-fake "propagation lag".
+    // prove existence from this source — return false so the caller keeps the
+    // origin-truth evidence (or re-checks) rather than trusting a non-answer.
     return false;
   }
   let versions;
@@ -667,20 +762,24 @@ export async function probeVersionExistsOnRegistry(name, version, opts = {}) {
 export async function describeStaleVersionReason(name, staleness, opts = {}) {
   const exists = await probeVersionExistsOnRegistry(name, staleness.onDiskVersion, opts);
   if (exists) {
-    // Genuine propagation lag — version IS on the registry, `dist-tags.latest`
-    // just hasn't caught up. Current wording, current (non-fatal-in-tone) severity.
+    // Genuine propagation lag — version IS on the registry (proven via the
+    // origin-truth version document), the packument just hasn't caught up.
+    // Current wording, current (non-fatal-in-tone) severity.
     return (
       `npm install @latest resolved a STALE version after ${staleness.attemptsMade} attempt(s): resolved ` +
       `"${staleness.resolvedVersion}" but this workspace's on-disk source version is "${staleness.onDiskVersion}" — ` +
-      `real registry/CDN propagation lag (verified: "${staleness.onDiskVersion}" IS present in the registry's ` +
-      `versions[] for ${name}, so dist-tags.latest just hasn't propagated yet); see cleanRoomInstall's ` +
-      `"STALE PACKUMENT CACHE" note`
+      `real registry/CDN propagation lag (verified via the registry's edge-uncached version document: ` +
+      `"${staleness.onDiskVersion}" IS on the registry for ${name}, so the packument's versions[]/dist-tags.latest ` +
+      `just hasn't propagated yet); see cleanRoomInstall's "STALE PACKUMENT CACHE" note`
     );
   }
-  // Decisive: the exact on-disk version does not exist on the registry at
-  // all. This can never be CDN lag — it is a failed publish.
+  // Decisive: after a bounded re-check, the exact on-disk version is absent
+  // from BOTH the origin-truth version document (edge-uncached) and the
+  // packument — it was never actually published.
   return (
-    `NOT PUBLISHED: ${name}@${staleness.onDiskVersion} does not exist on the registry (checked versions[]). ` +
+    `NOT PUBLISHED: ${name}@${staleness.onDiskVersion} does not exist on the registry ` +
+    `(checked the edge-uncached version document GET /${name.replace('/', '%2F')}/${staleness.onDiskVersion} and the ` +
+    `packument versions[], after the bounded propagation re-check). ` +
     `This is a FAILED PUBLISH, not propagation lag — npm install @latest resolved "${staleness.resolvedVersion}" ` +
     `after ${staleness.attemptsMade} attempt(s) because the on-disk version was never actually published ` +
     `(e.g. the publish task graph bailed on red tests upstream). Do NOT report this as "will resolve on its own".`

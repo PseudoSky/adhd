@@ -1,3 +1,19 @@
+## 1.0.5 (2026-09-27)
+
+### 🩹 Fixes
+
+- **backlog:** lock-serialise the shared dist across build/e2e/test ([02a33e33](https://github.com/PseudoSky/adhd/commit/02a33e33))
+- **backlog:** stop the catalog-invariant guard from gating writes ([dea2e476](https://github.com/PseudoSky/adhd/commit/dea2e476))
+- **backlog:** scope e2e-lane serialization to the e2e config ([b441d93c](https://github.com/PseudoSky/adhd/commit/b441d93c))
+- **nx-build:** make three verification gates actually fail when broken ([c4dc8ae0](https://github.com/PseudoSky/adhd/commit/c4dc8ae0))
+- **backlog:** stop the catalog-invariant guard from aborting reads ([7c941505](https://github.com/PseudoSky/adhd/commit/7c941505))
+- **backlog:** resolve uid prefixes with loud ambiguity refusal ([c9491ed4](https://github.com/PseudoSky/adhd/commit/c9491ed4))
+- **backlog:** normalize ETL status vocabulary to canonical lowercase ([8809de97](https://github.com/PseudoSky/adhd/commit/8809de97))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 1.0.4 (2026-09-27)
 
 ### 🩹 Fixes
