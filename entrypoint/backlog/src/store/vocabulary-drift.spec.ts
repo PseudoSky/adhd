@@ -3,7 +3,7 @@
  * source of truth so the two can never silently diverge.
  *
  * `store/vocabulary-guard.ts`'s `RECOGNIZED_NODE_KINDS` hand-duplicates the
- * 15-kind node vocabulary whose documented source of truth is
+ * 16-kind node vocabulary whose documented source of truth is
  * `write/tx.ts`'s `IWriteNodeTxInput.kind` doc comment ("The entity-type
  * discriminator — `project`/`component`/`location`/`issue`/`kind`/`edge_kind`/
  * `status`/`priority`/`agent`/`note`/`citation`/`transition`/`audit`/
@@ -49,7 +49,10 @@ function documentedWriteNodeKinds(): string[] {
       'vocabulary-drift: the "entity-type discriminator" anchor line is gone from src/write/tx.ts — the documented source of truth moved; re-point this pin at its new home.'
     );
   }
-  const kinds = [...line.matchAll(/`([a-z_]+)`/g)].map((m) => m[1]);
+  // Widened from `([a-z_]+)` so the uppercase `SPEC` literal (C10) is parsed;
+  // the narrow matcher silently dropped it, leaving `documented` short of the
+  // set by one — a red pin, never a silent pass.
+  const kinds = [...line.matchAll(/`([A-Za-z_]+)`/g)].map((m) => m[1]);
   if (kinds.length === 0) {
     throw new Error(
       `vocabulary-drift: found the anchor line but parsed no backticked kinds from it: ${line}`
@@ -59,10 +62,10 @@ function documentedWriteNodeKinds(): string[] {
 }
 
 describe('RECOGNIZED_NODE_KINDS ↔ write/tx.ts vocabulary pin (fail-closed drift guard)', () => {
-  it('is exactly the 15-kind vocabulary documented at IWriteNodeTxInput.kind', () => {
+  it('is exactly the 16-kind vocabulary documented at IWriteNodeTxInput.kind', () => {
     const documented = documentedWriteNodeKinds();
-    expect(documented).toHaveLength(15);
-    expect(RECOGNIZED_NODE_KINDS.size).toBe(15);
+    expect(documented).toHaveLength(16);
+    expect(RECOGNIZED_NODE_KINDS.size).toBe(16);
 
     // BOTH directions, so drift on either side is red: a kind added to tx.ts
     // but not the guard, AND a kind in the guard that tx.ts no longer names.

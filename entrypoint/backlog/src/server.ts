@@ -200,6 +200,8 @@ export const BACKLOG_VERBS: readonly string[] = [
   'recheck',
   'obligate',
   'unobligate',
+  'spec-append',
+  'spec-check',
   'claim',
   'relate',
   'move',

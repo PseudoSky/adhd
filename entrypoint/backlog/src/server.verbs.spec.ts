@@ -30,4 +30,6 @@ describe("mocked: server.verbs", () => {
   it.todo("mocked: install / install-skill / serve are not projected as operations");
   it.todo("mocked: no MCP tool, OpenAPI path, or CLI command exposes a host command");
   it.todo("mocked: they remain reachable as HOST commands — carved out, not deleted");
+  it.todo("mocked: C10 spec-append mounts on all four transports under backlog_spec_append / backlog spec-append");
+  it.todo("mocked: C10 spec-check mounts on all four transports under backlog_spec_check / backlog spec-check");
 });

@@ -84,6 +84,7 @@ import {
   OverrideNotPermittedError,
   PreconditionRefusedError,
   SingleValuedRelationConflictError,
+  SpecRevisionConflictError,
   StaleSupersedeError,
   WriteContentionError,
 } from './write/errors.js';
@@ -150,6 +151,16 @@ import type {
   IUnobligateInput,
   IUnobligateOutcome,
 } from './write/obligation.js';
+import {
+  appendSpecRevision,
+  type ISpecAppendInput,
+  type ISpecAppendOutcome,
+} from './write/spec-revision.js';
+import {
+  checkSpecStaleness,
+  type ISpecCheckInput,
+  type ISpecCheckOutcome,
+} from './query/spec-staleness.js';
 
 import type {
   IIssueGetInput,
@@ -446,6 +457,10 @@ const ERROR_CLASS_TO_ENVELOPE_CODE: ReadonlyArray<
   [ObligationUnsatisfiedError, 'precondition_failed'],
   [OverrideNotPermittedError, 'precondition_failed'],
   [PreconditionRefusedError, 'precondition_failed'],
+  // C10 — a stale `base_revision` is the caller's OWN read being out of date,
+  // not resource contention, so it maps to `precondition_failed` (AC6), never
+  // the `E_VALIDATION` fallthrough code `validation`.
+  [SpecRevisionConflictError, 'precondition_failed'],
   [WriteContentionError, 'store_busy'],
   [RagNotConfiguredError, 'rag_not_configured'],
 ];
@@ -869,6 +884,35 @@ export async function unobligate(
   return envelope(async () =>
     unobligateOp(await writeHandle(ctx, { needsSemantic: false }), input)
   );
+}
+
+/**
+ * Append a spec REVISION to a ticket (C10, DESIGN §12). A work product is a
+ * revision of its ticket: this mints a NEW immutable `SPEC` node holding the
+ * fragment and advances the ticket's `meta.spec_revision` pointer IN PLACE —
+ * the ticket's uid is preserved and no prior revision is rewritten. The
+ * required `base_revision` is a CAS token: a stale value is refused with
+ * `precondition_failed` and nothing is written.
+ */
+export async function specAppend(
+  ctx: BacklogCtx,
+  input: ISpecAppendInput
+): Promise<IOutcomeEnvelope<ISpecAppendOutcome>> {
+  return envelope(async () =>
+    appendSpecRevision(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
+}
+
+/**
+ * Check whether a spec-revision `token` is still current for a ticket (C10).
+ * An ABSENT token is `stale` (`method:'none'`, `reason:'no-token-supplied'`),
+ * never `fresh`.
+ */
+export async function specCheck(
+  ctx: BacklogCtx,
+  input: ISpecCheckInput
+): Promise<IOutcomeEnvelope<ISpecCheckOutcome>> {
+  return envelope(() => checkSpecStaleness(ctx.store.graph, input));
 }
 
 /** Take, renew or release an exclusive working lease on an issue. */

@@ -68,19 +68,25 @@ export type IParsedAnchor =
   | { scheme: 'url'; target: string }
   | { scheme: 'query'; target: string }
   | { scheme: 'registry'; target: string }
-  | { scheme: 'commit'; target: string };
+  | { scheme: 'commit'; target: string }
+  // C10: `revision:<revision uid>` — the anchor of a spec-revision ANNOTATION
+  // (`spec-annotation.ts`). Immutable by construction (a revision never
+  // changes), so its "digest" is the revision's own `sha256:<hex>` token.
+  | { scheme: 'revision'; target: string };
 
 /**
  * The closed set of locator SCHEMES the grammar names (C3 added
- * `path|url|query|registry`; C5 adds `commit:<sha>`). Kept as an exported alias
- * so a consumer (the C5 gate) can branch on the scheme without re-listing it.
+ * `path|url|query|registry`; C5 adds `commit:<sha>`; C10 adds `revision:<uid>`).
+ * Kept as an exported alias so a consumer (the C5 gate) can branch on the
+ * scheme without re-listing it.
  */
 export type AnchorLocatorKind =
   | 'path'
   | 'url'
   | 'query'
   | 'registry'
-  | 'commit';
+  | 'commit'
+  | 'revision';
 
 /** Options for {@link checkAnchor}. */
 export interface ICheckAnchorOptions {
@@ -94,7 +100,14 @@ export interface ICheckAnchorOptions {
   by: string;
 }
 
-const ANCHOR_SCHEMES = ['path', 'url', 'query', 'registry', 'commit'] as const;
+const ANCHOR_SCHEMES = [
+  'path',
+  'url',
+  'query',
+  'registry',
+  'commit',
+  'revision',
+] as const;
 
 /**
  * Parse `locator` against the closed grammar, throwing

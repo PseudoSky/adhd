@@ -42,18 +42,56 @@ import {
   AttestationNotFoundError,
   CatalogNotFoundError,
   InvalidArgumentError,
+  IssueNotFoundError,
+  StaleSupersedeError,
   assertNotBareRoleLiteral,
 } from './errors.js';
 import { readRevision } from './revision.js';
 import {
+  type ITxNodeRow,
   type IWriteStoreHandle,
   executeWriteTransaction,
   nowISO,
-  resolveLiveIssueTx,
   resolveUidPrefixTx,
   writeEdgeTx,
   writeNodeTx,
 } from './tx.js';
+
+/** A resolved attestation SUBJECT: an `issue` (C3) or a `SPEC` revision (C10's annotation). */
+interface IResolvedSubject {
+  rowid: number;
+  uid: string;
+  kind: 'issue' | 'SPEC';
+  metadata: Record<string, unknown> | undefined;
+}
+
+/**
+ * Resolve an attestation subject — an `issue` (C3) or a `SPEC` revision (C10's
+ * annotation) — to its LIVE node. C3's reciprocal note to C10's spec widens
+ * `subject.id` to name a `SPEC` node; an `issue` subject is byte-for-byte
+ * unchanged (supersession still throws {@link StaleSupersedeError}), while an
+ * unchained `SPEC` node normalises to itself. Any other kind is not a valid
+ * subject.
+ */
+async function resolveAttestSubject(
+  exec: IReadOneExecutor,
+  uid: string
+): Promise<IResolvedSubject> {
+  let row: ITxNodeRow;
+  try {
+    row = await resolveUidPrefixTx(exec, uid);
+  } catch (err) {
+    if (err instanceof CatalogNotFoundError) throw new IssueNotFoundError(uid);
+    throw err;
+  }
+  if (row.kind !== 'issue' && row.kind !== 'SPEC') {
+    throw new IssueNotFoundError(uid);
+  }
+  if (row.kind === 'issue' && row.isSuperseded) {
+    throw new StaleSupersedeError(uid);
+  }
+  return { rowid: row.rowid, uid: row.uid, kind: row.kind, metadata: row.metadata };
+}
 
 export type { AttestationCheckState, IAttestCheck, IAttestationAnchor };
 
@@ -300,8 +338,13 @@ export async function attest(
   // Pre-transaction: resolve the live subject and its project root, then run
   // the git ladder OUTSIDE any write lock (mirrors `create-issue.ts`'s
   // pre-transaction citation-sha discipline).
-  const preSubject = await resolveLiveIssueTx(handle.adapter, input.subject.id);
-  const root = await resolveIssueProjectPath(handle.adapter, preSubject.rowid);
+  const preSubject = await resolveAttestSubject(handle.adapter, input.subject.id);
+  // A SPEC revision owns no component, so the anchor ladder has no project
+  // root to resolve against — it degrades to `unknown`, never a false success.
+  const root =
+    preSubject.kind === 'issue'
+      ? await resolveIssueProjectPath(handle.adapter, preSubject.rowid)
+      : undefined;
   const now = nowISO();
   let check = checkAnchor(input.anchor, {
     ...(root !== undefined ? { root } : {}),
@@ -312,7 +355,7 @@ export async function attest(
   });
 
   return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
-    const subjectRow = await resolveLiveIssueTx(tx, input.subject.id);
+    const subjectRow = await resolveAttestSubject(tx, input.subject.id);
 
     // Stale-revision guard: never silently `verified` when the caller observed
     // a different revision than the node carries. String revisions (C10 SPEC
@@ -361,7 +404,7 @@ export async function attest(
       at: now,
       srcRowid: subjectRow.rowid,
       srcUid: subjectRow.uid,
-      srcKind: 'issue',
+      srcKind: subjectRow.kind,
       dstRowid: attestation.rowid,
       dstUid: attestation.uid,
       dstKind: 'attestation',
@@ -375,7 +418,7 @@ export async function attest(
       typePolicy: handle.typePolicy,
       subjectRowid: subjectRow.rowid,
       subjectUid: subjectRow.uid,
-      subjectKind: 'issue',
+      subjectKind: subjectRow.kind,
       actor: input.by,
       action: 'attested',
       to: attestation.uid,

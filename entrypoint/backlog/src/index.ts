@@ -39,6 +39,8 @@ export {
   recheck,
   obligate,
   unobligate,
+  specAppend,
+  specCheck,
   claim,
   relate,
   move,
@@ -84,6 +86,37 @@ export type {
   IUnobligateOutcome,
   IPredicateResolver,
 } from './write/obligation.js';
+export type {
+  ISpecAnchor,
+  ISpecRevisionMeta,
+  ISpecAppendInput,
+  ISpecAppendOutcome,
+  ISpecPointer,
+} from './write/spec-revision.js';
+export type {
+  SpecFreshness,
+  ISpecCheckInput,
+  ISpecCheckOutcome,
+} from './query/spec-staleness.js';
+// Library-only surface (NEVER mounted): the one-shot, idempotent,
+// `--dry-run`-first reconciliation of the legacy `SPEC` corpus (C10). Exported
+// here, not in `api.ts`, so the tool surface an agent holds in its head is
+// unchanged (`api.ts`'s own header states the rule).
+export {
+  planSpecRevisionReconcile,
+  applySpecRevisionReconcile,
+} from './write/spec-revision.reconcile.js';
+export type {
+  ISpecReconcileStore,
+  ISpecReconcileStamp,
+  ISpecReconcileHead,
+  ISpecReconcileReport,
+} from './write/spec-revision.reconcile.js';
+export { annotate } from './write/spec-annotation.js';
+export type {
+  IAnnotateInput,
+  IAnnotateOutcome,
+} from './write/spec-annotation.js';
 
 // The response envelope every verb returns, plus its closed error-code union
 // and the exit codes a CLI host keys off.

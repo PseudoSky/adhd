@@ -11,13 +11,17 @@ files to make its own verb easier is silently changing semantics under the
 other eight agents building in parallel.
 
 Every export below was read directly out of the current file (paths and line
-numbers are cited per-export). Nothing here is guessed. Counts: `tx.ts` — 24
-exports, `catalog.ts` — 12 exports, `errors.ts` — 19 exports, `audit.ts` — 3
-exports. **Total: 58 exports.**
+numbers are cited per-export). Nothing here is guessed. Counts: `tx.ts` — 26
+exports, `catalog.ts` — 12 exports, `errors.ts` — 21 exports, `audit.ts` — 3
+exports. **Total: 62 exports.** (C10 added `updateNodeMetaTx` to `tx.ts`;
+Wave 2 (C4–C6) added `InvalidPredicateError`, `ObligationNotFoundError`,
+`ObligationUnsatisfiedError`, `OverrideNotPermittedError` and
+`PreconditionRefusedError`, and C10 added `SpecRevisionConflictError` to
+`errors.ts`.)
 
 ---
 
-## `tx.ts` (25 exports)
+## `tx.ts` (26 exports)
 
 ### `IWriteStoreHandle` — interface (`tx.ts:89`)
 
@@ -184,8 +188,10 @@ export interface IEdgeKindRule {
 ```
 
 Guarantees: the resolved shape of one `rel`'s declared endpoint-kind and
-multiplicity rule. `sourceKind: '*'` is the one declared sentinel (`audits`)
-that skips the source-kind match.
+multiplicity rule. `sourceKind: '*'` is a declared sentinel that skips the
+source-kind match — now used by TWO rels: `audits` (a subject of any kind) and,
+since C10, `attests` (an attestation may be keyed to an `issue` OR a `SPEC`
+revision).
 
 ### `IWriteEdgeTxInput` — interface (`tx.ts:568`)
 
@@ -267,7 +273,24 @@ no-op if the edge is already invalidated or absent; otherwise sets
 `t_invalid` and merges `invalidatedAt`/`invalidatedReason` into `meta`,
 issued against `tx`.
 
-### `executeWriteTransaction(handle, fn)` — function (`tx.ts:885`)
+### `updateNodeMetaTx(tx, uid, patch, expectedRevision)` — function (`tx.ts:811`)
+
+```ts
+export async function updateNodeMetaTx(tx: AdapterTransaction, uid: string, patch: Record<string, unknown>, expectedRevision: number): Promise<number | null>;
+```
+
+Guarantees (C10, foundation amendment): updates a LIVE node's `meta` IN PLACE
+inside `tx`, shallow-merging `patch` and setting the merged blob's `revision` to
+`expectedRevision + 1` — CAS-guarded on `COALESCE(json_extract(meta,'$.revision'),0)
+= expectedRevision`. Preserves `uid`. Returns the new revision number, or `null`
+when the node is missing OR the stored revision no longer equals
+`expectedRevision` (a concurrent writer won the CAS). It is the **ONLY** write
+path that mutates a node without superseding it (SR-2 monotonic revision + SR-6
+per-node CAS, DESIGN §2 Primitive 1) and exists solely for C10's spec pointer
+(`meta.spec_revision`); no other verb may adopt it without a new decision. A
+node with no `meta.revision` reads as revision `0`.
+
+### `executeWriteTransaction(handle, fn)` — function (`tx.ts:934`)
 
 ```ts
 export async function executeWriteTransaction<T>(handle: IWriteStoreHandle, fn: (tx: AdapterTransaction) => Promise<T>): Promise<T>;
@@ -476,6 +499,9 @@ time of this contract: `owns_project`, `owns_component`, `has_kind`,
 are INTERNAL rels (C3/C4/C5) — they are deliberately NOT members of
 `relate`'s public `RelateRel` union. This is the single source of truth
 `resolveEdgeKindTx` reconciles against the live `edge_kind` catalog rows.
+**C10 widened `attests`' `source_kind` from `issue` to `*`** (the same sentinel
+`audits` uses) so an attestation can be keyed to a `SPEC` revision as well as an
+`issue`; the issue-subject path is unchanged.
 
 **`part_of` is `n:1` — one parent per item (C2, AC6).** An item has at most ONE
 `part_of` parent. A second `part_of` write on the same source (a DIFFERENT
@@ -486,7 +512,7 @@ gate `supersedes`/`duplicate_of` use, with no `part_of`-specific code path.
 Re-adding the SAME parent is a no-op (`noop: true`). A multi-parent model would
 require changing this row's multiplicity, not special-casing `part_of`.
 
-### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:616`)
+### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:622`)
 
 ```ts
 export async function resolveEdgeKindTx(tx: AdapterTransaction, rel: string): Promise<IEdgeKindRule>;
@@ -501,7 +527,7 @@ row (corrupt or missing `meta` keys) is invalidated and replaced in the SAME
 `CatalogNotFoundError('edge_kind', rel)` if `rel` isn't in
 `EDGE_KIND_TABLE` at all.
 
-### `IProjectPolicy` — interface (`catalog.ts:684`)
+### `IProjectPolicy` — interface (`catalog.ts:690`)
 
 ```ts
 export interface IProjectPolicy {
@@ -537,7 +563,7 @@ disabled. A malformed (non-`string[]`) value falls back to the — also empty �
 default rather than being spread. Typed per-project config, never an
 environment toggle.
 
-### `resolveProjectPolicy(project)` — function (`catalog.ts:758`)
+### `resolveProjectPolicy(project)` — function (`catalog.ts:764`)
 
 ```ts
 export function resolveProjectPolicy(project: IResolvedProjectRow): IProjectPolicy;
@@ -644,7 +670,7 @@ surface.
 
 ---
 
-## `errors.ts` (20 exports)
+## `errors.ts` (21 exports)
 
 ### `WriteErrorCode` — type (`errors.ts:41`)
 
@@ -973,7 +999,23 @@ Guarantees: thrown by `unobligate` when the named uid is not a live `obligation`
 node. Distinct from `IssueNotFoundError` / `AttestationNotFoundError`, so a
 caller can branch on the missing record kind; `E_VALIDATION`, never retryable.
 
-### `classifyDriverError(err)` — function (`errors.ts:706`)
+### `SpecRevisionConflictError` — class (`errors.ts:682`)
+
+```ts
+export class SpecRevisionConflictError extends BacklogWriteError {
+  readonly code: 'E_VALIDATION';
+  readonly retryable: false;
+  constructor(expected: string, actual: string);
+}
+```
+
+Guarantees (C10): `appendSpecRevision`'s `base_revision` no longer matches the
+ticket's current spec revision — a concurrent spec edit won the CAS. Mapped
+EXPLICITLY to the envelope code `precondition_failed` in `api.ts`'s
+`ERROR_CLASS_TO_ENVELOPE_CODE` (AC6); the `E_VALIDATION` fallthrough would
+otherwise return `validation`. No write runs.
+
+### `classifyDriverError(err)` — function (`errors.ts:733`)
 
 ```ts
 export function classifyDriverError(err: unknown): IWriteError;
@@ -988,7 +1030,7 @@ distinguishes a recognized-but-unclassified database error (`E_IO`,
 (`E_IO`, `retryable: false` — never retried, since it never even reached the
 driver).
 
-### `ObligationUnsatisfiedError(refusal)` — class (`errors.ts:788`)
+### `ObligationUnsatisfiedError(refusal)` — class (`errors.ts:815`)
 
 ```ts
 export class ObligationUnsatisfiedError extends BacklogWriteError {
@@ -1006,7 +1048,7 @@ envelope code `precondition_failed` (exit 1), with the structured refusal in
 a re-read shows the status unchanged. Never retryable. **Additive (C5)** —
 appended after every pre-existing export so no `CONTRACT.md` anchor shifted.
 
-### `OverrideNotPermittedError(obligationUid, actor)` — class (`errors.ts:808`)
+### `OverrideNotPermittedError(obligationUid, actor)` — class (`errors.ts:835`)
 
 ```ts
 export class OverrideNotPermittedError extends BacklogWriteError {
