@@ -1,10 +1,14 @@
 #!/usr/bin/env -S node
 /**
  * merge-catalog-case-fragments.ts — one-shot, reversible CLI that collapses
- * the status/priority catalog's case-fragment duplicates (the same token
+ * the status/priority/kind catalog's case-fragment duplicates (the same token
  * living as two LIVE rows that differ only in case). The repair logic itself
  * lives in `src/write/catalog-merge.ts`; this file is only argv parsing, plan
  * reporting, journal persistence, post-apply verification, and exit codes.
+ * The plan covers all three kinds the invariant guard reads
+ * (`catalog-invariant-guard.ts`'s `GUARDED_CATALOG_KINDS`) — including the
+ * OPEN `kind` vocabulary (`bug`/`BUG`), whose collapse C8 added to the
+ * planner but this CLI originally omitted.
  *
  * Usage:
  *
@@ -126,13 +130,27 @@ interface IPlanView {
 async function buildPlan(store: IEtlStoreHandle): Promise<IPlanView> {
   const statuses = await store.graph.queryNodes({ kind: 'status', liveOnly: true });
   const priorities = await store.graph.queryNodes({ kind: 'priority', liveOnly: true });
+  // C8 widened BOTH the write-path refusal and the invariant guard to the OPEN
+  // `kind` catalog (`catalog-invariant-guard.ts`'s `GUARDED_CATALOG_KINDS`), and
+  // `planCaseFragmentMerge` grew a third `liveKinds` parameter to match. This
+  // CLI was not updated at the same time, so its plan silently held only the
+  // status/priority groups: an apply would collapse those, report `VERIFY
+  // clean`, and leave every `bug`/`BUG`-style KIND duplicate live — i.e. the
+  // repair the guard's own message names could not turn `store-check` green.
+  // Pass the live `kind` rows too so the plan covers exactly the three kinds
+  // the guard reads.
+  const kinds = await store.graph.queryNodes({ kind: 'kind', liveOnly: true });
   const nameByUid = new Map<string, string>();
   const kindByUid = new Map<string, string>();
-  for (const n of [...statuses, ...priorities]) {
+  for (const n of [...statuses, ...priorities, ...kinds]) {
     nameByUid.set(n.uid, n.name ?? '');
     kindByUid.set(n.uid, n.kind);
   }
-  return { plan: planCaseFragmentMerge(statuses, priorities), nameByUid, kindByUid };
+  return {
+    plan: planCaseFragmentMerge(statuses, priorities, kinds),
+    nameByUid,
+    kindByUid,
+  };
 }
 
 function printPlan(dbPath: string, view: IPlanView): void {

@@ -60,6 +60,7 @@ import {
   writeNodeTx,
 } from './tx.js';
 import { catalogNameFold } from './catalog-repair.js';
+import { inspectCatalogInvariants } from '../store/catalog-invariant-guard.js';
 import {
   applyCaseFragmentMerge,
   planCaseFragmentMerge,
@@ -145,7 +146,7 @@ async function liveRowsFolding(
 /** Mint a bare catalog row with caller-chosen metadata — the same `writeNodeTx` primitive every verb uses. */
 async function mintCatalog(
   store: TestIssueStore,
-  kind: 'status' | 'priority',
+  kind: 'status' | 'priority' | 'kind',
   name: string,
   metadata: Record<string, unknown>
 ): Promise<{ rowid: number; uid: string }> {
@@ -692,3 +693,93 @@ describe('catalog-merge — status/priority case-fragment collapse', () => {
     expect(await caseTwinCount(store, 'status')).toBe(0);
   });
 });
+
+describe('catalog-merge — the OPEN `kind` catalog (C8 scope) is planned and collapsed', () => {
+  let dir: string;
+  let store: TestIssueStore;
+
+  beforeEach(async () => {
+    dir = freshTmpDir('catalog-merge-kind-spec');
+    store = await openTestIssueStore(join(dir, 'backlog.db'));
+  });
+
+  afterEach(async () => {
+    await store.close();
+    removeTestIssueStoreDir(dir);
+  });
+
+  it('RED→GREEN: the 2-arg plan (the pre-fix CLI) omits a `kind` twin the 3-arg plan collapses — and the guard goes clean', async () => {
+    // The C8 drift shape: a lowercase canonical kind (the write path's spelling
+    // — `isCanonicalSpelling('kind', …)` is lowercase) plus an uppercase twin.
+    const bugLower = await mintCatalog(store, 'kind', 'bug', {});
+    const bugUpper = await mintCatalog(store, 'kind', 'BUG', {});
+    const debtLower = await mintCatalog(store, 'kind', 'debt', {});
+    const debtUpper = await mintCatalog(store, 'kind', 'DEBT', {});
+
+    // The store genuinely violates the guard's UNIQUENESS invariant — two
+    // `kind` fold-collisions — so the clean assertion after the merge is real,
+    // not vacuous.
+    const before = await inspectCatalogInvariants(store.adapter);
+    const kindDuplicatesBefore = before.filter(
+      (v) => v.kind === 'case-fragment-duplicate'
+    );
+    expect(kindDuplicatesBefore.map((v) => v.fold).sort()).toEqual([
+      'bug',
+      'debt',
+    ]);
+
+    const kinds = await store.graph.queryNodes({ kind: 'kind', liveOnly: true });
+    const statuses = await store.graph.queryNodes({ kind: 'status', liveOnly: true });
+    const priorities = await store.graph.queryNodes({
+      kind: 'priority',
+      liveOnly: true,
+    });
+
+    // RED — the pre-fix CLI called the planner with only (statuses, priorities),
+    // so every `kind` twin was silently absent from the plan and an apply could
+    // report `VERIFY clean` while `store-check` still exited 1.
+    const oldPlan = planCaseFragmentMerge(statuses, priorities);
+    expect(oldPlan.groups).toEqual([]);
+
+    // GREEN — passing the live `kind` rows (the fix) makes both groups planable.
+    const plan = planCaseFragmentMerge(statuses, priorities, kinds);
+    const bugGroup = plan.groups.find((g) => g.canonicalUid === bugLower.uid);
+    expect(bugGroup?.fragmentUids).toEqual([bugUpper.uid]);
+    expect(
+      plan.groups.find((g) => g.fragmentUids.includes(debtUpper.uid))?.canonicalUid
+    ).toBe(debtLower.uid);
+
+    await applyCaseFragmentMerge(store, plan);
+
+    // The twins are invalidated (not deleted), their spellings recorded as
+    // aliases on the surviving lowercase row, and the guard is clean.
+    const liveKinds = await liveCatalogRowsKind(store, 'bug');
+    expect(liveKinds.map((r) => r.name)).toEqual(['bug']);
+    expect(liveKinds[0]!.meta.aliases).toEqual(['BUG']);
+
+    const after = await inspectCatalogInvariants(store.adapter);
+    expect(after.filter((v) => v.kind === 'case-fragment-duplicate')).toEqual([]);
+  });
+});
+
+/** LIVE `kind` rows by NAME, with their raw rowid/uid/meta — a `kind`-scoped sibling of {@link liveCatalogRows}. */
+async function liveCatalogRowsKind(
+  store: TestIssueStore,
+  name: string
+): Promise<ILiveCatalogRow[]> {
+  const { rows } = await store.adapter.executeAll<{
+    rowid: number;
+    uid: string;
+    name: string | null;
+    meta: string | null;
+  }>(
+    "SELECT rowid, uid, name, meta FROM node WHERE kind = 'kind' AND name = ? AND t_invalid IS NULL",
+    [name]
+  );
+  return rows.map((r) => ({
+    rowid: r.rowid,
+    uid: r.uid,
+    name: r.name ?? '',
+    meta: (r.meta ? JSON.parse(r.meta) : {}) as Record<string, unknown>,
+  }));
+}

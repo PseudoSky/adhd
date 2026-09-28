@@ -40,6 +40,7 @@ import {
 } from '../test/helpers/open-test-issue-store.js';
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
 import { createIssue } from './create-issue.js';
+import { transition } from './transition.js';
 import { CaseVariantNameError } from './errors.js';
 import { executeWriteTransaction, writeNodeTx } from './tx.js';
 import { inspectCatalogInvariants } from '../store/catalog-invariant-guard.js';
@@ -211,6 +212,71 @@ describe('mintOrResolveCatalogTx — a case-variant of a live catalog row is ref
       expect(await listedUids(store, { status: 'open' })).not.toContain(uid);
       expect(await listedUids(store, { status: 'closed' })).toContain(uid);
     }
+  });
+
+  it('REFUSES a case-variant `transition` toStatus against a live canonical (the path the write waves used)', async () => {
+    // The exact shape the corpus waves hit: `resolved` is live, and a caller
+    // transitions to the UPPERCASE `RESOLVED`. `transition` resolves the target
+    // through the SAME `mintOrResolveStatusTx`, so the refusal must hold here
+    // too — an ordinary `create`-only test would leave this path unproven.
+    const created = createdUid(
+      await createIssue(store, {
+        project: projectUid,
+        title: 'canonical resolved',
+        body: 'mints the lowercase reserved terminal status',
+        status: 'resolved',
+        by: 'agent:t',
+      })
+    );
+
+    const err = await transition(store, {
+      uid: created,
+      by: 'agent:t',
+      toStatus: 'RESOLVED',
+      note: 'close',
+    }).then(
+      () => undefined,
+      (e: unknown) => e
+    );
+
+    expect(err).toBeInstanceOf(CaseVariantNameError);
+    const variantErr = err as CaseVariantNameError;
+    expect(variantErr.catalogKind).toBe('status');
+    expect(variantErr.canonicalName).toBe('resolved');
+    expect(variantErr.offendingName).toBe('RESOLVED');
+
+    // No `RESOLVED` twin: exactly one live status row, still the lowercase
+    // canonical, and the store's reserved-terminal flag is intact (a fresh
+    // uppercase twin minted `terminal:false` is exactly the unflagged-terminal
+    // row `store-check` refuses).
+    expect(await liveNames(store, 'status')).toEqual(['resolved']);
+    expect(await inspectCatalogInvariants(store.adapter)).toEqual([]);
+
+    // NEGATIVE CONTROL (teeth): bypass the refusal with the same low-level
+    // primitive and reproduce precisely the drift it prevents — the twin AND
+    // its unflagged terminal flag — so the assertions above are falsifiable
+    // rather than vacuous.
+    await executeWriteTransaction(store, (tx) =>
+      writeNodeTx(tx, {
+        kind: 'status',
+        name: 'RESOLVED',
+        metadata: { terminal: false },
+      })
+    );
+    const violations = await inspectCatalogInvariants(store.adapter);
+    expect(
+      violations.some(
+        (v) =>
+          v.kind === 'case-fragment-duplicate' &&
+          v.names.includes('RESOLVED') &&
+          v.names.includes('resolved')
+      )
+    ).toBe(true);
+    expect(
+      violations.some(
+        (v) => v.kind === 'unflagged-terminal' && v.name === 'RESOLVED'
+      )
+    ).toBe(true);
   });
 
   it('preserves existing resolution: the exact spelling still resolves and a genuinely new name still mints', async () => {
