@@ -92,7 +92,7 @@ Available commands:
   backlog priority-matrix  { input: { filter?: object } }
   backlog report  { input: { filter?: object } }
   backlog query  { input: { text?: string, filter?: object, fields?: union[], sort?: 'priority'|'updated'|'created'|'relevance'|'textMatch', direction?: 'asc'|'desc', limit?: number, offset?: number, after?: string, view?: 'list'|'ready'|'graph'|'order'|'stale'|'similar'|'overlap'|'projects'|'components'|'locations', format?: 'json'|'markdown', overlapAxis?: 'file'|'project'|'component'|'author', overlapUids?: string[], staleAfterMin?: number } }
-  backlog relate  { input: { sourceUid: string, targetUid: string, rel: 'relates_to'|'supersedes'|'blocks'|'duplicate_of'|'part_of', action: 'add'|'remove', by: string } }
+  backlog relate  { input: { sourceUid: string, targetUid: string, rel: 'relates_to'|'supersedes'|'blocks'|'duplicate_of'|'part_of'|'similar_to', action: 'add'|'remove', by: string } }
   backlog rm-location  { input: { uid: string, by: string, reason?: string } }
   backlog rm-project  { input: { uid: string, reason: string, by: string } }
   backlog transition  { input: { uid: string, by: string, toStatus: string, note?: string, citations?: object[], gitContext?: string } }
@@ -273,9 +273,12 @@ registry entry by name directly, e.g.
 
 The full field vocabulary is `uid, title, kind, status, priority, project,
 component, createdAt, updatedAt, assignee, author, closedAt` (cheap/plain)
-plus `body, citations, notes, auditTrail, blockers, related, _score,
+plus `body, citations, notes, auditTrail, blockers, related, similar, _score,
 _vector` (opt-in only — each costs a genuine extra read, so none is in the
-default card). `_score_kind` is **not** a requestable field — it is a
+default card). `similar` is the reviewed `similar_to` links touching an item,
+both directions (`{similarTo:[…], similarFrom:[…]}`) — a different relation
+from the reserved `duplicate_of`, so a card that does not ask for it is
+unchanged. `_score_kind` is **not** a requestable field — it is a
 provenance tag emitted automatically alongside `_score` whenever a score is
 requested (`'rrf'` for a fused semantic rank, `'bm25'` for a grep-only FTS
 score, `'cosine'`/`'rank'`/`'priority'` otherwise); passing it in `fields`
@@ -377,7 +380,7 @@ $ adhd-backlog backlog claim --input '{"uid":"a61ff0b6-…","by":"claude:1","act
 ```
 
 **Link two issues.** `rel` is one of `relates_to`, `supersedes`, `blocks`,
-`duplicate_of`, `part_of` — NOT the bare word `"related"`:
+`duplicate_of`, `part_of`, `similar_to` — NOT the bare word `"related"`:
 
 ```
 $ adhd-backlog backlog relate --input '{"sourceUid":"777c5e33-…","targetUid":"a61ff0b6-…","rel":"relates_to","action":"add","by":"claude:1"}'
@@ -388,6 +391,21 @@ $ adhd-backlog backlog relate --input '{"sourceUid":"777c5e33-…","targetUid":"
 found none — no edge was written and no audit row produced; never assume
 every call was a fresh write. `targetUid` may belong to a different project
 than `sourceUid`.
+
+**Similarity (advisory scan, reviewed link).** Cross-project similarity is a
+two-step, deliberately non-automatic flow:
+
+- The scan surfaces **candidates**; it never writes a link. `create` reports
+  them on `similarCandidates` (scope-controlled by the project policy's
+  `similarityScope`: `same-project` default · `multi-project` · `store-wide`),
+  and `query {view:"similar", filter:{project}}` returns a `clusters` block
+  (`candidate` = advisory scan output, `linked` = existing links).
+- A reviewed link is the **existing `relate`** verb with
+  `rel:"similar_to"` (there is **no** `link-duplicate` verb). `similar_to` is
+  `n:m` issue→issue. `duplicate_of` stays **reserved** for the reviewed
+  actual-same judgement and is never written by a scan.
+- Filter reads with `filter.similarTo` (items linked `similar_to` X) or
+  `filter.hasSimilar:true` (items with ≥1 incoming link).
 
 **Move an issue to a different project/component.** `toProject`/
 `toComponent` are RESOLVE-ONLY, never minted — register the destination

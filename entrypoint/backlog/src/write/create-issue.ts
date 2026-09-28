@@ -17,8 +17,6 @@ import { readFile } from 'node:fs/promises';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import type { GraphBackend } from '@adhd/sox-graph-store';
 import type {
-  SearchQuery,
-  SignalSpec,
   StoreSearchBackend,
 } from '@adhd/sox-hybrid-search';
 import {
@@ -60,25 +58,24 @@ import {
   writeEdgeTx,
   writeNodeTx,
 } from './tx.js';
-// Read-only reuse of the query layer's own, direction-bug-fixed project/
-// component ownership-chain resolver (SPEC.md §6.4 point 1: the duplicate
-// scan is scoped to `filter.project`, "the target project only" — never a
-// second, hand-rolled traversal of `owns_project`/`owns_component` here).
-// This is an IMPORT, not an edit, of a file this slice does not own
-// (`src/query/**`) — see this module's own `IDuplicateScanHandle` doc
-// comment for why the two packages' handle shapes are structurally, not
-// nominally, compatible.
-import { resolveSimilarFilterIds } from '../query/views/semantic.js';
 // Read-only reuse of the query layer's own uid→live-issue resolver for the
 // declared-parent resolution this gate now needs (`dedupeExcludeUid`,
-// c5460239). Like `resolveSimilarFilterIds` above, this is an IMPORT of a
-// read-only module,
+// c5460239). Like `resolveDedupeExcludeIds`'s own read of the graph, this is
+// an IMPORT of a read-only module,
 // never a write-path `tx.ts` call: the duplicate scan runs BEFORE the write
 // transaction opens (see `scanForDuplicates`'s own doc comment), so it has no
 // `tx` to hand a `resolveLiveIssueTx`, and `resolveIssueByUid` is documented
 // safe to run standalone.
-import { resolveIssueByUid } from '../query/resolve.js';
-import type { IIssueFilter } from '../query/types.js';
+import { resolveIssueByUid, tryResolveComponentRef } from '../query/resolve.js';
+// C9 — the ONE shared advisory similarity scan (create gate + `view:'similar'`
+// cluster block run the identical scan). The former in-file `scanForDuplicates`
+// scan body moved there verbatim; `scanForDuplicates` below is now a thin
+// wrapper that keeps the create-gate-specific exclusion + degraded mapping.
+import {
+  type ISimilarCandidate,
+  type SimilarityScanDegradedReason,
+  scanSimilarCandidatesWithMeta,
+} from './similarity-scan.js';
 
 /**
  * A filing-time citation (§6.3.2, carried forward from the established `Citation` shape in
@@ -213,11 +210,13 @@ export interface IDuplicateCandidate {
  * Why {@link scanForDuplicates} could not produce a calibrated comparison —
  * i.e. why the gate did NOT actually scan for duplicates despite being asked
  * to. See {@link IDuplicateScanOutcome.degraded}.
+ *
+ * C9: this is now an ALIAS of the shared scan's own reason union
+ * (`write/similarity-scan.ts`), so the create gate and the `view:'similar'`
+ * cluster block can never drift on what "degraded" means. The name and every
+ * member are unchanged, so existing importers/tests are unaffected.
  */
-export type DuplicateScanDegradedReason =
-  | 'no-search-backend'
-  | 'no-embed-query'
-  | 'no-vector-scores';
+export type DuplicateScanDegradedReason = SimilarityScanDegradedReason;
 
 /**
  * The result of {@link scanForDuplicates}. Its `candidates` arm is the
@@ -237,6 +236,13 @@ export type DuplicateScanDegradedReason =
  */
 export interface IDuplicateScanOutcome {
   candidates: IDuplicateCandidate[];
+  /**
+   * C9 — advisory CROSS-project candidates surfaced alongside the
+   * same-project `candidates`. Never suppress a create, never fire
+   * `comment`, and the scan writes no edge for them (AC3). Empty when the
+   * scope is `same-project` (the default).
+   */
+  similarCandidates?: ISimilarCandidate[];
   /**
    * `true` iff the scan could NOT perform a calibrated duplicate comparison
    * for the in-scope issues — no vector channel ran, so `candidates` is empty
@@ -385,6 +391,13 @@ export interface ICreateIssueResult {
   uid?: string;
   item?: ICreateIssueCard;
   duplicateCandidates?: IDuplicateCandidate[];
+  /**
+   * C9 — advisory cross-project similarity candidates. Present iff the
+   * configured `similarityScope` is wider than `same-project` and the scan
+   * surfaced at least one. Purely informational: it never changes whether the
+   * write proceeded, and the scan writes no `similar_to` edge (AC2/AC3).
+   */
+  similarCandidates?: ISimilarCandidate[];
   reason?: 'duplicate-suppressed' | 'duplicate-scan-degraded';
   /** Present iff the pre-write scan was degraded — see this interface's own doc comment. Paired with {@link duplicateScanDegradedReason}. */
   duplicateScanDegraded?: boolean;
@@ -587,6 +600,65 @@ async function resolveDedupeExcludeIds(
 }
 
 /**
+ * C9 AC7 — the filing item's own (the "A") side of the cross-project
+ * structural signal: its citation tokens plus its resolved owning component's
+ * `meta.path`. The candidate ("B") side is read off a stored issue by
+ * {@link structuralContextFor}; this derives the not-yet-written subject from
+ * `createIssue`'s own input, using the SAME citation fields the B-side
+ * derivation reads (`file`→`target`, `symbol`, `blastRadius`) so the two sides
+ * can never disagree on what a citation token is.
+ *
+ * The component path is resolved READ-ONLY and best-effort: an explicit
+ * `component` ref resolves scoped to `project` (a uid belonging to another
+ * project never matches), and an omitted ref mirrors the write path's reserved
+ * `(root)` default. The structural signal is only ever ADDITIVE evidence gating
+ * an already-thresholded cosine, so a resolution miss contributes no path
+ * rather than failing a filing.
+ */
+async function filingStructuralContext(
+  graph: GraphBackend,
+  project: IResolvedProjectRow,
+  citations: readonly ICitationInput[],
+  componentRef: string | undefined
+): Promise<{ citationTokens: string[]; componentPath?: string }> {
+  const citationTokens: string[] = [];
+  for (const citation of citations) {
+    citationTokens.push(citation.file);
+    if (typeof citation.symbol === 'string')
+      citationTokens.push(citation.symbol);
+    if (typeof citation.blastRadius === 'string')
+      citationTokens.push(citation.blastRadius);
+  }
+
+  let componentPath: unknown;
+  if (componentRef !== undefined) {
+    const resolved = await tryResolveComponentRef(
+      graph,
+      project.uid,
+      componentRef
+    );
+    componentPath = resolved?.record.metadata?.path;
+  } else {
+    const ownsProjectEdges = await graph.getEdges({
+      src: project.rowid,
+      rel: 'owns_project',
+    });
+    const components = await graph.getNodesByIds(
+      ownsProjectEdges.map((e) => e.dst)
+    );
+    const root = components.find(
+      (c) => c.tInvalid === undefined && c.name === '(root)'
+    );
+    componentPath = root?.metadata?.path;
+  }
+
+  return {
+    citationTokens,
+    ...(typeof componentPath === 'string' ? { componentPath } : {}),
+  };
+}
+
+/**
  * §6.4 point 1: `createIssue`'s app-level pre-write similarity scan — never
  * the library's disabled content-hash path (§1's `skipDedupe:true` is
  * untouched by this function). Runs `StoreSearchBackend.search` scoped to
@@ -664,216 +736,72 @@ async function scanForDuplicates(
   policy: IProjectPolicy,
   title: string,
   body: string,
+  citations: readonly ICitationInput[],
+  componentRef: string | undefined,
   dedupeExcludeUid?: string
 ): Promise<IDuplicateScanOutcome> {
-  const { search, graph } = handle;
-  // Resolve the declared parent (and its ancestor chain) BEFORE any early
-  // return — an unresolvable `dedupeExcludeUid` must fail loud regardless of
-  // whether the scan itself is enabled, and regardless of whether the project
-  // happens to hold any other issue (an empty candidate set is what the
-  // exclusion most often produces). Only possible with a `graph` to resolve
-  // against: no graph already means "no scan" (the `no-search-backend`
-  // degrade below).
+  // The scan itself now lives in the SHARED `write/similarity-scan.ts` — the
+  // exact same scan the `view:'similar'` cluster block runs (C9). This wrapper
+  // only: (a) resolves the declared-parent exclusion (defect c5460239), which
+  // must fail loud BEFORE any early return; (b) maps the shared outcome back
+  // onto this gate's `IDuplicateScanOutcome`; and (c) preserves every
+  // degraded-mode distinction the shipped fail-closed guard depends on
+  // (BUG 4e8fce2a) — the shared scan carries the same reason union.
   const dedupeExcludeIds =
-    dedupeExcludeUid !== undefined && graph !== undefined
-      ? await resolveDedupeExcludeIds(graph, dedupeExcludeUid)
+    dedupeExcludeUid !== undefined && handle.graph !== undefined
+      ? await resolveDedupeExcludeIds(handle.graph, dedupeExcludeUid)
       : undefined;
   // A COMPLETE (if empty) scan, never a degraded one: an explicit operator
   // opt-out is a deliberate "do not scan", not a scan that failed to run.
-  if (!policy.dedupeScanEnabled) return { candidates: [], degraded: false };
-  // Resolve the in-scope candidate issue set FIRST — it needs only the graph,
-  // never the semantic backend — so a brand-new project with nothing to
-  // compare against is correctly a COMPLETE (empty) scan even when the
-  // semantic substrate is absent. Without this ordering, `abort` would refuse
-  // the very first create into any fresh project on an unconfigured store,
-  // breaking §6.4 point 3's documented zero-candidate behavior. `graph` is
-  // always present on the production handle; an absent one cannot be scoped,
-  // so it is (conservatively) degraded rather than assumed clean.
-  if (!graph) {
-    return {
-      candidates: [],
-      degraded: true,
-      degradedReason: 'no-search-backend',
-    };
-  }
-  // §6.4 point 1: scoped to `project` only — reuses the query layer's own
-  // direction-bug-fixed `owns_project`/`owns_component` traversal
-  // (`resolveSimilarFilterIds`) rather than a second, hand-rolled one here.
-  const filter: IIssueFilter = { project: project.uid };
-  const candidateIds = await resolveSimilarFilterIds(graph, filter);
-  // `resolveSimilarFilterIds` only ever returns `undefined` when NO filter
-  // dimension was given at all — unreachable here since `project` always is
-  // (§6.3.2: `project` is REQUIRED). A resolved-but-empty set (a brand new
-  // project with no prior issues) short-circuits — see this module's own
-  // "empty ids means unfiltered, never match-nothing" hazard doc comment in
-  // `query/views/semantic.ts`, which this guard exists specifically to avoid
-  // tripping. This is a COMPLETE scan of zero issues — nothing to compare
-  // against, so `abort` legitimately proceeds (§6.4 point 3, first sentence);
-  // it is NOT degraded.
-  if (!candidateIds || candidateIds.size === 0)
-    return { candidates: [], degraded: false };
+  if (!policy.dedupeScanEnabled)
+    return { candidates: [], similarCandidates: [], degraded: false };
 
-  // Defect c5460239: a declared parent (and its `part_of` ancestry) must never
-  // be scored as a duplicate of the child that is being filed UNDER it. Drop
-  // those ids from the candidate set BEFORE the vector scan, so a parent a
-  // child legitimately restates cannot suppress it. If this empties the set,
-  // the scan is a COMPLETE scan of zero remaining candidates — exactly the
-  // documented zero-candidate case `abort` proceeds on (§6.4 point 3) — never
-  // a degraded one.
-  if (dedupeExcludeIds !== undefined) {
-    for (const id of dedupeExcludeIds) candidateIds.delete(id);
-    if (candidateIds.size === 0) return { candidates: [], degraded: false };
-  }
+  // C9 AC7 — the filing item's own ("A") structural context. Without it the
+  // cross-project guard's only usable signal is title-token Jaccard, so a
+  // genuine cross-project twin that shares a cited file or a nested component
+  // path but is worded differently would never surface even at cosine 1.0.
+  // Best-effort: a graph-less handle simply contributes no structural signal.
+  const structuralA =
+    handle.graph !== undefined
+      ? await filingStructuralContext(
+          handle.graph,
+          project,
+          citations,
+          componentRef
+        )
+      : undefined;
 
-  if (!search) {
-    // Issues EXIST to compare against, but no semantic backend is mounted, so
-    // the gate cannot run its calibrated (vector) comparison. DEGRADED — and
-    // reporting it is what stops `duplicateAction:'abort'` from silently
-    // failing open (BUG 4e8fce2a). This is the wholly-UNCONFIGURED shape, so
-    // `createIssue` still PROCEEDS (filing must not hard-fail on an unwired
-    // feature) but carries `duplicateScanDegraded` on the result.
-    return {
-      candidates: [],
-      degraded: true,
-      degradedReason: 'no-search-backend',
-    };
-  }
+  const outcome = await scanSimilarCandidatesWithMeta(handle, {
+    title,
+    body,
+    scope: policy.similarityScope,
+    projectUid: project.uid,
+    sameProjectThreshold: policy.dedupeThreshold,
+    crossProjectThreshold: policy.similarityCrossProjectThreshold,
+    margin: policy.similarityCrossProjectMargin,
+    tokenOverlapMin: policy.similarityCrossProjectTokenOverlap,
+    citationTokens: structuralA?.citationTokens,
+    componentPath: structuralA?.componentPath,
+    excludeIds: dedupeExcludeIds,
+  });
 
-  // The vector channel is the ONLY calibrated similarity this gate accepts
-  // (`vecScore`, a raw cosine). With no `embedQuery` there is no query vector,
-  // so no candidate can carry a comparable score — the scan is DEGRADED, not
-  // empty. (§6.4 point 4's FTS-only degrade is deliberately NOT substituted
-  // here: BM25 is an uncalibrated, corpus-relative magnitude and comparing it
-  // to `dedupeThreshold` would reintroduce the false-positive class this gate
-  // was fixed away from — so the honest answer is "could not scan", which the
-  // caller now receives instead of a silent empty list.)
-  if (typeof search.embedQuery !== 'function') {
-    return {
-      candidates: [],
-      degraded: true,
-      degradedReason: 'no-embed-query',
-    };
-  }
-
-  // MUST stay byte-identical to `embedding-observer.ts`'s `composeEmbedText`
-  // — both this scan's query vector and the on-write vector populate/query
-  // the SAME vector space under the SAME `modelId`; see that function's own
-  // doc comment for why the two call sites import one shared composer
-  // instead of each keeping its own copy.
-  const text = composeEmbedText(title, body);
-  const vec = await search.embedQuery(text);
-
-  const signals: SignalSpec[] = [{ kind: 'text' }, { kind: 'vec' }];
-  const query: SearchQuery = {
-    text,
-    vec,
-    signals,
-    filters: { ids: [...candidateIds] },
+  // The WRITE gate is same-project only (§6.4; AC1/AC3). A cross-project
+  // candidate is advisory: it is reported on `similarCandidates`, NEVER
+  // suppresses a create, NEVER fires `comment`, and the scan writes no edge.
+  const candidates: IDuplicateCandidate[] = outcome.candidates
+    .filter((c) => c.scope === 'same-project')
+    .map((c) => ({ uid: c.uid, title: c.title, score: c.score }));
+  const similarCandidates = outcome.candidates.filter(
+    (c) => c.scope === 'cross-project'
+  );
+  return {
+    candidates,
+    similarCandidates,
+    degraded: outcome.degraded,
+    ...(outcome.degradedReason !== undefined
+      ? { degradedReason: outcome.degradedReason }
+      : {}),
   };
-  // The gate only ever needs to know whether ANY candidate clears threshold
-  // (all three `duplicateAction`s act on the full returned/filtered list,
-  // never a single arbitrary "top match" beyond `'comment'`'s own top-1 use,
-  // §6.4 point 3) — unbounded would cost an unnecessary full-table rank on
-  // every single `createIssue` call.
-  const SCAN_LIMIT = 5;
-  // FETCH_LIMIT deliberately over-fetches. `StoreSearchBackend.search`
-  // applies its `.slice(0, limit)` to a merge map in INSERTION order — every
-  // text hit first, vector-only hits after — so slicing at SCAN_LIMIT would
-  // discard exactly the vector-only near-duplicates this gate exists to
-  // catch whenever the text channel alone already returned SCAN_LIMIT rows.
-  // Over-fetch, threshold-filter, sort, then take the top SCAN_LIMIT.
-  const FETCH_LIMIT = SCAN_LIMIT * 4;
-  // NOTE — this calls `backend.search`, NOT `backend.searchRanked`, and that
-  // is load-bearing, not a style choice. `searchRanked` fuses its channels
-  // with reciprocal-rank fusion (`Σ w_i/(RRF_K + rank_i)`), and RRF is a RANK
-  // device: it discards magnitude by construction, so its output cannot be
-  // converted back into a similarity by ANY normalization. Dividing it by its
-  // theoretical rank-1 maximum — which this function used to do — yields a
-  // rank ladder (rank 1 → 1.0, rank 2 → 61/62 ≈ 0.984, rank 5 → 61/65 ≈ 0.938),
-  // every rung of which sits above the default `dedupeThreshold` of 0.8. That
-  // suppressed EVERY create into a project holding at least one prior issue,
-  // no matter how unrelated. `backend.search` instead returns the RAW
-  // per-channel scores, and its `vecScore` is the cosine similarity straight
-  // off `vec.knn` (`store/semantic-search.ts`'s `SemanticMatch.score`:
-  // "a similarity score, HIGHER-IS-BETTER") — a genuinely calibrated [0,1]
-  // quantity that IS comparable to `dedupeThreshold`.
-  const results = await search.backend.search(query, FETCH_LIMIT);
-  // A vector-backed KNN always returns its nearest neighbours, so an EMPTY
-  // result set with a query vector in hand means the vector channel itself
-  // produced nothing (an empty or `modelId`-mismatched space) — DEGRADED, not
-  // a clean store. Returning "no candidates" here is exactly the silent
-  // fail-open this fix exists to close (BUG 4e8fce2a).
-  if (results.length === 0) {
-    return {
-      candidates: [],
-      degraded: true,
-      degradedReason: 'no-vector-scores',
-    };
-  }
-
-  const nodes = await graph.getNodesByIds(results.map((r) => r.id));
-  const byId = new Map(nodes.map((n) => [n.id, n] as const));
-
-  const candidates: IDuplicateCandidate[] = [];
-  // Tracks whether the calibrated (vector) channel actually answered for ANY
-  // row. Text-only results — every row's `vecScore` is `undefined` — mean the
-  // vector space did not contain the project's issues, so the scan is blind
-  // even though `backend.search` returned rows. See the post-loop guard.
-  let sawVecScore = false;
-  for (const r of results) {
-    const node = byId.get(r.id);
-    if (!node) continue; // raced away (invalidated) between search and this lookup — never surfaced as a candidate
-    // §6.4: candidates MUST be LIVE issues. `getNodesByIds`'s default
-    // `liveOnly` omits soft-deleted rows (`t_invalid` set) but NOT superseded
-    // ones — a superseded node keeps `t_invalid IS NULL` (the supersede CAS
-    // sets `is_superseded` ONLY; see `tx.ts`'s `resolveLiveIssueTx` doc). A
-    // superseded node can still be reachable through a live `owns_component`
-    // edge, and its vector can outlive the edit that superseded it (the
-    // vector delete is fire-and-forget, `embedding-observer.ts`). Left
-    // unfiltered, that stale candidate suppresses a re-file of the very issue
-    // it superseded. Assert BOTH liveness axes explicitly rather than trusting
-    // the fetch's default, so a future `getNodesByIds` default change cannot
-    // silently reopen this.
-    if (node.tInvalid !== undefined || node.isSuperseded) continue;
-    // `vecScore` is the ONLY calibrated similarity available. It is absent
-    // when the vector channel did not run at all — §6.4 point 4's degraded
-    // (no `embedQuery`) mode, or no vector space matching the query's
-    // dimension — and when it ran but this row came back from the text
-    // channel only. In every one of those cases there is no similarity to
-    // compare against `dedupeThreshold`, so the row is not a candidate.
-    // Never fall back to `textScore`: BM25 is an uncalibrated, corpus-
-    // relative magnitude, and substituting it here would reintroduce the
-    // exact false-positive class described above under a different name.
-    const score = r.vecScore;
-    if (score === undefined) continue;
-    sawVecScore = true;
-    // Defence in depth on scoping: `filters.ids` IS a first-class
-    // `buildFilterClause` key, so the backend honours it on both channels —
-    // but a duplicate gate that silently widened to the whole store would be
-    // a correctness defect, not a UX one, so the membership is re-asserted
-    // here rather than trusted.
-    if (!candidateIds.has(r.id)) continue;
-    if (score >= policy.dedupeThreshold) {
-      candidates.push({ uid: node.uid, title: node.name ?? '', score });
-    }
-  }
-  // Rows came back, but not one carried a calibrated vector score: the vector
-  // channel is dark (empty or `modelId`-mismatched space), so `candidates` is
-  // empty because the gate is BLIND, not because the store is clean. Report
-  // it as degraded rather than as an indistinguishable "no duplicates".
-  if (!sawVecScore) {
-    return {
-      candidates: [],
-      degraded: true,
-      degradedReason: 'no-vector-scores',
-    };
-  }
-  // `backend.search` returns merge-map INSERTION order, not best-first (that
-  // is `searchRanked`'s contract, and this no longer calls it) — so the sort
-  // is what makes `candidates[0]` the top-scoring match that
-  // `duplicateAction:'comment'` (§6.4 point 3) attaches its note to.
-  candidates.sort((a, b) => b.score - a.score);
-  return { candidates: candidates.slice(0, SCAN_LIMIT), degraded: false };
 }
 
 /**
@@ -1035,9 +963,30 @@ export async function createIssue(
     preResolvedPolicy,
     input.title,
     input.body,
+    citations,
+    input.component,
     input.dedupeExcludeUid
   );
   const { candidates: duplicateCandidates } = scan;
+  const similarCandidates = scan.similarCandidates ?? [];
+
+  // C9 (AC3) — `comment` attaches a note to the TOP candidate's issue. A
+  // cross-project top candidate would mean writing into a FOREIGN project,
+  // which is exactly the false-link/over-merge class this feature must never
+  // perform. Reject it outright; the caller must pick a same-project candidate
+  // or a different `duplicateAction`.
+  if (duplicateAction === 'comment') {
+    const topSame = duplicateCandidates[0];
+    const topCross = similarCandidates[0];
+    if (topCross && (!topSame || topCross.score > topSame.score)) {
+      throw new InvalidArgumentError(
+        'duplicateAction',
+        `"comment" cannot target a cross-project candidate (top cross-project match uid="${topCross.uid}", project "${
+          topCross.provenance?.projectUid ?? '?'
+        }") — a reviewed similar_to link is written with relate; comment may only attach to a same-project duplicate`
+      );
+    }
+  }
 
   // BUG 4e8fce2a — a DEGRADED scan must never be silently treated as "no
   // candidates" when the caller asked to be protected from duplicates.
@@ -1093,6 +1042,7 @@ export async function createIssue(
       created: false,
       reason: 'duplicate-suppressed',
       duplicateCandidates,
+      ...(similarCandidates.length > 0 ? { similarCandidates } : {}),
     };
   }
 
@@ -1161,6 +1111,7 @@ export async function createIssue(
           created: false,
           commentedOn: { uid: targetIssue.uid, noteId: noteNode.uid },
           duplicateCandidates,
+          ...(similarCandidates.length > 0 ? { similarCandidates } : {}),
           ...degradedSignal,
         };
       }
@@ -1390,6 +1341,7 @@ export async function createIssue(
         // proceeded) — absent on a zero-candidate scan, per this file's own
         // `ICreateIssueResult` doc comment.
         ...(duplicateCandidates.length > 0 ? { duplicateCandidates } : {}),
+        ...(similarCandidates.length > 0 ? { similarCandidates } : {}),
         ...degradedSignal,
         placementResolved,
       };

@@ -763,6 +763,16 @@ export const EDGE_KIND_TABLE: readonly IEdgeKindRule[] = [
     targetKind: 'attestation',
     multiplicity: 'n:m',
   },
+  // C9 — the reviewed cross-project similarity link. ADVISORY and n:m: any
+  // number of items may be similar to any number, so there is no canonical
+  // head and no single-valued gate. Reserved `duplicate_of` (n:1, above) is
+  // untouched and stays for the reviewed actual-same judgement.
+  {
+    rel: 'similar_to',
+    sourceKind: 'issue',
+    targetKind: 'issue',
+    multiplicity: 'n:m',
+  },
 ] as const;
 
 const EDGE_KIND_BY_REL: ReadonlyMap<string, IEdgeKindRule> = new Map(
@@ -907,7 +917,34 @@ export interface IProjectPolicy {
   readonly allowedKinds: readonly string[];
   /** `project_field_requirement` — field names required on every mutating write for this project (§2). */
   readonly requiredFields: readonly string[];
+  /**
+   * C9 — how wide the CREATE-TIME advisory similarity scan looks. `'same-project'`
+   * (the default) is byte-for-byte today's behaviour (AC1); `'multi-project'`
+   * adds sibling projects reachable via a shared `repoUrl`/`component.meta.path`;
+   * `'store-wide'` drops the id restriction entirely. This NEVER widens the
+   * WRITE path — the scan is advisory and writes nothing (AC3) — it only widens
+   * which existing items may be surfaced as similar candidates.
+   */
+  readonly similarityScope: ISimilarityScope;
+  /**
+   * C9 — cosine threshold for CROSS-project candidates. Deliberately a DISTINCT
+   * value from `dedupeThreshold` (which stays calibrated for same-project
+   * byte-identical refiles): sharing one number either re-suppresses legitimate
+   * cross-repo filings or admits boilerplate (AC7/AC8). Enforced distinct by
+   * test, not by a runtime assertion.
+   */
+  readonly similarityCrossProjectThreshold: number;
+  /** C9 — minimum top-vs-next cosine gap for a cross-project candidate (margin guard). A candidate that is not meaningfully more similar than the runner-up is ambiguous and is not surfaced. */
+  readonly similarityCrossProjectMargin: number;
+  /** C9 — minimum title-token Jaccard overlap required as the second independent signal for a cross-project candidate (AC7). Cosine alone is never sufficient cross-project. */
+  readonly similarityCrossProjectTokenOverlap: number;
 }
+
+/** C9 — the typed scan breadth for the create-time advisory similarity scan. */
+export type ISimilarityScope =
+  | 'same-project'
+  | 'multi-project'
+  | 'store-wide';
 
 /**
  * Frozen (Finding 4): every field of {@link IProjectPolicy} is now genuinely
@@ -937,6 +974,11 @@ const DEFAULT_PROJECT_POLICY: IProjectPolicy = Object.freeze({
   allowedStatuses: [],
   allowedKinds: [],
   requiredFields: [],
+  // C9 — defaults preserve today's same-project-only behaviour (AC1).
+  similarityScope: 'same-project',
+  similarityCrossProjectThreshold: 0.92,
+  similarityCrossProjectMargin: 0.05,
+  similarityCrossProjectTokenOverlap: 0.5,
 });
 
 function assertNonBlank(
@@ -984,6 +1026,20 @@ export function resolveProjectPolicy(
     allowedKinds: policy.allowedKinds ?? DEFAULT_PROJECT_POLICY.allowedKinds,
     requiredFields:
       policy.requiredFields ?? DEFAULT_PROJECT_POLICY.requiredFields,
+    // C9 — resolved explicitly here (the no-`policy` branch above already
+    // carries them via the `...DEFAULT_PROJECT_POLICY` spread), so a project
+    // that never set them resolves the same-project default (AC1).
+    similarityScope:
+      policy.similarityScope ?? DEFAULT_PROJECT_POLICY.similarityScope,
+    similarityCrossProjectThreshold:
+      policy.similarityCrossProjectThreshold ??
+      DEFAULT_PROJECT_POLICY.similarityCrossProjectThreshold,
+    similarityCrossProjectMargin:
+      policy.similarityCrossProjectMargin ??
+      DEFAULT_PROJECT_POLICY.similarityCrossProjectMargin,
+    similarityCrossProjectTokenOverlap:
+      policy.similarityCrossProjectTokenOverlap ??
+      DEFAULT_PROJECT_POLICY.similarityCrossProjectTokenOverlap,
   };
 }
 

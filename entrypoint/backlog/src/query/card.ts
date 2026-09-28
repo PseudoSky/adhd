@@ -28,6 +28,8 @@ import {
   type IIssueNote,
   type IIssueRef,
   type IObligationView,
+  type ISimilarLinks,
+  type ISimilarRef,
   type IScoreKind,
   ISSUE_PLAIN_FIELDS,
   ISSUE_PSEUDO_FIELDS,
@@ -263,6 +265,66 @@ export async function resolveRelated(
     status: statuses.get(n.id)?.name ?? '',
     rel: relById.get(n.id),
   }));
+}
+
+/**
+ * C9 — the reviewed `similar_to` links touching one issue, BOTH directions
+ * (`n:m`). Outgoing edges (`similar_to` from this issue) become `similarTo`;
+ * incoming edges (into it) become `similarFrom`. Each neighbour is projected to
+ * the compact `ISimilarRef` shape (uid/title/status + owning project/repo).
+ *
+ * ADVISORY relation only — the reserved `duplicate_of` same-judgement relation
+ * is deliberately never read here.
+ */
+export async function resolveSimilar(
+  graph: GraphBackend,
+  issueId: number,
+  outgoing?: EdgeRecord[]
+): Promise<ISimilarLinks> {
+  const out = outgoing ?? (await getOutgoingEdges(graph, issueId));
+  const incoming = await getIncomingEdges(graph, issueId);
+  const toEdges = out.filter(
+    (e) => e.rel === 'similar_to' && e.src === issueId
+  );
+  const fromEdges = incoming.filter(
+    (e) => e.rel === 'similar_to' && e.dst === issueId
+  );
+  const ids = [
+    ...new Set([...toEdges.map((e) => e.dst), ...fromEdges.map((e) => e.src)]),
+  ];
+  if (ids.length === 0) return { similarTo: [], similarFrom: [] };
+
+  const nodes = await graph.getNodesByIds(ids);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const statuses = await resolveStatusesFor(graph, nodes);
+  const refFor = async (id: number): Promise<ISimilarRef | undefined> => {
+    const node = byId.get(id);
+    if (!node) return undefined;
+    const { project } = await resolveIssuePlacement(graph, node.id);
+    const ref: ISimilarRef = {
+      uid: node.uid,
+      title: node.name ?? '',
+      status: statuses.get(node.id)?.name ?? '',
+    };
+    if (project) {
+      ref.projectUid = project.uid;
+      if (typeof project.metadata?.repoUrl === 'string')
+        ref.repoUrl = project.metadata.repoUrl;
+    }
+    return ref;
+  };
+
+  const similarTo: ISimilarRef[] = [];
+  for (const edge of toEdges) {
+    const ref = await refFor(edge.dst);
+    if (ref) similarTo.push(ref);
+  }
+  const similarFrom: ISimilarRef[] = [];
+  for (const edge of fromEdges) {
+    const ref = await refFor(edge.src);
+    if (ref) similarFrom.push(ref);
+  }
+  return { similarTo, similarFrom };
 }
 
 /**
@@ -514,6 +576,7 @@ export async function assembleIssueCard(
   const needsObligations = want('obligations');
   const needsVerdict = want('verdict');
   const needsSpec = want('spec');
+  const needsSimilar = want('similar');
 
   const outgoing =
     opts.outgoingEdges ??
@@ -524,7 +587,8 @@ export async function assembleIssueCard(
     needsRelated ||
     needsBlocksOut ||
     needsPartOf ||
-    needsObligations
+    needsObligations ||
+    needsSimilar
       ? await getOutgoingEdges(graph, issue.id)
       : undefined);
 
@@ -652,6 +716,9 @@ export async function assembleIssueCard(
       }
     }
   }
+
+  if (needsSimilar && outgoing)
+    card.similar = await resolveSimilar(graph, issue.id, outgoing);
 
   if (want('_score') && opts.score !== undefined) {
     card._score = opts.score;

@@ -81,7 +81,8 @@ export type IIssuePseudoField =
   | 'partOf' // NEW (C2): the single parent this item is `part_of` (or null)
   | 'obligations' // NEW (C4): the declared, typed requirements on this item
   | 'verdict' // NEW (C6): the derived actionability verdict (never stored)
-  | 'spec'; // NEW (C10): the work item's current spec revision pointer (never the body)
+  | 'spec' // NEW (C10): the work item's current spec revision pointer (never the body)
+  | 'similar'; // NEW (C9): reviewed `similar_to` links, both directions (advisory `duplicate_of` is NOT this field)
 
 export type IIssueField = IIssuePlainField | IIssuePseudoField;
 
@@ -116,6 +117,7 @@ export const ISSUE_PSEUDO_FIELDS: readonly IIssuePseudoField[] = [
   'obligations',
   'verdict',
   'spec',
+  'similar',
 ];
 
 const ISSUE_FIELD_SET: ReadonlySet<string> = new Set<string>([
@@ -369,6 +371,13 @@ export interface IIssueCard {
    * has no spec, or when the `spec` pseudo field was not requested.
    */
   spec?: IIssueSpecProjection;
+  /**
+   * C9 — reviewed `similar_to` links touching this item, both directions
+   * (`ISimilarLinks`). This is the ADVISORY similarity relation, populated
+   * only when explicitly requested via `fields:['similar']`; it never includes
+   * the reserved `duplicate_of` same-judgement relation.
+   */
+  similar?: ISimilarLinks;
 }
 
 /**
@@ -442,6 +451,14 @@ export interface IIssueFilter {
   closedAt?: { since?: string; until?: string };
   createdAt?: { since?: string; until?: string };
   updatedAt?: { since?: string; until?: string };
+  /**
+   * C9 — uid of X: return items linked `similar_to` X (i.e. the SOURCE side of
+   * an outgoing `similar_to` edge whose target is X). Renamed from the removed
+   * `duplicateOf`; `similar_to` is the reviewed similarity relation.
+   */
+  similarTo?: string;
+  /** C9 — true: return items with ≥1 incoming `similar_to` link (the DST side). Renamed from the removed `hasDuplicates`. */
+  hasSimilar?: boolean;
 }
 
 export type IIssueSort =
@@ -585,7 +602,7 @@ export type IIssueQueryResult =
   | { view: 'graph'; graph: IDependencyGraph }
   | { view: 'order'; order: ITopoOrderResult }
   | { view: 'stale'; items: IIssueCard[] }
-  | { view: 'similar'; items: IIssueCard[] }
+  | { view: 'similar'; items: IIssueCard[]; clusters?: ISimilarViewClusterBlock }
   | { view: 'overlap'; groups: IOverlapGroup[] }
   | { view: 'projects'; items: IProjectSummary[] }
   | { view: 'components'; items: IComponentSummary[] }
@@ -732,3 +749,64 @@ export type IIssueGetResult =
   | IProjectDetail
   | IComponentDetail
   | ILocationDetail;
+
+// ---------------------------------------------------------------------------
+// C9 — cross-project similarity: the `similar` card projection, its filter
+// dimensions (declared on `IIssueFilter` above), and the `view:'similar'`
+// cluster block. All additive; nothing existing is reordered or renamed.
+// ---------------------------------------------------------------------------
+
+/** C9 — one reviewed `similar_to` neighbour of a card, in the compact cross-reference shape. */
+export interface ISimilarRef {
+  uid: string;
+  title: string;
+  status: string;
+  projectUid?: string;
+  repoUrl?: string;
+}
+
+/** C9 — a card's reviewed `similar_to` links, both directions (`n:m`, so both are sets). */
+export interface ISimilarLinks {
+  /** Items THIS one is linked `similar_to` (outgoing, n:m). */
+  similarTo: ISimilarRef[];
+  /** Items linked `similar_to` THIS one (incoming, n:m). */
+  similarFrom: ISimilarRef[];
+}
+
+/** C9 — one member of an advisory or linked similarity cluster. */
+export interface ISimilarMember {
+  uid: string;
+  title: string;
+  projectUid: string;
+  projectName: string;
+  componentUid?: string;
+  repoUrl?: string;
+  /** Cosine to the cluster seed (undefined for linked-only members). */
+  score?: number;
+  /** Which independent signals fired, e.g. `['cosine','title-tokens']`. */
+  signals?: string[];
+  /** A `similar_to` target when linked. */
+  linkedTo?: string;
+}
+
+/** C9 — a single-linkage similarity cluster: `seedUid` is the top-scoring member that anchored it. */
+export interface ISimilarCluster {
+  seedUid: string;
+  members: ISimilarMember[];
+  /** true iff live `similar_to` edges exist among members. */
+  linked: boolean;
+}
+
+/**
+ * C9 — the additive cluster block `view:'similar'` gains when a scope filter
+ * (`project`/`component`) is present. `candidate` is the advisory,
+ * write-nothing scan output; `linked` is built from existing live `similar_to`
+ * edges only. Without the embedding substrate `candidate` is `[]` (the
+ * documented degraded mode) while `linked` still returns.
+ */
+export interface ISimilarViewClusterBlock {
+  candidate: ISimilarCluster[];
+  linked: ISimilarCluster[];
+  scanned: number;
+  computedAt: string;
+}

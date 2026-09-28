@@ -548,7 +548,7 @@ export function deprecatedKindReplacement(name: string): string | undefined;
 Guarantees: the case-folded in-code replacement for a deprecated `kind` name,
 or `undefined` when the name is not one of `DEPRECATED_KIND_NAMES`.
 
-### `VALID_LOCATION_TYPES` — const (`catalog.ts:1469`)
+### `VALID_LOCATION_TYPES` — const (`catalog.ts:1525`)
 
 ```ts
 export const VALID_LOCATION_TYPES: readonly ILocationType[];
@@ -601,18 +601,26 @@ export const EDGE_KIND_TABLE: readonly IEdgeKindRule[];
 ```
 
 Guarantees: the fixed, complete `(rel, source_kind, target_kind,
-multiplicity)` table for every declared `rel` in the schema (20 rows at the
+multiplicity)` table for every declared `rel` in the schema (21 rows at the
 time of this contract: `owns_project`, `owns_component`, `has_kind`,
 `has_status`, `has_priority`, `authored_by`, `has_note`, `has_citation`,
 `has_transition`, `audits`, `depends_on`, `has_location`, `relates_to`,
 `supersedes`, `blocks`, `duplicate_of`, `part_of`, `attests`,
-`has_obligation`, `satisfies`). `attests`, `has_obligation` and `satisfies`
-are INTERNAL rels (C3/C4/C5) — they are deliberately NOT members of
+`has_obligation`, `satisfies`, `similar_to`). `attests`, `has_obligation` and
+`satisfies` are INTERNAL rels (C3/C4/C5) — they are deliberately NOT members of
 `relate`'s public `RelateRel` union. This is the single source of truth
 `resolveEdgeKindTx` reconciles against the live `edge_kind` catalog rows.
 **C10 widened `attests`' `source_kind` from `issue` to `*`** (the same sentinel
 `audits` uses) so an attestation can be keyed to a `SPEC` revision as well as an
 `issue`; the issue-subject path is unchanged.
+
+**`similar_to` is `n:m` (C9) — the reviewed ADVISORY similarity link.** Added
+by C9 as `issue → issue`, `n:m`: any number of items may be similar to any
+number, so there is no canonical head and no single-valued gate. It is written
+ONLY by an explicit reviewed `relate {rel:'similar_to'}` call — the similarity
+SCAN never writes it (advisory-only invariant). The reserved `duplicate_of`
+row is **untouched** (`n:1`, kept for the reviewed actual-same judgement,
+which C9's `resolveCanonicalIssue` walks).
 
 **`part_of` is `n:1` — one parent per item (C2, AC6).** An item has at most ONE
 `part_of` parent. A second `part_of` write on the same source (a DIFFERENT
@@ -623,7 +631,7 @@ gate `supersedes`/`duplicate_of` use, with no `part_of`-specific code path.
 Re-adding the SAME parent is a no-op (`noop: true`). A multi-parent model would
 require changing this row's multiplicity, not special-casing `part_of`.
 
-### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:809`)
+### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:819`)
 
 ```ts
 export async function resolveEdgeKindTx(tx: AdapterTransaction, rel: string): Promise<IEdgeKindRule>;
@@ -638,7 +646,7 @@ row (corrupt or missing `meta` keys) is invalidated and replaced in the SAME
 `CatalogNotFoundError('edge_kind', rel)` if `rel` isn't in
 `EDGE_KIND_TABLE` at all.
 
-### `IProjectPolicy` — interface (`catalog.ts:877`)
+### `IProjectPolicy` — interface (`catalog.ts:887`)
 
 ```ts
 export interface IProjectPolicy {
@@ -654,6 +662,11 @@ export interface IProjectPolicy {
   readonly allowedStatuses: readonly string[];
   readonly allowedKinds: readonly string[];
   readonly requiredFields: readonly string[];
+  // C9 — advisory similarity-scan scope + cross-project signal policy.
+  readonly similarityScope: ISimilarityScope;
+  readonly similarityCrossProjectThreshold: number;
+  readonly similarityCrossProjectMargin: number;
+  readonly similarityCrossProjectTokenOverlap: number;
 }
 ```
 
@@ -674,7 +687,20 @@ disabled. A malformed (non-`string[]`) value falls back to the — also empty �
 default rather than being spread. Typed per-project config, never an
 environment toggle.
 
-### `resolveProjectPolicy(project)` — function (`catalog.ts:951`)
+**C9 — the advisory similarity-scan scope fields.** `similarityScope`
+(`'same-project' | 'multi-project' | 'store-wide'`, default `'same-project'`)
+controls only how wide the CREATE-TIME advisory scan looks; it never widens the
+WRITE path. `similarityCrossProjectThreshold` (default `0.92`) is deliberately
+DISTINCT from `dedupeThreshold` (default `0.8`, the same-project cosine for
+byte-identical refiles) — a shared number either re-suppresses legitimate
+cross-repo filings or admits boilerplate. `similarityCrossProjectMargin`
+(default `0.05`) is the minimum top-vs-next cosine gap for a cross-project
+candidate, and `similarityCrossProjectTokenOverlap` (default `0.5`) is the
+minimum title-token Jaccard for the SECOND independent signal — cosine alone is
+never sufficient cross-project. All four are data (never env toggles) resolved
+by `resolveProjectPolicy` over `DEFAULT_PROJECT_POLICY`.
+
+### `resolveProjectPolicy(project)` — function (`catalog.ts:993`)
 
 ```ts
 export function resolveProjectPolicy(project: IResolvedProjectRow): IProjectPolicy;
@@ -684,6 +710,23 @@ Guarantees: returns a FRESH `IProjectPolicy` object on every call (never a
 shared reference), merging `project.metadata.policy` field-by-field over the
 frozen `DEFAULT_PROJECT_POLICY` defaults. A project with no `policy` object
 at all gets every default field exactly as SPEC.md §2 states.
+
+### `resolveCanonicalIssue(graph, uid)` — function (`query/canonical.ts`, C9)
+
+```ts
+export async function resolveCanonicalIssue(graph: GraphBackend, uid: string): Promise<string>;
+export async function resolveIssueCanonicalTx(tx: AdapterTransaction, uid: string): Promise<string>;
+```
+
+Guarantees: C1's one-hop redirect generalized from projects to issues, over the
+**reserved** `duplicate_of` relation ONLY. Walks a source→target `duplicate_of`
+chain to its head (cycle-guarded and bounded), then applies C1's
+`resolveLogicalIssue` (merge redirect + `SUPERSEDES` chain) to the head. So
+`A → C` and `B → C` both resolve to `C`. Read-only and NEVER throws on a linked
+uid — an unresolvable or unlinked input is returned unchanged. The similarity
+path (`similar_to`) never calls this: `similar_to` is `n:m`/advisory and has no
+canonical head. The tx-scoped variant hand-composes the same walk against an
+`AdapterTransaction`.
 
 _(Note: `IEdgeKindRule` is re-exported by `catalog.ts` via its `import type`
 from `tx.ts` — it is counted once, under `tx.ts`, above.)_

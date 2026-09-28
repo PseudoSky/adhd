@@ -365,6 +365,27 @@ export async function resolveSimilarFilterIds(
     );
   }
 
+  // C9 — `similarTo`: items linked `similar_to` X are the SOURCE side of the
+  // outgoing edges into X (`getEdges({dst:X, rel:'similar_to'})` → `src`).
+  // `similar_to` is `issue → issue`, so no catalog-kind resolution is needed;
+  // an unresolved X is zero matches (§6.1 read-path rule).
+  if (filter.similarTo !== undefined) {
+    const target = await tryResolveRef(graph, 'issue', filter.similarTo);
+    if (!target) return new Set();
+    const edges = await graph.getEdges({
+      dst: target.id,
+      rel: 'similar_to',
+    });
+    edgeScoped.push(new Set(edges.map((e) => e.src)));
+  }
+  // C9 — `hasSimilar: true`: items with ≥1 INCOMING `similar_to` link (the
+  // `dst` side of every live `similar_to` edge). A `false` value applies no
+  // restriction (the field is documented as a positive-presence filter only).
+  if (filter.hasSimilar === true) {
+    const edges = await graph.getEdges({ rel: 'similar_to' });
+    edgeScoped.push(new Set(edges.map((e) => e.dst)));
+  }
+
   const scalarFilter = buildScalarNodeFilter(filter);
 
   if (edgeScoped.length === 0 && !scalarFilter) return undefined;
