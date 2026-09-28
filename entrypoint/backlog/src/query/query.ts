@@ -57,6 +57,7 @@ import {
 } from './types.js';
 import { querySimilarViewWithMeta } from './views/semantic.js';
 import { renderIssueCardsMarkdown } from './markdown.js';
+import { catalogFor, catalogView } from './views/catalog.js';
 import {
   listComponents,
   listLocations,
@@ -1366,6 +1367,22 @@ async function dispatchQueryView(
           items: await queryLocations(handle, input),
         },
       };
+    case 'kinds':
+      // C8 — the generated catalog view over the validating registry. A
+      // read-only projection: no store rows are written and the store is
+      // never opened a second time.
+      return {
+        result: { view: 'kinds', catalogs: await catalogView(handle.graph) },
+      };
+    case 'catalogs': {
+      // C8 — one catalog's terms; omitted `input.catalog` ⇒ every term (the
+      // same set `view:'kinds'` carries), so the two views can never disagree.
+      const terms =
+        input.catalog !== undefined
+          ? await catalogFor(handle.graph, input.catalog)
+          : (await catalogView(handle.graph)).terms;
+      return { result: { view: 'catalogs', terms } };
+    }
     default: {
       const exhaustive: never = view;
       throw new BacklogValidationError(

@@ -96,12 +96,21 @@ import {
   writeEdgeTx,
 } from './tx.js';
 
-/** The two catalog kinds this repair collapses (D3's whole scope). */
-export type CatalogKind = 'status' | 'priority';
+/** The catalog kinds this repair collapses (D3's scope, widened to `kind` by C8). */
+export type CatalogKind = 'status' | 'priority' | 'kind';
 
 /** The edge rel an issue uses to point at a {@link CatalogKind} row. */
-function edgeRelForKind(kind: CatalogKind): 'has_status' | 'has_priority' {
-  return kind === 'status' ? 'has_status' : 'has_priority';
+function edgeRelForKind(
+  kind: CatalogKind
+): 'has_status' | 'has_priority' | 'has_kind' {
+  switch (kind) {
+    case 'status':
+      return 'has_status';
+    case 'priority':
+      return 'has_priority';
+    case 'kind':
+      return 'has_kind';
+  }
 }
 
 /**
@@ -127,13 +136,18 @@ function isLowerSpelled(name: string): boolean {
 }
 
 /**
- * The per-kind canonical predicate. The two catalogs disagree by design: the
+ * The per-kind canonical predicate. The catalogs disagree by design: the
  * status write path emits lowercase (`'open'`), the priority write path emits
- * uppercase (`'HIGH'`), so a canonical that is spelled the OTHER way is an
- * exact-match miss the next write would re-mint.
+ * uppercase (`'HIGH'`), and `kind` — an OPEN vocabulary whose writer emits
+ * whatever the caller passes and whose live spellings are dominated by
+ * lowercase — uses NFC-folded lowercase (the one a case-insensitive mint guard
+ * can reliably re-find; see `write/catalog.ts`'s `findCaseFoldedCatalogRowTx`).
+ * A canonical spelled the OTHER way is an exact-match miss the next write would
+ * re-mint for status/priority, and for `kind` it is a spelling the fold-lookup
+ * would need to re-resolve.
  */
 function isCanonicalSpelling(kind: CatalogKind, name: string): boolean {
-  return kind === 'status' ? isLowerSpelled(name) : isUpperSpelled(name);
+  return kind === 'priority' ? isUpperSpelled(name) : isLowerSpelled(name);
 }
 
 /**
@@ -262,23 +276,32 @@ export interface IMergeJournal {
  *
  * Grouping is by {@link catalogNameFold} alone. Within a fold group the
  * canonical is the member already carrying the write path's spelling for that
- * kind — lowercase for `status`, uppercase for `priority`.
+ * kind — lowercase for `status`, uppercase for `priority`, lowercase for the
+ * OPEN `kind` vocabulary (its canonical rule).
  *
  * A `priority` group with no upper-spelled member falls back to its
  * lowest-rowid member (deterministically renamed to uppercase at apply, as
- * before). A `status` group with no lower-spelled member is NOT planned at all:
- * any canonical would carry a spelling the write path never emits, so merging
- * would regenerate the fragment on the next ordinary `create`. It is surfaced
- * in `unmergeable` instead.
+ * before). A `status` OR `kind` group with no lower-spelled member is NOT
+ * planned at all: any canonical would carry a spelling the write path / fold
+ * lookup would not re-find, so merging would regenerate the fragment on the
+ * next ordinary `create`. It is surfaced in `unmergeable` instead.
+ *
+ * `liveKinds` is OPTIONAL and ADDITIVE (C8): existing two-argument callers
+ * keep their exact behavior, and a caller that wants the `kind` repair passes
+ * the live `kind` rows. (A kind cannot be planned without its rows entering
+ * somewhere; the spec's "unchanged signature" is honoured as "unchanged for
+ * every existing caller".)
  */
 export function planCaseFragmentMerge(
   liveStatuses: readonly NodeRecord[],
-  livePriorities: readonly NodeRecord[]
+  livePriorities: readonly NodeRecord[],
+  liveKinds: readonly NodeRecord[] = []
 ): IMergePlan {
   const groups: IMergePlan['groups'] = [];
   const unmergeable: IMergePlan['unmergeable'] = [];
 
   const kinds: ReadonlyArray<readonly [CatalogKind, readonly NodeRecord[]]> = [
+    ['kind', liveKinds],
     ['status', liveStatuses],
     ['priority', livePriorities],
   ];
@@ -299,11 +322,11 @@ export function planCaseFragmentMerge(
         isCanonicalSpelling(kind, m.name ?? '')
       );
       if (writeSpelled === undefined) {
-        // No member carries the write path's spelling. For `status` the merge
-        // would be self-defeating (never rename one to it — there is nothing to
-        // rename TO); for `priority` the canonical is lowest-rowid and is
-        // renamed to uppercase at apply.
-        if (kind === 'status') {
+        // No member carries the canonical spelling. For `status`/`kind` the
+        // merge would be self-defeating (never rename one to it — there is
+        // nothing to rename TO); for `priority` the canonical is lowest-rowid
+        // and is renamed to uppercase at apply.
+        if (kind === 'status' || kind === 'kind') {
           unmergeable.push({ kind, names: sorted.map((m) => m.name ?? '') });
           continue;
         }
@@ -322,9 +345,9 @@ export function planCaseFragmentMerge(
 
 /** A catalog kind this repair refuses to treat as a case-group target. */
 function assertMergeableKind(kind: string, uid: string): asserts kind is CatalogKind {
-  if (kind !== 'status' && kind !== 'priority') {
+  if (kind !== 'status' && kind !== 'priority' && kind !== 'kind') {
     throw new Error(
-      `applyCaseFragmentMerge: uid ${uid} is kind "${kind}" — only "status"/"priority" catalog rows are mergeable.`
+      `applyCaseFragmentMerge: uid ${uid} is kind "${kind}" — only "status"/"priority"/"kind" catalog rows are mergeable.`
     );
   }
 }
@@ -371,18 +394,18 @@ export async function applyCaseFragmentMerge(
       const canonicalMetaBefore = parseMetaObject(canonical.meta);
       const canonicalName = canonical.name ?? '';
 
-      // A status canonical must already carry the write path's lowercase
-      // spelling. Merging into anything else would be self-defeating: the next
-      // ordinary `create` emits the lowercase literal, exact-match misses, and
-      // mints a fresh fragment. (The planner never emits such a group; this
-      // re-guards a hand-built or buggy plan, the same posture as the fold
-      // check below.)
+      // A `status`/`kind` canonical must already carry its canonical
+      // (lowercase) spelling. Merging into anything else would be
+      // self-defeating: the next ordinary `create` would exact-miss and (for
+      // status) re-mint, or (for kind) fold-resolve to a row the merge did not
+      // choose. (The planner never emits such a group; this re-guards a
+      // hand-built or buggy plan, the same posture as the fold check below.)
       if (
-        canonical.kind === 'status' &&
-        !isCanonicalSpelling('status', canonicalName)
+        (canonical.kind === 'status' || canonical.kind === 'kind') &&
+        !isCanonicalSpelling(canonical.kind, canonicalName)
       ) {
         throw new Error(
-          `applyCaseFragmentMerge: refusing to merge into status uid ${canonical.uid} named "${canonicalName}" — a status canonical must carry the write path's lowercase spelling.`
+          `applyCaseFragmentMerge: refusing to merge into ${canonical.kind} uid ${canonical.uid} named "${canonicalName}" — a ${canonical.kind} canonical must carry the canonical lowercase spelling.`
         );
       }
 

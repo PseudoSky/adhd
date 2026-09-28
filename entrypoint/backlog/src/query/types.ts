@@ -27,6 +27,15 @@ import type { SpecFreshness } from './spec-staleness.js';
 export type IssueUid = string;
 
 /**
+ * C8 — the generated-catalog view's types. Declared in `views/catalog.ts`
+ * (their generation home), imported here TYPE-ONLY so the read-layer's shared
+ * `types.ts` can widen the `query` view union without creating a runtime
+ * module cycle (`types.ts` is a value-import target of `catalog.ts`; a
+ * type-only import is erased and adds no edge).
+ */
+import type { CatalogKindName, ICatalogTerm, ICatalogView } from './views/catalog.js';
+
+/**
  * The closed field vocabulary a `get`/`query` caller may request (SPEC.md
  * §6.5). `assertKnownFields` (this module's {@link assertKnownIssueFields})
  * rejects any name outside this union with a `BacklogValidationError` naming
@@ -460,7 +469,9 @@ export type IIssueView =
   | 'overlap'
   | 'projects'
   | 'components'
-  | 'locations';
+  | 'locations'
+  | 'kinds' // C8 — the full generated catalog view (all vocabulary catalogs)
+  | 'catalogs'; // C8 — one catalog's terms, narrowed by `input.catalog`
 export type IIssueQueryFormat = 'json' | 'markdown';
 
 /** SPEC.md §5, §6.1's `axis` — the grouping dimension for `overlapUids` (§6.2). */
@@ -500,6 +511,8 @@ export interface IIssueQueryInput {
   overlapUids?: readonly string[];
   /** `view:'stale'` only — minutes since `claimedAt`; falls back to `project_policy.claim_stale_after_min` (default 30) when omitted. */
   staleAfterMin?: number;
+  /** C8 — `view:'catalogs'` only: narrow to one vocabulary catalog. Omitted ⇒ every catalog's terms (the same set `view:'kinds'` exposes). */
+  catalog?: CatalogKindName;
 }
 
 export const MAX_QUERY_LIMIT = 1000;
@@ -577,6 +590,12 @@ export type IIssueQueryResult =
   | { view: 'projects'; items: IProjectSummary[] }
   | { view: 'components'; items: IComponentSummary[] }
   | { view: 'locations'; items: ILocationSummary[] }
+  // C8 — the generated catalog surface. `kinds` is the whole view (every
+  // catalog + its terms + the collision flag); `catalogs` is ONE catalog's
+  // terms (or all of them when `input.catalog` is omitted). Flat payload per
+  // ADR-0004 — never a `{result}` wrapper.
+  | { view: 'kinds'; catalogs: ICatalogView }
+  | { view: 'catalogs'; terms: ICatalogTerm[] }
   | IIssueMarkdownResult;
 
 // ---------------------------------------------------------------------------
