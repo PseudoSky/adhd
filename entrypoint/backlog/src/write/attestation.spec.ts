@@ -97,6 +97,45 @@ describe('attestation — attest/recheck (real store, real git repo)', () => {
     git(repo, ['commit', '-qm', `add ${rel}`]);
   }
 
+  /**
+   * Commit `rel` in `root` with an EXPLICIT committer/author date. The suite's
+   * own `git()` helper backdates everything to 2020 so "untouched since
+   * filing" is genuinely true — but that also hides a real post-filing edit
+   * from `git log --since`. The changed-content proof needs a commit dated
+   * AFTER the recheck instant, so this helper takes the date as a parameter.
+   */
+  function commitAt(
+    root: string,
+    rel: string,
+    content: string,
+    iso: string
+  ): void {
+    mkdirSync(join(root, rel, '..'), { recursive: true });
+    writeFileSync(join(root, rel), content);
+    execFileSync('git', ['add', rel], {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    execFileSync('git', ['commit', '-qm', `set ${rel} @ ${iso}`], {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, GIT_AUTHOR_DATE: iso, GIT_COMMITTER_DATE: iso },
+    });
+  }
+
+  /** A SECOND, independently-registered git work tree — a sibling project root. */
+  async function siblingProject(dirName: string): Promise<string> {
+    const root = join(dir, dirName);
+    mkdirSync(root, { recursive: true });
+    git(root, ['init', '-q']);
+    git(root, ['config', 'user.email', 'test@example.com']);
+    git(root, ['config', 'user.name', 'attestation test']);
+    await upsertProject(store, { name: dirName, path: root, by: 'filer' });
+    return root;
+  }
+
   async function issue(title: string): Promise<string> {
     const created = await createIssue(store, {
       project: projectUid,
@@ -250,6 +289,66 @@ describe('attestation — attest/recheck (real store, real git repo)', () => {
     // Persisted history is the full three, not a truncated replacement.
     const att = await readRow(attestationUid);
     expect((att!.metadata!['checks'] as unknown[]).length).toBe(3);
+  });
+
+  it('CROSS-REPO — recheck resolves an ABSOLUTE sibling-project anchor against the sibling project root (unchanged → verified, changed → stale), never a false refutation', async () => {
+    const sibling = await siblingProject('sibling-repo');
+    const content = 'sibling evidence v1\n';
+    commitAt(sibling, 'evidence.txt', content, '2020-01-01T00:00:00Z');
+
+    // The subject issue lives in project A (`repo`); the anchor names a file
+    // in project B. A resolver that only knows A can never see B's file.
+    const uid = await issue('cross-repo citation subject');
+    const { attestationUid, check } = await attest(store, {
+      subject: { id: uid, revision: 0 },
+      claim: {
+        kind: 'source-reading',
+        body: 'cites a file owned by a sibling project',
+      },
+      anchor: {
+        locator: `path:${join(sibling, 'evidence.txt')}`,
+        digest: sha256(content),
+      },
+      by: 'attester:1',
+    });
+
+    // (b) unchanged sibling file → verified, never a false `stale`/`unknown`.
+    expect(check.state).toBe('verified');
+
+    const r1 = await recheck(store, { attestationUid, by: 'rechecker:1' });
+    expect(r1.checks[r1.checks.length - 1]!.state).toBe('verified');
+
+    // (c) the sibling file genuinely changes → the check reports stale, and it
+    // reports it from the sibling root (full_resolve), not a subject-root miss.
+    commitAt(
+      sibling,
+      'evidence.txt',
+      'sibling evidence v2\n',
+      '2030-01-01T00:00:00Z'
+    );
+    const r2 = await recheck(store, { attestationUid, by: 'rechecker:1' });
+    const last = r2.checks[r2.checks.length - 1]!;
+    expect(last.state).toBe('stale');
+    expect(last.method).toBe('full_resolve');
+  });
+
+  it('CROSS-REPO — recheck disambiguates a RELATIVE sibling-project anchor by the root that OWNS the file', async () => {
+    const sibling = await siblingProject('sibling-relative');
+    const content = 'relative evidence\n';
+    commitAt(sibling, 'only-here.txt', content, '2020-01-01T00:00:00Z');
+
+    const uid = await issue('relative cross-repo subject');
+    const { attestationUid } = await attest(store, {
+      subject: { id: uid, revision: 0 },
+      claim: { kind: 'source-reading' },
+      anchor: { locator: 'path:only-here.txt', digest: sha256(content) },
+      by: 'attester:1',
+    });
+
+    // `only-here.txt` resolves under the subject root too, but only exists in
+    // the sibling — the resolver must pick the root that owns the file.
+    const r = await recheck(store, { attestationUid, by: 'rechecker:1' });
+    expect(r.checks[r.checks.length - 1]!.state).toBe('verified');
   });
 
   it('a caller-observed revision that differs from the node is an explicit unknown/revision-drift, never `verified`', async () => {

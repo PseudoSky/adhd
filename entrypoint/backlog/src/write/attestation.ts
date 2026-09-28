@@ -28,10 +28,17 @@
  * the citation-sha pre-resolve discipline in `create-issue.ts`/`transition.ts`.
  */
 
+import { isAbsolute, relative, resolve as resolvePath } from 'node:path';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { resolveEdgeKindTx } from './catalog.js';
 import { writeAudit } from './audit.js';
-import { checkAnchor, parseAnchor } from './anchor-check.js';
+import {
+  checkAnchor,
+  existsAtHead,
+  isGitWorkTree,
+  parseAnchor,
+} from './anchor-check.js';
+import { isPathWithin, resolveSiblingProjectRootsTx } from './citation-path.js';
 import type {
   AttestationCheckState,
   IAttestCheck,
@@ -171,17 +178,18 @@ function assertRevisionPresent(
 }
 
 /**
- * Two-hop `owns_component`/`owns_project` walk to the subject issue's project
- * root — the SAME graph-invariant pattern `claim.ts`/`transition.ts`/`move.ts`
- * each carry locally (per this package's established per-file convention for
- * these small tx-scoped helpers). Returns the project's `metadata.path`, or
- * `undefined` for a path-less project (which `anchor-check.ts` reports as
- * `unknown`, never a silent success).
+ * Two-hop `owns_component`/`owns_project` walk to the subject issue's project —
+ * the SAME graph-invariant pattern `claim.ts`/`transition.ts`/`move.ts` each
+ * carry locally (per this package's established per-file convention for these
+ * small tx-scoped helpers). Returns the project's `uid` (needed to EXCLUDE it
+ * from the sibling-root probe) and its `metadata.path`, or a `undefined`/empty
+ * path for a path-less project (which `anchor-check.ts` reports as `unknown`,
+ * never a silent success).
  */
-async function resolveIssueProjectPath(
+async function resolveIssueProject(
   exec: IReadOneExecutor,
   issueRowid: number
-): Promise<string | undefined> {
+): Promise<{ uid: string; path: string | undefined }> {
   const componentEdge = await exec.executeGet<{ src: number }>(
     'SELECT src FROM edge WHERE dst = ? AND rel = ? AND t_invalid IS NULL',
     [issueRowid, 'owns_component']
@@ -203,16 +211,14 @@ async function resolveIssueProjectPath(
     );
   }
   const projectRow = await exec.executeGet<{
+    uid: string;
     kind: string;
     t_invalid: string | null;
     meta: string | null;
-  }>('SELECT kind, t_invalid, meta FROM node WHERE rowid = ?', [
+  }>('SELECT uid, kind, t_invalid, meta FROM node WHERE rowid = ?', [
     projectEdge.src,
   ]);
-  if (
-    projectRow?.kind !== 'project' ||
-    projectRow.t_invalid !== null
-  ) {
+  if (projectRow?.kind !== 'project' || projectRow.t_invalid !== null) {
     throw new Error(
       `attestation: resolved project rowid=${projectEdge.src} is missing, invalidated, or not a "project" node — ` +
         'graph invariant violation.'
@@ -220,7 +226,80 @@ async function resolveIssueProjectPath(
   }
   const meta = parseMeta(projectRow.meta);
   const path = meta?.['path'];
-  return typeof path === 'string' && path.length > 0 ? path : undefined;
+  return {
+    uid: projectRow.uid,
+    path: typeof path === 'string' && path.length > 0 ? path : undefined,
+  };
+}
+
+/**
+ * `target` as a path RELATIVE to `root`, or `undefined` when it escapes the
+ * root (a `..` traversal is not a repo path). The containment half reuses
+ * `citation-path.ts`'s `isPathWithin` — the same lexical check the citation
+ * write path uses — so this adds no second containment policy.
+ */
+function repoRelative(root: string, target: string): string | undefined {
+  const absRoot = resolvePath(root);
+  const abs = isAbsolute(target)
+    ? resolvePath(target)
+    : resolvePath(absRoot, target);
+  if (!isPathWithin(absRoot, abs)) return undefined;
+  const rel = relative(absRoot, abs);
+  return rel.length === 0 ? undefined : rel;
+}
+
+/**
+ * Resolve an anchor to the registered PROJECT ROOT that actually OWNS its
+ * `path:` target, so a cross-repo citation is probed against its own project's
+ * work tree instead of the subject issue's (BUG `78c96213` — the sibling-repo
+ * false refutation; demo beat 2.4).
+ *
+ * The candidate set is the subject's own project root FIRST, then every other
+ * live registered project root from {@link resolveSiblingProjectRootsTx} — the
+ * SAME registry source `createIssue`/`transition` use for their cross-repo
+ * citation probe (AC4), deliberately NOT a second path-resolution mechanism.
+ * The first root whose work tree has the target present at `HEAD` owns the
+ * anchor; when no root has it present (a moved/deleted file) the first root
+ * that merely CONTAINS the resolved target is returned, so the ladder still
+ * reports `stale`/`exists_at_head` exactly as the single-root path did.
+ * Non-`path:` anchors, and a subject with no project root, keep the subject
+ * root unchanged.
+ *
+ * TRADEOFF (deliberate, disclosed): a RELATIVE locator that exists at the SAME
+ * relative path under two roots is ambiguous by construction — the locator
+ * names no project — so the subject root wins. An ABSOLUTE locator is
+ * unambiguous. The content digest is the backstop: a wrong-root pick on a
+ * changed file still resolves `stale`.
+ */
+async function resolveAnchorRoot(
+  exec: IReadOneExecutor,
+  anchor: IAttestationAnchor,
+  subjectRoot: string | undefined,
+  subjectProjectUid: string | undefined
+): Promise<string | undefined> {
+  const parsed = parseAnchor(anchor.locator);
+  if (parsed.scheme !== 'path') return subjectRoot;
+
+  const siblingRoots =
+    subjectProjectUid === undefined
+      ? []
+      : await resolveSiblingProjectRootsTx(exec, subjectProjectUid);
+  const roots = [
+    ...new Set([
+      ...(subjectRoot !== undefined ? [subjectRoot] : []),
+      ...siblingRoots,
+    ]),
+  ];
+
+  let containmentFallback: string | undefined;
+  for (const root of roots) {
+    if (!isGitWorkTree(root)) continue;
+    const rel = repoRelative(root, parsed.target);
+    if (rel === undefined) continue;
+    if (existsAtHead(root, rel)) return root;
+    if (containmentFallback === undefined) containmentFallback = root;
+  }
+  return containmentFallback ?? subjectRoot;
 }
 
 function parseMeta(meta: string | null): Record<string, unknown> | undefined {
@@ -339,12 +418,19 @@ export async function attest(
   // the git ladder OUTSIDE any write lock (mirrors `create-issue.ts`'s
   // pre-transaction citation-sha discipline).
   const preSubject = await resolveAttestSubject(handle.adapter, input.subject.id);
-  // A SPEC revision owns no component, so the anchor ladder has no project
-  // root to resolve against — it degrades to `unknown`, never a false success.
-  const root =
+  // A SPEC revision owns no component, so it has no project of its own to
+  // resolve against — `resolveAnchorRoot` keeps the (absent) subject root and
+  // the anchor degrades to `unknown`, never a false success.
+  const preProject =
     preSubject.kind === 'issue'
-      ? await resolveIssueProjectPath(handle.adapter, preSubject.rowid)
+      ? await resolveIssueProject(handle.adapter, preSubject.rowid)
       : undefined;
+  const root = await resolveAnchorRoot(
+    handle.adapter,
+    input.anchor,
+    preProject?.path,
+    preProject?.uid
+  );
   const now = nowISO();
   let check = checkAnchor(input.anchor, {
     ...(root !== undefined ? { root } : {}),
@@ -456,10 +542,10 @@ export async function recheck(
     handle.adapter,
     prior.rowid
   );
-  const root =
+  const subjectProject =
     subjectIssueRowid === undefined
       ? undefined
-      : await resolveIssueProjectPath(handle.adapter, subjectIssueRowid);
+      : await resolveIssueProject(handle.adapter, subjectIssueRowid);
   const anchor = readAnchor(prior.metadata);
   const priorChecks = readChecks(prior.metadata);
   const sinceISO =
@@ -467,6 +553,17 @@ export async function recheck(
       ? priorChecks[priorChecks.length - 1]!.checked_at
       : readAssertedAt(prior.metadata);
   const now = nowISO();
+  // Resolve the anchor against the registered project that OWNS its target
+  // (sibling-repo cross-citation, BUG 78c96213) — not just the subject's own
+  // project path. The git ladder still runs pre-transaction, outside any lock.
+  const root = anchor
+    ? await resolveAnchorRoot(
+        handle.adapter,
+        anchor,
+        subjectProject?.path,
+        subjectProject?.uid
+      )
+    : undefined;
   const newCheck: IAttestCheck = anchor
     ? checkAnchor(anchor, {
         ...(root !== undefined ? { root } : {}),
@@ -524,4 +621,3 @@ function readAssertedAt(
   }
   return undefined;
 }
-
