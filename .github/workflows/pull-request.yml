@@ -51,6 +51,13 @@ jobs:
           sudo install -m 0755 /tmp/gitleaks /usr/local/bin/gitleaks
           gitleaks version
 
+      # The scanner's own teeth tests (unit + real-CLI integration, incl. the
+      # large single-line data-dump case that the credential-only scanner missed
+      # for months). ~0.5s; runs before the scan so a regressed detector can
+      # never report a clean PR.
+      - name: Scanner teeth tests
+        run: node --test .githooks/check-no-credentials.spec.mjs
+
       - name: Scan the PR diff for credentials
         env:
           # A missing/broken scanner is a HARD failure in CI, never a silent pass.

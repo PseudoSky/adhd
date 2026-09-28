@@ -173,6 +173,9 @@ bug in it.
    - `ADHD_AGENT_*{SECRET,TOKEN,KEY,PASSWORD}` assigned a literal value.
 2. **gitleaks** — authoritative when installed (~150 maintained rules), configured by
    [`.gitleaks.toml`](../.gitleaks.toml).
+3. **PII / data-dump shape rules** (`.githooks/lib/pii-rules.js`) — always run, zero
+   dependencies. Catch the personal-data shapes a credential scanner is blind to. See
+   [PII / data-dump detection](#pii--data-dump-detection) below.
 
 **Installing gitleaks** (recommended locally, **required** in CI):
 
@@ -191,6 +194,37 @@ brew install gitleaks
 Exit `2` exists because **a scanner that errored is not a scanner that found nothing.**
 Locally, a missing gitleaks degrades to pattern-only with a loud warning. In CI,
 `SECRET_SCAN_REQUIRE_GITLEAKS=1` turns that into a hard failure.
+
+### PII / data-dump detection
+
+The scanner also looks for **personally identifiable information and third-party data
+dumps**, not just credentials. This exists because a real 9.8 MB dating-app export was
+once committed as a JSON test fixture and the credential scanner never saw it:
+`sanitize()` skipped files over 4 MiB, the per-line loop skipped lines over 4096 chars,
+and the export was a single 9.8 MB line.
+
+Rules (`.githooks/lib/pii-rules.js`, zero dependencies, shape-first):
+
+| Rule                        | Signal                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------ |
+| `pii:large-added-file`      | a **newly added** file over 1 MiB (the canonical large-file gate)                          |
+| `pii:minified-large-file`   | a >1 MiB file with no newline in its first 4 KiB                                           |
+| `pii:structured-person-dump`| a JSON/JSONL file dense with sensitive field names (`birth_date`, `gender`, `ssn`, `bio`, …)|
+| `pii:vendor-data-domain`    | a known third-party data host (e.g. a dating-app photo CDN)                                |
+| `pii:email-dump` / `pii:phone-dump` | ≥ 25 distinct emails / E.164 numbers in one file                                  |
+| `pii:us-ssn`                | a valid-shaped US Social Security number                                                    |
+| `pii:credit-card`           | a Luhn-valid card number **in card context** (UUID fragments like `0000-0000-…` excluded)   |
+| `pii:iban`                  | a mod-97-valid IBAN                                                                         |
+
+The PII pass runs over **every** candidate file — including the large and single-line
+files the credential pass skips. Escape hatches, both reviewable and greppable:
+
+- per line: `// pragma: allowlist secret` (same pragma as credentials) — or `pii`
+- per file (a structured fixture has no single line): put `pragma: allowlist pii` in the
+  file's first 4 KiB.
+
+There is deliberately **no directory allowlist** — a legitimate fixture that must keep a
+dense PII shape carries the file-level pragma explicitly.
 
 ## False positives
 

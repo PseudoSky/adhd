@@ -5,6 +5,10 @@
  * Scans the STAGED content of a commit (not the working tree) for:
  *   1. forbidden PATHS   — artifacts known to embed resolved secret values
  *   2. forbidden CONTENT — high-signal credential patterns
+ *   2b. PII / data dumps — high-signal personal data and third-party exports,
+ *       run over EVERY file including ones the credential pass skips for
+ *       size (see `lib/pii-rules.js`; a 9.8 MB export once slipped through a
+ *       4 MiB cap here — never again)
  *
  * Exit 0 = clean. Exit 1 = blocked. Exit 2 = the check itself could not run
  * (missing git, unreadable index) — a hard failure, never a silent skip.
@@ -33,8 +37,29 @@
 const { execFileSync, spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+const piiRules = require('./lib/pii-rules');
 
 const ALLOWLIST_PRAGMA = /pragma:\s*allowlist secret/i;
+// File-level escape for a PII scan (a structured fixture has no single line to
+// annotate). `secret` is honoured too so one pragma covers both passes.
+const PII_FILE_PRAGMA = /pragma:\s*allowlist\s+(?:pii|secret)/i;
+
+/**
+ * Files that DEFINE the patterns being hunted — the scanner, its PII rule
+ * module and spec, and the gitleaks config. Without this the gate flags itself
+ * (the PII module literally contains `images-ssl.gotinder.com` as a rule) and
+ * could never be committed. Kept as an explicit allowlist, never a directory
+ * glob: exempting a whole tree is how real secrets hide in "fixtures".
+ */
+const SELF_DEFINING = new Set([
+  '.githooks/check-no-credentials.js',
+  '.githooks/lib/pii-rules.js',
+  '.githooks/check-no-credentials.spec.mjs',
+  '.gitleaks.toml',
+]);
+function isSelfDefining(p) {
+  return SELF_DEFINING.has(p.split(path.sep).join('/'));
+}
 
 /**
  * Modes. The SAME rule table runs locally and in CI (and now the
@@ -164,17 +189,71 @@ function git(args) {
   return execFileSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 }
 
-/** Candidate (non-deleted) paths for the active mode. */
-function candidatePaths(mode) {
-  if (mode.kind === 'staged') {
-    return git(['diff', '--cached', '--name-only', '--diff-filter=ACMR', '-z']).split('\0').filter(Boolean);
+/**
+ * Candidate (non-deleted) entries for the active mode, each with its git
+ * name-status code (`A`/`M`/`C`/`R`) so the PII pass can distinguish a NEWLY
+ * ADDED file from a modified one (only additions mean new data entering the
+ * repo). `--name-status -z` yields NUL-separated `STATUS\0path\0` records,
+ * with renames/copies adding a second path token.
+ */
+function candidateEntries(mode) {
+  if (mode.kind === 'all') {
+    // Audit mode: every tracked file, treated as present (shape check is a
+    // per-commit notion and is skipped here; status `M` is a safe default).
+    return git(['ls-files', '-z']).split('\0').filter(Boolean).map((p) => ({ path: p, status: 'M' }));
   }
-  if (mode.kind === 'range') {
-    return git(['diff', '--name-only', '--diff-filter=ACMR', '-z', mode.base, mode.head])
-      .split('\0')
-      .filter(Boolean);
+  const args = mode.kind === 'staged'
+    ? ['diff', '--cached', '--name-status', '--diff-filter=ACMR', '-z']
+    : ['diff', '--name-status', '--diff-filter=ACMR', '-z', mode.base, mode.head];
+  const toks = git(args).split('\0').filter(Boolean);
+  const out = [];
+  for (let i = 0; i < toks.length; ) {
+    const status = toks[i++][0];
+    if (status === 'R' || status === 'C') {
+      i += 1; // old path (dropped)
+      const newp = toks[i++];
+      if (newp) out.push({ path: newp, status });
+    } else {
+      const p = toks[i++];
+      if (p) out.push({ path: p, status });
+    }
   }
-  return git(['ls-files', '-z']).split('\0').filter(Boolean);
+  return out;
+}
+
+/** Byte size of `p` at the scanned revision (index/commit for staged/range). */
+function sizeOf(mode, p) {
+  if (mode.kind === 'all') {
+    try { return fs.statSync(p).size; } catch { return 0; }
+  }
+  const rev = mode.kind === 'staged' ? `:0:${p}` : `${mode.head}:${p}`;
+  const r = spawnSync('git', ['cat-file', '-s', rev], { encoding: 'utf8' });
+  if (r.status !== 0) return 0;
+  return parseInt(r.stdout.trim(), 10) || 0;
+}
+
+/**
+ * Content for the PII pass. Deliberately does NOT apply `sanitize`'s 4 MiB
+ * cap — that cap is the reason the 9.8 MB leak was never scanned. Binary is
+ * still skipped (a NUL in the first 8 KiB), and an extreme 64 MiB ceiling
+ * keeps a pathological file from exhausting memory (such a file trips the
+ * large-added-file shape check regardless).
+ */
+function readForPii(mode, p) {
+  const MAX = 64 * 1024 * 1024;
+  let buf;
+  if (mode.kind === 'all') {
+    try { buf = fs.readFileSync(p); } catch { return null; }
+  } else {
+    const rev = mode.kind === 'staged' ? `:0:${p}` : `${mode.head}:${p}`;
+    const r = spawnSync('git', ['show', rev], { encoding: 'buffer', maxBuffer: MAX + 1024 });
+    if (r.status !== 0) return null;
+    buf = r.stdout;
+  }
+  if (!buf || buf.length === 0) return null;
+  if (buf.subarray(0, 8192).includes(0)) return null;
+  if (buf.length > MAX) return null;
+  return buf.toString('utf8');
 }
 
 function sanitize(buf) {
@@ -252,14 +331,15 @@ function main(argv = process.argv.slice(2)) {
   const requireGitleaks = process.env.SECRET_SCAN_REQUIRE_GITLEAKS === '1';
 
   let repoRoot;
-  let paths;
+  let entries;
   try {
     repoRoot = git(['rev-parse', '--show-toplevel']).trim();
-    paths = candidatePaths(mode);
+    entries = candidateEntries(mode);
   } catch (e) {
     console.error(`✖ secret-scan: cannot read git state — refusing to pass.\n  ${e.message}`);
     return 2;
   }
+  const paths = entries.map((e) => e.path);
   if (paths.length === 0) {
     console.log('✓ secret-scan: nothing to scan.');
     return 0;
@@ -282,8 +362,7 @@ function main(argv = process.argv.slice(2)) {
   for (const p of paths) {
     // These files DEFINE the patterns being hunted. Without the exemption the
     // scanner flags itself and can never be committed.
-    if (posixEq(p, '.githooks/check-no-credentials.js')) continue;
-    if (posixEq(p, '.gitleaks.toml')) continue;
+    if (isSelfDefining(p)) continue;
     const content = contentAt(mode, p);
     if (content === null) continue;
 
@@ -299,6 +378,31 @@ function main(argv = process.argv.slice(2)) {
         if (rule.name === 'adhd-agent-secret-assignment' && PLACEHOLDER.test(line)) continue;
         findings.push({ file: p, line: i + 1, rule: rule.name, why: 'matched a credential pattern' });
       }
+    }
+  }
+
+  // ── 2b. PII / structured-data dump ────────────────────────────────────────
+  // Runs over EVERY candidate (including files > 4 MiB and single-line dumps),
+  // which the credential pass above deliberately skips. Shape-first: the point
+  // is to catch a third-party export — a large, repetitive array of person
+  // records — not to flag individual emails. See lib/pii-rules.js.
+  for (const entry of entries) {
+    if (isSelfDefining(entry.path)) continue;
+
+    for (const f of piiRules.scanShape({
+      path: entry.path,
+      status: entry.status,
+      size: entry.status === 'A' ? sizeOf(mode, entry.path) : 0,
+    })) {
+      findings.push({ file: entry.path, line: 0, rule: f.rule, why: f.why });
+    }
+
+    const content = readForPii(mode, entry.path);
+    if (content === null) continue;
+    // File-level escape hatch for a deliberate, reviewed fixture.
+    if (PII_FILE_PRAGMA.test(content.slice(0, 4096))) continue;
+    for (const f of piiRules.scanContent(content)) {
+      findings.push({ file: entry.path, line: 0, rule: f.rule, why: f.why });
     }
   }
 
@@ -321,7 +425,7 @@ function main(argv = process.argv.slice(2)) {
   }
 
   if (findings.length > 0) {
-    console.error('\n✖ secret-scan: possible credential leak — BLOCKED.\n');
+    console.error('\n✖ secret-scan: possible credential or PII leak — BLOCKED.\n');
     for (const f of findings) {
       const loc = f.line > 0 ? `${f.file}:${f.line}` : f.file;
       console.error(`  [${f.rule}] ${loc}`);
@@ -330,6 +434,8 @@ function main(argv = process.argv.slice(2)) {
     console.error('\n  Values are never printed here. Open the file to inspect.');
     console.error('  If a match is genuinely not a secret, append this to the line:');
     console.error('      pragma: allowlist secret');
+    console.error('  For a deliberate PII fixture, put this at the top of the file:');
+    console.error('      pragma: allowlist pii');
     console.error('  Emergency bypass (leaves the secret in history): git commit --no-verify\n');
     return 1;
   }
@@ -339,8 +445,8 @@ function main(argv = process.argv.slice(2)) {
     console.warn('  Install for full coverage:  brew install gitleaks');
   }
   console.log(
-    `✓ secret-scan: no credentials in ${paths.length} file(s) [${mode.kind}]` +
-      (gl.ran ? ' (gitleaks + built-in rules)' : ' (built-in rules only)'),
+    `✓ secret-scan: no credentials or PII in ${paths.length} file(s) [${mode.kind}]` +
+      (gl.ran ? ' (gitleaks + built-in rules + PII shape rules)' : ' (built-in rules + PII shape rules)'),
   );
   return 0;
 }
