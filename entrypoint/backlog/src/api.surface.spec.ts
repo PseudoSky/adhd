@@ -24,4 +24,5 @@ describe("mocked: api.surface", () => {
   it.todo("mocked: mounts exactly the verbs SPEC §6.7 names, under the names it names");
   it.todo("mocked: mounts `delete` under its spec'd name — the export alias is load-bearing");
   it.todo("mocked: mounts no verb twice and no verb outside the list");
+  it.todo("mocked: does NOT mount the retired `annotate` verb (negative control)");
 });
