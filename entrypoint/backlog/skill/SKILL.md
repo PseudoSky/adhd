@@ -33,8 +33,17 @@ before relying on a field.
 
 ## 1. Command surface — 28 verbs (plus `batch`), one calling convention
 
-**Every verb takes a single `--input` flag carrying one JSON object.** There
-are no per-field flags.
+**Every verb except `embedding-status` takes a single `--input` flag carrying
+one JSON object** (`embedding-status` takes no options at all). There
+are no per-field flags: a per-field option (`get --uid …`, `query --view
+list`, `create --title …`, `batch action --operation …`) is rejected with
+`invalid_argument` (exit 2) and the message
+`Unknown option: --<field>. Available: --input`. The generated `--help`
+footer's "per-field flags are also accepted" line is boilerplate that does
+**not** hold for these commands — `--input` is the only option any verb
+accepts, verified by running it. (The special commands `serve`,
+`install-skill`, and `search` are the exception: they take argv flags and no
+`--input`.)
 
 Any verb that takes a `uid` also accepts a **unique uid prefix** (8+ hex
 characters — the first UUID block, e.g. `4fc3704e`). An exact uid always wins;
@@ -48,7 +57,7 @@ adhd-backlog backlog attest             --input '<IAttestInput json>'
 adhd-backlog backlog claim              --input '<IClaimInput json>'
 adhd-backlog backlog create             --input '<ICreateIssueInput json>'
 adhd-backlog backlog delete             --input '<IDeleteIssueInput json>'
-adhd-backlog backlog embedding-status   --input '{}'
+adhd-backlog backlog embedding-status                (no options — takes neither --input nor any flag)
 adhd-backlog backlog get                --input '<IIssueGetInput json>'
 adhd-backlog backlog lookup             --input '<ILookupInput json>'
 adhd-backlog backlog merge-project      --input '<IMergeProjectInput json>'
@@ -145,6 +154,23 @@ Use it to confirm WHICH store a command would touch before running a write.
 Combined with the global `--namespace sandbox` flag (valid before any
 command) it reports the throwaway store that flag would mint, so you can
 check isolation without creating anything.
+
+The **`adhdRoot` key is present only when a root was explicitly resolved** —
+the `ADHD_ROOT` env var is set, or `--namespace sandbox` minted one — and is
+**omitted** for the default `production`/`test` namespaces. Verified: plain
+`sandbox-path` prints
+`{"namespace":"production","dbPath":"/…/backlog-v2.db","embeddingEnabled":true}`
+with no `adhdRoot`, while the same call with `ADHD_ROOT=/tmp/foreign-root` (or
+`--namespace sandbox`) adds the key.
+
+`--namespace sandbox` also **ignores a foreign `ADHD_ROOT`** rather than
+writing to it: if the variable names a path this tool did not mint as a
+sandbox, it warns
+`[backlog] --namespace sandbox: ADHD_ROOT=<path> is set but is not a sandbox this tool created — ignoring it and minting a fresh isolated store instead, so --namespace sandbox never writes into an unrecognized (possibly production) location.`
+and mints a fresh throwaway store. So a stray `ADHD_ROOT` can never redirect a
+sandboxed run into an unrecognized location — but it also means a sandbox you
+want to *reuse* must be the exact path printed when it was created, not any
+directory you set `ADHD_ROOT` to.
 
 Two conventions apply to every transcript below. **Uids are truncated with
 `…` for readability** — always pass the FULL value the previous call
@@ -262,6 +288,27 @@ $ adhd-backlog backlog create --input '{
 {"ok":true,"data":{"created":true,"uid":"a61ff0b6-a0f1-4189-9923-671f6cbacd4e","item":{"uid":"a61ff0b6-a0f1-4189-9923-671f6cbacd4e","title":"Flaky test in auth module","kind":"issue","status":"open","priority":"HIGH","project":"020e87f2-…","component":"dcf134ab-…","createdAt":"2026-09-17T01:22:56.056Z","author":"claude:1"}}}
 ```
 
+`data` carries three more fields beyond `created`/`uid`/`item`:
+
+- **`placementResolved`** — `'explicit'` when a caller-supplied `component`
+  resolved, or `'default-root'` when the omitted `component` fell back to the
+  project's reserved `(root)` component. A supplied component that does NOT
+  resolve still throws before this field is reached, so `'default-root'` is
+  the only signal that an item was silently filed on `(root)` (and is thus
+  invisible to component-scoped scans — §7's filing rule).
+- **`duplicateScanDegraded` / `duplicateScanDegradedReason`** — present iff
+  the pre-write dedupe scan could not run a calibrated comparison, on EVERY
+  outcome (even a successful write). The reason is a concrete
+  `'no-search-backend' | 'no-embed-query' | 'no-vector-scores'`, never a
+  generic "unavailable". Verified: with embeddings off, a `create` against a
+  non-empty store returns
+  `"duplicateScanDegraded":true,"duplicateScanDegradedReason":"no-search-backend"`.
+  Both fields are **absent on a healthy scan**. When the scan is degraded in
+  the never-resolvable `'no-embed-query'` way AND `duplicateAction` is the
+  default `'abort'`, nothing is written and the result is
+  `{created:false, reason:"duplicate-scan-degraded", duplicateScanDegraded:true,
+  duplicateScanDegradedReason:"no-embed-query"}` instead.
+
 Filing more than a handful of similar issues in a row? Use `batch action`
 (§8) instead of repeating this call.
 
@@ -325,7 +372,15 @@ $ adhd-backlog backlog query --input '{"filter":{"project":"demo-project","statu
 
 `query.view` (default `'list'`) selects the result shape: `list` · `ready` ·
 `graph` · `order` · `stale` · `similar` · `overlap` · `projects` · `components`
-· `locations` (the last three are the registry LIST views — §7). `text` is the
+· `locations` (the last three are the registry LIST views — §7). **`ready` is
+NOT an actionability filter** — it selects the `open` issues that are
+**unclaimed** and whose every live incoming `blocks` blocker is **terminal**
+(a pure claim/`blocks` predicate; it never evaluates obligations, evidence, or
+attestations). An item whose `block`-severity obligation is unsatisfied —
+`fields:["verdict"]` returns `actionable:false` — still appears in `ready`,
+while an item with an open `blocks` source does not. **To find actionable
+work, read `fields:["verdict"]`; do not send an actionable-work query to
+`view:"ready"`.** `text` is the
 natural-language form — routed to `filter.semantic` when a populated vector
 space can rank it, or `filter.grep` (keyword FTS) otherwise; never set
 `text` alongside `filter.semantic`/`filter.grep` yourself. Pagination is
@@ -470,6 +525,23 @@ $ adhd-backlog backlog recheck --input '{"attestationUid":"<attestationUid>","by
 {"ok":true,"data":{"attestationUid":"…","checks":[{"state":"verified",…},{"state":"stale",…}]}}
 ```
 
+**Prerequisite for `path:` anchors — the subject project's registered `path`
+must be a git work tree.** The anchor ladder resolves a `path:` locator by
+running git against that project path, so `check.state:"verified"` is produced
+only when the path is a real git work tree containing the file. With a
+**non-git** registered project path the real result is
+`{"state":"unknown","method":"none","reason":"no git work tree at \"<path>\""}`
+— `verified` is never produced, so a `block`-severity `evidence` obligation of
+that kind **stays unsatisfied and the close stays refused**. A `url:` anchor is
+likewise only `unverified`
+(`reason:"no mechanical checker is wired for \"url:\" anchors yet"`), and a
+`revision:` anchor (the `annotate` default) is `unverified` too. Without a git
+work tree to verify against, satisfy such an obligation another way: register
+the project with a `path` that **is** the real git work tree, use
+`on_fail:"warn"` (a warn obligation never gates a transition), or list your
+actor in the obligation's `override.actors` and pass a recorded
+`override.reason` (§4 "Overriding a refusing obligation").
+
 ## 4. Obligations, attestations & the actionability verdict
 
 An **obligation** is a typed, stored requirement on an issue, scoped to a
@@ -584,6 +656,12 @@ cheap-first anchor ladder, and its `check.state` is one of
 $ adhd-backlog attest --input '{"subject":{"id":"1d9b77e5-…","revision":0},"claim":{"kind":"published-artifact"},"anchor":{"locator":"path:README.md","digest":"sha256:<hex>"},"by":"agent:worker-1"}'
 {"ok":true,"data":{"attestationUid":"8f3604b9-…","subject":{"id":"1d9b77e5-…","revision":0},"check":{"state":"verified","method":"changed_since","checked_at":"…","checked_by":"agent:worker-1"}}}
 ```
+
+That `verified` requires the subject project's registered `path` to be a **git
+work tree** containing the file. Against a non-git project path the same call
+returns `state:"unknown"`, `method:"none"`,
+`reason:"no git work tree at \"<path>\""`, and the transition below stays
+refused — see §3's `attest` note for the remedies.
 
 Now the close succeeds:
 
@@ -730,7 +808,9 @@ The default `anchor` is `{ locator: "revision:<revision uid>", digest:
 `graph` · `order` · `stale` · `similar` · `overlap` · `projects` · `components`
 · `locations` · `kinds` · `catalogs`. The registry list views
 (`projects`/`components`/`locations`) are §7. The catalog views and `order` are
-below.
+below. (`ready`'s exact predicate — `open` ∧ unclaimed ∧ every live incoming
+`blocks` blocker terminal — is defined in §3; it is **not** actionability, for
+which read `fields:["verdict"]`.)
 
 ### Catalogs — the live vocabularies
 
@@ -758,6 +838,22 @@ call time (`store` for `kind`/`status`/`priority` — live rows with a
 `issue_field_union`, `error_code_union`, `valid_location_types`,
 `mounted_verb_surface` for the in-code vocabularies). A `deprecated` term
 carries `replacedBy`.
+
+> **`kind` is an OPEN, free-form vocabulary — the `kind` catalog is a usage
+> CENSUS, not an allowlist.** `create`/`update` accept ANY `kind` string with
+> no validation: it is stored verbatim and the name then appears as a `kind`
+> term with `source:"store"` and a `usageCount` (verified: creating with
+> `"kind":"totally-made-up-kind"` succeeds and the term shows up on the next
+> `view:"catalogs"`). On a **fresh store the `kind` catalog is EMPTY**
+> (`{"terms":[]}`) — it reflects what has been filed, not what is permitted.
+> The conventional names are `issue` (the default, and the read path's item
+> scope) and `plan` (a plan is an ordinary issue with `kind:"plan"`; see
+> "Dependency order" below). Unlike `create`, **`filter.kind` IS validated
+> against this live census**: filtering by a name that has never been used is
+> a `validation` error naming the existing values
+> (`existing kind values: …`), so file one item with a kind before filtering
+> by it. This mirrors §3's note that `status` is an open catalog — neither is
+> a fixed enum.
 
 > **Trap — `catalog` is silently ignored without `view:"catalogs"`.** The
 > selector is honoured ONLY on `view:"catalogs"`. `{"catalog":"status"}` with

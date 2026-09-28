@@ -60,11 +60,20 @@ adhd-backlog create --input '{
 ```
 
 ```json
-{ "ok": true, "data": { "created": true, "uid": "b3b2da0e-…", "item": { "uid": "b3b2da0e-…", "title": "Query pagination drops the last page under offset paging", "kind": "issue", "status": "open", "priority": "HIGH", "project": "49ec673b-…", "component": "65c4e373-…", "createdAt": "2026-09-24T00:14:38.802Z", "author": "agent:worker-1", "gitContext": "feat/backlog-hard-replacement @ 4bf902fc" } } }
+{ "ok": true, "data": { "created": true, "uid": "b3b2da0e-…", "item": { "uid": "b3b2da0e-…", "title": "Query pagination drops the last page under offset paging", "kind": "issue", "status": "open", "priority": "HIGH", "project": "49ec673b-…", "component": "65c4e373-…", "createdAt": "2026-09-24T00:14:38.802Z", "author": "agent:worker-1", "gitContext": "feat/backlog-hard-replacement @ 4bf902fc" }, "placementResolved": "default-root" } }
 ```
 
 > `project` and `component` in the result are `uid`s, not names. `gitContext`
 > is described under [Citations & git context](#citations--git-context).
+> `placementResolved` is `"default-root"` when the omitted `component` fell
+> back to the project's reserved `(root)` component, or `"explicit"` when a
+> supplied one resolved — a `default-root` item is invisible to
+> component-scoped scans. A create result may additionally carry
+> `duplicateScanDegraded: true` plus `duplicateScanDegradedReason`
+> (`"no-search-backend"` / `"no-embed-query"` / `"no-vector-scores"`) when the
+> pre-write dedupe scan could not run a calibrated comparison; both are absent
+> on a healthy scan and never imply the write failed. Full field notes are in
+> [`skill/SKILL.md` §3](skill/SKILL.md).
 
 Query for it:
 
@@ -240,7 +249,15 @@ See [`skill/SKILL.md` §5](skill/SKILL.md) for the append/check worked example.
 `query --input '{"view":"catalogs"}'` returns every vocabulary the store
 enforces (kinds, statuses, priorities, relations, fields, error codes, location
 types, and the mounted verbs), each term naming the in-code source it was
-generated from. `query --input '{"view":"order","filter":{"plan":"<uid>"}}'`
+generated from. Note that **`kind` is open/free-form, not an enumerable
+allowlist**: `create` accepts any `kind` string and the `kind` catalog is a
+usage census (`source: "store"`), so it is **empty on a fresh store** and then
+lists what has actually been filed (`"issue"` is the default; `"plan"` is the
+conventional parent kind). `filter.kind` is validated against that live census,
+so filtering by a never-used kind is a `validation` error naming the values
+that do exist. This mirrors `status`, which is likewise an open catalog.
+
+`query --input '{"view":"order","filter":{"plan":"<uid>"}}'`
 returns a plan's members topologically ordered by their `blocks` edges. Note
 the trap: the `catalog` selector is honoured only with `view:"catalogs"` —
 `{"catalog":"status"}` without it silently returns the ordinary `list` view
@@ -250,8 +267,15 @@ the trap: the `catalog` selector is honoured only with `view:"catalogs"` —
 ## Command surface
 
 Every verb but `embedding-status` takes a single `--input` flag carrying one JSON
-object; there are no per-field flags. Twenty-nine operations (the 28 verbs plus
-`batch`):
+object; `embedding-status` takes **no** options at all. **There are no per-field
+flags** — a per-field option (`get --uid …`, `query --view list`, `create
+--title …`, `batch action --operation …`) fails with `invalid_argument` (exit 2)
+and `Unknown option: --<field>. Available: --input`. (`--help` prints a
+"per-field flags are also accepted" footer line; it is generated boilerplate
+that does not hold for these commands — `--input` is the only option they
+accept. The special commands `serve`, `install-skill`, and `search` are the
+exception: they take argv flags and no `--input`.) Twenty-nine operations (the
+28 verbs plus `batch`):
 
 | Verb              | CLI                             | MCP tool                   |
 | ----------------- | ------------------------------- | -------------------------- |
@@ -328,6 +352,14 @@ with `total_relation: 'gte'` — a lower bound, never a fabricated exact number
 (`'eq'` means exact). `graph`/`order`/`overlap` are a graph, a topological
 order, and an axis grouping — they deliberately carry **no** `meta`, because
 none of them is a filtered row set with an honest "how many matched" count.
+
+> **`view:"ready"` is not an actionability filter.** It selects the `open`
+> issues that are unclaimed and whose every live incoming `blocks` blocker is
+> terminal — a pure claim/`blocks` predicate that never evaluates obligations
+> or evidence. An item with an unsatisfied `block`-severity obligation
+> (`fields:["verdict"]` reports `actionable:false`) still appears in `ready`.
+> To find actionable work, read `fields:["verdict"]`; do not use `ready`.
+> Full definition: [`skill/SKILL.md` §3](skill/SKILL.md).
 
 A derived `_score` always carries its provenance: `_score_kind` is `'rrf'`
 (the fused text+vec rank `view:'similar'` and semantic list reads use),
@@ -463,7 +495,7 @@ into a narrower scope.
 | Write busy timeout | `ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS`               | `5000`                        | How long a write waits on a contended lock before giving up                                                                                                                                                                                                                                                                                                                                             |
 | Log level          | `ADHD_BACKLOG_LOG_LEVEL`                              | `info`                        | `trace`\|`debug`\|`info`\|`warn`\|`error`\|`fatal`\|`silent`                                                                                                                                                                                                                                                                                                                                            |
 | Scope              | `ADHD_BACKLOG_SCOPE` (falls back to `ADHD_ENV_SCOPE`) | `global`                      | Which store root to resolve against                                                                                                                                                                                                                                                                                                                                                                     |
-| Namespace          | `--namespace <value>` CLI flag (no env var)           | `production`                  | Which path segment under the scope root to resolve against (`<root>/backlog/<namespace>/…`) — one of `production`\|`test`\|`sandbox`. `--namespace sandbox` ALSO mints a fresh throwaway root and writes a real `config.yaml` there with `embedding.enabled: false`, so a sandboxed invocation is isolated along two independent axes plus a deliberate config, never an accident of an empty directory |
+| Namespace          | `--namespace <value>` CLI flag (no env var)           | `production`                  | Which path segment under the scope root to resolve against (`<root>/backlog/<namespace>/…`) — one of `production`\|`test`\|`sandbox`. `--namespace sandbox` ALSO mints a fresh throwaway root and writes a real `config.yaml` there with `embedding.enabled: false`, so a sandboxed invocation is isolated along two independent axes plus a deliberate config, never an accident of an empty directory. It also **ignores a foreign `ADHD_ROOT`**: if the variable names a path this tool did not mint as a sandbox it warns `… is not a sandbox this tool created — ignoring it …` and mints a fresh store instead, so a stray `ADHD_ROOT` can never redirect a sandboxed run into an unrecognized location. `adhd-backlog sandbox-path` reports the resolved store without opening it; its `adhdRoot` key is present only when a root was explicitly resolved (`ADHD_ROOT` set, or `--namespace sandbox`) and is omitted for the default `production`/`test` namespaces |
 | Semantic search    | `ADHD_BACKLOG_EMBEDDING_ENABLED`                      | `false`                       | See below                                                                                                                                                                                                                                                                                                                                                                                               |
 | Embedding provider | `ADHD_BACKLOG_EMBEDDING_PROVIDER`                     | `fastembed`                   | Only consulted when embedding is enabled                                                                                                                                                                                                                                                                                                                                                                |
 | Embedding model    | `ADHD_BACKLOG_EMBEDDING_MODEL`                        | `bge-base-en-v1.5` (768-dim)  | Only consulted when embedding is enabled                                                                                                                                                                                                                                                                                                                                                                |
