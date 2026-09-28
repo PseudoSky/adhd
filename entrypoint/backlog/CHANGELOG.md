@@ -1,3 +1,38 @@
+## 1.1.0 (2026-09-28)
+
+### 🚀 Features
+
+- **backlog:** deterministic dependent-weight tiebreak in view:"order" (C2 AC4) ([15dc77ba](https://github.com/PseudoSky/adhd/commit/15dc77ba))
+- **backlog:** C6 verdict — derived actionability with reasons; claim refuses live blockers ([c0c0ea5c](https://github.com/PseudoSky/adhd/commit/c0c0ea5c))
+- **backlog:** C5 closure gate — terminal transitions require satisfied obligations ([a49ec889](https://github.com/PseudoSky/adhd/commit/a49ec889))
+- **backlog:** C10 — a spec is a revision of its ticket (store-citizen documents) ([02a969ba](https://github.com/PseudoSky/adhd/commit/02a969ba))
+- **backlog:** C4 obligation — obligate/unobligate + closed predicate core ([72ddafbe](https://github.com/PseudoSky/adhd/commit/72ddafbe))
+- **backlog:** C8 — closed primitives, readable catalogs, self-describing surface ([5e8cb041](https://github.com/PseudoSky/adhd/commit/5e8cb041))
+- **backlog:** C3 attestation — attest/recheck, anchors, citation roots ([f675393b](https://github.com/PseudoSky/adhd/commit/f675393b))
+- **backlog:** C9 cross-project similarity detection and reviewed linking ([f9e1eb96](https://github.com/PseudoSky/adhd/commit/f9e1eb96))
+- **backlog:** D-A trustworthy service layer — readiness, config-drift gate, retry+breaker ([aa894690](https://github.com/PseudoSky/adhd/commit/aa894690))
+- **backlog:** foundation — attestation/obligation node kinds + attests/has_obligation/satisfies edges (69632883) ([cc7eae49](https://github.com/PseudoSky/adhd/commit/cc7eae49))
+- **backlog:** C1 reference — prefix resolution, redirect, merge/rm-project ([2780b433](https://github.com/PseudoSky/adhd/commit/2780b433))
+- **backlog:** C7 honest envelopes, score provenance, bounded sub-collections, report ([8fa60ffd](https://github.com/PseudoSky/adhd/commit/8fa60ffd))
+- **backlog:** C2 kind-scope — related exposes all rel types, order spans member kinds ([f02e8d23](https://github.com/PseudoSky/adhd/commit/f02e8d23))
+
+### 🩹 Fixes
+
+- **backlog:** collapse the kind case-fragments in the repair CLI, pin the transition-path refusal ([16b42095](https://github.com/PseudoSky/adhd/commit/16b42095))
+- **backlog:** C10 spec discovery sees declared-kind SPECs, not only raw kind (603737c2) ([e4a6b51d](https://github.com/PseudoSky/adhd/commit/e4a6b51d))
+- **backlog:** C10 reconcile discovers live kind:SPEC items, not only raw node kind ([9c87e1d4](https://github.com/PseudoSky/adhd/commit/9c87e1d4))
+- **backlog:** C9 wire the cross-project structural second signal (A-side) ([c01ef514](https://github.com/PseudoSky/adhd/commit/c01ef514))
+- **backlog:** D-A apply the resolved service.* config (port/transport/host/resilience) ([4405e717](https://github.com/PseudoSky/adhd/commit/4405e717))
+- **backlog:** rename create partOf input to dedupeExcludeUid (c5460239; 081facec) ([7584a847](https://github.com/PseudoSky/adhd/commit/7584a847))
+- **backlog:** C1 lookup — match issue name, not body, so the registry is not shadowed ([46b3165d](https://github.com/PseudoSky/adhd/commit/46b3165d))
+- **backlog:** C7 — reconcile _score_kind doc/code vocabulary ([3c111d80](https://github.com/PseudoSky/adhd/commit/3c111d80))
+- **backlog:** create dedupe excludes a declared parent + its part_of ancestors (c5460239) ([dfb5aca9](https://github.com/PseudoSky/adhd/commit/dfb5aca9))
+- **backlog:** create dedupe gate fails closed, not open, on a degraded scan (BUG 4e8fce2a; cc2b5b87) ([04dd0283](https://github.com/PseudoSky/adhd/commit/04dd0283))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 1.0.5 (2026-09-27)
 
 ### 🩹 Fixes
