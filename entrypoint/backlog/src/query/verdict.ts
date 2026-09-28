@@ -8,7 +8,7 @@
  * | Rung | What runs | Produces |
  * |---|---|---|
  * | 1 | incoming live `blocks` (indexed in-degree) | `Blocked`/`BlockedBy` for each non-terminal blocker |
- * | 2 | obligation presence & shape + predicate evaluation + claim staleness | `Obligation`/`Evidence`/`Claim` conditions |
+ * | 2 | obligation presence & shape + close-predictor skip + predicate evaluation + claim staleness | `Obligation`/`Evidence`/`Claim` conditions |
  * | 3 | anchor existence at HEAD | `EvidenceStale` when absent |
  * | 4 | changed-since-filing | `EvidenceStale` when moved since filing |
  * | 5 | full anchor re-resolve (digest match) | `EvidenceStale` on digest mismatch |
@@ -18,6 +18,17 @@
  * `Unknown`, which `computeActionable` renders as `actionable:'unknown'` —
  * neither a green light nor a block, so the list and `get` paths can never
  * disagree `true` vs `false` for the same item.
+ *
+ * **Rung 2 mirrors the write gate exactly.** The obligation loop applies the
+ * SAME close-predictor skip `write/gate.ts`'s `evaluateVerdictTx` (the write
+ * path's rung-2 verdict, behind `claim`) applies: a malformed row fails closed
+ * (checked FIRST), an obligation whose `applies_to.to` predicts a close
+ * (`'*'` | a terminal status | an unknown name) is SKIPPED — it guards the
+ * terminal transition, not claimability — and every other obligation is
+ * evaluated. This is what keeps `get`/`query fields:["verdict"]` and `claim`
+ * from answering the same question two ways; the two predicates are two
+ * definitions kept in lockstep by the read/write agreement test in
+ * `verdict.spec.ts`.
  */
 import type { GraphBackend, NodeRecord } from '@adhd/sox-graph-store';
 import { isStatusTerminal, resolveBlockers, resolveObligations } from './card.js';
@@ -183,20 +194,41 @@ function makeGraphResolver(
 }
 
 /**
- * Whether an obligation predicts a terminal transition — `applies_to.to` is
- * `'*'`, an unknown status name (fail-open toward including it), or a known
- * TERMINAL status. A `to` naming a known non-terminal status is excluded.
+ * The live `status` catalog, split into all-names and terminal-names — the
+ * graph-backed mirror of the write gate's `readStatusScopesTx`
+ * (`write/gate.ts`). Fetched ONCE for the whole rung-2 obligation loop, exactly
+ * as the gate fetches its scopes once.
  */
-async function isTerminallyScoped(
-  graph: GraphBackend,
-  obligation: IObligationView
-): Promise<boolean> {
-  const to = obligation.applies_to?.to;
-  if (to === '*') return true;
+async function readStatusScopes(
+  graph: GraphBackend
+): Promise<{ all: Set<string>; terminal: Set<string> }> {
   const statuses = await graph.queryNodes({ kind: 'status', liveOnly: true });
-  const match = statuses.find((s) => s.name === to);
-  if (match === undefined) return true; // unknown status name — do not silently exclude
-  return isStatusTerminal(match);
+  const all = new Set<string>();
+  const terminal = new Set<string>();
+  for (const s of statuses) {
+    if (typeof s.name !== 'string') continue;
+    all.add(s.name);
+    if (isStatusTerminal(s)) terminal.add(s.name);
+  }
+  return { all, terminal };
+}
+
+/**
+ * Whether an obligation row is malformed and must therefore fail CLOSED —
+ * exactly the shape `write/gate.ts`'s `readObligations` rejects (a missing
+ * predicate, a missing/blank `to`, or an `on_fail` outside `{block,warn}`).
+ * Checked BEFORE the close-predictor skip so a corrupt row — whose often-blank
+ * `to` would otherwise read as a close predictor — is never silently skipped.
+ */
+function isMalformedObligation(obligation: IObligationView): boolean {
+  const to = obligation.applies_to?.to;
+  const onFail: unknown = obligation.on_fail;
+  return (
+    obligation.requirement === undefined ||
+    typeof to !== 'string' ||
+    to.trim().length === 0 ||
+    (onFail !== 'block' && onFail !== 'warn')
+  );
 }
 
 /** The subject project's filesystem root, or `undefined` (path-less project). */
@@ -488,9 +520,39 @@ export async function deriveVerdict(
     }
 
     const resolver = makeGraphResolver(graph, issue, blockers);
+    const scopes = await readStatusScopes(graph);
     const rungOpts = { maxRung, at, ...(opts.onRung ? { onRung: opts.onRung } : {}) };
     for (const obligation of obligations) {
-      if (!(await isTerminallyScoped(graph, obligation))) continue;
+      // Malformed FIRST (mirrors `evaluateVerdictTx`): a corrupt row cannot be
+      // scoped, so it must fail closed — checked BEFORE the close-predictor
+      // skip, which its often-blank `to` would otherwise satisfy. Never a
+      // silent skip.
+      if (isMalformedObligation(obligation)) {
+        conditions.push(
+          condition({
+            type: 'Obligation',
+            status: 'True',
+            severity: obligation.on_fail === 'warn' ? 'warn' : 'block',
+            code: 'MissingObligation',
+            subject: obligation.uid,
+            message: 'the obligation is malformed and cannot be evaluated',
+          })
+        );
+        continue;
+      }
+
+      // The EXACT close-predictor `evaluateVerdictTx` (`write/gate.ts`) uses as
+      // its rung-2 skip: `to === '*' || scopes.terminal.has(to) ||
+      // !scopes.all.has(to)`. An obligation that predicts a CLOSE guards the
+      // terminal transition, NOT claimability — `claim` is an actionability
+      // precondition — so it must not produce a rung-2 block condition. Only a
+      // non-close (non-terminal-scoped) obligation is evaluated here, so the
+      // READ verdict and the WRITE gate answer the same question identically.
+      const to = obligation.applies_to.to;
+      const predictsClose =
+        to === '*' || scopes.terminal.has(to) || !scopes.all.has(to);
+      if (predictsClose) continue;
+
       conditions.push(
         ...(await evaluateObligation(graph, issue, obligation, resolver, rungOpts))
       );

@@ -28,18 +28,29 @@ import {
   seedProject,
   type TestIssueStore,
 } from '../test/helpers/open-test-issue-store.js';
-import { freshTmpDir } from '../test/helpers/tmp-store.js';
+import { freshTmpDir, openTmpStore, type TmpStore } from '../test/helpers/tmp-store.js';
+import { buildBacklogEnv } from '../env.js';
+import {
+  claim as apiClaim,
+  create,
+  get as apiGet,
+  obligate as apiObligate,
+  transition as apiTransition,
+  upsertProject,
+  type BacklogCtx,
+} from '../api.js';
 import { createIssue } from '../write/create-issue.js';
 import { transition } from '../write/transition.js';
 import { relate } from '../write/relate.js';
 import { attest } from '../write/attestation.js';
 import { obligate } from '../write/obligation.js';
 import { claim } from '../write/claim.js';
+import { PreconditionRefusedError } from '../write/errors.js';
 import { nowISO, writeNodeTx } from '../write/tx.js';
 import { readRevision } from '../write/revision.js';
 import { computeActionable, orderConditions } from './verdict-core.js';
 import { deriveVerdict } from './verdict.js';
-import type { ICondition } from './types.js';
+import type { ICondition, IIssueCard } from './types.js';
 
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, {
@@ -78,7 +89,11 @@ describe('C6 verdict — derived actionability with reasons (real store)', () =>
       JSON.stringify({ path: repo }),
       projectUid,
     ]);
-    await seedTerminalStatus(store, 'RESOLVED');
+    // A known TERMINAL and a known NON-terminal status, so the read/write
+    // agreement test below can exercise every `applies_to.to` shape against a
+    // real catalog.
+    await seedStatus(store, 'RESOLVED', true);
+    await seedStatus(store, 'IN_PROGRESS', false);
   });
 
   afterEach(async () => {
@@ -245,9 +260,13 @@ describe('C6 verdict — derived actionability with reasons (real store)', () =>
 
   it('AC5 — a satisfied evidence obligation is NOT certified true below rung 3 (list cannot afford the rung)', async () => {
     const blockerless = await issue('ac5 evidence');
+    // Scoped to a KNOWN NON-terminal status: rung 2 evaluates ONLY the
+    // obligations that do NOT predict a close (the write gate's own skip, which
+    // the read verdict now mirrors), so a close-scoped obligation would be
+    // skipped entirely and never reach the evidence ladder.
     await obligate(store, {
       uid: blockerless,
-      applies_to: { to: 'RESOLVED' },
+      applies_to: { to: 'IN_PROGRESS' },
       requirement: { op: 'evidence', kind: 'published-artifact' },
       on_fail: 'block',
       by: 'declarer:1',
@@ -300,16 +319,163 @@ describe('C6 verdict — derived actionability with reasons (real store)', () =>
     // status 'True') turns the floor item's `actionable` into `false` → the
     // two `toBe(true)` assertions above go red.
   });
+
+  // -------------------------------------------------------------------------
+  // Read/write verdict agreement (BUG bfc185f4) — the read verdict must apply
+  // the SAME close-predictor skip the write gate's `evaluateVerdictTx` does.
+  // -------------------------------------------------------------------------
+  it('READ/WRITE AGREEMENT — the read verdict and the write gate skip EXACTLY the same obligations (close-predictor matrix)', async () => {
+    // `evaluateVerdictTx` (write/gate.ts) skips an obligation whose
+    // `applies_to.to` predicts a close — `to === '*' || terminal.has(to) ||
+    // !all.has(to)` — and evaluates every other one. The read verdict must
+    // answer identically for EVERY shape; a drift on either side turns one of
+    // these rows red.
+    const unknown = `NOPE_${Date.now()}`;
+    const shapes: Array<{ to: string; rung2Block: boolean }> = [
+      { to: '*', rung2Block: false }, // any-terminal wildcard ⇒ predicts close
+      { to: 'RESOLVED', rung2Block: false }, // known TERMINAL status
+      { to: unknown, rung2Block: false }, // unknown status name ⇒ close-predictor
+      { to: 'IN_PROGRESS', rung2Block: true }, // known NON-terminal status
+    ];
+    for (const { to, rung2Block } of shapes) {
+      const uid = await issue(`agreement ${to}`);
+      const ob = await obligate(store, {
+        uid,
+        applies_to: { to },
+        requirement: { op: 'evidence', kind: 'published-artifact' },
+        on_fail: 'block',
+        by: 'declarer:1',
+      });
+
+      // READ path — `get`'s graph-backed verdict at rung 2.
+      const verdict = await deriveVerdict(store.graph, await nodeOf(uid), {
+        maxRung: 2,
+      });
+      const readBlocked = verdict.conditions.some(
+        (c) => c.severity === 'block' && c.status === 'True'
+      );
+      expect(readBlocked, `read verdict block for to="${to}"`).toBe(rung2Block);
+      expect(verdict.actionable, `read actionability for to="${to}"`).toBe(
+        !rung2Block
+      );
+
+      // WRITE path — `claim` runs `evaluateVerdictTx` (rungs 1–2); a block/True
+      // condition refuses the claim.
+      let writeRefused = false;
+      try {
+        await claim(store, { uid, by: 'claimer:1', action: 'claim' });
+      } catch (err) {
+        if (err instanceof PreconditionRefusedError) writeRefused = true;
+        else throw err;
+      }
+      expect(writeRefused, `write gate refusal for to="${to}"`).toBe(rung2Block);
+      // The two paths answer the SAME question identically — this is the
+      // drift guard: it fails the moment either path's predicate changes.
+      expect(readBlocked).toBe(writeRefused);
+
+      // A close-predicting shape produced NO condition naming the obligation;
+      // the non-terminal shape produced exactly that obligation's condition.
+      expect(
+        verdict.conditions.some((c) => c.subject === ob.obligationUid),
+        `obligation named in verdict for to="${to}"`
+      ).toBe(rung2Block);
+    }
+  });
 });
 
-/** Seeds a `status` catalog row with `terminal:true`. */
-async function seedTerminalStatus(store: TestIssueStore, name: string): Promise<void> {
+describe('C6 verdict — the READ verdict agrees with the WRITE gate over the mounted api', () => {
+  let tmp: TmpStore;
+  let ctx: BacklogCtx;
+
+  beforeEach(async () => {
+    tmp = await openTmpStore('c6-verdict-agreement');
+    ctx = { store: tmp.store, env: buildBacklogEnv({ adhdRoot: tmp.dir }) };
+  });
+
+  afterEach(async () => {
+    await tmp.cleanup();
+  });
+
+  it('a terminal-scoped unsatisfied `block` obligation does NOT block `get fields:["verdict"]` (matching `claim`), yet the close refuses `precondition_failed`', async () => {
+    const project = await upsertProject(ctx, {
+      name: 'c6-verdict-agreement-project',
+      by: 'filer',
+    });
+    if (!project.ok) throw new Error('fixture: upsertProject failed');
+    const created = await create(ctx, {
+      project: project.data.uid,
+      title: 'proof due at close',
+      body: 'b',
+      by: 'filer',
+    });
+    if (!created.ok || created.data?.uid === undefined) {
+      throw new Error('fixture: create failed');
+    }
+    const uid = created.data.uid;
+
+    const ob = await apiObligate(ctx, {
+      uid,
+      applies_to: { to: 'closed' },
+      requirement: { op: 'evidence', kind: 'published-artifact' },
+      on_fail: 'block',
+      by: 'declarer:1',
+    });
+    expect(ob.ok).toBe(true);
+
+    // (a) READ path: `get fields:["verdict"]` reports the item actionable — the
+    // close-predicting obligation contributes NO rung-2 block condition.
+    const card = await apiGet(ctx, { uid, fields: ['verdict'] });
+    expect(card.ok).toBe(true);
+    if (!card.ok) throw new Error('expected an ok envelope');
+    const verdict = (card.data as IIssueCard).verdict;
+    expect(verdict).toBeDefined();
+    if (verdict === undefined) throw new Error('expected a derived verdict');
+    expect(verdict.actionable).toBe(true);
+    expect(
+      verdict.conditions.some(
+        (c) => c.severity === 'block' && c.status === 'True'
+      )
+    ).toBe(false);
+
+    // (b) WRITE path: the SAME obligation does not refuse `claim` — the two
+    // paths give one answer.
+    const claimed = await apiClaim(ctx, {
+      uid,
+      by: 'claimer:1',
+      action: 'claim',
+    });
+    expect(claimed.ok).toBe(true);
+
+    // (c) The close is STILL refused by that same obligation, as the typed
+    // `precondition_failed` carrying the gate's structured refusal.
+    const closed = await apiTransition(ctx, {
+      uid,
+      by: 'claimer:1',
+      toStatus: 'closed',
+      note: 'close it',
+    });
+    expect(closed.ok).toBe(false);
+    if (closed.ok) throw new Error('expected a failure envelope');
+    expect(closed.error.code).toBe('precondition_failed');
+    const refusal = closed.error.details?.refusal as
+      | { code?: string }
+      | undefined;
+    expect(refusal?.code).toBe('EvidenceUnverified');
+  });
+});
+
+/** Seeds a `status` catalog row carrying the given `terminal` flag. */
+async function seedStatus(
+  store: TestIssueStore,
+  name: string,
+  terminal: boolean
+): Promise<void> {
   await store.adapter.transaction(
     async (tx) => {
       await writeNodeTx(tx, {
         kind: 'status',
         name,
-        metadata: { terminal: true },
+        metadata: { terminal },
         at: nowISO(),
       });
     },

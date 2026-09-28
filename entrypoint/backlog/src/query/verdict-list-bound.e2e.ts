@@ -94,6 +94,17 @@ describe(`C6 AC6 — the ${N}-item list bound (real store, real git)`, () => {
           metadata: { terminal: true },
           at: nowISO(),
         });
+        // A known NON-terminal status: rung 2 evaluates only the obligations
+        // that do NOT predict a close (the write gate's own skip, which the
+        // read verdict now mirrors), so the rung-3 negative-control anchor
+        // below must be scoped here — a close-scoped obligation is skipped and
+        // never reaches the evidence ladder.
+        await writeNodeTx(tx, {
+          kind: 'status',
+          name: 'IN_PROGRESS',
+          metadata: { terminal: false },
+          at: nowISO(),
+        });
       },
       { mode: 'immediate' }
     );
@@ -116,7 +127,7 @@ describe(`C6 AC6 — the ${N}-item list bound (real store, real git)`, () => {
 
     await obligate(store, {
       uid: evidenceUid,
-      applies_to: { to: 'RESOLVED' },
+      applies_to: { to: 'IN_PROGRESS' },
       requirement: { op: 'evidence', kind: 'published-artifact' },
       on_fail: 'block',
       by: 'declarer:1',
