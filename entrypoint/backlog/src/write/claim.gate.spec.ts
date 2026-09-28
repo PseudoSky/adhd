@@ -36,7 +36,9 @@ import { buildBacklogEnv } from '../env.js';
 import {
   claim as apiClaim,
   create,
+  obligate as apiObligate,
   relate as apiRelate,
+  transition as apiTransition,
   upsertProject,
   type BacklogCtx,
 } from '../api.js';
@@ -237,5 +239,52 @@ describe('C6 claim gate — the mounted api maps the refusal to precondition_fai
       | undefined;
     expect(refusal?.code).toBe('BlockedBy');
     expect(refusal?.subject).toBe(blockerUid);
+  });
+
+  // Demo beat 3.3 — a block obligation that only fires at the terminal
+  // transition must not refuse the claim; it still refuses the close.
+  it('a terminal-scoped block obligation does NOT refuse `claim`, yet the close is precondition_failed (demo beat 3.3)', async () => {
+    const project = await upsertProject(ctx, {
+      name: 'c6-terminal-obligation-project',
+      by: 'filer',
+    });
+    if (!project.ok) throw new Error('fixture: upsertProject failed');
+    const created = await create(ctx, {
+      project: project.data.uid,
+      title: 'proof due at close',
+      body: 'b',
+      by: 'filer',
+    });
+    if (!created.ok || created.data.uid === undefined) {
+      throw new Error('fixture: create failed');
+    }
+    const uid = created.data.uid;
+
+    const ob = await apiObligate(ctx, {
+      uid,
+      applies_to: { to: 'closed' },
+      requirement: { op: 'evidence', kind: 'published-artifact' },
+      on_fail: 'block',
+      by: 'declarer:1',
+    });
+    expect(ob.ok).toBe(true);
+
+    // (a) The obligation is not due at the claim rung — `claim` takes the work.
+    const claimed = await apiClaim(ctx, { uid, by: 'claimer:1', action: 'claim' });
+    expect(claimed.ok).toBe(true);
+
+    // (b) The close is still refused by the SAME obligation, as the typed
+    // `precondition_failed` + `details.refusal`.
+    const out = await apiTransition(ctx, {
+      uid,
+      by: 'claimer:1',
+      toStatus: 'closed',
+      note: 'close it',
+    });
+    expect(out.ok).toBe(false);
+    if (out.ok) throw new Error('expected a failure envelope');
+    expect(out.error.code).toBe('precondition_failed');
+    const refusal = out.error.details?.refusal as { code: string } | undefined;
+    expect(refusal?.code).toBe('EvidenceUnverified');
   });
 });

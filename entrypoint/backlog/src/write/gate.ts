@@ -679,7 +679,7 @@ export async function evaluateVerdictTx(
     });
   }
 
-  // Rung 2 — obligations (terminal-scoped) + claim staleness.
+  // Rung 2 — obligations that do NOT predict the close + claim staleness.
   const resolver = makeTxResolver(tx, issueRow.rowid);
   const scopes = await readStatusScopesTx(tx);
   const obligations = await readObligations(tx, issueRow.rowid);
@@ -695,11 +695,12 @@ export async function evaluateVerdictTx(
   }
 
   for (const obligation of obligations) {
-    const to = obligation.appliesTo.to;
-    const terminalScoped =
-      to === '*' || scopes.terminal.has(to) || !scopes.all.has(to);
-    if (!terminalScoped) continue;
-
+    // A malformed obligation cannot be scoped, so it cannot be proven
+    // out-of-scope: fail-closed by surfacing it regardless of `applies_to` —
+    // exactly as `evaluateTransitionGateTx` refuses it. Checked BEFORE the
+    // close-predictor skip below, so a malformed row can never be silently
+    // skipped (its `to` is often the blank/missing value that reads as a
+    // close predictor).
     if (obligation.malformed) {
       conditions.push({
         type: 'Obligation',
@@ -711,6 +712,23 @@ export async function evaluateVerdictTx(
       });
       continue;
     }
+
+    // `claim` is an actionability precondition, NOT a status transition. An
+    // obligation is a TRANSITION precondition — `applies_to.to` names the
+    // status whose transition it guards, and the close gate
+    // (`evaluateTransitionGateTx`, which `transition` invokes only when the
+    // target is terminal) refuses that transition while it is unsatisfied.
+    // So an obligation that predicts a CLOSE — `to` is `'*'`, a live terminal
+    // status, or an unknown status name (fail-closed toward treating it as a
+    // close predictor) — is NOT due while merely claiming/working. Evaluating
+    // it here wrongly reported `actionable:false` and had `claim` refuse work
+    // that is merely obligated (demo beat 3.3: declare proof-due-at-close
+    // BEFORE building). It still refuses the close itself, unchanged; only an
+    // obligation scoped to a NON-terminal transition stays a rung-2 concern.
+    const to = obligation.appliesTo.to;
+    const predictsClose =
+      to === '*' || scopes.terminal.has(to) || !scopes.all.has(to);
+    if (predictsClose) continue;
 
     let satisfied: boolean;
     try {

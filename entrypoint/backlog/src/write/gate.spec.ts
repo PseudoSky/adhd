@@ -2,8 +2,8 @@
  * gate.spec.ts — C5 unit proofs for the closure gate's mechanical pieces,
  * driven against a REAL store and a REAL git work tree. Nothing is mocked:
  * the thing under test is `evaluateTransitionGateTx` (over the tx-scoped
- * resolver it builds) and `anchor-check.ts`'s `commit:` / default-branch
- * check.
+ * resolver it builds), `evaluateVerdictTx` (the claim-rung actionability
+ * verdict), and `anchor-check.ts`'s `commit:` / default-branch check.
  *
  * AC4 (a sha not on the default branch is denied) is proven here directly:
  * `isShaOnDefaultBranch` returns false for a side-branch commit and its
@@ -36,14 +36,15 @@ import { attest } from './attestation.js';
 import { obligate } from './obligation.js';
 import { relate } from './relate.js';
 import { transition } from './transition.js';
+import { claim } from './claim.js';
 import {
   checkAnchor,
   isShaOnDefaultBranch,
   parseAnchor,
 } from './anchor-check.js';
-import { evaluateTransitionGateTx } from './gate.js';
-import { OverrideNotPermittedError } from './errors.js';
-import { nowISO, writeNodeTx } from './tx.js';
+import { evaluateTransitionGateTx, evaluateVerdictTx } from './gate.js';
+import { ObligationUnsatisfiedError, OverrideNotPermittedError } from './errors.js';
+import { nowISO, resolveLiveIssueTx, writeNodeTx } from './tx.js';
 
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, {
@@ -151,6 +152,17 @@ describe('C5 closure gate — evaluateTransitionGateTx + the default-branch chec
           at: nowISO(),
           ...(override !== undefined ? { override } : {}),
         }),
+      { mode: 'immediate' }
+    );
+  }
+
+  /** Run `evaluateVerdictTx` inside a REAL immediate transaction, exactly as `claim` does. */
+  async function runVerdict(issueUid: string) {
+    return store.adapter.transaction(
+      async (tx: AdapterTransaction) => {
+        const row = await resolveLiveIssueTx(tx, issueUid);
+        return evaluateVerdictTx(tx, row, { at: nowISO(), claimStaleAfterMin: 30 });
+      },
       { mode: 'immediate' }
     );
   }
@@ -423,5 +435,71 @@ describe('C5 closure gate — evaluateTransitionGateTx + the default-branch chec
       note: 'start work',
     });
     expect(outcome.toStatus).toBe('in_progress');
+  });
+
+  // -------------------------------------------------------------------------
+  // Demo beat 3.3 — a terminal-scoped `block` obligation must gate the CLOSE,
+  // never the rung-2 actionability/claim path.
+  // -------------------------------------------------------------------------
+  it('a terminal-scoped block obligation is NOT due at the claim rung, yet still refuses the close (demo beat 3.3)', async () => {
+    await seedTerminalStatus('closed');
+    const uid = await issue('proof-due-at-close subject');
+    await obligate(store, {
+      uid,
+      applies_to: { to: 'closed' },
+      requirement: { op: 'evidence', kind: 'published-artifact' },
+      on_fail: 'block',
+      by: 'declarer:1',
+    });
+
+    // (a) NOT due at the claim/actionability rung: the verdict is green and
+    // carries no live block-severity condition, so `claim` takes the work —
+    // the "declare failure conditions up front, then work" order.
+    //
+    // NEGATIVE CONTROL: restoring the pre-fix guard (evaluating a
+    // close-predicting obligation at rung 2) makes the verdict
+    // `actionable:false` and `claim` throw PreconditionRefusedError → the
+    // assertions in (a) all go red.
+    const verdict = await runVerdict(uid);
+    expect(verdict.actionable).toBe(true);
+    expect(
+      verdict.conditions.filter(
+        (c) => c.severity === 'block' && c.status === 'True'
+      )
+    ).toHaveLength(0);
+
+    const claimed = await claim(store, { uid, by: 'claimer:1', action: 'claim' });
+    expect(claimed.status).toBe('claimed');
+
+    // (b) The CLOSE is still refused by the SAME obligation — through the real
+    // `transition` verb, typed `ObligationUnsatisfiedError` (its envelope code
+    // is `precondition_failed`; the mounted-api mapping is proven in
+    // `transition.gate.spec.ts`), and the status is unchanged on re-read
+    // because the throw rolled the transaction back.
+    let refusal: ObligationUnsatisfiedError | undefined;
+    try {
+      await transition(store, {
+        uid,
+        by: 'claimer:1',
+        toStatus: 'closed',
+        note: 'close it',
+      });
+    } catch (err) {
+      if (err instanceof ObligationUnsatisfiedError) refusal = err;
+      else throw err;
+    }
+    expect(refusal).toBeDefined();
+    expect(refusal!.refusal.code).toBe('EvidenceUnverified');
+    expect(refusal!.refusal.required_kind).toBe('published-artifact');
+    expect(refusal!.code).toBe('E_VALIDATION');
+
+    const status = await store.adapter.executeGet<{ name: string | null }>(
+      `SELECT s.name AS name
+         FROM edge e JOIN node s ON s.rowid = e.dst
+        WHERE e.src = ? AND e.rel = 'has_status' AND e.t_invalid IS NULL
+        ORDER BY e.rowid LIMIT 1`,
+      [await rowidOf(uid)]
+    );
+    expect(status?.name).not.toBe('closed');
   });
 });
