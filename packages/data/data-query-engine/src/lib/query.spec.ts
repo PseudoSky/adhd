@@ -12,18 +12,12 @@ const data = [
 ];
 
 describe('query', () => {
-  it('(0) logical tripple and', () => {
+  it('(0) nested similarity filter over a large sample', () => {
     const dv = new DataView(largeSample as [], undefined, true).orderBy([
-      { value: 'asc' },
+      { unit_price: 'asc' },
     ]);
-    const _query: BooleanExpression = {
-      _and: [{ _and: [{ _and: [{ name: { _eq: 'D' } }] }] }],
-    };
 
-    dv.where({ person: { bio: { _similar: '@' } } });
-    console.log(
-      util.inspect(dv.query, { showHidden: false, depth: null, colors: true })
-    );
+    dv.where({ details: { summary: { _similar: '@' } } });
     expect(dv.view().length).toEqual(22);
   });
   it('(1) filter using provided raw query', () => {
