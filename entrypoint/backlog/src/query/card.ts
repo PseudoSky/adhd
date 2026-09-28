@@ -38,6 +38,8 @@ import {
   getOutgoingEdges,
   resolveIssuePlacement,
 } from './resolve.js';
+import { readSpecPointer } from '../write/spec-revision.js';
+import { checkSpecStaleness } from './spec-staleness.js';
 
 /** SPEC.md §6.5's `assertKnownFields` — unknown name → `BacklogValidationError` naming it, never a silent drop. */
 export function assertKnownIssueFields(
@@ -394,6 +396,12 @@ export interface IAssembleIssueCardOptions {
    * consulted when `fields` requests `dependents`.
    */
   scope?: ReadonlySet<number>;
+  /**
+   * C10 — a token the caller holds; when supplied AND the `spec` field was
+   * requested, `card.spec.freshness` reports whether that token is still
+   * current for this item's spec revision.
+   */
+  specToken?: string;
 }
 
 /**
@@ -440,6 +448,7 @@ export async function assembleIssueCard(
   const needsBlocksOut = want('blocksOut');
   const needsDependents = want('dependents');
   const needsPartOf = want('partOf');
+  const needsSpec = want('spec');
 
   const outgoing =
     opts.outgoingEdges ??
@@ -520,6 +529,27 @@ export async function assembleIssueCard(
     card.dependents = await resolveDependents(graph, issue.id, opts.scope);
   if (needsPartOf && outgoing)
     card.partOf = await resolvePartOf(graph, issue.id, outgoing);
+  if (needsSpec) {
+    // C10 — expose the pointer (revision uid + its `'sha256:<hex>'` token +
+    // seq), NEVER the revision body. `freshness` is included only when the
+    // caller supplied a token to compare against.
+    const pointer = await readSpecPointer(graph, issue.uid);
+    if (pointer) {
+      card.spec = {
+        spec_revision: pointer.revision_uid,
+        spec_revision_token: pointer.revision_token,
+        revision_seq: pointer.revision_seq,
+      };
+      if (opts.specToken !== undefined) {
+        card.spec.freshness = (
+          await checkSpecStaleness(graph, {
+            uid: issue.uid,
+            token: opts.specToken,
+          })
+        ).state;
+      }
+    }
+  }
 
   if (want('_score') && opts.score !== undefined) {
     card._score = opts.score;

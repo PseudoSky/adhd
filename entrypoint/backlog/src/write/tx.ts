@@ -335,7 +335,7 @@ export async function getNodeByRowidTx(
 }
 
 export interface IWriteNodeTxInput {
-  /** The entity-type discriminator — `project`/`component`/`location`/`issue`/`kind`/`edge_kind`/`status`/`priority`/`agent`/`note`/`citation`/`transition`/`audit`/`attestation`/`obligation` (§3). NEVER validated against a closed vocabulary here — the schema is open by design (§0 anti-antipattern 3); the write layer is the only composer of these literals. */
+  /** The entity-type discriminator — `project`/`component`/`location`/`issue`/`kind`/`edge_kind`/`status`/`priority`/`agent`/`note`/`citation`/`transition`/`audit`/`attestation`/`obligation`/`SPEC` (§3; the SPEC revision kind is added by C10, DESIGN §12). NEVER validated against a closed vocabulary here — the schema is open by design (§0 anti-antipattern 3); the write layer is the only composer of these literals. */
   kind: string;
   /** The business name (`issue.title`, a catalog row's name, …). Omit for a node with no name (none currently exist in §3's table, but the column is nullable). */
   name?: string;
@@ -787,6 +787,55 @@ export async function invalidateEdgeTx(
     'UPDATE edge SET t_invalid = ?, meta = ? WHERE rowid = ?',
     [now, JSON.stringify(metaObj), existing.rowid]
   );
+}
+
+/**
+ * Update a LIVE node's `meta` IN PLACE inside `tx`, CAS-guarded on the node's
+ * own `meta.revision` counter (SR-2 monotonic revision + SR-6 per-node CAS,
+ * per DESIGN §2 Primitive 1's "node's monotonic `revision`, bumped on every
+ * mutating write"). Preserves `uid` — this is the ONLY write path that mutates
+ * a node without superseding it, and it exists solely for the C10 spec pointer
+ * (`meta.spec_revision`) and the SR-2 counter it bumps. No other verb may adopt
+ * it without a new decision.
+ *
+ * `patch`'s keys are shallow-merged over the node's existing meta; the merged
+ * blob's `revision` is set to `expectedRevision + 1`. Returns the new revision
+ * number on success, or `null` when the node is missing OR the stored revision
+ * no longer equals `expectedRevision` (a concurrent writer won the CAS — the
+ * caller must surface a stale-base error, and because this runs inside the
+ * caller's own `BEGIN IMMEDIATE` transaction, a thrown error rolls the whole
+ * transaction back). A node with no `meta.revision` at all reads as revision
+ * `0` (matching `revision.ts`'s `readRevision`), so a pre-counter row is
+ * CAS-addressable without a backfill.
+ */
+export async function updateNodeMetaTx(
+  tx: AdapterTransaction,
+  uid: string,
+  patch: Record<string, unknown>,
+  expectedRevision: number
+): Promise<number | null> {
+  const existing = await tx.executeGet<{ rowid: number; meta: string | null }>(
+    'SELECT rowid, meta FROM node WHERE uid = ?',
+    [uid]
+  );
+  if (!existing) return null;
+
+  const currentMeta = parseJsonObject(existing.meta) ?? {};
+  const storedRevision =
+    typeof currentMeta['revision'] === 'number' &&
+    Number.isFinite(currentMeta['revision'])
+      ? (currentMeta['revision'] as number)
+      : 0;
+  if (storedRevision !== expectedRevision) return null;
+
+  const nextRevision = expectedRevision + 1;
+  const newMeta = { ...currentMeta, ...patch, revision: nextRevision };
+  const result = await tx.executeRun(
+    `UPDATE node SET meta = ?, t_updated = ?
+       WHERE uid = ? AND COALESCE(json_extract(meta, '$.revision'), 0) = ?`,
+    [JSON.stringify(newMeta), nowISO(), uid, expectedRevision]
+  );
+  return result.rowsAffected === 1 ? nextRevision : null;
 }
 
 /** Linear backoff schedule for `E_CONTENTION` — 250ms, then 500ms (3 total attempts, §4c "Retry semantics"; reuses ADR-0012 §4's own bound rather than a second, differently-tuned schedule). */

@@ -198,6 +198,8 @@ export const BACKLOG_VERBS: readonly string[] = [
   'transition',
   'attest',
   'recheck',
+  'spec-append',
+  'spec-check',
   'claim',
   'relate',
   'move',

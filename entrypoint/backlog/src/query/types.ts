@@ -13,6 +13,10 @@
  * top-level doc comment in `index.ts` for the reconciliation note).
  */
 
+// Type-only (erased at runtime) — the token-compare freshness verdict lives
+// with its ladder in `spec-staleness.ts`; the card only projects it.
+import type { SpecFreshness } from './spec-staleness.js';
+
 /** Identity is the global `uid` (SPEC.md §6.1) — a single scalar, never a composite key. */
 export type IssueUid = string;
 
@@ -59,7 +63,8 @@ export type IIssuePseudoField =
   | '_vector'
   | 'blocksOut' // NEW (C2): issues THIS one blocks (outbound `blocks`), live only
   | 'dependents' // NEW (C2): transitive count (number of nodes that reach this one via `blocks`)
-  | 'partOf'; // NEW (C2): the single parent this item is `part_of` (or null)
+  | 'partOf' // NEW (C2): the single parent this item is `part_of` (or null)
+  | 'spec'; // NEW (C10): the work item's current spec revision pointer (never the body)
 
 export type IIssueField = IIssuePlainField | IIssuePseudoField;
 
@@ -91,6 +96,7 @@ export const ISSUE_PSEUDO_FIELDS: readonly IIssuePseudoField[] = [
   'blocksOut',
   'dependents',
   'partOf',
+  'spec',
 ];
 
 const ISSUE_FIELD_SET: ReadonlySet<string> = new Set<string>([
@@ -235,6 +241,28 @@ export interface IIssueCard {
   dependents?: number;
   /** The `part_of` parent, if any (`n:1` — at most one). */
   partOf?: IIssueRef | null;
+  /**
+   * C10 — the work item's current spec revision pointer. The card carries the
+   * revision uid + its `'sha256:<hex>'` token (the token a reader holds and
+   * compares) and the sequence — NEVER the revision body. Absent when the item
+   * has no spec, or when the `spec` pseudo field was not requested.
+   */
+  spec?: IIssueSpecProjection;
+}
+
+/**
+ * C10 — the spec pointer projected onto an issue card (DESIGN §12). Additive:
+ * a consumer can hold `spec_revision_token` and later hand it to `spec-check`
+ * to learn whether it has gone stale.
+ */
+export interface IIssueSpecProjection {
+  /** The current revision uid (the pointer's target). */
+  spec_revision: string;
+  /** `'sha256:<hex>'` — the token a reader holds and compares. */
+  spec_revision_token: string;
+  revision_seq: number;
+  /** Present only when the caller supplied a token to compare against. */
+  freshness?: SpecFreshness;
 }
 
 /**

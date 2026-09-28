@@ -66,7 +66,11 @@ export type IParsedAnchor =
   | { scheme: 'path'; target: string; line?: number }
   | { scheme: 'url'; target: string }
   | { scheme: 'query'; target: string }
-  | { scheme: 'registry'; target: string };
+  | { scheme: 'registry'; target: string }
+  // C10: `revision:<revision uid>` — the anchor of a spec-revision ANNOTATION
+  // (`spec-annotation.ts`). Immutable by construction (a revision never
+  // changes), so its "digest" is the revision's own `sha256:<hex>` token.
+  | { scheme: 'revision'; target: string };
 
 /** Options for {@link checkAnchor}. */
 export interface ICheckAnchorOptions {
@@ -80,7 +84,7 @@ export interface ICheckAnchorOptions {
   by: string;
 }
 
-const ANCHOR_SCHEMES = ['path', 'url', 'query', 'registry'] as const;
+const ANCHOR_SCHEMES = ['path', 'url', 'query', 'registry', 'revision'] as const;
 
 /**
  * Parse `locator` against the closed grammar, throwing

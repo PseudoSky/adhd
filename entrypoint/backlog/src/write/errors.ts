@@ -630,6 +630,33 @@ export class AttestationNotFoundError extends BacklogWriteError {
 }
 
 /**
+ * `appendSpecRevision`'s `base_revision` no longer matches the ticket's current
+ * spec pointer — a concurrent spec edit won the CAS. `E_VALIDATION`,
+ * `retryable: false`, and mapped EXPLICITLY to the envelope code
+ * `precondition_failed` in `api.ts`'s `ERROR_CLASS_TO_ENVELOPE_CODE` (C10 AC6):
+ * the `E_VALIDATION` fallthrough would otherwise return `validation`.
+ *
+ * A stale `base_revision` is NOT resource contention — no other actor holds the
+ * node; the *caller's own* read is out of date and must be re-read before
+ * retrying — so it belongs with the existing refusing-write preconditions
+ * (`IssueTerminalError`, `CitationUnverifiableError`), not with `conflict`
+ * (reserved for a resource another actor holds). No write runs.
+ */
+export class SpecRevisionConflictError extends BacklogWriteError {
+  readonly code = 'E_VALIDATION' as const;
+  readonly retryable = false;
+
+  constructor(
+    public readonly expected: string,
+    public readonly actual: string
+  ) {
+    super(
+      `spec revision conflict: base_revision "${expected}" does not match the current revision "${actual}" — re-read the ticket's spec_revision and retry`
+    );
+  }
+}
+
+/**
  * Classify a caught, RAW driver-level error (never one of our own
  * {@link BacklogWriteError} subclasses — those are already decided and must
  * never reach this function) into the internal {@link IWriteError} envelope,

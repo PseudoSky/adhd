@@ -553,8 +553,14 @@ export const EDGE_KIND_TABLE: readonly IEdgeKindRule[] = [
     multiplicity: 'n:1',
   },
   {
+    // C10 (foundation amendment, requested by C10's spec / C3's reciprocal
+    // note): an attestation's subject may be an `issue` (C3) OR a `SPEC`
+    // revision (C10's annotation — `subject.id` is the revision uid). The `'*'`
+    // sentinel (`audits` already uses it) skips the source-kind match, so the
+    // existing issue-subject path is byte-for-byte unchanged while a revision
+    // annotation no longer trips `BacklogEdgeKindMismatchError`.
     rel: 'attests',
-    sourceKind: 'issue',
+    sourceKind: '*',
     targetKind: 'attestation',
     multiplicity: '1:n',
   },
