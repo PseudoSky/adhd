@@ -26,6 +26,7 @@ import { upsertProject } from './catalog.js';
 import {
   appendSpecRevision,
   deriveSpecHead,
+  discoverLiveSpecNodes,
   readPointerRecord,
   readSpecPointer,
 } from './spec-revision.js';
@@ -317,6 +318,91 @@ describe('spec-revision — a spec is a revision of its ticket (real store)', ()
     expect(again.scanned).toBe(1);
     expect(again.stamps.every((s) => !s.needsStamp)).toBe(true);
     expect(again.heads.every((h) => !h.needsPointer)).toBe(true);
+  });
+
+  it('C10 read-path (603737c2) — a post-reconcile append advances a DECLARED-kind SPEC head (findChainHeadTx + deriveSpecHead see has_kind→SPEC)', async () => {
+    const ticket = await issue('ticket with a reconciled declared-kind spec');
+    const specDoc = await declaredKindSpec(ticket, 'SPEC — reconciled declared-kind head');
+
+    // Reconcile the SHIPPED shape: the declared-kind document becomes seq-1 and
+    // the ticket's pointer names it. (Reconcile has its own discovery; the
+    // read/write discovery switch below does NOT touch it.)
+    await applySpecRevisionReconcile(store);
+    const pointer1 = await readPointerRecord(store.graph, ticket);
+    expect(pointer1?.revision_uid).toBe(specDoc);
+    expect(pointer1?.revision_seq).toBe(1);
+
+    // NEGATIVE CONTROL (teeth): reinstate the PRE-FIX criterion — RAW `node.kind`
+    // ONLY — in BOTH discovery sites via the switch. The reconciled head is an
+    // `issue` node, so `findChainHeadTx` is blind to it and the CAS base
+    // (`specDoc`) matches nothing: a spurious SpecRevisionConflictError; and
+    // `deriveSpecHead` is undefined. Without the declared-kind branch both
+    // assertions below are RED — the exact defect the fix closes.
+    const prior = process.env['ADHD_BACKLOG_UNSAFE_SPEC_DISCOVERY'];
+    process.env['ADHD_BACKLOG_UNSAFE_SPEC_DISCOVERY'] = 'raw-kind-only';
+    try {
+      expect(await deriveSpecHead(store.graph, ticket)).toBeUndefined();
+      const err = await appendSpecRevision(store, {
+        uid: ticket,
+        fragment: 'two\n',
+        base_revision: specDoc,
+        by: 'author:1',
+      }).catch((e) => e);
+      expect(err).toBeInstanceOf(SpecRevisionConflictError);
+    } finally {
+      if (prior === undefined)
+        delete process.env['ADHD_BACKLOG_UNSAFE_SPEC_DISCOVERY'];
+      else process.env['ADHD_BACKLOG_UNSAFE_SPEC_DISCOVERY'] = prior;
+    }
+
+    // GREEN — the declared-kind head is discovered by BOTH sites.
+    const derived1 = await deriveSpecHead(store.graph, ticket);
+    expect(derived1?.revision_uid).toBe(specDoc);
+    expect(derived1?.revision_seq).toBe(1);
+
+    // The append chaining off the reconciled head SUCCEEDS (no spurious
+    // conflict), advancing the pointer to seq 2.
+    const rev2 = await appendSpecRevision(store, {
+      uid: ticket,
+      fragment: 'two\n',
+      base_revision: specDoc,
+      by: 'author:1',
+    });
+    expect(rev2.uid).toBe(ticket);
+    expect(rev2.spec_revision).not.toBe(specDoc);
+    expect(rev2.revision_seq).toBe(2);
+
+    const pointer2 = await readPointerRecord(store.graph, ticket);
+    expect(pointer2?.revision_uid).toBe(rev2.spec_revision);
+    expect(pointer2?.revision_seq).toBe(2);
+
+    // The read path finds the ADVANCED head.
+    const derived2 = await deriveSpecHead(store.graph, ticket);
+    expect(derived2?.revision_uid).toBe(rev2.spec_revision);
+    expect(derived2?.revision_seq).toBe(2);
+
+    // A third append chains off the DERIVED head — the pointer advances again.
+    const rev3 = await appendSpecRevision(store, {
+      uid: ticket,
+      fragment: 'three\n',
+      base_revision: derived2!.revision_uid,
+      by: 'author:1',
+    });
+    expect(rev3.revision_seq).toBe(3);
+    expect((await readPointerRecord(store.graph, ticket))?.revision_uid).toBe(
+      rev3.spec_revision
+    );
+
+    // NO ORPHANED FORK: exactly three revisions exist for the ticket — the
+    // reconciled seq-1 object plus the two appends, seq 1/2/3 — never a second
+    // seq-1 the append path silently forked while blind to the reconciled head.
+    const owned = (await discoverLiveSpecNodes(store.graph)).filter(
+      (n) => n.metadata?.['spec_of'] === ticket
+    );
+    expect(owned.map((n) => n.metadata?.['revision_seq']).sort()).toEqual([
+      1, 2, 3,
+    ]);
+    expect(owned.map((n) => n.uid)).toContain(specDoc);
   });
 
   it('AC6 — a stale base_revision is refused with precondition_failed and writes nothing', async () => {

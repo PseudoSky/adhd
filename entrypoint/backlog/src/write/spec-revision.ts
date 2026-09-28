@@ -22,7 +22,7 @@
  * revision node after creation, and never rewrites the ticket body.
  */
 
-import type { GraphBackend } from '@adhd/sox-graph-store';
+import type { GraphBackend, NodeRecord } from '@adhd/sox-graph-store';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { writeAudit } from './audit.js';
 import {
@@ -30,7 +30,10 @@ import {
   SpecRevisionConflictError,
   assertNotBareRoleLiteral,
 } from './errors.js';
-import { resolveLogicalIssue } from '../query/resolve.js';
+import {
+  resolveEdgeScopedCandidates,
+  resolveLogicalIssue,
+} from '../query/resolve.js';
 import { readRevision } from './revision.js';
 import {
   type IWriteStoreHandle,
@@ -102,6 +105,20 @@ export interface ISpecPointer {
   revision_seq: number;
 }
 
+/**
+ * The store surface {@link appendSpecRevision} needs. Beyond the ordinary write
+ * handle it requires the store's `GraphBackend`, because revision DISCOVERY must
+ * run the SAME live-kind traversal the read path (`deriveSpecHead`) and the
+ * reconciliation (`spec-revision.reconcile.ts`) use — and that traversal
+ * (`query/resolve.ts`'s `resolveEdgeScopedCandidates`) is a `GraphBackend` read
+ * that must run BEFORE the `BEGIN IMMEDIATE` transaction opens (a `GraphBackend`
+ * call never runs inside it — see `resolveLogicalHeadTx`). `GraphBacklogStore`
+ * and the test `TestIssueStore` both satisfy this shape.
+ */
+export type ISpecAppendStore = IWriteStoreHandle & {
+  readonly graph: GraphBackend;
+};
+
 /** The token encoding, stated once: `sha256:<hex>` — never bare hex, never a raw uid. */
 const TOKEN_PREFIX = 'sha256:';
 
@@ -157,6 +174,46 @@ function resolveAppendMode(): AppendMode {
 }
 
 /**
+ * Negative-control switch — DANGER, test use ONLY, never set in normal
+ * operation or a deployed process. Read at the single point of use on EVERY
+ * call (never cached at import time) so a test can set it per-run and it
+ * reverts itself the moment the process exits (the same discipline as
+ * `ADHD_BACKLOG_UNSAFE_SPEC_APPEND` above and `spec-revision.reconcile.ts`'s
+ * `ADHD_BACKLOG_UNSAFE_SPEC_RECONCILE`, for the same reason:
+ * `DEBT-PROCESS-DISPATCH-RESIDUE-001`). Unrecognized values throw loudly.
+ *
+ *  - `'raw-kind-only'` — discover SPEC revisions by the RAW `node.kind` column
+ *    ONLY (the pre-fix criterion) in BOTH discovery sites — the write path's
+ *    `findChainHeadTx` (via `declaredRowids=undefined`) and the read path's
+ *    `deriveSpecHead`. On the SHIPPED corpus — spec documents stored as `issue`
+ *    nodes carrying the `has_kind`→`SPEC` catalog edge — this finds no head:
+ *    `appendSpecRevision` throws a spurious {@link SpecRevisionConflictError}
+ *    and `deriveSpecHead` is `undefined`. Reinstates the exact defect the
+ *    declared-kind branch closes, so the post-reconcile append test can be
+ *    proven RED against it. Does NOT touch the reconciliation (which has its own
+ *    switch), so a test can reconcile the declared-kind corpus, then flip this
+ *    one to isolate the read/write discovery.
+ */
+const DISCOVERY_MODES = ['normal', 'raw-kind-only'] as const;
+type DiscoveryMode = (typeof DISCOVERY_MODES)[number];
+
+function resolveSpecDiscoveryMode(): DiscoveryMode {
+  const raw = process.env['ADHD_BACKLOG_UNSAFE_SPEC_DISCOVERY'];
+  if (raw === undefined) return 'normal';
+  if ((DISCOVERY_MODES as readonly string[]).includes(raw))
+    return raw as DiscoveryMode;
+  throw new Error(
+    `ADHD_BACKLOG_UNSAFE_SPEC_DISCOVERY="${raw}" is not a recognized mode (expected ${DISCOVERY_MODES.join(', ')}). ` +
+      'This variable exists solely for negative-control test runs and must never be set in normal operation; ' +
+      'an unrecognized value fails loudly rather than silently defaulting.'
+  );
+}
+
+function specDiscoveryIsRawKindOnly(): boolean {
+  return resolveSpecDiscoveryMode() === 'raw-kind-only';
+}
+
+/**
  * Walk the ticket's `SUPERSEDES` chain forward from any member uid to its head,
  * collecting every uid encountered (the chain uid set the `spec_of` re-anchor
  * matches against — AC9). Tx-scoped: uses the same hand-composed reads every
@@ -188,25 +245,95 @@ async function resolveLogicalHeadTx(
 }
 
 /**
+ * Rowids of live items whose DECLARED catalog kind is `SPEC` — an
+ * `issue`-shaped node carrying a live `has_kind` edge to the `kind:'SPEC'`
+ * catalog row. This is the SHIPPED production shape: the reconciled corpus is
+ * `issue` nodes whose DECLARED kind is `SPEC`, and reconciliation stamps them
+ * `spec_of`/`revision_seq` WITHOUT changing the raw `node.kind` column. Any
+ * discovery keyed on the raw column alone is therefore blind to them.
+ *
+ * Uses the SAME live-kind traversal the read path's `filter.kind`
+ * (`query/views/semantic.ts`) and `spec-revision.reconcile.ts` use —
+ * `query/resolve.ts`'s {@link resolveEdgeScopedCandidates} on
+ * `has_kind`→`SPEC` — so read, write, and reconcile can never disagree on what
+ * "a live `kind:'SPEC'` item" is. Returns `undefined` when `SPEC` resolves to
+ * no live catalog row (nothing is declared SPEC).
+ */
+export async function declaredSpecRowids(
+  graph: GraphBackend
+): Promise<ReadonlySet<number> | undefined> {
+  return resolveEdgeScopedCandidates(graph, {
+    rel: 'has_kind',
+    expectedKind: 'kind',
+    ref: 'SPEC',
+  });
+}
+
+/**
+ * Every live SPEC document — the UNION of two representations the store has
+ * held, both of which are specs:
+ *
+ *  (a) a node whose RAW `kind` column is `SPEC` — the immutable revision object
+ *      {@link appendSpecRevision} mints (and the shape the unit fixtures
+ *      build); and
+ *  (b) an `issue` node whose DECLARED catalog kind is `SPEC` — the reconciled
+ *      production corpus (see {@link declaredSpecRowids}).
+ *
+ * This is the ONE discovery the read path ({@link deriveSpecHead}), the write
+ * path (`findChainHeadTx` via {@link declaredSpecRowids}), and the
+ * reconciliation all share, so they cannot drift on which items are specs. The
+ * union is load-bearing: a raw-kind-only reader missed shape (b) entirely.
+ */
+export async function discoverLiveSpecNodes(
+  graph: GraphBackend
+): Promise<NodeRecord[]> {
+  const byUid = new Map<string, NodeRecord>();
+  for (const n of await graph.queryNodes({ kind: 'SPEC', liveOnly: true })) {
+    byUid.set(n.uid, n);
+  }
+  const declared = await declaredSpecRowids(graph);
+  if (declared !== undefined && declared.size > 0) {
+    const nodes = await graph.getNodesByIds([...declared], { liveOnly: true });
+    for (const n of nodes) byUid.set(n.uid, n);
+  }
+  return [...byUid.values()];
+}
+
+/**
  * The live `SPEC` revision whose `meta.spec_of` is a member of the ticket's
  * `SUPERSEDES`-chain uid set with the MAX `meta.revision_seq` — the derived
  * chain head, backed by the functional index `spec-revision.reconcile.ts` creates on
  * `json_extract(meta,'$.spec_of')`.
+ *
+ * Discovers BOTH shapes: the RAW `kind:'SPEC'` column AND the DECLARED-kind
+ * `issue` nodes (`declaredRowids`, resolved before the tx — see
+ * {@link ISpecAppendStore}). The reconciled production corpus is the latter, so
+ * a raw-kind-only lookup returned `undefined` for it — a spurious
+ * {@link SpecRevisionConflictError} (or a silent forked seq-1 revision).
  */
 async function findChainHeadTx(
   tx: AdapterTransaction,
-  chainUids: ReadonlySet<string>
+  chainUids: ReadonlySet<string>,
+  declaredRowids: ReadonlySet<number> | undefined
 ): Promise<ITxNodeRow | undefined> {
   const uids = [...chainUids];
   if (uids.length === 0) return undefined;
-  const placeholders = uids.map(() => '?').join(', ');
+  const uidPlaceholders = uids.map(() => '?').join(', ');
+  const params: unknown[] = [];
+  let kindClause = "kind = 'SPEC'";
+  const declared = declaredRowids === undefined ? [] : [...declaredRowids];
+  if (declared.length > 0) {
+    const declaredPlaceholders = declared.map(() => '?').join(', ');
+    kindClause = `(kind = 'SPEC' OR rowid IN (${declaredPlaceholders}))`;
+    params.push(...declared);
+  }
   const row = await tx.executeGet<{ uid: string }>(
     `SELECT uid FROM node
-       WHERE kind = 'SPEC' AND t_invalid IS NULL
-         AND json_extract(meta, '$.spec_of') IN (${placeholders})
+       WHERE ${kindClause} AND t_invalid IS NULL
+         AND json_extract(meta, '$.spec_of') IN (${uidPlaceholders})
        ORDER BY json_extract(meta, '$.revision_seq') DESC
        LIMIT 1`,
-    uids
+    [...params, ...uids]
   );
   if (!row) return undefined;
   const full = await getNodeByUidTx(tx, row.uid);
@@ -269,7 +396,7 @@ async function foldChainTx(
  * NEVER update or delete a revision node (AC1/AC8).
  */
 export async function appendSpecRevision(
-  handle: IWriteStoreHandle,
+  handle: ISpecAppendStore,
   input: ISpecAppendInput
 ): Promise<ISpecAppendOutcome> {
   if (typeof input.uid !== 'string' || input.uid.trim().length === 0) {
@@ -288,11 +415,22 @@ export async function appendSpecRevision(
 
   const mode = resolveAppendMode();
 
+  // Resolve the DECLARED-kind SPEC rowids ONCE, before the transaction: the
+  // live-kind traversal is a `GraphBackend` read, and a `GraphBackend` call must
+  // never run inside `executeWriteTransaction`'s `BEGIN IMMEDIATE` (see
+  // `resolveLogicalHeadTx` — it autocommits outside the tx). `findChainHeadTx`
+  // unions this set with the raw `kind:'SPEC'` query inside the tx, so the head
+  // lookup sees the reconciled production corpus exactly as `deriveSpecHead` and
+  // `spec-revision.reconcile.ts` do.
+  const declaredRowids = specDiscoveryIsRawKindOnly()
+    ? undefined
+    : await declaredSpecRowids(handle.graph);
+
   return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
     const { head, chainUids } = await resolveLogicalHeadTx(tx, input.uid);
     const now = nowISO();
 
-    const currentRevision = await findChainHeadTx(tx, chainUids);
+    const currentRevision = await findChainHeadTx(tx, chainUids, declaredRowids);
     const currentUid = currentRevision?.uid ?? '';
     const currentSeq = currentRevision
       ? readNumberMeta(currentRevision.metadata, 'revision_seq') ?? 0
@@ -417,7 +555,15 @@ export async function deriveSpecHead(
 ): Promise<ISpecPointer | undefined> {
   const resolved = await resolveTicketHead(graph, uid);
   if (!resolved) return undefined;
-  const live = await graph.queryNodes({ kind: 'SPEC', liveOnly: true });
+  // The SAME union discovery the read path, the write path, and reconcile use —
+  // raw `kind:'SPEC'` AND the DECLARED-kind `issue` corpus (see
+  // `discoverLiveSpecNodes`). A raw-kind-only query here is undefined on the
+  // reconciled production corpus, which silently skips `checkSpecStaleness`'s
+  // AC7 forged-pointer cross-check. The `raw-kind-only` negative control
+  // reinstates that pre-fix criterion for teeth.
+  const live = specDiscoveryIsRawKindOnly()
+    ? await graph.queryNodes({ kind: 'SPEC', liveOnly: true })
+    : await discoverLiveSpecNodes(graph);
   const candidates = live.filter((n) => {
     const specOf = n.metadata?.['spec_of'];
     return typeof specOf === 'string' && resolved.chainUids.has(specOf);

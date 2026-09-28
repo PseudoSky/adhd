@@ -47,6 +47,7 @@
  * trace on any of the four mounts.
  */
 import type { Environment } from '@adhd/environment';
+import type { GraphBackend } from '@adhd/sox-graph-store';
 import type { BacklogConfig } from './env.js';
 import type { GraphBacklogStore } from './store/graph-backlog-store.js';
 import type { IWriteStoreHandle } from './write/tx.js';
@@ -328,7 +329,9 @@ async function ensureSemanticReady(
 async function writeHandle(
   ctx: BacklogCtx,
   opts: { needsSemantic: boolean }
-): Promise<IWriteStoreHandle & IDuplicateScanHandle> {
+): Promise<
+  IWriteStoreHandle & IDuplicateScanHandle & { readonly graph: GraphBackend }
+> {
   // Vocabulary guard (store/vocabulary-guard.ts): refuse to WRITE into a store
   // this build cannot address, rather than let the write fail downstream with
   // a misleading "project not found" caused by an unrecognized vocabulary.

@@ -20,10 +20,8 @@
  */
 
 import type { GraphBackend, NodeRecord } from '@adhd/sox-graph-store';
-import {
-  resolveEdgeScopedCandidates,
-  resolveLogicalIssue,
-} from '../query/resolve.js';
+import { resolveLogicalIssue } from '../query/resolve.js';
+import { discoverLiveSpecNodes } from './spec-revision.js';
 import { readRevision } from './revision.js';
 import {
   type IWriteStoreHandle,
@@ -146,24 +144,16 @@ async function discoverSpecDocuments(
   store: ISpecReconcileStore,
   mode: ReconcileMode
 ): Promise<NodeRecord[]> {
-  const byUid = new Map<string, NodeRecord>();
-  for (const n of await store.graph.queryNodes({ kind: 'SPEC', liveOnly: true })) {
-    byUid.set(n.uid, n);
+  if (mode === 'raw-kind-only') {
+    // The pre-fix criterion (the switch's negative control): the RAW `node.kind`
+    // column ONLY, blind to the declared-kind production shape.
+    return store.graph.queryNodes({ kind: 'SPEC', liveOnly: true });
   }
-  if (mode === 'raw-kind-only') return [...byUid.values()];
-
-  const declared = await resolveEdgeScopedCandidates(store.graph, {
-    rel: 'has_kind',
-    expectedKind: 'kind',
-    ref: 'SPEC',
-  });
-  if (declared !== undefined && declared.size > 0) {
-    const nodes = await store.graph.getNodesByIds([...declared], {
-      liveOnly: true,
-    });
-    for (const n of nodes) byUid.set(n.uid, n);
-  }
-  return [...byUid.values()];
+  // The ONE union discovery the read path (`deriveSpecHead`), the write path
+  // (`appendSpecRevision` via `declaredSpecRowids`), and this reconciliation all
+  // share (`spec-revision.ts`'s `discoverLiveSpecNodes`), so they can never
+  // disagree on what "a live `kind:'SPEC'` item" is.
+  return discoverLiveSpecNodes(store.graph);
 }
 
 /**
