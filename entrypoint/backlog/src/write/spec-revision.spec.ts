@@ -30,13 +30,14 @@ import {
   readPointerRecord,
   readSpecPointer,
 } from './spec-revision.js';
-import { annotate } from './spec-annotation.js';
+import { attest } from './attestation.js';
 import { SpecRevisionConflictError } from './errors.js';
 import { getNodeByUidTx, nowISO, writeNodeTx, type ITxNodeRow } from './tx.js';
 import { getIssue } from '../query/get.js';
 import { openGraphBacklogStore } from '../store/graph-backlog-store.js';
 import { buildBacklogEnv } from '../env.js';
-import { specAppend as apiSpecAppend, type BacklogCtx } from '../api.js';
+import { specAppend as apiSpecAppend, attest as apiAttest, type BacklogCtx } from '../api.js';
+import { BACKLOG_VERBS } from '../vocabulary.js';
 import {
   applySpecRevisionReconcile,
   planSpecRevisionReconcile,
@@ -181,7 +182,19 @@ describe('spec-revision — a spec is a revision of its ticket (real store)', ()
     expect((await row(rev1.spec_revision))!.content).toBe(rev1RowBefore!.content);
   });
 
-  it('AC4 — an annotation never enters the revision body; it is a separate record keyed to the revision', async () => {
+  /**
+   * AC4 (survives retirement) — the annotation capability is RETIRED as a verb
+   * (`annotate`) and RETAINED as a call shape on C3's `attest`: a `SPEC`
+   * subject (widened by `resolveAttestSubject`) + the opaque `'sha256:<hex>'`
+   * revision token as `subject.revision` + the `revision:` anchor grammar. This
+   * drives the REAL `attest` and asserts the SAME recorded result the retired
+   * `annotate` produced — an `attestation` node whose `subject.id` is the
+   * revision and whose `claim.kind` is `'spec-annotation'` — and that the
+   * revision body is never entered. The transform the old shim applied
+   * (`{id,token}` → `{subject:{id,revision}, claim:{kind,body}, anchor}`) is
+   * expressed at the call site; `attest` needs no helper for it.
+   */
+  it("AC4 — annotating a revision through `attest` reproduces the retired verb's recorded result and never enters the revision body", async () => {
     const uid = await issue('annotated spec');
     const rev = await appendSpecRevision(store, {
       uid,
@@ -191,22 +204,136 @@ describe('spec-revision — a spec is a revision of its ticket (real store)', ()
     });
     const before = await row(rev.spec_revision);
 
-    const out = await annotate(store, {
-      subject: { id: rev.spec_revision, token: rev.spec_revision_token },
-      comment: 'please split the acceptance criteria',
+    const out = await attest(store, {
+      subject: { id: rev.spec_revision, revision: rev.spec_revision_token },
+      claim: {
+        kind: 'spec-annotation',
+        body: 'please split the acceptance criteria',
+      },
+      anchor: {
+        locator: `revision:${rev.spec_revision}`,
+        digest: rev.spec_revision_token,
+      },
       by: 'reviewer:1',
     });
 
     // The revision body is BYTE-IDENTICAL.
     const after = await row(rev.spec_revision);
     expect(after!.content).toBe(before!.content);
+    expect(after!.uid).toBe(before!.uid);
 
-    // The annotation is a separate attestation whose subject.id === the revision.
-    const att = await row(out.annotationUid);
+    // The annotation is a separate attestation whose subject.id === the revision
+    // — the EXACT recorded result the retired `annotate` returned as
+    // `annotationUid` (named `attestationUid` on `attest`).
+    const att = await row(out.attestationUid);
     expect(att!.kind).toBe('attestation');
-    expect((att!.metadata!['subject'] as { id: string }).id).toBe(rev.spec_revision);
+    const meta = att!.metadata!;
+    expect((meta['subject'] as { id: string }).id).toBe(rev.spec_revision);
+    expect((meta['subject'] as { revision: string }).revision).toBe(
+      rev.spec_revision_token
+    );
+    expect((meta['claim'] as { kind: string }).kind).toBe('spec-annotation');
+    expect((meta['claim'] as { body: string }).body).toBe(
+      'please split the acceptance criteria'
+    );
+    expect((meta['anchor'] as { locator: string }).locator).toBe(
+      `revision:${rev.spec_revision}`
+    );
+    expect((meta['anchor'] as { digest: string }).digest).toBe(
+      rev.spec_revision_token
+    );
+
     // NEGATIVE CONTROL: keyed to the REVISION, never to the work item.
-    expect((att!.metadata!['subject'] as { id: string }).id).not.toBe(uid);
+    expect((meta['subject'] as { id: string }).id).not.toBe(uid);
+  });
+
+  /**
+   * NEGATIVE CONTROL (teeth) — the retired verb is gone from the pinned
+   * vocabulary, while its surviving path (`attest`) remains mounted. This is
+   * the cheap, default-lane half of the surface proof; the real built-dist half
+   * lives in `api.surface.e2e.ts`. If `annotate` were re-added to
+   * `BACKLOG_VERBS`, this case goes RED.
+   */
+  it('AC4 (surface) — the retired `annotate` verb is absent from the pinned vocabulary; `attest` remains', () => {
+    expect([...BACKLOG_VERBS]).not.toContain('annotate');
+    expect([...BACKLOG_VERBS]).toContain('attest');
+  });
+
+  it('AC4 (api mount) — the mounted `attest` records the annotation on the SAME ticket uid; the supersede path is the failing negative control', async () => {
+    // Drives the MOUNTED `api.ts` verb against a real store — the transport
+    // seam a CLI/MCP/HTTP caller actually hits — not the library function the
+    // test above already covers. The retired `annotate` verb's one call shape
+    // is now `attest` with a SPEC subject + `revision:` anchor.
+    const apiDir = freshTmpDir('spec-annotate-api');
+    const apiStore = await openGraphBacklogStore(join(apiDir, 'backlog.db'));
+    try {
+      const ctx: BacklogCtx = {
+        store: apiStore,
+        env: buildBacklogEnv({ adhdRoot: apiDir }),
+      };
+      const project = (await upsertProject(apiStore, { name: 'annotate-api', by: 'filer' })).uid;
+      const created = await createIssue(apiStore, {
+        project,
+        title: 'annotate api',
+        body: 'the reviewed body',
+        by: 'filer',
+      });
+      const uid = created.uid!;
+
+      // Reads the API test's OWN store — the outer `row()` helper closes over a
+      // different store and would return null here.
+      const apiRow = (u: string) =>
+        apiStore.adapter.transaction((tx) => getNodeByUidTx(tx, u));
+
+      const rev = await appendSpecRevision(apiStore, {
+        uid,
+        fragment: '# spec primary\n',
+        base_revision: '',
+        by: 'author:1',
+      });
+      const revBefore = await apiRow(rev.spec_revision);
+
+      const out = await apiAttest(ctx, {
+        subject: { id: rev.spec_revision, revision: rev.spec_revision_token },
+        claim: {
+          kind: 'spec-annotation',
+          body: 'C9 delta: read "similarity", not "duplicate"',
+        },
+        anchor: {
+          locator: `revision:${rev.spec_revision}`,
+          digest: rev.spec_revision_token,
+        },
+        by: 'reviewer:1',
+      });
+      expect(out.ok).toBe(true);
+      if (!out.ok) throw new Error('expected an ok envelope from the mounted verb');
+
+      // The ticket uid is BYTE-IDENTICAL — the annotation never supersedes the work item.
+      expect(created.uid).toBe(uid);
+      // …and the revision's content + uid are BYTE-IDENTICAL.
+      const revAfter = await apiRow(rev.spec_revision);
+      expect(revAfter!.uid).toBe(revBefore!.uid);
+      expect(revAfter!.content).toBe(revBefore!.content);
+
+      // The correction is a SEPARATE record keyed to the exact revision.
+      const att = await apiRow(out.data.attestationUid);
+      expect(att!.kind).toBe('attestation');
+      expect((att!.metadata!['subject'] as { id: string }).id).toBe(rev.spec_revision);
+      expect(
+        (att!.metadata!['claim'] as { kind: string }).kind
+      ).toBe('spec-annotation');
+
+      // NEGATIVE CONTROL (teeth): the anti-pattern — applying a correction by
+      // editing the BODY — `supersede`s the node and MINTS A NEW uid. If the
+      // annotation path ever edited the body this way, the `uid` assertions
+      // above would be red. Proven live on the same ticket.
+      const bumped = await update(apiStore, { uid, body: 'rewritten body', by: 'filer' });
+      expect(bumped.uid).not.toBe(uid);
+      expect(bumped.changed).toContain('body');
+    } finally {
+      await apiStore.adapter.close().catch(() => undefined);
+      rmSync(apiDir, { recursive: true, force: true });
+    }
   });
 
   it('AC5 — discovered SPECs are revisions: exactly one current revision per ticket', async () => {

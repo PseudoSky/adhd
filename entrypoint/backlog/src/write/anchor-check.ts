@@ -70,8 +70,9 @@ export type IParsedAnchor =
   | { scheme: 'registry'; target: string }
   | { scheme: 'commit'; target: string }
   // C10: `revision:<revision uid>` — the anchor of a spec-revision ANNOTATION
-  // (`spec-annotation.ts`). Immutable by construction (a revision never
-  // changes), so its "digest" is the revision's own `sha256:<hex>` token.
+  // recorded through `attest` (a `SPEC` subject + this anchor). Immutable by
+  // construction (a revision never changes), so its "digest" is the revision's
+  // own `sha256:<hex>` token.
   | { scheme: 'revision'; target: string };
 
 /**

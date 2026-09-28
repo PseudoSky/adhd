@@ -188,4 +188,21 @@ describe('api.ts — the mounted surface (SPEC §6.7)', () => {
     expect(new Set(surface.map((s) => s.id)).size).toBe(surface.length);
     expect(surface).toHaveLength(EXPECTED.length);
   });
+
+  /**
+   * NEGATIVE CONTROL (teeth) — the retired `annotate` verb is gone from the
+   * mounted surface on BOTH consumer seams (the MCP tool name and the CLI
+   * command). Re-adding the `api.ts` export (or its `EXPECTED` row) turns the
+   * exact-equality case above RED; this case states the retirement directly so
+   * the intent is legible rather than implied by a list diff. The capability it
+   * used to expose — commenting on a spec revision — is retained through
+   * `attest` with a `SPEC` subject + a `revision:` anchor, and is proven
+   * behaviorally in `write/spec-revision.spec.ts`.
+   */
+  it('does NOT mount the retired `annotate` verb (negative control)', async () => {
+    const surface = await mountedSurface();
+    expect(surface.map((s) => s.id)).not.toContain('backlog/annotate');
+    expect(surface.map((s) => s.mcp)).not.toContain('backlog_annotate');
+    expect(surface.map((s) => s.cli)).not.toContain('backlog annotate');
+  });
 });

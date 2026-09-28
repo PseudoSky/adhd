@@ -231,8 +231,8 @@ A ticket's work product is a sequence of immutable spec revisions.
 required `base_revision` makes the append a compare-and-swap: a stale base is
 refused with `precondition_failed` and nothing is written. `spec-check` tells a
 reader whether the token it holds is still current — an absent token is
-`stale`, never `fresh` — and `annotate` records a comment keyed to an exact
-revision (never to the ticket body):
+`stale`, never `fresh` — and `attest` records a comment keyed to an exact
+revision (never to the ticket body) via a `SPEC` subject + a `revision:` anchor:
 
 ```bash
 adhd-backlog spec-check --input '{"uid":"c79b52b0-…"}'
@@ -274,8 +274,8 @@ and `Unknown option: --<field>. Available: --input`. (`--help` prints a
 "per-field flags are also accepted" footer line; it is generated boilerplate
 that does not hold for these commands — `--input` is the only option they
 accept. The special commands `serve`, `install-skill`, and `search` are the
-exception: they take argv flags and no `--input`.) Twenty-nine operations (the
-28 verbs plus `batch`):
+exception: they take argv flags and no `--input`.) Twenty-eight operations (the
+27 verbs plus `batch`):
 
 | Verb              | CLI                             | MCP tool                   |
 | ----------------- | ------------------------------- | -------------------------- |
@@ -295,7 +295,6 @@ exception: they take argv flags and no `--input`.) Twenty-nine operations (the
 | `obligate`        | `adhd-backlog obligate`         | `backlog_obligate`         |
 | `unobligate`      | `adhd-backlog unobligate`       | `backlog_unobligate`       |
 | `specAppend`      | `adhd-backlog spec-append`      | `backlog_spec_append`      |
-| `annotate`        | `adhd-backlog annotate`         | `backlog_annotate`         |
 | `specCheck`       | `adhd-backlog spec-check`       | `backlog_spec_check`       |
 | `claim`           | `adhd-backlog claim`            | `backlog_claim`            |
 | `relate`          | `adhd-backlog relate`           | `backlog_relate`           |
@@ -315,8 +314,9 @@ prefix at any position. `get`/`query`/`lookup`/`embedding-status` and the four
 stats/rollup ops are reads. `create`/`update`/`transition`/`claim`/`relate`/
 `move`/`delete` mutate one issue; `attest`/`recheck` record anchored evidence,
 and `obligate`/`unobligate` declare or retire a typed requirement that gates a
-transition ([SKILL.md §4](skill/SKILL.md)); `specAppend`/`annotate`/`specCheck`
-advance, annotate, and verify a ticket's spec revisions ([SKILL.md
+transition ([SKILL.md §4](skill/SKILL.md)); `specAppend`/`specCheck` advance
+and verify a ticket's spec revisions, and a revision is annotated through
+`attest` with a `SPEC` subject + a `revision:` anchor ([SKILL.md
 §5](skill/SKILL.md)). The
 `upsert*`/`rmLocation` verbs manage the **registry** (projects, components,
 locations), and `mergeProject`/`rmProject` collapse or retire project rows.
@@ -415,8 +415,8 @@ the item's `Citations:` block. Omit it and nothing is stored.
 ### Which build these docs describe
 
 These docs describe `entrypoint/backlog/dist/index.js` built from the revision
-captured here, which mounts 28 verbs — including the obligation
-(`obligate`/`unobligate`), spec-pointer (`spec-append`/`annotate`/`spec-check`),
+captured here, which mounts 27 verbs — including the obligation
+(`obligate`/`unobligate`), spec-pointer (`spec-append`/`spec-check`),
 and catalog (`query --input '{"view":"catalogs"}'`) surfaces. A **globally
 installed** `adhd-backlog` may be an older build (it is whatever was last
 published/installed); on such a build `gitContext` may be rejected with

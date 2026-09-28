@@ -21,7 +21,7 @@ the successor. Never treat a stored uid as immutable across edits.
 
 Every example below was run against `entrypoint/backlog/dist/index.js` and its
 exact output is what is shown. The obligations/verdict (§4), spec-pointer (§5),
-and catalog/order (§6) examples were run on the build that mounts all 28 verbs;
+and catalog/order (§6) examples were run on the build that mounts all 27 verbs;
 the §11 stats/rollup examples on the build that first mounted those ops. A
 _globally installed_ `adhd-backlog` may be an older build: in particular
 `gitContext` on `create`/`transition` (§9) exists in the `9df2a5c7` build but
@@ -31,7 +31,7 @@ or after the one that mounted them. Compare the `backlog create`, `backlog
 priority-matrix`, and `backlog obligate` lines of `adhd-backlog --help` with §1
 before relying on a field.
 
-## 1. Command surface — 28 verbs (plus `batch`), one calling convention
+## 1. Command surface — 27 verbs (plus `batch`), one calling convention
 
 **Every verb except `embedding-status` takes a single `--input` flag carrying
 one JSON object** (`embedding-status` takes no options at all). There
@@ -52,7 +52,6 @@ a prefix matching two or more live nodes is refused with `ambiguous_reference`
 A prefix shorter than 8 characters is refused as too short.
 
 ```
-adhd-backlog backlog annotate           --input '<IAnnotateInput json>'
 adhd-backlog backlog attest             --input '<IAttestInput json>'
 adhd-backlog backlog claim              --input '<IClaimInput json>'
 adhd-backlog backlog create             --input '<ICreateIssueInput json>'
@@ -98,7 +97,6 @@ Namespaced verbs (namespace + verb, per-field flags):
   batch action  { input: { operation: 'backlog/get', items: object[], concurrency?: number, mode?: 'parallel'|'serial'|'chained', onItemError?: 'continue'|'abort', itemTimeoutMs?: number } }
 
 Verbs (one-token, --input JSON envelope):
-  backlog annotate  { input: { subject: object, comment: string, anchor?: object, by: string } }
   backlog attest  { input: { subject: object, claim: object, anchor: object, by: string } }
   backlog claim  { input: { uid: string, by: string, action: 'claim'|'release'|'renew', force?: boolean } }
   backlog create  { input: { title: string, body: string, project: string, component?: string, kind?: string, status?: string, priority?: string, citations?: object[], author?: string, assignee?: string, gitContext?: string, dedupeExcludeUid?: string, by: string, duplicateAction?: 'abort'|'force'|'comment', awaitEmbed?: boolean } }
@@ -247,8 +245,8 @@ Success is always exit `0`.
 ### MCP tool names
 
 Each verb is also an MCP tool once `.mcp.json` wires the server, named
-`backlog_<verb>` with the verb's own words snake_cased: `backlog_annotate`,
-`backlog_attest`, `backlog_claim`, `backlog_create`, `backlog_delete`,
+`backlog_<verb>` with the verb's own words snake_cased: `backlog_attest`,
+`backlog_claim`, `backlog_create`, `backlog_delete`,
 `backlog_embedding_status`,
 `backlog_get`, `backlog_lookup`, `backlog_merge_project`, `backlog_move`,
 `backlog_obligate`, `backlog_open_curve`, `backlog_part_of_rollup`,
@@ -257,7 +255,7 @@ Each verb is also an MCP tool once `.mcp.json` wires the server, named
 `backlog_spec_append`, `backlog_spec_check`, `backlog_transition`,
 `backlog_unobligate`, `backlog_update`, `backlog_upsert_component`,
 `backlog_upsert_location`, `backlog_upsert_project`, plus the un-namespaced
-`batch_action` — 28 verbs + `batch`.
+`batch_action` — 27 verbs + `batch`.
 
 The tool list a session sees is the MCP **server process's** build, which can
 lag the CLI: a long-lived `serve` started before a verb was mounted does not
@@ -535,7 +533,8 @@ only when the path is a real git work tree containing the file. With a
 that kind **stays unsatisfied and the close stays refused**. A `url:` anchor is
 likewise only `unverified`
 (`reason:"no mechanical checker is wired for \"url:\" anchors yet"`), and a
-`revision:` anchor (the `annotate` default) is `unverified` too. Without a git
+`revision:` anchor (a spec-revision annotation, recorded through `attest`) is
+`unverified` too. Without a git
 work tree to verify against, satisfy such an obligation another way: register
 the project with a `path` that **is** the real git work tree, use
 `on_fail:"warn"` (a warn obligation never gates a transition), or list your
@@ -785,22 +784,23 @@ $ adhd-backlog spec-append --input '{"uid":"c79b52b0-…","fragment":"# Design\n
 {"ok":true,"data":{"uid":"c79b52b0-…","spec_revision":"20efdc96-…","spec_revision_token":"sha256:149a2200…","revision_seq":2}}
 ```
 
-### Annotating a revision
+### Annotating a revision (through `attest`)
 
-`annotate { subject: { id, token }, comment, anchor?, by }` records a comment
-against a spec REVISION — a separate node keyed to the exact revision, never
-written into any body. `subject.id` is the revision uid and `subject.token` is
-its `'sha256:<hex>'` token, so a comment on revision _n_ can never drift onto
-_n+1_.
+There is no dedicated `annotate` verb: a comment on a spec REVISION is a plain
+`attest` call whose `subject.id` is the revision uid, whose `subject.revision`
+is its opaque `'sha256:<hex>'` token, and whose `claim.kind` is
+`"spec-annotation"`. The `anchor` is `{ locator: "revision:<revision uid>",
+digest: <token> }`. The comment is a separate `attestation` node keyed to the
+exact revision and is never written into any body, so a comment on revision _n_
+can never drift onto _n+1_.
 
 ```
-$ adhd-backlog annotate --input '{"subject":{"id":"20efdc96-…","token":"sha256:149a2200…"},"comment":"Reviewed: add the failure-mode section.","by":"agent:worker-1"}'
-{"ok":true,"data":{"annotationUid":"0fa85138-…","subject":{"id":"20efdc96-…","token":"sha256:149a2200…"},"check":{"state":"unverified","method":"none","checked_at":"…","checked_by":"agent:worker-1","reason":"no mechanical checker is wired for \"revision:\" anchors yet"}}}
+$ adhd-backlog attest --input '{"subject":{"id":"20efdc96-…","revision":"sha256:149a2200…"},"claim":{"kind":"spec-annotation","body":"Reviewed: add the failure-mode section."},"anchor":{"locator":"revision:20efdc96-…","digest":"sha256:149a2200…"},"by":"agent:worker-1"}'
+{"ok":true,"data":{"attestationUid":"0fa85138-…","subject":{"id":"20efdc96-…","revision":"sha256:149a2200…"},"check":{"state":"unverified","method":"none","checked_at":"…","checked_by":"agent:worker-1","reason":"no mechanical checker is wired for \"revision:\" anchors yet"}}}
 ```
 
-The default `anchor` is `{ locator: "revision:<revision uid>", digest:
-<token> }`. No mechanical checker is wired for `revision:` anchors yet, so
-`check.state` is `unverified` — the token is RECORDED, not validated.
+No mechanical checker is wired for `revision:` anchors yet, so `check.state` is
+`unverified` — the token is RECORDED, not validated.
 
 ## 6. Read views — catalogs, registry lists, and dependency order
 
