@@ -52,7 +52,8 @@ export interface IAttestCheck {
 
 /**
  * An anchor is `locator + digest`. The locator grammar is closed:
- * `path:<file>[:<line>]` | `url:<url>` | `query:<cql>` | `registry:<ref>`.
+ * `path:<file>[:<line>]` | `url:<url>` | `query:<cql>` | `registry:<ref>` |
+ * `commit:<sha>` (C5: ancestry of the default branch).
  * A bare hand-maintained `path:line` is INSUFFICIENT without a `digest` — the
  * digest is the whole point of content-addressing the claim.
  */
@@ -66,7 +67,20 @@ export type IParsedAnchor =
   | { scheme: 'path'; target: string; line?: number }
   | { scheme: 'url'; target: string }
   | { scheme: 'query'; target: string }
-  | { scheme: 'registry'; target: string };
+  | { scheme: 'registry'; target: string }
+  | { scheme: 'commit'; target: string };
+
+/**
+ * The closed set of locator SCHEMES the grammar names (C3 added
+ * `path|url|query|registry`; C5 adds `commit:<sha>`). Kept as an exported alias
+ * so a consumer (the C5 gate) can branch on the scheme without re-listing it.
+ */
+export type AnchorLocatorKind =
+  | 'path'
+  | 'url'
+  | 'query'
+  | 'registry'
+  | 'commit';
 
 /** Options for {@link checkAnchor}. */
 export interface ICheckAnchorOptions {
@@ -80,7 +94,7 @@ export interface ICheckAnchorOptions {
   by: string;
 }
 
-const ANCHOR_SCHEMES = ['path', 'url', 'query', 'registry'] as const;
+const ANCHOR_SCHEMES = ['path', 'url', 'query', 'registry', 'commit'] as const;
 
 /**
  * Parse `locator` against the closed grammar, throwing
@@ -204,6 +218,101 @@ function digestAtHead(root: string, relpath: string): string | undefined {
   return createHash('sha256').update(r.stdout).digest('hex');
 }
 
+/** The mechanical check a `commit:` anchor names — the one string every refusal carries as `performed_check`. */
+export const DEFAULT_BRANCH_ANCESTOR_CHECK = 'default_branch_ancestor' as const;
+
+/** The result of the default-branch check: whether `sha` is an ancestor of the resolved default branch, and the named check that produced it. */
+export interface IDefaultBranchCheck {
+  onDefaultBranch: boolean;
+  performed: string;
+}
+
+/**
+ * Resolve the repo's default branch NAME, or `undefined` when it cannot be
+ * determined. An explicit `defaultBranch` wins; otherwise `origin/HEAD`
+ * (`git symbolic-ref refs/remotes/origin/HEAD`, the cloned-repo convention)
+ * is tried, then the currently checked-out branch. A detached HEAD reports
+ * literally `"HEAD"`, which is not a branch — unresolved, so the caller
+ * fails closed rather than guessing.
+ */
+function resolveDefaultBranch(
+  root: string,
+  defaultBranch?: string
+): string | undefined {
+  if (typeof defaultBranch === 'string' && defaultBranch.trim().length > 0) {
+    return defaultBranch.trim();
+  }
+  const originHead = runGit(root, [
+    'symbolic-ref',
+    '-q',
+    '--short',
+    'refs/remotes/origin/HEAD',
+  ]);
+  if (originHead.status === 0) {
+    const ref = originHead.stdout.trim();
+    if (ref.length > 0) return ref.replace(/^origin\//, '');
+  }
+  const head = runGit(root, ['rev-parse', '--abbrev-ref', 'HEAD']);
+  const name = head.status === 0 ? head.stdout.trim() : '';
+  if (name.length > 0 && name !== 'HEAD') return name;
+  return undefined;
+}
+
+/**
+ * The SYNC core of the default-branch check — `git merge-base --is-ancestor
+ * <sha> <default>`. Sync because `checkAnchor` is sync and runs on `attest`'s
+ * pre-transaction path; {@link isShaOnDefaultBranch} is the async face the
+ * spec's `IGateRefusal.performed_check` consumer (the C5 gate) calls.
+ *
+ * **Fail-closed.** A missing `git`, a non-repo root, an unresolvable default
+ * branch, or an unknown `sha` all return `onDefaultBranch: false` — never a
+ * silent pass. `performed` is always {@link DEFAULT_BRANCH_ANCESTOR_CHECK}, so
+ * a refusal can name the check whether it passed, failed, or could not run.
+ */
+function defaultBranchAncestorCheck(
+  repoRoot: string,
+  sha: string,
+  defaultBranch?: string
+): IDefaultBranchCheck {
+  const performed = DEFAULT_BRANCH_ANCESTOR_CHECK;
+  if (
+    typeof sha !== 'string' ||
+    sha.trim().length === 0 ||
+    typeof repoRoot !== 'string' ||
+    repoRoot.trim().length === 0
+  ) {
+    return { onDefaultBranch: false, performed };
+  }
+  if (!isGitWorkTree(repoRoot)) {
+    return { onDefaultBranch: false, performed };
+  }
+  const branch = resolveDefaultBranch(repoRoot, defaultBranch);
+  if (branch === undefined) {
+    return { onDefaultBranch: false, performed };
+  }
+  // `--is-ancestor` exits 0 when <sha> is an ancestor of <branch>, 1 when it is
+  // not, and >1 (documented as 128) on an unknown object/branch. Only exit 0 is
+  // a pass; every other exit is fail-closed false.
+  const result = runGit(repoRoot, ['merge-base', '--is-ancestor', sha.trim(), branch]);
+  return { onDefaultBranch: result.status === 0, performed };
+}
+
+/**
+ * Is `<sha>` an ancestor of the repo's default branch? Shells
+ * `git merge-base --is-ancestor <sha> <default>`, exactly as C3's anchor ladder
+ * shells `git cat-file`/`git log`. Returns `{onDefaultBranch:false,
+ * performed:'default_branch_ancestor'}` when the repo or the branch cannot be
+ * resolved (fail-closed, never a silent pass) — the `performed` field is
+ * present in every outcome so the caller can name the mechanical check.
+ */
+export async function isShaOnDefaultBranch(
+  repoRoot: string,
+  sha: string,
+  defaultBranch?: string
+): Promise<IDefaultBranchCheck> {
+  return defaultBranchAncestorCheck(repoRoot, sha, defaultBranch);
+}
+
 /**
  * Resolve an anchor's `path:` target to a repo-relative path, or `undefined`
  * when it escapes the root (a `..` traversal is not a repo path).
@@ -241,6 +350,41 @@ export function checkAnchor(
 ): IAttestCheck {
   const base = { checked_at: opts.now, checked_by: opts.by };
   const parsed = parseAnchor(anchor.locator);
+
+  if (parsed.scheme === 'commit') {
+    const root = opts.root;
+    if (!root) {
+      return {
+        state: 'unknown',
+        method: 'none',
+        ...base,
+        reason: 'no project root could be resolved for the subject',
+      };
+    }
+    if (!isGitWorkTree(root)) {
+      return {
+        state: 'unknown',
+        method: 'none',
+        ...base,
+        reason: `no git work tree at "${root}"`,
+      };
+    }
+    // C5: a `commit:<sha>` anchor is mechanically checkable — is the sha an
+    // ancestor of the default branch? `verified` when yes; `stale` when no
+    // (the commit is not merged); the check names itself via `method` so a
+    // refusal can carry `performed_check`. Fail-closed: an unresolvable
+    // repo/branch is `unknown`, never a silent pass.
+    const check = defaultBranchAncestorCheck(root, parsed.target);
+    if (check.onDefaultBranch) {
+      return { state: 'verified', method: check.performed, ...base };
+    }
+    return {
+      state: 'stale',
+      method: check.performed,
+      ...base,
+      reason: `commit "${parsed.target}" is not an ancestor of the default branch`,
+    };
+  }
 
   if (parsed.scheme !== 'path') {
     return {

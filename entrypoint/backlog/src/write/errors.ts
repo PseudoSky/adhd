@@ -766,3 +766,56 @@ export function assertNotBareRoleLiteral(field: string, value: string): void {
     );
   }
 }
+
+/**
+ * (C5) A terminal transition was refused because a `block`-severity obligation
+ * is unsatisfied (DESIGN §2 Primitive 3). `E_VALIDATION` → the envelope maps
+ * it to `precondition_failed`, with the structured `IGateRefusal` in
+ * `error.details.refusal` (adhd ADR-0004 — object-shaped, never a `{result}`
+ * envelope). Thrown from INSIDE `transition`'s open `BEGIN IMMEDIATE`
+ * transaction and BEFORE any write, so the throw rolls the transaction back and
+ * a re-read shows the status unchanged.
+ *
+ * `E_VALIDATION`, never retryable — retrying the identical payload against
+ * unchanged obligations fails identically (the caller must satisfy or override
+ * the obligation first).
+ *
+ * Deliberately declared ATTACHED to `errors.ts`'s end (after every existing
+ * export) and importing `IGateRefusal` via an inline `import(...)` type, so
+ * this additive change shifts NO existing line and leaves `CONTRACT.md`'s
+ * `(errors.ts:NNN)` anchors (enforced by `contract-anchors.spec.ts`) true.
+ */
+export class ObligationUnsatisfiedError extends BacklogWriteError {
+  readonly code = 'E_VALIDATION' as const;
+  readonly retryable = false;
+
+  constructor(public readonly refusal: import('./gate.js').IGateRefusal) {
+    const required =
+      refusal.required_kind !== undefined ? ` (requires "${refusal.required_kind}")` : '';
+    super(`Transition refused: ${refusal.code}${required} — ${refusal.message}`);
+  }
+}
+
+/**
+ * (C5) A claimed override of a refusing obligation is not permitted: the caller
+ * is not in the obligation's `override.actors`, or the override carries a blank
+ * reason. An override ALWAYS requires a recorded reason (DESIGN §2 Primitive 3
+ * — "not a configurable boolean"), so a blank one is refused, never treated as
+ * a silent pass.
+ *
+ * `E_VALIDATION` → `precondition_failed`, never retryable.
+ */
+export class OverrideNotPermittedError extends BacklogWriteError {
+  readonly code = 'E_VALIDATION' as const;
+  readonly retryable = false;
+
+  constructor(
+    public readonly obligationUid: string,
+    public readonly actor: string
+  ) {
+    super(
+      `Override not permitted: actor "${actor}" may not override obligation "${obligationUid}" ` +
+        '(the actor is not listed in override.actors, or no override reason was recorded — an override always requires a reason)'
+    );
+  }
+}

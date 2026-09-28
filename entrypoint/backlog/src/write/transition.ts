@@ -106,6 +106,7 @@ import {
   ClaimHeldError,
   InvalidArgumentError,
   NoteRequiredError,
+  ObligationUnsatisfiedError,
   citationReadError,
   assertNotBareRoleLiteral,
 } from './errors.js';
@@ -124,6 +125,7 @@ import {
 } from './tx.js';
 import { extractClaimMeta, isClaimStale } from './claim-lease.js';
 import { resolveIssueStatusTx } from './issue-status.js';
+import { evaluateTransitionGateTx, type IGateEvaluation } from './gate.js';
 
 export interface ITransitionInput {
   /** The `issue` uid to transition (§6.3, an "Issue verb"). */
@@ -146,6 +148,15 @@ export interface ITransitionInput {
    * per-citation `ref` — it rides the issue, never a `citation` node.
    */
   gitContext?: string;
+  /**
+   * A recorded override of a refusing obligation (C5, DESIGN §2 Primitive 3).
+   * Honoured ONLY when the caller is in the refusing obligation's
+   * `override.actors`; a reason is ALWAYS required (never a configurable
+   * boolean) and is recorded on the audit row. A claimed override by a
+   * non-listed actor, or one with a blank reason, throws
+   * `OverrideNotPermittedError`.
+   */
+  override?: { reason: string };
 }
 
 export interface ITransitionOutcome {
@@ -464,6 +475,29 @@ export async function transition(
       throw new CitationRequiredError(issueRow.uid);
     }
 
+    // C5 closure gate — fail-closed evaluation of the item's transition-scoped
+    // obligations, INSIDE this same BEGIN IMMEDIATE transaction (adhd ADR-0001
+    // + ADR-0012): the read-modify-write is atomic with the writes below, so
+    // two concurrent terminal transitions serialize through the RESERVED lock
+    // and neither observes a stale obligation state. The gate NEVER writes; on
+    // success the `satisfies` edges + `satisfied_by` stamp are written below.
+    // On refusal the throw rolls this transaction back, so a re-read shows the
+    // status UNCHANGED (AC1).
+    let gate: IGateEvaluation | undefined;
+    if (toTerminal) {
+      gate = await evaluateTransitionGateTx(tx, {
+        issueRowid: issueRow.rowid,
+        fromStatus: fromStatusName,
+        toStatus: toStatusRow.name,
+        effectiveActor: input.by,
+        at: now,
+        ...(input.override !== undefined ? { override: input.override } : {}),
+      });
+      if (!gate.satisfied) {
+        throw new ObligationUnsatisfiedError(gate.refusals[0]!);
+      }
+    }
+
     // §4a's audit/transition sha convention, mirroring `audit.ts`'s own
     // `writeAudit` field-naming EXACTLY (`target_uid`/`from`/`to`, `null` for
     // an absent `note` rather than omitting the key) — see this file's own
@@ -491,6 +525,9 @@ export async function transition(
         note: input.note ?? null,
         sha: transitionSha,
         at: now,
+        ...(gate !== undefined && gate.satisfiedBy.length > 0
+          ? { satisfied_by: gate.satisfiedBy }
+          : {}),
       },
       at: now,
     });
@@ -572,6 +609,34 @@ export async function transition(
       }
     }
 
+    // C5: record which attestation satisfied which obligation — one live
+    // `satisfies` edge (obligation → attestation) per pair the gate returned,
+    // in the SAME transaction that closed the item. Without this the closure
+    // names no evidence (AC2).
+    if (gate !== undefined && gate.satisfiedBy.length > 0) {
+      const satisfiesRule = await resolveEdgeKindTx(tx, 'satisfies');
+      for (const { obligationUid, attestationUid } of gate.satisfiedBy) {
+        const obligationNode = await resolveUidPrefixTx(tx, obligationUid, {
+          expectedKind: 'obligation',
+        });
+        const attestationNode = await resolveUidPrefixTx(tx, attestationUid, {
+          expectedKind: 'attestation',
+        });
+        await writeEdgeTx(tx, {
+          at: now,
+          srcRowid: obligationNode.rowid,
+          srcUid: obligationNode.uid,
+          srcKind: 'obligation',
+          dstRowid: attestationNode.rowid,
+          dstUid: attestationNode.uid,
+          dstKind: 'attestation',
+          rel: 'satisfies',
+          rule: satisfiesRule,
+          typePolicy: handle.typePolicy,
+        });
+      }
+    }
+
     // §6.3.4's closedAt stamp/clear — see this file's own doc comment.
     const newIssueMetadata: Record<string, unknown> = {
       ...(issueRow.metadata ?? {}),
@@ -591,6 +656,11 @@ export async function transition(
     ) {
       newIssueMetadata.gitContext = input.gitContext;
     }
+    // C5: stamp the closure's satisfied-by pairs onto the issue so `get` can
+    // name which attestation closed it without a second traversal.
+    if (gate !== undefined && gate.satisfiedBy.length > 0) {
+      newIssueMetadata.satisfied_by = gate.satisfiedBy;
+    }
     const touchResult = await tx.executeRun(
       'UPDATE node SET meta = ?, t_updated = ? WHERE rowid = ?',
       [JSON.stringify(newIssueMetadata), now, issueRow.rowid]
@@ -600,6 +670,21 @@ export async function transition(
         `transition: closedAt touch UPDATE affected ${touchResult.rowsAffected} rows for rowid=${issueRow.rowid}, expected exactly 1.`
       );
     }
+
+    // C5: a recorded override reason rides the audit note (`override: <reason>`)
+    // so the closure's bypass is auditable, never a silent pass.
+    const overrideReason =
+      input.override !== undefined &&
+      typeof input.override.reason === 'string' &&
+      input.override.reason.trim().length > 0
+        ? `override: ${input.override.reason}`
+        : undefined;
+    const auditNote =
+      overrideReason === undefined
+        ? input.note
+        : [input.note, overrideReason]
+            .filter((p): p is string => typeof p === 'string' && p.length > 0)
+            .join(' — ');
 
     await writeAudit({
       tx,
@@ -611,7 +696,7 @@ export async function transition(
       action: 'transitioned',
       from: fromStatusName,
       to: toStatusRow.name,
-      note: input.note,
+      note: auditNote,
       at: now,
     });
 

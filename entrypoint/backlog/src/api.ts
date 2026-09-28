@@ -80,6 +80,8 @@ import {
   IssueTerminalError,
   NoteRequiredError,
   ObligationNotFoundError,
+  ObligationUnsatisfiedError,
+  OverrideNotPermittedError,
   SingleValuedRelationConflictError,
   StaleSupersedeError,
   WriteContentionError,
@@ -440,6 +442,8 @@ const ERROR_CLASS_TO_ENVELOPE_CODE: ReadonlyArray<
   [CitationRequiredError, 'precondition_failed'],
   [NoteRequiredError, 'precondition_failed'],
   [CitationUnverifiableError, 'precondition_failed'],
+  [ObligationUnsatisfiedError, 'precondition_failed'],
+  [OverrideNotPermittedError, 'precondition_failed'],
   [WriteContentionError, 'store_busy'],
   [RagNotConfiguredError, 'rag_not_configured'],
 ];
@@ -476,6 +480,16 @@ function toEnvelope(err: unknown): IOutcomeFailure {
                 : { retryAfterMs: err.retry_after_ms }),
             }
           : undefined;
+      // The closure gate's structured refusal rides under
+      // `error.details.refusal` (ADR-0004: object-shaped, never a `{result}`
+      // envelope), so the failure arm carries the typed reason set the caller
+      // needs to fix or override the obligation.
+      if (err instanceof ObligationUnsatisfiedError) {
+        return errorEnvelope(code, err.message, {
+          ...(details ?? {}),
+          refusal: err.refusal,
+        });
+      }
       return errorEnvelope(code, err.message, details);
     }
   }

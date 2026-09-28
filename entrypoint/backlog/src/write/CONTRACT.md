@@ -12,8 +12,8 @@ other eight agents building in parallel.
 
 Every export below was read directly out of the current file (paths and line
 numbers are cited per-export). Nothing here is guessed. Counts: `tx.ts` — 24
-exports, `catalog.ts` — 12 exports, `errors.ts` — 17 exports, `audit.ts` — 3
-exports. **Total: 56 exports.**
+exports, `catalog.ts` — 12 exports, `errors.ts` — 19 exports, `audit.ts` — 3
+exports. **Total: 58 exports.**
 
 ---
 
@@ -644,7 +644,7 @@ surface.
 
 ---
 
-## `errors.ts` (18 exports)
+## `errors.ts` (20 exports)
 
 ### `WriteErrorCode` — type (`errors.ts:41`)
 
@@ -987,6 +987,41 @@ distinguishes a recognized-but-unclassified database error (`E_IO`,
 `retryable: true`) from a genuinely unrecognized non-database failure
 (`E_IO`, `retryable: false` — never retried, since it never even reached the
 driver).
+
+### `ObligationUnsatisfiedError(refusal)` — class (`errors.ts:788`)
+
+```ts
+export class ObligationUnsatisfiedError extends BacklogWriteError {
+  readonly code: 'E_VALIDATION';
+  readonly retryable: false;
+  constructor(public readonly refusal: import('./gate.js').IGateRefusal);
+}
+```
+
+Guarantees: thrown by `transition` on a **terminal** status change when the C5
+closure gate found a `block`-severity obligation unsatisfied. Maps to the
+envelope code `precondition_failed` (exit 1), with the structured refusal in
+`error.details.refusal` (adhd ADR-0004). Thrown from INSIDE `transition`'s open
+`BEGIN IMMEDIATE` transaction and before any write, so the throw rolls back and
+a re-read shows the status unchanged. Never retryable. **Additive (C5)** —
+appended after every pre-existing export so no `CONTRACT.md` anchor shifted.
+
+### `OverrideNotPermittedError(obligationUid, actor)` — class (`errors.ts:808`)
+
+```ts
+export class OverrideNotPermittedError extends BacklogWriteError {
+  readonly code: 'E_VALIDATION';
+  readonly retryable: false;
+  constructor(public readonly obligationUid: string, public readonly actor: string);
+}
+```
+
+Guarantees: thrown by `transition` (via the C5 gate) when a claimed override of
+a refusing obligation is not permitted — the actor is not in the obligation's
+`override.actors`, or the reason is blank. An override ALWAYS requires a
+recorded reason (DESIGN §2 Primitive 3), never a configurable boolean. Maps to
+`precondition_failed`; never retryable. **Additive (C5)** — appended after every
+pre-existing export so no `CONTRACT.md` anchor shifted.
 
 ---
 
