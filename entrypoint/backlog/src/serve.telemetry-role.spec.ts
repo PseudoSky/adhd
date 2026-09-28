@@ -62,14 +62,23 @@ import {
 // calls above all imports in this file — can close over it safely.
 const serveCommandCallOrder: string[] = [];
 
-// `startBacklogServer` (server.ts) is exercised for real (with real
+// `createBacklogServer` (server.ts) is exercised for real (with real
 // subprocesses) in `serve.singleton.spec.ts` — mocked purely here to
 // observe INVOCATION ORDER, not to change its behavior. The mock resolves
-// immediately (no signal wait), so `runServeCommand` completes without
-// needing to deliver a real SIGTERM/SIGINT to this test process.
+// immediately (its handle's `whenClosed`/`close` are already-settled), so
+// `runServeCommand` completes without needing to deliver a real
+// SIGTERM/SIGINT to this test process. D-A renamed the observed symbol from
+// `startBacklogServer` to `createBacklogServer`; `startBacklogServer` is now
+// a thin wrapper over it, so the ordering invariant is identical.
 vi.mock('./server.js', () => ({
-  startBacklogServer: vi.fn(async () => {
-    serveCommandCallOrder.push('startBacklogServer');
+  createBacklogServer: vi.fn(async () => {
+    serveCommandCallOrder.push('createBacklogServer');
+    return {
+      report: () => ({ state: 'starting', since: '', degraded: false }),
+      whenReady: () => Promise.resolve(),
+      whenClosed: () => Promise.resolve(),
+      close: () => Promise.resolve(),
+    };
   }),
 }));
 
@@ -96,10 +105,10 @@ describe('BUG-014-LOCK-ORDER: runServeCommand invokes startBacklogServer before 
     _resetTelemetryForTest();
   });
 
-  it('RED (pre-fix): initTelemetry ran before startBacklogServer, ahead of its synchronous startup prefix — GREEN (this fix): startBacklogServer is invoked first, unawaited, and its synchronous prefix (env resolution + ensureDirs + signal-cleanup registration) completes in this tick before initTelemetry is ever called', async () => {
+  it('RED (pre-fix): initTelemetry ran before the server call, ahead of its synchronous startup prefix — GREEN (this fix): createBacklogServer is invoked first, unawaited, and its synchronous prefix (env resolution + ensureDirs + signal-cleanup registration) completes in this tick before initTelemetry is ever called', async () => {
     const { runServeCommand } = await import('./serve.js');
     await runServeCommand(['--transport', 'mcp']);
-    expect(serveCommandCallOrder).toEqual(['startBacklogServer', 'initTelemetry']);
+    expect(serveCommandCallOrder).toEqual(['createBacklogServer', 'initTelemetry']);
   });
 });
 

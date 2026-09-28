@@ -71,6 +71,18 @@ import {
 import { readBacklogVersionInfo } from './version-info.js';
 import { BACKLOG_VERBS } from './vocabulary.js';
 import type { Logger, OutputPlugin, RunInput } from '@adhd/apigen-core-client';
+import { createLifecycle, type IServiceReport } from './lifecycle.js';
+import { probeReadiness, type IReadinessResult } from './readiness.js';
+import {
+  resolveServiceConfig,
+  assertServerArtifact,
+} from './service-config.js';
+import {
+  withResilience,
+  CircuitBreaker,
+  type IResiliencePolicy,
+} from './retry-policy.js';
+import { ServiceNotReadyError } from './service-errors.js';
 
 /**
  * Guards a live-mount `plugin.run()` call. Exported (not local to this file)
@@ -422,7 +434,17 @@ export function assertSurfaceIsReal(): void {
 }
 
 export interface StartOpts {
-  transport: 'http' | 'mcp' | 'both';
+  /**
+   * OPTIONAL on purpose (D-A apply-fix): an omitted transport must NOT
+   * pre-empt the resolved `service.*` cascade. `resolveServiceConfig`'s
+   * precedence is explicit opts > `ADHD_BACKLOG_SERVICE_TRANSPORT` > layer
+   * files > the `'mcp'` code default, and it only consults `opts.transport`
+   * when it is actually present — so `serve.ts` must pass `undefined` (not a
+   * materialised `'mcp'`) when the operator did not type `--transport`.
+   * `createBacklogServer` mounts from the RESOLVED `serviceConfig.transport`,
+   * never from this raw field.
+   */
+  transport?: 'http' | 'mcp' | 'both';
   port?: number;
   host?: string;
   scope?: Scope;
@@ -675,11 +697,40 @@ export async function buildBacklogApigenPackage(
 }
 
 /**
+ * The long-lived server handle (D-A, Segment D). Additive: existing callers
+ * keep using {@link startBacklogServer} (unchanged `Promise<void>` signature).
+ */
+export interface IBacklogServerHandle {
+  report(): IServiceReport;
+  whenReady(): Promise<void>;
+  /** Resolves when the server has fully closed (store released). Additive. */
+  whenClosed(): Promise<void>;
+  /** Abort the transports and release the store. Idempotent. */
+  close(): Promise<void>;
+}
+
+/**
  * Opens (or reuses) the backlog store + env, mounts every `client.ts` export
  * live via `@adhd/apigen-plugin-api-fastify` and/or `@adhd/apigen-plugin-mcp`
- * — no code generation.
+ * — no code generation — and returns a lifecycle handle.
+ *
+ * D-A additions: resolves + validates `service.*` config, runs the load-time
+ * artifact drift check, and drives the `starting → live → ready` lifecycle
+ * with a serving-path readiness probe. `startBacklogServer` (below) is the
+ * unchanged-signature wrapper over this function.
  */
-export async function startBacklogServer(opts: StartOpts): Promise<void> {
+export async function createBacklogServer(
+  opts: StartOpts & {
+    onStateChange?: (r: IServiceReport) => void;
+    /**
+     * `--probe` mode: compose the serving path but do NOT mount a network
+     * transport. The readiness probe drives the SAME composed invoker the
+     * tools use, so a live socket is not required — and skipping the mount
+     * avoids a one-shot probe process being kept alive by a listening socket.
+     */
+    probeOnly?: boolean;
+  }
+): Promise<IBacklogServerHandle> {
   const env = buildBacklogEnv({
     scope: opts.scope,
     adhdRoot: opts.adhdRoot,
@@ -687,6 +738,23 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
     namespace: opts.namespace,
   });
   env.ensureDirs();
+
+  // D-A: resolve + validate the service.* config (unknown key = hard error,
+  // relative path = refusal) and run the load-time artifact drift check
+  // BEFORE opening the store. A configured-but-missing artifact must refuse
+  // to start, naming the resolved path — never launch a phantom.
+  const serviceConfig = resolveServiceConfig(opts, env);
+  assertServerArtifact(serviceConfig.server);
+  const lifecycle = createLifecycle();
+  const notify = (): void => opts.onStateChange?.(lifecycle.report());
+  // The internal controller is what `close()` aborts; the caller's signal is
+  // linked to it so existing `AbortSignal`-driven callers drain unchanged.
+  const internal = new AbortController();
+  if (opts.signal.aborted) internal.abort();
+  else
+    opts.signal.addEventListener('abort', () => internal.abort(), {
+      once: true,
+    });
 
   // BUG-BACKLOG-NO-SIGNAL-HANDLERS-001: `serve.ts`'s `runServeCommand`
   // registers its OWN SIGINT/SIGTERM handling (→ `AbortController.abort()`,
@@ -788,17 +856,27 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
     // OpenAPI paths cannot drift from the routes fastify registered. There is
     // no per-transport operation list anywhere in this function — that
     // absence is the contract.
-    if (opts.transport === 'http' || opts.transport === 'both') {
+    if (
+      !opts.probeOnly &&
+      (serviceConfig.transport === 'http' || serviceConfig.transport === 'both')
+    ) {
       runs.push(
         requireRun(apiFastifyPlugin)({
           packages: [pkg],
           outputDir: '',
           options: {
-            port: opts.port ?? 3300,
-            host: opts.host ?? '127.0.0.1',
+            // D-A apply-fix: the RESOLVED `service.*` values, not the raw
+            // `opts` fields. An env-only `ADHD_BACKLOG_SERVICE_PORT` /
+            // `ADHD_BACKLOG_SERVICE_HOST` must be what the socket binds to —
+            // the previous `opts.port ?? 3300` fell through to the code
+            // default whenever no `--port` flag was typed, silently ignoring
+            // the resolved config the whole `service.*` surface exists to
+            // drive.
+            port: serviceConfig.port,
+            host: serviceConfig.host,
             usePlugins: [openapiPlugin, batchPlugin],
           },
-          signal: opts.signal,
+          signal: internal.signal,
           // SPEC.md §6.7 — the SAME `operations` array the MCP
           // mount below receives. A per-transport operation list is exactly
           // what §6.7 forbids, because it lets the REST surface drift from
@@ -816,22 +894,146 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
         })
       );
     }
-    if (opts.transport === 'mcp' || opts.transport === 'both') {
+    if (
+      !opts.probeOnly &&
+      (serviceConfig.transport === 'mcp' || serviceConfig.transport === 'both')
+    ) {
       runs.push(
         requireRun(mcpPlugin)({
           packages: [pkg],
           outputDir: '',
           options: { transport: 'stdio', usePlugins: [batchPlugin] },
-          signal: opts.signal,
+          signal: internal.signal,
           operations,
           logger,
         })
       );
     }
 
-    await Promise.all(runs);
-  } finally {
+    // `live`: every transport has been asked to mount (stdio connected /
+    // socket bound). We cannot await `runs` — each resolves only on close —
+    // so `live` is marked once the mounts are initiated.
+    lifecycle.markLive();
+    notify();
+
+    // `ready` iff the SERVING path answers (not a ping, not a socket accept).
+    // A readiness failure is REPORT ONLY: state is unchanged and no restart
+    // is requested (only a liveness failure restarts).
+    //
+    // D-A apply-fix: the serving-path probe is this process's one
+    // connect/handshake, so it runs through the SAME bounded-retry policy the
+    // resolved `service.connect*` keys describe — grace on the FIRST attempt
+    // (the cold-start window), full jitter + a bounded wall-clock `budgetMs`
+    // across attempts, and the three-state breaker. Before this the whole
+    // `connect` block was resolved and never consumed, so `withResilience` /
+    // `CircuitBreaker` were dead exports.
+    const connectPolicy: IResiliencePolicy = {
+      maxAttempts: serviceConfig.connect.maxAttempts,
+      baseMs: serviceConfig.connect.baseMs,
+      maxMs: serviceConfig.connect.maxMs,
+      budgetMs: serviceConfig.connect.budgetMs,
+      breakerFailureThreshold: serviceConfig.connect.breakerFailureThreshold,
+      breakerResetMs: serviceConfig.connect.breakerResetMs,
+    };
+    const breaker = new CircuitBreaker({
+      failureThreshold: serviceConfig.connect.breakerFailureThreshold,
+      resetMs: serviceConfig.connect.breakerResetMs,
+    });
+    const readinessHandle = { pkg, operations, store };
+    let probe: IReadinessResult;
+    try {
+      probe = await withResilience<IReadinessResult>(
+        async (_attempt, deadlineMs) => {
+          const result = await probeReadiness(readinessHandle, {
+            // A single probe never waits longer than the operator's readiness
+            // timeout; the connect policy's per-attempt deadline (grace on
+            // the first attempt, `maxMs` afterwards) bounds it further.
+            timeoutMs: Math.min(
+              deadlineMs,
+              serviceConfig.readiness.timeoutMs
+            ),
+          });
+          // `probeReadiness` RESOLVES a typed refusal instead of throwing, so
+          // a not-ready result must be re-thrown for the policy to retry it;
+          // a genuinely ready result returns through unchanged.
+          if (!result.ready) {
+            throw new ServiceNotReadyError(
+              'starting',
+              result.failure?.message ?? 'serving-path probe not ready'
+            );
+          }
+          return result;
+        },
+        connectPolicy,
+        breaker,
+        {
+          graceMs: serviceConfig.connect.graceMs,
+          rand: Math.random,
+          now: Date.now,
+          sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+        }
+      );
+    } catch (err) {
+      // Bounded budget exhausted / breaker open — a READINESS failure is
+      // report-only, never a restart (only a liveness failure restarts).
+      probe = {
+        ready: false,
+        failure: {
+          kind: 'readiness',
+          code: 'probe_unavailable',
+          message: err instanceof Error ? err.message : String(err),
+        },
+      };
+    }
+    if (probe.ready) {
+      lifecycle.markReady();
+    } else if (probe.failure) {
+      lifecycle.fail(probe.failure);
+    }
+    notify();
+
+    const done = Promise.all(runs);
+    let closed: Promise<void> | undefined;
+    const close = (): Promise<void> => {
+      if (!closed) {
+        internal.abort();
+        closed = (async () => {
+          try {
+            await done;
+          } catch {
+            // surfaced by whenClosed() / startBacklogServer()
+          }
+          signalCleanup?.dispose();
+          await closeStoreOnce();
+        })();
+      }
+      return closed;
+    };
+    return {
+      report: () => lifecycle.report(),
+      whenReady: () => lifecycle.whenReady(),
+      whenClosed: async () => {
+        try {
+          await done;
+        } finally {
+          await close();
+        }
+      },
+      close,
+    };
+  } catch (err) {
+    internal.abort();
     signalCleanup?.dispose();
     await closeStoreOnce();
+    throw err;
   }
+}
+
+/**
+ * UNCHANGED public signature (`Promise<void>`, resolves on close) — a thin
+ * wrapper over {@link createBacklogServer} for existing callers.
+ */
+export async function startBacklogServer(opts: StartOpts): Promise<void> {
+  const handle = await createBacklogServer(opts);
+  await handle.whenClosed();
 }

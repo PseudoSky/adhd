@@ -123,13 +123,59 @@ export type {
 export * from './envelope.js';
 
 export {
+  createBacklogServer,
   startBacklogServer,
   buildBacklogApigenPackage,
   resolveExpectedMcpToolNames,
   describeBacklogSurface,
   assertSurfaceIsReal,
 } from './server.js';
-export type { StartOpts } from './server.js';
+export type { StartOpts, IBacklogServerHandle } from './server.js';
+
+// D-A: the process-lifecycle / readiness / resilience / service-config seams.
+export { createLifecycle } from './lifecycle.js';
+export type {
+  IServiceFailure,
+  IServiceLifecycle,
+  IServiceReport,
+  IServiceState,
+} from './lifecycle.js';
+export { probeReadiness } from './readiness.js';
+export type {
+  IReadinessHandle,
+  IReadinessResult,
+  IReadinessTimer,
+} from './readiness.js';
+export {
+  fullJitterDelay,
+  CircuitBreaker,
+  withResilience,
+} from './retry-policy.js';
+export type {
+  IResiliencePolicy,
+  IResilienceDeps,
+  IBreakerState,
+} from './retry-policy.js';
+export {
+  resolveServiceConfig,
+  assertMcpEntryValid,
+  assertServerArtifact,
+  isPathResolvableBin,
+  SERVICE_CONFIG_KEYS,
+} from './service-config.js';
+export type {
+  IServiceConfig,
+  IServiceTransport,
+  IArtifactIdentity,
+  IMcpServerEntry,
+} from './service-config.js';
+export {
+  UnknownConfigKeyError,
+  NonAbsolutePathError,
+  UnknownMcpConfigKeyError,
+  ArtifactDriftError,
+  ServiceNotReadyError,
+} from './service-errors.js';
 
 export {
   runBacklogCli,
