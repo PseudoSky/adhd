@@ -187,10 +187,70 @@ resolve to the wrong record.
 { "ok": false, "error": { "code": "conflict", "message": "Issue \"63c2f57e-…\" was superseded by a body edit and is no longer the live issue; it now lives under \"e3b32183-…\"", "details": { "retryable": false } } }
 ```
 
+### 8. Obligation-gated transitions and the actionability verdict
+
+Declare a typed requirement on an issue with `obligate`; the store then refuses
+any transition that would violate it until the requirement is met. A
+`block`-severity `evidence` obligation, for example, keeps a `closed`
+transition refused until a matching verified attestation exists — and `get`
+predicts that refusal before you act:
+
+```bash
+adhd-backlog get --input '{"uid":"1d9b77e5-…","fields":["verdict","obligations"]}'
+```
+
+```json
+{ "ok": true, "data": { "uid": "1d9b77e5-…", "obligations": [{ "uid": "fbcee200-…", "applies_to": { "to": "closed" }, "requirement": { "op": "evidence", "kind": "published-artifact", "min": 1 }, "on_fail": "block" }], "verdict": { "actionable": false, "evaluated_at": "…", "revision": 0, "conditions": [{ "type": "Evidence", "status": "True", "severity": "block", "code": "EvidenceUnverified", "subject": "fbcee200-…", "message": "obligation unsatisfied: EvidenceUnverified" }] } } }
+```
+
+Attempt the close and the gate refuses with a typed `precondition_failed`,
+writing nothing:
+
+```json
+{ "ok": false, "error": { "code": "precondition_failed", "message": "Transition refused: EvidenceUnverified (requires \"published-artifact\") — no verified attestation of kind \"published-artifact\" satisfies this obligation", "details": { "retryable": false } } }
+```
+
+`actionable` is tri-state (`true` / `false` / `"unknown"`) — `"unknown"` is
+never a green light. The full declare → read → refuse → attest → close
+workflow, the closed predicate grammar, and the permitted-override path are in
+[`skill/SKILL.md` §4](skill/SKILL.md).
+
+### 9. Compare-and-swap spec revisions
+
+A ticket's work product is a sequence of immutable spec revisions.
+`spec-append` appends a fragment and advances the pointer in place, and its
+required `base_revision` makes the append a compare-and-swap: a stale base is
+refused with `precondition_failed` and nothing is written. `spec-check` tells a
+reader whether the token it holds is still current — an absent token is
+`stale`, never `fresh` — and `annotate` records a comment keyed to an exact
+revision (never to the ticket body):
+
+```bash
+adhd-backlog spec-check --input '{"uid":"c79b52b0-…"}'
+```
+
+```json
+{ "ok": true, "data": { "current_revision": "58b5dfd8-…", "current_token": "sha256:d0bcba4a…", "state": "stale", "method": "none", "reason": "no-token-supplied" } }
+```
+
+See [`skill/SKILL.md` §5](skill/SKILL.md) for the append/check worked example.
+
+### 10. Live catalogs and dependency-ordered plans
+
+`query --input '{"view":"catalogs"}'` returns every vocabulary the store
+enforces (kinds, statuses, priorities, relations, fields, error codes, location
+types, and the mounted verbs), each term naming the in-code source it was
+generated from. `query --input '{"view":"order","filter":{"plan":"<uid>"}}'`
+returns a plan's members topologically ordered by their `blocks` edges. Note
+the trap: the `catalog` selector is honoured only with `view:"catalogs"` —
+`{"catalog":"status"}` without it silently returns the ordinary `list` view
+(never catalog `terms`). See
+[`skill/SKILL.md` §6](skill/SKILL.md).
+
 ## Command surface
 
 Every verb but `embedding-status` takes a single `--input` flag carrying one JSON
-object; there are no per-field flags. Twenty operations (the 19 verbs plus
+object; there are no per-field flags. Twenty-nine operations (the 28 verbs plus
 `batch`):
 
 | Verb              | CLI                             | MCP tool                   |
@@ -206,6 +266,13 @@ object; there are no per-field flags. Twenty operations (the 19 verbs plus
 | `create`          | `adhd-backlog create`           | `backlog_create`           |
 | `update`          | `adhd-backlog update`           | `backlog_update`           |
 | `transition`      | `adhd-backlog transition`       | `backlog_transition`       |
+| `attest`          | `adhd-backlog attest`           | `backlog_attest`           |
+| `recheck`         | `adhd-backlog recheck`          | `backlog_recheck`          |
+| `obligate`        | `adhd-backlog obligate`         | `backlog_obligate`         |
+| `unobligate`      | `adhd-backlog unobligate`       | `backlog_unobligate`       |
+| `specAppend`      | `adhd-backlog spec-append`      | `backlog_spec_append`      |
+| `annotate`        | `adhd-backlog annotate`         | `backlog_annotate`         |
+| `specCheck`       | `adhd-backlog spec-check`       | `backlog_spec_check`       |
 | `claim`           | `adhd-backlog claim`            | `backlog_claim`            |
 | `relate`          | `adhd-backlog relate`           | `backlog_relate`           |
 | `move`            | `adhd-backlog move`             | `backlog_move`             |
@@ -214,15 +281,22 @@ object; there are no per-field flags. Twenty operations (the 19 verbs plus
 | `upsertComponent` | `adhd-backlog upsert-component` | `backlog_upsert_component` |
 | `upsertLocation`  | `adhd-backlog upsert-location`  | `backlog_upsert_location`  |
 | `rmLocation`      | `adhd-backlog rm-location`      | `backlog_rm_location`      |
+| `mergeProject`    | `adhd-backlog merge-project`    | `backlog_merge_project`    |
+| `rmProject`       | `adhd-backlog rm-project`       | `backlog_rm_project`       |
 | `batch`           | `adhd-backlog batch action`     | `batch_action`             |
 
 `--help` prints these as `backlog <verb>`; the CLI also accepts the bare
 `adhd-backlog <verb>` form shown above, and accepts the explicit namespace
-prefix at any position. `get`/`query`/`lookup`/`embedding-status` are reads.
-`create`/`update`/`transition`/`claim`/`relate`/`move`/`delete` mutate one
-issue. The four `upsert*`/`rmLocation` verbs manage the **registry** —
-projects, components, and locations. `batch action` fans any one of them out
-over many items.
+prefix at any position. `get`/`query`/`lookup`/`embedding-status` and the four
+stats/rollup ops are reads. `create`/`update`/`transition`/`claim`/`relate`/
+`move`/`delete` mutate one issue; `attest`/`recheck` record anchored evidence,
+and `obligate`/`unobligate` declare or retire a typed requirement that gates a
+transition ([SKILL.md §4](skill/SKILL.md)); `specAppend`/`annotate`/`specCheck`
+advance, annotate, and verify a ticket's spec revisions ([SKILL.md
+§5](skill/SKILL.md)). The
+`upsert*`/`rmLocation` verbs manage the **registry** (projects, components,
+locations), and `mergeProject`/`rmProject` collapse or retire project rows.
+`batch action` fans any one of them out over many items.
 
 ## Transports
 
@@ -308,16 +382,16 @@ the item's `Citations:` block. Omit it and nothing is stored.
 
 ### Which build these docs describe
 
-These docs describe `entrypoint/backlog/dist/index.js` built from the current
-revision (at or after `9df2a5c7`), whose `create`/`transition` inputs include
-`gitContext` and which mounts the `report` verb. A
-**globally installed** `adhd-backlog` may be an older build (it is whatever was
-last published/installed); on such a build `gitContext` is not in the schema
-and is rejected with `invalid_argument`, and the stats/rollup ops
-(`priority-matrix` / `part-of-rollup` / `open-curve` / `report`) are absent. Run
-`adhd-backlog --help` and compare the `backlog create` / `backlog
-priority-matrix` lines against this page if a documented field or verb is
-refused.
+These docs describe `entrypoint/backlog/dist/index.js` built from the revision
+captured here, which mounts 28 verbs — including the obligation
+(`obligate`/`unobligate`), spec-pointer (`spec-append`/`annotate`/`spec-check`),
+and catalog (`query --input '{"view":"catalogs"}'`) surfaces. A **globally
+installed** `adhd-backlog` may be an older build (it is whatever was last
+published/installed); on such a build `gitContext` may be rejected with
+`invalid_argument`, and the stats/rollup ops (`priority-matrix` /
+`part-of-rollup` / `open-curve` / `report`) and the obligation/spec verbs may be
+absent. Run `adhd-backlog --help` and compare it against
+[§1 of SKILL.md](skill/SKILL.md) if a documented field or verb is refused.
 
 ## Build & startup
 
@@ -347,10 +421,10 @@ the extract-stage IR cache, which persists the result for the next run.
 and store-free (it never opens the graph store and never writes under
 `~/.adhd`).
 
-| Setting          | Env var                    | Default                              | Notes                                                                                                                                    |
-| ---------------- | -------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| IR cache enabled | `APIGEN_IR_CACHE_ENABLED`  | `1`                                  | Governs ONLY the **runtime fallback** cache. It does **not** bypass the baked `api.ir.json` artifact — that artifact is the startup path, not a cache |
-| IR cache file    | `APIGEN_IR_CACHE_FILE`     | a machine-global path under `~/.adhd` | Where a fallback extraction's result is cached                                                                                            |
+| Setting          | Env var                   | Default                               | Notes                                                                                                                                                 |
+| ---------------- | ------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| IR cache enabled | `APIGEN_IR_CACHE_ENABLED` | `1`                                   | Governs ONLY the **runtime fallback** cache. It does **not** bypass the baked `api.ir.json` artifact — that artifact is the startup path, not a cache |
+| IR cache file    | `APIGEN_IR_CACHE_FILE`    | a machine-global path under `~/.adhd` | Where a fallback extraction's result is cached                                                                                                        |
 
 ## Library API
 
