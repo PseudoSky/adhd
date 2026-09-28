@@ -21,10 +21,12 @@ import {
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
 import { createIssue } from './create-issue.js';
 import { update } from './update.js';
+import { relate } from './relate.js';
 import { upsertProject } from './catalog.js';
 import {
   appendSpecRevision,
   deriveSpecHead,
+  readPointerRecord,
   readSpecPointer,
 } from './spec-revision.js';
 import { annotate } from './spec-annotation.js';
@@ -84,16 +86,49 @@ describe('spec-revision — a spec is a revision of its ticket (real store)', ()
         if (!parent) throw new Error('fixture: ticket missing');
         // Raw edge insert: `part_of`'s declared target_kind is `issue`, so a
         // legacy SPEC child edge cannot be composed through `writeEdgeTx` —
-        // this mirrors exactly the historical data the reconciliation must tolerate
-        // and only READS such edges.
+        // this mirrors exactly the historical data the reconciliation must
+        // tolerate and only READS such edges. Direction is the model's:
+        // `part_of` points CHILD -> PARENT (`src` = the SPEC child, `dst` =
+        // the ticket) — the same direction `relate(childUid, planUid,
+        // 'part_of')` writes and the production corpus carries.
         await tx.executeRun(
           "INSERT INTO edge (src, dst, rel, weight, origin, meta, t_created, t_valid) VALUES (?, ?, 'part_of', 1.0, 'user_asserted', NULL, ?, ?)",
-          [parent.rowid, s.rowid, now, now]
+          [s.rowid, parent.rowid, now, now]
         );
         return s.uid;
       },
       { mode: 'immediate' }
     );
+  }
+
+  /**
+   * The SHIPPED production shape (the twelve spec documents): an `issue` node
+   * whose DECLARED catalog kind is `SPEC` (a `has_kind` edge to the
+   * `kind:'SPEC'` catalog row) and a `part_of` edge to its ticket. NOT the
+   * raw-`kind:'SPEC'` fixture shape above — this is what
+   * `backlog query --filter kind:SPEC` matches, and what the pre-fix scan
+   * (raw node column only) silently missed.
+   */
+  async function declaredKindSpec(ticketUid: string, title: string): Promise<string> {
+    const created = await createIssue(store, {
+      project: projectUid,
+      title,
+      body: `${title} body`,
+      kind: 'SPEC',
+      dedupeExcludeUid: ticketUid,
+      by: 'filer',
+    });
+    if (!created.created || created.uid === undefined) {
+      throw new Error(`fixture: createIssue suppressed: ${JSON.stringify(created)}`);
+    }
+    await relate(store, {
+      sourceUid: created.uid,
+      targetUid: ticketUid,
+      rel: 'part_of',
+      action: 'add',
+      by: 'filer',
+    });
+    return created.uid;
   }
 
   it('AC1 — append never changes the ticket uid and never rewrites a prior revision', async () => {
@@ -218,6 +253,70 @@ describe('spec-revision — a spec is a revision of its ticket (real store)', ()
     // Idempotent: a second plan finds nothing left to stamp.
     const plan2 = await planSpecRevisionReconcile(store);
     expect(plan2.stamps.every((s) => !s.needsStamp)).toBe(true);
+  });
+
+  it('AC5 (shipped shape) — the live-kind scan discovers a production SPEC document (issue + has_kind→SPEC), not only the raw-kind fixture', async () => {
+    const ticket = await issue('ticket carrying a production-shape spec');
+    const specDoc = await declaredKindSpec(ticket, 'SPEC — production shape');
+
+    // It is genuinely the SHIPPED shape: an `issue` node whose LIVE KIND is
+    // `SPEC` via the catalog edge — invisible to a raw-`kind` reader.
+    const beforeRow = await row(specDoc);
+    expect(beforeRow!.kind).toBe('issue');
+    expect(await deriveSpecHead(store.graph, ticket)).toBeUndefined();
+
+    // NEGATIVE CONTROL (teeth): reinstate the PRE-FIX criterion — raw
+    // `node.kind` only — via the switch and the scan goes BLIND to this
+    // document (scanned 0, nothing stamped): the exact defect, proven, then
+    // reverted. Without the live-kind branch the assertion below is RED.
+    const prior = process.env['ADHD_BACKLOG_UNSAFE_SPEC_RECONCILE'];
+    process.env['ADHD_BACKLOG_UNSAFE_SPEC_RECONCILE'] = 'raw-kind-only';
+    try {
+      const regressed = await planSpecRevisionReconcile(store);
+      expect(regressed.scanned).toBe(0);
+      expect(regressed.stamps).toHaveLength(0);
+    } finally {
+      if (prior === undefined)
+        delete process.env['ADHD_BACKLOG_UNSAFE_SPEC_RECONCILE'];
+      else process.env['ADHD_BACKLOG_UNSAFE_SPEC_RECONCILE'] = prior;
+    }
+
+    // GREEN — the live-kind scan discovers it and materialises it as the
+    // ticket's rev-0 revision object (seq 1, no predecessor, pointer to come).
+    const plan = await planSpecRevisionReconcile(store);
+    expect(plan.scanned).toBe(1);
+    expect(plan.orphaned).toEqual([]);
+    expect(plan.stamps).toHaveLength(1);
+    expect(plan.stamps[0]!.revisionUid).toBe(specDoc);
+    expect(plan.stamps[0]!.specOf).toBe(ticket);
+    expect(plan.stamps[0]!.revisionSeq).toBe(1);
+    expect(plan.stamps[0]!.prevRevision).toBeNull();
+    expect(plan.stamps[0]!.needsStamp).toBe(true);
+    expect(plan.heads).toHaveLength(1);
+    expect(plan.heads[0]!.ticketUid).toBe(ticket);
+    expect(plan.heads[0]!.revisionUid).toBe(specDoc);
+    expect(plan.heads[0]!.needsPointer).toBe(true);
+
+    await applySpecRevisionReconcile(store);
+
+    // The ticket's pointer names the rev-0 object, and the object carries the
+    // revision stamp (identity preserved — same uid, same node).
+    const pointer = await readPointerRecord(store.graph, ticket);
+    expect(pointer?.revision_uid).toBe(specDoc);
+    expect(pointer?.revision_seq).toBe(1);
+    const afterRow = await row(specDoc);
+    expect(afterRow!.uid).toBe(specDoc);
+    expect(afterRow!.metadata!['spec_of']).toBe(ticket);
+    expect(afterRow!.metadata!['revision_seq']).toBe(1);
+    expect(afterRow!.metadata!['revision_token']).toBe(
+      plan.stamps[0]!.revisionToken
+    );
+
+    // Idempotent: a re-run finds nothing left to stamp or point.
+    const again = await planSpecRevisionReconcile(store);
+    expect(again.scanned).toBe(1);
+    expect(again.stamps.every((s) => !s.needsStamp)).toBe(true);
+    expect(again.heads.every((h) => !h.needsPointer)).toBe(true);
   });
 
   it('AC6 — a stale base_revision is refused with precondition_failed and writes nothing', async () => {

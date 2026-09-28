@@ -20,7 +20,10 @@
  */
 
 import type { GraphBackend, NodeRecord } from '@adhd/sox-graph-store';
-import { resolveLogicalIssue } from '../query/resolve.js';
+import {
+  resolveEdgeScopedCandidates,
+  resolveLogicalIssue,
+} from '../query/resolve.js';
 import { readRevision } from './revision.js';
 import {
   type IWriteStoreHandle,
@@ -88,20 +91,102 @@ function parseMeta(raw: string | null): Record<string, unknown> | undefined {
 }
 
 /**
+ * Negative-control switch — DANGER, test use ONLY, never set in normal
+ * operation or a deployed process. Read at the single point of use on EVERY
+ * call (never cached at import time) so a test can set it per-run and it
+ * reverts itself the moment the process exits (the same discipline as
+ * `tx.ts`'s `ADHD_BACKLOG_UNSAFE_TX_MODE` and this module's sibling
+ * `spec-revision.ts`/`spec-staleness.ts` switches, for the same reason:
+ * `DEBT-PROCESS-DISPATCH-RESIDUE-001`). Unrecognized values throw loudly.
+ *
+ *  - `'raw-kind-only'` — discover SPEC documents by the RAW `node.kind` column
+ *    ONLY (the pre-fix criterion), skipping the live-kind branch. On the
+ *    SHIPPED corpus — spec documents stored as `issue` nodes carrying the
+ *    `kind:'SPEC'` catalog edge — this finds ZERO and the reconciliation
+ *    silently no-ops: the exact defect this module exists to fix, reinstated
+ *    so the new-kind test can be proven RED against it.
+ */
+const RECONCILE_MODES = ['normal', 'raw-kind-only'] as const;
+type ReconcileMode = (typeof RECONCILE_MODES)[number];
+
+function resolveReconcileMode(): ReconcileMode {
+  const raw = process.env['ADHD_BACKLOG_UNSAFE_SPEC_RECONCILE'];
+  if (raw === undefined) return 'normal';
+  if ((RECONCILE_MODES as readonly string[]).includes(raw))
+    return raw as ReconcileMode;
+  throw new Error(
+    `ADHD_BACKLOG_UNSAFE_SPEC_RECONCILE="${raw}" is not a recognized mode (expected ${RECONCILE_MODES.join(', ')}). ` +
+      'This variable exists solely for negative-control test runs and must never be set in normal operation; ' +
+      'an unrecognized value fails loudly rather than silently defaulting.'
+  );
+}
+
+/**
+ * Discover the live SPEC documents to reconcile. A "SPEC document" is an item
+ * whose LIVE KIND is `SPEC` — and the store has held TWO representations of
+ * that, both of which must reconcile:
+ *
+ *  (a) a node whose RAW `kind` column is `SPEC` — the immutable revision
+ *      object C10's `appendSpecRevision` mints (and the shape the unit
+ *      fixtures build); and
+ *  (b) an `issue` node whose DECLARED catalog kind is `SPEC`, carrying a live
+ *      `has_kind` edge to the `kind:'SPEC'` catalog row. This is the SHIPPED
+ *      production shape — the twelve spec documents — and exactly what
+ *      `backlog query --filter kind:SPEC` matches, because the read path
+ *      resolves `kind` through the `has_kind` EDGE, never the node column.
+ *
+ * The union is load-bearing. The pre-fix code discovered shape (a) only, so
+ * a corpus that is entirely shape (b) reported `scanned:0` and the
+ * reconciliation silently no-op'd — the defect this fix closes. Discovery
+ * uses the SAME live-kind traversal the read path's own `filter.kind` uses
+ * (`query/resolve.ts`'s {@link resolveEdgeScopedCandidates}), so read and
+ * reconcile can never disagree on what "a `kind:'SPEC'` item" is.
+ */
+async function discoverSpecDocuments(
+  store: ISpecReconcileStore,
+  mode: ReconcileMode
+): Promise<NodeRecord[]> {
+  const byUid = new Map<string, NodeRecord>();
+  for (const n of await store.graph.queryNodes({ kind: 'SPEC', liveOnly: true })) {
+    byUid.set(n.uid, n);
+  }
+  if (mode === 'raw-kind-only') return [...byUid.values()];
+
+  const declared = await resolveEdgeScopedCandidates(store.graph, {
+    rel: 'has_kind',
+    expectedKind: 'kind',
+    ref: 'SPEC',
+  });
+  if (declared !== undefined && declared.size > 0) {
+    const nodes = await store.graph.getNodesByIds([...declared], {
+      liveOnly: true,
+    });
+    for (const n of nodes) byUid.set(n.uid, n);
+  }
+  return [...byUid.values()];
+}
+
+/**
  * Compute the reconciliation plan WITHOUT writing (the dry-run). Discovery is
  * `query`-driven; nothing is mutated.
  */
 export async function planSpecRevisionReconcile(
   store: ISpecReconcileStore
 ): Promise<ISpecReconcileReport> {
-  const specs = await store.graph.queryNodes({ kind: 'SPEC', liveOnly: true });
+  const specs = await discoverSpecDocuments(store, resolveReconcileMode());
 
   // Group SPEC children by their live `part_of` parent.
   const byParent = new Map<string, { parent: NodeRecord; specs: NodeRecord[] }>();
   const orphaned: string[] = [];
   for (const s of specs) {
-    const edges = await store.graph.getEdges({ dst: s.id, rel: 'part_of' });
-    const parentId = edges[0]?.src;
+    // `part_of` points CHILD -> PARENT (AGENTS.md's `relate(childUid,
+    // planUid, 'part_of')`; query.ts's `filter.plan` takes a plan's members
+    // from `getEdges({dst: plan.id, rel:'part_of'}).src`). `s` is the child,
+    // so its ticket is the `dst` of `s`'s OUTGOING edge — NOT the `src` of an
+    // edge INTO `s`, which would be one of `s`'s OWN children (the SPEC
+    // document `de9c7db7` has four).
+    const edges = await store.graph.getEdges({ src: s.id, rel: 'part_of' });
+    const parentId = edges[0]?.dst;
     const [parent] =
       parentId === undefined ? [] : await store.graph.getNodesByIds([parentId]);
     if (!parent || parent.tInvalid) {
