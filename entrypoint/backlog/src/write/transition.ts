@@ -123,6 +123,7 @@ import {
   resolveLiveIssueTx,
   resolveUidPrefixTx,
 } from './tx.js';
+import { nextRevision } from './revision.js';
 import { extractClaimMeta, isClaimStale } from './claim-lease.js';
 import { resolveIssueStatusTx } from './issue-status.js';
 import { evaluateTransitionGateTx, type IGateEvaluation } from './gate.js';
@@ -641,6 +642,8 @@ export async function transition(
     const newIssueMetadata: Record<string, unknown> = {
       ...(issueRow.metadata ?? {}),
     };
+    // C6 — every mutating write bumps the monotonic content revision.
+    newIssueMetadata.revision = nextRevision(issueRow.metadata);
     if (toTerminal) {
       newIssueMetadata.closedAt = now;
     } else {

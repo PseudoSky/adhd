@@ -38,6 +38,11 @@ import {
 } from './obligation.js';
 import { OverrideNotPermittedError } from './errors.js';
 import { DEFAULT_BRANCH_ANCESTOR_CHECK, isShaOnDefaultBranch } from './anchor-check.js';
+import { computeActionable, orderConditions } from '../query/verdict-core.js';
+import type { ICondition, IConditionType, IVerdict } from '../query/types.js';
+import { extractClaimMeta, isClaimStale } from './claim-lease.js';
+import { readRevision } from './revision.js';
+import type { ITxNodeRow } from './tx.js';
 
 /** The closed refusal-reason vocabulary (DESIGN §2 Primitive 4's governed core, scoped to the write gate). */
 export type IGateReasonCode =
@@ -577,5 +582,189 @@ export async function evaluateTransitionGateTx(
     refusals,
     satisfiedBy,
     warnings,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// C6 — the tx-scoped verdict (rungs 1–2 only), for `claim`'s entry precondition
+// ---------------------------------------------------------------------------
+
+/** One live incoming blocker with its resolved terminal flag (rung 1). */
+async function readIncomingBlockersTx(
+  tx: AdapterTransaction,
+  issueRowid: number
+): Promise<Array<{ uid: string; terminal: boolean }>> {
+  const rows = await tx.executeAll<{
+    uid: string;
+    status_meta: string | null;
+  }>(
+    `SELECT n.uid AS uid, s.meta AS status_meta
+       FROM edge e
+       JOIN node n ON n.rowid = e.src
+       LEFT JOIN edge se
+         ON se.src = n.rowid AND se.rel = 'has_status' AND se.t_invalid IS NULL
+       LEFT JOIN node s ON s.rowid = se.dst
+      WHERE e.dst = ? AND e.rel = 'blocks' AND e.t_invalid IS NULL
+        AND n.t_invalid IS NULL`,
+    [issueRowid]
+  );
+  return rows.rows.map((r) => {
+    const meta = parseMeta(r.status_meta) ?? {};
+    // A missing status is NON-terminal (fail-closed), exactly as
+    // `blockersAllTerminal` reads it.
+    const terminal =
+      r.status_meta !== null ? meta['terminal'] === true : false;
+    return { uid: r.uid, terminal };
+  });
+}
+
+/** Every live `status` row's name, split into all-names and terminal-names (rung-2 transition scoping). */
+async function readStatusScopesTx(
+  tx: AdapterTransaction
+): Promise<{ all: Set<string>; terminal: Set<string> }> {
+  const rows = await tx.executeAll<{ name: string | null; meta: string | null }>(
+    "SELECT name, meta FROM node WHERE kind = 'status' AND t_invalid IS NULL"
+  );
+  const all = new Set<string>();
+  const terminal = new Set<string>();
+  for (const r of rows.rows) {
+    if (typeof r.name !== 'string') continue;
+    all.add(r.name);
+    const meta = parseMeta(r.meta) ?? {};
+    if (meta['terminal'] === true) terminal.add(r.name);
+  }
+  return { all, terminal };
+}
+
+function conditionTypeForCode(code: IGateReasonCode): IConditionType {
+  switch (code) {
+    case 'BlockedBy':
+      return 'Blocked';
+    case 'EvidenceUnverified':
+    case 'EvidenceStale':
+      return 'Evidence';
+    case 'ReferenceUnresolved':
+      return 'Reference';
+    case 'ClaimStale':
+      return 'Claim';
+    default:
+      return 'Obligation';
+  }
+}
+
+/**
+ * Derive the verdict INSIDE the caller's open tx, through rungs 1–2 only
+ * (claim is a precondition, never a full anchor re-resolve). Never writes;
+ * reuses C4's {@link evaluatePredicate} with the tx-scoped {@link
+ * makeTxResolver} and C6's own `orderConditions`/`computeActionable`.
+ */
+export async function evaluateVerdictTx(
+  tx: AdapterTransaction,
+  issueRow: ITxNodeRow,
+  input: { at: string; claimStaleAfterMin: number }
+): Promise<IVerdict> {
+  const conditions: ICondition[] = [];
+
+  // Rung 1 — relation state.
+  const blockers = await readIncomingBlockersTx(tx, issueRow.rowid);
+  for (const b of blockers) {
+    if (b.terminal) continue;
+    conditions.push({
+      type: 'Blocked',
+      status: 'True',
+      severity: 'block',
+      code: 'BlockedBy',
+      subject: b.uid,
+      message: `blocked by ${b.uid}`,
+    });
+  }
+
+  // Rung 2 — obligations (terminal-scoped) + claim staleness.
+  const resolver = makeTxResolver(tx, issueRow.rowid);
+  const scopes = await readStatusScopesTx(tx);
+  const obligations = await readObligations(tx, issueRow.rowid);
+
+  if (obligations.length === 0) {
+    conditions.push({
+      type: 'Obligation',
+      status: 'True',
+      severity: 'warn',
+      code: 'MissingObligation',
+      message: 'no obligations are declared on this item',
+    });
+  }
+
+  for (const obligation of obligations) {
+    const to = obligation.appliesTo.to;
+    const terminalScoped =
+      to === '*' || scopes.terminal.has(to) || !scopes.all.has(to);
+    if (!terminalScoped) continue;
+
+    if (obligation.malformed) {
+      conditions.push({
+        type: 'Obligation',
+        status: 'True',
+        severity: obligation.onFail,
+        code: 'MissingObligation',
+        subject: obligation.uid,
+        message: 'the obligation is malformed and cannot be evaluated',
+      });
+      continue;
+    }
+
+    let satisfied: boolean;
+    try {
+      satisfied = await evaluatePredicate(obligation.requirement, resolver);
+    } catch {
+      conditions.push({
+        type: 'Obligation',
+        status: 'Unknown',
+        severity: obligation.onFail,
+        code: 'Unknown',
+        subject: obligation.uid,
+        message: 'the obligation predicate could not be evaluated',
+      });
+      continue;
+    }
+    if (satisfied) continue;
+
+    const refusal = await deriveRefusal(
+      tx,
+      issueRow.rowid,
+      obligation.uid,
+      obligation.requirement,
+      resolver
+    );
+    conditions.push({
+      type: conditionTypeForCode(refusal.code),
+      status: 'True',
+      severity: obligation.onFail,
+      code: refusal.code,
+      subject: refusal.subject ?? obligation.uid,
+      message: refusal.message,
+    });
+  }
+
+  const { claimedBy, claimedAt } = extractClaimMeta(issueRow.metadata);
+  if (
+    claimedBy !== undefined &&
+    isClaimStale(claimedAt, input.at, input.claimStaleAfterMin)
+  ) {
+    conditions.push({
+      type: 'Claim',
+      status: 'True',
+      severity: 'warn',
+      code: 'ClaimStale',
+      subject: claimedBy,
+      message: `claim by "${claimedBy}" is stale (threshold ${input.claimStaleAfterMin}min)`,
+    });
+  }
+
+  const ordered = orderConditions(conditions);
+  return {
+    actionable: computeActionable(ordered),
+    evaluated_at: input.at,
+    revision: readRevision(issueRow.metadata),
+    conditions: ordered,
   };
 }

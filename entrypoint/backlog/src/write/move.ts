@@ -71,6 +71,7 @@ import {
   writeEdgeTx,
   resolveLiveIssueTx,
 } from './tx.js';
+import { nextRevision } from './revision.js';
 
 export interface IMoveIssueInput {
   /** The `issue` uid to move (§6.3, an "Issue verb"). */
@@ -309,6 +310,19 @@ export async function move(
       rule: ownsComponentRule,
       typePolicy: handle.typePolicy,
     });
+
+    // C6 — a real move bumps the issue's content revision.
+    await tx.executeRun(
+      'UPDATE node SET meta = ?, t_updated = ? WHERE rowid = ?',
+      [
+        JSON.stringify({
+          ...(issueRow.metadata ?? {}),
+          revision: nextRevision(issueRow.metadata),
+        }),
+        now,
+        issueRow.rowid,
+      ]
+    );
 
     await writeAudit({
       tx,

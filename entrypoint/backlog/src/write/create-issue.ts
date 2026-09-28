@@ -1231,7 +1231,9 @@ export async function createIssue(
         priority: priorityRow?.name,
       });
 
-      const issueMetadata: Record<string, unknown> = {};
+      // C6 — seed the monotonic content revision (never-mutated issue reads 0;
+      // this makes it explicit on first write rather than relying on the default).
+      const issueMetadata: Record<string, unknown> = { revision: 0 };
       if (input.assignee !== undefined) issueMetadata.assignee = input.assignee;
       if (gitContext !== undefined) issueMetadata.gitContext = gitContext;
 

@@ -819,3 +819,37 @@ export class OverrideNotPermittedError extends BacklogWriteError {
     );
   }
 }
+
+/**
+ * (C6) A verb's entry precondition was refused by a live block-severity verdict
+ * condition — today only `claim` (DESIGN §2 Primitive 3/4: taking blocked work
+ * is the observed failure). `E_VALIDATION` → the envelope maps it to
+ * `precondition_failed`, with the structured `ICondition` in
+ * `error.details.refusal` (adhd ADR-0004 — object-shaped, never a `{result}`
+ * envelope). Thrown from INSIDE `claim`'s open `BEGIN IMMEDIATE` transaction
+ * and BEFORE any write, so the throw rolls the transaction back and the item
+ * is left unclaimed.
+ *
+ * `E_VALIDATION`, never retryable — retrying the identical payload against an
+ * unchanged blocker fails identically (the caller must clear the blocker, or
+ * `force` and record it first).
+ *
+ * Declared ATTACHED to `errors.ts`'s end (after every existing export) and
+ * importing `ICondition` via an inline `import(...)` type, so this additive
+ * change shifts NO existing line and leaves `CONTRACT.md`'s `(errors.ts:NNN)`
+ * anchors (enforced by `contract-anchors.spec.ts`) true.
+ */
+export class PreconditionRefusedError extends BacklogWriteError {
+  readonly code = 'E_VALIDATION' as const;
+  readonly retryable = false;
+
+  constructor(public readonly refusal: import('../query/types.js').ICondition) {
+    const named =
+      refusal.subject !== undefined ? ` ${refusal.subject}` : '';
+    super(
+      `Claim refused: ${refusal.code}${named} — ${
+        refusal.message ?? 'a block-severity condition is live'
+      }`
+    );
+  }
+}

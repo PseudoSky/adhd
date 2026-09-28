@@ -121,6 +121,13 @@ export interface IQueryStoreHandle {
    * same way, so neither ordinary path is gated.)
    */
   readonly assertCatalogInvariants?: () => Promise<void>;
+  /**
+   * C6 test instrumentation — invoked with each verdict ladder rung the list
+   * path actually evaluates. Never consulted by production callers; wired only
+   * so the N-item list bound (AC6) can be MEASURED, not asserted. The list path
+   * must never evaluate beyond rungs 1–2.
+   */
+  readonly onVerdictRung?: (rung: number) => void;
 }
 
 function assertQueryLimit(limit: number | undefined): number {
@@ -584,7 +591,8 @@ async function queryList(
       ordered,
       fields,
       scoreByUid,
-      scoreKindByUid
+      scoreKindByUid,
+      { rung: 2, onRung: handle.onVerdictRung }
     );
 
     // `grep` is a genuine boolean match condition, so it narrows the
@@ -662,7 +670,10 @@ async function queryList(
   const page = hasMore ? nodes.slice(0, limit) : nodes;
   const nextCursor = hasMore ? String(page[page.length - 1].id) : undefined;
 
-  const items = await assembleIssueCards(graph, page, fields);
+  const items = await assembleIssueCards(graph, page, fields, undefined, undefined, {
+    rung: 2,
+    onRung: handle.onVerdictRung,
+  });
 
   // `assertQueryLimit` REJECTS (never clamps) a `limit` above
   // `MAX_QUERY_LIMIT` — there is no system-imposed cut on this path distinct
@@ -795,7 +806,10 @@ async function queryReady(
   }
   const hasMore = ready.length > limit;
   const page = hasMore ? ready.slice(0, limit) : ready;
-  const items = await assembleIssueCards(graph, page, fields);
+  const items = await assembleIssueCards(graph, page, fields, undefined, undefined, {
+    rung: 2,
+    onRung: handle.onVerdictRung,
+  });
   return { items, meta: itemListMeta(items.length, limit, hasMore) };
 }
 
@@ -823,7 +837,10 @@ async function queryStale(
   const nodes = await graph.queryNodes(nodeFilter as unknown as NodeFilter);
   const hasMore = nodes.length > limit;
   const page = hasMore ? nodes.slice(0, limit) : nodes;
-  const items = await assembleIssueCards(graph, page, fields);
+  const items = await assembleIssueCards(graph, page, fields, undefined, undefined, {
+    rung: 2,
+    onRung: handle.onVerdictRung,
+  });
   return { items, meta: itemListMeta(items.length, limit, hasMore) };
 }
 

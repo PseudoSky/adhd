@@ -82,6 +82,7 @@ import {
   writeEdgeTx,
   resolveLiveIssueTx,
 } from './tx.js';
+import { nextRevision } from './revision.js';
 
 /** The closed `rel` union `relate` accepts (§3/§6.3.6) — issue → issue in every case. */
 export type RelateRel =
@@ -263,6 +264,18 @@ export async function relate(
         at: now,
       });
 
+      // C6 — a real relation write bumps the SOURCE issue's content revision.
+      await tx.executeRun(
+        'UPDATE node SET meta = ?, t_updated = ? WHERE rowid = ?',
+        [
+          JSON.stringify({
+            ...(sourceRow.metadata ?? {}),
+            revision: nextRevision(sourceRow.metadata),
+          }),
+          now,
+          sourceRow.rowid,
+        ]
+      );
       return {
         sourceUid: sourceRow.uid,
         targetUid: targetRow.uid,
@@ -306,6 +319,18 @@ export async function relate(
       at: now,
     });
 
+    // C6 — a real relation removal bumps the SOURCE issue's content revision.
+    await tx.executeRun(
+      'UPDATE node SET meta = ?, t_updated = ? WHERE rowid = ?',
+      [
+        JSON.stringify({
+          ...(sourceRow.metadata ?? {}),
+          revision: nextRevision(sourceRow.metadata),
+        }),
+        now,
+        sourceRow.rowid,
+      ]
+    );
     return {
       sourceUid: sourceRow.uid,
       targetUid: targetRow.uid,

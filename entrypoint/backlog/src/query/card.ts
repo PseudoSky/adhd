@@ -40,11 +40,14 @@ import type {
   IPredicate,
 } from '../write/obligation.js';
 import { BacklogValidationError } from '../write/errors.js';
+import { nowISO } from '../write/tx.js';
+import { readRevision } from '../write/revision.js';
 import {
   getIncomingEdges,
   getOutgoingEdges,
   resolveIssuePlacement,
 } from './resolve.js';
+import { deriveVerdict, type IVerdictRung } from './verdict.js';
 
 /** SPEC.md §6.5's `assertKnownFields` — unknown name → `BacklogValidationError` naming it, never a silent drop. */
 export function assertKnownIssueFields(
@@ -446,6 +449,14 @@ export interface IAssembleIssueCardOptions {
    * consulted when `fields` requests `dependents`.
    */
   scope?: ReadonlySet<number>;
+  /**
+   * C6 — the highest verdict ladder rung this card may derive. Default 2 (the
+   * list bound); a single-item `get` raises it to 3+ via `deriveThrough`.
+   * Only consulted when `fields` requests `verdict`.
+   */
+  verdictRung?: IVerdictRung;
+  /** C6 test instrumentation — threaded to `deriveVerdict`'s `onRung`. */
+  onVerdictRung?: (rung: number) => void;
 }
 
 /**
@@ -493,6 +504,7 @@ export async function assembleIssueCard(
   const needsDependents = want('dependents');
   const needsPartOf = want('partOf');
   const needsObligations = want('obligations');
+  const needsVerdict = want('verdict');
 
   const outgoing =
     opts.outgoingEdges ??
@@ -577,6 +589,39 @@ export async function assembleIssueCard(
   if (needsObligations && outgoing)
     card.obligations = await resolveObligations(graph, issue.id, outgoing);
 
+  if (needsVerdict) {
+    // C6 — derived on read. An UNEXPECTED derivation failure degrades to an
+    // `Unknown`-block verdict, NEVER a card-wide throw: a single read-side bug
+    // must not make every list read fail (DESIGN §2 Primitive 4 — `unknown`
+    // is never a green light, and it must still be reported).
+    try {
+      card.verdict = await deriveVerdict(graph, issue, {
+        ...(opts.verdictRung !== undefined ? { maxRung: opts.verdictRung } : {}),
+        ...(opts.onVerdictRung !== undefined
+          ? { onRung: opts.onVerdictRung }
+          : {}),
+      });
+    } catch (err) {
+      const at = nowISO();
+      card.verdict = {
+        actionable: 'unknown',
+        evaluated_at: at,
+        revision: readRevision(issue.metadata),
+        conditions: [
+          {
+            type: 'Budget',
+            status: 'Unknown',
+            severity: 'block',
+            code: 'Unknown',
+            message: `verdict derivation failed: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          },
+        ],
+      };
+    }
+  }
+
   if (want('_score') && opts.score !== undefined) {
     card._score = opts.score;
     // Provenance is emitted alongside the score it describes, never on its
@@ -606,7 +651,8 @@ export async function assembleIssueCards(
   issues: NodeRecord[],
   fields: readonly IIssueField[],
   scoreByUid?: ReadonlyMap<string, number>,
-  scoreKindByUid?: ReadonlyMap<string, IScoreKind>
+  scoreKindByUid?: ReadonlyMap<string, IScoreKind>,
+  verdictOpts?: { rung?: IVerdictRung; onRung?: (rung: number) => void }
 ): Promise<IIssueCard[]> {
   const scope = new Set(issues.map((i) => i.id));
   return Promise.all(
@@ -615,6 +661,12 @@ export async function assembleIssueCards(
         score: scoreByUid?.get(issue.uid),
         scoreKind: scoreKindByUid?.get(issue.uid),
         scope,
+        ...(verdictOpts?.rung !== undefined
+          ? { verdictRung: verdictOpts.rung }
+          : {}),
+        ...(verdictOpts?.onRung !== undefined
+          ? { onVerdictRung: verdictOpts.onRung }
+          : {}),
       })
     )
   );

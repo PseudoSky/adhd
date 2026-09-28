@@ -67,7 +67,8 @@ export type IIssuePseudoField =
   | 'blocksOut' // NEW (C2): issues THIS one blocks (outbound `blocks`), live only
   | 'dependents' // NEW (C2): transitive count (number of nodes that reach this one via `blocks`)
   | 'partOf' // NEW (C2): the single parent this item is `part_of` (or null)
-  | 'obligations'; // NEW (C4): the declared, typed requirements on this item
+  | 'obligations' // NEW (C4): the declared, typed requirements on this item
+  | 'verdict'; // NEW (C6): the derived actionability verdict (never stored)
 
 export type IIssueField = IIssuePlainField | IIssuePseudoField;
 
@@ -100,6 +101,7 @@ export const ISSUE_PSEUDO_FIELDS: readonly IIssuePseudoField[] = [
   'dependents',
   'partOf',
   'obligations',
+  'verdict',
 ];
 
 const ISSUE_FIELD_SET: ReadonlySet<string> = new Set<string>([
@@ -209,6 +211,79 @@ export interface IObligationView {
  */
 export type IScoreKind = 'rrf' | 'bm25' | 'cosine' | 'rank' | 'priority';
 
+// ---------------------------------------------------------------------------
+// C6 — Verdict: derived actionability with reasons (DESIGN §2 Primitive 4)
+// ---------------------------------------------------------------------------
+
+/**
+ * The closed CONDITION type vocabulary. A `Condition` names one thing that can
+ * make an item non-actionable (or warn about it); `status` says whether that
+ * named condition HOLDS (`{type:'Blocked',status:True}` ⇒ the item IS blocked).
+ */
+export type IConditionType =
+  | 'Blocked'
+  | 'Obligation'
+  | 'Evidence'
+  | 'Claim'
+  | 'Reference'
+  | 'Budget';
+
+/** Whether the NAMED condition holds. `Unknown` is a first-class "could not determine", distinct from `False`. */
+export type IConditionStatus = 'True' | 'False' | 'Unknown';
+
+/** `block` flips actionability false; `warn` is reported but never blocks (systemd Condition-vs-Assert split). */
+export type IConditionSeverity = 'block' | 'warn';
+
+/**
+ * The governed reason-code core (DESIGN §2 Primitive 4) plus the
+ * `<domain>/<Code>` extension namespace. `Unknown` is the honest "the check
+ * was not run / could not be decided".
+ */
+export type IVerdictReasonCode =
+  | 'BlockedBy'
+  | 'MissingObligation'
+  | 'EvidenceUnverified'
+  | 'EvidenceStale'
+  | 'ClaimStale'
+  | 'ReferenceUnresolved'
+  | 'Unknown'
+  | `${string}/${string}`; // governed extension namespace
+
+/**
+ * TRI-STATE (DESIGN §2 Primitive 4) — NEVER a bare boolean. `'unknown'` is
+ * never a green light: a caller that handles only booleans must be told, and
+ * the list path must report `'unknown'` rather than `true` where it cannot
+ * afford the rung. `false` iff a `block`-severity condition is `True`;
+ * `'unknown'` iff a `block`-severity condition is `Unknown` (and none is
+ * `True`); otherwise `true`.
+ */
+export type IActionable = boolean | 'unknown';
+
+/** One named condition of a {@link IVerdict}. */
+export interface ICondition {
+  type: IConditionType;
+  /** Whether the NAMED condition HOLDS: `True` on a `Blocked` condition = IS blocked. */
+  status: IConditionStatus;
+  severity: IConditionSeverity;
+  code: IVerdictReasonCode;
+  message?: string;
+  /** The thing to fix (blocker uid / attestation uid / obligation uid). */
+  subject?: string;
+}
+
+/**
+ * The verdict — derived on read, never stored (`revision` is the node's own
+ * current content revision, so a caller can detect staleness; there is no
+ * materialized status field anywhere).
+ */
+export interface IVerdict {
+  actionable: IActionable;
+  evaluated_at: string;
+  revision: number;
+  /** Ordered block-severity first, then warn. */
+  conditions: ICondition[];
+}
+
 /**
  * The projected issue card (SPEC.md §6.5's `IIssueCard`). Every field is
  * OPTIONAL here because the shape is fields-projected: a caller that asked
@@ -268,6 +343,11 @@ export interface IIssueCard {
   // unchanged. The read path NEVER evaluates the predicate. ---
   /** The declared obligations on this item, in `has_obligation` edge order. */
   obligations?: IObligationView[];
+  // --- C6 (verdict) — ADDITIVE opt-in pseudo field; populated only when
+  // explicitly requested via `fields`, so the default card is byte-for-byte
+  // unchanged. DERIVED on read, never stored. ---
+  /** The derived actionability verdict + its typed reasons. */
+  verdict?: IVerdict;
 }
 
 /**
@@ -284,6 +364,13 @@ export interface IIssueGetByUidInput {
   lastN?: number;
   /** Cursor for the bounded sub-collection (opaque; from the previous page's last returned uid). */
   after?: string;
+  /**
+   * C6 — the highest verdict ladder rung this `get` may run. Default 3 (the
+   * single-item default); a caller may raise it to 5 for a full anchor
+   * re-resolve. The list views never accept this and always derive at rung 2
+   * (DESIGN §2 Primitive 4, "Bounded derivation").
+   */
+  deriveThrough?: 1 | 2 | 3 | 4 | 5;
 }
 
 /** SPEC.md §6.5's `IIssueFilter`. */

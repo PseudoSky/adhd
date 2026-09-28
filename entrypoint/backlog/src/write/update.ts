@@ -134,6 +134,7 @@ import {
   writeNodeTx,
   resolveLiveIssueTx,
 } from './tx.js';
+import { nextRevision } from './revision.js';
 
 export interface IUpdateIssueInput {
   /** The `issue` uid to update (§6.3, an "Issue verb"). */
@@ -849,6 +850,8 @@ export async function update(
         const newTitle = input.title ?? issueRow.name ?? undefined;
         const newMetadata: Record<string, unknown> = {
           ...(issueRow.metadata ?? {}),
+          // C6 — the superseding node carries the next content revision.
+          revision: nextRevision(issueRow.metadata),
         };
         if (input.assignee !== undefined) newMetadata.assignee = input.assignee;
 
@@ -907,10 +910,12 @@ export async function update(
         // priority/author additionally get their edge rewired below), so
         // `touchNodeTx` always runs here — even when title/assignee are BOTH
         // absent (a kind/priority/author-only patch) — to advance `t_updated`.
-        const newMetadata =
-          input.assignee !== undefined
-            ? { ...(issueRow.metadata ?? {}), assignee: input.assignee }
-            : undefined;
+        const newMetadata = {
+          ...(issueRow.metadata ?? {}),
+          ...(input.assignee !== undefined ? { assignee: input.assignee } : {}),
+          // C6 — every mutating write bumps the monotonic content revision.
+          revision: nextRevision(issueRow.metadata),
+        };
         await touchNodeTx(
           tx,
           issueRow.rowid,

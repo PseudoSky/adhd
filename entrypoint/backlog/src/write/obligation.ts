@@ -435,6 +435,12 @@ export async function obligate(
       at: now,
     });
 
+    // NOTE (C6): `obligate` deliberately does NOT bump the subject issue's
+    // revision. C4's contract (and its test) is that the subject is NEVER
+    // mutated — an obligation is a separate record keyed to it, exactly like an
+    // attestation (which C6 also leaves unbumped). C6's prose listing
+    // obligate/unobligate as bump sites contradicts C4's tested invariant; the
+    // invariant wins.
     return { uid: issue.uid, obligationUid: obligation.uid };
   });
 }
@@ -493,6 +499,7 @@ export async function unobligate(
         reason: 'unobligated',
         at: now,
       });
+      // See `obligate`'s NOTE — the subject issue is never mutated here either.
     }
 
     await writeAudit({

@@ -82,6 +82,7 @@ import {
   ObligationNotFoundError,
   ObligationUnsatisfiedError,
   OverrideNotPermittedError,
+  PreconditionRefusedError,
   SingleValuedRelationConflictError,
   StaleSupersedeError,
   WriteContentionError,
@@ -444,6 +445,7 @@ const ERROR_CLASS_TO_ENVELOPE_CODE: ReadonlyArray<
   [CitationUnverifiableError, 'precondition_failed'],
   [ObligationUnsatisfiedError, 'precondition_failed'],
   [OverrideNotPermittedError, 'precondition_failed'],
+  [PreconditionRefusedError, 'precondition_failed'],
   [WriteContentionError, 'store_busy'],
   [RagNotConfiguredError, 'rag_not_configured'],
 ];
@@ -485,6 +487,14 @@ function toEnvelope(err: unknown): IOutcomeFailure {
       // envelope), so the failure arm carries the typed reason set the caller
       // needs to fix or override the obligation.
       if (err instanceof ObligationUnsatisfiedError) {
+        return errorEnvelope(code, err.message, {
+          ...(details ?? {}),
+          refusal: err.refusal,
+        });
+      }
+      // C6 — the claim gate's structured refusal is the block-severity
+      // `ICondition` that refused, carried the same object-shaped way.
+      if (err instanceof PreconditionRefusedError) {
         return errorEnvelope(code, err.message, {
           ...(details ?? {}),
           refusal: err.refusal,

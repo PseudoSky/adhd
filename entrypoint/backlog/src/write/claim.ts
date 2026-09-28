@@ -40,9 +40,12 @@ import {
   InvalidArgumentError,
   IssueNotFoundError,
   IssueTerminalError,
+  PreconditionRefusedError,
   assertNotBareRoleLiteral,
 } from './errors.js';
 import { claimAgeMinutes, extractClaimMeta, isClaimStale } from './claim-lease.js';
+import { evaluateVerdictTx } from './gate.js';
+import { nextRevision } from './revision.js';
 import { resolveIssueStatusTx } from './issue-status.js';
 import {
   type IWriteStoreHandle,
@@ -281,8 +284,39 @@ export async function claim(
         throw new IssueTerminalError(row.uid, statusRow.name ?? '');
       }
 
+      // C6 — claim is an entry PRECONDITION: refuse a live blocker LOUDLY,
+      // naming it. `force` overrides and RECORDS the named blocker on the audit
+      // note (never a silent pass). Scoped to `action:'claim'` only —
+      // release/renew stay ungated (they are cleanup, not a new claim). The
+      // verdict here runs rungs 1–2 only (no anchor re-resolve).
+      const verdictPolicy = await resolveIssueProjectPolicyTx(tx, row.rowid);
+      const verdict = await evaluateVerdictTx(tx, row, {
+        at: now,
+        claimStaleAfterMin: verdictPolicy.claimStaleAfterMin,
+      });
+      const blocking = verdict.conditions.filter(
+        (c) => c.severity === 'block' && c.status === 'True'
+      );
+      const namedBlocker = blocking[0];
+      if (namedBlocker !== undefined && !force) {
+        throw new PreconditionRefusedError(namedBlocker);
+      }
+      const forceNote =
+        namedBlocker !== undefined
+          ? `force-claimed despite ${namedBlocker.code}${
+              namedBlocker.subject !== undefined
+                ? ` ${namedBlocker.subject}`
+                : ''
+            }`
+          : undefined;
+
       if (claimedBy === undefined) {
-        const newMeta = { ...meta, claimedBy: input.by, claimedAt: now };
+        const newMeta = {
+          ...meta,
+          claimedBy: input.by,
+          claimedAt: now,
+          revision: nextRevision(meta),
+        };
         await touchMetadataTx(tx, row.rowid, newMeta, now);
         await writeAudit({
           tx,
@@ -293,6 +327,7 @@ export async function claim(
           actor: input.by,
           action: 'claimed',
           to: input.by,
+          note: forceNote,
           at: now,
         });
         return {
@@ -306,7 +341,11 @@ export async function claim(
       if (claimedBy === input.by) {
         // Idempotent re-claim by the SAME agent — a real write (claimedAt bumps), reported as
         // the distinct 'held' status, but audited under the SAME 'claimed' action (see doc comment above).
-        const newMeta = { ...meta, claimedAt: now };
+        const newMeta = {
+          ...meta,
+          claimedAt: now,
+          revision: nextRevision(meta),
+        };
         await touchMetadataTx(tx, row.rowid, newMeta, now);
         await writeAudit({
           tx,
@@ -318,7 +357,10 @@ export async function claim(
           action: 'claimed',
           from: input.by,
           to: input.by,
-          note: 're-affirmed (held)',
+          note:
+            forceNote === undefined
+              ? 're-affirmed (held)'
+              : `${forceNote} — re-affirmed (held)`,
           at: now,
         });
         return {
@@ -343,8 +385,14 @@ export async function claim(
         claimedBy: input.by,
         claimedAt: now,
         previousClaimant: claimedBy,
+        revision: nextRevision(meta),
       };
       await touchMetadataTx(tx, row.rowid, newMeta, now);
+      const reclaimNote = stale
+        ? `stale claim reclaimed after ~${Math.floor(ageMin)}min (threshold ${
+            policy.claimStaleAfterMin
+          }min)`
+        : 'force override of a non-stale claim';
       await writeAudit({
         tx,
         typePolicy: handle.typePolicy,
@@ -355,11 +403,8 @@ export async function claim(
         action: 'reclaimed-stale',
         from: claimedBy,
         to: input.by,
-        note: stale
-          ? `stale claim reclaimed after ~${Math.floor(ageMin)}min (threshold ${
-              policy.claimStaleAfterMin
-            }min)`
-          : 'force override of a non-stale claim',
+        note:
+          forceNote === undefined ? reclaimNote : `${forceNote} — ${reclaimNote}`,
         at: now,
       });
       return {
@@ -373,7 +418,10 @@ export async function claim(
 
     if (input.action === 'release') {
       if (claimedBy === input.by) {
-        const newMeta = { ...meta };
+        const newMeta: Record<string, unknown> = {
+          ...meta,
+          revision: nextRevision(meta),
+        };
         delete newMeta['claimedBy'];
         delete newMeta['claimedAt'];
         await touchMetadataTx(tx, row.rowid, newMeta, now);
@@ -396,7 +444,7 @@ export async function claim(
 
     // input.action === 'renew'
     if (claimedBy === input.by) {
-      const newMeta = { ...meta, claimedAt: now };
+      const newMeta = { ...meta, claimedAt: now, revision: nextRevision(meta) };
       await touchMetadataTx(tx, row.rowid, newMeta, now);
       await writeAudit({
         tx,

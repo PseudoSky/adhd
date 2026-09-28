@@ -47,5 +47,10 @@ export async function getIssue(
     input.lastN !== undefined || input.after !== undefined
       ? { lastN: input.lastN, after: input.after }
       : undefined;
-  return assembleIssueCard(graph, issue, fields, { bounds });
+  // C6 — a single-item `get` derives its verdict through rung 3 by default
+  // (the list views stay at rung 2); a caller may raise it via `deriveThrough`.
+  return assembleIssueCard(graph, issue, fields, {
+    bounds,
+    verdictRung: input.deriveThrough ?? 3,
+  });
 }
