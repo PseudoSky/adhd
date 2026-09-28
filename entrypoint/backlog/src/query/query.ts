@@ -26,6 +26,7 @@ import {
   assembleIssueCards,
   assertKnownIssueFields,
   isStatusTerminal,
+  resolveDependents,
 } from './card.js';
 import {
   getOutgoingEdges,
@@ -363,28 +364,17 @@ function sortToOrderBy(
 }
 
 /**
- * `sort:'priority'` (SPEC.md §6.5) has no direct `NodeFilter` column — a
- * priority's `rank` lives on the `priority` catalog node, one edge hop away
- * (§2/§3), and `SortField` (`@adhd/sox-graph-store` `dist/index.d.ts:174`) only
- * covers `importance`/`tCreated`/`tValid`/`name`/a metadata key on the
- * ISSUE's own row — never a joined edge target. This function resolves rank
- * for a candidate page in-memory. **Documented limitation, stated rather than
- * silently approximated:** because rule 5 already bans `sort` with `after`
- * (keyset), `sort:'priority'` only ever composes with offset-based paging
- * (rule 6), which SPEC.md's own rule 6 already states is "EXPLICITLY not
- * stable under concurrent writes" — this in-memory sort adds no NEW
- * instability beyond what offset-paging already carries, but it does mean a
- * `sort:'priority'` page is computed over exactly the `limit+1` rows the
- * underlying (unsorted) fetch returned, THEN sorted — never a true store-
- * wide top-N by priority. A store-wide priority-ranked top-N would need a
- * dedicated SQL join this app-layer read surface does not have a primitive
- * for; flagged here rather than silently shipped as if it were exact.
+ * Resolve each issue's `priority.meta.rank` in one `has_priority` hop — the
+ * rank-map half of `sort:'priority'`, factored out so `queryOrder`'s
+ * deterministic tiebreak (C2 AC4) resolves rank through the SAME convention
+ * rather than a second copy of it. A missing rank (no `has_priority` edge, or a
+ * malformed pre-existing row whose `meta.rank` is not numeric) sorts LAST via
+ * `Number.MAX_SAFE_INTEGER` — the convention both callers state.
  */
-async function sortByPriorityRank(
+async function resolvePriorityRankByIssue(
   graph: GraphBackend,
-  issues: NodeRecord[],
-  direction: 'asc' | 'desc'
-): Promise<NodeRecord[]> {
+  issues: NodeRecord[]
+): Promise<Map<number, number>> {
   const edgesByIssue = await Promise.all(
     issues.map((i) => graph.getEdges({ src: i.id, rel: 'has_priority' }))
   );
@@ -411,6 +401,33 @@ async function sortByPriorityRank(
         : Number.MAX_SAFE_INTEGER
     );
   });
+  return rankByIssue;
+}
+
+/**
+ * `sort:'priority'` (SPEC.md §6.5) has no direct `NodeFilter` column — a
+ * priority's `rank` lives on the `priority` catalog node, one edge hop away
+ * (§2/§3), and `SortField` (`@adhd/sox-graph-store` `dist/index.d.ts:174`) only
+ * covers `importance`/`tCreated`/`tValid`/`name`/a metadata key on the
+ * ISSUE's own row — never a joined edge target. This function resolves rank
+ * for a candidate page in-memory. **Documented limitation, stated rather than
+ * silently approximated:** because rule 5 already bans `sort` with `after`
+ * (keyset), `sort:'priority'` only ever composes with offset-based paging
+ * (rule 6), which SPEC.md's own rule 6 already states is "EXPLICITLY not
+ * stable under concurrent writes" — this in-memory sort adds no NEW
+ * instability beyond what offset-paging already carries, but it does mean a
+ * `sort:'priority'` page is computed over exactly the `limit+1` rows the
+ * underlying (unsorted) fetch returned, THEN sorted — never a true store-
+ * wide top-N by priority. A store-wide priority-ranked top-N would need a
+ * dedicated SQL join this app-layer read surface does not have a primitive
+ * for; flagged here rather than silently shipped as if it were exact.
+ */
+async function sortByPriorityRank(
+  graph: GraphBackend,
+  issues: NodeRecord[],
+  direction: 'asc' | 'desc'
+): Promise<NodeRecord[]> {
+  const rankByIssue = await resolvePriorityRankByIssue(graph, issues);
   const sorted = [...issues].sort(
     (a, b) => rankByIssue.get(a.id)! - rankByIssue.get(b.id)!
   );
@@ -928,10 +945,14 @@ async function resolveStatusMap(
  * Only an UNFILTERED order keeps `kind:'issue'`, the bound a whole-store read
  * needs. `blocks` edges are considered only when both endpoints are in-set.
  *
- * The queue is plain FIFO (insertion / catalog order among equal in-degree
- * nodes): the deterministic dependent-count → priority-rank → uid tiebreak
- * (DESIGN §5 AC2, ticket 08102d9a) is C2's Wave-3 half and is deliberately NOT
- * applied here — Wave 1 ships the kind-scope half only (DESIGN §4). */
+ * C2 AC4 — DETERMINISTIC TIEBREAK. Among equal in-degree ready nodes the queue
+ * is a priority queue ordered by: (1) transitive outbound dependent count
+ * DESCENDING (`resolveDependents` over the in-set `blocks` graph — the Wave-1
+ * card walk reused, not re-derived), (2) `priority.meta.rank` ASCENDING
+ * (missing rank sorts last, via `resolvePriorityRankByIssue`), (3) uid
+ * ASCENDING (a strict total order, since uid is unique). This replaces Wave 1's
+ * plain FIFO; the Kahn core, the cycle arm, and the AC2 kind-scope are
+ * unchanged. */
 async function queryOrder(
   handle: IQueryStoreHandle,
   input: IIssueQueryInput
@@ -979,18 +1000,78 @@ async function queryOrder(
     }
   }
 
-  const queue = issues
-    .filter((i) => (inDeg.get(i.id) ?? 0) === 0)
-    .map((i) => i.id);
+  // C2 AC4 — the deterministic tiebreak's two extra keys, resolved once per
+  // in-set node. `dependents` reuses the Wave-1 `resolveDependents` walk
+  // (forward over outgoing `blocks`, scoped to this page's candidate set);
+  // priority rank reuses the `sortByPriorityRank` rank-map convention.
+  const dependents = new Map<number, number>();
+  for (const i of issues) {
+    dependents.set(i.id, await resolveDependents(graph, i.id, idSet));
+  }
+  const priorityRank = await resolvePriorityRankByIssue(graph, issues);
+
+  // Ready-queue order: dependents DESC → priority rank ASC → uid ASC. The uid
+  // key makes this a strict total order (uid is unique), so the pop sequence is
+  // fully deterministic regardless of heap internals.
+  const compareReady = (a: number, b: number): number => {
+    const da = dependents.get(a) ?? 0;
+    const db = dependents.get(b) ?? 0;
+    if (da !== db) return db - da;
+    const ra = priorityRank.get(a) ?? Number.MAX_SAFE_INTEGER;
+    const rb = priorityRank.get(b) ?? Number.MAX_SAFE_INTEGER;
+    if (ra !== rb) return ra - rb;
+    const ua = uidById.get(a)!;
+    const ub = uidById.get(b)!;
+    if (ua < ub) return -1;
+    if (ua > ub) return 1;
+    return 0;
+  };
+  const heap: number[] = [];
+  const heapPush = (id: number): void => {
+    heap.push(id);
+    let i = heap.length - 1;
+    while (i > 0) {
+      const parent = (i - 1) >> 1;
+      if (compareReady(heap[i], heap[parent]) < 0) {
+        [heap[i], heap[parent]] = [heap[parent], heap[i]];
+        i = parent;
+      } else break;
+    }
+  };
+  const heapPop = (): number => {
+    const top = heap[0];
+    const last = heap.pop()!;
+    if (heap.length > 0) {
+      heap[0] = last;
+      let i = 0;
+      for (;;) {
+        const l = 2 * i + 1;
+        const r = l + 1;
+        let smallest = i;
+        if (l < heap.length && compareReady(heap[l], heap[smallest]) < 0)
+          smallest = l;
+        if (r < heap.length && compareReady(heap[r], heap[smallest]) < 0)
+          smallest = r;
+        if (smallest === i) break;
+        [heap[i], heap[smallest]] = [heap[smallest], heap[i]];
+        i = smallest;
+      }
+    }
+    return top;
+  };
+
+  for (const i of issues) {
+    if ((inDeg.get(i.id) ?? 0) === 0) heapPush(i.id);
+  }
   const order: number[] = [];
   const remaining = new Map(inDeg);
-  while (queue.length > 0) {
-    const id = queue.shift()!;
+  while (heap.length > 0) {
+    const id = heapPop();
     order.push(id);
     for (const next of blockedBy.get(id) ?? []) {
       const d = (remaining.get(next) ?? 0) - 1;
       remaining.set(next, d);
-      if (d === 0) queue.push(next);
+      if (d === 0) heapPush(next);
     }
   }
 
