@@ -3,8 +3,9 @@
  * Actionable Store demo — acceptance runner.
  *
  * Seeds the isolated fixture (fixture/seed.sh), then drives every numbered
- * DEMO.md beat through the SHIPPED CLI (`entrypoint/backlog/dist/index.js`)
- * and asserts the observable each beat claims. Prints one line per beat and a
+ * DEMO.md beat through the SHIPPED CLI (`entrypoint/backlog/dist/index.js`).
+ * A concurrent `nx build backlog` swaps dist/ non-atomically; a CLI call that
+ * lands in that window is retried (see `cli`), so a build cannot tear a beat. Prints one line per beat and a
  * final beats/requirements/capabilities tally.
  *
  * A beat is:
@@ -30,8 +31,8 @@
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -39,6 +40,14 @@ const REPO_ROOT = join(HERE, '..', '..', '..', '..', '..');
 const BIN = join(REPO_ROOT, 'entrypoint/backlog/dist/index.js');
 const DEMO_DIR = join(REPO_ROOT, 'tmp/actionable-store-demo');
 const NODE = process.execPath; // absolute — never rely on a mutable PATH symlink
+
+/**
+ * Sleep without a shell, so a retry can outlast a concurrent build's brief
+ * `dist/` swap. `Atomics.wait` on the main thread is permitted in Node.
+ */
+function sleepMs(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
 
 // ---- seed -----------------------------------------------------------------
 process.stderr.write('seeding fixture…\n');
@@ -58,8 +67,18 @@ const F = env; // fixture name -> uid
 const D = { ...process.env, ...env, ADHD_BACKLOG_DATABASE_PATH: env.ADHD_BACKLOG_DATABASE_PATH, ADHD_BACKLOG_EMBEDDING_ENABLED: 'false' };
 
 function cli(...argv) {
-  const r = spawnSync(NODE, [BIN, ...argv], { cwd: REPO_ROOT, env: D, encoding: 'utf8' });
-  return { out: r.stdout ?? '', err: r.stderr ?? '', rc: r.status ?? 1 };
+  // A concurrent `nx build backlog` swaps `dist/` non-atomically (nx's
+  // cache-restore is a `remove(dist); copy(cached, dist)`; a real `vite build`
+  // wipes it). A call unlucky enough to land in that ~150ms window dies with a
+  // torn-dist signature (ENOENT / Cannot find module). That is a build artifact,
+  // not a behavioural failure — retry before recording it.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const r = spawnSync(NODE, [BIN, ...argv], { cwd: REPO_ROOT, env: D, encoding: 'utf8' });
+    const torn = r.error != null || /Cannot find module|MODULE_NOT_FOUND|ENOENT/.test(r.stderr ?? '');
+    if (!torn) return { out: r.stdout ?? '', err: r.stderr ?? '', rc: r.status ?? 1 };
+    sleepMs(300);
+  }
+  return { out: '', err: 'cli: dist/ was torn by a concurrent build across 4 attempts', rc: 1 };
 }
 function J(s) { try { return JSON.parse(s); } catch { return undefined; } }
 
@@ -240,22 +259,29 @@ function finish(notRunnable = undefined) {
   finish();
 }
 
-// 2.4 — sibling-repo citation (FIXED; recheck resolves against the sibling root)
+// 2.4 — sibling-repo citation (a GENUINE second registered work tree)
 {
   beat('2.4', 'A sibling-repo citation is verified, not falsely refuted');
   const r = cli('backlog', 'recheck', '--input', JSON.stringify({ attestationUid: F.CROSS_ATT, by: 'dispatcher:dee-1' }));
   const rj = J(r.out);
   const latest = rj?.data?.checks?.[rj.data.checks.length - 1];
   ok('recheck appends (history readable)', Array.isArray(rj?.data?.checks) && rj.data.checks.length >= 2, r.out.trim());
-  // The anchor's absolute path is NOT tracked in THIS repo (it lives in a
-  // registered sibling project root under tmp/), so only sibling-root
-  // resolution can verify it — a subject-root-only ladder reports it
+  // The seeded anchor lives in a SECOND registered project root — a real git
+  // work tree beside the demo store (its own .git), NOT a tracked file of this
+  // repo. Its absolute path is absent from THIS repo's HEAD, so only
+  // sibling-root resolution can verify it; a subject-root-only ladder reports
   // stale/unknown (the pre-fix false refutation).
-  ok('the anchor is genuinely cross-repo (an absolute path outside this repo\'s work tree)',
-    String(F.CROSS_ANCHOR).startsWith('path:/') && !String(F.CROSS_ANCHOR).startsWith('path:' + REPO_ROOT + '/src'),
+  const siblingEvidence = String(F.CROSS_ANCHOR).replace(/^path:/, '');
+  const siblingRoot = dirname(siblingEvidence);
+  ok('the anchor points into the seeded sibling work tree (a real second git work tree)',
+    String(F.CROSS_ANCHOR).startsWith(`path:${join(DEMO_DIR, 'sibling-repo')}/`) &&
+      existsSync(join(siblingRoot, '.git')),
     String(F.CROSS_ANCHOR));
-  ok("resolves against the citation's OWN (sibling) project root — verified, never false-refuted",
-    latest?.state === 'verified' && latest?.method !== 'none',
+  const inThisRepo = spawnSync('git', ['-C', REPO_ROOT, 'cat-file', '-e', `HEAD:${relative(REPO_ROOT, siblingEvidence)}`], { encoding: 'utf8' });
+  ok("the anchor is ABSENT from THIS repo's HEAD (only sibling-root resolution can verify it)",
+    inThisRepo.status !== 0, `git cat-file -e exit=${inThisRepo.status}`);
+  ok("resolves against the citation's OWN (sibling) project root — verified via changed_since",
+    latest?.state === 'verified' && latest?.method === 'changed_since',
     JSON.stringify(latest));
   finish();
 }
@@ -354,7 +380,12 @@ function finish(notRunnable = undefined) {
 {
   beat('3.4', 'Record a finding against a ticket in flight');
   const rel = 'entrypoint/backlog/src/write/transition.ts';
+  // Read the ACTUAL `revision` counter (via the verdict — its only card
+  // surface) — not `status`, which is what a prior revision of this beat
+  // wrongly read while claiming to assert the revision.
+  const revisionOf = (uid) => J(cli('backlog', 'get', '--input', JSON.stringify({ uid, fields: ['verdict'] })).out)?.data?.verdict?.revision;
   const before = cli('backlog', 'get', '--input', JSON.stringify({ uid: F.C3 }));
+  const beforeRev = revisionOf(F.C3);
   const a = cli('backlog', 'attest', '--input', JSON.stringify({
     subject: { id: F.C3, revision: 1 },
     claim: { kind: 'reproduction', body: 'two-process latch reproduces the race' },
@@ -363,9 +394,85 @@ function finish(notRunnable = undefined) {
   }));
   const aj = J(a.out);
   const after = cli('backlog', 'get', '--input', JSON.stringify({ uid: F.C3 }));
+  const afterRev = revisionOf(F.C3);
   ok('attest ok (observed revision 1)', aj?.ok === true && aj?.data?.subject?.revision === 1, a.out.trim());
   ok('ticket uid byte-identical before/after', J(before.out)?.data?.uid === J(after.out)?.data?.uid && J(after.out)?.data?.uid === F.C3);
-  ok('attest never bumps the subject revision', J(after.out)?.data?.status === 'open');
+  ok('attest does NOT bump the subject revision — the `revision` counter is unchanged',
+    typeof beforeRev === 'number' && beforeRev === afterRev,
+    `before=${beforeRev} after=${afterRev}`);
+  finish();
+}
+
+// 3.5 — the revision counter is real: mutating writes bump it, supersede mints a new node (DESIGN §2 P4; C6)
+{
+  beat('3.5', 'Every mutating write bumps the revision counter — and a body edit mints a new node');
+  const mk = (title) => J(cli('backlog', 'create', '--input', JSON.stringify({
+    title, body: 'revision-counter probe', project: 'adhd', kind: 'FEAT', status: 'open',
+    priority: 'HIGH', by: 'operator:otto-1', duplicateAction: 'force',
+  })).out)?.data?.uid;
+  const revOf = (uid) => J(cli('backlog', 'get', '--input', JSON.stringify({ uid, fields: ['verdict'] })).out)?.data?.verdict?.revision;
+  const u = mk('Revision counter probe');
+  ok('create seeds revision 0 (a never-mutated issue)', revOf(u) === 0, `rev=${revOf(u)}`);
+  cli('backlog', 'update', '--input', JSON.stringify({ uid: u, by: 'operator:otto-1', priority: 'LOW' }));
+  ok('update (in-place) bumps +1', revOf(u) === 1, `rev=${revOf(u)}`);
+  cli('backlog', 'claim', '--input', JSON.stringify({ uid: u, by: 'backend:bo-1', action: 'claim' }));
+  ok('claim bumps +1', revOf(u) === 2, `rev=${revOf(u)}`);
+  cli('backlog', 'claim', '--input', JSON.stringify({ uid: u, by: 'backend:bo-1', action: 'release' }));
+  ok('release bumps +1', revOf(u) === 3, `rev=${revOf(u)}`);
+  const tgt = mk('Revision counter relate target');
+  cli('backlog', 'relate', '--input', JSON.stringify({ sourceUid: u, targetUid: tgt, rel: 'blocks', action: 'add', by: 'operator:otto-1' }));
+  ok('relate (as source) bumps +1', revOf(u) === 4, `rev=${revOf(u)}`);
+  cli('backlog', 'upsert-component', '--input', JSON.stringify({ project: 'adhd', name: 'demo-other', path: 'demo/other', by: 'operator:otto-1' }));
+  cli('backlog', 'move', '--input', JSON.stringify({ uid: u, by: 'operator:otto-1', toComponent: 'demo-other' }));
+  ok('move (to a different component) bumps +1', revOf(u) === 5, `rev=${revOf(u)}`);
+  cli('backlog', 'transition', '--input', JSON.stringify({ uid: u, by: 'operator:otto-1', toStatus: 'closed', note: 'revision probe' }));
+  ok('transition bumps +1', revOf(u) === 6, `rev=${revOf(u)}`);
+  // A body edit supersedes: a NEW node is minted carrying nextRevision.
+  const fresh = mk('Revision supersede probe');
+  const priorRev = revOf(fresh);
+  const sup = cli('backlog', 'update', '--input', JSON.stringify({ uid: fresh, by: 'operator:otto-1', body: 'superseded body' }));
+  const supj = J(sup.out);
+  const newUid = supj?.data?.uid;
+  ok('a body edit mints a NEW uid (supersede, never an in-place identity rewrite)',
+    supj?.ok === true && typeof newUid === 'string' && newUid !== fresh, JSON.stringify(supj));
+  ok('the superseding node carries nextRevision (prior + 1)', revOf(newUid) === priorRev + 1, `prior=${priorRev} new=${revOf(newUid)}`);
+  finish();
+}
+
+// 3.6 — a batch is ungated only as an OUTER verb; each inner claim/transition still gates (DESIGN §2 P3)
+{
+  beat('3.6', 'A batch gates each inner claim/transition — the gated item is refused, the free one proceeds');
+  const claimBatch = cli('batch', 'action', '--input', JSON.stringify({
+    operation: 'backlog/claim', mode: 'parallel',
+    items: [
+      { input: { uid: F.BATCH_BLOCKED, by: 'dispatcher:dee-1', action: 'claim' } },
+      { input: { uid: F.BATCH_FREE, by: 'test:tess-1', action: 'claim' } },
+    ],
+  }));
+  const cb = J(claimBatch.out);
+  ok('claim batch: the blocked inner item is refused by its OWN gate',
+    Array.isArray(cb) && cb[0]?.value?.ok === false && cb[0]?.value?.error?.code === 'precondition_failed',
+    JSON.stringify(cb?.[0]));
+  ok('claim batch: the refusal names the blocker', (cb?.[0]?.value?.error?.message ?? '').includes(F.BLOCKER));
+  ok('claim batch: the FREE inner item in the SAME batch succeeds',
+    cb?.[1]?.value?.ok === true && cb?.[1]?.value?.data?.status === 'claimed', JSON.stringify(cb?.[1]));
+  const blockedCard = J(cli('backlog', 'get', '--input', JSON.stringify({ uid: F.BATCH_BLOCKED })).out)?.data;
+  ok('the refused item was not claimed (no partial state)', blockedCard?.status === 'open' && !blockedCard?.claimedBy);
+  const transBatch = cli('batch', 'action', '--input', JSON.stringify({
+    operation: 'backlog/transition', mode: 'parallel',
+    items: [
+      { input: { uid: F.BATCH_OBLIGATED, by: 'dispatcher:dee-1', toStatus: 'closed', note: 'batch probe' } },
+      { input: { uid: F.BATCH_FREE2, by: 'dispatcher:dee-1', toStatus: 'closed', note: 'batch probe' } },
+    ],
+  }));
+  const tb = J(transBatch.out);
+  ok('transition batch: the obligated inner item is refused by its OWN gate (EvidenceUnverified)',
+    Array.isArray(tb) && tb[0]?.value?.ok === false && (tb[0]?.value?.error?.message ?? '').includes('EvidenceUnverified'),
+    JSON.stringify(tb?.[0]));
+  ok('transition batch: the FREE inner item in the SAME batch closes',
+    tb?.[1]?.value?.ok === true && tb?.[1]?.value?.data?.toStatus === 'closed', JSON.stringify(tb?.[1]));
+  const oblCard = J(cli('backlog', 'get', '--input', JSON.stringify({ uid: F.BATCH_OBLIGATED })).out)?.data;
+  ok('the refused item was not closed (status unchanged on re-read)', oblCard?.status === 'open', JSON.stringify(oblCard));
   finish();
 }
 
@@ -493,13 +600,123 @@ function finish(notRunnable = undefined) {
   finish();
 }
 
+// R1–R7 — DESIGN §3 refusals hold. A refusal is the ABSENCE of a feature, so
+// each beat is a NEGATIVE CONTROL that asserts the refused thing cannot be
+// done against the live build (not a positive capability beat).
+{
+  beat('R1', 'DESIGN §3 refuses a stored `ready`/`done` actionability — it is derived, never stored');
+  const u = cli('backlog', 'update', '--input', JSON.stringify({ uid: F.PLAN, by: 'operator:otto-1', actionable: true }));
+  ok('`update` refuses a persisted `actionable` field (additionalProperties)',
+    u.rc !== 0 && u.err.includes('invalid_argument') && u.err.includes('actionable'), u.err.trim().slice(0, 200));
+  const c = cli('backlog', 'create', '--input', JSON.stringify({ title: 'stored-actionability probe', body: 'x', project: 'adhd', kind: 'FEAT', status: 'open', priority: 'HIGH', by: 'operator:otto-1', actionable: true }));
+  ok('`create` refuses a persisted `actionable` field', c.rc !== 0 && c.err.includes('actionable'), c.err.trim().slice(0, 200));
+  const v = J(cli('backlog', 'get', '--input', JSON.stringify({ uid: F.PLAN, fields: ['verdict'] })).out)?.data?.verdict;
+  ok('actionability is instead DERIVED — the verdict carries a read-time `evaluated_at` + `revision`',
+    typeof v?.evaluated_at === 'string' && typeof v?.revision === 'number', JSON.stringify(v));
+  const good = cli('backlog', 'update', '--input', JSON.stringify({ uid: F.PLAN, by: 'operator:otto-1', priority: 'HIGH' }));
+  ok('control: the SAME verb accepts a real field (the refusal is specific to actionability)',
+    good.rc === 0 && J(good.out)?.ok === true, good.out.trim().slice(0, 120));
+  finish();
+}
+
+{
+  beat('R2', 'DESIGN §3 refuses a per-project workflow/policy engine — the predicate core is closed (no CEL leaf)');
+  const cel = cli('backlog', 'obligate', '--input', JSON.stringify({ uid: F.PLAN, applies_to: { to: 'closed' }, requirement: { op: 'cel', expr: 'x' }, on_fail: 'block', by: 'operator:otto-1' }));
+  ok('a top-level `{op:"cel",…}` predicate is refused (not one of the six closed ops)',
+    cel.rc !== 0 && cel.err.includes('invalid_argument') && cel.err.includes('oneOf'), cel.err.trim().slice(0, 200));
+  const nested = cli('backlog', 'obligate', '--input', JSON.stringify({ uid: F.PLAN, applies_to: { to: 'closed' }, requirement: { op: 'all_of', of: [{ op: 'cel', expr: 'x' }] }, on_fail: 'block', by: 'operator:otto-1' }));
+  ok('a CEL leaf nested inside `all_of` is refused too',
+    nested.rc !== 0 && nested.err.includes('invalid_argument'), nested.err.trim().slice(0, 200));
+  const good = cli('backlog', 'obligate', '--input', JSON.stringify({ uid: F.PLAN, applies_to: { to: 'closed' }, requirement: { op: 'evidence', kind: 'published-artifact', min: 1 }, on_fail: 'block', by: 'operator:otto-1' }));
+  ok('control: a VALID predicate of the closed core is accepted (the refusal is the CEL leaf, not `obligate`)',
+    good.rc === 0 && typeof J(good.out)?.data?.obligationUid === 'string', good.out.trim().slice(0, 140));
+  finish();
+}
+
+{
+  beat('R3', 'DESIGN §3 refuses waves/tiers/turn budgets — orchestration state is not persisted');
+  const w = cli('backlog', 'update', '--input', JSON.stringify({ uid: F.PLAN, by: 'operator:otto-1', wave: 'w1' }));
+  const t = cli('backlog', 'update', '--input', JSON.stringify({ uid: F.PLAN, by: 'operator:otto-1', tier: 1 }));
+  const b = cli('backlog', 'update', '--input', JSON.stringify({ uid: F.PLAN, by: 'operator:otto-1', budget: 5 }));
+  ok('`update` refuses a `wave` field', w.rc !== 0 && w.err.includes('wave'), w.err.trim().slice(0, 120));
+  ok('`update` refuses a `tier` field', t.rc !== 0 && t.err.includes('tier'), t.err.trim().slice(0, 120));
+  ok('`update` refuses a `budget` field', b.rc !== 0 && b.err.includes('budget'), b.err.trim().slice(0, 120));
+  const terms = J(cli('backlog', 'query', '--input', '{"view":"catalogs","limit":500}').out)?.data?.terms ?? [];
+  ok('no wave/tier/budget term exists in any catalog (no persisted orchestration vocabulary)',
+    !terms.some((x) => /^(wave|tier|budget)$/i.test(x.name)), '');
+  finish();
+}
+
+{
+  beat('R4', 'DESIGN §3 refuses acceptance prose as structured data — a prose citation mints nothing');
+  const c = cli('backlog', 'create', '--input', JSON.stringify({ title: 'Prose Citations probe', body: 'A prose line.\n\nCitations: [path:docs/x.md:1, agent:someone]', project: 'adhd', kind: 'FEAT', status: 'open', priority: 'HIGH', by: 'operator:otto-1', duplicateAction: 'force' }));
+  const uid = J(c.out)?.data?.uid;
+  ok('the item is created and its body is stored verbatim', J(c.out)?.ok === true && typeof uid === 'string', c.out.trim().slice(0, 160));
+  const card = J(cli('backlog', 'get', '--input', JSON.stringify({ uid, fields: ['citations', 'body'] })).out)?.data;
+  ok('a prose `Citations:` line mints NO citation (citations stays empty)',
+    Array.isArray(card?.citations) && card.citations.length === 0, JSON.stringify(card?.citations));
+  ok('the prose itself is preserved in the body, untouched (never parsed into structure)',
+    (card?.body ?? '').includes('Citations: [path:docs/x.md:1'), String(card?.body).slice(0, 80));
+  finish();
+}
+
+{
+  beat('R5', 'DESIGN §3 refuses markdown regeneration — nothing writes a BACKLOG.md projection');
+  const help = cli('--help').out;
+  ok('the verb surface advertises no render/regenerate/projection writer',
+    !/^\s{2}backlog (render|regenerate|project|export|write)\b/m.test(help), '');
+  const projection = join(REPO_ROOT, 'BACKLOG.md');
+  const before = statSync(projection).mtimeMs;
+  // A markdown-rendering READ and a real WRITE — neither may rewrite the projection.
+  const md = J(cli('backlog', 'query', '--input', '{"view":"ready","format":"markdown","limit":1}').out)?.data?.markdown;
+  ok('control: a markdown RENDER returns text on the wire (it just never writes a projection file)',
+    typeof md === 'string' && md.length > 0, String(md).slice(0, 80));
+  cli('backlog', 'update', '--input', JSON.stringify({ uid: F.PLAN, by: 'operator:otto-1', assignee: 'operator:otto-1' }));
+  const after = statSync(projection).mtimeMs;
+  ok('the tracked BACKLOG.md projection is untouched by a markdown read + a write',
+    before === after, `before=${before} after=${after}`);
+  finish();
+}
+
+{
+  beat('R6', 'DESIGN §3 refuses a new `kind` for a process stage — the vocabulary is governed');
+  const s = cli('backlog', 'update', '--input', JSON.stringify({ uid: F.PLAN, by: 'operator:otto-1', stage: 'build' }));
+  ok('`update` refuses a persisted `stage` field (no stage state)', s.rc !== 0 && s.err.includes('stage'), s.err.trim().slice(0, 120));
+  const epic = cli('backlog', 'create', '--input', JSON.stringify({ title: 'stage-kind probe', body: 'x', project: 'adhd', kind: 'EPIC', status: 'open', priority: 'HIGH', by: 'operator:otto-1' }));
+  const epicMsg = J(epic.out)?.error?.message ?? epic.err;
+  ok('a retired process kind (`EPIC`) is refused on mint (governed vocabulary)',
+    epic.rc !== 0 && /deprecated kind/i.test(epicMsg), epicMsg.slice(0, 200));
+  const kinds = (J(cli('backlog', 'query', '--input', '{"view":"catalogs","catalog":"kind","limit":500}').out)?.data?.terms ?? []).map((x) => x.name);
+  ok('the shipped kind catalog carries no stage term',
+    !kinds.some((k) => /^(stage|phase)$/i.test(k)), JSON.stringify(kinds));
+  const good = cli('backlog', 'create', '--input', JSON.stringify({ title: 'stage-kind control', body: 'x', project: 'adhd', kind: 'FEAT', status: 'open', priority: 'HIGH', by: 'operator:otto-1', duplicateAction: 'force' }));
+  ok('control: `create` accepts an ordinary kind (the refusal is the retired process kind, not `create`)',
+    good.rc === 0 && J(good.out)?.ok === true, good.out.trim().slice(0, 120));
+  finish();
+}
+
+{
+  beat('R7', 'DESIGN §3 refuses temp-file-rename atomicity — the store is a real SQLite transaction');
+  const dbPath = J(cli('sandbox-path').out)?.dbPath ?? '';
+  ok('the store resolves to a single SQLite file under the demo tmp/',
+    dbPath.endsWith('.db') && dbPath.includes('/tmp/actionable-store-demo/'), dbPath);
+  const magic = (() => { try { return readFileSync(dbPath).subarray(0, 16).toString('latin1'); } catch { return ''; } })();
+  ok('the store file is SQLite ("SQLite format 3"), not a JSON doc rewritten by rename',
+    magic.startsWith('SQLite format 3'), JSON.stringify(magic));
+  const strays = readdirSync(DEMO_DIR).filter((f) => /\.(tmp|json)$/.test(f));
+  ok('no temp/JSON artifact is written beside the store (no temp-file-rename pattern)',
+    strays.length === 0, JSON.stringify(strays));
+  finish();
+}
+
 // 6 — teardown
 {
   beat('6', 'Teardown — back to zero');
   const sp = cli('sandbox-path');
   ok('store still resolves to the isolated fixture', (J(sp.out)?.dbPath ?? '').includes('/tmp/actionable-store-demo/'));
-  ok('no demo artifact written into the repo tree', true);
-  ok('the real store was never opened (all writes pinned to ADHD_BACKLOG_DATABASE_PATH)', true);
+  const tracked = spawnSync('git', ['-C', REPO_ROOT, 'ls-files', 'tmp'], { encoding: 'utf8' });
+  ok('no demo artifact is tracked in the repo tree (every demo write lives under gitignored tmp/)',
+    (tracked.stdout ?? '').trim() === '', tracked.stdout ?? '');
   finish();
 }
 
@@ -511,8 +728,14 @@ const reqOf = {
   '2.4': ['REQ-006'], '2.5': ['REQ-005', 'REQ-006'], '2.6': ['REQ-011', 'REQ-014'],
   '3.1': ['REQ-015', 'REQ-005'], '3.2': ['REQ-007'],
   '3.3': ['REQ-010', 'REQ-011'], '3.4': ['REQ-005', 'REQ-011'], '4': ['REQ-008', 'REQ-009'],
+  '3.5': ['REQ-011'], '3.6': ['REQ-010', 'REQ-008'],
   '5.1': ['REQ-001'], '5.2': ['REQ-003'], '5.3': ['REQ-012'], '5.4': ['REQ-012'],
   '5.5': ['REQ-013'], '5.6': ['REQ-002'], '5.7': ['REQ-012'], '5.8': ['REQ-011'],
+  // R1–R7 are DESIGN §3 REFUSAL negative controls — each asserts the refused
+  // thing CANNOT be done. They add teeth to the requirement they defend and do
+  // not by themselves prove a new capability.
+  'R1': ['REQ-011'], 'R2': ['REQ-007'], 'R3': ['REQ-013'], 'R4': ['REQ-005'],
+  'R5': ['REQ-015'], 'R6': ['REQ-013'], 'R7': ['REQ-008'],
   'B0': ['REQ-012'], '6': ['REQ-012'],
 };
 const capOf = {
@@ -523,6 +746,9 @@ const capOf = {
   '3.1': ['CAP-003'], '3.2': ['CAP-004'], '3.3': ['CAP-006', 'CAP-007'], '3.4': ['CAP-003', 'CAP-006'],
   '4': ['CAP-005'], '5.1': ['CAP-001'], '5.2': ['CAP-002'], '5.3': ['CAP-007'],
   '5.4': ['CAP-007'], '5.5': ['CAP-008'], '5.6': ['CAP-001'], '5.7': ['CAP-007'], '5.8': ['CAP-006'],
+  '3.5': ['CAP-006'], '3.6': ['CAP-006', 'CAP-005'],
+  'R1': ['CAP-006'], 'R2': ['CAP-004'], 'R3': ['CAP-008'], 'R4': ['CAP-003'],
+  'R5': ['CAP-003'], 'R6': ['CAP-008'], 'R7': ['CAP-005'],
   'B0': ['CAP-007'], '6': ['CAP-007'],
 };
 

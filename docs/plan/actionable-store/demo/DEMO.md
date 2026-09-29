@@ -4,7 +4,7 @@
 
 **What this is.** A presentation-grade walkthrough of the Actionable Store that doubles as its acceptance test. Follow it top to bottom and you will (a) experience the store the way a fleet of agents dropped cold into a repo would, and (b) prove every capability works — from discovering a feature, through multiple build passes and enrichment, to a deployment that the store *refuses to accept until proof exists*. Exact commands, exact data, binary checks. If it is demonstrated here, it must work; if it must work, it is demonstrated here.
 
-**Status of this revision (post-fix).** Every observable below was captured from the shipped build (`entrypoint/backlog/dist/index.js`) against the **seeded isolated fixture** described in §2.3, not from the mutable production store. The runner `fixture/run.mjs` executes all 25 beats and prints the tally: **21 passed · 1 now-runnable · 0 failed · 3 NOT-RUNNABLE** (12/15 requirements fully proven, +3 partial; 6/8 capabilities fully proven, +2 partial — see §7). This revision lands the two fixes the previous revision could only describe (beats 2.4 and 3.3) and gives the runner TEETH: a carried NOT-RUNNABLE classification no longer discards an evaluable assertion — reverting either fix turns the runner red (exit 1).
+**Status of this revision (post-fix).** Every observable below was captured from the shipped build (`entrypoint/backlog/dist/index.js`) against the **seeded isolated fixture** described in §2.3, not from the mutable production store. The runner `fixture/run.mjs` executes all **34 beats** and prints the tally: **30 passed · 1 now-runnable · 0 failed · 3 NOT-RUNNABLE** (12/15 requirements fully proven, +3 partial; 6/8 capabilities fully proven, +2 partial — see §7). This revision adds the acceptance **TEETH** an earlier one lacked: a **negative-control beat for each of the seven DESIGN §3 refusals** (R1–R7, §5b — each proves the refused thing *cannot be done*), a **revision-counter beat** (3.5) plus a corrected revision assertion in 3.4, a **batch inner-gating beat** (3.6 — a batch gates each inner `claim`/`transition`), and a tightened sibling-repo citation beat (2.4) that seeds a **genuine second git work tree** and asserts the real (`verified` / `changed_since`) outcome. Beat 3.3's terminal-scoped-obligation fix remains in place. A carried NOT-RUNNABLE classification never discards an evaluable assertion, and reverting a fix turns the runner red (exit 1).
 
 ---
 
@@ -22,6 +22,7 @@
 | 📎 **Source** | What grounds this step — design spec, skill doc, or ticket it came from. |
 | ⏭ **NOT-RUNNABLE** | The beat is genuinely unexecutable today (a missing backend or verb), so **no assertion could be evaluated**. The reason is named in the beat and classified in §7.3. |
 | ✅ **NOW-RUNNABLE** | The beat was CARRIED as NOT-RUNNABLE, but its in-beat assertion is **still evaluated every run** and now holds — a fixed defect. A beat whose full claim still has an unseedable part prints a NOTE and counts as PARTIAL. A carried classification never suppresses an assertion. |
+| 🔒 **R# refusal** | A DESIGN §3 **refusal** negative control: it asserts the refused thing **cannot be done** (the *absence* of a feature), not that a capability works. Paired with a positive control so the assertion is non-vacuous (the verb is refused only for the refused input). |
 | ⟦U#⟧ pinned | A former interface stub, now **pinned to the shipped build**; the exact shape is recorded in `UNRESOLVED.md` beside this file. |
 
 **Conventions**
@@ -511,6 +512,61 @@ adhd-backlog backlog get --input "{\"uid\":\"$C3\"}"
 🔗 **Proves:** REQ-005, REQ-011 · CAP-003, CAP-006
 📎 **Source:** design §2 Primitive 1 (identity survives supersession) + §2 Primitive 2; defect tickets `5b555754`, `e5a790a7`.
 
+#### 3.5 · The revision counter is real — and supersede mints a new node (⚠️ edge)
+
+🎬 **Scene.** A verdict can only go *stale* if there is a counter to go stale against. The store keeps one monotonic `revision` per item, bumped on every mutating write. This beat walks a fresh item through the mutating verbs and reads the counter back after each, then proves a body edit **supersedes** (mints a new node) rather than rewriting identity in place.
+
+▶️ **Do** (the runner does this against a freshly-created item)
+```bash
+adhd-backlog backlog update     --input "{\"uid\":\"$X\",\"by\":\"…\",\"priority\":\"LOW\"}"
+adhd-backlog backlog claim      --input "{\"uid\":\"$X\",\"by\":\"…\",\"action\":\"claim\"}"
+adhd-backlog backlog claim      --input "{\"uid\":\"$X\",\"by\":\"…\",\"action\":\"release\"}"
+adhd-backlog backlog relate     --input "{\"sourceUid\":\"$X\",\"targetUid\":\"$Y\",\"rel\":\"blocks\",\"action\":\"add\",\"by\":\"…\"}"
+adhd-backlog backlog move       --input "{\"uid\":\"$X\",\"by\":\"…\",\"toComponent\":\"demo-other\"}"
+adhd-backlog backlog transition --input "{\"uid\":\"$X\",\"by\":\"…\",\"toStatus\":\"closed\",\"note\":\"…\"}"
+adhd-backlog backlog update     --input "{\"uid\":\"$X\",\"by\":\"…\",\"body\":\"…\"}"   # supersede → NEW uid
+```
+
+✅ **Verify**
+- [ ] `create` seeds `revision: 0` (a never-mutated issue).
+- [ ] Each of `update` / `claim` / `release` / `relate` (as source) / `move` (to a different component) / `transition` bumps the revision by exactly **+1** (read back via `get fields:["verdict"]` → `verdict.revision`).
+- [ ] A `body` edit **mints a NEW uid** (supersede, never an in-place identity rewrite) and the superseding node carries `nextRevision` (prior + 1).
+- [ ] **Recorded caveat (not asserted either way — see `UNRESOLVED.md` §2.3):** `obligate` / `unobligate` / `attest` deliberately do **not** bump the subject revision in the shipped build, which contradicts DESIGN §2 P4 / the C6 spec's bump list. That is a separate open design question, so this beat asserts neither side.
+
+🔗 **Proves:** REQ-011 · CAP-006
+📎 **Source:** design §2 Primitive 4 ("`revision` is a monotonic counter on the node, bumped on every mutating write"); C6 spec (`specs/C6-verdict.spec.md` §"Interface changes" → `write/revision.ts`).
+
+#### 3.6 · A batch is ungated only as an OUTER verb (⚠️ edge)
+
+🎬 **Scene.** `batch` fans one operation over many items. It is **not** a way to launder a gated write: each inner `claim`/`transition` still evaluates its own gate (under a per-item transaction). So one batch must refuse exactly the gated item and fulfil the free one, in the same call.
+
+▶️ **Do**
+```bash
+adhd-backlog batch action --input "{\"operation\":\"backlog/claim\",\"items\":[
+  {\"input\":{\"uid\":\"$BATCH_BLOCKED\",\"by\":\"dispatcher:dee-1\",\"action\":\"claim\"}},
+  {\"input\":{\"uid\":\"$BATCH_FREE\",\"by\":\"test:tess-1\",\"action\":\"claim\"}}],\"mode\":\"parallel\"}"
+adhd-backlog batch action --input "{\"operation\":\"backlog/transition\",\"items\":[
+  {\"input\":{\"uid\":\"$BATCH_OBLIGATED\",\"by\":\"dispatcher:dee-1\",\"toStatus\":\"closed\",\"note\":\"…\"}},
+  {\"input\":{\"uid\":\"$BATCH_FREE2\",\"by\":\"dispatcher:dee-1\",\"toStatus\":\"closed\",\"note\":\"…\"}}],\"mode\":\"parallel\"}"
+```
+
+👀 **Expect** — each result carries its OWN outcome; the gated inner item is refused, the free one proceeds:
+```
+[{"index":0,"status":"fulfilled","value":{"ok":false,"error":{"code":"precondition_failed","message":"Claim refused: BlockedBy ⟨blocker⟩"}}},
+ {"index":1,"status":"fulfilled","value":{"ok":true,"data":{"status":"claimed","claimedBy":"test:tess-1"}}}]
+[{"index":0,"status":"fulfilled","value":{"ok":false,"error":{"code":"precondition_failed","message":"… EvidenceUnverified (requires \"published-artifact\") …"}}},
+ {"index":1,"status":"fulfilled","value":{"ok":true,"data":{"toStatus":"closed"}}}]
+```
+
+✅ **Verify**
+- [ ] `backlog/claim` batch: the **blocked** inner item is refused `precondition_failed`, and the refusal names the blocker.
+- [ ] The **free** inner item in the SAME batch succeeds (`status:"claimed"`).
+- [ ] `backlog/transition` batch: the **obligated** inner item is refused (`EvidenceUnverified`); the free one closes.
+- [ ] Both refused items read back **unchanged** (`open`, unclaimed / unclosed) — the per-item refusal rolls back only itself.
+
+🔗 **Proves:** REQ-010, REQ-008 · CAP-006, CAP-005
+📎 **Source:** design §2 Primitive 3 ("`batch` is ungated **as an outer verb only** — each inner `transition`/`claim` still evaluates its own gate") + §7 cond. 3 (adhd ADR-0001 `BEGIN IMMEDIATE` per item).
+
 ---
 
 ## 4 · The Climax — The Gate That Will Not Call a Merge "Done"
@@ -699,6 +755,117 @@ node entrypoint/backlog/tools/with-dist-lock.mjs npx vitest run \
 
 ---
 
+### 5b · The seven DESIGN §3 refusals hold — negative controls (🔒)
+
+> A refusal is the **absence** of a feature, so each beat below is a **negative control**: it asserts the refused thing **cannot be done** against the live build. Each is paired with a **positive control** in the same beat (the same verb succeeds on a legal input), so the refusal is non-vacuous — it distinguishes "refused" from "the verb is broken". Design authority: `DESIGN.md` §3, lines 119–127.
+
+#### R1 · §3 refuses a stored `ready`/`done` actionability (🔒 refusal)
+
+▶️ **Do**
+```bash
+adhd-backlog backlog update --input "{\"uid\":\"$PLAN\",\"by\":\"…\",\"actionable\":true}"
+adhd-backlog backlog create --input "{\"title\":\"…\",\"body\":\"…\",\"project\":\"adhd\",\"kind\":\"FEAT\",\"status\":\"open\",\"priority\":\"HIGH\",\"by\":\"…\",\"actionable\":true}"
+adhd-backlog backlog get    --input "{\"uid\":\"$PLAN\",\"fields\":[\"verdict\"]}"
+```
+✅ **Verify**
+- [ ] `update` **refuses** a persisted `actionable` field (`additionalProperties` → `invalid_argument`).
+- [ ] `create` **refuses** a persisted `actionable` field.
+- [ ] Actionability is instead **derived on read**: the verdict carries a read-time `evaluated_at` + `revision`.
+- [ ] **Control:** the same `update` verb accepts a real field (`priority`) — the refusal is specific to actionability.
+
+📎 **Source:** DESIGN §3 (`DESIGN.md:121`, "Stored `ready`/`done` status. Actionability is derived…") + §2 Primitive 4.
+
+#### R2 · §3 refuses a per-project workflow/policy engine — the predicate core is closed (🔒 refusal)
+
+▶️ **Do**
+```bash
+adhd-backlog backlog obligate --input "{\"uid\":\"$PLAN\",\"applies_to\":{\"to\":\"closed\"},\"requirement\":{\"op\":\"cel\",\"expr\":\"x\"},\"on_fail\":\"block\",\"by\":\"…\"}"
+adhd-backlog backlog obligate --input "{\"uid\":\"$PLAN\",\"applies_to\":{\"to\":\"closed\"},\"requirement\":{\"op\":\"all_of\",\"of\":[{\"op\":\"cel\",\"expr\":\"x\"}]},\"on_fail\":\"block\",\"by\":\"…\"}"
+```
+✅ **Verify**
+- [ ] A top-level `{op:"cel",…}` predicate is **refused** (`invalid_argument`; it is not one of the six closed ops).
+- [ ] A CEL leaf **nested** inside `all_of` is refused too.
+- [ ] **Control:** a valid `{op:"evidence",kind:"published-artifact",min:1}` predicate is accepted.
+
+📎 **Source:** DESIGN §3 (`DESIGN.md:122`, "A configurable workflow/policy engine… no dynamic leaf in v1 at all (CEL deferred)") + §7 cond. 4 ("CEL dropped from v1").
+
+#### R3 · §3 refuses waves / tiers / turn budgets — orchestration state is not persisted (🔒 refusal)
+
+▶️ **Do**
+```bash
+adhd-backlog backlog update --input "{\"uid\":\"$PLAN\",\"by\":\"…\",\"wave\":\"w1\"}"
+adhd-backlog backlog update --input "{\"uid\":\"$PLAN\",\"by\":\"…\",\"tier\":1}"
+adhd-backlog backlog update --input "{\"uid\":\"$PLAN\",\"by\":\"…\",\"budget\":5}"
+adhd-backlog backlog query  --input '{"view":"catalogs","limit":500}'
+```
+✅ **Verify**
+- [ ] `update` **refuses** a `wave` field, a `tier` field, and a `budget` field (`additionalProperties`).
+- [ ] **No** `wave`/`tier`/`budget` term exists in **any** catalog — the store has no persisted orchestration vocabulary.
+
+📎 **Source:** DESIGN §3 (`DESIGN.md:123`, "Waves, tiers, turn budgets, capacity… persisting them creates a stale artifact read as current").
+
+#### R4 · §3 refuses acceptance prose as structured data (🔒 refusal)
+
+▶️ **Do**
+```bash
+adhd-backlog backlog create --input "{\"title\":\"Prose Citations probe\",\"body\":\"A prose line.\\n\\nCitations: [path:docs/x.md:1, agent:someone]\",\"project\":\"adhd\",\"kind\":\"FEAT\",\"status\":\"open\",\"priority\":\"HIGH\",\"by\":\"…\",\"duplicateAction\":\"force\"}"
+adhd-backlog backlog get    --input "{\"uid\":\"$NEW\",\"fields\":[\"citations\",\"body\"]}"
+```
+✅ **Verify**
+- [ ] A prose `Citations:` line mints **NO** citation — `data.citations` stays `[]`.
+- [ ] The prose itself is preserved **verbatim** in the body (never parsed into structure).
+
+📎 **Source:** DESIGN §3 (`DESIGN.md:124`, "The prose stays prose; what is structured is the *evidence predicate*") + §6 ("existing prose `Citations:` lines are not auto-parsed").
+
+#### R5 · §3 refuses markdown regeneration (🔒 refusal)
+
+▶️ **Do**
+```bash
+adhd-backlog --help
+adhd-backlog backlog query --input '{"view":"ready","format":"markdown","limit":1}'
+adhd-backlog backlog update --input "{\"uid\":\"$PLAN\",\"by\":\"…\",\"assignee\":\"…\"}"
+```
+✅ **Verify**
+- [ ] The verb surface advertises **no** render/regenerate/projection writer.
+- [ ] **Control:** a markdown RENDER returns text on the wire (`data.markdown`) — the read exists, it just never writes a file.
+- [ ] The tracked `BACKLOG.md` projection is **byte-untouched** (its mtime is unchanged) across a markdown read and a write.
+
+📎 **Source:** DESIGN §3 (`DESIGN.md:125`, "The projection was deleted to end split-brain… rebuilding it would do so with the tool's blessing") + §12 point 8.
+
+#### R6 · §3 refuses a new `kind` for a process stage (🔒 refusal)
+
+▶️ **Do**
+```bash
+adhd-backlog backlog update --input "{\"uid\":\"$PLAN\",\"by\":\"…\",\"stage\":\"build\"}"
+adhd-backlog backlog create --input "{\"title\":\"…\",\"body\":\"…\",\"project\":\"adhd\",\"kind\":\"EPIC\",\"status\":\"open\",\"priority\":\"HIGH\",\"by\":\"…\"}"
+adhd-backlog backlog query  --input '{"view":"catalogs","catalog":"kind","limit":500}'
+```
+✅ **Verify**
+- [ ] `update` **refuses** a persisted `stage` field (no stage state).
+- [ ] A retired process kind (`EPIC`) is **refused on mint** ("deprecated kind") — the kind vocabulary is governed.
+- [ ] The shipped kind catalog carries **no** stage term.
+- [ ] **Control:** `create` accepts an ordinary kind (`FEAT`).
+
+> **Nuance (honest):** the store's kind vocabulary is **open**, so a user *can* mint an arbitrary label `STAGE`; what the design refuses — and what this beat proves — is that no **stage primitive** exists (no stage field, no stage kind, no stage semantics). A stage is an obligation plus a derived verdict, not a primitive.
+
+📎 **Source:** DESIGN §3 (`DESIGN.md:126`, "A new `kind` for a process stage. A stage is an obligation plus a derived verdict, not a primitive") + §2 Invariant 6 / §6 (`EPIC` re-expressed; `write/catalog.ts` `DEPRECATED_KIND_NAMES`).
+
+#### R7 · §3 refuses temp-file-rename atomicity — the store is a real transaction (🔒 refusal)
+
+▶️ **Do**
+```bash
+adhd-backlog sandbox-path
+# …then read the first 16 bytes of the reported store file and list its directory
+```
+✅ **Verify**
+- [ ] The store resolves to a single SQLite file (`.db`) under the demo `tmp/`.
+- [ ] The file begins with `SQLite format 3` — it is a real DB, **not** a JSON document rewritten by a temp-file-plus-rename.
+- [ ] **No** `.tmp` / `.json` artifact is written beside the store.
+
+📎 **Source:** DESIGN §3 (`DESIGN.md:127`, "Correctness of a backlog write is the **store's** job — never a temp-file-plus-rename pattern wrapped around JSON") + adhd ADR-0001 / ADR-0012.
+
+---
+
 ## 6 · Teardown — Back to Zero
 
 ▶️ **Do**
@@ -733,17 +900,17 @@ no stray tracked artifacts
 | REQ-002 | Resolve project/component tokens; one canonical row; cross-project provenance | 1.3 ✓, 5.6 ⏭ | H/E | ◐ |
 | REQ-003 | List a plan's members and order across every member kind | 1.3 ✓, 1.4 ✓, 5.2 ✓ | H/E | ✓ |
 | REQ-004 | Expose outbound blocks + dependent count; order by unblock-worth | 2.1 ✓, 1.4 ✓ | H | ✓ |
-| REQ-005 | Attach evidence without changing the item's uid | 2.3 ✓, 2.5 ✓, 3.1 ✓, 3.4 ✓ | H/R | ✓ |
+| REQ-005 | Attach evidence without changing the item's uid | 2.3 ✓, 2.5 ✓, 3.1 ✓, 3.4 ✓, R4 🔒 | H/R | ✓ |
 | REQ-006 | Verify a citation against its own project root; explicit `unverified` | 2.3 ✓, 2.4 ✅, 2.5 ✓ | H/R | ✓ |
-| REQ-007 | Declare a typed obligation from a closed predicate core | 3.2 ✓ | H | ✓ |
-| REQ-008 | Refuse a terminal transition whose obligations are unsatisfied | 4 ✓ | H | ✓ |
+| REQ-007 | Declare a typed obligation from a closed predicate core | 3.2 ✓, R2 🔒 | H | ✓ |
+| REQ-008 | Refuse a terminal transition whose obligations are unsatisfied | 4 ✓, 3.6 ✓, R7 🔒 | H | ✓ |
 | REQ-009 | A commit ref alone does not satisfy `published-artifact` | 4 ✓ | E | ✓ |
-| REQ-010 | Refuse a claim on an item with a live blocker, naming it | 2.2 ✓, 3.3 ✅ | E/H | ✓ |
-| REQ-011 | Derive actionability with typed reasons; `unknown` is never green | 2.1 ✓, 2.6 ✓, 3.3 ✅, 3.4 ✓, 5.8 ✓ | H/R | ✓ |
+| REQ-010 | Refuse a claim on an item with a live blocker, naming it | 2.2 ✓, 3.3 ✅, 3.6 ✓ | E/H | ✓ |
+| REQ-011 | Derive actionability with typed reasons; `unknown` is never green | 2.1 ✓, 2.6 ✓, 3.3 ✅, 3.4 ✓, 5.8 ✓, 3.5 ✓, R1 🔒 | H/R | ✓ |
 | REQ-012 | Every read reports completeness and score provenance | 2.4 ✅, 1.3 ✓, 5.3 ✓, 5.4 ⏭, 5.7 ⏭, 6 ✓ | H/E | ◐ |
-| REQ-013 | Catalogs are readable; no advertised verb is absent | 1.2 ✓, 5.5 ✓ | H/E | ✓ |
+| REQ-013 | Catalogs are readable; no advertised verb is absent | 1.2 ✓, 5.5 ✓, R3 🔒, R6 🔒 | H/E | ✓ |
 | REQ-014 | The honest floor: an un-obligated item is actionable by default | 2.1 ✓, 2.6 ✓, 3.2 ✓ | H | ✓ |
-| REQ-015 | A work product is a revision of its ticket — referenced not embedded; an absent token is stale | 3.1 ✓ | H | ✓ |
+| REQ-015 | A work product is a revision of its ticket — referenced not embedded; an absent token is stale | 3.1 ✓, R5 🔒 | H | ✓ |
 
 \* 5.1 is NOW-RUNNABLE — its too-short refusal is evaluated and holds — but its ambiguity half is unseedable, so the beat carries a residual gap and REQ-001 stays **partial**.
 
@@ -753,14 +920,16 @@ no stray tracked artifacts
 |---|---|---|---|
 | CAP-001 | Reference — canonical identity and resolution | 1.1 ✓, 1.3 ✓, 5.1 ✅*, 5.6 ⏭ | ◐ |
 | CAP-002 | Legibility — relations, order, unblock-worth | 1.3 ✓, 1.4 ✓, 2.1 ✓, 5.2 ✓ | ✓ |
-| CAP-003 | Attestation — anchored, verifiable, non-churning evidence | 2.3 ✓, 2.4 ✅, 2.5 ✓, 3.1 ✓, 3.4 ✓ | ✓ |
-| CAP-004 | Obligation — declared typed requirements | 3.2 ✓ | ✓ |
-| CAP-005 | Gate — terminal transitions require satisfied obligations | 4 ✓ | ✓ |
-| CAP-006 | Verdict — derived actionability and claim enforcement | 2.1 ✓, 2.2 ✓, 2.6 ✓, 3.3 ✅, 3.4 ✓, 5.8 ✓ | ✓ |
+| CAP-003 | Attestation — anchored, verifiable, non-churning evidence | 2.3 ✓, 2.4 ✅, 2.5 ✓, 3.1 ✓, 3.4 ✓, R4 🔒, R5 🔒 | ✓ |
+| CAP-004 | Obligation — declared typed requirements | 3.2 ✓, R2 🔒 | ✓ |
+| CAP-005 | Gate — terminal transitions require satisfied obligations | 4 ✓, 3.6 ✓, R7 🔒 | ✓ |
+| CAP-006 | Verdict — derived actionability and claim enforcement | 2.1 ✓, 2.2 ✓, 2.6 ✓, 3.3 ✅, 3.4 ✓, 5.8 ✓, 3.5 ✓, 3.6 ✓, R1 🔒 | ✓ |
 | CAP-007 | Observe — honest envelopes and computed reporting | 2.4 ✅, 1.3 ✓, 3.3 ✅, 5.3 ✓, 5.4 ⏭, 5.7 ⏭, 6 ✓ | ◐ |
-| CAP-008 | Catalog — readable, self-describing surface | 1.2 ✓, 5.5 ✓ | ✓ |
+| CAP-008 | Catalog — readable, self-describing surface | 1.2 ✓, 5.5 ✓, R3 🔒, R6 🔒 | ✓ |
 
-**Totals: 21 passed · 1 now-runnable · 0 failed · 3 NOT-RUNNABLE (of 25 beats) · 12/15 requirements fully proven (+3 partial) · 6/8 capabilities fully proven (+2 partial).**
+**Legend:** ✓ fully proven · ◐ partial (a beat is SKIPped, or a NOW-RUNNABLE beat carries a residual scope gap) · ✅ fixed (a former defect beat, now passing) · 🔒 refusal negative control (asserts the refused thing *cannot be done*).
+
+**Totals: 30 passed · 1 now-runnable · 0 failed · 3 NOT-RUNNABLE (of 34 beats) · 12/15 requirements fully proven (+3 partial) · 6/8 capabilities fully proven (+2 partial).**
 
 ### 7.3 Not-Runnable & Residual Beats — classification
 
@@ -780,6 +949,8 @@ no stray tracked artifacts
 | 5.6 | Same — `view:"similar"` needs the vector space. |
 | 5.7 | `soxe` has no `verify` verb; D-B is specified but unimplemented in sox-ecosystem. The probe is informational; the beat SKIPs. |
 
+**DESIGN §3 refusals — negative controls (R1–R7).** Each of the seven §3 refusals now has a beat (§5b) that asserts the refused thing **cannot be done** against the live build, each paired with a positive control so the assertion is non-vacuous. **All seven HELD** on this build. They corroborate REQ-005/007/008/010/011/013/015 and CAP-003/004/005/006/008; they do **not** add new requirement coverage (those requirements are already fully proven by positive beats). Beat 3.5 records — but does not assert on — the `obligate`/`unobligate` no-bump spec contradiction (`UNRESOLVED.md` §2.3).
+
 ### 7.4 Pinned Interfaces
 
 All former `⟦U#⟧` stubs are now pinned to the shipped build (see `UNRESOLVED.md` for the exact shapes): the readiness probe (`serve --probe`), the `attest`/`recheck`/`obligate`/`catalogs`/`verdict` payloads, the `order` result shape, the item-list `meta` envelope, and the anchor-locator grammar. The anchor digest is **bare sha256 hex** (no `sha256:` prefix) — the exact form `checkAnchor`'s full-resolve rung compares (beat 2.5).
@@ -794,11 +965,11 @@ All former `⟦U#⟧` stubs are now pinned to the shipped build (see `UNRESOLVED
 | Fixture | seeded isolated store at `tmp/actionable-store-demo/demo.db` (`fixture/seed.sh`) |
 | Runner | `node docs/plan/actionable-store/demo/fixture/run.mjs` |
 | Date | ⟨date⟩ |
-| Beats | 21 passed · 1 now-runnable · 0 failed · 3 NOT-RUNNABLE (of 25) |
+| Beats | 30 passed · 1 now-runnable · 0 failed · 3 NOT-RUNNABLE (of 34) |
 | Requirements proven | 12 of 15 fully (+3 partial) |
 | Capabilities proven | 6 of 8 fully (+2 partial) |
 | Runner exit | 0 |
 | Result | ☑ PASS &nbsp;&nbsp; ☐ FAIL |
-| Notes | 2 former product-defect beats (2.4, 3.3) FIXED, running, and covered by a negative control (reverting either makes the runner exit 1); 3 genuinely-unexecutable NOT-RUNNABLE (5.4, 5.6, 5.7); 1 residual scope gap (5.1 ambiguity). |
+| Notes | The seven DESIGN §3 refusals each carry a negative-control beat (R1–R7, §5b), all holding. Product-defect beats 2.4 and 3.3 are FIXED, running, and covered by a negative control (reverting either makes the runner exit 1). Revision-counter (3.5) and batch inner-gating (3.6) beats added; beat 3.4's revision assertion corrected. 3 genuinely-unexecutable NOT-RUNNABLE (5.4, 5.6, 5.7); 1 residual scope gap (5.1 ambiguity). |
 
 > A run is **PASS** only if every ✅ assertion is checked and every requirement in §7 is proven. One unchecked binary assertion = FAIL until resolved. The runner enforces this mechanically: it exits non-zero on any FAIL, and a carried NOT-RUNNABLE classification never suppresses an assertion — a beat whose assertion is evaluated and holds reads NOW-RUNNABLE, not SKIP.

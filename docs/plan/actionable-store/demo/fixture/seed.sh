@@ -113,6 +113,17 @@ CYCLE_B=$(new_issue "Cycle B" "Cycle member." LOW)
 CLAIM_1=$(new_issue "Parallel claim one" "Free to claim." MEDIUM)
 CLAIM_2=$(new_issue "Parallel claim two" "Free to claim." MEDIUM)
 
+# ---- Batch inner-gating fixture (beat 3.6) --------------------------------
+# A batch is ungated only as an OUTER verb: each inner `claim`/`transition`
+# still evaluates its own gate. BATCH_BLOCKED is blocked, BATCH_OBLIGATED
+# carries a close-scoped block obligation, and BATCH_FREE / BATCH_FREE2 are
+# clean — so one batch must refuse exactly the gated item and fulfil the free
+# one in the SAME call.
+BATCH_BLOCKED=$(new_issue "Batch blocked work" "Blocked; a batch claim must refuse only this item." HIGH)
+BATCH_FREE=$(new_issue "Batch free work" "Unblocked; the same batch must claim it." MEDIUM)
+BATCH_OBLIGATED=$(new_issue "Batch obligated close" "Close-scoped obligation; a batch transition must refuse only this item." HIGH)
+BATCH_FREE2=$(new_issue "Batch free close" "Unblocked, no obligation; the same batch must close it." MEDIUM)
+
 # ---- C2 AC4 order-tiebreak fixture (beat 1.4) -----------------------------
 # A distinct kind (`SPIKE`) bounds beat 1.4's candidate set to exactly these
 # nodes. X and Y have EQUAL in-degree (0) but X has two transitive dependents
@@ -129,6 +140,7 @@ AC2_D5=$(new_issue "C2 tiebreak D5" "transitive flip dependent of Y" MEDIUM SPIK
 # ---- Relations ------------------------------------------------------------
 bl backlog relate --input "{\"sourceUid\":\"$BLOCKER\",\"targetUid\":\"$PLAN\",\"rel\":\"blocks\",\"action\":\"add\",\"by\":\"operator:otto-1\"}" >/dev/null
 bl backlog relate --input "{\"sourceUid\":\"$BLOCKER\",\"targetUid\":\"$BLOCKED\",\"rel\":\"blocks\",\"action\":\"add\",\"by\":\"operator:otto-1\"}" >/dev/null
+bl backlog relate --input "{\"sourceUid\":\"$BLOCKER\",\"targetUid\":\"$BATCH_BLOCKED\",\"rel\":\"blocks\",\"action\":\"add\",\"by\":\"operator:otto-1\"}" >/dev/null
 bl backlog relate --input "{\"sourceUid\":\"$CHILD1\",\"targetUid\":\"$PLAN\",\"rel\":\"part_of\",\"action\":\"add\",\"by\":\"operator:otto-1\"}" >/dev/null
 bl backlog relate --input "{\"sourceUid\":\"$CHILD2\",\"targetUid\":\"$PLAN\",\"rel\":\"part_of\",\"action\":\"add\",\"by\":\"operator:otto-1\"}" >/dev/null
 bl backlog relate --input "{\"sourceUid\":\"$AC2_X\",\"targetUid\":\"$AC2_D1\",\"rel\":\"blocks\",\"action\":\"add\",\"by\":\"operator:otto-1\"}" >/dev/null
@@ -170,6 +182,8 @@ GIT_AUTHOR_DATE=2030-01-01T00:00:00Z GIT_COMMITTER_DATE=2030-01-01T00:00:00Z git
 
 # ---- Act-4 closure item's obligation --------------------------------------
 bl backlog obligate --input "{\"uid\":\"$COMMITREF\",\"applies_to\":{\"to\":\"closed\"},\"requirement\":{\"op\":\"evidence\",\"kind\":\"published-artifact\",\"min\":1},\"on_fail\":\"block\",\"by\":\"architect:axl-1\"}" >/dev/null
+# ---- Batch inner-gating item's close-scoped obligation (beat 3.6) ---------
+bl backlog obligate --input "{\"uid\":\"$BATCH_OBLIGATED\",\"applies_to\":{\"to\":\"closed\"},\"requirement\":{\"op\":\"evidence\",\"kind\":\"published-artifact\",\"min\":1},\"on_fail\":\"block\",\"by\":\"architect:axl-1\"}" >/dev/null
 
 # ---- Emit the fixture manifest --------------------------------------------
 {
@@ -181,6 +195,8 @@ bl backlog obligate --input "{\"uid\":\"$COMMITREF\",\"applies_to\":{\"to\":\"cl
     "PLAN=$PLAN" "BLOCKER=$BLOCKER" "BLOCKED=$BLOCKED" "COMMITREF=$COMMITREF" \
     "C3=$C3" "CHILD1=$CHILD1" "CHILD2=$CHILD2" \
     "CYCLE_A=$CYCLE_A" "CYCLE_B=$CYCLE_B" "CLAIM_1=$CLAIM_1" "CLAIM_2=$CLAIM_2" \
+    "BATCH_BLOCKED=$BATCH_BLOCKED" "BATCH_FREE=$BATCH_FREE" \
+    "BATCH_OBLIGATED=$BATCH_OBLIGATED" "BATCH_FREE2=$BATCH_FREE2" \
     "AC2_X=$AC2_X" "AC2_Y=$AC2_Y" "AC2_D4=$AC2_D4" "AC2_D5=$AC2_D5" \
     "C5_REV0=$C5_REV0" "C5_TOK0=$C5_TOK0" "CROSS_ATT=$CROSS_ATT" \
     "CROSS_ANCHOR=$CROSS_ANCHOR" "DIGEST_GOOD=$DIGEST_GOOD" "DIGEST_BAD=$DIGEST_BAD"; do

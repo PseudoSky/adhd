@@ -1,13 +1,16 @@
 # UNRESOLVED — Actionable Store Demo
 
 Interfaces the demo had to guess, and scope gaps found while authoring.
-**Revision 2 (post-acceptance):** every former ⟦U#⟧ stub is now **PINNED** to the
-shipped build (`entrypoint/backlog/dist/api.d.ts`, the CLI `--help`, and live
-runs against `entrypoint/backlog/dist/index.js`). The `DEMO.md` beats were
-corrected to match. Nothing below is a guess; each pinned row cites what
-confirmed it.
+**Revision 3:** every former ⟦U#⟧ stub is **PINNED** to the shipped build
+(`entrypoint/backlog/dist/api.d.ts`, the CLI `--help`, and live runs against
+`entrypoint/backlog/dist/index.js`). The `DEMO.md` beats were corrected to
+match. This revision adds the DESIGN §3 refusal negative controls (R1–R7), the
+revision-counter and batch-gating beats, a tightened sibling-repo fixture, and
+the §2.3 spec-vs-shipped contradictions. Nothing below is a guess; each pinned
+row cites what confirmed it.
 
-The remaining unresolved items are **scope gaps** (see §2.2 and §4). The two
+The remaining unresolved items are **scope gaps** (see §2.2 and §4) and one
+**spec-vs-shipped contradiction** recorded but not resolved (§2.3). The two
 former defect beats (2.4, 3.3) are now **FIXED and running** (see §2.1).
 
 ## 1 · Pinned interfaces (were ⟦U#⟧)
@@ -35,7 +38,12 @@ former defect beats (2.4, 3.3) are now **FIXED and running** (see §2.1).
   (`write/attestation.ts`) probes the subject root first, then every other live
   registered project root, returning the first root whose work tree has the
   target present at HEAD. The beat runs and reads `verified`; reverting the fix
-  makes the runner exit 1.
+  makes the runner exit 1. The fixture seeds a **genuine second registered
+  project** — a real git work tree at `tmp/actionable-store-demo/sibling-repo/`
+  (its own `.git`), registered via `upsert-project` — so the beat can assert the
+  anchor is **absent from THIS repo's HEAD** (`git cat-file -e HEAD:<rel>`
+  fails) and resolves `verified`/`changed_since` against the sibling root, not a
+  same-repo file.
 - **Beat 3.3 — a terminal-scoped `block` obligation made the item unclaimable.
   FIXED (`5db10040`).** `write/gate.ts` `evaluateVerdictTx` evaluated a
   terminal-scoped obligation (`applies_to.to:"closed"`) and reported
@@ -62,6 +70,22 @@ former defect beats (2.4, 3.3) are now **FIXED and running** (see §2.1).
 - **Beat 5.7 — D-B `verify` unimplemented.** No `soxe verify` verb exists; the
   D-B artifact-lifecycle check is specified under `substrate-fleet/specs/` but
   not implemented.
+
+### 2.3 Spec-vs-shipped contradictions (recorded, not resolved)
+
+- **The `revision` bump list — DESIGN §2 P4 / C6 spec vs the shipped build.**
+  The C6 spec (`C6-verdict.spec.md:74-79`, `write/revision.ts`) lists
+  `obligate` / `unobligate` among the writers that set `meta.revision =
+  nextRevision(priorMeta)`, and DESIGN §2 P4 says the counter is "bumped on
+  every mutating write". In the SHIPPED build (measured this session via
+  `get fields:["verdict"]` → `verdict.revision`): `update` (in-place),
+  `transition`, `claim`/`release`, `relate` (as source) and `move` each bump by
+  exactly **+1**, and a body edit **supersedes** to a new node at `prior + 1` —
+  but `obligate`, `unobligate` and `attest` do **NOT** bump. `attest` not bumping
+  is consistent with the spec (it never touches the subject); whether
+  `obligate`/`unobligate` *should* bump is an **open design question**. Beat 3.5
+  asserts the verbs that DO bump and makes **no assertion either way** about the
+  three, so the contradiction is recorded here rather than baked into a test.
 
 ## 3 · Corrected shipped-shape facts (were wrong in DEMO.md rev 1)
 
@@ -124,3 +148,10 @@ former defect beats (2.4, 3.3) are now **FIXED and running** (see §2.1).
   creates only `issue` plan members (the shipped `relate` verb links
   issue→issue `part_of`), so that clause cannot be reproduced here and is
   recorded as a scope gap, not silently dropped.
+- **The `STAGE`-kind refusal is a design-level absence, not a mint refusal**
+  (beat R6). The store's `kind` vocabulary is **open**, so a user can mint an
+  arbitrary label named `STAGE`; what the design refuses (`DESIGN.md:126`) and
+  what R6 proves is that no **stage primitive** exists — no stage field is
+  accepted, the shipped kind catalog carries no stage term, and the governed
+  vocabulary refuses the retired `EPIC` kind on mint. A stage is an obligation
+  plus a derived verdict, not a primitive.
