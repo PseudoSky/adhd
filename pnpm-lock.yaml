@@ -577,17 +577,17 @@ importers:
         specifier: ^0.1.7
         version: link:../../packages/environment/environment-builder
       '@adhd/sox-graph-store':
-        specifier: ^0.11.1
-        version: 0.11.1
+        specifier: ^0.12.0
+        version: 0.12.0
       '@adhd/sox-hybrid-search':
-        specifier: ^0.5.0
-        version: 0.5.0
+        specifier: ^0.6.0
+        version: 0.6.0
       '@adhd/sox-semantic':
         specifier: ^0.1.8
         version: 0.1.8
       '@adhd/sox-store-adapter':
-        specifier: ^0.10.0
-        version: 0.10.0
+        specifier: ^0.11.0
+        version: 0.11.0
       '@adhd/sox-telemetry':
         specifier: ^0.3.2
         version: 0.3.2
@@ -1559,11 +1559,31 @@ packages:
     dev: false
     optional: true
 
+  /@adhd/sox-embedding-provider@0.6.2:
+    resolution: {integrity: sha512-ZcmUh46sJCI++F8MgYdl1AOmN4d8JhqLbQRrdE3oiIiBO4MMpeat2TeCAW6uTkTYMKvgiVLUM+5PFr0TwU48fg==}
+    engines: {node: '>=22'}
+    requiresBuild: true
+    dependencies:
+      '@adhd/sox-service-proxy': 0.5.0
+      '@adhd/sox-telemetry': 0.3.2
+      '@huggingface/transformers': 4.2.0
+      fastembed: 2.1.0
+    dev: false
+    optional: true
+
   /@adhd/sox-graph-store@0.11.1:
     resolution: {integrity: sha512-kSguF/FI1uhRuCkAGWn+EWRMy7MGhUQrfTYhnOdPAQI7ZNoDSO5UXVxSnZJEUvtYk4J+hhfiykj2AIofFsIM9w==}
     engines: {node: '>=22'}
     dependencies:
       '@adhd/sox-store-adapter': 0.10.0
+      '@adhd/sox-telemetry': 0.3.2
+    dev: false
+
+  /@adhd/sox-graph-store@0.12.0:
+    resolution: {integrity: sha512-nTNA2sRnhkFMw+S1SNnrpGM/fNzS1iBCyLaGaHxL75lafru2XuAqVtsfHKY9nBnToqiM7TZrjmH9GyKORqY+sg==}
+    engines: {node: '>=22'}
+    dependencies:
+      '@adhd/sox-store-adapter': 0.11.0
       '@adhd/sox-telemetry': 0.3.2
     dev: false
 
@@ -1575,6 +1595,18 @@ packages:
     optionalDependencies:
       '@adhd/sox-embedding-provider': 0.6.0
       '@adhd/sox-vector-store': 0.7.2
+    transitivePeerDependencies:
+      - encoding
+    dev: false
+
+  /@adhd/sox-hybrid-search@0.6.0:
+    resolution: {integrity: sha512-83JwYlKCbxIWXV6JY10/nVE0XNbIhzBhksxZxAHsjGlqcBjL98EKdQOk2x5Wi2Gtsun9nYKqlVXunvyP1WSrzw==}
+    engines: {node: '>=22'}
+    dependencies:
+      '@adhd/sox-graph-store': 0.12.0
+    optionalDependencies:
+      '@adhd/sox-embedding-provider': 0.6.2
+      '@adhd/sox-vector-store': 0.7.3
     transitivePeerDependencies:
       - encoding
     dev: false
@@ -1609,8 +1641,27 @@ packages:
     dev: false
     optional: true
 
+  /@adhd/sox-service-proxy@0.5.0:
+    resolution: {integrity: sha512-BuefAZrsPrADlnQ351ehNxK8DrpcJZ67VtahPqm7r2AaBGt3EEBZBBbf9FsWZpb+P198Uk7zqTlCbeF4K/Kn9g==}
+    engines: {node: '>=20'}
+    requiresBuild: true
+    dependencies:
+      '@adhd/sox-listen-guard': 0.1.1
+    dev: false
+    optional: true
+
   /@adhd/sox-store-adapter@0.10.0:
     resolution: {integrity: sha512-kuIH1yJjsFBMdmF6K0sml24wopcQk+PHMWFc75XPt45TXntoGkfLVHiD0F/qYbH01EwCI/NdDfPzGGe3PaScDg==}
+    engines: {node: '>=20'}
+    dependencies:
+      '@adhd/sox-telemetry': 0.3.2
+      '@tursodatabase/database': 0.7.2
+    optionalDependencies:
+      better-sqlite3: 12.10.0
+    dev: false
+
+  /@adhd/sox-store-adapter@0.11.0:
+    resolution: {integrity: sha512-aFU5w+Q7aZuqXDEaVKX6V9Gqzn4fKVn1t/2ncJS1752QUhAJ3uontgg9tho6S403OacAwXHo2U34isFFcFI1wg==}
     engines: {node: '>=20'}
     dependencies:
       '@adhd/sox-telemetry': 0.3.2
@@ -1637,6 +1688,22 @@ packages:
     requiresBuild: true
     dependencies:
       '@adhd/sox-store-adapter': 0.10.0
+      '@lancedb/lancedb': 0.31.0(apache-arrow@18.1.0)
+      apache-arrow: 18.1.0
+      better-sqlite3: 12.10.0
+      sqlite-vec: 0.1.9
+      synckit: 0.11.13
+    transitivePeerDependencies:
+      - encoding
+    dev: false
+    optional: true
+
+  /@adhd/sox-vector-store@0.7.3:
+    resolution: {integrity: sha512-ew0j8OCzIQvDB//HMwUgNLroWweLeoyeoXgIDmw/ctp0BeH15cwZEdu6LtaHqqmb27e1YvKlRNTwyDRy6wO9Mg==}
+    engines: {node: '>=22'}
+    requiresBuild: true
+    dependencies:
+      '@adhd/sox-store-adapter': 0.11.0
       '@lancedb/lancedb': 0.31.0(apache-arrow@18.1.0)
       apache-arrow: 18.1.0
       better-sqlite3: 12.10.0
@@ -6014,6 +6081,7 @@ packages:
   /@lancedb/lancedb@0.31.0(apache-arrow@18.1.0):
     resolution: {integrity: sha512-EUEVpheKhaCNE6ybcW760OUyfeei2dKR2ZwgLWeC/ntHL4BBiBLIErh9fuEuUP3/mAx4B5UFraB2m5nDUx5XEA==}
     engines: {node: '>= 18'}
+    cpu: [x64, arm64]
     os: [darwin, linux, win32]
     requiresBuild: true
     peerDependencies:
