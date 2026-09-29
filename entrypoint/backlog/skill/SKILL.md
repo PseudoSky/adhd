@@ -21,7 +21,7 @@ the successor. Never treat a stored uid as immutable across edits.
 
 Every example below was run against `entrypoint/backlog/dist/index.js` and its
 exact output is what is shown. The obligations/verdict (§4), spec-pointer (§5),
-and catalog/order (§6) examples were run on the build that mounts all 27 verbs;
+and catalog/order (§6) examples were run on the build that mounts all 29 verbs;
 the §11 stats/rollup examples on the build that first mounted those ops. A
 _globally installed_ `adhd-backlog` may be an older build: in particular
 `gitContext` on `create`/`transition` (§9) exists in the `9df2a5c7` build but
@@ -31,7 +31,7 @@ or after the one that mounted them. Compare the `backlog create`, `backlog
 priority-matrix`, and `backlog obligate` lines of `adhd-backlog --help` with §1
 before relying on a field.
 
-## 1. Command surface — 27 verbs (plus `batch`), one calling convention
+## 1. Command surface — 29 verbs (plus `batch`), one calling convention
 
 **Every verb except `embedding-status` takes a single `--input` flag carrying
 one JSON object** (`embedding-status` takes no options at all). There
@@ -52,6 +52,7 @@ a prefix matching two or more live nodes is refused with `ambiguous_reference`
 A prefix shorter than 8 characters is refused as too short.
 
 ```
+adhd-backlog backlog add-citation       --input '<IAddCitationInput json>'
 adhd-backlog backlog attest             --input '<IAttestInput json>'
 adhd-backlog backlog claim              --input '<IClaimInput json>'
 adhd-backlog backlog create             --input '<ICreateIssueInput json>'
@@ -68,6 +69,7 @@ adhd-backlog backlog priority-matrix    --input '<IPriorityMatrixInput json>'
 adhd-backlog backlog query              --input '<IIssueQueryInput json>'
 adhd-backlog backlog recheck            --input '<IRecheckInput json>'
 adhd-backlog backlog relate             --input '<IRelateInput json>'
+adhd-backlog backlog remove-citation    --input '<IRemoveCitationInput json>'
 adhd-backlog backlog report             --input '<IReportInput json>'
 adhd-backlog backlog rm-location        --input '<IRmLocationInput json>'
 adhd-backlog backlog rm-project         --input '<IRmProjectInput json>'
@@ -97,6 +99,7 @@ Namespaced verbs (namespace + verb, per-field flags):
   batch action  { input: { operation: 'backlog/get', items: object[], concurrency?: number, mode?: 'parallel'|'serial'|'chained', onItemError?: 'continue'|'abort', itemTimeoutMs?: number } }
 
 Verbs (one-token, --input JSON envelope):
+  backlog add-citation  { input: { uid: string, citation: object, by: string } }
   backlog attest  { input: { subject: object, claim: object, anchor: object, by: string } }
   backlog claim  { input: { uid: string, by: string, action: 'claim'|'release'|'renew', force?: boolean } }
   backlog create  { input: { title: string, body: string, project: string, component?: string, kind?: string, status?: string, priority?: string, citations?: object[], author?: string, assignee?: string, gitContext?: string, dedupeExcludeUid?: string, by: string, duplicateAction?: 'abort'|'force'|'comment', awaitEmbed?: boolean } }
@@ -113,6 +116,7 @@ Verbs (one-token, --input JSON envelope):
   backlog query  { input: { text?: string, filter?: object, fields?: union[], sort?: 'priority'|'updated'|'created'|'relevance'|'textMatch', direction?: 'asc'|'desc', limit?: number, offset?: number, after?: string, view?: 'list'|'ready'|'graph'|'order'|'stale'|'similar'|'overlap'|'projects'|'components'|'locations'|'kinds'|'catalogs', format?: 'json'|'markdown', overlapAxis?: 'file'|'project'|'component'|'author', overlapUids?: string[], staleAfterMin?: number, catalog?: 'kind'|'status'|'priority'|'relation'|'field'|'error_code'|'location_type'|'verb' } }
   backlog recheck  { input: { attestationUid: string, by: string } }
   backlog relate  { input: { sourceUid: string, targetUid: string, rel: 'relates_to'|'supersedes'|'blocks'|'duplicate_of'|'part_of'|'similar_to', action: 'add'|'remove', by: string } }
+  backlog remove-citation  { input: { uid: string, by: string, reason?: string } }
   backlog report  { input: { filter?: object } }
   backlog rm-location  { input: { uid: string, by: string, reason?: string } }
   backlog rm-project  { input: { uid: string, reason: string, by: string } }
@@ -120,7 +124,7 @@ Verbs (one-token, --input JSON envelope):
   backlog spec-check  { input: { uid: string, token?: string } }
   backlog transition  { input: { uid: string, by: string, toStatus: string, note?: string, citations?: object[], gitContext?: string, override?: object } }
   backlog unobligate  { input: { obligationUid: string, by: string } }
-  backlog update  { input: { uid: string, by: string, title?: string, body?: string, kind?: string, priority?: string, assignee?: string, author?: string, awaitEmbed?: boolean } }
+  backlog update  { input: { uid: string, by: string, title?: string, body?: string, kind?: string, priority?: string, assignee?: string, author?: string, citations?: object[], awaitEmbed?: boolean } }
   backlog upsert-component  { input: { project: string, name: string, path?: string, description?: string, by: string } }
   backlog upsert-location  { input: { component: string, project?: string, locType: 'path'|'url'|'tool', value: string, by: string } }
   backlog upsert-project  { input: { name: string, path?: string, repoUrl?: string, monorepo?: boolean, description?: string, by: string } }
@@ -255,7 +259,7 @@ Each verb is also an MCP tool once `.mcp.json` wires the server, named
 `backlog_spec_append`, `backlog_spec_check`, `backlog_transition`,
 `backlog_unobligate`, `backlog_update`, `backlog_upsert_component`,
 `backlog_upsert_location`, `backlog_upsert_project`, plus the un-namespaced
-`batch_action` — 27 verbs + `batch`.
+`batch_action` — 29 verbs + `batch`.
 
 The tool list a session sees is the MCP **server process's** build, which can
 lag the CLI: a long-lived `serve` started before a verb was mounted does not
@@ -414,6 +418,38 @@ $ adhd-backlog backlog update --input '{"uid":"a61ff0b6-…","by":"claude:1","bo
 
 $ adhd-backlog backlog get --input '{"uid":"a61ff0b6-…"}'
 {"ok":false,"error":{"code":"conflict","message":"Issue \"a61ff0b6-…\" was superseded by a body edit and is no longer the live issue; it now lives under \"e3b32183-…\"","details":{"retryable":false}}}
+```
+
+**Add or remove a single citation.** `add-citation` attaches one citation to an
+existing issue (a `citation` node + a `has_citation` edge + an audit row, in one
+transaction) and returns the citation's own `uid`. `remove-citation` retires one
+by that `uid` (never by re-specifying `(file, lines)`) and leaves the issue's
+`uid` untouched:
+
+```
+$ adhd-backlog backlog add-citation --input '{"uid":"a61ff0b6-…","by":"claude:1","citation":{"file":"packages/auth/src/index.ts","lines":"1-1"}}'
+{"ok":true,"data":{"uid":"c1e2f3a4-…","issueUid":"a61ff0b6-…","citation":{"uid":"c1e2f3a4-…","file":"packages/auth/src/index.ts","lines":"1-1","sha":"9f2c…","at":"…"}}}
+
+$ adhd-backlog backlog remove-citation --input '{"uid":"c1e2f3a4-…","by":"claude:1","reason":"superseded by a rewrite"}'
+{"ok":true,"data":{"uid":"c1e2f3a4-…","invalidated":true}}
+```
+
+`update` carries a **desired citation set** as a diff: it adds what's new and
+removes what's gone against the live set, inside one transaction. It never mints
+a new issue `uid` — only a `body` edit supersedes:
+
+```
+$ adhd-backlog backlog update --input '{"uid":"a61ff0b6-…","by":"claude:1","citations":[{"file":"packages/auth/src/index.ts","lines":"1-1"}]}'
+{"ok":true,"data":{"uid":"a61ff0b6-…","changed":["citations"]}}
+```
+
+**Cite a branch-only file with `revision`.** A citation whose `file` exists only
+on an unmerged branch is unreadable from the working tree; pin it to the branch
+and the sha is resolved from `git show <revision>:<path>` instead:
+
+```
+$ adhd-backlog backlog add-citation --input '{"uid":"a61ff0b6-…","by":"claude:1","citation":{"file":"packages/auth/src/index.ts","revision":"feat/auth"}}'
+{"ok":true,"data":{"uid":"c1e2f3a4-…","issueUid":"a61ff0b6-…","citation":{"uid":"c1e2f3a4-…","file":"packages/auth/src/index.ts","revision":"feat/auth","sha":"9f2c…","at":"…"}}}
 ```
 
 **Move an issue to a new status.** A terminal `toStatus` REQUIRES `citations`

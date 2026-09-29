@@ -43,6 +43,7 @@ import type {
 } from '../write/obligation.js';
 import { BacklogValidationError } from '../write/errors.js';
 import { nowISO } from '../write/tx.js';
+import { citationFromNode } from '../citation.js';
 import { readRevision } from '../write/revision.js';
 import {
   getIncomingEdges,
@@ -136,17 +137,17 @@ async function resolveCitations(
   );
   if (edges.length === 0) return [];
   const nodes = await graph.getNodesByIds(edges.map((e) => e.dst));
-  return nodes.map((n) => ({
-    uid: n.uid,
-    file:
-      typeof n.metadata?.target === 'string' ? n.metadata.target : n.name ?? '',
-    lines: typeof n.metadata?.line === 'string' ? n.metadata.line : undefined,
-    context: n.content || undefined,
-    symbol:
-      typeof n.metadata?.symbol === 'string' ? n.metadata.symbol : undefined,
-    sha: typeof n.metadata?.sha === 'string' ? n.metadata.sha : 'unverified',
-    at: typeof n.metadata?.at === 'string' ? n.metadata.at : n.tCreated,
-  }));
+  // The ONE decoder for the persisted citation node (`../citation.ts`) — the
+  // read projection can never drift from the write encoding.
+  return nodes.map((n) =>
+    citationFromNode({
+      uid: n.uid,
+      name: n.name,
+      content: n.content,
+      metadata: n.metadata,
+      tCreated: n.tCreated,
+    })
+  );
 }
 
 async function resolveNotes(

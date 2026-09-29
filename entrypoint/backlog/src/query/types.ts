@@ -19,6 +19,9 @@ import type {
   IObligationSeverity,
   IPredicate,
 } from '../write/obligation.js';
+// The ONE citation contract. `../citation.js` is a zero-import leaf, so this
+// type-only edge adds no runtime/startup cost to the query layer.
+import type { ICitationRecord } from '../citation.js';
 // Type-only (erased at runtime) — the token-compare freshness verdict lives
 // with its ladder in `spec-staleness.ts`; the card only projects it.
 import type { SpecFreshness } from './spec-staleness.js';
@@ -138,24 +141,18 @@ export const DEFAULT_ISSUE_CARD_FIELDS: readonly IIssuePlainField[] = [
   'priority',
 ];
 
-/** A citation, projected for read (mirrors the write layer's `ICitationInput` shape plus the server-computed `sha`). */
-export interface IIssueCitation {
-  uid: string;
-  file: string;
-  lines?: string;
-  /**
-   * Free-text prose for this citation (the write layer's `ICitationInput.context`).
-   * NOT the item's disclosure-contract git context — that is ITEM-level
-   * provenance and lives on {@link IIssueCard.gitContext}, a sibling of
-   * `assignee`, rendered once at the head of the `Citations:` block. This
-   * per-citation `context` is never rendered by `markdown.ts` and cannot carry
-   * the git context.
-   */
-  context?: string;
-  symbol?: string;
-  sha: string;
-  at: string;
-}
+/**
+ * A citation, projected for read — the ONE citation contract
+ * (`../citation.ts`'s `ICitationRecord`: `ICitation` plus the server-computed
+ * `uid`/`sha`/`at` and the persisted `target_type`) with no re-declaration
+ * here. `context` is the per-citation free-text prose (the contract's
+ * `context`, persisted on the node's `content` column); it is NOT the item's
+ * disclosure-contract git context, which is ITEM-level provenance on
+ * {@link IIssueCard.gitContext} and rendered once at the head of the block.
+ * `revision`, when present, names the git revision the target was resolved
+ * against (a revision-pinned citation).
+ */
+export type IIssueCitation = ICitationRecord;
 
 export interface IIssueNote {
   uid: string;

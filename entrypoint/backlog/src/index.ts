@@ -34,6 +34,8 @@ export {
   lookup,
   create,
   update,
+  addCitation,
+  removeCitation,
   transition,
   attest,
   recheck,
@@ -53,6 +55,13 @@ export {
   delete,
 } from './api.js';
 export type { BacklogCtx, IEmbeddingStatusResult } from './api.js';
+export type {
+  IAddCitationInput,
+  IAddCitationOutcome,
+  IRemoveCitationInput,
+  IRemoveCitationOutcome,
+} from './write/citation.js';
+export type { ICitation, ICitationRecord } from './citation.js';
 export type {
   IMergeProjectInput,
   IMergeProjectOutcome,

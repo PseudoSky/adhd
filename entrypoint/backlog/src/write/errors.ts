@@ -880,3 +880,25 @@ export class PreconditionRefusedError extends BacklogWriteError {
     );
   }
 }
+
+/**
+ * `removeCitation` named a uid that is not a LIVE `citation` node — absent,
+ * already removed, or a uid naming a node of a DIFFERENT kind (the "foreign
+ * citation" refusal). Distinct from `IssueNotFoundError` (an `issue` uid) and
+ * `CatalogNotFoundError` (a registry/`catalog` ref) so a caller can branch on
+ * the missing record kind; `E_VALIDATION`, never retryable.
+ *
+ * Declared ATTACHED to `errors.ts`'s end (after every existing export, like
+ * `ObligationUnsatisfiedError`/`OverrideNotPermittedError`/
+ * `PreconditionRefusedError` before it), so this additive change shifts NO
+ * existing line and leaves `CONTRACT.md`'s `(errors.ts:NNN)` anchors
+ * (enforced by `contract-anchors.spec.ts`) true.
+ */
+export class CitationNotFoundError extends BacklogWriteError {
+  readonly code = 'E_VALIDATION' as const;
+  readonly retryable = false;
+
+  constructor(public readonly uid: string) {
+    super(`No live citation found for uid "${uid}"`);
+  }
+}

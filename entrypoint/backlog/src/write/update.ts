@@ -104,6 +104,15 @@
  */
 
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
+import { citationKey, type ICitation } from '../citation.js';
+import {
+  appendCitationTx,
+  assertCitationShasVerifiable,
+  computeCitationShas,
+  readLiveCitationsTx,
+  removeCitationTx,
+} from './citation.js';
+import { resolveSiblingProjectRootsTx } from './citation-path.js';
 import {
   type IResolvedProjectRow,
   mintOrResolveCatalogTx,
@@ -133,6 +142,7 @@ import {
   writeEdgeTx,
   writeNodeTx,
   resolveLiveIssueTx,
+  resolveUidPrefixTx,
 } from './tx.js';
 import { nextRevision } from './revision.js';
 
@@ -154,6 +164,27 @@ export interface IUpdateIssueInput {
   /** catalog agent name/uid; → `touch` + `authored_by` edge rewrite. An unresolved NAME mints; a uid-shaped ref that does not resolve throws `CatalogNotFoundError('agent', ref)`. */
   author?: string;
   /**
+   * The DESIRED set of citations this issue should carry after this call — a
+   * DIFF-EMITTER, never a body rewrite (the architecture verdict): the live
+   * citation set is read inside the SAME `immediate` transaction, citations
+   * present live but absent from `citations` are removed (bi-temporally), and
+   * citations in `citations` but not live are added. Identity for the diff is
+   * `(file, lines, revision)` (§ `citationKey`), never `sha`/`context`.
+   *
+   * Routing a citation change through `body`/`supersede` is FORBIDDEN: that
+   * would mint a new issue uid and violate §1's "uid is the only identity".
+   * When `body` IS also given, the supersede mints the new node first, its
+   * live citations are carried forward, and THIS diff is applied against the
+   * carried-forward set on the new node — still inside the one transaction.
+   *
+   * Each citation's `sha` is computed (and policy-gated, exactly as `create`/
+   * `transition` do) before the transaction opens, so the write lock is never
+   * held across a filesystem/git read. `citations: []` clears every live
+   * citation. Omitted entirely ⇒ citations are untouched (and carried forward
+   * verbatim on a body edit).
+   */
+  citations?: ICitation[];
+  /**
    * §4b/§6.2 — waits for the fire-and-forget on-write embedding round-trip
    * before `update` returns, when `true` and `handle.embedding` is
    * configured. Only meaningful on a BODY-changing call (the `supersede`
@@ -173,7 +204,8 @@ export type IUpdateIssueChangedField =
   | 'kind'
   | 'priority'
   | 'assignee'
-  | 'author';
+  | 'author'
+  | 'citations';
 
 export interface IUpdateIssueOutcome {
   /**
@@ -654,6 +686,7 @@ function computeChangedFields(
   if (input.priority !== undefined) changed.push('priority');
   if (input.assignee !== undefined) changed.push('assignee');
   if (input.author !== undefined) changed.push('author');
+  if (input.citations !== undefined) changed.push('citations');
   return changed;
 }
 
@@ -668,6 +701,7 @@ function assertNoSilentlyDiscardedPatchKeys(
     'priority',
     'assignee',
     'author',
+    'citations',
   ];
   for (const key of patchKeys) {
     if (input[key] !== undefined && !changed.includes(key)) {
@@ -732,10 +766,46 @@ export async function update(
   if (changed.length === 0) {
     throw new InvalidArgumentError(
       'patch',
-      'update requires at least one of title/body/kind/priority/assignee/author'
+      'update requires at least one of title/body/kind/priority/assignee/author/citations'
     );
   }
   assertNoSilentlyDiscardedPatchKeys(input, changed);
+
+  if (input.citations !== undefined) {
+    input.citations.forEach((c, i) =>
+      assertNonBlank(`citations[${i}].file`, c.file)
+    );
+  }
+
+  // The citations DIFF-EMITTER's sha pre-resolve — computed BEFORE the
+  // transaction opens, exactly as `create`/`transition`/`addCitation` do, so
+  // the write lock is never held across a filesystem/git read. The shas index
+  // the SUPPLIED `citations` array. Deliberately NOT gated here: the
+  // `citation_requires_sha` gate is applied IN the transaction, to only the
+  // citations actually being ADDED (`assertCitationShasVerifiable`), so an
+  // issue holding a citation whose file has since vanished can still be
+  // updated — that already-live citation is neither re-added nor re-gated.
+  let citationShas: string[] = [];
+  if (input.citations !== undefined && input.citations.length > 0) {
+    const preIssueRow = await resolveUidPrefixTx(handle.adapter, input.uid, {
+      expectedKind: 'issue',
+    });
+    const preProject = await resolveIssueProjectTx(
+      handle.adapter,
+      preIssueRow.rowid
+    );
+    const prePolicy = resolveProjectPolicy(preProject);
+    const preSiblingRoots = await resolveSiblingProjectRootsTx(
+      handle.adapter,
+      preProject.uid
+    );
+    citationShas = await computeCitationShas(
+      preProject,
+      input.citations,
+      prePolicy.citationAllowedExternalRoots,
+      preSiblingRoots
+    );
+  }
 
   // §4b/§8 AC-4 — captured from inside the transaction closure, read only
   // AFTER `executeWriteTransaction` below resolves (never used to trigger an
@@ -983,6 +1053,56 @@ export async function update(
         newIssueRowid: currentRowid,
         at: now,
       });
+
+      // The citations DIFF-EMITTER. Runs against the CURRENT node
+      // (`currentRowid`): when `body` also changed, the supersede above minted
+      // the new node and `carryForwardResidualEdgesTx` already moved the live
+      // citation edges onto it, so the live set here is the carried-forward
+      // one. Removals first, then additions, so a same-key replace is clean.
+      // NEVER routes through `supersede` — that would mint a new uid (§1).
+      if (input.citations !== undefined) {
+        const desired = input.citations;
+        const live = await readLiveCitationsTx(tx, currentRowid);
+        const liveKeys = new Set(live.map((r) => r.key));
+        // The citations actually being added — gate ONLY these (against the
+        // transaction's own authoritative project/policy), so a live citation
+        // whose file has since vanished is not re-gated. Thrown before any
+        // write, so the gate refusal rolls the whole transaction back.
+        const toAdd: { citation: ICitation; sha: string }[] = [];
+        for (let i = 0; i < desired.length; i += 1) {
+          if (!liveKeys.has(citationKey(desired[i]))) {
+            toAdd.push({ citation: desired[i], sha: citationShas[i] });
+          }
+        }
+        assertCitationShasVerifiable(
+          project,
+          policy,
+          toAdd.map((t) => t.citation),
+          toAdd.map((t) => t.sha),
+          'update'
+        );
+
+        const desiredKeys = new Set(desired.map((c) => citationKey(c)));
+        for (const row of live) {
+          if (!desiredKeys.has(row.key)) {
+            await removeCitationTx(tx, {
+              citationRowid: row.rowid,
+              citationUid: row.uid,
+              at: now,
+              reason: 'removed via update citations diff',
+            });
+          }
+        }
+        for (const entry of toAdd) {
+          await appendCitationTx(tx, handle, {
+            issueRowid: currentRowid,
+            issueUid: currentUid,
+            citation: entry.citation,
+            sha: entry.sha,
+            at: now,
+          });
+        }
+      }
 
       await writeAudit({
         tx,

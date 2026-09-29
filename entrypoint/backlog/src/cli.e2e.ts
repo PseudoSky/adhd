@@ -176,9 +176,10 @@ describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (
   it('every api.ts operation shares the identical prefix (one source file, flat path ⇒ one uniform prefix)', async () => {
     const { operations } = await buildBacklogApigenPackage({} as BacklogCtx);
     const actions = operations.filter((op) => op.kind === 'action');
-    // The mounted surface is EXACTLY api.ts's twenty-seven exported verbs
+    // The mounted surface is EXACTLY api.ts's twenty-nine exported verbs
     // (`get`, `query`, `priorityMatrix`, `partOfRollup`, `openCurve`, `report`,
-    // `lookup`, `create`, `update`, `transition`, `attest`, `recheck`,
+    // `lookup`, `create`, `update`, `addCitation`, `removeCitation`,
+    // `transition`, `attest`, `recheck`,
     // `claim`, `relate`, `move`, `obligate`, `unobligate`,
     // `upsertProject`, `upsertComponent`, `upsertLocation`, `rmLocation`,
     // `mergeProject`, `rmProject`, `delete`, `embeddingStatus`, `specAppend`,
@@ -186,7 +187,7 @@ describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (
     // lower bound, so a widened action count here is real evidence of scope
     // creep onto api.ts's exported surface (see api.ts's own doc comment on why
     // the exported surface IS the mounted surface).
-    expect(actions.length).toBe(27);
+    expect(actions.length).toBe(29);
     const prefix = resolveCommandPrefix(actions);
     for (const op of actions) {
       expect(resolveCommandPrefix([op])).toEqual(prefix);

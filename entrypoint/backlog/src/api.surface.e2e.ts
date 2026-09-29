@@ -53,6 +53,16 @@ const EXPECTED = [
   { id: 'backlog/create', mcp: 'backlog_create', cli: 'backlog create' },
   { id: 'backlog/update', mcp: 'backlog_update', cli: 'backlog update' },
   {
+    id: 'backlog/add-citation',
+    mcp: 'backlog_add_citation',
+    cli: 'backlog add-citation',
+  },
+  {
+    id: 'backlog/remove-citation',
+    mcp: 'backlog_remove_citation',
+    cli: 'backlog remove-citation',
+  },
+  {
     id: 'backlog/transition',
     mcp: 'backlog_transition',
     cli: 'backlog transition',

@@ -282,8 +282,8 @@ and `Unknown option: --<field>. Available: --input`. (`--help` prints a
 "per-field flags are also accepted" footer line; it is generated boilerplate
 that does not hold for these commands — `--input` is the only option they
 accept. The special commands `serve`, `install-skill`, and `search` are the
-exception: they take argv flags and no `--input`.) Twenty-eight operations (the
-27 verbs plus `batch`):
+exception: they take argv flags and no `--input`.) Thirty operations (the
+29 verbs plus `batch`):
 
 | Verb              | CLI                             | MCP tool                   |
 | ----------------- | ------------------------------- | -------------------------- |
@@ -297,6 +297,8 @@ exception: they take argv flags and no `--input`.) Twenty-eight operations (the
 | `lookup`          | `adhd-backlog lookup`           | `backlog_lookup`           |
 | `create`          | `adhd-backlog create`           | `backlog_create`           |
 | `update`          | `adhd-backlog update`           | `backlog_update`           |
+| `addCitation`     | `adhd-backlog add-citation`     | `backlog_add_citation`     |
+| `removeCitation`  | `adhd-backlog remove-citation`  | `backlog_remove_citation`  |
 | `transition`      | `adhd-backlog transition`       | `backlog_transition`       |
 | `attest`          | `adhd-backlog attest`           | `backlog_attest`           |
 | `recheck`         | `adhd-backlog recheck`          | `backlog_recheck`          |
@@ -319,8 +321,9 @@ exception: they take argv flags and no `--input`.) Twenty-eight operations (the
 `--help` prints these as `backlog <verb>`; the CLI also accepts the bare
 `adhd-backlog <verb>` form shown above, and accepts the explicit namespace
 prefix at any position. `get`/`query`/`lookup`/`embedding-status` and the four
-stats/rollup ops are reads. `create`/`update`/`transition`/`claim`/`relate`/
-`move`/`delete` mutate one issue; `attest`/`recheck` record anchored evidence,
+stats/rollup ops are reads. `create`/`update`/`add-citation`/`remove-citation`/
+`transition`/`claim`/`relate`/`move`/`delete` mutate one issue;
+`attest`/`recheck` record anchored evidence,
 and `obligate`/`unobligate` declare or retire a typed requirement that gates a
 transition ([SKILL.md §4](skill/SKILL.md)); `specAppend`/`specCheck` advance
 and verify a ticket's spec revisions, and a revision is annotated through
@@ -407,11 +410,20 @@ code alone.
 
 ### Citations & git context
 
-A citation is `{ file, lines?, context?, symbol? }`. Pass `citations` on
-`create`, or on the `transition` that moves an issue into a terminal status
-when the project's policy requires it. `file` must name a file, not a
-directory: a directory target is rejected as a non-retryable `validation`
-error.
+A citation is `{ file, lines?, context?, symbol?, blastRadius?, revision? }`.
+Pass `citations` on `create`, or on the `transition` that moves an issue into a
+terminal status when the project's policy requires it. Add one to an existing
+issue with `add-citation` and retire one with `remove-citation` (addressed by
+the citation's **own uid**, never by re-specifying `(file, lines)`). `update`
+carries `citations` as a **diff-emitter** — it adds what's new and removes what's
+gone against the live set, in the same transaction, and never mints a new issue
+uid (only a `body` edit supersedes). `file` must name a file, not a directory: a
+directory target is rejected as a non-retryable `validation` error.
+
+Pin a citation to a git revision with `revision` (a branch, tag, or sha) to cite
+a file that exists **only on an unmerged branch** — the target is read from
+`git show <revision>:<path>` rather than the working tree, so the sha is a real
+content hash even though the file is not checked out.
 
 The item-level **`gitContext`** is separate from a citation's own `context`:
 it records the repo disclosure contract's `<active git context>` — the first
@@ -423,7 +435,8 @@ the item's `Citations:` block. Omit it and nothing is stored.
 ### Which build these docs describe
 
 These docs describe `entrypoint/backlog/dist/index.js` built from the revision
-captured here, which mounts 27 verbs — including the obligation
+captured here, which mounts 29 verbs — including the citation
+(`add-citation`/`remove-citation`), obligation
 (`obligate`/`unobligate`), spec-pointer (`spec-append`/`spec-check`),
 and catalog (`query --input '{"view":"catalogs"}'`) surfaces. A **globally
 installed** `adhd-backlog` may be an older build (it is whatever was last

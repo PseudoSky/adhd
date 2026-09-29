@@ -170,12 +170,24 @@ note         kind='note'
   meta: { author, text, at }
 
 citation     kind='citation'
-  meta: { target, target_type, sha, line, at }
+  meta: { target, target_type, sha, line, at, symbol, blastRadius, revision }
   -- content-addressed: sha is sha256 of the cited content at citation time.
   -- Verification = re-hash the target and compare. When no path is known
   -- for the owning project, or the target no longer resolves, sha is the
   -- fixed sentinel string "unverified" — never a fabricated hash, never a
   -- missing field.
+  -- The persisted keys are the graph-native ENDS of the ONE citation
+  -- contract (`src/citation.ts`): `target`/`line` in the node are `file`/
+  -- `lines` in the contract, bridged only by citationNodeMetadata /
+  -- citationFromNode — never at a call site. `revision` (non-null) names
+  -- the git revision the target was resolved against (`git show
+  -- <revision>:<path>`) rather than the working tree, so evidence that
+  -- exists only on an unmerged branch is citable.
+  -- A citation is added after the fact by `addCitation` (mint node + edge +
+  -- audit) and retired by `removeCitation` (invalidate the node AND its
+  -- `has_citation` edge by the citation's OWN uid — never a `(target,line)`
+  -- composite). `update` carries a DESIRED citation set as a diff-emitter
+  -- against the live set, never through a body rewrite (§5).
 
 transition   kind='transition'
   meta: { from_status, to_status, agent, note, sha, at }

@@ -72,6 +72,7 @@ import {
   AnchorLocatorInvalidError,
   AttestationNotFoundError,
   CatalogNotFoundError,
+  CitationNotFoundError,
   CitationRequiredError,
   CitationUnverifiableError,
   ClaimHeldError,
@@ -124,6 +125,16 @@ import {
   type IDuplicateScanHandle,
 } from './write/create-issue.js';
 import { update as updateIssueOp } from './write/update.js';
+import {
+  addCitation as addCitationOp,
+  removeCitation as removeCitationOp,
+} from './write/citation.js';
+import type {
+  IAddCitationInput,
+  IAddCitationOutcome,
+  IRemoveCitationInput,
+  IRemoveCitationOutcome,
+} from './write/citation.js';
 import { transition as transitionIssueOp } from './write/transition.js';
 import { claim as claimIssueOp } from './write/claim.js';
 import { relate as relateIssueOp } from './write/relate.js';
@@ -445,6 +456,7 @@ const ERROR_CLASS_TO_ENVELOPE_CODE: ReadonlyArray<
   [IssueNotFoundError, 'item_not_found'],
   [AttestationNotFoundError, 'item_not_found'],
   [ObligationNotFoundError, 'item_not_found'],
+  [CitationNotFoundError, 'item_not_found'],
   [AmbiguousReferenceError, 'ambiguous_reference'],
   [CatalogNotFoundError, 'not_found'],
   [InvalidArgumentError, 'invalid_argument'],
@@ -822,6 +834,37 @@ export async function update(
 ): Promise<IOutcomeEnvelope<IUpdateIssueOutcome>> {
   return envelope(async () =>
     updateIssueOp(await writeHandle(ctx, { needsSemantic: true }), input)
+  );
+}
+
+/**
+ * Add one first-class citation to an existing issue.
+ *
+ * Mints a `citation` node + its `has_citation` edge + an audit row, atomically.
+ * The citation may pin a git `revision` to cite evidence that exists only on an
+ * unmerged branch. `update` carries citations as a diff; this is the single-add
+ * form.
+ */
+export async function addCitation(
+  ctx: BacklogCtx,
+  input: IAddCitationInput
+): Promise<IOutcomeEnvelope<IAddCitationOutcome>> {
+  return envelope(async () =>
+    addCitationOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
+}
+
+/**
+ * Soft-remove one citation by the citation's OWN `uid` (never a
+ * `(target,line)` re-specification). Bi-temporally invalidates the citation
+ * node and its `has_citation` edge; the issue's uid is untouched.
+ */
+export async function removeCitation(
+  ctx: BacklogCtx,
+  input: IRemoveCitationInput
+): Promise<IOutcomeEnvelope<IRemoveCitationOutcome>> {
+  return envelope(async () =>
+    removeCitationOp(await writeHandle(ctx, { needsSemantic: false }), input)
   );
 }
 

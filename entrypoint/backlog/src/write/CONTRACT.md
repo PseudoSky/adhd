@@ -824,7 +824,99 @@ surface.
 
 ---
 
-## `errors.ts` (21 exports)
+## `citation.ts` (14 exports) — first-class citation writes
+
+The ONE copy of §8.5's citation-sha rule (`create`/`transition`/`update`/
+`addCitation` all run it) and the tx-threaded primitives `addCitation` /
+`removeCitation` are built from. A citation is a `kind='citation'` node joined
+by a `has_citation` edge; the ONE contract lives in the `citation.ts` leaf
+(`src/citation.ts`), which this module encodes to / decodes from.
+
+### `computeCitationSha(project, file, revision, allowedExternalRoots, siblingRoots?)` — function (`citation.ts:248`)
+
+```ts
+export async function computeCitationSha(
+  project: IResolvedProjectRow,
+  file: string,
+  revision: string | undefined,
+  allowedExternalRoots: readonly string[],
+  siblingRoots?: readonly string[]
+): Promise<string>;
+```
+
+§8.5's two-branch rule. Branch 1: a path-less project degrades to the
+`"unverified"` sentinel. Branch 2a: a `revision` resolves the target from
+`git show <revision>:<path>` (so a branch-only file is citable). Branch 2b: the
+working-tree read, canonical containment against the project root ∪
+`allowedExternalRoots`.
+
+### `computeCitationShas(project, citations, allowedExternalRoots, siblingRoots?)` — function (`citation.ts:287`)
+
+The filesystem/git half of the pre-resolve, with NO policy gate — callable on
+its own by `update`'s diff-emitter, which defers the gate until it knows which
+citations are actually being added.
+
+### `assertCitationShasVerifiable(project, policy, citations, shas, verb)` — function (`citation.ts:322`)
+
+Enforce `citationRequiresSha` over an already-computed sha list. Only where
+verification is possible (a known project `path`) is an `"unverified"` sha a
+hard `CitationUnverifiableError`; a path-less project records `sha:"unverified"`
+and logs the waiver.
+
+### `resolveCitationShas(project, policy, citations, siblingRoots, verb)` — function (`citation.ts:350`)
+
+`computeCitationShas` + `assertCitationShasVerifiable` — compute AND gate every
+citation, in order.
+
+### `appendCitationTx(tx, handle, params)` — function (`citation.ts:372`)
+
+Mint ONE `citation` node + its `has_citation` edge against the issue, inside the
+caller's open `tx`. Never writes an audit row (the calling verb owns it).
+
+### `readLiveCitationsTx(tx, issueRowid)` — function (`citation.ts:421`)
+
+The LIVE citations currently attached to an issue, each with its `citationKey`
+(`file` + `lines`) — the "live set" `update`'s diff compares a desired set to.
+
+### `removeCitationTx(tx, params)` — function (`citation.ts:452`)
+
+Bi-temporally invalidate ONE citation: its node (merged `invalidatedAt` /
+`invalidatedReason`) AND its `has_citation` edge. Never writes an audit row.
+
+### `IAddCitationInput` — interface (`citation.ts:521`)
+
+```ts
+export interface IAddCitationInput {
+  uid: string;
+  citation: ICitation;
+  by: string;
+}
+```
+
+### `addCitation(handle, input)` — function (`citation.ts:554`)
+
+One `immediate` transaction: resolve the issue → mint the citation node + edge →
+audit. The sha is computed before the transaction opens.
+
+### `IRemoveCitationInput` — interface (`citation.ts:626`)
+
+```ts
+export interface IRemoveCitationInput {
+  uid: string;
+  by: string;
+  reason?: string;
+}
+```
+
+### `removeCitation(handle, input)` — function (`citation.ts:653`)
+
+One `immediate` transaction: resolve the citation by its OWN uid → invalidate
+the node + edge → audit. `CitationNotFoundError` when the uid is not a live
+citation (absent, already removed, or a foreign kind).
+
+---
+
+## `errors.ts` (22 exports)
 
 ### `WriteErrorCode` — type (`errors.ts:41`)
 
@@ -1218,6 +1310,22 @@ a refusing obligation is not permitted — the actor is not in the obligation's
 recorded reason (DESIGN §2 Primitive 3), never a configurable boolean. Maps to
 `precondition_failed`; never retryable. **Additive (C5)** — appended after every
 pre-existing export so no `CONTRACT.md` anchor shifted.
+
+### `CitationNotFoundError(uid)` — class (`errors.ts:897`)
+
+```ts
+export class CitationNotFoundError extends BacklogWriteError {
+  readonly code: 'E_VALIDATION';
+  readonly retryable: false;
+  constructor(public readonly uid: string);
+}
+```
+
+Guarantees: thrown by `removeCitation` when the uid is not a LIVE `citation`
+node — absent, already removed, or a uid naming a node of a different kind (the
+"foreign citation" refusal). Maps to the envelope code `item_not_found`.
+**Additive** — appended after every pre-existing export so no existing
+`CONTRACT.md` anchor shifted.
 
 ---
 

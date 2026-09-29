@@ -79,35 +79,24 @@
  * also require for OTHER verbs).
  */
 
-import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
-import {
-  assertGitContextWithinCap,
-  type ICitationInput,
-} from './create-issue.js';
+import { assertGitContextWithinCap } from './create-issue.js';
+import { type ICitation } from '../citation.js';
+import { appendCitationTx, resolveCitationShas } from './citation.js';
 import {
   type IResolvedProjectRow,
   mintOrResolveStatusTx,
-  projectHasKnownPath,
   resolveEdgeKindTx,
   resolveProjectPolicy,
 } from './catalog.js';
 import { writeAudit } from './audit.js';
-import {
-  isMissingPathError,
-  resolveCitationTarget,
-  resolveSiblingProjectRootsTx,
-  toolOwnedCitationRoots,
-} from './citation-path.js';
+import { resolveSiblingProjectRootsTx } from './citation-path.js';
 import {
   CitationRequiredError,
-  CitationUnverifiableError,
   ClaimHeldError,
   InvalidArgumentError,
   NoteRequiredError,
   ObligationUnsatisfiedError,
-  citationReadError,
   assertNotBareRoleLiteral,
 } from './errors.js';
 import {
@@ -138,7 +127,7 @@ export interface ITransitionInput {
   /** REQUIRED unless `project_policy.transition_requires_note` is `false` (default `true`) — optional in the type; enforced at runtime (`NoteRequiredError`), never at the TS level. */
   note?: string;
   /** REQUIRED (≥1) when `project_policy.citation_required` is `true` AND `toStatus` resolves to a terminal status. Written as `citation` nodes + `has_citation` edges exactly like `create`'s own citations. */
-  citations?: ICitationInput[];
+  citations?: ICitation[];
   /**
    * The item-level disclosure-contract git context — the SAME plain metadata
    * scalar `create`'s own `gitContext` field writes (repo `AGENTS.md`'s "Cite
@@ -243,50 +232,6 @@ async function resolveIssueProjectTx(
   };
 }
 
-/**
- * §8.5's two-branch citation-sha rule, identical to `create-issue.ts`'s own
- * (private, unexported) `computeCitationSha` — duplicated here per this
- * package's established per-file convention (see this file's own doc comment
- * on {@link resolveIssueProjectTx}).
- *
- * `allowedExternalRoots` is the project policy's typed carve-out (BUG
- * c6d35272): in-project resolution stays the DEFAULT, and a target outside the
- * root is accepted only under an allowlisted external root, decided by
- * canonical (symlink-resolved) containment in `citation-path.ts`'s
- * {@link resolveCitationTarget}. The read itself happens only after
- * acceptance; ENOENT/ENOTDIR degrades to `'unverified'`, EISDIR is a
- * `CitationTargetIsDirectoryError`, and any other errno is a real
- * `WriteIOError` (same §4c taxonomy as `create-issue.ts`, via `errors.ts`'s
- * `citationReadError`, 56a2133e).
- */
-async function computeCitationSha(
-  project: IResolvedProjectRow,
-  file: string,
-  allowedExternalRoots: readonly string[],
-  siblingRoots: readonly string[] = []
-): Promise<string> {
-  if (!projectHasKnownPath(project)) return 'unverified';
-
-  try {
-    const { accepted, candidate } = await resolveCitationTarget(
-      project.metadata.path,
-      file,
-      [
-        ...allowedExternalRoots,
-        ...toolOwnedCitationRoots(),
-        ...siblingRoots,
-      ]
-    );
-    if (!accepted) return 'unverified';
-
-    const content = await readFile(candidate);
-    return createHash('sha256').update(content).digest('hex');
-  } catch (err) {
-    if (isMissingPathError(err)) return 'unverified';
-    throw citationReadError(err, file);
-  }
-}
-
 function enforceAllowedStatus(allowed: readonly string[], value: string): void {
   if (allowed.length > 0 && !allowed.includes(value)) {
     throw new InvalidArgumentError(
@@ -370,9 +315,10 @@ export async function transition(
 
   // Pre-transaction citation-sha computation, skipped entirely when there are
   // no citations (the common case never pays for a project/policy resolve it
-  // doesn't need) — mirrors `create-issue.ts`'s own "never hold the write
-  // lock across `fs.readFile`" discipline (§4c/§4b).
-  const citationShas: string[] = [];
+  // doesn't need) — the SAME shared rule `createIssue`/`addCitation` run, never
+  // a second copy, and never holding the write lock across a filesystem read
+  // (§4c/§4b).
+  let citationShas: string[] = [];
   if (citations.length > 0) {
     // Accepts an exact uid or a UNIQUE uid prefix — the same reference shape
     // `resolveLiveIssueTx` accepts inside the transaction below, so a caller
@@ -391,35 +337,13 @@ export async function transition(
       handle.adapter,
       preProject.uid
     );
-    for (const citation of citations) {
-      const sha = await computeCitationSha(
-        preProject,
-        citation.file,
-        prePolicy.citationAllowedExternalRoots,
-        preSiblingRoots
-      );
-      // Same contract as `create-issue.ts`'s identical gate: enforce
-      // `citationRequiresSha` only where verification is POSSIBLE (a project
-      // with a known `path`). A path-less project records `sha:"unverified"`
-      // verbatim; a path-present project citing a missing file — or a target
-      // outside the project root and every `citationAllowedExternalRoots`
-      // entry (BUG c6d35272) — still hard-fails, and the error names the roots.
-      if (sha === 'unverified' && prePolicy.citationRequiresSha) {
-        if (projectHasKnownPath(preProject)) {
-          throw new CitationUnverifiableError(
-            citation.file,
-            prePolicy.citationAllowedExternalRoots
-          );
-        }
-        // Observability for the deliberate path-less waiver (DEBT a934e089) —
-        // same rationale as `create-issue.ts`'s identical log; never a second
-        // audit row (SPEC §4a's one-audit-node-per-state-change contract).
-        console.error(
-          `transition: citation_requires_sha waived for path-less project uid="${preProject.uid}" — cannot verify citation "${citation.file}", persisting sha:"unverified" (set the project's metadata.path to make citation_requires_sha enforceable).`
-        );
-      }
-      citationShas.push(sha);
-    }
+    citationShas = await resolveCitationShas(
+      preProject,
+      prePolicy,
+      citations,
+      preSiblingRoots,
+      'transition'
+    );
   }
 
   return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
@@ -575,39 +499,17 @@ export async function transition(
       typePolicy: handle.typePolicy,
     });
 
-    if (citations.length > 0) {
-      const hasCitationRule = await resolveEdgeKindTx(tx, 'has_citation');
-      for (let i = 0; i < citations.length; i += 1) {
-        const citation = citations[i];
-        const sha = citationShas[i];
-        const citationNode = await writeNodeTx(tx, {
-          at: now,
-          kind: 'citation',
-          name: citation.file,
-          content: citation.context ?? citation.file,
-          metadata: {
-            target: citation.file,
-            target_type: 'path',
-            sha,
-            line: citation.lines ?? null,
-            at: now,
-            symbol: citation.symbol ?? null,
-            blastRadius: citation.blastRadius ?? null,
-          },
-        });
-        await writeEdgeTx(tx, {
-          at: now,
-          srcRowid: issueRow.rowid,
-          srcUid: issueRow.uid,
-          srcKind: 'issue',
-          dstRowid: citationNode.rowid,
-          dstUid: citationNode.uid,
-          dstKind: 'citation',
-          rel: 'has_citation',
-          rule: hasCitationRule,
-          typePolicy: handle.typePolicy,
-        });
-      }
+    // Each citation is the SAME node+edge write `addCitation` performs, via
+    // the SAME helper. The sha was computed and policy-gated before this
+    // transaction opened.
+    for (let i = 0; i < citations.length; i += 1) {
+      await appendCitationTx(tx, handle, {
+        issueRowid: issueRow.rowid,
+        issueUid: issueRow.uid,
+        citation: citations[i],
+        sha: citationShas[i],
+        at: now,
+      });
     }
 
     // C5: record which attestation satisfied which obligation — one live

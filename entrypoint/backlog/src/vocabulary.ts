@@ -56,6 +56,8 @@ export const BACKLOG_VERBS: readonly string[] = [
   'lookup',
   'create',
   'update',
+  'add-citation',
+  'remove-citation',
   'transition',
   'attest',
   'recheck',

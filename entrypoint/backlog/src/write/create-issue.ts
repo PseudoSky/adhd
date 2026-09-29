@@ -12,8 +12,6 @@
  * `writeNode`/`writeEdge`/`findOrCreateNode` themselves (§4c).
  */
 
-import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import type { GraphBackend } from '@adhd/sox-graph-store';
 import type {
@@ -26,7 +24,6 @@ import {
   mintOrResolveCatalogTx,
   mintOrResolveStatusTx,
   nextPriorityRankTx,
-  projectHasKnownPath,
   resolveComponentTx,
   resolveDefaultComponentTx,
   resolveEdgeKindTx,
@@ -34,20 +31,15 @@ import {
   resolveProjectTx,
 } from './catalog.js';
 import { writeAudit } from './audit.js';
-import {
-  isMissingPathError,
-  resolveCitationTarget,
-  resolveSiblingProjectRootsTx,
-  toolOwnedCitationRoots,
-} from './citation-path.js';
+import { resolveSiblingProjectRootsTx } from './citation-path.js';
+import { type ICitation } from '../citation.js';
+import { appendCitationTx, resolveCitationShas } from './citation.js';
 import {
   composeEmbedText,
   scheduleIssueEmbedding,
 } from './embedding-observer.js';
 import {
-  CitationUnverifiableError,
   InvalidArgumentError,
-  citationReadError,
   assertNotBareRoleLiteral,
 } from './errors.js';
 import {
@@ -78,19 +70,12 @@ import {
 } from './similarity-scan.js';
 
 /**
- * A filing-time citation (§6.3.2, carried forward from the established `Citation` shape in
- * spirit — `blastRadius` stays best-effort, `model.ts:110-120`). Named
- * `ICitationInput` here (not the spec's bare `Citation`) per this repo's
- * "prefix shared/data interfaces with `I`" convention.
+ * A filing-time citation. `ICitation` — the ONE contract, defined in
+ * `../citation.ts` — is imported here and re-exported below so an existing
+ * importer of `ICitationInput` from this module keeps compiling; the shape and
+ * the persisted codec live in exactly one place (`../citation.ts`), never here.
  */
-export interface ICitationInput {
-  file: string;
-  lines?: string;
-  context?: string;
-  symbol?: string;
-  /** Best-effort enrichment payload — not re-specified here; carried through verbatim into the citation node's metadata. */
-  blastRadius?: unknown;
-}
+export type { ICitation, ICitationInput } from '../citation.js';
 
 export interface ICreateIssueInput {
   title: string;
@@ -105,7 +90,7 @@ export interface ICreateIssueInput {
   status?: string;
   /** catalog name or uid; genuinely OPTIONAL — §6.3.2 states minting behavior for a GIVEN unresolved name but, unlike `kind`/`status`, states no fallback for the omitted case; omitted therefore writes no `has_priority` edge at all (a deliberate reading of §6.3.2's more precise per-field text over §4's summary prose — see this project's own README/CHANGELOG note on this slice for the citation). An unresolved NAME mints with `rank` = one past the current max (lowest urgency); a uid-shaped ref that does not resolve throws. */
   priority?: string;
-  citations?: ICitationInput[];
+  citations?: ICitation[];
   /** catalog agent name/uid; defaults to `by`. An unresolved NAME mints; a uid-shaped ref that does not resolve throws (§6.1). */
   author?: string;
   /** Plain metadata scalar (§6.2) — no edge. */
@@ -446,69 +431,6 @@ export function assertGitContextWithinCap(value: string | undefined): void {
   }
 }
 
-/**
- * §8.5's two-branch citation-sha rule, run identically at live-write time
- * (§8.5: "this is also the canonical rule for computing citation.sha on the
- * LIVE write path").
- *
- * Branch 1: a PATH-LESS project cannot content-address anything, so every
- * citation degrades to the `'unverified'` sentinel up front.
- *
- * Branch 2: the target must resolve (canonically) within the project root OR
- * within one of the project policy's `citationAllowedExternalRoots` — see
- * `citation-path.ts`'s {@link resolveCitationTarget}. In-project resolution
- * stays the DEFAULT; the external roots are a TYPED, per-project carve-out
- * (BUG c6d35272) that makes deliberately-out-of-root evidence citable without
- * ever opening the read surface to an arbitrary absolute path. Because the
- * check canonicalizes (realpath) BOTH the candidate and every root, a `..`
- * traversal cannot widen the surface, and a symlink inside the root that
- * points outside it is rejected (the sibling defect c6d90ddf, closed here).
- * A target outside every root resolves to `'unverified'`, identically to a
- * genuinely missing file — `createIssue`'s policy gate below decides whether
- * to reject it, and the read is never performed for it.
- *
- * The only filesystem read happens AFTER acceptance, against the canonical
- * candidate. §4c's error taxonomy is preserved exactly (never a parallel
- * classification): "the cited file genuinely is not there" is the ONLY case
- * that degrades to `'unverified'` — ENOENT (missing path segment) and ENOTDIR
- * (a path segment that should be a directory is a file, so the target cannot
- * exist) both mean exactly that. `EISDIR` (the target is a directory) is a
- * caller mistake and surfaces as `CitationTargetIsDirectoryError`
- * (`E_VALIDATION`, 56a2133e). Any other failure (EACCES, EPERM, EMFILE,
- * ELOOP, …) — whether from `realpath` or the `readFile` — is a REAL I/O
- * failure, not a "file doesn't exist" signal, and surfaces as `WriteIOError`
- * (raw errno message attached and logged) rather than silently masquerading
- * as an absent citation. Both mappings live in `errors.ts`'s
- * `citationReadError`.
- */
-async function computeCitationSha(
-  project: IResolvedProjectRow,
-  file: string,
-  allowedExternalRoots: readonly string[],
-  siblingRoots: readonly string[] = []
-): Promise<string> {
-  if (!projectHasKnownPath(project)) return 'unverified';
-
-  try {
-    const { accepted, candidate } = await resolveCitationTarget(
-      project.metadata.path,
-      file,
-      [
-        ...allowedExternalRoots,
-        ...toolOwnedCitationRoots(),
-        ...siblingRoots,
-      ]
-    );
-    if (!accepted) return 'unverified';
-
-    const content = await readFile(candidate);
-    return createHash('sha256').update(content).digest('hex');
-  } catch (err) {
-    if (isMissingPathError(err)) return 'unverified';
-    throw citationReadError(err, file);
-  }
-}
-
 function enforceAllowedSet(
   allowed: readonly string[],
   field: 'kind' | 'status',
@@ -618,7 +540,7 @@ async function resolveDedupeExcludeIds(
 async function filingStructuralContext(
   graph: GraphBackend,
   project: IResolvedProjectRow,
-  citations: readonly ICitationInput[],
+  citations: readonly ICitation[],
   componentRef: string | undefined
 ): Promise<{ citationTokens: string[]; componentPath?: string }> {
   const citationTokens: string[] = [];
@@ -736,7 +658,7 @@ async function scanForDuplicates(
   policy: IProjectPolicy,
   title: string,
   body: string,
-  citations: readonly ICitationInput[],
+  citations: readonly ICitation[],
   componentRef: string | undefined,
   dedupeExcludeUid?: string
 ): Promise<IDuplicateScanOutcome> {
@@ -909,47 +831,19 @@ export async function createIssue(
     handle.adapter,
     preResolvedProject.uid
   );
-  const citationShas: string[] = [];
-  // The `citationRequiresSha` gate applies only where verification is
-  // POSSIBLE: a project with a known `path`. A path-less project can never
-  // hash a citation (every target degrades to `"unverified"` at
-  // `computeCitationSha`'s first branch), so the gate has nothing to reject —
-  // the citation is accepted and `sha:"unverified"` is persisted verbatim,
-  // exactly as the ETL's own `computeCitationSha` already does. The hard-fail
-  // is preserved for a path-PRESENT project whose cited file is missing (or
-  // whose CANONICAL path lies outside the project root AND every
-  // `citationAllowedExternalRoots` entry — the carve-out, BUG c6d35272):
-  // each still resolves to `"unverified"` and still throws, and the message
-  // names the allowed roots.
-  for (const citation of citations) {
-    const sha = await computeCitationSha(
-      preResolvedProject,
-      citation.file,
-      preResolvedPolicy.citationAllowedExternalRoots,
-      preSiblingRoots
-    );
-    if (sha === 'unverified' && preResolvedPolicy.citationRequiresSha) {
-      if (projectHasKnownPath(preResolvedProject)) {
-        throw new CitationUnverifiableError(
-          citation.file,
-          preResolvedPolicy.citationAllowedExternalRoots
-        );
-      }
-      // Observability for the deliberate path-less waiver (DEBT a934e089).
-      // The gate above is enforced only where verification is POSSIBLE, so for
-      // a project with no `metadata.path` the caller's default
-      // `citation_requires_sha: true` is a silent no-op and `sha:"unverified"`
-      // is persisted verbatim. That waiver is correct (§8.5) but would
-      // otherwise be INVISIBLE — the operator set a policy and never learns it
-      // did not apply. A log is the whole fix: NOT a second audit row, which
-      // SPEC §4a's one-audit-node-per-state-change contract forbids for a
-      // branch that changes no state.
-      console.error(
-        `createIssue: citation_requires_sha waived for path-less project uid="${preResolvedProject.uid}" — cannot verify citation "${citation.file}", persisting sha:"unverified" (set the project's metadata.path to make citation_requires_sha enforceable).`
-      );
-    }
-    citationShas.push(sha);
-  }
+  // The sha computation AND the `citationRequiresSha` gate are the ONE shared
+  // implementation in `citation.ts` (`resolveCitationShas`) — the same one
+  // `transition` and `addCitation` use, so the rule cannot drift between verbs.
+  // It runs entirely OUTSIDE any write-lock scope, as finding 2 requires; the
+  // write transaction below re-resolves `project` against its own snapshot and
+  // receives only the already-computed `sha` STRINGS.
+  const citationShas = await resolveCitationShas(
+    preResolvedProject,
+    preResolvedPolicy,
+    citations,
+    preSiblingRoots,
+    'createIssue'
+  );
 
   // §6.4 point 1: the scan runs BEFORE the `immediate` transaction opens —
   // the scan is an external, potentially network-backed round-trip
@@ -1269,44 +1163,19 @@ export async function createIssue(
         typePolicy: handle.typePolicy,
       });
 
-      if (citations.length > 0) {
-        const hasCitationRule = await resolveEdgeKindTx(tx, 'has_citation');
-        for (let i = 0; i < citations.length; i += 1) {
-          const citation = citations[i];
-          // §8.5's sha is already computed (and policy-gated) BEFORE this
-          // transaction opened, above — see the `preResolvedProject`/
-          // `citationShas` block. This loop only writes the already-decided
-          // value; it never re-reads the filesystem inside the write lock
-          // (BUG blind-review finding 2).
-          const sha = citationShas[i];
-          const citationNode = await writeNodeTx(tx, {
-            at: now,
-            kind: 'citation',
-            name: citation.file,
-            content: citation.context ?? citation.file,
-            metadata: {
-              target: citation.file,
-              target_type: 'path',
-              sha,
-              line: citation.lines ?? null,
-              at: now,
-              symbol: citation.symbol ?? null,
-              blastRadius: citation.blastRadius ?? null,
-            },
-          });
-          await writeEdgeTx(tx, {
-            at: now,
-            srcRowid: issue.rowid,
-            srcUid: issue.uid,
-            srcKind: 'issue',
-            dstRowid: citationNode.rowid,
-            dstUid: citationNode.uid,
-            dstKind: 'citation',
-            rel: 'has_citation',
-            rule: hasCitationRule,
-            typePolicy: handle.typePolicy,
-          });
-        }
+      // Each citation is the SAME node+edge write `addCitation` performs,
+      // through the SAME helper — so filing-time and after-the-fact citation
+      // writes can never diverge. The sha is already computed (and
+      // policy-gated) BEFORE this transaction opened, above; this loop never
+      // re-reads the filesystem inside the write lock (finding 2).
+      for (let i = 0; i < citations.length; i += 1) {
+        await appendCitationTx(tx, handle, {
+          issueRowid: issue.rowid,
+          issueUid: issue.uid,
+          citation: citations[i],
+          sha: citationShas[i],
+          at: now,
+        });
       }
 
       await writeAudit({

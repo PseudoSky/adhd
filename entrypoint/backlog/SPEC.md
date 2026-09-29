@@ -258,7 +258,13 @@ write runs — the identical mechanism §6.3's `by` check already uses (line
   relational "tables"** (the graph store has no arbitrary tables; a "first-class
   row" is a node). This is a deliberate, stated divergence:
   - `note` — `{ author, text, at }` (metadata).
-  - `citation` — `{ target, target_type, sha, line, at }`; content-addressed.
+  - `citation` — `{ target, target_type, sha, line, at, symbol, blastRadius,
+    revision }`; content-addressed. The persisted `target`/`line` keys are the
+    graph-native ends of the ONE citation contract's `file`/`lines`
+    (`src/citation.ts`); `revision`, when non-null, names the git revision the
+    target was resolved against (a revision-pinned citation, `git show
+    <revision>:<path>`), so evidence that exists only on an unmerged branch is
+    citable.
   - `transition` — `{ from_status, to_status, agent, note, sha, at }`.
   - `audit` — `{ actor, action, target_uid, from, to, note, sha, at }`.
 
@@ -538,6 +544,8 @@ for that adapter — ADR-0012 §1 note two).
 | `claim`                                                | `immediate` | CAS-merges the `claimedBy`/`claimedAt` pair against a fresh read of the same uid, taken on the transaction handle — a specific-node check-then-act, identical shape to `transition`'s current-state read                                     |
 | `upsertProject` / `upsertComponent` / `upsertLocation` | `immediate` | create-or-update by business key — the exact `findOrCreateNode` shape, composed by hand (below)                                                                                                                                              |
 | `rmLocation`                                           | `immediate` | invalidate-by-uid after confirming the row is live, for uniformity with every other verb above (one mode, one decision, never re-litigated per verb)                                                                                         |
+| `addCitation`                                          | `immediate` | resolves the issue → live `issue` row and mints the `citation` node + its `has_citation` edge + audit in one transaction; the cited file's sha is computed before the transaction opens (never a lock held across a filesystem/git read)     |
+| `removeCitation`                                       | `immediate` | invalidate-by-uid (the citation's OWN uid, never a `(target,line)` composite) after confirming the citation row is live, then invalidates its `has_citation` edge — the `rmLocation` shape, applied to `citation`                          |
 
 #### `findOrCreateNode` is not race-free — the write layer does not call it
 
@@ -2122,8 +2130,7 @@ other field": every field maps onto exactly one of these named paths.
   second one folded into `create`.
 - **`citations`** — written as `citation` nodes + `has_citation` edges
   against the new node in the same transaction, exactly as a standalone
-  `create`'s citation handling (§6.2) — independent of `touch`, since
-  `IUpdateIssueInput` carries no `citations` field to mirror.
+  `create`'s citation handling (§6.2) — independent of `touch`.
 - **`awaitEmbed`** — applied to the new node's on-write embedding exactly
   as a standalone `create` (§4b): waits for the fire-and-forget embed
   observer when `true`, fire-and-forget otherwise.
@@ -2189,9 +2196,24 @@ interface IUpdateIssueInput {
   priority?: string; // → touch + has_priority edge rewrite
   assignee?: string; // → touch (metadata scalar, §6.2)
   author?: string; // → touch + authored_by edge rewrite
+  citations?: Citation[]; // the DESIRED citation set — a DIFF-EMITTER, never a body rewrite (see below); each citation's sha is computed before the tx opens
   awaitEmbed?: boolean;
 }
 ```
+
+**`citations` is a diff-emitter, never a rewrite.** When `citations` is given,
+`update` reads the issue's LIVE citation set inside its own `immediate`
+transaction, removes every live citation absent from the new set, and adds every
+citation in the new set that is not already live (identity is `(file, lines,
+revision)`).
+It NEVER routes a citation change through `body`/`supersede`: that would mint a
+new issue `uid` and violate §1's "uid is the only identity". When `body` is ALSO
+given, the supersede mints the new node first, its live citations are carried
+forward, and the diff is applied against the carried-forward set on the new node
+— still inside the one transaction. `citations: []` clears every live citation;
+omitting the field leaves citations untouched. It is `transition`/`create`'s own
+sha discipline: each supplied citation's `sha` (and its `citation_requires_sha`
+gate) is resolved before the transaction opens.
 
 `status` is **deliberately absent** — a status change is ALWAYS `transition`
 (§6.3.4), never `update`. This is a structural fix of DEBT-010, whose original
@@ -2209,7 +2231,7 @@ Output:
 ```ts
 interface IUpdateOutcome {
   uid: string;
-  changed: Array<'title' | 'body' | 'kind' | 'priority' | 'assignee' | 'author'>;
+  changed: Array<'title' | 'body' | 'kind' | 'priority' | 'assignee' | 'author' | 'citations'>;
   // empty array = genuine no-op, stated (BUG-BACKLOG-UPDATE-ITEM-SILENT-DISCARD-001's fix, carried forward unchanged in spirit)
 }
 ```
@@ -2763,16 +2785,17 @@ not carry (§7). Every action once carried under `admin` is accounted for:
 | `embedding_health`, `list_near_duplicates`                                                         | fold into `query`'s `view:"similar"` (§5a) — a health/near-duplicate report is exactly "run the similarity view over the whole corpus," not a distinct admin code path                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `doctor`, `prune`, `run_dedup_sweep`, `cluster_into_plans`, `promote_cluster_to_plan`              | **not part of this consumer surface.** These are one-shot/periodic maintenance operations, not a product feature a caller addresses by `uid`. Per this repo's own package-scaffolding rule (reusable tooling belongs in a script or plugin; a one-shot data transform is a throwaway script — never a mounted verb), if any of these are still needed operationally they are scripts run directly against `src/write/`/`src/query/`, never re-admitted as a 20th grab-bag `admin` action — that grab-bag shape is precisely what the named, individually-typed verb surface (§4, §6.3) replaces. |
 | `skill`, `version`                                                                                 | both are host-adjacent, store-free introspection — same carve-out class as `install`/`install-skill`/`serve` (server.ts:139's `BACKLOG_HOST_COMMANDS`), extended to include them, rather than mounted as data verbs. Neither opens the store (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001's whole point), so nothing changes about how they run — only that they are formally carved out instead of living inside `admin`.                                                                                                                                                                             |
-| `batch`                                                                                            | not backlog-specific code — `apigen-plugin-batch`'s generic `batch_action` fan-out is inherited automatically the moment this application layer's nine verbs mount through the same apigen plugin surface (`usePlugins:[batchPlugin]`, unchanged from server.ts's current wiring). Nothing to design here.                                                                                                                                                                                                                                                                                       |
+| `batch`                                                                                            | not backlog-specific code — `apigen-plugin-batch`'s generic `batch_action` fan-out is inherited automatically the moment this application layer's verbs mount through the same apigen plugin surface (`usePlugins:[batchPlugin]`, unchanged from server.ts's current wiring). Nothing to design here.                                                                                                                                                                                                                                                                                       |
 
 ### 6.7 Transport surfaces
 
-CLI/MCP/HTTP each mount the nine issue verbs plus §3a's registry verbs
+CLI/MCP/HTTP each mount the issue verbs (the nine plus `add-citation`/`remove-citation`) plus §3a's registry verbs
 through the same one-descriptor→four-projection mechanism `server.ts`
 already uses (`describeMountedSurface`/`project(op)`) — unchanged
 mechanism, new operation list. MCP tool names follow the existing
 `backlog_<verb>` convention (`backlog_get`, `backlog_query`, `backlog_create`,
-`backlog_update`, `backlog_transition`, `backlog_claim`, `backlog_relate`,
+`backlog_update`, `backlog_add_citation`, `backlog_remove_citation`,
+`backlog_transition`, `backlog_claim`, `backlog_relate`,
 `backlog_move`, `backlog_delete`, plus `backlog_lookup` and the registry
 CRUD verbs from §3a). CLI commands follow the same leaf-name convention
 (`backlog get`, `backlog query`, ...). Every response is `uid`-keyed;
