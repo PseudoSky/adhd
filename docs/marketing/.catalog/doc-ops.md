@@ -245,3 +245,26 @@ Dispatching doc-cartographer (fresh run for metrics delta), doc-consumer (canoni
 2. Template conformance (every doc matches its skeleton; every README claim resolves to shipped receipt or "pending release" marker; high-cardinality README test)
 3. Link integrity (all relative links in updated/new sections resolve to real files via pathname resolution, not reasoning)
 4. Fresh-agent consumer test (docs sufficient for real user tasks without reading source)
+
+---
+
+## REVISE `PUBLISHING.md` — 2026-09-29T03:09:23Z
+
+reason: `PUBLISHING.md`'s "Big-release pre-flight" section asserted the `e2e` target is in **no** target's `dependsOn` and instructed "Do not add it to `test.dependsOn`" — both false for `entrypoint/backlog` since 2026-09-26 (backlog `98142eab`, instance 2), which wires `e2e` into `test.dependsOn`. Following the stale instruction would remove a real publish gate. Verified against the resolved graph (`npx nx show project backlog --json`): `test => ["lint","^build","build","assets","vocabulary-gate","typecheck-spec","e2e"]`; `e2e => ["build"]`; `publish => ["test","^test","version","^publish","dist-manifest","verify-dist-load","publish-hygiene"]`; `nx-release-publish => ["build","test","verify-dist-load","dist-manifest","publish-hygiene"]`. Also corrected the `publish` dependsOn list (omitted `^publish`) and dropped an unverifiable `37`-suite count (config says 33 and 37; actual `.e2e.ts` files = 42).
+
+removed_or_moved (verbatim):
+
+```
+`nx affected -t test` (and the pre-commit/pre-push hooks that wrap it) is the **fast gate**: it runs each package's default `test` target only, and the default target deliberately excludes the resource-consuming suites — real subprocess spawns, bound-port HTTP/MCP servers, the real fastembed embedding model, and CPU/memory hogs. Those live in a separately-named `e2e` lane per package (e.g. `entrypoint/backlog`'s `src/**/*.e2e.ts`, collected by its `e2e` target and its `vitest.e2e.config.ts`).
+
+**Before a big release, run the resource lanes explicitly:**
+
+npx nx run-many -t e2e            # every package that declares an e2e target
+npx nx run backlog:e2e            # one package — the per-project form
+
+This is deliberate, not an oversight: the `e2e` target is in **no** target's `dependsOn` and is absent from `nx.json` `targetDefaults`, and it has **no automatic CI runner** — it never runs under `nx affected -t test` or the fast hooks. It is run as this explicit checklist step instead. Do **not** add it to `test.dependsOn` and do **not** add a global `targetDefaults.e2e` (the latter is keyed by target name only, so it cannot be scoped to one project).
+```
+
+- `publish` dependsOn: `[test, ^test, version, dist-manifest, verify-dist-load, publish-hygiene]` → `[test, ^test, version, ^publish, dist-manifest, verify-dist-load, publish-hygiene]`
+
+Checked & found correct: `e2e` is absent from `nx.json` `targetDefaults`; the four GATE 2 smoke packages (`agent-mcp`, `apigen-cli`, `backlog`, `decompile-cli`) all exist, all declare `bin`, all carry `dist-manifest`/`verify-dist-load`/`publish-hygiene`; the other 12 packages declaring an `e2e` target do not wire it into `test.dependsOn`.
