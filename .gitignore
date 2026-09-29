@@ -176,3 +176,6 @@ packages/agent/*/tsconfig.tsbuildinfo
 # Agent research traces — scratch working papers, same class as the
 # agent-scratch section above; they are working notes, not repo artifacts.
 .research-trace/
+
+# Manual .mcp.json backups (agent-created copies, not source)
+.mcp.json.bak-*
