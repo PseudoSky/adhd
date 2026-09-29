@@ -1,6 +1,6 @@
 {
   "name": "@adhd/backlog",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "type": "skill",
   "entrypoint": "SKILL.md"
 }
