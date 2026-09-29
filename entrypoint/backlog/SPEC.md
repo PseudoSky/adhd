@@ -2065,8 +2065,13 @@ interface Citation {
   context?: string;
   symbol?: string;
   blastRadius?: CitationBlastRadius; // still real, still best-effort
+  revision?: string; // a git revision (branch/tag/sha) to resolve `file` against instead of the working tree — so a file that exists only on an unmerged branch is citable (`git show <revision>:<path>`); persisted as the citation node's `meta.revision`
 }
 ```
+
+`Citation` is ONE contract: the persisted `citation` node stores `file` as
+`meta.target` and `lines` as `meta.line`, and the two ends are bridged in
+exactly one place (`src/citation.ts`'s codec), never at a call site.
 
 **`children` composition (how N+1 writes land in ONE transaction):** a
 `create` call with `children` present still opens exactly the one
