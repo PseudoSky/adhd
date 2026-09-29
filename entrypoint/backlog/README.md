@@ -201,16 +201,24 @@ resolve to the wrong record.
 Declare a typed requirement on an issue with `obligate`; the store then refuses
 any transition that would violate it until the requirement is met. A
 `block`-severity `evidence` obligation, for example, keeps a `closed`
-transition refused until a matching verified attestation exists — and `get`
-predicts that refusal before you act:
+transition refused until a matching verified attestation exists.
+
+An obligation is scoped by `applies_to.to` to the **transition** it guards — a
+close-scoped obligation gates the close, **not** claimability. So `get` reports
+the item actionable (the same answer `claim` gives), and the close is what gets
+refused:
 
 ```bash
 adhd-backlog get --input '{"uid":"1d9b77e5-…","fields":["verdict","obligations"]}'
 ```
 
 ```json
-{ "ok": true, "data": { "uid": "1d9b77e5-…", "obligations": [{ "uid": "fbcee200-…", "applies_to": { "to": "closed" }, "requirement": { "op": "evidence", "kind": "published-artifact", "min": 1 }, "on_fail": "block" }], "verdict": { "actionable": false, "evaluated_at": "…", "revision": 0, "conditions": [{ "type": "Evidence", "status": "True", "severity": "block", "code": "EvidenceUnverified", "subject": "fbcee200-…", "message": "obligation unsatisfied: EvidenceUnverified" }] } } }
+{ "ok": true, "data": { "uid": "1d9b77e5-…", "obligations": [{ "uid": "fbcee200-…", "applies_to": { "to": "closed" }, "requirement": { "op": "evidence", "kind": "published-artifact", "min": 1 }, "on_fail": "block" }], "verdict": { "actionable": true, "evaluated_at": "…", "revision": 0, "conditions": [] } } }
 ```
+
+Only an obligation scoped to a **non-terminal** transition (e.g.
+`applies_to:{to:"in_progress"}`) is due at claim time, and only then does it
+appear as a rung-2 block condition in the verdict.
 
 Attempt the close and the gate refuses with a typed `precondition_failed`,
 writing nothing:

@@ -374,9 +374,11 @@ $ adhd-backlog backlog query --input '{"filter":{"project":"demo-project","statu
 NOT an actionability filter** — it selects the `open` issues that are
 **unclaimed** and whose every live incoming `blocks` blocker is **terminal**
 (a pure claim/`blocks` predicate; it never evaluates obligations, evidence, or
-attestations). An item whose `block`-severity obligation is unsatisfied —
-`fields:["verdict"]` returns `actionable:false` — still appears in `ready`,
-while an item with an open `blocks` source does not. **To find actionable
+attestations). An item whose `block`-severity obligation is unsatisfied **and
+scoped to a non-terminal transition** — `fields:["verdict"]` returns
+`actionable:false` — still appears in `ready` (a *close*-scoped obligation does
+not gate claimability and leaves the item `actionable:true`), while an item
+with an open `blocks` source does not. **To find actionable
 work, read `fields:["verdict"]`; do not send an actionable-work query to
 `view:"ready"`.** `text` is the
 natural-language form — routed to `filter.semantic` when a populated vector
@@ -613,7 +615,7 @@ on `get`, 1–5). `get` defaults to rung 3; the list views always run rung 2:
 | rung | what runs                                                    | produces                                       |
 | ---- | ------------------------------------------------------------ | ---------------------------------------------- |
 | 1    | incoming live `blocks` (indexed in-degree)                   | `Blocked`/`BlockedBy` per non-terminal blocker |
-| 2    | obligation presence + predicate evaluation + claim staleness | `Obligation`/`Evidence`/`Claim`                |
+| 2    | obligation presence + close-predictor skip + predicate evaluation + claim staleness | `Obligation`/`Evidence`/`Claim` |
 | 3    | anchor existence at HEAD                                     | `EvidenceStale` when absent                    |
 | 4    | changed-since-filing                                         | `EvidenceStale` when moved since filing        |
 | 5    | full anchor re-resolve (digest match)                        | `EvidenceStale` on digest mismatch             |
@@ -623,16 +625,22 @@ paths can never disagree `true` vs `false` for the same item.
 
 ### End-to-end: declare → read → refuse → attest → close
 
-Declare the obligation, then read the verdict it predicts (`block`-severity
-`EvidenceUnverified`, because the required evidence has not been attested):
+Declare the obligation, then read it. An obligation is scoped by
+`applies_to.to` to the **transition** it guards — a close-scoped obligation
+gates the CLOSE, not claimability — so `get` reports the item actionable (the
+same answer `claim` gives), and the close is what gets refused:
 
 ```
 $ adhd-backlog obligate --input '{"uid":"1d9b77e5-…","applies_to":{"to":"closed"},"requirement":{"op":"evidence","kind":"published-artifact","min":1},"on_fail":"block","by":"agent:worker-1"}'
 {"ok":true,"data":{"uid":"1d9b77e5-…","obligationUid":"fbcee200-…"}}
 
 $ adhd-backlog get --input '{"uid":"1d9b77e5-…","fields":["verdict","obligations"]}'
-{"ok":true,"data":{"uid":"1d9b77e5-…","obligations":[{"uid":"fbcee200-…","applies_to":{"to":"closed"},"requirement":{"op":"evidence","kind":"published-artifact","min":1},"on_fail":"block"}],"verdict":{"actionable":false,"evaluated_at":"…","revision":0,"conditions":[{"type":"Evidence","status":"True","severity":"block","code":"EvidenceUnverified","subject":"fbcee200-…","message":"obligation unsatisfied: EvidenceUnverified"}]}}}
+{"ok":true,"data":{"uid":"1d9b77e5-…","obligations":[{"uid":"fbcee200-…","applies_to":{"to":"closed"},"requirement":{"op":"evidence","kind":"published-artifact","min":1},"on_fail":"block"}],"verdict":{"actionable":true,"evaluated_at":"…","revision":0,"conditions":[]}}}
 ```
+
+An obligation scoped to a **non-terminal** transition (e.g.
+`applies_to:{to:"in_progress"}`) IS due at claim time and appears as a rung-2
+block condition instead.
 
 Attempt the close — the gate refuses with `precondition_failed` and NOTHING is
 written (the throw rolls the transaction back; a re-read shows the status
@@ -652,7 +660,7 @@ cheap-first anchor ladder, and its `check.state` is one of
 `checks[]` history (`attest` itself returns the single `check`):
 
 ```
-$ adhd-backlog attest --input '{"subject":{"id":"1d9b77e5-…","revision":0},"claim":{"kind":"published-artifact"},"anchor":{"locator":"path:README.md","digest":"sha256:<hex>"},"by":"agent:worker-1"}'
+$ adhd-backlog attest --input '{"subject":{"id":"1d9b77e5-…","revision":0},"claim":{"kind":"published-artifact"},"anchor":{"locator":"path:README.md","digest":"<sha256 hex of the HEAD blob>"},"by":"agent:worker-1"}'
 {"ok":true,"data":{"attestationUid":"8f3604b9-…","subject":{"id":"1d9b77e5-…","revision":0},"check":{"state":"verified","method":"changed_since","checked_at":"…","checked_by":"agent:worker-1"}}}
 ```
 
@@ -669,9 +677,10 @@ $ adhd-backlog transition --input '{"uid":"1d9b77e5-…","by":"agent:worker-1","
 {"ok":true,"data":{"uid":"1d9b77e5-…","fromStatus":"open","toStatus":"closed","closedAt":"…","transitionUid":"f42dd635-…"}}
 ```
 
-At the default `get` rung (3) the predicate is satisfied but its anchor
-freshness was not re-resolved, so `actionable` is honestly `"unknown"`; raise
-`deriveThrough:5` to re-resolve it to `true`:
+For an obligation scoped to a **non-terminal** transition — which IS evaluated
+at rung 2 — the default `get` rung (3) finds the predicate satisfied but does
+not re-resolve the anchor's freshness, so `actionable` is honestly `"unknown"`;
+raise `deriveThrough:5` to re-resolve it to `true`:
 
 ```
 $ adhd-backlog get --input '{"uid":"1d9b77e5-…","fields":["verdict"]}'
