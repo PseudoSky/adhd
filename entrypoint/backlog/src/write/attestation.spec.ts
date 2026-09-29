@@ -293,7 +293,7 @@ describe('attestation — attest/recheck (real store, real git repo)', () => {
 
   it('CROSS-REPO — recheck resolves an ABSOLUTE sibling-project anchor against the sibling project root (unchanged → verified, changed → stale), never a false refutation', async () => {
     const sibling = await siblingProject('sibling-repo');
-    const content = 'sibling evidence v1\n';
+    const content = 'sibling evidence original\n';
     commitAt(sibling, 'evidence.txt', content, '2020-01-01T00:00:00Z');
 
     // The subject issue lives in project A (`repo`); the anchor names a file
@@ -323,7 +323,7 @@ describe('attestation — attest/recheck (real store, real git repo)', () => {
     commitAt(
       sibling,
       'evidence.txt',
-      'sibling evidence v2\n',
+      'sibling evidence revised\n',
       '2030-01-01T00:00:00Z'
     );
     const r2 = await recheck(store, { attestationUid, by: 'rechecker:1' });
