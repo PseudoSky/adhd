@@ -65,7 +65,7 @@ Everything below refers back to this table. These objects are created by the see
 | `$C3` | attestation — evidence that attaches without churning identity | FEAT · open · HIGH · revision 1 |
 | `$RESEARCH` | ticket for the first anchored-evidence beat | FEAT · open · MEDIUM · revision 0 |
 | `$CROSSREPO` | an item whose citation points into a sibling repo (`$CROSS_ATT`, `$DIGEST_GOOD`, `$DIGEST_BAD` = its seeded attestations) | FEAT · open · MEDIUM |
-| `$SIBLING` | a **second registered project root** — a real git work tree under `tmp/` (`fixture/sibling-repo/`) the cross-repo beats cite into | git work tree · registered project |
+| `tmp/…/sibling-repo/` | a **second registered project root** — a real git work tree the cross-repo beats cite into (`$CROSS_ANCHOR` points at its `evidence.txt`) | git work tree · registered project |
 | `$AC2_X`, `$AC2_Y` | equal in-degree order-tie head nodes (X has more transitive dependents) | SPIKE · open · MEDIUM |
 | `$AC2_D4`, `$AC2_D5` | the flip pair beat 1.4 wires to Y so the dependent-weight order flips | SPIKE · open · MEDIUM |
 | `$PLAN` | the umbrella plan Dee must advance | FEAT · open · HIGH · blocked by `$BLOCKER` |
