@@ -266,9 +266,13 @@ export function readBakedIrArtifact(distDir: string): Operation[] | undefined {
 
 /**
  * Writes the baked IR artifact to `outFile`, recording the provenance the
- * reader re-validates against: the source `.d.ts` path (audit), its sha256 and
- * byte length, plus a sha256 per EVERY `*.d.ts` under the artifact's `dist/`
- * (`artifactSource.deps`). Uses the plugin's shared `atomicWriteJson`, so the
+ * reader re-validates against: the source `.d.ts`'s DIST-RELATIVE path
+ * (`api.d.ts`; audit, machine-independent), its sha256 and byte length, plus a
+ * sha256 per EVERY `*.d.ts` under the artifact's `dist/`
+ * (`artifactSource.deps`). Emits NO timestamp and NO absolute path, so two
+ * builds of identical source produce byte-identical artifacts — reproducible
+ * output that `version`'s no-bump fast path depends on (`normalizedHash` over
+ * `dist/`). Uses the plugin's shared `atomicWriteJson`, so the
  * artifact is published atomically and durably exactly like a runtime-cache
  * entry — a build killed mid-write can never leave a half-written artifact
  * behind.
@@ -290,16 +294,27 @@ export async function writeBakedIrArtifact(args: {
   operations: Operation[];
 }): Promise<void> {
   const content = readFileSync(args.apiDts);
+  const distDir = dirname(args.apiDts);
   const entry: CachedExtractEntry = {
     formatVersion: CURRENT_FORMAT_VERSION,
     operations: args.operations,
     extractorVersion: args.extractorVersion,
-    createdAt: new Date().toISOString(),
+    // No timestamp — the entry shape deliberately carries none (see
+    // `CachedExtractEntry`'s NOTE in @adhd/apigen-plugin-ir-cache). A wall-clock
+    // field here would make every build of identical source emit different
+    // bytes, so the published `dist/api.ir.json` would hash unstably forever
+    // and `version` would re-bump + republish `@adhd/backlog` on every release
+    // with no source change.
     artifactSource: {
-      path: args.apiDts,
+      // DIST-RELATIVE (`api.d.ts`), never the absolute build-machine path: a
+      // stable relative path is reproducible and meaningful on any machine;
+      // the absolute path was neither (it does not exist on a consumer). This
+      // field is write-only — the reader re-hashes the CURRENT source — and is
+      // recorded purely as human-readable provenance.
+      path: relative(distDir, args.apiDts).split(sep).join('/'),
       sha256: sha256Hex(content),
       bytes: content.byteLength,
-      deps: distSurfaceDepHashes(dirname(args.apiDts)),
+      deps: distSurfaceDepHashes(distDir),
     },
   };
   await atomicWriteJson(args.outFile, entry);

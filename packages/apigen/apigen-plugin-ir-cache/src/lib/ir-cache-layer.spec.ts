@@ -202,7 +202,6 @@ describe('createLocalFsBackend (directory mode, kept for a future multi-key back
       formatVersion: CURRENT_FORMAT_VERSION,
       operations: FIXTURE_OPS,
       extractorVersion: EXTRACTOR_VERSION,
-      createdAt: new Date().toISOString(),
     };
     await backend.put('k1', entry);
     await expect(backend.get('k1')).resolves.toEqual(entry);
@@ -237,6 +236,11 @@ describe('createIrCacheLayer — RUNTIME CACHE mode HIT/MISS semantics', () => {
     await expect(invoke(call)).resolves.toEqual(FIXTURE_OPS);
     expect(runExtractor).toHaveBeenCalledTimes(1);
     await waitForCacheWrite(); // the MISS's write-through is fire-and-forget
+
+    // Reproducibility: the written runtime-cache entry carries NO wall-clock
+    // timestamp (the shared `CachedExtractEntry` shape deliberately has none —
+    // see its NOTE). Teeth: reintroducing the stamp turns this red.
+    expect(readCacheFile()).not.toHaveProperty('createdAt');
 
     await expect(invoke(call)).resolves.toEqual(FIXTURE_OPS);
     expect(runExtractor).toHaveBeenCalledTimes(1); // still once — HIT, no re-extraction
@@ -411,7 +415,6 @@ describe('createIrCacheLayer — cross-mode compatibility (R2.5)', () => {
       formatVersion: CURRENT_FORMAT_VERSION,
       operations: FIXTURE_OPS,
       extractorVersion: EXTRACTOR_VERSION,
-      createdAt: new Date().toISOString(),
     };
     fs.mkdirSync(path.dirname(cachePath), { recursive: true });
     fs.writeFileSync(cachePath, JSON.stringify(artifactEntry));
@@ -453,7 +456,6 @@ describe('createIrCacheLayer — cross-mode compatibility (R2.5)', () => {
       formatVersion: CURRENT_FORMAT_VERSION,
       operations: FIXTURE_OPS, // "v1" operations — stale the moment source changes below.
       extractorVersion: EXTRACTOR_VERSION,
-      createdAt: new Date().toISOString(),
     };
     fs.mkdirSync(path.dirname(cachePath), { recursive: true });
     fs.writeFileSync(cachePath, JSON.stringify(staleArtifactEntry));

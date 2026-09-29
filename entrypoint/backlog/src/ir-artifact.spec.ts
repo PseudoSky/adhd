@@ -222,19 +222,48 @@ describe('ir-artifact — readBakedIrArtifact freshness gate', () => {
         formatVersion: CURRENT_FORMAT_VERSION,
         extractorVersion: EXPECTED_EXTRACTOR_VERSION,
         operations: OPS,
-        createdAt: new Date().toISOString(),
       })
     );
     expect(readBakedIrArtifact(distDir)).toBeUndefined();
   });
 
-  it('records provenance (path, sha256, bytes) matching the source it baked', async () => {
+  it('records provenance (dist-relative path, sha256, bytes) matching the source it baked', async () => {
     await bake();
     const entry = JSON.parse(readFileSync(artifactPath, 'utf8')) as {
       artifactSource: { path: string; sha256: string; bytes: number };
     };
-    expect(entry.artifactSource.path).toBe(apiDts);
+    // DIST-RELATIVE (`api.d.ts`), never the absolute build-machine path: an
+    // absolute path is machine-specific and makes the artifact non-reproducible
+    // (it is also useless to a consumer, where it does not exist).
+    expect(entry.artifactSource.path).toBe('api.d.ts');
+    expect(entry.artifactSource.path).not.toContain(distDir);
     expect(entry.artifactSource.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(entry.artifactSource.bytes).toBeGreaterThan(0);
+  });
+});
+
+describe('ir-artifact — reproducibility', () => {
+  it('two bakes of identical source are byte-identical and carry no timestamp or absolute path', async () => {
+    await bake();
+    const first = readFileSync(artifactPath, 'utf8');
+
+    // Cross a millisecond boundary on purpose: the removed `createdAt` had ms
+    // resolution, so two bakes in the same millisecond could produce identical
+    // bytes even WITH the defect — a false pass. This bounded gap is not a
+    // race; it deterministically widens the window so a reintroduced wall-clock
+    // stamp would differ and be caught.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    await bake();
+    const second = readFileSync(artifactPath, 'utf8');
+
+    // The reproducibility assertion the whole fix exists for: identical source
+    // → identical bytes → a stable `normalizedHash` → a reachable no-bump path.
+    expect(second).toBe(first);
+
+    // And the two volatile fields that used to break it are gone.
+    const parsed = JSON.parse(first) as { artifactSource: { path: string } };
+    expect(parsed).not.toHaveProperty('createdAt');
+    expect(parsed.artifactSource.path).not.toContain(distDir);
   });
 });

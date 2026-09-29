@@ -47,7 +47,11 @@ describe('buildIrCacheArtifact — ARTIFACT mode (--type ir-cache --opt cache=ar
     expect(entry.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(entry.operations).toEqual(FIXTURE_DESCRIPTOR.operations);
     expect(entry.extractorVersion).toBe('test-extractor@1.0.0');
-    expect(typeof entry.createdAt).toBe('string');
+    // Reproducibility: the artifact must carry NO wall-clock timestamp (a
+    // `createdAt` here made two builds of identical source differ byte-for-byte,
+    // defeating content-hash change detection). Asserting its ABSENCE gives the
+    // test teeth — reintroducing the stamp turns this red.
+    expect(entry).not.toHaveProperty('createdAt');
     expect(entry.staleness).toBeUndefined();
     expect('staleness' in entry).toBe(false);
   });

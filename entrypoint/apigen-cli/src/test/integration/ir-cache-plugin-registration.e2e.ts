@@ -46,7 +46,6 @@ interface CachedExtractEntryLike {
   formatVersion: number;
   operations: Array<{ id: string }>;
   extractorVersion: string;
-  createdAt: string;
   staleness?: {
     contentKey: string;
     source: { path: string; mtimeMs: number };
@@ -115,7 +114,10 @@ describe('ir-cache plugin registration — real built apigen-cli bin', () => {
     expect(entry.formatVersion).toBe(1);
     expect(typeof entry.extractorVersion).toBe('string');
     expect(entry.extractorVersion.length).toBeGreaterThan(0);
-    expect(typeof entry.createdAt).toBe('string');
+    // Reproducibility: ARTIFACT mode must emit NO wall-clock timestamp, so
+    // identical source yields byte-identical artifacts (the entry shape
+    // deliberately carries none — see `CachedExtractEntry`'s NOTE).
+    expect(entry).not.toHaveProperty('createdAt');
     // ARTIFACT mode never carries a staleness snapshot (design doc R2.4).
     expect(entry.staleness).toBeUndefined();
     // Real extraction happened: alpha.ts exports exactly one API function

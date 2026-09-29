@@ -92,8 +92,19 @@ export interface CachedExtractEntry {
   operations: Operation[];
   /** Which extractor build produced this (e.g. apigen-core-client's version). */
   extractorVersion: string;
-  /** ISO timestamp — provenance/audit only, never part of the key. */
-  createdAt: string;
+  /*
+   * NOTE — deliberately NO wall-clock timestamp field. An earlier revision
+   * carried a required `createdAt: new Date().toISOString()`, stamped by all
+   * three writers. Nothing ever READ it, but it made every emitted artifact
+   * differ byte-for-byte across two builds of identical source — which broke
+   * content-hash change detection for any package whose published `dist/`
+   * contains one (the artifact hashed unstable forever, so `version` could
+   * never take its no-bump fast path and re-bumped + republished on every
+   * release). Removing the field from the shared shape forces every writer to
+   * stop stamping it. If a provenance instant is ever genuinely wanted, derive
+   * it from the commit (SOURCE_DATE_EPOCH / git commit date), never the wall
+   * clock — identical source must yield identical bytes.
+   */
   /**
    * RUNTIME CACHE mode only — absent for an ARTIFACT-mode entry (a build
    * artifact is never staleness-checked at read time) and absent for an
@@ -109,10 +120,13 @@ export interface CachedExtractEntry {
    * Records the source `.d.ts` this artifact was extracted from (`path`), its
    * sha256 (`sha256`), and its byte length (`bytes`) at bake time, so the
    * consumer can refuse to serve a baked artifact whose source has since
-   * drifted (never-serve-stale). `path` is provenance/audit only — a shipped
-   * artifact travels to machines where the bake-time absolute path does not
-   * exist, so the reader re-hashes the CURRENT source it is about to describe
-   * and compares that hash, never the recorded path. Additive and optional:
+   * drifted (never-serve-stale). `path` is the DIST-RELATIVE POSIX path of
+   * that entry file within the artifact's own `dist/` (always `api.d.ts`) —
+   * stable across machines, never an absolute build-machine path (an absolute
+   * path would make the artifact non-reproducible, and is useless to a
+   * consumer on whose machine it does not exist). It is provenance/audit only:
+   * the reader re-hashes the CURRENT source it is about to describe and
+   * compares that hash, never the recorded path. Additive and optional:
    * an artifact that predates this field simply has no provenance and is
    * treated as unvalidatable (a miss) by the bake reader.
    *
@@ -343,7 +357,6 @@ export function createIrCacheLayer(
       formatVersion: CURRENT_FORMAT_VERSION,
       operations,
       extractorVersion,
-      createdAt: new Date().toISOString(),
       staleness,
     });
   }

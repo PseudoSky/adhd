@@ -57,8 +57,10 @@ export function buildIrCacheArtifact(
     formatVersion: CURRENT_FORMAT_VERSION,
     operations: descriptor.operations,
     extractorVersion: opts.extractorVersion ?? readDefaultExtractorVersion(),
-    createdAt: new Date().toISOString(),
-    // No `staleness` — see module doc above.
+    // No `staleness` — see module doc above. No timestamp either — the entry
+    // shape deliberately carries none (see `CachedExtractEntry`'s NOTE): a
+    // wall-clock field would make this artifact differ across builds of
+    // identical source, defeating content-hash change detection.
   };
 
   return [
