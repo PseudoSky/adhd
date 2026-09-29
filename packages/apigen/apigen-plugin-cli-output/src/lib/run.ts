@@ -261,6 +261,30 @@ function paramsText(params: ParamInfo[] | undefined): string {
 }
 
 /**
+ * The `--flag` spellings a route actually ACCEPTS, kebab-case only — the same
+ * non-alias projection {@link parseArgs}'s unknown-option error already lists
+ * (BUG-BACKLOG-CLI-FLAG-CASE-MISMATCH-001: camelCase aliases are accepted on
+ * input but never advertised). Sorted so the rendered order is deterministic.
+ *
+ * This is the per-route FACT the usage listing is built from. The help must
+ * describe only what a route declares: the previous unconditional footer
+ * claimed "per-field flags are also accepted" for EVERY route, which is false
+ * for a one-token verb whose schema decomposes to a single `--input '<json>'`
+ * envelope (the whole `backlog`/`batch action` surface — `get --uid X` is
+ * rejected as `Unknown option: --uid. Available: --input`). Reading the fact
+ * off `plan.cliFlags` is the structural fix: no route is special-cased, and a
+ * host whose schema DOES decompose into per-field flags (e.g. an extracted
+ * `getItem(id, includeArchived)` → `--id`, `--include-archived`) still
+ * advertises them.
+ */
+function advertisedFlags(plan: OpPlan): string[] {
+  return [...plan.cliFlags.entries()]
+    .filter(([, flag]) => flag.aliasOf === undefined)
+    .map(([name]) => name)
+    .sort();
+}
+
+/**
  * Human-readable command listing, derived from the live OpPlan-keyed route
  * table (never hardcoded) — rendered as TWO labelled sections so the help text
  * reflects the SAME dispatch distinction `matchCommand` already makes:
@@ -268,9 +292,15 @@ function paramsText(params: ParamInfo[] | undefined): string {
  *  - **Namespaced verbs** (`namespace + verb`) — a `--use` MOUNT plugin's
  *    synthetic operations (`plan.isMount`), e.g. `batch action`. Additive:
  *    every apigen host that mounts a plugin gains this section.
- *  - **Verbs** (one-token) — the host package's own source operations, whose
- *    calling convention is the `--input '<json>'` envelope (per-field flags are
- *    also accepted; `--help` on a verb prints those).
+ *  - **Verbs** (one-token) — the host package's own source operations.
+ *
+ * Each command line ADVERTISES EXACTLY the flags that command accepts, read
+ * from its `plan.cliFlags`; a command that declares none renders `(no flags)`.
+ * The heading and footer therefore make no capability claim about a route that
+ * the route does not itself declare — fixing the false, unconditional
+ * "(per-field flags are also accepted; run `<verb> --help` for a verb's own
+ * flags)" footer and the "per-field flags" section heading, neither of which
+ * held for the `--input '<json>'`-only verbs the footer was printed beside.
  *
  * The classification is `plan.isMount`, not `cli.path.length`: a host's own
  * verbs also carry their package namespace as the first path segment
@@ -287,24 +317,26 @@ export function formatUsage(routes: Map<string, CliRoute>): string {
 
   const render = ([key, { plan }]: [string, CliRoute]): string => {
     const text = paramsText(plan.params);
-    return `  ${key}${text ? `  { ${text} }` : ''}`;
+    const flags = advertisedFlags(plan);
+    const flagNote = flags.length
+      ? `  [${flags.map((f) => `--${f}`).join(', ')}]`
+      : '  (no flags)';
+    return `  ${key}${text ? `  { ${text} }` : ''}${flagNote}`;
   };
 
   const lines = [
     'Available commands:',
     '',
-    'Namespaced verbs (namespace + verb, per-field flags):',
+    'Namespaced verbs (namespace + verb):',
   ];
   if (namespaced.length === 0) lines.push('  (none)');
   else for (const entry of namespaced) lines.push(render(entry));
   lines.push('');
-  lines.push('Verbs (one-token, --input JSON envelope):');
+  lines.push('Verbs (one-token):');
   if (verbs.length === 0) lines.push('  (none)');
   else for (const entry of verbs) lines.push(render(entry));
   lines.push('');
-  lines.push(
-    "Calling convention: <verb> --input '{\"field\":\"value\"}'  (per-field flags are also accepted; run `<verb> --help` for a verb's own flags)"
-  );
+  lines.push('Each command lists the flags it accepts in [brackets].');
   return lines.join('\n');
 }
 
