@@ -159,7 +159,8 @@ export class DataView<T = unknown> {
   };
 
   setQuery = (query: QueryExpression) => {
-    this.dirty = this.query.setQuery(query);
+    const didUpdate = this.query.setQuery(query);
+    this.dirty = this.dirty || didUpdate;
     this.commit();
     return this;
   };

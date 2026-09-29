@@ -411,3 +411,39 @@ describe('regex operators', () => {
     expect(dv.view()).toEqual([items[1]]);
   });
 });
+
+// Regression: an empty/absent `where` must not clear the `dirty` flag that
+// `setData()` raised. Before the fix, `setQuery()` overwrote `this.dirty` with
+// the inner diff result (false for a no-op empty where), so `commit()` early-
+// returned and `view()` handed back the initial empty `dataview` instead of the
+// rows. Each assertion below is binary and independent of `data`'s ordering.
+describe('query empty-where dirty flag', () => {
+  it('returns every row for a queryless DataView', () => {
+    expect(new DataView(data).view()).toEqual(data);
+  });
+  it('returns every row when where is an empty object', () => {
+    expect(new DataView(data, { where: {} }).view()).toEqual(data);
+  });
+  it('returns every row when the query object is empty', () => {
+    expect(new DataView(data, {}).view()).toEqual(data);
+  });
+  it('returns every row when a where deep-equal to {} is applied twice via setQuery', () => {
+    const dv = new DataView(data);
+    dv.setQuery({ where: {} });
+    dv.setQuery({ where: {} });
+    expect(dv.view()).toEqual(data);
+  });
+  it('still filters correctly for a non-empty where', () => {
+    const dv = new DataView(data, {
+      where: { value: { _gt: 100 } },
+      order_by: [{ value: 'asc' }],
+    });
+    expect(dv.view()).toEqual([
+      { name: 'D', value: 128 },
+      { name: 'E', value: 18000 },
+    ]);
+  });
+  it('returns an empty array for empty data', () => {
+    expect(new DataView([]).view()).toEqual([]);
+  });
+});
