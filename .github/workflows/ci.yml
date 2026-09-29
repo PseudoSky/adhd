@@ -51,4 +51,16 @@ jobs:
         if: ${{ github.event_name == 'pull_request' }}
 
       - run: npx nx format:check
+      # Lane-reachability gate — UNCONDITIONAL, before the lanes (same as
+      # .github/workflows/pull-request.yml): proves every gate file invokes
+      # every target in GATE_TARGETS (tools/gate/lane-gate.mjs), that no
+      # `test.dependsOn` re-couples `e2e`, that every `e2e` lane is cached, and
+      # that `publish` reaches every declared `e2e`.
+      - run: node tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs
       - run: npx nx affected -t lint test build verify-dist-load
+      # `e2e` is the resource-heavy lane (2026-09-28, backlog-e2e-cache-separation;
+      # canonical list: tools/gate/lane-gate.mjs — GATE_TARGETS = ['test','e2e']).
+      # It binds real ports and spawns real servers/processes, so it runs in its
+      # OWN step at --parallel=1, never mixed into the --parallel run above. A
+      # regression in these suites must not ship green.
+      - run: npx nx affected -t e2e --parallel=1

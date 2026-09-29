@@ -27,14 +27,21 @@
     },
     "e2e": {
       "executor": "nx:run-commands",
-      "//": "RESOURCE-CONSUMING lane. Deliberately NOT part of `affected` and NOT referenced by any target's dependsOn or by targetDefaults — it runs ONLY on an explicit `nx run apigen-cli:e2e` (and nx affected never selects it). It runs the sibling *.e2e.ts suites via vitest.e2e.config.ts. `dependsOn` is exactly the resource prerequisites those suites need: `build` (most spawn the built dist/index.js) and `apigen-java:package` (java-ts-decimal-parity drives the JVM).",
+      "//": "RESOURCE-CONSUMING lane. REACHABILITY (2026-09-28, backlog-e2e-cache-separation): it is NOT in any `test.dependsOn` (the default lane stays fast), but it IS reached by the push/CI gate's `nx affected -t e2e` — the gate's target list is canonicalised in `tools/gate/lane-gate.mjs` (`GATE_TARGETS = ['test','e2e']`), which `.githooks/pre-push` and both CI workflows consume — and by `publish` via the conditional in `tools/nx-plugins/build/plugin.js` (`hasE2e ? [\"e2e\"] : []`). It is cached (`cache:true` + `inputs`) so a repeat gate run is a cache HIT, never an uncached re-run. It runs the sibling *.e2e.ts suites via vitest.e2e.config.ts. `dependsOn` is exactly the resource prerequisites those suites need: `build` (most spawn the built dist/index.js) and `apigen-java:package` (java-ts-decimal-parity drives the JVM).",
       "dependsOn": ["build", "apigen-java:package"],
       "outputs": ["{workspaceRoot}/coverage/entrypoint/apigen-cli-e2e"],
       "options": {
         "cwd": ".",
         "command": "vitest run --config {projectRoot}/vitest.e2e.config.ts"
       },
-      "cache": false
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": ["vitest"]
+        }
+      ]
     },
     "generate-api": {
       "executor": "@adhd/apigen-nx:generate",

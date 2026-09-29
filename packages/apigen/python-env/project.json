@@ -25,7 +25,7 @@
       ]
     },
     "e2e": {
-      "//": "Resource-consuming lane: runs ONLY the `*.e2e.ts` suite extracted out of the default `test` target (real venv provisioning + `spawnSync` python probes, plus a `dist/` copy). Opt-in and deliberately NOT wired into any `test.dependsOn` nor into nx.json `targetDefaults`, so `nx affected -t test` / the pre-commit + pre-push hooks never reach it. `dependsOn: [\"build\"]` because the moved suite reads this package's OWN build (the published-layout checks read dist/python/, produced by this package's build). Its coverage dir is DISTINCT from the default lane's, and declares no dist-shaped output.",
+      "//": "Resource-consuming lane: runs ONLY the `*.e2e.ts` suite extracted out of the default `test` target (real venv provisioning + `spawnSync` python probes, plus a `dist/` copy). REACHABILITY (2026-09-28, backlog-e2e-cache-separation): it is NOT in any `test.dependsOn` (the default lane stays fast), but it IS reached by the push/CI gate's `nx affected -t e2e` — the gate's target list is canonicalised in `tools/gate/lane-gate.mjs` (`GATE_TARGETS = ['test','e2e']`), which `.githooks/pre-push` and both CI workflows consume — and by `publish` via the conditional in `tools/nx-plugins/build/plugin.js` (`hasE2e ? [\"e2e\"] : []`). It is cached (`cache:true` + `inputs`) so a repeat gate run is a cache HIT, never an uncached re-run. `dependsOn: [\"build\"]` because the moved suite reads this package's OWN build (the published-layout checks read dist/python/, produced by this package's build). Its coverage dir is DISTINCT from the default lane's, and declares no dist-shaped output.",
       "executor": "nx:run-commands",
       "outputs": ["{workspaceRoot}/coverage/packages/apigen/python-env-e2e"],
       "dependsOn": ["build"],
@@ -33,7 +33,14 @@
         "cwd": ".",
         "command": "vitest run --config {projectRoot}/vitest.e2e.config.ts"
       },
-      "cache": false
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": ["vitest"]
+        }
+      ]
     },
     "build": {
       "inputs": [

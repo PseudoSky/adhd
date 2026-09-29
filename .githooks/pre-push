@@ -1,9 +1,20 @@
 #!/usr/bin/env sh
 #
-# Pre-push hook — the full, honest `nx affected -t test` closure that used to
-# live in `pre-commit` (DEBT-PROCESS-AFFECTED-TEST-001 Option 2 -> Option 3
-# migration; see `.githooks/pre-commit`'s Gate 3 header for the incident that
-# moved it here). `pre-commit`'s Gate 3 now runs a fast, staged-file-scoped
+# Pre-push hook — the full, honest `nx affected` closure over both gate lanes
+# (`test` + `e2e`) that used to live in `pre-commit` (DEBT-PROCESS-AFFECTED-TEST-001
+# Option 2 -> Option 3 migration; see `.githooks/pre-commit`'s Gate 3 header for
+# the incident that moved it here). The lane list is NOT hard-coded here: it is
+# sourced from the single canonical module `tools/gate/lane-gate.mjs`
+# (`GATE_TARGETS = ['test','e2e']`), the same list both CI workflows consume —
+# so this file, `pull-request.yml`, and `ci.yml` cannot drift. `@adhd/backlog`'s
+# resource-heavy `e2e` lane is deliberately NOT in `test.dependsOn` (2026-09-28,
+# backlog-e2e-cache-separation — coupling it there ran the whole heavy lane
+# uncached on every push), so the gate must reach it explicitly here.
+# Reachability at the gate is the invariant, and
+# `tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs` (run
+# below, unconditionally) fails the push if any gate file stops invoking every
+# target in that list.
+# `pre-commit`'s Gate 3 now runs a fast, staged-file-scoped
 # vitest pass (seconds); THIS hook runs the real, whole-project, full-affected
 # suite that gate used to run (minutes), but scoped by COMMIT RANGE rather
 # than a snapshot of the working tree — which is what makes it safe to run in
@@ -23,12 +34,34 @@
 #
 # Activated by the same `core.hooksPath=.githooks` as every other hook here.
 # Bypass for an emergency push: `git push --no-verify` (use sparingly — CI's
-# `nx affected -t test` job on the PR is the real, non-bypassable backstop;
-# see `.github/workflows/pull-request.yml`).
+# gate jobs on the PR run the SAME targets (`tools/gate/lane-gate.mjs`) and are
+# the real, non-bypassable backstop; see `.github/workflows/pull-request.yml`
+# and `ci.yml`).
 
 zero_sha="0000000000000000000000000000000000000000"
 hook_dir=$(dirname "$0")
 repo_root=$(cd "$hook_dir/.." && pwd)
+
+# The gate's affected-target list is canonicalised in ONE module
+# (`tools/gate/lane-gate.mjs`, `GATE_TARGETS = ['test','e2e']`). Never
+# hard-code `--target=…` here: if this file and the CI workflows drift, a lane
+# drops out of the gate silently. `flags` is the shell rendering of that list
+# ("--target=test --target=e2e"), reused in the run, echo, and inspect lines
+# below.
+flags=$(node "$repo_root/tools/gate/lane-gate.mjs")
+
+# Fail fast, before spending minutes running the gate (or trusting a green
+# result): prove every gate file still invokes every target in GATE_TARGETS.
+# `tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs` also
+# checks the e2e lanes are cached, that `test` never re-couples to `e2e`, and
+# that `publish` reaches every declared `e2e` lane. Node built-ins only, so it
+# runs even before `pnpm install`. Runs UNCONDITIONALLY (even a no-op push).
+if ! node "$repo_root/tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs"; then
+  echo ""
+  echo "✖ pre-push: lane-reachability check failed — the gate is mis-wired (a lane is unreachable or uncached)."
+  echo "  Fix tools/gate/lane-gate.mjs / the gate files, then re-push."
+  exit 1
+fi
 
 any_ref=0
 overall_status=0
@@ -55,7 +88,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     fi
   fi
 
-  echo "→ pre-push: nx affected -t test  (base=${base:-<default>}  head=$local_sha, ref=$local_ref)"
+  echo "→ pre-push: nx affected $flags  (base=${base:-<default>}  head=$local_sha, ref=$local_ref)"
 
   # ---------------------------------------------------------------------------
   # Passive timing capture (no extra run, no reporter to configure).
@@ -87,9 +120,9 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   status_file=$(mktemp 2>/dev/null || echo /tmp/adhd-pre-push-status.$$)
 
   if [ -n "$base" ]; then
-    { CI=true npx nx affected --target=test --base="$base" --head="$local_sha" --output-style=stream-without-prefixes; echo $? > "$status_file"; } 2>&1 | tee "$timings_log"
+    { CI=true npx nx affected $flags --base="$base" --head="$local_sha" --output-style=stream-without-prefixes; echo $? > "$status_file"; } 2>&1 | tee "$timings_log"
   else
-    { CI=true npx nx affected --target=test --head="$local_sha" --output-style=stream-without-prefixes; echo $? > "$status_file"; } 2>&1 | tee "$timings_log"
+    { CI=true npx nx affected $flags --head="$local_sha" --output-style=stream-without-prefixes; echo $? > "$status_file"; } 2>&1 | tee "$timings_log"
   fi
   # nx's TRUE status (the pipeline's status above is tee's, and is discarded).
   status=$(cat "$status_file" 2>/dev/null)
@@ -103,9 +136,9 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     echo ""
     echo "✖ pre-push: affected test failed for $local_ref — fix and re-push."
     if [ -n "$base" ]; then
-      echo "  Inspect: npx nx affected -t test --base=$base --head=$local_sha"
+      echo "  Inspect: npx nx affected $flags --base=$base --head=$local_sha"
     else
-      echo "  Inspect: npx nx affected -t test --head=$local_sha"
+      echo "  Inspect: npx nx affected $flags --head=$local_sha"
     fi
     echo "  (bypass in an emergency with: git push --no-verify)"
     overall_status=1

@@ -94,8 +94,9 @@ jobs:
         with:
           # >=22 required by @adhd/backlog's sox-graph-store/better-sqlite3@^12
           # native-module toolchain (DEBT-BACKLOG-CI-NODE22-001) — this job's
-          # `nx affected -t lint/test/verify-dist-load` runs every affected
-          # project on this one runner, so the version here is the floor.
+          # `nx affected -t lint/test/e2e/verify-dist-load` runs every affected
+          # project (incl. the resource-heavy e2e lane) on this one runner, so
+          # the version here is the floor.
           node-version: 22
 
       - name: Enable Corepack (pnpm)
@@ -113,9 +114,29 @@ jobs:
         id: lint
         run: npx nx affected -t lint --parallel=5
 
+      # Lane-reachability gate — runs UNCONDITIONALLY, BEFORE the lanes, so a
+      # mis-wired gate fails in seconds rather than after minutes of tests (or,
+      # worse, as a false green). It proves every gate file invokes every target
+      # in GATE_TARGETS (tools/gate/lane-gate.mjs), that no `test.dependsOn`
+      # re-couples `e2e`, that every `e2e` lane is cached, and that `publish`
+      # reaches every declared `e2e`.
+      - name: Lane reachability check
+        run: node tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs
+
+      # Two steps, not one: `e2e` is the resource-heavy lane (2026-09-28,
+      # backlog-e2e-cache-separation; the lane list is canonicalised in
+      # tools/gate/lane-gate.mjs — GATE_TARGETS = ['test','e2e']). It binds real
+      # ports and spawns real servers/processes, so it must NOT run at
+      # --parallel=5 next to the default lane; it gets its own step at
+      # --parallel=1. `Publish` below is guarded by `if: success()`, so an e2e
+      # regression still blocks publish.
       - name: Test
         id: test
         run: npx nx affected -t test --parallel=5
+
+      - name: E2E (resource-heavy lane)
+        id: e2e
+        run: npx nx affected -t e2e --parallel=1
 
       # Green `test` is NOT proof a published package works — `nx test`
       # resolves everything (including Node builtins, in a Rollup-library

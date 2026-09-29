@@ -13,8 +13,8 @@ const repoRoot = path.resolve(__dirname, '../..');
  * The on-demand E2E lane for `@adhd/backlog`.
  *
  * Imported ONLY by the `e2e` target in `project.json` (`nx run backlog:e2e` /
- * `nx run-many -t e2e`). It collects the 33 `src/**\/*.e2e.ts` suites that were
- * extracted out of the default `test` target — every spawn-a-subprocess /
+ * `nx run-many -t e2e`). It collects the resource-heavy `src/**\/*.e2e.ts`
+ * suites that were extracted out of the default `test` target — every spawn-a-subprocess /
  * load-the-real-fastembed-model / CPU-or-memory-hog suite — whose cheap
  * `*.spec.ts` stubs stay in the default lane (each stub's header carries a
  * `Resource lane:` tag naming why it was separated).
@@ -24,14 +24,18 @@ const repoRoot = path.resolve(__dirname, '../..');
  * `test.cache.dir`, and a DISTINCT coverage `reportsDirectory` — so the `test`
  * and `e2e` lanes can never cross-read each other's cache or coverage output.
  *
- * REACHABILITY (FIXED 2026-09-26, backlog 98142eab instance 2): this lane is
- * now wired into the ordinary gate via `test.dependsOn` in project.json, so
- * `nx affected -t test` (and the commit-range-scoped `.githooks/pre-push`
- * closure) run it. It USED to be deliberately unreachable — `e2e` appeared in
- * no target's `dependsOn` — which made all 37 `.e2e.ts` suites dead config and
- * let e2e regressions report green. The separation that matters (resource-
- * heavy suites, distinct cache/coverage, own config) is unchanged; do not
- * remove it from `test.dependsOn`.
+ * REACHABILITY (RE-WIRED 2026-09-28, backlog-e2e-cache-separation): this lane
+ * is reached AT THE GATE, not through `test.dependsOn` — it was removed from
+ * there so the heavy lane stops running uncached on every `nx affected -t test`.
+ * The gate's target list is canonicalised in `tools/gate/lane-gate.mjs`
+ * (`GATE_TARGETS = ['test','e2e']`); `.githooks/pre-push` and both CI workflows
+ * derive their `nx affected` targets from it, and `publish` reaches it via the
+ * conditional in `tools/nx-plugins/build/plugin.js`. It USED to be deliberately
+ * unreachable — `e2e` appeared in no target's `dependsOn` — which made the
+ * `.e2e.ts` suites dead config and let e2e regressions report green. The
+ * separation that matters (resource-heavy suites, distinct cache/coverage, own
+ * config, `cache: true`) is unchanged; do not remove `e2e` from
+ * `GATE_TARGETS`.
  *
  * TARGET NAME (backlog-e2e-separation review): the lane KEEPS the name `e2e`
  * for repo-wide consistency with the 12 sibling apigen packages that name the
@@ -78,7 +82,7 @@ const e2eConfig = mergeConfig(
     test: {
       include: ['src/**/*.e2e.ts'],
       // SERIAL, and only this lane: the base config's `fileParallelism: false`
-      // is not honoured across Vitest 4's fork pool, so these 37 suites were
+      // is not honoured across Vitest 4's fork pool, so these suites were
       // running CONCURRENTLY and racing on shared on-disk state (dist/api.ir.json,
       // dist/api.d.ts, the built bin). `maxWorkers: 1` pins one worker and makes
       // the lane deterministic (measured: flaky -> 271/271 green). Scoped to

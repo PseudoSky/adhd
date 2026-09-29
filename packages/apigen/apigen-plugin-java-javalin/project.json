@@ -25,7 +25,7 @@
     },
     "e2e": {
       "executor": "nx:run-commands",
-      "//": "RESOURCE-CONSUMING lane. Deliberately NOT part of `affected` and NOT referenced by any target's dependsOn or by targetDefaults — it runs ONLY on an explicit `nx run apigen-plugin-java-javalin:e2e` (nx affected never selects it). It runs the sibling *.e2e.ts suites via vitest.e2e.config.ts. `dependsOn` is exactly the resource prerequisites those suites need: `build` (the plugin's own built artifact) and `apigen-java:package` (the real JVM pipeline the plugin drives).",
+      "//": "RESOURCE-CONSUMING lane. REACHABILITY (2026-09-28, backlog-e2e-cache-separation): it is NOT in any `test.dependsOn` (the default lane stays fast), but it IS reached by the push/CI gate's `nx affected -t e2e` — the gate's target list is canonicalised in `tools/gate/lane-gate.mjs` (`GATE_TARGETS = ['test','e2e']`), which `.githooks/pre-push` and both CI workflows consume — and by `publish` via the conditional in `tools/nx-plugins/build/plugin.js` (`hasE2e ? [\"e2e\"] : []`). It is cached (`cache:true` + `inputs`) so a repeat gate run is a cache HIT, never an uncached re-run. It runs the sibling *.e2e.ts suites via vitest.e2e.config.ts. `dependsOn` is exactly the resource prerequisites those suites need: `build` (the plugin's own built artifact) and `apigen-java:package` (the real JVM pipeline the plugin drives).",
       "dependsOn": ["build", "apigen-java:package"],
       "outputs": [
         "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-java-javalin-e2e"
@@ -34,7 +34,14 @@
         "cwd": ".",
         "command": "vitest run --config {projectRoot}/vitest.e2e.config.ts"
       },
-      "cache": false
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": ["vitest"]
+        }
+      ]
     },
     "nx-release-publish": {
       "dependsOn": [

@@ -146,10 +146,12 @@ export default defineConfig({
     // `*.spec.ts` ONLY. The resource-consuming suites (real subprocess spawns,
     // the real fastembed embedding model, real HTTP servers bound to ports)
     // live in sibling `*.e2e.ts` files and run in their OWN config
-    // (vitest.e2e.config.ts) — which IS wired into `test.dependsOn`, so
-    // `nx affected -t test` does run them. Keeping this default lane spec-only
-    // preserves the fast inner loop; the `.e2e.ts` exclusion is structural
-    // (the glob), not an emergent property of glob semantics.
+    // (vitest.e2e.config.ts) — reached AT THE GATE (the gate's target list is
+    // canonicalised in `tools/gate/lane-gate.mjs`: `GATE_TARGETS =
+    // ['test','e2e']`), NOT through this lane's `test.dependsOn`. Keeping this
+    // default lane spec-only preserves the fast inner loop; the `.e2e.ts`
+    // exclusion is structural (the glob), not an emergent property of glob
+    // semantics.
     include: ['src/**/*.spec.ts'],
     testTimeout: 30000,
     hookTimeout: 30000,

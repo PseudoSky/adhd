@@ -1,10 +1,25 @@
 'use strict';
 /** createNodes: attach @adhd/nx-build executor-backed targets to every buildable project. No project.json edits. */
-const { existsSync } = require('node:fs');
+const { existsSync, readFileSync } = require('node:fs');
 const { dirname, join } = require('node:path');
 const { hasBuildTarget, isPublishable } = require('./detect-target');
 const { isScratchPath } = require('../lib/scratch-root');
 function skip(p) { return p === '.' || p.startsWith('node_modules/') || p.includes('/node_modules/') || p.startsWith('dist/') || p.includes('/dist/') || isScratchPath(p); }
+// True if `{projectRoot}/project.json` declares a target of this name. Used to
+// make `publish` conditionally reach the project's resource-heavy `e2e` lane.
+// The heavy lane is deliberately NOT in `test.dependsOn` (2026-09-28,
+// backlog-e2e-cache-separation) so `nx affected -t test` stays a fast default
+// lane — which means `publish`, which used to inherit `e2e` through `test`, must
+// now reach it DIRECTLY, or a broken heavy suite can be published green. Kept
+// here (not in `nx.json` `targetDefaults`) because that key is target-name-only
+// and cannot be scoped per project. A project with no `e2e` target gets an
+// unchanged `publish.dependsOn`.
+function declaresTarget(workspaceRoot, projectRoot, targetName) {
+  const projectJsonPath = join(workspaceRoot, projectRoot, 'project.json');
+  if (!existsSync(projectJsonPath)) return false;
+  try { return Boolean(JSON.parse(readFileSync(projectJsonPath, 'utf-8')).targets?.[targetName]); }
+  catch { return false; }
+}
 // Nx 23 unified on the v2 plugin API: createNodes[1] receives the ARRAY of
 // matched config files and returns [configFile, result] tuples.
 exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
@@ -16,6 +31,9 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
   if (!hasBuildTarget(ctx.workspaceRoot, projectRoot)) return [pkgPath, {}];
   // Private packages have no published artifact to verify/ship.
   if (!isPublishable(ctx.workspaceRoot, projectRoot)) return [pkgPath, {}];
+  // Does this project own a resource-heavy `e2e` lane? If so, `publish` must
+  // reach it directly (see declaresTarget above).
+  const hasE2e = declaresTarget(ctx.workspaceRoot, projectRoot, 'e2e');
   // In-source dist ({projectRoot}/dist) + publish-from-source-root means pnpm resolves
   // @adhd/* natively via each package's own manifest (main → ./dist/…). The old `link`
   // target (symlink node_modules/@adhd/<name> → repo-root dist) is retired — it created
@@ -110,7 +128,17 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
           // dependency's declared range against a version that isn't published
           // yet and hits ETARGET. `^publish` guarantees every internal
           // dependency's publish task completes first, closing that window.
-          "publish": { "executor": "@adhd/nx-build:publish", "dependsOn": ["test", "^test", "version", "^publish", "dist-manifest", "verify-dist-load", "publish-hygiene"], "cache": false },
+          // `e2e` is inserted conditionally: the resource-heavy lane is no
+          // longer reached through `test.dependsOn` (2026-09-28,
+          // backlog-e2e-cache-separation — coupling it there ran the whole
+          // heavy lane uncached on every `nx affected -t test`), so `publish`
+          // must reach it here or a broken heavy suite publishes green. Only a
+          // project that DECLARES an `e2e` target gets the dependency; every
+          // other project's dependsOn is unchanged. The retired `nx release`
+          // path cannot be made conditional (it has no per-project hook), so
+          // entrypoint/backlog carries it in its own `nx-release-publish`
+          // override; the LIVE gate is this `publish` target.
+          "publish": { "executor": "@adhd/nx-build:publish", "dependsOn": ["test", "^test", ...(hasE2e ? ["e2e"] : []), "version", "^publish", "dist-manifest", "verify-dist-load", "publish-hygiene"], "cache": false },
           // release-reset (FEAT-RELEASE-RESET-001): reads LIVE git/working-tree
           // state (HEAD vs working `package.json`/`CHANGELOG.md`) to detect a
           // partial/half-generated release step for THIS project and, with

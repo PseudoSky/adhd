@@ -48,6 +48,15 @@
       "executor": "@adhd/nx-secret-scan:scan",
       "options": {}
     },
+    "lane-reachability": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs"
+      },
+      "metadata": {
+        "description": "Machine check that the push/CI gate's resource-heavy lane (`e2e`) stays reachable and cached — the check that stops the silent-green recurrence. Fails when: a project ships src/**/*.e2e.ts but declares no `e2e` target; any `test.dependsOn` re-couples `e2e`; an `e2e` target is not cache:true with non-empty inputs containing `default`; a publishable project's `e2e` presence disagrees with `publish` reaching `e2e` (the tools/nx-plugins/build/plugin.js conditional); a gate file (.githooks/pre-push + both CI workflows) fails to invoke every target in GATE_TARGETS (tools/gate/lane-gate.mjs); or a project has a tsconfig.spec.json with no compiling target (ratcheted in the checker's baseline). Invoked UNCONDITIONALLY by .githooks/pre-push and both workflows BEFORE the lanes; also `nx run @adhd/source:lane-reachability` / `pnpm run check:lane-reachability`."
+      }
+    },
     "mass-delete-guard": {
       "executor": "@adhd/nx-mass-delete-guard:check",
       "options": {},

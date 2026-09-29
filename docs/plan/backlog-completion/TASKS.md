@@ -77,7 +77,7 @@ Status: `todo` | `wip` | `blocked` | `done`
 | D2 | SPEC gap: `IMoveIssueInput.toComponent` required, no `toProject` | todo | `SPEC.md:1479-1483` |
 | D3 | `s5b-semantic-views` frozen-foundation violation on `query.ts` | todo | |
 | D4 | 9 pre-existing TS errors in spec files | todo | |
-| D5 | Test-lane pattern applied nowhere | todo | `tools/nx-plugins/test/lib/spec-lanes.mjs`; 43 spawn-based specs across 13 projects |
+| D5 | Test-lane pattern applied nowhere | todo | 43 spawn-based specs across 13 projects. The `tools/nx-plugins/test/lib/spec-lanes.mjs` stub was removed 2026-09-28 (dead convention — no project declares a `.proc`/`test-proc` lane); decide: implement the proc lane or drop the idea |
 | D6 | `tools/etl/_profile.ts` uncommitted throwaway | todo | Deliberately left untracked (CLAUDE.md: one-shot ETL scripts stay throwaway). Not deleted — it is not mine to delete. Decide with the user. |
 
 ## E. Hard acceptance criteria (check at the end)

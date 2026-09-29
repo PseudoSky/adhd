@@ -46,12 +46,13 @@ function makeFixtureProject({
   projectRoot,
   name,
   isPrivate = false,
+  extraTargets = {},
 }) {
   const abs = join(workspaceRoot, projectRoot);
   mkdirSync(abs, { recursive: true });
   writeFileSync(
     join(abs, 'project.json'),
-    JSON.stringify({ name, targets: { build: {} } })
+    JSON.stringify({ name, targets: { build: {}, ...extraTargets } })
   );
   const pkg = { name, version: '1.0.0' };
   if (isPrivate) pkg.private = true;
@@ -174,4 +175,63 @@ test('createNodes: version target still carries ^version (topological dependency
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
   }
+});
+
+/**
+ * GAP 1 (2026-09-28, backlog-e2e-cache-separation): the resource-heavy `e2e`
+ * lane is no longer reached through `test.dependsOn`, so `publish` must reach a
+ * DECLARING project's `e2e` directly — else a broken heavy suite publishes
+ * green. The conditional is `hasE2e ? ["e2e"] : []`.
+ */
+test('createNodes: publish reaches `e2e` iff the project declares an `e2e` target', () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'nx-build-plugin-fixture-e2e-'));
+  try {
+    const withE2e = makeFixtureProject({
+      workspaceRoot,
+      projectRoot: 'packages/fixture/fixture-e2e-owner',
+      name: '@adhd/fixture-e2e-owner',
+      extraTargets: { e2e: { cache: true, inputs: ['default'] } },
+    }).slice(workspaceRoot.length + 1);
+    const withoutE2e = makeFixtureProject({
+      workspaceRoot,
+      projectRoot: 'packages/fixture/fixture-no-e2e',
+      name: '@adhd/fixture-no-e2e',
+    }).slice(workspaceRoot.length + 1);
+
+    const ownerTargets =
+      runFor(withE2e, { workspaceRoot }).projects['packages/fixture/fixture-e2e-owner'].targets;
+    const plainTargets =
+      runFor(withoutE2e, { workspaceRoot }).projects['packages/fixture/fixture-no-e2e'].targets;
+
+    assert.ok(
+      ownerTargets.publish.dependsOn.includes('e2e'),
+      `a project declaring \`e2e\` must have it in publish.dependsOn — got: ${JSON.stringify(ownerTargets.publish.dependsOn)}`
+    );
+    assert.ok(
+      !plainTargets.publish.dependsOn.includes('e2e'),
+      `a project WITHOUT an \`e2e\` target must NOT get one injected — got: ${JSON.stringify(plainTargets.publish.dependsOn)}`
+    );
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('RED-equivalent: a publish.dependsOn that omits the conditional `e2e` fails the GAP-1 assertion', () => {
+  // The broken shape: publish always dependsOn test but never e2e (the exact
+  // regression the conditional guards). The assertion in the test above must
+  // reject it.
+  const brokenPublishDependsOn = [
+    'test',
+    '^test',
+    'version',
+    '^publish',
+    'dist-manifest',
+    'verify-dist-load',
+    'publish-hygiene',
+  ];
+  assert.equal(
+    brokenPublishDependsOn.includes('e2e'),
+    false,
+    'sanity check: the unconditional (pre-fix) publish.dependsOn must NOT satisfy the e2e-reachability assertion'
+  );
 });
