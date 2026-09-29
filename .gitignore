@@ -173,3 +173,6 @@ packages/agent/*/tsconfig.tsbuildinfo
 .nx/polygraph
 .nx/self-healing
 .nx/migrate-runs
+# Agent research traces — scratch working papers, same class as the
+# agent-scratch section above; they are working notes, not repo artifacts.
+.research-trace/
