@@ -40,7 +40,7 @@ import {
   X_APIGEN_CODEC,
   X_APIGEN_CTOR,
   X_APIGEN_TOJSON,
-  renderExampleNote,
+  synthesizeExample,
 } from '@adhd/apigen-base-logical';
 import type { Layer, Call, Next } from './invoke';
 import type { LayerResult } from './invoke';
@@ -49,6 +49,11 @@ import type { LayerResult } from './invoke';
 // Ajv singleton — one instance for all validation in the runtime process.
 // `allErrors: true` collects all violations, not just the first, so the error
 // message is maximally informative.
+// `verbose: true` attaches `parentSchema` and `data` to each ErrorObject. The
+// formatter below reads `parentSchema.properties` (the set of keys that WOULD
+// have been accepted, for a "did you mean"/allowed-keys hint) and `data` (to
+// echo back the rejected value) — neither is present on AJV's default lite
+// error shape, so verbose is a correctness requirement here, not decoration.
 // `addFormats` registers all standard JSON Schema `format` keywords (date-time,
 // date, time, uuid, email, uri, etc.) so that a schema like
 // `{ type: 'string', format: 'date-time' }` actively rejects non-conforming
@@ -71,7 +76,7 @@ import type { LayerResult } from './invoke';
 // any of these five keys unless declared, which crashed BUG-APIGEN-030.
 // ---------------------------------------------------------------------------
 
-const ajv = new Ajv({ allErrors: true });
+const ajv = new Ajv({ allErrors: true, verbose: true });
 addFormats(ajv);
 for (const keyword of [
   X_APIGEN_LOGICAL,
@@ -94,29 +99,187 @@ ajv.addFormat('decimal', /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/);
 // ---------------------------------------------------------------------------
 
 /**
- * Format AJV error objects into a human-readable summary line.
+ * Convert an AJV `instancePath` (a JSON Pointer, e.g. `/data/input/filter`)
+ * into a readable dotted path (`data.input.filter`). An empty path is `(root)`.
+ *
+ * @internal
+ */
+function pointerToPath(instancePath: string): string {
+  if (!instancePath) return '(root)';
+  return instancePath
+    .replace(/^\//, '')
+    .split('/')
+    .map((seg) => seg.replace(/~1/g, '/').replace(/~0/g, '~'))
+    .join('.');
+}
+
+/**
+ * The declared keys of the object schema a violation points at. AJV carries the
+ * offending object's own schema in `ErrorObject.parentSchema`, so its
+ * `properties` is exactly the set of keys that WOULD have been accepted.
+ *
+ * @internal
+ */
+function allowedKeysOf(parentSchema: unknown): string[] {
+  const props = (
+    parentSchema as { properties?: Record<string, unknown> } | undefined
+  )?.properties;
+  return props ? Object.keys(props) : [];
+}
+
+/**
+ * Levenshtein edit distance. Small inputs only (the bounded-key suggestion path).
+ *
+ * @internal
+ */
+function editDistance(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+/**
+ * The nearest declared key to an unrecognized one — the "did you mean" hint.
+ * Returns `undefined` when nothing is close enough; the threshold grows with the
+ * input length so short keys do not match spuriously.
+ *
+ * @internal
+ */
+function closestKey(unknown: string, allowed: string[]): string | undefined {
+  let best: string | undefined;
+  let bestDist = Infinity;
+  for (const key of allowed) {
+    const d = editDistance(unknown.toLowerCase(), key.toLowerCase());
+    if (d < bestDist) {
+      bestDist = d;
+      best = key;
+    }
+  }
+  const threshold = Math.max(2, Math.floor(unknown.length / 3));
+  return best !== undefined && bestDist <= threshold ? best : undefined;
+}
+
+/** A short type label for a rejected value (used by `type` violations). */
+function valueType(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  return typeof value;
+}
+
+/**
+ * Render ONE AJV error as an actionable line.
+ *
+ * The whole point (BUG-APIGEN-MCP-DISCOVERABILITY-001): AJV's raw `message` for
+ * an `additionalProperties` violation is the bare string "must NOT have
+ * additional properties" — it names NEITHER the offending key NOR the keys that
+ * would have been accepted, so a caller (especially an LLM) can only guess
+ * again. AJV carries the offending key in `params.additionalProperty` and the
+ * accepted set in `parentSchema.properties`; this surfaces both, plus a
+ * nearest-key ("did you mean") hint.
+ *
+ * @internal
+ */
+function formatOneError(e: ErrorObject): string {
+  const where = pointerToPath(e.instancePath);
+  const params = (e.params ?? {}) as Record<string, unknown>;
+
+  switch (e.keyword) {
+    case 'additionalProperties': {
+      const unknownKey = String(params['additionalProperty'] ?? '?');
+      const allowed = allowedKeysOf(e.parentSchema);
+      const suggestion = closestKey(unknownKey, allowed);
+      const allowedPart = allowed.length
+        ? `; allowed keys: ${allowed.join(', ')}`
+        : '';
+      const hintPart = suggestion ? ` (did you mean '${suggestion}'?)` : '';
+      return `unknown key '${unknownKey}' at ${where}${allowedPart}${hintPart}`;
+    }
+    case 'required': {
+      const missing = String(params['missingProperty'] ?? '?');
+      const allowed = allowedKeysOf(e.parentSchema);
+      const allowedPart = allowed.length
+        ? `; allowed keys: ${allowed.join(', ')}`
+        : '';
+      return `missing required key '${missing}' at ${where}${allowedPart}`;
+    }
+    case 'enum': {
+      const allowed = Array.isArray(params['allowedValues'])
+        ? (params['allowedValues'] as unknown[])
+        : [];
+      const got = (e as { data?: unknown }).data;
+      return `value ${JSON.stringify(got)} at ${where} is not one of: ${allowed
+        .map((v) => JSON.stringify(v))
+        .join(', ')}`;
+    }
+    case 'type': {
+      const got = (e as { data?: unknown }).data;
+      return `${where} must be ${String(params['type'])} (got ${valueType(got)})`;
+    }
+    default:
+      return `${where} ${e.message ?? 'failed schema check'}`;
+  }
+}
+
+/** Max individual violations listed before the tail is summarized by a count. */
+const MAX_REPORTED_ERRORS = 12;
+
+/**
+ * Format AJV error objects into an actionable, human/agent-readable summary.
  *
  * @internal
  */
 function formatErrors(errors: ErrorObject[]): string {
-  return errors
-    .map(
-      (e) =>
-        `${e.instancePath || '(root)'} ${e.message ?? 'failed schema check'}`
-    )
-    .join('; ');
+  const shown = errors.slice(0, MAX_REPORTED_ERRORS).map(formatOneError);
+  if (errors.length > MAX_REPORTED_ERRORS) {
+    shown.push(`…and ${errors.length - MAX_REPORTED_ERRORS} more`);
+  }
+  return shown.join('; ');
+}
+
+/**
+ * True when a synthesized example carries a concrete value, i.e. it is not just
+ * nested empty objects. A schema whose required set is empty (e.g. an
+ * all-optional `data.input`) synthesizes to `{"data":{"input":{}}}`, which
+ * teaches a caller nothing and reads as "pass an empty object" — worse than no
+ * example. Such an example is suppressed.
+ *
+ * @internal
+ */
+function hasInformativeValue(value: unknown): boolean {
+  if (value === null) return false;
+  if (Array.isArray(value)) return value.some(hasInformativeValue);
+  if (typeof value === 'object') {
+    const values = Object.values(value as Record<string, unknown>);
+    return values.some(hasInformativeValue);
+  }
+  return true;
 }
 
 /**
  * BUG-APIGEN-MCP-DISCOVERABILITY-001: builds the full `invalid_argument`
  * message for a validation failure — AJV's own per-violation diagnostics
- * (WHAT was wrong, from {@link formatErrors}) PLUS a concrete, schema-derived
- * example of a shape that WOULD pass (WHAT a correct call looks like),
- * synthesized by the exact same `@adhd/apigen-base-logical` primitive the
- * MCP tool description (`tool-description.ts`'s `buildToolDescription`)
- * uses to render its own `Example: {...}` note — so a caller who got the
- * shape wrong sees the identical worked example whether they read the tool
- * description up front or only discover the mistake from the error.
+ * (WHAT was wrong, from {@link formatErrors}, made actionable: the offending
+ * key, the accepted keys, and a nearest-key hint) PLUS, when it is actually
+ * informative, a concrete schema-derived example of a shape that WOULD pass
+ * (WHAT a correct call looks like), synthesized by the same
+ * `@adhd/apigen-base-logical` primitive the MCP tool description
+ * (`tool-description.ts`'s `buildToolDescription`) uses for its own
+ * `Example: {...}` note.
+ *
+ * An example that would synthesize to nested empty objects (an all-optional
+ * input) is dropped rather than shown, so the error never reads as "pass an
+ * empty object".
  *
  * @internal shared by both {@link validateLayer} and {@link makeValidateLayer}.
  */
@@ -124,9 +287,13 @@ function buildValidationErrorMessage(
   errors: ErrorObject[],
   inputSchema: Record<string, unknown>
 ): string {
-  const exampleNote = renderExampleNote(inputSchema);
   const parts = [`Validation failed: ${formatErrors(errors)}`];
-  if (exampleNote) parts.push(exampleNote);
+  const example = synthesizeExample(
+    inputSchema as Parameters<typeof synthesizeExample>[0]
+  );
+  if (hasInformativeValue(example)) {
+    parts.push(`Example: ${JSON.stringify(example)}`);
+  }
   return parts.join(' — ');
 }
 

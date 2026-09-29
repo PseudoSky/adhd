@@ -376,3 +376,129 @@ describe('validateLayer — necessary-not-sufficient (§6 boundary)', () => {
     expect(dispatchSpy).toHaveBeenCalledOnce();
   });
 });
+
+// ---------------------------------------------------------------------------
+// 5. ACTIONABLE DIAGNOSTICS (BUG-APIGEN-MCP-DISCOVERABILITY-001)
+//
+// AJV's raw `additionalProperties` message is the bare string "must NOT have
+// additional properties" — it names neither the offending key nor the accepted
+// set, so a caller can only re-guess. These tests pin the improved message:
+// it names the offending key, lists the allowed keys, offers a "did you mean"
+// hint, names missing/enum keys, and drops an uninformative empty example.
+// ---------------------------------------------------------------------------
+
+const diagSchemas: ComposedSchemas = {
+  createUser: schemas.createUser,
+  setProvider: {
+    input: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'object',
+          properties: {
+            provider: { type: 'string', enum: ['duckduckgo', 'google', 'npm'] },
+          },
+          required: ['provider'],
+          additionalProperties: false,
+        },
+      },
+      required: ['data'],
+    },
+    output: {},
+  },
+  // All-optional input: `data.input` has no required keys, so a synthesized
+  // example is just nested empty objects — uninformative and must be dropped.
+  allOptional: {
+    input: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'object',
+          properties: { input: { type: 'object', properties: {} } },
+          additionalProperties: false,
+        },
+      },
+      required: ['data'],
+    },
+    output: {},
+  },
+};
+
+const diagFns = {
+  createUser: vi.fn().mockResolvedValue({ id: '1' }),
+  setProvider: vi.fn().mockResolvedValue({ ok: true }),
+  allOptional: vi.fn().mockResolvedValue({ ok: true }),
+};
+
+async function captureValidationError(
+  opId: string,
+  domainArgs: Record<string, unknown>
+): Promise<ApiError> {
+  const invoke = createInvoker([makeValidateLayer(diagSchemas)]);
+  const call = makeCall({ operation: { id: opId }, domainArgs });
+  return invoke(opId, call, { fns: diagFns, schemas: diagSchemas }).catch(
+    (e) => e as ApiError
+  );
+}
+
+describe('validateLayer — actionable diagnostics (BUG-APIGEN-MCP-DISCOVERABILITY-001)', () => {
+  it('names the offending key AND the allowed keys on an additionalProperties violation', async () => {
+    const err = await captureValidationError('createUser', {
+      name: 'Alice',
+      age: 30,
+      extraField: true,
+    });
+
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.code).toBe('invalid_argument');
+    // The offending key is named…
+    expect(err.message).toContain("unknown key 'extraField'");
+    // …and so is the exact set of keys that would have been accepted.
+    expect(err.message).toContain('allowed keys: name, age');
+    // The opaque AJV phrasing is gone.
+    expect(err.message).not.toContain('must NOT have additional properties');
+  });
+
+  it('offers a did-you-mean nearest-key hint for a near-miss key', async () => {
+    const err = await captureValidationError('createUser', {
+      name: 'Alice',
+      agge: 30, // typo of the accepted key `age`
+    });
+
+    expect(err.message).toContain("unknown key 'agge'");
+    expect(err.message).toContain("did you mean 'age'");
+    // …and the missing required key is named too.
+    expect(err.message).toContain("missing required key 'age'");
+  });
+
+  it('names the missing key on a required violation', async () => {
+    const err = await captureValidationError('createUser', { name: 'Alice' });
+
+    expect(err.message).toContain("missing required key 'age'");
+    expect(err.message).toContain('allowed keys: name, age');
+  });
+
+  it('names the allowed values on an enum violation', async () => {
+    const err = await captureValidationError('setProvider', { provider: 'web' });
+
+    expect(err.message).toContain('is not one of:');
+    expect(err.message).toContain('"duckduckgo"');
+    expect(err.message).toContain('"npm"');
+    expect(err.message).toContain('"web"'); // the rejected value is echoed back
+  });
+
+  it('keeps an informative worked example', async () => {
+    const err = await captureValidationError('setProvider', { provider: 'web' });
+    expect(err.message).toContain('Example:');
+    expect(err.message).toContain('"provider"');
+  });
+
+  it('suppresses an uninformative (all-empty) worked example', async () => {
+    const err = await captureValidationError('allOptional', { bogus: 1 });
+
+    expect(err.message).toMatch(/Validation failed/);
+    expect(err.message).toContain("unknown key 'bogus' at data");
+    // `{"data":{}}` teaches nothing — it must not be rendered.
+    expect(err.message).not.toContain('Example:');
+  });
+});

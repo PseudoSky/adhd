@@ -36,13 +36,30 @@ import type { Logger, LogFormat, CreateLoggerOptions, ParamInfo, AnyFn, BatchOpt
   `apigen-plugin-mcp`'s dynamic server, so every apigen-mounted tool's description carries a
   concrete example of its own real shape, not just a generic convention sentence.
 
-## Validation error messages include a worked example
+## Validation error messages are actionable
 
-The validate-Layer's AJV validation-failure errors append the same schema-synthesized
-example described above (`invalid_argument`, `Validation failed: ... — Example: {...}`) —
-so a rejected call comes back with both what was structurally wrong and a shape that would
-actually pass. This closes a real discoverability gap: previously an error only named the
-missing/invalid property, never what a correct call looked like.
+The validate-Layer's AJV validation-failure errors (`invalid_argument`) are built so a
+caller — including an LLM — can correct the call in one round-trip:
+
+- **`additionalProperties`** names the offending key, lists the keys that *would* have been
+  accepted, and adds a nearest-key "did you mean" hint — e.g.
+  `unknown key 'agge' at data; allowed keys: name, age (did you mean 'age'?)`.
+- **`required`** names the missing key and the accepted set.
+- **`enum`** echoes the rejected value and lists the allowed values.
+
+This closes the discoverability gap where AJV's raw message was the bare
+"must NOT have additional properties" — which named neither the offending key nor the
+accepted set, so a caller could only guess again. Violations are listed one per line and
+capped (with an `…and N more` tail) rather than concatenated into an unreadable run.
+
+The message still appends the schema-synthesized worked example described above,
+**except** when that example would synthesize to nested empty objects (an all-optional
+input, e.g. `{"data":{"input":{}}}`) — then it is dropped rather than shown, because it
+reads as "pass an empty object" and teaches nothing.
+
+> Requires AJV `verbose: true`: the formatter reads `parentSchema` (the accepted-key set)
+> and `data` (the rejected value) off each `ErrorObject`, neither of which is present on
+> AJV's default error shape.
 
 ## Request envelope
 
