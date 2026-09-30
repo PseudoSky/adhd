@@ -163,8 +163,23 @@ jobs:
             echo "affected=NA" >> $GITHUB_OUTPUT
           else
             npx nx affected -t build --exclude=$EXCLUDE --parallel=4
-            npx nx affected -t version --exclude=$EXCLUDE --parallel=4
-            npx nx affected -t publish --exclude=$EXCLUDE --configuration=production --parallel=4
+            # A bare `nx affected -t version/publish` can NEVER publish: the
+            # `publish` executor's manifest backstop (release-manifest.js) refuses
+            # any project not listed in a fresh .adhd/tmp/release-manifest.json,
+            # and the ONLY writer of that manifest is `computeChangedProjectSet`
+            # (changed-set.js) — which `pnpm release`/run-release.mjs call, and the
+            # bare targets never do. Mint the run token and compute the scope here
+            # so the version/publish phases below WRITE and then satisfy that
+            # manifest. See PUBLISHING.md "CI publish (automated)" and
+            # tools/nx-plugins/build/ci-publish-wiring.spec.mjs.
+            export RELEASE_RUN_TOKEN=$(uuidgen)
+            RELEASE_PROJECTS=$(node -e 'const {computeChangedProjectSet}=require("./tools/nx-plugins/build/lib/changed-set.js");process.stdout.write(computeChangedProjectSet({workspaceRoot: process.cwd()}).projectNames.join(","));')
+            if [ -z "$RELEASE_PROJECTS" ]; then
+              echo "No projects in the computed release changed-set — nothing to version/publish"
+            else
+              npx nx run-many -t version --projects=$RELEASE_PROJECTS
+              npx nx run-many -t publish --projects=$RELEASE_PROJECTS --configuration=production
+            fi
             echo "affected=$AFFECTED" >> $GITHUB_OUTPUT
           fi
 

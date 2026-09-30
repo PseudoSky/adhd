@@ -418,13 +418,16 @@ A release once reported success while three packages were silently withheld —
 their publish tasks never ran because the task graph bailed upstream. The registry
 is the only source of truth for what is published.
 
-### Do not use `pnpm release:dry` as a safety check
+### `pnpm release:dry` is a preview, not a safety check
 
-It runs `nx run-many -t version/publish --dryRun` **unscoped** — the full workspace
-task graph (486–541 tasks on a real changeset), the exact resource-contention shape
-that caused three distinct failures. It also hides that `run-many` inside
-`package.json`, so the `check-nx-scope` pre-tool hook does not catch it. Use
-`pnpm release`, which scopes via `changed-set.js`.
+`pnpm release:dry` is scoped and manifest-safe: it mints `RELEASE_RUN_TOKEN` and
+computes the scope via `computeChangedProjectSet`, exactly like `pnpm release`, so
+its `--dryRun` version/publish phases no longer run unscoped and the `publish`
+executor's manifest backstop no longer refuses them
+(`BUG-RELEASE-DRY-BLOCKED-BY-MANIFEST-BACKSTOP`). It is still only a PREVIEW of
+version/publish — it does not run GATE 2 (`clean-room-smoke`) or the global-CLI
+`sync-global`, so it is not proof a release works end-to-end. Use `pnpm release`
+for the real thing.
 
 ---
 
@@ -450,23 +453,28 @@ that caused three distinct failures. It also hides that `run-many` inside
 
 ## CI publish (automated)
 
-> ⚠️ **This section previously described intended behavior, not actual behavior —
-> corrected 2026-07-20.** The CI workflow (`.github/workflows/pull-request.yml`,
-> `Publish` step) does **not** call `nx release` at all. It calls the **legacy**
-> `nx affected -t version` / `-t publish` targets (the `version`/`publish`
-> `targetDefaults` in `nx.json`, which predate the `nx release` migration), and
-> those targets' production configuration hardcodes `npm publish dist/libs/core` —
-> a path with no corresponding project anywhere in this workspace. If this job
-> ever actually ran with affected libraries present, it would fail outright. It
-> gets **none** of the `verify-dist-load` gating this doc describes above. See
-> `BACKLOG.md` `BUG-CI-PUBLISH-STALE-TARGETS-001` — rewiring CI's `Publish` step to
-> call `node tools/nx-plugins/build/executors/publish/release-publish.mjs` is filed but not yet done (it's a live
-> npm-publishing job gated by the `NPM_TOKEN` secret; needs explicit human sign-off
-> before changing).
->
-> **Until that's fixed, do not rely on CI to publish correctly.** Publish locally
-> via `node tools/nx-plugins/build/executors/publish/release-publish.mjs` (§2 above) and verify the dry-run output
-> yourself.
+The `Publish` step (`.github/workflows/pull-request.yml`) publishes through the
+SAME scoped pipeline as `pnpm release` — never a bare `nx affected -t version` /
+`-t publish` (those can never publish; see below). In order it:
+
+1. builds the affected libraries (`npx nx affected -t build`), then
+2. mints a run token (`export RELEASE_RUN_TOKEN=$(uuidgen)`) and computes the
+   changed-set with
+   `node -e '… computeChangedProjectSet({workspaceRoot: process.cwd()})'` —
+   this step is what WRITES `.adhd/tmp/release-manifest.json`, the manifest the
+   `publish` executor's backstop requires
+   (`tools/nx-plugins/build/lib/release-manifest.js`), then
+3. runs `npx nx run-many -t version --projects=$RELEASE_PROJECTS` and
+   `npx nx run-many -t publish --projects=$RELEASE_PROJECTS --configuration=production`.
+
+A bare `nx affected -t publish` can never publish: the `publish` executor calls
+`checkPublishAllowed` FIRST and refuses any project absent from a fresh manifest,
+and the ONLY writer of that manifest is `computeChangedProjectSet` — which the
+bare targets never call. That required shape is asserted by
+`tools/nx-plugins/build/ci-publish-wiring.spec.mjs`.
+
+`tools/nx-plugins/build/executors/publish/release-publish.mjs` is RETIRED — its own
+header (lines 7–13) forbids wiring new callers to it; do not point CI at it.
 
 This requires `NPM_TOKEN` to be set as a GitHub Actions secret using an **automation token** (no OTP required).
 
