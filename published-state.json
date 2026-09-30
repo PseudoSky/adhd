@@ -258,10 +258,10 @@
     "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
   },
   "@adhd/data-query-engine": {
-    "version": "2.3.3",
-    "normalizedHash": "sha256:354951a1a5a575b56963f172793d1eecec7763be4a40aef9d32fd7c59a26e01b",
-    "publishedIntegrity": "sha512-Is3VumS0F71dyblMa24JLU5D2oETJieVau+RQOs33AePVrJuvrI5aFEiYnE3G3nCvn82JgxraPTFdo1pmvemuQ==",
-    "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
+    "version": "2.3.4",
+    "normalizedHash": "sha256:99ca5dfba3f5cecad4b6d22cf2ca6f58c3b3c42fcf1b1cd1b0ae4c219bc0fe8e",
+    "publishedIntegrity": "sha512-jNxSevD8i8l9wyjmZgIx8ZQCsBBoKJr8K0Iklo+noS/PH8YsenA5TyKfK0sq4NrVpSeebzeaUA0obA5xz798UA==",
+    "publishedFromRef": "bda5c4b3965ff743b2e59738dd0f98581a2a5832"
   },
   "@adhd/decompile-cli": {
     "version": "0.2.3",

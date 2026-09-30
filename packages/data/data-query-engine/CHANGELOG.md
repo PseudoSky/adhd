@@ -1,3 +1,13 @@
+## 2.3.4 (2026-09-30)
+
+### 🩹 Fixes
+
+- **data-query-engine:** re-export expression types and materialise empty/absent where ([b9512c7e](https://github.com/PseudoSky/adhd/commit/b9512c7e))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.2 (2026-09-26)
 
 ### 🚀 Features
