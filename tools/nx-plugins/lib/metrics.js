@@ -48,10 +48,11 @@ const FILE_NAME = 'metrics.json';
 const MAX_RECORDS = 5000;
 const MAX_RECORDS_KEEP = 2000;
 
-/** Default `ADHD_NX_METRICS_MAX_CPU_PCT` — generous enough that a task using
- * a couple of cores' worth of in-process parallelism (e.g. worker_threads)
- * doesn't false-trip, but tight enough to catch a genuinely runaway task. */
-const DEFAULT_MAX_CPU_PCT = 300;
+/** Default `ADHD_NX_METRICS_MAX_CPU_PCT`. `0` (the default) means the CPU
+ * guard is DISABLED — enforcement is opt-in. Set
+ * `ADHD_NX_METRICS_MAX_CPU_PCT=<n>` to a positive value to re-enable it with
+ * cap `n`. */
+const DEFAULT_MAX_CPU_PCT = 0;
 
 function metricsPath(root) {
   return join(root, FILE_NAME);
@@ -307,13 +308,15 @@ function checkCpuGuard(taskName, context, cpuPercent) {
  * waiting parent — there is no portable, dependency-free way to reliably
  * read a child's rusage across macOS/Linux, so that case is intentionally
  * out of scope for this guard (in-process CPU-heavy work like `secret-scan`
- * is the target). When the measured percentage exceeds
- * `ADHD_NX_METRICS_MAX_CPU_PCT` (default {@link DEFAULT_MAX_CPU_PCT}), the
- * task FAILS by default — `withMetrics` throws, naming the task, project,
- * measured %, and threshold. Set `ADHD_NX_METRICS_MAX_CPU_PCT=0` to disable
- * the guard entirely, or `ADHD_NX_METRICS_CPU_MODE=warn` to downgrade a trip
- * to a `console.warn` instead of a failure. The guard runs independently of
- * `ADHD_NX_METRICS` (recording can be off while the guard stays on).
+ * is the target). The guard is DISABLED by default: `ADHD_NX_METRICS_MAX_CPU_PCT`
+ * defaults to `{@link DEFAULT_MAX_CPU_PCT}` (`0`), and a non-positive
+ * threshold is an early-return no-op. Set `ADHD_NX_METRICS_MAX_CPU_PCT=<n>`
+ * to a positive value to re-enable enforcement with cap `n`: when the
+ * measured percentage exceeds `n`, the task FAILS — `withMetrics` throws,
+ * naming the task, project, measured %, and threshold.
+ * `ADHD_NX_METRICS_CPU_MODE=warn` downgrades a trip to a `console.warn`
+ * instead of a failure. The guard runs independently of `ADHD_NX_METRICS`
+ * (recording can be off while the guard stays on).
  *
  * @template T
  * @param {string} taskName

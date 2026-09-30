@@ -12,23 +12,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
-// BUG (flaky CPU-guard trips under real machine load, test:build-tools):
-// `withMetrics` ALWAYS runs the real `checkCpuGuard` (FEAT-NXMETRICS-CPU-GUARD-001)
-// against a REAL `process.cpuUsage()` measurement, at the real default
-// `ADHD_NX_METRICS_MAX_CPU_PCT=300` threshold, unless a test explicitly
-// overrides it. Most `withMetrics(...)` calls in this file exercise
-// unrelated behavior (record shape, error propagation, concurrency, write
-// failures, overhead) with near-instantaneous no-op task bodies — for those,
-// even a few real CPU-microseconds against a near-zero real wall-clock
-// window can compute a measured % far above 300% on a loaded/shared machine
-// (observed 312%-1300%+ here), tripping the guard and failing an assertion
-// that has nothing to do with the guard. Disable the guard file-wide by
-// default; the "CPU GUARD" test block below explicitly re-scopes
-// `ADHD_NX_METRICS_MAX_CPU_PCT` via `withEnv(...)` wherever guard-tripping
-// behavior itself is the thing under test, so this default never masks that
-// coverage — it only protects the OTHER tests from a guard they aren't
-// exercising.
-process.env.ADHD_NX_METRICS_MAX_CPU_PCT = '0';
+// The CPU guard is DISABLED by default (`ADHD_NX_METRICS_MAX_CPU_PCT` defaults
+// to 0), so `withMetrics` never trips it here unless a test opts in. Tests in
+// the "CPU GUARD" block below that exercise tripping behavior set a finite
+// threshold explicitly via `withEnv(...)`.
 
 const require = createRequire(import.meta.url);
 const {
@@ -500,6 +487,19 @@ test('checkCpuGuard: ADHD_NX_METRICS_MAX_CPU_PCT=0 disables the guard entirely',
   });
 });
 
+test('checkCpuGuard: the DEFAULT (no env) is DISABLED — a measurement above the old 300% cap does not throw', async () => {
+  await withEnv({ ADHD_NX_METRICS_MAX_CPU_PCT: undefined }, () => {
+    assert.equal(__internals.DEFAULT_MAX_CPU_PCT, 0, 'the compiled-in default must be the disabled sentinel');
+    assert.doesNotThrow(() => checkCpuGuard('runaway', { projectName: '@adhd/x' }, 395.1));
+  });
+});
+
+test('checkCpuGuard: a negative threshold is also treated as disabled', async () => {
+  await withEnv({ ADHD_NX_METRICS_MAX_CPU_PCT: '-1' }, () => {
+    assert.doesNotThrow(() => checkCpuGuard('runaway', {}, 999999));
+  });
+});
+
 test('checkCpuGuard: ADHD_NX_METRICS_CPU_MODE=warn downgrades a trip to console.warn, never throws', async () => {
   await withEnv({ ADHD_NX_METRICS_MAX_CPU_PCT: '10', ADHD_NX_METRICS_CPU_MODE: 'warn' }, () => {
     const calls = [];
@@ -558,20 +558,13 @@ test('withMetrics + CPU GUARD teeth test: a busy-loop task TRIPS the guard under
   }
 });
 
-test('withMetrics + CPU GUARD negative control: a task measuring well under the threshold PASSES at the default threshold (mocked CPU — deterministic regardless of machine load)', async () => {
+test('withMetrics + CPU GUARD negative control: a low-CPU task PASSES at the default (guard disabled) (mocked CPU — deterministic regardless of machine load)', async () => {
   const root = makeRoot();
   try {
-    // Real short-burst process.cpuUsage() deltas legitimately spike well
-    // above 300% on a loaded machine (observed 320%-550%) — that's a real
-    // machine-load artifact, not a guard-logic bug, and asserting this
-    // "doesn't trip" test against real measurement makes it flaky. Mock the
-    // CPU-time half to a tiny, fixed 1ms delta instead, and give the task a
-    // real >=50ms wall-clock floor via `setTimeout` (real elapsed time can
-    // only be >= that floor — never less, regardless of scheduling noise —
-    // so 1ms fake CPU / >=50ms real wall caps out at <=2%, nowhere near the
-    // 300% default). The guard logic under test — "measured % under the
-    // default threshold never trips" — is proven the same way, but without
-    // depending on what else the machine happens to be doing.
+    // At the default `ADHD_NX_METRICS_MAX_CPU_PCT=0` the guard is disabled, so
+    // any measurement passes. Mock a tiny fixed CPU-time delta and give the
+    // task a real `setTimeout` wall-clock floor so the recorded cpuPercent is
+    // low and independent of what else the machine is doing.
     await withEnv({ ADHD_NX_METRICS_MAX_CPU_PCT: undefined }, async () => {
       await withFakeCpuUsage({ cpuUserMs: 1 }, async () => {
         const result = await withMetrics('busy-task', { root, projectName: '@adhd/busy' }, async () => {
@@ -584,6 +577,31 @@ test('withMetrics + CPU GUARD negative control: a task measuring well under the 
     const { records } = readMetrics(root);
     assert.equal(records[0].success, true);
     assert.ok(records[0].cpuPercent < 20, `expected a low mocked cpuPercent, got ${records[0].cpuPercent}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('withMetrics + CPU GUARD: at the DEFAULT (guard disabled, no env) a task measuring far above the old 300% cap still SUCCEEDS (mocked CPU — deterministic)', async () => {
+  const root = makeRoot();
+  try {
+    // The compiled-in default guard is OFF (`ADHD_NX_METRICS_MAX_CPU_PCT=0`),
+    // so a task whose measured CPU wildly exceeds the old 300% cap must not
+    // trip. Mock a huge fixed CPU-time delta over a real `setTimeout`
+    // wall-clock floor so the recorded cpuPercent is far above 300%
+    // regardless of machine load (1e6ms fake CPU / any wall < ~5.5min => >300%).
+    await withEnv({ ADHD_NX_METRICS_MAX_CPU_PCT: undefined }, async () => {
+      await withFakeCpuUsage({ cpuUserMs: 1e6 }, async () => {
+        const result = await withMetrics('runaway', { root, projectName: '@adhd/busy' }, async () => {
+          await new Promise((r) => setTimeout(r, 10));
+          return { success: true };
+        });
+        assert.equal(result.success, true);
+      });
+    });
+    const { records } = readMetrics(root);
+    assert.equal(records[0].success, true);
+    assert.ok(records[0].cpuPercent > 300, `expected a measured cpuPercent above the old 300% cap, got ${records[0].cpuPercent}`);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
