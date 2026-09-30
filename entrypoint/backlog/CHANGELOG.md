@@ -40,10 +40,10 @@
 - **backlog:** C10 spec discovery sees declared-kind SPECs, not only raw kind (603737c2) ([e4a6b51d](https://github.com/PseudoSky/adhd/commit/e4a6b51d))
 - **backlog:** C10 reconcile discovers live kind:SPEC items, not only raw node kind ([9c87e1d4](https://github.com/PseudoSky/adhd/commit/9c87e1d4))
 - **backlog:** C9 wire the cross-project structural second signal (A-side) ([c01ef514](https://github.com/PseudoSky/adhd/commit/c01ef514))
-- **backlog:** D-A apply the resolved service.* config (port/transport/host/resilience) ([4405e717](https://github.com/PseudoSky/adhd/commit/4405e717))
+- **backlog:** D-A apply the resolved service.\* config (port/transport/host/resilience) ([4405e717](https://github.com/PseudoSky/adhd/commit/4405e717))
 - **backlog:** rename create partOf input to dedupeExcludeUid (c5460239; 081facec) ([7584a847](https://github.com/PseudoSky/adhd/commit/7584a847))
 - **backlog:** C1 lookup — match issue name, not body, so the registry is not shadowed ([46b3165d](https://github.com/PseudoSky/adhd/commit/46b3165d))
-- **backlog:** C7 — reconcile _score_kind doc/code vocabulary ([3c111d80](https://github.com/PseudoSky/adhd/commit/3c111d80))
+- **backlog:** C7 — reconcile \_score_kind doc/code vocabulary ([3c111d80](https://github.com/PseudoSky/adhd/commit/3c111d80))
 - **backlog:** create dedupe excludes a declared parent + its part_of ancestors (c5460239) ([dfb5aca9](https://github.com/PseudoSky/adhd/commit/dfb5aca9))
 - **backlog:** create dedupe gate fails closed, not open, on a degraded scan (BUG 4e8fce2a; cc2b5b87) ([04dd0283](https://github.com/PseudoSky/adhd/commit/04dd0283))
 

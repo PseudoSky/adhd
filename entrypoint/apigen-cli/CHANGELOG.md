@@ -12,7 +12,7 @@
 
 ### 🚀 Features
 
-- **vite-plugins:** absorb perf/test-resolve-fix — test-time @adhd/* source resolution ([3e344506](https://github.com/PseudoSky/adhd/commit/3e344506))
+- **vite-plugins:** absorb perf/test-resolve-fix — test-time @adhd/\* source resolution ([3e344506](https://github.com/PseudoSky/adhd/commit/3e344506))
 
 ### 🩹 Fixes
 
@@ -26,11 +26,9 @@
 
 ## 0.2.5 (2026-09-24)
 
-
 ### 🚀 Features
 
 - **backlog:** INTERFACE_v2 consolidation — six-verb surface, web UI (search/stats/batch/edit), stats API (citationCount, closedAt, summary scope + window)
-
 
 ### 🩹 Fixes
 
@@ -42,8 +40,7 @@
 
 - **nx-build:** run-scoped release manifest token + apigen-cli readiness flake + codegen test output
 
-
-### ❤️  Thank You
+### ❤️ Thank You
 
 - parity-harness-self-test
 - pseudosky
@@ -55,7 +52,6 @@ This was a version bump only for apigen-cli to align it with other projects, the
 
 ## 0.2.3 (2026-08-07)
 
-
 ### 🚀 Features
 
 - **apigen:** generic batch/bulk fan-out operations (FEAT-APIGEN-BULK-OPS-001)
@@ -63,7 +59,6 @@ This was a version bump only for apigen-cli to align it with other projects, the
 - **apigen-cli:** register apigen-plugin-batch as a builtin --use option
 
 - **apigen-cli:** register java-javalin host, cross-host TS<->Java decimal parity proof (FEAT-APIGEN-001 1/3)
-
 
 ### 🩹 Fixes
 
@@ -73,8 +68,7 @@ This was a version bump only for apigen-cli to align it with other projects, the
 
 - **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
 
-
-### ❤️  Thank You
+### ❤️ Thank You
 
 - parity-harness-self-test
 - pseudosky
@@ -89,30 +83,25 @@ This was a version bump only for apigen-cli to align it with other projects, the
 
 ## 0.1.6 (2026-07-27)
 
-
 ### 🚀 Features
 
 - **apigen-cli:** `--use batch` plugin registers `POST /_batch/<kind>` mounts for bulk fan-out operations
 
-
-### ❤️  Thank You
+### ❤️ Thank You
 
 - pseudosky
 
 ## 0.1.5 (2026-07-25)
 
-
 ### 🩹 Fixes
 
 - **apigen,backlog:** killable serve, configurable namespace, flaky test + log spam
 
-
-### ❤️  Thank You
+### ❤️ Thank You
 
 - pseudosky
 
 ## 0.1.4 (2026-07-24)
-
 
 ### 🩹 Fixes
 
@@ -124,13 +113,11 @@ This was a version bump only for apigen-cli to align it with other projects, the
 
 - **backlog:** resolve cross-file duplicate human-ids blocking cut-over parity
 
-
-### ❤️  Thank You
+### ❤️ Thank You
 
 - pseudosky
 
 ## 0.1.3 (2026-07-23)
-
 
 ### 🚀 Features
 
@@ -138,7 +125,6 @@ This was a version bump only for apigen-cli to align it with other projects, the
 
 - **apigen:** canonical route/tool-name projection across transports; serve + generate() + import-specifier fixes
 
-
 ### 🩹 Fixes
 
 - **apigen-cli:** triage BUG-APIGEN-041 (low, edge case only), 042 (medium, architectural path mismatch), 043 (logging-only, part 1+2 resolved, part 3 feature request)
@@ -149,20 +135,17 @@ This was a version bump only for apigen-cli to align it with other projects, the
 
 - **apigen-cli:** BUG-APIGEN-041 — final verdict; not fixable at runtime, systemic build-tool issue tracked at INVESTIGATION-BUILD-TOOL-001
 
-- **apigen:** externalize real npm deps in vite builds — 10 packages shipped broken dist bundles (__filename/timeOrigin crash)
+- **apigen:** externalize real npm deps in vite builds — 10 packages shipped broken dist bundles (\_\_filename/timeOrigin crash)
 
-
-### ❤️  Thank You
+### ❤️ Thank You
 
 - pseudosky
 
 ## 0.1.2 (2026-07-23)
 
-
 ### 🚀 Features
 
 - **release:** nx release independent versioning + verify-dist-load publish gate (Agent 2)
-
 
 ### 🩹 Fixes
 
@@ -174,10 +157,9 @@ This was a version bump only for apigen-cli to align it with other projects, the
 
 - **apigen-cli:** BUG-APIGEN-041 — final verdict; not fixable at runtime, systemic build-tool issue tracked at INVESTIGATION-BUILD-TOOL-001
 
-- **apigen:** externalize real npm deps in vite builds — 10 packages shipped broken dist bundles (__filename/timeOrigin crash)
+- **apigen:** externalize real npm deps in vite builds — 10 packages shipped broken dist bundles (\_\_filename/timeOrigin crash)
 
-
-### ❤️  Thank You
+### ❤️ Thank You
 
 - pseudosky
 
@@ -195,7 +177,7 @@ All notable changes to this project are documented here.
   repro (`~/dev/ai/sox-ecosystem/libs/memory-core`, read-only reference):
   several routes 500'd — `/memory/write` →
   `{"code":"internal","message":"can't resolve reference
-  #/definitions/WriteParams from id #"}`; the `BetterSqlite3.Database`-taking
+#/definitions/WriteParams from id #"}`; the `BetterSqlite3.Database`-taking
   routes → the identical error class for `#/definitions/BetterSqlite3.Database`.
   Confirmed identical under both v1 and v2 (pre-existing, not a
   v1-retirement regression).
@@ -235,7 +217,7 @@ All notable changes to this project are documented here.
   generate-time error on a genuine same-name/different-content definition
   collision across params, rather than silently corrupting one.
   `composeSchemas()` (`apigen-core-client/src/lib/compose-schemas.ts:193-197,
-  216-217`) now carries that root-level `definitions`/`$defs` forward onto
+216-217`) now carries that root-level `definitions`/`$defs` forward onto
   the final composed `input` document, where `ajv.compile()` actually
   resolves `$ref`s against. `validateComposedRefs`'s pre-existing
   BUG-APIGEN-CORE-001 generate-time safety net (`compose-schemas.ts:21-49`)
@@ -262,7 +244,7 @@ All notable changes to this project are documented here.
   back the now-`definitions`-less cached fragment and reintroduced the exact
   dangling-`$ref` bug — verified live: two BUG-APIGEN-029 regression tests
   run back-to-back reproduced `"can't resolve reference
-  #/definitions/SelfRefParams from id #"` on the SECOND test only, while
+#/definitions/SelfRefParams from id #"` on the SECOND test only, while
   either one alone always passed. Fixed by making `hoistNestedDefs` a pure
   clone-and-hoist function that never mutates its input — it returns a
   freshly-built fragment tree with `definitions`/`$defs` removed from
@@ -395,7 +377,7 @@ All notable changes to this project are documented here.
   exact runtime `.name` `buildFnTable()` will always resolve — instead of a filename-derived
   synthetic id (`extract.ts`'s Shape 5 arrow/`FunctionExpression` branch and Shape 4's
   anonymous `FunctionDeclaration` branch, both now call `buildActionOp(..., fileSegment,
-  'default', ...)`, mirroring exactly how Shape 4's *named* default function is already
+'default', ...)`, mirroring exactly how Shape 4's _named_ default function is already
   handled). `fileSegment` still carries the per-file id/route disambiguation
   (`shapes/anonymous-default/default`) — only the dispatch key (the leaf path segment)
   changes. No changes needed to `fn-table.ts`, `compose-schemas.ts`, `dispatch.ts`, or
@@ -419,8 +401,8 @@ All notable changes to this project are documented here.
   `tsx`-based loader `run.ts` actually uses at runtime, which is exactly the mechanism this
   bug lived in; see `import-source-cjs-format.spec.ts`'s header comment for the same
   established precedent.) All 3 cases pass against the freshly-built bin (`npx vite build
-  --config entrypoint/apigen-cli/vite.config.ts`, `npx vitest run --root
-  entrypoint/apigen-cli entrypoint/apigen-cli/src/test/e2e/bug-apigen-033-anonymous-default-dispatch.spec.ts`
+--config entrypoint/apigen-cli/vite.config.ts`, `npx vitest run --root
+entrypoint/apigen-cli entrypoint/apigen-cli/src/test/e2e/bug-apigen-033-anonymous-default-dispatch.spec.ts`
   → 3/3), confirmed by the bin's own log lines showing `tools: ["default"]` and a
   successful `→ default` dispatch for both anonymous fixtures pre-fix would instead show
   `fns['foo_default']`/equivalent undefined and throw at the `tools/call`. Additionally
@@ -432,7 +414,7 @@ All notable changes to this project are documented here.
   in `compose-schemas.spec.ts`, confirmed via `git diff` to be caused by concurrent,
   not-yet-committed BUG-APIGEN-029 work touching `compose-schemas.ts`/`descriptor.ts` —
   neither file touched by this fix). `npx vitest run --root
-  packages/apigen/apigen-engine-runtime`: 151/151 passed at the time this fix's changes
+packages/apigen/apigen-engine-runtime`: 151/151 passed at the time this fix's changes
   were verified in isolation — `dispatch.spec.ts` (14/14) unaffected; a concurrent,
   untracked, not-yet-committed BUG-APIGEN-029 test file
   (`src/test/bug-apigen-029.spec.ts`, not part of this commit) appeared mid-session and
@@ -442,7 +424,7 @@ All notable changes to this project are documented here.
   anonymous shapes into the same `[file, name]` 2-segment `op.path` bucket
   `opMatchesExportMode()` (BUG-APIGEN-034) already can't fully disambiguate from a plain
   named export — the identical class of gap BUG-APIGEN-034 already documented and
-  deferred for Shape 4's *named* default case, now with a wider blast radius.
+  deferred for Shape 4's _named_ default case, now with a wider blast radius.
 
 - **BUG-APIGEN-024** — `--use openapi` mount produced an empty OpenAPI doc (`paths: {}`)
   on live `run`, even though the underlying operations were correctly extracted and
@@ -470,9 +452,9 @@ All notable changes to this project are documented here.
   routes with the correct HTTP method/schema per path (safe→GET, unsafe→POST with
   requestBody), plus a regression control proving `RunInput.operations` omitted still
   safely falls back to empty `paths` rather than crashing. `nx test
-  apigen-plugin-api-express` 25/25, `nx test apigen-plugin-api-fastify` 37/37 (2 files),
+apigen-plugin-api-express` 25/25, `nx test apigen-plugin-api-fastify` 37/37 (2 files),
   `nx run-many -t test -p apigen-core-client apigen-plugin-openapi apigen-cli
-  apigen-engine-runtime` 114/114 — zero regressions.
+apigen-engine-runtime` 114/114 — zero regressions.
 
 - **FEAT-APIGEN-022 / BUG-APIGEN-025** — apigen now auto-hoists a function to `GET`
   when its domain params are ALL "properly typed primitives" (`string`/`number`/
@@ -490,7 +472,7 @@ All notable changes to this project are documented here.
   (vacuously true — covers zero-arg functions). `$ref`, `oneOf`/`anyOf`/`allOf`,
   `array`, and `object` properties are excluded. `composeSchemas()`
   (`apigen-core-client/src/lib/compose-schemas.ts`) computes `op.safe ===
-  true || isPrimitiveOnlyInputSchema(fnSchema.input)` per function and stamps it
+true || isPrimitiveOnlyInputSchema(fnSchema.input)` per function and stamps it
   as `'x-apigen-safe'` on the `ComposedSchemas` entry (BUG-APIGEN-025's fix:
   `op.safe` is threaded from `Operation.safe` through a new `safe?: boolean`
   field on `GeneratedSchemas.schemas[fn]`, populated by
@@ -500,7 +482,7 @@ All notable changes to this project are documented here.
   directly against `op.input` for non-`ComposedSchemas` consumers (gRPC/openapi/
   MCP paths). The four previously-duplicated `httpVerb()` definitions
   (`apigen-plugin-api-express`'s `run.ts`/`generate.ts`, `apigen-plugin-api-
-  fastify`'s `run.ts`/`generate.ts`) are now ONE definition, exported from
+fastify`'s `run.ts`/`generate.ts`) are now ONE definition, exported from
   `apigen-engine-naming`, imported by all four call sites — the manual
   `--opt http.verb.<id>=GET`/`POST` override is checked first there and always
   wins over the auto-detected value, in both directions.
@@ -509,7 +491,7 @@ All notable changes to this project are documented here.
   for any non-`string` primitive param (backlog point 3 — Ajv's validate-Layer
   has no `coerceTypes`, so a query-string `"42"` failed a `number` schema check).
   A new `coerceQueryParams()` helper (`apigen-engine-runtime/src/lib/coerce-
-  query.ts`) coerces `number`/`integer`/`boolean` query values to their real JS
+query.ts`) coerces `number`/`integer`/`boolean` query values to their real JS
   types at the TRANSPORT layer (both `run.ts`s and both `generate.ts`s' emitted
   code), strictly scoped to the GET/query-string path — the shared Ajv instance
   used for POST/body validation is untouched, so this cannot silently coerce a
@@ -521,7 +503,7 @@ All notable changes to this project are documented here.
   `orchestrator.spec.ts`'s override test, `price(v: Decimal)` — literally
   `type Decimal = string` — in `cross-host-response-envelope.spec.ts`,
   `upperFirst`/etc. in `real-consumer.spec.ts`, `addNumbers(a: number, b:
-  number)` in `serve.spec.ts`) — updated to GET/query-string calls (or, for the
+number)` in `serve.spec.ts`) — updated to GET/query-string calls (or, for the
   one test whose actual point was proving the override mechanism itself, to a
   non-primitive-shaped fixture) since the old assertions encoded pre-feature
   default behavior, not the tests' real intent.
@@ -537,7 +519,7 @@ All notable changes to this project are documented here.
   `apigen-engine-runtime` 151/151, `apigen-plugin-api-express` 36/36,
   `apigen-plugin-api-fastify` 48/48, `apigen-cli` 139/139 — zero regressions.
   `nx run-many -t build` clean for all six + their 32 dependents; `nx run-many -t
-  lint` clean.
+lint` clean.
 
 - **BUG-APIGEN-017/018/019/020** — MCP tool-schema hardening bundle (all four filed
   2026-07-06 from the `scratch-agent-search`/agent-browser consumer). Root-caused each
@@ -564,12 +546,12 @@ All notable changes to this project are documented here.
     `inputSchema` (`apigen-plugin-mcp`'s `run.ts`/templates never touch `input`). Existing
     coverage: `apigen-core-client/src/test/extract.spec.ts`'s `[BUG-APIGEN-018]` describe
     block.
-  - **BUG-APIGEN-019** (union return types produce weak schemas) had its *schema-building*
+  - **BUG-APIGEN-019** (union return types produce weak schemas) had its _schema-building_
     half already fixed the same way — `ts-json-schema.ts`'s `normalizeTopLevelUnion` rewrites
     a TS union's `anyOf` to `oneOf` + an advisory `discriminator` for both inline and named
     union return types, reaching `extract()`'s `output` fragment for real (confirmed via
     `union.spec.ts` + the wiring trace in BUG-APIGEN-038's BACKLOG entry, which explicitly
-    scopes that gap to *parameters*, not return types). **But the MCP transport never
+    scopes that gap to _parameters_, not return types). **But the MCP transport never
     surfaced any return-type schema to clients at all** — `apigen-plugin-mcp`'s `run.ts` and
     both generated-server templates (`server-stdio.tpl.ts`, `server-http.tpl.ts`) only ever
     emitted `inputSchema` in `tools/list`, never `outputSchema`, for any function, union or
@@ -583,7 +565,7 @@ All notable changes to this project are documented here.
     `wrapMcpStructuredContent`, exported from the package index): an already-`type:"object"`
     output schema passes through unwrapped; anything else (the union case, arrays, bare
     scalars) is wrapped as `{ type: "object", properties: { result: <output> }, required:
-    ["result"] }` for `outputSchema`, with the paired runtime value wrapped the same way
+["result"] }` for `outputSchema`, with the paired runtime value wrapped the same way
     (`{ result: <value> }`) as MCP's `structuredContent` (also object-constrained by the
     SDK) alongside the pre-existing `content` text field for backward compatibility. Wired
     into all three MCP server code paths that independently duplicate the `tools/list`/
@@ -605,7 +587,7 @@ All notable changes to this project are documented here.
   `result` with the discriminator intact; an array-return output is wrapped under `result`;
   `tools/call` `structuredContent` mirrors `content` unwrapped for the object case; and
   wrapped as `{ result: <value> }` for the union case). Verified clean: `nx test
-  apigen-engine-runtime` 140/140 (15 files), `nx test apigen-plugin-mcp` 47/47 (4 files) —
+apigen-engine-runtime` 140/140 (15 files), `nx test apigen-plugin-mcp` 47/47 (4 files) —
   zero regressions to the pre-existing 38 apigen-plugin-mcp tests or 131 apigen-engine-runtime
   tests. Both projects' `nx run <project>:build` (which typechecks via `vite-plugin-dts`) and
   `nx run <project>:lint` pass clean.
@@ -634,9 +616,9 @@ All notable changes to this project are documented here.
   `'data'` (regression control), that middleware envelope fields stay required independent of
   `data`, and that overriding a zero-param function's only middleware to `false` yields a
   fully empty `required` array. Verified clean: `nx test apigen-core-client` 252/252, `nx test
-  apigen-engine-runtime` 131/131, and `nx run-many -t test -p apigen-plugin-api-express
-  apigen-plugin-api-fastify apigen-plugin-mcp apigen-plugin-jsonschema apigen-plugin-cli-output
-  apigen-cli` 134/134 across all six downstream `ComposedSchemas` consumers — zero regressions.
+apigen-engine-runtime` 131/131, and `nx run-many -t test -p apigen-plugin-api-express
+apigen-plugin-api-fastify apigen-plugin-mcp apigen-plugin-jsonschema apigen-plugin-cli-output
+apigen-cli` 134/134 across all six downstream `ComposedSchemas` consumers — zero regressions.
 
 - **BUG-APIGEN-031** — `generate --type cli` output silently mishandled array/object-typed
   domain params: Commander's raw argv string for a flag like `--arr '[2,4,6]'` was passed
@@ -669,7 +651,7 @@ All notable changes to this project are documented here.
   `Invalid JSON for --arr: ...` (not a silent passthrough) on malformed input. Live end-to-end
   verification against `/Users/nix/dev/ai/sox-ecosystem/libs/memory-core/src/latency-stats.ts`
   (`generate --type cli --link-workspace` then real `tsx cli.ts` invocations): `mean --arr
-  '[2,4,6]'` now returns `4` (was a crash), `percentile --sorted '[10,20,30,40,50]' --p 0.5` now
+'[2,4,6]'` now returns `4` (was a crash), `percentile --sorted '[10,20,30,40,50]' --p 0.5` now
   returns `30` (was the silently-wrong `"3"`), and `mean --arr 'not-json'` now throws
   `Invalid JSON for --arr: Unexpected token 'o', "not-json" is not valid JSON` instead of
   reaching dispatch at all. `apigen-plugin-cli-output` suite: 34/34 (was 25/25 pre-fix,
@@ -692,7 +674,7 @@ All notable changes to this project are documented here.
   `` `import * as ${pkg.id}_ns from '${pkg.importPath}'` ``,
   `` `const ${pkg.id}_fns = buildFnTable(...)` ``, and the `dispatch(${pkg.id}_fns …)`
   call sites reusing that same unsanitized name — producing `import * as pkg-a_ns from
-  …`, a hard parse error (`Expected "from" but found "-"`; a bare `-` is the
+…`, a hard parse error (`Expected "from" but found "-"`; a bare `-` is the
   subtraction operator in an identifier position, not a valid character). Ported from
   `main`'s `entrypoint/apigen-cli/BACKLOG.md` (filed there 2026-07-19 by
   `verify-registry-commands`) and independently reproduced on this worktree's current
@@ -730,10 +712,10 @@ All notable changes to this project are documented here.
   `apigen-plugin-health` package — not a real type error, an artifact of invoking
   `tsc` outside the Vite-aware toolchain). `nx test` for these projects was not used
   directly for final verification because it transitively gates on `apigen-core-client:
-  lint`, which had an unrelated, concurrent in-flight failure from a different
+lint`, which had an unrelated, concurrent in-flight failure from a different
   teammate's uncommitted WIP at verification time (`apigen-core-client/src/test/
-  extract.spec.ts`, BUG-APIGEN-CORE-004 in progress) — confirmed via `git status`/`git
-  diff` to be outside this fix's diff entirely.
+extract.spec.ts`, BUG-APIGEN-CORE-004 in progress) — confirmed via `git status`/`git
+diff` to be outside this fix's diff entirely.
 
 - **FEAT-APIGEN-019** — CLI's `--type` plugin discovery was undiscoverable: `generate`'s
   `--type` help text was a hardcoded, already-stale string (missing `py-flask`/`py-grpc`,
@@ -759,18 +741,18 @@ All notable changes to this project are documented here.
   run-capable subsets separately. Verified end-to-end against the real registry (all 8 keys):
   `apigen list-types` prints every id with its `plugin.description` and generate/run
   capability; `apigen run --type express ...` now throws `Unknown --type: express. Available:
-  mcp, jsonschema, api-fastify, api-express, cli, cli-output, py-flask, py-grpc` (previously
+mcp, jsonschema, api-fastify, api-express, cli, cli-output, py-flask, py-grpc` (previously
   the misleading "does not support run mode"); `apigen run --type jsonschema ...` throws
   `Plugin jsonschema does not support run mode. Generate-only plugins: jsonschema, cli,
-  cli-output. Run-capable plugins: mcp, api-fastify, api-express, py-flask, py-grpc.`; `apigen
-  generate --help`/`apigen run --help` show live, correctly-scoped `--type` option text.
+cli-output. Run-capable plugins: mcp, api-fastify, api-express, py-flask, py-grpc.`; `apigen
+generate --help`/`apigen run --help` show live, correctly-scoped `--type` option text.
   Covered by `src/test/plugin-registry.spec.ts` (registry-derivation unit tests — proves
   every helper's output changes when a fixture registry gains/loses a plugin, not just that
   it matches a fixed string), `src/test/list-types.spec.ts` (the new command, same
   derivation proof), and new cases in `src/test/run.spec.ts`/`src/test/generate.spec.ts`
   (the unknown-vs-unsupported-run-mode split, and `--help` text scoping for `run` vs
   `generate`). Deferred out of scope: `py-flask`/`py-grpc`'s unconditional eager imports
-  (unpublished on npm — filed as BUG-APIGEN-037, since it's a plugin-*loading* concern, not
+  (unpublished on npm — filed as BUG-APIGEN-037, since it's a plugin-_loading_ concern, not
   a `--type` text/list-derivation concern).
 
 - **BUG-APIGEN-021** — `apigen run --source <file> --type <plugin>` crashed with
@@ -800,13 +782,13 @@ All notable changes to this project are documented here.
   a compile-time AJV failure that fired regardless of the actual input sent. Root cause:
   `ts-json-schema-generator`'s own default (`topRef: true`, confirmed in the installed
   package's `Config.js`) wraps every named-type schema as `{ $ref: "#/definitions/X",
-  definitions: { X: {...} } }`; `apigen-core-client`'s `runScalarAwareGenerator()`
+definitions: { X: {...} } }`; `apigen-core-client`'s `runScalarAwareGenerator()`
   (`schema-builders/ts-json-schema.ts`) never overrode it, and nothing dereferenced the
   result before `extract.ts` spliced it into a nested property position inside the
   composed function schema — where `$ref`'s root-relative resolution permanently dangled
   once AJV compiled the full schema (one schema per function, no shared registry).
   Reported live against a real consumer (`agent-browser`'s `search(provider:
-  ProviderName, ...)`); reproduced exactly via `apigen generate --type jsonschema`
+ProviderName, ...)`); reproduced exactly via `apigen generate --type jsonschema`
   against the unmodified source. Fixed by passing `topRef: false` in Path 1's
   `Config`, which inlines the entry type directly instead of wrapping it — verified via a
   standalone `createGenerator()` call before applying, then end-to-end against the real
@@ -824,15 +806,15 @@ All notable changes to this project are documented here.
   omitted an optional `number`-typed parameter (e.g. `search()`'s `maxContentSize`,
   `timeoutMs`, `maxAttempts`, `challengeWaitMs` — all valid to omit per the AJV schema,
   none in `required`) crashed dispatch with `{"code":"internal","message":"[number-
-  special] unrecognized wire value at \"\": undefined. Expected a number or one of NaN,
-  Infinity, -Infinity."}`, before the target function was ever called. Root cause:
+special] unrecognized wire value at \"\": undefined. Expected a number or one of NaN,
+Infinity, -Infinity."}`, before the target function was ever called. Root cause:
   `apigen-engine-runtime/src/lib/dispatch.ts`'s `decodeArg()` only guarded on whether the
-  parameter's *schema node* was defined, not whether the caller actually *sent* a value
+  parameter's _schema node_ was defined, not whether the caller actually _sent_ a value
   for it — so every declared optional param the caller omitted was still passed through
   `_transcoder.decode(undefined, node)`, which for a bare `{type:'number'}` node resolves
   to `numberSpecialCodec` and correctly rejects `undefined` in strict mode. The object-
   property walk in `runmode.ts`'s `encodeNode`/`decodeNode` already guards `v !==
-  undefined` internally; `dispatch.ts`'s per-parameter call site was the one place that
+undefined` internally; `dispatch.ts`'s per-parameter call site was the one place that
   lacked the equivalent guard, because it calls the transcoder once per declared param
   name rather than walking a nested object schema. Fixed by adding `wire === undefined`
   to `decodeArg()`'s existing early-return guard — an omitted optional value now passes
@@ -842,7 +824,7 @@ All notable changes to this project are documented here.
   optional param doesn't throw; omitted param arrives as `undefined` at the fn boundary;
   an explicitly-provided optional param still decodes normally); verified red against the
   pre-fix code (identical `number-special` error — including on the "explicitly
-  provided" case, since a *different* still-omitted optional param in the same call
+  provided" case, since a _different_ still-omitted optional param in the same call
   tripped it too) and green after. Verified end-to-end against the real `search()`
   consumer: `POST /agent-browser/search` with only `{provider, query}` now completes
   (`200`, real dispatch to a live network search) instead of crashing before dispatch.
@@ -904,7 +886,7 @@ All notable changes to this project are documented here.
   rewriting all 3 call sites to the v2 equivalent: `extract({ sourceFile })`
   → `Operation[]`, adapted into `composeSchemas()`'s expected `GeneratedSchemas`
   shape via a `toGeneratedSchemas()` helper added to the test file (`kind:
-  'action'` operations only, keyed by the terminal path segment's raw
+'action'` operations only, keyed by the terminal path segment's raw
   spelling) — the exact same adaptation `buildDescriptor`'s Step 5 performs in
   `entrypoint/apigen-cli/src/lib/orchestrator.ts`, reproduced locally since
   it isn't exported as a standalone helper. The test's real-pipeline intent
@@ -943,7 +925,7 @@ All notable changes to this project are documented here.
   three new cases in `apigen-core-client/src/test/compose-schemas.spec.ts`:
   a dangling `$ref` (referencing a `$def` never defined by any function)
   throws `Schema validation failed for function "pick"`; a `$ref` that
-  resolves against a `$def` pooled from a *different* function does not
+  resolves against a `$def` pooled from a _different_ function does not
   throw (proves cross-function pooling, not per-function-only validation);
   a schema with no `$defs` at all is left unvalidated (matches v1's
   behavior — a bare `$ref` with no `$defs` anywhere is a structural problem
@@ -964,7 +946,7 @@ All notable changes to this project are documented here.
   OpenAPI-style `discriminator` object on union fragments
   (`morph-walk.ts:172-182`) — read back by `union-codec.ts`/`nominal-codec.ts`
   at decode time, never declared to Ajv. `apigen-engine-runtime/src/lib/
-  validate-layer.ts`'s single module-level `Ajv({ allErrors: true })`
+validate-layer.ts`'s single module-level `Ajv({ allErrors: true })`
   singleton (line 51; both `validateLayer` and `makeValidateLayer` share it —
   there is only one construction site, not two as originally suspected) never
   registered any of these five keywords, and Ajv 8's default `strict: true`
@@ -979,7 +961,7 @@ All notable changes to this project are documented here.
   with `ajv@8.20.0`, the installed version). Fixed by registering all five
   keys (`X_APIGEN_LOGICAL`, `X_APIGEN_CODEC`, `X_APIGEN_CTOR`,
   `X_APIGEN_TOJSON`, `'discriminator'`) as no-op `ajv.addKeyword({ keyword,
-  valid: true })` annotations at the singleton's construction site
+valid: true })` annotations at the singleton's construction site
   (`validate-layer.ts:73-82`), preserving `strict: true`'s other protections
   rather than disabling strict mode wholesale. Covered by a new
   `apigen-engine-runtime/src/test/bug-apigen-030.spec.ts` (5 cases):
@@ -1078,7 +1060,7 @@ All notable changes to this project are documented here.
 - **DEBT-LT-005** — Inline `TS_LOGICAL_TYPE_DEP_MAP` replaced with authoritative
   `tsDepMap()` from `@adhd/apigen-base-logical`.
 - **Leak fixes:** `builtinTsconfigPath()` memoized; gRPC h2c sessions have 60s idle eviction
-  + `unref()`.
+  - `unref()`.
 - **Stale monorepo paths** corrected from `packages/apigen/cli/` → `entrypoint/apigen-cli/`.
 
 ### Known limitations

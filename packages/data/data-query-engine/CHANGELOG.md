@@ -12,7 +12,7 @@
 
 ### 🚀 Features
 
-- **vite-plugins:** absorb perf/test-resolve-fix — test-time @adhd/* source resolution ([3e344506](https://github.com/PseudoSky/adhd/commit/3e344506))
+- **vite-plugins:** absorb perf/test-resolve-fix — test-time @adhd/\* source resolution ([3e344506](https://github.com/PseudoSky/adhd/commit/3e344506))
 
 ### 🩹 Fixes
 
@@ -25,18 +25,15 @@
 
 ## 2.3.1 (2026-09-24)
 
-
 ### 🩹 Fixes
 
 - **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
-
 
 ### 🔥 Performance
 
 - **test:** bound vitest thread pools to curb CPU oversubscription (DEBT-TEST-CPU-OVERSUBSCRIBED-001)
 
-
-### ❤️  Thank You
+### ❤️ Thank You
 
 - parity-harness-self-test
 - pseudosky
@@ -48,13 +45,11 @@ This was a version bump only for data-query-engine to align it with other projec
 
 ## 2.2.3 (2026-07-23)
 
-
 ### 🚀 Features
 
 - session batch — dispatch tool-exec + provider routing, publish hygiene, agent/env/apigen fixes
 
 - **release:** nx release independent versioning + verify-dist-load publish gate (Agent 2)
-
 
 ### 🩹 Fixes
 
@@ -70,20 +65,17 @@ This was a version bump only for data-query-engine to align it with other projec
 
 - **build:** generatePackageJson on data-base-transforms, data-query-engine, ui-react-base-hooks so dist package.json version syncs to source every build (was one-time !existsSync seed → stale dist version survived nx reset)
 
-
-### ❤️  Thank You
+### ❤️ Thank You
 
 - pseudosky
 
 ## 2.2.2 (2026-07-23)
 
-
 ### 🚀 Features
 
 - session batch — dispatch tool-exec + provider routing, publish hygiene, agent/env/apigen fixes
 
 - **release:** nx release independent versioning + verify-dist-load publish gate (Agent 2)
-
 
 ### 🩹 Fixes
 
@@ -99,8 +91,7 @@ This was a version bump only for data-query-engine to align it with other projec
 
 - **build:** generatePackageJson on data-base-transforms, data-query-engine, ui-react-base-hooks so dist package.json version syncs to source every build (was one-time !existsSync seed → stale dist version survived nx reset)
 
-
-### ❤️  Thank You
+### ❤️ Thank You
 
 - pseudosky
 

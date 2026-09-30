@@ -72,14 +72,21 @@ const PRE_FIX_PUBLISH_STEP = [
 export function workflowMintsReleaseScope(text) {
   const mintsScope = /computeChangedProjectSet\s*\(/.test(text);
   const mintsToken = /RELEASE_RUN_TOKEN/.test(text);
-  const scopedVersion = /nx\s+run-many\s+-t\s+version\s+--projects=\$RELEASE_PROJECTS/.test(text);
+  const scopedVersion =
+    /nx\s+run-many\s+-t\s+version\s+--projects=\$RELEASE_PROJECTS/.test(text);
   const scopedPublish =
-    /nx\s+run-many\s+-t\s+publish\s+--projects=\$RELEASE_PROJECTS\s+--configuration=production/.test(text);
+    /nx\s+run-many\s+-t\s+publish\s+--projects=\$RELEASE_PROJECTS\s+--configuration=production/.test(
+      text
+    );
   return mintsScope && mintsToken && scopedVersion && scopedPublish;
 }
 
 test('sanity: the spec reads the REAL PR workflow (not a fixture)', () => {
-  assert.match(source, /^name: PR$/m, `expected to read the real PR workflow at ${workflowPath}`);
+  assert.match(
+    source,
+    /^name: PR$/m,
+    `expected to read the real PR workflow at ${workflowPath}`
+  );
 });
 
 test('Publish step: calls computeChangedProjectSet — the ONLY writer of the release manifest', () => {

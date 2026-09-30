@@ -6,7 +6,7 @@ This was a version bump only for agent-engine-compiler to align it with other pr
 
 ### 🚀 Features
 
-- **vite-plugins:** absorb perf/test-resolve-fix — test-time @adhd/* source resolution ([3e344506](https://github.com/PseudoSky/adhd/commit/3e344506))
+- **vite-plugins:** absorb perf/test-resolve-fix — test-time @adhd/\* source resolution ([3e344506](https://github.com/PseudoSky/adhd/commit/3e344506))
 
 ### 🩹 Fixes
 
@@ -18,7 +18,6 @@ This was a version bump only for agent-engine-compiler to align it with other pr
 - pseudosky
 
 ## 2.2.2 (2026-09-24)
-
 
 ### 🩹 Fixes
 
@@ -36,13 +35,11 @@ This was a version bump only for agent-engine-compiler to align it with other pr
 
 - **nx:** drop self-referential scripts.build wrappers to restore build cache
 
-
 ### 🔥 Performance
 
 - **nx:** drop lint+sync-deps from the default test target
 
-
-### ❤️  Thank You
+### ❤️ Thank You
 
 - parity-harness-self-test
 - pseudosky
@@ -50,11 +47,9 @@ This was a version bump only for agent-engine-compiler to align it with other pr
 
 ## 2.2.1 (2026-07-27)
 
-
 ### 🩹 Fixes
 
 - **agent-engine-compiler:** resolve sibling `@adhd/*/drizzle` migration folders via real module resolution (`createRequire` + walk-up) instead of a 3-hop `../../../` that assumed a nonexistent monolithic dist — migrations were silently skipped (→ `no such table: registry_agents`) under the per-project dist layout and pnpm's isolated store (BUG-014). A missing migration set is now a hard error, not a silent warn-and-continue.
-
 
 ## 2.1.10 (2026-07-26)
 
@@ -86,12 +81,10 @@ This was a version bump only for agent-engine-compiler to align it with other pr
 
 ## 2.1.3 (2026-07-23)
 
-
 ### 🚀 Features
 
 - **agent-core-env:** shared registry-DB resolver + DI kills import-time DB-open side effect
 
-
-### ❤️  Thank You
+### ❤️ Thank You
 
 - pseudosky
