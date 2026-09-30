@@ -246,11 +246,13 @@ describe('backlog web ui (nx serve backlog seam)', () => {
       bogus: true,
     } as never);
     expect(res.status).toBe(400);
-    // validate-layer error envelope: { code, message } with the offending key named.
+    // validate-layer error envelope: { code, message } naming the offending key
+    // AND the accepted set (BUG-APIGEN-MCP-DISCOVERABILITY-001) — no longer the
+    // bare AJV "must NOT have additional properties", which named neither.
     expect(res.json.code).toBe('invalid_argument');
-    expect(String(res.json.message ?? '')).toContain(
-      'must NOT have additional properties'
-    );
+    const message = String(res.json.message ?? '');
+    expect(message).toContain("unknown key 'bogus'");
+    expect(message).toContain('allowed keys:');
   });
 
   /**
