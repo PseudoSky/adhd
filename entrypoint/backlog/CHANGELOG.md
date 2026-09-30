@@ -1,3 +1,21 @@
+## 1.0.6 (2026-09-29)
+
+### 🚀 Features
+
+- **backlog:** first-class citation verbs + one citation contract ([e46a0490](https://github.com/PseudoSky/adhd/commit/e46a0490))
+
+### 🩹 Fixes
+
+- **workspace:** restore the publish gate's heavy lane and canonicalise the gate ([45532731](https://github.com/PseudoSky/adhd/commit/45532731))
+- **backlog:** drop banned prior-version/current-version tokens from the cross-repo attestation spec ([acf53458](https://github.com/PseudoSky/adhd/commit/acf53458))
+- **backlog:** read verdict applies the write gate's close-predictor skip ([13e7c870](https://github.com/PseudoSky/adhd/commit/13e7c870))
+- **backlog:** a terminal-scoped obligation gates the close, not the claim (demo 3.3) ([5db10040](https://github.com/PseudoSky/adhd/commit/5db10040))
+- **backlog:** resolve a cross-repo anchor against the sibling project root that owns it (demo 2.4) ([068e554c](https://github.com/PseudoSky/adhd/commit/068e554c))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 1.1.0 (2026-09-28)
 
 ### 🚀 Features

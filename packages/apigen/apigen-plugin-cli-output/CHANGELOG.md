@@ -1,3 +1,18 @@
+## 0.2.7 (2026-09-29)
+
+### 🚀 Features
+
+- **backlog:** C8 — closed primitives, readable catalogs, self-describing surface ([5e8cb041](https://github.com/PseudoSky/adhd/commit/5e8cb041))
+
+### 🩹 Fixes
+
+- **workspace:** restore the publish gate's heavy lane and canonicalise the gate ([45532731](https://github.com/PseudoSky/adhd/commit/45532731))
+- **apigen-plugin-cli-output:** render CLI help flags per route, not a false per-field claim ([8493e35a](https://github.com/PseudoSky/adhd/commit/8493e35a))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.2.5 (2026-09-26)
 
 ### 🚀 Features

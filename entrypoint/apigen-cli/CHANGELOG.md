@@ -1,3 +1,13 @@
+## 0.2.8 (2026-09-29)
+
+### 🩹 Fixes
+
+- **workspace:** restore the publish gate's heavy lane and canonicalise the gate ([45532731](https://github.com/PseudoSky/adhd/commit/45532731))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.2.6 (2026-09-26)
 
 ### 🚀 Features
