@@ -2,6 +2,8 @@
 
 Thank you for your interest in contributing! This document outlines the process for submitting changes.
 
+> The authoritative git policy — branching & merge, push & review, commit convention, worktree layout, and cleanup — is [docs/GIT-POLICY.md](docs/GIT-POLICY.md).
+
 ## Development Workflow
 
 1. **Fork and clone** the repository
