@@ -20,9 +20,9 @@
   ],
   "targets": {
     "nx-release-publish": {
-      "dependsOn": ["build", "test"],
+      "dependsOn": ["build", "test", "verify-dist-load", "dist-manifest", "publish-hygiene"],
       "options": {
-        "packageRoot": "packages/apigen/apigen-plugin-tracing/dist"
+        "packageRoot": "{projectRoot}/dist"
       }
     }
   }

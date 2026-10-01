@@ -9,6 +9,10 @@
     "@adhd/apigen-engine-runtime": "^0.3.1",
     "@adhd/apigen-engine-naming": "^0.2.5"
   },
+  "devDependencies": {
+    "@adhd/apigen-plugin-tracing": "^0.1.0",
+    "@adhd/sox-telemetry": "^0.3.2"
+  },
   "publishConfig": {
     "access": "public"
   },

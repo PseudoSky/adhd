@@ -2,19 +2,23 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Call, Chunk, Result, Transport } from '@adhd/apigen-core-client';
-import type { ComposedSchemas } from '@adhd/apigen-core-client';
+import type { Call, Chunk, Next, Result, Transport } from '@adhd/apigen-core-client';
 import {
   initTelemetry,
   _resetTelemetryForTest,
   type TelemetryHandle,
 } from '@adhd/sox-telemetry';
-import { createPackageInvoker, readUsePlugins, LayerContext } from '@adhd/apigen-engine-runtime';
-import { tracingPlugin, makeTracingPlugin, makeTraceLayer, TraceHandle } from './plugin';
+import { tracingPlugin, makeTracingPlugin, makeTraceLayer, traceStream, TraceHandle } from './plugin';
 
 // ---------------------------------------------------------------------------
 // Harness — a real sox-telemetry sink on a throwaway log dir, OTel forced on, so the
 // assertions read actual emitted records rather than inspecting code.
+//
+// NOTE: the real-transport end-to-end proof that a dispatched operation carries
+// `apigen.transport` for each of mcp / fastify / express / cli lives next to each adapter
+// (packages/apigen/apigen-plugin-*/src/test/tracing-transport.e2e.ts) — it boots the real
+// transport and drives a real dispatch. A hand-fabricated `Call` literal here would prove
+// nothing about the runtime stamp, which is exactly the gap this suite closes.
 // ---------------------------------------------------------------------------
 
 interface Recorded {
@@ -91,6 +95,10 @@ function makeCall(init: CallInit = {}): Call {
   } as unknown as Call;
 }
 
+async function* sourceOf(chunks: readonly Chunk[]): AsyncGenerator<Chunk> {
+  for (const chunk of chunks) yield chunk;
+}
+
 // ---------------------------------------------------------------------------
 // Unit — §7 of the implementation spec
 // ---------------------------------------------------------------------------
@@ -161,58 +169,6 @@ describe('apigen-plugin-tracing — layer', () => {
     expect(records.some((r) => r.event === 'apigen.echo.error')).toBe(true);
   });
 
-  it('passes stream chunks through unchanged and emits .finish with the chunk count', async () => {
-    const call = makeCall({ id: 'stream' });
-    const chunks: Chunk[] = [{ n: 1 }, { n: 2 }, { n: 3 }];
-    async function* source(): AsyncGenerator<Chunk> {
-      for (const chunk of chunks) yield chunk;
-    }
-    const stream = makeTraceLayer()(call, () => source()) as AsyncIterable<Chunk>;
-
-    const collected: unknown[] = [];
-    for await (const chunk of stream) collected.push(chunk);
-    expect(collected).toEqual(chunks);
-
-    const finish = readRecords().find((r) => r.event === 'apigen.stream.finish');
-    expect(finish).toBeDefined();
-    expect(finish!.chunks).toBe(3);
-    expect(typeof finish!.duration_ms).toBe('number');
-  });
-
-  it('propagates a mid-stream throw AND emits .error (streaming)', async () => {
-    const call = makeCall({ id: 'stream' });
-    const boom = new Error('mid');
-    async function* source(): AsyncGenerator<Chunk> {
-      yield 1;
-      throw boom;
-    }
-    const stream = makeTraceLayer()(call, () => source()) as AsyncIterable<Chunk>;
-
-    const collected: unknown[] = [];
-    await expect(
-      (async () => {
-        for await (const chunk of stream) collected.push(chunk);
-      })()
-    ).rejects.toBe(boom);
-    expect(collected).toEqual([1]);
-
-    const err = readRecords().find((r) => r.event === 'apigen.stream.error');
-    expect(err).toBeDefined();
-    expect(err!.err).toBe('mid');
-    expect(err!.chunks).toBe(1);
-  });
-
-  it('emits .start before the stream body (streaming, synchronous on entry)', () => {
-    const call = makeCall({ id: 'stream' });
-    async function* source(): AsyncGenerator<Chunk> {
-      yield 1;
-    }
-    const stream = makeTraceLayer()(call, () => source()) as AsyncIterable<Chunk>;
-    // The generator has not been iterated yet, but .start must already be on disk.
-    expect(readRecords().some((r) => r.event === 'apigen.stream.start')).toBe(true);
-    void stream;
-  });
-
   it('honours serviceName in the span name (makeTracingPlugin)', async () => {
     const call = makeCall({ id: 'echo' });
     const plugin = makeTracingPlugin({ serviceName: 'checkout' });
@@ -228,6 +184,122 @@ describe('apigen-plugin-tracing — layer', () => {
     expect(start!['x-request-id']).toBe('abc');
     expect(start!.ignored).toBeUndefined();
   });
+
+  it('reserved attrs win over a shadowing envelopeAttrs key (F14)', async () => {
+    // An envelope that tries to impersonate the built-in attrs, declared via envelopeAttrs.
+    const call = makeCall({
+      id: 'echo',
+      transport: 'cli',
+      envelope: {
+        trace_id: 'attacker',
+        'apigen.op': 'forged',
+        'apigen.transport': 'forged',
+      },
+    });
+    const plugin = makeTracingPlugin({
+      envelopeAttrs: ['trace_id', 'apigen.op', 'apigen.transport'],
+    });
+    await (plugin.capabilities.layer!.layer(call, async () => 'ok') as Promise<Result>);
+
+    const start = readRecords().find((r) => r.event === 'apigen.echo.start');
+    expect(start).toBeDefined();
+    // The reserved keys — spread LAST — must always win over the envelope-supplied values.
+    expect(start!['apigen.op']).toBe('echo');
+    expect(start!['apigen.transport']).toBe('cli');
+    expect(start!.trace_id).toBe(call.ctx.get(TraceHandle)!.traceId);
+    expect(start!.trace_id).not.toBe('attacker');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Streaming branch — QUARANTINED under the current `Next` contract (CONTRACT-FIX §4).
+//
+// `Next = () => Promise<LayerResult>`: an `AsyncIterable` can only ever be a *resolved*
+// value, so the layer cannot (and must not) branch on the unresolved `next()` promise.
+// `traceStream` is therefore exercised directly here, plus a quarantine test proving the
+// layer treats a resolved iterable as an opaque unary value (never fabricating a streaming
+// span), and a negative control that fails if the layer ever calls `isAsyncIterable` on the
+// unresolved promise again.
+// ---------------------------------------------------------------------------
+
+describe('apigen-plugin-tracing — streaming branch (quarantined)', () => {
+  const attrs = { 'apigen.op': 'stream', 'apigen.transport': 'mcp', trace_id: 'tid' };
+
+  it('traceStream passes chunks through unchanged and emits .finish with the chunk count', async () => {
+    const chunks: Chunk[] = [{ n: 1 }, { n: 2 }, { n: 3 }];
+    const stream = traceStream(sourceOf(chunks), 'apigen.stream', attrs);
+
+    const collected: unknown[] = [];
+    for await (const chunk of stream) collected.push(chunk);
+    expect(collected).toEqual(chunks);
+
+    const finish = readRecords().find((r) => r.event === 'apigen.stream.finish');
+    expect(finish).toBeDefined();
+    expect(finish!.chunks).toBe(3);
+    expect(typeof finish!.duration_ms).toBe('number');
+  });
+
+  it('traceStream propagates a mid-stream throw AND emits .error with the partial count', async () => {
+    const boom = new Error('mid');
+    async function* failing(): AsyncGenerator<Chunk> {
+      yield 1;
+      throw boom;
+    }
+    const stream = traceStream(failing(), 'apigen.stream', attrs);
+
+    const collected: unknown[] = [];
+    await expect(
+      (async () => {
+        for await (const chunk of stream) collected.push(chunk);
+      })()
+    ).rejects.toBe(boom);
+    expect(collected).toEqual([1]);
+
+    const err = readRecords().find((r) => r.event === 'apigen.stream.error');
+    expect(err).toBeDefined();
+    expect(err!.err).toBe('mid');
+    expect(err!.chunks).toBe(1);
+  });
+
+  it('traceStream emits .start synchronously on entry, before the body is iterated', () => {
+    const stream = traceStream(sourceOf([1]), 'apigen.stream', attrs);
+    // The generator has not been iterated yet, but .start must already be on disk.
+    expect(readRecords().some((r) => r.event === 'apigen.stream.start')).toBe(true);
+    void stream;
+  });
+
+  it('the layer treats a resolved iterable as an opaque unary value (does NOT fabricate a stream span)', async () => {
+    const call = makeCall({ id: 'q' });
+    const src = sourceOf([1, 2, 3]);
+
+    // A `next` that honours the real contract: it RESOLVES to the iterable.
+    const out = await (makeTraceLayer()(call, () => Promise.resolve(src)) as Promise<
+      AsyncIterable<Chunk>
+    >);
+
+    // Identity is preserved — the layer did not wrap the resolved iterable in a second generator.
+    expect(out).toBe(src);
+    // No streaming lifecycle ran: nothing recorded a `chunks` count.
+    expect(readRecords().some((r) => r.chunks !== undefined)).toBe(false);
+    // The legitimate unary span for the operation still opened and closed.
+    expect(readRecords().some((r) => r.event === 'apigen.q.start')).toBe(true);
+    expect(readRecords().some((r) => r.event === 'apigen.q.finish')).toBe(true);
+  });
+
+  it('negative control: a bare-iterable `next` is passed through by identity (fails under the old eager branch)', async () => {
+    const call = makeCall({ id: 'neg' });
+    const src = sourceOf([1, 2, 3]);
+
+    // Deliberately violates the contract (`Next` must resolve): the old code branched HERE on the
+    // unresolved value and returned a NEW generator (identity broken). The current layer never
+    // inspects the unresolved value, so identity holds.
+    const out = await (makeTraceLayer()(call, (() => src) as unknown as Next) as Promise<
+      AsyncIterable<Chunk>
+    >);
+
+    expect(out).toBe(src);
+    expect(readRecords().some((r) => r.chunks !== undefined)).toBe(false);
+  });
 });
 
 describe('apigen-plugin-tracing — plugin shape', () => {
@@ -240,50 +312,5 @@ describe('apigen-plugin-tracing — plugin shape', () => {
   it('declares id "tracing" and a layer capability', () => {
     expect(tracingPlugin.id).toBe('tracing');
     expect(typeof tracingPlugin.capabilities.layer!.layer).toBe('function');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Integration — a REAL dispatch through the composed invoker writes a span record
-// carrying a trace_id to the sink (runtime proof, not code inspection).
-// ---------------------------------------------------------------------------
-
-describe('apigen-plugin-tracing — integration (real invoker)', () => {
-  it('a traced call writes a span record carrying apigen.op, apigen.transport and trace_id', async () => {
-    const schemas: ComposedSchemas = {
-      echo: {
-        input: { type: 'object', properties: { data: { type: 'object', properties: {} } } },
-        output: {},
-      },
-    };
-
-    const invoke = createPackageInvoker(schemas, readUsePlugins({ usePlugins: [tracingPlugin] }));
-
-    const result = await invoke(
-      'echo',
-      {
-        operation: { id: 'echo' },
-        ctx: new LayerContext(),
-        envelope: {},
-        domainArgs: {},
-        transport: 'mcp',
-      } as never,
-      { fns: { echo: () => 'hi' }, schemas }
-    );
-
-    expect(result).toBe('hi');
-
-    // Flush so the assertion reads the durable sink the running process actually wrote to.
-    await handle.flush();
-
-    const start = readRecords().find((r) => r.event === 'apigen.echo.start');
-    expect(start).toBeDefined();
-    expect(start!['apigen.op']).toBe('echo');
-    expect(start!['apigen.transport']).toBe('mcp');
-    expect(start!.trace_id).toBeTruthy();
-
-    const finish = readRecords().find((r) => r.event === 'apigen.echo.finish');
-    expect(finish).toBeDefined();
-    expect(finish!.trace_id).toBe(start!.trace_id);
   });
 });

@@ -51,8 +51,14 @@ export class TraceHandle {
  */
 const boundSpans = new WeakMap<TraceHandle, OtelSpanHandle>();
 
-/** A value is a stream iff it is a non-null object exposing `Symbol.asyncIterator`. */
-function isAsyncIterable(value: unknown): value is AsyncIterable<Chunk> {
+/**
+ * QUARANTINED — unreachable under the current `Next` contract; see CONTRACT-FIX §4.
+ * Exported only so the streaming branch can be exercised by a direct unit test; no layer
+ * path reaches it (a `Next` resolves to a `LayerResult`, so this detector can never be
+ * true for the unresolved `next()` promise). Retained — never deleted — pending a `Next`
+ * that can yield an iterable before resolution.
+ */
+export function isAsyncIterable(value: unknown): value is AsyncIterable<Chunk> {
   return typeof value === 'object' && value !== null && Symbol.asyncIterator in value;
 }
 
@@ -128,11 +134,18 @@ function traceUnary(
 }
 
 /**
+ * QUARANTINED — unreachable under the current `Next` contract; see CONTRACT-FIX §4.
+ * The layer no longer branches on `next()` (an `AsyncIterable` can only be a *resolved*
+ * value, never the unresolved promise), so this is retained with its body intact and
+ * exported solely for a direct unit test. Do NOT re-wire it into the layer by awaiting
+ * `next()` first — that would destroy the span-before-body invariant guarded by
+ * `plugin.spec.ts` (the hang-visibility test).
+ *
  * Streaming branch — `withSpan` cannot await an iterable, so the `.start` record is emitted
  * synchronously on entry and an async-generator wrapper yields each chunk unchanged, then
  * emits `.finish` with the chunk count (or `.error` and re-throws).
  */
-function traceStream(
+export function traceStream(
   downstream: AsyncIterable<Chunk>,
   spanName: string,
   attrs: Record<string, unknown>
@@ -182,20 +195,27 @@ export function makeTraceLayer(
     // Seed the per-call trace handle so downstream layers / domain code can correlate + annotate.
     call.ctx.set(TraceHandle, handle);
 
+    // Reserved keys are spread LAST so a configured `envelopeAttrs` entry can never shadow
+    // `apigen.op` / `apigen.transport` / `trace_id` — the built-in attrs always win (F14).
     const attrs: Record<string, unknown> = {
+      ...pickEnvelope(call.envelope, envelopeAttrs),
       'apigen.op': call.operation.id,
       'apigen.transport': call.transport,
       trace_id: traceId,
-      ...pickEnvelope(call.envelope, envelopeAttrs),
     };
 
     // Run the whole downstream inside the trace context so nested spans share the trace_id.
-    return withTrace(traceId, () => {
-      const downstream = next();
-      return isAsyncIterable(downstream)
-        ? traceStream(downstream, spanName, attrs)
-        : traceUnary(downstream, spanName, attrs, handle);
-    });
+    // `next()` resolves to a `LayerResult`; the unary span is opened unconditionally (and
+    // BEFORE the body runs) so a hanging downstream is still visible. The streaming branch
+    // is quarantined — see below — because branching on the unresolved `next()` promise is
+    // always false (an `AsyncIterable` can only be a resolved value), and awaiting first
+    // would destroy the span-before-body invariant. `traceUnary` remains the only layer path.
+    // `Next` in scope is @adhd/apigen-core-client's broad authoring union
+    // `() => Promise<Result> | AsyncIterable<Chunk>`; engine-runtime always hands a Layer a
+    // Promise (its own `Next` is `() => Promise<LayerResult>`), so `Promise.resolve` is a
+    // no-op on the real path and merely re-narrows the static type for `traceUnary`. It never
+    // branches on, and never awaits, the unresolved value — the span still opens first.
+    return withTrace(traceId, () => traceUnary(Promise.resolve(next()), spanName, attrs, handle));
   };
 }
 

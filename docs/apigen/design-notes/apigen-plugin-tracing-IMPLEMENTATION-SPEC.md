@@ -4,6 +4,8 @@
 **Owner:** architecture. **Drives:** `@adhd/backlog` becoming a required tracing consumer.
 **Convention:** this note lives beside `ir-cache-IMPLEMENTATION-SPEC.md` in
 `docs/apigen/design-notes/`, the established apigen implementation-spec home.
+**Superseded in part by:** [`apigen-plugin-tracing-CONTRACT-FIX.md`](./apigen-plugin-tracing-CONTRACT-FIX.md)
+— the contract seam (engine-supplied `Call.transport`), the streaming quarantine, and the test rework.
 
 ---
 

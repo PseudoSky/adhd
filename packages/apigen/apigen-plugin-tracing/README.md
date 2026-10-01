@@ -50,8 +50,11 @@ apigen run --source ./api.ts --type tracing
 ```ts
 import { tracingPlugin, makeTracingPlugin, TraceHandle } from '@adhd/apigen-plugin-tracing';
 
-// default plugin — span prefix `apigen`
+// default plugin — span prefix `apigen` (zero-config)
 run({ usePlugins: [tracingPlugin] });
+
+// `makeTracingPlugin(...)` is the configured entry point — use it to set the span prefix and
+// copy declared envelope headers onto every span.
 
 // configured
 run({
@@ -90,8 +93,12 @@ downstream resolved, or for a streaming call, which is logged rather than spanne
 | `<serviceName>.<op>.error` | error | the above + `error` (the thrown message) |
 | `apigen.op.error` | error | `apigen.op`, `apigen.transport`, `trace_id`, `span`, `duration_ms`, `err` |
 
-Streaming operations emit `<serviceName>.<op>.{start,finish,error}` synchronously — `.start` before
-the stream body runs (so a hang is visible), `.finish` with the chunk count after it ends.
+Streaming operations are **quarantined**: under the current `Next` contract
+(`() => Promise<LayerResult>`), an `AsyncIterable` can only be a *resolved* value, never an
+unresolved one, so the layer spans a streaming op only up to the point the stream is obtained — as a
+unary span. Per-chunk `.{start,finish,error}` records with a chunk count are **not** emitted. The
+`traceStream` helper remains in the package (directly unit-tested) behind a quarantine banner for a
+future reopen-span follow-up; `traceUnary` is the only layer path.
 
 ## Options
 

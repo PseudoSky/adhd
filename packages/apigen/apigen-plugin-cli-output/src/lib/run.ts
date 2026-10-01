@@ -492,7 +492,7 @@ export interface CliRawCall {
 /** One registered command: its `OpPlan` plus the dispatch closure bound to it (`(call) => dispatchForPlan(plan, invoke, call, opts)`). */
 export interface CliRoute {
   plan: OpPlan;
-  dispatch: (call: Omit<RuntimeCall, 'operation' | 'ctx'>) => Promise<LayerResult>;
+  dispatch: (call: Omit<RuntimeCall, 'operation' | 'ctx' | 'transport'>) => Promise<LayerResult>;
 }
 
 /**
@@ -519,7 +519,7 @@ class CliTransportAdapter implements TransportAdapter<CliRawCall> {
 
   registerRoute(
     plan: OpPlan,
-    dispatch: (call: Omit<RuntimeCall, 'operation' | 'ctx'>) => Promise<LayerResult>
+    dispatch: (call: Omit<RuntimeCall, 'operation' | 'ctx' | 'transport'>) => Promise<LayerResult>
   ): void {
     this.routes.set(plan.cli.path.join(' '), { plan, dispatch });
   }
@@ -529,7 +529,7 @@ class CliTransportAdapter implements TransportAdapter<CliRawCall> {
     return this.routes;
   }
 
-  readCall(raw: CliRawCall, plan: OpPlan): Omit<RuntimeCall, 'operation' | 'ctx'> {
+  readCall(raw: CliRawCall, plan: OpPlan): Omit<RuntimeCall, 'operation' | 'ctx' | 'transport'> {
     const { domainArgs, envelope } = parseArgs(raw.rest, plan.cliFlags);
     return { domainArgs, envelope, signal: this.signal };
   }
@@ -696,6 +696,7 @@ export async function run(input: RunInput): Promise<void> {
           domainArgs: call.domainArgs,
           envelope: call.envelope,
           signal: call.signal,
+          transport: 'cli',
         },
         opts as InvokeOptions
       ),

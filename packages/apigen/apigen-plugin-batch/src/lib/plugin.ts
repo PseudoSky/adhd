@@ -197,6 +197,11 @@ function buildBatchHandler(
       domainArgs: (item ?? {}) as Record<string, unknown>,
       envelope: call.envelope,
       signal: call.signal,
+      // Propagate the host's transport from the already-stamped batch
+      // invocation: every fanned-out item executes on the same host as the
+      // batch call itself (mirrors dispatchForPlan's stamp from
+      // plan.transport — never a fabricated value).
+      transport: call.transport,
     }));
 
     // `hostBridge.invokeOptions.schemas` is deliberately typed as the loose,

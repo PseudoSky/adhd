@@ -154,7 +154,7 @@ class ExpressTransportAdapter implements TransportAdapter<ExpressRaw> {
   registerRoute(
     plan: OpPlan,
     dispatch: (
-      call: Omit<RuntimeCall, 'operation' | 'ctx'>
+      call: Omit<RuntimeCall, 'operation' | 'ctx' | 'transport'>
     ) => Promise<LayerResult>
   ): void {
     const route = this.routeFor(plan);
@@ -176,7 +176,7 @@ class ExpressTransportAdapter implements TransportAdapter<ExpressRaw> {
   readCall(
     raw: ExpressRaw,
     plan: OpPlan
-  ): Omit<RuntimeCall, 'operation' | 'ctx'> {
+  ): Omit<RuntimeCall, 'operation' | 'ctx' | 'transport'> {
     const { req } = raw;
     const headers = req.headers as Record<
       string,
@@ -405,6 +405,7 @@ export async function run(input: RunInput): Promise<void> {
           domainArgs: call.domainArgs,
           envelope: call.envelope,
           signal: call.signal,
+          transport: 'http',
         },
         opts as InvokeOptions
       ),

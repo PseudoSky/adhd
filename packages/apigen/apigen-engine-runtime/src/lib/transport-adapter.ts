@@ -41,7 +41,7 @@ export interface TransportAdapter<Raw = unknown> {
    */
   registerRoute(
     plan: OpPlan,
-    dispatch: (call: Omit<Call, 'operation' | 'ctx'>) => Promise<LayerResult>
+    dispatch: (call: Omit<Call, 'operation' | 'ctx' | 'transport'>) => Promise<LayerResult>
   ): void;
 
   /**
@@ -51,7 +51,7 @@ export interface TransportAdapter<Raw = unknown> {
   readCall(
     raw: Raw,
     plan: OpPlan
-  ): Omit<Call, 'operation' | 'ctx'> | Promise<Omit<Call, 'operation' | 'ctx'>>;
+  ): Omit<Call, 'operation' | 'ctx' | 'transport'> | Promise<Omit<Call, 'operation' | 'ctx' | 'transport'>>;
 
   /**
    * Marshal a resolved `LayerResult` (the value `dispatch`'s returned

@@ -19,7 +19,7 @@
  *      weave at codegen with the same semantics.
  */
 
-import type { Operation } from '@adhd/apigen-core-client';
+import type { Operation, Transport } from '@adhd/apigen-core-client';
 import { dispatch } from './dispatch';
 import type { ComposedSchemas } from './types';
 
@@ -79,6 +79,13 @@ export interface Call {
   domainArgs: Record<string, unknown>;
   /** Cancellation signal (AbortSignal) — §11. */
   signal?: AbortSignal;
+  /**
+   * The canonical transport this call arrived on.  Stamped by `dispatchForPlan`
+   * from `plan.transport` (F3), so it is guaranteed present on every call a
+   * Layer observes — never optional, never a silent `undefined`.  A Layer that
+   * needs the transport reads it here; it never hunts for it elsewhere.
+   */
+  transport: Transport;
 }
 
 // ---------------------------------------------------------------------------

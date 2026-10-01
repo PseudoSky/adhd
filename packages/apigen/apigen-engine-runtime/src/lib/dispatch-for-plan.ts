@@ -84,13 +84,16 @@ const MOUNT_PASSTHROUGH_SCHEMA: {
 export async function dispatchForPlan(
   plan: OpPlan,
   invoke: InvokeFn,
-  call: Omit<RuntimeCall, 'operation' | 'ctx'>,
+  call: Omit<RuntimeCall, 'operation' | 'ctx' | 'transport'>,
   opts: InvokeOptions
 ): Promise<LayerResult> {
   const fullCall: RuntimeCall = {
     ...call,
     operation: { id: plan.op.id },
     ctx: new LayerContext(),
+    // F3: the single stamp — `plan.transport` is the source of truth for the
+    // transport this call arrived on.  Supplied by the engine, never by a Layer.
+    transport: plan.transport,
   };
 
   if (plan.isMount) {

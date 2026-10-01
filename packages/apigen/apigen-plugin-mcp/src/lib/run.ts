@@ -200,7 +200,7 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
   private readonly plans = new Map<string, OpPlan>();
   private readonly dispatchers = new Map<
     string,
-    (call: Omit<RuntimeCall, 'operation' | 'ctx'>) => Promise<LayerResult>
+    (call: Omit<RuntimeCall, 'operation' | 'ctx' | 'transport'>) => Promise<LayerResult>
   >();
   /** op.id → composed schema — used by `writeResult` to resolve whether THIS
    * op's output shape is an already-object return and therefore emits a
@@ -229,7 +229,7 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
   registerRoute(
     plan: OpPlan,
     dispatch: (
-      call: Omit<RuntimeCall, 'operation' | 'ctx'>
+      call: Omit<RuntimeCall, 'operation' | 'ctx' | 'transport'>
     ) => Promise<LayerResult>
   ): void {
     // Any route mutation invalidates the memoized tools/list projection.
@@ -247,7 +247,7 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
   getDispatch(
     name: string
   ):
-    | ((call: Omit<RuntimeCall, 'operation' | 'ctx'>) => Promise<LayerResult>)
+    | ((call: Omit<RuntimeCall, 'operation' | 'ctx' | 'transport'>) => Promise<LayerResult>)
     | undefined {
     return this.dispatchers.get(name);
   }
@@ -278,7 +278,7 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
     return this.cachedList;
   }
 
-  readCall(raw: McpRaw, plan: OpPlan): Omit<RuntimeCall, 'operation' | 'ctx'> {
+  readCall(raw: McpRaw, plan: OpPlan): Omit<RuntimeCall, 'operation' | 'ctx' | 'transport'> {
     // §9.1: envelope fields come from _meta["x-<pluginId>-<field>"], not from
     // the args body — driven entirely off the resolved OpPlan envelope
     // bindings (no per-request schema re-derivation).
@@ -574,6 +574,7 @@ function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
           domainArgs: call.domainArgs,
           envelope: call.envelope,
           signal: call.signal,
+          transport: 'mcp',
         },
         opts as InvokeOptions
       ),
