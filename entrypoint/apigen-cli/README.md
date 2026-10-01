@@ -126,9 +126,10 @@ curl http://localhost:8080/_meta/health
 ### With middleware
 
 ```bash
-npx @adhd/apigen-cli run --source hello.ts --type api-fastify --use health --use logger --use batch
+npx @adhd/apigen-cli run --source hello.ts --type api-fastify --use health --use logger --use tracing --use batch
 # health  → GET /_meta/health  (live health check)
 # logger  → per-operation structured logging to stderr
+# tracing → per-operation OTel spans + durable JSONL trace records
 # batch   → POST /_batch/query, /_batch/action (bulk fan-out)
 ```
 
@@ -336,7 +337,7 @@ MCP over `stdio` keeps **stdout** clean for JSON-RPC — all logs go to stderr.
 
 Compose cross-cutting behavior without editing your source code. Accepts:
 
-- **Built-in slugs:** `health` — mounts `GET /_meta/health`; `logger` — per-operation structured logging
+- **Built-in slugs:** `health` — mounts `GET /_meta/health`; `logger` — per-operation structured logging; `tracing` — per-operation OTel spans + durable JSONL trace records
 - **Package specifiers:** any npm package exporting a Plugin interface
 - **Local paths:** filesystem path to a plugin module
 
@@ -386,6 +387,7 @@ Built-in plugins:
 | `batch` | Mount | Adds `POST /_batch/<kind>` — fan out N items through one operation with concurrency control and per-item error handling |
 | `health` | Mount | Adds `GET /_meta/health` with aggregate status |
 | `logger` | Layer | Per-operation pino logging to stderr |
+| `tracing` | Layer | Per-operation OTel spans + durable JSONL trace records to the `@adhd/sox-telemetry` sink, correlated by `trace_id` |
 
 Write your own by exporting a Plugin object (with `capabilities` field) from any npm package or local file.
 

@@ -55,6 +55,7 @@ HTTP calls use `POST /<namespace>/<fn>` with body `{"data":{…}}`.
 | [`@adhd/apigen-plugin-openapi`](./apigen-plugin-openapi) | Mount: `GET /_meta/openapi` live doc | — | — |
 | [`@adhd/apigen-plugin-health`](./apigen-plugin-health) | Mount: `GET /_meta/health` | — | — |
 | [`@adhd/apigen-plugin-logger`](./apigen-plugin-logger) | Layer: per-operation logging | — | — |
+| [`@adhd/apigen-plugin-tracing`](./apigen-plugin-tracing) | Layer: per-operation OTel spans + durable JSONL trace records | — | — |
 | [`@adhd/apigen-codegen-openapi`](./apigen-codegen-openapi) | OpenAPI 3.1 document builder | — | — |
 | [`@adhd/apigen-generator-nx`](./apigen-generator-nx) | Nx generator (`plugin`) + cache-aware executor (`generate`) | — | — |
 | [`@adhd/apigen-python-env`](./python-env) | Python venv provisioning | — | — |
@@ -80,6 +81,7 @@ machine at `docs/plan/apigen-client-generation/`.
 ```bash
 npx nx run-many -t build -p apigen-core-client apigen-engine-runtime apigen-cli \
   apigen-generator-nx apigen-plugin-mcp apigen-plugin-api-fastify \
-  apigen-plugin-api-express apigen-plugin-cli-output apigen-plugin-jsonschema
+  apigen-plugin-api-express apigen-plugin-cli-output apigen-plugin-jsonschema \
+  apigen-plugin-tracing
 npx nx run-many -t test -p apigen-cli            # unit + integration
 ```
