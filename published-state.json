@@ -227,6 +227,12 @@
     "publishedIntegrity": "sha512-lL1T/y1A+Y5aMlKWs0lB+dkrhD3y4S86Xy6KNMmA/3juIYaKtiH7S7RwIpSg8/Vb8f2eodPKy5d2yl7bU2Hg5Q==",
     "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
   },
+  "@adhd/apigen-plugin-tracing": {
+    "version": "0.1.0",
+    "normalizedHash": "sha256:5fcd44dd933fb232bb7e06508774af627e27541635632774b9ad5a38381f62ab",
+    "publishedIntegrity": "sha512-lxp68ikAOgQno1ZCBEuvcyrg/QTPLyC65+GgJwtuK3ip6srEyKav6NyfOykfcZa3AAu5ypw3KTZXcm4MkCVLXA==",
+    "publishedFromRef": "708e85e1d00df5965ece189e79bb9f6167fa1bc8"
+  },
   "@adhd/apigen-plugin-ts-types": {
     "version": "0.0.3",
     "normalizedHash": "sha256:7d305bcdddc57a377724f9947999805d2156cdc4fe2f1fdf8fef847b79950389",
