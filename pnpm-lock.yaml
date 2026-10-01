@@ -494,6 +494,9 @@ importers:
       '@adhd/apigen-plugin-py-grpc':
         specifier: ^0.2.7
         version: link:../../packages/apigen/apigen-plugin-py-grpc
+      '@adhd/apigen-plugin-tracing':
+        specifier: 0.1.0
+        version: link:../../packages/apigen/apigen-plugin-tracing
       '@adhd/apigen-plugin-ts-types':
         specifier: ^0.0.3
         version: link:../../packages/apigen/apigen-plugin-ts-types
@@ -567,6 +570,9 @@ importers:
       '@adhd/apigen-plugin-openapi':
         specifier: ^0.2.5
         version: link:../../packages/apigen/apigen-plugin-openapi
+      '@adhd/apigen-plugin-tracing':
+        specifier: ^0.1.0
+        version: link:../../packages/apigen/apigen-plugin-tracing
       '@adhd/environment':
         specifier: ^0.1.0
         version: link:../../packages/environment/environment-core-node
@@ -1372,6 +1378,15 @@ importers:
       '@adhd/apigen-python-env':
         specifier: ^0.2.7
         version: link:../python-env
+
+  packages/apigen/apigen-plugin-tracing:
+    dependencies:
+      '@adhd/apigen-core-client':
+        specifier: ^0.3.3
+        version: link:../apigen-core-client
+      '@adhd/sox-telemetry':
+        specifier: ^0.3.2
+        version: 0.3.2
 
   packages/apigen/apigen-plugin-ts-types:
     dependencies:
@@ -6014,7 +6029,6 @@ packages:
   /@lancedb/lancedb@0.31.0(apache-arrow@18.1.0):
     resolution: {integrity: sha512-EUEVpheKhaCNE6ybcW760OUyfeei2dKR2ZwgLWeC/ntHL4BBiBLIErh9fuEuUP3/mAx4B5UFraB2m5nDUx5XEA==}
     engines: {node: '>= 18'}
-    cpu: [x64, arm64]
     os: [darwin, linux, win32]
     requiresBuild: true
     peerDependencies:

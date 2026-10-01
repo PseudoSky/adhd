@@ -47,6 +47,7 @@ import { apiFastifyPlugin } from '@adhd/apigen-plugin-api-fastify';
 import { openapiPlugin } from '@adhd/apigen-plugin-openapi';
 import { mcpPlugin } from '@adhd/apigen-plugin-mcp';
 import { batchPlugin } from '@adhd/apigen-plugin-batch';
+import { tracingPlugin } from '@adhd/apigen-plugin-tracing';
 import * as clientMod from './api.js';
 import type { BacklogCtx } from './api.js';
 import {
@@ -874,7 +875,7 @@ export async function createBacklogServer(
             // drive.
             port: serviceConfig.port,
             host: serviceConfig.host,
-            usePlugins: [openapiPlugin, batchPlugin],
+            usePlugins: [tracingPlugin, openapiPlugin, batchPlugin],
           },
           signal: internal.signal,
           // SPEC.md §6.7 — the SAME `operations` array the MCP
@@ -902,7 +903,7 @@ export async function createBacklogServer(
         requireRun(mcpPlugin)({
           packages: [pkg],
           outputDir: '',
-          options: { transport: 'stdio', usePlugins: [batchPlugin] },
+          options: { transport: 'stdio', usePlugins: [tracingPlugin, batchPlugin] },
           signal: internal.signal,
           operations,
           logger,

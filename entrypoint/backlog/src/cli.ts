@@ -25,6 +25,7 @@ import { join, resolve, sep } from 'node:path';
 import type { Scope } from '@adhd/environment-base-spec';
 import { cliPlugin } from '@adhd/apigen-plugin-cli-output';
 import { batchPlugin } from '@adhd/apigen-plugin-batch';
+import { tracingPlugin } from '@adhd/apigen-plugin-tracing';
 import type { Descriptor, Operation, Plugin } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
 import type { BacklogCtx } from './api.js';
@@ -114,7 +115,7 @@ export function resolveCommandPrefix(
  * two can never drift apart (that drift is exactly what made the old
  * hand-maintained `MOUNT_COMMAND_NAMESPACES` constant go stale).
  */
-export const USE_PLUGINS: readonly Plugin[] = [batchPlugin];
+export const USE_PLUGINS: readonly Plugin[] = [tracingPlugin, batchPlugin];
 
 /**
  * Derives the set of top-level command segments reserved by every mount
