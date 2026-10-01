@@ -104,3 +104,14 @@ Schema version 1.
   another worker) was left byte-identical and staged: it appears in neither `main`'s nor the
   branch's tree, so the merge could not reach it. No source file, `registry/index.json`, or
   worktree was modified. This record is the only change to this file.
+
+- **2026-10-01 — operation record: reap of `.worktrees/impl-apigen-tracing`.** Applied the
+  §Cleanup safe-to-remove test to the worktree for `feat/apigen-plugin-tracing` (HEAD
+  `0f85bc1c`, its branch fast-forwarded onto `main` at `b19990a4`): `git status --porcelain` was
+  empty, the entry carried no `locked` line, and the branch was an ancestor of `main`
+  (`git rev-list --count main..feat/apigen-plugin-tracing` = 0), so it is attributable to a
+  merged branch. Ran `git worktree remove .worktrees/impl-apigen-tracing` — no `--force` — and
+  `git branch -d feat/apigen-plugin-tracing` (was `0f85bc1c`). Worktrees went 53 → 52; no source
+  file, hook, or `registry/index.json` was modified. The staged orphan
+  `tools/nx-plugins/build/executors/smoke-test/task-report.mjs` (blob `70fd7b71`) remains
+  byte-identical and staged. This record is the only change to this file.
