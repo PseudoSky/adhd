@@ -93,3 +93,14 @@ Schema version 1.
   … nothing … implemented". Established this file as the single authoritative policy, citing
   AGENTS.md, CONTRIBUTING.md, `.githooks/`, and `.github/workflows/` by path rather than
   restating them, and added a one-line pointer to it from `CONTRIBUTING.md`.
+
+- **2026-10-01 — operation record: fast-forward merge of `feat/apigen-plugin-tracing`.** Ran
+  `git merge --ff-only feat/apigen-plugin-tracing` on `main`, moving `main` `bb832e7b` →
+  `0f85bc1c` (7 commits, 42 files) with no merge commit. A fast-forward is within this policy's
+  stated norm rather than a deviation: §Branching & merge says ff-only is **not** enforced, and
+  `main`'s history already contains both ff-able landings that took a merge commit and landings
+  that did not — so `--no-ff` is a chosen shape here, not the only lawful one. The staged index
+  entry for `tools/nx-plugins/build/executors/smoke-test/task-report.mjs` (an orphan owned by
+  another worker) was left byte-identical and staged: it appears in neither `main`'s nor the
+  branch's tree, so the merge could not reach it. No source file, `registry/index.json`, or
+  worktree was modified. This record is the only change to this file.
