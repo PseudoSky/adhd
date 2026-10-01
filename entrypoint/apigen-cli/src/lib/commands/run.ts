@@ -36,6 +36,9 @@ import openapiPlugin from '@adhd/apigen-plugin-openapi';
 // extract-stage-onion-and-ir-cache.md R2-3): `--use ir-cache` selects its
 // `extractLayer` capability (RUNTIME CACHE mode, `--opt cache=<file-path>`).
 import { irCachePlugin } from '@adhd/apigen-plugin-ir-cache';
+// Tracing (FEAT-APIGEN-TRACING): `--use tracing` selects its Layer capability —
+// one OTel span per dispatched operation, written to the sox-telemetry JSONL sink.
+import tracingPlugin from '@adhd/apigen-plugin-tracing';
 
 
 /** Parse --opt key=value pairs into an options record. */
@@ -164,6 +167,7 @@ export function assertDecimalLibPresent(
  * inlines them.
  */
 const BUILTIN_USE_PLUGINS: Record<string, Plugin> = {
+  tracing: tracingPlugin as Plugin,
   batch: batchPlugin as Plugin,
   health: healthPlugin as Plugin,
   logger: loggerPlugin as Plugin,
