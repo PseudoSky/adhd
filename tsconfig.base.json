@@ -143,6 +143,9 @@
       "@adhd/apigen-plugin-py-grpc": [
         "./packages/apigen/apigen-plugin-py-grpc/src/index.ts"
       ],
+      "@adhd/apigen-plugin-tracing": [
+        "./packages/apigen/apigen-plugin-tracing/src/index.ts"
+      ],
       "@adhd/apigen-plugin-ts-types": [
         "./packages/apigen/apigen-plugin-ts-types/src/index.ts"
       ],

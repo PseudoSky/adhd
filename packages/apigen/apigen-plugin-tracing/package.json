@@ -1,0 +1,27 @@
+{
+  "name": "@adhd/apigen-plugin-tracing",
+  "version": "0.1.0",
+  "dependencies": {
+    "@adhd/apigen-core-client": "^0.3.3",
+    "@adhd/sox-telemetry": "^0.3.2"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": ["dist", "CHANGELOG.md"],
+  "description": "Tracing plugin for apigen servers",
+  "keywords": ["tracing", "telemetry", "otel", "apigen", "plugin", "typescript"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/apigen/apigen-plugin-tracing"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/apigen/apigen-plugin-tracing#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
+}

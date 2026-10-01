@@ -1,0 +1,29 @@
+{
+  "name": "apigen-plugin-tracing",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/apigen/apigen-plugin-tracing/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "currentVersionResolver": "git-tag",
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": ["packages/apigen/apigen-plugin-tracing"]
+    }
+  },
+  "tags": [
+    "domain:apigen",
+    "pkg-kind:plugin",
+    "pkg-class:optional",
+    "layer:logic",
+    "platform:node",
+    "access:domain"
+  ],
+  "targets": {
+    "nx-release-publish": {
+      "dependsOn": ["build", "test"],
+      "options": {
+        "packageRoot": "packages/apigen/apigen-plugin-tracing/dist"
+      }
+    }
+  }
+}
