@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Call, Chunk, Next, Result, Transport } from '@adhd/apigen-core-client';
@@ -8,7 +9,14 @@ import {
   _resetTelemetryForTest,
   type TelemetryHandle,
 } from '@adhd/sox-telemetry';
-import { tracingPlugin, makeTracingPlugin, makeTraceLayer, traceStream, TraceHandle } from './plugin';
+import {
+  tracingPlugin,
+  makeTracingPlugin,
+  makeTraceLayer,
+  classifyWorktree,
+  traceStream,
+  TraceHandle,
+} from './plugin';
 
 // ---------------------------------------------------------------------------
 // Harness — a real sox-telemetry sink on a throwaway log dir, OTel forced on, so the
@@ -274,12 +282,12 @@ describe('apigen-plugin-tracing — process-identity attributes', () => {
     expect(start!.role).toBe('cli');
   });
 
-  it('stamps worktree=true — this checkout is a linked git worktree', async () => {
+  it("stamps worktree='linked' — this checkout is a linked git worktree", async () => {
     const call = makeCall({ id: 'echo' });
     await (makeTraceLayer({ serviceName: 'apigen' })(call, async () => 'ok') as Promise<Result>);
     const start = readRecords().find((r) => r.event === 'apigen.echo.start');
     expect(start).toBeDefined();
-    expect(start!.worktree).toBe(true);
+    expect(start!.worktree).toBe('linked');
   });
 
   it('stamps release.version/git_sha/artifact_sha256 from the running process', async () => {
@@ -290,6 +298,70 @@ describe('apigen-plugin-tracing — process-identity attributes', () => {
     expect(start!['release.version']).toBe('9.8.7');
     expect(start!['release.git_sha']).toMatch(/^[0-9a-f]{40}$/);
     expect(start!['release.artifact_sha256']).toMatch(/^sha256:[0-9a-f]{64}$/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// `worktree` discriminator — the value is only useful if the main checkout, a
+// linked worktree, and a cwd outside any repository actually classify *apart*.
+// The process-identity suite above proves the *emitted* span record carries the
+// discriminator; this proves all three branches of the classifier against real
+// git repositories on disk (a boolean collapsed "main" and "none" into one value).
+// ---------------------------------------------------------------------------
+
+describe('apigen-plugin-tracing — worktree discriminator (classifyWorktree)', () => {
+  const originalCwd = process.cwd();
+  let base: string;
+  let mainRepo: string;
+  let linkedRepo: string;
+  let nonRepo: string;
+
+  const runGit = (cwd: string, args: string[]): void => {
+    const r = spawnSync('git', args, { cwd, encoding: 'utf8' });
+    if (r.status !== 0) {
+      throw new Error(`git ${args.join(' ')} failed in ${cwd}: ${r.stderr}`);
+    }
+  };
+
+  beforeAll(() => {
+    base = mkdtempSync(join(tmpdir(), 'apigen-worktree-spec-'));
+    mainRepo = join(base, 'main');
+    linkedRepo = join(base, 'linked');
+    nonRepo = join(base, 'none');
+    mkdirSync(mainRepo, { recursive: true });
+    mkdirSync(nonRepo, { recursive: true });
+    runGit(mainRepo, ['init']);
+    runGit(mainRepo, [
+      '-c',
+      'user.email=spec@example.test',
+      '-c',
+      'user.name=spec',
+      'commit',
+      '--allow-empty',
+      '-m',
+      'init',
+    ]);
+    runGit(mainRepo, ['worktree', 'add', '--detach', linkedRepo]);
+  });
+
+  afterAll(() => {
+    process.chdir(originalCwd);
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it('classifies the main checkout, a linked worktree, and a non-repo cwd as three distinct values', () => {
+    try {
+      process.chdir(mainRepo);
+      expect(classifyWorktree()).toBe('main');
+
+      process.chdir(linkedRepo);
+      expect(classifyWorktree()).toBe('linked');
+
+      process.chdir(nonRepo);
+      expect(classifyWorktree()).toBe('none');
+    } finally {
+      process.chdir(originalCwd);
+    }
   });
 });
 

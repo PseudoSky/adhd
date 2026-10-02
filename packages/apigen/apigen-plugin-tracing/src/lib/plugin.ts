@@ -18,20 +18,28 @@ import type { OtelSpanHandle } from '@adhd/sox-telemetry';
  * Process-identity attributes — resolved once per process, then frozen. These are
  * first-class reserved attributes (spread LAST in the layer so a configured
  * `envelopeAttrs` entry can never shadow them) and give every span enough tagging
- * to aggregate by session, trace, parent, worktree, role, and release across a
- * whole process run.
+ * to aggregate by session, trace, worktree, role, and release across a
+ * whole process run (parent linkage is not emitted — see `parent_span_id` below).
  *
  *   - `session_id`        — `ADHD_SESSION_ID` env when set, else a process-stable
  *                           `randomUUID()`. Stable for the process, never per-span.
  *   - `trace_id`          — the OTel trace id (existing; see the layer body).
- *   - `parent_span_id`    — NOT emitted here: the OTel facade the plugin sees
- *                           (`OtelSpanHandle`) exposes only `setAttributes` /
- *                           `recordError`, no span/parent identity. sox-telemetry's
- *                           `JsonlSpanProcessor` stamps `parent_span_id` on every
- *                           span record (empty at the root, the parent's id when
- *                           nested) — see `otel.ts` in @adhd/sox-telemetry.
- *   - `worktree`          — `true` when `process.cwd()` sits inside a LINKED git
- *                           worktree (vs. the main checkout), else `false`.
+ *   - `parent_span_id`    — NOT emitted anywhere in this path, and the durable
+ *                           record carries no parent today. The OTel facade the
+ *                           plugin sees (`OtelSpanHandle`) exposes only
+ *                           `setAttributes` / `recordError`, no span/parent
+ *                           identity, so the plugin cannot supply it; and the
+ *                           installed sox-telemetry 0.3.2 `JsonlSpanProcessor`
+ *                           stamps only `span_id` + `otel_trace_id` on each
+ *                           record — it does NOT emit `parent_span_id`. Adding
+ *                           parent linkage requires extending sox-telemetry's
+ *                           `JsonlSpanProcessor` (a separate package) to stamp
+ *                           `parent_span_id` from `span.parentSpanContext`.
+ *   - `worktree`          — `'linked'` when `process.cwd()` sits inside a LINKED git
+ *                           worktree, `'main'` in a repository's main checkout, or
+ *                           `'none'` outside any repository — three-valued so the main
+ *                           checkout and a non-repo cwd stay distinguishable when records
+ *                           are aggregated (see `classifyWorktree`).
  *   - `role`              — `currentRuntimeState().role`, matching the envelope's
  *                           `role` exactly so test/cli/live-service/harness
  *                           populations aggregate together.
@@ -74,17 +82,38 @@ function artifactSha256(): string | null {
   }
 }
 
-/** True when `process.cwd()` sits inside a LINKED git worktree (not the main checkout). */
-function isLinkedWorktree(): boolean {
+/**
+ * Where `process.cwd()` sits relative to git — three-valued so the main checkout and a
+ * cwd outside any repository (a boolean reported both as the same value) stay
+ * distinguishable when records are aggregated.
+ */
+export type WorktreeKind = 'main' | 'linked' | 'none';
+
+/**
+ * Classify `process.cwd()` as a LINKED git worktree, a repository's main checkout, or
+ * nothing at all:
+ *
+ *   - `'linked'` — inside a LINKED worktree: `--git-common-dir` names the main
+ *                  checkout's `.git` directory (a path ending in `.git`), and its
+ *                  parent is not this worktree's own `--show-toplevel`.
+ *   - `'main'`   — inside a repository but not a linked worktree (the main checkout).
+ *   - `'none'`   — not inside any repository (either `git rev-parse` probe fails).
+ *
+ * Exported only so all three values can be unit-tested directly — the same
+ * test-only, not-in-the-public-API precedent as `traceStream`; NOT re-exported
+ * from `src/index.ts`.
+ */
+export function classifyWorktree(): WorktreeKind {
   const top = gitRevParse(['--show-toplevel']);
   const commonDir = gitRevParse(['--path-format=absolute', '--git-common-dir']);
-  if (top === null || commonDir === null) return false;
-  return /[\\/]\.git$/.test(commonDir) && resolve(dirname(commonDir)) !== resolve(top);
+  if (top === null || commonDir === null) return 'none';
+  const linked = /[\\/]\.git$/.test(commonDir) && resolve(dirname(commonDir)) !== resolve(top);
+  return linked ? 'linked' : 'main';
 }
 
 interface ProcessIdentity {
   sessionId: string;
-  worktree: boolean;
+  worktree: WorktreeKind;
   release: { version: string | null; gitSha: string | null; artifactSha256: string | null };
 }
 
@@ -97,7 +126,7 @@ function processIdentity(): ProcessIdentity {
     const versionEnv = process.env['npm_package_version'];
     cachedIdentity = {
       sessionId: sessionEnv !== undefined && sessionEnv.length > 0 ? sessionEnv : randomUUID(),
-      worktree: isLinkedWorktree(),
+      worktree: classifyWorktree(),
       release: {
         version: versionEnv !== undefined && versionEnv.length > 0 ? versionEnv : null,
         gitSha: gitRevParse(['HEAD']),
