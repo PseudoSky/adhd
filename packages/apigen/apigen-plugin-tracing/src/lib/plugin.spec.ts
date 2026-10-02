@@ -282,12 +282,18 @@ describe('apigen-plugin-tracing — process-identity attributes', () => {
     expect(start!.role).toBe('cli');
   });
 
-  it("stamps worktree='linked' — this checkout is a linked git worktree", async () => {
+  it('stamps the worktree discriminator on the span record, matching the live classifier', async () => {
     const call = makeCall({ id: 'echo' });
     await (makeTraceLayer({ serviceName: 'apigen' })(call, async () => 'ok') as Promise<Result>);
     const start = readRecords().find((r) => r.event === 'apigen.echo.start');
     expect(start).toBeDefined();
-    expect(start!.worktree).toBe('linked');
+    // The emitted value must be one of the three valid kinds AND must agree
+    // with the classifier evaluated in this process's cwd. A hard-coded
+    // 'linked' would fail in the main checkout (and in CI, which is never a
+    // linked worktree) even though the emission is correct; the classifier's
+    // three branches are covered by the dedicated suite below.
+    expect(['main', 'linked', 'none']).toContain(start!.worktree);
+    expect(start!.worktree).toBe(classifyWorktree());
   });
 
   it('stamps release.version/git_sha/artifact_sha256 from the running process', async () => {
