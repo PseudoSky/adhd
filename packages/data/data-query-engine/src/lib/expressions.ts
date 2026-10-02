@@ -45,7 +45,23 @@ export interface JsonOperator
   _has_keys_all?: string[];
 }
 
-export type Operator = NumberOperator | StringOperator | JsonOperator;
+/**
+ * ISO-8601 duration period operator. Filters a timestamp column to the window
+ * `[anchor - duration, anchor]`, where the anchor is `Date.now()` for a bare
+ * duration string, or the tuple's second element for a `[duration, anchor]`
+ * value. Calendar components (Y/M) resolve against the calendar — see
+ * `resolveIsoPeriod` in `./period` — so `P1M` is a CALENDAR month, not 30 fixed
+ * days.
+ */
+export interface PeriodOperator {
+  _period?: string | [string, number];
+}
+
+export type Operator =
+  | NumberOperator
+  | StringOperator
+  | JsonOperator
+  | PeriodOperator;
 
 export interface BooleanExpression {
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment

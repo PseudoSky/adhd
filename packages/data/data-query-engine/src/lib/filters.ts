@@ -1,4 +1,5 @@
 import { Transform as _ } from '@adhd/data-base-transforms';
+import { resolveIsoPeriod } from './period';
 // export const partialApply = (fn: ((...args: unknown[]) => any), ...cache: undefined[]) => (...args: unknown[][]) => {
 //   const all = cache.concat(args);
 //   return all.length >= fn.length ? fn(...all) : partialApply(fn, ...all);
@@ -94,6 +95,53 @@ const matchesIRegex = (a: string, b: string) =>
 const matchesNRegex = (a: string, b: string) => !matchesRegex(a, b);
 const matchesNIRegex = (a: string, b: string) => !matchesIRegex(a, b);
 const isNull = (a: unknown, b: boolean) => _.isDefined(a) !== b;
+
+/** Coerce a row's timestamp (epoch ms, Date, or parseable string) to epoch ms. */
+const toEpochMs = (v: unknown): number | null => {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (v instanceof Date) return v.getTime();
+  if (typeof v === 'string') {
+    const t = Date.parse(v);
+    return Number.isNaN(t) ? null : t;
+  }
+  return null;
+};
+
+/**
+ * ISO-8601 duration period predicate. `a` is the row's timestamp; `b` is either
+ * an ISO-8601 duration string (anchored at `Date.now()`) or a
+ * `[duration, anchorMs]` tuple pinning the anchor. True when `a` falls in the
+ * inclusive window `[anchor - duration, anchor]` — with calendar components
+ * resolved against the calendar via `resolveIsoPeriod` (so `P1M` is a calendar
+ * month, not 30 fixed days).
+ */
+const isPeriod = (a: unknown, b: unknown): boolean => {
+  let duration: string;
+  let anchor: number;
+  if (typeof b === 'string') {
+    duration = b;
+    anchor = Date.now();
+  } else if (
+    Array.isArray(b) &&
+    b.length === 2 &&
+    typeof b[0] === 'string' &&
+    typeof b[1] === 'number'
+  ) {
+    duration = b[0];
+    anchor = b[1];
+  } else {
+    return false;
+  }
+  const t = toEpochMs(a);
+  if (t === null) return false;
+  try {
+    const bounds = resolveIsoPeriod(duration, anchor);
+    return t >= bounds.from && t <= bounds.to;
+  } catch {
+    // A malformed duration matches nothing rather than aborting the whole query.
+    return false;
+  }
+};
 export type Filter = (...args: unknown[]) => boolean;
 export type FilterPartial = (...args: unknown[]) => Filter;
 
@@ -122,6 +170,7 @@ export const operators: Record<string, FilterPartial> = {
   _lt: asFilterPartial(isLt),
   _gte: asFilterPartial(isGte),
   _lte: asFilterPartial(isLte),
+  _period: asFilterPartial(isPeriod),
   _like: asFilterPartial(isLike),
   _nlike: asFilterPartial(isNlike),
   _ilike: asFilterPartial(isIlike),
