@@ -181,6 +181,53 @@ stderr** (telemetry, the embedding backend, onnxruntime) whether or not it
 succeeded; stdout carries the JSON envelope alone. Parse stdout, key on the
 exit code, and ignore stderr — it is noise, not a failure signal.
 
+### Reading the traces
+
+Backlog mounts `@adhd/apigen-plugin-tracing` and writes **one span per
+dispatched operation** to the sox-telemetry JSONL sink — one file per component
+and day:
+
+```
+~/.adhd/sox-ecosystem/backlog/logs/backlog.cli-<YYYY-MM-DD>.jsonl           # one-shot CLI   (role: cli)
+~/.adhd/sox-ecosystem/backlog/logs/backlog.live-service-<YYYY-MM-DD>.jsonl  # long-lived serve (role: live-service)
+```
+
+Each op emits `<ns>.<op>.start` before the body runs and `<ns>.<op>.finish`
+(duration) after; a throw emits `<ns>.op.error` and re-throws. The namespace is
+`adhd` — `src/tracing.ts` constructs `makeTracingPlugin({ serviceName: 'adhd' })`,
+and every transport (fastify, mcp, cli) shares that one instance. The plugin's
+own `apigen` singleton belongs to apigen: **a backlog process must never emit
+`apigen.*` records.**
+
+A span record carries the tags triage needs:
+
+| Tag | Meaning |
+|---|---|
+| `adhd.op` | the dispatched verb id (`backlog/get`, `backlog/query`, …) |
+| `adhd.transport` | the mount that dispatched it (`cli`, `mcp`, `fastify`) |
+| `session_id` | `$ADHD_SESSION_ID`, else a process-stable fallback |
+| `trace_id` / `span_id` / `parent_span_id` | tree identity; `parent_span_id` is `null` on a root span |
+| `worktree` | `linked` \| `main` \| `none` — which checkout the op ran in |
+| `role` | `cli` (one-shot) \| `live-service` (serve) |
+| `release.version` / `release.git_sha` / `release.artifact_sha256` | the running artifact's provenance |
+
+`release.*` are **dotted, flat keys** — read `record['release.version']`. A base
+nested `release` object may also appear but is all-null; the flat keys are the
+populated ones (the plugin emits them flat so `toOtelAttributes` keeps them).
+
+Confirm tracing is live by running any read-only verb and grepping the sink for
+its span — a correctly-built backlog names it `adhd.backlog/get.start` and tags
+it `"adhd.op":"backlog/get"` / `"adhd.transport":"cli"`:
+
+```
+$ adhd-backlog get <uid> >/dev/null
+$ rg '"event":"adhd\.backlog/get\.start"' ~/.adhd/sox-ecosystem/backlog/logs/backlog.cli-$(date -u +%F).jsonl
+```
+
+Seeing `apigen.backlog/…` from a `"service":"backlog"` record means the binary
+predates the `adhd` namespacing — rebuild/reinstall it rather than trusting
+those spans.
+
 `search "x" --limit 2` is the argv-flag shortcut for `backlog query --input
 '{"text":"x","limit":2}'` — same envelope, same exit codes, verified:
 
