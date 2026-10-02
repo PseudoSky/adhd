@@ -16,6 +16,9 @@
  * PRIORITY SPELLING — canonical is UPPERCASE, left as-is below.
  */
 
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 /**
  * The full status vocabulary, in its canonical (lowercase) spelling. The
  * member SET is the same as the source union — only letter case is
@@ -59,7 +62,8 @@ export const ALL_PRIORITIES: readonly string[] = ['CRITICAL', 'HIGH', 'MEDIUM', 
 
 /** The one project this ETL can verify a real filesystem path for (SPEC.md §8.4/§8.5). */
 export const ADHD_PROJECT_NAME = 'adhd';
-export const ADHD_PROJECT_PATH = '/Users/nix/dev/node/adhd';
+/** Repo root, derived from this file's location (`entrypoint/backlog/tools/etl/` → 4 levels up) so it is correct in any checkout, never a baked machine path. */
+export const ADHD_PROJECT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 export const ADHD_PROJECT_REPO_URL = 'git@github.com:PseudoSky/adhd.git';
 
 /** SPEC.md §8.4 — both forms collapse onto the single `"adhd"` project row. */

@@ -63,6 +63,8 @@
  *   dryRun                boolean   default false. When true, the product
  *                                   phases compute what they WOULD write but
  *                                   make no backlog_update (priority) calls.
+ *   repoRoot              string    optional absolute checkout path. Only prefixes
+ *                                   the artifact path; default is repo-relative.
  *   runLabel              string    default 'latest'. Artifact path becomes
  *                                   tmp/grooming-<runLabel>.md. Fixed/stable —
  *                                   this script cannot call Date.now().
@@ -109,7 +111,10 @@ if (typeof A !== 'object' || A === null || Array.isArray(A)) {
   throw new Error('backlog-grooming: args must be an object (or a JSON string encoding one), got ' + (Array.isArray(A) ? 'array' : typeof A))
 }
 
-const REPO_ROOT = '/Users/nix/dev/node/adhd'
+// Optional absolute prefix for the artifact path. Unset (the default) keeps the
+// artifact path repo-relative (`tmp/grooming-<runLabel>.md`), resolved against the
+// agents' cwd — i.e. the checkout the workflow was launched from, on any machine.
+const REPO_ROOT = typeof A.repoRoot === 'string' && A.repoRoot ? A.repoRoot.replace(/\/+$/, '') : ''
 const REPOS = ['adhd', 'PseudoSky/adhd'] // sox-ecosystem is a DIFFERENT repository — always out of scope here
 const SCOPE_PRIORITIES = A.priorities && A.priorities.length ? A.priorities : null
 const SCOPE_KINDS = A.kinds && A.kinds.length ? A.kinds : null
@@ -121,7 +126,7 @@ const ONLY_IDS = Array.isArray(A.onlyIds) && A.onlyIds.length ? new Set(A.onlyId
 const MAX_ITEMS = Number.isInteger(A.maxItems) && A.maxItems > 0 ? A.maxItems : null
 const DRY_RUN = !!A.dryRun
 const RUN_LABEL = A.runLabel || 'latest'
-const ARTIFACT_PATH = `${REPO_ROOT}/tmp/grooming-${RUN_LABEL}.md`
+const ARTIFACT_PATH = `${REPO_ROOT ? REPO_ROOT + '/' : ''}tmp/grooming-${RUN_LABEL}.md`
 const PREV_OPEN_COUNT = typeof A.previousOpenCount === 'number' ? A.previousOpenCount : null
 const PREV_UNRESOLVED_COUNT = typeof A.previousUnresolvedCount === 'number' ? A.previousUnresolvedCount : null
 

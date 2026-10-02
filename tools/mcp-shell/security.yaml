@@ -30,5 +30,5 @@ security:
     - 'cat\s'
   max_execution_time: 300s
   max_output_size: 5242880
-  working_directory: /Users/nix/dev/node/adhd
+  working_directory: .
   audit_log: true

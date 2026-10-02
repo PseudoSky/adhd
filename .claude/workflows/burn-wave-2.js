@@ -3,8 +3,16 @@ export const meta = {
   description: 'Backlog burn wave 2 — implement/review/fix/review over 14 file-disjoint packages via the backlog-remediation pipeline',
 }
 
+// repoRoot is machine-specific, so it is NOT baked in: pass it as `args.repoRoot`
+// (absolute path to this checkout — the pipeline interpolates it into shell
+// commands and worktree paths, so a relative path would break once agents cd).
+const RAW_ARGS = typeof args === 'string' ? JSON.parse(args) : (typeof args !== 'undefined' && args) || {}
+if (typeof RAW_ARGS.repoRoot !== 'string' || !RAW_ARGS.repoRoot.startsWith('/')) {
+  throw new Error('burn-wave-2: args.repoRoot (absolute path to this checkout) is required')
+}
+
 const A = {
- "repoRoot": "/Users/nix/dev/node/adhd",
+ "repoRoot": RAW_ARGS.repoRoot.replace(/\/+$/, ''),
  "baselineRef": "ec033b1b31295ab33a467dff0c84e8ae45117fba",
  "worktreeTemplate": "{repoRoot}/.worktrees/burn-{cluster}",
  "branchTemplate": "burn/{cluster}",
@@ -416,4 +424,4 @@ const A = {
  "extraRules": "- INTERRUPTED PRIOR ATTEMPT: an earlier run of THIS SAME wave was killed mid-edit by a network outage (API ENOTFOUND), not by any decision. Your worktree may therefore already contain UNCOMMITTED edits from your own package's previous attempt. Before you start, run `git status --porcelain` and `git diff` and classify what you find: anything inside your package's own filesTouched is your predecessor's partial work \u2014 read it, judge it on its merits, and either finish it or replace it, whichever produces the correct result. Do NOT stop and report on account of it, and do NOT treat it as another agent's in-flight work. Anything OUTSIDE your filesTouched belongs to a different package: leave it exactly as it is, never commit it, and never revert it."
 }
 
-return await workflow({ scriptPath: "/Users/nix/dev/node/adhd/.claude/skills/backlog-remediation/remediation-pipeline.js" }, A)
+return await workflow({ scriptPath: ".claude/skills/backlog-remediation/remediation-pipeline.js" }, A)

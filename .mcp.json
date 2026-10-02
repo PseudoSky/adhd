@@ -5,14 +5,14 @@
       "command": "npx",
       "args": ["-y", "@adhd/agent-mcp@latest"],
       "env": {
-        "ADHD_AGENT_DATABASE_PATH": "/Users/nix/.adhd/agent-mcp/agents.db",
-        "ADHD_AGENT_REGISTRY_DB_PATH": "/Users/nix/.adhd/agent-mcp/registry.db"
+        "ADHD_AGENT_DATABASE_PATH": "${HOME}/.adhd/agent-mcp/agents.db",
+        "ADHD_AGENT_REGISTRY_DB_PATH": "${HOME}/.adhd/agent-mcp/registry.db"
       }
     },
     "backlog": {
       "type": "stdio",
       "command": "node",
-      "args": ["/Users/nix/dev/node/adhd/entrypoint/backlog/dist/index.js", "serve", "--transport", "mcp"]
+      "args": ["entrypoint/backlog/dist/index.js", "serve", "--transport", "mcp"]
     }
   }
 }
