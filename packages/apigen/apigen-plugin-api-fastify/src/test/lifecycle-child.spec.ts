@@ -35,7 +35,16 @@ import type { PluginInput } from '@adhd/apigen-core-client';
 const REPO_ROOT = path.resolve(__dirname, '../../../../..');
 const TMP_ROOT = path.join(REPO_ROOT, 'tmp', 'apigen');
 
-/** A TCP server bound (and left listening) on an OS-assigned 127.0.0.1 port. */
+/**
+ * A TCP server bound (and left listening) on an OS-assigned port.
+ *
+ * Bound to `localhost`, NOT `127.0.0.1`: fastify's `listen({ port })` defaults
+ * its host to `localhost`, which Node's DNS resolves to IPv6 `::1` first. An
+ * IPv4-only blocker would therefore never collide with the address fastify
+ * actually binds — `listen` would SUCCEED and the server handle would keep the
+ * child's event loop alive forever (the symptom this spec exists to catch). The
+ * blocker must occupy the same resolved address the generated host targets.
+ */
 async function bindBlockerPort(): Promise<{
   port: number;
   close: () => Promise<void>;
@@ -43,7 +52,7 @@ async function bindBlockerPort(): Promise<{
   return new Promise((resolve, reject) => {
     const server = net.createServer();
     server.on('error', reject);
-    server.listen(0, '127.0.0.1', () => {
+    server.listen(0, 'localhost', () => {
       const { port } = server.address() as net.AddressInfo;
       resolve({
         port,
