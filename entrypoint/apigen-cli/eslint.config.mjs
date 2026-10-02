@@ -50,6 +50,11 @@ export default [
             'pino-http',
             'thread-stream',
             'sonic-boom',
+            // Reached transitively via @adhd/apigen-plugin-tracing and kept
+            // external in the bundle (its CJS require("node:perf_hooks") cannot
+            // be inlined into the ESM artifact) — so it is a real runtime dep
+            // with no direct source import.
+            '@adhd/sox-telemetry',
           ],
         },
       ],

@@ -59,6 +59,15 @@ export default defineConfig({
         'pino-http',
         'thread-stream',
         'sonic-boom',
+        // @adhd/sox-telemetry is a real npm-INSTALLED dep (it has no
+        // tsconfig.base.json path mapping, unlike the @adhd/apigen-* workspace
+        // graph), reached here transitively via @adhd/apigen-plugin-tracing.
+        // Inlining its CJS `require("node:perf_hooks")` makes Rolldown emit its
+        // `__require` shim instead, which THROWS the moment the ESM artifact
+        // (package.json "module": ./dist/index.mjs) is imported. Keep it
+        // external like the tracing plugin does — see externalizeRealDeps.
+        '@adhd/sox-telemetry',
+        /^@adhd\/sox-telemetry\//,
       ],
       output: {
         // Real executable: node shebang on the built entry.
