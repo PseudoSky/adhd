@@ -1,5 +1,20 @@
 # @adhd/apigen-plugin-tracing
 
+## 0.2.0 (2026-10-01)
+
+### ⚠️  Breaking Changes
+
+- **apigen-plugin-tracing:** `makeTracingPlugin(opts)` / `makeTraceLayer(opts)` now REQUIRE
+  `opts.serviceName` (previously the options object defaulted to `{}` with an implicit `'apigen'`
+  namespace). Reserved span attribute and event keys changed from `apigen.op` / `apigen.transport` /
+  `apigen.op.error` to `<serviceName>.op` / `<serviceName>.transport` / `<serviceName>.op.error`.
+  Every consumer must now pass an explicit `serviceName` (adhd products pass `'adhd'`) and read the
+  namespaced keys. 0.x breaking ⇒ minor.
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.0
 
 ### Minor Changes

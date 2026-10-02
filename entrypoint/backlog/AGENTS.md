@@ -41,11 +41,22 @@ The hidden subcommand must never open the store and must never write under
 `~/.adhd`. `src/index.ts` deliberately skips `initTelemetry` for it, because
 telemetry's default file sink lives under `~/.adhd`.
 
-## Tracing is a required mount consumer
+## Tracing is a required, adhd-namespaced mount consumer
 
 `@adhd/backlog` mounts `apigen-plugin-tracing` on every transport it serves. The
-plugin is a static import in BOTH `server.ts` and `cli.ts`, and `tracingPlugin`
-is a member of all THREE `usePlugins` arrays:
+plugin is CONFIGURED once, in `src/tracing.ts`, with an explicit namespace:
+
+```ts
+export const tracingPlugin = makeTracingPlugin({ serviceName: 'adhd' });
+```
+
+`serviceName` is REQUIRED by the plugin (there is no implicit default) and is the
+prefix of every emitted span/record/attribute. Backlog passes `'adhd'` because it
+is an adhd product — it must NEVER import the package's own `tracingPlugin`
+singleton, which is apigen-namespaced (`apigen.*`) and exists only for apigen's
+CLI and self-test. Both `server.ts` and `cli.ts` import `{ tracingPlugin }` from
+`./tracing.js` (the configured instance), and it is a member of all THREE
+`usePlugins` arrays:
 
 - `server.ts` fastify mount — `usePlugins: [tracingPlugin, openapiPlugin, batchPlugin]`
 - `server.ts` MCP mount — `usePlugins: [tracingPlugin, batchPlugin]`
@@ -53,15 +64,18 @@ is a member of all THREE `usePlugins` arrays:
 
 It is prepended so it is the OUTERMOST layer of each composed invoker: one span
 per dispatched op, carrying the op id, transport, outcome and duration, written
-under a `trace_id` to the `@adhd/sox-telemetry` JSONL sink. This is designed-in,
-not a flag — there is no enable switch. Deriving the reserved mount namespaces
-from this array is unaffected: tracing contributes no `mount` capability.
+under a `trace_id` to the `@adhd/sox-telemetry` JSONL sink as `adhd.<op>.start` /
+`adhd.<op>.finish` / `adhd.op.error` records with `adhd.op` / `adhd.transport`
+attributes. This is designed-in, not a flag — there is no enable switch. Deriving
+the reserved mount namespaces from this array is unaffected: tracing contributes
+no `mount` capability.
 
-Removing the dependency fails the build (`TS2307: Cannot find module
-'@adhd/apigen-plugin-tracing'` in `server.ts`/`cli.ts`); dropping the plugin from
-any one array silently untraces that transport. `src/server.tracing-required.spec.ts`
-asserts membership of all three. Do NOT remove the import, the array members, or
-the dependency, and do NOT add a fourth mount's `usePlugins` without tracing.
+`src/server.tracing-required.spec.ts` is the proof: it boots a real sox-telemetry
+sink and asserts the configured instance actually EMITS `adhd.*` records (never
+`apigen.*`), plus a clearly-labelled static guard that the transports import the
+configured instance, not the bare package singleton. Do NOT remove the import,
+the array members, or the dependency, do NOT change `serviceName: 'adhd'`, and do
+NOT add a fourth mount's `usePlugins` without tracing.
 
 ## `APIGEN_IR_CACHE_ENABLED` scope
 

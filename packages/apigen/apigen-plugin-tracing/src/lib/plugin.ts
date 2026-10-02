@@ -8,15 +8,20 @@ import type { OtelSpanHandle } from '@adhd/sox-telemetry';
  * Layer plugins receive no opts at call time — `LayerCapability.layer` is invoked with only
  * `(call, next)` — so configuration is a factory, exactly as `makeLoggerPlugin` does it.
  */
-export interface TracingOptions {
-  /** Span / record name prefix. Default: `'apigen'`. */
-  serviceName?: string;
+export type TracingOptions = {
+  /**
+   * Span / record / attribute name prefix — the emitting product's namespace. REQUIRED: there
+   * is no implicit default, so a product cannot silently emit another product's telemetry.
+   * adhd products pass `'adhd'`; apigen's own CLI and self-test pass `'apigen'` explicitly.
+   */
+  serviceName: string;
   /**
    * Extra attribute keys copied verbatim from `call.envelope` onto each span. Default: `[]`
-   * (only the built-in attrs `apigen.op`, `apigen.transport`, `trace_id` are emitted).
+   * (only the built-in attrs `${serviceName}.op`, `${serviceName}.transport`, `trace_id` are
+   * emitted).
    */
   envelopeAttrs?: readonly string[];
-}
+};
 
 /**
  * Per-call trace handle, seeded into `call.ctx`. The class is the ctx token: domain code reads
@@ -34,8 +39,9 @@ export class TraceHandle {
 
   /**
    * Add attributes to the live span from domain code — opt-in. A no-op when the operation is
-   * not currently inside a unary span (e.g. before the downstream resolved, or for a streaming
-   * call, which is logged rather than spanned).
+   * not currently inside a unary span (e.g. before the downstream resolved, or after the span
+   * has closed). Streaming is not special-cased: the layer spans a streaming op as a unary
+   * span covering only the point the stream is obtained.
    */
   annotate(fields: Record<string, unknown>): void {
     const span = boundSpans.get(this);
@@ -55,8 +61,9 @@ const boundSpans = new WeakMap<TraceHandle, OtelSpanHandle>();
  * QUARANTINED — unreachable under the current `Next` contract; see CONTRACT-FIX §4.
  * Exported only so the streaming branch can be exercised by a direct unit test; no layer
  * path reaches it (a `Next` resolves to a `LayerResult`, so this detector can never be
- * true for the unresolved `next()` promise). Retained — never deleted — pending a `Next`
- * that can yield an iterable before resolution.
+ * true for the unresolved `next()` promise). Not re-exported from the package entry
+ * (`src/index.ts`), so it is not part of the public API either. Retained — never
+ * deleted — pending a `Next` that can yield an iterable before resolution.
  */
 export function isAsyncIterable(value: unknown): value is AsyncIterable<Chunk> {
   return typeof value === 'object' && value !== null && Symbol.asyncIterator in value;
@@ -106,21 +113,22 @@ function errMessage(err: unknown): string {
 /**
  * Unary branch — wrap the downstream promise in an OTel span. `withSpan` writes the
  * `<spanName>.start` record BEFORE invoking the body (so a hang is visible) and the
- * `<spanName>.finish` / `<spanName>.error` record on completion. We additionally emit an
- * `apigen.op.error` record and re-throw — the layer never swallows.
+ * `<spanName>.finish` / `<spanName>.error` record on completion. We additionally emit a
+ * `${serviceName}.op.error` record and re-throw — the layer never swallows.
  */
 function traceUnary(
   downstream: Promise<Result>,
   spanName: string,
   attrs: Record<string, unknown>,
-  handle: TraceHandle
+  handle: TraceHandle,
+  serviceName: string
 ): Promise<Result> {
   return withSpan(spanName, toOtelAttributes(attrs), async (span) => {
     boundSpans.set(handle, span);
     try {
       return await downstream;
     } catch (err) {
-      log.error('apigen.op.error', {
+      log.error(`${serviceName}.op.error`, {
         ...attrs,
         span: spanName,
         duration_ms: Date.now() - handle.startedAt,
@@ -137,8 +145,9 @@ function traceUnary(
  * QUARANTINED — unreachable under the current `Next` contract; see CONTRACT-FIX §4.
  * The layer no longer branches on `next()` (an `AsyncIterable` can only be a *resolved*
  * value, never the unresolved promise), so this is retained with its body intact and
- * exported solely for a direct unit test. Do NOT re-wire it into the layer by awaiting
- * `next()` first — that would destroy the span-before-body invariant guarded by
+ * exported solely for a direct unit test (and not re-exported from the package entry
+ * `src/index.ts`, so not part of the public API). Do NOT re-wire it into the layer by
+ * awaiting `next()` first — that would destroy the span-before-body invariant guarded by
  * `plugin.spec.ts` (the hang-visibility test).
  *
  * Streaming branch — `withSpan` cannot await an iterable, so the `.start` record is emitted
@@ -181,9 +190,19 @@ export function traceStream(
  * once and returns its resolved value (or iterable) unchanged, wrapping it in a span.
  */
 export function makeTraceLayer(
-  opts: TracingOptions = {}
+  opts: TracingOptions
 ): (call: Call, next: Next) => Promise<Result> | AsyncIterable<Chunk> {
-  const serviceName = opts.serviceName ?? 'apigen';
+  const serviceName = opts.serviceName;
+  // Required by the type, but a JS caller (or an untyped `any`) bypasses that: an absent or
+  // blank name would silently stamp every span with `undefined.op` / `undefined.transport` and
+  // name records `undefined.<op>`, poisoning the sink instead of failing loudly. Fail fast.
+  if (typeof serviceName !== 'string' || serviceName.trim() === '') {
+    throw new Error(
+      '@adhd/apigen-plugin-tracing: `serviceName` is required and must be a non-empty string — ' +
+        'it namespaces every span name, attribute key, and error record. Construct the plugin ' +
+        'explicitly, e.g. `makeTracingPlugin({ serviceName: "adhd" })`.'
+    );
+  }
   const envelopeAttrs = opts.envelopeAttrs ?? [];
 
   return (call: Call, next: Next): Promise<Result> | AsyncIterable<Chunk> => {
@@ -196,11 +215,12 @@ export function makeTraceLayer(
     call.ctx.set(TraceHandle, handle);
 
     // Reserved keys are spread LAST so a configured `envelopeAttrs` entry can never shadow
-    // `apigen.op` / `apigen.transport` / `trace_id` — the built-in attrs always win (F14).
+    // `${serviceName}.op` / `${serviceName}.transport` / `trace_id` — the built-in attrs always
+    // win (F14).
     const attrs: Record<string, unknown> = {
       ...pickEnvelope(call.envelope, envelopeAttrs),
-      'apigen.op': call.operation.id,
-      'apigen.transport': call.transport,
+      [`${serviceName}.op`]: call.operation.id,
+      [`${serviceName}.transport`]: call.transport,
       trace_id: traceId,
     };
 
@@ -215,7 +235,9 @@ export function makeTraceLayer(
     // Promise (its own `Next` is `() => Promise<LayerResult>`), so `Promise.resolve` is a
     // no-op on the real path and merely re-narrows the static type for `traceUnary`. It never
     // branches on, and never awaits, the unresolved value — the span still opens first.
-    return withTrace(traceId, () => traceUnary(Promise.resolve(next()), spanName, attrs, handle));
+    return withTrace(traceId, () =>
+      traceUnary(Promise.resolve(next()), spanName, attrs, handle, serviceName)
+    );
   };
 }
 
@@ -237,7 +259,8 @@ export const tracingPlugin: Plugin<TracingOptions> = {
     properties: {
       serviceName: {
         type: 'string',
-        description: 'Span / record name prefix. Default: apigen.',
+        description:
+          'Span / record / attribute name prefix. REQUIRED — the emitting product namespace (e.g. adhd).',
       },
       envelopeAttrs: {
         type: 'array',
@@ -245,6 +268,7 @@ export const tracingPlugin: Plugin<TracingOptions> = {
         description: 'Extra envelope keys copied verbatim onto each span. Default: [].',
       },
     },
+    required: ['serviceName'],
     additionalProperties: false,
   },
   capabilities: {
@@ -257,13 +281,16 @@ export const tracingPlugin: Plugin<TracingOptions> = {
       },
     },
     layer: {
-      layer: makeTraceLayer(),
+      // `'apigen'` is apigen's OWN namespace, for its self-test and CLI transports — an explicit
+      // constant, not a fallback. adhd products must NOT import this singleton: they construct
+      // `makeTracingPlugin({ serviceName: 'adhd' })` at their call site.
+      layer: makeTraceLayer({ serviceName: 'apigen' }),
     },
   },
 };
 
 /** Configured factory — rebuilds the layer with `opts` (logger precedent). */
-export function makeTracingPlugin(opts: TracingOptions = {}): Plugin<TracingOptions> {
+export function makeTracingPlugin(opts: TracingOptions): Plugin<TracingOptions> {
   return {
     ...tracingPlugin,
     capabilities: {

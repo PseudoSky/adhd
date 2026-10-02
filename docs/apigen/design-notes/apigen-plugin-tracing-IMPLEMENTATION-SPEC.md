@@ -165,10 +165,13 @@ import {
  *  (LayerCapability.layer carries only `call`/`next`), so configuration is a
  *  factory — the same pattern as `makeLoggerPlugin` (logger plugin.ts:310-323). */
 export interface TracingOptions {
-  /** Span/event name prefix. Default: `'apigen'`. */
-  serviceName?: string;
+  /** Span/event/attribute name prefix — the emitting product's namespace. REQUIRED:
+   *  there is no implicit default, so a product cannot silently emit another
+   *  product's telemetry (adhd products pass `'adhd'`; apigen passes `'apigen'`). */
+  serviceName: string;
   /** Extra attribute keys copied verbatim from `call.envelope` onto each span.
-   *  Default: `[]` (only the built-in attrs are emitted). */
+   *  Default: `[]` (only the built-in attrs `${serviceName}.op`,
+   *  `${serviceName}.transport`, `trace_id` are emitted). */
   envelopeAttrs?: readonly string[];
 }
 
@@ -186,8 +189,9 @@ export class TraceHandle {
 /** Default plugin — module-scope configured layer (logger precedent, plugin.ts:238-295). */
 export const tracingPlugin: Plugin<TracingOptions>;
 
-/** Configured factory — rebuilds the layer with `opts` (logger precedent). */
-export function makeTracingPlugin(opts?: TracingOptions): Plugin<TracingOptions>;
+/** Configured factory — rebuilds the layer with `opts` (logger precedent). `opts` is
+ *  REQUIRED and `opts.serviceName` is a required non-empty string. */
+export function makeTracingPlugin(opts: TracingOptions): Plugin<TracingOptions>;
 
 export default tracingPlugin;
 ```
@@ -527,7 +531,7 @@ Per §8.
 
 - `apigen --use tracing run --source ./api.ts --type mcp` starts and emits trace records;
   `--type tracing` resolves to a no-op target (no files, no error).
-- Backlog: `adhd-backlog stats` writes at least one `apigen.*` record to
+- Backlog: `adhd-backlog stats` writes at least one `adhd.*` record to
   `~/.adhd/sox-ecosystem/backlog/logs/backlog.cli-<date>.jsonl` in addition to the
   existing telemetry (does not replace it).
 

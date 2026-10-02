@@ -25,7 +25,7 @@ import { join, resolve, sep } from 'node:path';
 import type { Scope } from '@adhd/environment-base-spec';
 import { cliPlugin } from '@adhd/apigen-plugin-cli-output';
 import { batchPlugin } from '@adhd/apigen-plugin-batch';
-import { tracingPlugin } from '@adhd/apigen-plugin-tracing';
+import { tracingPlugin } from './tracing.js';
 import type { Descriptor, Operation, Plugin } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
 import type { BacklogCtx } from './api.js';

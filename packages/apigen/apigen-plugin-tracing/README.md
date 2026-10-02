@@ -50,11 +50,13 @@ apigen run --source ./api.ts --type tracing
 ```ts
 import { tracingPlugin, makeTracingPlugin, TraceHandle } from '@adhd/apigen-plugin-tracing';
 
-// default plugin — span prefix `apigen` (zero-config)
+// apigen's own singleton — span prefix `apigen` (for apigen's CLI and self-test only).
+// adhd products must NOT use this: they pass their own namespace explicitly (see below).
 run({ usePlugins: [tracingPlugin] });
 
-// `makeTracingPlugin(...)` is the configured entry point — use it to set the span prefix and
-// copy declared envelope headers onto every span.
+// `makeTracingPlugin(...)` is the configured entry point — `serviceName` is REQUIRED (no
+// implicit default) and is the namespace every emitted span/record/attribute is prefixed
+// with. Pass your product's namespace (e.g. `adhd`), plus any envelope headers to copy.
 
 // configured
 run({
@@ -82,16 +84,17 @@ export async function placeOrder(call, ...args) {
 ```
 
 `annotate` is a no-op when the operation is not currently inside a unary span (e.g. before the
-downstream resolved, or for a streaming call, which is logged rather than spanned).
+downstream resolved, or after the span has closed). A streaming call is still spanned — as a
+unary span covering only the point the stream is obtained (see [Records](#records)).
 
 ## Records
 
 | Event | Level | Carries |
 |---|---|---|
-| `<serviceName>.<op>.start` | info | `apigen.op`, `apigen.transport`, `trace_id` |
+| `<serviceName>.<op>.start` | info | `<serviceName>.op`, `<serviceName>.transport`, `trace_id` |
 | `<serviceName>.<op>.finish` | info | the above + `duration_ms` |
 | `<serviceName>.<op>.error` | error | the above + `error` (the thrown message) |
-| `apigen.op.error` | error | `apigen.op`, `apigen.transport`, `trace_id`, `span`, `duration_ms`, `err` |
+| `<serviceName>.op.error` | error | `<serviceName>.op`, `<serviceName>.transport`, `trace_id`, `span`, `duration_ms`, `err` |
 
 Streaming operations are **quarantined**: under the current `Next` contract
 (`() => Promise<LayerResult>`), an `AsyncIterable` can only be a *resolved* value, never an
@@ -104,7 +107,7 @@ future reopen-span follow-up; `traceUnary` is the only layer path.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `serviceName` | `string` | `'apigen'` | Span / record name prefix. |
+| `serviceName` | `string` | _(required)_ | Span / record / attribute name prefix — the emitting product's namespace (e.g. `adhd`). |
 | `envelopeAttrs` | `string[]` | `[]` | Extra `call.envelope` keys copied verbatim onto each span. |
 
 ## Part of the apigen toolchain

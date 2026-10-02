@@ -47,7 +47,7 @@ import { apiFastifyPlugin } from '@adhd/apigen-plugin-api-fastify';
 import { openapiPlugin } from '@adhd/apigen-plugin-openapi';
 import { mcpPlugin } from '@adhd/apigen-plugin-mcp';
 import { batchPlugin } from '@adhd/apigen-plugin-batch';
-import { tracingPlugin } from '@adhd/apigen-plugin-tracing';
+import { tracingPlugin } from './tracing.js';
 import * as clientMod from './api.js';
 import type { BacklogCtx } from './api.js';
 import {

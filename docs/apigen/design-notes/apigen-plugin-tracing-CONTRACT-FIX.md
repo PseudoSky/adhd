@@ -26,7 +26,7 @@ document corrects.
 
 | # | Fact | Anchor |
 |---|------|--------|
-| F1 | The layer reads `call.transport` for `apigen.transport`. | `packages/apigen/apigen-plugin-tracing/src/lib/plugin.ts:187` |
+| F1 | The layer reads `call.transport` and stamps it as `${serviceName}.transport` (the emitting product's namespace). | `packages/apigen/apigen-plugin-tracing/src/lib/plugin.ts` |
 | F2 | The runtime `Call` the layer actually receives has **no `transport` field**: fields are `operation`, `ctx`, `envelope`, `domainArgs`, `signal?`. | `packages/apigen/apigen-engine-runtime/src/lib/invoke.ts:68-82` |
 | F3 | `dispatchForPlan` builds `fullCall = { ...call, operation, ctx }` and threads **that** to `invoke` (the layer stack); it never adds `transport`. `plan.transport` is stamped only onto the separate `coreCall` handed to `mountHandler`. | `…/apigen-engine-runtime/src/lib/dispatch-for-plan.ts:87-94, 104-121, 124` |
 | F4 | `adaptCoreLayer` passes the runtime `Call` through (`Object.assign(call, { data })`) — it neither supplies nor strips `transport`. | `…/apigen-engine-runtime/src/lib/package-invoker.ts:133-141` |
@@ -39,7 +39,7 @@ document corrects.
 | F11 | The plugin branches on the **unresolved** promise: `isAsyncIterable(next())` — always `false`. | `plugin.ts:193-198` |
 | F12 | `isAsyncIterable` is a correct guard for a resolved object exposing `Symbol.asyncIterator`. | `plugin.ts:54-57` |
 | F13 | The only integration test hand-fabricates `transport: 'mcp'` on a `Call` cast `as never`; the unit harness sets `transport: init.transport ?? 'mcp'`; the streaming tests pass a **bare** `AsyncIterable` straight into `makeTraceLayer` via `() => source()`. | `plugin.spec.ts:83-92`, `:170, 189, 210`, `:262-272` |
-| F14 | `envelopeAttrs` is spread **last**, so a caller field can shadow `apigen.op` / `apigen.transport` / `trace_id`. | `plugin.ts:185-190` |
+| F14 | Reserved keys `${serviceName}.op` / `${serviceName}.transport` / `trace_id` are spread **last**, so they always win — a caller `envelopeAttrs` key can never shadow them. | `plugin.ts:220-225` |
 | F15 | `makeTracingPlugin` is exported (barrel `src/index.ts:2`) and unit-tested, but both consumers import the singleton. | `src/index.ts:2`; `entrypoint/backlog/src/server.ts:50, 878, 906`; `entrypoint/apigen-cli/src/lib/commands/run.ts:41, 170` |
 | F16 | `entrypoint/apigen-cli/package.json` pins exact `"0.1.0"`; `entrypoint/backlog/package.json` uses `"^0.1.0"`. | `entrypoint/apigen-cli/package.json:37`; `entrypoint/backlog/package.json:17` |
 | F17 | Tracing's `nx-release-publish` omits `verify-dist-load`, `dist-manifest`, `publish-hygiene` and uses a literal `packageRoot`. The canonical sibling (`apigen-plugin-logger`) carries all three and `{projectRoot}/dist`; `apigen-plugin-ir-cache` shares tracing's drift. | `…/apigen-plugin-tracing/project.json:22-27`; `…/apigen-plugin-logger/project.json:13-24`; `…/apigen-plugin-ir-cache/project.json:22-27` |
@@ -192,13 +192,17 @@ hostInvoke(fnName, { operation: { id: fnName }, ctx: new LayerContext(),
 // fastify:456-467 → transport: 'http'   express:399-410 → transport: 'http'   cli:690-701 → transport: 'cli'
 ```
 
+A *fifth* construction site lives outside the adapters: `apigen-plugin-batch/src/lib/plugin.ts`
+builds a `calls: RuntimeCall[]` array (`plugin.ts:194-205`) and must stamp
+`transport: call.transport` onto each entry once `transport` is required (see Segment B).
+
 ### `apigen-plugin-tracing/src/lib/plugin.ts` — attrs order (item 2)
 
 ```typescript
 // BEFORE (F14) — envelope can shadow the reserved keys
 const attrs = {
-  'apigen.op': call.operation.id,
-  'apigen.transport': call.transport,
+  [`${serviceName}.op`]: call.operation.id,
+  [`${serviceName}.transport`]: call.transport,
   trace_id: traceId,
   ...pickEnvelope(call.envelope, envelopeAttrs),
 };
@@ -206,8 +210,8 @@ const attrs = {
 // AFTER — reserved keys win; caller fields may not overwrite the correlation id
 const attrs = {
   ...pickEnvelope(call.envelope, envelopeAttrs),
-  'apigen.op': call.operation.id,
-  'apigen.transport': call.transport,
+  [`${serviceName}.op`]: call.operation.id,
+  [`${serviceName}.transport`]: call.transport,
   trace_id: traceId,
 };
 ```
@@ -226,8 +230,12 @@ return withTrace(traceId, () => {
 // AFTER — the harness's next() is always a Promise (F9/F10); a Layer cannot
 // synchronously know whether its value is a stream, and awaiting first would break
 // the unary span-before-body invariant. Span the unary path unconditionally; the
-// streaming tracer is quarantined (see §4).
-return withTrace(traceId, () => traceUnary(next(), spanName, attrs, handle));
+// streaming tracer is quarantined (see §4). `Promise.resolve(next())` — not a bare
+// `next()` — because `Next` is the broad union `() => Promise<Result> |
+// AsyncIterable<Chunk>` (core-client `plugin.ts:153`) while `traceUnary` takes a
+// `Promise<Result>`; the literal `traceUnary(next(), …)` is a TS2345 (the union is not
+// assignable to `Promise<Result>`), and `Promise.resolve` re-narrows it.
+return withTrace(traceId, () => traceUnary(Promise.resolve(next()), spanName, attrs, handle));
 ```
 
 `traceStream` stays in the file under an explicit quarantine banner
@@ -268,9 +276,9 @@ it.
   `coreCall.transport` (F3) is unchanged.
 - **Layer stack**: `adaptCoreLayer` (F4) already passes the call through by reference, so
   `transport` survives with no change to that function.
-- **Tracing layer**: `apigen.transport` is present on every emitted record, for every
+- **Tracing layer**: `${serviceName}.transport` is present on every emitted record, for every
   transport, source and mount.
-- **`envelopeAttrs`**: a caller-supplied envelope key equal to `apigen.op`/`apigen.transport`/
+- **`envelopeAttrs`**: a caller-supplied envelope key equal to `${serviceName}.op`/`${serviceName}.transport`/
   `trace_id` no longer overwrites the reserved value.
 - **Streaming**: unchanged in observable effect for any op the harness actually serves
   (all unary). A stream, were one served, is spanned only to the point the iterable is
@@ -293,14 +301,16 @@ it.
 - **Required context:** read `invoke.ts:63-102`, `dispatch-for-plan.ts:79-125`,
   `transport-adapter.ts:36-69` only.
 
-### Segment B — four adapters narrow the inbound type + stamp host bridges
+### Segment B — four adapters and the batch plugin narrow the inbound type + stamp host bridges
 
-- **Files:** mcp `run.ts`, fastify `run.ts`, express `run.ts`, cli `run.ts`
+- **Files:** mcp `run.ts`, fastify `run.ts`, express `run.ts`, cli `run.ts`, batch `plugin.ts`
 - **Dependencies:** Segment A (the `Call` shape and port signature must exist first)
 - **Read tokens:** ~540 · **Output tokens:** ~130
-- **Required context:** for each file read only the `registerRoute`/`readCall`/`getDispatch`
+- **Required context:** for each adapter read only the `registerRoute`/`readCall`/`getDispatch`
   region and the `hostBridge` literal (mcp `:199-302` + `:561-585`; fastify `:189-266` +
-  `:455-473`; express `:154-224` + `:398-416`; cli `:511-535` + `:688-707`).
+  `:455-473`; express `:154-224` + `:398-416`; cli `:511-535` + `:688-707`). For batch, read
+  the `calls: RuntimeCall[]` literal (`plugin.ts:194-205`) — a *fifth* construction site that
+  builds `RuntimeCall` objects and must stamp `transport` too.
 
 ### Segment C — tracing layer fixes
 
@@ -347,7 +357,7 @@ it.
 
 **Segment C**
 1. Reorder `attrs` so `pickEnvelope` spreads first (item 2).
-2. Replace the branch with `return withTrace(traceId, () => traceUnary(next(), spanName, attrs, handle));`.
+2. Replace the branch with `return withTrace(traceId, () => traceUnary(Promise.resolve(next()), spanName, attrs, handle));` — the bare `next()` literal does not typecheck (TS2345): `Next` is the broad union `() => Promise<Result> | AsyncIterable<Chunk>` while `traceUnary` takes a `Promise<Result>`; `Promise.resolve` re-narrows.
 3. Put the `traceStream` quarantine banner on the function; leave its body intact.
 4. Do NOT change `traceUnary`, `withSpan`, or the `TraceHandle` seeding.
 
@@ -380,12 +390,12 @@ quote (or run in an isolated worktree).
 
 - **AC0.1** `RuntimeCall` has required `transport: Transport`. *Observable:* `npx nx typecheck apigen-engine-runtime` exits 0, and `rg "Omit<RuntimeCall, 'operation' \| 'ctx'>"` returns **zero** hits across `packages/apigen`.
 - **AC0.2** `dispatchForPlan` stamps `fullCall.transport = plan.transport` for both branches. *Observable:* a new engine-runtime unit test captures the `Call` passed to `invoke` and asserts `transport === 'mcp'` when `plan.transport === 'mcp'`; goes RED if the stamp is removed.
-- **AC0.3 — REAL-TRANSPORT E2E (the test that would have caught the HIGH).** For **each** of mcp, fastify, express, cli-output: boot the real transport with `usePlugins: [tracingPlugin]`, dispatch one operation end to end, flush the sox-telemetry sink, and assert the durable JSONL record `apigen.<op>.start` carries `'apigen.transport'` equal to that transport's literal — `'mcp'`, `'http'`, `'http'`, `'cli'` respectively — **and never `undefined`**.
+- **AC0.3 — REAL-TRANSPORT E2E (the test that would have caught the HIGH).** For **each** of mcp, fastify, express, cli-output: boot the real transport with the tracing plugin installed, dispatch one operation end to end, flush the sox-telemetry sink, and assert the durable JSONL record `<serviceName>.<op>.start` carries `'<serviceName>.transport'` equal to that transport's literal — `'mcp'`, `'http'`, `'http'`, `'cli'` respectively — **and never `undefined`**. The concrete e2e installs the apigen-namespaced singleton (`usePlugins: [tracingPlugin]`, `serviceName: 'apigen'`), so the asserted keys are `apigen.<op>.start` / `apigen.transport`; the backlog transport emits the same seam under `adhd.*` (asserted in `entrypoint/backlog/src/server.tracing-required.spec.ts`).
   - fastify/express: `run()` on an ephemeral port + a real `fetch`/supertest request (or `app.inject` for fastify — still the real adapter path).
   - mcp: drive the built `CallToolRequestSchema` handler (or a stdio round-trip) through the real `McpTransportAdapter`.
   - cli: invoke `apigen-plugin-cli-output`'s `run()` with a real `argv` and a real schema.
   - *Observable:* four assertions, one per transport, all reading the emitted record — not a fabricated `Call`.
-  - *Teeth:* with the Segment-A stamp removed, all four go RED (`apigen.transport` missing).
+  - *Teeth:* with the Segment-A stamp removed, all four go RED (`<serviceName>.transport` missing).
 - **AC0.4** No plugin special-casing: `plugin.ts` has no import of `dispatchForPlan`/`OpPlan` and reads transport only via `call.transport`. *Observable:* `rg "dispatchForPlan|OpPlan" packages/apigen/apigen-plugin-tracing` returns zero hits.
 
 ### AC1 — project.json gates (item 1)
@@ -395,9 +405,11 @@ quote (or run in an isolated worktree).
 
 ### AC2 — envelopeAttrs shadowing (item 2)
 
-- **AC2** With `envelopeAttrs: ['trace_id', 'apigen.op', 'apigen.transport']` and an envelope
-  carrying those same keys, the emitted record's `trace_id` equals the minted `TraceHandle.traceId`,
-  `apigen.op` equals the operation id, and `apigen.transport` equals the call's transport.
+- **AC2** With `envelopeAttrs` naming the reserved keys and an envelope carrying those same
+  keys, the emitted record's `trace_id` equals the minted `TraceHandle.traceId`,
+  `${serviceName}.op` equals the operation id, and `${serviceName}.transport` equals the call's
+  transport. (The concrete unit test drives `serviceName: 'checkout'` and asserts
+  `checkout.op` / `checkout.transport`.)
   *Observable:* a unit test asserting each reserved field is the plugin's value, not the envelope's.
   *Teeth:* RED under the current (spread-last) order.
 
@@ -429,7 +441,7 @@ assertions to the real contract; it does not remove them.
 
 1. **Transport integration (`plugin.spec.ts:251-289`)** — replace the hand-fabricated `Call`
    (`transport: 'mcp'` on an `as never` cast) with the real-transport e2e (AC0.3). Keep an
-   assertion that the record carries `apigen.transport`, now proven against a real transport.
+   assertion that the record carries `${serviceName}.transport`, now proven against a real transport.
 2. **Streaming unit tests (`:164-214`)** — currently call `makeTraceLayer()(call, () => source())`,
    handing the layer a bare `AsyncIterable`, which `Next` never returns. Split them:
    - **`traceStream` direct tests**: call `traceStream(source(), spanName, attrs)` directly and

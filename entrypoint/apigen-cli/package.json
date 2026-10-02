@@ -34,7 +34,7 @@
     "@adhd/apigen-engine-naming": "^0.2.5",
     "@adhd/apigen-plugin-openapi": "^0.2.5",
     "@adhd/apigen-plugin-ir-cache": "^0.1.3",
-    "@adhd/apigen-plugin-tracing": "^0.1.0"
+    "@adhd/apigen-plugin-tracing": "^0.2.0"
   },
   "devDependencies": {
     "decimal.js": "^10.4.3",

@@ -495,7 +495,7 @@ importers:
         specifier: ^0.2.7
         version: link:../../packages/apigen/apigen-plugin-py-grpc
       '@adhd/apigen-plugin-tracing':
-        specifier: ^0.1.0
+        specifier: ^0.2.0
         version: link:../../packages/apigen/apigen-plugin-tracing
       '@adhd/apigen-plugin-ts-types':
         specifier: ^0.0.3
@@ -571,7 +571,7 @@ importers:
         specifier: ^0.2.5
         version: link:../../packages/apigen/apigen-plugin-openapi
       '@adhd/apigen-plugin-tracing':
-        specifier: ^0.1.0
+        specifier: ^0.2.0
         version: link:../../packages/apigen/apigen-plugin-tracing
       '@adhd/environment':
         specifier: ^0.1.0
@@ -1236,7 +1236,7 @@ importers:
         version: 11.0.0
     devDependencies:
       '@adhd/apigen-plugin-tracing':
-        specifier: ^0.1.0
+        specifier: ^0.2.0
         version: link:../apigen-plugin-tracing
       '@adhd/sox-telemetry':
         specifier: ^0.3.2
@@ -1261,7 +1261,7 @@ importers:
         version: 4.29.1
     devDependencies:
       '@adhd/apigen-plugin-tracing':
-        specifier: ^0.1.0
+        specifier: ^0.2.0
         version: link:../apigen-plugin-tracing
       '@adhd/sox-telemetry':
         specifier: ^0.3.2
@@ -1295,7 +1295,7 @@ importers:
         version: link:../apigen-engine-runtime
     devDependencies:
       '@adhd/apigen-plugin-tracing':
-        specifier: ^0.1.0
+        specifier: ^0.2.0
         version: link:../apigen-plugin-tracing
       '@adhd/sox-telemetry':
         specifier: ^0.3.2
@@ -1365,7 +1365,7 @@ importers:
         version: 1.29.0(zod@4.4.3)
     devDependencies:
       '@adhd/apigen-plugin-tracing':
-        specifier: ^0.1.0
+        specifier: ^0.2.0
         version: link:../apigen-plugin-tracing
       '@adhd/sox-telemetry':
         specifier: ^0.3.2

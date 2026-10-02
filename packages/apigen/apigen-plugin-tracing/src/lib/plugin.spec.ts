@@ -106,7 +106,7 @@ async function* sourceOf(chunks: readonly Chunk[]): AsyncGenerator<Chunk> {
 describe('apigen-plugin-tracing — layer', () => {
   it('calls next() exactly once and returns its resolved value unchanged', async () => {
     let calls = 0;
-    const out = await (makeTraceLayer()(makeCall(), async () => {
+    const out = await (makeTraceLayer({ serviceName: 'apigen' })(makeCall(), async () => {
       calls += 1;
       return 'value';
     }) as Promise<Result>);
@@ -116,7 +116,7 @@ describe('apigen-plugin-tracing — layer', () => {
 
   it('seeds call.ctx with a TraceHandle carrying a non-empty traceId and apigen.<op> spanName', async () => {
     const call = makeCall({ id: 'echo' });
-    await (makeTraceLayer()(call, async () => 'ok') as Promise<Result>);
+    await (makeTraceLayer({ serviceName: 'apigen' })(call, async () => 'ok') as Promise<Result>);
     const trace = call.ctx.get(TraceHandle);
     expect(trace).toBeDefined();
     expect(trace!.traceId).toBeTruthy();
@@ -131,7 +131,7 @@ describe('apigen-plugin-tracing — layer', () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const pending = makeTraceLayer()(call, async () => {
+    const pending = makeTraceLayer({ serviceName: 'apigen' })(call, async () => {
       await gate;
       return 'ok';
     }) as Promise<Result>;
@@ -153,7 +153,7 @@ describe('apigen-plugin-tracing — layer', () => {
     const call = makeCall({ id: 'echo' });
     const boom = new Error('boom');
     await expect(
-      makeTraceLayer()(call, async () => {
+      makeTraceLayer({ serviceName: 'apigen' })(call, async () => {
         throw boom;
       }) as Promise<Result>
     ).rejects.toBe(boom);
@@ -176,9 +176,27 @@ describe('apigen-plugin-tracing — layer', () => {
     expect(call.ctx.get(TraceHandle)!.spanName).toBe('checkout.echo');
   });
 
+  it('namespaces span name, attribute keys, and error record with serviceName (adhd.*, never apigen.*)', async () => {
+    const call = makeCall({ id: 'echo', transport: 'mcp' });
+    const plugin = makeTracingPlugin({ serviceName: 'adhd' });
+    await (plugin.capabilities.layer!.layer(call, async () => 'ok') as Promise<Result>);
+
+    const records = readRecords();
+    const start = records.find((r) => r.event === 'adhd.echo.start');
+    expect(start).toBeDefined();
+    expect(start!['adhd.op']).toBe('echo');
+    expect(start!['adhd.transport']).toBe('mcp');
+    expect(records.some((r) => r.event === 'adhd.echo.finish')).toBe(true);
+
+    // The whole point: no hardcoded `apigen.*` telemetry may leak through a configured plugin.
+    expect(records.some((r) => r.event.startsWith('apigen.'))).toBe(false);
+    expect(start!['apigen.op']).toBeUndefined();
+    expect(start!['apigen.transport']).toBeUndefined();
+  });
+
   it('copies declared envelopeAttrs onto the span', async () => {
     const call = makeCall({ id: 'echo', envelope: { 'x-request-id': 'abc', ignored: 'nope' } });
-    const plugin = makeTracingPlugin({ envelopeAttrs: ['x-request-id'] });
+    const plugin = makeTracingPlugin({ serviceName: 'apigen', envelopeAttrs: ['x-request-id'] });
     await (plugin.capabilities.layer!.layer(call, async () => 'ok') as Promise<Result>);
     const start = readRecords().find((r) => r.event === 'apigen.echo.start');
     expect(start!['x-request-id']).toBe('abc');
@@ -192,20 +210,21 @@ describe('apigen-plugin-tracing — layer', () => {
       transport: 'cli',
       envelope: {
         trace_id: 'attacker',
-        'apigen.op': 'forged',
-        'apigen.transport': 'forged',
+        'checkout.op': 'forged',
+        'checkout.transport': 'forged',
       },
     });
     const plugin = makeTracingPlugin({
-      envelopeAttrs: ['trace_id', 'apigen.op', 'apigen.transport'],
+      serviceName: 'checkout',
+      envelopeAttrs: ['trace_id', 'checkout.op', 'checkout.transport'],
     });
     await (plugin.capabilities.layer!.layer(call, async () => 'ok') as Promise<Result>);
 
-    const start = readRecords().find((r) => r.event === 'apigen.echo.start');
+    const start = readRecords().find((r) => r.event === 'checkout.echo.start');
     expect(start).toBeDefined();
     // The reserved keys — spread LAST — must always win over the envelope-supplied values.
-    expect(start!['apigen.op']).toBe('echo');
-    expect(start!['apigen.transport']).toBe('cli');
+    expect(start!['checkout.op']).toBe('echo');
+    expect(start!['checkout.transport']).toBe('cli');
     expect(start!.trace_id).toBe(call.ctx.get(TraceHandle)!.traceId);
     expect(start!.trace_id).not.toBe('attacker');
   });
@@ -273,7 +292,7 @@ describe('apigen-plugin-tracing — streaming branch (quarantined)', () => {
     const src = sourceOf([1, 2, 3]);
 
     // A `next` that honours the real contract: it RESOLVES to the iterable.
-    const out = await (makeTraceLayer()(call, () => Promise.resolve(src)) as Promise<
+    const out = await (makeTraceLayer({ serviceName: 'apigen' })(call, () => Promise.resolve(src)) as Promise<
       AsyncIterable<Chunk>
     >);
 
@@ -293,7 +312,7 @@ describe('apigen-plugin-tracing — streaming branch (quarantined)', () => {
     // Deliberately violates the contract (`Next` must resolve): the old code branched HERE on the
     // unresolved value and returned a NEW generator (identity broken). The current layer never
     // inspects the unresolved value, so identity holds.
-    const out = await (makeTraceLayer()(call, (() => src) as unknown as Next) as Promise<
+    const out = await (makeTraceLayer({ serviceName: 'apigen' })(call, (() => src) as unknown as Next) as Promise<
       AsyncIterable<Chunk>
     >);
 
@@ -312,5 +331,29 @@ describe('apigen-plugin-tracing — plugin shape', () => {
   it('declares id "tracing" and a layer capability', () => {
     expect(tracingPlugin.id).toBe('tracing');
     expect(typeof tracingPlugin.capabilities.layer!.layer).toBe('function');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// serviceName runtime guard — a JS caller (or an untyped `any`) bypasses the
+// REQUIRED type and would silently stamp every span with `undefined.op` /
+// `undefined.transport` and name records `undefined.<op>`. The guard fails fast
+// instead of poisoning the sink.
+// ---------------------------------------------------------------------------
+
+describe('apigen-plugin-tracing — serviceName runtime guard', () => {
+  it('throws when serviceName is undefined (missing/blank guard fires)', () => {
+    expect(() =>
+      makeTraceLayer({ serviceName: undefined as unknown as string })
+    ).toThrow(/serviceName.*required/);
+  });
+
+  it('throws when serviceName is an empty or whitespace-only string', () => {
+    expect(() => makeTraceLayer({ serviceName: '' })).toThrow(/serviceName.*required/);
+    expect(() => makeTraceLayer({ serviceName: '   ' })).toThrow(/serviceName.*required/);
+  });
+
+  it('accepts a valid non-empty serviceName', () => {
+    expect(() => makeTraceLayer({ serviceName: 'adhd' })).not.toThrow();
   });
 });
