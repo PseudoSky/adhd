@@ -28,6 +28,14 @@ import {
   type TelemetryHandle,
 } from '@adhd/sox-telemetry';
 import { tracingPlugin } from './tracing.js';
+// The real operation surface is DERIVED from these two modules (see the
+// full-surface describe at the end of this file): `./api.js` is the extraction
+// surface (every exported async function is mounted), and `./vocabulary.js` is
+// the pinned mounted-verb list the mount guards already assert against. Both are
+// dependency-light and already imported at module scope by sibling `.spec.ts`
+// files in this same lane (env.spec.ts, c8-vocabulary.spec.ts).
+import * as clientMod from './api.js';
+import { BACKLOG_VERBS } from './vocabulary.js';
 // `USE_PLUGINS` is imported lazily inside the identity test below. `cli.ts`
 // transitively imports `ir-artifact.ts`, whose module-level runtime
 // `require('@adhd/apigen-core-client/package.json')` needs this package's OWN
@@ -202,4 +210,75 @@ describe('backlog is a REQUIRED, adhd-namespaced tracing consumer (FEAT-APIGEN-T
     // CLI mount
     expect(cliSrc).toContain('USE_PLUGINS: readonly Plugin[] = [tracingPlugin, batchPlugin];');
   });
+});
+
+/**
+ * FULL-SURFACE COVERAGE — FEAT-APIGEN-TRACING.
+ *
+ * The suite above drives two SYNTHETIC operation ids (`echo`, `boom`) and proves
+ * the configured `adhd` layer works. It does NOT prove the layer fires for the
+ * operations backlog actually mounts. This block closes that gap: the op list is
+ * DERIVED from the extraction surface (`./api.js` — per that module's header,
+ * every exported async function IS a mounted operation) and cross-checked against
+ * `BACKLOG_VERBS`, the pinned mounted-verb list that `server.verbs.spec.ts`
+ * already asserts BOTH the CLI and mount surfaces against. A new op added to
+ * either side fails the parity test below instead of silently escaping tracing
+ * coverage.
+ *
+ * Runtime op ids are `backlog/<kebab>`, NOT the bare export name: `server.ts`
+ * threads the extracted `operations` into the mcp/fastify mounts, so
+ * `operationFor()` resolves the REAL extracted Operation (`backlog/priority-matrix`),
+ * not the synthesized camelCase form. The layer echoes `call.operation.id`
+ * verbatim into the span name, so the records are literally
+ * `adhd.backlog/<kebab>.start` / `.finish` (slash preserved).
+ */
+describe('FEAT-APIGEN-TRACING: every real backlog operation is traced', () => {
+  const toKebab = (name: string): string =>
+    name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+
+  // Derived, never hard-coded: a future export widens this automatically.
+  const derivedOpIds = Object.keys(clientMod)
+    .filter((key) => typeof (clientMod as Record<string, unknown>)[key] === 'function')
+    .map((fnName) => `backlog/${toKebab(fnName)}`)
+    .sort();
+
+  it('the derived op surface matches the pinned mounted verb list (neither can silently drift)', () => {
+    expect(derivedOpIds).toEqual(BACKLOG_VERBS.map((verb) => `backlog/${verb}`).sort());
+    expect(derivedOpIds.length).toBeGreaterThan(0);
+  });
+
+  it.each(derivedOpIds)(
+    'emits adhd.%s.{start,finish} + adhd.op/adhd.transport — never apigen.*',
+    async (opId) => {
+      const call = makeCall(opId);
+      await (tracingPlugin.capabilities.layer!.layer(call, async () => 'ok') as Promise<Result>);
+
+      const records = readRecords();
+      const start = records.find((r) => r.event === `adhd.${opId}.start`);
+      expect(start, `no adhd.${opId}.start record`).toBeDefined();
+      expect(start!['adhd.op']).toBe(opId);
+      expect(typeof start!['adhd.transport']).toBe('string');
+      expect((start!['adhd.transport'] as string).length).toBeGreaterThan(0);
+      expect(records.some((r) => r.event === `adhd.${opId}.finish`)).toBe(true);
+      expect(records.some((r) => r.event.startsWith('apigen.'))).toBe(false);
+    }
+  );
+
+  it.each(derivedOpIds)(
+    'emits adhd.op.error (never apigen.*) when %s throws',
+    async (opId) => {
+      const call = makeCall(opId);
+      await expect(
+        tracingPlugin.capabilities.layer!.layer(call, async () => {
+          throw new Error(`synthetic-failure:${opId}`);
+        }) as Promise<Result>
+      ).rejects.toThrow('synthetic-failure');
+
+      const records = readRecords();
+      const opError = records.find((r) => r.event === 'adhd.op.error');
+      expect(opError, `no adhd.op.error record for ${opId}`).toBeDefined();
+      expect(opError!['adhd.op']).toBe(opId);
+      expect(records.some((r) => r.event.startsWith('apigen.'))).toBe(false);
+    }
+  );
 });
