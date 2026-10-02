@@ -1,5 +1,17 @@
 ## Unreleased
 
+### Fixed — hardcoded `/Users/nix/...` machine paths removed from live config, workflows and the backlog ETL (2026-10-02)
+
+Six live files embedded the author's macOS home and checkout paths, so they only worked on one machine (in a cloud session `backlog` failed to connect and `agent-mcp-published` timed out on DB paths that do not exist). Each now resolves from where it runs:
+
+- `.mcp.json` — the `backlog` server arg is repo-relative (`entrypoint/backlog/dist/index.js`; stdio servers spawn in the project root) and the agent-mcp DB paths use `${HOME}/.adhd/agent-mcp/...`.
+- `entrypoint/backlog/tools/etl/constants.ts` — `ADHD_PROJECT_PATH` is derived from the file's own location (4 levels up) instead of a baked path; the ETL now records the real checkout as the `adhd` project path.
+- `.claude/workflows/backlog-grooming.js` — the artifact path is repo-relative (`tmp/grooming-<runLabel>.md`); new optional `args.repoRoot` prefixes it.
+- `.claude/workflows/burn-wave-2.js` — `repoRoot` now comes from required `args.repoRoot` (absolute; fails loudly if missing, since the pipeline interpolates it into shell/worktree paths); the pipeline `scriptPath` is repo-relative.
+- `tools/mcp-shell/security.yaml` — `working_directory: .` (no in-repo reader; `server.mjs` already uses its cwd).
+
+Historical docs, ETL fixtures and survey data that merely *record* `/Users/nix/...` paths are intentionally untouched.
+
 ### Notes — `@adhd/backlog` Actionable Store wave is versioned at 1.1.0; the 1.0.x changelog cites commits this repository no longer contains (2026-09-28)
 
 The Actionable Store wave landed on `entrypoint/backlog` without a version or a changelog entry. `entrypoint/backlog/CHANGELOG.md` was last written at `7c4be09e` (2026-09-26), before every wave commit, and `entrypoint/backlog/package.json` stayed at `1.0.5` — the version the `docs/plan/actionable-store/demo` sign-off recorded, which predates the wave. The wave's 23 conventional commits on the backlog line (13 `feat`, 10 `fix`, `7c4be09e`..HEAD) add short-uid/prefix reference resolution, derived verdicts, obligations with the closure gate, anchored attestations, plan dependency order, readable catalogs, honest envelopes with `has_more` and score provenance, spec revisions, cross-project similarity, and the D-A trustworthy service layer. The bump level is computed at release time by `@adhd/nx-build:version` (`PUBLISHING.md`), and a `feat`-only wave takes **minor** — so the correct next version is **1.1.0**, and the release must pass `--bump=minor`. The `## 1.1.0` section at the top of `entrypoint/backlog/CHANGELOG.md` is the entry `nx release changelog` generates for that specifier (the same conventional-commits renderer the `version` executor invokes); every commit it cites resolves against this repository's object DB.
