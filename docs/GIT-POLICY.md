@@ -115,3 +115,15 @@ Schema version 1.
   file, hook, or `registry/index.json` was modified. The staged orphan
   `tools/nx-plugins/build/executors/smoke-test/task-report.mjs` (blob `70fd7b71`) remains
   byte-identical and staged. This record is the only change to this file.
+
+- **2026-10-02 — operation record: land of `fix/apigen-tracing-debts`.** Committed the rewire as
+  `580399a7` (8 paths: `@adhd/sox-telemetry` `^0.3.2` → `^0.4.1` in six `package.json`,
+  `pnpm-lock.yaml`, and the new `entrypoint/backlog/src/server.tracing-six-tags.spec.ts`). Gates
+  all green: `nx test apigen-plugin-tracing` (23 passed, exit 0); `server.tracing-six-tags`
+  (1 passed, exit 0); `server.tracing-required` (66 passed, exit 0); plus the pre-commit hook's
+  affected-lint pass. Absorbed `main` (`ce645937`, root `AGENTS.md`) into the branch, then
+  fast-forwarded `main` `ce645937` → `06a0d3f9` (a merge commit on the branch whose first parent
+  is `580399a7`; ff-only, within §Branching & merge's "ff-only is not enforced"). No push, no
+  publish, and no worktree or branch removed — cleanup is deferred. The staged orphan
+  `tools/nx-plugins/build/executors/smoke-test/task-report.mjs` was left byte-identical and
+  staged. This record is the only change to this file.
