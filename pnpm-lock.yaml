@@ -595,8 +595,8 @@ importers:
         specifier: ^0.13.0
         version: 0.13.0
       '@adhd/sox-telemetry':
-        specifier: ^0.3.2
-        version: 0.3.2
+        specifier: ^0.4.1
+        version: 0.4.1
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.3)
@@ -1239,8 +1239,8 @@ importers:
         specifier: ^0.2.0
         version: link:../apigen-plugin-tracing
       '@adhd/sox-telemetry':
-        specifier: ^0.3.2
-        version: 0.3.2
+        specifier: ^0.4.1
+        version: 0.4.1
 
   packages/apigen/apigen-plugin-api-fastify:
     dependencies:
@@ -1264,8 +1264,8 @@ importers:
         specifier: ^0.2.0
         version: link:../apigen-plugin-tracing
       '@adhd/sox-telemetry':
-        specifier: ^0.3.2
-        version: 0.3.2
+        specifier: ^0.4.1
+        version: 0.4.1
 
   packages/apigen/apigen-plugin-batch:
     dependencies:
@@ -1298,8 +1298,8 @@ importers:
         specifier: ^0.2.0
         version: link:../apigen-plugin-tracing
       '@adhd/sox-telemetry':
-        specifier: ^0.3.2
-        version: 0.3.2
+        specifier: ^0.4.1
+        version: 0.4.1
 
   packages/apigen/apigen-plugin-health:
     dependencies:
@@ -1368,8 +1368,8 @@ importers:
         specifier: ^0.2.0
         version: link:../apigen-plugin-tracing
       '@adhd/sox-telemetry':
-        specifier: ^0.3.2
-        version: 0.3.2
+        specifier: ^0.4.1
+        version: 0.4.1
 
   packages/apigen/apigen-plugin-openapi:
     dependencies:
@@ -1413,8 +1413,8 @@ importers:
         specifier: ^0.3.3
         version: link:../apigen-core-client
       '@adhd/sox-telemetry':
-        specifier: ^0.3.2
-        version: 0.3.2
+        specifier: ^0.4.1
+        version: 0.4.1
 
   packages/apigen/apigen-plugin-ts-types:
     dependencies:
@@ -1664,6 +1664,18 @@ packages:
 
   /@adhd/sox-telemetry@0.3.2:
     resolution: {integrity: sha512-tJaQtJaHHaYw9KLpKQEJAfEzadh6dBm6ZZeVmr1XwJIKvp4Nu87cTvljHY75ZNFGVmg6SyFBy8SnmaACDCbvZg==}
+    engines: {node: '>=20'}
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/context-async-hooks': 2.10.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.10.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-metrics': 2.10.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.10.0(@opentelemetry/api@1.9.1)
+      ulid: 2.4.0
+    dev: false
+
+  /@adhd/sox-telemetry@0.4.1:
+    resolution: {integrity: sha512-kcgbJMB92lFLNjuC4w9iV8TGK4HzDstcLhgwqVKaNyCtciYZXVxKqaqzm9ecE6YBKiMmFRr3tgmiKUW956Vpnw==}
     engines: {node: '>=20'}
     dependencies:
       '@opentelemetry/api': 1.9.1
@@ -6056,7 +6068,6 @@ packages:
   /@lancedb/lancedb@0.31.0(apache-arrow@18.1.0):
     resolution: {integrity: sha512-EUEVpheKhaCNE6ybcW760OUyfeei2dKR2ZwgLWeC/ntHL4BBiBLIErh9fuEuUP3/mAx4B5UFraB2m5nDUx5XEA==}
     engines: {node: '>= 18'}
-    cpu: [x64, arm64]
     os: [darwin, linux, win32]
     requiresBuild: true
     peerDependencies:

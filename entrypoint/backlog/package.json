@@ -22,7 +22,7 @@
     "@adhd/sox-hybrid-search": "^0.6.0",
     "@adhd/sox-semantic": "^0.1.8",
     "@adhd/sox-store-adapter": "^0.13.0",
-    "@adhd/sox-telemetry": "^0.3.2",
+    "@adhd/sox-telemetry": "^0.4.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "ajv": "^8.20.0",
     "ajv-formats": "2.1.1",

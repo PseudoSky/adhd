@@ -10,7 +10,7 @@
   },
   "devDependencies": {
     "@adhd/apigen-plugin-tracing": "^0.2.0",
-    "@adhd/sox-telemetry": "^0.3.2"
+    "@adhd/sox-telemetry": "^0.4.1"
   },
   "publishConfig": {
     "access": "public"
