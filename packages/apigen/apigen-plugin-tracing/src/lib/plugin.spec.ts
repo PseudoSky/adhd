@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -30,6 +30,19 @@ interface Recorded {
 
 let logDir: string;
 let handle: TelemetryHandle;
+
+beforeAll(() => {
+  // Deterministic process-identity inputs: the plugin resolves session/version ONCE (lazily,
+  // on the first span), so pin them before any layer runs. Without this, `npm_package_version`
+  // is unset under `nx test` (no npm lifecycle script) and `ADHD_SESSION_ID` is random.
+  process.env['ADHD_SESSION_ID'] = 'session-test-123';
+  process.env['npm_package_version'] = '9.8.7';
+});
+
+afterAll(() => {
+  delete process.env['ADHD_SESSION_ID'];
+  delete process.env['npm_package_version'];
+});
 
 beforeEach(async () => {
   _resetTelemetryForTest();
@@ -227,6 +240,56 @@ describe('apigen-plugin-tracing — layer', () => {
     expect(start!['checkout.transport']).toBe('cli');
     expect(start!.trace_id).toBe(call.ctx.get(TraceHandle)!.traceId);
     expect(start!.trace_id).not.toBe('attacker');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Process-identity attributes — every span carries session/trace/worktree/role/
+// release tagging for cross-run aggregation. These read REAL emitted records.
+// ---------------------------------------------------------------------------
+
+describe('apigen-plugin-tracing — process-identity attributes', () => {
+  it('stamps session_id from ADHD_SESSION_ID and keeps it stable across spans (never per-span-random)', async () => {
+    const a = makeCall({ id: 'a' });
+    const b = makeCall({ id: 'b' });
+    const layer = makeTraceLayer({ serviceName: 'apigen' });
+    await (layer(a, async () => 'ok') as Promise<Result>);
+    await (layer(b, async () => 'ok') as Promise<Result>);
+
+    const records = readRecords();
+    const startA = records.find((r) => r.event === 'apigen.a.start');
+    const startB = records.find((r) => r.event === 'apigen.b.start');
+    expect(startA).toBeDefined();
+    expect(startB).toBeDefined();
+    expect(startA!.session_id).toBe('session-test-123');
+    expect(startB!.session_id).toBe('session-test-123');
+  });
+
+  it('stamps trace_id and role on the span record', async () => {
+    const call = makeCall({ id: 'echo' });
+    await (makeTraceLayer({ serviceName: 'apigen' })(call, async () => 'ok') as Promise<Result>);
+    const start = readRecords().find((r) => r.event === 'apigen.echo.start');
+    expect(start).toBeDefined();
+    expect(start!.trace_id).toBe(call.ctx.get(TraceHandle)!.traceId);
+    expect(start!.role).toBe('cli');
+  });
+
+  it('stamps worktree=true — this checkout is a linked git worktree', async () => {
+    const call = makeCall({ id: 'echo' });
+    await (makeTraceLayer({ serviceName: 'apigen' })(call, async () => 'ok') as Promise<Result>);
+    const start = readRecords().find((r) => r.event === 'apigen.echo.start');
+    expect(start).toBeDefined();
+    expect(start!.worktree).toBe(true);
+  });
+
+  it('stamps release.version/git_sha/artifact_sha256 from the running process', async () => {
+    const call = makeCall({ id: 'echo' });
+    await (makeTraceLayer({ serviceName: 'apigen' })(call, async () => 'ok') as Promise<Result>);
+    const start = readRecords().find((r) => r.event === 'apigen.echo.start');
+    expect(start).toBeDefined();
+    expect(start!['release.version']).toBe('9.8.7');
+    expect(start!['release.git_sha']).toMatch(/^[0-9a-f]{40}$/);
+    expect(start!['release.artifact_sha256']).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 });
 

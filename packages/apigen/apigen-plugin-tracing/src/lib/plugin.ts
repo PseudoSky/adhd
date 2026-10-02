@@ -1,6 +1,112 @@
+import { randomUUID, createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { dirname, resolve } from 'node:path';
 import type { Plugin, Call, Next, Result, Chunk, File } from '@adhd/apigen-core-client';
-import { withSpan, log, newTraceId, currentTraceId, withTrace } from '@adhd/sox-telemetry';
+import {
+  withSpan,
+  log,
+  newTraceId,
+  currentTraceId,
+  withTrace,
+  currentRuntimeState,
+} from '@adhd/sox-telemetry';
 import type { OtelSpanHandle } from '@adhd/sox-telemetry';
+
+/**
+ * ---------------------------------------------------------------------------
+ * Process-identity attributes — resolved once per process, then frozen. These are
+ * first-class reserved attributes (spread LAST in the layer so a configured
+ * `envelopeAttrs` entry can never shadow them) and give every span enough tagging
+ * to aggregate by session, trace, parent, worktree, role, and release across a
+ * whole process run.
+ *
+ *   - `session_id`        — `ADHD_SESSION_ID` env when set, else a process-stable
+ *                           `randomUUID()`. Stable for the process, never per-span.
+ *   - `trace_id`          — the OTel trace id (existing; see the layer body).
+ *   - `parent_span_id`    — NOT emitted here: the OTel facade the plugin sees
+ *                           (`OtelSpanHandle`) exposes only `setAttributes` /
+ *                           `recordError`, no span/parent identity. sox-telemetry's
+ *                           `JsonlSpanProcessor` stamps `parent_span_id` on every
+ *                           span record (empty at the root, the parent's id when
+ *                           nested) — see `otel.ts` in @adhd/sox-telemetry.
+ *   - `worktree`          — `true` when `process.cwd()` sits inside a LINKED git
+ *                           worktree (vs. the main checkout), else `false`.
+ *   - `role`              — `currentRuntimeState().role`, matching the envelope's
+ *                           `role` exactly so test/cli/live-service/harness
+ *                           populations aggregate together.
+ *   - `release.*`         — the running artifact's release identity, self-resolved
+ *                           here because the installed sox-telemetry (0.3.x) does
+ *                           not stamp it: `release.version` from
+ *                           `npm_package_version`, `release.git_sha` from
+ *                           `git rev-parse HEAD`, `release.artifact_sha256` from
+ *                           `sha256(process.argv[1])`. Each is present ONLY when it
+ *                           genuinely resolved — a null is omitted, never fabricated.
+ * ---------------------------------------------------------------------------
+ */
+
+/** Run `git rev-parse <args>` in `process.cwd()`; trimmed stdout on success, else null. */
+function gitRevParse(args: string[]): string | null {
+  try {
+    const result = spawnSync('git', ['rev-parse', ...args], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      timeout: 2000,
+    });
+    if (result.status === 0 && result.stdout) {
+      const out = result.stdout.trim();
+      return out.length > 0 ? out : null;
+    }
+  } catch {
+    /* git missing / not a repo / timeout — caller falls back to null */
+  }
+  return null;
+}
+
+/** `sha256:<hex>` of the running entrypoint (`process.argv[1]`), else null. */
+function artifactSha256(): string | null {
+  const entry = process.argv[1];
+  if (entry === undefined) return null;
+  try {
+    return `sha256:${createHash('sha256').update(readFileSync(entry)).digest('hex')}`;
+  } catch {
+    return null;
+  }
+}
+
+/** True when `process.cwd()` sits inside a LINKED git worktree (not the main checkout). */
+function isLinkedWorktree(): boolean {
+  const top = gitRevParse(['--show-toplevel']);
+  const commonDir = gitRevParse(['--path-format=absolute', '--git-common-dir']);
+  if (top === null || commonDir === null) return false;
+  return /[\\/]\.git$/.test(commonDir) && resolve(dirname(commonDir)) !== resolve(top);
+}
+
+interface ProcessIdentity {
+  sessionId: string;
+  worktree: boolean;
+  release: { version: string | null; gitSha: string | null; artifactSha256: string | null };
+}
+
+let cachedIdentity: ProcessIdentity | null = null;
+
+/** Resolve the process-stable identity once; every later call returns the same value. */
+function processIdentity(): ProcessIdentity {
+  if (cachedIdentity === null) {
+    const sessionEnv = process.env['ADHD_SESSION_ID'];
+    const versionEnv = process.env['npm_package_version'];
+    cachedIdentity = {
+      sessionId: sessionEnv !== undefined && sessionEnv.length > 0 ? sessionEnv : randomUUID(),
+      worktree: isLinkedWorktree(),
+      release: {
+        version: versionEnv !== undefined && versionEnv.length > 0 ? versionEnv : null,
+        gitSha: gitRevParse(['HEAD']),
+        artifactSha256: artifactSha256(),
+      },
+    };
+  }
+  return cachedIdentity;
+}
 
 /**
  * Options for {@link makeTracingPlugin}.
@@ -215,14 +321,27 @@ export function makeTraceLayer(
     call.ctx.set(TraceHandle, handle);
 
     // Reserved keys are spread LAST so a configured `envelopeAttrs` entry can never shadow
-    // `${serviceName}.op` / `${serviceName}.transport` / `trace_id` — the built-in attrs always
-    // win (F14).
+    // `${serviceName}.op` / `${serviceName}.transport` / `trace_id` / the process-identity
+    // attrs — the built-in attrs always win (F14).
+    const identity = processIdentity();
     const attrs: Record<string, unknown> = {
       ...pickEnvelope(call.envelope, envelopeAttrs),
       [`${serviceName}.op`]: call.operation.id,
       [`${serviceName}.transport`]: call.transport,
       trace_id: traceId,
+      session_id: identity.sessionId,
+      worktree: identity.worktree,
+      role: currentRuntimeState().role,
     };
+    // Release identity is carried as dotted `release.*` keys — the OTel attribute contract is
+    // flat (string | number | boolean), so a nested `release` object would be dropped by
+    // `toOtelAttributes`. Each key is present ONLY when it genuinely resolved; a null is
+    // omitted, never fabricated (a null "sha256:…" would be indistinguishable from a real one).
+    if (identity.release.version !== null) attrs['release.version'] = identity.release.version;
+    if (identity.release.gitSha !== null) attrs['release.git_sha'] = identity.release.gitSha;
+    if (identity.release.artifactSha256 !== null) {
+      attrs['release.artifact_sha256'] = identity.release.artifactSha256;
+    }
 
     // Run the whole downstream inside the trace context so nested spans share the trace_id.
     // `next()` resolves to a `LayerResult`; the unary span is opened unconditionally (and
