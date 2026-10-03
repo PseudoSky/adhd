@@ -229,7 +229,7 @@ describe('GAP-5 — absolute date-time range operators', () => {
     { id: 4, t: B },
     { id: 5, t: B + 1 },
   ];
-  const ids = (r: Row[]) => r.map((x) => x.id);
+  const ids = (r: Row[]) => r.map((x) => x['id']);
 
   it('_in_datetimerange includes both ends', () => {
     expect(ids(view(rows, { where: { t: { _in_datetimerange: [[A, B]] } } }))).toEqual([

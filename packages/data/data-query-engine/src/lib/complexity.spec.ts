@@ -549,7 +549,7 @@ describe('complexity — select / path resolver / date-range (ADR-0005 ops)', ()
   it('the compiled path resolver is O(n) at fixed depth d=3', () => {
     // Depth-3 ref exercises the segment walk per row; the predicate is
     // satisfiable for every row, so the walk is never elided by V8.
-    const r = measureCustom<Array<Record<string, unknown>>>(LIN_SIZES, (n) => ({
+    const r = measureCustom<Record<string, unknown>>(LIN_SIZES, (n) => ({
       rows: makeNestedRows(n),
       query: { where: { 'nested.deep.v': { _gte: 0 } } },
     }));
@@ -574,7 +574,7 @@ describe('complexity — select / path resolver / date-range (ADR-0005 ops)', ()
       BASE_TS - (i + 1) * 90 * DAY,
       BASE_TS - i * 90 * DAY,
     ]);
-    const r = measureCustom<Array<Record<string, unknown>>>(LIN_SIZES, (n) => ({
+    const r = measureCustom<Record<string, unknown>>(LIN_SIZES, (n) => ({
       rows: makeNestedRows(n),
       query: { where: { span: { _overlaps: ranges } } },
     }));
