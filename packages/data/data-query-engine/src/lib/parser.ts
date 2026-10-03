@@ -1,5 +1,6 @@
 import { Transform as _ } from '@adhd/data-base-transforms';
 import { BooleanExpression, OrderByExpression } from './expressions';
+import { QueryValidationError } from './errors';
 import { operators } from './filters';
 import { OrderByOperation } from './operators';
 
@@ -56,10 +57,17 @@ export function compileWhere(
       fieldDeps[depKey] = [...(fieldDeps[depKey] || []), key];
       const op = operators[opName];
       if (!op) {
-        console.error(
-          `@adhd/query where operation ${opName} does not exist. Try one of ${Object.keys(
-            operators
-          )}`
+        // Fail LOUD, never silently. An unknown `_`-prefixed key is either a
+        // typo'd operator or an aggregate node that does not belong in `where`
+        // (e.g. `_having`). The rejected `_having`-as-sugar design (d2d72095)
+        // logged and skipped here, so the aggregate silently no-op'd and the
+        // query returned wrong rows — SPEC AC-6 / AC-15 forbid that.
+        throw new QueryValidationError(
+          `@adhd/query: unknown operator "${opName}" in a where expression. ` +
+            `Aggregates are not representable under \`where\` — use the top-level ` +
+            `\`having\` field (over \`aggregate\` output fields). Known operators: ${Object.keys(
+              operators
+            ).join(', ')}`
         );
       }
       return [...res, { field: fieldKey, key, op, value: _.get(query, item) }];

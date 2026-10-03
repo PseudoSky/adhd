@@ -88,12 +88,116 @@ export interface OrderByExpression {
   [key: string]: OrderByValue | OrderByExpression;
 }
 
+/**
+ * A single grouping dimension. Either a field name (group by its value) or a
+ * time bucket `{_bucket:{field,seconds,offset?}}` that maps a row to
+ * `floor((t - offset) / (seconds*1000)) * (seconds*1000) + offset` (UTC epoch
+ * arithmetic; `offset` defaults to 0). See SPEC AC-10.
+ */
+export type GroupKey =
+  | string
+  | {
+      _bucket: {
+        field: string;
+        seconds: number;
+        offset?: number;
+      };
+    };
+
+/**
+ * The grouping-set family. A plain array is a single grouping set; `_rollup`
+ * emits the prefix hierarchy `{a,b}, {a}, {}`; `_cube` emits every subset.
+ * See SPEC AC-9.
+ */
+export type GroupByExpression =
+  | GroupKey[]
+  | { _rollup: GroupKey[] }
+  | { _cube: GroupKey[] };
+
+/**
+ * The closed algebraic aggregate vocabulary (SPEC section 4). One operator key
+ * per aggregate. It is intentionally NOT an arbitrary JavaScript reducer: a
+ * row-stream transform would make the query non-serialisable and break the
+ * dashboard seam's expression round-trip.
+ */
+export type AggregateFunction =
+  | { _sum: string }
+  | { _count: true | string }
+  | { _min: string }
+  | { _max: string }
+  | { _avg: string }
+  | { _ratio_of_sums: { num: string; den: string } }
+  | { _distinct_count: string }
+  | { _quantile: { field: string; q: number } };
+
+/** `outputField -> aggregate function`; each output field is computed per group. */
+export interface AggregateExpression {
+  [outputField: string]: AggregateFunction;
+}
+
+/**
+ * A predicate over the GROUPED record — its field names are the aggregate
+ * output fields (and, for reference, group keys). Structurally the same shape
+ * as `BooleanExpression`, but its fields are resolved against the post-GROUP
+ * record, which is what makes "an aggregate predicate inside `where`"
+ * unrepresentable (SPEC section 2 / AC-15).
+ */
+export interface HavingExpression {
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  _and?: HavingExpression[];
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  _or?: HavingExpression[];
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  _not?: HavingExpression;
+  [outputField: string]:
+    | NumberOperator
+    | StringOperator
+    | HavingExpression
+    | HavingExpression[];
+}
+
+/**
+ * A scoped window: it restricts the rows fed INTO the aggregate (Phase 3),
+ * never the rows emitted. `period` is the SAME value form the `_period`
+ * operator accepts and is resolved by the SAME `resolveIsoPeriod` (SPEC AC-7):
+ * a bare duration string anchors at `Date.now()`, a `[duration, anchorMs]`
+ * tuple pins the anchor; the window is CLOSED `[from, to]`.
+ */
+export interface WindowSpec {
+  field: string;
+  period: string | [string, number];
+}
+
+/** `groups` = one row per group (default); `rows` = broadcast back to input rows. */
+export type QueryOutput = 'groups' | 'rows';
+
+/**
+ * Top-N groups, optionally collapsing the dropped tail into one `_other` row
+ * whose accumulators are the merge of the dropped groups (SPEC AC-11). Applied
+ * to the FINAL grouped result, per grouping set — never to raw events.
+ */
+export interface TopNExpression {
+  n: number;
+  by: string;
+  other?: boolean;
+}
+
 export interface QueryExpression {
   distinct_on?: string[];
   limit?: number;
   offset?: number;
   order_by?: OrderByExpression[];
   where?: BooleanExpression;
+  // Grouping / aggregation surface (SPEC: engine group-by + aggregation + HAVING).
+  group_by?: GroupByExpression;
+  aggregate?: AggregateExpression;
+  having?: HavingExpression;
+  window?: WindowSpec;
+  output?: QueryOutput;
+  top_n?: TopNExpression;
 }
 
 export type QueryExpressionValues =

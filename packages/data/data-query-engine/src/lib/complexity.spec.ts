@@ -89,10 +89,17 @@
  *   _period                  O(n)         filter O(n); resolveIsoPeriod is O(1)
  *                                         Date math per row (src/lib/period.ts)
  *
- * NOT COVERED
- *   - aggregation / group-by: no such surface exists at this revision. There is
- *     no `group_by`/aggregate operator anywhere in src/. It is therefore left
- *     unasserted rather than guessed at (per the brief).
+ * COVERED SINCE THE GROUPING SURFACE LANDED (SPEC 49a62647 §4)
+ *   - group_by / aggregate / having / top_n: one hash-partition pass per
+ *     grouping set => O(n) per set. The ladder holds G constant (GROUPS, 8
+ *     values) so the fitted slope is the N-dimension.
+ *   - _rollup(d) = O(n*(d+1)) (Gray et al. 1997); asserted here at d=2 over two
+ *     low-cardinality dims, still O(n) per grouping set. CUBE is O(n*2^d) and
+ *     the engine caps d at 12.
+ *   - honest limits: the G-dimension (hash cost, O(G) space) and the
+ *     non-algebraic `_quantile` (buffers and sorts each group's values) are
+ *     NOT asserted here — neither is linear in N, and a per-N ladder cannot
+ *     isolate them. _period/window share the same O(n) per-row bound.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -395,5 +402,58 @@ describe('complexity — distinct_on / offset+limit', () => {
     }));
     logFit('offset+limit', r);
     expectLinear(r.p, 'offset+limit');
+  });
+});
+
+describe('complexity — group_by / aggregate / HAVING', () => {
+  // G is held constant (GROUPS, 8 values) across the ladder, so each suite
+  // isolates the N-dimension: one hash-partition pass + one fold per row.
+  it('flat group_by + aggregate is O(n) per grouping set', () => {
+    const r = measureQuery(LIN_SIZES, () => ({
+      group_by: ['group'],
+      aggregate: { s: { _sum: 'value' }, c: { _count: true } },
+    }));
+    logFit('group_by flat', r);
+    expectLinear(r.p, 'group_by flat');
+  });
+
+  it('windowed group_by + aggregate is O(n) (window is a per-row test)', () => {
+    const r = measureQuery(LIN_SIZES, () => ({
+      group_by: ['group'],
+      window: { field: 'ts', period: ['P100Y', BASE_TS] },
+      aggregate: { s: { _sum: 'value' } },
+    }));
+    logFit('group_by windowed', r);
+    expectLinear(r.p, 'group_by windowed');
+  });
+
+  it('HAVING adds only an O(G) pass over the grouped rows', () => {
+    const r = measureQuery(LIN_SIZES, () => ({
+      group_by: ['group'],
+      aggregate: { s: { _sum: 'value' } },
+      having: { s: { _gt: -1 } },
+    }));
+    logFit('group_by + having', r);
+    expectLinear(r.p, 'group_by + having');
+  });
+
+  it('_rollup over two low-cardinality dims is O(n) per grouping set', () => {
+    // d=2 => {group,rank}, {group}, {}: three passes, so still O(n).
+    const r = measureQuery(LIN_SIZES, () => ({
+      group_by: { _rollup: ['group', 'rank'] },
+      aggregate: { s: { _sum: 'value' } },
+    }));
+    logFit('group_by rollup(2)', r);
+    expectLinear(r.p, 'group_by rollup(2)');
+  });
+
+  it('top_n adds only an O(G log G) rank over the grouped rows', () => {
+    const r = measureQuery(LIN_SIZES, () => ({
+      group_by: ['group'],
+      aggregate: { v: { _sum: 'value' } },
+      top_n: { n: 2, by: 'v', other: true },
+    }));
+    logFit('group_by + top_n', r);
+    expectLinear(r.p, 'group_by + top_n');
   });
 });

@@ -1,6 +1,13 @@
 import { Transform as _ } from '@adhd/data-base-transforms';
 import { OrderByExpression, QueryExpression } from './expressions';
 import { compileWhere, parseOrderBy } from './parser';
+import {
+  CompiledGrouping,
+  GroupingSpec,
+  compileGrouping,
+  runGrouping,
+} from './aggregate';
+import { QueryValidationError } from './errors';
 
 export const orderBy =
   (props: OrderByExpression[] = []) => {
@@ -42,6 +49,7 @@ type QueryType = {
   distinct_on?: string[];
   offset?: number;
   limit?: number;
+  grouping?: CompiledGrouping;
 };
 
 // const EmptyQuery: QueryType = {
@@ -73,6 +81,8 @@ export class Query implements QueryType {
   distinct_on?: string[];
   offset = 0;
   limit?: number;
+  grouping?: CompiledGrouping;
+  private _groupingRaw: GroupingSpec | null = null;
   constructor(_query: QueryExpression = {}) {
     // const query = RawQuery(_query);
     this.raw = {};
@@ -86,8 +96,42 @@ export class Query implements QueryType {
       this.setDistinctOn(query.distinct_on),
       this.setOffset(query.offset),
       this.setLimit(query.limit),
+      this.setGrouping(query),
     ];
     return ops.some(_.isTrue);
+  };
+
+  setGrouping = (query: QueryExpression = {}) => {
+    const next: GroupingSpec = {
+      group_by: query.group_by,
+      aggregate: query.aggregate,
+      having: query.having,
+      window: query.window,
+      output: query.output,
+      top_n: query.top_n,
+    };
+    if (_.isEqual(next, this._groupingRaw)) return false;
+    this._groupingRaw = next;
+    this.raw.group_by = query.group_by;
+    this.raw.aggregate = query.aggregate;
+    this.raw.having = query.having;
+    this.raw.window = query.window;
+    this.raw.output = query.output;
+    this.raw.top_n = query.top_n;
+    const hasSurface =
+      query.group_by !== undefined || query.aggregate !== undefined;
+    if (
+      !hasSurface &&
+      (query.having !== undefined ||
+        query.window !== undefined ||
+        query.top_n !== undefined)
+    ) {
+      throw new QueryValidationError(
+        'having/window/top_n require group_by or aggregate on the query'
+      );
+    }
+    this.grouping = hasSurface ? compileGrouping(next) : undefined;
+    return true;
   };
 
   setWhere = (whereQuery: QueryExpression['where'] = {}) => {
@@ -146,6 +190,7 @@ export class DataView<T = unknown> {
     total: 0,
     total_matched: 0,
     total_distinct: 0,
+    total_groups: 0,
   };
   static Query: typeof Query;
   constructor(data: T[], query: QueryExpression = {}, logging = false) {
@@ -217,6 +262,20 @@ export class DataView<T = unknown> {
     if (this.query.where)
       res = res.filter(this.query.where as unknown as (row: T) => boolean);
     this.metrics.total_matched = res.length;
+    // Phases 2-6 (GROUP -> AGGREGATE -> HAVING -> TOP_N -> OUTPUT) are inserted
+    // here, between the per-row WHERE phase and the tail (order_by -> distinct_on
+    // -> offset -> limit), which then runs on the grouped result unchanged. The
+    // phase order is fixed by construction: each phase is a distinct, single-valued
+    // expression field and there is exactly one slot per field, so "having before
+    // group" or "aggregate before where" is unrepresentable.
+    if (this.query.grouping) {
+      const grouped = runGrouping(
+        res as unknown as Record<string, unknown>[],
+        this.query.grouping
+      );
+      this.metrics.total_groups = grouped.groups.length;
+      res = grouped.tail as unknown as T[];
+    }
     if (this.query.order_by) res = res.sort(this.query.order_by);
     if (this.query.distinct_on)
       res = _.uniqueBy(
