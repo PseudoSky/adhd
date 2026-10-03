@@ -1,3 +1,13 @@
+## 0.2.6 (2026-10-03)
+
+### 🩹 Fixes
+
+- **apigen:** engine-supplied Call.transport + real-transport tracing e2e ([509ee4c7](https://github.com/PseudoSky/adhd/commit/509ee4c7))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.2.4 (2026-09-26)
 
 ### 🚀 Features

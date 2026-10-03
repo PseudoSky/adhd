@@ -1,3 +1,13 @@
+## 2.3.5 (2026-10-03)
+
+### 🚀 Features
+
+- **data-query-engine:** ISO-8601 duration period filtering via the _period operator ([a2e69dd6](https://github.com/PseudoSky/adhd/commit/a2e69dd6))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.4 (2026-09-30)
 
 ### 🩹 Fixes

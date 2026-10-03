@@ -1,3 +1,19 @@
+## 0.2.9 (2026-10-03)
+
+### 🚀 Features
+
+- **apigen-plugin-tracing:** require serviceName and namespace backlog tracing as adhd ([8d18a082](https://github.com/PseudoSky/adhd/commit/8d18a082))
+- **apigen-cli:** register tracing among built-in --use plugins ([bc6bf8e7](https://github.com/PseudoSky/adhd/commit/bc6bf8e7))
+
+### 🩹 Fixes
+
+- **apigen-cli:** externalize @adhd/sox-telemetry to fix the ESM artifact load ([adc991ad](https://github.com/PseudoSky/adhd/commit/adc991ad))
+- **apigen:** engine-supplied Call.transport + real-transport tracing e2e ([509ee4c7](https://github.com/PseudoSky/adhd/commit/509ee4c7))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.2.8 (2026-09-29)
 
 ### 🩹 Fixes

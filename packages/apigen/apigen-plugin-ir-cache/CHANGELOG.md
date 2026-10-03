@@ -1,3 +1,13 @@
+## 0.1.4 (2026-10-03)
+
+### 🩹 Fixes
+
+- **apigen-plugin-ir-cache:** drop wall-clock createdAt from IR artifacts; make artifactSource.path dist-relative ([382e6638](https://github.com/PseudoSky/adhd/commit/382e6638))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.1.2 (2026-09-26)
 
 ### 🚀 Features

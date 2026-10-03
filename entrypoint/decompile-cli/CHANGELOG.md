@@ -1,3 +1,14 @@
+## 0.2.4 (2026-10-03)
+
+### 🩹 Fixes
+
+- **deps:** restore tough-cookie 4.1.4 and relock after specifier bump ([83c490d3](https://github.com/PseudoSky/adhd/commit/83c490d3))
+- **deps:** align stale specifiers with installed versions (unblocks nx affected lint) ([f9e49bec](https://github.com/PseudoSky/adhd/commit/f9e49bec))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.2.2 (2026-09-26)
 
 ### 🚀 Features

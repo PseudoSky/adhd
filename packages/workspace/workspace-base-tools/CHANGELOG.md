@@ -1,3 +1,18 @@
+## 0.1.3 (2026-10-03)
+
+### 🚀 Features
+
+- **vite-plugins:** absorb perf/test-resolve-fix — test-time @adhd/* source resolution ([b2022986](https://github.com/PseudoSky/adhd/commit/b2022986))
+
+### 🩹 Fixes
+
+- **deps:** align stale specifiers with installed versions (unblocks nx affected lint) ([f9e49bec](https://github.com/PseudoSky/adhd/commit/f9e49bec))
+- **nx:** finish the ESLint v9 flat-config migration and unblock the gate ([4ccdb53e](https://github.com/PseudoSky/adhd/commit/4ccdb53e))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.1.1 (2026-09-24)
 
 

@@ -1,3 +1,20 @@
+## 0.2.7 (2026-10-03)
+
+### 🚀 Features
+
+- **backlog:** rewire onto @adhd/sox-telemetry 0.4.1 and prove the six tracing tags on one record ([580399a7](https://github.com/PseudoSky/adhd/commit/580399a7))
+- **apigen-plugin-tracing:** require serviceName and namespace backlog tracing as adhd ([8d18a082](https://github.com/PseudoSky/adhd/commit/8d18a082))
+
+### 🩹 Fixes
+
+- **apigen-plugin-api-fastify:** bind lifecycle blocker to localhost, not 127.0.0.1 ([40508308](https://github.com/PseudoSky/adhd/commit/40508308))
+- **apigen:** engine-supplied Call.transport + real-transport tracing e2e ([509ee4c7](https://github.com/PseudoSky/adhd/commit/509ee4c7))
+- **workspace:** restore the publish gate's heavy lane and canonicalise the gate ([45532731](https://github.com/PseudoSky/adhd/commit/45532731))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.2.5 (2026-09-26)
 
 ### 🚀 Features

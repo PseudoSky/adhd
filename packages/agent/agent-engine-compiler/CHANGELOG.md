@@ -1,3 +1,7 @@
+## 2.2.6 (2026-10-03)
+
+This was a version bump only for agent-engine-compiler to align it with other projects, there were no code changes.
+
 ## 2.2.5 (2026-09-29)
 
 This was a version bump only for agent-engine-compiler to align it with other projects, there were no code changes.

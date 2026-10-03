@@ -1,3 +1,15 @@
+## 0.3.2 (2026-10-03)
+
+### 🩹 Fixes
+
+- **apigen:** engine-supplied Call.transport + real-transport tracing e2e ([509ee4c7](https://github.com/PseudoSky/adhd/commit/509ee4c7))
+- **apigen-engine-runtime:** make validation errors actionable ([37847eb7](https://github.com/PseudoSky/adhd/commit/37847eb7))
+- **workspace:** restore the publish gate's heavy lane and canonicalise the gate ([45532731](https://github.com/PseudoSky/adhd/commit/45532731))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.3.0 (2026-09-26)
 
 ### 🚀 Features
