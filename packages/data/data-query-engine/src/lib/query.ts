@@ -3,27 +3,32 @@ import { OrderByExpression, QueryExpression } from './expressions';
 import { compileWhere, parseOrderBy } from './parser';
 
 export const orderBy =
-  (props: OrderByExpression[] = []) =>
-  (a: unknown, b: unknown) => {
+  (props: OrderByExpression[] = []) => {
+    // Parse ONCE per query, not once per comparison. `parseOrderBy` is pure in
+    // `props`, so hoisting it out of the returned comparator is behaviour-
+    // preserving — but it removes a full spec re-parse from every one of the
+    // ~n·log n pairwise comparisons a sort makes (defect 73f35930).
     const orderOps = parseOrderBy(props);
-    // console.log({orderOps})
-    for (const p in orderOps) {
-      const { key, dir, nulls } = orderOps[p];
-      const cmp = dir === 'asc' ? _.defaultSort : _.reverseSort;
-      const x = _.get(a, key);
-      const y = _.get(b, key);
-      // console.log("order by", {x, y, key, dir, nulls })
-      // TODO: doesnt look like multiple sort works
-      if (x !== y) {
-        if (nulls && !_.isDefined(x)) {
-          return nulls === 'last' ? 1 : -1;
-        } else if (nulls && !_.isDefined(y)) {
-          return nulls === 'last' ? -1 : 1;
+    return (a: unknown, b: unknown) => {
+      // console.log({orderOps})
+      for (const p in orderOps) {
+        const { key, dir, nulls } = orderOps[p];
+        const cmp = dir === 'asc' ? _.defaultSort : _.reverseSort;
+        const x = _.get(a, key);
+        const y = _.get(b, key);
+        // console.log("order by", {x, y, key, dir, nulls })
+        // TODO: doesnt look like multiple sort works
+        if (x !== y) {
+          if (nulls && !_.isDefined(x)) {
+            return nulls === 'last' ? 1 : -1;
+          } else if (nulls && !_.isDefined(y)) {
+            return nulls === 'last' ? -1 : 1;
+          }
+          return cmp(x, y);
         }
-        return cmp(x, y);
       }
-    }
-    return 0;
+      return 0;
+    };
   };
 
 type QueryType = {
