@@ -142,6 +142,55 @@ const isPeriod = (a: unknown, b: unknown): boolean => {
     return false;
   }
 };
+/**
+ * Normalize one `[from, to]` bound. Returns `null` for a malformed bound (wrong
+ * shape, or a side `toEpochMs` cannot coerce) so it contributes NOTHING to the
+ * result rather than throwing — mirroring `_period`'s catch above.
+ */
+const normalizeRange = (r: unknown): [number, number] | null => {
+  if (!Array.isArray(r) || r.length < 2) return null;
+  const from = toEpochMs(r[0]);
+  const to = toEpochMs(r[1]);
+  return from === null || to === null ? null : [from, to];
+};
+
+/**
+ * `_in_datetimerange` — test a POINT against a list of inclusive ranges. A
+ * null / non-coercible row value is FALSE; an empty / non-array list is FALSE;
+ * a malformed bound contributes nothing (no throw); a reversed range matches
+ * nothing (no auto-swap).
+ */
+const inDatetimeRange = (a: unknown, b: unknown): boolean => {
+  if (!Array.isArray(b)) return false;
+  const t = toEpochMs(a);
+  if (t === null) return false;
+  return b.some((r) => {
+    const range = normalizeRange(r);
+    return range !== null && t >= range[0] && t <= range[1];
+  });
+};
+
+/** Exact negation of `inDatetimeRange`: null / empty / reversed → TRUE. */
+const ninDatetimeRange = (a: unknown, b: unknown): boolean =>
+  !inDatetimeRange(a, b);
+
+/**
+ * `_overlaps` — the row's own value is an INTERVAL `[from, to]`; TRUE when it
+ * intersects any query range. Distinct from `_in_datetimerange`, which tests a
+ * POINT: an interval that CONTAINS a range midpoint but starts before it is
+ * caught here and missed there. A non-interval row value is FALSE.
+ */
+const overlapsDatetimeRange = (a: unknown, b: unknown): boolean => {
+  if (!Array.isArray(a) || a.length < 2 || !Array.isArray(b)) return false;
+  const rowFrom = toEpochMs(a[0]);
+  const rowTo = toEpochMs(a[1]);
+  if (rowFrom === null || rowTo === null) return false;
+  return b.some((r) => {
+    const range = normalizeRange(r);
+    return range !== null && rowFrom <= range[1] && range[0] <= rowTo;
+  });
+};
+
 export type Filter = (...args: unknown[]) => boolean;
 export type FilterPartial = (...args: unknown[]) => Filter;
 
@@ -171,6 +220,12 @@ export const operators: Record<string, FilterPartial> = {
   _gte: asFilterPartial(isGte),
   _lte: asFilterPartial(isLte),
   _period: asFilterPartial(isPeriod),
+  // Absolute date-time range operators. `_between` / `_nbetween` are NOT listed:
+  // they are compile-time sugar desugared into these two by `parser.ts`, so the
+  // table holds exactly one entry per real predicate.
+  _in_datetimerange: asFilterPartial(inDatetimeRange),
+  _nin_datetimerange: asFilterPartial(ninDatetimeRange),
+  _overlaps: asFilterPartial(overlapsDatetimeRange),
   _like: asFilterPartial(isLike),
   _nlike: asFilterPartial(isNlike),
   _ilike: asFilterPartial(isIlike),

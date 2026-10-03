@@ -57,11 +57,42 @@ export interface PeriodOperator {
   _period?: string | [string, number];
 }
 
+/**
+ * A date-time bound accepted by the range operators: an epoch-ms number, a
+ * `Date`, or a parseable date-time string. Normalized by the shared
+ * `toEpochMs` (same normalization `_period` uses).
+ */
+export type DateInput = string | number | Date;
+
+/**
+ * Absolute date-time range operators. `_in_datetimerange` / `_nin_datetimerange`
+ * test a POINT against a list of inclusive `[from, to]` ranges — the `_in` /
+ * `_nin` shape lifted to intervals. `_between` / `_nbetween` are COMPILE-TIME
+ * SUGAR for a single-range `_in_datetimerange` / `_nin_datetimerange` and
+ * desugar into the SAME predicate (there is never a second code path).
+ * `_overlaps` is a genuinely different predicate: the row's own value is an
+ * INTERVAL `[from, to]` and it is true when that interval intersects any query
+ * range — a POINT test such as `_in_datetimerange` would miss it.
+ *
+ * Semantics (shared): both ends inclusive; a null/non-coercible row value is
+ * `_in` false / `_nin` true; an empty list is false/true; a malformed bound
+ * contributes nothing and does NOT throw; a reversed range matches nothing
+ * (no auto-swap).
+ */
+export interface DatetimeRangeOperator {
+  _in_datetimerange?: Array<[DateInput, DateInput]>;
+  _nin_datetimerange?: Array<[DateInput, DateInput]>;
+  _between?: [DateInput, DateInput];
+  _nbetween?: [DateInput, DateInput];
+  _overlaps?: Array<[DateInput, DateInput]>;
+}
+
 export type Operator =
   | NumberOperator
   | StringOperator
   | JsonOperator
-  | PeriodOperator;
+  | PeriodOperator
+  | DatetimeRangeOperator;
 
 export interface BooleanExpression {
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -105,14 +136,33 @@ export type GroupKey =
     };
 
 /**
+ * One level of a nested (`_nest`) grouping. Each node groups its slice of the
+ * input by `key`, accumulates its OWN `aggregate` over every row beneath it,
+ * filters itself with `having`, and prunes its own children with `top_n`
+ * (per-parent, with a per-parent `_other`). `children` recurses. The top-level
+ * `aggregate` / `having` / `top_n` are MUTUALLY EXCLUSIVE with these per-node
+ * fields — a nested query expresses them per node.
+ */
+export interface NestedGroupNode {
+  key: GroupKey;
+  aggregate?: AggregateExpression;
+  having?: HavingExpression;
+  top_n?: TopNExpression;
+  children?: NestedGroupNode[];
+}
+
+/**
  * The grouping-set family. A plain array is a single grouping set; `_rollup`
- * emits the prefix hierarchy `{a,b}, {a}, {}`; `_cube` emits every subset.
- * See SPEC AC-9.
+ * emits the prefix hierarchy `{a,b}, {a}, {}`; `_cube` emits every subset; and
+ * `_nest` builds a hierarchical trie whose roots are emitted with their
+ * children attached (`output:'groups'` on a nested query already means
+ * roots-with-children — there is no separate `output:'tree'`). See SPEC AC-9.
  */
 export type GroupByExpression =
   | GroupKey[]
   | { _rollup: GroupKey[] }
-  | { _cube: GroupKey[] };
+  | { _cube: GroupKey[] }
+  | { _nest: NestedGroupNode[] };
 
 /**
  * The closed algebraic aggregate vocabulary (SPEC section 4). One operator key
@@ -198,6 +248,18 @@ export interface QueryExpression {
   window?: WindowSpec;
   output?: QueryOutput;
   top_n?: TopNExpression;
+  /**
+   * Pure FINAL projection: applied AFTER the whole tail (after the order_by ->
+   * distinct_on -> offset -> limit pipeline) in `DataView.commit`, exactly as
+   * SQL's select list is applied last. Because it is final, `order_by`,
+   * `distinct_on` and `limit` may reference fields that `select` drops. Each
+   * emitted key is the reference string itself. With `output:'groups'` the refs
+   * resolve among group-key names + aggregate output names + `_grouping` /
+   * `_other`; with `output:'rows'` they resolve against the raw post-`where`
+   * row. The `output:'rows'` identity guarantee holds only when `select` is
+   * ABSENT — any `select` deliberately reshapes the row.
+   */
+  select?: string[];
 }
 
 export type QueryExpressionValues =

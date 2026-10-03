@@ -1,6 +1,6 @@
 # ADR-0005 — The data-query-engine owns grouping, aggregation, and HAVING
 
-**Status:** PROPOSED (2026-10-02). **Draft for owner approval — do not treat as settled.**
+**Status:** ACCEPTED (2026-10-02; owner approval 2026-10-03, owner pseudosky — "I approve, you're green for impl").
 **Owner:** pseudosky.
 **Supersedes:** nothing.
 **Drives:** SPEC `49a62647-5a50-461a-b004-461b9b6bd66f`; plan `3a6f7f34-55ec-43da-a0c3-b82670902099` (stage S3, `48319772-6ab7-454e-b74b-31410e1b6c83`); the open group-by/aggregation items `a672f3ae-373a-44d9-a395-df7a0b62ad8a`, `b383acce-0d81-4424-bd1a-4e1871d687db` / `88fe8643`, `0d6cff76-4b25-4c13-bfd5-cb1dd0b2f806`.

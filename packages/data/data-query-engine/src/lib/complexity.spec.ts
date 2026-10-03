@@ -100,6 +100,46 @@
  *     non-algebraic `_quantile` (buffers and sorts each group's values) are
  *     NOT asserted here — neither is linear in N, and a per-N ladder cannot
  *     isolate them. _period/window share the same O(n) per-row bound.
+ *
+ * ADDED WITH ADR-0005 SELECT + _nest + PATH/RANGE OPS
+ *   op                       bound        source
+ *   -----------------------  -----------  -----------------------------------
+ *   select                   O(n)         a single Array.map projection over
+ *                                         the rows surviving the whole tail
+ *                                         (src/lib/query.ts commit()). The
+ *                                         suite holds the projection width fixed
+ *                                         (2 refs), so the fit is the N-slope.
+ *   path resolver            O(n*d)       compileAccessor() splits the ref ONCE
+ *                                         at compile time (src/lib/path.ts) then
+ *                                         walks d segments per row, with an
+ *                                         exact-name-first fast path. Asserted at
+ *                                         a FIXED depth d=3, hence O(n).
+ *   _in/_nin_datetimerange   O(n*k)       one filter pass; k range tuples are
+ *                                         tested per row (src/lib/filters.ts).
+ *                                         Asserted at fixed k=4, hence O(n).
+ *   _overlaps                O(n*k)       same per-row k-tuple shape, over an
+ *                                         INTERVAL row value instead of a point.
+ *   _between / _nbetween     O(n*k)       compile-time SUGAR desugaring into the
+ *                                         SAME _in/_nin_datetimerange predicate
+ *                                         (src/lib/parser.ts desugarOperators);
+ *                                         there is deliberately no second code
+ *                                         path, so it needs no separate bound.
+ *
+ *   - _nest is a single-pass TRIE OF ACCUMULATORS: each row descends its tree
+ *     path once, adding into every ancestor, so per-row work is O(d) and the
+ *     pass is O(n*d) time, O(G) space (G = emitted nodes). Asserted at d=2 and
+ *     d=3 — with d HELD CONSTANT — so the fitted slope is the N-dimension.
+ *   - HONEST LIMIT (nested): the D-DIMENSION is NOT assertable by a per-N
+ *     ladder. A ladder over N holds d fixed and can only recover the N-slope;
+ *     it cannot distinguish O(n*d) from O(n) at a fixed d, and it cannot see a
+ *     regression that is super-linear in d. Likewise a per-node `top_n` adds an
+ *     O(G log G) term that the suite CANNOT separate from O(n) (the n-log-n
+ *     limit above). The nested ladder therefore omits top_n, and the d-limit is
+ *     stated here rather than faked.
+ *   - POSITIVE CONTROL (nested): the pass PARTITIONS the parent set — each row
+ *     updates its own ancestor chain rather than rescanning all data per node.
+ *     A rescan variant would be O(G*n) and is rejected by the linear band; the
+ *     nested controls below are the gate that would catch it.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -208,6 +248,45 @@ function measureQuery(
     return { n, ms };
   });
   return { points, p: fitExponent(points) };
+}
+
+/**
+ * Like measureQuery, but the caller supplies the ROWS as well as the query —
+ * needed for the path-resolver and `_overlaps` ladders, which require a fixture
+ * shape (nested objects / interval values) the shared `makeRows` does not carry.
+ */
+function measureCustom<S>(
+  sizes: number[],
+  build: (n: number) => { rows: S[]; query: QueryExpression },
+  reps = 7,
+  warmup = 2
+): { points: Point[]; p: number } {
+  const points: Point[] = sizes.map((n) => {
+    const { rows, query } = build(n);
+    const ms = measure(() => {
+      new DataView(rows, query).view();
+    }, reps, warmup);
+    return { n, ms };
+  });
+  return { points, p: fitExponent(points) };
+}
+
+/**
+ * Fixture for the path-resolver and interval ladders: each row carries a
+ * depth-3 nested ref (`nested.deep.v`) and an interval value (`span`).
+ */
+function makeNestedRows(n: number): Array<Record<string, unknown>> {
+  const rnd = mulberry32(0x9e37_79b9);
+  const rows: Array<Record<string, unknown>> = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const t = BASE_TS - Math.floor(rnd() * 365 * DAY);
+    rows[i] = {
+      id: i,
+      nested: { deep: { v: i % 1000 } },
+      span: [t, t + 3_600_000],
+    };
+  }
+  return rows;
 }
 
 /** Emit the raw measurements so the run log carries the evidence. */
@@ -455,5 +534,115 @@ describe('complexity — group_by / aggregate / HAVING', () => {
     }));
     logFit('group_by + top_n', r);
     expectLinear(r.p, 'group_by + top_n');
+  });
+});
+
+describe('complexity — select / path resolver / date-range (ADR-0005 ops)', () => {
+  it('select is a final O(n) projection after the tail', () => {
+    const r = measureQuery(LIN_SIZES, () => ({
+      select: ['id', 'value'],
+    }));
+    logFit('select', r);
+    expectLinear(r.p, 'select');
+  });
+
+  it('the compiled path resolver is O(n) at fixed depth d=3', () => {
+    // Depth-3 ref exercises the segment walk per row; the predicate is
+    // satisfiable for every row, so the walk is never elided by V8.
+    const r = measureCustom<Array<Record<string, unknown>>>(LIN_SIZES, (n) => ({
+      rows: makeNestedRows(n),
+      query: { where: { 'nested.deep.v': { _gte: 0 } } },
+    }));
+    logFit('path resolver (depth 3)', r);
+    expectLinear(r.p, 'path resolver (depth 3)');
+  });
+
+  it('_in_datetimerange is O(n) at fixed k=4 ranges (point test)', () => {
+    const ranges: Array<[number, number]> = Array.from({ length: 4 }, (_, i) => [
+      BASE_TS - (i + 1) * 90 * DAY,
+      BASE_TS - i * 90 * DAY,
+    ]);
+    const r = measureQuery(LIN_SIZES, () => ({
+      where: { ts: { _in_datetimerange: ranges } },
+    }));
+    logFit('_in_datetimerange (k=4)', r);
+    expectLinear(r.p, '_in_datetimerange (k=4)');
+  });
+
+  it('_overlaps is O(n) at fixed k=4 ranges (interval test)', () => {
+    const ranges: Array<[number, number]> = Array.from({ length: 4 }, (_, i) => [
+      BASE_TS - (i + 1) * 90 * DAY,
+      BASE_TS - i * 90 * DAY,
+    ]);
+    const r = measureCustom<Array<Record<string, unknown>>>(LIN_SIZES, (n) => ({
+      rows: makeNestedRows(n),
+      query: { where: { span: { _overlaps: ranges } } },
+    }));
+    logFit('_overlaps (k=4)', r);
+    expectLinear(r.p, '_overlaps (k=4)');
+  });
+});
+
+describe('complexity — nested group_by (_nest)', () => {
+  // Each row descends its tree path ONCE, adding into every ancestor: O(n*d)
+  // time at a fixed tree, O(G) space. The ladder holds d constant, so the fit
+  // is the N-slope; see the header's honest-limit note for what this CANNOT
+  // assert (the d-dimension, and the per-node top_n n-log-n term).
+
+  it('_nest d=2 (group -> rank) is O(n*d), linear in N at fixed d', () => {
+    const r = measureQuery(LIN_SIZES, () => ({
+      group_by: {
+        _nest: [
+          {
+            key: 'group',
+            aggregate: { s: { _sum: 'value' } },
+            children: [{ key: 'rank', aggregate: { s: { _sum: 'value' } } }],
+          },
+        ],
+      },
+    }));
+    logFit('_nest d=2', r);
+    expectLinear(r.p, '_nest d=2');
+  });
+
+  it('_nest d=3 (group -> rank -> id) is O(n*d), linear in N at fixed d', () => {
+    const r = measureQuery(LIN_SIZES, () => ({
+      group_by: {
+        _nest: [
+          {
+            key: 'group',
+            aggregate: { s: { _sum: 'value' } },
+            children: [
+              {
+                key: 'rank',
+                aggregate: { s: { _sum: 'value' } },
+                children: [{ key: 'id', aggregate: { s: { _sum: 'value' } } }],
+              },
+            ],
+          },
+        ],
+      },
+    }));
+    logFit('_nest d=3', r);
+    expectLinear(r.p, '_nest d=3');
+  });
+
+  it('positive control: the nested pass partitions the parent set (not quadratic)', () => {
+    // A rescan-per-node implementation (O(G*n)) would blow past the linear band
+    // here; the pass under test partitions instead. _count keeps the fixture
+    // work non-elidable while asserting the same linear class.
+    const r = measureQuery(LIN_SIZES, () => ({
+      group_by: {
+        _nest: [
+          {
+            key: 'group',
+            aggregate: { c: { _count: true } },
+            children: [{ key: 'rank', aggregate: { c: { _count: true } } }],
+          },
+        ],
+      },
+    }));
+    logFit('_nest positive control', r);
+    expectLinear(r.p, '_nest positive control');
   });
 });

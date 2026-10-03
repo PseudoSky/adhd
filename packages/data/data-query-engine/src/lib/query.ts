@@ -2,6 +2,12 @@ import { Transform as _ } from '@adhd/data-base-transforms';
 import { OrderByExpression, QueryExpression } from './expressions';
 import { compileWhere, parseOrderBy } from './parser';
 import {
+  compileAccessor,
+  compilePath,
+  projectRefs,
+  uniqueByPaths,
+} from './path';
+import {
   CompiledGrouping,
   GroupingSpec,
   compileGrouping,
@@ -15,14 +21,21 @@ export const orderBy =
     // `props`, so hoisting it out of the returned comparator is behaviour-
     // preserving — but it removes a full spec re-parse from every one of the
     // ~n·log n pairwise comparisons a sort makes (defect 73f35930).
-    const orderOps = parseOrderBy(props);
+    // Compile each order key ONCE, alongside `parseOrderBy`. The accessor is the
+    // unified exact-name-first/path-fallback resolver, so `order_by` sees the SAME
+    // field value as `where`/`having`/`aggregate` — including a grouped output key
+    // stored FLAT under its raw path name (`'a.b'`).
+    const orderOps = parseOrderBy(props).map((op) => ({
+      ...op,
+      get: compileAccessor(op.key),
+    }));
     return (a: unknown, b: unknown) => {
       // console.log({orderOps})
       for (const p in orderOps) {
-        const { key, dir, nulls } = orderOps[p];
+        const { dir, nulls, get } = orderOps[p];
         const cmp = dir === 'asc' ? _.defaultSort : _.reverseSort;
-        const x = _.get(a, key);
-        const y = _.get(b, key);
+        const x = get(a);
+        const y = get(b);
         // console.log("order by", {x, y, key, dir, nulls })
         // TODO: doesnt look like multiple sort works
         if (x !== y) {
@@ -50,6 +63,7 @@ type QueryType = {
   offset?: number;
   limit?: number;
   grouping?: CompiledGrouping;
+  select?: string[];
 };
 
 // const EmptyQuery: QueryType = {
@@ -82,6 +96,7 @@ export class Query implements QueryType {
   offset = 0;
   limit?: number;
   grouping?: CompiledGrouping;
+  select?: string[];
   private _groupingRaw: GroupingSpec | null = null;
   constructor(_query: QueryExpression = {}) {
     // const query = RawQuery(_query);
@@ -97,8 +112,16 @@ export class Query implements QueryType {
       this.setOffset(query.offset),
       this.setLimit(query.limit),
       this.setGrouping(query),
+      this.setSelect(query.select),
     ];
     return ops.some(_.isTrue);
+  };
+
+  setSelect = (selectQuery: QueryExpression['select']) => {
+    if (_.isEqual(selectQuery, this.raw.select)) return false;
+    this.raw.select = selectQuery;
+    this.select = selectQuery;
+    return true;
   };
 
   setGrouping = (query: QueryExpression = {}) => {
@@ -215,8 +238,13 @@ export class DataView<T = unknown> {
     return this;
   };
 
-  // TODO: add select support
-  // select = (selectQuery: QueryExpression['select']) => {...}
+  // SELECT is a PURE FINAL projection (see `commit`): it runs after the whole
+  // tail, so it is a builder method like any other — no separate phase slot.
+  select = (selectQuery: QueryExpression['select']) => {
+    const didUpdate = this.query.setSelect(selectQuery);
+    this.dirty = this.dirty || didUpdate;
+    return this;
+  };
 
   where = (whereQuery: QueryExpression['where']) => {
     const didUpdate = this.query.setWhere(whereQuery);
@@ -278,7 +306,7 @@ export class DataView<T = unknown> {
     }
     if (this.query.order_by) res = res.sort(this.query.order_by);
     if (this.query.distinct_on)
-      res = _.uniqueBy(
+      res = uniqueByPaths(
         res as unknown as Record<string, unknown>[],
         this.query.distinct_on
       ) as unknown as T[];
@@ -288,6 +316,24 @@ export class DataView<T = unknown> {
       const preSliceLength = res.length;
       res = res.slice(0, this.query.limit);
       this.has_more = preSliceLength > this.query.limit;
+    }
+    // SELECT — the FINAL phase, after the entire tail (order_by -> distinct_on ->
+    // offset -> limit). Being last is the whole design: `order_by`, `distinct_on`
+    // and `limit` may reference fields that are NOT selected (the SQL rule). It is
+    // a pure projection over the surviving rows — first row in, first row out, no
+    // reordering, no filtering.
+    //
+    // The `output:'rows'` identity guarantee (rows pass through unchanged) holds
+    // ONLY when `select` is absent. Supplying `select` deliberately reshapes each
+    // row to exactly the referenced keys.
+    if (this.query.select) {
+      const accessors = this.query.select.map((ref) => ({
+        ref,
+        compiled: compilePath(ref),
+      }));
+      res = res.map((row) =>
+        projectRefs(row as Record<string, unknown>, accessors)
+      ) as unknown as T[];
     }
     this.dataview = res;
     this.dirty = false;

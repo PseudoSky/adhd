@@ -3,6 +3,35 @@ import { BooleanExpression, OrderByExpression } from './expressions';
 import { QueryValidationError } from './errors';
 import { operators } from './filters';
 import { OrderByOperation } from './operators';
+import { compileAccessor, PathGetter } from './path';
+
+/**
+ * Compile-time operator sugar: `_between` / `_nbetween` are the single-range
+ * spellings of `_in_datetimerange` / `_nin_datetimerange`. Desugaring happens at
+ * the ONE point before operator dispatch (here), so the operator table keeps
+ * exactly one entry per real predicate and the sugar can never drift into a
+ * second code path. `[a, b]` becomes `[[a, b]]`.
+ */
+const OPERATOR_SUGAR: Record<string, string> = {
+  _between: '_in_datetimerange',
+  _nbetween: '_nin_datetimerange',
+};
+
+function desugarOperators(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(desugarOperators);
+  if (node === null || typeof node !== 'object') return node;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+    const mapped = OPERATOR_SUGAR[key];
+    if (mapped !== undefined) {
+      // A single `[from, to]` becomes a one-range list for the general operator.
+      out[mapped] = Array.isArray(value) ? [value] : value;
+      continue;
+    }
+    out[key] = desugarOperators(value);
+  }
+  return out;
+}
 
 function findLogicalParent(path: string[]): string {
   const stack = [...path].slice(0, -1);
@@ -18,6 +47,9 @@ function findLogicalParent(path: string[]): string {
 export function compileWhere(
   query: BooleanExpression
 ): (obj: Record<string, unknown>) => boolean {
+  // Normalize sugar (`_between`/`_nbetween`) BEFORE anything reads the tree, so
+  // every downstream step sees only real operators. `query` is a local param.
+  query = desugarOperators(query) as BooleanExpression;
   // Compile phase: analyze query tree once
   const logical = _.allPaths(query, (key) =>
     ['_and', '_or', '_not'].includes(key.toString())
@@ -42,6 +74,7 @@ export function compileWhere(
   const fieldDeps = {} as Record<string, string[]>;
   type CompiledFilter = {
     field: string;
+    get: PathGetter;
     op: (typeof operators)[string] | undefined;
     key: string;
     value: unknown;
@@ -70,7 +103,16 @@ export function compileWhere(
             ).join(', ')}`
         );
       }
-      return [...res, { field: fieldKey, key, op, value: _.get(query, item) }];
+      return [
+        ...res,
+        {
+          field: fieldKey,
+          get: compileAccessor(fieldKey),
+          key,
+          op,
+          value: _.get(query, item),
+        },
+      ];
     },
     [] as CompiledFilter[]
   );
@@ -114,7 +156,9 @@ export function compileWhere(
 
     for (const item of compiledFilters) {
       if (!item.op) continue;
-      const input = _.get(obj, item.field);
+      // Unified resolver: exact-name-first (so a grouped key stored FLAT under
+      // its raw dotted path is found) then path-walk.
+      const input = item.get(obj);
       results[item.key as string] = item.op(input)(item.value);
     }
 
