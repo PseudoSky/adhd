@@ -464,9 +464,9 @@ describe('apigen-plugin-tracing — streaming branch (quarantined)', () => {
 
 describe('apigen-plugin-tracing — plugin shape', () => {
   it('target.generate() returns [] (a valid no-op target)', () => {
-    expect(tracingPlugin.capabilities.target!.generate({ operations: [], host: 'ts' }, {})).toEqual(
-      []
-    );
+    expect(
+      tracingPlugin.capabilities.target!.generate({ operations: [], host: 'ts' }, { serviceName: 'apigen' })
+    ).toEqual([]);
   });
 
   it('declares id "tracing" and a layer capability', () => {

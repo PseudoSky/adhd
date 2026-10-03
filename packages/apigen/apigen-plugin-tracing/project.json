@@ -19,6 +19,20 @@
     "access:domain"
   ],
   "targets": {
+    "typecheck-spec": {
+      "//": "Type-checks the spec corpus (tsconfig.spec.json). Closes lane-reachability rule 6 / backlog 98142eab instance 3: a tsconfig.spec.json with no target that compiles it lets the spec corpus carry type errors no gate can see. The ratchet baselines the 5 pre-existing vite.config.ts build-config errors (shared tools/vite-plugins/*.mjs declaration gaps — the same noise baselined at entrypoint/backlog) and fails on any increase or coverage narrowing. Wired into test.dependsOn so `nx affected -t test` actually runs it.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["default", { "externalDependencies": ["typescript"] }],
+      "options": {
+        "cwd": ".",
+        "command": "node tools/nx-plugins/build/executors/typecheck-spec/ratchet.mjs --tsconfig packages/apigen/apigen-plugin-tracing/tsconfig.spec.json --baseline tools/nx-plugins/build/executors/typecheck-spec/apigen-plugin-tracing.baseline.json"
+      }
+    },
+    "test": {
+      "//": "Partial override — executor/cache/outputs still come from the inferred @nx/vitest target. dependsOn is replaced wholesale, so lint/^build (from the workspace test targetDefaults) are relisted here, plus typecheck-spec so the spec corpus is gated whenever tests run.",
+      "dependsOn": ["lint", "^build", "typecheck-spec"]
+    },
     "nx-release-publish": {
       "dependsOn": ["build", "test", "verify-dist-load", "dist-manifest", "publish-hygiene"],
       "options": {
