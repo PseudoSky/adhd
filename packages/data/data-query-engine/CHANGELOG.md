@@ -1,3 +1,18 @@
+## 2.3.7 (2026-10-03)
+
+### 🚀 Features
+
+- **data-query-engine:** select projection, nested group-by, path-notation parity, date-range ops (SPEC 49a62647) ([e720ce9b](https://github.com/PseudoSky/adhd/commit/e720ce9b))
+- **data-query-engine:** group_by/aggregate/having + window/output/top_n (SPEC 49a62647) ([afe3fdec](https://github.com/PseudoSky/adhd/commit/afe3fdec))
+
+### 🔥 Performance
+
+- **data-query-engine:** hoist parseOrderBy out of the order_by comparator ([79438073](https://github.com/PseudoSky/adhd/commit/79438073))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.5 (2026-10-03)
 
 ### 🚀 Features
