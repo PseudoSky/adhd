@@ -29,6 +29,14 @@ export const orderBy =
       ...op,
       get: compileAccessor(op.key),
     }));
+    // Skip-when-unnecessary (defect 24948077). An absent or empty `order_by`
+    // yields zero order operations, and the comparator built below would then
+    // fall straight through its empty loop to `return 0` — a comparator that can
+    // never reorder anything, yet is truthy, so the execute path's
+    // `if (this.query.order_by)` guard would run a full O(n·log n) no-op sort on
+    // EVERY query. Returning `undefined` here makes that guard genuinely skip the
+    // sort. A query WITH an ordering gets the byte-identical comparator as before.
+    if (orderOps.length === 0) return undefined;
     return (a: unknown, b: unknown) => {
       // console.log({orderOps})
       for (const p in orderOps) {
