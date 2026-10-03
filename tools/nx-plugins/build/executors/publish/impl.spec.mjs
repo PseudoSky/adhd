@@ -37,19 +37,43 @@ import { join } from 'node:path';
 // throw-on-trip is turned off).
 process.env.ADHD_NX_METRICS_MAX_CPU_PCT = '0';
 
+// DEFECT 32af828b: `publish` now VERIFIES the just-published version is
+// retrievable from the registry (lib/publish-verify.js) BEFORE writing
+// published-state.json. These tests never touch the real network — they stub
+// publish-verify's module-level reader seam below. Pin the poll budget to 0 so
+// a stubbed reader is consulted EXACTLY ONCE with no real sleep (the production
+// default is a ~30-minute bounded poll; an unpinned 404 stub would otherwise
+// sleep 15s per attempt for 30 minutes).
+process.env.ADHD_PUBLISH_VERIFY_TIMEOUT_MS = '0';
+process.env.ADHD_PUBLISH_VERIFY_INTERVAL_MS = '0';
+
 const require = createRequire(import.meta.url);
 const implAbs = require.resolve('./impl.js');
 const npmRegistryAbs = require.resolve('../../lib/npm-registry.js');
 const publishedStateAbs = require.resolve('../../lib/published-state.js');
+const publishVerify = require('../../lib/publish-verify.js');
 const { writeReleaseManifest } = require('../../lib/release-manifest.js');
 
 function resetAll() {
   delete require.cache[implAbs];
   delete require.cache[npmRegistryAbs];
   delete require.cache[publishedStateAbs];
+  // publish-verify.js is DELIBERATELY not cache-busted: its module-level reader
+  // seam (__setReadVersion) must survive a loadFreshImpl() reload so the offline
+  // registry stub set below stays in effect for every executor under test.
+}
+/**
+ * Stub the post-publish registry read (defect 32af828b) so the executor's new
+ * verification step answers locally instead of hitting the network. The echo
+ * reader claims every requested version is retrievable — exactly what the
+ * pre-existing "publish then write-through" tests already assume happened.
+ */
+function stubRegistryAlwaysRetrievable() {
+  publishVerify.__setReadVersion(async ({ name, version }) => ({ status: 200, body: { name, version } }));
 }
 function loadFreshImpl() {
   resetAll();
+  stubRegistryAlwaysRetrievable();
   return require(implAbs);
 }
 
@@ -434,4 +458,129 @@ test('concurrency: N parallel publish tasks (simulating `nx run-many -t publish`
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// DEFECT 32af828b — post-publish retrievability verification.
+//
+// Proven here, with no network and no wall-clock:
+//   * INTEGRATION (through the real executor + a genuinely-written state file):
+//     a publish whose version is NOT retrievable returns success:false and the
+//     state file is NOT written (the cache is not poisoned); a retrievable one
+//     writes through and reports the verification.
+//   * UNIT (lib/publish-verify.js's pure predicate + the bounded poll itself):
+//     the whole "retrievable?" contract, the retry-until-found path, the
+//     give-up-at-budget path, and the never-throw-on-transport-error guarantee.
+// ---------------------------------------------------------------------------
+
+test('defect 32af828b: a publish whose version is NOT retrievable FAILS and does NOT write published-state.json', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'publish-impl-'));
+  try {
+    const distPkg = { name: '@adhd/pkg-hidden', version: '1.0.0' };
+    const { context } = makeProject({ rootDir, name: 'pkg-hidden', projectRoot: 'packages/pkg-hidden', distPkg });
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const errors = [];
+    t.mock.method(console, 'error', (...a) => errors.push(a.join(' ')));
+    const publishImpl = loadFreshImpl();
+    // npm publish "succeeds" (exit 0 — the HTTP 202 "being processed" case), but
+    // the version never promotes, so every post-publish read is a 404.
+    publishVerify.__setReadVersion(async () => ({ status: 404, body: null }));
+
+    const res = await publishImpl({}, context);
+
+    assert.equal(res.success, false, 'a 202-without-retrievability must be a FAILURE, not a success');
+    assert.equal(
+      existsSync(publishedStatePath(rootDir)),
+      false,
+      'the cache must NOT be poisoned — published-state.json is not written when the version is not retrievable'
+    );
+    const publishCalls = state.calls.filter((c) => c.cmd === 'npm' && c.args[0] === 'publish');
+    assert.equal(publishCalls.length, 1, 'npm publish was still attempted before the verification vetoed it');
+    assert.ok(errors.some((m) => /NOT retrievable/.test(m)), 'the failure must be reported as non-retrievability');
+    assert.ok(errors.some((m) => /HTTP 202/.test(m)), 'the message must name the 202 lag, not a generic failure');
+  } finally {
+    publishVerify.__resetReadVersion();
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('defect 32af828b: a publish whose version IS retrievable writes through and reports the verification', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'publish-impl-'));
+  try {
+    const distPkg = { name: '@adhd/pkg-promoted', version: '2.0.0' };
+    const { context } = makeProject({ rootDir, name: 'pkg-promoted', projectRoot: 'packages/pkg-promoted', distPkg });
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const errors = [];
+    t.mock.method(console, 'error', (...a) => errors.push(a.join(' ')));
+    const publishImpl = loadFreshImpl(); // loadFreshImpl installs the always-retrievable echo stub
+
+    const res = await publishImpl({}, context);
+
+    assert.equal(res.success, true);
+    const cached = JSON.parse(readFileSync(publishedStatePath(rootDir), 'utf8'));
+    assert.equal(cached['@adhd/pkg-promoted'].version, '2.0.0', 'the write-through must land once the version is verified');
+    assert.ok(errors.some((m) => /verified over 1 attempt/.test(m)), 'success must record that the version was verified');
+  } finally {
+    publishVerify.__resetReadVersion();
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('publish-verify.versionManifestMatches: only an exact 200-for-this-version is retrievable', () => {
+  const { versionManifestMatches } = publishVerify;
+  assert.equal(versionManifestMatches('@x/p', '1.0.0', 200, { name: '@x/p', version: '1.0.0' }), true);
+  assert.equal(versionManifestMatches('@x/p', '1.0.0', 200, { version: '1.0.0' }), true, 'name is optional in the body');
+  assert.equal(versionManifestMatches('@x/p', '1.0.0', 202, { version: '1.0.0' }), false, 'HTTP 202 (accepted, not promoted) is NOT retrievable');
+  assert.equal(versionManifestMatches('@x/p', '1.0.0', 404, null), false);
+  assert.equal(versionManifestMatches('@x/p', '1.0.0', 0, null), false, 'a transport failure is not retrievable');
+  assert.equal(versionManifestMatches('@x/p', '1.0.0', 200, { version: '1.0.1' }), false, 'a different version is not this version');
+  assert.equal(versionManifestMatches('@x/p', '1.0.0', 200, null), false);
+  assert.equal(versionManifestMatches('@x/p', '1.0.0', 200, { name: '@x/other', version: '1.0.0' }), false, 'a name mismatch is not retrievable');
+});
+
+test('publish-verify.verifyVersionRetrievable: polls until the version appears, then stops', async () => {
+  let fakeNow = 0;
+  let reads = 0;
+  const res = await publishVerify.verifyVersionRetrievable({
+    name: '@x/p',
+    version: '1.0.0',
+    timeoutMs: 10_000,
+    intervalMs: 100,
+    now: () => fakeNow,
+    sleep: async (ms) => { fakeNow += ms; },
+    readVersion: async () => (++reads < 3 ? { status: 404, body: null } : { status: 200, body: { name: '@x/p', version: '1.0.0' } }),
+  });
+  assert.deepEqual(res, { retrievable: true, attempts: 3, lastStatus: 200 });
+  assert.equal(reads, 3, 'must stop reading the moment the version is retrievable');
+});
+
+test('publish-verify.verifyVersionRetrievable: gives up at the budget and reports NOT retrievable', async () => {
+  let fakeNow = 0;
+  const res = await publishVerify.verifyVersionRetrievable({
+    name: '@x/p',
+    version: '1.0.0',
+    timeoutMs: 150,
+    intervalMs: 100,
+    now: () => fakeNow,
+    sleep: async (ms) => { fakeNow += ms; },
+    readVersion: async () => ({ status: 404, body: null }),
+  });
+  assert.deepEqual(res, { retrievable: false, attempts: 3, lastStatus: 404 });
+});
+
+test('publish-verify.verifyVersionRetrievable: a throwing reader is not-retrievable, never thrown outward', async () => {
+  const res = await publishVerify.verifyVersionRetrievable({
+    name: '@x/p',
+    version: '1.0.0',
+    timeoutMs: 0,
+    readVersion: async () => { throw new Error('ECONNRESET'); },
+  });
+  assert.deepEqual(res, { retrievable: false, attempts: 1, lastStatus: 0 }, 'a transient transport error must not abort the release as an exception');
+});
+
+test('publish-verify.versionUrl: scoped names encode the slash and a cache-buster is appended', () => {
+  assert.match(publishVerify.versionUrl('@babel/core', '7.0.0', 'cb-123'), /^https:\/\/registry\.npmjs\.org\/@babel%2fcore\/7\.0\.0\?_=cb-123$/);
+  assert.equal(publishVerify.versionUrl('left-pad', '1.0.0'), 'https://registry.npmjs.org/left-pad/1.0.0');
 });

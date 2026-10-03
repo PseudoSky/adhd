@@ -37,11 +37,20 @@ import { join } from 'node:path';
 // recording still happens; only the throw-on-trip is turned off).
 process.env.ADHD_NX_METRICS_MAX_CPU_PCT = '0';
 
+// DEFECT 32af828b: the executor now verifies post-publish retrievability before
+// writing published-state.json. Several tests below reach a status-0 publish
+// (listed+fresh, the FORCE override, and the same-run-token path), so pin the
+// poll budget to 0 and stub publish-verify's reader seam to answer locally —
+// otherwise they would hit the real network and/or sleep for ~30 minutes.
+process.env.ADHD_PUBLISH_VERIFY_TIMEOUT_MS = '0';
+process.env.ADHD_PUBLISH_VERIFY_INTERVAL_MS = '0';
+
 const require = createRequire(import.meta.url);
 const implAbs = require.resolve('./impl.js');
 const npmRegistryAbs = require.resolve('../../lib/npm-registry.js');
 const publishedStateAbs = require.resolve('../../lib/published-state.js');
 const releaseManifestAbs = require.resolve('../../lib/release-manifest.js');
+const publishVerify = require('../../lib/publish-verify.js');
 const { writeReleaseManifest, readReleaseManifest, OVERRIDE_LOG_RELATIVE_PATH } = require('../../lib/release-manifest.js');
 
 function resetAll() {
@@ -49,9 +58,15 @@ function resetAll() {
   delete require.cache[npmRegistryAbs];
   delete require.cache[publishedStateAbs];
   delete require.cache[releaseManifestAbs];
+  // publish-verify.js is DELIBERATELY not cache-busted so the reader stub below
+  // survives a loadFreshImpl() reload.
 }
 function loadFreshImpl() {
   resetAll();
+  // Every publish that reaches status 0 in this file is "accepted and promoted":
+  // the echo reader answers 200 for the exact requested version, so the new
+  // verification step passes offline.
+  publishVerify.__setReadVersion(async ({ name, version }) => ({ status: 200, body: { name, version } }));
   return require(implAbs);
 }
 

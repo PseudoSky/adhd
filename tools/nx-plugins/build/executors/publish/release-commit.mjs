@@ -107,6 +107,38 @@ function collectReleasePaths() {
   return paths;
 }
 
+/**
+ * Paths currently STAGED in the index that are NOT part of this release's
+ * intended path set — i.e. another agent's/human's in-flight work.
+ *
+ * DEFECT 9de522a4-b5ce-464e-9d03-67d47f3b1fc1 (HIGH): the commit below used
+ * to be `git commit -m <msg>` with NO pathspec, which commits the ENTIRE
+ * index. `git add -- <paths>` had staged our release files, but any file
+ * ALREADY staged by a concurrent process rode along into the release commit.
+ * This was not hypothetical: `tools/nx-plugins/build/executors/smoke-test/
+ * task-report.mjs` was staged in the repo for a whole session.
+ *
+ * The primary fix is a PATHSPEC-SCOPED commit (`git commit -m <msg> -- <paths>`),
+ * which commits only these paths' staged content and LEAVES every other staged
+ * entry in the index untouched (empirically verified: a pre-staged foreign file
+ * stays staged after such a commit). This helper is DEFENSE-IN-DEPTH: a
+ * non-blocking, visible NOTE so a human can see foreign staged work is present
+ * and being deliberately left behind. It is a NOTE rather than a refusal on
+ * purpose — a concurrent multi-agent repo routinely has unrelated staged work,
+ * so refusing would make the tool fire on normal WIP; the pathspec commit is
+ * what actually guarantees correctness, not the refusal.
+ */
+function stagedOutside(intended) {
+  const res = git(['diff', '--cached', '--name-only']);
+  if (res.status !== 0) return [];
+  const want = new Set(intended);
+  return res.stdout
+    .split('\n')
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .filter((p) => !want.has(p));
+}
+
 function main() {
   const dryRun = process.argv.includes('--dry-run');
   const paths = collectReleasePaths();
@@ -128,13 +160,27 @@ function main() {
   }
 
   // Explicit pathspecs only — never `-A`/`.` — so unrelated concurrent work
-  // (another agent's in-flight edits) is never swept into this commit.
+  // (another agent's in-flight edits) is never staged.
   const addRes = git(['add', '--', ...paths]);
   if (addRes.status !== 0) {
     console.error(`release-commit: git add FAILED:\n${addRes.stderr || addRes.stdout}`);
     return addRes.status ?? 1;
   }
-  const commitRes = git(['commit', '-m', message]);
+  // Defense-in-depth: surface (but do not block on) any OTHER staged path. The
+  // pathspec-scoped commit below is what actually excludes it — see
+  // stagedOutside() for why this is a NOTE, not a refusal.
+  const foreign = stagedOutside(paths);
+  if (foreign.length > 0) {
+    console.error(
+      `release-commit: NOTE — ${foreign.length} unrelated staged path(s) present; the pathspec-scoped commit leaves them untouched in the index:`
+    );
+    for (const p of foreign) console.error(`  - ${p}`);
+  }
+  // PATHSPEC-SCOPED (defect 9de522a4): the trailing `-- <paths>` means git
+  // commits only THESE paths' staged content; an already-staged foreign file
+  // is NOT swept in and remains staged. Without the pathspec this commits the
+  // whole index.
+  const commitRes = git(['commit', '-m', message, '--', ...paths]);
   if (commitRes.status !== 0) {
     console.error(`release-commit: git commit FAILED:\n${commitRes.stderr || commitRes.stdout}`);
     return commitRes.status ?? 1;

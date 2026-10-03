@@ -28,6 +28,23 @@
  * read-modify-write) so parallel `nx run-many -t publish` tasks — each a
  * separate process — never lose one another's update.
  *
+ * POST-PUBLISH VERIFICATION (defect 32af828b-fb78-467f-bbe9-cbf96061b258,
+ * HIGH): a zero `npm publish` exit status is NOT proof the version is
+ * retrievable — npm returns HTTP 202 ("being processed…") on ACCEPTANCE, and
+ * promotion into the packument can lag by many minutes (observed ~20). So on
+ * the exit-0 path this task now calls `lib/publish-verify.js`'s
+ * `verifyVersionRetrievable` BEFORE writing the write-through cache: it does
+ * a direct, cache-bypassing `GET /<name>/<version>` in a BOUNDED POLL and
+ * only a matching 200 authorises the write. A 202-without-retrievability is
+ * treated as FAILURE (`{success:false}`) and writes NOTHING, so a
+ * never-promoted version is neither silently reported released nor allowed to
+ * poison `published-state.json` (which would make every later run skip it).
+ * The failure is honest about the wait and the last observed status; the
+ * version is simply re-attempted next run. The `npm view`-based reconcile
+ * branch (npm exit != 0) is deliberately UNCHANGED: `isAlreadyPublishedError`
+ * is the registry itself refusing and naming the version, and
+ * `isPublishedLive` is positive evidence, so neither is speculative.
+ *
  * MANIFEST BACKSTOP (Phase 3, `tmp/release-pipeline-audit.md`): before doing
  * anything else, this task calls `../../lib/release-manifest.js`'s
  * `checkPublishAllowed` — it refuses to run a real `npm publish` unless this
@@ -59,6 +76,7 @@ const { writeDistManifest } = require('../manifest/generate-manifest');
 const { packLocalDir, tarballIntegrity } = require('../../lib/npm-registry');
 const { readState, updatePublishedState } = require('../../lib/published-state');
 const { checkPublishAllowed } = require('../../lib/release-manifest');
+const { verifyVersionRetrievable } = require('../../lib/publish-verify');
 const { withMetrics } = require('../../../lib/metrics');
 
 function sh(cmd, args, opts = {}) {
@@ -257,8 +275,24 @@ async function run(options, context) {
     }
 
     if (!options.dryRun) {
+      // VERIFY BEFORE CACHING (defect 32af828b): npm's exit 0 / HTTP 202 says
+      // "accepted", not "retrievable". Confirm the specific version is
+      // actually served by the registry before we trust it — otherwise a
+      // never-promoted publish would both withhold the package AND poison the
+      // cache. See lib/publish-verify.js for the poll and why this is a direct
+      // version GET rather than `npm view`.
+      const verification = await verifyVersionRetrievable({ name, version });
+      if (!verification.retrievable) {
+        console.error(
+          `publish: ${name}@${version} — npm reported success but the version is NOT retrievable from the registry ` +
+          `after ${verification.attempts} attempt(s) (last status: ${verification.lastStatus}). npm's ` +
+          `"being processed" (HTTP 202) can lag by many minutes; refusing to write published-state.json so this ` +
+          `version is retried on the next run rather than being silently withheld and cached as done.`
+        );
+        return { success: false };
+      }
       await writeThroughCache(context.root, name, version, distDir, workDir, rec);
-      console.error(`publish: ${name}@${version} -> published-state.json updated (write-through).`);
+      console.error(`publish: ${name}@${version} -> published-state.json updated (write-through; version verified over ${verification.attempts} attempt(s)).`);
     }
     return { success: true };
   });

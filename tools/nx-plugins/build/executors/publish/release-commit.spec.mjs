@@ -156,3 +156,46 @@ test('a package.json OUTSIDE packages/*/*/ or entrypoint/*/ is never swept in (e
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('defect 9de522a4: a pre-staged FOREIGN file is NOT swept into the release commit and is left staged', () => {
+  const root = makeRepo();
+  try {
+    // ONE release-shaped change: a package.json version bump.
+    bump(root, 'packages/foo/foo-base-a/package.json', (s) => s.replace('1.0.0', '1.0.1'));
+
+    // A FOREIGN file that another agent had ALREADY staged before the release
+    // commit ran — the exact real-world shape of this defect (mirrors
+    // task-report.mjs being staged in this repo for a whole session). Staged
+    // with an EXPLICIT pathspec, inside the test's own throwaway repo.
+    const foreignRel = 'packages/foo/foo-base-a/src/foreign-notes.txt';
+    writeFileSync(join(root, foreignRel), 'another agent\'s in-flight work\n');
+    sh('git', ['add', '--', foreignRel], { cwd: root });
+
+    // Sanity: it really is staged BEFORE the release commit runs.
+    assert.match(
+      porcelainStatus(root),
+      /A {1,2}packages\/foo\/foo-base-a\/src\/foreign-notes\.txt/,
+      'fixture precondition: the foreign file must be staged before release-commit runs'
+    );
+
+    const res = run(root);
+    assert.equal(res.status, 0, res.stderr);
+
+    // The release commit must contain ONLY the release path(s).
+    const committedFiles = sh('git', ['show', '--stat', '--format=', 'HEAD'], { cwd: root }).stdout;
+    assert.doesNotMatch(committedFiles, /foreign-notes\.txt/, 'a pre-staged foreign file must NEVER be swept into the release commit');
+    assert.match(committedFiles, /foo-base-a\/package\.json/);
+
+    // And it must STILL be staged, untouched — the commit did not consume it.
+    assert.match(
+      porcelainStatus(root),
+      /A {1,2}packages\/foo\/foo-base-a\/src\/foreign-notes\.txt/,
+      'the foreign file must remain staged after the release commit — the pathspec commit left it alone'
+    );
+
+    // Defense-in-depth: the NOTE surfaces the unrelated staged path.
+    assert.match(res.stderr, /unrelated staged path/, 'the tool must visibly NOTE the unrelated staged path it deliberately left behind');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
