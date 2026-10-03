@@ -244,6 +244,27 @@ function main() {
     return;
   }
 
+  // GATE 0 (NEW) — lane-reachability wiring gate. This is the SAME check the
+  // pre-push hook runs (.githooks/pre-push): it refuses when any project has a
+  // tsconfig.spec.json that no target compiles (backlog 98142eab rule 6), so a
+  // spec corpus can carry type errors no gate can see. The release path
+  // previously did NOT run it, so a release could publish around a broken gate
+  // (incident: @adhd/apigen-plugin-tracing shipped with exactly that gap). A
+  // hard pre-flight gate: if the wiring is broken, nothing downstream (build,
+  // version, GATE 1, publish) is allowed to run.
+  const laneExit = run('GATE 0: check-lane-reachability', 'node', [
+    join(workspaceRoot, 'tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs'),
+  ]);
+  if (laneExit !== 0) {
+    console.error(
+      '\nrun-release: GATE 0 (lane-reachability) FAILED — the gate wiring is broken ' +
+        '(e.g. a project has a tsconfig.spec.json that no target compiles). Refusing to ' +
+        'build/version/publish around a broken gate. Fix the wiring and retry.'
+    );
+    process.exit(laneExit);
+    return;
+  }
+
   const projectsArg = `--projects=${projectNames.join(',')}`;
 
   // Step -1 (NEW) — explicit build-first phase, scoped to the SAME computed

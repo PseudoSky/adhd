@@ -211,6 +211,66 @@ test('run-release.mjs: the empty-changed-set early return (projectNames.length =
   );
 });
 
+// --- GATE 0: lane-reachability pre-flight (closes the publish-around-the-gate gap) ---
+
+test('run-release.mjs: a labeled "GATE 0: check-lane-reachability" run() call exists, invoking the shared lane-reachability check', () => {
+  // The pre-push hook runs check-lane-reachability.mjs unconditionally; the
+  // release path previously did NOT, so a package could be published while its
+  // gate wiring was broken (incident: @adhd/apigen-plugin-tracing shipped a
+  // tsconfig.spec.json no target compiled — backlog 98142eab rule 6). The
+  // release path must now run the SAME check, via node, scoped to the
+  // workspace root.
+  assert.match(
+    source,
+    /run\(\s*'GATE 0: check-lane-reachability'\s*,\s*'node'\s*,\s*\[\s*join\(workspaceRoot,\s*'tools\/nx-plugins\/test\/executors\/wiring\/check-lane-reachability\.mjs'\)\s*,?\s*\]\s*\)/,
+    'expected a run() call labeled "GATE 0: check-lane-reachability" that invokes the shared ' +
+      'tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs via node'
+  );
+});
+
+test('run-release.mjs: GATE 0 is a HARD gate — a non-zero laneExit exits and returns before any build/version/publish', () => {
+  const gate0BlockMatch = source.match(
+    /const laneExit = run\([\s\S]*?if \(laneExit !== 0\) \{[\s\S]*?process\.exit\(laneExit\);\s*return;\s*\}/
+  );
+  assert.ok(
+    gate0BlockMatch,
+    'expected GATE 0 to be a hard gate: `const laneExit = run(...)` followed by an ' +
+      '`if (laneExit !== 0) { ... process.exit(laneExit); return; }` block'
+  );
+  assert.match(
+    gate0BlockMatch[0],
+    /Refusing to\s*' \+\s*'build\/version\/publish around a broken gate|build\/version\/publish around a broken gate/i,
+    'the GATE 0 failure message must explicitly state the release is refusing to build/version/publish around a broken gate'
+  );
+});
+
+test('run-release.mjs: GATE 0 appears BEFORE the structural build-first run() call (and therefore before version/GATE 1/publish) in source order', () => {
+  const gate0Idx = source.indexOf("run('GATE 0: check-lane-reachability'");
+  const buildPhaseIdx = source.indexOf("run('build (structural build-first guarantee)'");
+  const versionPhaseIdx = source.indexOf("run('version (explicit prior phase, GATE 1 timing fix)'");
+  const gate1Idx = source.indexOf("run(\n    'GATE 1: check-release-ranges'");
+  assert.ok(gate0Idx !== -1, 'expected to find the labeled GATE 0 run() call');
+  assert.ok(buildPhaseIdx !== -1, 'expected to find the labeled structural build-first run() call');
+  assert.ok(
+    gate0Idx < buildPhaseIdx && gate0Idx < versionPhaseIdx && gate0Idx < gate1Idx,
+    `expected GATE 0 (index ${gate0Idx}) to appear BEFORE build (${buildPhaseIdx}), version ` +
+      `(${versionPhaseIdx}), and GATE 1 (${gate1Idx}) — the lane gate must fail fast before any ` +
+      'build/version/publish side effect, so a broken gate wiring can never be published around'
+  );
+});
+
+test('RED-equivalent: the pre-fix source (no GATE 0 at all) is exactly the shape that let a release publish around the lane gate', () => {
+  // Simulates the pre-fix run-release.mjs (scope computation straight to the
+  // build phase, no lane-reachability check) to prove the existence/ordering
+  // assertions above have teeth: a source lacking GATE 0 must fail them.
+  const preFixSource =
+    "if (projectNames.length === 0) { process.exit(0); }\nconst projectsArg = ...;\nconst buildExit = run('build (structural build-first guarantee)', ...);";
+  const gate0Idx = preFixSource.indexOf("run('GATE 0: check-lane-reachability'");
+  const buildPhaseIdx = preFixSource.indexOf("run('build (structural build-first guarantee)'");
+  assert.equal(gate0Idx, -1, 'sanity check: the pre-fix source has no GATE 0 run() call at all');
+  assert.ok(buildPhaseIdx !== -1, 'sanity check: the build phase is present in the simulated pre-fix source');
+});
+
 // --- Step 3.5: publish -> global-CLI sync (sync-global.mjs) ---
 
 test('run-release.mjs: the sync-global run() call (step 3.5) appears AFTER the publish run() call and BEFORE GATE 2 (clean-room-smoke) in source order', () => {
