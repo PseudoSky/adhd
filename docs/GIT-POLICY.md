@@ -82,6 +82,28 @@ Recovery runbook:
 - Before abandoning any worktree, require the work to be committed **and** pushed — recovery
   must not depend on a local, expiring reflog.
 
+## Release
+
+- **Versioning & tag scheme:** there are **no git tags** — the npm registry is the source of
+  truth for what is released. A package version is released iff `name@version` resolves on the
+  registry. Versions are computed per-project and written to each package's `package.json` by the
+  `@adhd/nx-build:version` executor (cited: `PUBLISHING.md` §Workflow; `tools/nx-plugins/build/`).
+- **Changelog / release notes:** the root `CHANGELOG.md` is maintained by hand and committed by
+  the opt-in `pnpm release:commit` step, which stages only bumped `package.json`, `CHANGELOG.md`,
+  and `published-state.json` (cited: `PUBLISHING.md` §Workflow;
+  `DEBT-BUILD-VERSION-NO-AUTOCOMMIT-001`).
+- **Monorepo release coordination:** the workspace is released as one unit by `pnpm release`
+  (`build` → `nx run-many -t version` → `nx run-many -t publish`); the `publish` target runs
+  per-project only when `name@version` is absent from the registry. `published-state.json` at the
+  workspace root records `{version, normalizedHash, publishedIntegrity}` per package and is
+  committed alongside version bumps (cited: root `package.json` `release` script;
+  `PUBLISHING.md` §Workflow).
+- **Rollback:** a bad publish is superseded by publishing a corrected version; the registry is
+  append-only and no git tag or ref is moved by a release (cited: `PUBLISHING.md` §Troubleshooting).
+- **Deploy triggers:** automated publish is driven by the workflows in `.github/workflows/` (cited:
+  `PUBLISHING.md` §CI publish). Pushing and publishing require human approval — silence is not
+  consent (cited: `PUBLISHING.md` §Approval & Authorization; `AGENTS.md` §Rules).
+
 ## Provenance
 
 Schema version 1.
@@ -126,4 +148,12 @@ Schema version 1.
   is `580399a7`; ff-only, within §Branching & merge's "ff-only is not enforced"). No push, no
   publish, and no worktree or branch removed — cleanup is deferred. The staged orphan
   `tools/nx-plugins/build/executors/smoke-test/task-report.mjs` was left byte-identical and
-  staged. This record is the only change to this file.
+   staged. This record is the only change to this file.
+
+- **2026-10-04 — operation record: policy sync, landing adhd ADR-0006.** The equivalence test
+  failed: this file carried Branching & merge, Push & review, Commit convention, Worktree layout,
+  Cleanup, and Provenance, but no Release section. Corrected inside the ADR-0006 landing operation
+  by adding §Release above (versioning/tag scheme, changelog, rollback, deploy triggers, monorepo
+  coordination), each rule cited to `PUBLISHING.md`, root `package.json`, and `.github/workflows/`
+  by path rather than restated. §Release and this record are the changes to this file in this
+  operation.
