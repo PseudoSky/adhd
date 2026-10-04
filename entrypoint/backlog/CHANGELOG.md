@@ -1,3 +1,15 @@
+## 1.0.8 (2026-10-04)
+
+### 🚀 Features
+
+- **backlog:** rewire onto @adhd/sox-telemetry 0.4.1 and prove the six tracing tags on one record ([580399a7](https://github.com/PseudoSky/adhd/commit/580399a7))
+- **apigen-plugin-tracing:** require serviceName and namespace backlog tracing as adhd ([8d18a082](https://github.com/PseudoSky/adhd/commit/8d18a082))
+- **backlog:** tracing is now a required mount consumer of the fastify/MCP/CLI transports ([51e8b7bf](https://github.com/PseudoSky/adhd/commit/51e8b7bf))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 1.0.6 (2026-09-29)
 
 ### 🚀 Features

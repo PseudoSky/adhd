@@ -1,3 +1,13 @@
+## 2.3.8 (2026-10-04)
+
+### 🔥 Performance
+
+- **data-query-engine:** skip no-op sort when order_by is absent/empty (defect 24948077) ([fff48630](https://github.com/PseudoSky/adhd/commit/fff48630))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.7 (2026-10-03)
 
 ### 🚀 Features

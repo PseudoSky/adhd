@@ -246,10 +246,10 @@
     "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
   },
   "@adhd/backlog": {
-    "version": "1.0.7",
-    "normalizedHash": "sha256:7ba0581fdee487ef85f71276e35e59f4c0f173d5aa9f366023a2c9581b03b2d0",
-    "publishedIntegrity": "sha512-wamnaXroyrdH0xBlSZ3WQGVSjF+nKEQiu5P4V3GyMiZF9tqZ4kMrZFpwNUwoLU/U6qXM3EUjIvs19qsFbqLIUw==",
-    "publishedFromRef": "cef52a538a1d1a46a93ff7cd6b33554df6072b62"
+    "version": "1.0.8",
+    "normalizedHash": "sha256:8f1f8217dcebdba0311c5b41ea02631e40b22e1b96d9ece17846898e55a453f5",
+    "publishedIntegrity": "sha512-IF4iushCtC8v7hdvEUlLOmNWN2ntEwkfJoxLiqyPhnP4jnu3eVOJ+a5CN7Pv1yN0M2vnoyc9qaAQnq+2koS7pg==",
+    "publishedFromRef": "ef4f46db77e36555b8a0edf18d767afee08e3b5b"
   },
   "@adhd/data-base-transforms": {
     "version": "2.3.3",
@@ -264,10 +264,10 @@
     "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
   },
   "@adhd/data-query-engine": {
-    "version": "2.3.7",
-    "normalizedHash": "sha256:a2404c229bcefbc2f4d485b84736e8523216b2a1718ca4101ab7681d5f0340b1",
-    "publishedIntegrity": "sha512-FaNC6rHK9YaxwhStFqEsigihFzFvoTWyDugOmbWnFaOqi6c6DXRI6/OrxkrTgyF+2T82j9PoQRhzpIU2Ei9Obw==",
-    "publishedFromRef": "413663facd76aae071ec5ef4608753c646f52fde"
+    "version": "2.3.8",
+    "normalizedHash": "sha256:c417ca9f192e06fa5ab3631581aeac267a33009ff66a8d4662698c8bb434c898",
+    "publishedIntegrity": "sha512-nKdjnufUAvEZMer8dpynrfFUy+z7PDRdh/UWQSm0y7SMLIIDWv4BheGUrGBWzint+7yxwGuRa5/B3XNIfhE4/g==",
+    "publishedFromRef": "ef4f46db77e36555b8a0edf18d767afee08e3b5b"
   },
   "@adhd/decompile-cli": {
     "version": "0.2.4",
