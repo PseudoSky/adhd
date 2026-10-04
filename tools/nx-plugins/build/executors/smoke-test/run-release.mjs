@@ -58,6 +58,16 @@
  *      3.5 (sync-global currency), or step 3 (smoke) failed; it is only 0
  *      when all three succeeded (or had nothing to do).
  *
+ * RECEIPT. After GATE 2, and BEFORE the compound verdict, a release receipt
+ * (task-report.mjs) is printed on EVERY outcome — success or failure — so a
+ * failed release still reports every task it got through. It is sourced from
+ * metrics.json (withMetrics executors only; the report states its own
+ * coverage) and, for each published package, partitions PUBLISHED vs SKIPPED
+ * from the publish executor's own `outcome` field (the `✔ :publish` line is
+ * identical for both, and a registry re-read lags). It is diagnostic: its exit
+ * code does NOT change the verdict (a corrupt metrics log must not fail an
+ * otherwise-good release) and is surfaced as a warning if nonzero.
+ *
  * `release:dry` is DELIBERATELY NOT routed through this runner. A `--dryRun`
  * publish never actually touches the registry (it can't ETARGET, and it
  * can't partially land packages — nx either prints the full "would publish"
@@ -374,6 +384,27 @@ function main() {
     [join(workspaceRoot, 'tools/nx-plugins/build/executors/smoke-test/clean-room-smoke.mjs')]
   );
   const smokeOk = smokeExit === 0;
+
+  // Final phase — the release RECEIPT: every task this run executed, grouped
+  // by task with project + duration, sourced from metrics.json (withMetrics
+  // executors only — nx-native build/test are NOT in it; the report states
+  // its own coverage), plus the per-package PUBLISHED vs SKIPPED partition
+  // from the publish executor's own `outcome` (never a registry re-read, which
+  // lags the publish). Placed AFTER GATE 2 and before the compound verdict so
+  // it runs on EVERY outcome — a FAILED release still reports what it got
+  // through. Its exit code is deliberately NOT folded into the verdict: a
+  // corrupt/unreadable metrics log must not fail an otherwise-good release,
+  // and the report exits 1 ONLY in that case — surfaced as a warning, never
+  // swallowed.
+  const reportExit = run('receipt: release task report (metrics.json)', 'node', [
+    join(workspaceRoot, 'tools/nx-plugins/build/executors/smoke-test/task-report.mjs'),
+  ]);
+  if (reportExit !== 0) {
+    console.error(
+      `run-release: task report could not be produced (metrics.json unreadable/corrupt, exit ${reportExit}) — ` +
+        'release verdict unaffected.'
+    );
+  }
 
   console.error('\nrun-release: ==================== COMPOUND RESULT ====================');
   console.error(`run-release: publish: ${publishOk ? 'OK' : `FAILED (exit ${publishExit})`}`);

@@ -102,6 +102,29 @@ function isAlreadyPublishedError(npmStderrOrStdout) {
 }
 
 /**
+ * Machine-readable outcome of this publish task.
+ *
+ * The nx console line for a real publish and an already-published SKIP are
+ * identical (`✔ :publish`), and the distinction was otherwise only printed as
+ * stderr prose — so a release receipt could not say which packages actually
+ * landed without parsing logs or re-querying the registry (which suffers
+ * read-after-write/packument lag). Every terminal `return` now carries this
+ * object; `withMetrics` persists it on the metrics record (see
+ * `tools/nx-plugins/lib/metrics.js`'s `outcome` handling), and
+ * `task-report.mjs` partitions PUBLISHED vs SKIPPED from it alone.
+ *
+ * @param {'published'|'skipped-already-published'|'dry-run'|'failed'|'refused'} status
+ * @param {{name?: string, version?: string}} [pkg] the package identity, when known
+ * @returns {{status: string, name?: string, version?: string}}
+ */
+function outcome(status, pkg) {
+  const o = { status };
+  if (pkg && pkg.name) o.name = pkg.name;
+  if (pkg && pkg.version) o.version = pkg.version;
+  return o;
+}
+
+/**
  * The commit this publish is shipping FROM, or null if it cannot be
  * determined. ADVISORY METADATA ONLY — see `publishedFromRef` in
  * `writeThroughCache` below for why it must never become authoritative.
@@ -202,7 +225,7 @@ async function run(options, context) {
     const manifestCheck = checkPublishAllowed({ workspaceRoot: context.root, projectName: context.projectName });
     if (!manifestCheck.allowed) {
       console.error(`publish: REFUSED for ${context.projectName} — ${manifestCheck.reason}`);
-      return { success: false };
+      return { success: false, outcome: outcome('refused') };
     }
     if (manifestCheck.forced) {
       console.error(`publish: ${context.projectName} — ${manifestCheck.reason}`);
@@ -215,7 +238,7 @@ async function run(options, context) {
 
     if (!existsSync(distPkgPath)) {
       console.error(`publish: no ${relative(context.root, distPkgPath)} — build + dist-manifest must run first (this target dependsOn them).`);
-      return { success: false };
+      return { success: false, outcome: outcome('failed') };
     }
 
     // BUG-BUILD-PUBLISH-DISTMANIFEST-CLOBBERED-001: re-stamp the dist manifest
@@ -227,7 +250,7 @@ async function run(options, context) {
     const { name, version } = manifest;
     if (!name || !version) {
       console.error(`publish: ${relative(context.root, distPkgPath)} has no name/version.`);
-      return { success: false };
+      return { success: false, outcome: outcome('failed') };
     }
 
     // ZERO-NETWORK existence check: the committed published-state cache.
@@ -235,7 +258,7 @@ async function run(options, context) {
     rec.phase('readState');
     if (cached && cached.version === version) {
       console.error(`publish: ${name}@${version} already on npm (published-state cache hit, zero network) — skipping.`);
-      return { success: true };
+      return { success: true, outcome: outcome('skipped-already-published', { name, version }) };
     }
 
     // DEBT-002 #2: `options.access` (an explicit task-option override) wins
@@ -268,10 +291,10 @@ async function run(options, context) {
       if (isAlreadyPublishedError(res.stderr) || isPublishedLive(name, version, rec)) {
         console.error(`publish: ${name}@${version} already on npm (registry disagreed with a stale cache) — treating as success, reconciling cache.`);
         if (!options.dryRun) await writeThroughCache(context.root, name, version, distDir, workDir, rec);
-        return { success: true };
+        return { success: true, outcome: outcome('skipped-already-published', { name, version }) };
       }
       console.error(`publish: npm publish failed (exit ${res.status}) for ${name}@${version} — nothing published for this package.`);
-      return { success: false };
+      return { success: false, outcome: outcome('failed', { name, version }) };
     }
 
     if (!options.dryRun) {
@@ -289,12 +312,15 @@ async function run(options, context) {
           `"being processed" (HTTP 202) can lag by many minutes; refusing to write published-state.json so this ` +
           `version is retried on the next run rather than being silently withheld and cached as done.`
         );
-        return { success: false };
+        return { success: false, outcome: outcome('failed', { name, version }) };
       }
       await writeThroughCache(context.root, name, version, distDir, workDir, rec);
       console.error(`publish: ${name}@${version} -> published-state.json updated (write-through; version verified over ${verification.attempts} attempt(s)).`);
     }
-    return { success: true };
+    return {
+      success: true,
+      outcome: outcome(options.dryRun ? 'dry-run' : 'published', { name, version }),
+    };
   });
 }
 

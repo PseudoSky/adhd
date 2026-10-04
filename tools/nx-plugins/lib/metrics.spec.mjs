@@ -303,6 +303,7 @@ test('MetricsRecorder.toRecord: shape matches the documented schema', () => {
   assert.equal(record.subprocess.count, 1);
   assert.equal(record.subprocess.byCommand['git log'].count, 1);
   assert.equal(record.network.count, 1);
+  assert.equal('outcome' in record, false, 'no `outcome` field unless the executor supplied one — base schema unchanged');
 });
 
 // ---------------------------------------------------------------------------
@@ -323,6 +324,30 @@ test('withMetrics: runs fn, returns its result, and appends exactly one record',
     assert.equal(records[0].project, '@adhd/x');
     assert.equal(records[0].success, true);
     assert.ok(records[0].durationMs >= 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('withMetrics: a result.outcome is persisted on the record (executor-sourced PUBLISHED vs SKIPPED)', async () => {
+  const root = makeRoot();
+  try {
+    const outcome = { status: 'skipped-already-published', name: '@adhd/pkg-b', version: '1.0.0' };
+    const result = await withMetrics('publish', { root, projectName: 'pkg-b' }, async () => ({ success: true, outcome }));
+    assert.deepEqual(result, { success: true, outcome }, 'withMetrics must return the result UNCHANGED');
+    const { records } = readMetrics(root);
+    assert.deepEqual(records[0].outcome, outcome, 'the executor outcome must be persisted on the metrics record');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('withMetrics: a result with no `outcome` adds no outcome field (base schema unchanged)', async () => {
+  const root = makeRoot();
+  try {
+    await withMetrics('version', { root }, async () => ({ success: true }));
+    const { records } = readMetrics(root);
+    assert.equal('outcome' in records[0], false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

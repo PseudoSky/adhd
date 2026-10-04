@@ -163,6 +163,7 @@ test('cache HIT (already published at this version): ZERO network — skips with
 
     const result = await publishImpl({}, context);
     assert.equal(result.success, true);
+    assert.deepEqual(result.outcome, { status: 'skipped-already-published', name: '@adhd/pkg-b', version: '1.0.0' });
     assert.deepEqual(state.calls, [], 'a cache hit must never invoke npm at all — not even a read');
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
@@ -183,6 +184,7 @@ test('cache MISS (not yet in cache): publishes for real, then write-through upda
     assert.equal(result.success, true);
     const publishCalls = state.calls.filter((c) => c.cmd === 'npm' && c.args[0] === 'publish');
     assert.equal(publishCalls.length, 1, 'a genuine cache miss must actually attempt npm publish');
+    assert.deepEqual(result.outcome, { status: 'published', name: '@adhd/pkg-b', version: '1.0.0' });
     assert.ok(publishCalls[0].args.includes(distDir), 'must publish from the dist dir');
 
     const cached = JSON.parse(readFileSync(publishedStatePath(rootDir), 'utf8'));
@@ -213,6 +215,7 @@ test('"cannot publish over previously published version" is treated as SUCCESS a
 
     const result = await publishImpl({}, context);
     assert.equal(result.success, true, 'must be treated as already-published, not a failure');
+    assert.equal(result.outcome.status, 'skipped-already-published');
     const cached = JSON.parse(readFileSync(publishedStatePath(rootDir), 'utf8'));
     assert.equal(cached['@adhd/pkg-b'].version, '1.0.0', 'must still reconcile the cache from the local dist we attempted to publish');
   } finally {
@@ -231,6 +234,7 @@ test('a REAL publish failure (not the "already published" message) fails the tas
 
     const result = await publishImpl({}, context);
     assert.equal(result.success, false);
+    assert.equal(result.outcome.status, 'failed');
     assert.equal(existsSync(publishedStatePath(rootDir)), false, 'a real failure must never write a (wrong) cache entry');
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
@@ -248,6 +252,7 @@ test('--dryRun: never writes the cache, even on a "successful" (dry) npm publish
 
     const result = await publishImpl({ dryRun: true }, context);
     assert.equal(result.success, true);
+    assert.equal(result.outcome.status, 'dry-run');
     const publishCalls = state.calls.filter((c) => c.cmd === 'npm' && c.args[0] === 'publish');
     assert.ok(publishCalls[0].args.includes('--dry-run'));
     assert.equal(existsSync(publishedStatePath(rootDir)), false, 'a dry run must never write published-state.json');

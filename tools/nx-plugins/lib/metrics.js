@@ -134,6 +134,16 @@ class MetricsRecorder {
     this.subprocessByCommand = {};
     this.networkCount = 0;
     this.networkCalls = [];
+    /**
+     * Optional machine-readable executor outcome (e.g. the `publish` task's
+     * `'published'` vs `'skipped-already-published'`). NOT part of the base
+     * record shape: an executor that puts `outcome` on its returned result
+     * has it persisted here by `withMetrics`; every executor that doesn't is
+     * unchanged. This is what lets a release report partition per package
+     * from the executor's own signal instead of parsing stderr.
+     * @type {object|null}
+     */
+    this.outcome = null;
   }
 
   /**
@@ -231,7 +241,7 @@ class MetricsRecorder {
     for (const key of Object.keys(this.subprocessByCommand)) {
       this.subprocessByCommand[key].ms = round(this.subprocessByCommand[key].ms);
     }
-    return {
+    const record = {
       task: this.taskName,
       project: this.project,
       t: new Date().toISOString(),
@@ -246,6 +256,11 @@ class MetricsRecorder {
       },
       network: { count: this.networkCount, calls: this.networkCalls },
     };
+    // Persist the optional executor-supplied outcome only when present, so the
+    // base record schema is byte-for-byte unchanged for every executor that
+    // does not supply one.
+    if (this.outcome != null) record.outcome = this.outcome;
+    return record;
   }
 }
 
@@ -293,7 +308,11 @@ function checkCpuGuard(taskName, context, cpuPercent) {
  * `fn(rec)` receives a fresh {@link MetricsRecorder} and must return (or
  * resolve to) the executor's normal result (`{success: boolean}`). Success is
  * inferred from that result's `.success` field when present, else from
- * whether `fn` threw.
+ * whether `fn` threw. If the result also carries an `outcome` field, it is
+ * persisted verbatim on the metrics record (see
+ * {@link MetricsRecorder}'s `outcome`) — the escape hatch that lets a report
+ * distinguish e.g. publish's `'published'` from `'skipped-already-published'`
+ * without parsing stderr.
  *
  * Set `ADHD_NX_METRICS=0` to disable recording entirely (still runs `fn`
  * normally — a pure escape hatch, never required for correctness).
@@ -332,6 +351,10 @@ async function withMetrics(taskName, context, fn) {
   try {
     const result = await fn(rec);
     success = result && typeof result === 'object' && 'success' in result ? !!result.success : true;
+    // A result may carry a machine-readable `outcome` (e.g. publish's
+    // 'published' vs 'skipped-already-published'); persist it on the record.
+    // The result object itself is returned UNCHANGED — this only reads it.
+    if (result && typeof result === 'object' && 'outcome' in result) rec.outcome = result.outcome;
     rec.measureCpuPercent(performance.now() - overallStart);
     // The guard runs even when ADHD_NX_METRICS=0 disables recording — it's
     // a correctness check on the task, not part of the perf log.

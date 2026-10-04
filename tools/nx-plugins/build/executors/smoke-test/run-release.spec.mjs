@@ -383,3 +383,49 @@ test('RED-equivalent: a sync-global step placed BEFORE publish (or missing entir
   assert.ok(publishIdx !== -1 && syncIdx !== -1 && gate2Idx !== -1, 'sanity check: all three phases present in the simulation');
   assert.ok(syncIdx < publishIdx, 'sanity check: the simulated pre-fix source has sync BEFORE publish');
 });
+
+// --- Release receipt: report every task the run executed (task-report.mjs) ---
+
+test('run-release.mjs: a labeled receipt run() call exists, invoking task-report.mjs via node', () => {
+  // The receipt is the per-task, per-package report the release was missing:
+  // today run-release prints only the compound verdict and never durations.
+  assert.match(
+    source,
+    /run\(\s*'receipt: release task report \(metrics\.json\)'\s*,\s*'node'\s*,\s*\[\s*join\(workspaceRoot,\s*'tools\/nx-plugins\/build\/executors\/smoke-test\/task-report\.mjs'\)\s*,?\s*\]\s*\)/,
+    'expected a run() call labeled "receipt: release task report (metrics.json)" invoking ' +
+      'tools/nx-plugins/build/executors/smoke-test/task-report.mjs via node'
+  );
+});
+
+test('run-release.mjs: the receipt run() call appears AFTER GATE 2 (clean-room-smoke) in source order', () => {
+  const gate2Idx = source.indexOf("run(\n    'GATE 2: clean-room-smoke'");
+  const receiptIdx = source.indexOf("run('receipt: release task report (metrics.json)'");
+  assert.ok(gate2Idx !== -1, 'expected to find the GATE 2 run() call');
+  assert.ok(receiptIdx !== -1, 'expected to find the labeled receipt run() call');
+  assert.ok(
+    receiptIdx > gate2Idx,
+    `expected the receipt (index ${receiptIdx}) to appear AFTER GATE 2 (index ${gate2Idx}) — it must run as ` +
+      'the final phase, on every outcome (success or failure), so a failed release still reports what it got through'
+  );
+});
+
+test('run-release.mjs: the receipt exit code is captured for a warning and does NOT feed the release verdict', () => {
+  // It is diagnostic: a corrupt/unreadable metrics log must not fail an
+  // otherwise-good release, so reportExit is checked with a warning, never
+  // folded into publishOk/smokeOk/syncOk.
+  assert.match(
+    source,
+    /const reportExit = run\(\s*'receipt:[\s\S]*?if \(reportExit !== 0\) \{/,
+    'expected the receipt exit code to be captured as `reportExit` and guarded with an `if (reportExit !== 0)` warning'
+  );
+  assert.ok(
+    !/publishOk && smokeOk && syncOk && reportOk/.test(source),
+    'the receipt must NOT become a fourth verdict input — it is diagnostic only'
+  );
+});
+
+test('RED-equivalent: the pre-receipt source (go straight from smoke to the compound verdict) is exactly the shape that printed no per-task report', () => {
+  const preFixSource = "const smokeOk = smokeExit === 0;\nconsole.error('COMPOUND RESULT');";
+  assert.equal(preFixSource.indexOf('receipt: release task report'), -1, 'sanity: the pre-fix shape has no receipt phase at all');
+  assert.ok(preFixSource.includes('COMPOUND RESULT'), 'sanity: it goes straight to the verdict');
+});
