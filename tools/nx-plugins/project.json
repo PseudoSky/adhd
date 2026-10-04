@@ -1,0 +1,28 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "@adhd/nx-plugins",
+  "projectType": "library",
+  "root": "tools/nx-plugins",
+  "implicitDependencies": [
+    "@adhd/nx-assets",
+    "@adhd/nx-build",
+    "@adhd/nx-deps",
+    "@adhd/nx-mass-delete-guard",
+    "@adhd/nx-secret-scan",
+    "@adhd/nx-test"
+  ],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "dependsOn": [],
+      "options": {
+        "command": "pnpm run test:build-tools",
+        "cwd": "."
+      },
+      "metadata": {
+        "description": "Runs the repo's existing `test:build-tools` suite (root package.json — reused verbatim, never forked) so the build/release-tooling specs, including the release pipeline's own, are covered by `nx affected -t test`. This project exists only to give the package.json-less `tools/nx-plugins/` tree a first-class nx identity: the six `@adhd/nx-*` sub-packages under it are separate workspace projects by longest-root-prefix, so the umbrella declares them as `implicitDependencies` to become affected whenever the build tooling changes. Deliberately uncached: the suite validates repo-wide build/release wiring and reads files owned by other projects (`.github/workflows/**`, `entrypoint/backlog/**`), so no exhaustive content-hash cache key exists and caching could report a stale green. Deliberately has no cross-target `dependsOn`: the umbrella is package.json-less, so the `lint`/`sync-deps-check` targets that targetDefaults expect do not exist here."
+      }
+    }
+  }
+}
