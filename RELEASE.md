@@ -3,6 +3,8 @@
 > **Status:** Pre-release draft — the changes below are committed to `main` but not yet published
 > as a tagged release. See [CHANGELOG.md](./CHANGELOG.md) for the full line-by-line record.
 
+> Pipeline definition (commit → published artifact): [docs/PIPELINE.md](./docs/PIPELINE.md).
+
 **54 packages published to npm** across 7 domains (agent, apigen, backlog, data, dispatch, environment, workspace). **42 shipped capabilities** verified, 1 roadmap, 1 deprecated. **All 54 published packages** now have capability documentation.
 
 ---

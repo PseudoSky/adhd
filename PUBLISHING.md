@@ -2,6 +2,8 @@
 
 How to version, build, and publish packages in this monorepo to npm.
 
+> Pipeline definition (build graph, CI/CD stages, caching, secrets, budgets, provenance): [docs/PIPELINE.md](./docs/PIPELINE.md).
+
 **This workflow does NOT use `nx release`** (see "Workflow" below — it's retired for this repo). Versioning and publishing are normal per-project **nx tasks** backed by custom executors (`@adhd/nx-build:version` / `@adhd/nx-build:publish`), driven by one command: `pnpm release`. The **npm registry is the source of truth** for what's released — no git tags, no `nx release` commit/tag side effects.
 
 ### Build & publish layout: in-source dist, **publish-from-dist**
