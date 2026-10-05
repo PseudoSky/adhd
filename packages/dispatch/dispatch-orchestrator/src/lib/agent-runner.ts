@@ -301,6 +301,16 @@ export interface AgentMcpRunnerConfig {
    * milestone, not this one.
    */
   clientFactory?: () => IMcpToolClient;
+  /**
+   * Default `mcpServers` sent on `agent_create` (backlog daafe2d3). When set,
+   * every agent this runner CREATES is born with these servers — so a
+   * dispatched agent can recall prior findings (memory-server) and read/write
+   * backlog items (backlog) without a per-DAG opt-in. Wire-shaped
+   * (transport-discriminated), the same JSON `agent_create` accepts. Omitted
+   * ⇒ `{}` (the pre-fix behavior). The host supplies the concrete,
+   * environment-appropriate entries.
+   */
+  defaultMcpServers?: Record<string, Record<string, unknown>>;
 }
 
 function defaultClientFactory(
@@ -334,11 +344,13 @@ function defaultClientFactory(
  */
 export class AgentMcpRunner implements IDispatchAgentRunner {
   private readonly makeClient: () => IMcpToolClient;
+  private readonly defaultMcpServers: Record<string, Record<string, unknown>>;
   private client: IMcpToolClient | null = null;
   private connecting: Promise<IMcpToolClient> | null = null;
 
   constructor(config: AgentMcpRunnerConfig) {
     this.makeClient = config.clientFactory ?? defaultClientFactory(config);
+    this.defaultMcpServers = config.defaultMcpServers ?? {};
   }
 
   private async getClient(): Promise<IMcpToolClient> {
@@ -387,15 +399,16 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
       }
     }
 
-    // The `mcpServers: {}` fallback is deliberate — see dag.json
-    // milestones["agent-runner"] description (BL-105): claudecli agents need
-    // no MCP servers, so this bypasses the mcp_servers: null catalog-lookup
-    // stub (PoC compiler.ts:1788) that would otherwise block e2e.
+    // `defaultMcpServers` is the runner's configured default set (backlog
+    // daafe2d3): the host injects memory-server + backlog so a dispatch-created
+    // agent can recall prior findings and read/write backlog items out of the
+    // box. Omitted ⇒ `{}` — the pre-fix behavior, which also keeps the
+    // `mcp_servers: null` catalog-lookup stub (PoC compiler.ts:1788) bypassed.
     await this.callTool('agent_create', {
       name: unit.agent_name,
       provider: toAgentMcpProviderConfig(unit.provider),
       systemPrompt: unit.systemPrompt ?? undefined,
-      mcpServers: {},
+      mcpServers: this.defaultMcpServers,
     });
   }
 
