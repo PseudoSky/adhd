@@ -173,3 +173,22 @@ Schema version 1.
   `docs(adr):`), a convention the stated "scope = library/package name" rule omitted. Committed
   with explicit paths (never `git add -A`/`.`/`-a`); not pushed. This §Commit convention correction
   and this record are the changes to this file in this operation.
+
+- **2026-10-04 — operation record: land of `feat/bucket-d-multisurface-reconcile` (dispatch-2026-10-04-9c4e).**
+  Landed bucket D onto `main` as a **merge commit** `a98429d9` (parents `9b8b580a` = pre-merge
+  `main`, `fd19fe16` = D head), moving `main` `9b8b580a` → `a98429d9`; 9 files, +1616 lines.
+  §Branching & merge was the deciding rule: this history "carries true merge commits" and ff-only is
+  not enforced, while rebase-in-flight is permitted only on a branch "solely your own" — D is an
+  in-flight executor branch, not the operator's, so rewriting its 5 commits (`1bcc147d`..`fd19fe16`)
+  was out; a merge commit is the stated shape here. Dry-run `git merge-tree --write-tree --name-only
+  main fd19fe16` exited 0 with no conflict hunks; the actual merge was conflict-free (the only
+  shared directory with merged bucket A is `entrypoint/agent-mcp/src/__tests__/`, and A and D added
+  distinct filenames there; A did not touch `entrypoint/agent-mcp/package.json`, so D's
+  `agent-mcp-follow` bin insertion applied cleanly). Post-merge `git rev-list --count main..fd19fe16`
+  = 0 and `git merge-base --is-ancestor fd19fe16 main` exits 0, so all 5 D commits are contained.
+  A concurrent agent's uncommitted work was present in the working tree throughout
+  (`entrypoint/agent-mcp/src/store/agent-store.ts`, `packages/agent/agent-core-env/src/{index.ts,
+  sqlite-locking.ts}` modified; two untracked test fixtures) and was neither staged, swept, nor
+  modified — the merge touched none of those paths. No push, no branch or worktree removed, no gates
+  run (the post-merge review runs the suite). This record is the only change to this file in this
+  operation. Recorded under §Commit convention's `docs(<area>):` scope.
