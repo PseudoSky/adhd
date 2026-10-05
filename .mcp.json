@@ -6,7 +6,10 @@
       "args": ["-y", "@adhd/agent-mcp@latest"],
       "env": {
         "ADHD_AGENT_DATABASE_PATH": "/Users/nix/.adhd/agent-mcp/agents.db",
-        "ADHD_AGENT_REGISTRY_DB_PATH": "/Users/nix/.adhd/agent-mcp/registry.db"
+        "ADHD_AGENT_REGISTRY_DB_PATH": "/Users/nix/.adhd/agent-mcp/registry.db",
+        "ADHD_AGENT_ANTHROPIC_SECRET": "${ADHD_AGENT_ANTHROPIC_SECRET}",
+        "ADHD_AGENT_OPENAI_SECRET": "${ADHD_AGENT_OPENAI_SECRET}",
+        "ADHD_AGENT_DEEPSEEK_SECRET": "${ADHD_AGENT_DEEPSEEK_SECRET}"
       }
     },
     "backlog": {

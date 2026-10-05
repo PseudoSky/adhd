@@ -3,6 +3,31 @@ import os from "node:os";
 import { config as dotenvConfig } from "dotenv";
 
 /**
+ * Blank provider-secret env values are treated as UNSET before the hierarchy
+ * is loaded.
+ *
+ * Rationale (backlog 307a36c1): an MCP host that forwards a secret it does not
+ * have (e.g. `.mcp.json`'s `"ADHD_AGENT_ANTHROPIC_SECRET": "${...}"` with the
+ * var unset in the shell) sets it to the EMPTY STRING. `dotenv` never overrides
+ * an already-defined key, so that empty value would shadow a real secret sitting
+ * in `~/.adhd/.env` — turning the forwarding change into a silent regression for
+ * every user who relies on the `.env` cascade. Clearing empty `*_SECRET` values
+ * first lets the file hierarchy fill them, while a genuinely-empty secret stays
+ * meaningless (falsy) either way.
+ *
+ * Exported for direct unit-testing.
+ */
+export function clearEmptyProviderSecrets(
+    env: NodeJS.ProcessEnv = process.env
+): void {
+    for (const key of Object.keys(env)) {
+        if (env[key] === "" && /^ADHD_AGENT_.*_SECRET$/.test(key)) {
+            delete env[key];
+        }
+    }
+}
+
+/**
  * Load the `.env` hierarchy into `process.env` with most-specific wins:
  *
  *   1. `<cwd>/.env`            (highest precedence)
@@ -37,6 +62,8 @@ import { config as dotenvConfig } from "dotenv";
  * user-facing docs already reference.
  */
 export function loadEnvHierarchy(cwd: string = process.cwd()): void {
+    // Blank-out empty forwarded secrets so they cannot shadow a real file value.
+    clearEmptyProviderSecrets();
     // 3. ~/.adhd/.env — lowest precedence, load first without override flag so
     //    POSIX vars already in process.env (PATH, HOME, …) are not disturbed.
     dotenvConfig({ path: path.join(os.homedir(), ".adhd", ".env") });
