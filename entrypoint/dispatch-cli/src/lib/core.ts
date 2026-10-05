@@ -49,6 +49,7 @@ import {
   pollUntilTerminal,
   type CycleResult,
   type IDispatchAgentRunner,
+  type IMcpToolClient,
   type OrchestratorDeps,
   type PollConfig,
 } from '@adhd/dispatch-orchestrator';
@@ -233,8 +234,23 @@ export function defaultDispatchMcpServers(
  *   - `ADHD_DISPATCH_AGENT_MCP_ARGS`    (whitespace-separated; default
  *     `-y @adhd/agent-mcp`)
  */
+export interface ProductionRunnerOverrides {
+  /** Test seam: inject the MCP client instead of spawning `command`/`args`. */
+  clientFactory?: () => IMcpToolClient;
+  /**
+   * No-auto-create override (backlog f1dbd0f2). Defaults to `false` for the
+   * dispatch host: a DAG's `agent` field names an operator-owned agent, and a
+   * missing one (e.g. a persona since `agent_delete`d) must FAIL the run rather
+   * than be silently re-created with an empty/default systemPrompt. `calibrate`
+   * opts back in with `true` — it mints a synthetic null-task agent that never
+   * pre-exists.
+   */
+  createAgentsIfMissing?: boolean;
+}
+
 export function buildProductionAgentMcpRunner(
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  overrides: ProductionRunnerOverrides = {}
 ): AgentMcpRunner {
   const command = env['ADHD_DISPATCH_AGENT_MCP_COMMAND'] ?? 'npx';
   const args = env['ADHD_DISPATCH_AGENT_MCP_ARGS']
@@ -244,6 +260,10 @@ export function buildProductionAgentMcpRunner(
     command,
     args,
     defaultMcpServers: defaultDispatchMcpServers(env),
+    // DAG-named agents must already exist (f1dbd0f2): never silently
+    // (re)create a missing/deleted persona. `calibrate` overrides this.
+    createAgentsIfMissing: overrides.createAgentsIfMissing ?? false,
+    ...(overrides.clientFactory ? { clientFactory: overrides.clientFactory } : {}),
   });
 }
 

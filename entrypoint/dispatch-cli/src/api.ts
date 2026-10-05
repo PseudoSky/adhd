@@ -194,7 +194,14 @@ export async function run(
  *   runtime — any other value throws).
  */
 export async function calibrate(modelTier: string): Promise<CalibrationResult> {
-  return calibrateCore(modelTier, () => buildProductionAgentMcpRunner(), DEFAULT_CALIBRATION_PATH);
+  // Calibration mints a synthetic null-task agent (`dispatch-cli-calibration-*`)
+  // that is never registered, so it must opt INTO create-if-missing (backlog
+  // f1dbd0f2). A DAG dispatch, by contrast, must NOT auto-create its agents.
+  return calibrateCore(
+    modelTier,
+    () => buildProductionAgentMcpRunner(process.env, { createAgentsIfMissing: true }),
+    DEFAULT_CALIBRATION_PATH
+  );
 }
 
 /**

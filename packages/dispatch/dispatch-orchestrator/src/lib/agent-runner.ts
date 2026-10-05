@@ -131,6 +131,11 @@ export interface IDispatchAgentRunner {
    * Idempotently ensures `unit.agent_name` exists as an agent-mcp agent
    * definition: `agent_read` by name; on `AGENT_NOT_FOUND`, `agent_create`
    * with `{ name, provider: { type: 'claudecli' }, systemPrompt, mcpServers: {} }`.
+   *
+   * When the runner is configured `createAgentsIfMissing:false` (backlog
+   * f1dbd0f2), a miss throws `AGENT_NOT_FOUND` instead of creating — the mode
+   * that makes a DAG naming a DELETED persona fail rather than silently run a
+   * different (re-created, empty) agent.
    */
   ensureAgent(unit: DispatchUnit): Promise<void>;
   /**
@@ -334,6 +339,20 @@ export interface AgentMcpRunnerConfig {
    * environment-appropriate entries.
    */
   defaultMcpServers?: Record<string, Record<string, unknown>>;
+  /**
+   * No-auto-create mode (backlog f1dbd0f2). `true` (default) preserves the
+   * pre-existing behavior: `ensureAgent` `agent_create`s an agent that is
+   * `AGENT_NOT_FOUND`. `false` makes a DAG-named agent that is missing an
+   * ERROR (`AGENT_NOT_FOUND`, no create) — so a milestone naming a persona
+   * that was imported then `agent_delete`d fails the run instead of being
+   * silently re-created with an empty/default systemPrompt.
+   *
+   * The production dispatch host sets `false` (a DAG's `agent` field names an
+   * agent the operator owns); callers that intentionally mint a synthetic
+   * agent (e.g. `dispatch-cli calibrate`'s null-task agent) opt back in with
+   * `true`.
+   */
+  createAgentsIfMissing?: boolean;
 }
 
 function defaultClientFactory(
@@ -369,12 +388,14 @@ function defaultClientFactory(
 export class AgentMcpRunner implements IDispatchAgentRunner {
   private readonly makeClient: () => IMcpToolClient;
   private readonly defaultMcpServers: Record<string, Record<string, unknown>>;
+  private readonly createAgentsIfMissing: boolean;
   private client: IMcpToolClient | null = null;
   private connecting: Promise<IMcpToolClient> | null = null;
 
   constructor(config: AgentMcpRunnerConfig) {
     this.makeClient = config.clientFactory ?? defaultClientFactory(config);
     this.defaultMcpServers = config.defaultMcpServers ?? {};
+    this.createAgentsIfMissing = config.createAgentsIfMissing ?? true;
   }
 
   private async getClient(): Promise<IMcpToolClient> {
@@ -428,6 +449,19 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
       if (!(err instanceof AgentMcpToolError) || err.code !== 'AGENT_NOT_FOUND') {
         throw err;
       }
+    }
+
+    // No-auto-create mode (backlog f1dbd0f2): a DAG-named agent that is absent
+    // must FAIL, never be silently (re)created with a default systemPrompt.
+    // A persona imported then `agent_delete`d therefore fails the run
+    // (AGENT_NOT_FOUND) instead of quietly becoming a different agent.
+    if (!this.createAgentsIfMissing) {
+      throw new AgentMcpToolError(
+        'AGENT_NOT_FOUND',
+        `Agent '${unit.agent_name}' does not exist and createAgentsIfMissing is false — ` +
+          `a DAG/milestone may only name agents that already exist in the registry ` +
+          `(backlog f1dbd0f2)`
+      );
     }
 
     // `defaultMcpServers` is the runner's configured default set (backlog

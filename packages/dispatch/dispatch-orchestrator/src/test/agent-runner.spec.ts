@@ -213,6 +213,52 @@ describe('AgentMcpRunner', () => {
       });
       expect(client.calls.map((c) => c.name)).toEqual(['agent_read']);
     });
+
+    // f1dbd0f2 — a DAG milestone naming a DELETED persona must fail, never be
+    // silently re-created with an empty/default systemPrompt.
+    it('createAgentsIfMissing:false throws AGENT_NOT_FOUND and never calls agent_create (f1dbd0f2)', async () => {
+      const client = new FakeMcpToolClient({
+        agent_read: () =>
+          mcpError('AGENT_NOT_FOUND', "Agent 'deleted-persona' not found"),
+      });
+      const runner = new AgentMcpRunner({
+        command: 'unused-in-test',
+        clientFactory: () => client,
+        createAgentsIfMissing: false,
+      });
+
+      await expect(
+        runner.ensureAgent(makeUnit({ agent_name: 'deleted-persona' }))
+      ).rejects.toMatchObject({ code: 'AGENT_NOT_FOUND' });
+
+      // AC1: the create call count is 0 — no silent re-creation.
+      expect(client.calls.map((c) => c.name)).toEqual(['agent_read']);
+    });
+
+    it('createAgentsIfMissing:true explicitly keeps the create-if-missing path (f1dbd0f2 AC3)', async () => {
+      const client = new FakeMcpToolClient({
+        agent_read: () =>
+          mcpError('AGENT_NOT_FOUND', "Agent 'calibration-agent' not found"),
+        agent_create: (args) => ({
+          ...args,
+          version: 1,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        }),
+      });
+      const runner = new AgentMcpRunner({
+        command: 'unused-in-test',
+        clientFactory: () => client,
+        createAgentsIfMissing: true,
+      });
+
+      await runner.ensureAgent(makeUnit({ agent_name: 'calibration-agent' }));
+
+      expect(client.calls.map((c) => c.name)).toEqual([
+        'agent_read',
+        'agent_create',
+      ]);
+    });
   });
 
   describe('fire', () => {
