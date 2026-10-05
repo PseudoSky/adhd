@@ -4,13 +4,13 @@
 **Source of truth:** the 49 reconciled clusters in `tmp/backlog-consolidation/clusters/reconciled.json`; cluster→card-uid map in `tmp/backlog-consolidation/clusters/cluster-card-map.json`.
 **Machine mapping:** `docs/plan/backlog-consolidation/spec-set-mapping.json`.
 
-**Mapping sum (one line):** 49 clusters → **10 specs** (47 clusters absorbed) **+ 2 deferred** (`adr-0005-policy`, `project-config-surface`); 47 + 2 = 49. Of the 27 unclustered survivors, 26 attach to a spec by home cluster and 1 (`eec45b05`) is deferred.
+**Mapping sum (one line):** 49 clusters → **12 specs** (47 clusters absorbed) **+ 2 deferred** (`adr-0005-policy`, `project-config-surface`); 47 + 2 = 49. Of the 27 unclustered survivors, 26 attach to a spec by home cluster and 1 (`eec45b05`) is deferred. The two owner-mandated additions — **S11** (Session & reservation timeline) and **S12** (Expected-state revision) — absorb owner-set items (`46cf1086`/`91a8c640`; the state-revision research), not reconciled clusters, so the 47-absorbed + 2-deferred cluster math is unchanged.
 
-**Reading the fields.** Each spec carries: id + imperative title; root problem (P-1..P-8, plan §9.1); the cluster keys/uids it absorbs; its design-corpus anchor (C1–C10 / FOUNDATION `69632883`); concrete write-scope; 2–6 binary observable acceptance criteria; dependencies / gating order; classification (additive-safe-now vs breaking); executor class. `REM:` marks a cluster that is *remodeled-by* a design item and therefore **deferred-until** that anchor lands — it is budgeted inside its owning spec but must not be implemented ahead of the gate (`reconciliation-plan.md` §8).
+**Reading the fields.** Each spec carries: id + imperative title; root problem (P-1..P-8, plan §9.1); the cluster keys/uids it absorbs; its design-corpus anchor (C1–C10 / FOUNDATION `69632883`); concrete write-scope; 2–13 binary observable acceptance criteria (owner-set extensions included); dependencies / gating order; classification (additive-safe-now vs breaking); executor class. `REM:` marks a cluster that is *remodeled-by* a design item and therefore **deferred-until** that anchor lands — it is budgeted inside its owning spec but must not be implemented ahead of the gate (`reconciliation-plan.md` §8).
 
 **Ordering principle.** Foundational-safe-now first (S01, S07, S08, S09, S10 have no target-ADR gate). Everything the target ADR would remodel is marked `dependent/deferred-until-<gating uid>` and is never a standalone implementation. Gate chain the plan fixed: FOUNDATION `69632883` → target ADR (Bucket E, `backlog-interface-target.md`) → C1/C8/C9/C3/C10/C2.
 
-**Spec index (10).**
+**Spec index (12).**
 
 | id | title | problem | anchor | clusters | class | executor |
 |----|-------|---------|--------|----------|-------|----------|
@@ -24,6 +24,8 @@
 | S08 | Guarantee shipped artifacts match source | P-6 | — (foundational) | 9 | additive-safe-now | devops + typescript |
 | S09 | Give runtime services a durable lifecycle & truthful telemetry | P-7 | — (foundational) | 4 | additive-safe-now | backend |
 | S10 | Make process & tooling self-enforcing | P-8 | — (foundational) | 8 | additive-safe-now | devops + doc-steward |
+| S11 | Session & reservation timeline | P-2 | — (owner-mandated) | — | additive | backend |
+| S12 | Expected-state revision | P-2 | — (owner-mandated) | — | additive | backend |
 
 ---
 
@@ -53,6 +55,15 @@
   2. A merge writes one `Redirect` row and soft-retires the source; the source uid still resolves to the chain head — no hard delete, addressability preserved.
   3. Cross-project dedupe never auto-links: default scope `same-project`; `link-duplicate {sourceUid,targetUid,by,reason}` requires explicit inputs; a `duplicates` read returns candidate clusters with provenance.
   4. Every uid-taking verb resolves through the SUPERSEDES/Redirect chain (resolution invariant holds across the surface).
+  5. **S02.C1 — citation verifies EXISTS (breaking):** a citation to an existing out-of-root / worktree-only / non-file locator is accepted as an assertion; `computeCitationSha` records it (verified or `unverified-with-reason`). `create` does **not** throw `CitationUnverifiableError` merely because the target is outside the project root. *Drops the membership test (`citationAllowedExternalRoots=[]`); keeps the existence test.*
+  6. **S02.C2 — never drop, never abort:** an unverifiable citation is persisted `unverified-with-reason`; the write neither silently omits it nor aborts. *Closes the measured hole where the only workaround is to omit citations and the write still reports success (violating invariant `4531b816`).*
+  7. **S02.C3 — anchor kinds:** `url:`, `registry:`, `query:` anchors are accepted and recorded with a verification outcome (not hard-`unverified`).
+  8. **S02.C4 — project-identity de-dup:** the duplicate identities (`adhd` 7ee5721e vs `PseudoSky/adhd`; `sox-ecosystem` a1e8f31c vs `PseudoSky/sox-ecosystem` 6b7c7d3c vs `PseudoSky/sox` 6d647bf6; `dot` 912e1cc5 vs `id8/dot` 9a6e706a; `claude-agents` e82f9cd4 vs `PseudoSky/claude-agents` 7176401f) reconcile to one canonical identity with a recorded merge; `query view:projects` returns each project once.
+  9. **S02.T1 — reason enum:** `adhd-backlog transition` to `SUPERSEDED` requires a `reason` from a closed enum covering the ≥5 conflated meanings (`v1-to-v2-premise-deletion`, `imported-never-transitioned`, `deliberate-plan-retirement`, `status-token-correction`, `obsolete-by-obsolescence`); a reasonless transition is a typed error.
+  10. **S02.T2 — traversable successor:** the successor is recorded as a `relate rel:'supersedes'` edge (retired→replacement), not auditTrail prose, so cascade-scan reaches it.
+  11. **S02.T3 — backfill the 15:** the ~15 imported-SUPERSEDED nodes (e.g. `21a76386`, `04c6978f`, `86fd0ab9`, …) are backfilled with a recorded reason; `query --input '{"filter":{"status":"SUPERSEDED"}}'` returns each node with a reason and a successor-or-none.
+  12. **S02.S2 — joins (n:m + distinguished primary owner):** an issue has many-to-many `issue↔component↔project` derived from citations + explicit edges, with a **distinguished primary owner** retained for routing/ACL. *Binary:* an issue citing evidence in 2 components across 2 projects returns both sets from a spanning query and reports exactly one primary owner.
+  13. **S02.H45 — hard rules #4/#5 discharged:** citation verification is not project-root-scoped (#4), and out-of-repo / worktree-only / non-file evidence is never refused or silently dropped (#5). *Binary:* a worktree-only path and a non-file locator are accepted and recorded; neither `create` refusal nor silent omission occurs. (This is the highest-leverage blocker per the plan; #4/#5 are the write-gate consequence of C1/C2.)
 - **Dependencies / gating:** gate = target ADR (`backlog-interface-target.md`) approval of D3a/D3c. **Breaking** — canonical identity resolution changes behavior across every uid-taking verb: `OWNER SIGN-OFF REQUIRED`, inert until a superseding ADR of ADR-0006 is authored at ship. No code in this spec ships before that.
 - **Classification:** **breaking** (sign-off gated).
 - **Executor:** backend.
@@ -68,6 +79,7 @@
   2. A `direction:"desc"` order request returns descending order (D3 `9a95be96` fixed); derived reads carry `score_kind` (`rrf|bm25|cosine|rank`).
   3. `view:"order"` scopes to every member kind the filter selects (not just `issue`) and includes outbound `blocks` + a dependent count; a second `part_of` returns a typed error naming the existing parent.
   4. The C1-contradiction is closed one way in the target ADR: either `related` returns every live relation (wide variant) and the stale comment is deleted, **or** the enumerated three are declared authoritative and the stale comment is deleted. Either way the two sources no longer disagree.
+  5. **S03.S4 — read surface renders joins:** the default card (`view:'list'` and `get`) renders project/component **sets**, and a component/project-spanning query exists. *Binary:* a default-card read of a multi-project issue shows the joined project/component sets. *Closes `7ed3ac0e` (default card omits project/component).*
 - **Dependencies / gating:** gate = target ADR D4e decision. Narrow variant needs no sign-off; **wide `related` is behavior-visible → `OWNER SIGN-OFF REQUIRED`**.
 - **Classification:** additive (narrow variant); breaking if the wide variant is chosen.
 - **Executor:** typescript.
@@ -83,6 +95,7 @@
   2. A `SPEC` item is a queryable store citizen, `part_of` a work item; its export reads back with `revision` + anchor digest and reports `verified|drifted|gone`.
   3. B1 closed: a `get` optional input field (or additive `spec-get`) returns the revision fragment, not just the pointer.
   4. B2 closed: a `query` filter/projection (e.g. `byCitationPath`) returns which items cite a given path.
+  5. **S04.S3 — citations-as-assertions (tracked once with `050ea18f`):** split "exists/locatable" (keep, hard) from "within project root" (drop); support `url:`/`registry:`/`query:`; never silently drop. *Binary:* an out-of-root existing locator verifies-as-exists; a nonexistent locator is rejected; each abstract anchor is recorded with its outcome; no write silently omits a citation. (Same implementation surface as `050ea18f`; tracked once, cited here.)
 - **Dependencies / gating:** **depends on S01** (attestation kind + `attests` edge). Gate = target ADR. Additive.
 - **Classification:** additive-safe-now *once S01 lands*.
 - **Executor:** backend (+ doc-steward for SPEC/DATA_MODEL wording).
@@ -113,6 +126,7 @@
   2. Every doc that hand-copies the verb/enum surface is regenerated from the catalog; a drift check fails on divergence (cluster 20).
   3. Vocabulary cleanup either done or explicitly deferred with sign-off: `kind:EPIC` retired, `bug`/`BUG` reconciled, `undefined`/`MEDIUM` removed.
   4. Defect D2 `73d3b97d` repaired: ADR-0006 records `ambiguous_reference` among the ten codes and no longer invents an `update` status (non-decision correction, doc-steward).
+  5. **S06.S6 — correct the docs/model:** `entrypoint/backlog/SPEC.md:328` ("A location belongs to exactly one component; a component to exactly one project."), `entrypoint/backlog/DATA_MODEL.md:330-334`, and the skill's component-as-path model (`entrypoint/backlog/skill/SKILL.md:392`) are corrected; a doc-drift check fails if the 1:1 sentence reappears. *Closes `a1e69b2d`.*
 - **Dependencies / gating:** gate = target ADR. Additive (registry reads, drift checks); **breaking sub-items** — closing the kind catalog and the vocabulary migration — need `OWNER SIGN-OFF REQUIRED` and are inert until a superseding ADR.
 - **Classification:** additive for the registry/self-describing surface; breaking for the close + vocab migration (gated).
 - **Executor:** doc-steward + backend.
@@ -128,6 +142,9 @@
   2. An interrupted write leaves no split WAL/sidecar; reopening the store shows the pre-write state (durability proven by reopen, not by a success envelope).
   3. FTS rebuild is idempotent and migration-safe; a shadow/missing row is detected rather than silently serving stale matches.
   4. A failed write reports failure — no false-success envelope (negative control).
+  5. **S07.R1 — rollup counts non-terminal (fixes `b16bf316`):** part-of-rollup's `childrenOpen` counts children that are not terminal; a `resolved` child is **not** counted open.
+  6. **S07.R2 — orphaned-parent signal:** a retired/abandoned parent with live children is surfaced by the rollup rooted at the umbrella as an **orphaned-parent** condition (the children are visible, not invisible).
+  7. **S07.R3 — direction recoverable (fixes `abf3b665`):** `related`/`part_of` distinguishes parent from child (not tagged identically in both directions).
 - **Dependencies / gating:** independent — foundational-safe-now. Must uphold sox ADR-0012; correct any stale single-writer claim touched.
 - **Classification:** additive-safe-now.
 - **Executor:** backend.
@@ -177,6 +194,44 @@
 - **Classification:** additive-safe-now.
 - **Executor:** devops + doc-steward.
 
+## Spec S11 — Session & reservation timeline
+
+- **Root problem:** P-2 (the store cannot answer what a session holds or did — no durable reservation read, no first-class session/op-event record).
+- **Absorbs (2, owner-mandated):** `46cf1086` (CRITICAL: no query for files reserved by active claims), `91a8c640` (HIGH: first-class session claim + `backlog timeline <session>`). Additive; not folded from any reconciled cluster.
+- **Design anchor:** none — owner-mandated (the NOT-COVERED pair).
+- **Shared persistence prerequisite:** one layer serves both — claim events are a subset of op events (`claim`/`renew`/`release` are mutating verbs). **S11.R1 is the prerequisite for S11.S2**; one persistence layer serves both mandated features (no duplication).
+- **Write-scope:** `entrypoint/backlog/src/write/claim.ts`, `entrypoint/backlog/src/write/claim-lease.ts`, `entrypoint/backlog/src/write/tx.ts` (op-event append per mutating verb), `entrypoint/backlog/src/query/` (new `reservations` view) + `query/types.ts`, `entrypoint/backlog/src/cli.ts` (`timeline` verb), `entrypoint/backlog/SPEC.md`, `entrypoint/backlog/DATA_MODEL.md`.
+- **Acceptance criteria (binary):**
+  1. **S11.R1 — claim-interval persistence:** every `claim`/`renew`/`release` appends a durable record `{item uid, path(s), holder agentName:instanceId, session id, claimedAt, leaseExpiry}` that survives a store reopen. *Red today:* `get fields:['auditTrail']` shows only `created|embedding_upserted|updated|related|transitioned|imported` — **no claim/renew/release rows** (corroborated by resolved `33db8ac8`).
+  2. **S11.R2 — enumeration read:** `adhd-backlog query --input '{"view":"reservations","filter":{"project"?,"component"?,"pathPrefix"?}}'` returns, per active claim, `{path, item uid, holder, session id, claimedAt, leaseExpiry}`, enumerable store-wide. *Contrast:* `view:'overlap'` requires `overlapUids` ≥2 (pairwise, not enumerable).
+  3. **S11.R3 — session reverse lookup:** the same read answers "which files is session S holding right now" deterministically.
+  4. **S11.R4 — liveness:** a claim whose `leaseExpiry` has passed is **not** returned as active.
+  5. **S11.S1 — session record:** a first-class session node `{id, agent, started_at, ended_at, parent_session_id}` is created on session start and is queryable.
+  6. **S11.S2 — append-only op-event log:** every mutating verb (`create/update/transition/claim/renew/release/relate/merge`) appends `{session_id, agent, op, target uid, field-delta summary, t}` to a durable append-only log — **not** derived from `auditTrail`.
+  7. **S11.S3 — timeline read:** `adhd-backlog timeline <session>` returns the agent name, the session, the ordered operations, and the records touched.
+  8. **S11.S4 — child-session rollup:** `timeline <session>` includes all descendant (child-session) operations rolled up.
+- **Tests (real entrypoint + negative control):** drive `adhd-backlog create → claim → transition → release`, each stamped `--session-id S1`; read `adhd-backlog query --input '{"view":"reservations","filter":{"pathPrefix":P}}'` and `adhd-backlog timeline S1` back; close+reopen the store and re-read (persistence). **Negative control:** on the pre-change build the `reservations` view and the `timeline` verb are unknown (typed errors) and `auditTrail` carries no claim/op rows → red before, green after.
+- **Dependencies / gating:** additive; no target-ADR gate.
+- **Classification:** additive.
+- **Executor:** backend.
+
+## Spec S12 — Expected-state revision
+
+- **Root problem:** P-2 (the store cannot read its own truth — expected state is derived on every read, never stored, so two readers legitimately disagree and no artifact records what was agreed).
+- **Absorbs (owner-mandated research):** the state-revision recommendation in `tmp/backlog-consolidation/research/completed-state-representation.md` (findings R2a/R2b/R2d of `research-incorporation-plan.md`); item `34b69c69` (B1 fragment read path, shared with S04). Additive while the kind/edge stay internal.
+- **Design anchor:** none — owner-mandated; reuses the shipped `spec-revision` primitive.
+- **Write-scope:** `entrypoint/backlog/src/write/spec-revision.ts` (lift the primitive to plan state) + new `write/state-revision.ts`, `entrypoint/backlog/src/write/transition.ts` (mint hook, same tx), `entrypoint/backlog/src/query/spec-staleness.ts` + `get`/`state-get` read path, `entrypoint/backlog/src/cli.ts` (`state-append`), `entrypoint/backlog/SPEC.md`, `entrypoint/backlog/DATA_MODEL.md`.
+- **Acceptance criteria (binary):**
+  1. **S12.E1 — immutable revision + pointer:** a terminal transition inside a plan subtree mints an immutable content-addressed **state-revision** node (revision node + internal `has_state_revision` edge; `meta.state_revision` / `state_revision_token` / `state_revision_seq` on the plan item, mirroring the spec keys), advanced **in place** — ticket uid preserved, no prior revision rewritten. Read back via `adhd-backlog get --input '{"uid":<plan>}'`.
+  2. **S12.E2 — expected-state ledger payload:** the payload is the canonical sorted-key ledger (`expected{total,completed,remaining,byKind,byPriority,byStatus}` — decomposable counts only; `dispositions`; `coverage_proof{sum,frozen_total,balanced}`; `requirements[].spec_revision`), chained by `parent_revision` (`null` on the first).
+  3. **S12.E3 — same-tx mint, non-blocking, CAS:** the revision is minted in the **same transaction** as the terminal-transition/audit node with the identical CAS discipline as `appendSpecRevision` (stale base ⇒ `precondition_failed`, nothing written), and the hook is **mint-or-skip** — a completion is never refused. Two concurrent completions of the same logical fold yield **one** token (latch/barrier, no lock).
+  4. **S12.E4 — fragment read path (B1 `34b69c69`):** `adhd-backlog get` (additive optional field) or `state-get` returns the canonical payload + current token, **not** pointer-only; a token that no longer matches the fold returns `stale`, never a silent `fresh`.
+  5. **S12.E5 — verdict stays derived-on-read:** no stored `verdict` exists on the state-revision node; mutating an obligation after a snapshot changes the **derived** verdict **without** minting a new revision.
+- **Tests (real entrypoint + negative control):** drive `adhd-backlog transition` on a plan member to terminal; assert the plan item exposes the pointer + token and `coverage_proof.balanced === true`; flip the stored token and assert `stale`; mutate an obligation and assert the derived verdict changes with no new revision. **Negative control:** `ADHD_BACKLOG_UNSAFE_STATE_REVISION=skip` leaves no pointer → red; a hook made a refusal precondition turns the transition red (proves non-blocking is load-bearing).
+- **Dependencies / gating:** additive while the kind and edge stay **internal** (not on the public `kind`/`relate` catalogs) and the hook stays non-blocking; depends on **S01** (internal kind/edge admission) and **S04** (B1 read path). **Breaking** only if `state` joins the public kind catalog or the hook becomes a refusal precondition (S05 closure gate) — then `OWNER SIGN-OFF REQUIRED`.
+- **Classification:** additive (internal kind/edge; non-blocking hook).
+- **Executor:** backend.
+
 ---
 
 ## Deferred (2 clusters)
@@ -195,6 +250,8 @@
 ## Unclustered survivors (27)
 
 26 attach by home cluster; 1 deferred. Full per-uid list is in `spec-set-mapping.json` (`unclustered`). Attach counts: S03:1 (`983f5971`, gated with `query-semantics`), S04:2 (`2cf61846`,`4a979cef`), S05:3 (`3bd99d24`,`f613472b`,`fa0c8cc6`), S06:4 (`4f0882e3`,`c8b8fb10`,`cc4698c4`,`f78b8692`; `cc4698c4` gated with `catalog-minting`), S07:2 (`8c261906`,`d1ebe470`), S08:1 (`255394d0`), S09:4 (`29ae3faa`,`91f57dc3`,`e29cd816`,`edbb640b`), S10:9 (`025d3239`,`2979eb6a`,`4a41a335`,`51a725c4`,`57c370ce`,`8db42169`,`c3532742`,`dc40a5dc`,`dc92006f`). **Deferred (1):** `eec45b05` — unclustered `decision` item (`HIGH`), no home cluster; resolve at target-ADR review.
+
+**Owner-set attachments (6, owner-mandated — additive, never folded or deleted):** four cluster-carried items — `050ea18f` (citation gate → S02.C1–C4), `7ef53d55` (SUPERSEDED reason enum → S02.T1–T3), `e54bd58b` (MAIN plan slices → S02.S2/H45, S03.S4, S04.S3, S06.S6), `7a78312c` (rollup visibility → S07.R1–R3) — plus the two NOT-COVERED features `46cf1086` + `91a8c640` (→ new S11). None is a reconciled cluster or an unclustered survivor; all six survive verbatim as items. The state-revision research is likewise owner-mandated into new S12.
 
 ## What this document is not
 

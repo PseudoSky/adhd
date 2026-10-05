@@ -10,7 +10,8 @@
   "totals": {
     "clusters": 49,
     "clusteredMembers": 518,
-    "specs": 10,
+    "specs": 12,
+    "specCount": 12,
     "clustersAbsorbed": 47,
     "clustersDeferred": 2,
     "unclusteredSurvivors": 27,
@@ -206,6 +207,30 @@
       "executor": "devops + doc-steward",
       "dependsOn": [],
       "remodeledDeferred": []
+    },
+    "S11": {
+      "title": "Session & reservation timeline",
+      "problem": "P-2",
+      "anchor": [],
+      "clusters": [],
+      "clusterUids": [],
+      "classification": "additive",
+      "executor": "backend",
+      "dependsOn": [],
+      "remodeledDeferred": [],
+      "ownerSetItems": ["46cf1086", "91a8c640"]
+    },
+    "S12": {
+      "title": "Expected-state revision",
+      "problem": "P-2",
+      "anchor": [],
+      "clusters": [],
+      "clusterUids": [],
+      "classification": "additive",
+      "executor": "backend",
+      "dependsOn": ["S01", "S04"],
+      "remodeledDeferred": [],
+      "ownerSetItems": ["state-revision-research", "34b69c69"]
     }
   },
   "specByCluster": {
@@ -301,5 +326,43 @@
     {"uid": "f613472b", "home": "test-harness", "spec": "S05"},
     {"uid": "f78b8692", "home": "config-environment", "spec": "S06"},
     {"uid": "fa0c8cc6", "home": "gate-integrity", "spec": "S05"}
+  ],
+  "specsAddedByOwnerOrder": [
+    {
+      "id": "S11",
+      "title": "Session & reservation timeline",
+      "problem": "P-2",
+      "class": "additive",
+      "executor": "backend",
+      "designAnchor": null,
+      "ownerSetItems": ["46cf1086", "91a8c640"],
+      "acs": {
+        "46cf1086": ["S11.R1", "S11.R2", "S11.R3", "S11.R4"],
+        "91a8c640": ["S11.S1", "S11.S2", "S11.S3", "S11.S4"]
+      }
+    },
+    {
+      "id": "S12",
+      "title": "Expected-state revision",
+      "problem": "P-2",
+      "class": "additive",
+      "executor": "backend",
+      "designAnchor": null,
+      "ownerSetItems": ["state-revision-research", "34b69c69"],
+      "acs": {
+        "state-revision-research": ["S12.E1", "S12.E2", "S12.E3", "S12.E4", "S12.E5"]
+      }
+    }
+  ],
+  "ownerSetIncorporations": [
+    {"uid": "050ea18f", "spec": "S02", "acs": ["S02.C1", "S02.C2", "S02.C3", "S02.C4"]},
+    {"uid": "7ef53d55", "spec": "S02", "acs": ["S02.T1", "S02.T2", "S02.T3"]},
+    {"uid": "e54bd58b", "spec": "S02", "acs": ["S02.S2", "S02.H45"]},
+    {"uid": "e54bd58b", "spec": "S03", "acs": ["S03.S4"]},
+    {"uid": "e54bd58b", "spec": "S04", "acs": ["S04.S3"]},
+    {"uid": "e54bd58b", "spec": "S06", "acs": ["S06.S6"]},
+    {"uid": "7a78312c", "spec": "S07", "acs": ["S07.R1", "S07.R2", "S07.R3"]},
+    {"uid": "46cf1086", "spec": "S11", "acs": ["S11.R1", "S11.R2", "S11.R3", "S11.R4"]},
+    {"uid": "91a8c640", "spec": "S11", "acs": ["S11.S1", "S11.S2", "S11.S3", "S11.S4"]}
   ]
 }
