@@ -348,4 +348,107 @@ describe('DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001 — legacy flat-path migratio
 
     canonical.close();
   });
+
+  // ---------------------------------------------------------------------------
+  // 80b61a7d — DELTA-SCOPED catch-up. The old catch-up triggered on flat agent
+  // COUNT growth and then DO-UPDATEd EVERY overlapping row of EVERY table, so
+  // flat's stale rows reverted canonical rows written after the seed.
+  // ---------------------------------------------------------------------------
+
+  it('80b61a7d — a canonical write made AFTER the seed is NOT reverted when flat later grows (delta-scoped catch-up)', () => {
+    const flatDir = mkTmpDir('clobber');
+    const flatPath = join(flatDir, '.adhd', 'agent-mcp', 'agents.db');
+    const flatSeed = openMigratedDb(flatPath);
+    seedAgents(flatSeed, ['agent-1', 'agent-2', 'agent-3']);
+    seedSessions(flatSeed, [{ id: 'sess-1', agentName: 'agent-1' }]);
+    flatSeed.close();
+
+    const canonicalPath = join(mkTmpDir('clobber-canon'), 'canonical', 'agents.db');
+    const canonical = openMigratedDb(canonicalPath);
+    // First boot: the seed copies flat v1 rows into canonical and records the
+    // per-table watermark.
+    const seed = migrateLegacyOperationalDb(canonical, { flatDbPath: flatPath });
+    expect(seed.copied).toBe(true);
+    expect(countRows(canonical, 'agents')).toBe(3);
+
+    // Canonical writes that happen AFTER the seed (e.g. a zero-config server
+    // revising agents, or closing a session). These must survive a later
+    // catch-up — the exact clobber the finding demonstrated.
+    canonical
+      .prepare(`UPDATE agents SET version = 99, data = ? WHERE name = 'agent-1'`)
+      .run(JSON.stringify({ name: 'agent-1', canonical: true }));
+    canonical
+      .prepare(`UPDATE agents SET version = 42, data = ? WHERE name = 'agent-2'`)
+      .run(JSON.stringify({ name: 'agent-2', canonical: true }));
+    const postSeedUpdatedAt = '2999-01-01T00:00:00.000Z';
+    canonical
+      .prepare(`UPDATE sessions SET status = 'closed', updated_at = ? WHERE id = 'sess-1'`)
+      .run(postSeedUpdatedAt);
+
+    // The pin stays live: flat keeps being written and gains two agents
+    // (count 3 → 5), which is what used to fire the clobbering catch-up.
+    const flatGrow = openMigratedDb(flatPath);
+    seedAgents(flatGrow, ['agent-4', 'agent-5']);
+    flatGrow.close();
+
+    const outcome = migrateLegacyOperationalDb(canonical, { flatDbPath: flatPath });
+
+    // The grow is reconciled (new agents land)...
+    expect(outcome.copied).toBe(true);
+    expect(countRows(canonical, 'agents')).toBe(5);
+    // ...but the canonical post-seed writes SURVIVE the stale flat rows.
+    const agent1 = canonical
+      .prepare(`SELECT version, data FROM agents WHERE name = 'agent-1'`)
+      .get() as { version: number; data: string };
+    expect(agent1.version).toBe(99);
+    expect((JSON.parse(agent1.data) as { canonical?: boolean }).canonical).toBe(true);
+    const agent2 = canonical
+      .prepare(`SELECT version FROM agents WHERE name = 'agent-2'`)
+      .get() as { version: number };
+    expect(agent2.version).toBe(42);
+    // The guard is per-table, not agents-only: a canonical session write made
+    // after the seed is likewise not reverted by flat's older copy.
+    const session1 = canonical
+      .prepare(`SELECT status, updated_at FROM sessions WHERE id = 'sess-1'`)
+      .get() as { status: string; updated_at: string };
+    expect(session1.status).toBe('closed');
+    expect(session1.updated_at).toBe(postSeedUpdatedAt);
+
+    canonical.close();
+  });
+
+  it('80b61a7d — a constant-agent-count flat edit is reconciled (trigger is flat content change, not agent-count growth)', () => {
+    const flatDir = mkTmpDir('constant-count-edit');
+    const flatPath = join(flatDir, '.adhd', 'agent-mcp', 'agents.db');
+    const flatSeed = openMigratedDb(flatPath);
+    seedAgents(flatSeed, ['a', 'b', 'c']);
+    flatSeed.close();
+
+    const canonicalPath = join(mkTmpDir('constant-count-edit-canon'), 'canonical', 'agents.db');
+    const canonical = openMigratedDb(canonicalPath);
+    const seed = migrateLegacyOperationalDb(canonical, { flatDbPath: flatPath });
+    expect(seed.copied).toBe(true);
+    expect(countRows(canonical, 'agents')).toBe(3);
+
+    // Revise 'b' IN PLACE in flat — the agent count is unchanged (still 3), so
+    // the old count-only trigger never fired and the edit was stranded forever.
+    const flatEdit = openMigratedDb(flatPath);
+    flatEdit
+      .prepare(`UPDATE agents SET version = 2, data = ? WHERE name = 'b'`)
+      .run(JSON.stringify({ name: 'b', edited: true }));
+    flatEdit.close();
+
+    const outcome = migrateLegacyOperationalDb(canonical, { flatDbPath: flatPath });
+
+    expect(outcome.copied).toBe(true);
+    const b = canonical
+      .prepare(`SELECT version, data FROM agents WHERE name = 'b'`)
+      .get() as { version: number; data: string };
+    expect(b.version).toBe(2);
+    expect((JSON.parse(b.data) as { edited?: boolean }).edited).toBe(true);
+    // No new agents — the edit, not a count change, drove the reconciliation.
+    expect(countRows(canonical, 'agents')).toBe(3);
+
+    canonical.close();
+  });
 });
