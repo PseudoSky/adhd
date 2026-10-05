@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Readable } from "stream";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import type { EngineConfig, EngineLogger } from "../interfaces.js";
 import type { ProviderChatRequest } from "../providers/types.js";
 
@@ -177,5 +179,17 @@ describe("ClaudeCliProvider — group-aware teardown (322a1efb)", () => {
         proc.stdout.push("\n");
         proc.stdout.push(null);
         await promise;
+    });
+});
+
+describe("ClaudeCliProvider — nested-claude hazard is documented (322a1efb AC3)", () => {
+    it("documents the env-strip + termination rationale, cross-referencing DEBT-SOX-009", () => {
+        const src = readFileSync(
+            fileURLToPath(new URL("../providers/claudecli.ts", import.meta.url)),
+            "utf8",
+        );
+        expect(src).toContain("DEBT-SOX-009");
+        expect(src.toLowerCase()).toContain("nested");
+        expect(src).toContain("anthropics/claude-code#25803");
     });
 });

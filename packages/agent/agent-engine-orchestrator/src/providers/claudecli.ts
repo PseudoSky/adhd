@@ -212,6 +212,9 @@ export function normalizeAgentSpec(md: string): { content: string; agentName: st
  * or wedge (anthropics/claude-code#25803, #29543). They are stripped
  * unconditionally, regardless of what `config.subprocessEnv()` returns.
  *
+ * See DEBT-SOX-009 (nested-claude crash semantics) — this is the same hazard
+ * observed as a session-kill incident during agent-mcp diagnosis.
+ *
  * Deliberately NOT stripped: `CLAUDE_CONFIG_DIR` (carries the child's auth),
  * `ANTHROPIC_*` (the child may legitimately use an API key or auth token), and
  * `ADHD_AGENT_*` (the harness's own declared pass-through vars, see

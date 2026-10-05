@@ -229,6 +229,12 @@ describe("Orchestrator", () => {
                 AbortSignal.timeout = originalTimeout;
             }
         });
+
+        it("exports a raised DEFAULT_PROVIDER_TIMEOUT_MS of 300000 (36a73117 AC1)", () => {
+            // The 60s default was the fan-out footgun; the shipped default must
+            // stay raised. Reverting to 60_000 turns this red.
+            expect(DEFAULT_PROVIDER_TIMEOUT_MS).toBe(300_000);
+        });
     });
 
     describe("task cancellation", () => {
