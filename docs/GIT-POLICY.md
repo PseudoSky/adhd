@@ -951,3 +951,44 @@ Schema version 1.
   `.worktrees/dispatch-9c4e-bucket-j` at `5f1d5880`; no push, no branch or worktree removed, and no
   gates were run by this operation (the post-merge review runs the suite). This record is the only
   change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `fix/bucket-i-dispatch-hitl-budget-9c4e` (dispatch-2026-10-04-9c4e).**
+  Landed bucket I's resume-reconcile fix + budget/deps coverage onto `main` as a **merge commit**
+  `87454702` (parents `69d349ee` = pre-merge `main`, `33454e2c` = branch head), moving `main`
+  `69d349ee` → `87454702`; 8 files, +852/-179. The branch was 4 commits, linear on top of the
+  merge-base `14c6777e` (`97c1bb85` parent = `14c6777e`; then `dbcc3b2e` parent = `97c1bb85`;
+  `e811bd73` parent = `dbcc3b2e`; `33454e2c` parent = `e811bd73`): `97c1bb85`
+  (`fix(dispatch-orchestrator,dispatch-cli): reconcile resumed HITL task back into the DAG` —
+  `48b14ec1`), `dbcc3b2e` (`test(agent-mcp): prove default budget cap accumulates globally across
+  tasks` — `4023b235`), `e811bd73` (`test(agent-engine-orchestrator,agent-mcp): cover dequeue-clock
+  and default fan-out cap` — `5945d8d5`), and `33454e2c` (`fix(dispatch-orchestrator): harden HITL
+  reconcile against transient poll failures` — `48b14ec1`) — the four commits named by the
+  dispatch. §Branching & merge was the deciding rule: this history "carries true merge commits" and
+  ff-only is not enforced, while rebase-in-flight is permitted only on a branch "solely your own" —
+  I is an in-flight executor branch, not the operator's, so rewriting its 4 commits was out; the
+  dispatch directed `--no-ff`. Dry-run `git merge-tree --write-tree --name-only main
+  fix/bucket-i-dispatch-hitl-budget-9c4e` exited 1, predicting content conflicts in exactly two
+  paths — `entrypoint/dispatch-cli/AGENTS.md` (base `f2161136`, ours `01cee066`, theirs `d121f1be`)
+  and `entrypoint/dispatch-cli/README.md` (base `1d83f441`, ours `6799b04e`, theirs `555a1f0e`) —
+  the same two files bucket J's already-merged `072860a9` had edited. Both conflicts were the single
+  HITL-resume sentence, and they were **complementary, not contradictory**: J had scoped the claim
+  to the task (`task_resume` drives the **task** to `completed`), and I added the reconcile step.
+  Resolved each as a coherent union retaining both facts, dropping neither: "Resume the task with
+  agent-mcp's `task_resume` (that token) to drive the task to `completed`; the next `run` cycle then
+  **reconciles** the completed task back into the DAG — re-runs the milestone guard and marks the
+  milestone complete — so `status` stops reporting `awaiting_input` (48b14ec1)." Resolved content is
+  README blob `c1e81ce0` and AGENTS blob `bb5b8a41`; no conflict marker remains
+  (`rg '^(<<<<<<<|=======|>>>>>>>)'` over both files, and `git grep -nE` over the whole tree, each
+  exited 1 with no matches). Only the two resolved paths were staged; `git commit --no-edit` exited 0
+  after the git-invoked pre-commit hook (mass-deletion guard clean, secret-scan clean, affected lint
+  clean, staged-spec test clean). Post-merge `git rev-list --count
+  main..fix/bucket-i-dispatch-hitl-budget-9c4e` = 0 and `git merge-base --is-ancestor <commit> main`
+  exits 0 for each of `97c1bb85`, `dbcc3b2e`, `e811bd73`, `33454e2c`, so all four are contained. The
+  branch never touched this file (empty `git diff --stat 69d349ee 87454702 -- docs/GIT-POLICY.md`),
+  so `main`'s policy blob survived the merge byte-identical. The working tree was clean before and
+  after (`git status --porcelain` empty) and nothing was staged after the commit (`git diff --cached
+  --name-only` empty); the dispatch's anticipated "unrelated concurrent dirt" was not present, so
+  nothing had to be avoided or protected. The branch remains checked out in worktree
+  `.worktrees/wt-bucket-i-9c4e` at `33454e2c`; no push, no branch or worktree removed, and no gates
+  were run by this operation (the post-merge review runs the suite). This record is the only change
+  to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
