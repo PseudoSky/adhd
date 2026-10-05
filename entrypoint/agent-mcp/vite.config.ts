@@ -9,8 +9,8 @@ export default defineConfig({
   root: __dirname,
   cacheDir: projectCacheDir(__dirname),
 
-  plugins: [importMetaUrlCjs(), nxViteTsPaths()],
-  // Deliberately OMITS nxViteTsPathsPre(): src/__tests__/main-entry-symlink.test.ts
+  // ONE `plugins:` array — a duplicate key silently drops every plugin but the
+  // last (backlog 50b77657). Deliberately OMITS nxViteTsPathsPre(): src/__tests__/main-entry-symlink.test.ts
   // spawns the REAL built entry (dist/src/index.js) as a Node child process, and
   // a real-Node child resolves `@adhd/*` through node_modules to each
   // dependency's built `dist` — it cannot be made to follow the parent's
@@ -20,7 +20,7 @@ export default defineConfig({
   // Keep this project consistently all-`dist`; `^build` stays in the test
   // target's dependsOn (project.json) so the child's `dist` is always fresh.
   // Do NOT re-add nxViteTsPathsPre() here.
-  plugins: [nxViteTsPaths()],
+  plugins: [importMetaUrlCjs(), nxViteTsPaths()],
 
   build: {
     outDir: 'dist',
