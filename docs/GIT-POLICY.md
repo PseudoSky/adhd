@@ -192,3 +192,18 @@ Schema version 1.
   modified — the merge touched none of those paths. No push, no branch or worktree removed, no gates
   run (the post-merge review runs the suite). This record is the only change to this file in this
   operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-04 — operation record: land of `feat/bucket-c-publish-contract-docs` (dispatch-2026-10-04-9c4e).**
+  Landed bucket C onto `main` as a **merge commit** `67b2762f` (parents `cd1e4333` = pre-merge
+  `main`, `5c377d7c` = C head), moving `main` `cd1e4333` → `67b2762f`; 22 files, +749/-38.
+  §Branching & merge was the deciding rule: this history "carries true merge commits" and ff-only is
+  not enforced, while rebase-in-flight is permitted only on a branch "solely your own" — C is an
+  in-flight executor branch, not the operator's, so rewriting its 7 commits (`1bcc147d`..`5c377d7c`)
+  was out; a merge commit is the stated shape here. Dry-run `git merge-tree --write-tree main
+  5c377d7c` exited 0, producing tree `3efa0232` with no conflict hunks; the actual `git merge
+  --no-ff` was conflict-free (ort strategy, exit 0). Post-merge `git rev-list --count
+  main..feat/bucket-c-publish-contract-docs` = 0 and `git merge-base --is-ancestor 5c377d7c main`
+  exits 0, so all 7 C commits are contained. The working tree was clean before and after
+  (`git status --porcelain` empty). No push, no branch or worktree removed, no gates run (the
+  post-merge review runs the suite). This record is the only change to this file in this operation.
+  Recorded under §Commit convention's `docs(<area>):` scope.
