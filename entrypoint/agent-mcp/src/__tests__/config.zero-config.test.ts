@@ -146,6 +146,27 @@ describe('agent-mcp real AgentMcpConfig spec — zero-config proof', () => {
     }
   });
 
+  it('db.skipLegacyMigration defaults to false and is set by ADHD_AGENT_SKIP_LEGACY_MIGRATION (af567fb8)', () => {
+    const restoreOff = withEnvVar('ADHD_AGENT_SKIP_LEGACY_MIGRATION', undefined);
+    try {
+      expect(makeEnv(mkAdhdRoot(), mkCwdFixture()).config.db.skipLegacyMigration).toBe(false);
+    } finally {
+      restoreOff();
+    }
+
+    const restoreOn = withEnvVar('ADHD_AGENT_SKIP_LEGACY_MIGRATION', 'true');
+    try {
+      const env = makeEnv(mkAdhdRoot(), mkCwdFixture());
+      expect(env.config.db.skipLegacyMigration).toBe(true);
+      expect(env.get('provenance.db.skipLegacyMigration')).toMatchObject({
+        source: 'env',
+        env: 'ADHD_AGENT_SKIP_LEGACY_MIGRATION',
+      });
+    } finally {
+      restoreOn();
+    }
+  });
+
   it('the env-prefix guard covers both agent-mcp own config vars and provider credential vars (ADHD_AGENT_-prefixed)', () => {
     const adhdRoot = mkAdhdRoot();
     const cwd = mkCwdFixture();

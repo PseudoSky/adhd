@@ -2,6 +2,7 @@ import { db, sqlite } from "./client.js";
 import { runMigrationsOn } from "./migrate-runner.js";
 import { migrateLegacyOperationalDb } from "./migrate-legacy.js";
 import { logger } from "../logger.js";
+import { env } from "../config.js";
 
 /**
  * Applies the drizzle schema migrations, then the one-time flat-legacy →
@@ -21,6 +22,9 @@ export function runMigrations(): void {
     try {
         const outcome = migrateLegacyOperationalDb(sqlite, {
             log: (level, message) => (level === "warn" ? logger.warn(message) : logger.info(message)),
+            // Backlog af567fb8 — hermetic harnesses set this so the fresh
+            // scratch DB is never seeded from the developer's real store.
+            skipLegacyMigration: env.config.db.skipLegacyMigration,
         });
         if (outcome.reason === "copied") {
             logger.info(

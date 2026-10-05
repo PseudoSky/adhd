@@ -91,6 +91,8 @@ export function makeRunner(opts: {
   home: string;
   cwd: string;
   defaultMcpServers?: Record<string, Record<string, unknown>>;
+  /** Extra child env vars merged over the isolated defaults. */
+  extraEnv?: Record<string, string>;
 }): AgentMcpRunner {
   return new AgentMcpRunner({
     command: process.execPath,
@@ -101,6 +103,7 @@ export function makeRunner(opts: {
       ADHD_AGENT_DATABASE_PATH: opts.dbPath,
       ADHD_AGENT_SSE_ENABLED: 'false',
       ADHD_AGENT_TRANSPORT: 'stdio',
+      ...(opts.extraEnv ?? {}),
     },
     defaultMcpServers: opts.defaultMcpServers,
   });

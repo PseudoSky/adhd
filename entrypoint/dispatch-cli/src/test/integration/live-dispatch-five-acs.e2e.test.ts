@@ -251,7 +251,7 @@ describe.skipIf(!LIVE)(
      * refresh is keychain/home-bound, and overriding `HOME` breaks `claudecli`
      * (verified: provider returns `PROVIDER_ERROR` / "OAuth session expired").
      * The `$HOME`-derived legacy-DB leak is neutralized separately by
-     * `clearLegacySeed`.
+     * `ADHD_AGENT_SKIP_LEGACY_MIGRATION` (see `launch()`).
      */
     function childEnv(overrides: Record<string, string>): Record<string, string> {
       const env: Record<string, string> = {};
@@ -295,12 +295,20 @@ describe.skipIf(!LIVE)(
           // default" rule let a machine-global budget config (a task-scoped cap)
           // REPLACE the env-driven default entry `defaultPluginEntries()`
           // builds, and AC3's env cap was never installed. `ADHD_AGENT_CONFIG`
-          // → `plugins.configPath` (agent-mcp/src/config.ts). `HOME` stays the
-          // real one — the `claude` CLI's OAuth refresh is keychain/home-bound
-          // (an isolated/symlinked `$HOME` fails `claude -p` with "OAuth session
-          // expired"), so we isolate the OTHER `$HOME`-derived leak (the legacy
-          // flat DB) separately in `AC3` — see `clearLegacySeed`.
+          // → `plugins.configPath` (agent-mcp/src/config.ts).
           ADHD_AGENT_CONFIG: join(scratch, 'no-agent-mcp-config.json'),
+          // HERMETIC (af567fb8): skip agent-mcp's flat→namespaced legacy-DB
+          // migration entirely, so a fresh scratch DB is NEVER seeded from the
+          // developer's real `~/.adhd/agent-mcp/agents.db` (which would make a
+          // global `scope:'global'` cap count the developer's real task
+          // history and trip on the first milestone). `$HOME` itself cannot be
+          // isolated — the `claude` CLI's OAuth refresh is keychain/home-bound
+          // (a symlinked `$HOME` fails `claude -p` with "OAuth session
+          // expired") — so the legacy-store read is disabled at the source
+          // (`ADHD_AGENT_SKIP_LEGACY_MIGRATION` → `db.skipLegacyMigration`,
+          // agent-mcp/src/config.ts / db/migrate.ts). The previous
+          // post-boot `clearLegacySeed` DELETE is therefore no longer needed.
+          ADHD_AGENT_SKIP_LEGACY_MIGRATION: 'true',
           ...(opts?.extraEnv ?? {}),
         }),
         defaultMcpServers: opts?.defaultMcpServers,
@@ -479,24 +487,16 @@ describe.skipIf(!LIVE)(
 
     /**
      * Hermeticity for the global-cap AC (5339c2e5). agent-mcp's flat→namespaced
-     * legacy migration seeds a FRESH scratch DB from the developer's real
+     * legacy migration would seed a FRESH scratch DB from the developer's real
      * `$HOME/.adhd/agent-mcp/agents.db` (`resolveFlatLegacyDbPath`), so a
      * `scope:'global'` cap would count the developer's real task history and trip
      * on the first milestone. `$HOME` can't be isolated (claudecli OAuth is
-     * keychain/home-bound). Instead, once the child is booted + migrated (forced
-     * by a `guide` call), delete the seeded usage from the child's OWN scratch
-     * DB — the real legacy store is never touched (read-only migration source).
+     * keychain/home-bound), so `launch()` sets
+     * `ADHD_AGENT_SKIP_LEGACY_MIGRATION=true` — the migration is never run and
+     * the real legacy store is neither read nor modified (backlog af567fb8).
+     * The old post-boot `clearLegacySeed` DELETE is gone: with the flag the
+     * scratch DB is born empty, so there is nothing to clear.
      */
-    async function clearLegacySeed(l: Launched): Promise<void> {
-      await l.runner.callTool('guide', {}); // force child boot + migrations
-      const raw = new Database(l.dbPath);
-      try {
-        raw.prepare('DELETE FROM task_usage').run();
-        raw.prepare('DELETE FROM tasks').run();
-      } finally {
-        raw.close();
-      }
-    }
 
     /**
      * Provision an agent and open a REAL agent-mcp session for it, returning the
@@ -726,7 +726,6 @@ describe.skipIf(!LIVE)(
           extraEnv: { ADHD_AGENT_BUDGET_MAX_CALLS: '1' },
         });
         try {
-          await clearLegacySeed(l);
           const AGENT = 'live-budget-agent';
           const dag = newDag({
             description: 'AC3 default budget cap',
@@ -993,7 +992,6 @@ describe.skipIf(!LIVE)(
             },
           });
           try {
-            await clearLegacySeed(l);
             const AGENT = 'live-budget-control-agent';
             const dag = newDag({
               description: 'AC3 negative control',

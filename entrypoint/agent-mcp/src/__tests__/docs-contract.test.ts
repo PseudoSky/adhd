@@ -89,6 +89,31 @@ describe("97acef07 — default MCP servers documented", () => {
   });
 });
 
+describe("6f3cd348 — agent_update row documents openSessionsNotUpdated", () => {
+  it("AC1+AC2: the agent_update table row names openSessionsNotUpdated and its meaning", () => {
+    const agents = readRepoFile("../../AGENTS.md");
+    const row = agents
+      .split("\n")
+      .find((line) => line.startsWith("| `agent_update`"));
+    expect(row, "the agent_update row must exist").toBeDefined();
+    expect(row).toContain("openSessionsNotUpdated");
+    // The documented return matches AgentUpdateResult
+    // (packages/agent/agent-engine-orchestrator/src/tools/agent-crud.ts:126-128):
+    // `AgentRecord & { openSessionsNotUpdated: string[] }`.
+    expect(row).toMatch(/openSessionsNotUpdated\s*:\s*string\[\]/);
+    expect(row).toMatch(/active sessions|open session/i);
+  });
+});
+
+describe("af567fb8 — ADHD_AGENT_SKIP_LEGACY_MIGRATION documented", () => {
+  it("AC: AGENTS.md documents the legacy-migration skip flag and its hermetic purpose", () => {
+    const agents = readRepoFile("../../AGENTS.md");
+    expect(agents).toContain("ADHD_AGENT_SKIP_LEGACY_MIGRATION");
+    expect(agents).toMatch(/hermetic/i);
+    expect(agents).toMatch(/flat.*legacy|legacy.*store/i);
+  });
+});
+
 describe("2cd99264 — gitnexus-singleton concurrency contract", () => {
   it("AC1: the skill documents the one-client kill-and-replace contract", () => {
     const skill = readRepoFile(

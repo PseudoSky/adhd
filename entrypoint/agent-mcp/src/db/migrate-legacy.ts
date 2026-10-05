@@ -115,6 +115,10 @@ export interface LegacyMigrationOutcome {
     | "canonical-not-migrated"
     | "flat-empty"
     | "deferred-pinned-flat"
+    /** `opts.skipLegacyMigration` was set (backlog af567fb8): the flat legacy
+     *  store is never opened or read — used by hermetic test harnesses so a
+     *  fresh scratch DB is not seeded from the developer's real store. */
+    | "skipped"
     /** A seed that did not land every offered agent row — rolled back, marker
      *  unwritten, retried on the next boot (bug 0ea16bf1). */
     | "seed-incomplete";
@@ -331,6 +335,12 @@ export interface MigrateLegacyOptions {
   flatDbPath?: string;
   /** Best-effort log sink; defaults to `console`. */
   log?: (level: "info" | "warn", message: string) => void;
+  /** Backlog af567fb8 — when `true`, skip the migration entirely: the flat
+   *  legacy store is never opened. `runMigrations()` sets this from the
+   *  `ADHD_AGENT_SKIP_LEGACY_MIGRATION` config flag, which hermetic test
+   *  harnesses set so a fresh scratch DB is not seeded from the developer's
+   *  real `~/.adhd/agent-mcp/agents.db`. Returns `reason: "skipped"`. */
+  skipLegacyMigration?: boolean;
 }
 
 interface CopyFlatOptions {
@@ -512,6 +522,17 @@ export function migrateLegacyOperationalDb(
 ): LegacyMigrationOutcome {
   const flatDbPath = opts.flatDbPath ?? resolveFlatLegacyDbPath();
   const log = opts.log ?? ((level, message) => console[level](message));
+
+  // Backlog af567fb8: opt-out for hermetic boots. Return BEFORE touching the
+  // filesystem so a test harness's fresh scratch DB can never be seeded from
+  // the developer's real flat legacy store (and no marker is written).
+  if (opts.skipLegacyMigration) {
+    log(
+      "info",
+      "migrate-legacy: skipped (ADHD_AGENT_SKIP_LEGACY_MIGRATION) — the flat legacy store is never read",
+    );
+    return { copied: false, agentsCopied: 0, reason: "skipped" };
+  }
 
   // DEBT-AGENTMCP-MIGRATION-PINNED-MARKER-001: when the operational DB is
   // pinned (`ADHD_AGENT_DATABASE_PATH` → the flat legacy path — the exact
