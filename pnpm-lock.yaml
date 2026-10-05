@@ -701,6 +701,9 @@ importers:
 
   entrypoint/dispatch-cli:
     dependencies:
+      '@adhd/backlog':
+        specifier: ^1.0.8
+        version: link:../backlog
       '@adhd/dispatch-base-spec':
         specifier: ^0.1.5
         version: link:../../packages/dispatch/dispatch-base-spec

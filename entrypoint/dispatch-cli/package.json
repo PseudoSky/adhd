@@ -5,6 +5,7 @@
     "dispatch-cli": "./dist/bin/cli.js"
   },
   "dependencies": {
+    "@adhd/backlog": "^1.0.8",
     "@adhd/dispatch-serializer-json": "^0.1.3",
     "@adhd/dispatch-orchestrator": "^0.1.5",
     "@modelcontextprotocol/sdk": "1.29.0",

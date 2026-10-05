@@ -281,6 +281,52 @@ describe("TaskStore", () => {
         expect(taskStore.list({})).toHaveLength(2);
     });
 
+    it("orders ascending by created_at, then rowid — the chat-gateway HITL [0] contract", () => {
+        // Insert OUT of createdAt order so raw/insertion (rowid) order differs
+        // from the contract order: X (newest) first, then Y and Z sharing an
+        // identical, earlier createdAt. Ascending (created_at, rowid) must yield
+        // Y, Z, X — NOT insertion order (X, Y, Z). This is the exact order the
+        // chat gateway relies on when it resumes `list({ status: "awaiting_input" })[0]`.
+        const earlier = "2026-01-01T00:00:00.000Z";
+        const later = "2026-01-01T00:00:01.000Z";
+        const insert = (id: string, createdAt: string) =>
+            db.insert(schema.tasksTable)
+                .values({
+                    id,
+                    sessionId,
+                    parentTaskId: null,
+                    isEphemeral: 0,
+                    recursionDepth: 0,
+                    status: "awaiting_input",
+                    prompt: id,
+                    createdAt,
+                    updatedAt: createdAt,
+                })
+                .run();
+
+        insert("00000000-0000-4000-8000-00000000000a", later); // rowid 1 (newest)
+        insert("00000000-0000-4000-8000-00000000000b", earlier); // rowid 2
+        insert("00000000-0000-4000-8000-00000000000c", earlier); // rowid 3 (tie -> rowid)
+
+        const ordered = taskStore.list({ session_id: sessionId });
+        expect(ordered.map(t => t.id)).toEqual([
+            "00000000-0000-4000-8000-00000000000b",
+            "00000000-0000-4000-8000-00000000000c",
+            "00000000-0000-4000-8000-00000000000a",
+        ]);
+
+        // The exact element chat-gateway resumes: the OLDEST awaiting task.
+        expect(ordered[0].id).toBe("00000000-0000-4000-8000-00000000000b");
+
+        // Ordering is applied BEFORE limit/offset — stable pagination.
+        expect(
+            taskStore.list({ session_id: sessionId, limit: 1 }).map(t => t.id)
+        ).toEqual(["00000000-0000-4000-8000-00000000000b"]);
+        expect(
+            taskStore.list({ session_id: sessionId, limit: 1, offset: 1 }).map(t => t.id)
+        ).toEqual(["00000000-0000-4000-8000-00000000000c"]);
+    });
+
     it("creates a task with parentTaskId and recursionDepth", () => {
         const parent = taskStore.create({ sessionId, prompt: "Parent" });
         const child = taskStore.create({
