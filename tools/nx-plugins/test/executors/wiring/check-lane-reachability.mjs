@@ -47,6 +47,12 @@
  *      green today and can only shrink — a new un-wired `tsconfig.spec.json`
  *      fails, and a baselined project that gets wired must be removed from the
  *      baseline.
+ *   7. Every `vite.config.ts` (and generator `vite.config.ts__tmpl__`) declares
+ *      exactly ONE `plugins:` key and contains every imported vite-plugin
+ *      factory in that array — the whole-workspace class guard for 50b77657,
+ *      run unconditionally here so an unrelated package's duplicate key cannot
+ *      escape `nx affected -t test` (47557842). Delegated to
+ *      `check-vite-config-plugins.mjs` (one implementation).
  *
  * Exit code is the only signal (0 = wired, 1 = gap found), per the repo's
  * verification standard — never grep stdout for "passed".
@@ -59,6 +65,7 @@ import { globSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, relative } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { collectViteConfigPluginViolations } from './check-vite-config-plugins.mjs';
 
 const require = createRequire(import.meta.url);
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -257,6 +264,25 @@ export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, bas
     }
   }
 
+  // ---- rule 7: every vite.config.ts has exactly ONE plugins array ---------
+  // Hosted HERE (not in a package's vitest suite) because a whole-workspace
+  // invariant must not be gated on one project's nx-affected membership
+  // (backlog 47557842): the sweep used to live in agent-engine-orchestrator, so
+  // a duplicate `plugins:` key reintroduced in an unrelated package escaped
+  // `nx affected -t test` entirely. This check is run UNCONDITIONALLY by the
+  // pre-push hook and both CI workflows, ahead of the lanes and independent of
+  // the affected graph. A workspace with project.json files but ZERO configs
+  // scanned is itself flagged — a dead walker must fail loudly, not pass empty.
+  const hasProjects = globSync(['packages/**/project.json', 'entrypoint/**/project.json'], {
+    cwd: workspaceRoot,
+    ignore: IGNORE,
+  }).length > 0;
+  const vite = collectViteConfigPluginViolations(workspaceRoot);
+  if (hasProjects && vite.scanned === 0) {
+    add('7-vite-sweep-found-nothing', `${workspaceRoot} — discovered project.json files but ZERO vite.config.ts files; the sweep walker is broken.`);
+  }
+  for (const v of vite.violations) add(v.rule, v.detail);
+
   return { violations, gapProjects };
 }
 
@@ -279,12 +305,13 @@ async function main() {
     for (const v of violations) console.error(`   [${v.rule}] ${v.detail}`);
     console.error('');
     console.error('  The gate runs GATE_TARGETS from tools/gate/lane-gate.mjs; every gate file must reach');
-    console.error('  every target, every `e2e` lane must be cached, `test` must not re-couple `e2e`, and');
-    console.error('  `publish` must reach every declared `e2e` (tools/nx-plugins/build/plugin.js).');
+    console.error('  every target, every `e2e` lane must be cached, `test` must not re-couple `e2e`,');
+    console.error('  `publish` must reach every declared `e2e` (tools/nx-plugins/build/plugin.js), and every');
+    console.error('  `vite.config.ts` must declare exactly ONE `plugins:` array (check-vite-config-plugins.mjs).');
     process.exit(1);
   }
 
-  console.log(`✓ lane reachability OK — gate targets [${gateTargets.join(', ')}]; all gate files reach them; every e2e lane cached; publish reaches every declared e2e.`);
+  console.log(`✓ lane reachability OK — gate targets [${gateTargets.join(', ')}]; all gate files reach them; every e2e lane cached; publish reaches every declared e2e; every vite.config.ts single-array.`);
 }
 
 // Only run when invoked directly (never when imported by a test).

@@ -48,6 +48,8 @@ function baseFiles(overrides = {}) {
     'packages/foo/project.json': JSON.stringify(fooProject, null, 2),
     'packages/foo/package.json': JSON.stringify({ name: '@adhd/foo', version: '0.0.0' }),
     'packages/foo/src/a.e2e.ts': '',
+    // A valid single-array config so rule 7 (the repo-wide sweep) is silent on the base fixture.
+    'packages/foo/vite.config.ts': 'export default {\n  plugins: [nxViteTsPaths()],\n};\n',
     '.githooks/pre-push': 'flags=$(node "$repo_root/tools/gate/lane-gate.mjs")\n',
     '.github/workflows/pull-request.yml':
       'npx nx affected -t test --parallel=5\nnpx nx affected -t e2e --parallel=1\n',
@@ -163,6 +165,48 @@ test('rule 6 RED: tsconfig.spec.json with no compiling target (not baselined)', 
   try {
     const res = await check(root);
     assert.ok(hasRule(res, '6-tsconfig-spec-without-compile-target'), JSON.stringify(res.violations));
+  } finally {
+    close(root);
+  }
+});
+
+test('rule 7 RED: a duplicate `plugins:` key in ANY package config', async () => {
+  const { files } = baseFiles();
+  // A config OUTSIDE packages/foo (the sweep is repo-wide, not per-project).
+  files['packages/bar/project.json'] = JSON.stringify({ name: 'bar', targets: {} });
+  files['packages/bar/vite.config.ts'] =
+    'export default {\n  plugins: [nxViteTsPaths()],\n  plugins: [importMetaUrlCjs()],\n};\n';
+  const root = fixture(files);
+  try {
+    const res = await check(root);
+    assert.ok(hasRule(res, 'vite-duplicate-plugins-key'), JSON.stringify(res.violations));
+    assert.ok(res.violations.some((v) => v.detail.includes('packages/bar')));
+  } finally {
+    close(root);
+  }
+});
+
+test('rule 7 RED: an imported vite-plugin factory missing from the plugins array', async () => {
+  const { files } = baseFiles();
+  files['packages/bar/project.json'] = JSON.stringify({ name: 'bar', targets: {} });
+  files['packages/bar/vite.config.ts'] =
+    "import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';\nexport default {\n  plugins: [],\n};\n";
+  const root = fixture(files);
+  try {
+    const res = await check(root);
+    assert.ok(hasRule(res, 'vite-imported-factory-missing'), JSON.stringify(res.violations));
+  } finally {
+    close(root);
+  }
+});
+
+test('rule 7 RED: a workspace with projects but no scanned configs fails loudly (dead walker)', async () => {
+  const { files } = baseFiles();
+  delete files['packages/foo/vite.config.ts'];
+  const root = fixture(files);
+  try {
+    const res = await check(root);
+    assert.ok(hasRule(res, '7-vite-sweep-found-nothing'), JSON.stringify(res.violations));
   } finally {
     close(root);
   }
