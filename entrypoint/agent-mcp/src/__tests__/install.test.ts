@@ -191,6 +191,77 @@ describe('agent-mcp-install (BUG-AGENTMCP-006)', () => {
       expect(doc.mcpServers.other).toEqual({ type: 'stdio', command: 'node', args: ['x.js'] });
       expect(doc.mcpServers['agent-mcp'].command).toBe('npx');
     });
+
+    it('RECONCILE (025a2a5e): a pre-existing same-command entry under another key is removed on install', () => {
+      const configPath = join(tmp, '.claude.json');
+      writeFileSync(
+        configPath,
+        JSON.stringify(
+          {
+            mcpServers: {
+              // Stale duplicate: byte-identical server argv to what `install`
+              // writes, under a different key, carrying a non-canonical env
+              // override. `registerMcpClaude` must reconcile it away.
+              agent: {
+                type: 'stdio',
+                command: 'npx',
+                args: [...AGENT_MCP_NPX_ARGS],
+                env: { ADHD_AGENT_DATABASE_PATH: '/old/agents.db' },
+              },
+            },
+          },
+          null,
+          2,
+        ) + '\n',
+        'utf8',
+      );
+
+      install(['--host', 'claude', '--scope', 'user'], tmp, tmp);
+
+      const doc = JSON.parse(readFileSync(configPath, 'utf8'));
+      // The stale-key duplicate is gone; only the canonical key remains.
+      expect(doc.mcpServers.agent).toBeUndefined();
+      expect(doc.mcpServers['agent-mcp']).toEqual({
+        type: 'stdio',
+        command: 'npx',
+        args: [...AGENT_MCP_NPX_ARGS],
+      });
+    });
+
+    it('args are part of the command signature (1034c8a8): an unrelated bare-npx server with DIFFERENT args survives', () => {
+      const configPath = join(tmp, '.claude.json');
+      writeFileSync(
+        configPath,
+        JSON.stringify(
+          {
+            mcpServers: {
+              // Same bare command (`npx`) AND a byte-identical argv to what
+              // `install` writes -> reconciled away.
+              agent: { type: 'stdio', command: 'npx', args: [...AGENT_MCP_NPX_ARGS] },
+              // Same bare command, DIFFERENT args -> a genuinely different
+              // server the signature must keep. Pre-fix the string-command
+              // signature was the bare `npx`, so this entry was over-deleted.
+              other: { type: 'stdio', command: 'npx', args: ['-y', '@some/other-mcp@latest'] },
+            },
+          },
+          null,
+          2,
+        ) + '\n',
+        'utf8',
+      );
+
+      install(['--host', 'claude', '--scope', 'user'], tmp, tmp);
+
+      const doc = JSON.parse(readFileSync(configPath, 'utf8'));
+      expect(doc.mcpServers.agent).toBeUndefined(); // identical argv -> deduped
+      // Teeth: pre-fix (bare `npx`) this unrelated server was deleted too.
+      expect(doc.mcpServers.other).toEqual({
+        type: 'stdio',
+        command: 'npx',
+        args: ['-y', '@some/other-mcp@latest'],
+      });
+      expect(doc.mcpServers['agent-mcp']).toBeDefined();
+    });
   });
 
   describe('codex (best-effort TOML)', () => {

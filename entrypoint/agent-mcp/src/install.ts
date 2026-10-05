@@ -68,42 +68,25 @@ function readJsonFile(path: string): Record<string, unknown> {
 }
 
 /**
- * Deep-merges ONE entry (`entryKey` -> `entryValue`) into the object living
- * at `containerKey` inside the JSON file at `path`, preserving every other
- * top-level key in the file AND every other entry already inside the
- * container object. Creates the file (and the container object) if either
- * is absent. Re-serializes with a stable 2-space indent (matching every
- * hand-authored config this repo already ships — `.mcp.json`,
- * `opencode.json`, `~/.claude.json`) and a trailing newline. Mirrors
- * `backlog/src/install.ts:86-97`.
- */
-function upsertJsonMcpEntry(path: string, containerKey: string, entryKey: string, entryValue: unknown): void {
-  const doc = readJsonFile(path);
-  const containerRaw = doc[containerKey];
-  const container: Record<string, unknown> =
-    typeof containerRaw === 'object' && containerRaw !== null && !Array.isArray(containerRaw)
-      ? (containerRaw as Record<string, unknown>)
-      : {};
-  container[entryKey] = entryValue;
-  doc[containerKey] = container;
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify(doc, null, 2) + '\n', 'utf8');
-}
-
-/**
  * The command signature of an MCP entry, used to recognize a second
  * registration of the SAME server under a different key. `command` is either
  * an array (`["npx", "-y", "@adhd/agent-mcp@latest"]`) or a string
- * (`"npx"`); the other fields are server-specific config, so the command is the
- * stable identity.
+ * (`"npx"`) paired with an `args` array (`["-y", "@adhd/agent-mcp@latest"]`).
+ * In BOTH shapes the full argv is identity-bearing: a bare `npx` command says
+ * nothing about WHICH server it launches, so `args` must be folded into the
+ * string-command signature too — otherwise two unrelated `npx` servers collide
+ * and the dedupe would over-delete one (backlog 1034c8a8).
  */
 function mcpEntryCommandSignature(entry: unknown): string | undefined {
   if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
     return undefined;
   }
-  const command = (entry as { command?: unknown }).command;
+  const { command, args } = entry as { command?: unknown; args?: unknown };
   if (Array.isArray(command)) return command.join('\u0000');
-  if (typeof command === 'string') return command;
+  if (typeof command === 'string') {
+    const argList = Array.isArray(args) ? args.join('\u0000') : '';
+    return `${command}\u0000${argList}`;
+  }
   return undefined;
 }
 
@@ -217,7 +200,7 @@ function tomlStringArray(values: readonly string[]): string {
 
 function registerMcpClaude(scope: McpScope, cwd: string, homeOverride?: string): McpInstallResult {
   const configPath = claudeConfigPath(scope, cwd, homeOverride);
-  upsertJsonMcpEntry(configPath, 'mcpServers', 'agent-mcp', {
+  upsertJsonMcpEntryDeduped(configPath, 'mcpServers', 'agent-mcp', {
     type: 'stdio',
     command: 'npx',
     args: [...AGENT_MCP_NPX_ARGS],
