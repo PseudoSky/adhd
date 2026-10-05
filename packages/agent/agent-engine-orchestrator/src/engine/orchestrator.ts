@@ -31,6 +31,21 @@ import {
 
 const HITL_TOOL_NAME = 'request_human_input';
 
+/**
+ * Default per-`provider.chat()` timeout when an agent definition does not set
+ * `provider.timeoutMs`.
+ *
+ * Was 60_000ms, which proved a footgun under real fan-out: a genuine agentic
+ * turn (Read/Grep/Bash plus at least one MCP round-trip) routinely exceeds 60s,
+ * and a 29-way concurrent dispatch of `claudecli` tasks failed ~72% on the first
+ * pass (backlog 36a73117). The clock is per model call — it starts inside the
+ * turn, not at task creation — so a longer per-call budget does not penalize
+ * queued tasks. 300_000ms (5 min) matches the operator-verified override from
+ * that incident. Callers who need tighter bounds set `provider.timeoutMs`.
+ */
+export const DEFAULT_PROVIDER_TIMEOUT_MS = 300_000;
+
+
 const HITL_BUILTIN_TOOL_DEFINITION = {
   name: 'builtin__request_human_input',
   description:
@@ -274,7 +289,7 @@ export class Orchestrator {
         const composedSignal = AbortSignal.any([
           signal,
           AbortSignal.timeout(
-            executionContext.agentDefinition.provider.timeoutMs ?? 60_000
+            executionContext.agentDefinition.provider.timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS
           ),
         ]);
 
@@ -368,7 +383,7 @@ export class Orchestrator {
               (error.name === 'AbortError' || error.name === 'TimeoutError'))
           ) {
             const ms =
-              executionContext.agentDefinition.provider.timeoutMs ?? 60_000;
+              executionContext.agentDefinition.provider.timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
             throw new ToolError(
               'PROVIDER_TIMEOUT',
               `Provider call timed out after ${ms}ms. Increase timeoutMs on the agent's provider config.`

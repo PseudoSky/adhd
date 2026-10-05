@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Orchestrator, resolveHitl } from "../engine/orchestrator.js";
+import { Orchestrator, resolveHitl, DEFAULT_PROVIDER_TIMEOUT_MS } from "../engine/orchestrator.js";
 import type { OrchestratorTaskStore, OrchestratorSessionStore } from "../engine/orchestrator.js";
 import { ToolError } from "../validation/errors.js";
 import { nowIso } from "../utils/timestamps.js";
@@ -198,12 +198,15 @@ describe("Orchestrator", () => {
             });
         });
 
-        it("uses the default 60000ms value in the message when timeoutMs is not set", async () => {
+        it(`uses the default ${DEFAULT_PROVIDER_TIMEOUT_MS}ms value in the message when timeoutMs is not set`, async () => {
             const ctx = makeCtx(); // no timeoutMs
             const orch = new Orchestrator();
 
+            // The raised default (backlog 36a73117) is 300s; shorten it to 50ms
+            // only for this assertion so the test does not wait 5 minutes.
             const originalTimeout = AbortSignal.timeout.bind(AbortSignal);
-            AbortSignal.timeout = (ms: number) => (ms === 60_000 ? originalTimeout(50) : originalTimeout(ms));
+            AbortSignal.timeout = (ms: number) =>
+                ms === DEFAULT_PROVIDER_TIMEOUT_MS ? originalTimeout(50) : originalTimeout(ms);
 
             try {
                 await expect(
@@ -220,7 +223,7 @@ describe("Orchestrator", () => {
                     })
                 ).rejects.toMatchObject({
                     code: "PROVIDER_TIMEOUT",
-                    message: expect.stringContaining("60000ms"),
+                    message: expect.stringContaining(`${DEFAULT_PROVIDER_TIMEOUT_MS}ms`),
                 });
             } finally {
                 AbortSignal.timeout = originalTimeout;
