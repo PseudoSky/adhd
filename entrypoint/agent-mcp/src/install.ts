@@ -90,6 +90,60 @@ function upsertJsonMcpEntry(path: string, containerKey: string, entryKey: string
   writeFileSync(path, JSON.stringify(doc, null, 2) + '\n', 'utf8');
 }
 
+/**
+ * The command signature of an MCP entry, used to recognize a second
+ * registration of the SAME server under a different key. `command` is either
+ * an array (`["npx", "-y", "@adhd/agent-mcp@latest"]`) or a string
+ * (`"npx"`); the other fields are server-specific config, so the command is the
+ * stable identity.
+ */
+function mcpEntryCommandSignature(entry: unknown): string | undefined {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+    return undefined;
+  }
+  const command = (entry as { command?: unknown }).command;
+  if (Array.isArray(command)) return command.join('\u0000');
+  if (typeof command === 'string') return command;
+  return undefined;
+}
+
+/**
+ * Upserts ONE MCP entry and removes any OTHER entry in the same container that
+ * registers the same command — i.e. the same server under a stale key. Without
+ * this, a previous install's differently-keyed entry survives alongside the
+ * canonical one (backlog 099b8f48: `agent` with an env block next to
+ * `agent-mcp` with none, the same `npx -y @adhd/agent-mcp@latest` command),
+ * producing duplicate registrations of one server. Keeps `entryKey`.
+ */
+function upsertJsonMcpEntryDeduped(
+  path: string,
+  containerKey: string,
+  entryKey: string,
+  entryValue: Record<string, unknown>,
+): void {
+  const doc = readJsonFile(path);
+  const containerRaw = doc[containerKey];
+  const container: Record<string, unknown> =
+    typeof containerRaw === 'object' && containerRaw !== null && !Array.isArray(containerRaw)
+      ? (containerRaw as Record<string, unknown>)
+      : {};
+
+  const targetSig = mcpEntryCommandSignature(entryValue);
+  if (targetSig !== undefined) {
+    for (const key of Object.keys(container)) {
+      if (key === entryKey) continue;
+      if (mcpEntryCommandSignature(container[key]) === targetSig) {
+        delete container[key];
+      }
+    }
+  }
+
+  container[entryKey] = entryValue;
+  doc[containerKey] = container;
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(doc, null, 2) + '\n', 'utf8');
+}
+
 function claudeConfigPath(scope: McpScope, cwd: string, homeOverride?: string): string {
   if (scope === 'project') return join(cwd, '.mcp.json');
   const home = homeOverride ?? homedir();
@@ -173,7 +227,7 @@ function registerMcpClaude(scope: McpScope, cwd: string, homeOverride?: string):
 
 function registerMcpOpencode(scope: McpScope, cwd: string, homeOverride?: string): McpInstallResult {
   const configPath = opencodeConfigPath(scope, cwd, homeOverride);
-  upsertJsonMcpEntry(configPath, 'mcp', 'agent-mcp', {
+  upsertJsonMcpEntryDeduped(configPath, 'mcp', 'agent-mcp', {
     type: 'local',
     command: ['npx', ...AGENT_MCP_NPX_ARGS],
   });

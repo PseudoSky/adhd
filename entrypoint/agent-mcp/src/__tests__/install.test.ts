@@ -87,6 +87,48 @@ describe('agent-mcp-install (BUG-AGENTMCP-006)', () => {
         command: ['npx', ...AGENT_MCP_NPX_ARGS],
       });
     });
+
+    it('RECONCILE: a pre-existing same-command entry under another key is removed (099b8f48)', () => {
+      const configDir = join(tmp, '.config', 'opencode');
+      mkdirSync(configDir, { recursive: true });
+      const configPath = join(configDir, 'opencode.json');
+      writeFileSync(
+        configPath,
+        JSON.stringify(
+          {
+            $schema: 'https://opencode.ai/config.json',
+            mcp: {
+              // The stale duplicate: same server command, different key, with a
+              // non-canonical env override.
+              agent: {
+                type: 'local',
+                command: ['npx', ...AGENT_MCP_NPX_ARGS],
+                environment: { ADHD_AGENT_DATABASE_PATH: '/old/agents.db' },
+              },
+              github: {
+                type: 'local',
+                command: ['npx', '-y', '@modelcontextprotocol/server-github'],
+              },
+            },
+          },
+          null,
+          2,
+        ) + '\n',
+        'utf8',
+      );
+
+      install(['--host', 'opencode', '--scope', 'user'], tmp, tmp);
+
+      const doc = JSON.parse(readFileSync(configPath, 'utf8'));
+      // the duplicate is gone...
+      expect(doc.mcp.agent).toBeUndefined();
+      expect(doc.mcp['agent-mcp']).toEqual({
+        type: 'local',
+        command: ['npx', ...AGENT_MCP_NPX_ARGS],
+      });
+      // ...while an unrelated server under a DIFFERENT command survives
+      expect(doc.mcp.github).toBeDefined();
+    });
   });
 
   describe('claude', () => {
