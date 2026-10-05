@@ -12,8 +12,12 @@ export default defineConfig({
   root: __dirname,
   cacheDir: projectCacheDir(__dirname),
 
-  plugins: [importMetaUrlCjs(), nxViteTsPaths()],
-  plugins: [nxViteTsPaths(), nxViteTsPathsPre()],
+  // ONE array: a duplicate `plugins:` key would silently drop every plugin but
+  // the last (importMetaUrlCjs() was the casualty — backlog 50b77657). All
+  // three are required: importMetaUrlCjs() restores `import.meta.url` in the
+  // CJS output; nxViteTsPaths()/nxViteTsPathsPre() provide test-time @adhd/*
+  // source resolution.
+  plugins: [importMetaUrlCjs(), nxViteTsPaths(), nxViteTsPathsPre()],
 
   build: {
     outDir: 'dist',
