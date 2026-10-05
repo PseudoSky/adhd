@@ -42,6 +42,12 @@ export default [
                         "{projectRoot}/vite.config.{js,ts,mjs,mts}"
                     ],
                     ignoredDependencies: [
+                        // Resolved dynamically by the plugin loader from a bare
+                        // specifier — external plugins are host dependencies and
+                        // are never statically imported. Declared as an optional
+                        // peer so the loader's own-module resolution base finds
+                        // it. See plugins/loader.ts and backlog dfb03557.
+                        "@adhd/agent-plugin-budget",
                         "tslib",
                         "better-sqlite3",
                         "@anthropic-ai/sdk",
