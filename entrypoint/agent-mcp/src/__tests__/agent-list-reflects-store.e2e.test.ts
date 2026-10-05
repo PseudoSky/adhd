@@ -109,6 +109,17 @@ describe('agent_list reflects the operational store (d31d2655, b6a02237)', () =>
       command: process.execPath,
       args: [DIST_ENTRY],
       env: buildChildEnv(),
+      // Hermetic cwd (backlog d31d2655/b6a02237 test-isolation fix): the child
+      // runs `loadEnvHierarchy()` at import time, which loads `<cwd>/.env` and
+      // `<cwd>/.adhd/.env` with `override:true`. Without an explicit cwd the
+      // child inherits this test's cwd (the monorepo root, whose gitignored
+      // `.env` pins ADHD_AGENT_DATABASE_PATH=data/agent-mcp/agents-dev.db) —
+      // that override silently beat the `ADHD_AGENT_DATABASE_PATH` set in
+      // `buildChildEnv()`, so the server advertised the DEV store (0/2 rows)
+      // instead of this test's 5-row seeded store, and the count assertion
+      // failed. `tmpDir` holds only the seeded db + `home/` (the fake HOME),
+      // so no `.env` is found at any level of the hierarchy.
+      cwd: tmpDir,
     });
     client = new Client(
       { name: 'agent-list-e2e', version: '1.0.0' },

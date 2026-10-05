@@ -37,6 +37,11 @@ export interface IImportAgentsResult {
   /** Files with no parseable frontmatter, or left alone by `update: false`. */
   skipped: string[];
   errors: Array<{ file: string; message: string }>;
+  /**
+   * Non-fatal frontmatter parse notes (e.g. an indented/structured line that
+   * could not be attached to a key). Empty when every file parsed cleanly.
+   */
+  warnings: string[];
 }
 
 export interface IImportAgentsOptions {
@@ -50,25 +55,112 @@ export interface IImportAgentsOptions {
 }
 
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+/** A YAML block-scalar header: `|`, `>`, and either with a chomping indicator. */
+const BLOCK_SCALAR_HEADER = /^[|>][+-]?$/;
 
-/** Parse one persona file. Returns `null` when it has no `---` frontmatter. */
-export function parsePersona(file: string, content: string): IImportedPersona | null {
+/** Strip a single layer of matching surrounding quotes, if present. */
+function unquote(raw: string): string {
+  if (
+    (raw.startsWith('"') && raw.endsWith('"')) ||
+    (raw.startsWith("'") && raw.endsWith("'"))
+  ) {
+    return raw.slice(1, -1);
+  }
+  return raw;
+}
+
+/** Leading whitespace width of a line (spaces + tabs, counted as chars). */
+function indentOf(line: string): number {
+  const m = /^[ \t]*/.exec(line);
+  return m ? m[0].length : 0;
+}
+
+/**
+ * Parse one persona file. Returns `null` when it has no `---` frontmatter.
+ *
+ * Handles the simple `key: value` shape plus the two structured YAML shapes a
+ * real Claude Code persona can carry: block scalars (`description: |` / `>`)
+ * and block sequences (`key:` followed by indented `- item` lines). Any
+ * remaining indented/structured line that cannot be attached to a key is
+ * surfaced through the optional `warn` callback rather than silently dropped
+ * (the pre-fix naive `indexOf(':')` parser truncated such values to `''`).
+ */
+export function parsePersona(
+  file: string,
+  content: string,
+  warn?: (message: string) => void
+): IImportedPersona | null {
   const match = FRONTMATTER.exec(content);
   if (!match) return null;
 
+  const lines = match[1].split(/\r?\n/);
   const meta: Record<string, string> = {};
-  for (const rawLine of match[1].split(/\r?\n/)) {
-    const sep = rawLine.indexOf(':');
-    if (sep === -1) continue;
-    const key = rawLine.slice(0, sep).trim();
-    let value = rawLine.slice(sep + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
+
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i];
+    if (rawLine.trim() === '' || rawLine.trimStart().startsWith('#')) continue;
+
+    // Frontmatter keys start at column 0. An indented line here is structured
+    // content not attached to a key (an unconsumed block/list) — report it.
+    if (indentOf(rawLine) > 0) {
+      warn?.(
+        `line ${i + 1}: indented content with no preceding key — ignored: ${JSON.stringify(rawLine)}`
+      );
+      continue;
     }
-    if (key) meta[key] = value;
+
+    const sep = rawLine.indexOf(':');
+    if (sep === -1) {
+      warn?.(`line ${i + 1}: not a "key: value" pair — ignored: ${JSON.stringify(rawLine)}`);
+      continue;
+    }
+    const key = rawLine.slice(0, sep).trim();
+    if (!key) {
+      warn?.(`line ${i + 1}: empty key — ignored: ${JSON.stringify(rawLine)}`);
+      continue;
+    }
+    const inlineValue = rawLine.slice(sep + 1).trim();
+
+    // Block scalar: `key: |` / `key: >` (optionally with `-`/`+` chomping).
+    if (BLOCK_SCALAR_HEADER.test(inlineValue)) {
+      const folded = inlineValue.startsWith('>');
+      const blockLines: string[] = [];
+      let j = i + 1;
+      for (; j < lines.length; j++) {
+        const l = lines[j];
+        if (l.trim() !== '' && indentOf(l) === 0) break; // next top-level key
+        blockLines.push(l.replace(/^[ \t]+/, ''));
+      }
+      i = j - 1;
+      while (blockLines.length > 0 && blockLines[blockLines.length - 1].trim() === '') {
+        blockLines.pop();
+      }
+      meta[key] = folded ? blockLines.join(' ') : blockLines.join('\n');
+      continue;
+    }
+
+    // Empty inline value → a block sequence (`- item` lines), or a genuinely
+    // empty value. Blank lines between items are tolerated.
+    if (inlineValue === '') {
+      const items: string[] = [];
+      let j = i + 1;
+      for (; j < lines.length; j++) {
+        const l = lines[j];
+        if (l.trim() === '') continue;
+        const m = /^\s*-\s+(.*)$/.exec(l);
+        if (!m) break;
+        items.push(unquote(m[1].trim()));
+      }
+      if (items.length > 0) {
+        i = j - 1;
+        meta[key] = items.join('\n');
+        continue;
+      }
+      meta[key] = '';
+      continue;
+    }
+
+    meta[key] = unquote(inlineValue);
   }
 
   const fallbackName = file.replace(/.*[/\\]/, '').replace(/\.md$/, '');
@@ -115,6 +207,7 @@ export async function importClaudeAgents(
     updated: [],
     skipped: [],
     errors: [],
+    warnings: [],
   };
 
   const files = readdirSync(dir)
@@ -125,7 +218,9 @@ export async function importClaudeAgents(
     const filePath = join(dir, file);
     let persona: IImportedPersona | null;
     try {
-      persona = parsePersona(file, readFileSync(filePath, 'utf8'));
+      persona = parsePersona(file, readFileSync(filePath, 'utf8'), (message) =>
+        result.warnings.push(`${file}: ${message}`)
+      );
     } catch (err) {
       result.errors.push({
         file,

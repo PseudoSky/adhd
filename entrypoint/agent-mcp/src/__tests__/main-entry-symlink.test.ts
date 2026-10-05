@@ -361,6 +361,16 @@ describe("BUG-011: isMainModule guard must survive a symlinked launch", () => {
             // and an ambient ADHD_AGENT_DATABASE_PATH would override the HOME-
             // derived location entirely).
             child = spawn(process.execPath, [symlinkPath], {
+                // Hermetic cwd: `buildChildEnv()` strips ambient ADHD_AGENT_*
+                // vars, but the child's own `loadEnvHierarchy()` still loads
+                // `<cwd>/.env` with `override:true` at import time. Left
+                // unset, cwd inherits this test's cwd (the monorepo root) and
+                // a gitignored repo-root `.env` (ADHD_AGENT_DATABASE_PATH=
+                // data/agent-mcp/agents-dev.db) overrides the fake-HOME
+                // isolation, making the child open a store under the repo tree
+                // (AGENTS.md §10). `tmpDir` holds only this test's symlink +
+                // fake `home/`, so no `.env` is found at any level.
+                cwd: tmpDir,
                 env: buildChildEnv(fakeHome, port),
                 stdio: ["ignore", "pipe", "pipe"],
             });

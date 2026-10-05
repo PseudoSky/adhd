@@ -305,6 +305,14 @@ export interface AgentMcpRunnerConfig {
   command: string;
   /** Args passed to `command` (e.g. `["dist/packages/ai/agent-mcp/src/index.js"]`). */
   args?: string[];
+  /**
+   * Working directory for the spawned server. Defaults to the parent's cwd.
+   * Set this for hermetic tests: agent-mcp's `loadEnvHierarchy()` loads
+   * `<cwd>/.env` (and `<cwd>/.adhd/.env`) with `override:true` at import time,
+   * so a repo-root `.env` would otherwise override an explicit
+   * `ADHD_AGENT_DATABASE_PATH` and make the child open a different store.
+   */
+  cwd?: string;
   /** Extra environment variables merged over the current process env for the spawned server. */
   env?: Record<string, string>;
   /**
@@ -329,13 +337,14 @@ export interface AgentMcpRunnerConfig {
 }
 
 function defaultClientFactory(
-  config: Pick<AgentMcpRunnerConfig, 'command' | 'args' | 'env'>
+  config: Pick<AgentMcpRunnerConfig, 'command' | 'args' | 'env' | 'cwd'>
 ): () => IMcpToolClient {
   return () => {
     const transport = new StdioClientTransport({
       command: config.command,
       args: config.args ?? [],
       env: { ...process.env, ...config.env } as Record<string, string>,
+      ...(config.cwd !== undefined ? { cwd: config.cwd } : {}),
     });
     const client = new Client(
       { name: 'dispatch-orchestrator', version: '0.0.1' },

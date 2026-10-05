@@ -71,8 +71,8 @@
       "dependsOn": ["build", "build-bin", "dist-manifest"]
     },
     "test": {
-      "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference). cli-smoke.spec.ts drives the GENERATED CLI at dist/entrypoint/dispatch-cli/cli/cli.ts and the compiled bin at dist/bin/cli.js, so it needs `generate-cli` and `build-bin`. targetDefaults.test's `^build` builds only dependencies; an explicit dependsOn replaces the targetDefault, so `lint`/`^build` are repeated.",
-      "dependsOn": ["lint", "^build", "generate-cli", "build-bin"]
+      "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference). cli-smoke.spec.ts drives the GENERATED CLI at dist/entrypoint/dispatch-cli/cli/cli.ts and the compiled bin at dist/bin/cli.js, so it needs `generate-cli` and `build-bin`. targetDefaults.test's `^build` builds only dependencies; an explicit dependsOn replaces the targetDefault, so `lint`/`^build` are repeated. `agent-mcp:build` is required by the real-registry e2e (agent-mcp-registry.e2e.test.ts): it spawns the BUILT agent-mcp entry at entrypoint/agent-mcp/dist/src/index.js as the external MCP boundary (the `daafe2d3` default-servers + `09e84a88` import round-trip proofs). agent-mcp:build is cacheable, so this is a one-time cost.",
+      "dependsOn": ["lint", "^build", "generate-cli", "build-bin", "agent-mcp:build"]
     }
   }
 }

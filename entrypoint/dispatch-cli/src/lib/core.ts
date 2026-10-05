@@ -15,7 +15,8 @@
  * and a path under `tmp/dispatch-cli/`.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -116,6 +117,81 @@ function loggedOperationIds(dag: DagJson): Set<string> {
  * fires a real, billed model call. Used only by `api.ts`'s `run()` (when
  * `dryRun: false`) and `calibrate()` — never by this package's tests.
  */
+/** How many directory levels to walk up from the entry script looking for the
+ *  monorepo's `entrypoint/` directory. Generous enough to cover `src/lib`,
+ *  `dist/`, and any build nesting, while bounded. */
+const WORKSPACE_MARKER_SEARCH_DEPTH = 12;
+
+/**
+ * Base path used both to resolve the installed `@adhd/backlog` package and to
+ * walk up to the monorepo root. Deliberately `process.argv[1]` (the entry
+ * script) and NEVER `process.cwd()` — the original defect. `argv[1]` is a file
+ * inside the running install (`…/entrypoint/dispatch-cli/dist/bin/cli.js` for
+ * the published bin, `…/node_modules/vitest/…` under a test runner), so it
+ * identifies the tree whose `node_modules` owns the dependencies, and it does
+ * not change when a caller `cd`s elsewhere.
+ */
+function resolutionBase(): string {
+  const entry = process.argv[1];
+  return entry && entry.length > 0 ? entry : join(process.cwd(), 'index.js');
+}
+
+/**
+ * Resolve the `@adhd/backlog` MCP-server entry (`dist/index.js`) to an
+ * ABSOLUTE path — never a `process.cwd()`-relative guess.
+ *
+ * The pre-fix default was
+ * `join(process.cwd(), 'entrypoint', 'backlog', 'dist', 'index.js')`. That is
+ * correct only when the caller happens to run from the monorepo root, and is
+ * broken for every out-of-repo consumer (a published/installed
+ * `@adhd/dispatch-cli`): their cwd has no `entrypoint/backlog/` at all, so the
+ * spawned backlog server silently fails to start. Resolution order:
+ *
+ *   1. `ADHD_DISPATCH_BACKLOG_MCP_ENTRY` — an explicit override always wins
+ *      (used verbatim, so a caller can point at any backlog build).
+ *   2. `createRequire(import.meta.url).resolve('@adhd/backlog')` — the
+ *      installed package's real entry. This is the correct resolution for a
+ *      consumer that has `@adhd/backlog` installed.
+ *   3. The monorepo checkout this CLI was launched from — the nearest ancestor
+ *      directory containing `entrypoint/`, plus `entrypoint/backlog/dist/
+ *      index.js`. Relative to the entry script (see {@link resolutionBase}), so
+ *      it is INDEPENDENT of the caller's cwd.
+ *
+ * @throws when no candidate resolves (no override, `@adhd/backlog` not
+ *   installed, and this CLI is not inside the monorepo) — fail loudly rather
+ *   than hand the child a path that 404s at spawn time.
+ */
+export function resolveBacklogMcpEntry(
+  env: NodeJS.ProcessEnv = process.env
+): string {
+  const override = env['ADHD_DISPATCH_BACKLOG_MCP_ENTRY'];
+  if (override) return override;
+
+  const base = resolutionBase();
+  try {
+    return createRequire(base).resolve('@adhd/backlog');
+  } catch {
+    // Not installed as a resolvable dependency — fall through to the
+    // monorepo-relative path (the in-repo dev case).
+  }
+
+  let dir = dirname(base);
+  for (let i = 0; i < WORKSPACE_MARKER_SEARCH_DEPTH; i++) {
+    if (existsSync(join(dir, 'entrypoint'))) {
+      return join(dir, 'entrypoint', 'backlog', 'dist', 'index.js');
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  throw new Error(
+    'defaultDispatchMcpServers: cannot locate the @adhd/backlog MCP server entry. ' +
+      'Install @adhd/backlog, or set ADHD_DISPATCH_BACKLOG_MCP_ENTRY to its ' +
+      'dist/index.js absolute path.'
+  );
+}
+
 /**
  * The default `mcpServers` every dispatch-created agent is born with (backlog
  * daafe2d3): the memory-server (so a dispatched agent can recall prior
@@ -126,16 +202,15 @@ function loggedOperationIds(dag: DagJson): Set<string> {
  * Wire-shaped (transport-discriminated) — exactly the JSON `agent_create`
  * accepts. Both entries are environment-overridable:
  *   - `ADHD_DISPATCH_MEMORY_MCP_URL`    (default `http://localhost:3099/sse`)
- *   - `ADHD_DISPATCH_BACKLOG_MCP_ENTRY` (default `<cwd>/entrypoint/backlog/dist/index.js`)
+ *   - `ADHD_DISPATCH_BACKLOG_MCP_ENTRY` (override; else resolved by
+ *     {@link resolveBacklogMcpEntry} — installed package, then monorepo)
  */
 export function defaultDispatchMcpServers(
   env: NodeJS.ProcessEnv = process.env
 ): Record<string, Record<string, unknown>> {
   const memoryUrl =
     env['ADHD_DISPATCH_MEMORY_MCP_URL'] ?? 'http://localhost:3099/sse';
-  const backlogEntry =
-    env['ADHD_DISPATCH_BACKLOG_MCP_ENTRY'] ??
-    join(process.cwd(), 'entrypoint', 'backlog', 'dist', 'index.js');
+  const backlogEntry = resolveBacklogMcpEntry(env);
 
   return {
     'memory-server': { transport: 'sse', url: memoryUrl },
@@ -147,11 +222,28 @@ export function defaultDispatchMcpServers(
   };
 }
 
-export function buildProductionAgentMcpRunner(): AgentMcpRunner {
+/**
+ * Production `AgentMcpRunner` wiring — spawns agent-mcp via `npx -y
+ * @adhd/agent-mcp` by default (matching agent-mcp's documented Quickstart).
+ *
+ * The launch is environment-overridable so a caller (or a hermetic e2e test)
+ * can point at a local/alternative agent-mcp build instead of the published
+ * one:
+ *   - `ADHD_DISPATCH_AGENT_MCP_COMMAND` (default `npx`)
+ *   - `ADHD_DISPATCH_AGENT_MCP_ARGS`    (whitespace-separated; default
+ *     `-y @adhd/agent-mcp`)
+ */
+export function buildProductionAgentMcpRunner(
+  env: NodeJS.ProcessEnv = process.env
+): AgentMcpRunner {
+  const command = env['ADHD_DISPATCH_AGENT_MCP_COMMAND'] ?? 'npx';
+  const args = env['ADHD_DISPATCH_AGENT_MCP_ARGS']
+    ? env['ADHD_DISPATCH_AGENT_MCP_ARGS'].split(/\s+/).filter(Boolean)
+    : ['-y', '@adhd/agent-mcp'];
   return new AgentMcpRunner({
-    command: 'npx',
-    args: ['-y', '@adhd/agent-mcp'],
-    defaultMcpServers: defaultDispatchMcpServers(),
+    command,
+    args,
+    defaultMcpServers: defaultDispatchMcpServers(env),
   });
 }
 

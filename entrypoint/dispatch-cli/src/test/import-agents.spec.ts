@@ -94,6 +94,49 @@ describe('parsePersona', () => {
   it('returns null when there is no frontmatter', () => {
     expect(parsePersona('x.md', 'no frontmatter here')).toBeNull();
   });
+
+  it('parses a folded block scalar (`>`) as a single joined line', () => {
+    const persona = parsePersona(
+      'folded.md',
+      `---\nname: folded\ndescription: >\n  A senior reviewer who\n  reviews code carefully.\nmodel: sonnet\n---\n\nbody\n`
+    );
+    expect(persona?.description).toBe(
+      'A senior reviewer who reviews code carefully.'
+    );
+    // The block scalar must not swallow the following top-level key.
+    expect(persona?.model).toBe('sonnet');
+  });
+
+  it('parses a literal block scalar (`|`) preserving line breaks', () => {
+    const persona = parsePersona(
+      'literal.md',
+      `---\nname: literal\ndescription: |\n  line one\n  line two\n---\n\nbody\n`
+    );
+    expect(persona?.description).toBe('line one\nline two');
+  });
+
+  it('parses a block sequence (`- item`) into a newline-joined value', () => {
+    const persona = parsePersona(
+      'list.md',
+      `---\nname: list\ndescription:\n  - one\n  - two\nmodel: sonnet\n---\n\nbody\n`
+    );
+    expect(persona?.description).toBe('one\ntwo');
+    expect(persona?.model).toBe('sonnet');
+  });
+
+  it('warns (never silently drops) on an unattached indented line', () => {
+    const warnings: string[] = [];
+    const persona = parsePersona(
+      'warned.md',
+      `---\nname: warned\n  stray: indented\nmodel: sonnet\n---\n\nbody\n`,
+      (m) => warnings.push(m)
+    );
+    expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0]).toContain('indented content');
+    // The surrounding top-level keys still parse correctly.
+    expect(persona?.name).toBe('warned');
+    expect(persona?.model).toBe('sonnet');
+  });
 });
 
 describe('importClaudeAgents (09e84a88)', () => {
@@ -153,5 +196,26 @@ describe('importClaudeAgents (09e84a88)', () => {
     expect(result.updated).toEqual([]);
     expect(client.calls.filter((c) => c.name === 'agent_update')).toHaveLength(0);
     expect(client.calls.filter((c) => c.name === 'agent_create')).toHaveLength(0);
+  });
+
+  it('surfaces frontmatter parse warnings per file while still importing the persona', async () => {
+    const warnDir = fs.mkdtempSync(path.join(TMP_ROOT, 'import-agents-warn-'));
+    try {
+      fs.writeFileSync(
+        path.join(warnDir, 'structured.md'),
+        `---\nname: structured\ndescription: >\n  Folded description text.\nmodel: sonnet\n  stray: indented\n---\n\nbody\n`
+      );
+      const client = new FakeAgentMcpCaller();
+      const result = await importClaudeAgents(warnDir, client);
+
+      expect(result.created).toEqual(['structured']);
+      expect(result.warnings.length).toBeGreaterThan(0);
+      expect(result.warnings[0]).toContain('structured.md');
+      // Block scalar still parsed and sent as the systemPrompt-adjacent description.
+      const created = client.calls.find((c) => c.name === 'agent_create');
+      expect(created?.args['description']).toContain('Folded description text.');
+    } finally {
+      fs.rmSync(warnDir, { recursive: true, force: true });
+    }
   });
 });

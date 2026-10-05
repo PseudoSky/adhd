@@ -24,16 +24,36 @@ export const agentVerifyMcpInputSchema = z.object({
 
 export type AgentVerifyMcpInput = z.infer<typeof agentVerifyMcpInputSchema>;
 
+/**
+ * The AUTHORITATIVE three-way outcome of verifying one server. Consumers should
+ * switch on this rather than on `ok` alone: `ok: true` used to mean BOTH
+ * "handshake verified" AND "skipped", which is ambiguous (backlog review
+ * finding). `status` disambiguates:
+ *   - `'verified'` — the stdio/http/sse handshake + `listTools` succeeded;
+ *     `tools` carries the reachable tool names (possibly empty).
+ *   - `'skipped'`  — the server needs no out-of-process probe (the
+ *     self-referential `agent-mcp` entry, handled in-process); `skipped`
+ *     carries the reason.
+ *   - `'error'`    — connect/handshake failed; `error` carries the message.
+ */
+export type McpServerVerificationStatus = 'verified' | 'skipped' | 'error';
+
 export interface McpServerVerification {
   name: string;
   transport: McpServerConfig['transport'];
-  /** True when the handshake + listTools succeeded (or the server was skipped). */
+  /** Authoritative tri-state — prefer this over `ok`. */
+  status: McpServerVerificationStatus;
+  /**
+   * Convenience shorthand for `status !== 'error'` (a skipped server did not
+   * error). Kept for wire backward-compatibility; use `status` when you must
+   * distinguish `'verified'` from `'skipped'`.
+   */
   ok: boolean;
-  /** Reachable tool names — present (possibly empty) only when `ok`. */
+  /** Reachable tool names — present (possibly empty) only when `status === 'verified'`. */
   tools?: string[];
-  /** Human-readable connection/handshake error — present only when `!ok`. */
+  /** Human-readable connection/handshake error — present only when `status === 'error'`. */
   error?: string;
-  /** Set instead of a connection when the server needs no out-of-process probe. */
+  /** The skip reason — present only when `status === 'skipped'`. */
   skipped?: string;
 }
 
@@ -77,6 +97,7 @@ async function verifyOne(
     return {
       name,
       transport: config.transport,
+      status: 'skipped',
       ok: true,
       tools: [],
       skipped: 'self-referential (handled in-process)',
@@ -87,7 +108,13 @@ async function verifyOne(
   try {
     client = createClient(name, config);
   } catch (err) {
-    return { name, transport: config.transport, ok: false, error: errorMessage(err) };
+    return {
+      name,
+      transport: config.transport,
+      status: 'error',
+      ok: false,
+      error: errorMessage(err),
+    };
   }
 
   try {
@@ -96,6 +123,7 @@ async function verifyOne(
     return {
       name,
       transport: config.transport,
+      status: 'verified',
       ok: true,
       tools: tools.map((t) => t.name),
     };
@@ -103,6 +131,7 @@ async function verifyOne(
     return {
       name,
       transport: config.transport,
+      status: 'error',
       ok: false,
       error: errorMessage(err),
     };
