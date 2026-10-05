@@ -83,6 +83,11 @@ describe('09e84a88 — dispatch-cli agents import round-trips into a temp regist
     try {
       const def = await runner.callTool<{ systemPrompt?: string }>('agent_read', {
         name: 'imported-persona',
+        // The body is gated behind an explicit opt-in since 4a6ae079 ("gate
+        // agent systemPrompt behind explicit opt-in"): the default `agent_read`
+        // response is a SUMMARY that OMITS systemPrompt. The round-trip proof
+        // must request it, exactly as the tool's own description instructs.
+        fullDefinition: true,
       });
       expect(def.systemPrompt).toBe(BODY);
 
