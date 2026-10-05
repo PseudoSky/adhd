@@ -803,3 +803,53 @@ Schema version 1.
   `.worktrees/wt-vite-dupe-plugins-9c4e` at `f2e8ceba`; no push, no branch or worktree removed, and no
   gates were run by this operation (the post-merge review runs the suite). This record is the only
   change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `feat/hitl-reachable-9c4e` (dispatch-2026-10-04-9c4e).**
+  Landed the HITL-reachability fix onto `main` as a **merge commit** `26252bfe` (parents `89d3d73b`
+  = pre-merge `main`, `57f53429` = branch head), moving `main` `89d3d73b` → `26252bfe`; 19 files,
+  +1095/-57. The branch was a single commit, `57f53429` (`fix(dispatch-orchestrator,dispatch-cli):
+  make HITL reachable from dispatch (03145a46)`), whose only parent is the merge-base `27a21407`
+  (`git show -s --format=%P 57f53429` = `27a21407`); `main` had advanced 6 commits beyond that base
+  (`5be96af9`, `3869d37d`, `958c09c8`, `f2e8ceba`, `4ad0378d`, `89d3d73b`), so the landing is a genuine
+  non-fast-forward. The dispatch directed `--no-ff`, and a merge commit is within §Branching & merge,
+  which states history "carries true merge commits" and ff-only is not enforced. §Branching & merge
+  was the deciding rule: rebase-in-flight is permitted only on a branch "solely your own" — this is
+  an in-flight executor branch, not the operator's, so rewriting its commit was out; a merge commit
+  is the stated shape here. The dry-run `git merge-tree --write-tree --name-only main
+  feat/hitl-reachable-9c4e` exited **1** with exactly one conflict,
+  `entrypoint/dispatch-cli/src/test/integration/live-dispatch-five-acs.e2e.test.ts` (with
+  `entrypoint/dispatch-cli/README.md` auto-merging) — the **only** conflict, both this branch and the
+  already-merged `5be96af9` having edited that live five-AC e2e. The merged side (`5be96af9`) added
+  `DISPATCH_E2E_PROVIDER=anthropic` support, AC2 tool-surface isolation (`HITL_ISOLATED_MCP`), an AC2
+  diagnostic (a `try/catch` around `orchestrateCycle` dumping the child's persisted task rows), and
+  rewrote the test header's reachability note to a "KNOWN BLOCKER"; this branch (`57f53429`) rewrote
+  the same header to "AC2 STATUS SURFACE (… now implemented)" and extended AC2 to assert the
+  `dispatch-cli status` surface (`awaiting_input` + `awaitingInput.resumeToken`) via `statusCore`.
+  git's ort merge auto-merged the AC2 body — keeping main's isolation, systemPrompt, and diagnostic
+  `try/catch` **and** the branch's `statusCore` assertions — and left exactly the header paragraph in
+  conflict (`<<<<<<<`/`=======`/`>>>>>>>` at lines 66–91). Per the dispatch's "single coherent file
+  that keeps BOTH sets of changes", the header was resolved to one narrative retaining both sides'
+  content: main's live-proven mechanism (the model really calls `builtin__request_human_input`, the
+  child persists `awaiting_input` + `resume_token`; `fire()` awaited a synchronous `task` call while
+  the HITL path blocked on `await userInputPromise`, aborting at the 60s deadline; `statusCore` had no
+  `awaiting_input`/`resumeToken`) now stated as the pre-fix history, and the branch's implemented
+  outcome (a sessioned unit fires `background:true`, `poll()` observes `awaiting_input`, the unit is
+  parked not failed, `statusCore` reports `awaiting_input` + `awaitingInput: { taskId, resumeToken }`).
+  Resolved content is blob `a00e66db`; verified no conflict marker remains
+  (`rg '^(<<<<<<<|=======|>>>>>>>)' <file>` matches nothing), the `anthropic` provider support is
+  present (provider type union, `assertPrerequisites` credential check, both provider-spec builders,
+  and the env merge), and the AC2 status-surface assertion is present (`statusCore(l.dagPath)` +
+  `report['hitl']?.awaitingInput?.resumeToken`). The dry-run's exit 1 was the only non-zero step; the
+  resolved `git commit --no-edit` exited 0 after the git-invoked pre-commit hook (mass-deletion guard,
+  secret scan, affected lint, staged-spec) passed. Post-merge `git rev-list --count
+  main..feat/hitl-reachable-9c4e` = 0 and `git merge-base --is-ancestor 57f53429 main` exits 0, so
+  `57f53429` is contained; the merge is two-parent (not fast-forward). The branch never touched this
+  file (empty `git diff --name-only 27a21407..57f53429 -- docs/GIT-POLICY.md`), so `main`'s policy
+  blob `5bbfe26e` survived the merge byte-identical (pre-merge `89d3d73b` and post-merge `26252bfe`
+  resolve the same blob). The working tree was clean before and after (`git status --porcelain`
+  empty) and nothing was staged before or after (`git diff --cached --name-only` empty); the
+  dispatch's anticipated "unrelated concurrent dirt" was not present, so nothing had to be avoided or
+  protected. The branch remains checked out in worktree `.worktrees/wt-hitl-reachable-9c4e` at
+  `57f53429`; no push, no branch or worktree removed, and no gates were run by this operation (the
+  post-merge review runs the suite). This record is the only change to this file in this operation.
+  Recorded under §Commit convention's `docs(<area>):` scope.
