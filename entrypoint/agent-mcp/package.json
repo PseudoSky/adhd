@@ -5,6 +5,7 @@
   "bin": {
     "agent-mcp": "./dist/src/index.js",
     "agent-mcp-tail": "./dist/src/scripts/agent-mcp-tail.js",
+    "agent-mcp-follow": "./dist/src/scripts/agent-mcp-follow.js",
     "agent-mcp-install": "./dist/src/scripts/agent-mcp-install.js"
   },
   "files": [
