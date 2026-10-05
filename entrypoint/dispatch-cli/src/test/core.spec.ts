@@ -35,7 +35,12 @@ import {
   statusCore,
   validateCore,
 } from '../lib/core.js';
-import { makeCompletionLogEntry, makeFixtureDag, makeOp } from './helpers/fixtures.js';
+import {
+  makeCompletionLogEntry,
+  makeFixtureDag,
+  makeOp,
+  makeSuspensionLogEntry,
+} from './helpers/fixtures.js';
 
 // Repo-canonical ephemeral root (CLAUDE.md "Test/ephemeral artifacts"):
 // tmp/<package>/<test-scoped>/ — gitignored, fully removed on teardown.
@@ -181,6 +186,51 @@ describe('statusCore', () => {
     expect(report['a']?.loggedOperationIds).toEqual(['a.1']);
     expect(report['b']?.loggedOperationIds).toEqual([]);
     expect(report['b']?.status).toBe('pending');
+  });
+
+  it('surfaces awaiting_input + awaitingInput{taskId,resumeToken} for a suspended milestone (03145a46)', async () => {
+    const dag = makeFixtureDag();
+    dag.dispatch_log.push(
+      makeSuspensionLogEntry('a', ['a.1'], {
+        taskId: 'task-hitl-suspended',
+        resumeToken: 'token-hitl-suspended',
+      })
+    );
+    const dagPath = await writeFixture(dag);
+    const report = await statusCore(dagPath);
+
+    // NEGATIVE-CONTROL: `awaitingInput` is only attached when the derived
+    // status is 'awaiting_input'; dropping the `latestSuspensionForMilestone`
+    // call (or the MilestoneStatus member) makes this see 'pending'/undefined
+    // -> red.
+    expect(report['a']?.status).toBe('awaiting_input');
+    expect(report['a']?.awaitingInput).toEqual({
+      taskId: 'task-hitl-suspended',
+      resumeToken: 'token-hitl-suspended',
+    });
+    // A non-suspended milestone stays 'pending' with no awaitingInput field.
+    expect(report['b']?.status).toBe('pending');
+    expect(report['b']?.awaitingInput).toBeUndefined();
+  });
+
+  it('prefers the most recent suspension when a milestone suspended more than once', async () => {
+    const dag = makeFixtureDag();
+    dag.dispatch_log.push(
+      makeSuspensionLogEntry('a', ['a.1'], {
+        taskId: 'task-first',
+        resumeToken: 'token-first',
+      }),
+      makeSuspensionLogEntry('a', ['a.1'], {
+        taskId: 'task-second',
+        resumeToken: 'token-second',
+      })
+    );
+    const dagPath = await writeFixture(dag);
+    const report = await statusCore(dagPath);
+    expect(report['a']?.awaitingInput).toEqual({
+      taskId: 'task-second',
+      resumeToken: 'token-second',
+    });
   });
 });
 

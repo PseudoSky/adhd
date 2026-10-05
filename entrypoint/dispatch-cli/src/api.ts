@@ -108,6 +108,11 @@ export async function eligible(dagPath: string): Promise<string[]> {
  * recorded dispatch_log result), and `tokensEstimated`/`tokensActual`
  * (carried straight from the snapshot). Read-only.
  *
+ * When a milestone's `status` is `awaiting_input` (a sessioned HITL task
+ * suspended via `request_human_input`), the entry additionally carries
+ * `awaitingInput: { taskId, resumeToken }` — pass those to agent-mcp's
+ * `task_resume` to release the suspension (03145a46).
+ *
  * @param dagPath - Path to the plan's `dag.json`.
  */
 export async function status(dagPath: string): Promise<Record<string, MilestoneStatusEntry>> {

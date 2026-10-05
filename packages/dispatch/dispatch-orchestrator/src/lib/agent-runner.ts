@@ -158,6 +158,13 @@ export interface IDispatchAgentRunner {
     status: DispatchTaskStatus;
     usage: DispatchUsageReport | undefined;
     error?: string;
+    /**
+     * Present only when `status === 'awaiting_input'`: agent-mcp's opaque HITL
+     * `resumeToken` for the suspended task, read from the same `result` payload.
+     * The orchestrator persists it on the dispatch_log entry's `suspension` so
+     * `dispatch-cli status` can surface it (backlog 03145a46).
+     */
+    resumeToken?: string;
   }>;
   /** Cancels a pending/running/awaiting_input task. */
   cancel(taskId: string): Promise<void>;
@@ -198,10 +205,22 @@ export interface McpCallToolResult {
  */
 export interface IMcpToolClient {
   connect(): Promise<void>;
-  callTool(params: {
-    name: string;
-    arguments?: Record<string, unknown>;
-  }): Promise<McpCallToolResult>;
+  /**
+   * `options.timeout` overrides the MCP SDK's per-request timeout
+   * (`@modelcontextprotocol/sdk`'s 60s `DEFAULT_REQUEST_TIMEOUT_MSEC`) for this
+   * one call. `AgentMcpRunner` passes its configured `requestTimeoutMs` here so
+   * the MCP request budget can never be shorter than a dispatch's poll budget —
+   * the "60s MCP abort vs 300s/10min poll" mismatch that used to abort a
+   * long-running synchronous `task` call (`-32001`). Optional, so an injected
+   * fake that ignores it (and the SDK default when unset) stay byte-identical.
+   */
+  callTool(
+    params: {
+      name: string;
+      arguments?: Record<string, unknown>;
+    },
+    options?: { timeout?: number }
+  ): Promise<McpCallToolResult>;
   close(): Promise<void>;
 }
 
@@ -353,6 +372,15 @@ export interface AgentMcpRunnerConfig {
    * `true`.
    */
   createAgentsIfMissing?: boolean;
+  /**
+   * Per-call MCP request timeout, ms (default: unset — the SDK's own 60s
+   * `DEFAULT_REQUEST_TIMEOUT_MSEC`). The dispatch host sets this to its
+   * orchestrator poll budget so a synchronous `task` call can never be aborted
+   * by the MCP client before the poll deadline it is paired with — the
+   * "60s MCP abort vs Ns poll" mismatch. Ignored when a `clientFactory` is
+   * injected (the fake client decides its own timing).
+   */
+  requestTimeoutMs?: number;
 }
 
 function defaultClientFactory(
@@ -371,8 +399,15 @@ function defaultClientFactory(
     );
     return {
       connect: () => client.connect(transport),
-      callTool: (params) =>
-        client.callTool(params) as Promise<McpCallToolResult>,
+      callTool: (params, options) =>
+        // `resultSchema` is intentionally `undefined` (the SDK's default) —
+        // the runner parses the raw text content itself. `options` carries the
+        // per-call timeout override (see IMcpToolClient.callTool).
+        client.callTool(
+          params,
+          undefined,
+          options
+        ) as Promise<McpCallToolResult>,
       close: () => client.close(),
     };
   };
@@ -389,6 +424,7 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
   private readonly makeClient: () => IMcpToolClient;
   private readonly defaultMcpServers: Record<string, Record<string, unknown>>;
   private readonly createAgentsIfMissing: boolean;
+  private readonly requestTimeoutMs: number | undefined;
   private client: IMcpToolClient | null = null;
   private connecting: Promise<IMcpToolClient> | null = null;
 
@@ -396,6 +432,7 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
     this.makeClient = config.clientFactory ?? defaultClientFactory(config);
     this.defaultMcpServers = config.defaultMcpServers ?? {};
     this.createAgentsIfMissing = config.createAgentsIfMissing ?? true;
+    this.requestTimeoutMs = config.requestTimeoutMs;
   }
 
   private async getClient(): Promise<IMcpToolClient> {
@@ -423,7 +460,12 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
     args: Record<string, unknown>
   ): Promise<T> {
     const client = await this.getClient();
-    const result = await client.callTool({ name, arguments: args });
+    const result = await client.callTool(
+      { name, arguments: args },
+      this.requestTimeoutMs !== undefined
+        ? { timeout: this.requestTimeoutMs }
+        : undefined
+    );
     const text = result.content?.[0]?.text ?? '';
 
     if (result.isError) {
@@ -490,7 +532,21 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
       agent_name: unit.agent_name,
       prompt: unit.prompt,
     };
-    if (unit.session_id) args["session_id"] = unit.session_id;
+    if (unit.session_id) {
+      args["session_id"] = unit.session_id;
+      // Fire sessioned tasks in the BACKGROUND (03145a46). A sessioned task is
+      // the only kind that can suspend for human input (HITL); agent-mcp
+      // hard-blocks `request_human_input` for ephemeral tasks
+      // (agent-engine-orchestrator/src/engine/orchestrator.ts). A synchronous
+      // `task` call would block on the engine's `await userInputPromise` and
+      // never return, so the MCP client aborts at its 60s request timeout
+      // (`-32001`) — leaving the (real, persisted) suspension unobservable.
+      // Background returns an immediate `{ task_id, status: 'pending' }`; the
+      // existing `poll()` then observes `awaiting_input` (or `completed`) on the
+      // same connection. Non-sessioned units stay synchronous: agent-mcp's
+      // ephemeral branch is synchronous by design and ignores `background`.
+      args["background"] = true;
+    }
 
     const result = await this.callTool<{ task_id: string }>('task', args);
     return { taskId: result.task_id };
@@ -502,16 +558,22 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
     status: DispatchTaskStatus;
     usage: DispatchUsageReport | undefined;
     error?: string;
+    resumeToken?: string;
   }> {
     const result = await this.callTool<{
       status: DispatchTaskStatus;
       usage?: DispatchUsageReport;
       error?: string;
+      resumeToken?: string | null;
     }>('result', { task_id: taskId });
     return {
       status: result.status,
       usage: result.usage,
       ...(result.error !== undefined ? { error: result.error } : {}),
+      // Only surface a real token; agent-mcp returns `resumeToken: null` for
+      // every non-suspended task, and an absent key keeps `poll()` output
+      // byte-identical to before for the common case.
+      ...(result.resumeToken != null ? { resumeToken: result.resumeToken } : {}),
     };
   }
 

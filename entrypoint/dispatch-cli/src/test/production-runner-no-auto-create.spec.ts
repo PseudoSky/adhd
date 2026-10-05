@@ -6,6 +6,8 @@ import type {
   McpCallToolResult,
 } from '@adhd/dispatch-orchestrator';
 
+import { DEFAULT_POLL } from '@adhd/dispatch-orchestrator';
+
 import { buildProductionAgentMcpRunner } from '../lib/core.js';
 
 /**
@@ -22,14 +24,19 @@ import { buildProductionAgentMcpRunner } from '../lib/core.js';
 
 class RecordingClient implements IMcpToolClient {
   readonly calls: string[] = [];
+  readonly timeouts: Array<number | undefined> = [];
   async connect(): Promise<void> {
     /* no-op */
   }
-  async callTool(params: {
-    name: string;
-    arguments?: Record<string, unknown>;
-  }): Promise<McpCallToolResult> {
+  async callTool(
+    params: {
+      name: string;
+      arguments?: Record<string, unknown>;
+    },
+    options?: { timeout?: number }
+  ): Promise<McpCallToolResult> {
     this.calls.push(params.name);
+    this.timeouts.push(options?.timeout);
     if (params.name === 'agent_read') {
       return {
         isError: true,
@@ -79,5 +86,41 @@ describe('production runner no-auto-create (f1dbd0f2)', () => {
 
     await runner.ensureAgent(unit('dispatch-cli-calibration-sonnet'));
     expect(client.calls).toEqual(['agent_read', 'agent_create']);
+  });
+});
+
+describe('production runner MCP request timeout (removes the 60s-vs-poll mismatch)', () => {
+  it('defaults the per-call timeout to the orchestrator poll budget (DEFAULT_POLL.timeoutMs)', async () => {
+    const client = new RecordingClient();
+    const runner = buildProductionAgentMcpRunner(process.env, {
+      clientFactory: () => client,
+    });
+
+    // agent_read misses -> agent_create; both calls carry the timeout.
+    await runner.ensureAgent(unit('missing')).catch(() => {
+      /* AGENT_NOT_FOUND expected */
+    });
+
+    // NEGATIVE-CONTROL: dropping `requestTimeoutMs` from
+    // buildProductionAgentMcpRunner makes these see `undefined` (the SDK's 60s
+    // default) -> red.
+    expect(client.timeouts.length).toBeGreaterThan(0);
+    for (const t of client.timeouts) {
+      expect(t).toBe(DEFAULT_POLL.timeoutMs);
+    }
+  });
+
+  it('honors the ADHD_DISPATCH_AGENT_MCP_REQUEST_TIMEOUT_MS override', async () => {
+    const client = new RecordingClient();
+    const runner = buildProductionAgentMcpRunner(
+      { ...process.env, ADHD_DISPATCH_AGENT_MCP_REQUEST_TIMEOUT_MS: '4321' },
+      { clientFactory: () => client }
+    );
+
+    await runner.ensureAgent(unit('missing')).catch(() => {
+      /* AGENT_NOT_FOUND expected */
+    });
+
+    expect(client.timeouts[0]).toBe(4321);
   });
 });

@@ -20,6 +20,10 @@ const VALID_MILESTONE_STATUSES = new Set<MilestoneStatus>([
   'complete',
   'failed',
   'skipped',
+  // HITL suspension (03145a46): a milestone whose sessioned task parked at
+  // awaiting_input. Must be accepted by the snapshot validator (set when the
+  // optimizer derives the status from a dispatch_log `suspension`).
+  'awaiting_input',
 ]);
 const VALID_OPERATION_STATUSES = new Set<OperationStatus>([
   'pending',

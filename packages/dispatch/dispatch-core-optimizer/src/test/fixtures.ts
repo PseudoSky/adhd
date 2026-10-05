@@ -153,3 +153,50 @@ export function passingGuardEntry(
     ...overrides,
   };
 }
+
+/**
+ * A dispatch_log entry recording a HITL SUSPENSION for `${slug}` (03145a46):
+ * the agent-mcp task parked at `awaiting_input`, so the milestone's ops and
+ * guard are 'skipped' (never 'failed') and the entry carries the `suspension`
+ * (task id + resumeToken). Mirrors exactly what `dispatch-orchestrator`'s
+ * `dispatchUnit` writes for an `awaiting_input` poll outcome.
+ */
+export function suspendedEntry(
+  slug: string,
+  opIds: string[],
+  overrides: Partial<DispatchLogEntry> = {}
+): DispatchLogEntry {
+  const guardId = `${slug}.guard`;
+  const ranAt = '2026-01-01T00:01:00Z';
+  return {
+    id: `dispatch.suspended.${slug}`,
+    kind: 'execution',
+    provider: 'anthropic',
+    model: 'claude-sonnet',
+    agent: 'test-agent',
+    effort: 'medium',
+    started_at: '2026-01-01T00:00:00Z',
+    completed_at: null,
+    operations: [...opIds, guardId],
+    turns: [],
+    results: [
+      ...opIds.map((opId) => ({
+        op_id: opId,
+        status: 'skipped' as const,
+        guard_result: null,
+        guard_output: null,
+        guard_ran_at: null,
+      })),
+      {
+        op_id: guardId,
+        status: 'skipped' as const,
+        guard_result: null,
+        guard_output: 'guard not run: task suspended awaiting input',
+        guard_ran_at: ranAt,
+      },
+    ],
+    notes: [],
+    suspension: { taskId: 'task-suspended', resumeToken: 'token-suspended' },
+    ...overrides,
+  };
+}

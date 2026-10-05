@@ -13,7 +13,7 @@ The CLI wraps `src/api.ts`, a plain, JSDoc'd TypeScript functions surface where 
 | `snapshot --dag-path <p>` | read-only | Real `DagClient` + `@adhd/dispatch-core-optimizer`'s `snapshot()`, cold-start B/context-window defaults. |
 | `optimize --dag-path <p>` | read-only | Snapshot + the greedy `optimize()` — the next batch of `DispatchUnit`s that would be packed. |
 | `eligible --dag-path <p>` | read-only | `DagClient.getEligibleMilestones()` — milestone slugs whose deps are complete per `dispatch_log`. |
-| `status --dag-path <p>` | read-only | Per-milestone `{ status, loggedOperationIds, tokensEstimated, tokensActual }`. |
+| `status --dag-path <p>` | read-only | Per-milestone `{ status, loggedOperationIds, tokensEstimated, tokensActual }`. A milestone whose sessioned task suspended for human input reports `status: "awaiting_input"` plus `awaitingInput: { taskId, resumeToken }` — resume it with agent-mcp's `task_resume`. |
 | `run --dag-path <p> [--dry-run] [--allow-fs <actions>] [--tools-root <path>]` | **writes** the dag | Runs exactly one `@adhd/dispatch-orchestrator` scheduling cycle. |
 | `calibrate --model-tier <Haiku\|Sonnet\|Opus>` | **writes** `~/.adhd/dispatch-calibration.json` | Fires a null-task dispatch to measure a baseline per-tier token cost ("B"). |
 

@@ -295,12 +295,15 @@ describe('AgentMcpRunner', () => {
       expect(client.calls).toEqual([]);
     });
 
-    it('forwards unit.session_id to the task call when set (fa9d3079)', async () => {
+    it('fires a sessioned unit in the BACKGROUND with session_id + background:true (fa9d3079 + 03145a46)', async () => {
+      // The fake returns the IMMEDIATE background reply, exactly what agent-mcp
+      // returns for `background: true` — proving fire() does not expect a
+      // terminal result on the fire call.
       const { client, runner } = makeRunner({
-        task: () => ({ task_id: 'wire-task-session', status: 'completed', result: 'ok' }),
+        task: () => ({ task_id: 'wire-task-session', status: 'pending' }),
       });
 
-      await runner.fire(
+      const { taskId } = await runner.fire(
         makeUnit({
           agent_name: 'workflow-researcher',
           prompt: 'THE PROMPT',
@@ -308,6 +311,12 @@ describe('AgentMcpRunner', () => {
         })
       );
 
+      expect(taskId).toBe('wire-task-session');
+      // NEGATIVE-CONTROL: removing `args["background"] = true` from
+      // AgentMcpRunner.fire()'s sessioned branch makes this forget the
+      // `background: true` key -> red. Without it a sessioned HITL task blocks
+      // the MCP call to the 60s timeout (`-32001`) and the suspension is never
+      // observed.
       expect(client.calls).toEqual([
         {
           name: 'task',
@@ -315,26 +324,31 @@ describe('AgentMcpRunner', () => {
             agent_name: 'workflow-researcher',
             prompt: 'THE PROMPT',
             session_id: 'sess-shared-123',
+            background: true,
           },
         },
       ]);
     });
 
-    it('omits session_id entirely when the unit has none (preserves ephemeral shape)', async () => {
+    it('omits session_id/background entirely when the unit has none (preserves ephemeral shape)', async () => {
       const { client, runner } = makeRunner({
         task: () => ({ task_id: 'wire-task-ephemeral', status: 'completed', result: 'ok' }),
       });
 
       await runner.fire(makeUnit({ agent_name: 'workflow-researcher', prompt: 'P' }));
 
-      // toEqual on the whole object proves the key is ABSENT, not merely undefined.
+      // toEqual on the whole object proves both keys are ABSENT, not merely
+      // undefined — an ephemeral unit must not gain `background:true` (its
+      // agent-mcp branch is synchronous and ignores it anyway).
       expect(client.calls[0]?.arguments).toEqual({
         agent_name: 'workflow-researcher',
         prompt: 'P',
       });
-      expect(Object.prototype.hasOwnProperty.call(client.calls[0]?.arguments, 'session_id')).toBe(
-        false
-      );
+      for (const key of ['session_id', 'background']) {
+        expect(
+          Object.prototype.hasOwnProperty.call(client.calls[0]?.arguments, key)
+        ).toBe(false);
+      }
     });
   });
 
@@ -380,6 +394,40 @@ describe('AgentMcpRunner', () => {
 
       expect(out).toEqual({ status: 'running', usage: undefined });
     });
+
+    it('surfaces the HITL resumeToken from the result payload when present (03145a46)', async () => {
+      // NEGATIVE-CONTROL: dropping the resumeToken mapping in poll() makes this
+      // see `{status, usage}` with no token -> red, and the orchestrator would
+      // persist an empty resumeToken on the suspension.
+      const { runner } = makeRunner({
+        result: () => ({
+          status: 'awaiting_input',
+          resumeToken: '11111111-1111-4111-8111-111111111111',
+        }),
+      });
+
+      const out = await runner.poll('task-suspended');
+
+      expect(out).toEqual({
+        status: 'awaiting_input',
+        usage: undefined,
+        resumeToken: '11111111-1111-4111-8111-111111111111',
+      });
+    });
+
+    it('omits resumeToken when the wire returns null (non-suspended task)', async () => {
+      const { runner } = makeRunner({
+        result: () => ({ status: 'completed', resumeToken: null }),
+      });
+
+      const out = await runner.poll('task-xyz');
+
+      // Absent key (not `undefined`) keeps the common-case output byte-identical.
+      expect(out).toEqual({ status: 'completed', usage: undefined });
+      expect(
+        Object.prototype.hasOwnProperty.call(out, 'resumeToken')
+      ).toBe(false);
+    });
   });
 
   describe('cancel', () => {
@@ -410,6 +458,32 @@ describe('AgentMcpRunner', () => {
       await expect(runner.cancel('task-xyz')).rejects.toMatchObject({
         code: 'TASK_NOT_CANCELLABLE',
       });
+    });
+  });
+
+  describe('request timeout (removes the MCP-60s-vs-poll mismatch)', () => {
+    it('passes the configured requestTimeoutMs as the per-call timeout', async () => {
+      const client = new FakeMcpToolClient({
+        agent_read: () => ({ name: 'a' }),
+      });
+      const runner = new AgentMcpRunner({
+        command: 'unused-in-test',
+        clientFactory: () => client,
+        requestTimeoutMs: 600_000,
+      });
+
+      await runner.ensureAgent(makeUnit());
+
+      expect(client.callTimeouts).toEqual([600_000]);
+    });
+
+    it('omits the per-call timeout when requestTimeoutMs is unset (SDK default preserved)', async () => {
+      const { client, runner } = makeRunner({ agent_read: () => ({ name: 'a' }) });
+
+      await runner.ensureAgent(makeUnit());
+
+      // `undefined` (not 0) — the SDK's own 60s default applies.
+      expect(client.callTimeouts).toEqual([undefined]);
     });
   });
 

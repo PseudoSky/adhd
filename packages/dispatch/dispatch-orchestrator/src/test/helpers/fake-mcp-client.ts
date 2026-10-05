@@ -44,6 +44,8 @@ export type FakeToolHandler = (
  */
 export class FakeMcpToolClient implements IMcpToolClient {
   readonly calls: RecordedCall[] = [];
+  /** The per-call `options.timeout` passed by `AgentMcpRunner` (undefined when unset). */
+  readonly callTimeouts: Array<number | undefined> = [];
   connectCallCount = 0;
   closeCallCount = 0;
 
@@ -53,11 +55,15 @@ export class FakeMcpToolClient implements IMcpToolClient {
     this.connectCallCount++;
   }
 
-  async callTool(params: {
-    name: string;
-    arguments?: Record<string, unknown>;
-  }): Promise<McpCallToolResult> {
+  async callTool(
+    params: {
+      name: string;
+      arguments?: Record<string, unknown>;
+    },
+    options?: { timeout?: number }
+  ): Promise<McpCallToolResult> {
     this.calls.push({ name: params.name, arguments: params.arguments });
+    this.callTimeouts.push(options?.timeout);
 
     const handler = this.handlers[params.name];
     if (!handler) {

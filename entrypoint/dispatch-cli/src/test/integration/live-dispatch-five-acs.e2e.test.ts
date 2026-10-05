@@ -63,23 +63,22 @@
  *   cd entrypoint/dispatch-cli && DISPATCH_E2E_LIVE=1 DISPATCH_E2E_NEGATIVE=1 \
  *     npx vitest run --config vite.config.ts src/test/integration/live-dispatch-five-acs.e2e.test.ts
  *
- * KNOWN BLOCKER ON AC2 (03145a46) — proven live 2026-10-05 under anthropic: the
- * model really calls `builtin__request_human_input` and the child agent-mcp really
- * persists the task as `awaiting_input` carrying a `resume_token` (this test's own
- * diagnostic dumps that row when the cycle does not return), so the tool is
- * genuinely advertised and the suspension is genuinely persisted. But the dispatch
- * pipeline cannot OBSERVE it: `AgentMcpRunner.fire()` awaits a SYNCHRONOUS
- * agent-mcp `task` call (no `background:true`), and the engine's HITL path blocks
- * on `await userInputPromise` until a resume — so `fire()`, and the
- * `orchestrateCycle` awaiting it, never return at suspension; the MCP client aborts
- * at its 60s deadline. Separately, `dispatch-cli status` (`statusCore`) surfaces
- * only the snapshot `MilestoneStatus` vocabulary, which has no `awaiting_input`
- * member and no `resumeToken`. AC2 therefore stays red for a PRODUCT reason in
- * `@adhd/dispatch-orchestrator`, not a harness or provider one. Fix (not applied
- * here — no product behavior is changed to force a pass): fire sessioned units with
- * `background:true`, take the task id from the immediate `{task_id,status:'pending'}`
- * reply, and let `poll()` observe `awaiting_input` (it is already in the poll-stop
- * set at orchestrator.ts:922-931). Do NOT assert AC2 green until that lands.
+ * AC2 STATUS SURFACE (03145a46, now implemented; proven live 2026-10-05 under
+ * anthropic): the model really calls `builtin__request_human_input` and the child
+ * agent-mcp really persists the task as `awaiting_input` carrying a `resume_token`.
+ * The pipeline previously could not OBSERVE it — `AgentMcpRunner.fire()` awaited a
+ * SYNCHRONOUS agent-mcp `task` call (no `background:true`) while the engine's HITL
+ * path blocked on `await userInputPromise`, so `fire()` — and the
+ * `orchestrateCycle` awaiting it — never returned at suspension and the MCP client
+ * aborted at its 60s deadline; and `dispatch-cli status` (`statusCore`) surfaced
+ * only the snapshot `MilestoneStatus` vocabulary, with no `awaiting_input` member
+ * and no `resumeToken`. That is fixed here: a sessioned unit fires in the
+ * BACKGROUND (`fire()` sends `background:true`, taking the task id from the
+ * immediate `{task_id,status:'pending'}` reply so `poll()` observes
+ * `awaiting_input`), the unit is PARKED rather than failed, and `statusCore`
+ * reports `awaiting_input` + `awaitingInput: { taskId, resumeToken }`. AC2 asserts
+ * that surface directly, then resumes through the real MCP `task_resume` and polls
+ * to completion.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -106,6 +105,8 @@ import {
   orchestrateCycle,
   type OrchestratorDeps,
 } from '@adhd/dispatch-orchestrator';
+
+import { statusCore } from '../../lib/core.js';
 
 import {
   AGENT_MCP_DIST,
@@ -738,11 +739,24 @@ describe.skipIf(!LIVE)(
           }
           expect(cycle.dispatched.length).toBe(1);
 
-          // The orchestrator stops polling on awaiting_input and records it.
+          // The orchestrator stops polling on awaiting_input and parks the
+          // unit (not failed): the summary carries the suspension.
           expect(
             cycle.dispatched[0]?.taskStatus,
             'the dispatched task must suspend to awaiting_input (sessioned, non-ephemeral)'
           ).toBe('awaiting_input');
+
+          // `dispatch-cli status` (statusCore) surfaces the suspension + token
+          // — the previously-missing status half of this AC (03145a46).
+          const report = await statusCore(l.dagPath);
+          expect(
+            report['hitl']?.status,
+            'dispatch-cli status must report the milestone as awaiting_input'
+          ).toBe('awaiting_input');
+          expect(
+            report['hitl']?.awaitingInput?.resumeToken,
+            'dispatch-cli status must surface the resumeToken'
+          ).toBeTruthy();
 
           // The real MCP surface exposes the suspended task + its resumeToken.
           const tasks = await listTasks(l.runner, {
