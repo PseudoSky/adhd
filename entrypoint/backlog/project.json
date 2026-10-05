@@ -35,7 +35,7 @@
     },
     "test": {
       "//": "Override of the inferred `test` target (dependsOn + the lock-wrapped command; executor/cache/outputs come from inference — the @nx/vitest plugin replaces main's removed `@nx/vite:test` executor, and its coverage output matches vite.config.ts's reportsDirectory, which main's explicit output did not). Backlog's OWN `build` + `assets` are load-bearing: the remaining default-lane specs (e.g. src/mcp-discoverability-real-ops.spec.ts reads dist/api.d.ts) and the vocabulary-gate pack the real built dist/, and `assets` (BUG-013 FIX A) is what copies dist/skill/SKILL.md in. `vocabulary-gate` (C-22) makes both vocabulary acceptance gates run on every `nx affected -t test`. `lint`/`^build` mirror the workspace `test` targetDefaults, which an explicit dependsOn otherwise replaces. `typecheck-spec` was ADDED 2026-09-26 (backlog 98142eab instance 3): `tsconfig.spec.json` had no compiling target at all, so the spec corpus carried type errors no gate could see — a check that could not fail. Removing it from this list silently restores a green-without-checking gate. `e2e` was REMOVED from this list 2026-09-28 (backlog-e2e-cache-separation): coupling the resource-heavy lane into `test.dependsOn` while `e2e` was `cache:false` made every `nx affected -t test` — including every `git push` via `.githooks/pre-push` and both CI workflows — run all the `.e2e.ts` suites UNCACHED, defeating the separation's entire purpose (a fast local/default lane). `e2e` is now reached AT THE GATE instead: the gate's target list is canonicalised in `tools/gate/lane-gate.mjs` (`GATE_TARGETS = ['test','e2e']`), which `.githooks/pre-push` and both CI workflows all derive their `nx affected` targets from, and `e2e` is itself cached, so reachability is preserved while the per-push cost is not. `tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs` (invoked by the hook and both workflows) fails if any of them stops invoking every target in that list. The command is wrapped in the shared `backlog-dist` lock (`entrypoint/backlog/tools/with-dist-lock.mjs`) because this lane's `server.startup-path.spec.ts` / `mcp-discoverability-real-ops.spec.ts` read the SHARED in-tree `dist/api.ir.json` / `dist/api.d.ts` — which a concurrent `build` swaps and an `e2e` lane renames away — so the lane must be mutually exclusive with both.",
-      "dependsOn": ["lint", "^build", "build", "assets", "vocabulary-gate", "typecheck-spec"],
+      "dependsOn": ["lint", "^build", "build", "assets", "vocabulary-gate", "typecheck-spec", "traceability"],
       "options": {
         "cwd": ".",
         "command": "node entrypoint/backlog/tools/with-dist-lock.mjs vitest run --config {projectRoot}/vite.config.ts"
@@ -113,6 +113,20 @@
       "options": {
         "cwd": ".",
         "command": "node tools/nx-plugins/build/executors/typecheck-spec/ratchet.mjs --tsconfig entrypoint/backlog/tsconfig.spec.json --baseline tools/nx-plugins/build/executors/typecheck-spec/backlog.baseline.json"
+      }
+    },
+    "traceability": {
+      "//": "QA-STRATEGY.md §6: the AC→test traceability artifact is GENERATED, never hand-curated, and 'its computation is a gate'. This target runs the generator in --check mode: it re-derives all 107 measured AC bindings (S01–S12) from QA-STRATEGY.md §3, asserts the AC count is still 107, re-checks that every `bound` test file still exists on disk, and fails when the committed docs/plan/backlog-consolidation/ac-traceability.json differs from the generated body (drift). Wired into test.dependsOn so `nx affected -t test` runs it. Inputs cover the generator, the source corpus the bindings resolve against, the strategy it parses, and the artifact it compares — a src rename that un-binds an AC, or a hand edit to the artifact, re-runs and fails the gate.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        "{workspaceRoot}/docs/plan/backlog-consolidation/QA-STRATEGY.md",
+        "{workspaceRoot}/docs/plan/backlog-consolidation/ac-traceability.json"
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "node entrypoint/backlog/scripts/gen-ac-traceability.mjs --check"
       }
     },
     "assets": {
