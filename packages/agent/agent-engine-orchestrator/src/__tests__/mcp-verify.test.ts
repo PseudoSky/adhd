@@ -54,9 +54,11 @@ describe('verifyAgentMcpServers — handshake before a real task (1f352507)', ()
     expect(result.servers).toHaveLength(1);
     const echo = result.servers[0];
     expect(echo.name).toBe('echo');
+    expect(echo.status).toBe('verified');
     expect(echo.ok).toBe(true);
     expect(echo.tools).toContain('echo');
     expect(echo.error).toBeUndefined();
+    expect(echo.skipped).toBeUndefined();
   });
 
   it('reports a clear per-server error for a server that cannot handshake', async () => {
@@ -73,6 +75,7 @@ describe('verifyAgentMcpServers — handshake before a real task (1f352507)', ()
     );
 
     expect(result.servers).toHaveLength(1);
+    expect(result.servers[0].status).toBe('error');
     expect(result.servers[0].ok).toBe(false);
     expect(result.servers[0].error).toBeTruthy();
   });
@@ -95,8 +98,10 @@ describe('verifyAgentMcpServers — handshake before a real task (1f352507)', ()
     );
 
     const byName = Object.fromEntries(result.servers.map((s) => [s.name, s]));
+    expect(byName.good.status).toBe('verified');
     expect(byName.good.ok).toBe(true);
     expect(byName.good.tools).toContain('echo');
+    expect(byName.bad.status).toBe('error');
     expect(byName.bad.ok).toBe(false);
     expect(byName.bad.error).toBeTruthy();
   });
@@ -110,8 +115,13 @@ describe('verifyAgentMcpServers — handshake before a real task (1f352507)', ()
     );
 
     expect(result.servers).toHaveLength(1);
+    // The tri-state disambiguates "skipped" from "verified": the old
+    // `ok:true + skipped` pair could not tell a consumer which it was.
+    expect(result.servers[0].status).toBe('skipped');
     expect(result.servers[0].ok).toBe(true);
     expect(result.servers[0].skipped).toBeTruthy();
+    expect(result.servers[0].error).toBeUndefined();
+    expect(result.servers[0].tools).toEqual([]);
   });
 
   it('returns an empty server list when the agent configures none', async () => {
