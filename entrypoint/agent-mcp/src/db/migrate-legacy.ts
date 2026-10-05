@@ -56,10 +56,11 @@
  *    the seed (bug 80b61a7d: canonical agent-1 @v99 / agent-2 @v42 reverted to
  *    flat's v1 the moment the flat agent count grew 3→5). Per-row recency is
  *    the explicit monotonic `version` where a table has one (agents), else
- *    `updated_at`, else `created_at`; a table with none is insert-only. The
- *    UPDATE carries the recency comparison in its own `WHERE`, so it is atomic
- *    under concurrent writers (ADR-0012 — the store is parallel-process
- *    enabled; there is no single-writer assumption here).
+ *    `updated_at`, else the numeric `model_calls` counter (task_usage), else
+ *    `created_at`; a table with none is insert-only. The UPDATE carries the
+ *    recency comparison in its own `WHERE`, so it is atomic under concurrent
+ *    writers (ADR-0012 — the store is parallel-process enabled; there is no
+ *    single-writer assumption here).
  *  - Catch-up trigger is flat CONTENT change, not agent-count growth alone.
  *    Each reconciliation records a per-table watermark (row count, max rowid,
  *    recency aggregate) in the marker; a later boot reconciles when any of
@@ -113,7 +114,10 @@ export interface LegacyMigrationOutcome {
     | "canonical-populated"
     | "canonical-not-migrated"
     | "flat-empty"
-    | "deferred-pinned-flat";
+    | "deferred-pinned-flat"
+    /** A seed that did not land every offered agent row — rolled back, marker
+     *  unwritten, retried on the next boot (bug 0ea16bf1). */
+    | "seed-incomplete";
 }
 
 /** What a single column is for recency purposes: `version` is the explicit
@@ -178,12 +182,26 @@ function countRows(conn: Database.Database, table: string): number {
 /**
  * Chooses the per-table recency column used for BOTH the catch-up trigger's
  * watermark and the per-row UPDATE guard. Preference: the explicit monotonic
- * `version` (agents), then `updated_at` (sessions, tasks), then `created_at`
- * (append-only tables). A table with none is insert-only.
+ * `version` (agents), then `updated_at` (sessions, tasks), then the numeric
+ * `model_calls` counter (task_usage), then `created_at` (append-only tables).
+ * A table with none is insert-only.
  */
 function recencyColumn(cols: readonly string[]): RecencyColumn | undefined {
   if (cols.includes("version")) return { col: "version", numeric: true };
   if (cols.includes("updated_at")) return { col: "updated_at", numeric: false };
+  // task_usage carries NEITHER a version NOR an updated_at: its rows are
+  // upserted IN PLACE after insert (usage-plugin accumulates `model_calls` /
+  // token counters and flips `is_complete`), so `created_at` never moves and a
+  // continued task's flat row is invisible to a timestamp-only guard (backlog
+  // b530f68f). `model_calls` is the monotonic signal that DOES move: the
+  // upsert adds 1 on every model response, `task_id` is a UUID so both stores'
+  // rows are the SAME task, and the larger counter is strictly further along.
+  // Aggregate with SUM (like `version`) so any row's increment moves the
+  // watermark; the per-row guard then reconciles flat only when its counter is
+  // strictly greater. Residual safe gap (documented, asserted by test): a
+  // completion-only edit (`is_complete` 0→1, `latency_ms`) that adds no further
+  // model call is declined — it never reverts a canonical write.
+  if (cols.includes("model_calls")) return { col: "model_calls", numeric: true };
   if (cols.includes("created_at")) return { col: "created_at", numeric: false };
   return undefined;
 }
@@ -326,98 +344,147 @@ interface CopyFlatOptions {
   log: (level: "info" | "warn", message: string) => void;
 }
 
+/** Sentinel thrown inside the seed transaction when the `agents` copy did not
+ *  land every offered row. The enclosing IMMEDIATE transaction rolls back —
+ *  no partial seed and no marker — so a later boot retries cleanly instead of
+ *  short-circuiting on a false success (bug 0ea16bf1). */
+class IncompleteSeedError extends Error {}
+
 /**
  * Copies every same-shaped operational table from the read-only `flat`
  * connection into `canonical`, then writes the marker — all in ONE IMMEDIATE
  * transaction (concurrent writers are serialized through it; ADR-0012), so the
  * rows and the run-once marker commit or roll back together.
  *
- * Returns `{ applied, tables }`: `applied` is the number of rows actually
- * inserted or updated (0 ⇒ a reconcile was a no-op), `tables` the number of
- * flat tables from which rows were offered. Keeps the original per-row
- * best-effort semantics (a single orphaned row must not drop its whole table).
+ * Returns `{ applied, tables, agentsComplete }`: `applied` is the number of
+ * rows actually inserted or updated (0 ⇒ a reconcile was a no-op), `tables`
+ * the number of flat tables from which rows were offered, and `agentsComplete`
+ * whether every offered `agents` row landed (always `true` in `reconcile`
+ * mode — completeness is a SEED gate; the delta path is allowed to be a no-op).
+ *
+ * In `seed` mode, if the `agents` copy did not land every offered row (e.g. a
+ * canonical NOT NULL column absent from the flat file makes every agent insert
+ * throw), the transaction ROLLS BACK and the run-once marker is NOT written: a
+ * zero-row apply must never be recorded as a success, or the next boot
+ * short-circuits `already-migrated` and strands the legacy agents forever
+ * (bug 0ea16bf1). `applied`/`tables` are then 0 and `agentsComplete` is false.
+ *
+ * Keeps the original per-row best-effort semantics (a single orphaned row must
+ * not drop its whole table).
  */
 function copyFlatIntoCanonical(
   canonical: Database.Database,
   flat: Database.Database,
   opts: CopyFlatOptions,
-): { applied: number; tables: number } {
+): { applied: number; tables: number; agentsComplete: boolean } {
+  // The authoritative offered-agent count is the caller's `countRows` result,
+  // NOT the per-table read's length: if the agents read itself were to throw
+  // (table-level catch below), a length-derived offer of 0 would falsely mark
+  // the seed complete.
+  const agentsOffered = opts.flatAgentCount;
   let applied = 0;
   let copiedTables = 0;
-  canonical
-    .transaction(() => {
-      for (const table of LEGACY_OPERATIONAL_TABLES) {
-        if (!tableExists(flat, table)) continue;
-        const flatCols = columnNames(flat, table);
-        const canonicalCols = columnNames(canonical, table);
-        if (flatCols.length === 0) continue;
-        // Same-shaped only: copy the INTERSECTING columns, in flat's order.
-        const cols = flatCols.filter((c) => canonicalCols.includes(c));
-        if (cols.length === 0) continue; // no shared shape — skip, never guess
+  let agentsApplied = 0;
+  try {
+    canonical
+      .transaction(() => {
+        for (const table of LEGACY_OPERATIONAL_TABLES) {
+          if (!tableExists(flat, table)) continue;
+          const flatCols = columnNames(flat, table);
+          const canonicalCols = columnNames(canonical, table);
+          if (flatCols.length === 0) continue;
+          // Same-shaped only: copy the INTERSECTING columns, in flat's order.
+          const cols = flatCols.filter((c) => canonicalCols.includes(c));
+          if (cols.length === 0) continue; // no shared shape — skip, never guess
 
-        const quoted = cols.map((c) => `"${c}"`).join(", ");
-        const placeholders = cols.map(() => "?").join(", ");
-        const pkCols = primaryKeyColumns(canonical, table).filter((c) => cols.includes(c));
-        const updatable = cols.filter((c) => !pkCols.includes(c));
-        const rec = recencyColumn(cols);
-        const recCol = rec?.col;
+          const quoted = cols.map((c) => `"${c}"`).join(", ");
+          const placeholders = cols.map(() => "?").join(", ");
+          const pkCols = primaryKeyColumns(canonical, table).filter((c) => cols.includes(c));
+          const updatable = cols.filter((c) => !pkCols.includes(c));
+          const rec = recencyColumn(cols);
+          const recCol = rec?.col;
 
-        // A new flat row always lands (INSERT OR IGNORE never clobbers a
-        // concurrently-written canonical row). An existing canonical row is
-        // overwritten ONLY when the flat copy is strictly newer — the recency
-        // comparison lives in the UPDATE's WHERE, so it is atomic.
-        const insertSql = `INSERT OR IGNORE INTO "${table}" (${quoted}) VALUES (${placeholders})`;
-        const canUpdate =
-          opts.mode === "reconcile" &&
-          recCol !== undefined &&
-          pkCols.length > 0 &&
-          updatable.length > 0;
-        const updateSql = canUpdate
-          ? `UPDATE "${table}" SET ${updatable.map((c) => `"${c}" = ?`).join(", ")} ` +
-            `WHERE ${pkCols.map((c) => `"${c}" = ?`).join(" AND ")} AND "${recCol}" < ?`
-          : undefined;
+          // A new flat row always lands (INSERT OR IGNORE never clobbers a
+          // concurrently-written canonical row). An existing canonical row is
+          // overwritten ONLY when the flat copy is strictly newer — the recency
+          // comparison lives in the UPDATE's WHERE, so it is atomic.
+          const insertSql = `INSERT OR IGNORE INTO "${table}" (${quoted}) VALUES (${placeholders})`;
+          const canUpdate =
+            opts.mode === "reconcile" &&
+            recCol !== undefined &&
+            pkCols.length > 0 &&
+            updatable.length > 0;
+          const updateSql = canUpdate
+            ? `UPDATE "${table}" SET ${updatable.map((c) => `"${c}" = ?`).join(", ")} ` +
+              `WHERE ${pkCols.map((c) => `"${c}" = ?`).join(" AND ")} AND "${recCol}" < ?`
+            : undefined;
 
-        try {
-          const rows = flat
-            .prepare(`SELECT ${quoted} FROM "${table}"`)
-            .all() as Array<Record<string, unknown>>;
-          const insert = canonical.prepare(insertSql);
-          const update = updateSql ? canonical.prepare(updateSql) : undefined;
-          // Best-effort PER ROW: a single orphaned row (e.g. a session whose
-          // agent was deleted from the legacy store — real flat DBs carry
-          // these) must not drop the whole table. An error aborts only the
-          // current statement; the enclosing transaction stays open.
-          let skipped = 0;
-          for (const row of rows) {
-            try {
-              applied += insert.run(...cols.map((c) => row[c])).changes;
-              if (update && recCol !== undefined) {
-                applied += update.run(
-                  ...updatable.map((c) => row[c]),
-                  ...pkCols.map((c) => row[c]),
-                  row[recCol],
-                ).changes;
+          try {
+            const rows = flat
+              .prepare(`SELECT ${quoted} FROM "${table}"`)
+              .all() as Array<Record<string, unknown>>;
+            const insert = canonical.prepare(insertSql);
+            const update = updateSql ? canonical.prepare(updateSql) : undefined;
+            const isAgents = table === "agents";
+            let tableApplied = 0;
+            // Best-effort PER ROW: a single orphaned row (e.g. a session whose
+            // agent was deleted from the legacy store — real flat DBs carry
+            // these) must not drop the whole table. An error aborts only the
+            // current statement; the enclosing transaction stays open.
+            let skipped = 0;
+            for (const row of rows) {
+              try {
+                tableApplied += insert.run(...cols.map((c) => row[c])).changes;
+                if (update && recCol !== undefined) {
+                  tableApplied += update.run(
+                    ...updatable.map((c) => row[c]),
+                    ...pkCols.map((c) => row[c]),
+                    row[recCol],
+                  ).changes;
+                }
+              } catch {
+                skipped++;
               }
-            } catch {
-              skipped++;
             }
+            applied += tableApplied;
+            if (isAgents) agentsApplied = tableApplied;
+            copiedTables++;
+            if (skipped > 0) {
+              opts.log(
+                "warn",
+                `migrate-legacy: skipped ${skipped} orphaned/invalid row(s) in "${table}"`,
+              );
+            }
+          } catch (err) {
+            // Table-level failure (e.g. the read itself) — never abort the boot.
+            opts.log("warn", `migrate-legacy: skipping "${table}" (${(err as Error).message})`);
           }
-          copiedTables++;
-          if (skipped > 0) {
-            opts.log(
-              "warn",
-              `migrate-legacy: skipped ${skipped} orphaned/invalid row(s) in "${table}"`,
-            );
-          }
-        } catch (err) {
-          // Table-level failure (e.g. the read itself) — never abort the boot.
-          opts.log("warn", `migrate-legacy: skipping "${table}" (${(err as Error).message})`);
         }
-      }
-      writeMarker(canonical, opts.flatDbPath, opts.flatAgentCount, computeFlatWatermarks(flat));
-    })
-    .immediate();
-  return { applied, tables: copiedTables };
+
+        // SEED COMPLETENESS GATE (bug 0ea16bf1): a seed that did not land every
+        // offered agent is not a success. Throw so the IMMEDIATE transaction
+        // rolls back — NOTHING is committed (no partial rows, no marker) and
+        // the next boot retries, rather than recording a false success that
+        // short-circuits `already-migrated` and strands the agents.
+        if (opts.mode === "seed" && agentsOffered > 0 && agentsApplied < agentsOffered) {
+          throw new IncompleteSeedError(
+            `migrate-legacy: seed copied only ${agentsApplied}/${agentsOffered} agent row(s) ` +
+              `(canonical schema drift?) — rolling back without recording the marker; the ` +
+              `migration will retry on the next boot (bug 0ea16bf1)`,
+          );
+        }
+
+        writeMarker(canonical, opts.flatDbPath, opts.flatAgentCount, computeFlatWatermarks(flat));
+      })
+      .immediate();
+  } catch (err) {
+    if (err instanceof IncompleteSeedError) {
+      opts.log("warn", err.message);
+      return { applied: 0, tables: 0, agentsComplete: false };
+    }
+    throw err;
+  }
+  return { applied, tables: copiedTables, agentsComplete: true };
 }
 
 /**
@@ -528,12 +595,19 @@ export function migrateLegacyOperationalDb(
       return { copied: false, agentsCopied: 0, reason: "flat-empty" };
     }
 
-    copyFlatIntoCanonical(canonical, flat, {
+    // Seed an empty canonical store. `agentsComplete` is false when the agents
+    // copy did not land every offered row — copyFlatIntoCanonical has already
+    // rolled the seed back and left the marker unwritten, so a later boot
+    // retries; this must NOT be reported as a successful copy (bug 0ea16bf1).
+    const { agentsComplete } = copyFlatIntoCanonical(canonical, flat, {
       mode: "seed",
       flatDbPath,
       flatAgentCount,
       log,
     });
+    if (!agentsComplete) {
+      return { copied: false, agentsCopied: 0, reason: "seed-incomplete" };
+    }
     return { copied: true, agentsCopied: flatAgentCount, reason: "copied" };
   } finally {
     flat.close();

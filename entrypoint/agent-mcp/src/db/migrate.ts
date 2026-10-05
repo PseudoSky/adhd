@@ -28,6 +28,15 @@ export function runMigrations(): void {
                 "migrate-legacy: copied flat legacy operational DB into the namespaced store " +
                 "(DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001)"
             );
+        } else if (outcome.reason === "seed-incomplete") {
+            // The seed did not land every legacy agent; copyFlatIntoCanonical
+            // already rolled it back and left the marker unwritten. Surface it
+            // at the call site too, so a zero-config boot does not look clean
+            // while the real agents remain stranded (bug 0ea16bf1).
+            logger.warn(
+                "migrate-legacy: legacy seed did not land every agent row; the canonical store was " +
+                "left untouched and the migration will retry on the next boot (bug 0ea16bf1)"
+            );
         }
     } catch (err) {
         // The operational store still opens fine without the migration — never

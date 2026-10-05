@@ -451,4 +451,180 @@ describe('DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001 — legacy flat-path migratio
 
     canonical.close();
   });
+
+  // ---------------------------------------------------------------------------
+  // b530f68f — task_usage has no version/updated_at, so its rows are mutated
+  // IN PLACE after insert (usage-plugin accumulates counters). created_at never
+  // moves, so a timestamp-only recency guard missed the edit at both the
+  // trigger and the per-row guard. `model_calls` is the monotonic signal.
+  // ---------------------------------------------------------------------------
+
+  it('b530f68f — an IN-PLACE task_usage edit in the flat store reconciles (model_calls recency)', () => {
+    const flatDir = mkTmpDir('task-usage-reconcile');
+    const flatPath = join(flatDir, '.adhd', 'agent-mcp', 'agents.db');
+    const flatSeed = openMigratedDb(flatPath);
+    seedAgents(flatSeed, ['agent-1']);
+    flatSeed
+      .prepare(
+        `INSERT INTO task_usage
+           (task_id, agent_name, provider_type, model, input_tokens, output_tokens,
+            tool_call_count, model_calls, is_complete, created_at)
+         VALUES (?, ?, 'anthropic', 'm', 100, 10, 1, 1, 0, ?)`,
+      )
+      .run('task-usage-1', 'agent-1', new Date().toISOString());
+    flatSeed.close();
+
+    const canonicalPath = join(mkTmpDir('task-usage-reconcile-canon'), 'canonical', 'agents.db');
+    const canonical = openMigratedDb(canonicalPath);
+    // First boot seeds task_usage with model_calls = 1.
+    const seed = migrateLegacyOperationalDb(canonical, { flatDbPath: flatPath });
+    expect(seed.copied).toBe(true);
+    const seeded = canonical
+      .prepare(`SELECT model_calls FROM task_usage WHERE task_id = ?`)
+      .get('task-usage-1') as { model_calls: number };
+    expect(seeded.model_calls).toBe(1);
+
+    // The flat-pinned server keeps running the task: the upsert accumulates
+    // IN PLACE — same task_id, same created_at, no version/updated_at bump.
+    const flatEdit = openMigratedDb(flatPath);
+    flatEdit
+      .prepare(
+        `UPDATE task_usage
+           SET input_tokens = input_tokens + 500, output_tokens = output_tokens + 50,
+               tool_call_count = tool_call_count + 1, model_calls = model_calls + 1,
+               is_complete = 1
+         WHERE task_id = ?`,
+      )
+      .run('task-usage-1');
+    flatEdit.close();
+
+    const outcome = migrateLegacyOperationalDb(canonical, { flatDbPath: flatPath });
+    expect(outcome.copied).toBe(true);
+    const reconciled = canonical
+      .prepare(
+        `SELECT model_calls, input_tokens, is_complete FROM task_usage WHERE task_id = ?`,
+      )
+      .get('task-usage-1') as { model_calls: number; input_tokens: number; is_complete: number };
+    expect(reconciled.model_calls).toBe(2);
+    expect(reconciled.input_tokens).toBe(600);
+    expect(reconciled.is_complete).toBe(1);
+
+    // Idempotent once reconciled (no further flat movement).
+    const again = migrateLegacyOperationalDb(canonical, { flatDbPath: flatPath });
+    expect(again.reason).toBe('already-migrated');
+
+    canonical.close();
+  });
+
+  it('b530f68f — the residual SAFE skip is asserted: a same-model_calls in-place edit is declined, never reverting canonical', () => {
+    // The recency signal is `model_calls`, not "any content change". An edit
+    // that does NOT add a model call (e.g. a completion-only flip on a row
+    // whose canonical copy already holds the same model_calls) is deliberately
+    // declined — the safe direction: canonical is never reverted. This test
+    // pins that boundary so a future "just DO-UPDATE everything" regression is
+    // caught.
+    const flatDir = mkTmpDir('task-usage-safe-skip');
+    const flatPath = join(flatDir, '.adhd', 'agent-mcp', 'agents.db');
+    const flatSeed = openMigratedDb(flatPath);
+    seedAgents(flatSeed, ['agent-1']);
+    flatSeed
+      .prepare(
+        `INSERT INTO task_usage
+           (task_id, agent_name, provider_type, model, input_tokens, model_calls, created_at)
+         VALUES (?, ?, 'anthropic', 'm', 100, 1, ?)`,
+      )
+      .run('task-usage-safe', 'agent-1', new Date().toISOString());
+    flatSeed.close();
+
+    const canonicalPath = join(mkTmpDir('task-usage-safe-skip-canon'), 'canonical', 'agents.db');
+    const canonical = openMigratedDb(canonicalPath);
+    expect(migrateLegacyOperationalDb(canonical, { flatDbPath: flatPath }).copied).toBe(true);
+
+    // A canonical write AFTER the seed that is not representable in flat's
+    // stale copy (a newer value on a non-recency column).
+    canonical
+      .prepare(`UPDATE task_usage SET input_tokens = 999999 WHERE task_id = ?`)
+      .run('task-usage-safe');
+
+    // Flat edit with the SAME model_calls — the trigger may fire on another
+    // table, but the per-row guard must decline this row.
+    const flatEdit = openMigratedDb(flatPath);
+    flatEdit
+      .prepare(`UPDATE task_usage SET stop_reason = 'edited' WHERE task_id = ?`)
+      .run('task-usage-safe');
+    flatEdit.close();
+
+    migrateLegacyOperationalDb(canonical, { flatDbPath: flatPath });
+
+    const row = canonical
+      .prepare(`SELECT input_tokens FROM task_usage WHERE task_id = ?`)
+      .get('task-usage-safe') as { input_tokens: number };
+    expect(row.input_tokens).toBe(999999);
+
+    canonical.close();
+  });
+
+  // ---------------------------------------------------------------------------
+  // 0ea16bf1 — the SEED branch discarded copyFlatIntoCanonical's `applied` and
+  // returned copied:true while writeMarker committed, so a zero-row apply (e.g.
+  // seed-time schema drift making every agent insert throw) recorded a FALSE
+  // success and the next boot short-circuited `already-migrated`, stranding the
+  // legacy agents forever.
+  // ---------------------------------------------------------------------------
+
+  it('0ea16bf1 — a schema-drifted SEED is not recorded as a false success (rolled back, no marker) and retries', () => {
+    const flatDir = mkTmpDir('seed-drift');
+    const flatPath = join(flatDir, '.adhd', 'agent-mcp', 'agents.db');
+    const flat = openMigratedDb(flatPath);
+    seedAgents(flat, ['agent-1', 'agent-2', 'agent-3']);
+    flat.close();
+
+    const canonicalPath = join(mkTmpDir('seed-drift-canon'), 'canonical', 'agents.db');
+    const canonical = openMigratedDb(canonicalPath);
+    // Canonical schema drift: an extra NOT NULL column with NO default that the
+    // flat file lacks. The same-shaped intersection omits it from the INSERT,
+    // so every agent insert fails NOT NULL — the exact seed-time drift bug.
+    canonical.exec(`
+      CREATE TABLE agents_drift (
+        name text PRIMARY KEY NOT NULL,
+        version integer DEFAULT 1 NOT NULL,
+        data text NOT NULL,
+        created_at text NOT NULL,
+        updated_at text NOT NULL,
+        drift_col text NOT NULL
+      );
+      DROP TABLE agents;
+      ALTER TABLE agents_drift RENAME TO agents;
+    `);
+
+    const outcome = migrateLegacyOperationalDb(canonical, { flatDbPath: flatPath });
+
+    // NOT a false success: no copy claimed, canonical untouched, no marker.
+    expect(outcome.copied).toBe(false);
+    expect(outcome.reason).toBe('seed-incomplete');
+    expect(countRows(canonical, 'agents')).toBe(0);
+    const markerTable = canonical
+      .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`)
+      .get(LEGACY_MIGRATION_MARKER_TABLE);
+    expect(markerTable).toBeUndefined();
+
+    // The drift is fixed; the next boot RETRIES (no marker short-circuits it)
+    // and the agents finally land.
+    canonical.exec(`
+      DROP TABLE agents;
+      CREATE TABLE agents (
+        name text PRIMARY KEY NOT NULL,
+        version integer DEFAULT 1 NOT NULL,
+        data text NOT NULL,
+        created_at text NOT NULL,
+        updated_at text NOT NULL
+      );
+    `);
+    const retry = migrateLegacyOperationalDb(canonical, { flatDbPath: flatPath });
+    expect(retry.copied).toBe(true);
+    expect(retry.agentsCopied).toBe(3);
+    expect(countRows(canonical, 'agents')).toBe(3);
+
+    canonical.close();
+  });
 });
