@@ -38,7 +38,7 @@ This is what makes `AGENTS.md`'s parallel-process hard rule unambiguous: its `AD
 | [0005](./0005-data-query-engine-owns-grouping-aggregation-having.md) | The data-query-engine owns grouping, aggregation, and HAVING | PROPOSED (2026-10-02) |
 | [0006](./0006-backlog-public-interface-freeze.md) | Backlog public interface freeze — verbs, envelope, naming | ACCEPTED (2026-10-05) — SUPERSEDED (in part) BY 0007 (breaking list only) |
 | [0007](./0007-backlog-target-public-interface.md) | Backlog target public interface — additive/breaking deltas (designated target record) | ACCEPTED (2026-10-05) |
-| [0008](./0008-agent-mcp-native-tooling.md) | Standardized, portable native tooling for dispatched agents (fs / shell / dispatch) | PROPOSED (2026-10-05; revised for reconfirmation) — awaiting owner approval |
+| [0008](./0008-agent-mcp-native-tooling.md) | Standardized, portable native tooling for dispatched agents (fs / shell / dispatch) | ACCEPTED (2026-10-05) |
 
 ---
 
