@@ -16,9 +16,13 @@ credentials and no machine-local paths.
 - **Branch naming:** no machine-enforced pattern. Convention is a `<type>/<slug>` prefix using
   the commit-convention types (e.g. `fix/nx-build-cpu-guard`); agent worktrees use the
   `worktree-agent-<id>` form. Reviewers check this; no ref hook does.
-- **Merge strategy:** changes land on `main` through a pull request (CONTRIBUTING.md
-  §Development Workflow), not a direct push. History carries true merge commits (e.g.
-  `merge(backlog): …`); ff-only is **not** enforced.
+- **Merge strategy:** external contributions land on `main` through a pull request
+  (CONTRIBUTING.md §Development Workflow). The operator/dispatcher integration path lands a
+  change directly on the local `main` — a fast-forward or `--no-ff` merge of the executor
+  branch — then syncs `main` to `origin/main` with a plain, never `--force`, push under the
+  per-session human grant in §Push & review; this is the path CI's `push: main` trigger covers
+  (`.github/workflows/ci.yml`). History carries true merge commits (e.g. `merge(backlog): …`);
+  ff-only is **not** enforced.
 - **Rebase-in-flight:** permitted only on a branch that is solely your own and is nobody else's
   base. `main` is never rebased or rewritten.
 
@@ -888,3 +892,20 @@ Schema version 1.
   or worktree removed, and no gates were run by this operation (the post-merge review runs the
   suite). This record is the only change to this file in this operation. Recorded under §Commit
   convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: policy sync of §Branching & merge, performed inside the push of
+  `main` (dispatch-2026-10-04-9c4e).** The equivalence test passed — the committed policy carried
+  all seven required sections (Branching & merge, Push & review, Commit convention, Release,
+  Worktree layout, Cleanup, Provenance) — but the sync check failed: §Branching & merge stated
+  "changes land on `main` through a pull request (CONTRIBUTING.md §Development Workflow), not a
+  direct push", which is false of this repository. Of the 3198 commits reachable from `main`, only
+  24 carry any PR reference (19 subjects ending `(#N)`, 5 `Merge pull request` commits — ~0.75%),
+  so the operative convention is direct integration onto `main`, not a PR-gated landing; that
+  convention is also what §Push & review's per-session human push grant (`AGENTS.md` §Rules)
+  presupposes and what `.github/workflows/ci.yml`'s `push: main` trigger covers. Corrected that
+  bullet to state both paths truthfully, each cited by path: **external contributions** land via a
+  pull request (CONTRIBUTING.md §Development Workflow), while the **operator/dispatcher
+  integration path** lands a change directly on the local `main` — a fast-forward or `--no-ff`
+  merge of the executor branch — then syncs `main` to `origin/main` with a plain, never `--force`,
+  push under the §Push & review grant. No other rule was added or changed, and no rule depends on
+  this file for its trust root. Recorded under §Commit convention's `docs(<area>):` scope.
