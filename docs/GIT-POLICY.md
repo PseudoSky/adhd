@@ -671,3 +671,37 @@ Schema version 1.
   before and after. No push, no branch or worktree removed, and no gates were run by this operation
   (the post-merge review runs the suite). This record is the only change to this file in this
   operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `fix/budget-global-cap` (dispatch-2026-10-04-9c4e).**
+  Landed the global-scope budget-cap fix onto `main` as a **merge commit** `43fadbba` (parents
+  `f3d9502f` = pre-merge `main`, `6a2da60d` = branch head), moving `main` `f3d9502f` → `43fadbba`;
+  6 files, +550/-203: `entrypoint/dispatch-cli/src/test/integration/live-dispatch-five-acs.e2e.test.ts`
+  (M), `packages/agent/agent-plugin-budget/package.json` (M),
+  `packages/agent/agent-plugin-budget/src/__tests__/budget-plugin.test.ts` (M),
+  `packages/agent/agent-plugin-budget/src/index.ts` (M),
+  `packages/agent/agent-plugin-budget/vite.config.ts` (M), and `pnpm-lock.yaml` (M). The single
+  commit since the merge-base `7adea399` is `6a2da60d` (`fix(agent-plugin-budget): enforce
+  global-scope caps via the drizzle handle + scoped cost`, fixing `5339c2e5`) — matching the
+  dispatch list exactly. §Branching & merge was the deciding rule: this history "carries true merge
+  commits" and ff-only is not enforced (and the dispatch directed `--no-ff`), while rebase-in-flight
+  is permitted only on a branch "solely your own" — the branch is an in-flight executor branch, not
+  the operator's, so rewriting its commit was out; a merge commit is the stated shape here. Dry-run
+  `git merge-tree --write-tree --name-only main fix/budget-global-cap` exited 0, producing tree
+  `f312145e` with no conflict hunks; the actual `git merge --no-ff` was conflict-free (ort strategy,
+  exit 0), auto-merging `pnpm-lock.yaml` (the branch's +10 lockfile delta against `main`'s) with no
+  hunk left unresolved, and the post-merge tree at `43fadbba` is `f312145e`, byte-identical to the
+  dry-run tree. The lockfile was left byte-identical to the merge result — no post-merge edit, no
+  conflict marker (`rg '^(<<<<<<<|=======|>>>>>>>)' pnpm-lock.yaml` matches nothing). The branch
+  never touched this file (empty `git diff --name-only 7adea399..6a2da60d -- docs/GIT-POLICY.md`), so
+  `main`'s policy blob `dce4da3f` survived the merge byte-identical (pre-merge `f3d9502f` and
+  post-merge `43fadbba` resolve the same blob). Post-merge `git rev-list --count
+  main..fix/budget-global-cap` = 0 and `git merge-base --is-ancestor 6a2da60d main` exits 0, so the
+  commit is contained; the merge is two-parent, not fast-forward. A concurrent agent's uncommitted
+  work was present in the working tree throughout (`docs/plan/backlog-consolidation/QA-STRATEGY.md`
+  and `entrypoint/backlog/project.json` modified; five untracked files under
+  `docs/plan/backlog-consolidation/` and `entrypoint/backlog/`) and was neither staged, swept, nor
+  touched — the merge's path set is disjoint from those paths, nothing was staged before or after
+  (`git diff --cached --name-only` empty), and the `git status --porcelain` line set was identical
+  before and after. This operation did not push, did not delete a branch or remove a worktree, and
+  did not run gates (the post-merge review runs the suite). This record is the only change to this
+  file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
