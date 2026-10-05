@@ -1,0 +1,45 @@
+{
+  "name": "@adhd/agent-core-native-tooling",
+  "version": "0.0.1",
+  "description": "Core resolver + thin tool-name permission matcher for the standardized, portable native toolset (fs/shell/dispatch) inherited by dispatched agents (ADR-0008). CommonJS-only (adhd ADR-0003).",
+  "main": "./dist/index.js",
+  "typings": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "dependencies": {
+    "@adhd/agent-base-types": "^2.3.3",
+    "tslib": "^2.6.0"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^1.0.4",
+    "typescript": "^5.5.0",
+    "vite": "~5.0.13",
+    "vite-plugin-dts": "~3.8.3",
+    "vitest": "^1.6.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/agent/agent-core-native-tooling"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/agent/agent-core-native-tooling#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  },
+  "keywords": [
+    "agent",
+    "native-tooling",
+    "mcp",
+    "filesystem",
+    "shell",
+    "dispatch",
+    "permissions",
+    "typescript"
+  ]
+}

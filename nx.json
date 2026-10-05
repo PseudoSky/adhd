@@ -133,7 +133,8 @@
         "packages/agent/agent-store-tools/tsconfig.lib.json",
         "packages/apigen/apigen-generator-nx/tsconfig.lib.json",
         "packages/workspace/workspace-base-tools/tsconfig.lib.json",
-        "packages/workspace/workspace-codegen-nx/tsconfig.lib.json"
+        "packages/workspace/workspace-codegen-nx/tsconfig.lib.json",
+        "packages/agent/agent-core-native-tooling/tsconfig.lib.json"
       ],
       "options": {
         "build": {
