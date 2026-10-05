@@ -219,14 +219,69 @@ export const agentPatchSchema = z.object({
   nativeWebTools: z.boolean().optional(),
 });
 
-export const agentUpdateInputSchema = z
-  .object({
-    name: z.string().min(1),
-    patch: agentPatchSchema,
-  });
+/**
+ * The closed vocabulary of agent-definition fields a caller may project onto
+ * via `fields[]`. Declaring it as an enum makes an unknown key a validation
+ * error, never a silent drop. `systemPrompt` is intentionally in the list:
+ * it is the one field that requires an explicit opt-in, so a caller who wants
+ * it must name it (this is what keeps the multi-KB prompt body out of every
+ * default MCP response).
+ */
+export const AGENT_PROJECTABLE_FIELDS = [
+  'name',
+  'description',
+  'version',
+  'provider',
+  'systemPrompt',
+  'mcpServers',
+  'permissions',
+  'maxToolLoops',
+  'allowHumanInput',
+  'sanitization',
+  'toolAdvertisement',
+  'nativeWebTools',
+  'createdAt',
+  'updatedAt',
+] as const;
+
+export type AgentProjectableField = (typeof AGENT_PROJECTABLE_FIELDS)[number];
+
+/**
+ * The opt-in projection controls shared by `agent_read` / `agent_list` (and
+ * accepted by `agent_update`'s response). With neither supplied, the response
+ * is a bounded summary that OMITS `systemPrompt` — the multi-KB body that must
+ * never be dumped unrequested.
+ *
+ * The full-record opt-in is deliberately named `fullDefinition`, not `full`:
+ * the name itself states that it returns the FULL agent definition including
+ * `systemPrompt`, so a caller cannot enable a multi-KB payload by accident
+ * with an ambiguous flag. `fields` is the complementary, equally explicit
+ * whitelist (`fields: ['systemPrompt']` names the body directly).
+ */
+export const agentProjectionFields = {
+  fullDefinition: z
+    .boolean()
+    .optional()
+    .describe(
+      'Return the FULL agent definition including the systemPrompt body. Defaults to false: by default the response is a summary that omits systemPrompt.'
+    ),
+  fields: z
+    .array(z.enum(AGENT_PROJECTABLE_FIELDS))
+    .optional()
+    .describe(
+      "Project each record onto these fields (name is always included). Pass ['systemPrompt'] to opt into the prompt body; leaving it out omits the body."
+    ),
+};
+
+export const agentUpdateInputSchema = z.object({
+  name: z.string().min(1),
+  patch: agentPatchSchema,
+  ...agentProjectionFields,
+});
 
 export const agentReadInputSchema = z.object({
   name: z.string().min(1),
+  ...agentProjectionFields,
 });
 
 export const agentDeleteInputSchema = z.object({
@@ -234,9 +289,12 @@ export const agentDeleteInputSchema = z.object({
   force: z.boolean().optional(),
 });
 
-export const agentListInputSchema = z.object({}).optional();
+export const agentListInputSchema = z.object({
+  ...agentProjectionFields,
+});
 
 export type AgentCreateInput = z.infer<typeof agentCreateInputSchema>;
 export type AgentUpdateInput = z.infer<typeof agentUpdateInputSchema>;
 export type AgentReadInput = z.infer<typeof agentReadInputSchema>;
 export type AgentDeleteInput = z.infer<typeof agentDeleteInputSchema>;
+export type AgentListInput = z.infer<typeof agentListInputSchema>;
