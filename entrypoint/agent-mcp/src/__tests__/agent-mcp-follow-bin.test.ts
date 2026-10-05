@@ -146,4 +146,11 @@ describe("agent-mcp-follow bin exit codes", () => {
         expect(stderr).not.toMatch(/\n\s+at\s/);
         expect(stderr).not.toContain("TypeError");
     });
+
+    it("--help documents the ephemeral-port caveat (standalone default may differ from a spawned instance)", async () => {
+        const { code, stdout } = await runBin(["--help"]);
+        expect(code).toBe(0);
+        expect(stdout).toMatch(/ephemeral port/i);
+        expect(stdout).toMatch(/dispatch-cli[\s\S]*?MUST pass[\s\S]*?exact bound port/i);
+    });
 });
