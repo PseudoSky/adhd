@@ -243,7 +243,11 @@ Sessions preserve full message history. Call \`task\` repeatedly on the same
 ## Updating an agent definition
 
 \`agent_update\` never affects open sessions. It bumps the version and only
-applies to sessions opened after the update.
+applies to sessions opened after the update. To make that visible up front,
+the response carries \`openSessionsNotUpdated\` — the ids of the currently-active
+sessions still running on the pre-update snapshot. Close/reopen those sessions
+(or open fresh ones) to pick up the new definition; an empty list means no open
+session was left behind.
 
 ---
 
@@ -483,7 +487,8 @@ export function createServer(deps: ServerDeps): Server {
       },
       {
         name: 'agent_update',
-        description: 'Update a stored agent definition',
+        description:
+          'Update a stored agent definition. The response includes openSessionsNotUpdated — the active session ids that will keep running on the pre-update snapshot.',
         inputSchema: toMcpInputSchema(agentUpdateInputSchema),
       },
       {

@@ -32,8 +32,35 @@ export function agentRead(input: AgentReadInput, deps: AgentCrudDeps): AgentDefi
     return deps.agentStore.read(input.name);
 }
 
-export function agentUpdate(input: AgentUpdateInput, deps: AgentCrudDeps): AgentDefinition {
-    return deps.agentStore.update(input);
+/**
+ * The `agent_update` result: the updated definition PLUS the ids of every
+ * currently-ACTIVE session on that agent that will NOT receive this update.
+ *
+ * A session snapshots its agent definition at creation (documented, intended),
+ * so an update silently never reaches already-open sessions — the operator only
+ * discovers it later when a retry on the old `session_id` reproduces the exact
+ * failure they just fixed (backlog 301f040a). Surfacing the open session ids
+ * on the update response makes that visible up front: close/reopen the listed
+ * sessions (or open fresh ones) to pick up the new definition.
+ */
+export type AgentUpdateResult = AgentDefinition & {
+    openSessionsNotUpdated: string[];
+};
+
+export function agentUpdate(input: AgentUpdateInput, deps: AgentCrudDeps): AgentUpdateResult {
+    const updated = deps.agentStore.update(input);
+
+    // Read AFTER the write: any session active at this point was created from
+    // the pre-update snapshot, so it will keep running on the old definition.
+    const openSessions = deps.sessionStore.list({
+        agentName: input.name,
+        status: "active",
+    });
+
+    return {
+        ...updated,
+        openSessionsNotUpdated: openSessions.map((s) => s.id),
+    };
 }
 
 export function agentDelete(input: AgentDeleteInput, deps: AgentCrudDeps): { success: true } {
