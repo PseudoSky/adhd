@@ -17,6 +17,32 @@ import type {
 import { nowIso } from '@adhd/agent-store-runtime';
 import type { IHookRegistry } from '@adhd/agent-base-types';
 
+type McpServerConfig = NonNullable<AgentDefinition['mcpServers']>[string];
+type McpServersPatch = NonNullable<AgentUpdateInput['patch']['mcpServers']>;
+
+/**
+ * Applies an `mcpServers` patch with delete semantics: a `null` value removes
+ * that key, any other value upserts it, and keys absent from the patch are
+ * left untouched. This is what makes a key rename expressible —
+ * `{ agent: null, 'agent-mcp': {...} }` deletes the old key and adds the new
+ * one, instead of a plain record-merge that would leave the old key stranded
+ * forever (BUG: agent_update cannot remove/rename an mcpServers key).
+ */
+function mergeMcpServers(
+  existing: AgentDefinition['mcpServers'],
+  patch: McpServersPatch
+): AgentDefinition['mcpServers'] {
+  const next: Record<string, McpServerConfig> = { ...(existing ?? {}) };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null) {
+      delete next[key];
+    } else {
+      next[key] = value;
+    }
+  }
+  return next;
+}
+
 export class AgentStore {
   constructor(
     private readonly db: BetterSQLite3Database<Record<string, never>>,
@@ -78,14 +104,16 @@ export class AgentStore {
     const existing = this.read(input.name);
 
     const definedPatch = Object.fromEntries(
-      Object.entries(input.patch).filter(([, v]) => v !== undefined)
+      Object.entries(input.patch).filter(
+        ([key, v]) => v !== undefined && key !== 'mcpServers'
+      )
     );
 
     const updated: AgentDefinition = {
       ...existing,
       ...definedPatch,
       mcpServers: input.patch.mcpServers
-        ? { ...existing.mcpServers, ...input.patch.mcpServers }
+        ? mergeMcpServers(existing.mcpServers, input.patch.mcpServers)
         : existing.mcpServers,
       permissions: input.patch.permissions
         ? { ...existing.permissions, ...input.patch.permissions }

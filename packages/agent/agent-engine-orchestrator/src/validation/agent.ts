@@ -187,11 +187,30 @@ export const agentCreateInputSchema = agentDefinitionSchema
     updatedAt: true,
   });
 
+/**
+ * One key's value in an `mcpServers` patch: a full server config to upsert
+ * (create or replace that key), or `null` to DELETE the key. The explicit
+ * `null` is what makes a rename expressible — a plain record-merge can only
+ * add/overwrite keys, so a renamed key would leave the old one permanently
+ * stranded (BUG: agent_update cannot remove/rename an mcpServers key).
+ */
+export const mcpServerPatchValueSchema = mcpServerConfigSchema.nullable();
+
+/** The `mcpServers` half of an `agent_update` patch — see
+ *  {@link mcpServerPatchValueSchema} for the upsert-vs-delete semantics. */
+export const mcpServersPatchSchema = z.record(
+  z.string(),
+  mcpServerPatchValueSchema
+);
+
+export type McpServerPatchValue = z.infer<typeof mcpServerPatchValueSchema>;
+export type McpServersPatch = z.infer<typeof mcpServersPatchSchema>;
+
 export const agentPatchSchema = z.object({
   description: z.string().optional(),
   provider: providerConfigSchema.optional(),
   systemPrompt: z.optional(z.string()),
-  mcpServers: z.record(z.string(), mcpServerConfigSchema).optional(),
+  mcpServers: mcpServersPatchSchema.optional(),
   permissions: agentPermissionsSchema.optional(),
   maxToolLoops: z.number().int().positive().optional(),
   allowHumanInput: z.boolean().optional(),
