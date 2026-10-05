@@ -79,10 +79,14 @@ describe('09e84a88 — dispatch-cli agents import round-trips into a temp regist
     expect(imported.created).toEqual(['imported-persona']);
 
     // Read back through the SAME real MCP boundary — consumer-visible outcome.
+    // `agent_read`'s DEFAULT projection omits the systemPrompt body (backlog
+    // eaa420a0); this assertion is about the body, so it must opt in explicitly
+    // with `fullDefinition: true`.
     const runner = makeRunner({ dbPath, home, cwd: scratch });
     try {
       const def = await runner.callTool<{ systemPrompt?: string }>('agent_read', {
         name: 'imported-persona',
+        fullDefinition: true,
       });
       expect(def.systemPrompt).toBe(BODY);
 
