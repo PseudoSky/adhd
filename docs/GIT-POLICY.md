@@ -1139,3 +1139,41 @@ Schema version 1.
   `.worktrees/native-tooling-9c4e` at `20474da7` (clean, not reaped); no push, no branch or worktree
   removed, and no gates were run by this operation (the dispatch directed none). This record is the only
   change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `fix/native-tooling-build-9c4e` (dispatch-2026-10-04-9c4e).**
+  Landed the NAT-TOOL slice-1 build/permission corrections onto `main` as a **merge commit**
+  `6ee92473` (parents `6910ad27` = pre-merge `main`, `1b4ac0f5` = branch head), moving `main`
+  `6910ad27` → `6ee92473`; 8 files, +85/-47: `packages/agent/agent-core-native-tooling/README.md`
+  (M, +4/-2), `.../project.json` (M, +4/-5), `.../src/index.spec.ts` (A, +32),
+  `.../src/lib/dist-load.spec.ts` (D, -25), `.../src/lib/permissions.spec.ts` (M, +25/-9),
+  `.../src/lib/permissions.ts` (M, +5/-4), `.../tsconfig.build.json` (A, +10), and
+  `packages/agent/agent-engine-orchestrator/src/__tests__/native-tooling-validation.test.ts`
+  (M, +5/-2) — the `tsconfig.build.json` workspace-dep-to-built-declaration mapping with `--baseUrl`
+  dropped (`d97a8836`), the `matchPermission` tool-NAME gate per ADR-0008 D5 (`be2c0041`), the unit
+  suite decoupled from the build with the artifact proof moved to `verify-dist-load` (`bc4cddad`),
+  and the NAT-TOOL-1 AC1 tool-name permission example (`1b4ac0f5`). The 4 commits since the
+  merge-base `6910ad27` are `d97a8836`, `be2c0041`, `bc4cddad`, `1b4ac0f5` — a linear chain whose
+  base is `main`'s tip, matching the dispatch list exactly. §Branching & merge was the deciding rule:
+  this history "carries true merge commits" and ff-only is not enforced, while rebase-in-flight is
+  permitted only on a branch "solely your own" — the branch is an in-flight executor branch, not the
+  operator's, so rewriting its 4 commits was out; the dispatch directed `--no-ff`, and although the
+  merge-base equalled `main`'s tip (so a fast-forward was possible) a merge commit is the stated
+  shape here. Dry-run `git merge-tree --write-tree --name-only main fix/native-tooling-build-9c4e`
+  exited 0, producing tree `844e5e0a` with no conflict hunks; the actual `git merge --no-ff` was
+  conflict-free (ort strategy, exit 0) and the post-merge tree at `6ee92473` is `844e5e0a`,
+  byte-identical to the dry-run tree, so no conflict arose and none required resolution. No conflict
+  marker remains in the merged package (`git grep -nE '^(<<<<<<<|=======|>>>>>>>)' main --
+  packages/agent/agent-core-native-tooling/` exited 1 with no matches). The branch never touched this
+  file (empty `git diff --name-only 6910ad27..1b4ac0f5 -- docs/GIT-POLICY.md`), so `main`'s policy
+  blob `60bac7e0da15434ebe0d7da9c534cb99f0ccfec5` survived the merge byte-identical (pre-merge
+  `6910ad27`, post-merge `6ee92473`, and the on-disk file all resolve to the same blob). The merge is
+  two-parent (not fast-forward); post-merge `git rev-list --count
+  main..fix/native-tooling-build-9c4e` = 0 and `git merge-base --is-ancestor` exits 0 for each of
+  `d97a8836`, `be2c0041`, `bc4cddad`, `1b4ac0f5`, so all four are contained. The working tree was
+  clean before and after (`git status --porcelain` empty) and nothing was staged before or after
+  (`git diff --cached --name-only` empty); the dispatch's anticipated "unrelated concurrent dirt"
+  was not present, so nothing had to be avoided or protected. The branch remains checked out in
+  worktree `.worktrees/wt-native-tooling-fix-9c4e` at `1b4ac0f5` (clean, not reaped); no push, no
+  branch or worktree removed, and no gates were run by this operation (the post-merge review runs the
+  suite). This record is the only change to this file in this operation. Recorded under §Commit
+  convention's `docs(<area>):` scope.
