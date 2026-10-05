@@ -1,10 +1,10 @@
 # CLI-HIERARCHY — Consolidate `@adhd/backlog` onto an action-first verb tree
 
-**Status:** TARGET design (spec artifact). Changes no behavior, writes nothing to the graph, ships no code. It is the interface-shape deliverable for the owner's verb-consolidation direction; execution is gated behind the superseding ADR in §8.
+**Status:** TARGET design (spec artifact). Changes no behavior, writes nothing to the graph, ships no code. It is the **action-first verb-tree companion** to the single target-interface record `backlog-interface-target.md` (**ADR-0007, OWNER-APPROVAL-PENDING**); it owns the tree shape and the old→new mapping only — the public verb/envelope/naming surface, the ADR number, and the canonical additive/breaking classification are owned by ADR-0007 (see its "Ownership & classification authority"). Execution is gated behind the superseding ADR.
 **Owner:** pseudosky.
 **Directed by:** the owner, verbatim: *"i want the hyphenated top level verbs consolidated into logical locations, if they are crud operations they should live on the crud verbs the cli should be action based at the top level absolutely not including domain level objects like project. establish a clear hierarchy maybe backlog `<verb> <subject> [action options and input]`"*.
 **Grounding:** `docs/decisions/0006-backlog-public-interface-freeze.md` (the CURRENT 29 verbs + `batch action`, one-`--input` convention, ten error codes, kebab/snake/scoped naming, CLOSED `rel` union); `docs/plan/backlog-consolidation/backlog-interface-target.md` (target deltas); `docs/plan/backlog-consolidation/SPEC-SET.md` (S01–S12 + implied verbs); `entrypoint/backlog/src/api.ts` (the exported functions ARE the mounted surface).
-**Relationship to ADR-0006:** this design is **BREAKING** against the frozen surface. It is proposed as a superseding ADR (§8); `docs/decisions/0006-*` is **not** edited here.
+**Relationship to ADR-0006:** this design is **BREAKING** against the frozen surface. Its verb-tree reshuffle is one entry in the single breaking list owned by `backlog-interface-target.md` (ADR-0007); `docs/decisions/0006-*` is **not** edited here.
 
 ---
 
@@ -99,7 +99,7 @@ Every one of the 29 frozen verbs, the `batch action` mount, and the target/new v
 | # | current verb / mount | new hierarchical form | rationale |
 |---|----------------------|-----------------------|-----------|
 | 1 | `get` | `get <subject>` (`issue` \| `project` \| `component` \| `location`) | read-one; subject selects the record type (absorbs the `{registry:…}` branch) |
-| 2 | `query` | `list issue` (+ `search issue` for `text:`) | read-many split into the collection read and the text read |
+| 2 | `query` | `list issue` (+ `search issue` for `text:`) | read-many split into the collection read and the text read; the existing views `ready`, `graph`, `stale`, `similar`, `overlap` are retained as `list issue --view ready\|graph\|stale\|similar\|overlap` (with `similar`/`overlap` also reachable via `list duplicate`/`list collision`), so no query view is dropped and the 29→new map is total |
 | 3 | `create` | `create issue` | CRUD create; issue is the subject |
 | 4 | `update` | `update issue` | CRUD update |
 | 5 | `transition` | `transition issue` | status state machine — action verb, not CRUD |
@@ -181,6 +181,8 @@ Every one of the 29 frozen verbs, the `batch action` mount, and the target/new v
 
 Measured against `adhd ADR-0006`. `additive` = permitted under ADR-0006 D6 with no sign-off; `breaking` = requires explicit owner sign-off **and** a superseding ADR of 0006 at ship time.
 
+**Authority:** the canonical additive/breaking classification is owned by ADR-0007 (`backlog-interface-target.md`). The table below classifies the **hierarchy reshuffle only**, and its net "breaking surface change" is recorded as a single entry in ADR-0007's breaking list — it is not a competing classification.
+
 | move | class |
 |------|-------|
 | `get` → `get <subject>` (subject token added) | **breaking** (verb name/signature changes for most subjects; MCP/HTTP/routes change) |
@@ -195,7 +197,7 @@ Measured against `adhd ADR-0006`. `additive` = permitted under ADR-0006 D6 with 
 | `priority-matrix`/`part-of-rollup`/`open-curve`/`report` → `report issue --view` | **breaking** (three verbs + one absorbed into one) |
 | `merge-project` → `merge project`; `lookup` → `resolve registry`; `embedding-status` → `inspect embedding` | **breaking** (rename) |
 | `batch action` → `batch` | **breaking** (mount name/op id change) |
-| N1 `link-duplicate` → `relate issue --rel duplicate_of` | **breaking** as a mapping (the verb is not shipped, so its *arrival* is additive; its *canonical home* is `relate`) |
+| N1 `link-duplicate` → `relate issue --rel duplicate_of` | **additive** — the canonical class owned by ADR-0007: the verb is not shipped, so its *arrival* is additive; its *canonical home* is `relate`, which is a tree placement, not a break |
 | N2–N9 (`get spec --fragment`, `list citation --path`, `list reservation`, `get session`, `get state`, `list collision`, `list kind`) | additive capabilities expressed through the new tree |
 | envelope shape, ten error codes, `by` identity, one-`--input`, CLOSED `rel` union | **unchanged** |
 
@@ -212,7 +214,7 @@ There is **no migration story** — the owner rejects one. The CLI verb surface 
 | file | role | what changes in it |
 |------|------|--------------------|
 | `entrypoint/backlog/skill/SKILL.md` | the authoritative command-surface doc (the in-repo source; frontmatter `name: backlog-usage`) | §1 command surface: replace the 29-verb list with the action-first tree (§2 above); every worked example re-run against the new build; the `adhd-backlog --help` comparison lines re-stated; §2 MCP tool names → `backlog_<verb>_<subject>`; §7 registry reads → the `get`/`list`/`resolve` subjects; §8 `batch action` → `batch`. The one-`--input` convention text is unchanged. |
-| `.opencode/skills/backlog/SKILL.md` | the repo-local **installed copy** of the same document (observed byte-identical, `name: backlog-usage`) | regenerated from `entrypoint/backlog/skill/SKILL.md`; kept identical. |
+| `.opencode/skills/backlog/SKILL.md` | the repo-local **installed copy** — **NOT byte-identical** to the source: measured **78,747 B** here vs the source's **78,557 B**, and the installed copy *weakens* the friction-filing rule | regenerated from `entrypoint/backlog/skill/SKILL.md` — **the authoritative source** — so the divergence is closed by re-install, never by hand-editing the copy. |
 | the global install target (named by root `AGENTS.md` as `~/.claude/skills/backlog/SKILL.md`, written by `adhd-backlog install-skill`) | the machine-wide agent-facing copy | re-installed from the updated source in the same change — a stale global copy is exactly the failure mode the `install-skill` step exists to prevent. |
 
 The linked, hand-copied surface docs the same change touches are `entrypoint/backlog/SPEC.md`, `entrypoint/backlog/DATA_MODEL.md`, and `entrypoint/backlog/README.md` (per SPEC-SET write-scope for surface changes); they are corrected in lockstep with the skill, not via a compatibility path.
@@ -250,13 +252,13 @@ The linked, hand-copied surface docs the same change touches are `entrypoint/bac
 
 ---
 
-## Superseding-ADR proposal
+## Superseding-ADR relationship
 
-> **Proposed; not written to the catalog.** Per the ADR-catalog rule ("propose before write"), this block is a proposal only. The file `docs/decisions/000N-…` is created **only after explicit owner approval**, together with `adhd ADR-0006`'s updated Status line.
+> **One ADR number, one record.** The single target-interface record is `backlog-interface-target.md` (**ADR-0007**, OWNER-APPROVAL-PENDING). This hierarchy is **not** a second ADR: it is the verb-tree companion whose reshuffle is one entry in ADR-0007's single breaking list. The decision text below is this companion's proposal, **folded into ADR-0007** — and `docs/decisions/0006-*` gets its "SUPERSEDED BY ADR-0007" Status line — **only after explicit owner approval**; nothing is written to `docs/decisions/` here.
 
 ```
-# ADR-0007 — Consolidate @adhd/backlog onto an action-first verb hierarchy
-                          (supersedes ADR-0006)
+# ADR-0007 — target @adhd/backlog public interface (single record)
+#   companion decision: consolidate onto an action-first verb hierarchy (this file)
 
 Status:  PROPOSED
 Owner:   pseudosky
@@ -309,4 +311,4 @@ Evidence
   entrypoint/backlog/src/api.ts (the extraction surface).
 ```
 
-**Numbering note (resolved):** the catalog's next free number is **0007** (max on disk = 0006). `docs/plan/backlog-consolidation/backlog-interface-target.md` informally calls *itself* "target ADR-0007"; that file is not a catalog entry. Resolution: whichever of the two proposals is accepted first takes 0007; the other takes 0008. This artifact proposes **0007** per the catalog rule and flags the contention rather than silently colliding.
+**Numbering note (resolved):** the catalog's next free number is **0007** (max on disk = 0006). It is assigned **deterministically to the single target-interface record** `docs/plan/backlog-consolidation/backlog-interface-target.md` (**ADR-0007**, OWNER-APPROVAL-PENDING). This file carries **no ADR number** — its hierarchy is a companion decision within ADR-0007. There is no contention and no 0008 reservation.

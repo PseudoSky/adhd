@@ -1,6 +1,6 @@
 # Backlog Consolidation — Summary of the Spec Set
 
-**One document, owner-facing.** It states what will change, what problems the specs solve, what the final interface and workflows look like, and how every one of today's requests is discharged. Sources: `SPEC-SET.md` (S01–S12), `spec-set-mapping.json`, `spec-coverage-proof.md`, `partial-disposition.md`, `reconciliation-plan.md`, `research-incorporation-plan.md`, the two research files, and `backlog-interface-target.md` / ADR-0006 for the current-vs-target interface. Every claim below traces to a spec AC or a named artifact (see `## Citations`).
+**One document, owner-facing.** It states what will change, what problems the specs solve, what the final interface and workflows look like, and how every one of today's requests is discharged. Sources: `SPEC-SET.md` (S01–S12), `spec-set-mapping.json`, `spec-coverage-proof.md`, `partial-disposition.md`, `reconciliation-plan.md`, `research-incorporation-plan.md`, the two research files, and the **single target-interface record** `backlog-interface-target.md` (**ADR-0007, OWNER-APPROVAL-PENDING**) with `CLI-HIERARCHY.md` (its verb-tree companion) / ADR-0006 for the current-vs-target interface. Every claim below traces to a spec AC or a named artifact (see `## Citations`).
 
 **Committed:** the spec set is committed at `3aafd544`. It changes no shipped behavior; every breaking spec is inert until the owner signs off and a superseding ADR of ADR-0006 is authored at ship time.
 
@@ -40,9 +40,9 @@ The eight root problems (reconciliation-plan §9.1), the specs that address each
 
 **Current (frozen by ADR-0006, PROPOSED):** 29 verbs + the `batch action` mount; one `--input '<json>'` per verb; a two-arm `{ok:true,data}` / `{ok:false,error}` envelope; **10 error codes** (including `ambiguous_reference`); the `by = "${agentName}:${instanceId}"` rule; a **CLOSED** six-member `rel` union `{relates_to, supersedes, blocks, duplicate_of, part_of, similar_to}`; three naming schemes (kebab CLI, snake_case MCP, scoped `@adhd/backlog`). (`docs/decisions/0006-backlog-public-interface-freeze.md` D1–D5)
 
-**Target deltas (from `backlog-interface-target.md`, PROPOSED, not accepted).** Additive deltas — permitted under ADR-0006 D6 with no sign-off — are: the new `link-duplicate` verb; first-class `anchor`/predicate inputs on the shipped `attest`/`obligate`; the B1/B2/B3 reader+merge paths; `get {registry:"kind"}`; `Verdict`/`Condition` derived read types; completeness meta + `score_kind` on every view; internal node/edge kinds `attestation`/`obligation`/`SPEC` + `attests`/`has_obligation`/`satisfies`/`has_state_revision`; the joined-entity model; `collisions` view. (`backlog-interface-target.md` D1–D6, classification)
+**Target deltas (from `backlog-interface-target.md` — ADR-0007, OWNER-APPROVAL-PENDING).** Additive deltas — permitted under ADR-0006 D6 with no sign-off — are: the new `link-duplicate` verb; first-class `anchor`/predicate inputs on the shipped `attest`/`obligate`; the B1/B2/B3 reader+merge paths; `get {registry:"kind"}`; `Verdict`/`Condition` derived read types; completeness meta + `score_kind` on every view; internal node/edge kinds `attestation`/`obligation`/`SPEC` + `attests`/`has_obligation`/`satisfies`/`has_state_revision`; the joined-entity model; `collisions` view. (`backlog-interface-target.md` D1–D6, classification)
 
-The **seven breaking items**, each `OWNER SIGN-OFF REQUIRED` and each gated behind a superseding ADR of ADR-0006 at ship time (`backlog-interface-target.md` §Classification):
+The **eight breaking items**, each `OWNER SIGN-OFF REQUIRED` and each gated behind a superseding ADR of ADR-0006 at ship time (the single target-interface record `backlog-interface-target.md`, **ADR-0007, OWNER-APPROVAL-PENDING**, §Classification):
 
 1. **New public `rel` member `consolidated_into`** — opens the closed union. *Recommended: do not add; reuse `duplicate_of` n:1.*
 2. **Widening `related` to every live relation** (D4e) — behavior-visible response-shape change resolving contradiction C1 (`6fb30481` vs `77310a60`). The narrow variant (enumerated three authoritative + delete the stale comment) needs no sign-off.
@@ -51,6 +51,7 @@ The **seven breaking items**, each `OWNER SIGN-OFF REQUIRED` and each gated behi
 5. **`claim` block-severity precondition** (D6f) — changes an existing verb's success semantics.
 6. **Terminal-transition closure gate** (D6e) — changes `transition`/terminal success semantics.
 7. **Canonical identity resolution** (D3a) — changes uid-prefix/merge behavior across every uid-taking verb.
+8. **Citation existence-vs-membership gate** (D6c) — `create` stops refusing an **existing** out-of-root locator (`050ea18f`/S02.C1); behavior-visible on an existing verb.
 
 ## Final workflows
 
@@ -68,9 +69,9 @@ The **seven breaking items**, each `OWNER SIGN-OFF REQUIRED` and each gated behi
 | **R-2** | Compress all 49 clusters into ≤10 actual specs | S01–S10 | 47 clusters absorbed into 10 specs, 2 deferred; 10 cluster-derived + S11/S12 owner-set = **12 specs**. 49→12 map in `SPEC-SET.md` index + `spec-set-mapping.json`. | done (12, not 10 — 10 cluster-derived + 2 owner-mandated) |
 | **R-3** | Researcher strategy for collisions at create/update time + resolution | R1a→S02; R1b→S02; R1c→S03; R1d→S02/S03; R1e→S02 (breaking, gated); R1f→no spec | `research-incorporation-plan.md` §1 maps every finding to a spec with a binary AC + red→green test; R1f (contradictory-acceptance-criteria heuristic) is explicitly flagged a process gap, never code. | done for detection; R1e pending owner sign-off; R1f flagged gap |
 | **R-4** | Convert completion into one representation of expected state / compressed point in time | **S12** E1–E5 (R2a–R2e) | State-revision node + pointer + `sha256` token + expected-state ledger + coverage proof; same-tx, non-blocking, CAS mint on terminal transition; B1 fragment read path. (`completed-state-representation.md` §3; `SPEC-SET.md` S12) | done |
-| **R-5** | The ADR on backlog interface shouldn't be an ADR | `backlog-interface-target.md` | Relocated out of `docs/decisions/` to `docs/plan/backlog-consolidation/backlog-interface-target.md`; ADR-0006 remains the current-state freeze. (`backlog-interface-target.md` header; `docs/decisions/` has no target ADR) | done |
+| **R-5** | The ADR on backlog interface shouldn't be an ADR | `backlog-interface-target.md` | Relocated out of `docs/decisions/`; it carries the reserved designation **ADR-0007 (OWNER-APPROVAL-PENDING)** and is written into `docs/decisions/` only after owner approval — so "not a catalog ADR yet" holds. ADR-0006 remains the current-state freeze. (`backlog-interface-target.md` header; `docs/decisions/` has no target ADR) | done |
 | **R-6** | Prove the 10 specs fully solve all problems, especially the 4–5 large items filed today | `spec-coverage-proof.md` §1/§2; the 23 ACs | Adversarial proof: 47 COVERED / 41 PARTIAL / 7 NOT-COVERED over 95 units; **0/6 mandated fully covered before S11/S12 + the owner ACs**. S11/S12 + the 23 owner ACs are what close the mandated gap. | done (honest result: gap was real, then closed) |
-| **R-7** | For partial items, decide delete or incorporate | `partial-disposition.md` §1–§3 | 43 units in scope → **43 INCORPORATE / 0 DELETE / 0 KEEP-standalone**; zero deletes because no live successor fully subsumes any item's stated problem. | done |
+| **R-7** | For partial items, decide delete or incorporate | `partial-disposition.md` §1–§3 | **proposed; not yet incorporated** — the disposition is 43 INCORPORATE / 0 DELETE / 0 KEEP-standalone, but only the six owner-set ACs + S11/S12 were committed at `3aafd544`; the 41 non-mandated proposed ACs are unincorporated, and cluster 15 `config-environment` is listed S06-absorbed with no AC. |
 | **R-8** | "On my set, an architect needs to solve those" / incorporate what I asked for | S11/S12 added; owner ACs in S02/S03/S04/S06/S07 | The incorporation is committed at `3aafd544`; the six owner-set items are discharged by the 23 ACs. | done (committed `3aafd544`) |
 | **R-9** | Process constraints: >10-dispatch pause+ask; ≤4-dispatch fan-outs; only backlog-operator writes the graph; 3-layer verification | **S10** AC1–4; `research-incorporation-plan.md` §4 | S10 makes dispatch grants, agent-spec sections, worktree provisioning and repo hygiene self-enforcing; the incorporation plan's budget honors ≤4/cap and names the >10 pause; graph writes stay with backlog-operator. | done for the spec; enforcement pending execution |
 | **R-10** | "How much content would an agent need to read…" orientation cost | `ORIENTATION.md` (`reconciliation-plan.md` §3.1); **S10** AC2 | A single ≤12 KB entrypoint (`tmp/backlog-consolidation/ORIENTATION.md`, exists) replaces the ~3.5 MB corpus read; S10 AC2 requires agent-spec sections be present/validated. | done (artifact exists); S10 enforcement pending |
@@ -78,7 +79,7 @@ The **seven breaking items**, each `OWNER SIGN-OFF REQUIRED` and each gated behi
 ## What is not yet done
 
 - **Phase 6 EXECUTE/CLOSE has not started.** The spec set is a target; no spec here has been implemented. (`reconciliation-plan.md` header)
-- **Owner actions pending:** ADR-0006 PROPOSED→ACCEPTED; the **seven breaking target deltas** need explicit owner sign-off (S02 canonical identity, S05 closure gate + `claim` precondition, S03 wide-`related`, S06 kind-catalog close + vocab migration, and any `consolidated_into` reversal). (`backlog-interface-target.md` §Classification)
+- **Owner actions pending:** ADR-0006 PROPOSED→ACCEPTED; the **eight breaking target deltas** need explicit owner sign-off (S02 canonical identity, S05 closure gate + `claim` precondition, S03 wide-`related`, S06 kind-catalog close + vocab migration, and any `consolidated_into` reversal). (`backlog-interface-target.md` §Classification)
 - **Two deferred clusters:** `adr-0005-policy` (AMB-1) and `project-config-surface` (AMB-3) — each needs one architect/owner decision before scoping. (`SPEC-SET.md` Deferred)
 - **Three filed-not-scheduled defects:** `77310a60` (stale `card.ts:8` comment), `73d3b97d` (ADR-0006 defect: invented `update` status / "nine" codes), `9a95be96` (`direction:"desc"` ignored) — filed, not scheduled. (`reconciliation-plan.md` §1d)
 - **Detection half is shippable pre-approval; merge half is gated.** R1a/R1b/R1c/R1d can land once scheduled; R1e (issue-level merge) cannot ship first. (`research-incorporation-plan.md` §4)
@@ -90,7 +91,7 @@ The **seven breaking items**, each `OWNER SIGN-OFF REQUIRED` and each gated behi
 - `docs/plan/backlog-consolidation/backlog-interface-target.md` — target interface deltas + 7 breaking items.
 - `docs/decisions/0006-backlog-public-interface-freeze.md` — current frozen 29 verbs, 10 codes, closed `rel` union.
 - `tmp/backlog-consolidation/spec-coverage-proof.md` — 47/41/7 coverage + owner-mandate verdicts.
-- `tmp/backlog-consolidation/partial-disposition.md` — 43 INCORPORATE / 0 DELETE; §9 owner-mandated 23 ACs.
+- `tmp/backlog-consolidation/partial-disposition.md` — 43 INCORPORATE / 0 DELETE (proposed; not yet incorporated); §9 owner-mandated 23 ACs.
 - `tmp/backlog-consolidation/reconciliation-plan.md` — §9 problems P-1..P-8, §8 remodel map, §3.1 ORIENTATION entrypoint, §1d defects.
 - `tmp/backlog-consolidation/research-incorporation-plan.md` — R1a–R1f collision and R2a–R2e state-revision → spec/AC mapping.
 - `tmp/backlog-consolidation/research/collision-detection-strategy.md` — SITE 1/2/3 collision detection + resolution ladder.

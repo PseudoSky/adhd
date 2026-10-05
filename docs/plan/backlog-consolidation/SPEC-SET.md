@@ -1,6 +1,6 @@
 # SPEC-SET — the small set of fixes between now and the target end state
 
-**Status:** TARGET plan. Changes no behavior and no code. Not an ADR; derives from `backlog-interface-target.md` (target ADR-0007, PROPOSED) and `tmp/backlog-consolidation/reconciliation-plan.md`.
+**Status:** TARGET plan. Changes no behavior and no code. Not an ADR; derives from `tmp/backlog-consolidation/reconciliation-plan.md` and the **single target-interface record** `backlog-interface-target.md` (**ADR-0007, OWNER-APPROVAL-PENDING**). **Interface ownership:** this document is the implementation spec set (S01–S12) and owns the acceptance criteria + write-scopes; `backlog-interface-target.md` (ADR-0007) alone owns the public verb/envelope/naming surface and the canonical additive/breaking classification, with `CLI-HIERARCHY.md` as its subordinate verb-tree companion. Where a spec names a public verb, ADR-0007 / `CLI-HIERARCHY.md` own the exact spelling (see S11/S12).
 **Source of truth:** the 49 reconciled clusters in `tmp/backlog-consolidation/clusters/reconciled.json`; cluster→card-uid map in `tmp/backlog-consolidation/clusters/cluster-card-map.json`.
 **Machine mapping:** `docs/plan/backlog-consolidation/spec-set-mapping.json`.
 
@@ -39,7 +39,7 @@
   1. Node kinds `attestation` and `obligation` are admitted and readable; the catalog reports 15 kinds (13 → 15).
   2. Internal edges `attests`, `has_obligation`, `satisfies` are writable/traversable and are **absent** from the public `relate` enum — a `relate` with `attests` returns a typed error, not success.
   3. Unknown-kind *mint* behaviour is unchanged (the guard is additive; closing the catalog is S06's breaking decision, not this spec).
-  4. `npx nx test @adhd/backlog` and `npx nx run @adhd/backlog:verify-dist-load` exit 0.
+  4. `npx nx test backlog` and `npx nx run backlog:verify-dist-load` exit 0.
 - **Dependencies / gating:** none — foundational-safe-now. **Precedes S04 and S05** (they are written against these kinds/edges).
 - **Classification:** additive-safe-now (internal vocabulary; permitted under ADR-0006 D6).
 - **Executor:** backend.
@@ -49,7 +49,7 @@
 - **Root problem:** P-1 (a record has no identity lifecycle; one thing is several rows; ids unresolvable).
 - **Absorbs (5):** `backlog-lifecycle-model` (`0b0df8f3-cf19-45e6-a00f-486dc8b74a88`), `backlog-write-integrity` (`65029970-4e7e-4516-9e00-713ae705056b`), `id-resolution` (`3a4a0405-9e18-4ae7-a74a-152ed5a740be`), `registry-integrity` (`39799f8e-dacb-4acb-a7cb-cd98ed32531f`) — all **REM: C1 73d0b9c6**, deferred-until target ADR; `dedupe-similarity` (`6d64f6b3-f950-4396-83e9-83fe28322b30`) — **REM: C9 cf97c613**, deferred-until target ADR.
 - **Design anchor:** C1 `73d0b9c6` (canonical node + merge/retire/redirect) + C9 `cf97c613` (cross-project dedupe + reviewed linking) + blocker B3 + adoption `e54bd58b`.
-- **Write-scope:** `entrypoint/backlog/src/` uid-resolution path and merge/redirect handling, `entrypoint/backlog/src/cli.ts`, `entrypoint/backlog/src/store/graph-backlog-store.ts`, `entrypoint/backlog/skill/SKILL.md`, `entrypoint/backlog/SPEC.md`, `entrypoint/backlog/DATA_MODEL.md`.
+- **Write-scope:** `entrypoint/backlog/src/` uid-resolution path and merge/redirect handling, `entrypoint/backlog/src/write/citation.ts` (the citation gate: `computeCitationSha` / `assertCitationShasVerifiable` / `resolveCitationShas`), `entrypoint/backlog/src/write/create-issue.ts` (drops the `CitationUnverifiableError` throw for existing out-of-root targets), `entrypoint/backlog/src/cli.ts`, `entrypoint/backlog/src/store/graph-backlog-store.ts`, `entrypoint/backlog/skill/SKILL.md`, `entrypoint/backlog/SPEC.md`, `entrypoint/backlog/DATA_MODEL.md`.
 - **Acceptance criteria (binary):**
   1. An ambiguous uid prefix returns the candidate **set** (typed `ambiguous_reference` carrying candidates); no silent first-match.
   2. A merge writes one `Redirect` row and soft-retires the source; the source uid still resolves to the chain head — no hard delete, addressability preserved.
@@ -120,13 +120,13 @@
 - **Root problem:** P-4 (vocabulary unstructured/undocumented; unknown kinds mint silently; hand-copied prose drifts; catalog not machine-readable).
 - **Absorbs (4):** `catalog-minting` (`4d603d05-0ec3-4041-b3a8-5c31c3c74532`), `docs-spec-drift` (`7586d46c-0d63-4c0a-bb52-bb4af46dbcea`), `planning-extensibility` (`af3eb285-0c40-446c-aefc-ee2f9ec78531`) — all **REM: C8 4a12472e**, deferred-until target ADR; `config-environment` (`37c0430c-8fc3-40d0-a447-d64b3536816f`).
 - **Design anchor:** C8 `4a12472e` (closed primitives, readable catalogs, self-describing surface); B2's C8 half.
-- **Write-scope:** `entrypoint/backlog/src/write/catalog.ts`, `entrypoint/backlog/src/store/vocabulary-guard.ts`, `entrypoint/backlog/skill/SKILL.md`, `entrypoint/backlog/SPEC.md`, `packages/environment/*`, `.adhd/workspace.json`, `docs/decisions/0006-backlog-public-interface-freeze.md` (defect D2 `73d3b97d`).
+- **Write-scope:** `entrypoint/backlog/src/write/catalog.ts`, `entrypoint/backlog/src/store/vocabulary-guard.ts`, `entrypoint/backlog/skill/SKILL.md`, `entrypoint/backlog/SPEC.md`, `entrypoint/backlog/DATA_MODEL.md`, `packages/environment/*`, `.adhd/workspace.json`, `docs/decisions/0006-backlog-public-interface-freeze.md` (defect D2 `73d3b97d`).
 - **Acceptance criteria (binary):**
   1. `get {registry:"kind"}` (or a `kind` view) returns every catalog term with identity/type/scope/lifecycle/replacement pointer; the verb surface is machine-readable — "no advertised verb is absent" is checkable.
   2. Every doc that hand-copies the verb/enum surface is regenerated from the catalog; a drift check fails on divergence (cluster 20).
   3. Vocabulary cleanup either done or explicitly deferred with sign-off: `kind:EPIC` retired, `bug`/`BUG` reconciled, `undefined`/`MEDIUM` removed.
   4. Defect D2 `73d3b97d` repaired: ADR-0006 records `ambiguous_reference` among the ten codes and no longer invents an `update` status (non-decision correction, doc-steward).
-  5. **S06.S6 — correct the docs/model:** `entrypoint/backlog/SPEC.md:328` ("A location belongs to exactly one component; a component to exactly one project."), `entrypoint/backlog/DATA_MODEL.md:330-334`, and the skill's component-as-path model (`entrypoint/backlog/skill/SKILL.md:392`) are corrected; a doc-drift check fails if the 1:1 sentence reappears. *Closes `a1e69b2d`.*
+  5. **S06.S6 — correct the docs/model:** `entrypoint/backlog/SPEC.md:328` ("A location belongs to exactly one component; a component to exactly one project."), `entrypoint/backlog/DATA_MODEL.md:330-334`, and the skill's component-as-path model (`entrypoint/backlog/skill/SKILL.md:1004` primary + `:1035` reinforcing; `:1009` is the related *location* model, cited separately) are corrected; a doc-drift check fails if the 1:1 sentence reappears. *Closes `a1e69b2d`.*
 - **Dependencies / gating:** gate = target ADR. Additive (registry reads, drift checks); **breaking sub-items** — closing the kind catalog and the vocabulary migration — need `OWNER SIGN-OFF REQUIRED` and are inert until a superseding ADR.
 - **Classification:** additive for the registry/self-describing surface; breaking for the close + vocab migration (gated).
 - **Executor:** doc-steward + backend.
@@ -199,6 +199,7 @@
 - **Root problem:** P-2 (the store cannot answer what a session holds or did — no durable reservation read, no first-class session/op-event record).
 - **Absorbs (2, owner-mandated):** `46cf1086` (CRITICAL: no query for files reserved by active claims), `91a8c640` (HIGH: first-class session claim + `backlog timeline <session>`). Additive; not folded from any reconciled cluster.
 - **Design anchor:** none — owner-mandated (the NOT-COVERED pair).
+- **Public spelling (owned by ADR-0007 / `CLI-HIERARCHY.md`):** the semantic reads below are spelled on the target verb tree as `list reservation` (the `reservations` view), `get session <id>` (the `timeline` read), and `list session`; this spec owns the AC semantics, the target record owns the spelling.
 - **Shared persistence prerequisite:** one layer serves both — claim events are a subset of op events (`claim`/`renew`/`release` are mutating verbs). **S11.R1 is the prerequisite for S11.S2**; one persistence layer serves both mandated features (no duplication).
 - **Write-scope:** `entrypoint/backlog/src/write/claim.ts`, `entrypoint/backlog/src/write/claim-lease.ts`, `entrypoint/backlog/src/write/tx.ts` (op-event append per mutating verb), `entrypoint/backlog/src/query/` (new `reservations` view) + `query/types.ts`, `entrypoint/backlog/src/cli.ts` (`timeline` verb), `entrypoint/backlog/SPEC.md`, `entrypoint/backlog/DATA_MODEL.md`.
 - **Acceptance criteria (binary):**
@@ -220,6 +221,7 @@
 - **Root problem:** P-2 (the store cannot read its own truth — expected state is derived on every read, never stored, so two readers legitimately disagree and no artifact records what was agreed).
 - **Absorbs (owner-mandated research):** the state-revision recommendation in `tmp/backlog-consolidation/research/completed-state-representation.md` (findings R2a/R2b/R2d of `research-incorporation-plan.md`); item `34b69c69` (B1 fragment read path, shared with S04). Additive while the kind/edge stay internal.
 - **Design anchor:** none — owner-mandated; reuses the shipped `spec-revision` primitive.
+- **Public spelling (owned by ADR-0007 / `CLI-HIERARCHY.md`):** the fragment read is `get state` (or the additive `get` field) and the mint hook is `create state`; this spec owns the AC semantics, the target record owns the spelling.
 - **Write-scope:** `entrypoint/backlog/src/write/spec-revision.ts` (lift the primitive to plan state) + new `write/state-revision.ts`, `entrypoint/backlog/src/write/transition.ts` (mint hook, same tx), `entrypoint/backlog/src/query/spec-staleness.ts` + `get`/`state-get` read path, `entrypoint/backlog/src/cli.ts` (`state-append`), `entrypoint/backlog/SPEC.md`, `entrypoint/backlog/DATA_MODEL.md`.
 - **Acceptance criteria (binary):**
   1. **S12.E1 — immutable revision + pointer:** a terminal transition inside a plan subtree mints an immutable content-addressed **state-revision** node (revision node + internal `has_state_revision` edge; `meta.state_revision` / `state_revision_token` / `state_revision_seq` on the plan item, mirroring the spec keys), advanced **in place** — ticket uid preserved, no prior revision rewritten. Read back via `adhd-backlog get --input '{"uid":<plan>}'`.
@@ -255,4 +257,4 @@
 
 ## What this document is not
 
-Not an ADR, not a schedule, changes no behavior or code. It is the target the gated implementation program builds toward. Every breaking spec is inert until the owner signs off and a superseding ADR of `adhd ADR-0006` is authored at ship time.
+Not an ADR, not a schedule, changes no behavior or code. It is the target the gated implementation program builds toward. Every breaking spec is inert until the owner signs off and a superseding ADR of `adhd ADR-0006` is authored at ship time. The single target-interface record is `backlog-interface-target.md` (**ADR-0007, OWNER-APPROVAL-PENDING**) — it owns the public verb/envelope/naming surface and the canonical breaking list, with `CLI-HIERARCHY.md` as its subordinate verb-tree companion. This document owns the ACs and write-scopes only; the public verb spellings for S11/S12 (`list reservation`, `get session <id>`, `get state`, `create state`) are owned by ADR-0007.

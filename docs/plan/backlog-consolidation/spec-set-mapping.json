@@ -5,7 +5,9 @@
     "clusters": "tmp/backlog-consolidation/clusters/reconciled.json",
     "clusterCardMap": "tmp/backlog-consolidation/clusters/cluster-card-map.json",
     "plan": "tmp/backlog-consolidation/reconciliation-plan.md",
-    "targetAdr": "docs/plan/backlog-consolidation/backlog-interface-target.md"
+    "targetAdr": "docs/plan/backlog-consolidation/backlog-interface-target.md",
+    "targetAdrDesignation": "ADR-0007 (OWNER-APPROVAL-PENDING) - the single target-interface record; CLI-HIERARCHY.md is its subordinate verb-tree companion",
+    "interfaceOwnership": "SPEC-SET.md owns ACs + write-scopes; backlog-interface-target.md (ADR-0007) owns the public verb/envelope/naming surface + canonical additive/breaking classification + the breaking list; CLI-HIERARCHY.md owns the verb-tree shape and old-to-new mapping only"
   },
   "totals": {
     "clusters": 49,
