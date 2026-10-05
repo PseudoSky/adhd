@@ -571,3 +571,46 @@ Schema version 1.
   touched. No push, no branch or worktree removed, and no gates were run by this operation (the
   dispatcher verifies `dispatch-cli:test` against the post-merge `main`). This record is the only
   change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `feat/bucket-b-provider-runtime-eng`
+  (dispatch-2026-10-04-9c4e).** Landed bucket B's provider-runtime engine branch onto `main` as a
+  **merge commit** `c47cdf9e` (parents `28c40d30` = pre-merge `main`, `b1bb718b` = branch head),
+  moving `main` `28c40d30` → `c47cdf9e`; 4 files, +53: `entrypoint/agent-mcp/project.json` (M),
+  `packages/agent/agent-engine-orchestrator/project.json` (M),
+  `packages/agent/agent-engine-orchestrator/tsconfig.spec.json` (A), and
+  `tools/nx-plugins/build/executors/typecheck-spec/agent-engine-orchestrator.baseline.json` (A). The
+  2 commits since the merge-base `db9c95d2` are `4c254146` (`fix(agent-engine-orchestrator):
+  compile the spec corpus with a typecheck-spec ratchet`) and `b1bb718b`
+  (`fix(agent-mcp,dispatch-cli): materialize registry-family drizzle for the spawned host`) —
+  matching the dispatch list exactly. §Branching & merge was the deciding rule: this history
+  "carries true merge commits" and ff-only is not enforced, while rebase-in-flight is permitted only
+  on a branch "solely your own" — the branch is an in-flight executor branch, not the operator's, so
+  rewriting its 2 commits was out; a merge commit is the stated shape here. The dry-run `git
+  merge-tree --write-tree --name-only main b1bb718b` exited **1** with exactly one conflict,
+  `entrypoint/dispatch-cli/src/test/agents-import.e2e.test.ts` — the **only** conflict, both this
+  branch and the already-merged `e0458224` having made the same intended change: add the explicit
+  `fullDefinition: true` opt-in to the `agent_read` call so `def.systemPrompt` is returned, keeping
+  `expect(def.systemPrompt).toBe(BODY)`. Git auto-merged the shared `fullDefinition: true` and
+  `main`'s explanatory comment; the conflict block was **only** the branch's extra explanatory
+  comment inserted before that argument, so the resolution keeps the already-integrated comment and
+  drops the duplicate — a single, coherent version. Both sides are equivalent in substance; the
+  resolved file is byte-identical to `main`'s (`git show main:<file> | diff - <file>` empty), so the
+  merge's net change to that path is nil and the post-merge diff (`git diff --name-status 28c40d30
+  c47cdf9e`) lists the other 4 files only. Verified in the resolved file: `rg
+  '^(<<<<<<<|=======|>>>>>>>)'` matches nothing (no markers), the `agent_read` call passes
+  `fullDefinition: true` exactly once (line 89; the other textual hit is prose in the retained
+  comment on line 84), and `expect(def.systemPrompt).toBe(BODY)` remains. The dry-run's exit 1 was
+  the only non-zero step; the resolved `git commit --no-edit` exited 0 after the git-invoked
+  pre-commit hook (mass-deletion guard, secret scan, affected lint, staged-spec) passed. Post-merge
+  `git rev-list --count main..feat/bucket-b-provider-runtime-eng` = 0, the merge is two-parent (not
+  fast-forward), and `git merge-base --is-ancestor` exits 0 for each of the 2 named commits
+  individually. The branch never touched this file (`git diff --name-status db9c95d2..b1bb718b`
+  lists no `docs/GIT-POLICY.md`), so `main`'s policy blob `ed3a021d` survived the merge
+  byte-identical (pre-merge `28c40d30` and post-merge `c47cdf9e` resolve the same blob). The working
+  tree was clean before and after (`git status --porcelain` empty); the concurrent backlog work
+  already committed on `main` by another agent (`1ff78e39`, `entrypoint/backlog/src/query/*`) was
+  carried through untouched and never staged. The branch remains checked out in worktree
+  `.worktrees/bucket-b-eng`; no push, no branch or worktree removed, and no gates were run by this
+  operation (the dispatcher verifies `dispatch-cli:test` against the post-merge `main`). This record
+  is the only change to this file in this operation. Recorded under §Commit convention's
+  `docs(<area>):` scope.
