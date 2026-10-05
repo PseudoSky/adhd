@@ -131,6 +131,25 @@ export class TaskStore {
         });
     }
 
+    /**
+     * List tasks, filtered and paginated.
+     *
+     * ORDERING CONTRACT — load-bearing, not incidental. Rows are ALWAYS
+     * returned in ascending `(created_at, rowid)` order: oldest first, with the
+     * insertion-order `rowid` as the deterministic tiebreak for equal
+     * `created_at` timestamps. The `ORDER BY` is applied BEFORE `limit`/
+     * `offset`, so pagination is stable across calls and `list(...)[0]` always
+     * returns the OLDEST matching task.
+     *
+     * `entrypoint/agent-mcp/src/streaming/chat-gateway.ts` resumes the HITL
+     * task as `list({ session_id, status: "awaiting_input" })[0]`, so changing
+     * this ordering silently changes WHICH awaiting task the chat gateway
+     * resumes. Any change here MUST update that call site.
+     *
+     * Pinned by `src/__tests__/task-store.test.ts` ("orders ascending by
+     * created_at, then rowid") — that test reds if the ordering is removed or
+     * the tiebreak is reversed.
+     */
     list(input: TaskListInput): Task[] {
         const conditions = [];
 
