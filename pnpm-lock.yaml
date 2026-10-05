@@ -991,9 +991,19 @@ importers:
       '@adhd/agent-base-types':
         specifier: ^2.3.3
         version: link:../agent-base-types
+      drizzle-orm:
+        specifier: 0.45.2
+        version: 0.45.2(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.10.0)
       zod:
         specifier: ^4.4.3
         version: 4.4.3
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+      better-sqlite3:
+        specifier: 12.10.0
+        version: 12.10.0
 
   packages/agent/agent-plugin-sanitize:
     dependencies:
