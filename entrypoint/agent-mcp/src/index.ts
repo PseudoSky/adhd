@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { db } from "./db/client.js";
 import { runMigrations } from "./db/migrate.js";
 import { logger } from "./logger.js";
-import { env, toEngineConfig, resolveInitialSsePort, setSseBoundPort } from "./config.js";
+import { env, toEngineConfig, resolveInitialSsePort, setSseBoundPort, defaultPluginEntries } from "./config.js";
 import { AgentStore } from "./store/agent-store.js";
 
 import { resolveRegistryDbPath, openRegistryDb } from "@adhd/agent-core-env";
@@ -230,7 +230,7 @@ async function main() {
     const usagePlugin = new UsagePlugin(dbAny);
     await usagePlugin.install(hooks);
 
-    await loadExternalPlugins(hooks, dbAny, undefined, env.config.plugins.configPath, env.config.plugins.entries as string[], logger);
+    await loadExternalPlugins(hooks, dbAny, undefined, env.config.plugins.configPath, env.config.plugins.entries as string[], logger, defaultPluginEntries());
 
     const queue = new BackgroundQueue(env.config.queue.concurrency, logger);
     const orchestrator = new Orchestrator();

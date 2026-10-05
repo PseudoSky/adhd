@@ -256,6 +256,10 @@ async function loadOnePlugin(
  *   `pluginEntries` — explicit module list (replaces config.plugins.entries)
  * @param configPathFromEnv — config.plugins.configPath injection
  * @param logger — injected logger
+ * @param defaultEntries — plugins to load even with zero config (backlog
+ *   5339c2e5, e.g. the default budget plugin). A user entry naming the same
+ *   `module` (config file or `pluginEntries`/env) OVERRIDES the default:
+ *   de-duped by module, user wins.
  */
 export async function loadExternalPlugins(
   hooks: IHookRegistry,
@@ -263,7 +267,8 @@ export async function loadExternalPlugins(
   overrides?: { configPath?: string | null; pluginEntries?: string[] },
   configPathFromEnv?: string,
   pluginEntriesFromEnv?: string[],
-  logger?: EngineLogger
+  logger?: EngineLogger,
+  defaultEntries: PluginEntry[] = []
 ): Promise<void> {
   const log = logger ?? { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as EngineLogger;
   const configFile = loadConfigFile(overrides?.configPath, configPathFromEnv, logger);
@@ -272,7 +277,14 @@ export async function loadExternalPlugins(
     overrides?.pluginEntries ?? pluginEntriesFromEnv ?? []
   ).map((module) => ({ module, config: {} }));
 
-  const allEntries: PluginEntry[] = [...configFile.plugins, ...legacyEntries];
+  const userEntries: PluginEntry[] = [...configFile.plugins, ...legacyEntries];
+  // User entries win over defaults for the same module.
+  const userModules = new Set(userEntries.map((e) => e.module));
+  const effectiveDefaults = defaultEntries.filter(
+    (e) => !userModules.has(e.module)
+  );
+
+  const allEntries: PluginEntry[] = [...effectiveDefaults, ...userEntries];
   if (allEntries.length === 0) return;
 
   for (const entry of allEntries) {

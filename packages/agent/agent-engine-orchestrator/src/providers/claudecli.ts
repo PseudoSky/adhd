@@ -1,4 +1,4 @@
-import { spawn } from "child_process";
+import { spawn, type ChildProcess } from "child_process";
 import readline from "readline";
 import { writeFile, unlink, mkdtemp, mkdir, rm } from "fs/promises";
 import { tmpdir } from "os";
@@ -201,6 +201,82 @@ export function normalizeAgentSpec(md: string): { content: string; agentName: st
     return { content, agentName: FALLBACK_SPEC_AGENT_NAME };
 }
 
+// ─── subprocess env hygiene ──────────────────────────────────────────────────
+
+/**
+ * Env vars that identify an *enclosing* Claude Code session. When the engine
+ * spawns its own `claude` child from inside an interactive Claude Code session
+ * (or from another agent-mcp task), these leak through `process.env` into the
+ * nested `claude -p` invocation. The nested CLI then believes it is already
+ * running inside a session — it can refuse to run, mis-attribute its session,
+ * or wedge (anthropics/claude-code#25803, #29543). They are stripped
+ * unconditionally, regardless of what `config.subprocessEnv()` returns.
+ *
+ * See DEBT-SOX-009 (nested-claude crash semantics) — this is the same hazard
+ * observed as a session-kill incident during agent-mcp diagnosis.
+ *
+ * Deliberately NOT stripped: `CLAUDE_CONFIG_DIR` (carries the child's auth),
+ * `ANTHROPIC_*` (the child may legitimately use an API key or auth token), and
+ * `ADHD_AGENT_*` (the harness's own declared pass-through vars, see
+ * `EngineConfig.subprocessEnv`).
+ */
+const CLAUDE_SESSION_ENV_DENYLIST: ReadonlySet<string> = new Set([
+    "CLAUDECODE",
+    "CLAUDE_CODE_ENTRYPOINT",
+    "CLAUDE_CODE_SSE_PORT",
+    "CLAUDE_CODE_SESSION_ID",
+    "CLAUDE_SESSION_ID",
+]);
+
+/**
+ * Strip every `CLAUDE_SESSION_ENV_DENYLIST` key from an env map, returning a new
+ * map. Exported for direct unit-testing and reuse by hosts that build the
+ * subprocess env themselves.
+ */
+export function stripClaudeSessionEnv(
+    env: Record<string, string | undefined>
+): Record<string, string> {
+    const cleaned: Record<string, string> = {};
+    for (const [k, v] of Object.entries(env)) {
+        if (v === undefined) continue;
+        if (CLAUDE_SESSION_ENV_DENYLIST.has(k)) continue;
+        cleaned[k] = v;
+    }
+    return cleaned;
+}
+
+/**
+ * Terminate a spawned `claude` process **and its whole process tree**.
+ *
+ * A bare `child.kill('SIGTERM')` signals only the direct child; the CLI's own
+ * MCP servers / tool subprocesses (which share its process group) are orphaned
+ * and keep running, which is one of the ways a fan-out of provider calls leaks
+ * processes. On POSIX we spawn detached, so the child leads its own process
+ * group and `process.kill(-pid, …)` tears the group down atomically. On
+ * Windows there is no negative-pid group signal, so we fall back to the direct
+ * child kill. Never throws.
+ */
+function terminateProcessTree(
+    proc: ChildProcess,
+    signal: NodeJS.Signals = "SIGTERM"
+): void {
+    if (proc.exitCode !== null) return;
+    const pid = proc.pid;
+    if (process.platform !== "win32" && typeof pid === "number" && pid > 0) {
+        try {
+            process.kill(-pid, signal);
+            return;
+        } catch {
+            // Group already gone, or not a group leader — fall through.
+        }
+    }
+    try {
+        proc.kill(signal);
+    } catch {
+        // Already dead — nothing to do.
+    }
+}
+
 // ─── provider ────────────────────────────────────────────────────────────────
 
 export class ClaudeCliProvider implements LLMProvider {
@@ -232,7 +308,10 @@ export class ClaudeCliProvider implements LLMProvider {
         for (const [k, v] of Object.entries(this.config.subprocessEnv())) {
             result[k] = v;
         }
-        return result;
+        // Strip the enclosing Claude Code session's identity vars LAST, so a
+        // host that (incorrectly) re-exports one via subprocessEnv() cannot
+        // re-introduce it. See CLAUDE_SESSION_ENV_DENYLIST.
+        return stripClaudeSessionEnv(result);
     }
 
     private async writeMcpConfigFile(): Promise<string | undefined> {
@@ -334,6 +413,9 @@ export class ClaudeCliProvider implements LLMProvider {
         const proc = spawn(claudePath, args, {
             stdio: ["pipe", "pipe", "pipe"],
             env: subEnv,
+            // Own process group (POSIX) so terminateProcessTree can signal the
+            // CLI *and* every subprocess it spawned (MCP servers, tools).
+            detached: process.platform !== "win32",
         });
 
         if (!proc.stdout) throw new Error('stdout not available');
@@ -344,7 +426,7 @@ export class ClaudeCliProvider implements LLMProvider {
             crlfDelay: Infinity,
         });
 
-        const onAbort = (): void => { proc.kill("SIGTERM"); };
+        const onAbort = (): void => { terminateProcessTree(proc); };
         request.signal?.addEventListener("abort", onAbort, { once: true });
 
         try {
@@ -478,9 +560,9 @@ export class ClaudeCliProvider implements LLMProvider {
         } finally {
             request.signal?.removeEventListener("abort", onAbort);
             rl.close();
-            if (proc.exitCode === null && !proc.killed) {
-                proc.kill("SIGTERM");
-            }
+            // Group-aware teardown: a bare proc.kill() would orphan the CLI's
+            // own MCP-server/tool subprocesses. See terminateProcessTree.
+            terminateProcessTree(proc);
             if (mcpConfigPath) {
                 unlink(mcpConfigPath).catch(() => { /* best-effort */ });
             }
