@@ -79,7 +79,7 @@ These env vars configure the server-wide default agent and provider credentials:
 - **Location:** zero-config default under the resolved scope root (never the repo tree), configurable via `ADHD_AGENT_DATABASE_PATH` (`src/config.ts` `"db.path"` field — falls back to `env.files.db` when unset)
 - **Tables:** `agents`, `sessions`, `messages`, `task_usage`, `migrations`
 - **Persistence:** All agents, conversations, and usage records persist across server restarts
-- **Migration:** `npm run db:migrate` (drizzle-kit auto-applied on server start as of 2.0.2)
+- **Migration:** `npm run db:migrate` (drizzle-kit auto-applied on server start as of 2.0.2). On boot the server also runs a one-time flat→namespaced legacy migration that copies rows from `~/.adhd/agent-mcp/agents.db` into the resolved store. Set `ADHD_AGENT_SKIP_LEGACY_MIGRATION=true` (config field `db.skipLegacyMigration`) to skip it entirely — the flat legacy store is then never read. Intended for hermetic test harnesses so a fresh scratch DB is not seeded from a developer's real store; normal servers should leave it unset.
 
 ### Providers (Supported Models)
 

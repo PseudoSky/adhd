@@ -105,6 +105,15 @@ describe("6f3cd348 — agent_update row documents openSessionsNotUpdated", () =>
   });
 });
 
+describe("af567fb8 — ADHD_AGENT_SKIP_LEGACY_MIGRATION documented", () => {
+  it("AC: AGENTS.md documents the legacy-migration skip flag and its hermetic purpose", () => {
+    const agents = readRepoFile("../../AGENTS.md");
+    expect(agents).toContain("ADHD_AGENT_SKIP_LEGACY_MIGRATION");
+    expect(agents).toMatch(/hermetic/i);
+    expect(agents).toMatch(/flat.*legacy|legacy.*store/i);
+  });
+});
+
 describe("2cd99264 — gitnexus-singleton concurrency contract", () => {
   it("AC1: the skill documents the one-client kill-and-replace contract", () => {
     const skill = readRepoFile(

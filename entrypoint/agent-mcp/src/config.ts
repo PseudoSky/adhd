@@ -41,7 +41,15 @@ loadEnvHierarchy();
 // ============================================================================
 
 export interface AgentMcpConfig {
-  readonly db: { readonly path: string | undefined };
+  readonly db: {
+    readonly path: string | undefined;
+    /**
+     * Skip the flat→namespaced legacy operational-DB migration at boot
+     * (backlog af567fb8). Hermetic test harnesses set this so a fresh scratch
+     * DB is never seeded from the developer's real `~/.adhd` store.
+     */
+    readonly skipLegacyMigration: boolean;
+  };
   readonly logging: { readonly level: string };
   readonly queue: { readonly concurrency: number };
   readonly server: {
@@ -114,6 +122,16 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
       env: "ADHD_AGENT_DATABASE_PATH",
       description:
         "SQLite DB path. Unset by default — falls back to the zero-config env.files.db location (db/client.ts), resolved from the scope-forced operationalEnv instance (DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001) so ADHD_ENV_SCOPE=project can never relocate the operational store.",
+    },
+    "db.skipLegacyMigration": {
+      type: "boolean",
+      env: "ADHD_AGENT_SKIP_LEGACY_MIGRATION",
+      default: false,
+      description:
+        "Skip the flat legacy ~/.adhd/agent-mcp/agents.db → namespaced-store " +
+        "migration on boot. Set to `true` by hermetic test harnesses so a fresh " +
+        "scratch DB is never seeded from the developer's real legacy store " +
+        "(backlog af567fb8).",
     },
     "logging.level": {
       type: "string",

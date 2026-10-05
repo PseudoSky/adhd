@@ -628,3 +628,43 @@ describe('DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001 — legacy flat-path migratio
     canonical.close();
   });
 });
+
+describe('af567fb8 — skipLegacyMigration', () => {
+  it('returns reason "skipped", seeds nothing, and writes no marker — while the same setup WITHOUT the flag seeds', () => {
+    const flatDir = mkTmpDir('skip-legacy');
+    const flatPath = join(flatDir, '.adhd', 'agent-mcp', 'agents.db');
+    const flat = openMigratedDb(flatPath);
+    seedAgents(flat, ['agent-1', 'agent-2', 'agent-3']);
+    flat.close();
+
+    const canonicalPath = join(mkTmpDir('skip-legacy-canon'), 'canonical', 'agents.db');
+    const canonical = openMigratedDb(canonicalPath);
+
+    const outcome = migrateLegacyOperationalDb(canonical, {
+      flatDbPath: flatPath,
+      skipLegacyMigration: true,
+    });
+
+    expect(outcome.reason).toBe('skipped');
+    expect(outcome.copied).toBe(false);
+    expect(outcome.agentsCopied).toBe(0);
+    // Nothing seeded and no marker written (the store was never touched).
+    expect(countRows(canonical, 'agents')).toBe(0);
+    expect(
+      canonical
+        .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`)
+        .get(LEGACY_MIGRATION_MARKER_TABLE)
+    ).toBeUndefined();
+
+    // NEGATIVE CONTROL: the SAME flat store + empty canonical, WITHOUT the
+    // flag, is seeded — proving the flag (not the fixture) suppresses the read.
+    const controlPath = join(mkTmpDir('skip-legacy-control'), 'canonical', 'agents.db');
+    const control = openMigratedDb(controlPath);
+    const copied = migrateLegacyOperationalDb(control, { flatDbPath: flatPath });
+    expect(copied.reason).toBe('copied');
+    expect(countRows(control, 'agents')).toBe(3);
+
+    control.close();
+    canonical.close();
+  });
+});
