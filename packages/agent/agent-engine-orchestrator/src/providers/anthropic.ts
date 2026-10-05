@@ -10,6 +10,7 @@ import type { ProviderConfig, Message, ToolCall } from "../validation/index.js";
 import type { TokenUsage } from "@adhd/agent-base-types";
 import { ToolError } from "../validation/errors.js";
 import type { EngineLogger, EngineConfig } from "../interfaces.js";
+import { DEFAULT_PROVIDER_TIMEOUT_MS } from "../interfaces.js";
 
 import type {
     LLMProvider,
@@ -95,9 +96,15 @@ function buildAnthropicClient(
     secret: string,
     timeoutMs: number | undefined
 ): AnthropicClientParts {
+    // Fall back to the raised per-call budget so the SDK client timeout never
+    // undercuts the orchestrator's AbortSignal (which uses the same constant).
+    // Previously `undefined` deferred to the SDK's own default; making it
+    // explicit keeps openai and anthropic behavior identical (backlog 36a73117
+    // / post-merge bucket-B review).
+    const effectiveTimeout = timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
     if (secret.startsWith("sk-ant-api")) {
         return {
-            client: new Anthropic({ apiKey: secret, timeout: timeoutMs }),
+            client: new Anthropic({ apiKey: secret, timeout: effectiveTimeout }),
             useOauthIdentity: false,
         };
     }
@@ -105,7 +112,7 @@ function buildAnthropicClient(
     return {
         client: new Anthropic({
             authToken: secret,
-            timeout: timeoutMs,
+            timeout: effectiveTimeout,
             ...(isOauth ? { defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" } } : {}),
         }),
         useOauthIdentity: isOauth,

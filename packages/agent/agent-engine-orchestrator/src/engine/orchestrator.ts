@@ -13,6 +13,7 @@ import { ToolError } from '../validation/errors.js';
 import { generateId } from '../utils/ids.js';
 import { nowIso } from '../utils/timestamps.js';
 import type { EngineConfig, EngineLogger } from '../interfaces.js';
+import { DEFAULT_PROVIDER_TIMEOUT_MS } from '../interfaces.js';
 
 import type { McpClientRegistry } from '../clients/registry.js';
 import type { PolicyEngine } from './policy.js';
@@ -32,20 +33,10 @@ import {
 
 const HITL_TOOL_NAME = 'request_human_input';
 
-/**
- * Default per-`provider.chat()` timeout when an agent definition does not set
- * `provider.timeoutMs`.
- *
- * Was 60_000ms, which proved a footgun under real fan-out: a genuine agentic
- * turn (Read/Grep/Bash plus at least one MCP round-trip) routinely exceeds 60s,
- * and a 29-way concurrent dispatch of `claudecli` tasks failed ~72% on the first
- * pass (backlog 36a73117). The clock is per model call — it starts inside the
- * turn, not at task creation — so a longer per-call budget does not penalize
- * queued tasks. 300_000ms (5 min) matches the operator-verified override from
- * that incident. Callers who need tighter bounds set `provider.timeoutMs`.
- */
-export const DEFAULT_PROVIDER_TIMEOUT_MS = 300_000;
-
+// Re-exported for existing importers (`../engine/orchestrator.js`); the
+// canonical definition now lives in interfaces.ts so provider adapters can
+// share it without an import cycle.
+export { DEFAULT_PROVIDER_TIMEOUT_MS };
 
 const HITL_BUILTIN_TOOL_DEFINITION = {
   name: 'builtin__request_human_input',
