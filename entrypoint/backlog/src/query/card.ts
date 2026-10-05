@@ -3,16 +3,23 @@
  * `issue` `NodeRecord` (SPEC.md §6.5).
  *
  * One issue card costs, in the worst case (every pseudo field requested):
- * one `getEdges({src: issueId})` (covers `has_kind`/`has_status`/
- * `has_priority`/`authored_by`/`has_note`/`has_citation`/`has_transition`/
- * `audits`/`relates_to`/`supersedes`/`duplicate_of`/`part_of`/`blocks` in one
- * round trip), one `getEdges({dst: issueId, rel:'owns_component'})` +
+ * one `getEdges({src: issueId})` — a single call returning EVERY outgoing
+ * relation (`has_kind`/`has_status`/`has_priority`/`authored_by`/`has_note`/
+ * `has_citation`/`has_transition`/`audits`/`relates_to`/`part_of`/`blocks`,
+ * and also `supersedes`/`duplicate_of` — in one round trip), one
+ * `getEdges({dst: issueId, rel:'owns_component'})` +
  * `getEdges({dst: componentId, rel:'owns_project'})` for placement, and one
  * `getNodesByIds` batch covering every distinct target rowid collected above
  * — never one query per field. The DEFAULT five-field card
  * (`uid,kind,title,status,priority`) costs exactly the first `getEdges` call
  * plus one batched `getNodesByIds` — no placement traversal, no pseudo-field
  * reads.
+ *
+ * The fetch returns `supersedes`/`duplicate_of`, but NO card field surfaces
+ * them: `related` deliberately projects ONLY `relates_to`/`part_of`/`blocks`
+ * (see {@link resolveRelated}), and the only read path for the full relation
+ * picture is the `auditTrail` pseudo-field (ADR-0006, "Known read asymmetry —
+ * `related` excludes `supersedes`/`duplicate_of`").
  */
 
 import type {

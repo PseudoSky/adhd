@@ -451,7 +451,14 @@ async function sortByPriorityRank(
   const sorted = [...issues].sort(
     (a, b) => rankByIssue.get(a.id)! - rankByIssue.get(b.id)!
   );
-  return direction === 'desc' ? sorted.reverse() : sorted;
+  // `rank` is INVERSE to urgency: a smaller rank is a MORE urgent priority
+  // (`catalog.ts` mints a novel priority one past the current max — the LOWEST
+  // urgency; SPEC.md §6.3.2). Rank-ascending is thus most-urgent-first.
+  // `direction` names the PRIORITY order, not the raw rank: `desc` (most urgent
+  // first) keeps the rank-ascending order; `asc` (least urgent first) reverses
+  // it. Mapping `desc` onto a raw rank-descending sort inverted the result, so
+  // `direction:"desc"` returned ascending priority (D3 `9a95be96`).
+  return direction === 'asc' ? sorted.reverse() : sorted;
 }
 
 /**
@@ -700,7 +707,10 @@ async function queryList(
   let nodes = await graph.queryNodes(pagingFilter as unknown as NodeFilter);
 
   if (input.sort === 'priority' && input.after === undefined) {
-    nodes = await sortByPriorityRank(graph, nodes, input.direction ?? 'asc');
+    // An omitted direction defaults to `'desc'` — most-urgent-first, matching
+    // `orderDir`'s default for the store-column sorts above and SPEC.md §6.5
+    // rule 6's "show me the top N by priority" (D3 `9a95be96`).
+    nodes = await sortByPriorityRank(graph, nodes, input.direction ?? 'desc');
   }
 
   const hasMore = nodes.length > limit;
