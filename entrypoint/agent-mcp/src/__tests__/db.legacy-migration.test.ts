@@ -241,4 +241,111 @@ describe('DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001 — legacy flat-path migratio
 
     canonical.close();
   });
+
+  it('7acc68c1 — CATCH-UP: a canonical store seeded from flat, then overtaken by a growing flat store, is reconciled (flat wins) and the marker refreshed', () => {
+    // The production history this fixes: the canonical store was seeded by a
+    // 2026-08-11 run (marker agents_copied = N), but the flat store stayed the
+    // LIVE one because .mcp.json pinned it — so it kept growing (48 → 69 real
+    // agents). A plain zero-agent-guard migration returns "already-migrated"
+    // and strands every agent added after the seed. The catch-up reconciles the
+    // delta so removing the pin is safe.
+    const flatDir = mkTmpDir('catchup');
+    const flatPath = join(flatDir, '.adhd', 'agent-mcp', 'agents.db');
+    const flat = openMigratedDb(flatPath);
+    seedAgents(flat, ['agent-1', 'agent-2', 'agent-3', 'agent-4', 'agent-5']); // 5 now
+    // agent-1 was revised in the live flat store AFTER the original seed.
+    flat
+      .prepare(`UPDATE agents SET version = 9, data = ? WHERE name = 'agent-1'`)
+      .run(JSON.stringify({ name: 'agent-1', revised: true }));
+    flat.close();
+
+    const canonicalPath = join(mkTmpDir('catchup-canon'), 'canonical', 'agents.db');
+    const canonical = openMigratedDb(canonicalPath);
+    // The PRIOR seed: only the first 3 agents, with the OLD agent-1, plus the
+    // marker recording agents_copied = 3.
+    seedAgents(canonical, ['agent-1', 'agent-2', 'agent-3']);
+    canonical
+      .prepare(`UPDATE agents SET version = 1, data = ? WHERE name = 'agent-1'`)
+      .run(JSON.stringify({ name: 'agent-1' }));
+    canonical
+      .prepare(
+        `CREATE TABLE "${LEGACY_MIGRATION_MARKER_TABLE}" (
+           id INTEGER PRIMARY KEY,
+           source_path TEXT NOT NULL,
+           migrated_at TEXT NOT NULL,
+           agents_copied INTEGER NOT NULL
+         )`,
+      )
+      .run();
+    canonical
+      .prepare(
+        `INSERT INTO "${LEGACY_MIGRATION_MARKER_TABLE}" (id, source_path, migrated_at, agents_copied)
+         VALUES (1, ?, ?, ?)`,
+      )
+      .run(flatPath, new Date().toISOString(), 3);
+
+    // Catch-up run: reconciles the 2 missing agents + refreshes agent-1.
+    const outcome = migrateLegacyOperationalDb(canonical, { flatDbPath: flatPath });
+    expect(outcome.copied).toBe(true);
+    expect(outcome.agentsCopied).toBe(5);
+    expect(countRows(canonical, 'agents')).toBe(5);
+    // flat WINS on the overlapping row (the live store's newer revision lands).
+    const agent1 = canonical
+      .prepare(`SELECT version, data FROM agents WHERE name = 'agent-1'`)
+      .get() as { version: number; data: string };
+    expect(agent1.version).toBe(9);
+    expect((JSON.parse(agent1.data) as { revised?: boolean }).revised).toBe(true);
+    // Marker refreshed to the new watermark so the next boot stops.
+    const marker = canonical
+      .prepare(`SELECT agents_copied FROM "${LEGACY_MIGRATION_MARKER_TABLE}" WHERE id = 1`)
+      .get() as { agents_copied: number };
+    expect(marker.agents_copied).toBe(5);
+
+    // Idempotent: no further growth -> already-migrated, count stable.
+    const again = migrateLegacyOperationalDb(canonical, { flatDbPath: flatPath });
+    expect(again.copied).toBe(false);
+    expect(again.reason).toBe('already-migrated');
+    expect(countRows(canonical, 'agents')).toBe(5);
+
+    // The flat legacy DB is still untouched (opened read-only throughout).
+    const flatCheck = openMigratedDb(flatPath);
+    expect(countRows(flatCheck, 'agents')).toBe(5);
+    flatCheck.close();
+
+    canonical.close();
+  });
+
+  it('7acc68c1 — a MARKERED canonical store that has NOT grown past the marker is left alone (no spurious catch-up)', () => {
+    const flatDir = mkTmpDir('catchup-nogrow');
+    const flatPath = join(flatDir, '.adhd', 'agent-mcp', 'agents.db');
+    const flat = openMigratedDb(flatPath);
+    seedAgents(flat, ['a', 'b', 'c']);
+    flat.close();
+
+    const canonicalPath = join(mkTmpDir('catchup-nogrow-canon'), 'canonical', 'agents.db');
+    const canonical = openMigratedDb(canonicalPath);
+    seedAgents(canonical, ['a', 'b', 'c']);
+    canonical
+      .prepare(
+        `CREATE TABLE "${LEGACY_MIGRATION_MARKER_TABLE}" (
+           id INTEGER PRIMARY KEY,
+           source_path TEXT NOT NULL,
+           migrated_at TEXT NOT NULL,
+           agents_copied INTEGER NOT NULL
+         )`,
+      )
+      .run();
+    canonical
+      .prepare(
+        `INSERT INTO "${LEGACY_MIGRATION_MARKER_TABLE}" (id, source_path, migrated_at, agents_copied)
+         VALUES (1, ?, ?, ?)`,
+      )
+      .run(flatPath, new Date().toISOString(), 3);
+
+    const outcome = migrateLegacyOperationalDb(canonical, { flatDbPath: flatPath });
+    expect(outcome.copied).toBe(false);
+    expect(outcome.reason).toBe('already-migrated');
+
+    canonical.close();
+  });
 });

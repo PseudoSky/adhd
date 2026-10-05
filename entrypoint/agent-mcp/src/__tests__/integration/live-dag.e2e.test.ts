@@ -119,7 +119,6 @@ describe.skipIf(!isLive)(
                         try {
                             parsed = taskToolInputSchema.parse(args);
                         } catch (e) {
-                            // eslint-disable-next-line no-console
                             console.error(
                                 "agent-mcp__task validation failed; raw args=" +
                                     JSON.stringify(args)

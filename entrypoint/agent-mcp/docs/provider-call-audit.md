@@ -11,7 +11,7 @@ Code.
 
 ## 1. What Goes to the Provider Every Turn
 
-### Orchestrator Loop (`packages/ai/agent-mcp/src/engine/orchestrator.ts`)
+### Orchestrator Loop (`packages/agent/agent-engine-orchestrator/src/engine/orchestrator.ts`)
 
 Every iteration of the while-loop (lines ~130–850):
 
@@ -33,7 +33,7 @@ Every iteration of the while-loop (lines ~130–850):
 4. **Provider call (lines 235-237)** — passes `tools: tools.length > 0 ? tools : undefined`
    to `provider.chat()`.
 
-### OpenAI Provider (`packages/ai/agent-mcp/src/providers/openai.ts`)
+### OpenAI Provider (`packages/agent/agent-engine-orchestrator/src/providers/openai.ts`)
 
 `toOpenAITools()` (lines 62-76) serializes every `ToolDefinition` as:
 

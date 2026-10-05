@@ -596,7 +596,6 @@ export function createServer(deps: ServerDeps): Server {
           return toMcpContent(
             agentCreate(createInput, {
               agentStore: deps.agentStore,
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               sessionStore: crudSessionStore,
             })
           );
@@ -606,7 +605,6 @@ export function createServer(deps: ServerDeps): Server {
           return toMcpContent(
             agentRead(agentReadInputSchema.parse(args), {
               agentStore: deps.agentStore,
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               sessionStore: crudSessionStore,
             })
           );
@@ -618,7 +616,6 @@ export function createServer(deps: ServerDeps): Server {
           return toMcpContent(
             agentUpdate(updateInput, {
               agentStore: deps.agentStore,
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               sessionStore: crudSessionStore,
             })
           );
@@ -628,7 +625,6 @@ export function createServer(deps: ServerDeps): Server {
           return toMcpContent(
             agentDelete(agentDeleteInputSchema.parse(args), {
               agentStore: deps.agentStore,
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               sessionStore: crudSessionStore,
             })
           );
@@ -637,7 +633,6 @@ export function createServer(deps: ServerDeps): Server {
           return toMcpContent(
             agentList(args, {
               agentStore: deps.agentStore,
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               sessionStore: crudSessionStore,
             })
           );
