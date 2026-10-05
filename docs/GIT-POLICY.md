@@ -642,3 +642,32 @@ Schema version 1.
   push, no branch or worktree removed, no gates run (the post-merge review runs the suite). This
   record is the only change to this file in this operation. Recorded under §Commit convention's
   `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `test/complexity-determinism` (dispatch-2026-10-04-9c4e).**
+  Landed the deterministic-complexity-gate fix onto `main` as a **merge commit** `63fc204e`
+  (parents `7e28b45d` = pre-merge `main`, `2801dc23` = branch head), moving `main` `7e28b45d` →
+  `63fc204e`; 1 file, +165/-127: `packages/data/data-query-engine/src/lib/complexity.spec.ts`. The
+  branch was a single commit, `2801dc23` (`test(data-query-engine): make complexity gate
+  deterministic via element-touch counts`), whose only parent is the merge-base `7adea399`, so the
+  landing is a genuine non-fast-forward (`git merge-base --is-ancestor 2801dc23 main` was false
+  before the merge). §Branching & merge was the deciding rule: this history "carries true merge
+  commits" and ff-only is not enforced, while rebase-in-flight is permitted only on a branch "solely
+  your own" — the branch is an in-flight executor branch, not the operator's, so rewriting its
+  commit was out; a merge commit is the stated shape here. Dry-run `git merge-tree --write-tree
+  --name-only main test/complexity-determinism` exited 0, producing tree `cbd4edea` with no conflict
+  hunks; the actual `git merge --no-ff` was conflict-free (ort strategy, exit 0), and the post-merge
+  tree (`git rev-parse HEAD^{tree}` = `cbd4edea`) is byte-identical to the dry-run tree. The branch
+  never touched this file (empty `git diff --name-only 7adea399..2801dc23 -- docs/GIT-POLICY.md`), so
+  `main`'s policy blob `4f7218e0` survived the merge byte-identical (pre-merge `7e28b45d` and
+  post-merge `63fc204e` resolve the same blob). Post-merge `git rev-list --count
+  main..test/complexity-determinism` = 0 and `git merge-base --is-ancestor 2801dc23 main` exits 0, so
+  the commit is contained. A concurrent agent's uncommitted work was present in the working tree
+  throughout — five untracked files (`docs/plan/backlog-consolidation/ac-traceability.json`,
+  `entrypoint/backlog/scripts/gen-ac-traceability.mjs`,
+  `entrypoint/backlog/src/contract-matrix.e2e.ts`, `entrypoint/backlog/src/mcp-host.e2e.ts`,
+  `entrypoint/backlog/src/test/helpers/spawn-mcp-host.ts`) — and was neither staged, swept, nor
+  touched: the merge's path set is disjoint from those paths, nothing was staged before or after
+  (`git diff --cached --name-only` empty), and the `git status --porcelain` line set was identical
+  before and after. No push, no branch or worktree removed, and no gates were run by this operation
+  (the post-merge review runs the suite). This record is the only change to this file in this
+  operation. Recorded under §Commit convention's `docs(<area>):` scope.
