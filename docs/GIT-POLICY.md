@@ -1050,3 +1050,33 @@ Schema version 1.
   `5dbcf52c` (clean, not reaped); no push, no branch or worktree removed, and no gates were run by
   this operation (the post-merge review runs the suite). This record is the only change to this file
   in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `docs/adr-0008-native-tooling` (dispatch-2026-10-04-9c4e).**
+  Landed the ADR-0008 native-tooling change onto `main` as a **merge commit** `36242d1f` (parents
+  `defa1de6` = pre-merge `main`, `a6db9730` = branch head), moving `main` `defa1de6` → `36242d1f`; 2
+  files, +329 lines (`docs/decisions/0008-agent-mcp-native-tooling.md` added, 328 lines;
+  `docs/decisions/README.md` +1 index row). The dispatch named "2 commits"; the branch in fact carries
+  **3** commits since the merge-base `cca763b9` — `bc60183a` (add ADR-0008, proposed), `3cbd2f3e`
+  (revise per owner answers), and `a6db9730` (accept). All three are contained
+  (`git rev-list --count main..docs/adr-0008-native-tooling` = 0; `git merge-base --is-ancestor` exits 0
+  for each). §Branching & merge was the deciding rule: this history "carries true merge commits" and
+  ff-only is not enforced, while rebase-in-flight is permitted only on a branch "solely your own" — the
+  branch is an in-flight executor branch, not the operator's, so rewriting its 3 commits was out; the
+  dispatch directed `--no-ff`. Dry-run `git merge-tree --write-tree --name-only main a6db9730` exited 0,
+  producing tree `4e11fce8` with no conflict hunks; the actual `git merge --no-ff` was conflict-free (ort
+  strategy, exit 0) and the post-merge tree at `36242d1f` is `4e11fce8`, byte-identical to the dry-run
+  tree. The branch never touched this file relative to the merge-base (empty `git diff --name-only
+  cca763b9..a6db9730 -- docs/GIT-POLICY.md`; branch and merge-base policy blob both `7dcee854`), so
+  `main`'s newer policy blob `c99c846a` survived the merge byte-identical (pre-merge `defa1de6`,
+  post-merge `36242d1f`, and the on-disk file all resolve to the same blob). The working tree was clean
+  before and after (`git status --porcelain` empty) and nothing was staged before the provenance commit;
+  the dispatch's anticipated "unrelated concurrent dirt" was not present, so nothing had to be avoided
+  or protected. **Noted, not corrected:** the branch's own `docs/decisions/README.md` index row for 0008
+  still reads `PROPOSED (2026-10-05; revised for reconfirmation) — awaiting owner approval` while the ADR
+  body it indexes (`docs/decisions/0008-agent-mcp-native-tooling.md`, `**Status:** ACCEPTED`) is ACCEPTED
+  — the accept commit `a6db9730` changed only the ADR file, not the index. That index contradiction is a
+  content defect owned by the ADR author/owner, not a git operation, so this operation landed the branch
+  as authored and did not edit it (separation of duties). The branch remains checked out in worktree
+  `.worktrees/adr-0008-native-tooling` at `a6db9730` (clean, not reaped); no push, no branch or worktree
+  removed, and no gates were run (docs-only ADR; the dispatch directed none). This record is the only
+  change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
