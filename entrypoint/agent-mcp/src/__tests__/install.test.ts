@@ -128,6 +128,16 @@ describe('agent-mcp-install (BUG-AGENTMCP-006)', () => {
       });
       // ...while an unrelated server under a DIFFERENT command survives
       expect(doc.mcp.github).toBeDefined();
+
+      // AC: exactly ONE entry registers the agent-mcp command.
+      const signature = ['npx', ...AGENT_MCP_NPX_ARGS].join('\u0000');
+      const sameCommandKeys = Object.entries(doc.mcp)
+        .filter(([, v]) => {
+          const entry = v as { command?: unknown };
+          return Array.isArray(entry?.command) && entry.command.join('\u0000') === signature;
+        })
+        .map(([k]) => k);
+      expect(sameCommandKeys).toEqual(['agent-mcp']);
     });
   });
 

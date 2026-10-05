@@ -214,14 +214,12 @@ const ERROR_CODE_PATTERN = /^\[([A-Z_]+)\]\s*([\s\S]*)$/;
  * `ProviderConfig.type` already restrict `DispatchUnit.provider` to
  * (types.ts:84) — DeepSeek is not a 4th type on either side: it dispatches as
  * `type: 'openai'` with a DeepSeek `model`/`baseURL`, exactly matching the
- * real production `typescript-deepseek` agent definition (verified against
- * the canonical namespaced operational store
- * `<HOME>/.adhd/agent-mcp/production/data/agents.db`, resolved by
- * `@adhd/agent-mcp`'s config: `{type:'openai', model:'deepseek-v4-flash',
- * baseURL:'https://api.deepseek.com/v1',
- * env:{secret:'ADHD_AGENT_DEEPSEEK_SECRET'}}`). NOTE: the legacy flat path
- * `~/.adhd/agent-mcp/agents.db` is NOT the production store
- * (`entrypoint/agent-mcp/src/db/migrate-legacy.ts`).
+ * real production `typescript-deepseek` agent definition. `@adhd/agent-mcp`
+ * resolves the operational store from the canonical namespaced location
+ * `<HOME>/.adhd/agent-mcp/production/data/agents.db` (or an explicit
+ * `ADHD_AGENT_DATABASE_PATH` override): `{type:'openai',
+ * model:'deepseek-v4-flash', baseURL:'https://api.deepseek.com/v1',
+ * env:{secret:'ADHD_AGENT_DEEPSEEK_SECRET'}}`.
  */
 export interface McpAgentProviderConfig {
   type: 'anthropic' | 'openai' | 'claudecli';
