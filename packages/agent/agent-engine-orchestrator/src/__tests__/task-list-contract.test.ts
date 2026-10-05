@@ -211,4 +211,18 @@ describe("task_list / result contract (f2b004eb + df109078)", () => {
     expect(projectTaskRecord(rec, undefined, true)).toEqual({ id: "x", status: "pending" });
     expect(projectTaskRecord(rec, ["status"])).toEqual({ id: "x", status: "pending" });
   });
+
+  it("a projected element is typed partial — a dropped field may be absent", () => {
+    taskStore.create({ sessionId: sidA, prompt: "a long prompt body" });
+    const [projected] = taskList({ fields: ["status"] }, { taskStore });
+    // Runtime: projection physically omits the unrequested `prompt`.
+    expect(Object.keys(projected).sort()).toEqual(["id", "status"]);
+    // Compile-time guard (checked by `tsc`, not vitest's runtime): a projected
+    // element's `prompt` is `string | undefined`, so it must NOT narrow to
+    // `string`. Reverting the return type to `Task[]` would make this compile,
+    // turning the directive below into an unused `@ts-expect-error`.
+    // @ts-expect-error - projection may have dropped `prompt`.
+    const _promptIsOptional: string = projected.prompt;
+    void _promptIsOptional;
+  });
 });
