@@ -5,7 +5,7 @@
       "command": "npx",
       "args": ["-y", "@adhd/agent-mcp@latest"],
       "env": {
-        "ADHD_AGENT_DATABASE_PATH": "/Users/nix/.adhd/agent-mcp/agents.db",
+        "ADHD_AGENT_DATABASE_PATH": "/Users/nix/.adhd/agent-mcp/production/data/agents.db",
         "ADHD_AGENT_REGISTRY_DB_PATH": "/Users/nix/.adhd/agent-registry/production/data/registry.db"
       }
     },

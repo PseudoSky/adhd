@@ -1,7 +1,9 @@
 /**
- * `migrate-legacy.ts` — one-time, idempotent, first-boot migration of the
- * FLAT legacy operational DB into the canonical namespaced store
- * (DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001, design decision 3).
+ * `migrate-legacy.ts` — idempotent, first-boot migration of the
+ * FLAT legacy operational DB into the canonical namespaced store, plus a
+ * marker-aware CATCH-UP for a store that kept growing after it was seeded
+ * (DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001, design decision 3; backlog
+ * 7acc68c1).
  *
  * History: before the namespacing redesign, agent-mcp's operational store
  * lived at the FLAT `~/.adhd/agent-mcp/agents.db`. The redesign moved the
@@ -44,6 +46,13 @@
  *    drift (newer/older migrations on either side) degrades gracefully.
  *  - Best-effort per table: a failure on one table (e.g. an orphaned FK
  *    reference) skips that table and logs, never aborting the boot.
+ *  - Catch-up: when the marker shows a prior seed from the SAME flat file and
+ *    the flat store has since GROWN, the new/updated rows are reconciled in
+ *    (flat wins). This is what makes removing the flat pin safe — without it, a
+ *    store seeded once and then kept live by the pin would silently strand
+ *    every agent added afterwards (backlog 7acc68c1). `agents_copied === 0`
+ *    (the zero-agent guard) never triggers a catch-up, so a canonical store
+ *    that was authoritative from the start is never overwritten from legacy.
  *
  * Ordering (see `db/migrate.ts`): this runs AFTER the drizzle migrations, so
  * the canonical tables always exist with the full current schema. (Running it
@@ -109,17 +118,40 @@ function columnNames(conn: Database.Database, table: string): string[] {
   );
 }
 
+/** The table's PRIMARY KEY columns in key order — the conflict target for the
+ *  catch-up upsert (all eight operational tables have a single-column PK). */
+function primaryKeyColumns(conn: Database.Database, table: string): string[] {
+  return (
+    conn.prepare(`PRAGMA table_info("${table}")`).all() as Array<{ name: string; pk: number }>
+  )
+    .filter((c) => c.pk > 0)
+    .sort((a, b) => a.pk - b.pk)
+    .map((c) => c.name);
+}
+
 function countRows(conn: Database.Database, table: string): number {
   if (!tableExists(conn, table)) return 0;
   return (conn.prepare(`SELECT COUNT(*) AS n FROM "${table}"`).get() as { n: number }).n;
 }
 
-function markerRecorded(conn: Database.Database): boolean {
-  if (!tableExists(conn, LEGACY_MIGRATION_MARKER_TABLE)) return false;
-  return conn.prepare(`SELECT 1 FROM "${LEGACY_MIGRATION_MARKER_TABLE}" LIMIT 1`).get() !== undefined;
+interface LegacyMigrationMarker {
+  source_path: string;
+  agents_copied: number;
 }
 
-function recordMarker(conn: Database.Database, sourcePath: string, agentsCopied: number): void {
+/** Reads the run-once marker row, if the marker table exists and carries one. */
+function readMarker(conn: Database.Database): LegacyMigrationMarker | undefined {
+  if (!tableExists(conn, LEGACY_MIGRATION_MARKER_TABLE)) return undefined;
+  const row = conn
+    .prepare(`SELECT source_path, agents_copied FROM "${LEGACY_MIGRATION_MARKER_TABLE}" WHERE id = 1`)
+    .get() as LegacyMigrationMarker | undefined;
+  return row;
+}
+
+/** Writes (or REFRESHES) the single marker row. The upsert is load-bearing: the
+ *  catch-up path re-records its `agents_copied` watermark on the same row so a
+ *  later boot sees flat == marker and stops. */
+function writeMarker(conn: Database.Database, sourcePath: string, agentsCopied: number): void {
   conn
     .prepare(
       `CREATE TABLE IF NOT EXISTS "${LEGACY_MIGRATION_MARKER_TABLE}" (
@@ -132,8 +164,12 @@ function recordMarker(conn: Database.Database, sourcePath: string, agentsCopied:
     .run();
   conn
     .prepare(
-      `INSERT OR IGNORE INTO "${LEGACY_MIGRATION_MARKER_TABLE}" (id, source_path, migrated_at, agents_copied)
-       VALUES (1, ?, ?, ?)`,
+      `INSERT INTO "${LEGACY_MIGRATION_MARKER_TABLE}" (id, source_path, migrated_at, agents_copied)
+       VALUES (1, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         source_path = excluded.source_path,
+         migrated_at = excluded.migrated_at,
+         agents_copied = excluded.agents_copied`,
     )
     .run(sourcePath, new Date().toISOString(), agentsCopied);
 }
@@ -146,10 +182,96 @@ export interface MigrateLegacyOptions {
   log?: (level: "info" | "warn", message: string) => void;
 }
 
+interface CopyFlatOptions {
+  /** `true` ⇒ an existing canonical row whose PK collides with a flat row is
+   *  UPDATED from the flat row (flat wins) — the catch-up path, where the flat
+   *  store is still the live source. `false` ⇒ INSERT OR IGNORE (first-boot
+   *  seed into an empty canonical store). */
+  overwriteExisting: boolean;
+  flatDbPath: string;
+  flatAgentCount: number;
+  log: (level: "info" | "warn", message: string) => void;
+}
+
 /**
- * Runs the one-time flat → namespaced migration on the OPEN canonical
- * connection (`sqlite` from `db/client.ts`, after the drizzle migrations have
- * run — see `db/migrate.ts`).
+ * Copies every same-shaped operational table from the read-only `flat`
+ * connection into `canonical`, then writes the marker — all in ONE
+ * transaction, so the rows and the run-once marker commit or roll back
+ * together. Returns the number of tables from which at least one row was
+ * offered. Keeps the original inline copy's per-row best-effort semantics (a
+ * single orphaned row must not drop its whole table).
+ */
+function copyFlatIntoCanonical(
+  canonical: Database.Database,
+  flat: Database.Database,
+  opts: CopyFlatOptions,
+): number {
+  let copiedTables = 0;
+  canonical.transaction(() => {
+    for (const table of LEGACY_OPERATIONAL_TABLES) {
+      if (!tableExists(flat, table)) continue;
+      const flatCols = columnNames(flat, table);
+      const canonicalCols = columnNames(canonical, table);
+      if (flatCols.length === 0) continue;
+      // Same-shaped only: copy the INTERSECTING columns, in flat's order.
+      const cols = flatCols.filter((c) => canonicalCols.includes(c));
+      if (cols.length === 0) continue; // no shared shape — skip, never guess
+
+      const quoted = cols.map((c) => `"${c}"`).join(", ");
+      const placeholders = cols.map(() => "?").join(", ");
+      const pkCols = primaryKeyColumns(canonical, table).filter((c) => cols.includes(c));
+      const updatable = cols.filter((c) => !pkCols.includes(c));
+      const canUpsert = opts.overwriteExisting && pkCols.length > 0 && updatable.length > 0;
+      const sql = canUpsert
+        ? `INSERT INTO "${table}" (${quoted}) VALUES (${placeholders}) ` +
+          `ON CONFLICT(${pkCols.map((c) => `"${c}"`).join(", ")}) ` +
+          `DO UPDATE SET ${updatable.map((c) => `"${c}" = excluded."${c}"`).join(", ")}`
+        : `INSERT OR IGNORE INTO "${table}" (${quoted}) VALUES (${placeholders})`;
+
+      try {
+        const rows = flat
+          .prepare(`SELECT ${quoted} FROM "${table}"`)
+          .all() as Array<Record<string, unknown>>;
+        const insert = canonical.prepare(sql);
+        // Best-effort PER ROW: a single orphaned row (e.g. a session whose
+        // agent was deleted from the legacy store — real flat DBs carry
+        // these) must not drop the whole table. An error aborts only the
+        // current statement; the enclosing transaction stays open.
+        let skipped = 0;
+        for (const row of rows) {
+          try {
+            insert.run(...cols.map((c) => row[c]));
+          } catch {
+            skipped++;
+          }
+        }
+        copiedTables++;
+        if (skipped > 0) {
+          opts.log("warn", `migrate-legacy: skipped ${skipped} orphaned/invalid row(s) in "${table}"`);
+        }
+      } catch (err) {
+        // Table-level failure (e.g. the read itself) — never abort the boot.
+        opts.log("warn", `migrate-legacy: skipping "${table}" (${(err as Error).message})`);
+      }
+    }
+    writeMarker(canonical, opts.flatDbPath, opts.flatAgentCount);
+  })();
+  return copiedTables;
+}
+
+/**
+ * Runs the flat → namespaced migration on the OPEN canonical connection
+ * (`sqlite` from `db/client.ts`, after the drizzle migrations have run — see
+ * `db/migrate.ts`).
+ *
+ * Two modes, both idempotent:
+ *  - FIRST BOOT (no marker): seed an empty canonical store from the flat legacy
+ *    DB, then record the run-once marker.
+ *  - CATCH-UP (marker present + the flat store has GROWN since it was seeded):
+ *    the pin kept the flat store live after the seed, so reconcile the delta
+ *    (flat wins) and refresh the marker — without this, a store seeded early
+ *    and then kept growing would silently strand every later agent once the
+ *    pin is removed (backlog 7acc68c1).
  *
  * @returns the outcome describing what happened.
  */
@@ -184,17 +306,6 @@ export function migrateLegacyOperationalDb(
   if (!fs.existsSync(flatDbPath)) {
     return { copied: false, agentsCopied: 0, reason: "no-flat-db" };
   }
-  if (markerRecorded(canonical)) {
-    return { copied: false, agentsCopied: 0, reason: "already-migrated" };
-  }
-
-  // Zero-agent guard: canonical is authoritative. Record the marker so this
-  // guard is stable (deleting all agents later must not resurrect legacy rows).
-  if (countRows(canonical, "agents") > 0) {
-    recordMarker(canonical, flatDbPath, 0);
-    return { copied: false, agentsCopied: 0, reason: "canonical-populated" };
-  }
-
   // Production always runs this AFTER the drizzle migrations (see
   // `db/migrate.ts`), so the canonical schema exists. Defend the direct-call
   // API against a schema-less canonical: copying would be a silent no-op
@@ -205,60 +316,52 @@ export function migrateLegacyOperationalDb(
     return { copied: false, agentsCopied: 0, reason: "canonical-not-migrated" };
   }
 
+  const marker = readMarker(canonical);
+
   // Read-only over the flat file — never modify the legacy store (a resident
   // server pinned via ADHD_AGENT_DATABASE_PATH may still be writing it).
   const flat = new Database(flatDbPath, { readonly: true });
   try {
     const flatAgentCount = countRows(flat, "agents");
+
+    if (marker) {
+      // CATCH-UP (backlog 7acc68c1): the marker proves a prior run seeded the
+      // canonical store from THIS flat file. Only reconcile when the flat store
+      // has GROWN since then — the pin kept it live after the seed, so its
+      // newer rows must not be stranded. `agents_copied === 0` is the
+      // zero-agent-guard case (canonical was authoritative, nothing seeded), so
+      // it is deliberately NOT a catch-up trigger.
+      const sameSource = path.resolve(marker.source_path) === path.resolve(flatDbPath);
+      const grew = marker.agents_copied > 0 && flatAgentCount > marker.agents_copied;
+      if (!(sameSource && grew)) {
+        return { copied: false, agentsCopied: 0, reason: "already-migrated" };
+      }
+      copyFlatIntoCanonical(canonical, flat, {
+        overwriteExisting: true,
+        flatDbPath,
+        flatAgentCount,
+        log,
+      });
+      return { copied: true, agentsCopied: flatAgentCount, reason: "copied" };
+    }
+
+    // Zero-agent guard: canonical is authoritative. Record the marker so this
+    // guard is stable (deleting all agents later must not resurrect legacy rows).
+    if (countRows(canonical, "agents") > 0) {
+      writeMarker(canonical, flatDbPath, 0);
+      return { copied: false, agentsCopied: 0, reason: "canonical-populated" };
+    }
     if (flatAgentCount === 0) {
-      recordMarker(canonical, flatDbPath, 0);
+      writeMarker(canonical, flatDbPath, 0);
       return { copied: false, agentsCopied: 0, reason: "flat-empty" };
     }
 
-    const doCopy = canonical.transaction(() => {
-      let copiedTables = 0;
-      for (const table of LEGACY_OPERATIONAL_TABLES) {
-        if (!tableExists(flat, table)) continue;
-        const flatCols = columnNames(flat, table);
-        const canonicalCols = columnNames(canonical, table);
-        if (flatCols.length === 0) continue;
-        // Same-shaped only: copy the INTERSECTING columns, in flat's order.
-        const cols = flatCols.filter((c) => canonicalCols.includes(c));
-        if (cols.length === 0) continue; // no shared shape — skip, never guess
-        try {
-          const rows = flat
-            .prepare(`SELECT ${cols.map((c) => `"${c}"`).join(", ")} FROM "${table}"`)
-            .all() as Array<Record<string, unknown>>;
-          const insert = canonical.prepare(
-            `INSERT OR IGNORE INTO "${table}" (${cols.map((c) => `"${c}"`).join(", ")})
-             VALUES (${cols.map(() => "?").join(", ")})`,
-          );
-          // Best-effort PER ROW: a single orphaned row (e.g. a session whose
-          // agent was deleted from the legacy store — real flat DBs carry
-          // these) must not drop the whole table. An error aborts only the
-          // current statement; the enclosing transaction stays open.
-          let skipped = 0;
-          for (const row of rows) {
-            try {
-              insert.run(...cols.map((c) => row[c]));
-            } catch {
-              skipped++;
-            }
-          }
-          copiedTables++;
-          if (skipped > 0) {
-            log("warn", `migrate-legacy: skipped ${skipped} orphaned/invalid row(s) in "${table}"`);
-          }
-        } catch (err) {
-          // Table-level failure (e.g. the read itself) — never abort the boot.
-          log("warn", `migrate-legacy: skipping "${table}" (${(err as Error).message})`);
-        }
-      }
-      recordMarker(canonical, flatDbPath, flatAgentCount);
-      return copiedTables;
+    copyFlatIntoCanonical(canonical, flat, {
+      overwriteExisting: false,
+      flatDbPath,
+      flatAgentCount,
+      log,
     });
-    doCopy();
-
     return { copied: true, agentsCopied: flatAgentCount, reason: "copied" };
   } finally {
     flat.close();
