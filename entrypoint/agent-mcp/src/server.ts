@@ -30,6 +30,8 @@ import {
   agentUpdate,
   agentDelete,
   agentList,
+  verifyAgentMcpServers,
+  agentVerifyMcpInputSchema,
 } from '@adhd/agent-engine-orchestrator';
 import {
   agentTool,
@@ -503,6 +505,12 @@ export function createServer(deps: ServerDeps): Server {
         inputSchema: { type: 'object', properties: {} },
       },
       {
+        name: 'agent_verify_mcp',
+        description:
+          "Handshake-verify an agent's configured mcpServers WITHOUT dispatching a task: connects each server, lists its tools, and returns one result per server (reachable tool names, or a clear connection error). Spends no model/provider-timeout budget.",
+        inputSchema: toMcpInputSchema(agentVerifyMcpInputSchema),
+      },
+      {
         name: 'agent',
         description: 'Instantiate a stateful session for a named agent',
         inputSchema: toMcpInputSchema(agentToolInputSchema),
@@ -626,6 +634,14 @@ export function createServer(deps: ServerDeps): Server {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               sessionStore: crudSessionStore,
             })
+          );
+
+        case 'agent_verify_mcp':
+          return toMcpContent(
+            await verifyAgentMcpServers(
+              agentVerifyMcpInputSchema.parse(args),
+              { agentStore: deps.agentStore }
+            )
           );
 
         case 'agent':
