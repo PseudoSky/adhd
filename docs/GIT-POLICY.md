@@ -427,3 +427,37 @@ Schema version 1.
   after. No push, no branch or worktree removed, and no gates were run by this operation (the
   post-merge review runs the suite). This record is the only change to this file in this operation.
   Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `feat/bucket-g-dispatch-cli-taskstore` (dispatch-2026-10-04-9c4e).**
+  Landed bucket G onto `main` as a **merge commit** `d71f7f02` (parents `52a8f3f0` = pre-merge
+  `main`, `a6854d78` = G head), moving `main` `52a8f3f0` → `d71f7f02`; 7 files, +123/-7:
+  `entrypoint/dispatch-cli/eslint.config.mjs` (M), `entrypoint/dispatch-cli/package.json` (M),
+  `entrypoint/dispatch-cli/project.json` (M),
+  `entrypoint/dispatch-cli/src/test/default-mcp-servers.spec.ts` (M),
+  `packages/agent/agent-store-runtime/src/__tests__/task-store.test.ts` (M),
+  `packages/agent/agent-store-runtime/src/store/task-store.ts` (M), and `pnpm-lock.yaml` (M). The 2
+  commits since the merge-base `ff979cc2` are `892da21c` (`fix(dispatch-cli): declare @adhd/backlog
+  dependency and assert the default MCP entry exists (1505199b)`) and `a6854d78`
+  (`docs(agent-store-runtime): document and pin the task-store list() ordering contract (7ab73187)`) —
+  matching the dispatch list exactly. §Branching & merge was the deciding rule: this history "carries
+  true merge commits" and ff-only is not enforced, while rebase-in-flight is permitted only on a
+  branch "solely your own" — G is an in-flight executor branch, not the operator's, so rewriting its
+  2 commits was out; a merge commit is the stated shape here. This merge was performed **after** the
+  bucket-C merge above and `main` was re-read first (`52a8f3f0`), so the dry-run was re-run against
+  the advanced `main`: `git merge-tree --write-tree --name-only main a6854d78` exited 0, producing
+  tree `92e5e628` with no conflict hunks — differing from the bucket-C-era dry-run tree `6a1033c6`
+  only because `main` had moved, and still clean. The actual `git merge --no-ff` was conflict-free
+  (ort strategy, exit 0), auto-merging `pnpm-lock.yaml` (G's lockfile delta vs. `main`'s
+  bucket-C lockfile delta) with no hunk left unresolved. The branch never touched this file since
+  its merge-base (empty `git diff ff979cc2..a6854d78 -- docs/GIT-POLICY.md`), so the policy revision
+  landed by the bucket-C provenance commit (`5d1d8474`) survived the merge byte-identical (pre-merge
+  `52a8f3f0` and post-merge `d71f7f02` resolve the same blob). Post-merge
+  `git rev-list --count main..feat/bucket-g-dispatch-cli-taskstore` = 0 and
+  `git merge-base --is-ancestor` exits 0 for each of the 2 named commits individually. A concurrent
+  agent's uncommitted work was present in the working tree throughout
+  (`entrypoint/backlog/src/query/card.ts` and `query.ts` modified; `sort-priority-direction.spec.ts`
+  untracked) and was neither staged, swept, nor touched — the merge's path set is disjoint from those
+  paths, and their sha256 hashes and `git status --porcelain` lines were byte-identical before and
+  after. No push, no branch or worktree removed, and no gates were run by this operation (the
+  post-merge review runs the suite). This record is the only change to this file in this operation.
+  Recorded under §Commit convention's `docs(<area>):` scope.
