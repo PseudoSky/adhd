@@ -312,3 +312,35 @@ Schema version 1.
   tree was clean before and after (`git status --porcelain` empty). No push, no branch or worktree
   removed, no gates run (the post-merge review runs the suite). This record is the only change to
   this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-04 — operation record: land of the `feat/bucket-b-provider-runtime` continuation
+  (dispatch-2026-10-04-9c4e).** Landed the bucket-B continuation onto `main` as a **merge commit**
+  `a7e526f3` (parents `7fe7ce10` = pre-merge `main`, `6f739de0` = B head), moving `main`
+  `7fe7ce10` → `a7e526f3`; 29 files, +1954/-79. The 8 commits since the merge-base `e175c2dd` are
+  `182d741c`, `b6884f67`, `ecd0f138`, `e95bc2df`, `f6213b58`, `6f30eb40`, `e8271d77`, `6f739de0` —
+  matching the dispatch list exactly. §Branching & merge was the deciding rule: this history
+  "carries true merge commits" and ff-only is not enforced, while rebase-in-flight is permitted only
+  on a branch "solely your own" — B is an in-flight executor branch, not the operator's, so
+  rewriting its commits was out; a merge commit is the stated shape here. The dry-run
+  `git merge-tree --write-tree --name-only main 6f739de0` exited **1** with exactly one conflict,
+  `packages/agent/agent-engine-orchestrator/src/index.ts`. That conflict was a trivial additive
+  export union: base blob `03fbe6d2`; `main` (`63b6c9cb`) added the `AgentUpdateResult` type to the
+  `./tools/agent-crud.js` line and the `./tools/mcp-verify.js` export block; B (`f8b26a54`) added
+  the `./providers/server-side-tools.js` exports and `ServerSideTool` to the provider-types line
+  (these auto-merged, producing no hunk), plus `tasksBatch` and `DEFAULT_BATCH_CONCURRENCY` to the
+  `./tools/task.js` line. No symbol was defined divergently on the two sides, so the resolution is
+  the union rather than a choice: kept `main`'s mcp-verify block **and** B's
+  `tasksBatch`/`DEFAULT_BATCH_CONCURRENCY` on the task line, with the auto-merged provider-side
+  additions and `AgentUpdateResult` intact. Resolved content is blob `d93a2ff9`; verified
+  `git diff main -- <file>` shows only B's additions and `git diff
+  feat/bucket-b-provider-runtime -- <file>` shows only `main`'s additions, i.e. the union with
+  nothing dropped. The dry-run's exit 1 was the only non-zero step; the resolved
+  `git commit --no-edit` exited 0 after the git-invoked pre-commit hook (mass-deletion guard, secret
+  scan, affected lint, staged-spec) passed. Post-merge `git rev-list --count
+  main..feat/bucket-b-provider-runtime` = 0 and `git merge-base --is-ancestor 6f739de0 main` exits 0,
+  and each of the 8 named commits was individually confirmed an ancestor of `main`. The branch never
+  touched this file (empty `git diff 7fe7ce10..a7e526f3 -- docs/GIT-POLICY.md`), so `main`'s policy
+  blob `c650d6b7` survived the merge byte-identical. The working tree was clean before and after
+  (`git status --porcelain` empty). No push, no branch or worktree removed, and no gates were run by
+  this operation (the post-merge review runs the suite). This record is the only change to this file
+  in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
