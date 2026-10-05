@@ -518,7 +518,11 @@ export function defaultPluginEntries(
     caps.push({ field: "calls", maximum: maxCalls });
   }
 
-  const defaults: Record<string, unknown> = { mode: "block", caps };
+  // `scope` lives INSIDE `defaults` (a dimension field), not at the config
+  // root: `pluginConfigSchema` has no top-level `scope` key, so the previous
+  // `config: { scope: "global", defaults }` silently dropped it and the caps
+  // resolved per-task instead of globally (post-merge bucket-B review, MEDIUM).
+  const defaults: Record<string, unknown> = { mode: "block", caps, scope: "global" };
 
   const rawCost = processEnv["ADHD_AGENT_BUDGET_COST_USD"];
   if (rawCost !== undefined) {
@@ -535,7 +539,7 @@ export function defaultPluginEntries(
   return [
     {
       module: DEFAULT_BUDGET_PLUGIN_MODULE,
-      config: { scope: "global", defaults },
+      config: { defaults },
     },
   ];
 }
