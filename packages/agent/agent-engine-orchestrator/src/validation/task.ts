@@ -107,3 +107,107 @@ export type TaskToolOutput = z.infer<typeof taskToolOutputSchema>;
 export type TaskListInput = z.infer<typeof taskListInputSchema>;
 export type TaskCancelInput = z.infer<typeof taskCancelInputSchema>;
 export type ResultInput = z.infer<typeof resultInputSchema>;
+
+/**
+ * `tasks_batch` (FEAT: native bulk/parallel task-dispatch primitive,
+ * backlog 05cc1db4). Fans out N prompts in ONE call, honoring a concurrency
+ * cap, so the caller never hand-maintains a session_id↔task_id mapping or
+ * hand-builds a `depends_on` chain for the common "N independent items,
+ * throttled" case.
+ *
+ * Exactly one of `agent_name` (one-shot ephemeral per prompt — sessions are
+ * created internally) or `session_ids` (reuse an existing session per prompt)
+ * must be supplied. Per-item `depends_on` (pre-existing task ids) and
+ * `depends_on_indexes` (earlier items *within this batch*, resolved to the
+ * generated task ids) compose with the existing DAG ordering fields.
+ */
+export const tasksBatchInputSchema = z
+  .object({
+    agent_name: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Ephemeral one-shot agent for every prompt (mutually exclusive with session_ids)'),
+    session_ids: z
+      .array(z.string().uuid())
+      .optional()
+      .describe('Reuse one existing session per prompt; length must equal prompts.length'),
+    prompts: z.array(z.string().min(1)).min(1).describe('One prompt per dispatched task'),
+    concurrency: z
+      .number()
+      .int()
+      .positive()
+      .max(64)
+      .optional()
+      .describe('Max tasks executing simultaneously (default 4)'),
+    depends_on: z
+      .array(z.array(z.string().uuid()))
+      .optional()
+      .describe('Per-item pre-existing upstream task ids; length must equal prompts.length'),
+    depends_on_indexes: z
+      .array(z.array(z.number().int().nonnegative()))
+      .optional()
+      .describe(
+        'Per-item indexes of EARLIER items in this batch this task depends on; each index must be < its item index'
+      ),
+    on_upstream_failure: z
+      .array(z.enum(['fail', 'skip']))
+      .optional()
+      .describe('Per-item upstream-failure policy; length must equal prompts.length'),
+  })
+  .superRefine((val, ctx) => {
+    const n = val.prompts.length;
+    const hasAgent = val.agent_name !== undefined;
+    const hasSessions = val.session_ids !== undefined;
+    if (hasAgent === hasSessions) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'exactly one of agent_name or session_ids must be supplied',
+      });
+    }
+    if (val.session_ids && val.session_ids.length !== n) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `session_ids.length (${val.session_ids.length}) must equal prompts.length (${n})`,
+      });
+    }
+    const parallel = (name: string, arr: unknown[] | undefined) => {
+      if (arr && arr.length !== n) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${name}.length (${arr.length}) must equal prompts.length (${n})`,
+        });
+      }
+    };
+    parallel('depends_on', val.depends_on);
+    parallel('depends_on_indexes', val.depends_on_indexes);
+    parallel('on_upstream_failure', val.on_upstream_failure);
+
+    val.depends_on_indexes?.forEach((deps, i) => {
+      for (const j of deps) {
+        if (j >= i) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['depends_on_indexes', i],
+            message: `item ${i} may only depend on an earlier index (< ${i}); got ${j}`,
+          });
+        }
+      }
+    });
+  });
+
+export type TasksBatchInput = z.infer<typeof tasksBatchInputSchema>;
+
+export const tasksBatchOutputSchema = z.object({
+  concurrency: z.number().int().positive(),
+  results: z.array(
+    z.object({
+      index: z.number().int().nonnegative(),
+      task_id: z.string().uuid(),
+      status: taskStatusSchema,
+      result: z.string().optional(),
+    })
+  ),
+});
+
+export type TasksBatchOutput = z.infer<typeof tasksBatchOutputSchema>;
