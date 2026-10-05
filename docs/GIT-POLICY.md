@@ -292,3 +292,23 @@ Schema version 1.
   working tree was clean before and after (`git status --porcelain` empty). No push, no branch or
   worktree removed, no gates run (the post-merge review runs the suite). This record is the only
   change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-04 — operation record: land of the `feat/bucket-c-publish-contract-docs` delta-scope
+  follow-up (dispatch-2026-10-04-9c4e).** Landed 1 follow-up commit on top of the already-merged
+  `20f541cc` (`ea3923db` = `fix(agent-mcp): delta-scope legacy catch-up so canonical post-seed
+  writes survive (80b61a7d)`) onto `main` as a **merge commit** `05f4b0e0` (parents `f5bd3938` =
+  pre-merge `main`, `ea3923db` = C head), moving `main` `f5bd3938` → `05f4b0e0`; 2 files,
+  +371/-96 (`entrypoint/agent-mcp/src/db/migrate-legacy.ts`,
+  `entrypoint/agent-mcp/src/__tests__/db.legacy-migration.test.ts`). §Branching & merge was the
+  deciding rule: this history "carries true merge commits" and ff-only is not enforced, while
+  rebase-in-flight is permitted only on a branch "solely your own" — C is an in-flight executor
+  branch, not the operator's, so rewriting its commit was out; a merge commit is the stated shape
+  here. Dry-run `git merge-tree --write-tree main ea3923db` exited 0, producing tree `9976c1b6`
+  with no conflict hunks; the actual `git merge --no-ff` was conflict-free (ort strategy, exit 0).
+  The branch never touched this file (empty `git diff 20f541cc..ea3923db -- docs/GIT-POLICY.md`), so
+  the merge carried `main`'s policy blob `7a0b9b7f` byte-identical. Post-merge
+  `git rev-list --count main..feat/bucket-c-publish-contract-docs` = 0 and
+  `git merge-base --is-ancestor ea3923db main` exits 0, so the commit is contained. The working
+  tree was clean before and after (`git status --porcelain` empty). No push, no branch or worktree
+  removed, no gates run (the post-merge review runs the suite). This record is the only change to
+  this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
