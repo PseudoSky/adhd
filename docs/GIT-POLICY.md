@@ -461,3 +461,34 @@ Schema version 1.
   after. No push, no branch or worktree removed, and no gates were run by this operation (the
   post-merge review runs the suite). This record is the only change to this file in this operation.
   Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `feat/bucket-b-provider-runtime-eng` (dispatch-2026-10-04-9c4e).**
+  Landed the bucket-B engine onto `main` as a **merge commit** `0451d09b` (parents `6bdbf3e5` =
+  pre-merge `main`, `2f5a556a` = branch head), moving `main` `6bdbf3e5` → `0451d09b`; 6 files,
+  +590/-7: `packages/agent/agent-engine-orchestrator/eslint.config.mjs` (M),
+  `packages/agent/agent-engine-orchestrator/package.json` (M),
+  `packages/agent/agent-engine-orchestrator/src/__tests__/plugins-loader-budget.test.ts` (A),
+  `packages/agent/agent-engine-orchestrator/src/__tests__/task-dependency-gating.test.ts` (A),
+  `packages/agent/agent-engine-orchestrator/src/tools/task.ts` (M), and `pnpm-lock.yaml` (M). The 2
+  commits since the merge-base `ff979cc2` are `976e4a2a` (`fix(agent-engine-orchestrator): resolve the
+  default budget plugin from the engine (dfb03557)`) and `2f5a556a` (`fix(agent-engine-orchestrator):
+  enforce task depends_on gating before dispatch (ac115447)`) — matching the dispatch list exactly.
+  §Branching & merge was the deciding rule: this history "carries true merge commits" and ff-only is
+  not enforced, while rebase-in-flight is permitted only on a branch "solely your own" — the branch is
+  an in-flight executor branch, not the operator's, so rewriting its 2 commits was out; a merge commit
+  is the stated shape here. Dry-run `git merge-tree --write-tree --name-only main 2f5a556a` exited 0,
+  producing tree `7f547f9c` with no conflict hunks; the actual `git merge --no-ff` was conflict-free
+  (ort strategy, exit 0), auto-merging `packages/agent/agent-engine-orchestrator/src/tools/task.ts`
+  and `pnpm-lock.yaml` with no hunk left unresolved, and the post-merge tree at `0451d09b` is
+  `7f547f9c`, byte-identical to the dry-run tree. The branch never touched this file (empty
+  `git diff ff979cc2..2f5a556a -- docs/GIT-POLICY.md`), so `main`'s policy blob `da70249d` survived
+  the merge byte-identical (pre-merge `6bdbf3e5` and post-merge `0451d09b` resolve the same blob).
+  Post-merge `git rev-list --count main..feat/bucket-b-provider-runtime-eng` = 0 and
+  `git merge-base --is-ancestor` exits 0 for each of the 2 named commits individually. A concurrent
+  agent's uncommitted work was present in the working tree throughout
+  (`entrypoint/backlog/src/query/card.ts` and `query.ts` modified; `sort-priority-direction.spec.ts`
+  untracked) and was neither staged, swept, nor touched — the merge's path set is disjoint from those
+  paths, and their sha256 hashes and `git status --porcelain` lines were byte-identical before and
+  after. No push, no branch or worktree removed, and no gates were run by this operation (the
+  post-merge review runs the suite). This record is the only change to this file in this operation.
+  Recorded under §Commit convention's `docs(<area>):` scope.
