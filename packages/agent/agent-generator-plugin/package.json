@@ -3,7 +3,7 @@
   "version": "0.1.4",
   "description": "Nx generator for golden-path @adhd/agent-* registry packages (lint + cache + ^build inherited, README + rules doc)",
   "dependencies": {
-    "@nx/devkit": "*",
+    "@nx/devkit": "18.3.4",
     "tslib": "^2.6.0"
   },
   "devDependencies": {

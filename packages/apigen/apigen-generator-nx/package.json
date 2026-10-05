@@ -2,7 +2,7 @@
   "name": "@adhd/apigen-generator-nx",
   "version": "0.1.3",
   "dependencies": {
-    "@nx/devkit": "*",
+    "@nx/devkit": "18.3.4",
     "tslib": "^2.3.0"
   },
   "main": "./dist/src/index.js",

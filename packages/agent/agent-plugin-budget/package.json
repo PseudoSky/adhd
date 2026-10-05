@@ -24,7 +24,7 @@
     "@adhd/agent-base-types": "^2.3.3"
   },
   "dependencies": {
-    "zod": "*"
+    "zod": "^4.4.3"
   },
   "keywords": [
     "agent",
