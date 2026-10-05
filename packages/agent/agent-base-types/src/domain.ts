@@ -276,6 +276,14 @@ export interface AgentDefinition {
    * - `"full"`: include full JSON Schema for each tool
    */
   toolAdvertisement?: 'names' | 'full';
+  /**
+   * When NOT `false`, a provider that supports native (server-side) web tools
+   * (currently Anthropic) advertises `web_search` and `web_fetch` to the
+   * model by default, so a dispatched agent can run a real web search/fetch
+   * without any client-side tool wiring (backlog 1abd2d84). Set to `false` to
+   * opt out. Has no effect on providers without native web tools.
+   */
+  nativeWebTools?: boolean;
   createdAt: string;
   updatedAt: string;
 }

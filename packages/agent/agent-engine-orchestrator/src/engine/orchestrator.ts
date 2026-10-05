@@ -1,4 +1,5 @@
 import type { LLMProvider } from '../providers/types.js';
+import { serverSideToolsForProvider } from '../providers/server-side-tools.js';
 import type { ExecutionContext, Message } from '../validation/index.js';
 import type {
   IHookRegistry,
@@ -350,9 +351,17 @@ export class Orchestrator {
                 ? [toolDocSystemMessage, ...baseMessages.slice(1)]
                 : [toolDocSystemMessage, ...baseMessages];
           }
+          // Provider-native web tools (default on, opt out via
+          // nativeWebTools:false) — see server-side-tools.ts (backlog 1abd2d84).
+          const serverSideTools = serverSideToolsForProvider(
+            executionContext.agentDefinition.provider.type,
+            executionContext.agentDefinition.nativeWebTools !== false
+          );
           providerResponse = await provider.chat({
             messages: messagesToSend,
             tools: advertisedTools.length > 0 ? advertisedTools : undefined,
+            serverSideTools:
+              serverSideTools.length > 0 ? serverSideTools : undefined,
             signal: composedSignal,
             executeTool: async (server, tool, args) => {
               registry.assertToolAllowed?.(server, tool);

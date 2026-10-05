@@ -24,7 +24,8 @@ export { AnthropicProvider } from './providers/anthropic.js';
 export { OpenAIProvider } from './providers/openai.js';
 export { ClaudeCliProvider, computeClaudeBuiltinArgs, extractAgentSpecName, normalizeAgentSpec } from './providers/claudecli.js';
 export { createProvider } from './providers/factory.js';
-export type { LLMProvider, ProviderChatRequest, ProviderChatResponse } from './providers/types.js';
+export { serverSideToolsForProvider, ANTHROPIC_NATIVE_WEB_TOOLS } from './providers/server-side-tools.js';
+export type { LLMProvider, ProviderChatRequest, ProviderChatResponse, ServerSideTool } from './providers/types.js';
 export type { ToolDefinition, TokenUsage } from '@adhd/agent-base-types';
 
 // ── Clients ───────────────────────────────────────────────────────────────────

@@ -115,6 +115,7 @@ export const agentDefinitionSchema = z.object({
   allowHumanInput: z.boolean().optional(),
   sanitization: z.enum(['none', 'prefix', 'wrap']).optional(),
   toolAdvertisement: z.enum(['names', 'full']).optional(),
+  nativeWebTools: z.boolean().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -196,6 +197,7 @@ export const agentPatchSchema = z.object({
   maxToolLoops: z.number().int().positive().optional(),
   allowHumanInput: z.boolean().optional(),
   sanitization: z.enum(['none', 'prefix', 'wrap']).optional(),
+  nativeWebTools: z.boolean().optional(),
 });
 
 export const agentUpdateInputSchema = z

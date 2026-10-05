@@ -240,6 +240,15 @@ export class AnthropicProvider implements LLMProvider {
                 this.logger.warn("AnthropicProvider: no model configured; API will likely reject");
             }
 
+            // Custom (client-executed) tools plus any provider-native
+            // (server-executed) tools from the default web toolset
+            // (backlog 1abd2d84). Server-side entries are type-tagged and
+            // carry no input_schema.
+            const mergedTools: Tool[] = [
+                ...(toAnthropicTools(request.tools) ?? []),
+                ...((request.serverSideTools ?? []) as unknown as Tool[]),
+            ];
+
             const stream = this.client.messages.stream(
                 {
                     model: effectiveModel,
@@ -247,7 +256,7 @@ export class AnthropicProvider implements LLMProvider {
                     temperature: this.providerConfig.temperature,
                     max_tokens: this.providerConfig.maxTokens ?? defaultMaxTokens(effectiveModel, this.config),
                     messages: toAnthropicMessages(request.messages),
-                    tools: toAnthropicTools(request.tools),
+                    tools: mergedTools.length > 0 ? mergedTools : undefined,
                 },
                 { signal: request.signal }
             );

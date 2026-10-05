@@ -129,6 +129,17 @@ There are exactly three provider `type`s in code (`packages/agent/agent-engine-o
 
 **Prior behavior (2.0.0-2.0.1):** Silently defaulted to name-only for all non-claudecli agents, breaking provider-side tool-call validation.
 
+### Native web tools (default toolset, 1abd2d84)
+
+For a provider that supports server-executed tools (currently Anthropic),
+every dispatched agent advertises `web_search` and `web_fetch` by default, so
+it can run a real web search/fetch without any client-side executor. The tools
+are emitted as type-tagged entries (`{ type: 'web_search_20250305', name:
+'web_search' }`, `{ type: 'web_fetch_20250910', name: 'web_fetch' }`) and
+executed by the provider. Set `nativeWebTools: false` on the agent definition
+to opt out. Providers without native web tools (openai/claudecli) are
+unaffected.
+
 ### Default MCP servers for new agents (97acef07)
 
 `agent_create` default-wires the adopted filesystem and shell MCP servers
