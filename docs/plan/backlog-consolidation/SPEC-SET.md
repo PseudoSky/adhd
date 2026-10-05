@@ -1,6 +1,6 @@
 # SPEC-SET — the small set of fixes between now and the target end state
 
-**Status:** TARGET plan. Changes no behavior and no code. Not an ADR; derives from `tmp/backlog-consolidation/reconciliation-plan.md` and the **single target-interface record** `backlog-interface-target.md` (**ADR-0007, OWNER-APPROVAL-PENDING**). **Interface ownership:** this document is the implementation spec set (S01–S12) and owns the acceptance criteria + write-scopes; `backlog-interface-target.md` (ADR-0007) alone owns the public verb/envelope/naming surface and the canonical additive/breaking classification, with `CLI-HIERARCHY.md` as its subordinate verb-tree companion. Where a spec names a public verb, ADR-0007 / `CLI-HIERARCHY.md` own the exact spelling (see S11/S12).
+**Status:** TARGET plan. Changes no behavior and no code. Not an ADR; derives from `tmp/backlog-consolidation/reconciliation-plan.md` and the **single target-interface record** `backlog-interface-target.md` (**ADR-0007, ACCEPTED 2026-10-05**). **Interface ownership:** this document is the implementation spec set (S01–S12) and owns the acceptance criteria + write-scopes; `backlog-interface-target.md` (ADR-0007) alone owns the public verb/envelope/naming surface and the canonical additive/breaking classification, with `CLI-HIERARCHY.md` as its subordinate verb-tree companion. Where a spec names a public verb, ADR-0007 / `CLI-HIERARCHY.md` own the exact spelling (see S11/S12).
 **Source of truth:** the 49 reconciled clusters in `tmp/backlog-consolidation/clusters/reconciled.json`; cluster→card-uid map in `tmp/backlog-consolidation/clusters/cluster-card-map.json`.
 **Machine mapping:** `docs/plan/backlog-consolidation/spec-set-mapping.json`.
 
@@ -32,7 +32,7 @@
 ## Spec S01 — Freeze and extend the node/edge vocabulary (FOUNDATION)
 
 - **Root problem:** P-3 (the substrate the evidence/obligation system is written against).
-- **Absorbs (1):** `graph-store-identity` (`2cd00fd3-07cb-48eb-9532-563148eba0ff`). AMB-2 ("does the FOUNDATION node-kind vocab subsume per-kind node identity?") is answered **yes** by this spec — it *is* the vocabulary decision; owner-confirm at target-ADR review.
+- **Absorbs (1):** `graph-store-identity` (`2cd00fd3-07cb-48eb-9532-563148eba0ff`). AMB-2 ("does the FOUNDATION node-kind vocab subsume per-kind node identity?") is **RESOLVED yes** (owner-approved 2026-10-05) by this spec — it *is* the vocabulary decision.
 - **Design anchor:** FOUNDATION `69632883` (node kinds + internal edges + typed error arms); partial overlap with C8 `4a12472e`.
 - **Write-scope:** `entrypoint/backlog/src/store/vocabulary-guard.ts`, `entrypoint/backlog/src/write/tx.ts`, `entrypoint/backlog/src/write/catalog.ts`, `entrypoint/backlog/src/write/errors.ts`, `entrypoint/backlog/src/store/graph-backlog-store.ts`; substrate seam to external `node_modules/@adhd/sox-graph-store` (out-of-repo dependency — file a coordinated upgrade if new kinds must be taught to the substrate).
 - **Acceptance criteria (binary):**
@@ -40,6 +40,7 @@
   2. Internal edges `attests`, `has_obligation`, `satisfies` are writable/traversable and are **absent** from the public `relate` enum — a `relate` with `attests` returns a typed error, not success.
   3. Unknown-kind *mint* behaviour is unchanged (the guard is additive; closing the catalog is S06's breaking decision, not this spec).
   4. `npx nx test backlog` and `npx nx run backlog:verify-dist-load` exit 0.
+  5. **S01 AC5 — per-kind node identity (`graph-store-identity` 2cd00fd3):** node identity is per-kind; two nodes differing only by case in a content-bearing field are **not** collapsed — a regression that admits 15 kinds but leaves the global case-insensitive content-hash collapse is red.
 - **Dependencies / gating:** none — foundational-safe-now. **Precedes S04 and S05** (they are written against these kinds/edges).
 - **Classification:** additive-safe-now (internal vocabulary; permitted under ADR-0006 D6).
 - **Executor:** backend.
@@ -64,6 +65,9 @@
   11. **S02.T3 — backfill the 15:** the ~15 imported-SUPERSEDED nodes (e.g. `21a76386`, `04c6978f`, `86fd0ab9`, …) are backfilled with a recorded reason; `query --input '{"filter":{"status":"SUPERSEDED"}}'` returns each node with a reason and a successor-or-none.
   12. **S02.S2 — joins (n:m + distinguished primary owner):** an issue has many-to-many `issue↔component↔project` derived from citations + explicit edges, with a **distinguished primary owner** retained for routing/ACL. *Binary:* an issue citing evidence in 2 components across 2 projects returns both sets from a spanning query and reports exactly one primary owner.
   13. **S02.H45 — hard rules #4/#5 discharged:** citation verification is not project-root-scoped (#4), and out-of-repo / worktree-only / non-file evidence is never refused or silently dropped (#5). *Binary:* a worktree-only path and a non-file locator are accepted and recorded; neither `create` refusal nor silent omission occurs. (This is the highest-leverage blocker per the plan; #4/#5 are the write-gate consequence of C1/C2.)
+  14. **S02 AC14 — lifecycle remove/restore + production gate (`backlog-lifecycle-model` 0b0df8f3):** `remove {uid,confirm}` permanently retires and `restore {uid}` reverses a soft-retire; a production-store write fails loudly without an explicit gate; a retired parent with live children is reported as an orphaned-parent condition by rollup. *(breaking, gated)*
+  15. **S02 AC15 — write-verb actor mismatch (`backlog-write-integrity` 65029970):** a write verb whose caller actor/identity mismatches the node's owner returns a typed validation error, never a bare `conflict`; a merge cannot destroy the dropped item's addressability without recorded provenance.
+  16. **S02 AC16 — registry single enumeration (`registry-integrity` 39799f8e):** a project/component/location registry read returns each entity exactly once (no duplicate rows); an orphan identity is flagged; scratch/import artifacts never appear in the production registry.
 - **Dependencies / gating:** gate = target ADR (`backlog-interface-target.md`) approval of D3a/D3c. **Breaking** — canonical identity resolution changes behavior across every uid-taking verb: `OWNER SIGN-OFF REQUIRED`, inert until a superseding ADR of ADR-0006 is authored at ship. No code in this spec ships before that.
 - **Classification:** **breaking** (sign-off gated).
 - **Executor:** backend.
@@ -80,6 +84,8 @@
   3. `view:"order"` scopes to every member kind the filter selects (not just `issue`) and includes outbound `blocks` + a dependent count; a second `part_of` returns a typed error naming the existing parent.
   4. The C1-contradiction is closed one way in the target ADR: either `related` returns every live relation (wide variant) and the stale comment is deleted, **or** the enumerated three are declared authoritative and the stale comment is deleted. Either way the two sources no longer disagree.
   5. **S03.S4 — read surface renders joins:** the default card (`view:'list'` and `get`) renders project/component **sets**, and a component/project-spanning query exists. *Binary:* a default-card read of a multi-project issue shows the joined project/component sets. *Closes `7ed3ac0e` (default card omits project/component).*
+  6. **S03 AC6 — structured/FTS precedence + documented params (`query-semantics` b3e24b62):** a structured branch is never shadowed by the FTS branch (deterministic precedence, observable); every required param is documented in the returned error/help; default fields are exposed.
+  7. **S03 AC7 — spec-append CAS/head agreement (`983f5971`):** `spec-append` CAS compares against the same revision head `get`/`spec-check` report; a divergent CAS is impossible (fixture proves equality).
 - **Dependencies / gating:** gate = target ADR D4e decision. Narrow variant needs no sign-off; **wide `related` is behavior-visible → `OWNER SIGN-OFF REQUIRED`**.
 - **Classification:** additive (narrow variant); breaking if the wide variant is chosen.
 - **Executor:** typescript.
@@ -96,6 +102,10 @@
   3. B1 closed: a `get` optional input field (or additive `spec-get`) returns the revision fragment, not just the pointer.
   4. B2 closed: a `query` filter/projection (e.g. `byCitationPath`) returns which items cite a given path.
   5. **S04.S3 — citations-as-assertions (tracked once with `050ea18f`):** split "exists/locatable" (keep, hard) from "within project root" (drop); support `url:`/`registry:`/`query:`; never silently drop. *Binary:* an out-of-root existing locator verifies-as-exists; a nonexistent locator is rejected; each abstract anchor is recorded with its outcome; no write silently omits a citation. (Same implementation surface as `050ea18f`; tracked once, cited here.)
+  6. **S04 AC6 — symlink/out-of-tree citation integrity (`citation-integrity` 8392a07c):** sha resolution resolves symlinks and records out-of-tree targets as `unverified-with-reason` (never dropped/aborted); a presence-only anchor is distinguishable from a content anchor; a cited path's blast radius is reportable.
+  7. **S04 AC7 — SPEC adoption metric + e2e (`spec-design-corpus` c88a73b2):** each design-corpus SPEC exposes an adoption metric (implemented? referenced-by?) queryable from the store, and an end-to-end test drives one SPEC from item → export → drift detection.
+  8. **S04 AC8 — reproducible acceptance criterion (`2cf61846`):** an acceptance criterion is reproducible from committed inputs alone (no machine-local state); the 675-delta is replaced by a residual-0 decomposition.
+  9. **S04 AC9 — portable deploy-verify script (`4a979cef`):** a committed verification script resolves paths portably (no machine-local abs paths/SHAs) and runs in CI on a clean checkout.
 - **Dependencies / gating:** **depends on S01** (attestation kind + `attests` edge). Gate = target ADR. Additive.
 - **Classification:** additive-safe-now *once S01 lands*.
 - **Executor:** backend (+ doc-steward for SPEC/DATA_MODEL wording).
@@ -111,6 +121,8 @@
   2. A terminal transition with an unsatisfied `block` obligation is refused with typed `{code, required_kind}`; a commit ref alone does **not** satisfy `published-artifact`.
   3. `claim` fails loudly on a `block`-severity condition; `Verdict`/`Condition` are derived on read, never stored.
   4. Every CI/test/demo gate has a negative control that turns red when the guarded defect is reintroduced (proven by a deliberately-broken variant going red, then reverted).
+  5. **S05 AC5 — harness fidelity (`test-harness` af7c138f):** a lane that self-skips without a declared reason fails the gate; a test whose type config (`tsconfig.spec`) is unwired is detected; a non-deterministic lane is quarantined, not silently green.
+  6. **S05 AC6 — spec-lanes real count (`f613472b`):** `spec-lanes.mjs` computes its lane count from the real suite (no hard-coded number); a drifted count fails the gate and never reaches plan docs.
 - **Dependencies / gating:** **depends on S01 + S04** (obligations consume verified evidence). Gate = target ADR. **Breaking** — the closure gate + `claim` precondition change existing-verb success semantics: `OWNER SIGN-OFF REQUIRED`, inert until a superseding ADR of ADR-0006.
 - **Classification:** **breaking** (sign-off gated).
 - **Executor:** backend + qa (devops for CI wiring).
@@ -127,6 +139,11 @@
   3. Vocabulary cleanup either done or explicitly deferred with sign-off: `kind:EPIC` retired, `bug`/`BUG` reconciled, `undefined`/`MEDIUM` removed.
   4. Defect D2 `73d3b97d` repaired: ADR-0006 records `ambiguous_reference` among the ten codes and no longer invents an `update` status (non-decision correction, doc-steward).
   5. **S06.S6 — correct the docs/model:** `entrypoint/backlog/SPEC.md:328` ("A location belongs to exactly one component; a component to exactly one project."), `entrypoint/backlog/DATA_MODEL.md:330-334`, and the skill's component-as-path model (`entrypoint/backlog/skill/SKILL.md:1004` primary + `:1035` reinforcing; `:1009` is the related *location* model, cited separately) are corrected; a doc-drift check fails if the 1:1 sentence reappears. *Closes `a1e69b2d`.*
+  6. **S06 AC6 — unknown kind/priority fails (`catalog-minting` 4d603d05):** a create/update with an unknown kind or priority returns typed `not_found` naming the term; no row is minted; the per-verb GROUP BY histogram is not run on every write. *(close = breaking, gated)*
+  7. **S06 AC7 — planning extensibility + plan-value assessment (`planning-extensibility` af3eb285 + `4f0882e3`/`c8b8fb10`):** a documented extensibility model exists (how a new group/cluster type registers; how native grouping is derived), and registering a plugin extension requires no core code change; a plan-value assessment (novelty/differentiation/defensibility/gain) is derivable via a documented skill with an evidence-based verdict and a queryable capability register.
+  8. **S06 AC8 — catalog header zero false positives (`cc4698c4`):** the catalog header check has zero false positives on disallowedTools mentions and on role-word model inference (fixture corpus).
+  9. **S06 AC9 — post-cutover config surface (`f78b8692`):** after cutover, a config-surface check confirms no consumer references a removed key (`migration.phase`); a live reference fails loudly.
+  10. **S06 AC10 — env→store resolution (`P-4` config half):** an env→store resolution is specified and tested (a seeded `db_path`/scope is honoured; an unneutralized store-redirect env is rejected); the deferred `project-config-surface` decision is recorded.
 - **Dependencies / gating:** gate = target ADR. Additive (registry reads, drift checks); **breaking sub-items** — closing the kind catalog and the vocabulary migration — need `OWNER SIGN-OFF REQUIRED` and are inert until a superseding ADR.
 - **Classification:** additive for the registry/self-describing surface; breaking for the close + vocab migration (gated).
 - **Executor:** doc-steward + backend.
@@ -145,6 +162,9 @@
   5. **S07.R1 — rollup counts non-terminal (fixes `b16bf316`):** part-of-rollup's `childrenOpen` counts children that are not terminal; a `resolved` child is **not** counted open.
   6. **S07.R2 — orphaned-parent signal:** a retired/abandoned parent with live children is surfaced by the rollup rooted at the umbrella as an **orphaned-parent** condition (the children are visible, not invisible).
   7. **S07.R3 — direction recoverable (fixes `abf3b665`):** `related`/`part_of` distinguishes parent from child (not tagged identically in both directions).
+  8. **S07 AC8 — memory-server write races (`memory-write-race` b2afcfa2):** facet-admit is a single atomic conditional insert (two racers yield one term, no duplicate); outcome append is idempotent by client key; a persisted-but-unacked write is detectable.
+  9. **S07 AC9 — malformed independence (`8c261906`):** a malformed `independence` is rejected/recorded as `unknown`, never coerced to `self`; the `unknown` verdict tier is reachable (fixture proves it).
+  10. **S07 AC10 — integrity-pass policy on reopen (`d1ebe470`):** the integrity pass has a documented, tested policy for structural unknowns (exempt-with-reason or checked); the reopen path is deterministic.
 - **Dependencies / gating:** independent — foundational-safe-now. Must uphold sox ADR-0012; correct any stale single-writer claim touched.
 - **Classification:** additive-safe-now.
 - **Executor:** backend.
@@ -160,6 +180,11 @@
   2. `verify-dist-load` runs by default (unflagged) and loads the real built entry; an apigen generated contract that diverges from its source types fails the build.
   3. pnpm/nx toolchain versions are pinned; a mismatch fails rather than silently re-resolving.
   4. apigen runmode strictness: an unsupported runmode errors; tracing emits a trace for every invoked operation.
+  5. **S08 AC5 — apigen plugin docs/help/test contract (`apigen-contract` 1854a9f6):** a gate fails when any apigen plugin's docs/help/test expectation contradicts the exported engine contract (streaming spans, help footer, lazy barrel, cache toggle, e2e resolution).
+  6. **S08 AC6 — runmode undeclared vs malformed key (`apigen-runmode-strictness` 2c7179a0):** runmode encode/decode rejects an **undeclared** key with a typed error naming it, and rejects a **malformed** key with a distinct typed error — neither dropped.
+  7. **S08 AC7 — install/upgrade dependency-absence failure (`install-engine` 5fd61857):** install/upgrade fails loudly (non-zero, typed) when a declared delivery surface's dependency is absent; success is impossible otherwise.
+  8. **S08 AC8 — baked-IR cache hashes `.d.ts` (`ir-cache-freshness` f8b6ffc2):** the baked-IR cache key includes `.d.ts` inputs; editing a `.d.ts` without touching `.ts` invalidates the cache (proven by a rebuild changing output).
+  9. **S08 AC9 — release/publish drift (`release-publish-drift` df9de4da):** a release reports every task + duration; a mis-inserted version section fails the changelog gate; `--dry-run` leaves the tree byte-identical; an unrelocked dep range fails.
 - **Dependencies / gating:** independent — foundational-safe-now.
 - **Classification:** additive-safe-now.
 - **Executor:** devops + typescript.
@@ -175,6 +200,9 @@
   2. Recall over the same store returns the same result after reopen (persistence proven by reopen, not by cache).
   3. Telemetry never reports success for a failed operation (false-metric negative control goes red).
   4. Service start/stop is idempotent and leaves no orphaned process or socket.
+  5. **S09 AC5 — memory-core recall leaks (`memory-core-recall` 709cc0ad):** a read against a read-only/unavailable FTS returns a typed failure (never stale success); a timed-out embed is cancelled (no orphan); a test never writes the production log/store.
+  6. **S09 AC6 — hybrid-search loadability decision (`91f57dc3`):** the hybrid-search loadability decision is recorded (ADR or equivalent) and the native chain is optional per that record; the test asserts the optional path loads.
+  7. **S09 AC7 — mass-mislabel incident guard (`e29cd816`):** a guard detects mass topic mislabeling (threshold), fails/raises before it propagates, and is exercised by a negative-control fixture.
 - **Dependencies / gating:** independent — foundational-safe-now. Carries an out-of-repo substrate dependency (memory server lives in the soxe bundle).
 - **Classification:** additive-safe-now.
 - **Executor:** backend.
@@ -190,6 +218,17 @@
   2. Agent-spec output discipline: a spec missing a required section fails validation.
   3. Worktrees are provisioned under `.worktrees/` with an installed `node_modules` before dependency-checks; a missing install is detected (never silently strips used deps).
   4. Repo hygiene: a `git status --porcelain` clean-or-accounted gate; no tracked `dist/`/`tmp/` artifacts; dead code detected by lint.
+  5. **S10 AC5 — agent-spec evidence guard (`agent-spec-output-discipline` 53664070):** a spec whose required-section content asserts a model-qualified outcome with no evidence anchor fails validation (typed error), not silently passes.
+  6. **S10 AC6 — dispatch grant satisfies lane (`dispatch-tooling` 7ed25125):** a dispatch whose tool grant cannot satisfy its declared lane is refused; an in-agent liveness signal is observable; an agent/skill prose drift check fails on divergence.
+  7. **S10 AC7 — process resource hygiene (`process-resource-hygiene` d794287f):** a dispatch that would duplicate an in-flight identical unit is refused/warned; a harness exceeding a memory ceiling fails the gate; an idle child process is reaped on parent exit.
+  8. **S10 AC8 — no removed-field keys (`025d3239`):** no shipped skill/orchestrator artifact keys on a removed field; a reference to a non-existent field is a typed failure, and the S0 coverage gate is computable.
+  9. **S10 AC9 — verb references resolve (`2979eb6a`):** every verb/prose reference in agent instructions resolves to a live CLI verb (drift check); a rejection is recordable in one documented call.
+  10. **S10 AC10 — TaskCreate enablement (`4a41a335`):** a dispatch declares whether `TaskCreate` is enabled for its session, and the enabling/disabling condition is documented + tested.
+  11. **S10 AC11 — architect cross-package slot (`51a725c4`):** the architect output schema carries an explicit cross-package slot, and an agent that refuses cross-package work on structural grounds fails a fixture.
+  12. **S10 AC12 — filed-vs-ready view (`8db42169`):** a `filed` item and a `ready` item are distinguishable from the store; the gap is a first-class view.
+  13. **S10 AC13 — dashboard theme-aware literals (`c3532742`):** dashboard control literals are theme-aware; a dark/light fixture renders both without hard-coded black/`#fff`.
+  14. **S10 AC14 — rehearse-live-vacuum flag safety (`dc40a5dc`):** an unrecognized flag (incl `--help`) on `rehearse-live-vacuum` is refused (no side effect); `--help` prints usage only.
+  15. **S10 AC15 — normalize_command multi-token (`dc92006f`):** `normalize_command` classifies multi-token commands; the mis-classification rate drops measurably (fixture of real bash calls).
 - **Dependencies / gating:** independent — foundational-safe-now.
 - **Classification:** additive-safe-now.
 - **Executor:** devops + doc-steward.
@@ -240,14 +279,14 @@
 
 | cluster | uid | reason (one line) |
 |---|---|---|
-| `adr-0005-policy` | `9b99df00-01ce-4fa1-aa35-47c8b2722c37` | AMB-1 — whether the `IProjectPolicy` knob is obsolete vs C4's no-config-engine + adoption `e54bd58b` joined-project needs one architect decision before it can be scoped. |
-| `project-config-surface` | `6ab30778-5d26-49bd-b8f2-85652263996f` | AMB-3 — whether C4's closed-predicate / no-config-engine obsoletes project-scoped config; decide before owning it. |
+| `adr-0005-policy` | `9b99df00-01ce-4fa1-aa35-47c8b2722c37` | **AMB-1 RESOLVED** (owner-approved 2026-10-05): cluster 1 is **REMODELED-BY C4 `1c53784d`** + adoption `e54bd58b` — the `IProjectPolicy` knob is obsolete as a per-project *workflow* config engine; residual typed per-project *data* is subsumed by the joined-entity model. |
+| `project-config-surface` | `6ab30778-5d26-49bd-b8f2-85652263996f` | **AMB-3 RESOLVED** (owner-approved 2026-10-05): project-scoped *workflow* config is obsolete (C4 closed-predicate/no-config-engine); legitimate project-scoped config is the env→store resolution folded into **S06 AC10**, and the decision is recorded there. |
 
-## Ambiguities absorbed (owner-confirm at target-ADR review)
+## Ambiguities absorbed (RESOLVED — owner-approved 2026-10-05)
 
-- **AMB-2** (`graph-store-identity` → S01): this spec *is* the node-kind vocabulary decision; per-kind node identity is subsumed.
-- **AMB-4** (`query-semantics` → S03): C7's completeness contract + C2's order view directly cover read-layer limit/score semantics.
-- **AMB-5** (defect `9a95be96` `direction:"desc"` → S03): read-layer bug, owned by the read spec, not orthogonal.
+- **AMB-2** (`graph-store-identity` → S01): **RESOLVED** — FOUNDATION's node-kind vocabulary *is* the per-kind node-identity decision; per-kind identity is subsumed (REMODELED-BY `69632883`).
+- **AMB-4** (`query-semantics` → S03): **RESOLVED** — C7's completeness contract + C2's order view directly cover read-layer limit/score semantics (REMODELED-BY `ac911229` + `395cfcad`).
+- **AMB-5** (defect `9a95be96` `direction:"desc"` → S03): **RESOLVED** — a read-layer bug, owned by the read spec (S03 AC2), not orthogonal; FOUNDATIONAL-safe-now.
 
 ## Unclustered survivors (27)
 
@@ -257,4 +296,4 @@
 
 ## What this document is not
 
-Not an ADR, not a schedule, changes no behavior or code. It is the target the gated implementation program builds toward. Every breaking spec is inert until the owner signs off and a superseding ADR of `adhd ADR-0006` is authored at ship time. The single target-interface record is `backlog-interface-target.md` (**ADR-0007, OWNER-APPROVAL-PENDING**) — it owns the public verb/envelope/naming surface and the canonical breaking list, with `CLI-HIERARCHY.md` as its subordinate verb-tree companion. This document owns the ACs and write-scopes only; the public verb spellings for S11/S12 (`list reservation`, `get session <id>`, `get state`, `create state`) are owned by ADR-0007.
+Not an ADR, not a schedule, changes no behavior or code. It is the target the gated implementation program builds toward. Every breaking spec is inert until the owner signs off and a superseding ADR of `adhd ADR-0006` is authored at ship time. The single target-interface record is `backlog-interface-target.md` (**ADR-0007, ACCEPTED 2026-10-05**) — it owns the public verb/envelope/naming surface and the canonical breaking list, with `CLI-HIERARCHY.md` as its subordinate verb-tree companion. This document owns the ACs and write-scopes only; the public verb spellings for S11/S12 (`list reservation`, `get session <id>`, `get state`, `create state`) are owned by ADR-0007.

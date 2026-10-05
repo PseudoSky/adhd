@@ -1,6 +1,6 @@
 # ADR-0006 — Freeze the `@adhd/backlog` public verb, envelope, and naming surface
 
-**Status:** PROPOSED (2026-10-04). Drafted for blind review, A/B, and the vocabulary-pin check; **not yet ACCEPTED** — this ADR records the shipped surface and is written neither to re-open nor to authorize any change to it.
+**Status:** ACCEPTED (2026-10-05). **SUPERSEDED (in part) BY adhd ADR-0007 — see its breaking list** (the eight target deltas it approves; this ADR's frozen current-state surface otherwise stands, is unedited, and remains the record of what ships today). Drafted for blind review, A/B, and the vocabulary-pin check; this ADR records the shipped surface and re-opens no behavior beyond what ADR-0007 explicitly lists.
 **Owner:** pseudosky.
 **Supersedes:** nothing. This is the first ADR to record the `@adhd/backlog` public surface; it intentionally changes no behavior.
 **Drives:** the missing in-repo interface freeze for the `@adhd/backlog` verb/envelope/naming surface; the additive-first rule; SPEC revision `document:3478468a`.

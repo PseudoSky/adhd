@@ -36,7 +36,8 @@ This is what makes `AGENTS.md`'s parallel-process hard rule unambiguous: its `AD
 | [0003](./0003-adhd-packages-publish-commonjs-only.md) | `@adhd/*` packages publish CommonJS-only | ACCEPTED (2026-09-25) |
 | [0004](./0004-mcp-tool-output-is-the-flat-content-payload.md) | MCP tool output is the flat payload on `content`; no `{result}` envelope | ACCEPTED (2026-09-25) |
 | [0005](./0005-data-query-engine-owns-grouping-aggregation-having.md) | The data-query-engine owns grouping, aggregation, and HAVING | PROPOSED (2026-10-02) |
-| [0006](./0006-backlog-public-interface-freeze.md) | Backlog public interface freeze — verbs, envelope, naming | PROPOSED (2026-10-04) |
+| [0006](./0006-backlog-public-interface-freeze.md) | Backlog public interface freeze — verbs, envelope, naming | ACCEPTED (2026-10-05) — SUPERSEDED (in part) BY 0007 (breaking list only) |
+| [0007](./0007-backlog-target-public-interface.md) | Backlog target public interface — additive/breaking deltas (designated target record) | ACCEPTED (2026-10-05) |
 
 ---
 
