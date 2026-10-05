@@ -31,14 +31,14 @@ The server exposes these MCP tools:
 | `agent_list` | `() -> {agents: [...]}` | List all registered agents |
 | `task` | `(agentName: string, prompt: string) -> {taskId, status}` | Run a prompt against a session and execute tool-call loop until completion |
 | `result` | `(taskId: string) -> {status, result, usage}` | Retrieve task result and execution usage |
-| `task_list` | `(filter?: object) -> {tasks: [...]}` | List tasks (filter by sessionId, status, agentName) |
+| `task_list` | `(filter?: object) -> {tasks: [...]}` | List tasks (filter by sessionId/session_ids/agentName/status/is_ephemeral; page with limit/offset; project with fields[] or summary:true) |
 | `task_cancel` | `(taskId: string) -> {}` | Cancel a running or pending task |
 | `task_resume` | `(taskId: string, resumeInput: string) -> {}` | Resume a HITL-suspended task with user input |
 | `session_list` | `(filter?: object) -> {sessions: [...]}` | List sessions (filter by agentName, status) |
 | `session_close` | `(sessionId: string) -> {}` | Close a session; marks final state |
 | `session_clear` | `(sessionId: string) -> {}` | Delete message history for a session (preserves agent snapshot) |
 | `usage_query` | `(filter?: object, groupBy?: string) -> {usage: [...]}` | Query task usage across multiple tasks (grouped by agent, model, provider) |
-| `guide` | `() -> {workflows, providers, errors}` | Built-in help: 5 workflows, provider table, error codes |
+| `guide` | `() -> {workflows, providers, errors}` | Built-in help: 6 workflows, provider table, error codes |
 
 ### Configuration: Zero-Config via @adhd/environment Cascade
 
@@ -136,6 +136,16 @@ An agent can delegate to child agents by calling the `task` tool targeting anoth
 - Have restricted tool and filesystem access (subset of parent)
 - Cannot delegate further if `maxDelegationDepth` is reached
 - Are supervised by the same SQLite database and policy engine
+
+## Live tests (env-gated — paid model)
+
+Three integration tests call a **real paid model** and are gated behind env flags
+(`AGENT_MCP_LIVE=1`, `AGENT_MCP_BUDGET_LIVE=1`) — the sole gate reason AGENTS.md §7
+permits. **Approved by:** pseudosky (repo owner). Gated files:
+`live-budget.e2e.test.ts`, `live-dag.e2e.test.ts`, `live-oauth.e2e.test.ts`. The gate
+reason is that a real model is a paid third-party service; skipping it in CI saves money
+and avoids an outside system. The same record is in this package's `README.md` and each
+test's header.
 
 ## Known Limitations (as of 2.0.2)
 

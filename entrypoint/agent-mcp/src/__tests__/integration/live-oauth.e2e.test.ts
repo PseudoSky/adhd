@@ -3,7 +3,11 @@
  *
  * AUTHOR ONLY — DO NOT RUN in the CI/unit test suite.
  *
- * Gated behind AGENT_MCP_LIVE=1 environment variable.
+ * Gated behind AGENT_MCP_LIVE=1 environment variable. *
+ * Approved gate (AGENTS.md §7): owner = pseudosky (repo owner). This test calls a real
+ * paid model — the single permitted gate reason. Recorded in this package's
+ * README ("Live tests (env-gated — paid model)") and AGENTS.md.
+
  * Uses the real Anthropic provider with Claude OAuth (useClaudeOauth: true).
  * Drives the full orchestrator loop with real model responses.
  *

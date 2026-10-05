@@ -240,6 +240,23 @@ Sessions preserve full message history. Call \`task\` repeatedly on the same
 
 ---
 
+## Workflow 5 — Serialized chain via depends_on (shared-resource contention)
+
+When many tasks would hit the SAME contention-sensitive resource (a shared MCP
+server, a rate-limited API, a gitnexus singleton), firing them all in parallel can
+saturate it and cause mass timeouts. Instead chain them: give each task the id(s)
+of the task(s) it must wait for, and it will dispatch only once every upstream task
+reaches a terminal status (it is created in "waiting" status, then released).
+
+    1. task { agent_name, prompt, depends_on: [] }            -> { task_id }
+    2. task { agent_name, prompt, depends_on: ["<task_id>"] } -> queued behind task 1
+
+on_upstream_failure defaults to "fail" (a dependent fails when an upstream fails);
+set it to "skip" to leave the dependent skipped instead. Prefer this over parallel
+fan-out whenever the tasks contend for one shared resource.
+
+---
+
 ## Updating an agent definition
 
 \`agent_update\` never affects open sessions. It bumps the version and only
@@ -336,7 +353,8 @@ export function createServer(deps: ServerDeps): Server {
     },
     {
       name: 'task_list',
-      description: 'List tasks',
+      description:
+        'List tasks. Filters: session_id, session_ids[], agent_name, status, is_ephemeral. Pagination: limit/offset. Projection: fields[] (id always included) or summary:true to omit the bulk prompt/result text.',
       inputSchema: toMcpInputSchema(taskListInputSchema),
     },
     {
@@ -528,7 +546,8 @@ export function createServer(deps: ServerDeps): Server {
       },
       {
         name: 'task_list',
-        description: 'List tasks',
+        description:
+          'List tasks. Filters: session_id, session_ids[], agent_name, status, is_ephemeral. Pagination: limit/offset. Projection: fields[] (id always included) or summary:true to omit the bulk prompt/result text.',
         inputSchema: toMcpInputSchema(taskListInputSchema),
       },
       {
