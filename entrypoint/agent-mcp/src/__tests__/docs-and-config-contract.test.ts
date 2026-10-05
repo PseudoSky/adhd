@@ -131,6 +131,19 @@ describe('f141baad — mcp-shell security-config path is real', () => {
   });
 });
 
+describe('c00ad483 — provider-call-audit.md cites real source paths', () => {
+  const doc = read(resolve(pkgRoot, 'docs', 'provider-call-audit.md'));
+
+  it('AC1: no dead packages/ai/... source path remains', () => {
+    expect(doc).not.toMatch(/packages\/ai\//);
+  });
+
+  it('AC2: the orchestrator + provider citations point at the real monorepo homes', () => {
+    expect(doc).toContain('packages/agent/agent-engine-orchestrator/src/engine/orchestrator.ts');
+    expect(doc).toContain('packages/agent/agent-engine-orchestrator/src/providers/openai.ts');
+  });
+});
+
 /** Catalog DBs the app may use: the path in .mcp.json plus the two default scopes. */
 function discoverCatalogDbs(): string[] {
   const found = new Set<string>();
