@@ -137,7 +137,10 @@ export function loadConfigFile(
 
 // ── Module resolution ─────────────────────────────────────────────────────────
 
-export async function resolveSpecifier(specifier: string): Promise<string> {
+export async function resolveSpecifier(
+  specifier: string,
+  extraBases: readonly string[] = []
+): Promise<string> {
   if (
     specifier.startsWith('/') ||
     specifier.startsWith('./') ||
@@ -146,7 +149,14 @@ export async function resolveSpecifier(specifier: string): Promise<string> {
     return pathToFileURL(resolve(specifier)).href;
   }
 
-  const bases = [process.cwd(), new URL('.', import.meta.url).pathname];
+  // `extraBases` lets the embedding host contribute its own module base — the
+  // directory where ITS real dependencies live. A bare specifier is otherwise
+  // resolved only from [cwd, the orchestrator's own module dir]; an OPTIONAL
+  // peer of the orchestrator is not auto-installed for a published consumer, so
+  // a default entry (e.g. @adhd/agent-plugin-budget) that the consumer declares
+  // as a regular dependency would be unreachable outside the monorepo (backlog
+  // cc636860). The host passes its own package module dir via `resolveBases`.
+  const bases = [process.cwd(), ...extraBases, new URL('.', import.meta.url).pathname];
 
   for (const base of bases) {
     try {
@@ -169,13 +179,14 @@ async function loadOnePlugin(
   hooks: IHookRegistry,
   db: unknown,
   entry: PluginEntry,
-  logger: EngineLogger
+  logger: EngineLogger,
+  resolveBases: readonly string[] = []
 ): Promise<void> {
   const { module: specifier, config: rawConfig } = entry;
 
   let resolved: string;
   try {
-    resolved = await resolveSpecifier(specifier);
+    resolved = await resolveSpecifier(specifier, resolveBases);
   } catch (err) {
     logger.error({ specifier, err }, 'Plugin resolution failed — skipping');
     return;
@@ -254,6 +265,10 @@ async function loadOnePlugin(
  * @param overrides — explicit values for testability
  *   `configPath`    — forwarded to findConfigFile
  *   `pluginEntries` — explicit module list (replaces config.plugins.entries)
+ *   `resolveBases`  — extra module-resolution bases prepended to the
+ *     orchestrator's own (backlog cc636860). The HOST passes its own package
+ *     module dir so a default entry it declares as a real dependency resolves
+ *     in a published layout, where the orchestrator's optional peer does not.
  * @param configPathFromEnv — config.plugins.configPath injection
  * @param logger — injected logger
  * @param defaultEntries — plugins to load even with zero config (backlog
@@ -264,7 +279,11 @@ async function loadOnePlugin(
 export async function loadExternalPlugins(
   hooks: IHookRegistry,
   db: unknown,
-  overrides?: { configPath?: string | null; pluginEntries?: string[] },
+  overrides?: {
+    configPath?: string | null;
+    pluginEntries?: string[];
+    resolveBases?: readonly string[];
+  },
   configPathFromEnv?: string,
   pluginEntriesFromEnv?: string[],
   logger?: EngineLogger,
@@ -288,6 +307,6 @@ export async function loadExternalPlugins(
   if (allEntries.length === 0) return;
 
   for (const entry of allEntries) {
-    await loadOnePlugin(hooks, db, entry, log);
+    await loadOnePlugin(hooks, db, entry, log, overrides?.resolveBases ?? []);
   }
 }

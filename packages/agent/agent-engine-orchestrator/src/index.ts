@@ -61,7 +61,7 @@ export type { Database, UsageQueryResult, TaskUsageRow } from './tools/usage.js'
 
 // ── Plugins ───────────────────────────────────────────────────────────────────
 export { UsagePlugin } from './plugins/usage-plugin.js';
-export { loadExternalPlugins, findConfigFile, loadConfigFile, agentMcpConfigFileSchema } from './plugins/loader.js';
+export { loadExternalPlugins, resolveSpecifier, findConfigFile, loadConfigFile, agentMcpConfigFileSchema } from './plugins/loader.js';
 export type { AgentMcpConfigFile, PluginEntry } from './plugins/loader.js';
 
 // ── Validation ────────────────────────────────────────────────────────────────
