@@ -29,15 +29,6 @@
  *  wedged holder still surfaces as an error rather than an infinite hang. */
 export const DEFAULT_BUSY_TIMEOUT_MS = 5_000;
 
-/** Default total attempts (first try + retries) for {@link withBusyRetry}. */
-export const DEFAULT_BUSY_MAX_ATTEMPTS = 5;
-
-/** Default base backoff in ms for {@link withBusyRetry} (doubles per attempt). */
-export const DEFAULT_BUSY_RETRY_BASE_DELAY_MS = 20;
-
-/** Upper bound on a single {@link withBusyRetry} backoff sleep, in ms. */
-export const DEFAULT_BUSY_RETRY_MAX_DELAY_MS = 500;
-
 /** Minimal structural type for a better-sqlite3 connection — avoids importing
  *  the runtime class merely to type the pragma call. */
 export interface ISqliteConn {
@@ -66,81 +57,4 @@ export function applyLockingPragmas(
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
   sqlite.pragma(`busy_timeout = ${busyTimeoutMs}`);
-}
-
-/**
- * True iff `err` is a SQLite lock-contention error — i.e. the connection lost
- * a writer race and should be retried. This is the ONE classifier for the
- * agent-* SQLite clients (mirroring `@adhd/sox-store-adapter`'s `isBusyError`
- * seam that `entrypoint/backlog`'s retry wrapper keys on).
- *
- * Both `SQLITE_BUSY*` (the database file is locked by another connection, or a
- * deferred reader could not upgrade to a writer) and `SQLITE_LOCKED*` (a
- * conflicting lock within the same connection / shared-cache) are contention
- * shapes; every OTHER error (`SQLITE_CONSTRAINT`, a `ToolError`, a plain
- * `Error`) is a real failure and must NOT be retried.
- */
-export function isSqliteBusyError(err: unknown): boolean {
-  if (err === null || typeof err !== 'object') return false;
-  const code = (err as { code?: unknown }).code;
-  if (typeof code !== 'string') return false;
-  return code.startsWith('SQLITE_BUSY') || code.startsWith('SQLITE_LOCKED');
-}
-
-/** Synchronous sleep via `Atomics.wait` — a deterministic wait that neither
- *  busy-spins the CPU nor yields to the (irrelevant) event loop. */
-function sleepSyncMs(ms: number): void {
-  const clamped = Math.max(0, Math.round(ms));
-  if (clamped === 0) return;
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, clamped);
-}
-
-export interface BusyRetryOpts {
-  /** Total attempts (first try + retries). Default
-   *  {@link DEFAULT_BUSY_MAX_ATTEMPTS}. A value < 1 is clamped to 1, which
-   *  disables retry (the first busy error propagates). */
-  maxAttempts?: number;
-  /** Base backoff in ms. Default {@link DEFAULT_BUSY_RETRY_BASE_DELAY_MS}. */
-  baseDelayMs?: number;
-  /** Per-sleep cap in ms. Default {@link DEFAULT_BUSY_RETRY_MAX_DELAY_MS}. */
-  maxDelayMs?: number;
-}
-
-/**
- * Runs `attempt()` — expected to open a `BEGIN IMMEDIATE` write transaction
- * (drizzle's `.transaction(fn, { behavior: 'immediate' })`, or better-sqlite3's
- * `tx.immediate()`) — and retries it a BOUNDED number of times ONLY when it
- * throws a SQLite lock-contention error (see {@link isSqliteBusyError}).
- *
- * Why both halves are required (backlog 331508ac):
- *   - `busy_timeout` (see {@link applyLockingPragmas}) makes a contending
- *     writer WAIT up to its budget before failing — but a sustained held lock
- *     still eventually fails, and a lost write should be retried, not dropped.
- *   - `BEGIN IMMEDIATE` removes the deferred-read → write-upgrade race, so the
- *     retry only ever replays a transaction that never observed a partial
- *     state (the safety invariant the read-modify-write paths need).
- *
- * Any non-busy error propagates immediately, unretried. After the final attempt
- * still fails busy, the last busy error is re-thrown: a genuine, sustained
- * pileup is still a real failure — this bounds the wait, it does not hide
- * contention forever.
- */
-export function withBusyRetry<T>(
-  attempt: () => T,
-  opts: BusyRetryOpts = {}
-): T {
-  const maxAttempts = Math.max(1, Math.trunc(opts.maxAttempts ?? DEFAULT_BUSY_MAX_ATTEMPTS));
-  if (maxAttempts === 1) return attempt();
-
-  const baseDelay = Math.max(0, opts.baseDelayMs ?? DEFAULT_BUSY_RETRY_BASE_DELAY_MS);
-  const maxDelay = Math.max(baseDelay, opts.maxDelayMs ?? DEFAULT_BUSY_RETRY_MAX_DELAY_MS);
-
-  for (let i = 0; ; i++) {
-    try {
-      return attempt();
-    } catch (err) {
-      if (!isSqliteBusyError(err) || i >= maxAttempts - 1) throw err;
-      sleepSyncMs(Math.min(maxDelay, baseDelay * 2 ** i));
-    }
-  }
 }

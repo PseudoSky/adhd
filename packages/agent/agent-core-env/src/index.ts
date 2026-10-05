@@ -13,14 +13,9 @@ export type { OpenRegistryDbOpts, RegistryDbHandle } from './open-registry-db.js
 
 export {
   applyLockingPragmas,
-  isSqliteBusyError,
-  withBusyRetry,
   DEFAULT_BUSY_TIMEOUT_MS,
-  DEFAULT_BUSY_MAX_ATTEMPTS,
-  DEFAULT_BUSY_RETRY_BASE_DELAY_MS,
-  DEFAULT_BUSY_RETRY_MAX_DELAY_MS,
 } from './sqlite-locking.js';
-export type { ISqliteConn, LockingPragmaOpts, BusyRetryOpts } from './sqlite-locking.js';
+export type { ISqliteConn, LockingPragmaOpts } from './sqlite-locking.js';
 
 export { agentRegistryEnvironmentSpec, AGENT_REGISTRY_PROJECT_ID } from './spec.js';
 export type { AgentRegistryEnvConfig } from './spec.js';
