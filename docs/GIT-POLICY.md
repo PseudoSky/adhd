@@ -492,3 +492,49 @@ Schema version 1.
   after. No push, no branch or worktree removed, and no gates were run by this operation (the
   post-merge review runs the suite). This record is the only change to this file in this operation.
   Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `feat/bucket-b-provider-runtime` (dispatch-2026-10-04-9c4e).**
+  Landed the bucket-B agent systemPrompt projection onto `main` as a **merge commit** `4c2ad052`
+  (parents `8a8361ad` = pre-merge `main`, `4dad74bc` = B head), moving `main` `8a8361ad` →
+  `4c2ad052`; 7 files, +686/-26: `entrypoint/agent-mcp/AGENTS.md` (M),
+  `entrypoint/agent-mcp/src/__tests__/integration/agent-prompt-projection.e2e.test.ts` (A),
+  `entrypoint/agent-mcp/src/server.ts` (M),
+  `packages/agent/agent-engine-orchestrator/src/__tests__/agent-crud-projection.test.ts` (A),
+  `packages/agent/agent-engine-orchestrator/src/index.ts` (M),
+  `packages/agent/agent-engine-orchestrator/src/tools/agent-crud.ts` (M), and
+  `packages/agent/agent-engine-orchestrator/src/validation/agent.ts` (M). The 3 commits since the
+  merge-base `3fa5609d` are `4a6ae079` (`feat(agent-engine-orchestrator,agent-mcp): gate agent
+  systemPrompt behind explicit opt-in`), `d0d26495`
+  (`fix(agent-engine-orchestrator,agent-mcp): wire full/fields opt-in into agent_update response`),
+  and `4dad74bc` (`refactor(agent-engine-orchestrator,agent-mcp): rename bare full opt-in to
+  self-describing fullDefinition`) — matching the dispatch list exactly. §Branching & merge was the
+  deciding rule: this history "carries true merge commits" and ff-only is not enforced, while
+  rebase-in-flight is permitted only on a branch "solely your own" — B is an in-flight executor
+  branch, not the operator's, so rewriting its 3 commits was out; a merge commit is the stated shape
+  here. Dry-run `git merge-tree --write-tree --name-only main 4dad74bc` exited **1** with exactly one
+  conflict, `entrypoint/agent-mcp/AGENTS.md` — the **only** conflict, both this branch and the
+  already-merged A-fix having edited the tool table, and the conflict region was exactly two adjacent
+  rows of that table (`agent_list`, `agent_verify_mcp`) with no other hunk. As the dispatch directed,
+  the conflict was resolved as a **union of the table rows, dropping nothing**: kept B's `agent_list`
+  row (`(fullDefinition?: bool, fields?: string[]) -> {agents: [...]}` with the summary-omits-
+  `systemPrompt` wording) **and** `main`'s (A-fix's) `agent_verify_mcp` row (`status`/`ok` tri-state
+  wording, which itself carries the self-referential `agent-mcp` skip explanation), with both sides'
+  unchanged `agent_create`/`agent_read`/`agent_update` rows intact (B's `fullDefinition` wording) and
+  every other row untouched. Resolved content is blob `589fd913`; verified `git diff main -- <file>`
+  shows only B's additions and `git diff feat/bucket-b-provider-runtime -- <file>` shows only
+  `main`'s `agent_verify_mcp` addition, i.e. the union with nothing dropped, and
+  `rg '^(<<<<<<<|=======|>>>>>>>)' <file>` matches nothing (no markers remain). The dry-run's exit 1
+  was the only non-zero step; the resolved `git commit --no-edit` exited 0 after the git-invoked
+  pre-commit hook (mass-deletion guard, secret-scan, affected lint, staged-spec) passed. Post-merge
+  `git rev-list --count main..feat/bucket-b-provider-runtime` = 0, the merge is two-parent (not
+  fast-forward), and `git merge-base --is-ancestor` exits 0 for each of the 3 named commits
+  individually. The branch never touched this file (empty `git diff 3fa5609d..4dad74bc --
+  docs/GIT-POLICY.md`), so `main`'s policy blob `32f9a3b5` survived the merge byte-identical
+  (pre-merge `8a8361ad` and post-merge `4c2ad052` resolve the same blob). A concurrent agent's
+  uncommitted work was present in the working tree throughout (`entrypoint/backlog/src/query/card.ts`
+  and `query.ts` modified; `sort-priority-direction.spec.ts` untracked) and was neither staged,
+  swept, nor touched — the merge's path set is disjoint from those paths, and their sha256 hashes and
+  `git status --porcelain` lines were byte-identical before and after. No push, no branch or worktree
+  removed, and no gates were run by this operation (the post-merge review runs the suite). This
+  record is the only change to this file in this operation. Recorded under §Commit convention's
+  `docs(<area>):` scope.
