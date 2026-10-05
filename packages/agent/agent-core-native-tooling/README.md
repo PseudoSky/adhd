@@ -37,8 +37,10 @@ const servers = resolveNativeTooling(
 // -> [fsServer, shellServer, dispatchServer], each rooted at process.cwd()
 
 // Rule resolution is LAST-match-wins, with `deny` terminal (ADR-0008 D5 / Q1).
-matchPermission({ '*': 'ask', 'git *': 'allow', 'rm *': 'deny' }, 'git status'); // 'allow'
-matchPermission({ 'rm *': 'deny', '*': 'allow' }, 'rm -rf /');                   // 'deny'
+// The resource is a TOOL NAME — never command text (D5): the thin gate owns no
+// command parser, segmentation, or dangerous-command catalog.
+matchPermission({ '*': 'ask', 'agent-mcp.*': 'allow', 'shell': 'deny' }, 'agent-mcp.task'); // 'allow'
+matchPermission({ 'shell': 'deny', '*': 'allow' }, 'shell');                               // 'deny'
 ```
 
 `dispatchSelf` is the **real** agent-mcp MCP server config the host loads —

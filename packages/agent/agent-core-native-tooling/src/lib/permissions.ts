@@ -18,12 +18,13 @@ function globToRegExp(pattern: string): RegExp {
  * rule matches, the result is `deny` regardless of later rules. An absent or empty
  * map defaults to `allow` (the base toolset must be usable without an answer).
  *
- * The matched resource is a **tool name**; this function never parses, matches, or
- * segments command text (the harness owns NO command semantics — D5).
+ * The matched resource is a **tool name** (e.g. `shell`, `fs`, `agent-mcp.task`);
+ * this function never parses, matches, or segments command text, and command
+ * text is never passed as the resource (the harness owns NO command semantics — D5).
  *
  * @example
- * matchPermission({ '*': 'ask', 'git *': 'allow', 'rm *': 'deny' }, 'git status') // 'allow'
- * matchPermission({ 'rm *': 'deny', '*': 'allow' }, 'rm -rf /') // 'deny' (deny is terminal)
+ * matchPermission({ '*': 'ask', 'agent-mcp.*': 'allow', 'shell': 'deny' }, 'agent-mcp.task') // 'allow'
+ * matchPermission({ 'shell': 'deny', '*': 'allow' }, 'shell') // 'deny' (deny is terminal)
  */
 export function matchPermission(
   ruleMap: PermissionRuleMap | undefined | null,
