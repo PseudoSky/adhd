@@ -140,10 +140,20 @@ export interface IDispatchAgentRunner {
    * default.
    */
   fire(unit: DispatchUnit): Promise<{ taskId: string }>;
-  /** Reads current task status and aggregate token usage. */
+  /**
+   * Reads current task status, aggregate token usage, and — when the task is
+   * not `completed` — the task's recorded `error` string. The `error` carries
+   * the policy enforcement reason (e.g. `[DELEGATION_NOT_ALLOWED] ...`) that
+   * agent-mcp persisted on the task, so `dispatch_log` can surface it
+   * (backlog 4e829a08).
+   */
   poll(
     taskId: string
-  ): Promise<{ status: DispatchTaskStatus; usage: DispatchUsageReport | undefined }>;
+  ): Promise<{
+    status: DispatchTaskStatus;
+    usage: DispatchUsageReport | undefined;
+    error?: string;
+  }>;
   /** Cancels a pending/running/awaiting_input task. */
   cancel(taskId: string): Promise<void>;
   /**
@@ -423,12 +433,21 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
 
   async poll(
     taskId: string
-  ): Promise<{ status: DispatchTaskStatus; usage: DispatchUsageReport | undefined }> {
+  ): Promise<{
+    status: DispatchTaskStatus;
+    usage: DispatchUsageReport | undefined;
+    error?: string;
+  }> {
     const result = await this.callTool<{
       status: DispatchTaskStatus;
       usage?: DispatchUsageReport;
+      error?: string;
     }>('result', { task_id: taskId });
-    return { status: result.status, usage: result.usage };
+    return {
+      status: result.status,
+      usage: result.usage,
+      ...(result.error !== undefined ? { error: result.error } : {}),
+    };
   }
 
   async cancel(taskId: string): Promise<void> {

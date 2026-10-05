@@ -920,9 +920,19 @@ export class Orchestrator {
           error: 'Task was cancelled',
         });
       } else {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-
+        // Prefix the error CODE for ToolErrors so a policy stop is
+        // identifiable on the stored task — the same `[CODE] message`
+        // convention agent-mcp's MCP boundary uses. Downstream consumers
+        // (e.g. dispatch-orchestrator's dispatch_log, backlog 4e829a08)
+        // can then surface the exact enforcement code, not just prose.
+        let errorMessage: string;
+        if (error instanceof ToolError) {
+          errorMessage = `[${error.code}] ${error.message}`;
+        } else if (error instanceof Error) {
+          errorMessage = error.message;
+        } else {
+          errorMessage = String(error);
+        }
         taskStore.updateStatus(taskId, 'failed', {
           error: errorMessage,
         });
