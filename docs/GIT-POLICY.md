@@ -344,3 +344,27 @@ Schema version 1.
   (`git status --porcelain` empty). No push, no branch or worktree removed, and no gates were run by
   this operation (the post-merge review runs the suite). This record is the only change to this file
   in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `feat/bucket-a-store-registry` (dispatch-2026-10-04-9c4e).**
+  Landed bucket A onto `main` as a **merge commit** `28de68d7` (parents `2bd9d012` = pre-merge
+  `main`, `133a338d` = A head), moving `main` `2bd9d012` → `28de68d7`; 14 files, +711/-42. The 7
+  commits since the merge-base `6f889317` are `f2c736ea`, `fabf0b50`, `570412e4`, `1c4c6604`,
+  `30b04c74`, `9faee66f`, `133a338d` — matching the dispatch list exactly. §Branching & merge was the
+  deciding rule: this history "carries true merge commits" and ff-only is not enforced, while
+  rebase-in-flight is permitted only on a branch "solely your own" — A is an in-flight executor
+  branch, not the operator's, so rewriting its 7 commits was out; a merge commit is the stated shape
+  here. The dry-run `git merge-tree --write-tree --name-only main 133a338d` exited 0, producing tree
+  `b7444205` with no conflict hunks; the actual `git merge --no-ff` was conflict-free (ort strategy,
+  exit 0), auto-merging `entrypoint/agent-mcp/AGENTS.md` and
+  `packages/dispatch/dispatch-orchestrator/src/lib/agent-runner.ts` with no hunk left unresolved. The
+  post-merge tree at `28de68d7` is `b7444205`, byte-identical to the dry-run tree. Post-merge
+  `git rev-list --count main..feat/bucket-a-store-registry` = 0, the merge is two-parent (not
+  fast-forward), and `git merge-base --is-ancestor` exits 0 for each of the 7 named commits
+  individually. The branch never touched this file (empty `git diff 6f889317..133a338d --
+  docs/GIT-POLICY.md`), so `main`'s policy blob `1492528e` survived the merge byte-identical
+  (pre-merge `2bd9d012` and post-merge `28de68d7` resolve the same blob). The working tree was clean
+  before and after (`git status --porcelain` empty), and no concurrent agent had this file dirty when
+  the append began (its on-disk sha256 equalled the committed blob). The branch remains checked out
+  in worktree `.worktrees/bucket-a`; no push, no branch or worktree removed, and no gates were run by
+  this operation (the post-merge review runs the suite). This record is the only change to this file
+  in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
