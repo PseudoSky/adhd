@@ -246,3 +246,21 @@ Schema version 1.
   `ded98335` (a concurrent agent's `docs(plan):` commit) was left byte-identical. No push, no branch
   or worktree removed, no gates run (the post-merge review runs the suite). This record is the only
   change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-04 — operation record: land of the `feat/bucket-c-publish-contract-docs` findings-sweep
+  follow-up (dispatch-2026-10-04-9c4e).** Landed 4 follow-up commits on top of the already-merged
+  `5c377d7c` (`2a6dc470`, `7060faa4`, `3fcf997e`, `20f541cc`; head `20f541cc`) onto `main` as a
+  **merge commit** `210d52d1` (parents `1839d1a3` = pre-merge `main`, `20f541cc` = C head), moving
+  `main` `1839d1a3` → `210d52d1`; 11 files, +458/-104. §Branching & merge was the deciding rule:
+  this history "carries true merge commits" and ff-only is not enforced, while rebase-in-flight is
+  permitted only on a branch "solely your own" — C is an in-flight executor branch, not the
+  operator's, so rewriting its commits was out; a merge commit is the stated shape here. Dry-run
+  `git merge-tree --write-tree --name-only main 20f541cc` exited 0, producing tree `6203c0c1` with no
+  conflict hunks; the actual `git merge --no-ff` was conflict-free (ort strategy, exit 0). The branch
+  never touched this file (empty `git diff 54ee90a2..20f541cc -- docs/GIT-POLICY.md`), so the merge
+  carried `main`'s policy blob `d772b9fc` into tree `6203c0c1` byte-identical. Post-merge
+  `git rev-list --count main..feat/bucket-c-publish-contract-docs` = 0 and
+  `git merge-base --is-ancestor 20f541cc main` exits 0, so all 4 follow-up commits are contained. The
+  working tree was clean before and after (`git status --porcelain` empty). No push, no branch or
+  worktree removed, no gates run (the post-merge review runs the suite). This record is the only
+  change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
