@@ -910,6 +910,32 @@ Schema version 1.
   push under the §Push & review grant. No other rule was added or changed, and no rule depends on
   this file for its trust root. Recorded under §Commit convention's `docs(<area>):` scope.
 
+- **2026-10-05 — operation record: push of `main` to `origin/main` (dispatch-2026-10-04-9c4e).**
+  Pushed `main` to `origin/main` with a plain fast-forward — `git push origin main` exit 0,
+  `413663fa..db49f985  main -> main` — and `git rev-parse main origin/main` both return
+  `db49f98514efc5da7dc3f62914c238b3d5d47a27`, so `origin/main == main`. Pre-push
+  `git rev-list --left-right --count origin/main...main` was `0  171` (`origin/main` an ancestor
+  of `main`; `git merge-base --is-ancestor origin/main main` exit 0), so the update is a pure
+  fast-forward: no `--force` was used (§Push & review forbids force-push on `main`), and the
+  per-session human grant authorised the push (§Push & review; AGENTS.md §Rules). Two earlier
+  `git push origin main` attempts were refused without moving the remote. The first
+  (`head cca763b9`) was rejected by the mandatory pre-push gate (`git push` exit 141): three e2e
+  lanes — `apigen-core-client:e2e`, `apigen-cli:e2e`, `backlog:e2e` — went red under a cold,
+  fully-parallel 268-task run (`Cache: 0/343 hit`), the whole nx test cache cold-invalidated by a
+  concurrent agent's then-uncommitted `nx.json` hash-input edit; each lane then passed in
+  isolation (`nx run-many -t e2e -p apigen-core-client apigen-cli --parallel=1` exit 0; `nx run
+  backlog:e2e` exit 0, 292 tests), showing the failures were load-induced, not a red committed
+  `main`. The second attempt (`head db49f985`, after the concurrent bucket-I/J work committed and
+  the tree returned clean, local `main` 12 commits further ahead) passed the gate
+  (`✓ pre-push: affected test clean`) but the transport dropped the update — `Connection to
+  github.com closed by remote host.`, `git push` exit 141 (SIGPIPE) — leaving `origin/main` at
+  `413663fa`. The third attempt passed the gate warm (`Cache: 325/346 hit`, 20.4s) and completed
+  the fast-forward (exit 0). Only `main` was pushed; no other branch, no tag, and no worktree or
+  branch was created, deleted, or removed; `--no-verify` was not used (and is denied by the
+  operator's allowlist). The push was performed under the corrected §Branching & merge committed
+  at `cca763b9`, an ancestor of `db49f985`. This record commit is itself synced to `origin/main`
+  by the follow-up fast-forward push. Recorded under §Commit convention's `docs(<area>):` scope.
+
 - **2026-10-05 — operation record: land of `fix/dispatch-9c4e-bucket-j` (dispatch-2026-10-04-9c4e).**
   Landed bucket J's hermeticity + fixtures onto `main` as a **merge commit** `072860a9` (parents
   `cca763b9` = pre-merge `main`, `5f1d5880` = branch head), moving `main` `cca763b9` → `072860a9`;
