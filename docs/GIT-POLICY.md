@@ -909,3 +909,45 @@ Schema version 1.
   merge of the executor branch — then syncs `main` to `origin/main` with a plain, never `--force`,
   push under the §Push & review grant. No other rule was added or changed, and no rule depends on
   this file for its trust root. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `fix/dispatch-9c4e-bucket-j` (dispatch-2026-10-04-9c4e).**
+  Landed bucket J's hermeticity + fixtures onto `main` as a **merge commit** `072860a9` (parents
+  `cca763b9` = pre-merge `main`, `5f1d5880` = branch head), moving `main` `cca763b9` → `072860a9`;
+  9 files, +361/-11: `.gitignore` (M), `entrypoint/agent-mcp/src/__tests__/calc-server.fixture.test.ts`
+  (A), `entrypoint/agent-mcp/src/__tests__/integration/fixtures/calc-server.mjs` (A),
+  `entrypoint/backlog/src/store/embed-write-path.spec.ts` (M), `entrypoint/dispatch-cli/AGENTS.md`
+  (M), `entrypoint/dispatch-cli/README.md` (M),
+  `entrypoint/dispatch-cli/src/test/docs-contract.spec.ts` (M),
+  `entrypoint/dispatch-cli/src/test/integration/live-dispatch-five-acs.e2e.test.ts` (M), and
+  `entrypoint/dispatch-cli/src/test/live-harness-hermetic.spec.ts` (A). The branch was 4 commits,
+  linear on top of the pre-merge `main` (`52318772` parent = `cca763b9`; then `b2012601` parent =
+  `52318772`; `a71e2011` parent = `b2012601`; `5f1d5880` parent = `a71e2011`): `52318772`
+  (`fix(agent-mcp): ship the missing calc-server.mjs live fixture and unignore it` — the calc-server
+  fixture, fixing `305a63d4`), `b2012601` (`docs(dispatch-cli): scope task_resume wording to the
+  task, guard it` — `f141baad` follow-up), `a71e2011` (`test(dispatch-cli): guard the live e2e's
+  hermetic legacy-migration skip` — the hermetic guard, fixing `3ba246b6`), and `5f1d5880`
+  (`test(backlog): poll the durable embedding_upserted row, not just the vector` — the
+  embed-write-path load-flake fix) — matching the dispatch list exactly (4 commits; the dispatch
+  named them in the order `52318772`, `a71e2011`, `b2012601`, `5f1d5880`, whose actual parent chain
+  is the linear `52318772` → `b2012601` → `a71e2011` → `5f1d5880`). §Branching & merge was the
+  deciding rule: this history "carries true merge commits" and ff-only is not enforced, while
+  rebase-in-flight is permitted only on a branch "solely your own" — J is an in-flight executor
+  branch, not the operator's, so rewriting its 4 commits was out; the dispatch directed `--no-ff`
+  (and `main` was an ancestor of the branch, so a fast-forward was possible), and a merge commit is
+  the stated shape here. Dry-run `git merge-tree --write-tree --name-only main
+  fix/dispatch-9c4e-bucket-j` exited 0, producing tree `5fa26de3` with no conflict hunks; the actual
+  `git merge --no-ff` was conflict-free (ort strategy, exit 0), and the post-merge tree at `072860a9`
+  is `5fa26de3`, byte-identical to the dry-run tree. No conflict marker remains in any merged file
+  (`git grep -nE '^(<<<<<<<|=======|>>>>>>>)'` over the tree exited 1, no matches). The branch never
+  touched this file (empty `git diff --name-only main..fix/dispatch-9c4e-bucket-j --
+  docs/GIT-POLICY.md`), so `main`'s policy blob `7dcee8541941a9f287c7a3aafa2a76484a1e262a` survived
+  the merge byte-identical (pre-merge `cca763b9` and post-merge `072860a9` resolve the same blob).
+  The merge is two-parent (not fast-forward); post-merge `git rev-list --count
+  main..fix/dispatch-9c4e-bucket-j` = 0 and `git merge-base --is-ancestor` exits 0 for each of the 4
+  named commits individually, so all four are contained. The working tree was clean before and after
+  (`git status --porcelain` empty) and nothing was staged before or after (`git diff --cached
+  --name-only` empty); the dispatch's anticipated "unrelated concurrent dirt" was not present, so
+  nothing had to be avoided or protected. The branch remains checked out in worktree
+  `.worktrees/dispatch-9c4e-bucket-j` at `5f1d5880`; no push, no branch or worktree removed, and no
+  gates were run by this operation (the post-merge review runs the suite). This record is the only
+  change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
