@@ -4,12 +4,22 @@
 // the DI'd core seams directly (e.g. to drive `run`/`calibrate` with an
 // injected runner without going through the CLI at all).
 
-export { validate, snapshot, optimize, eligible, status, run, calibrate } from './api.js';
+export { validate, snapshot, optimize, eligible, status, run, calibrate, importAgents } from './api.js';
 
 export type {
   CalibrationResult,
   MilestoneStatusEntry,
 } from './lib/core.js';
+export {
+  importClaudeAgents,
+  parsePersona,
+} from './lib/import-agents.js';
+export type {
+  IAgentMcpToolCaller,
+  IImportedPersona,
+  IImportAgentsResult,
+  IImportAgentsOptions,
+} from './lib/import-agents.js';
 export {
   assertModelTier,
   buildClient,

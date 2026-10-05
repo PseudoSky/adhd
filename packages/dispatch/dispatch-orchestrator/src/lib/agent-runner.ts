@@ -366,7 +366,14 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
     return this.connecting;
   }
 
-  private async callTool<T>(
+  /**
+   * Generic agent-mcp tool passthrough (parses the JSON text content, throws
+   * `AgentMcpToolError` on `isError`). Public so non-dispatch callers — e.g.
+   * dispatch-cli's `agents import` (backlog 09e84a88) — can drive
+   * `agent_read`/`agent_create`/`agent_update` through the SAME real, wired
+   * MCP client lifecycle this runner already manages for dispatch.
+   */
+  async callTool<T>(
     name: string,
     args: Record<string, unknown>
   ): Promise<T> {
