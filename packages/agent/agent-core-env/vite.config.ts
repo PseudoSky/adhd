@@ -48,7 +48,19 @@ export default defineConfig({
       // `node:fs`/`node:path` (build-breaking `"resolve" is not exported by
       // "__vite-browser-external"`), and bundling `better-sqlite3` would
       // break its native `.node` addon entirely.
-      external: [/^node:/, 'better-sqlite3', 'drizzle-orm', 'drizzle-orm/better-sqlite3', '@adhd/environment'],
+      external: [
+        /^node:/,
+        'better-sqlite3',
+        'drizzle-orm',
+        'drizzle-orm/better-sqlite3',
+        '@adhd/environment',
+        // ADR-0001: the sox store adapter (and its @tursodatabase/* native
+        // deps) is a real runtime dependency — never bundle it. Bundling it
+        // pulls the Turso driver's native resolution into this package and
+        // bloats dist ~300x (measured 1.45 kB → 466 kB).
+        '@adhd/sox-store-adapter',
+        /^@tursodatabase\//,
+      ],
     },
   },
 

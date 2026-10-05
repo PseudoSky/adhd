@@ -13,15 +13,17 @@
  *   3. `busy_timeout = N` (ms)  — a writer that loses the lock race waits a
  *      bounded time for the holder before surfacing an error.
  *
- * SCOPE NOTE (backlog 331508ac): the original report claimed these clients
- * surfaced an *immediate* `SQLITE_BUSY` because they "never set busy_timeout".
- * That specific symptom does NOT reproduce — `better-sqlite3` installs a
- * 5000ms busy handler by default (`new Database(path).pragma('busy_timeout')`
- * reads back `5000`). What was genuinely missing is an explicit, configurable,
- * single-sourced contract; relying on an undocumented driver default is not a
- * guarantee. The read-modify-write `BEGIN IMMEDIATE` obligation (so a
- * check-then-write cannot race) and a bounded BUSY-only retry for sustained
- * contention remain open — see the backlog item.
+ * SCOPE NOTE (ADR-0001, backlog 331508ac): `better-sqlite3`-as-the-store is
+ * RETIRED. The sanctioned substrate is the sox store adapter (Turso) — see
+ * `open-registry-store.ts` (the adapter-backed open, applying the same
+ * `busy_timeout` via `adapter.pragmaSet`) and `store-transaction.ts` (the
+ * `BEGIN IMMEDIATE` + bounded busy-only retry contract, on top of the adapter).
+ *
+ * This module remains ONLY for the `better-sqlite3` consumers the ADR's D4
+ * sequence has not yet migrated (Drizzle-based stores still receive a
+ * better-sqlite3 handle). It is not a second locking implementation: it is the
+ * connect-time pragma trio applied to the not-yet-migrated substrate. New
+ * stores MUST start on the adapter (ADR-0001 D1).
  */
 
 /** Default `busy_timeout` budget in milliseconds. Long enough to absorb a

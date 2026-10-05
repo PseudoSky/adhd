@@ -43,7 +43,7 @@
  * above is fixed.
  */
 import { Command } from 'commander';
-import { validate, snapshot, optimize, eligible, status, run, calibrate } from '../src/api.js';
+import { validate, snapshot, optimize, eligible, status, run, calibrate, importAgents } from '../src/api.js';
 
 const program = new Command().name('dispatch-cli').version('0.0.1');
 
@@ -150,6 +150,24 @@ program
   .action(async (opts: { modelTier: string }) => {
     try {
       printAndExit(await calibrate(opts.modelTier));
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+const agents = program
+  .command('agents')
+  .description('manage the agent-mcp registry');
+
+agents
+  .command('import')
+  .description(
+    'import Claude Code subagent personas (~/.claude/agents/*.md) into the agent-mcp registry (agent_read -> agent_create/agent_update)'
+  )
+  .argument('<dir>', 'directory of persona *.md files (e.g. ~/.claude/agents)')
+  .action(async (dir: string) => {
+    try {
+      printAndExit(await importAgents(dir));
     } catch (err) {
       fail(err);
     }

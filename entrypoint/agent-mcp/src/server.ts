@@ -30,6 +30,8 @@ import {
   agentUpdate,
   agentDelete,
   agentList,
+  verifyAgentMcpServers,
+  agentVerifyMcpInputSchema,
 } from '@adhd/agent-engine-orchestrator';
 import {
   agentTool,
@@ -260,7 +262,11 @@ fan-out whenever the tasks contend for one shared resource.
 ## Updating an agent definition
 
 \`agent_update\` never affects open sessions. It bumps the version and only
-applies to sessions opened after the update.
+applies to sessions opened after the update. To make that visible up front,
+the response carries \`openSessionsNotUpdated\` — the ids of the currently-active
+sessions still running on the pre-update snapshot. Close/reopen those sessions
+(or open fresh ones) to pick up the new definition; an empty list means no open
+session was left behind.
 
 ---
 
@@ -501,7 +507,8 @@ export function createServer(deps: ServerDeps): Server {
       },
       {
         name: 'agent_update',
-        description: 'Update a stored agent definition',
+        description:
+          'Update a stored agent definition. The response includes openSessionsNotUpdated — the active session ids that will keep running on the pre-update snapshot.',
         inputSchema: toMcpInputSchema(agentUpdateInputSchema),
       },
       {
@@ -514,6 +521,12 @@ export function createServer(deps: ServerDeps): Server {
         name: 'agent_list',
         description: 'List all stored agent definitions',
         inputSchema: { type: 'object', properties: {} },
+      },
+      {
+        name: 'agent_verify_mcp',
+        description:
+          "Handshake-verify an agent's configured mcpServers WITHOUT dispatching a task: connects each server, lists its tools, and returns one result per server (reachable tool names, or a clear connection error). Spends no model/provider-timeout budget.",
+        inputSchema: toMcpInputSchema(agentVerifyMcpInputSchema),
       },
       {
         name: 'agent',
@@ -635,6 +648,14 @@ export function createServer(deps: ServerDeps): Server {
               agentStore: deps.agentStore,
               sessionStore: crudSessionStore,
             })
+          );
+
+        case 'agent_verify_mcp':
+          return toMcpContent(
+            await verifyAgentMcpServers(
+              agentVerifyMcpInputSchema.parse(args),
+              { agentStore: deps.agentStore }
+            )
           );
 
         case 'agent':

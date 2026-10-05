@@ -139,6 +139,38 @@ describe('AgentMcpRunner', () => {
       });
     });
 
+    it('sends the configured defaultMcpServers on agent_create (daafe2d3)', async () => {
+      const defaults = {
+        'memory-server': { transport: 'sse', url: 'http://localhost:3099/sse' },
+        backlog: {
+          transport: 'stdio',
+          command: 'node',
+          args: ['/repo/entrypoint/backlog/dist/index.js', 'serve', '--transport', 'mcp'],
+        },
+      };
+      const client = new FakeMcpToolClient({
+        agent_read: () =>
+          mcpError('AGENT_NOT_FOUND', "Agent 'workflow-researcher' not found"),
+        agent_create: (args) => ({
+          ...args,
+          version: 1,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        }),
+      });
+      const runner = new AgentMcpRunner({
+        command: 'unused-in-test',
+        clientFactory: () => client,
+        defaultMcpServers: defaults,
+      });
+
+      await runner.ensureAgent(makeUnit({ agent_name: 'workflow-researcher' }));
+
+      // Teeth: dropping `defaultMcpServers` from ensureAgent's agent_create
+      // (or the constructor) makes this see `{}` and fail.
+      expect(client.calls[1]?.arguments?.['mcpServers']).toEqual(defaults);
+    });
+
     // DEBT-DISPATCH-012: ensureAgent's agent_create must bake unit.systemPrompt
     // (the stable, milestone-independent preamble) — never unit.prompt (the
     // per-fire compiled task body) — into the agent's systemPrompt. Distinct

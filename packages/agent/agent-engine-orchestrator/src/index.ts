@@ -39,10 +39,20 @@ export type { IMcpClient } from './clients/types.js';
 
 // ── Tools ─────────────────────────────────────────────────────────────────────
 export { agentCreate, agentRead, agentUpdate, agentDelete, agentList } from './tools/agent-crud.js';
-export type { AgentCrudDeps } from './tools/agent-crud.js';
+export type { AgentCrudDeps, AgentUpdateResult } from './tools/agent-crud.js';
 export type { AgentStore } from './tools/agent-crud.js';
 export { agentTool, sessionList, sessionClose, sessionClear } from './tools/session.js';
 export type { SessionDeps } from './tools/session.js';
+export {
+  verifyAgentMcpServers,
+  agentVerifyMcpInputSchema,
+} from './tools/mcp-verify.js';
+export type {
+  AgentVerifyMcpInput,
+  AgentVerifyMcpResult,
+  AgentVerifyMcpDeps,
+  McpServerVerification,
+} from './tools/mcp-verify.js';
 export { taskTool, taskList, taskCancel, taskResume, resultTool, enqueueExistingTask } from './tools/task.js';
 export type { TaskDeps } from './tools/task.js';
 export { usageQuery, usageQueryByGrain, buildTaskUsageReport } from './tools/usage.js';

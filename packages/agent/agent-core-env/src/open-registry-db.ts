@@ -11,6 +11,11 @@
  * Does NOT run migrations — that stays the caller's explicit responsibility
  * (exactly as `buildPromptResolver()` in `entrypoint/agent-mcp/src/index.ts`
  * already does, via each package's own `runMigrationsOn`).
+ *
+ * DEPRECATED IN DIRECTION (ADR-0001): `better-sqlite3`-as-the-store is retired;
+ * the sanctioned open is the adapter-backed `openRegistryStore()` (same
+ * package). This factory remains only for the not-yet-migrated Drizzle-based
+ * registry consumers the ADR's D4 sequence reaches last (D4 steps 3-6).
  */
 import fs from 'node:fs';
 import path from 'node:path';

@@ -116,8 +116,43 @@ function loggedOperationIds(dag: DagJson): Set<string> {
  * fires a real, billed model call. Used only by `api.ts`'s `run()` (when
  * `dryRun: false`) and `calibrate()` — never by this package's tests.
  */
+/**
+ * The default `mcpServers` every dispatch-created agent is born with (backlog
+ * daafe2d3): the memory-server (so a dispatched agent can recall prior
+ * findings) and the backlog MCP server (so it can read/write backlog items) —
+ * neither was wired before, so an agent created for dispatch work had no
+ * memory or backlog access at all.
+ *
+ * Wire-shaped (transport-discriminated) — exactly the JSON `agent_create`
+ * accepts. Both entries are environment-overridable:
+ *   - `ADHD_DISPATCH_MEMORY_MCP_URL`    (default `http://localhost:3099/sse`)
+ *   - `ADHD_DISPATCH_BACKLOG_MCP_ENTRY` (default `<cwd>/entrypoint/backlog/dist/index.js`)
+ */
+export function defaultDispatchMcpServers(
+  env: NodeJS.ProcessEnv = process.env
+): Record<string, Record<string, unknown>> {
+  const memoryUrl =
+    env['ADHD_DISPATCH_MEMORY_MCP_URL'] ?? 'http://localhost:3099/sse';
+  const backlogEntry =
+    env['ADHD_DISPATCH_BACKLOG_MCP_ENTRY'] ??
+    join(process.cwd(), 'entrypoint', 'backlog', 'dist', 'index.js');
+
+  return {
+    'memory-server': { transport: 'sse', url: memoryUrl },
+    backlog: {
+      transport: 'stdio',
+      command: 'node',
+      args: [backlogEntry, 'serve', '--transport', 'mcp'],
+    },
+  };
+}
+
 export function buildProductionAgentMcpRunner(): AgentMcpRunner {
-  return new AgentMcpRunner({ command: 'npx', args: ['-y', '@adhd/agent-mcp'] });
+  return new AgentMcpRunner({
+    command: 'npx',
+    args: ['-y', '@adhd/agent-mcp'],
+    defaultMcpServers: defaultDispatchMcpServers(),
+  });
 }
 
 // ---------------------------------------------------------------------------

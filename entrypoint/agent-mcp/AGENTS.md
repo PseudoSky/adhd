@@ -29,6 +29,7 @@ The server exposes these MCP tools:
 | `agent_update` | `(name: string, config: object) -> {version}` | Update agent config; existing sessions isolated from change |
 | `agent_delete` | `(name: string, force?: bool) -> {}` | Unregister agent and cascade-delete all sessions (as of 2.0.2) |
 | `agent_list` | `() -> {agents: [...]}` | List all registered agents |
+| `agent_verify_mcp` | `(name: string) -> {agent, servers: [{name, transport, ok, tools?, error?, skipped?}]}` | Handshake-verify an agent's configured `mcpServers` before a real task: connects each server and returns its reachable tool names (or a clear per-server error). No model call — spends no provider-timeout budget. Skips the self-referential `agent-mcp` entry (handled in-process). |
 | `task` | `(agentName: string, prompt: string) -> {taskId, status}` | Run a prompt against a session and execute tool-call loop until completion |
 | `result` | `(taskId: string) -> {status, result, usage}` | Retrieve task result and execution usage |
 | `task_list` | `(filter?: object) -> {tasks: [...]}` | List tasks (filter by sessionId/session_ids/agentName/status/is_ephemeral; page with limit/offset; project with fields[] or summary:true) |

@@ -34,6 +34,7 @@ import {
   buildProductionAgentMcpRunner,
   calibrateCore,
   DEFAULT_CALIBRATION_PATH,
+  defaultDispatchMcpServers,
   eligibleCore,
   optimizeCore,
   runCycleCore,
@@ -43,6 +44,10 @@ import {
   type CalibrationResult,
   type MilestoneStatusEntry,
 } from './lib/core.js';
+import {
+  importClaudeAgents,
+  type IImportAgentsResult,
+} from './lib/import-agents.js';
 
 /**
  * Validates a plan `dag.json` against `@adhd/dispatch-base-spec`'s structural
@@ -190,4 +195,27 @@ export async function run(
  */
 export async function calibrate(modelTier: string): Promise<CalibrationResult> {
   return calibrateCore(modelTier, () => buildProductionAgentMcpRunner(), DEFAULT_CALIBRATION_PATH);
+}
+
+/**
+ * Imports Claude Code subagent personas from `dir` (e.g. `~/.claude/agents` —
+ * every `*.md` is YAML frontmatter (`name`/`description`/`model`, …) followed
+ * by its system-prompt body) into the agent-mcp registry: `agent_read` each,
+ * `agent_create` on a miss, `agent_update` on a hit. Idempotent.
+ *
+ * NOT a paid boundary — only `agent_read`/`agent_create`/`agent_update` are
+ * called; no task is dispatched, so no model call is made. It does spawn a
+ * real `AgentMcpRunner` (`npx -y @adhd/agent-mcp`).
+ *
+ * @param dir - Directory containing persona `*.md` files.
+ */
+export async function importAgents(dir: string): Promise<IImportAgentsResult> {
+  const runner = buildProductionAgentMcpRunner();
+  try {
+    return await importClaudeAgents(dir, runner, {
+      mcpServers: defaultDispatchMcpServers(),
+    });
+  } finally {
+    await runner.close();
+  }
 }
