@@ -1018,3 +1018,35 @@ Schema version 1.
   `.worktrees/wt-bucket-i-9c4e` at `33454e2c`; no push, no branch or worktree removed, and no gates
   were run by this operation (the post-merge review runs the suite). This record is the only change
   to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `feat/bucket-k-nx-tooling-9c4e` (dispatch-2026-10-04-9c4e).**
+  Landed bucket K's Nx tooling onto `main` as a **merge commit** `3101ab2b` (parents `0853ab4d` =
+  pre-merge `main`, `5dbcf52c` = K head), moving `main` `0853ab4d` → `3101ab2b`; 128 files,
+  +2814/-399. The 3 commits since the merge-base `14c6777e` are `c98144f2`
+  (`fix(nx-tooling): hash dependent-task build outputs in test target inputs` — `62535ce7`),
+  `176a09f9` (`test(nx-tooling): run vite-config-plugins sweep unconditionally, not per-affected-
+  project` — `47557842`), and `5dbcf52c` (`test(nx-tooling): typecheck the spec corpus of 57
+  projects, ratcheted per-file` — `770c0919`) — matching the dispatch list exactly. §Branching &
+  merge was the deciding rule: this history "carries true merge commits" and ff-only is not
+  enforced, while rebase-in-flight is permitted only on a branch "solely your own" — K is an
+  in-flight executor branch, not the operator's, so rewriting its 3 commits was out; the dispatch
+  directed `--no-ff`. Dry-run `git merge-tree --write-tree --name-only main 5dbcf52c` exited 0,
+  producing tree `40c77ef6` with no conflict hunks; the actual `git merge --no-ff` was
+  conflict-free (ort strategy, exit 0), and the post-merge tree at `3101ab2b` is `40c77ef6`,
+  byte-identical to the dry-run tree. No conflict arose because the branch and the post-merge-base
+  `main` changed disjoint path sets (empty intersection of `git diff --name-only 14c6777e..main`
+  and `git diff --name-only main...5dbcf52c`) — which is why touching `nx.json`, `package.json`, and
+  all 57 `project.json` files produced no conflict. No conflict marker remains: `git grep -nE
+  '^(<<<<<<<|=======|>>>>>>>)'` over the tree exited 1 with no matches. The branch never touched
+  this file (empty `git diff --name-only main...5dbcf52c -- docs/GIT-POLICY.md`), so `main`'s policy
+  blob `2a33e24e97d5b1d091400087bd1abf9565e1a039` survived the merge byte-identical (pre-merge
+  `0853ab4d`, post-merge `3101ab2b`, and the on-disk file all resolve to the same blob). The merge
+  is two-parent (not fast-forward); post-merge `git rev-list --count
+  main..feat/bucket-k-nx-tooling-9c4e` = 0 and `git merge-base --is-ancestor` exits 0 for each of
+  `c98144f2`, `176a09f9`, `5dbcf52c`, so all three are contained. The working tree was clean before
+  and after (`git status --porcelain` empty) and nothing was staged before or after (`git diff
+  --cached --name-only` empty); no unrelated concurrent dirt was present, so nothing had to be
+  avoided or protected. The branch remains checked out in worktree `.worktrees/bucket-k` at
+  `5dbcf52c` (clean, not reaped); no push, no branch or worktree removed, and no gates were run by
+  this operation (the post-merge review runs the suite). This record is the only change to this file
+  in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
