@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { sql } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
+import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type {
   IHookRegistry,
   IEnforcementError,
@@ -16,6 +19,22 @@ import type {
   ToolDefinition,
 } from '@adhd/agent-base-types';
 import { contextWindowFor } from '@adhd/agent-base-types';
+
+/**
+ * The database handle the engine loader actually passes as `ctx.db` — the live
+ * drizzle `BetterSQLite3Database` (entrypoint/agent-mcp/src/index.ts's `dbAny`), NOT a raw
+ * better-sqlite3 `Database`. `PluginContext.db`'s contract documents exactly this
+ * ("the live SQLite database handle; cast to `BetterSQLite3Database<any>`"), and
+ * the built-in UsagePlugin (which the loader also receives) consumes it that way.
+ *
+ * BUG (5339c2e5): this plugin used to call `this.db.prepare(...)` — a
+ * better-sqlite3 method that does not exist on the drizzle wrapper. The call
+ * threw, was swallowed by the surrounding `catch`, and every non-task-scoped cap
+ * silently fell back to per-task in-memory counters, so a `scope:'global'` cap
+ * never accumulated across tasks and the unattended-spend cap was defeated.
+ * Matching the documented handle (drizzle) is the fix.
+ */
+type BudgetDb = BetterSQLite3Database<Record<string, unknown>>;
 
 // ── ISO8601 duration parser ──────────────────────────────────────────────────
 
@@ -527,6 +546,14 @@ interface UsageTotals {
   modelCalls: number;
   /** MAX(peak_context_tokens) across the scope's task set (+ this task in-memory). */
   peakContextTokens: number;
+  // Per-class input split, carried so a SCOPED cost cap can be billed at the
+  // configured cache-weighted rates exactly like the in-memory task cost
+  // (BUG-AGENTMCP-008). Without these a `scope:'global'` cost cap could only
+  // ever see the current task's in-memory cost and never accumulate across
+  // tasks (5339c2e5).
+  uncachedInputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
 }
 
 // ── Plugin class ─────────────────────────────────────────────────────────────
@@ -796,72 +823,78 @@ class BudgetPlugin implements Plugin {
           outputTokens: acc.outputTokens,
           modelCalls: acc.modelCalls,
           peakContextTokens: acc.peakContextTokens,
+          uncachedInputTokens: acc.uncachedInputTokens,
+          cacheReadTokens: acc.cacheReadTokens,
+          cacheCreationTokens: acc.cacheCreationTokens,
         }
       : {
           inputTokens: 0,
           outputTokens: 0,
           modelCalls: 0,
           peakContextTokens: 0,
+          uncachedInputTokens: 0,
+          cacheReadTokens: 0,
+          cacheCreationTokens: 0,
         };
 
     if (scope === 'task' || !this.db) return inMem;
 
     try {
-      const db = this.db as {
-        prepare: (sql: string) => {
-          get: (
-            ...args: unknown[]
-          ) =>
-            | { input: number; output: number; calls: number; peak?: number }
-            | undefined;
-        };
-      };
+      const db = this.db as BudgetDb;
       // NOTE (BUG-ORCH-010): input_tokens is already the provider-neutral total
       // (uncached + cache-read + cache-creation) — do not also SUM the cache columns
       // here, they are a subset of input_tokens, not additive.
       // `peak` = MAX(peak_context_tokens) over the scope's task set — the scoped
       // 'context' cap value (owner ruling, §5.2).
-      let row:
-        | { input: number; output: number; calls: number; peak?: number }
-        | undefined;
+      // `uncached`/`cache_read`/`cache_write` feed the scoped COST cap: a legacy
+      // row with no uncached split (uncached_input_tokens NULL) bills its residual
+      // (input − cache-read − cache-writing) as uncached, mirroring the in-memory
+      // "no split present" rule (onPostModelResponse).
+      const SELECT = (from: SQL) => sql`
+        SELECT
+          COALESCE(SUM(tu.input_tokens), 0) AS input,
+          COALESCE(SUM(tu.output_tokens), 0) AS output,
+          COALESCE(SUM(tu.model_calls), 0) AS calls,
+          COALESCE(MAX(tu.peak_context_tokens), 0) AS peak,
+          COALESCE(SUM(COALESCE(
+            tu.uncached_input_tokens,
+            tu.input_tokens - COALESCE(tu.cache_read_input_tokens, 0)
+                            - COALESCE(tu.cache_creation_input_tokens, 0)
+          )), 0) AS uncached,
+          COALESCE(SUM(tu.cache_read_input_tokens), 0) AS cache_read,
+          COALESCE(SUM(tu.cache_creation_input_tokens), 0) AS cache_write
+        ${from}`;
+      type Row = {
+        input: number;
+        output: number;
+        calls: number;
+        peak: number;
+        uncached: number;
+        cache_read: number;
+        cache_write: number;
+      };
+
+      let row: Row | undefined;
 
       if (scope === 'session' && sessionId) {
-        row = db
-          .prepare(
-            `SELECT
-               COALESCE(SUM(tu.input_tokens), 0) AS input,
-               COALESCE(SUM(tu.output_tokens), 0) AS output,
-               COALESCE(SUM(tu.model_calls), 0) AS calls,
-               COALESCE(MAX(tu.peak_context_tokens), 0) AS peak
-             FROM task_usage tu
-             JOIN tasks t ON tu.task_id = t.id
-             WHERE t.session_id = ? AND tu.task_id != ?`
+        row = db.get<Row>(
+          SELECT(
+            sql`FROM task_usage tu
+                JOIN tasks t ON tu.task_id = t.id
+                WHERE t.session_id = ${sessionId} AND tu.task_id != ${taskId}`
           )
-          .get(sessionId, taskId) as typeof row;
+        );
       } else if (scope === 'agent') {
-        row = db
-          .prepare(
-            `SELECT
-               COALESCE(SUM(input_tokens), 0) AS input,
-               COALESCE(SUM(output_tokens), 0) AS output,
-               COALESCE(SUM(model_calls), 0) AS calls,
-               COALESCE(MAX(peak_context_tokens), 0) AS peak
-             FROM task_usage
-             WHERE agent_name = ? AND task_id != ?`
+        row = db.get<Row>(
+          SELECT(
+            sql`FROM task_usage tu
+                WHERE tu.agent_name = ${agentName} AND tu.task_id != ${taskId}`
           )
-          .get(agentName, taskId) as typeof row;
+        );
       } else if (scope === 'global') {
-        row = db
-          .prepare(
-            `SELECT
-               COALESCE(SUM(input_tokens), 0) AS input,
-               COALESCE(SUM(output_tokens), 0) AS output,
-               COALESCE(SUM(model_calls), 0) AS calls,
-               COALESCE(MAX(peak_context_tokens), 0) AS peak
-             FROM task_usage
-             WHERE task_id != ?`
-          )
-          .get(taskId) as typeof row;
+        row = db.get<Row>(
+          SELECT(sql`FROM task_usage tu WHERE tu.task_id != ${taskId}`)
+        );
       }
 
       if (row) {
@@ -873,6 +906,9 @@ class BudgetPlugin implements Plugin {
           // with the current task's in-memory peak folded in (it is a member of the
           // set; the queries above exclude it by `task_id != ?`).
           peakContextTokens: Math.max(row.peak ?? 0, inMem.peakContextTokens),
+          uncachedInputTokens: (row.uncached ?? 0) + inMem.uncachedInputTokens,
+          cacheReadTokens: (row.cache_read ?? 0) + inMem.cacheReadTokens,
+          cacheCreationTokens: (row.cache_write ?? 0) + inMem.cacheCreationTokens,
         };
       }
     } catch {
@@ -890,14 +926,8 @@ class BudgetPlugin implements Plugin {
   ): number {
     if (!this.db) return 0;
     try {
-      const db = this.db as {
-        prepare: (sql: string) => {
-          get: (...args: unknown[]) => { total: number } | undefined;
-        };
-      };
+      const db = this.db as BudgetDb;
       const since = new Date(Date.now() - windowMs).toISOString();
-
-      let row: { total: number } | undefined;
 
       // NOTE (BUG-ORCH-010): `input_tokens` already IS the provider-neutral total
       // (uncached + cache-read + cache-creation summed at the provider boundary —
@@ -905,40 +935,31 @@ class BudgetPlugin implements Plugin {
       // cache_read_input_tokens/cache_creation_input_tokens on top here would
       // double-count the cached portion and trip a windowed 'tokens' cap
       // (e.g. maxTokensPer24h) far earlier than real usage.
+      type Row = { total: number };
+      let row: Row | undefined;
+
       if (scope === 'session') {
-        const excl = excludeTaskId ? ' AND tu.task_id != ?' : '';
-        const params: unknown[] = [id, since];
-        if (excludeTaskId) params.push(excludeTaskId);
-        row = db
-          .prepare(
-            `SELECT COALESCE(SUM(tu.input_tokens + tu.output_tokens), 0) AS total
-             FROM task_usage tu
-             JOIN tasks t ON tu.task_id = t.id
-             WHERE t.session_id = ? AND tu.created_at >= ?${excl}`
-          )
-          .get(...params) as typeof row;
+        row = db.get<Row>(sql`
+          SELECT COALESCE(SUM(tu.input_tokens + tu.output_tokens), 0) AS total
+          FROM task_usage tu
+          JOIN tasks t ON tu.task_id = t.id
+          WHERE t.session_id = ${id} AND tu.created_at >= ${since}
+          ${excludeTaskId ? sql` AND tu.task_id != ${excludeTaskId}` : sql``}
+        `);
       } else if (scope === 'agent') {
-        const excl = excludeTaskId ? ' AND task_id != ?' : '';
-        const params: unknown[] = [id, since];
-        if (excludeTaskId) params.push(excludeTaskId);
-        row = db
-          .prepare(
-            `SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
-             FROM task_usage
-             WHERE agent_name = ? AND created_at >= ?${excl}`
-          )
-          .get(...params) as typeof row;
+        row = db.get<Row>(sql`
+          SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
+          FROM task_usage
+          WHERE agent_name = ${id} AND created_at >= ${since}
+          ${excludeTaskId ? sql` AND task_id != ${excludeTaskId}` : sql``}
+        `);
       } else if (scope === 'global') {
-        const excl = excludeTaskId ? ' AND task_id != ?' : '';
-        const params: unknown[] = [since];
-        if (excludeTaskId) params.push(excludeTaskId);
-        row = db
-          .prepare(
-            `SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
-             FROM task_usage
-             WHERE created_at >= ?${excl}`
-          )
-          .get(...params) as typeof row;
+        row = db.get<Row>(sql`
+          SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
+          FROM task_usage
+          WHERE created_at >= ${since}
+          ${excludeTaskId ? sql` AND task_id != ${excludeTaskId}` : sql``}
+        `);
       }
 
       return row?.total ?? 0;
@@ -950,6 +971,26 @@ class BudgetPlugin implements Plugin {
   // ── Generic cap evaluation ────────────────────────────────────────────────
 
   // ── Single-shot usage snapshot ──────────────────────────────────────────
+
+  /**
+   * Dollar cost of a per-class token tally at the configured cache-weighted
+   * rates. Shared by the in-memory task cost (`buildSnapshot`) and every scoped
+   * cost (`queryScopeTotals` → `buildSnapshot`) so both are billed identically
+   * and a scoped cost cap accumulates correctly across tasks (5339c2e5).
+   */
+  private costFromTotals(t: {
+    uncachedInputTokens: number;
+    cacheReadTokens: number;
+    cacheCreationTokens: number;
+    outputTokens: number;
+  }): number {
+    return (
+      t.uncachedInputTokens * this.costPerInput +
+      t.cacheReadTokens * this.costPerCacheRead +
+      t.cacheCreationTokens * this.costPerCacheWrite +
+      t.outputTokens * this.costPerOutput
+    );
+  }
 
   /**
    * Build a complete usage snapshot for the current enforcement event.
@@ -993,11 +1034,7 @@ class BudgetPlugin implements Plugin {
     // With costPerCacheReadToken/costPerCacheWriteToken unset (default = costPerInput),
     // this collapses to inputTokens × costPerInput + outputTokens × costPerOutput —
     // the exact flat formula that shipped before, byte-for-byte.
-    snap['cost'] =
-      acc.uncachedInputTokens * this.costPerInput +
-      acc.cacheReadTokens * this.costPerCacheRead +
-      acc.cacheCreationTokens * this.costPerCacheWrite +
-      acc.outputTokens * this.costPerOutput;
+    snap['cost'] = this.costFromTotals(acc);
 
     const uniqueScopes = new Set<string>();
     const uniqueWindows = new Map<
@@ -1030,6 +1067,12 @@ class BudgetPlugin implements Plugin {
         t.peakContextTokens,
         requestEstimate
       );
+      // Scoped COST (5339c2e5): billed from the scope's persisted per-class token
+      // totals at the SAME cache-weighted rates as the in-memory task cost, so a
+      // `scope:'global'` cost cap accumulates across tasks instead of seeing only
+      // the current task. (The persisted classes already include this task's
+      // in-memory share — queryScopeTotals folds `inMem` in.)
+      snap[`${scope}:cost`] = this.costFromTotals(t);
     }
 
     for (const [key, { scope, windowMs }] of uniqueWindows) {
@@ -1083,7 +1126,9 @@ class BudgetPlugin implements Plugin {
         base = snap['modelMs'];
         break;
       case 'cost':
-        base = snap['cost'];
+        // Scoped cost (5339c2e5) — falls back to the unscoped in-memory cost for a
+        // task-scoped (or absent-scope) cap.
+        base = snap[`${scopeKey}cost`] ?? snap['cost'];
         break;
       case 'toolCalls':
         base = 0; // resolved at enforcement time via toolName

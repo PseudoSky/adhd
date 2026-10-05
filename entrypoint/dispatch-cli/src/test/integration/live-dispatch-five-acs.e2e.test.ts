@@ -247,9 +247,11 @@ describe.skipIf(!LIVE)(
     /**
      * Build a child env: strip every ambient `ADHD_AGENT_*` (so the real
      * `~/.adhd` store can never be touched), then apply explicit overrides.
-     * `HOME` and `PATH` are deliberately preserved — the `claude` CLI reads its
-     * auth from the real home, and overriding `HOME` breaks `claudecli`
-     * (verified: provider returns `PROVIDER_AUTH_ERROR`).
+     * `HOME` and `PATH` are deliberately preserved — the `claude` CLI's OAuth
+     * refresh is keychain/home-bound, and overriding `HOME` breaks `claudecli`
+     * (verified: provider returns `PROVIDER_ERROR` / "OAuth session expired").
+     * The `$HOME`-derived legacy-DB leak is neutralized separately by
+     * `clearLegacySeed`.
      */
     function childEnv(overrides: Record<string, string>): Record<string, string> {
       const env: Record<string, string> = {};
@@ -287,6 +289,18 @@ describe.skipIf(!LIVE)(
           ADHD_AGENT_REGISTRY_DB_PATH: join(scratch, 'registry.db'),
           ADHD_AGENT_SSE_ENABLED: 'false',
           ADHD_AGENT_TRANSPORT: 'stdio',
+          // HERMETIC (5339c2e5 AC3): point the loader at a config path that does
+          // not exist, so the developer's real `~/.adhd/agent-mcp/config.json`
+          // can never load. Without this the loader's "user entry wins over
+          // default" rule let a machine-global budget config (a task-scoped cap)
+          // REPLACE the env-driven default entry `defaultPluginEntries()`
+          // builds, and AC3's env cap was never installed. `ADHD_AGENT_CONFIG`
+          // → `plugins.configPath` (agent-mcp/src/config.ts). `HOME` stays the
+          // real one — the `claude` CLI's OAuth refresh is keychain/home-bound
+          // (an isolated/symlinked `$HOME` fails `claude -p` with "OAuth session
+          // expired"), so we isolate the OTHER `$HOME`-derived leak (the legacy
+          // flat DB) separately in `AC3` — see `clearLegacySeed`.
+          ADHD_AGENT_CONFIG: join(scratch, 'no-agent-mcp-config.json'),
           ...(opts?.extraEnv ?? {}),
         }),
         defaultMcpServers: opts?.defaultMcpServers,
@@ -458,6 +472,27 @@ describe.skipIf(!LIVE)(
           )
           .all(taskId) as Array<{ payload: string | null }>;
         return rows.map((r) => r.payload ?? '').join('\n');
+      } finally {
+        raw.close();
+      }
+    }
+
+    /**
+     * Hermeticity for the global-cap AC (5339c2e5). agent-mcp's flat→namespaced
+     * legacy migration seeds a FRESH scratch DB from the developer's real
+     * `$HOME/.adhd/agent-mcp/agents.db` (`resolveFlatLegacyDbPath`), so a
+     * `scope:'global'` cap would count the developer's real task history and trip
+     * on the first milestone. `$HOME` can't be isolated (claudecli OAuth is
+     * keychain/home-bound). Instead, once the child is booted + migrated (forced
+     * by a `guide` call), delete the seeded usage from the child's OWN scratch
+     * DB — the real legacy store is never touched (read-only migration source).
+     */
+    async function clearLegacySeed(l: Launched): Promise<void> {
+      await l.runner.callTool('guide', {}); // force child boot + migrations
+      const raw = new Database(l.dbPath);
+      try {
+        raw.prepare('DELETE FROM task_usage').run();
+        raw.prepare('DELETE FROM tasks').run();
       } finally {
         raw.close();
       }
@@ -665,8 +700,33 @@ describe.skipIf(!LIVE)(
     it(
       'AC3 (5339c2e5): the DEFAULT budget plugin halts a multi-task run at a global cap with BUDGET_EXCEEDED',
       async () => {
-        const l = launch({ extraEnv: { ADHD_AGENT_BUDGET_COST_USD: '0.0001' } });
+        // Deterministic single-model-call tasks (5339c2e5). The dispatch system
+        // preamble tells the worker to "produce real output (code, docs, or
+        // config)", so a tools-enabled agent may call a filesystem/shell tool —
+        // a SECOND model request — which makes a cumulative cap depend on the
+        // model's variable turn count. `allowedTools: []` hides every tool on
+        // the one server (`McpClientRegistry.isToolHidden`: an empty allowlist is
+        // truthy, so every tool is hidden), so each milestone is exactly ONE
+        // model call and the global cap accumulates across the two tasks
+        // deterministically. The single server is the real memory-stub (a live
+        // MCP server), so nothing fails to connect.
+        const l = launch({
+          defaultMcpServers: {
+            'memory-server': {
+              transport: 'stdio',
+              command: process.execPath,
+              args: [MEMORY_STUB],
+              allowedTools: [],
+            },
+          },
+          // A GLOBAL model-call cap of 1: m1's own pre-flight sees 0 calls
+          // (fresh store; its own row is excluded) and completes with one
+          // persisted call; m2's first pre-flight then reads that persisted
+          // call globally and is halted — the cumulative-across-tasks property.
+          extraEnv: { ADHD_AGENT_BUDGET_MAX_CALLS: '1' },
+        });
         try {
+          await clearLegacySeed(l);
           const AGENT = 'live-budget-agent';
           const dag = newDag({
             description: 'AC3 default budget cap',
@@ -915,9 +975,25 @@ describe.skipIf(!LIVE)(
         'AC3 control: with the budget plugin DISABLED no BUDGET_EXCEEDED halt occurs',
         async () => {
           const l = launch({
-            extraEnv: { ADHD_AGENT_BUDGET_COST_USD: '0.0001', ADHD_AGENT_DISABLE_BUDGET_PLUGIN: '1' },
+            // Same deterministic single-call, tool-less setup as the positive
+            // AC3, but the budget plugin is removed entirely (opt-out) — the
+            // identical two tasks must then run past the cap with no halt,
+            // proving the halt in the positive test is the plugin's doing.
+            defaultMcpServers: {
+              'memory-server': {
+                transport: 'stdio',
+                command: process.execPath,
+                args: [MEMORY_STUB],
+                allowedTools: [],
+              },
+            },
+            extraEnv: {
+              ADHD_AGENT_BUDGET_MAX_CALLS: '1',
+              ADHD_AGENT_DISABLE_BUDGET_PLUGIN: '1',
+            },
           });
           try {
+            await clearLegacySeed(l);
             const AGENT = 'live-budget-control-agent';
             const dag = newDag({
               description: 'AC3 negative control',

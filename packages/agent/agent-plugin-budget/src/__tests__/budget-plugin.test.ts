@@ -1,8 +1,44 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import Database from 'better-sqlite3';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { SQLiteSyncDialect } from 'drizzle-orm/sqlite-core';
 // Import HookRegistry from @adhd/agent-base-types (not @adhd/agent-mcp) to avoid
 // a circular Nx build-graph dependency: agent-mcp-budget → agent-mcp → agent-mcp-budget.
 import { HookRegistry } from '@adhd/agent-base-types';
 import { createPlugin, configSchema, pluginConfigSchema } from '../index.js';
+
+// ── Fake-DB adapter ───────────────────────────────────────────────────────────
+//
+// The plugin now queries through the drizzle handle the engine loader actually
+// passes (`db.get(sql`...`)`), not raw better-sqlite3 `db.prepare(...)`
+// (5339c2e5). These text-matching fakes predate that and stub `prepare(sql)`;
+// this adapter renders each drizzle `sql` template back to `{sql, params}` and
+// forwards both, so a fake keeps matching on SQL text and positional params —
+// no behavioural change to what each test asserts.
+const adapterDialect = new SQLiteSyncDialect();
+function renderQuery(query: unknown): { sql: string; params: unknown[] } {
+  return adapterDialect.sqlToQuery(query as never) as {
+    sql: string;
+    params: unknown[];
+  };
+}
+function fakeDrizzleDb(
+  prepare: (sql: string) => { get: (...params: unknown[]) => unknown }
+) {
+  return {
+    get(query: unknown) {
+      const { sql, params } = renderQuery(query);
+      return prepare(sql).get(...params);
+    },
+    all(query: unknown) {
+      const { sql, params } = renderQuery(query);
+      const stmt = prepare(sql) as {
+        all?: (...p: unknown[]) => unknown;
+      };
+      return stmt.all ? stmt.all(...params) : [];
+    },
+  };
+}
 import type {
   ExecutionContext,
   PostToolCallPayload,
@@ -459,21 +495,17 @@ describe('BudgetPlugin — task scope', () => {
   });
 
   it('scope + window cap does not double-count historical tokens', async () => {
-    const mockDb = {
-      prepare(sql: string) {
-        return {
-          get(..._params: unknown[]) {
-            if (sql.includes('input_tokens, 0) AS input')) {
-              return { input: 40_000, output: 40_000, cache: 0, calls: 5 };
-            }
-            if (sql.includes('created_at')) {
-              return { total: 80_000 };
-            }
-            return undefined;
-          },
-        };
+    const mockDb = fakeDrizzleDb((sql) => ({
+      get(..._params: unknown[]) {
+        if (sql.includes('input_tokens, 0) AS input')) {
+          return { input: 40_000, output: 40_000, cache: 0, calls: 5 };
+        }
+        if (sql.includes('created_at')) {
+          return { total: 80_000 };
+        }
+        return undefined;
       },
-    };
+    }));
 
     const plugin = createPlugin({
       db: mockDb,
@@ -1045,18 +1077,14 @@ describe('per-tool overrides', () => {
 
 describe('maxTokensPer24h — mock DB (re-expressed as windowed inputTokens, Packet B ruling 3)', () => {
   let hooks: HookRegistry;
-  const mockDb = {
-    prepare(sql: string) {
-      return {
-        get(..._params: unknown[]) {
-          if (sql.includes('created_at')) {
-            return { total: 180_000 };
-          }
-          return undefined;
-        },
-      };
+  const mockDb = fakeDrizzleDb((sql) => ({
+    get(..._params: unknown[]) {
+      if (sql.includes('created_at')) {
+        return { total: 180_000 };
+      }
+      return undefined;
     },
-  };
+  }));
 
   beforeEach(() => {
     hooks = new HookRegistry();
@@ -1124,16 +1152,12 @@ describe('maxTokensPer24h — mock DB (re-expressed as windowed inputTokens, Pac
   });
 
   it('passes when 24h total + current is under the windowed inputTokens cap', async () => {
-    const lowMockDb = {
-      prepare(sql: string) {
-        return {
-          get(..._params: unknown[]) {
-            if (sql.includes('created_at')) return { total: 10_000 };
-            return undefined;
-          },
-        };
+    const lowMockDb = fakeDrizzleDb((sql) => ({
+      get(..._params: unknown[]) {
+        if (sql.includes('created_at')) return { total: 10_000 };
+        return undefined;
       },
-    };
+    }));
     const plugin = createPlugin({
       db: lowMockDb,
       config: pluginConfigSchema.parse({
@@ -1385,20 +1409,16 @@ describe('cache-token double-count (BUG-ORCH-010)', () => {
     // correct provider-neutral totals for prior tasks, and records the exact SQL text so
     // the assertion can catch a regression that re-adds cache columns into the SUM.
     let windowSql = '';
-    const mockDb = {
-      prepare(sql: string) {
-        return {
-          get(..._params: unknown[]) {
-            if (sql.includes('created_at')) {
-              windowSql = sql;
-              // Prior 24h usage: 100k input(already-total) + 20k output = 120k real tokens.
-              return { total: 120_000 };
-            }
-            return undefined;
-          },
-        };
+    const mockDb = fakeDrizzleDb((sql) => ({
+      get(..._params: unknown[]) {
+        if (sql.includes('created_at')) {
+          windowSql = sql;
+          // Prior 24h usage: 100k input(already-total) + 20k output = 120k real tokens.
+          return { total: 120_000 };
+        }
+        return undefined;
       },
-    };
+    }));
 
     const plugin = createPlugin({
       db: mockDb,
@@ -2121,16 +2141,12 @@ describe('Packet B — tokens → context (BUG-AGENTMCP-009)', () => {
     // Ruling 3: maxTokensPer24h is NOT dropped — the flat alias re-maps to
     // {field:'inputTokens', window:'PT24H'} + the flat `scope:'agent'`. Historical
     // 24h window: 150K from the mock DB; this call's in-memory input adds on top.
-    const mockDb = {
-      prepare(sql: string) {
-        return {
-          get(..._params: unknown[]) {
-            if (sql.includes('created_at')) return { total: 150_000 };
-            return undefined;
-          },
-        };
+    const mockDb = fakeDrizzleDb((sql) => ({
+      get(..._params: unknown[]) {
+        if (sql.includes('created_at')) return { total: 150_000 };
+        return undefined;
       },
-    };
+    }));
     const plugin = createPlugin({
       db: mockDb,
       config: { maxTokensPer24h: 180_000, scope: 'agent', mode: 'block' },
@@ -2158,16 +2174,12 @@ describe('Packet B — tokens → context (BUG-AGENTMCP-009)', () => {
   });
 
   it('windowed inputTokens/outputTokens caps enforce across turns (resource-burn axis)', async () => {
-    const mockDb = {
-      prepare(sql: string) {
-        return {
-          get(..._params: unknown[]) {
-            if (sql.includes('created_at')) return { total: 0 };
-            return undefined;
-          },
-        };
+    const mockDb = fakeDrizzleDb((sql) => ({
+      get(..._params: unknown[]) {
+        if (sql.includes('created_at')) return { total: 0 };
+        return undefined;
       },
-    };
+    }));
     const plugin = createPlugin({
       db: mockDb,
       config: pluginConfigSchema.parse({
@@ -2265,21 +2277,17 @@ describe('Packet B — tokens → context (BUG-AGENTMCP-009)', () => {
     // the historical peak across prior tasks. The mock is stateful so the test can
     // watch the scoped value cross the cap.
     let dbPeak = 45_000;
-    const mockDb = {
-      prepare(sql: string) {
-        return {
-          get(..._params: unknown[]) {
-            if (
-              sql.includes('MAX(tu.peak_context_tokens)') ||
-              sql.includes('MAX(peak_context_tokens)')
-            ) {
-              return { input: 0, output: 0, calls: 0, peak: dbPeak };
-            }
-            return undefined;
-          },
-        };
+    const mockDb = fakeDrizzleDb((sql) => ({
+      get(..._params: unknown[]) {
+        if (
+          sql.includes('MAX(tu.peak_context_tokens)') ||
+          sql.includes('MAX(peak_context_tokens)')
+        ) {
+          return { input: 0, output: 0, calls: 0, peak: dbPeak };
+        }
+        return undefined;
       },
-    };
+    }));
     const plugin = createPlugin({
       db: mockDb,
       config: pluginConfigSchema.parse({
@@ -2719,19 +2727,15 @@ describe('Packet C — errors + consecutiveErrors caps', () => {
     // 150K of 24h history vs a 100K maximum with ZERO in-memory usage. At global
     // scope the window query runs and the cap must trip immediately.
     let windowQueryRan = false;
-    const mockDb = {
-      prepare(sql: string) {
-        return {
-          get(..._params: unknown[]) {
-            if (sql.includes('created_at')) {
-              windowQueryRan = true;
-              return { total: 150_000 };
-            }
-            return undefined;
-          },
-        };
+    const mockDb = fakeDrizzleDb((sql) => ({
+      get(..._params: unknown[]) {
+        if (sql.includes('created_at')) {
+          windowQueryRan = true;
+          return { total: 150_000 };
+        }
+        return undefined;
       },
-    };
+    }));
     const plugin = createPlugin({
       db: mockDb,
       config: pluginConfigSchema.parse({
@@ -2763,16 +2767,12 @@ describe('Packet C — errors + consecutiveErrors caps', () => {
   });
 
   it('windowed inputTokens cap at GLOBAL scope enforces across turns — window + in-memory cumulative cross the maximum (F2)', async () => {
-    const mockDb = {
-      prepare(sql: string) {
-        return {
-          get(..._params: unknown[]) {
-            if (sql.includes('created_at')) return { total: 120_000 };
-            return undefined;
-          },
-        };
+    const mockDb = fakeDrizzleDb((sql) => ({
+      get(..._params: unknown[]) {
+        if (sql.includes('created_at')) return { total: 120_000 };
+        return undefined;
       },
-    };
+    }));
     const plugin = createPlugin({
       db: mockDb,
       config: pluginConfigSchema.parse({
@@ -2821,16 +2821,12 @@ describe('Packet C — errors + consecutiveErrors caps', () => {
   });
 
   it('windowed inputTokens cap at GLOBAL scope, warning mode → budget:warning event, resolves (F2 — trips per mode)', async () => {
-    const mockDb = {
-      prepare(sql: string) {
-        return {
-          get(..._params: unknown[]) {
-            if (sql.includes('created_at')) return { total: 150_000 };
-            return undefined;
-          },
-        };
+    const mockDb = fakeDrizzleDb((sql) => ({
+      get(..._params: unknown[]) {
+        if (sql.includes('created_at')) return { total: 150_000 };
+        return undefined;
       },
-    };
+    }));
     const plugin = createPlugin({
       db: mockDb,
       config: pluginConfigSchema.parse({
@@ -2865,5 +2861,220 @@ describe('Packet C — errors + consecutiveErrors caps', () => {
       maximum: 100_000,
       current: 150_000,
     });
+  });
+});
+
+// ── 5339c2e5 — global-scope cap enforcement across tasks (REAL drizzle handle) ─
+//
+// The bug: the engine loader passes the drizzle `BetterSQLite3Database` as
+// `ctx.db`, but the plugin queried with raw `.prepare(...)`; the throw was
+// swallowed and every non-task-scoped cap fell back to per-task in-memory
+// counters — so a `scope:'global'` cap never accumulated and the unattended
+// spend cap was defeated. These tests drive the REAL handle (a real
+// in-memory better-sqlite3 wrapped with drizzle) and simulate the engine's
+// two-task lifecycle: task A runs + its `task_usage` row is persisted (as
+// UsagePlugin does on completion), then task B's first pre-flight MUST be halted
+// by A's persisted spend.
+//
+// Teeth: on the pre-fix code (`.prepare` on a drizzle handle) the scoped query
+// threw and was swallowed, so B resolved — these assertions go red. The
+// task-scope and no-plugin controls prove the halt comes SPECIFICALLY from the
+// global-scope DB accumulation, not an unrelated failure.
+function makeRealBudgetDb(): {
+  db: ReturnType<typeof drizzle>;
+  addTaskUsage: (row: {
+    taskId: string;
+    sessionId?: string | null;
+    agentName?: string;
+    input?: number;
+    output?: number;
+    calls?: number;
+    peak?: number;
+    uncached?: number | null;
+    cacheRead?: number | null;
+    cacheWrite?: number | null;
+    createdAt?: string;
+  }) => void;
+} {
+  const sqlite = new Database(':memory:');
+  // The subset of the real task_usage/tasks schema the budget queries touch.
+  sqlite.exec(`CREATE TABLE tasks (id TEXT PRIMARY KEY, session_id TEXT)`);
+  sqlite.exec(`CREATE TABLE task_usage (
+    task_id TEXT PRIMARY KEY, agent_name TEXT,
+    input_tokens INTEGER DEFAULT 0, output_tokens INTEGER DEFAULT 0,
+    model_calls INTEGER DEFAULT 0, peak_context_tokens INTEGER,
+    cache_read_input_tokens INTEGER, cache_creation_input_tokens INTEGER,
+    uncached_input_tokens INTEGER, created_at TEXT)`);
+  const insTask = sqlite.prepare(
+    `INSERT INTO tasks (id, session_id) VALUES (?, ?)`
+  );
+  const insUsage = sqlite.prepare(
+    `INSERT INTO task_usage (
+       task_id, agent_name, input_tokens, output_tokens, model_calls,
+       peak_context_tokens, cache_read_input_tokens,
+       cache_creation_input_tokens, uncached_input_tokens, created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`
+  );
+  return {
+    db: drizzle(sqlite) as ReturnType<typeof drizzle>,
+    addTaskUsage(row) {
+      insTask.run(row.taskId, row.sessionId ?? null);
+      insUsage.run(
+        row.taskId,
+        row.agentName ?? 'test-agent',
+        row.input ?? 0,
+        row.output ?? 0,
+        row.calls ?? 0,
+        row.peak ?? 0,
+        row.cacheRead ?? null,
+        row.cacheWrite ?? null,
+        row.uncached ?? null,
+        row.createdAt ?? new Date().toISOString()
+      );
+    },
+  };
+}
+
+/** Drive one task's full engine lifecycle, then persist its usage row. */
+async function runAndPersistTask(
+  hooks: HookRegistry,
+  addTaskUsage: ReturnType<typeof makeRealBudgetDb>['addTaskUsage'],
+  ctx: ExecutionContext,
+  usage: { input?: number; output?: number; calls?: number; uncached?: number }
+): Promise<void> {
+  await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+  await enforcePreModel(hooks, ctx);
+  await hooks.emit('post:model_response', {
+    executionContext: ctx,
+    stopReason: 'stop',
+    toolCallCount: 0,
+    tokenUsage: {
+      inputTokens: usage.input ?? 0,
+      outputTokens: usage.output ?? 0,
+    },
+  });
+  await hooks.emit('task:completed', { executionContext: ctx });
+  addTaskUsage({
+    taskId: ctx.taskId,
+    sessionId: ctx.sessionId ?? null,
+    agentName: ctx.agentName,
+    input: usage.input ?? 0,
+    output: usage.output ?? 0,
+    calls: usage.calls ?? 1,
+    uncached: usage.uncached ?? usage.input ?? 0,
+  });
+}
+
+describe('5339c2e5 — global-scope caps accumulate across tasks (real drizzle handle)', () => {
+  it('a GLOBAL cost cap halts task B from task A\'s persisted spend (BUDGET_EXCEEDED)', async () => {
+    const hooks = new HookRegistry();
+    const { db, addTaskUsage } = makeRealBudgetDb();
+    const plugin = createPlugin({
+      db,
+      config: pluginConfigSchema.parse({
+        defaults: {
+          mode: 'block',
+          scope: 'global',
+          costPerInputToken: 0.000003,
+          costPerOutputToken: 0.000015,
+          caps: [{ field: 'cost', maximum: 0.001 }],
+        },
+      }),
+    });
+    await plugin.install(hooks);
+
+    const ctxA = makeCtx({ taskId: 'task-a', sessionId: 'sess-1' });
+    await runAndPersistTask(hooks, addTaskUsage, ctxA, {
+      input: 100_000,
+      output: 1_000,
+      uncached: 100_000,
+    });
+
+    const ctxB = makeCtx({ taskId: 'task-b', sessionId: 'sess-1' });
+    await hooks.emit('task:start', { executionContext: ctxB, messages: [] });
+    await expect(enforcePreModel(hooks, ctxB)).rejects.toMatchObject({
+      isEnforcementError: true,
+      code: 'BUDGET_EXCEEDED',
+      message: expect.stringContaining('cost'),
+    });
+  });
+
+  it('a GLOBAL calls cap halts task B from task A\'s persisted call (BUDGET_EXCEEDED)', async () => {
+    const hooks = new HookRegistry();
+    const { db, addTaskUsage } = makeRealBudgetDb();
+    const plugin = createPlugin({
+      db,
+      config: pluginConfigSchema.parse({
+        defaults: {
+          mode: 'block',
+          scope: 'global',
+          caps: [{ field: 'calls', maximum: 1 }],
+        },
+      }),
+    });
+    await plugin.install(hooks);
+
+    const ctxA = makeCtx({ taskId: 'task-a' });
+    // `task-a`'s first pre-flight sees 0 calls (its own row is excluded and its
+    // in-memory count is 0) → passes; then it completes with 1 model call, which
+    // `runAndPersistTask` persists as a `model_calls = 1` usage row.
+    await runAndPersistTask(hooks, addTaskUsage, ctxA, { calls: 1 });
+
+    const ctxB = makeCtx({ taskId: 'task-b' });
+    await hooks.emit('task:start', { executionContext: ctxB, messages: [] });
+    await expect(enforcePreModel(hooks, ctxB)).rejects.toMatchObject({
+      isEnforcementError: true,
+      code: 'BUDGET_EXCEEDED',
+      message: expect.stringContaining('calls'),
+    });
+  });
+
+  it('control — a TASK-scoped cost cap does NOT accumulate: task B starts fresh and passes', async () => {
+    const hooks = new HookRegistry();
+    const { db, addTaskUsage } = makeRealBudgetDb();
+    const plugin = createPlugin({
+      db,
+      config: pluginConfigSchema.parse({
+        defaults: {
+          mode: 'block',
+          scope: 'task',
+          costPerInputToken: 0.000003,
+          costPerOutputToken: 0.000015,
+          caps: [{ field: 'cost', maximum: 0.001 }],
+        },
+      }),
+    });
+    await plugin.install(hooks);
+
+    const ctxA = makeCtx({ taskId: 'task-a', sessionId: 'sess-1' });
+    await runAndPersistTask(hooks, addTaskUsage, ctxA, {
+      input: 100_000,
+      output: 1_000,
+      uncached: 100_000,
+    });
+
+    const ctxB = makeCtx({ taskId: 'task-b', sessionId: 'sess-1' });
+    await hooks.emit('task:start', { executionContext: ctxB, messages: [] });
+    await expect(enforcePreModel(hooks, ctxB)).resolves.toBeUndefined();
+  });
+
+  it('control (removal) — with the budget plugin NOT installed the same two tasks run past the cap', async () => {
+    // Mirrors the live e2e's `ADHD_AGENT_DISABLE_BUDGET_PLUGIN=1` control: no
+    // plugin registered means no enforcement, so the identical second task
+    // proceeds — proving the halt above is the budget plugin's doing.
+    const hooks = new HookRegistry();
+    const { addTaskUsage } = makeRealBudgetDb();
+    addTaskUsage({
+      taskId: 'task-a',
+      agentName: 'test-agent',
+      input: 100_000,
+      output: 1_000,
+      calls: 1,
+      uncached: 100_000,
+    });
+
+    const ctxB = makeCtx({ taskId: 'task-b', sessionId: 'sess-1' });
+    await hooks.emit('task:start', { executionContext: ctxB, messages: [] });
+    await expect(enforcePreModel(hooks, ctxB)).resolves.toBeUndefined();
   });
 });
