@@ -7,10 +7,16 @@
     "version": {
       "currentVersionResolver": "git-tag",
       "preserveLocalDependencyProtocols": false,
-      "manifestRootsToUpdate": ["{projectRoot}"]
+      "manifestRootsToUpdate": [
+        "{projectRoot}"
+      ]
     }
   },
-  "tags": ["entrypoint:cli", "pkg-class:entrypoint", "platform:node"],
+  "tags": [
+    "entrypoint:cli",
+    "pkg-class:entrypoint",
+    "platform:node"
+  ],
   "targets": {
     "typecheck": {
       "executor": "nx:run-commands",
@@ -19,7 +25,9 @@
         "default",
         "^production",
         {
-          "externalDependencies": ["typescript"]
+          "externalDependencies": [
+            "typescript"
+          ]
         }
       ],
       "options": {
@@ -38,8 +46,14 @@
       "//": "Override of the `build-bin` target inferred by @nx/js/typescript's second registration (configName tsconfig.build-bin.json) — see that registration in nx.json for why the inferred `tsc --build tsconfig.build-bin.json` cannot run in this workspace. Compiles bin/cli.ts's WHOLE reachable graph (src/** AND bin/*, per tsconfig.lib.json's existing include list) in one tsc pass, mirroring source structure under dist/ so dist/bin/cli.js's `require('../src/api.js')` resolves to the ALSO-emitted dist/src/api.js. dependsOn:[build] is load-bearing: vite's build.emptyOutDir wipes dist/ on every run, so this MUST run after build (tsc is additive, never empties outDir) never before/parallel.",
       "//clean": "Additive by construction: this command never empties dist/, so the retired executor's `clean: false` is preserved. That was load-bearing — build-bin's output dir is the SAME entrypoint/dispatch-cli/dist that `build` (vite) just populated with index.js/index.mjs/index.d.ts/api.d.ts/lib, so a clean run would WIPE those files the instant it starts (verified empirically while authoring the original fix: build's output vanished entirely after build-bin ran on top of it).",
       "//outputs": "Narrower than build's outputs ({projectRoot}/dist = the whole dir) so each target's own Nx cache-restore only ever touches the subtree it actually owns, never the sibling target's files.",
-      "dependsOn": ["build", "^build"],
-      "outputs": ["{projectRoot}/dist/bin", "{projectRoot}/dist/src"],
+      "dependsOn": [
+        "build",
+        "^build"
+      ],
+      "outputs": [
+        "{projectRoot}/dist/bin",
+        "{projectRoot}/dist/src"
+      ],
       "options": {
         "cwd": ".",
         "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.build-bin.json --outDir {projectRoot}/dist --rootDir {projectRoot} --baseUrl {projectRoot} --composite false --noEmitOnError"
@@ -60,19 +74,55 @@
     },
     "assets": {
       "//": "@adhd/nx-assets:copy is inferred by tools/nx-plugins/assets/plugin.js with dependsOn:[\"build\"] only. Now that package.json declares a `bin` field pointing at dist/bin/cli.js, this target's chmod-the-bin-file step needs that file to exist first — overridden here (dependsOn only; executor/cache still come from the inferred target) to add build-bin.",
-      "dependsOn": ["build", "build-bin"]
+      "dependsOn": [
+        "build",
+        "build-bin"
+      ]
     },
     "dist-manifest": {
       "//": "@adhd/nx-build:manifest is inferred with dependsOn:[\"build\",\"assets\"]. Rebases package.json (including the new `bin` field) against dist/ — needs build-bin so dist/bin/cli.js exists before the rebase runs.",
-      "dependsOn": ["build", "build-bin", "assets"]
+      "dependsOn": [
+        "build",
+        "build-bin",
+        "assets"
+      ]
     },
     "verify-dist-load": {
       "//": "@adhd/nx-build:verify is inferred with dependsOn:[\"build\",\"dist-manifest\"]. It now resolves the `bin` entry declared in package.json against dist/bin/cli.js — needs build-bin, else it fails with 'file declared in package.json but missing from dist' (verified empirically while authoring this fix).",
-      "dependsOn": ["build", "build-bin", "dist-manifest"]
+      "dependsOn": [
+        "build",
+        "build-bin",
+        "dist-manifest"
+      ]
     },
     "test": {
       "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference). cli-smoke.spec.ts drives the GENERATED CLI at dist/entrypoint/dispatch-cli/cli/cli.ts and the compiled bin at dist/bin/cli.js, so it needs `generate-cli` and `build-bin`. targetDefaults.test's `^build` builds only dependencies; an explicit dependsOn replaces the targetDefault, so `lint`/`^build` are repeated. `agent-mcp:dist-manifest` is required by the real-registry e2e specs (`dispatch-default-mcp-servers.e2e.test.ts`, `agents-import.e2e.test.ts`; shared harness `helpers/agent-mcp-registry.ts`): they spawn the BUILT agent-mcp entry at entrypoint/agent-mcp/dist/src/index.js as the external MCP boundary (the `daafe2d3` default-servers + `09e84a88` import round-trip proofs). `dist-manifest` (build+assets), NOT `build` alone, is load-bearing: agent-mcp's dist/src/server.js `require`s `../package.json`, which the `assets` target copies into dist/ — depending on `agent-mcp:build` alone leaves dist/package.json absent and the spawned child crashes with `Cannot find module '../package.json'`. (That defect only hid before because agent-mcp was coincidentally also in the affected set; it is deterministic under a targeted `nx test dispatch-cli`.) `agent-mcp:dist-manifest` is cacheable, so this is a one-time cost. `backlog:build` is required by the default-backlog existence contract (1505199b): default-mcp-servers.spec.ts asserts the DEFAULT resolveBacklogMcpEntry() result EXISTS on disk — i.e. the spawned backlog MCP server can actually start — which only holds once entrypoint/backlog/dist/index.js is built. (@adhd/backlog is now a declared runtime dependency, so `^build` reaches it too; naming it here documents the edge.) CI COST: backlog's `build` is cache:false (dist-locked; `vite build` + `ir-artifact`), so any run that reaches dispatch-cli:test rebuilds backlog (~minutes) instead of taking a cache hit — the accepted price of making the default path provably spawnable.",
-      "dependsOn": ["lint", "^build", "generate-cli", "build-bin", "agent-mcp:dist-manifest", "backlog:build"]
+      "dependsOn": [
+        "lint",
+        "^build",
+        "generate-cli",
+        "build-bin",
+        "agent-mcp:dist-manifest",
+        "backlog:build",
+        "typecheck-spec"
+      ]
+    },
+    "typecheck-spec": {
+      "//": "Type-checks the SPEC corpus (entrypoint/dispatch-cli/tsconfig.spec.json). Closes lane-reachability rule 6 / backlog 770c0919: a tsconfig.spec.json with no compiling target lets the spec corpus carry type errors no gate can see. The ratchet baselines the pre-existing spec errors in tools/nx-plugins/build/executors/typecheck-spec/dispatch-cli.baseline.json (baselined, NOT excluded) and fails on any per-file increase or on include narrowing. Wired into test.dependsOn so nx affected -t test runs it.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "node tools/nx-plugins/build/executors/typecheck-spec/ratchet.mjs --tsconfig entrypoint/dispatch-cli/tsconfig.spec.json --baseline tools/nx-plugins/build/executors/typecheck-spec/dispatch-cli.baseline.json"
+      }
     }
   }
 }

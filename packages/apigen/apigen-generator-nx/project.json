@@ -7,15 +7,24 @@
     "version": {
       "currentVersionResolver": "git-tag",
       "preserveLocalDependencyProtocols": false,
-      "manifestRootsToUpdate": ["{projectRoot}"]
+      "manifestRootsToUpdate": [
+        "{projectRoot}"
+      ]
     }
   },
-  "tags": ["layer:logic", "platform:node"],
-  "implicitDependencies": ["!workspace-base-vite-paths"],
+  "tags": [
+    "layer:logic",
+    "platform:node"
+  ],
+  "implicitDependencies": [
+    "!workspace-base-vite-paths"
+  ],
   "targets": {
     "build": {
       "//": "Override of the `build` target inferred by @nx/js/typescript (see that plugin's registration in nx.json for why the inferred `tsc --build tsconfig.lib.json` cannot run in this workspace). The trailing cp calls reproduce the `assets` globs the retired tsc build executor copied (generator/executor schemas + templates); README/CHANGELOG are owned by the inferred `assets` target.",
-      "outputs": ["{projectRoot}/dist"],
+      "outputs": [
+        "{projectRoot}/dist"
+      ],
       "options": {
         "cwd": ".",
         "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.lib.json --outDir {projectRoot}/dist --rootDir {projectRoot} --baseUrl {projectRoot} --composite false --noEmitOnError && cp {projectRoot}/*.md {projectRoot}/generators.json {projectRoot}/executors.json {projectRoot}/dist/ && cp {projectRoot}/src/generators/host/schema.json {projectRoot}/dist/src/generators/host/ && cp -R {projectRoot}/src/generators/host/__files__ {projectRoot}/dist/src/generators/host/ && cp {projectRoot}/src/generators/plugin/schema.json {projectRoot}/dist/src/generators/plugin/ && cp -R {projectRoot}/src/generators/plugin/__files__ {projectRoot}/dist/src/generators/plugin/ && cp {projectRoot}/src/executors/generate/schema.json {projectRoot}/dist/src/executors/generate/"
@@ -32,6 +41,31 @@
       "options": {
         "packageRoot": "{projectRoot}/dist"
       }
+    },
+    "typecheck-spec": {
+      "//": "Type-checks the SPEC corpus (packages/apigen/apigen-generator-nx/tsconfig.spec.json). Closes lane-reachability rule 6 / backlog 770c0919: a tsconfig.spec.json with no compiling target lets the spec corpus carry type errors no gate can see. The ratchet baselines the pre-existing spec errors in tools/nx-plugins/build/executors/typecheck-spec/apigen-generator-nx.baseline.json (baselined, NOT excluded) and fails on any per-file increase or on include narrowing. Wired into test.dependsOn so nx affected -t test runs it.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "node tools/nx-plugins/build/executors/typecheck-spec/ratchet.mjs --tsconfig packages/apigen/apigen-generator-nx/tsconfig.spec.json --baseline tools/nx-plugins/build/executors/typecheck-spec/apigen-generator-nx.baseline.json"
+      }
+    },
+    "test": {
+      "//": "Partial override — executor/cache/outputs still come from the inferred @nx/vitest target. dependsOn is replaced wholesale, so lint/^build (workspace test targetDefaults) are relisted, plus typecheck-spec so the spec corpus is gated whenever tests run (backlog 770c0919).",
+      "dependsOn": [
+        "lint",
+        "^build",
+        "typecheck-spec"
+      ]
     }
   }
 }

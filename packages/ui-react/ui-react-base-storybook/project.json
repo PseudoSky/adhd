@@ -3,7 +3,35 @@
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/src",
   "projectType": "library",
-  "tags": ["platform:browser", "layer:test-ui"],
+  "tags": [
+    "platform:browser",
+    "layer:test-ui"
+  ],
   "targets": {
+    "typecheck-spec": {
+      "//": "Type-checks the SPEC corpus (packages/ui-react/ui-react-base-storybook/tsconfig.spec.json). Closes lane-reachability rule 6 / backlog 770c0919: a tsconfig.spec.json with no compiling target lets the spec corpus carry type errors no gate can see. The ratchet baselines the pre-existing spec errors in tools/nx-plugins/build/executors/typecheck-spec/ui-react-base-storybook.baseline.json (baselined, NOT excluded) and fails on any per-file increase or on include narrowing. Wired into test.dependsOn so nx affected -t test runs it.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "node tools/nx-plugins/build/executors/typecheck-spec/ratchet.mjs --tsconfig packages/ui-react/ui-react-base-storybook/tsconfig.spec.json --baseline tools/nx-plugins/build/executors/typecheck-spec/ui-react-base-storybook.baseline.json"
+      }
+    },
+    "test": {
+      "//": "Partial override — executor/cache/outputs still come from the inferred @nx/vitest target. dependsOn is replaced wholesale, so lint/^build (workspace test targetDefaults) are relisted, plus typecheck-spec so the spec corpus is gated whenever tests run (backlog 770c0919).",
+      "dependsOn": [
+        "lint",
+        "^build",
+        "typecheck-spec"
+      ]
+    }
   }
 }

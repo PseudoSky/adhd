@@ -5,20 +5,33 @@
   "release": {
     "version": {
       "preserveLocalDependencyProtocols": false,
-      "manifestRootsToUpdate": ["packages/apigen/apigen-plugin-cli-output"]
+      "manifestRootsToUpdate": [
+        "packages/apigen/apigen-plugin-cli-output"
+      ]
     }
   },
-  "tags": ["layer:logic", "platform:node"],
+  "tags": [
+    "layer:logic",
+    "platform:node"
+  ],
   "targets": {
     "test": {
-      "dependsOn": ["lint", "^build"],
+      "dependsOn": [
+        "lint",
+        "^build",
+        "typecheck-spec"
+      ],
       "//inputs": "Exclude *.e2e.ts so editing the resource-consuming suite never invalidates the default lane's cache — it never runs those files (its vitest `include` is `src/**/*.spec.ts`, see vite.config.ts). Mirrors the workspace targetDefaults.test inputs plus the negative pattern.",
       "inputs": [
         "default",
         "!{projectRoot}/**/*.e2e.ts",
         "^production",
         {
-          "externalDependencies": ["vitest", "better-sqlite3", "drizzle-orm"]
+          "externalDependencies": [
+            "vitest",
+            "better-sqlite3",
+            "drizzle-orm"
+          ]
         }
       ]
     },
@@ -28,7 +41,9 @@
       "dependsOn": [
         "build",
         {
-          "projects": ["apigen-cli"],
+          "projects": [
+            "apigen-cli"
+          ],
           "target": "build"
         }
       ],
@@ -44,7 +59,9 @@
         "default",
         "^production",
         {
-          "externalDependencies": ["vitest"]
+          "externalDependencies": [
+            "vitest"
+          ]
         }
       ]
     },
@@ -58,6 +75,23 @@
       ],
       "options": {
         "packageRoot": "{projectRoot}/dist"
+      }
+    },
+    "typecheck-spec": {
+      "//": "Type-checks the SPEC corpus (packages/apigen/apigen-plugin-cli-output/tsconfig.spec.json). Closes lane-reachability rule 6 / backlog 770c0919: a tsconfig.spec.json with no compiling target lets the spec corpus carry type errors no gate can see. The ratchet baselines the pre-existing spec errors in tools/nx-plugins/build/executors/typecheck-spec/apigen-plugin-cli-output.baseline.json (baselined, NOT excluded) and fails on any per-file increase or on include narrowing. Wired into test.dependsOn so nx affected -t test runs it.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "node tools/nx-plugins/build/executors/typecheck-spec/ratchet.mjs --tsconfig packages/apigen/apigen-plugin-cli-output/tsconfig.spec.json --baseline tools/nx-plugins/build/executors/typecheck-spec/apigen-plugin-cli-output.baseline.json"
       }
     }
   }

@@ -7,14 +7,21 @@
     "version": {
       "currentVersionResolver": "git-tag",
       "preserveLocalDependencyProtocols": false,
-      "manifestRootsToUpdate": ["{projectRoot}"]
+      "manifestRootsToUpdate": [
+        "{projectRoot}"
+      ]
     }
   },
-  "tags": ["layer:ai", "platform:node"],
+  "tags": [
+    "layer:ai",
+    "platform:node"
+  ],
   "targets": {
     "build": {
       "//": "Override of the `build` target inferred by @nx/js/typescript (see that plugin's registration in nx.json for why the inferred `tsc --build tsconfig.lib.json` cannot run in this workspace). The `drizzle/**/*` asset glob is covered by the inferred `assets` target.",
-      "outputs": ["{projectRoot}/dist"],
+      "outputs": [
+        "{projectRoot}/dist"
+      ],
       "options": {
         "cwd": ".",
         "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.lib.json --outDir {projectRoot}/dist --rootDir {projectRoot} --baseUrl {projectRoot} --composite false --noEmitOnError"
@@ -60,7 +67,30 @@
     },
     "test": {
       "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference). compile-cli*.test.ts spawn the BUILT bin at {projectRoot}/dist/src/cli/compile.js and assert the migration folders exist at {projectRoot}/dist/drizzle — under this workspace's remodel that asset glob is owned by the inferred `assets` target (main's `@nx/js:tsc` `build` copied it inline). targetDefaults.test's `^build` builds only DEPENDENCIES, never this project's OWN dist/ or assets, so `build` + `assets` are declared. `lint`/`^build` repeated because an explicit dependsOn replaces the targetDefault.",
-      "dependsOn": ["lint", "^build", "build", "assets"]
+      "dependsOn": [
+        "lint",
+        "^build",
+        "build",
+        "assets",
+        "typecheck-spec"
+      ]
+    },
+    "typecheck-spec": {
+      "//": "Type-checks the SPEC corpus (packages/agent/agent-engine-compiler/tsconfig.spec.json). Closes lane-reachability rule 6 / backlog 770c0919: a tsconfig.spec.json with no compiling target lets the spec corpus carry type errors no gate can see. The ratchet baselines the pre-existing spec errors in tools/nx-plugins/build/executors/typecheck-spec/agent-engine-compiler.baseline.json (baselined, NOT excluded) and fails on any per-file increase or on include narrowing. Wired into test.dependsOn so nx affected -t test runs it.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "node tools/nx-plugins/build/executors/typecheck-spec/ratchet.mjs --tsconfig packages/agent/agent-engine-compiler/tsconfig.spec.json --baseline tools/nx-plugins/build/executors/typecheck-spec/agent-engine-compiler.baseline.json"
+      }
     }
   }
 }

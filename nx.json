@@ -199,6 +199,7 @@
       ]
     },
     "test": {
+      "//": "`dependentTasksOutputFiles` closes backlog 62535ce7: a `test` target may `dependsOn` a task of a project OUTSIDE its Nx project graph — e.g. dispatch-cli spawns agent-mcp's BUILT entry as an external MCP boundary and names `agent-mcp:dist-manifest` in test.dependsOn, but imports nothing from agent-mcp, so `^production` never sees agent-mcp's source or dist. The task-dependsOn REBUILDS agent-mcp/dist, yet the consumer test's hash did not change and Nx served a STALE cached PASS across a real rebuild (reproduced in bucket-h). `transitive: true` is REQUIRED, not stylistic: the direct dependency `agent-mcp:dist-manifest` resolves NO outputs (its @adhd/nx-build:manifest executor declares none), so a non-transitive glob matches nothing — the artifact is materialized by the transitive `agent-mcp:build`, which declares `{projectRoot}/dist`. The glob `**/*` matches every candidate path; the hasher restricts the match to files inside a declared output of an upstream task in the task graph.",
       "cache": true,
       "dependsOn": [
         "lint",
@@ -213,6 +214,10 @@
             "better-sqlite3",
             "drizzle-orm"
           ]
+        },
+        {
+          "dependentTasksOutputFiles": "**/*",
+          "transitive": true
         }
       ],
       "options": {
