@@ -39,8 +39,8 @@ export type { ResolvedToolName } from './clients/tool-naming.js';
 export type { IMcpClient } from './clients/types.js';
 
 // ── Tools ─────────────────────────────────────────────────────────────────────
-export { agentCreate, agentRead, agentUpdate, agentDelete, agentList } from './tools/agent-crud.js';
-export type { AgentCrudDeps, AgentUpdateResult } from './tools/agent-crud.js';
+export { agentCreate, agentRead, agentUpdate, agentDelete, agentList, projectAgentRecord } from './tools/agent-crud.js';
+export type { AgentCrudDeps, AgentUpdateResult, AgentProjectionOptions, AgentRecord } from './tools/agent-crud.js';
 export type { AgentStore } from './tools/agent-crud.js';
 export { agentTool, sessionList, sessionClose, sessionClear } from './tools/session.js';
 export type { SessionDeps } from './tools/session.js';

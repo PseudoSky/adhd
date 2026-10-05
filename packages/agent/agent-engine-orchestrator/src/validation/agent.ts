@@ -225,8 +225,58 @@ export const agentUpdateInputSchema = z
     patch: agentPatchSchema,
   });
 
+/**
+ * The closed vocabulary of agent-definition fields a caller may project onto
+ * via `fields[]`. Declaring it as an enum makes an unknown key a validation
+ * error, never a silent drop. `systemPrompt` is intentionally in the list:
+ * it is the one field that requires an explicit opt-in, so a caller who wants
+ * it must name it (this is what keeps the multi-KB prompt body out of every
+ * default MCP response).
+ */
+export const AGENT_PROJECTABLE_FIELDS = [
+  'name',
+  'description',
+  'version',
+  'provider',
+  'systemPrompt',
+  'mcpServers',
+  'permissions',
+  'maxToolLoops',
+  'allowHumanInput',
+  'sanitization',
+  'toolAdvertisement',
+  'nativeWebTools',
+  'createdAt',
+  'updatedAt',
+] as const;
+
+export type AgentProjectableField = (typeof AGENT_PROJECTABLE_FIELDS)[number];
+
+/**
+ * The opt-in projection controls shared by `agent_read` / `agent_list`.
+ *
+ * With neither supplied, the response omits `systemPrompt` — the multi-KB body
+ * that must never be dumped unrequested. Request the full record with
+ * `full: true`, or name `systemPrompt` in `fields`.
+ */
+export const agentProjectionFields = {
+  full: z
+    .boolean()
+    .optional()
+    .describe(
+      'Return the full record including systemPrompt. Defaults to false: by default systemPrompt is omitted from the response.'
+    ),
+  fields: z
+    .array(z.enum(AGENT_PROJECTABLE_FIELDS))
+    .optional()
+    .describe(
+      "Project each record onto these fields (name is always included). Pass ['systemPrompt'] to opt into the prompt body; leaving it out omits the body."
+    ),
+};
+
 export const agentReadInputSchema = z.object({
   name: z.string().min(1),
+  ...agentProjectionFields,
 });
 
 export const agentDeleteInputSchema = z.object({
@@ -234,9 +284,12 @@ export const agentDeleteInputSchema = z.object({
   force: z.boolean().optional(),
 });
 
-export const agentListInputSchema = z.object({}).optional();
+export const agentListInputSchema = z.object({
+  ...agentProjectionFields,
+});
 
 export type AgentCreateInput = z.infer<typeof agentCreateInputSchema>;
 export type AgentUpdateInput = z.infer<typeof agentUpdateInputSchema>;
 export type AgentReadInput = z.infer<typeof agentReadInputSchema>;
 export type AgentDeleteInput = z.infer<typeof agentDeleteInputSchema>;
+export type AgentListInput = z.infer<typeof agentListInputSchema>;

@@ -56,6 +56,7 @@ import {
   agentReadInputSchema,
   agentUpdateInputSchema,
   agentDeleteInputSchema,
+  agentListInputSchema,
   agentToolInputSchema,
   sessionListInputSchema,
   sessionCloseInputSchema,
@@ -515,18 +516,20 @@ export function createServer(deps: ServerDeps): Server {
     tools: [
       {
         name: 'agent_create',
-        description: 'Create a new stored agent definition',
+        description:
+          'Create a new stored agent definition. The response omits systemPrompt by default (fetch it explicitly with agent_read full:true if needed).',
         inputSchema: toMcpInputSchema(agentCreateInputSchema),
       },
       {
         name: 'agent_read',
-        description: 'Read a stored agent definition by name',
+        description:
+          'Read a stored agent definition by name. By default the response omits systemPrompt (the multi-KB body); pass full:true or fields:["systemPrompt"] to include it explicitly.',
         inputSchema: toMcpInputSchema(agentReadInputSchema),
       },
       {
         name: 'agent_update',
         description:
-          'Update a stored agent definition. The response includes openSessionsNotUpdated — the active session ids that will keep running on the pre-update snapshot.',
+          'Update a stored agent definition. The response includes openSessionsNotUpdated — the active session ids that will keep running on the pre-update snapshot. The response omits systemPrompt by default; pass full:true or fields:["systemPrompt"] to include it.',
         inputSchema: toMcpInputSchema(agentUpdateInputSchema),
       },
       {
@@ -537,8 +540,9 @@ export function createServer(deps: ServerDeps): Server {
       },
       {
         name: 'agent_list',
-        description: 'List all stored agent definitions',
-        inputSchema: { type: 'object', properties: {} },
+        description:
+          'List all stored agent definitions. By default each record omits systemPrompt (the multi-KB body); pass full:true or fields:["systemPrompt"] to include it explicitly.',
+        inputSchema: toMcpInputSchema(agentListInputSchema),
       },
       {
         name: 'agent_verify_mcp',
@@ -673,7 +677,7 @@ export function createServer(deps: ServerDeps): Server {
 
         case 'agent_list':
           return toMcpContent(
-            agentList(args, {
+            agentList(agentListInputSchema.parse(args ?? {}), {
               agentStore: deps.agentStore,
               sessionStore: crudSessionStore,
             })
