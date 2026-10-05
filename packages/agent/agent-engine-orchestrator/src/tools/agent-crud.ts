@@ -127,7 +127,10 @@ export function agentUpdate(input: AgentUpdateInput, deps: AgentCrudDeps): Agent
     });
 
     return {
-        ...projectAgentRecord(updated as unknown as Record<string, unknown>),
+        ...projectAgentRecord(
+            updated as unknown as Record<string, unknown>,
+            input
+        ),
         openSessionsNotUpdated: openSessions.map((s) => s.id),
     };
 }

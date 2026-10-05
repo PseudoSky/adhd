@@ -19,11 +19,16 @@ import type { AgentDefinition } from '@adhd/agent-base-types';
 import {
   agentList,
   agentRead,
+  agentUpdate,
   projectAgentRecord,
   type AgentCrudDeps,
   type AgentStore,
 } from '../tools/agent-crud.js';
-import { agentListInputSchema, agentReadInputSchema } from '../validation/index.js';
+import {
+  agentListInputSchema,
+  agentReadInputSchema,
+  agentUpdateInputSchema,
+} from '../validation/index.js';
 
 const PROMPT = 'S'.repeat(4096); // a deliberately multi-KB system prompt
 
@@ -51,8 +56,10 @@ function makeDeps(defs: AgentDefinition[]): AgentCrudDeps {
       if (!found) throw new Error(`missing ${name}`);
       return found;
     },
-    update: () => {
-      throw new Error('not used');
+    update: (input) => {
+      const existing = defs.find((d) => d.name === input.name);
+      if (!existing) throw new Error(`missing ${input.name}`);
+      return { ...existing, ...input.patch, version: existing.version + 1 };
     },
     delete: () => {
       throw new Error('not used');
@@ -138,6 +145,35 @@ describe('agent_* prompt projection', () => {
         `${PROMPT}:alpha`,
         `${PROMPT}:beta`,
       ]);
+    });
+  });
+
+  describe('agent_update', () => {
+    it('omits systemPrompt by default but preserves openSessionsNotUpdated', () => {
+      const deps = makeDeps([makeDefinition('alpha')]);
+      const out = agentUpdate(
+        agentUpdateInputSchema.parse({
+          name: 'alpha',
+          patch: { description: 'updated' },
+        }),
+        deps
+      );
+      expect(out).not.toHaveProperty('systemPrompt');
+      expect(out['openSessionsNotUpdated']).toEqual([]);
+      expect(out['description']).toBe('updated');
+    });
+
+    it('returns systemPrompt with full:true', () => {
+      const deps = makeDeps([makeDefinition('alpha')]);
+      const out = agentUpdate(
+        agentUpdateInputSchema.parse({
+          name: 'alpha',
+          patch: { description: 'updated' },
+          full: true,
+        }),
+        deps
+      );
+      expect(out['systemPrompt']).toBe(`${PROMPT}:alpha`);
     });
   });
 

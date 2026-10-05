@@ -162,6 +162,47 @@ describe('agent_read / agent_list never dump systemPrompt by default', () => {
     expect(read).toEqual({ name: 'projection-agent', systemPrompt: PROMPT });
   });
 
+  it('agent_update default omits systemPrompt and preserves openSessionsNotUpdated', async () => {
+    harness = await buildHarness();
+    const conn = await connectMcp(harness);
+    close = conn.close;
+    await seed(conn.client);
+
+    const updated = parse<Record<string, unknown>>(
+      await conn.client.callTool({
+        name: 'agent_update',
+        arguments: {
+          name: 'projection-agent',
+          patch: { description: 'updated' },
+        },
+      })
+    );
+
+    expect(updated).not.toHaveProperty('systemPrompt');
+    expect(JSON.stringify(updated)).not.toContain(PROMPT);
+    expect(updated['openSessionsNotUpdated']).toEqual([]);
+    expect(updated['description']).toBe('updated');
+  });
+
+  it('agent_update full:true explicitly returns the systemPrompt', async () => {
+    harness = await buildHarness();
+    const conn = await connectMcp(harness);
+    close = conn.close;
+    await seed(conn.client);
+
+    const updated = parse<Record<string, unknown>>(
+      await conn.client.callTool({
+        name: 'agent_update',
+        arguments: {
+          name: 'projection-agent',
+          patch: { description: 'updated' },
+          full: true,
+        },
+      })
+    );
+    expect(updated['systemPrompt']).toBe(PROMPT);
+  });
+
   it('agent_list default omits systemPrompt for every record', async () => {
     harness = await buildHarness();
     const conn = await connectMcp(harness);
@@ -202,16 +243,21 @@ describe('agent_read / agent_list never dump systemPrompt by default', () => {
 
     const tools = await conn.client.listTools();
     const read = tools.tools.find((t) => t.name === 'agent_read');
+    const update = tools.tools.find((t) => t.name === 'agent_update');
     const list = tools.tools.find((t) => t.name === 'agent_list');
 
     const readProps = (read?.inputSchema.properties ?? {}) as Record<string, unknown>;
+    const updateProps = (update?.inputSchema.properties ?? {}) as Record<string, unknown>;
     const listProps = (list?.inputSchema.properties ?? {}) as Record<string, unknown>;
     expect(readProps).toHaveProperty('full');
     expect(readProps).toHaveProperty('fields');
+    expect(updateProps).toHaveProperty('full');
+    expect(updateProps).toHaveProperty('fields');
     expect(listProps).toHaveProperty('full');
     expect(listProps).toHaveProperty('fields');
     // The descriptions state the opt-in so an agent knows the body is gated.
     expect(read?.description ?? '').toContain('systemPrompt');
+    expect(update?.description ?? '').toContain('systemPrompt');
     expect(list?.description ?? '').toContain('systemPrompt');
   });
 });

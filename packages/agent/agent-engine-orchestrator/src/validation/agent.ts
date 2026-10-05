@@ -219,12 +219,6 @@ export const agentPatchSchema = z.object({
   nativeWebTools: z.boolean().optional(),
 });
 
-export const agentUpdateInputSchema = z
-  .object({
-    name: z.string().min(1),
-    patch: agentPatchSchema,
-  });
-
 /**
  * The closed vocabulary of agent-definition fields a caller may project onto
  * via `fields[]`. Declaring it as an enum makes an unknown key a validation
@@ -253,11 +247,11 @@ export const AGENT_PROJECTABLE_FIELDS = [
 export type AgentProjectableField = (typeof AGENT_PROJECTABLE_FIELDS)[number];
 
 /**
- * The opt-in projection controls shared by `agent_read` / `agent_list`.
- *
- * With neither supplied, the response omits `systemPrompt` — the multi-KB body
- * that must never be dumped unrequested. Request the full record with
- * `full: true`, or name `systemPrompt` in `fields`.
+ * The opt-in projection controls shared by `agent_read` / `agent_list` (and
+ * accepted by `agent_update`'s response). With neither supplied, the response
+ * omits `systemPrompt` — the multi-KB body that must never be dumped
+ * unrequested. Request the full record with `full: true`, or name
+ * `systemPrompt` in `fields`.
  */
 export const agentProjectionFields = {
   full: z
@@ -273,6 +267,12 @@ export const agentProjectionFields = {
       "Project each record onto these fields (name is always included). Pass ['systemPrompt'] to opt into the prompt body; leaving it out omits the body."
     ),
 };
+
+export const agentUpdateInputSchema = z.object({
+  name: z.string().min(1),
+  patch: agentPatchSchema,
+  ...agentProjectionFields,
+});
 
 export const agentReadInputSchema = z.object({
   name: z.string().min(1),
