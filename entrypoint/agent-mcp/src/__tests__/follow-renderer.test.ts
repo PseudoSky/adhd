@@ -36,6 +36,8 @@ import {
     followTaskStream,
     parseSseEvents,
     renderEvent,
+    FollowUsageError,
+    MAX_SSE_BUFFER_BYTES,
     type FollowResult,
 } from "../streaming/follow-renderer.js";
 
@@ -284,5 +286,77 @@ describe("c667a213 AC: incremental assistant text over SSE, first token precedes
         expect(firstToken!.t).toBeLessThanOrEqual(terminal!.t);
         expect(result.tokens).toBe(2);
         expect(result.result).toBe("streaming now");
+    });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Post-merge-review hardening (bucket-d follow-up).
+//
+// Three failure modes that must NOT be mistaken for success, each proven
+// against a REAL socket so the fix (not a mock) is under test:
+//   - a stream that ENDS before the terminal `done` (was resolved as
+//     status:null → the bin exited 0 — a false success);
+//   - an unparseable `baseUrl` (was thrown synchronously past the bin's
+//     `.catch`);
+//   - a producer that never emits a frame boundary (unbounded buffer growth).
+// Each assertion FAILS if the corresponding guard is reverted.
+// ──────────────────────────────────────────────────────────────────────────
+
+/** Starts a raw `text/event-stream` responder on an ephemeral loopback port. */
+async function listenEphemeralSse(handler: (res: http.ServerResponse) => void): Promise<number> {
+    const server = http.createServer((_req, res) => {
+        res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+        res.flushHeaders?.();
+        handler(res);
+    });
+    openServers.push(server);
+    return new Promise<number>((resolve) => {
+        server.listen(0, "127.0.0.1", () => {
+            const addr = server.address();
+            resolve(addr && typeof addr === "object" ? addr.port : 0);
+        });
+    });
+}
+
+describe("followTaskStream hardening: premature end / bad url / unbounded frame", () => {
+    it("REJECTS (never false-success) when the stream ends without a terminal `done`", async () => {
+        const port = await listenEphemeralSse((res) => {
+            res.write('event: token\ndata: {"type":"token","taskId":"t","chunk":"partial"}\n\n');
+            res.end(); // socket closes, but no terminal `done` was ever emitted
+        });
+
+        await expect(
+            followTaskStream({
+                taskId: "22222222-2222-4222-8222-222222222222",
+                baseUrl: `http://127.0.0.1:${port}`,
+            })
+        ).rejects.toThrow(/ended before the terminal 'done'/);
+    });
+
+    it("REJECTS with a FollowUsageError (no synchronous throw) for an unparseable --base-url", async () => {
+        let followPromise!: Promise<FollowResult>;
+        expect(() => {
+            followPromise = followTaskStream({ taskId: "t", baseUrl: "not a valid url" });
+        }).not.toThrow();
+
+        await expect(followPromise).rejects.toBeInstanceOf(FollowUsageError);
+        await expect(followPromise).rejects.toThrow(/invalid base URL/);
+    });
+
+    it("REJECTS a stream whose frame never terminates, bounding retained buffer memory", async () => {
+        const port = await listenEphemeralSse((res) => {
+            // No `\n\n` boundary is ever written. Without the cap the renderer
+            // would buffer this forever (never settling); with the cap it
+            // rejects deterministically once the retained bytes exceed it.
+            res.write("x".repeat(MAX_SSE_BUFFER_BYTES + 4096));
+            res.end();
+        });
+
+        await expect(
+            followTaskStream({
+                taskId: "33333333-3333-4333-8333-333333333333",
+                baseUrl: `http://127.0.0.1:${port}`,
+            })
+        ).rejects.toThrow(/exceeds .* bytes without a boundary/);
     });
 });

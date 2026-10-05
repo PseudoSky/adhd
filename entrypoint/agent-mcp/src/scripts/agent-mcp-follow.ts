@@ -17,7 +17,7 @@
  * (the other half) wires a caller to this renderer.
  */
 import { parseArgs } from "node:util";
-import { followTaskStream, type FollowFormat } from "../streaming/follow-renderer.js";
+import { followTaskStream, FollowUsageError, type FollowFormat } from "../streaming/follow-renderer.js";
 
 const USAGE = `agent-mcp-follow — live SSE renderer for an agent-mcp task
 
@@ -31,6 +31,13 @@ Options:
       --events           Print one line per stream event, not just assistant text
       --json             Print raw newline-delimited JSON events
       --help             Show this help
+
+Port note: a standalone agent-mcp instance binds an OS-assigned ephemeral port
+when its configured SSE port is already taken by another instance (see
+startSseServer's EADDRINUSE fallback). This bin's default (3001 or
+$ADHD_AGENT_SSE_PORT) can therefore differ from the port the instance you mean
+to follow actually bound. When dispatch-cli spawns agent-mcp, it MUST pass that
+instance's exact bound port via --base-url or --port; do not rely on the default.
 `;
 
 const { values, positionals } = parseArgs({
@@ -85,9 +92,15 @@ followTaskStream({
             process.stderr.write(`agent-mcp-follow: task error: ${result.error}\n`);
             process.exit(1);
         }
-        process.exit(result.status === "completed" || result.status === null ? 0 : 1);
+        // Only an explicit `completed` is success. `status === null` means the
+        // terminal `done` event was never observed (the renderer now rejects on
+        // a premature stream end, but keep this mapping defensive: a null status
+        // must never look like success).
+        process.exit(result.status === "completed" ? 0 : 1);
     })
     .catch((err: unknown) => {
         process.stderr.write(`agent-mcp-follow: ${err instanceof Error ? err.message : String(err)}\n`);
-        process.exit(1);
+        // Usage errors (e.g. an unparseable --base-url) exit 2, distinct from
+        // the runtime/stream failure exit 1.
+        process.exit(err instanceof FollowUsageError ? 2 : 1);
     });
