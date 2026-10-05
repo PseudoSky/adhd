@@ -207,3 +207,23 @@ Schema version 1.
   (`git status --porcelain` empty). No push, no branch or worktree removed, no gates run (the
   post-merge review runs the suite). This record is the only change to this file in this operation.
   Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-04 — operation record: land of the `feat/bucket-d-multisurface-reconcile` follow-up
+  (dispatch-2026-10-04-9c4e).** Landed 3 follow-up commits on top of the already-merged
+  `fd19fe16` (`6e21be6f`, `5c1aabd3`, `7eb0c728`; head `7eb0c728`) onto `main` as a **merge
+  commit** `132f4072` (parents `d045cfc0` = pre-merge `main`, `7eb0c728` = branch head), moving
+  `main` `d045cfc0` → `132f4072`; 5 files, +374/-9 (new
+  `entrypoint/agent-mcp/src/__tests__/agent-mcp-follow-bin.test.ts`; modified
+  `bucket-d-acceptance.test.ts`, `follow-renderer.test.ts`,
+  `entrypoint/agent-mcp/src/scripts/agent-mcp-follow.ts`, and
+  `entrypoint/agent-mcp/src/streaming/follow-renderer.ts`). §Branching & merge was the deciding
+  rule: this history "carries true merge commits" and ff-only is not enforced, while rebase-in-
+  flight is permitted only on a branch "solely your own" — D is an in-flight executor branch, not
+  the operator's, so rewriting its commits was out; a merge commit is the stated shape here.
+  Dry-run `git merge-tree --write-tree main 7eb0c728` exited 0 producing tree `c8c7c613` with no
+  conflict hunks; the actual `git merge --no-ff` was conflict-free (ort strategy, exit 0).
+  Post-merge `git rev-list --count main..feat/bucket-d-multisurface-reconcile` = 0 and
+  `git merge-base --is-ancestor 7eb0c728 main` exits 0, so all 3 follow-up commits are contained.
+  The working tree was clean before and after (`git status --porcelain` empty). No push, no branch
+  or worktree removed, no gates run (the post-merge review runs the suite). This record is the only
+  change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
