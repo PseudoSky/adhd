@@ -264,3 +264,31 @@ Schema version 1.
   working tree was clean before and after (`git status --porcelain` empty). No push, no branch or
   worktree removed, no gates run (the post-merge review runs the suite). This record is the only
   change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-04 — operation record: land of the `feat/bucket-a-store-registry` remainder
+  (dispatch-2026-10-04-9c4e).** Landed the bucket-A remainder onto `main` as a **merge commit**
+  `8ddd6836` (parents `b3648471` = pre-merge `main`, `6f889317` = branch head), moving `main`
+  `b3648471` → `8ddd6836`; 36 files, +2144/-119. The dispatch named 8 commits (`1b970168`,
+  `492092a2`, `88171d7c`, `a0e29d8f`, `2c3fa5b7`, `1647488d`, `e84a71e7`, `6f889317`), but the
+  branch carried **9** since the merge-base `9b8b580a`: the base of the series is `d9fddae5`
+  (`fix(agent-core-env,agent-mcp): BEGIN IMMEDIATE + bounded BUSY retry on AgentStore
+  read-modify-write`), which the dispatch list omitted. Contents: the ADR-0001 store substrate
+  (`packages/agent/agent-core-env/src/{open-registry-store.ts,store-transaction.ts,index.ts,
+  sqlite-locking.ts}`), the `agent-engine-compiler/src/db/migrate-registry.ts` migration, the
+  agent-mcp registry/session/`agent_verify_mcp` tests, the dispatch-cli `import-agents` work, and
+  the revert of the rejected better-sqlite3-only AC4/AC5 path (`e84a71e7`). §Branching & merge was
+  the deciding rule: this history "carries true merge commits" and ff-only is not enforced, while
+  rebase-in-flight is permitted only on a branch "solely your own" — the branch is an in-flight
+  executor branch, not the operator's, so rewriting its 9 commits was out; a merge commit is the
+  stated shape here. Dry-run `git merge-tree --write-tree main 6f889317` exited 0, producing tree
+  `d9a210e1` with no conflict hunks; the actual `git merge --no-ff` was conflict-free (ort
+  strategy, exit 0), with automatic content merges in `entrypoint/agent-mcp/{AGENTS.md,package.json,
+  src/index.ts,src/server.ts}` and `packages/dispatch/dispatch-orchestrator/src/{lib/agent-runner.ts,
+  test/agent-runner.spec.ts}` and no conflict. The branch did not touch this file
+  (`git diff 9b8b580a..6f889317 -- docs/GIT-POLICY.md` empty), so `main`'s policy blob `ef6fa31d`
+  survived the merge byte-identical (merged tree `d9a210e1` resolves this path to `ef6fa31d`).
+  Post-merge `git rev-list --count main..feat/bucket-a-store-registry` = 0 and
+  `git merge-base --is-ancestor 6f889317 main` exits 0, so all 9 branch commits are contained. The
+  working tree was clean before and after (`git status --porcelain` empty). No push, no branch or
+  worktree removed, no gates run (the post-merge review runs the suite). This record is the only
+  change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
