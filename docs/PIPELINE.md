@@ -31,10 +31,17 @@ Ordered stages and the gate that advances each (`.github/workflows/pull-request.
 6. `verify-dist-load` (loads the REAL built `dist/`, which `nx test` does not)
 7. `publish` — `if: success() && (label 'publish' || closed-and-merged to main)`
 
-The advance gate is `if: success()` plus nx `affected` membership. `.github/workflows/ci.yml` runs
-on push to `main`. Locally, `.githooks/pre-commit` mirrors the early stages (mass-deletion guard →
-secret-scan → `nx affected -t lint` → staged-spec tests) and `.githooks/pre-push` adds the affected
-suite.
+The advance gate is `if: success()` plus nx `affected` membership. `.github/workflows/ci.yml` runs on
+push to `main` **and** on `pull_request`: `nx format:check` **range-scoped to the event's own commit
+range** (`--base`/`--head`, never the frozen `NX_BASE` — see §3), then the lane-reachability gate, then
+`nx affected -t lint test build verify-dist-load`, then `e2e --parallel=1`. Locally,
+`.githooks/pre-commit` mirrors the early stages (mass-deletion guard → secret-scan → `nx affected -t
+lint` → staged-spec tests) and `.githooks/pre-push` adds the affected suite.
+
+**External status checks (installed GitHub Apps, not workflow steps):** DeepSource is configured by
+the committed `.deepsource.toml` and runs as the installed `deepsource-io` GitHub App check — no
+workflow file is involved, so `rg -i deepsource .github/` = 0 is expected and is **not** evidence of an
+unwired analyzer. The `claude`, `trigger-dev-app`, and `vercel` apps also post check suites.
 
 ## 3. Reproducibility
 - **Pinned toolchain** — pnpm `8.15.9` (`package.json` `packageManager`), Corepack enabled in CI,
@@ -44,6 +51,13 @@ suite.
 - **Release entry** — `pnpm release` = `node tools/nx-plugins/build/executors/smoke-test/run-release.mjs`
   (`package.json`), which computes the changed set, runs a structural scoped `build`, `version`,
   GATE 1, scoped `publish`, sync-global, GATE 2, then the receipt.
+- **CPU-only runner** — CI sets `ONNXRUNTIME_NODE_INSTALL_CUDA=skip` (`ci.yml` `main` job,
+  `pull-request.yml` `test` job) so `onnxruntime-node` does not download the CUDA execution provider
+  on a runner with no `libcublasLt.so.12`; the CPU EP is the reproducible choice, and the flag
+  provisions it rather than gating a test.
+- **`format:check` scope** — `nx format:check` is range-scoped to the event's commit range, not the
+  `NX_BASE` that `nrwl/nx-set-shas` pins to the last **successful** run. Consuming that env in
+  `format:check` makes the range grow on every red push and the gate self-locks (backlog `f1ddfb0c`).
 - **GAP** — there is no double-build hash check and no committed base-image digest check; the
   container lane (`.github/workflows/build-docker.yml`) and the npm tarball are the surfaces that
   would need one.
@@ -114,6 +128,15 @@ suite.
 - **Every edit to this doc** — what changed and why, below.
 
 ## Provenance
+- `2026-10-05` — Corrected-and-synced while fixing cluster 12 (`8c0c314e`, CI chronically red) at
+  revision `4bbf87d2`. (1) `ci.yml` `main` + `pull-request.yml` `test` set
+  `ONNXRUNTIME_NODE_INSTALL_CUDA=skip` — root cause of the red real-fastembed e2e lane
+  (`libonnxruntime_providers_cuda.so` needs the absent `libcublasLt.so.12`); recorded in §3.
+  (2) `ci.yml` `format:check` now takes explicit `--base`/`--head` from the event, not the frozen
+  last-green `NX_BASE` — the self-locking range of `f1ddfb0c`; recorded in §2/§3. (3) §2 now records
+  DeepSource as an installed GitHub App check configured by `.deepsource.toml`; the audit's
+  "configured, never run" premise (`rg -i deepsource .github/` = 0) was false — the commit's
+  check-suites include `deepsource-io`.
 - `2026-10-04` — Created `docs/PIPELINE.md` (schema 1). Why: no single committed document carried all
   required pipeline sections (equivalence test failed), so the definition was created rather than
   adopted. Every section cites its existing source (`nx.json`, `PUBLISHING.md`,

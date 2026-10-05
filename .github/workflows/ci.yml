@@ -15,6 +15,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NX_NO_CLOUD: true
+      # Force the onnxruntime-node bindings to the CPU execution provider on the
+      # CPU-only runner. Without this, onnxruntime-node's install script finds no
+      # `nvcc`, "assumes CUDA 12", and downloads the GPU EP; the real-fastembed
+      # e2e suites then fail at runtime loading libonnxruntime_providers_cuda.so
+      # (`libcublasLt.so.12: cannot open shared object file`). This provisions
+      # the CPU EP — it does NOT skip a test.
+      ONNXRUNTIME_NODE_INSTALL_CUDA: skip
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,7 +57,17 @@ jobs:
       - run: git branch --track main origin/main
         if: ${{ github.event_name == 'pull_request' }}
 
-      - run: npx nx format:check
+      # `format:check` is range-scoped. On a PUSH the base must be the previous
+      # tip (`github.event.before`), NOT the `NX_BASE` that `nx-set-shas` pins to
+      # the last SUCCESSFUL run: once main is red the base freezes, the range
+      # grows on every push, and the gate can never recover on its own (backlog
+      # f1ddfb0c). On a PR, nx-set-shas already supplies the correct merge-base.
+      - name: Format check (push to main)
+        if: github.event_name != 'pull_request'
+        run: npx nx format:check --base=${{ github.event.before }} --head=${{ github.sha }}
+      - name: Format check (pull request)
+        if: github.event_name == 'pull_request'
+        run: npx nx format:check
       # Lane-reachability gate — UNCONDITIONAL, before the lanes (same as
       # .github/workflows/pull-request.yml): proves every gate file invokes
       # every target in GATE_TARGETS (tools/gate/lane-gate.mjs), that no

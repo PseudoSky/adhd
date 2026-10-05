@@ -73,6 +73,12 @@ jobs:
       NODE_OPTIONS: '--max-old-space-size=8192'
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
       NX_NO_CLOUD: true
+      # CPU execution provider for onnxruntime-node on the CPU-only runner: no
+      # `nvcc` -> the install script assumes CUDA 12 and downloads the GPU EP,
+      # whose provider .so fails to load at runtime (`libcublasLt.so.12: cannot
+      # open shared object file`) and reds the real-fastembed e2e suites. This
+      # provisions the CPU EP; it does NOT skip a test.
+      ONNXRUNTIME_NODE_INSTALL_CUDA: skip
       GH_MERGED: ${{ github.event.pull_request.merged }}
       GH_ACTION: ${{ github.event.action }}
       GH_PR_COMPLETE: ${{ github.event.action == 'closed' && github.event.pull_request.merged == true }}
