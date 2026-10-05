@@ -415,7 +415,7 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
       agent_name: unit.agent_name,
       prompt: unit.prompt,
     };
-    if (unit.session_id) args.session_id = unit.session_id;
+    if (unit.session_id) args["session_id"] = unit.session_id;
 
     const result = await this.callTool<{ task_id: string }>('task', args);
     return { taskId: result.task_id };
