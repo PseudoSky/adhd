@@ -614,3 +614,31 @@ Schema version 1.
   operation (the dispatcher verifies `dispatch-cli:test` against the post-merge `main`). This record
   is the only change to this file in this operation. Recorded under §Commit convention's
   `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `test/live-e2e-five-acs` (dispatch-2026-10-04-9c4e).**
+  Landed the live five-AC e2e branch onto `main` as a **merge commit** `207bd509` (parents
+  `86036ce5` = pre-merge `main`, `18b2e7d5` = branch head), moving `main` `86036ce5` → `207bd509`;
+  5 files, +1333, no deletions (new `docs/TEST-STRATEGY.md`, `entrypoint/dispatch-cli/AGENTS.md`,
+  `entrypoint/dispatch-cli/README.md`,
+  `entrypoint/dispatch-cli/src/test/fixtures/memory-stub-server.mjs`,
+  `entrypoint/dispatch-cli/src/test/integration/live-dispatch-five-acs.e2e.test.ts`). The branch was
+  two commits: `f833ed9f` (the gated live five-AC e2e across real agent-mcp + real provider, the
+  memory stub, and `docs/TEST-STRATEGY.md`) and `18b2e7d5` (correct the run command — no
+  `--testFile` on the nx target). It forked from `1ff78e39` and diverged from `main`'s tip by 6
+  commits, so the landing is a genuine non-fast-forward. §Branching & merge was the deciding rule:
+  this history "carries true merge commits" and ff-only is not enforced, while rebase-in-flight is
+  permitted only on a branch "solely your own" — the branch is an in-flight executor branch, not the
+  operator's, so rewriting its 2 commits was out; a merge commit is the stated shape here. Dry-run
+  `git merge-tree --write-tree --name-only main 18b2e7d5` exited 0 with no conflict hunks, producing
+  tree `1f0ac287`; the actual `git merge --no-ff` was conflict-free (ort strategy, exit 0), and the
+  post-merge tree is byte-identical to the dry-run tree (`git rev-parse HEAD^{tree}` = `1f0ac287`).
+  The branch never touched this file (`git diff --stat 1ff78e39 test/live-e2e-five-acs --
+  docs/GIT-POLICY.md` empty), so `main`'s policy blob `ca0f1953` survived the merge byte-identical
+  (pre-merge `86036ce5` and post-merge `207bd509` resolve the same blob). Post-merge
+  `git rev-list --count main..test/live-e2e-five-acs` = 0 and `git merge-base --is-ancestor 18b2e7d5
+  main` exits 0; `f833ed9f` and `18b2e7d5` are each individually contained. The working tree was
+  clean before and after (`git status --porcelain` empty) — the dispatched "concurrent dirt under
+  `entrypoint/backlog/**`" was not present at execution time, so nothing was avoided or staged. No
+  push, no branch or worktree removed, no gates run (the post-merge review runs the suite). This
+  record is the only change to this file in this operation. Recorded under §Commit convention's
+  `docs(<area>):` scope.
