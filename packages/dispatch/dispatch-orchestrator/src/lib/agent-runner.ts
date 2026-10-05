@@ -133,7 +133,12 @@ export interface IDispatchAgentRunner {
    * with `{ name, provider: { type: 'claudecli' }, systemPrompt, mcpServers: {} }`.
    */
   ensureAgent(unit: DispatchUnit): Promise<void>;
-  /** Fires `unit.prompt` at `unit.agent_name` via an ephemeral (session-less), synchronous task. */
+  /**
+   * Fires `unit.prompt` at `unit.agent_name` via agent-mcp's `task` tool.
+   * Sessioned when `unit.session_id` is set (context carries across units that
+   * share the session); ephemeral (session-less) otherwise — the pre-existing
+   * default.
+   */
   fire(unit: DispatchUnit): Promise<{ taskId: string }>;
   /** Reads current task status and aggregate token usage. */
   poll(
@@ -403,10 +408,16 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
         `DispatchUnit '${unit.id}' has no compiled prompt (prompt is null) — cannot fire`
       );
     }
-    const result = await this.callTool<{ task_id: string }>('task', {
+    // Thread the session when one is assigned (FEAT-DISPATCH-SESSION-001 /
+    // fa9d3079). Omitted entirely otherwise so an un-sessioned unit sends
+    // byte-for-byte the same `task` arguments as before this change.
+    const args: Record<string, unknown> = {
       agent_name: unit.agent_name,
       prompt: unit.prompt,
-    });
+    };
+    if (unit.session_id) args.session_id = unit.session_id;
+
+    const result = await this.callTool<{ task_id: string }>('task', args);
     return { taskId: result.task_id };
   }
 

@@ -648,6 +648,14 @@ export interface DispatchUnit {
   sentinel_role: SentinelRole | null;
   dispatch_log_id: string | null;
   remote_task_id: string | null;
+  /**
+   * agent-mcp session this unit runs in (FEAT-DISPATCH-SESSION-001 / backlog
+   * fa9d3079). When set, `AgentMcpRunner.fire` forwards it to agent-mcp's
+   * `task` tool, so consecutive units sharing a session keep conversational
+   * context instead of each being a cold, session-less (ephemeral) task.
+   * `null`/omitted preserves the pre-existing ephemeral behavior exactly.
+   */
+  session_id?: string | null;
   result: string | null;
   status: DispatchUnitStatus;
   started_at: string | null;

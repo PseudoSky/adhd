@@ -216,6 +216,48 @@ describe('AgentMcpRunner', () => {
       );
       expect(client.calls).toEqual([]);
     });
+
+    it('forwards unit.session_id to the task call when set (fa9d3079)', async () => {
+      const { client, runner } = makeRunner({
+        task: () => ({ task_id: 'wire-task-session', status: 'completed', result: 'ok' }),
+      });
+
+      await runner.fire(
+        makeUnit({
+          agent_name: 'workflow-researcher',
+          prompt: 'THE PROMPT',
+          session_id: 'sess-shared-123',
+        })
+      );
+
+      expect(client.calls).toEqual([
+        {
+          name: 'task',
+          arguments: {
+            agent_name: 'workflow-researcher',
+            prompt: 'THE PROMPT',
+            session_id: 'sess-shared-123',
+          },
+        },
+      ]);
+    });
+
+    it('omits session_id entirely when the unit has none (preserves ephemeral shape)', async () => {
+      const { client, runner } = makeRunner({
+        task: () => ({ task_id: 'wire-task-ephemeral', status: 'completed', result: 'ok' }),
+      });
+
+      await runner.fire(makeUnit({ agent_name: 'workflow-researcher', prompt: 'P' }));
+
+      // toEqual on the whole object proves the key is ABSENT, not merely undefined.
+      expect(client.calls[0]?.arguments).toEqual({
+        agent_name: 'workflow-researcher',
+        prompt: 'P',
+      });
+      expect(Object.prototype.hasOwnProperty.call(client.calls[0]?.arguments, 'session_id')).toBe(
+        false
+      );
+    });
   });
 
   describe('poll', () => {
