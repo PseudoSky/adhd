@@ -571,6 +571,19 @@ export async function enqueueExistingTask(
 }
 
 /**
+ * A task record after a `fields`/`summary` projection (f2b004eb): `id` is always
+ * present, but every other field may have been dropped by the projection and is
+ * therefore optional. This is the honest element type of the projected branches
+ * of {@link taskList} / {@link resultTool} — typing a partial projection as
+ * `Task` (the previous `as unknown as Task[]`) let a caller read a field such as
+ * `prompt` as present after projection had removed it.
+ */
+export type ProjectedTask = Partial<Task> & Pick<Task, 'id'>;
+
+/** A projected `resultTool` payload: the projected task plus the optional usage report. */
+export type ProjectedTaskResult = ProjectedTask & { usage?: TaskUsageReport };
+
+/**
  * Project a task-like record onto a caller-requested field set (f2b004eb). `id` is
  * always kept. With `summary`, the two bulk text fields (`prompt`, `result`) are
  * dropped. With neither, the record is returned untouched. Pure — exported for tests.
@@ -605,20 +618,37 @@ export function projectTaskRecord<T extends Record<string, unknown>>(
  * element is narrowed to the requested keys — the caller-facing fix for the
  * unbounded prompt/result payload (f2b004eb). Without either, full `Task`s are
  * returned exactly as before.
+ *
+ * The projected branches return {@link ProjectedTask} (not `Task`), so a caller
+ * cannot read a field that projection may have dropped; the unprojected branch
+ * returns full `Task`s.
  */
+export function taskList(
+  input: TaskListInput & { fields: readonly string[] },
+  deps: Pick<TaskDeps, 'taskStore'>
+): ProjectedTask[];
+export function taskList(
+  input: TaskListInput & { summary: true },
+  deps: Pick<TaskDeps, 'taskStore'>
+): ProjectedTask[];
 export function taskList(
   input: TaskListInput,
   deps: Pick<TaskDeps, 'taskStore'>
-): Task[] {
+): Task[] | ProjectedTask[];
+export function taskList(
+  input: TaskListInput,
+  deps: Pick<TaskDeps, 'taskStore'>
+): Task[] | ProjectedTask[] {
   const tasks = deps.taskStore.list(input);
   if ((input.fields && input.fields.length > 0) || input.summary) {
-    return tasks.map(task =>
-      projectTaskRecord(
-        task as unknown as Record<string, unknown>,
-        input.fields,
-        input.summary
-      )
-    ) as unknown as Task[];
+    return tasks.map(
+      (task) =>
+        projectTaskRecord(
+          task as unknown as Record<string, unknown>,
+          input.fields,
+          input.summary
+        ) as ProjectedTask
+    );
   }
   return tasks;
 }
@@ -677,10 +707,24 @@ export async function taskResume(
   return { success: true, taskId: input.taskId };
 }
 
+/**
+ * Fetch a task's result. With `fields`, the returned record is projected to the
+ * requested keys (id always kept) and typed as {@link ProjectedTaskResult} — the
+ * honest partial type — instead of being cast to a full `Task`. Without
+ * `fields`, the full `Task` plus its usage report is returned.
+ */
+export function resultTool(
+  input: ResultInput & { fields: readonly string[] },
+  deps: Pick<TaskDeps, 'taskStore' | 'db'>
+): ProjectedTaskResult;
 export function resultTool(
   input: ResultInput,
   deps: Pick<TaskDeps, 'taskStore' | 'db'>
-): Task & { usage?: TaskUsageReport } {
+): (Task | ProjectedTask) & { usage?: TaskUsageReport };
+export function resultTool(
+  input: ResultInput,
+  deps: Pick<TaskDeps, 'taskStore' | 'db'>
+): (Task | ProjectedTask) & { usage?: TaskUsageReport } {
   const task = deps.taskStore.read(input.task_id);
   const usage = buildTaskUsageReport(deps.db, task.id);
   const full = { ...task, usage } as Task & { usage?: TaskUsageReport };
@@ -688,7 +732,7 @@ export function resultTool(
     return projectTaskRecord(
       full as unknown as Record<string, unknown>,
       input.fields
-    ) as unknown as Task & { usage?: TaskUsageReport };
+    ) as ProjectedTaskResult;
   }
   return full;
 }
