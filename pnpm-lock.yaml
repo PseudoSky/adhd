@@ -6,8 +6,9 @@ settings:
 
 overrides:
   estree-walker: 2.0.2
+  '@nx/devkit@18.3.4>nx': 18.3.4
 
-packageExtensionsChecksum: e50506b55e57cc46b64fd4e973ae78ec
+packageExtensionsChecksum: 0a1b277ec7c2255cc227bfa64108bd4d
 
 importers:
 
@@ -966,7 +967,7 @@ importers:
   packages/agent/agent-generator-plugin:
     dependencies:
       '@nx/devkit':
-        specifier: '*'
+        specifier: 18.3.4
         version: 18.3.4(nx@18.3.4)
       tslib:
         specifier: ^2.6.0
@@ -985,7 +986,7 @@ importers:
         specifier: ^2.3.3
         version: link:../agent-base-types
       zod:
-        specifier: '*'
+        specifier: ^4.4.3
         version: 4.4.3
 
   packages/agent/agent-plugin-sanitize:
@@ -994,7 +995,7 @@ importers:
         specifier: ^2.3.3
         version: link:../agent-base-types
       zod:
-        specifier: '*'
+        specifier: ^4.4.3
         version: 4.4.3
 
   packages/agent/agent-store-prompts:
@@ -1139,7 +1140,7 @@ importers:
         specifier: ^10.4.3
         version: 10.6.0
       zod:
-        specifier: '*'
+        specifier: ^4.4.3
         version: 4.4.3
 
   packages/apigen/apigen-engine-conformance:
@@ -1205,7 +1206,7 @@ importers:
   packages/apigen/apigen-generator-nx:
     dependencies:
       '@nx/devkit':
-        specifier: '*'
+        specifier: 18.3.4
         version: 18.3.4(nx@18.3.4)
       tslib:
         specifier: ^2.3.0
@@ -7187,7 +7188,7 @@ packages:
   /@nx/devkit@18.3.4(nx@18.3.4):
     resolution: {integrity: sha512-M3htxl5WvlNKK5KNOndCAApbyBCZNTFFs+rtdwvudNZk5+84zAAPaWzSoX9C4XLAW78/f98LzF68/ch05aN12A==}
     peerDependencies:
-      nx: '>= 16 <= 19'
+      nx: 18.3.4
     dependencies:
       '@nrwl/devkit': 18.3.4(nx@18.3.4)
       ejs: 3.1.10
@@ -20671,11 +20672,6 @@ packages:
     resolution: {integrity: sha512-cNOjgCnLB+FnvWWtyRTzmB3POJ+cXxTA81LoW7u8JdmhfXzriropYwpjShnz1QLLWsQwY7nIxoDmcPTwphDK9w==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
-  /lines-and-columns@2.0.4:
-    resolution: {integrity: sha512-wM1+Z03eypVAVUCE7QdSqpVIvelbOakn1M0bPDoA4SGWPx3sNDVUiMo3L6To6WWGClB7VyXnhQ4Sn7gxiJbE6A==}
-    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
-    dev: false
-
   /listr2@3.14.0(enquirer@2.4.1):
     resolution: {integrity: sha512-TyWI8G99GX9GjE54cJ+RrNMcIFBfwMPxc3XTFiAYGN4s10hWROGtOg7+O6u6LE3mNkyld7RSLE6nrKBvTfcs3g==}
     engines: {node: '>=10.0.0'}
@@ -21561,7 +21557,7 @@ packages:
       jest-diff: 29.7.0
       js-yaml: 4.1.0
       jsonc-parser: 3.2.0
-      lines-and-columns: 2.0.4
+      lines-and-columns: 2.0.3
       minimatch: 9.0.3
       node-machine-id: 1.1.12
       npm-run-path: 4.0.1
