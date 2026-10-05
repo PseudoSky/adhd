@@ -853,3 +853,38 @@ Schema version 1.
   `57f53429`; no push, no branch or worktree removed, and no gates were run by this operation (the
   post-merge review runs the suite). This record is the only change to this file in this operation.
   Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `fix/dispatch-cli-docs-hitl-docsync-9c4e` (dispatch-2026-10-04-9c4e).**
+  Landed the HITL AC2 doc-sync onto `main` as a **merge commit** `7fb277a6` (parents `c640ff4b` =
+  pre-merge `main`, `89f2bae8` = branch head), moving `main` `c640ff4b` → `7fb277a6`; 5 files,
+  +124/-26: `entrypoint/dispatch-cli/AGENTS.md` (M), `entrypoint/dispatch-cli/CHANGELOG.md` (M),
+  `entrypoint/dispatch-cli/README.md` (M),
+  `entrypoint/dispatch-cli/src/test/docs-contract.spec.ts` (A), and
+  `entrypoint/dispatch-cli/src/test/integration/live-dispatch-five-acs.e2e.test.ts` (M) — the
+  correction of the stale HITL AC2-blocker narrative in the dispatch-cli README, AGENTS, CHANGELOG,
+  and the live five-AC e2e header, plus a new docs-contract spec asserting the docs match the
+  implemented surface (`912c52d7`). The branch was a single commit, `89f2bae8`
+  (`docs(dispatch-cli): correct stale HITL AC2 blocker in README/AGENTS`), whose only parent is the
+  merge-base `c640ff4b` (`git show -s --format=%P 89f2bae8` = `c640ff4b`) — which was `main`'s tip,
+  so the branch was strictly ahead by one and a fast-forward was possible; the dispatch directed
+  `--no-ff`, and a merge commit is within §Branching & merge, which states history "carries true
+  merge commits" and ff-only is not enforced. §Branching & merge was the deciding rule:
+  rebase-in-flight is permitted only on a branch "solely your own" — this is an in-flight executor
+  branch, not the operator's, so rewriting its commit was out; a merge commit is the stated shape
+  here. Dry-run `git merge-tree --write-tree --name-only main
+  fix/dispatch-cli-docs-hitl-docsync-9c4e` exited 0, producing tree `4ca16a02` with no conflict
+  hunks; the actual `git merge --no-ff` was conflict-free (ort strategy, exit 0), and the post-merge
+  tree at `7fb277a6` is `4ca16a02`, byte-identical to the dry-run tree. No conflict marker remains in
+  any merged file (`git grep -nE '^(<<<<<<<|=======|>>>>>>>)'` over the five paths exited 1, no
+  matches). The branch never touched this file (empty `git diff --name-only c640ff4b..89f2bae8 --
+  docs/GIT-POLICY.md`), so `main`'s policy blob `faf6a5a8` survived the merge byte-identical
+  (pre-merge `c640ff4b` and post-merge `7fb277a6` resolve the same blob). The merge is two-parent
+  (not fast-forward); post-merge `git merge-base --is-ancestor 89f2bae8 main` exits 0 and
+  `git rev-list --count main..fix/dispatch-cli-docs-hitl-docsync-9c4e` = 0, so `89f2bae8` is
+  contained. The working tree was clean before and after (`git status --porcelain` empty) and nothing
+  was staged before or after (`git diff --cached --name-only` empty); the dispatch's anticipated
+  "unrelated concurrent dirt" was not present, so nothing had to be avoided or protected. The branch
+  remains checked out in worktree `.worktrees/wt-docsync-hitl-9c4e` at `89f2bae8`; no push, no branch
+  or worktree removed, and no gates were run by this operation (the post-merge review runs the
+  suite). This record is the only change to this file in this operation. Recorded under §Commit
+  convention's `docs(<area>):` scope.
