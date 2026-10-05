@@ -57,7 +57,11 @@ __pycache__/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
-calc-server.*
+# The calc MCP fixture's runtime log (the fixture itself is a tracked test
+# asset at entrypoint/agent-mcp/src/__tests__/integration/fixtures/calc-server.mjs).
+# A bare `calc-server.*` ignored the .mjs fixture too, which is how backlog
+# 305a63d4's dangling reference went undetected. Ignore only the log.
+calc-server.log
 
 .nx/cache
 .nx/workspace-data

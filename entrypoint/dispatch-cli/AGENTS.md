@@ -69,7 +69,7 @@ orchestrator **parks** the unit (records the suspension, runs no guards, injects
 no correction) rather than failing it, and `dispatch-cli status` surfaces
 `status: "awaiting_input"` plus `awaitingInput: { taskId, resumeToken }`
 (`statusCore`). Resume the task with agent-mcp's `task_resume` (that token) to
-drive it to completion. (A `run --no-dry-run` naming an *unregistered* agent
+drive the task to `completed`. (A `run --no-dry-run` naming an *unregistered* agent
 fails `AGENT_NOT_FOUND` — see the paid-boundary note in `README.md`.)
 
 The same gate record appears in this package's `README.md` and in the test file's

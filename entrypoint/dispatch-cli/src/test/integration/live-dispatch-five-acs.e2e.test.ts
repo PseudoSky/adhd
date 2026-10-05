@@ -30,7 +30,7 @@
  *   AC2 03145a46 — HITL reachable from dispatch: a sessioned task suspends to
  *                  `awaiting_input` carrying a `resumeToken`; `dispatch-cli
  *                  status` surfaces `awaitingInput: { taskId, resumeToken }`;
- *                  `task_resume` drives it to completion.
+ *                  `task_resume` drives the task to `completed`.
  *   AC3 5339c2e5 — the default budget plugin halts at a global cap across tasks
  *                  (`ADHD_AGENT_BUDGET_MAX_CALLS`), with BUDGET_EXCEEDED.
  *   AC4 daafe2d3 — a dispatch-created agent is born with `memory-server` and
@@ -78,7 +78,7 @@
  * `awaiting_input`), the unit is PARKED rather than failed, and `statusCore`
  * reports `awaiting_input` + `awaitingInput: { taskId, resumeToken }`. AC2 asserts
  * that surface directly, then resumes through the real MCP `task_resume` and polls
- * to completion.
+ * the task to `completed`.
  */
 
 import { execFileSync } from 'node:child_process';

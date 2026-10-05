@@ -232,12 +232,23 @@ describe('embed write path (write/embedding-observer.ts, via create/update/delet
     // Release the gate and let the fire-and-forget round-trip settle. The
     // store is NOT closed here, so this is a bounded poll rather than a drain
     // (the drain is what `closeGraphBacklogStore` runs; see file header).
+    //
+    // Wait on the DURABLE outcome — the post-commit `embedding_upserted`
+    // audit row — not merely `vectors.has(rowid)`: `scheduleIssueEmbedding`
+    // upserts the vector and THEN writes the audit row as a separate awaited
+    // step, so polling on the in-memory vector alone can read the audit row
+    // before it commits (a race under parallel load; the audit write lags the
+    // vector write). The generous bounded timeout keeps it deterministic
+    // without a sleep (AGENTS.md §7.3) even under `nx affected` load.
     gate.resolve();
-    await vi.waitFor(() => {
-      expect(vectors.has(rowid)).toBe(true);
-    });
-    const actions = await auditActionsFor(store, rowid);
-    expect(actions.filter((a) => a === 'embedding_upserted')).toHaveLength(1);
+    await vi.waitFor(
+      async () => {
+        expect(vectors.has(rowid)).toBe(true);
+        const actions = await auditActionsFor(store, rowid);
+        expect(actions.filter((a) => a === 'embedding_upserted')).toHaveLength(1);
+      },
+      { timeout: 15_000, interval: 25 }
+    );
   });
 
   it('an embed completed via awaitEmbed:true survives a store close/reopen — the embedding_upserted audit row is durable, proven by reopening the store', async () => {
