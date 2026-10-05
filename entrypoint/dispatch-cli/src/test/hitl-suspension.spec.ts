@@ -6,7 +6,12 @@
  *
  * Real components throughout: real `runCycleCore` → real `orchestrateCycle` →
  * real `AgentMcpRunner` → real `DagClient`/snapshot/optimize → real
- * `statusCore`. The ONLY double is the MCP client (`IMcpToolClient`): the
+ * `statusCore`. It also proves the reconciliation follow-up (48b14ec1): after
+ * the resumed task completes, a subsequent cycle reconciles it back into the
+ * DAG (runs the milestone guard, marks the milestone complete) and `statusCore`
+ * stops reporting `awaiting_input`.
+ *
+ * The ONLY double is the MCP client (`IMcpToolClient`): the
  * external agent-mcp boundary, whose real form spawns a child and calls a paid
  * model. The live equivalent (`live-dispatch-five-acs.e2e.test.ts`, env-gated)
  * drives the REAL agent-mcp + real model; this test proves the same mechanics
@@ -163,6 +168,22 @@ describe('HITL suspension surfaced by dispatch-cli status (03145a46)', () => {
       });
       const polled = await runner.poll(TASK_ID);
       expect(polled.status).toBe('completed');
+
+      // RECONCILIATION (48b14ec1): a subsequent cycle reconciles the resumed
+      // task back into the DAG — runs milestone 'a's guard and marks it
+      // complete — WITHOUT re-firing the agent. This is the consumer outcome
+      // the item requires: the milestone LEAVES awaiting_input.
+      const cycle2 = await runCycleCore(dagPath, false, runner);
+      const reconciled = cycle2.dispatched.find((d) =>
+        d.milestones.includes('a')
+      );
+      expect(reconciled?.taskStatus).toBe('completed');
+      expect(reconciled?.suspension).toBeNull();
+
+      // `dispatch-cli status` no longer reports the stale awaiting_input.
+      const report2 = await statusCore(dagPath);
+      expect(report2['a']?.status).toBe('complete');
+      expect(report2['a']?.awaitingInput).toBeUndefined();
     } finally {
       await runner.close();
     }

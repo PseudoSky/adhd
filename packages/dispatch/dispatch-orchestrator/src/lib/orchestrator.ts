@@ -1,7 +1,9 @@
 /**
  * orchestrator.ts — the MINIMAL dispatch loop for @adhd/dispatch-orchestrator.
  *
- * One scheduling cycle (`orchestrateCycle`): load dag.json -> optimizer.snapshot()
+ * One scheduling cycle (`orchestrateCycle`): load dag.json -> RECONCILE any
+ * HITL-suspended milestone whose task has since reached a terminal status
+ * (03145a46 follow-up, 48b14ec1) -> optimizer.snapshot()
  * -> optimizer.optimize() -> for each DispatchUnit: resolve provider/max_tokens ->
  * runner.ensureAgent -> runner.fire -> poll until terminal (bounded deadline) ->
  * run every packed milestone's guard (shell exec) -> append ONE dispatch_log entry
@@ -847,7 +849,13 @@ export interface DispatchedUnitSummary {
 
 /** Result of one scheduling cycle (`orchestrateCycle`). */
 export interface CycleResult {
-  /** Every `DispatchUnit` handled this cycle, in dispatch order. */
+  /**
+   * Every `DispatchUnit` handled this cycle, in dispatch order. Reconciled
+   * HITL milestones (48b14ec1) appear first: a resumed task's completion is
+   * reconciled into the DAG before dispatch selection, and its summary is
+   * reported here (with `taskStatus` the resumed task's terminal status and
+   * `suspension: null`).
+   */
   dispatched: DispatchedUnitSummary[];
   /** Slugs of correction milestones injected this cycle (guard failures). */
   injectedMilestones: string[];
@@ -1111,6 +1119,228 @@ function injectFailureCorrection(
 // ── Per-unit dispatch ────────────────────────────────────────────────────────
 // ---------------------------------------------------------------------------
 
+interface UnitGuardRunParams {
+  deps: ResolvedDeps;
+  dag: DagJson;
+  snap: DagSnapshot;
+  /** Owning unit id, for diagnostic notes only. */
+  unitId: string;
+  /** Milestones whose guards this run should evaluate. */
+  milestoneSlugs: string[];
+  /** The unit's own (non-guard) operation ids, in order. */
+  operationIds: string[];
+  dispatchId: string;
+  /** Mutable op results (one per `operationIds`); guard entries are appended. */
+  results: DispatchResult[];
+  notes: DispatchNote[];
+  /**
+   * `true` when the underlying dispatch completed (or is a tool-call/guard-only
+   * unit) so guards should actually execute; `false` when the dispatch never
+   * completed (`opResultStatus === 'failed'`) or a HITL suspension is parked.
+   */
+  runGuards: boolean;
+  /** Non-null only for a parked HITL suspension. */
+  suspension: { taskId: string; resumeToken: string } | null;
+  /** Task status/error for the "guard not run" diagnostic message. */
+  taskStatus: DispatchTaskStatus | null;
+  taskError: string | undefined;
+}
+
+/**
+ * Executes every guard this unit is responsible for — the per-operation
+ * automated guards (`type:'automated'`/`action:'guard'`) AND each milestone's
+ * synthesized `<slug>.guard` — and (on failure) injects correction milestones.
+ *
+ * Extracted from `dispatchUnit` so the HITL reconciliation path
+ * (`reconcileSuspendedUnits`, 48b14ec1) runs the SAME guard/correction logic on
+ * a resumed unit it never fired itself, rather than reimplementing it.
+ */
+async function runUnitGuards(params: UnitGuardRunParams): Promise<{
+  guardOpIds: string[];
+  guardOutcomes: MilestoneGuardOutcome[];
+  injectedSlugs: string[];
+}> {
+  const {
+    deps,
+    dag,
+    snap,
+    unitId,
+    milestoneSlugs,
+    operationIds,
+    dispatchId,
+    results,
+    notes,
+    runGuards,
+    suspension,
+    taskStatus,
+    taskError,
+  } = params;
+
+  // Build operation lookup — needed for per-operation automated-guard routing.
+  const opLookup = new Map<string, OperationDag>();
+  for (const op of dag.operations as OperationDag[]) {
+    opLookup.set(op.id, op);
+  }
+
+  // Execute per-operation automated guards (type:'automated'/action:'guard').
+  // These are routed through the same GuardExecFn seam as milestone-level
+  // guards, but operate at the operation level.
+  for (const opId of operationIds) {
+    const opDag = opLookup.get(opId);
+    if (
+      opDag?.type !== 'automated' ||
+      opDag.action !== 'guard' ||
+      opDag.guard == null
+    ) {
+      continue;
+    }
+
+    const resultEntry = results.find((r) => r.op_id === opId);
+    if (!resultEntry) continue;
+
+    if (!runGuards) {
+      const guardRanAt = deps.clock();
+      if (suspension) {
+        // Suspended (HITL): not a failure — leave the guard unrun ('skipped',
+        // null result) rather than a misleading 'fail'.
+        resultEntry.status = 'skipped';
+        resultEntry.guard_result = null;
+        resultEntry.guard_output = `guard not run: task '${suspension.taskId}' suspended awaiting human input (awaiting_input) — resume with task_resume, then re-run the cycle`;
+      } else {
+        resultEntry.status = 'failed';
+        resultEntry.guard_result = 'fail';
+        resultEntry.guard_output = `guard not run: dispatch ${dispatchId} did not complete (task status: ${taskStatus ?? 'n/a'})${taskError ? `; task error: ${taskError}` : ''}`;
+      }
+      resultEntry.guard_ran_at = guardRanAt;
+      continue;
+    }
+
+    const execResult = await deps.guardExec(opDag.guard, deps.guardTimeoutMs);
+    const guardRanAt = deps.clock();
+    const passed = execResult.exitCode === 0;
+    resultEntry.status = passed ? 'complete' : 'failed';
+    resultEntry.guard_result = passed ? 'pass' : 'fail';
+    resultEntry.guard_output = execResult.output;
+    resultEntry.guard_ran_at = guardRanAt;
+  }
+
+  const guardOpIds: string[] = [];
+  const guardOutcomes: MilestoneGuardOutcome[] = [];
+  const injectedSlugs: string[] = [];
+
+  for (const slug of milestoneSlugs) {
+    const milestone = dag.milestones[slug];
+    if (!milestone) {
+      notes.push({
+        level: 'error',
+        text: `unit '${unitId}' references unknown milestone '${slug}' — skipping its guard`,
+      });
+      continue;
+    }
+    const guardOpId = `${slug}.guard`;
+    guardOpIds.push(guardOpId);
+
+    if (!runGuards) {
+      const guardRanAt = deps.clock();
+      if (suspension) {
+        // Suspended (HITL): park the milestone guard as unrun and inject NO
+        // correction — the task is paused, not failed. The milestone's derived
+        // status becomes 'awaiting_input' (deriveMilestoneStatus), which
+        // `dispatch-cli status` surfaces.
+        const suspendOutput = `guard not run: task '${suspension.taskId}' suspended awaiting human input (awaiting_input) — resume with task_resume, then re-run the cycle`;
+        results.push({
+          op_id: guardOpId,
+          status: 'skipped',
+          guard_result: null,
+          guard_output: suspendOutput,
+          guard_ran_at: guardRanAt,
+        });
+        guardOutcomes.push({
+          milestone: slug,
+          guardResult: null,
+          guardOutput: suspendOutput,
+          injectedCorrection: null,
+        });
+        continue;
+      }
+      const failOutput = `guard not run: dispatch ${dispatchId} did not complete (task status: ${taskStatus ?? 'n/a'})${taskError ? `; task error: ${taskError}` : ''}`;
+      results.push({
+        op_id: guardOpId,
+        status: 'failed',
+        guard_result: 'fail',
+        guard_output: failOutput,
+        guard_ran_at: guardRanAt,
+      });
+      const injectedSlug = injectFailureCorrection(
+        dag,
+        slug,
+        dispatchId,
+        failOutput,
+        snap,
+        injectedSlugs,
+        notes
+      );
+      guardOutcomes.push({
+        milestone: slug,
+        guardResult: 'fail',
+        guardOutput: failOutput,
+        injectedCorrection: injectedSlug,
+      });
+      continue;
+    }
+
+    if (!milestone.guard) {
+      // No guard configured — nothing to verify; treat as an automatic pass.
+      const guardRanAt = deps.clock();
+      results.push({
+        op_id: guardOpId,
+        status: 'complete',
+        guard_result: 'pass',
+        guard_output: null,
+        guard_ran_at: guardRanAt,
+      });
+      guardOutcomes.push({
+        milestone: slug,
+        guardResult: 'pass',
+        guardOutput: '',
+        injectedCorrection: null,
+      });
+      continue;
+    }
+
+    const execResult = await deps.guardExec(milestone.guard, deps.guardTimeoutMs);
+    const guardRanAt = deps.clock();
+    const passed = execResult.exitCode === 0;
+    results.push({
+      op_id: guardOpId,
+      status: passed ? 'complete' : 'failed',
+      guard_result: passed ? 'pass' : 'fail',
+      guard_output: execResult.output,
+      guard_ran_at: guardRanAt,
+    });
+
+    const injectedSlug = passed
+      ? null
+      : injectFailureCorrection(
+          dag,
+          slug,
+          dispatchId,
+          execResult.output,
+          snap,
+          injectedSlugs,
+          notes
+        );
+    guardOutcomes.push({
+      milestone: slug,
+      guardResult: passed ? 'pass' : 'fail',
+      guardOutput: execResult.output,
+      injectedCorrection: injectedSlug,
+    });
+  }
+
+  return { guardOpIds, guardOutcomes, injectedSlugs };
+}
+
 /**
  * Handles one `DispatchUnit`: optionally fires+polls a real agent dispatch,
  * then runs every packed milestone's guard, injects corrections for failures,
@@ -1246,7 +1476,7 @@ async function dispatchUnit(
     // ones only — real tool-call outcomes and automated guards each
     // overwrite their own entry below, never regressing to a false
     // 'complete'). Deliberately not 'failed': a tool-call/guard-only unit
-    // still deserves its milestone guard(s) to run (see `shouldRunGuards`).
+    // still deserves its milestone guard(s) to run (see `runGuards` below).
     opResultStatus = 'skipped';
   } else {
     // True guard-only milestone(s) (D-12): zero operations at all.
@@ -1281,167 +1511,29 @@ async function dispatchUnit(
     };
   });
 
-  const shouldRunDispatchedGuards = opResultStatus !== 'failed' && suspension === null;
-
-  // Execute per-operation automated guards (type:'automated'/action:'guard').
-  // These are routed through the same GuardExecFn seam as milestone-level
-  // guards, but operate at the operation level.
-  for (const opId of unit.operations) {
-    const opDag = opLookup.get(opId);
-    if (
-      opDag?.type !== 'automated' ||
-      opDag.action !== 'guard' ||
-      opDag.guard == null
-    ) {
-      continue;
-    }
-
-    const resultEntry = results.find((r) => r.op_id === opId);
-    if (!resultEntry) continue;
-
-    if (!shouldRunDispatchedGuards) {
-      const guardRanAt = deps.clock();
-      if (suspension) {
-        // Suspended (HITL): not a failure — leave the guard unrun ('skipped',
-        // null result) rather than a misleading 'fail'.
-        resultEntry.status = 'skipped';
-        resultEntry.guard_result = null;
-        resultEntry.guard_output = `guard not run: task '${suspension.taskId}' suspended awaiting human input (awaiting_input) — resume with task_resume, then re-run the cycle`;
-      } else {
-        resultEntry.status = 'failed';
-        resultEntry.guard_result = 'fail';
-        resultEntry.guard_output = `guard not run: dispatch ${dispatchId} did not complete (task status: ${taskStatus ?? 'n/a'})${taskError ? `; task error: ${taskError}` : ''}`;
-      }
-      resultEntry.guard_ran_at = guardRanAt;
-      continue;
-    }
-
-    const execResult = await deps.guardExec(opDag.guard, deps.guardTimeoutMs);
-    const guardRanAt = deps.clock();
-    const passed = execResult.exitCode === 0;
-    resultEntry.status = passed ? 'complete' : 'failed';
-    resultEntry.guard_result = passed ? 'pass' : 'fail';
-    resultEntry.guard_output = execResult.output;
-    resultEntry.guard_ran_at = guardRanAt;
-  }
-
-  const guardOpIds: string[] = [];
-  const guardOutcomes: MilestoneGuardOutcome[] = [];
-  const injectedSlugs: string[] = [];
   // Only skip verification when the underlying dispatch itself never
   // completed — a 'skipped' (tool-call) or 'complete' (guard-only / real
-  // success) unit still deserves a real guard run.
-  const shouldRunGuards = opResultStatus !== 'failed' && suspension === null;
+  // success) unit still deserves a real guard run. Shared by the op-level
+  // automated guards AND the milestone guards inside `runUnitGuards`.
+  const runGuards = opResultStatus !== 'failed' && suspension === null;
 
-  for (const slug of unit.milestones) {
-    const milestone = dag.milestones[slug];
-    if (!milestone) {
-      notes.push({
-        level: 'error',
-        text: `unit '${unit.id}' references unknown milestone '${slug}' — skipping its guard`,
-      });
-      continue;
-    }
-    const guardOpId = `${slug}.guard`;
-    guardOpIds.push(guardOpId);
+  const guardRun = await runUnitGuards({
+    deps,
+    dag,
+    snap,
+    unitId: unit.id,
+    milestoneSlugs: unit.milestones,
+    operationIds: unit.operations,
+    dispatchId,
+    results,
+    notes,
+    runGuards,
+    suspension,
+    taskStatus,
+    taskError,
+  });
 
-    if (!shouldRunGuards) {
-      const guardRanAt = deps.clock();
-      if (suspension) {
-        // Suspended (HITL): park the milestone guard as unrun and inject NO
-        // correction — the task is paused, not failed. The milestone's derived
-        // status becomes 'awaiting_input' (deriveMilestoneStatus), which
-        // `dispatch-cli status` surfaces.
-        const suspendOutput = `guard not run: task '${suspension.taskId}' suspended awaiting human input (awaiting_input) — resume with task_resume, then re-run the cycle`;
-        results.push({
-          op_id: guardOpId,
-          status: 'skipped',
-          guard_result: null,
-          guard_output: suspendOutput,
-          guard_ran_at: guardRanAt,
-        });
-        guardOutcomes.push({
-          milestone: slug,
-          guardResult: null,
-          guardOutput: suspendOutput,
-          injectedCorrection: null,
-        });
-        continue;
-      }
-      const failOutput = `guard not run: dispatch ${dispatchId} did not complete (task status: ${taskStatus ?? 'n/a'})${taskError ? `; task error: ${taskError}` : ''}`;
-      results.push({
-        op_id: guardOpId,
-        status: 'failed',
-        guard_result: 'fail',
-        guard_output: failOutput,
-        guard_ran_at: guardRanAt,
-      });
-      const injectedSlug = injectFailureCorrection(
-        dag,
-        slug,
-        dispatchId,
-        failOutput,
-        snap,
-        injectedSlugs,
-        notes
-      );
-      guardOutcomes.push({
-        milestone: slug,
-        guardResult: 'fail',
-        guardOutput: failOutput,
-        injectedCorrection: injectedSlug,
-      });
-      continue;
-    }
-
-    if (!milestone.guard) {
-      // No guard configured — nothing to verify; treat as an automatic pass.
-      const guardRanAt = deps.clock();
-      results.push({
-        op_id: guardOpId,
-        status: 'complete',
-        guard_result: 'pass',
-        guard_output: null,
-        guard_ran_at: guardRanAt,
-      });
-      guardOutcomes.push({
-        milestone: slug,
-        guardResult: 'pass',
-        guardOutput: '',
-        injectedCorrection: null,
-      });
-      continue;
-    }
-
-    const execResult = await deps.guardExec(milestone.guard, deps.guardTimeoutMs);
-    const guardRanAt = deps.clock();
-    const passed = execResult.exitCode === 0;
-    results.push({
-      op_id: guardOpId,
-      status: passed ? 'complete' : 'failed',
-      guard_result: passed ? 'pass' : 'fail',
-      guard_output: execResult.output,
-      guard_ran_at: guardRanAt,
-    });
-
-    const injectedSlug = passed
-      ? null
-      : injectFailureCorrection(
-          dag,
-          slug,
-          dispatchId,
-          execResult.output,
-          snap,
-          injectedSlugs,
-          notes
-        );
-    guardOutcomes.push({
-      milestone: slug,
-      guardResult: passed ? 'pass' : 'fail',
-      guardOutput: execResult.output,
-      injectedCorrection: injectedSlug,
-    });
-  }
+  const { guardOpIds, guardOutcomes, injectedSlugs } = guardRun;
 
   const completedAt = deps.clock();
   const entry: DispatchLogEntry = {
@@ -1485,12 +1577,206 @@ async function dispatchUnit(
 }
 
 // ---------------------------------------------------------------------------
+// ── HITL reconciliation (03145a46 follow-up, 48b14ec1) ────────────────────────
+// ---------------------------------------------------------------------------
+
+/**
+ * The MOST RECENT `dispatch_log` entry that touched each milestone. An entry
+ * "touches" a milestone when it carries that milestone's synthesized
+ * `<slug>.guard` op id, or an operation id belonging to the milestone.
+ *
+ * Used by `reconcileSuspendedUnits` to decide which milestones are CURRENTLY
+ * parked at `awaiting_input`: only a suspension entry that is still the latest
+ * entry for its milestone is reconciled (once a completion entry is appended,
+ * it becomes the latest and the milestone is no longer considered parked).
+ */
+function latestEntryByMilestone(dag: DagJson): Map<string, DispatchLogEntry> {
+  const opMilestone = new Map<string, string>();
+  for (const op of dag.operations as OperationDag[]) {
+    opMilestone.set(op.id, op.milestone);
+  }
+  const latest = new Map<string, DispatchLogEntry>();
+  for (const entry of dag.dispatch_log) {
+    const slugs = new Set<string>();
+    for (const opId of entry.operations) {
+      if (opId.endsWith('.guard')) {
+        slugs.add(opId.slice(0, -'.guard'.length));
+      }
+      const milestone = opMilestone.get(opId);
+      if (milestone) slugs.add(milestone);
+    }
+    for (const slug of slugs) latest.set(slug, entry);
+  }
+  return latest;
+}
+
+/**
+ * Reconciles HITL-suspended milestones back into the DAG (03145a46 follow-up,
+ * 48b14ec1). Runs BEFORE snapshot/optimize on every cycle so a resumed task's
+ * completion is reflected in the same cycle's eligibility/completion derivation.
+ *
+ * For each milestone whose MOST RECENT `dispatch_log` entry carries a
+ * `suspension`, polls the recorded task exactly ONCE (never loops — a cycle
+ * must not block on a task that is still parked or in flight):
+ *
+ *   - `completed` → append a completion entry: the unit's operations are marked
+ *     complete and its guards are RUN (via `runUnitGuards`), so the milestone's
+ *     derived status leaves `awaiting_input` and progresses.
+ *   - `failed`/`cancelled` → append a terminal-failure entry: operations failed,
+ *     guards failed, and a correction milestone injected.
+ *   - `awaiting_input`/`pending`/`running`/`waiting` → leave parked; a later
+ *     cycle re-polls.
+ *
+ * Idempotent: once a completion/failure entry is appended it becomes the
+ * milestone's latest entry (no `suspension`), so the next cycle does not
+ * re-reconcile it.
+ */
+async function reconcileSuspendedUnits(
+  dag: DagJson,
+  resolved: ResolvedDeps,
+  optimizerDeps: IOptimizerDeps
+): Promise<{
+  summaries: DispatchedUnitSummary[];
+  injectedMilestones: string[];
+  persisted: boolean;
+}> {
+  const summaries: DispatchedUnitSummary[] = [];
+  const injectedMilestones: string[] = [];
+  let persisted = false;
+
+  const latestByMilestone = latestEntryByMilestone(dag);
+  const opIdsInDag = new Set((dag.operations as OperationDag[]).map((o) => o.id));
+
+  for (const [slug, original] of latestByMilestone) {
+    const suspension = original.suspension;
+    if (!suspension) continue;
+
+    let polled: Awaited<ReturnType<IDispatchAgentRunner['poll']>>;
+    try {
+      polled = await resolved.runner.poll(suspension.taskId);
+    } catch {
+      // A transient MCP/poll failure (e.g. an unknown task id after a store
+      // reset) must not abort the whole cycle and block all other work — leave
+      // the milestone parked and retry on a later cycle.
+      continue;
+    }
+    if (
+      polled.status === 'awaiting_input' ||
+      polled.status === 'pending' ||
+      polled.status === 'running' ||
+      polled.status === 'waiting'
+    ) {
+      // Still parked or in flight — leave it; a later cycle re-polls.
+      continue;
+    }
+
+    // Reconstruct the unit's own operation ids (present in `dag.operations`)
+    // and the milestone(s) it covers (from the synthesized `<slug>.guard`
+    // ids). A packed multi-milestone unit yields every covered slug.
+    const operationIds = original.operations.filter((id) => opIdsInDag.has(id));
+    const milestoneSlugs = original.operations
+      .filter((id) => id.endsWith('.guard'))
+      .map((id) => id.slice(0, -'.guard'.length))
+      .filter((s) => dag.milestones[s] != null);
+    if (milestoneSlugs.length === 0) continue;
+
+    const completed = polled.status === 'completed';
+    const dispatchId = resolved.idFactory();
+    const notes: DispatchNote[] = [];
+    notes.push(
+      completed
+        ? {
+            level: 'info',
+            text: `reconciled dispatch ${dispatchId}: suspended task '${suspension.taskId}' for milestone(s) [${milestoneSlugs.join(', ')}] completed after resume — running guard(s)`,
+          }
+        : {
+            level: 'warn',
+            text: `reconciled dispatch ${dispatchId}: suspended task '${suspension.taskId}' for milestone(s) [${milestoneSlugs.join(', ')}] ended with status '${polled.status}' after resume${polled.error ? `: ${polled.error}` : ''} — marking operations failed, running milestone guard(s)`,
+          }
+    );
+
+    const results: DispatchResult[] = operationIds.map((opId) => ({
+      op_id: opId,
+      status: completed ? 'complete' : 'failed',
+      guard_result: null,
+      guard_output: null,
+      guard_ran_at: null,
+      tool_result: null,
+    }));
+
+    // A usage-query failure is non-fatal: the completion/guard reconciliation
+    // still proceeds with an empty turns[] rather than aborting the cycle.
+    let turns: Turn[] = [];
+    if (completed) {
+      try {
+        turns = reconcileTurns(await resolved.runner.queryTurns(suspension.taskId));
+      } catch {
+        turns = [];
+      }
+    }
+
+    // Snapshot at reconcile time so guard-failure correction injection reads
+    // current artifacts (any earlier reconcile this pass already mutated `dag`).
+    const snap = resolved.optimizer.snapshot(dag, optimizerDeps);
+    const guardRun = await runUnitGuards({
+      deps: resolved,
+      dag,
+      snap,
+      unitId: original.id,
+      milestoneSlugs,
+      operationIds,
+      dispatchId,
+      results,
+      notes,
+      runGuards: completed,
+      suspension: null,
+      taskStatus: polled.status,
+      taskError: polled.error,
+    });
+
+    const entry: DispatchLogEntry = {
+      id: dispatchId,
+      kind: 'execution',
+      provider: original.provider,
+      model: original.model,
+      agent: original.agent,
+      effort: original.effort,
+      started_at: original.started_at,
+      completed_at: resolved.clock(),
+      operations: [...operationIds, ...guardRun.guardOpIds],
+      turns,
+      results,
+      notes,
+    };
+    dag.dispatch_log.push(entry);
+    await resolved.client.saveDag(dag);
+    persisted = true;
+
+    summaries.push({
+      unitId: original.id,
+      milestones: milestoneSlugs,
+      agentName: original.agent,
+      taskId: suspension.taskId,
+      taskStatus: polled.status,
+      suspension: null,
+      dispatchLogEntryId: dispatchId,
+      guardOutcomes: guardRun.guardOutcomes,
+    });
+    injectedMilestones.push(...guardRun.injectedSlugs);
+  }
+
+  return { summaries, injectedMilestones, persisted };
+}
+
+// ---------------------------------------------------------------------------
 // ── Public API ───────────────────────────────────────────────────────────────
 // ---------------------------------------------------------------------------
 
 /**
- * Runs exactly one scheduling cycle: snapshot -> optimize -> dispatch every
- * returned unit (with per-unit persistence) -> return a `CycleResult`.
+ * Runs exactly one scheduling cycle: load -> RECONCILE any HITL-suspended
+ * milestone whose task has since reached a terminal status (48b14ec1) ->
+ * snapshot -> optimize -> dispatch every returned unit (with per-unit
+ * persistence) -> return a `CycleResult`.
  *
  * Resumption is free: `client.load()` returns whatever was last persisted
  * (including every prior `dispatch_log` entry), so `snapshot()` derives
@@ -1510,6 +1796,12 @@ export async function orchestrateCycle(deps: OrchestratorDeps): Promise<CycleRes
     readFiles: resolved.plugins.io?.readFiles,
   };
 
+  // 48b14ec1: reconcile any HITL-suspended milestone whose task has since been
+  // resumed and reached a terminal status, BEFORE snapshot/optimize, so this
+  // same cycle sees the reconciled completion (and the milestone leaves
+  // `awaiting_input`). No-op when nothing is suspended.
+  const reconciled = await reconcileSuspendedUnits(dag, resolved, optimizerDeps);
+
   const snap = resolved.optimizer.snapshot(dag, optimizerDeps);
   const units = resolved.optimizer.optimize(snap, optimizerDeps);
 
@@ -1518,17 +1810,17 @@ export async function orchestrateCycle(deps: OrchestratorDeps): Promise<CycleRes
       (m) => m.status === 'complete' || m.status === 'skipped'
     );
     return {
-      dispatched: [],
-      injectedMilestones: [],
-      persisted: false,
+      dispatched: reconciled.summaries,
+      injectedMilestones: reconciled.injectedMilestones,
+      persisted: reconciled.persisted,
       terminal: true,
       terminalReason: allComplete ? 'all-complete' : 'no-eligible-work',
     };
   }
 
-  const dispatched: DispatchedUnitSummary[] = [];
-  const injectedMilestones: string[] = [];
-  let persisted = false;
+  const dispatched: DispatchedUnitSummary[] = [...reconciled.summaries];
+  const injectedMilestones: string[] = [...reconciled.injectedMilestones];
+  let persisted = reconciled.persisted;
 
   for (const unit of units) {
     resolveUnitProviderAndTokens(unit, dag);

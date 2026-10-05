@@ -69,8 +69,11 @@ orchestrator **parks** the unit (records the suspension, runs no guards, injects
 no correction) rather than failing it, and `dispatch-cli status` surfaces
 `status: "awaiting_input"` plus `awaitingInput: { taskId, resumeToken }`
 (`statusCore`). Resume the task with agent-mcp's `task_resume` (that token) to
-drive the task to `completed`. (A `run --no-dry-run` naming an *unregistered* agent
-fails `AGENT_NOT_FOUND` — see the paid-boundary note in `README.md`.)
+drive the task to `completed`; the next cycle then reconciles the completed task
+back into the DAG — re-runs the milestone guard and marks the milestone complete,
+so `status` stops reporting `awaiting_input` (48b14ec1). (A `run --no-dry-run`
+naming an *unregistered* agent fails `AGENT_NOT_FOUND` — see the paid-boundary
+note in `README.md`.)
 
 The same gate record appears in this package's `README.md` and in the test file's
 own header.

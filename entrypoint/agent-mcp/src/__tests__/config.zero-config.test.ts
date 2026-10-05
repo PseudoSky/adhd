@@ -99,6 +99,28 @@ describe('agent-mcp real AgentMcpConfig spec — zero-config proof', () => {
     }
   });
 
+  it('queue.concurrency resolves to the default fan-out cap (5), overridable via ADHD_AGENT_QUEUE_CONCURRENCY (36a73117 direction 4)', () => {
+    const restore = withEnvVar('ADHD_AGENT_QUEUE_CONCURRENCY', undefined);
+    try {
+      // The default bounds concurrent background tasks when many sessions share
+      // one agent-mcp server (the gitnexus-singleton contention guard) — a
+      // real default fan-out/concurrency cap, not merely a caller-set one.
+      const envDefault = makeEnv(mkAdhdRoot(), mkCwdFixture());
+      expect(envDefault.config.queue.concurrency).toBe(5);
+      expect(envDefault.get('provenance.queue.concurrency')).toMatchObject({ source: 'default' });
+    } finally {
+      restore();
+    }
+
+    const restoreOverride = withEnvVar('ADHD_AGENT_QUEUE_CONCURRENCY', '2');
+    try {
+      const envOverride = makeEnv(mkAdhdRoot(), mkCwdFixture());
+      expect(envOverride.config.queue.concurrency).toBe(2);
+    } finally {
+      restoreOverride();
+    }
+  });
+
   it('setting ADHD_AGENT_PORT overrides env.config.transport.port on a fresh construction', () => {
     const restore = withEnvVar('ADHD_AGENT_PORT', '4321');
     try {
