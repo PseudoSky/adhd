@@ -67,6 +67,36 @@ describe('docs contract — HITL (03145a46) is reachable, not blocked', () => {
   });
 });
 
+describe('docs contract — task_resume wording is TASK-scoped (no DAG-completion implication)', () => {
+  // The HITL fix makes `task_resume` drive the suspended TASK to `completed`;
+  // it does not make the surrounding DAG/milestone reconcile to completion.
+  // The earlier "to drive it to completion" was ambiguous ("it" could read as
+  // the DAG). These fail if the wording regresses to the ambiguous phrasing.
+  // Docs hard-wrap at ~80 cols, so a phrase can straddle a newline; compare on
+  // whitespace-normalized text so the guard asserts the CLAIM, not the wrapping.
+  const norm = (s: string): string => s.replace(/\s+/g, ' ');
+  for (const name of ['README.md', 'AGENTS.md'] as const) {
+    it(`${name} says task_resume drives THE TASK to completed`, () => {
+      const text = norm(DOCS[name]);
+      expect(text, `${name} must state the task-scoped outcome`).toContain(
+        'drive the task to `completed`'
+      );
+      expect(text, `${name} must not use the ambiguous DAG-implying phrasing`).not.toContain(
+        'drive it to completion'
+      );
+      expect(text, `${name} must not use the ambiguous DAG-implying phrasing`).not.toContain(
+        'drives it to completion'
+      );
+    });
+  }
+
+  it('live-e2e header states task_resume drives the task to `completed`', () => {
+    const header = norm(DOCS['live-e2e header']);
+    expect(header).toContain('drives the task to `completed`');
+    expect(header).not.toContain('drives it to completion');
+  });
+});
+
 describe('docs contract — DAG agents must pre-exist (f1dbd0f2)', () => {
   it('README documents the AGENT_NOT_FOUND no-auto-create behavior of --no-dry-run', () => {
     const readme = DOCS['README.md'];

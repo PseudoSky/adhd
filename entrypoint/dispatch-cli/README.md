@@ -218,7 +218,7 @@ the immediate `{ task_id, status: 'pending' }` reply) so `poll()` sees
 `awaiting_input` instead of the MCP call blocking to its 60s deadline; the
 orchestrator **parks** the unit rather than failing it; and `dispatch-cli status`
 surfaces `status: "awaiting_input"` plus `awaitingInput: { taskId, resumeToken }`.
-Resume the task with agent-mcp's `task_resume` (that token) to drive it to
-completion. AC2 asserts this status surface directly and resumes through the real
+Resume the task with agent-mcp's `task_resume` (that token) to drive the task to
+`completed`. AC2 asserts this status surface directly and resumes through the real
 MCP boundary (live-verified 2026-10-05 under `DISPATCH_E2E_PROVIDER=deepseek`;
 `anthropic` is also a function-tool provider).
