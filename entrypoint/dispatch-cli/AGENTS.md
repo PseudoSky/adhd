@@ -59,16 +59,18 @@ provider that advertises JSON-schema function tools (DeepSeek/OpenAI or Anthropi
 and are skipped under `claudecli` with a visible warning. AC1 (session threading),
 AC3 (budget) and AC4 (memory MCP server) run under `claudecli`.
 
-**Known blocker on AC2 (`03145a46`).** The function-tool provider is necessary but
-not sufficient: under `anthropic` the model really calls
-`builtin__request_human_input` and the child `agent-mcp` really persists the task
-as `awaiting_input` with a `resume_token`, but `AgentMcpRunner.fire()` awaits a
-*synchronous* `task` call while the engine's HITL path blocks on
-`await userInputPromise` — so `fire()` never returns at suspension and the MCP
-client aborts at 60s. The dispatch pipeline cannot observe `awaiting_input` until
-`fire()` is changed to fire `background:true` and drive completion via `poll()`.
-The `dispatch-cli status` surface likewise carries no `awaiting_input`/`resumeToken`
-(`statusCore` returns only `MilestoneStatus`).
+**HITL on AC2 (`03145a46`) — reachable (implemented 2026-10-05).** A sessioned
+dispatch unit that calls `builtin__request_human_input` suspends to
+`awaiting_input` carrying a `resume_token`. `AgentMcpRunner.fire()` fires a
+sessioned unit in the **background** (`background:true`, taking the task id from
+the immediate `{ task_id, status: 'pending' }` reply) so `poll()` observes
+`awaiting_input` instead of the MCP call blocking to its 60s deadline. The
+orchestrator **parks** the unit (records the suspension, runs no guards, injects
+no correction) rather than failing it, and `dispatch-cli status` surfaces
+`status: "awaiting_input"` plus `awaitingInput: { taskId, resumeToken }`
+(`statusCore`). Resume the task with agent-mcp's `task_resume` (that token) to
+drive it to completion. (A `run --no-dry-run` naming an *unregistered* agent
+fails `AGENT_NOT_FOUND` — see the paid-boundary note in `README.md`.)
 
 The same gate record appears in this package's `README.md` and in the test file's
 own header.

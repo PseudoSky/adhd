@@ -87,6 +87,15 @@ network, no cost, fully deterministic. `dryRun: false` wires a real
 `AgentMcpRunner` that spawns `npx -y @adhd/agent-mcp` and fires real, billed
 model calls. `calibrate` *always* fires one real model call.
 
+**DAG agents must pre-exist — `--no-dry-run` fails `AGENT_NOT_FOUND`.** The
+production runner (`buildProductionAgentMcpRunner`) defaults to
+`createAgentsIfMissing: false`: a `run --no-dry-run` whose DAG names an agent
+that is not registered (e.g. a persona imported and then `agent_delete`d) fails
+the run with `AGENT_NOT_FOUND` instead of silently re-creating the agent with an
+empty/default systemPrompt — so the run never dispatches under a *different*
+agent than the one the DAG named. `calibrate` is the sole caller that opts back
+in (`createAgentsIfMissing: true`, minting its synthetic null-task agent).
+
 **CLI implementation:** `bin/cli.ts` (the hand-written fallback) uses Commander's native `--no-dry-run` negation, so it *does* reach the real paid path from the command line — proved by `cli-smoke.spec.ts`'s `run --no-dry-run` test. This is the CLI that ships (compiled to `dist/bin/cli.js` and executed via `npx dispatch-cli`).
 
 Neither path is exercised by this package's default-running tests, which
@@ -200,15 +209,16 @@ DISPATCH_E2E_LIVE=1 sh -c 'cd entrypoint/dispatch-cli && \
 HITL and delegation ACs require a function-tool provider (`anthropic` or
 `deepseek`) and are skipped under `claudecli` with a visible warning.
 
-**Known blocker on AC2 (`03145a46`).** Under `anthropic` the model really calls
-`builtin__request_human_input` and the child `agent-mcp` really persists the task
-as `awaiting_input` with a `resume_token` (verified live, 2026-10-05 — the
-dispatch-cli test's own diagnostic dumps that row). But `AgentMcpRunner.fire()`
-calls agent-mcp's `task` tool *synchronously* (no `background:true`), and the
-engine's HITL path blocks on `await userInputPromise` until a resume — so
-`fire()` (and the `orchestrateCycle` awaiting it) never returns at suspension and
-the MCP client aborts at its 60s deadline. The dispatch pipeline therefore
-*cannot* observe `awaiting_input` even though the child reached it. This is a
-product gap in `@adhd/dispatch-orchestrator`, not a harness or provider gap, and
-it keeps `03145a46` unmet (the `dispatch-cli status` surface also still carries
-no `awaiting_input`/`resumeToken` — `statusCore` returns only `MilestoneStatus`).
+**HITL on AC2 (`03145a46`) — reachable (implemented 2026-10-05).** Under a
+function-tool provider the model really calls `builtin__request_human_input` and
+the child `agent-mcp` persists the task as `awaiting_input` with a `resume_token`.
+The dispatch pipeline now observes that suspension: `AgentMcpRunner.fire()` fires
+a sessioned unit in the **background** (`background:true`, taking the task id from
+the immediate `{ task_id, status: 'pending' }` reply) so `poll()` sees
+`awaiting_input` instead of the MCP call blocking to its 60s deadline; the
+orchestrator **parks** the unit rather than failing it; and `dispatch-cli status`
+surfaces `status: "awaiting_input"` plus `awaitingInput: { taskId, resumeToken }`.
+Resume the task with agent-mcp's `task_resume` (that token) to drive it to
+completion. AC2 asserts this status surface directly and resumes through the real
+MCP boundary (live-verified 2026-10-05 under `DISPATCH_E2E_PROVIDER=deepseek`;
+`anthropic` is also a function-tool provider).

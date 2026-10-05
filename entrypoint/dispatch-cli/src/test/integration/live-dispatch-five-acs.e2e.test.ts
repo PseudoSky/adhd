@@ -28,9 +28,9 @@
  *                  where B repeats a nonce that only ever appeared in A's turn;
  *                  both tasks share ONE session (verified via `task_list`).
  *   AC2 03145a46 — HITL reachable from dispatch: a sessioned task suspends to
- *                  `awaiting_input` carrying a `resumeToken`; `task_resume`
- *                  drives it to completion. (The `dispatch-cli status` CLI
- *                  surface is NOT asserted here — see "KNOWN GAP" below.)
+ *                  `awaiting_input` carrying a `resumeToken`; `dispatch-cli
+ *                  status` surfaces `awaitingInput: { taskId, resumeToken }`;
+ *                  `task_resume` drives it to completion.
  *   AC3 5339c2e5 — the default budget plugin halts at a global cap across tasks
  *                  (`ADHD_AGENT_BUDGET_MAX_CALLS`), with BUDGET_EXCEEDED.
  *   AC4 daafe2d3 — a dispatch-created agent is born with `memory-server` and
@@ -64,7 +64,7 @@
  *     npx vitest run --config vite.config.ts src/test/integration/live-dispatch-five-acs.e2e.test.ts
  *
  * AC2 STATUS SURFACE (03145a46, now implemented; proven live 2026-10-05 under
- * anthropic): the model really calls `builtin__request_human_input` and the child
+ * deepseek): the model really calls `builtin__request_human_input` and the child
  * agent-mcp really persists the task as `awaiting_input` carrying a `resume_token`.
  * The pipeline previously could not OBSERVE it — `AgentMcpRunner.fire()` awaited a
  * SYNCHRONOUS agent-mcp `task` call (no `background:true`) while the engine's HITL
