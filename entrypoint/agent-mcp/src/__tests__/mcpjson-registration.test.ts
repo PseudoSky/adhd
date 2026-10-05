@@ -1,5 +1,6 @@
 /**
- * BUG-MCP-HOME-EXPAND-001 regression guard: the repo's committed `.mcp.json`
+ * backlog 263ee45f regression guard (the old human id BUG-MCP-HOME-EXPAND-001
+ * no longer resolves): the repo's committed `.mcp.json`
  * `agent-mcp-published` entry must never carry `${VAR}` literals in its `env`
  * block — MCP hosts (opencode) pass env values through WITHOUT shell/variable
  * expansion, so `${HOME}/...` reaches the server as the literal string and the
@@ -35,7 +36,7 @@ describe('.mcp.json — agent-mcp-published registration', () => {
     expect(entry.args).toContain('@adhd/agent-mcp@latest');
   });
 
-  it('BUG-MCP-HOME-EXPAND-001: no env value contains an unexpandable ${VAR} literal (hosts pass env through verbatim)', () => {
+  it('backlog 263ee45f: no env value contains an unexpandable ${VAR} literal (hosts pass env through verbatim)', () => {
     const entry = mcpJson.mcpServers['agent-mcp-published'];
     const env = entry?.env ?? {};
     for (const [key, value] of Object.entries(env)) {
