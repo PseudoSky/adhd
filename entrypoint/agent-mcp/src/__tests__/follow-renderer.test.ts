@@ -233,3 +233,56 @@ describe("followTaskStream (real SSE server)", () => {
         ).rejects.toThrow(/unexpected HTTP 404/);
     });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// c667a213 acceptance criterion (SSE side — provable in THIS worktree).
+//
+// The item's done-state: assistant text must be delivered INCREMENTALLY by
+// subscribing to the SSE stream, "instead of polling result to a terminal state
+// before printing anything", and the first token must arrive STRICTLY before the
+// terminal event (its timestamp is the SSE-side analog of "first-token latency
+// < the milestone's total wall-clock"). The dispatch-cli `run --follow` wiring
+// that consumes this is the sibling bucket's half (988e74dd) and is NOT provable
+// here. This test fails if the renderer is reverted to terminal-only behavior
+// (no token events surfaced before done).
+// ──────────────────────────────────────────────────────────────────────────
+
+describe("c667a213 AC: incremental assistant text over SSE, first token precedes terminal", () => {
+    it("delivers assistant tokens as produced; first-token timestamp is <= the terminal done timestamp; result comes from the stream (no poll)", async () => {
+        const { taskStore, close } = buildTaskStore();
+        closeFns.push(close);
+        const { server, port } = await startSseServer(taskStore, 0, "127.0.0.1");
+        openServers.push(server);
+
+        const taskId = "abcdefab-1111-4222-8333-abcdefabcdef";
+        const stamps: Array<{ type: string; t: number }> = [];
+        let markOpen!: () => void;
+        const opened = new Promise<void>((r) => { markOpen = r; });
+
+        const followPromise = followTaskStream({
+            taskId,
+            baseUrl: `http://127.0.0.1:${port}`,
+            onOpen: () => markOpen(),
+            onEvent: (e) => stamps.push({ type: e.type, t: Date.now() }),
+        });
+        await opened;
+
+        // CRITICAL: the task is deliberately NOT in the store (no row exists).
+        // A "poll result to terminal" implementation would find nothing; the
+        // only source of this text is the live SSE event stream.
+        emitTaskEvent({ type: "token", taskId, chunk: "streaming" });
+        emitTaskEvent({ type: "token", taskId, chunk: " now" });
+        emitTaskEvent({ type: "done", taskId, result: "streaming now", error: null });
+
+        const result = await followPromise;
+
+        const firstToken = stamps.find((s) => s.type === "token");
+        const terminal = stamps.find((s) => s.type === "done");
+        expect(firstToken).toBeDefined();
+        expect(terminal).toBeDefined();
+        expect(stamps.map((s) => s.type)).toEqual(["token", "token", "done"]);
+        expect(firstToken!.t).toBeLessThanOrEqual(terminal!.t);
+        expect(result.tokens).toBe(2);
+        expect(result.result).toBe("streaming now");
+    });
+});
