@@ -538,3 +538,36 @@ Schema version 1.
   removed, and no gates were run by this operation (the post-merge review runs the suite). This
   record is the only change to this file in this operation. Recorded under §Commit convention's
   `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: fast-forward land of `feat/bucket-g-dispatch-cli-taskstore`
+  (dispatch-2026-10-04-9c4e).** Ran `git merge --ff-only feat/bucket-g-dispatch-cli-taskstore` on
+  `main`, moving `main` `1ff78e39` → `e0458224` (1 commit; 1 file, +4) with no merge commit. The
+  single commit is `e0458224` (`test(dispatch-cli): opt agent_read into fullDefinition in
+  agents-import e2e`); the change is 4 added lines in
+  `entrypoint/dispatch-cli/src/test/agents-import.e2e.test.ts` — a 3-line comment plus
+  `fullDefinition: true` on the `agent_read` call — so the assertion at
+  `expect(def.systemPrompt).toBe(BODY)` again requests the full record, which the `eaa420a0`
+  systemPrompt projection had made a **default** `agent_read` omit. Per the commit message, that
+  omission made the test red on merged `main` (`f5a76002`); the production callers
+  (`import-agents.ts` `ensureAgent`, `dispatch-orchestrator` `agent-runner.ts`) use `agent_read`
+  only as an existence probe and are unaffected, and the other dispatch-cli/agent-mcp `agent_read`
+  sites were audited to be existence probes or to read `mcpServers`/index fields, none asserting the
+  omitted `systemPrompt`. A fast-forward is within §Branching & merge's stated norm rather than a
+  deviation: it "carries true merge commits" and ff-only is not enforced, and — unlike a rebase — a
+  fast-forward rewrites no commit; it advances `main`'s ref to the branch head, which is what this
+  operation was directed to do, so the "branch solely your own" rebase restriction is not
+  implicated. Preconditions verified before the merge: `git rev-parse main` = `1ff78e39` and
+  `git rev-parse feat/bucket-g-dispatch-cli-taskstore` = `e0458224`; the merge-base of `main` and the
+  branch was `main` itself; `git merge-base --is-ancestor main
+  feat/bucket-g-dispatch-cli-taskstore` exited 0; `git rev-list --count main..<branch>` = 1 and
+  `<branch>..main` = 0; and `git show -s --format=%P e0458224` is the single parent `1ff78e39`. The
+  merge ran clean (`Updating 1ff78e39..e0458224` / `Fast-forward`, exit 0), and `e0458224` is
+  contained: post-merge `git merge-base --is-ancestor e0458224 main` exits 0 and
+  `git rev-list --count main..feat/bucket-g-dispatch-cli-taskstore` = 0. The branch never touched
+  this file — `main` and `e0458224` resolve the identical policy blob `67f47270` — so the policy
+  revision this operation read (commit `db9c95d2`) and records under survived the merge
+  byte-identical. The working tree was clean before and after (`git status --porcelain` empty); no
+  concurrent agent had an uncommitted path in it at either point, and none was staged, swept, or
+  touched. No push, no branch or worktree removed, and no gates were run by this operation (the
+  dispatcher verifies `dispatch-cli:test` against the post-merge `main`). This record is the only
+  change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
