@@ -74,6 +74,8 @@ const RESUME_TOKEN = '44444444-4444-4444-8444-444444444444';
 interface HitlState {
   resumed: boolean;
   taskArgs: Record<string, unknown> | undefined;
+  /** When true, `result` rejects (simulates a transient poll failure). */
+  resultThrows?: boolean;
 }
 
 /**
@@ -93,10 +95,14 @@ function makeHitlHandlers(state: HitlState): Record<string, FakeToolHandler> {
       }
       return { task_id: TASK_ID, status: 'pending' };
     },
-    result: () =>
-      state.resumed
+    result: () => {
+      if (state.resultThrows) {
+        throw new Error('MCP error -32000: transient poll failure');
+      }
+      return state.resumed
         ? { status: 'completed', result: 'approved and done' }
-        : { status: 'awaiting_input', resumeToken: RESUME_TOKEN },
+        : { status: 'awaiting_input', resumeToken: RESUME_TOKEN };
+    },
     task_resume: (args) => {
       if (args?.['resumeToken'] !== RESUME_TOKEN) {
         return {
@@ -376,6 +382,49 @@ describe('HITL suspension from dispatch (03145a46)', () => {
         snapshot(reconciledDag, { bPerTier: {}, contextWindowPerTier: {} })
           .milestones['a']?.status
       ).toBe('complete');
+    } finally {
+      await runner.close();
+    }
+  });
+
+  it('does not abort the cycle when a suspended task poll fails — the milestone stays parked (48b14ec1 hardening)', async () => {
+    const state: HitlState = { resumed: false, taskArgs: undefined };
+    const client = new FakeMcpToolClient(makeHitlHandlers(state));
+    const runner = new AgentMcpRunner({
+      command: 'unused-in-test',
+      clientFactory: () => client,
+    });
+    const { dagPath, deps } = await setup('poll-error', runner);
+
+    try {
+      const cycle1 = await orchestrateCycle(deps);
+      expect(cycle1.dispatched[0]?.taskStatus).toBe('awaiting_input');
+
+      // The operator resumes; the NEXT cycle's reconcile poll now fails
+      // transiently (e.g. the task row is gone after a store reset, or the MCP
+      // call errors). This must not tear down the whole cycle.
+      state.resultThrows = true;
+      await runner.callTool('task_resume', {
+        taskId: TASK_ID,
+        resumeToken: RESUME_TOKEN,
+        userInput: 'approved',
+      });
+
+      const cycle2 = await orchestrateCycle(deps);
+      // Resolves (does not reject) with no eligible work; the milestone is parked.
+      expect(cycle2.terminal).toBe(true);
+      expect(cycle2.terminalReason).toBe('no-eligible-work');
+
+      const dag = await reload(dagPath);
+      // No completion entry was appended — the suspension entry is still latest.
+      expect(dag.dispatch_log.at(-1)?.suspension).toEqual({
+        taskId: TASK_ID,
+        resumeToken: RESUME_TOKEN,
+      });
+      expect(
+        snapshot(dag, { bPerTier: {}, contextWindowPerTier: {} }).milestones['a']
+          ?.status
+      ).toBe('awaiting_input');
     } finally {
       await runner.close();
     }

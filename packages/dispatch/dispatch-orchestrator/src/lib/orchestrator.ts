@@ -1651,7 +1651,15 @@ async function reconcileSuspendedUnits(
     const suspension = original.suspension;
     if (!suspension) continue;
 
-    const polled = await resolved.runner.poll(suspension.taskId);
+    let polled: Awaited<ReturnType<IDispatchAgentRunner['poll']>>;
+    try {
+      polled = await resolved.runner.poll(suspension.taskId);
+    } catch {
+      // A transient MCP/poll failure (e.g. an unknown task id after a store
+      // reset) must not abort the whole cycle and block all other work — leave
+      // the milestone parked and retry on a later cycle.
+      continue;
+    }
     if (
       polled.status === 'awaiting_input' ||
       polled.status === 'pending' ||
@@ -1696,9 +1704,16 @@ async function reconcileSuspendedUnits(
       tool_result: null,
     }));
 
-    const turns = completed
-      ? reconcileTurns(await resolved.runner.queryTurns(suspension.taskId))
-      : [];
+    // A usage-query failure is non-fatal: the completion/guard reconciliation
+    // still proceeds with an empty turns[] rather than aborting the cycle.
+    let turns: Turn[] = [];
+    if (completed) {
+      try {
+        turns = reconcileTurns(await resolved.runner.queryTurns(suspension.taskId));
+      } catch {
+        turns = [];
+      }
+    }
 
     // Snapshot at reconcile time so guard-failure correction injection reads
     // current artifacts (any earlier reconcile this pass already mutated `dag`).
