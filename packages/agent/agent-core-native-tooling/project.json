@@ -51,11 +51,10 @@
       }
     },
     "test": {
-      "//": "Partial override — executor/cache/outputs still come from the inferred @nx/vitest target. dependsOn is replaced wholesale, so lint/^build (workspace test targetDefaults) are relisted, plus `build` so the `require(dist)` acceptance test (ADR-0003 / NAT-TOOL-2 AC5) exercises the real built CJS artifact. The command is overridden because this package's vitest config is `.mts` while the workspace targetDefaults hardcodes `.ts`.",
+      "//": "Partial override — executor/cache/outputs still come from the inferred @nx/vitest target. dependsOn is replaced wholesale, so lint/^build (workspace test targetDefaults) are relisted. DELIBERATELY no `build`: coupling the unit suite to `build` meant a red build SKIPPED every unit test ('tasks not run because dependencies failed'), hiding real test signal behind a build failure. The built-artifact proof (ADR-0003 / NAT-TOOL-2 AC5) lives in the default-running `verify-dist-load` gate, which require()/import()s the real dist entry; the public-surface barrel contract is asserted at SOURCE in src/index.spec.ts. A unit run therefore never depends on a prior artifact. The command is overridden because this package's vitest config is `.mts` while the workspace targetDefaults hardcodes `.ts`.",
       "dependsOn": [
         "lint",
-        "^build",
-        "build"
+        "^build"
       ],
       "options": {
         "cwd": ".",
