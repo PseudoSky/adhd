@@ -207,6 +207,9 @@
       ],
       "@adhd/workspace-codegen-nx": [
         "./packages/workspace/workspace-codegen-nx/src/index.ts"
+      ],
+      "@adhd/agent-core-native-tooling": [
+        "./packages/agent/agent-core-native-tooling/src/index.ts"
       ]
     }
   },

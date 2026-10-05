@@ -30,3 +30,21 @@ export type TokenUsageExtShape = {
 // Provider adapter contract — additive, defined in domain.ts.
 // Re-exported here so downstream consumers import from the single barrel.
 export type { StreamChunk, ProviderAdapter } from './domain.js';
+
+// Native tooling (ADR-0008) — explicit re-exports so the identifiers appear
+// literally in the compiled barrel declaration for tooling/audit greps.
+export type {
+  PermissionAction,
+  PermissionRule,
+  PermissionRuleMap,
+  FsBuiltinOverrides,
+  ShellBuiltinOverrides,
+  DispatchBuiltinOverrides,
+  FsToolConfig,
+  ShellToolConfig,
+  DispatchToolConfig,
+  NativeToolingConfig,
+  AskPolicy,
+  AskResolution,
+} from './domain.js';
+export { effectiveHitl } from './domain.js';
