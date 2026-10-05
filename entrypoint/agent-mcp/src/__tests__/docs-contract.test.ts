@@ -70,6 +70,25 @@ describe("307a36c1 — provider secret surfacing", () => {
   });
 });
 
+describe("97acef07 — default MCP servers documented", () => {
+  it("AC3: AGENTS.md documents the default filesystem + shell wiring and opt-out", () => {
+    const agents = readRepoFile("../../AGENTS.md");
+    expect(agents).toContain("Default MCP servers for new agents");
+    expect(agents).toContain("`filesystem`");
+    expect(agents).toContain("`shell`");
+    expect(agents).toContain("@modelcontextprotocol/server-filesystem");
+    expect(agents).toContain("ADHD_AGENT_SHELL_MCP_PATH");
+    expect(agents).toMatch(/explicit non-empty `mcpServers` map always wins/i);
+  });
+
+  it("AC3: README documents the default tools", () => {
+    const readme = readRepoFile("../../README.md");
+    expect(readme).toContain("Default tools for new agents");
+    expect(readme).toContain("@modelcontextprotocol/server-filesystem");
+    expect(readme).toContain("ADHD_AGENT_SHELL_MCP_PATH");
+  });
+});
+
 describe("2cd99264 — gitnexus-singleton concurrency contract", () => {
   it("AC1: the skill documents the one-client kill-and-replace contract", () => {
     const skill = readRepoFile(

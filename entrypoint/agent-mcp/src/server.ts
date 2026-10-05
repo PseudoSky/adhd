@@ -23,6 +23,7 @@ import type {
 } from '@adhd/agent-engine-orchestrator';
 import type { IHookRegistry } from '@adhd/agent-base-types';
 import { subscribeToTaskDone, emitTaskEvent } from './streaming/event-bus.js';
+import { withDefaultMcpServers } from './defaults.js';
 
 import {
   agentCreate,
@@ -599,8 +600,11 @@ export function createServer(deps: ServerDeps): Server {
           const createInput = agentCreateInputSchema.parse(args);
           // Reject non-ADHD_AGENT_-prefixed env names at create time (BUG-ORCH-011).
           assertEnvNamesAllowed(createInput.provider, toEngineConfig(), ['provider']);
+          // Default-wire the adopted filesystem + shell MCP servers so a new
+          // agent is born with file/shell capabilities (backlog 97acef07). An
+          // explicit non-empty mcpServers map always wins.
           return toMcpContent(
-            agentCreate(createInput, {
+            agentCreate(withDefaultMcpServers(createInput), {
               agentStore: deps.agentStore,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               sessionStore: crudSessionStore,

@@ -156,6 +156,23 @@ When connected to `agent-mcp` via MCP, call tools in sequence:
 
 See the source repository's `examples/` directory for end-to-end client libraries (Node.js, Python).
 
+### Default tools for new agents
+
+`agent_create` default-wires the filesystem and shell MCP servers when you
+pass no `mcpServers`, so a new agent can read/write/glob/grep files and run
+allowlisted shell commands out of the box:
+
+- `filesystem` → `npx -y @modelcontextprotocol/server-filesystem <cwd>`,
+  allowlisting `read_text_file`, `write_file`, `edit_file`, `search_files`,
+  and the other standard filesystem tools.
+- `shell` → `node <repo>/tools/mcp-shell/server.mjs <cwd>` (allowlisting the
+  `shell` tool), omitted if the server file is not found — set
+  `ADHD_AGENT_SHELL_MCP_PATH` to point at it.
+
+An explicit non-empty `mcpServers` map always overrides the defaults, and
+`allowedTools`/`disallowedTools` remain enforced on every call. See
+`AGENTS.md` §“Default MCP servers for new agents”.
+
 ## 2.0.2 Release Notes
 
 This release fixes six critical regressions from 2.0.0/2.0.1 related to context management, token accounting, security guards, and configuration discovery:

@@ -129,6 +129,27 @@ There are exactly three provider `type`s in code (`packages/agent/agent-engine-o
 
 **Prior behavior (2.0.0-2.0.1):** Silently defaulted to name-only for all non-claudecli agents, breaking provider-side tool-call validation.
 
+### Default MCP servers for new agents (97acef07)
+
+`agent_create` default-wires the adopted filesystem and shell MCP servers
+when the caller supplies no `mcpServers` (or an empty map). A newly created
+agent is therefore born with these capabilities without an operator
+hand-authoring an `mcpServers` block:
+
+| server | transport | command | allowlisted tools (canonical capability) |
+|---|---|---|---|
+| `filesystem` | stdio | `npx -y @modelcontextprotocol/server-filesystem <root>` | `read_text_file`, `read_file`, `read_multiple_files`, `read_media_file`, `write_file`, `edit_file`, `create_directory`, `list_directory`, `list_directory_with_sizes`, `directory_tree`, `move_file`, `search_files`, `get_file_info`, `list_allowed_directories` (canonical `file_read`/`file_write`/`file_glob`/`file_grep`) |
+| `shell` | stdio | `node <repo>/tools/mcp-shell/server.mjs <root>` | `shell` (canonical `shell_exec`) |
+
+- `<root>` defaults to the server process's working directory.
+- The shell entry is omitted when `tools/mcp-shell/server.mjs` cannot be
+  resolved (e.g. the published package installed outside the monorepo); set
+  `ADHD_AGENT_SHELL_MCP_PATH` to point at it explicitly.
+- **An explicit non-empty `mcpServers` map always wins** — defaults are only
+  applied when the caller supplies none. `allowedTools`/`disallowedTools`
+  remain enforced by `McpClientRegistry` at every `callTool`, exactly as for
+  operator-authored servers.
+
 ### Delegation (Agent → Child Agent)
 
 An agent can delegate to child agents by calling the `task` tool targeting another agent (when allowed by parent policy). Child agents:
