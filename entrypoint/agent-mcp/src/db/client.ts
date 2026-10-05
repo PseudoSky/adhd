@@ -5,6 +5,7 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 
 import { operationalEnv } from "../config.js";
+import { applyLockingPragmas } from "@adhd/agent-core-env";
 import * as localSchema from "./schema.js";
 import * as runtimeSchema from "@adhd/agent-store-runtime";
 
@@ -31,8 +32,10 @@ if (!fs.existsSync(directory)) {
 export const sqlite: Database.Database =
     new Database(resolvedPath);
 
-sqlite.pragma("journal_mode = WAL");
-sqlite.pragma("foreign_keys = ON");
+// The parallel-process locking contract (ADR-0012): WAL + foreign_keys +
+// busy_timeout. Without busy_timeout the loser of a writer race fails with an
+// immediate SQLITE_BUSY instead of waiting for the holder (backlog 331508ac).
+applyLockingPragmas(sqlite);
 
 const mergedSchema = { ...localSchema, ...runtimeSchema };
 export const db = drizzle(sqlite, { schema: mergedSchema });

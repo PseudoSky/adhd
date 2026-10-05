@@ -11,5 +11,11 @@ export type { ResolveRegistryDbPathOpts } from './resolve-registry-db-path.js';
 export { openRegistryDb } from './open-registry-db.js';
 export type { OpenRegistryDbOpts, RegistryDbHandle } from './open-registry-db.js';
 
+export {
+  applyLockingPragmas,
+  DEFAULT_BUSY_TIMEOUT_MS,
+} from './sqlite-locking.js';
+export type { ISqliteConn, LockingPragmaOpts } from './sqlite-locking.js';
+
 export { agentRegistryEnvironmentSpec, AGENT_REGISTRY_PROJECT_ID } from './spec.js';
 export type { AgentRegistryEnvConfig } from './spec.js';

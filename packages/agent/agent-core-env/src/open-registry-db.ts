@@ -20,17 +20,22 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
 import { resolveRegistryDbPath } from './resolve-registry-db-path.js';
+import { applyLockingPragmas } from './sqlite-locking.js';
 
 export interface OpenRegistryDbOpts {
   /** Explicit path override — forwarded to `resolveRegistryDbPath()`. When
    *  absent, the full precedence chain (function arg / env vars / canonical
    *  default) resolves the path. */
   registryDbPath?: string;
+  /** `busy_timeout` budget (ms) applied at connect time. Typed config, never
+   *  an env-var toggle (ADR-0013). Defaults to 5000ms. */
+  busyTimeoutMs?: number;
 }
 
 export interface RegistryDbHandle {
-  /** The raw `better-sqlite3` connection — WAL mode + `foreign_keys = ON`
-   *  already set, matching every existing family client's pragmas. */
+  /** The raw `better-sqlite3` connection — WAL mode + `foreign_keys = ON` +
+   *  `busy_timeout` already set (see `sqlite-locking.ts`), matching every
+   *  existing family client's pragmas. */
   sqlite: Database.Database;
   /** A schema-less Drizzle instance over `sqlite`. Each family package
    *  binds its OWN schema-typed Drizzle instance against this same
@@ -56,8 +61,7 @@ export function openRegistryDb(opts: OpenRegistryDbOpts = {}): RegistryDbHandle 
   }
 
   const sqlite: Database.Database = new Database(resolvedPath);
-  sqlite.pragma('journal_mode = WAL');
-  sqlite.pragma('foreign_keys = ON');
+  applyLockingPragmas(sqlite, { busyTimeoutMs: opts.busyTimeoutMs });
 
   const db = drizzle(sqlite);
 
