@@ -115,8 +115,7 @@ describe('buildPromptResolver — registry DB open + migrate + composition (BUG-
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             agentMcpDb: agentMcpDb as any,
             compileAgentFn: compilerModule.compileAgent,
-            compilerMigrationsOn: compilerModule.runMigrationsOn,
-            compilerMigrationsFolder: compilerModule.MIGRATIONS_FOLDER,
+            migrateRegistry: compilerModule.migrateRegistry,
         });
 
         // ── [1] resolver is DEFINED — registry DB opened + migrated, compiler

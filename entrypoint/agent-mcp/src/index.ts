@@ -12,30 +12,16 @@ import { AgentStore } from "./store/agent-store.js";
 
 import { resolveRegistryDbPath, openRegistryDb } from "@adhd/agent-core-env";
 import { SessionStore, TaskStore } from "@adhd/agent-store-runtime";
-import {
-    ComposedPromptStore,
-    runMigrationsOn as runPromptsMigrationsOn,
-    MIGRATIONS_FOLDER as PROMPTS_MIGRATIONS_FOLDER,
-} from "@adhd/agent-store-prompts";
-import {
-    runMigrationsOn as runProviderMigrationsOn,
-    MIGRATIONS_FOLDER as PROVIDER_MIGRATIONS_FOLDER,
-} from "@adhd/agent-core-provider";
-import {
-    runMigrationsOn as runToolsMigrationsOn,
-    MIGRATIONS_FOLDER as TOOLS_MIGRATIONS_FOLDER,
-} from "@adhd/agent-store-tools";
-import {
-    runMigrationsOn as runPolicyMigrationsOn,
-    MIGRATIONS_FOLDER as POLICY_MIGRATIONS_FOLDER,
-} from "@adhd/agent-core-policy";
+import { ComposedPromptStore } from "@adhd/agent-store-prompts";
 // NOTE: @adhd/agent-engine-compiler is deliberately NOT statically imported
 // here — it is lazy-loaded (`await import(...)`) in main() below so the
 // server can still boot with flat system-prompts if the package is ever
 // absent, and @nx/enforce-module-boundaries forbids mixing a static import
-// of a lazy-loaded library in the same project. Its runMigrationsOn/
-// MIGRATIONS_FOLDER are obtained from that same dynamic import and threaded
-// through BuildPromptResolverOpts instead (see main()).
+// of a lazy-loaded library in the same project. Its `compileAgent` and the
+// centralized `migrateRegistry` (which runs all FIVE registry-family
+// migration sets — no longer hand-inlined here, backlog 1ef6134d) are
+// obtained from that same dynamic import and threaded through
+// BuildPromptResolverOpts (see main()).
 
 import type { CompileAgentFn, PromptResolverDeps } from "@adhd/agent-engine-orchestrator";
 import {
@@ -64,21 +50,21 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 export { HookRegistry } from "@adhd/agent-engine-orchestrator";
 export { ComposedPromptStore } from "@adhd/agent-store-prompts";
 
-// Structural type for @adhd/agent-engine-compiler's runMigrationsOn — identical
-// signature to the other four registry-family packages' runMigrationsOn
-// (all generated from the same @adhd/agent-nx registry-package template), so
-// it's safe to reuse this type without a static import of agent-engine-compiler.
-type RegistryMigrationsOnFn = typeof runProviderMigrationsOn;
-
 export interface BuildPromptResolverOpts {
     registryDbPath?: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     agentMcpDb: any;
     compileAgentFn?: CompileAgentFn;
-    /** From the same lazy `await import("@adhd/agent-engine-compiler")` as compileAgentFn. */
-    compilerMigrationsOn?: RegistryMigrationsOnFn;
-    /** From the same lazy `await import("@adhd/agent-engine-compiler")` as compileAgentFn. */
-    compilerMigrationsFolder?: string;
+    /**
+     * Runs ALL FIVE registry-family migration sets on the given connection in
+     * canonical order. From the same lazy
+     * `await import("@adhd/agent-engine-compiler")` as `compileAgentFn`
+     * (`migrateRegistry`) — the single reusable "give me a migrated registry
+     * DB" call that replaced the hand-inlined five-runner sequence here
+     * (backlog 1ef6134d; it lives in the engine-tier compiler package, NOT
+     * core-tier agent-core-env, to keep layer purity).
+     */
+    migrateRegistry?: (sqlite: Database.Database) => void;
 }
 
 export function buildPromptResolver(opts: BuildPromptResolverOpts): PromptResolverDeps | undefined {
@@ -93,13 +79,13 @@ export function buildPromptResolver(opts: BuildPromptResolverOpts): PromptResolv
     // always happened before this code path could ever be reached, so it was
     // never exercised in production). Kept in the public opts type for
     // backward compatibility.
-    const { registryDbPath, compileAgentFn, compilerMigrationsOn, compilerMigrationsFolder } = opts;
+    const { registryDbPath, compileAgentFn, migrateRegistry } = opts;
 
     if (!registryDbPath) {
         return undefined;
     }
 
-    if (!compileAgentFn || !compilerMigrationsOn || !compilerMigrationsFolder) {
+    if (!compileAgentFn || !migrateRegistry) {
         logger.info(
             "@adhd/agent-engine-compiler not available — registry/compiler integration disabled; using flat system-prompts"
         );
@@ -127,16 +113,12 @@ export function buildPromptResolver(opts: BuildPromptResolverOpts): PromptResolv
         // packages/agent/agent-engine-compiler/CLAUDE.md "One shared SQLite
         // file"): agent-core-provider (provider_*), agent-store-prompts
         // (registry_*), agent-store-tools (tool_*), agent-core-policy
-        // (policy_*), agent-engine-compiler (compiler_*). All five migration
-        // sets must be applied, in this exact ascending-timestamp order, to
-        // this same connection before compileAgent()'s stores can query it —
-        // mirrors agent-engine-compiler/src/cli/compile.ts's proven openDb().
-        const registryMigrationDb = drizzle(registrySqlite);
-        runProviderMigrationsOn(registrySqlite, registryMigrationDb, PROVIDER_MIGRATIONS_FOLDER);
-        runPromptsMigrationsOn(registrySqlite, registryMigrationDb, PROMPTS_MIGRATIONS_FOLDER);
-        runToolsMigrationsOn(registrySqlite, registryMigrationDb, TOOLS_MIGRATIONS_FOLDER);
-        runPolicyMigrationsOn(registrySqlite, registryMigrationDb, POLICY_MIGRATIONS_FOLDER);
-        compilerMigrationsOn(registrySqlite, registryMigrationDb, compilerMigrationsFolder);
+        // (policy_*), agent-engine-compiler (compiler_*). `migrateRegistry`
+        // (agent-engine-compiler) applies ALL five migration sets, in the one
+        // canonical ascending-timestamp order, to this same connection before
+        // any compiler store can query it — this call replaced the five
+        // hand-listed runners that used to live here (backlog 1ef6134d).
+        migrateRegistry(registrySqlite);
     } catch (err) {
         logger.info(
             { registryDbPath, err },
@@ -252,13 +234,11 @@ async function main() {
     const dagEngine = new DagEngine(dbAny as import("drizzle-orm/better-sqlite3").BetterSQLite3Database<Record<string, never>>, queue, taskStore, dispatchFn, logger);
 
     let compileAgentFn: CompileAgentFn | undefined;
-    let compilerMigrationsOn: RegistryMigrationsOnFn | undefined;
-    let compilerMigrationsFolder: string | undefined;
+    let migrateRegistryFn: ((sqlite: Database.Database) => void) | undefined;
     try {
         const compilerModule = await import("@adhd/agent-engine-compiler");
         compileAgentFn = compilerModule.compileAgent;
-        compilerMigrationsOn = compilerModule.runMigrationsOn;
-        compilerMigrationsFolder = compilerModule.MIGRATIONS_FOLDER;
+        migrateRegistryFn = compilerModule.migrateRegistry;
     } catch {
         logger.info(
             "@adhd/agent-engine-compiler not installed — registry/compiler integration disabled; using flat system-prompts"
@@ -274,8 +254,7 @@ async function main() {
         registryDbPath: env.config.server.registryDbPath ?? resolveRegistryDbPath(),
         agentMcpDb: dbAny,
         compileAgentFn,
-        compilerMigrationsOn,
-        compilerMigrationsFolder,
+        migrateRegistry: migrateRegistryFn,
     });
 
     try {

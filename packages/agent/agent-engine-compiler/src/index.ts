@@ -3,6 +3,7 @@
 // registry packages: every state that adds a table also extends this barrel).
 
 export { runMigrationsOn, MIGRATIONS_FOLDER } from './db/migrate-runner.js';
+export { migrateRegistry } from './db/migrate-registry.js';
 export * from './db/schema.js';
 
 // composition-resolve state: body assembly from agent-registry junction order
