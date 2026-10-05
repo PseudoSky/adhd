@@ -396,3 +396,34 @@ Schema version 1.
   the merge byte-identical. No push, no branch or worktree removed, and no gates were run by this
   operation (the post-merge review runs the suite). This record is the only change to this file in
   this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `feat/bucket-c-publish-contract-docs` (dispatch-2026-10-04-9c4e).**
+  Landed bucket C onto `main` as a **merge commit** `c3058b3f` (parents `127ba06c` = pre-merge
+  `main`, `d0b9b095` = C head), moving `main` `127ba06c` → `c3058b3f`; 6 files, +176/-43:
+  `entrypoint/agent-mcp/src/__tests__/docs-and-config-contract.test.ts` (M),
+  `entrypoint/agent-mcp/src/__tests__/fixtures/catalog-shell-config.seed.json` (A),
+  `package.json` (M),
+  `packages/agent/agent-engine-orchestrator/src/__tests__/task-list-contract.test.ts` (M),
+  `packages/agent/agent-engine-orchestrator/src/tools/task.ts` (M), and `pnpm-lock.yaml` (M). The 3
+  commits since the merge-base `3fa5609d` are `ff58c8e5` (`fix(deps): regenerate pnpm-lock.yaml for
+  the pinned specifiers` — the HIGH CI fix), `6ee04cea`
+  (`fix(agent-engine-orchestrator): type projected taskList/resultTool as ProjectedTask`), and
+  `d0b9b095` (`test(agent-mcp): seed repo-owned fixture so f141baad AC2 asserts unconditionally`) —
+  matching the dispatch list exactly. §Branching & merge was the deciding rule: this history "carries
+  true merge commits" and ff-only is not enforced, while rebase-in-flight is permitted only on a
+  branch "solely your own" — C is an in-flight executor branch, not the operator's, so rewriting its
+  3 commits was out; a merge commit is the stated shape here. Dry-run
+  `git merge-tree --write-tree --name-only main d0b9b095` exited 0, producing tree `ff46b5d4` with no
+  conflict hunks; the actual `git merge --no-ff` was conflict-free (ort strategy, exit 0). The branch
+  never touched this file since its merge-base (empty `git diff 3fa5609d..d0b9b095 --
+  docs/GIT-POLICY.md`), so `main`'s policy blob `d92bac78` survived the merge byte-identical
+  (pre-merge `127ba06c` and post-merge `c3058b3f` resolve the same blob). Post-merge
+  `git rev-list --count main..feat/bucket-c-publish-contract-docs` = 0 and
+  `git merge-base --is-ancestor` exits 0 for each of the 3 named commits individually. A concurrent
+  agent's uncommitted work was present in the working tree throughout
+  (`entrypoint/backlog/src/query/card.ts` and `query.ts` modified; `sort-priority-direction.spec.ts`
+  untracked) and was neither staged, swept, nor touched — the merge's path set is disjoint from those
+  paths, and their sha256 hashes and `git status --porcelain` lines were byte-identical before and
+  after. No push, no branch or worktree removed, and no gates were run by this operation (the
+  post-merge review runs the suite). This record is the only change to this file in this operation.
+  Recorded under §Commit convention's `docs(<area>):` scope.
