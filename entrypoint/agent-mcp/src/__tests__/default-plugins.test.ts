@@ -51,6 +51,29 @@ describe("defaultPluginEntries — default-on budget plugin (5339c2e5)", () => {
     expect(defaults.costPerOutputToken).toBeGreaterThan(0);
   });
 
+  it("the default caps resolve to GLOBAL scope (post-merge review: top-level scope was dropped)", async () => {
+    // agent-plugin-budget is a lazy-loaded library from agent-mcp's perspective
+    // (loader.ts imports it dynamically) — mirror that with a dynamic import.
+    const { createPlugin, pluginConfigSchema } = await import(
+      "@adhd/agent-plugin-budget"
+    );
+    const config = defaultPluginEntries({} as NodeJS.ProcessEnv)[0]?.config;
+    expect(config).toBeDefined();
+
+    // `scope` must live inside `defaults` — `pluginConfigSchema` has no
+    // top-level `scope` key, so a root-level one is silently discarded and the
+    // caps fall back to per-task scope.
+    expect((config as Record<string, unknown>)["scope"]).toBeUndefined();
+
+    const parsed = pluginConfigSchema.parse(config);
+    expect(parsed.defaults?.scope).toBe("global");
+
+    // The plugin's real create/normalize path accepts the config unchanged.
+    expect(() =>
+      createPlugin({ db: null, config: config as Record<string, unknown> })
+    ).not.toThrow();
+  });
+
   it("is opt-OUT via ADHD_AGENT_DISABLE_BUDGET_PLUGIN=1", () => {
     expect(
       defaultPluginEntries({

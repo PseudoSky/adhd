@@ -29,7 +29,7 @@ describe("307a36c1 — provider secret surfacing", () => {
     expect(src).toMatch(/clearEmptyProviderSecrets\(\)/);
   });
 
-  it("AC2: .mcp.json does not carry unexpandable ${VAR} secrets (BUG-MCP-HOME-EXPAND-001); resolution is shell-env or the .env cascade", () => {
+  it("AC2: .mcp.json does not carry unexpandable ${VAR} secrets (backlog 263ee45f); resolution is shell-env or the .env cascade", () => {
     const raw = readRepoFile("../../../../.mcp.json");
     const cfg = JSON.parse(raw) as {
       mcpServers: Record<string, { env?: Record<string, string> }>;
@@ -38,7 +38,7 @@ describe("307a36c1 — provider secret surfacing", () => {
     expect(entry).toBeDefined();
     // MCP hosts pass env through verbatim (no expansion), so a `${VAR}` literal
     // would reach the server as garbage — the repo forbids it (see
-    // mcpjson-registration.test.ts / BUG-MCP-HOME-EXPAND-001). The supported
+    // mcpjson-registration.test.ts / backlog 263ee45f). The supported
     // paths are a real shell export or the ~/.adhd/.env cascade (AC1/AC3).
     for (const [key, value] of Object.entries(entry?.env ?? {})) {
       expect(value, `env "${key}" must not contain \${...}`).not.toMatch(/\$\{/);
@@ -67,6 +67,25 @@ describe("307a36c1 — provider secret surfacing", () => {
     expect(env["ADHD_AGENT_OPENAI_SECRET"]).toBe("sk-real");
     expect("PATH" in env).toBe(true);
     expect("OTHER_SECRET" in env).toBe(true);
+  });
+});
+
+describe("97acef07 — default MCP servers documented", () => {
+  it("AC3: AGENTS.md documents the default filesystem + shell wiring and opt-out", () => {
+    const agents = readRepoFile("../../AGENTS.md");
+    expect(agents).toContain("Default MCP servers for new agents");
+    expect(agents).toContain("`filesystem`");
+    expect(agents).toContain("`shell`");
+    expect(agents).toContain("@modelcontextprotocol/server-filesystem");
+    expect(agents).toContain("ADHD_AGENT_SHELL_MCP_PATH");
+    expect(agents).toMatch(/explicit non-empty `mcpServers` map always wins/i);
+  });
+
+  it("AC3: README documents the default tools", () => {
+    const readme = readRepoFile("../../README.md");
+    expect(readme).toContain("Default tools for new agents");
+    expect(readme).toContain("@modelcontextprotocol/server-filesystem");
+    expect(readme).toContain("ADHD_AGENT_SHELL_MCP_PATH");
   });
 });
 

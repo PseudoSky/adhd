@@ -1,3 +1,4 @@
+import PQueue from 'p-queue';
 import type { EngineConfig, EngineLogger } from '../interfaces.js';
 import type { BackgroundQueue } from '../engine/queue.js';
 import type { DagEngine } from '../engine/dag-engine.js';
@@ -22,6 +23,8 @@ import type {
   TaskToolInput,
   TaskToolOutput,
   TaskUsageReport,
+  TasksBatchInput,
+  TasksBatchOutput,
 } from '../validation/index.js';
 import { ToolError } from '../validation/errors.js';
 import { generateId } from '../utils/ids.js';
@@ -68,7 +71,12 @@ export interface TaskDeps {
 }
 
 async function runEphemeralTask(
-  input: { agent_name: string; prompt: string },
+  input: {
+    agent_name: string;
+    prompt: string;
+    depends_on?: string[];
+    on_upstream_failure?: 'fail' | 'skip';
+  },
   deps: TaskDeps,
   callerContext?: ExecutionContext
 ): Promise<TaskToolOutput> {
@@ -80,6 +88,10 @@ async function runEphemeralTask(
     ? callerContext.rootTaskId ?? callerContext.taskId
     : undefined;
 
+  if (input.depends_on && input.depends_on.length > 0) {
+    deps.dagEngine.validateNoCycle(taskId, input.depends_on);
+  }
+
   deps.taskStore.create({
     id: taskId,
     sessionId: ephemeralSessionId,
@@ -87,6 +99,15 @@ async function runEphemeralTask(
     prompt: input.prompt,
     parentTaskId: callerContext?.taskId,
     recursionDepth: (callerContext?.recursionDepth ?? -1) + 1,
+    // Composition with the DAG ordering fields is recorded for ephemeral
+    // tasks too (backlog 05cc1db4): `tasks_batch` enforces the ordering with
+    // its wave scheduler, and the record must still reflect the declared
+    // upstreams so the batch is not a silent no-op for depends_on.
+    dependsOn:
+      input.depends_on && input.depends_on.length > 0
+        ? input.depends_on
+        : undefined,
+    onUpstreamFailure: input.on_upstream_failure,
   });
 
   const executionContext: ExecutionContext = {
@@ -342,6 +363,102 @@ export async function taskTool(
     }
     return response;
   }
+}
+
+/** Default `tasksBatch` concurrency when the caller omits `concurrency`. */
+export const DEFAULT_BATCH_CONCURRENCY = 4;
+
+/**
+ * Native bulk/parallel task-dispatch primitive (backlog 05cc1db4).
+ *
+ * Dispatches every prompt in `input.prompts` through the same `taskTool`
+ * path a single call would use, executing at most `input.concurrency` at
+ * once and returning `{index, task_id, status, result?}` per prompt so the
+ * caller never has to maintain a session_id↔task_id mapping by hand.
+ *
+ * Ordering composes with the existing DAG fields:
+ * - `depends_on[i]` — pre-existing upstream task ids for item `i`.
+ * - `depends_on_indexes[i]` — indexes of EARLIER items in this same batch;
+ *   resolved to their generated task ids and threaded through as
+ *   `depends_on`, so a later item is only started after the earlier one
+ *   completes (wave scheduling — a deterministic topological order).
+ * - `on_upstream_failure[i]` — per-item upstream-failure policy.
+ *
+ * A task's own execution failure is not a batch failure: `taskTool` records
+ * it as `status: 'failed'` and it is returned in that item's result. Only a
+ * validation-level failure (e.g. a session closed before dispatch) rejects.
+ */
+export async function tasksBatch(
+  input: TasksBatchInput,
+  deps: TaskDeps,
+  callerContext?: ExecutionContext
+): Promise<TasksBatchOutput> {
+  const concurrency = input.concurrency ?? DEFAULT_BATCH_CONCURRENCY;
+  const n = input.prompts.length;
+
+  const taskIds = new Array<string | undefined>(n);
+  const results = new Array<TasksBatchOutput['results'][number]>(n);
+  const completed = new Set<number>();
+  const started = new Set<number>();
+  const queue = new PQueue({ concurrency });
+
+  const runItem = async (i: number): Promise<void> => {
+    const upstream = (input.depends_on?.[i] ?? []).slice();
+    for (const j of input.depends_on_indexes?.[i] ?? []) {
+      const upstreamId = taskIds[j];
+      if (!upstreamId) {
+        throw new ToolError(
+          'VALIDATION_ERROR',
+          `tasks_batch: item ${i} depends on index ${j}, which has not produced a task yet`
+        );
+      }
+      upstream.push(upstreamId);
+    }
+
+    const onUpstreamFailure = input.on_upstream_failure?.[i];
+    const base = {
+      prompt: input.prompts[i],
+      background: false,
+      ...(upstream.length > 0 ? { depends_on: upstream } : {}),
+      ...(onUpstreamFailure ? { on_upstream_failure: onUpstreamFailure } : {}),
+    };
+    const itemInput = input.session_ids
+      ? ({ session_id: input.session_ids[i], ...base } as TaskToolInput)
+      : ({ agent_name: input.agent_name as string, ...base } as TaskToolInput);
+
+    const out = await taskTool(itemInput, deps, callerContext);
+    taskIds[i] = out.task_id;
+    results[i] = {
+      index: i,
+      task_id: out.task_id,
+      status: out.status,
+      ...(out.result !== undefined ? { result: out.result } : {}),
+    };
+  };
+
+  // Wave scheduler: each wave runs every item whose intra-batch dependencies
+  // have completed, bounded by `concurrency`. Because `depends_on_indexes`
+  // only references earlier indexes, the graph is acyclic and every item is
+  // eventually ready.
+  while (completed.size < n) {
+    const ready: number[] = [];
+    for (let i = 0; i < n; i++) {
+      if (completed.has(i) || started.has(i)) continue;
+      const idxDeps = input.depends_on_indexes?.[i] ?? [];
+      if (idxDeps.every((j) => completed.has(j))) ready.push(i);
+    }
+    if (ready.length === 0) {
+      throw new ToolError(
+        'VALIDATION_ERROR',
+        'tasks_batch: unsatisfiable dependency graph among depends_on_indexes'
+      );
+    }
+    for (const i of ready) started.add(i);
+    await Promise.all(ready.map((i) => queue.add(() => runItem(i))));
+    for (const i of ready) completed.add(i);
+  }
+
+  return { concurrency, results };
 }
 
 export async function enqueueExistingTask(

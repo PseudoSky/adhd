@@ -289,6 +289,66 @@ describe('orchestrateCycle — real agent dispatch', () => {
 });
 
 // ---------------------------------------------------------------------------
+// (1b) session producer: dag.session_id stamps every fired unit (fa9d3079 /
+//      03145a46) — the missing producer for the already-landed DispatchUnit
+//      session threading.
+// ---------------------------------------------------------------------------
+
+describe('orchestrateCycle — session producer (fa9d3079 / 03145a46)', () => {
+  it('stamps the fired unit with dag.session_id', async () => {
+    const { deps, runner } = await setupScenario(
+      'session-producer',
+      makeDag({ session_id: 'sess-abc-123' })
+    );
+
+    const result = await orchestrateCycle(deps);
+
+    expect(result.dispatched[0]?.taskStatus).toBe('completed');
+    expect(runner.firedUnits).toHaveLength(1);
+    // The unit agent-mcp would receive now carries the session.
+    expect(runner.firedUnits[0]?.session_id).toBe('sess-abc-123');
+
+    runner.cleanup();
+  });
+
+  it('NEGATIVE CONTROL: no dag.session_id leaves the unit ephemeral (session_id absent)', async () => {
+    const { deps, runner } = await setupScenario('session-producer-none', makeDag());
+
+    const result = await orchestrateCycle(deps);
+
+    expect(result.dispatched[0]?.taskStatus).toBe('completed');
+    expect(runner.firedUnits[0]?.session_id ?? null).toBeNull();
+
+    runner.cleanup();
+  });
+
+  it('a per-unit session_id wins over dag.session_id', async () => {
+    const { deps, runner } = await setupScenario(
+      'session-producer-precedence',
+      makeDag({ session_id: 'dag-level' })
+    );
+    // An optimizer that already stamps the unit must not be overwritten.
+    const override: OrchestratorDeps = {
+      ...deps,
+      optimizer: {
+        snapshot,
+        optimize: (snap, oDeps) => {
+          const units = optimize(snap, oDeps);
+          if (units[0]) units[0].session_id = 'unit-level';
+          return units;
+        },
+      },
+    };
+
+    await orchestrateCycle(override);
+
+    expect(runner.firedUnits[0]?.session_id).toBe('unit-level');
+
+    runner.cleanup();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // (2) guard failure -> correction milestone injected with triggered_by;
 //     original milestone NOT marked complete
 // ---------------------------------------------------------------------------

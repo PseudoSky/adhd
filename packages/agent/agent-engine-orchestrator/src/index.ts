@@ -24,7 +24,8 @@ export { AnthropicProvider } from './providers/anthropic.js';
 export { OpenAIProvider } from './providers/openai.js';
 export { ClaudeCliProvider, computeClaudeBuiltinArgs, extractAgentSpecName, normalizeAgentSpec } from './providers/claudecli.js';
 export { createProvider } from './providers/factory.js';
-export type { LLMProvider, ProviderChatRequest, ProviderChatResponse } from './providers/types.js';
+export { serverSideToolsForProvider, ANTHROPIC_NATIVE_WEB_TOOLS } from './providers/server-side-tools.js';
+export type { LLMProvider, ProviderChatRequest, ProviderChatResponse, ServerSideTool } from './providers/types.js';
 export type { ToolDefinition, TokenUsage } from '@adhd/agent-base-types';
 
 // ── Clients ───────────────────────────────────────────────────────────────────
@@ -53,7 +54,7 @@ export type {
   AgentVerifyMcpDeps,
   McpServerVerification,
 } from './tools/mcp-verify.js';
-export { taskTool, taskList, taskCancel, taskResume, resultTool, enqueueExistingTask } from './tools/task.js';
+export { taskTool, taskList, taskCancel, taskResume, resultTool, enqueueExistingTask, tasksBatch, DEFAULT_BATCH_CONCURRENCY } from './tools/task.js';
 export type { TaskDeps } from './tools/task.js';
 export { usageQuery, usageQueryByGrain, buildTaskUsageReport } from './tools/usage.js';
 export type { Database, UsageQueryResult, TaskUsageRow } from './tools/usage.js';

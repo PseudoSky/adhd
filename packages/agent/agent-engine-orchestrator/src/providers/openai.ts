@@ -5,6 +5,7 @@ import pRetry from "p-retry";
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
 import { resolveToolCallName } from "../clients/tool-naming.js";
+import { DEFAULT_PROVIDER_TIMEOUT_MS } from "../interfaces.js";
 import type { EngineConfig } from "../interfaces.js";
 
 import type { ProviderConfig, Message, ToolCall } from "../validation/index.js";
@@ -146,7 +147,13 @@ export class OpenAIProvider implements LLMProvider {
         this.client = new OpenAI({
             apiKey:  resolved.secret ?? "no-auth",
             baseURL: resolved.baseURL,
-            timeout: providerConfig.timeoutMs ?? 60_000,
+            // Must match the orchestrator's per-call budget
+            // (DEFAULT_PROVIDER_TIMEOUT_MS) — a shorter SDK client timeout
+            // silently aborts a call the outer AbortSignal would still allow.
+            // This was `?? 60_000`, making the raised 300_000ms default inert
+            // for openai/DeepSeek agents with no explicit provider.timeoutMs
+            // (backlog 36a73117 / post-merge bucket-B review).
+            timeout: providerConfig.timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS,
         });
     }
 

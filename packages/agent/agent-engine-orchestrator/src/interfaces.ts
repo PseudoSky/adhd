@@ -6,6 +6,26 @@
  * and passes it where needed (constructor params, function arguments).
  */
 
+/**
+ * Default per-`provider.chat()` timeout when an agent definition does not set
+ * `provider.timeoutMs`.
+ *
+ * Was 60_000ms, which proved a footgun under real fan-out: a genuine agentic
+ * turn (Read/Grep/Bash plus at least one MCP round-trip) routinely exceeds 60s,
+ * and a 29-way concurrent dispatch of `claudecli` tasks failed ~72% on the first
+ * pass (backlog 36a73117). The clock is per model call — it starts inside the
+ * turn, not at task creation — so a longer per-call budget does not penalize
+ * queued tasks. 300_000ms (5 min) matches the operator-verified override from
+ * that incident. Callers who need tighter bounds set `provider.timeoutMs`.
+ *
+ * Lives here (not in engine/orchestrator.ts) so provider adapters — e.g. the
+ * OpenAI/DeepSeek SDK client — can apply the SAME default without importing
+ * the engine module (which would create an import cycle). The engine URL/signal
+ * timeout and the provider SDK client timeout MUST agree: a shorter SDK client
+ * timeout silently aborts a call the outer signal would still allow.
+ */
+export const DEFAULT_PROVIDER_TIMEOUT_MS = 300_000;
+
 export interface EngineConfig {
   server: {
     /** Estimated token limit for the message window passed to each provider call.

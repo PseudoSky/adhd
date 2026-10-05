@@ -23,6 +23,7 @@ import type {
 } from '@adhd/agent-engine-orchestrator';
 import type { IHookRegistry } from '@adhd/agent-base-types';
 import { subscribeToTaskDone, emitTaskEvent } from './streaming/event-bus.js';
+import { withDefaultMcpServers } from './defaults.js';
 
 import {
   agentCreate,
@@ -45,6 +46,7 @@ import {
   taskCancel,
   taskResume,
   resultTool,
+  tasksBatch,
 } from '@adhd/agent-engine-orchestrator';
 import { usageQuery, usageQueryByGrain, type Database } from '@adhd/agent-engine-orchestrator';
 import {
@@ -59,6 +61,7 @@ import {
   sessionCloseInputSchema,
   sessionClearInputSchema,
   taskToolInputSchema,
+  tasksBatchInputSchema,
   taskListInputSchema,
   taskCancelInputSchema,
   resultInputSchema,
@@ -67,6 +70,7 @@ import {
 
 import type { BackgroundQueue } from '@adhd/agent-engine-orchestrator';
 import type { Orchestrator } from '@adhd/agent-engine-orchestrator';
+import type { TaskDeps } from '@adhd/agent-engine-orchestrator';
 import type { PolicyEngine } from '@adhd/agent-engine-orchestrator';
 import type { DagEngine } from '@adhd/agent-engine-orchestrator';
 import type { PromptResolverDeps } from '@adhd/agent-engine-orchestrator';
@@ -353,6 +357,12 @@ export function createServer(deps: ServerDeps): Server {
       inputSchema: toMcpInputSchema(taskToolInputSchema),
     },
     {
+      name: 'tasks_batch',
+      description:
+        'Fan out N prompts in one call with a concurrency cap; returns {index, task_id, status, result?} per prompt',
+      inputSchema: toMcpInputSchema(tasksBatchInputSchema),
+    },
+    {
       name: 'result',
       description: 'Get the result of a task',
       inputSchema: toMcpInputSchema(resultInputSchema),
@@ -425,25 +435,11 @@ export function createServer(deps: ServerDeps): Server {
           ctx
         );
       case 'task':
-        return taskTool(
-          taskToolInputSchema.parse(args),
-          {
-            agentStore: deps.agentStore,
-            sessionStore: deps.sessionStore,
-            taskStore: deps.taskStore,
-            orchestrator: deps.orchestrator,
-            queue: deps.queue,
-            policy: deps.policy,
-            hooks: deps.hooks,
-            selfUrl: deps.selfUrl,
-            inProcessDescriptors,
-            inProcessHandler,
-            db: deps.db,
-            dagEngine: deps.dagEngine,
-            config: toEngineConfig(),
-            logger: logger,
-            emitTaskEvent: emitTaskEvent as (event: { type: string; taskId: string; status?: string; result?: string | null; error?: string | null; toolName?: string; toolCallId?: string; input?: unknown; content?: unknown }) => void,
-          },
+        return taskTool(taskToolInputSchema.parse(args), buildTaskDeps(), ctx);
+      case 'tasks_batch':
+        return tasksBatch(
+          tasksBatchInputSchema.parse(args),
+          buildTaskDeps(),
           ctx
         );
       case 'result':
@@ -492,6 +488,28 @@ export function createServer(deps: ServerDeps): Server {
         );
     }
   };
+
+  /**
+   * Assemble the `TaskDeps` that `task` and `tasks_batch` both dispatch with.
+   * Defined after `inProcessHandler` (which it closes over).
+   */
+  const buildTaskDeps = (): TaskDeps => ({
+    agentStore: deps.agentStore,
+    sessionStore: deps.sessionStore,
+    taskStore: deps.taskStore,
+    orchestrator: deps.orchestrator,
+    queue: deps.queue,
+    policy: deps.policy,
+    hooks: deps.hooks,
+    selfUrl: deps.selfUrl,
+    inProcessDescriptors,
+    inProcessHandler,
+    db: deps.db,
+    dagEngine: deps.dagEngine,
+    config: toEngineConfig(),
+    logger: logger,
+    emitTaskEvent: emitTaskEvent as (event: { type: string; taskId: string; status?: string; result?: string | null; error?: string | null; toolName?: string; toolCallId?: string; input?: unknown; content?: unknown }) => void,
+  });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
@@ -558,6 +576,14 @@ export function createServer(deps: ServerDeps): Server {
         inputSchema: toMcpInputSchema(taskToolInputSchema),
       },
       {
+        name: 'tasks_batch',
+        description:
+          'Fan out N prompts in one call, honoring a concurrency cap, and return {index, task_id, status, result?} per prompt. ' +
+          'Composes with depends_on / on_upstream_failure; depends_on_indexes orders items within the batch. ' +
+          'Exactly one of agent_name (one-shot ephemeral per prompt) or session_ids (reuse existing sessions) is required.',
+        inputSchema: toMcpInputSchema(tasksBatchInputSchema),
+      },
+      {
         name: 'task_list',
         description:
           'List tasks. Filters: session_id, session_ids[], agent_name, status, is_ephemeral. Pagination: limit/offset. Projection: fields[] (id always included) or summary:true to omit the bulk prompt/result text.',
@@ -606,8 +632,11 @@ export function createServer(deps: ServerDeps): Server {
           const createInput = agentCreateInputSchema.parse(args);
           // Reject non-ADHD_AGENT_-prefixed env names at create time (BUG-ORCH-011).
           assertEnvNamesAllowed(createInput.provider, toEngineConfig(), ['provider']);
+          // Default-wire the adopted filesystem + shell MCP servers so a new
+          // agent is born with file/shell capabilities (backlog 97acef07). An
+          // explicit non-empty mcpServers map always wins.
           return toMcpContent(
-            agentCreate(createInput, {
+            agentCreate(withDefaultMcpServers(createInput), {
               agentStore: deps.agentStore,
               sessionStore: crudSessionStore,
             })
@@ -700,23 +729,15 @@ export function createServer(deps: ServerDeps): Server {
 
         case 'task':
           return toMcpContent(
-            await taskTool(taskToolInputSchema.parse(args), {
-              agentStore: deps.agentStore,
-              sessionStore: deps.sessionStore,
-              taskStore: deps.taskStore,
-              orchestrator: deps.orchestrator,
-              queue: deps.queue,
-              policy: deps.policy,
-              hooks: deps.hooks,
-              selfUrl: deps.selfUrl,
-              inProcessDescriptors,
-              inProcessHandler,
-              db: deps.db,
-              dagEngine: deps.dagEngine,
-              config: toEngineConfig(),
-              logger: logger,
-              emitTaskEvent: emitTaskEvent as (event: { type: string; taskId: string; status?: string; result?: string | null; error?: string | null; toolName?: string; toolCallId?: string; input?: unknown; content?: unknown }) => void,
-            })
+            await taskTool(taskToolInputSchema.parse(args), buildTaskDeps())
+          );
+
+        case 'tasks_batch':
+          return toMcpContent(
+            await tasksBatch(
+              tasksBatchInputSchema.parse(args),
+              buildTaskDeps()
+            )
           );
 
         case 'task_list':

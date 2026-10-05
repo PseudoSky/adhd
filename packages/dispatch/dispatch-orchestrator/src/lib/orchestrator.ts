@@ -57,6 +57,7 @@ import type {
   IDispatchAgentRunner,
   RealUsageTurn,
 } from './agent-runner.js';
+import { AgentMcpToolError } from './agent-runner.js';
 
 // ---------------------------------------------------------------------------
 // ── DETERMINISM SEAMS ────────────────────────────────────────────────────────
@@ -934,6 +935,8 @@ export interface PollOutcome {
   status: DispatchTaskStatus;
   usage: DispatchUsageReport | undefined;
   timedOut: boolean;
+  /** Task's recorded failure reason, when present (e.g. a policy violation). */
+  error?: string;
 }
 
 /**
@@ -949,12 +952,12 @@ export async function pollUntilTerminal(
 ): Promise<PollOutcome> {
   let elapsedMs = 0;
   for (;;) {
-    const { status, usage } = await runner.poll(taskId);
+    const { status, usage, error } = await runner.poll(taskId);
     if (POLL_TERMINAL_STATUSES.has(status)) {
-      return { status, usage, timedOut: false };
+      return { status, usage, timedOut: false, ...(error !== undefined ? { error } : {}) };
     }
     if (elapsedMs >= poll.timeoutMs) {
-      return { status, usage, timedOut: true };
+      return { status, usage, timedOut: true, ...(error !== undefined ? { error } : {}) };
     }
     await sleep(poll.intervalMs);
     elapsedMs += poll.intervalMs;
@@ -1116,6 +1119,10 @@ async function dispatchUnit(
   let turns: Turn[] = [];
   let taskId: string | null = null;
   let taskStatus: DispatchTaskStatus | null = null;
+  // Task's recorded failure reason (e.g. an agent-mcp policy violation:
+  // `[DELEGATION_NOT_ALLOWED] ...`). Surfaced into `dispatch_log` notes and
+  // guard outputs so a depth/allowlist stop is visible (backlog 4e829a08).
+  let taskError: string | undefined;
   let opResultStatus: OperationStatus;
   // Previously: `unit.prompt != null` — behaviorally identical, since
   // assembleUnit() derives execution_mode from that SAME `prompt !== null`
@@ -1146,13 +1153,16 @@ async function dispatchUnit(
 
     const polled = await pollUntilTerminal(deps.runner, taskId, deps.poll, deps.sleep);
     taskStatus = polled.status;
+    taskError = polled.error;
     turns = reconcileTurns(await deps.runner.queryTurns(taskId));
+
+    const errorSuffix = taskError ? `: ${taskError}` : '';
 
     if (polled.timedOut) {
       opResultStatus = 'failed';
       notes.push({
         level: 'error',
-        text: `dispatch ${dispatchId}: poll deadline (${deps.poll.timeoutMs}ms) exceeded for task '${taskId}' (last status: '${taskStatus}') — marking operations failed, skipping milestone guard(s)`,
+        text: `dispatch ${dispatchId}: poll deadline (${deps.poll.timeoutMs}ms) exceeded for task '${taskId}' (last status: '${taskStatus}')${errorSuffix} — marking operations failed, skipping milestone guard(s)`,
       });
     } else if (taskStatus === 'completed') {
       opResultStatus = 'complete';
@@ -1160,7 +1170,7 @@ async function dispatchUnit(
       opResultStatus = 'failed';
       notes.push({
         level: 'warn',
-        text: `dispatch ${dispatchId}: task '${taskId}' ended with status '${taskStatus}' (not 'completed') — marking operations failed, skipping milestone guard(s)`,
+        text: `dispatch ${dispatchId}: task '${taskId}' ended with status '${taskStatus}' (not 'completed')${errorSuffix} — marking operations failed, skipping milestone guard(s)`,
       });
     }
   } else if (unit.operations.length > 0) {
@@ -1261,7 +1271,7 @@ async function dispatchUnit(
       const guardRanAt = deps.clock();
       resultEntry.status = 'failed';
       resultEntry.guard_result = 'fail';
-      resultEntry.guard_output = `guard not run: dispatch ${dispatchId} did not complete (task status: ${taskStatus ?? 'n/a'})`;
+      resultEntry.guard_output = `guard not run: dispatch ${dispatchId} did not complete (task status: ${taskStatus ?? 'n/a'})${taskError ? `; task error: ${taskError}` : ''}`;
       resultEntry.guard_ran_at = guardRanAt;
       continue;
     }
@@ -1297,7 +1307,7 @@ async function dispatchUnit(
 
     if (!shouldRunGuards) {
       const guardRanAt = deps.clock();
-      const failOutput = `guard not run: dispatch ${dispatchId} did not complete (task status: ${taskStatus ?? 'n/a'})`;
+      const failOutput = `guard not run: dispatch ${dispatchId} did not complete (task status: ${taskStatus ?? 'n/a'})${taskError ? `; task error: ${taskError}` : ''}`;
       results.push({
         op_id: guardOpId,
         status: 'failed',
@@ -1459,6 +1469,13 @@ export async function orchestrateCycle(deps: OrchestratorDeps): Promise<CycleRes
 
   for (const unit of units) {
     resolveUnitProviderAndTokens(unit, dag);
+    // Session producer (FEAT-DISPATCH-SESSION-001, fa9d3079 / 03145a46): a
+    // top-level `dag.session_id` stamps every unit that does not already carry
+    // one, so `AgentMcpRunner.fire` forwards it and the unit runs as a
+    // SESSIONED (non-ephemeral) task. A per-unit id still wins.
+    if (unit.session_id == null && dag.session_id != null) {
+      unit.session_id = dag.session_id;
+    }
     try {
       const { summary, injectedSlugs } = await dispatchUnit(unit, dag, snap, resolved);
       dispatched.push(summary);
@@ -1469,7 +1486,18 @@ export async function orchestrateCycle(deps: OrchestratorDeps): Promise<CycleRes
       await resolved.client.saveDag(dag);
       persisted = true;
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
+      // Surface the agent-mcp error CODE (not just its message) when the
+      // boundary rejected the unit — a fire-time policy rejection
+      // (e.g. DELEGATION_NOT_ALLOWED) must be identifiable in dispatch_log
+      // (backlog 4e829a08).
+      let errMsg: string;
+      if (err instanceof AgentMcpToolError) {
+        errMsg = `[${err.code}] ${err.message}`;
+      } else if (err instanceof Error) {
+        errMsg = err.message;
+      } else {
+        errMsg = String(err);
+      }
       const failId = resolved.idFactory();
       const failStartedAt = resolved.clock();
       const failCompletedAt = resolved.clock();

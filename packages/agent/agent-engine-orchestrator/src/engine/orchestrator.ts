@@ -1,4 +1,5 @@
 import type { LLMProvider } from '../providers/types.js';
+import { serverSideToolsForProvider } from '../providers/server-side-tools.js';
 import type { ExecutionContext, Message } from '../validation/index.js';
 import type {
   IHookRegistry,
@@ -12,6 +13,7 @@ import { ToolError } from '../validation/errors.js';
 import { generateId } from '../utils/ids.js';
 import { nowIso } from '../utils/timestamps.js';
 import type { EngineConfig, EngineLogger } from '../interfaces.js';
+import { DEFAULT_PROVIDER_TIMEOUT_MS } from '../interfaces.js';
 
 import type { McpClientRegistry } from '../clients/registry.js';
 import type { PolicyEngine } from './policy.js';
@@ -31,20 +33,10 @@ import {
 
 const HITL_TOOL_NAME = 'request_human_input';
 
-/**
- * Default per-`provider.chat()` timeout when an agent definition does not set
- * `provider.timeoutMs`.
- *
- * Was 60_000ms, which proved a footgun under real fan-out: a genuine agentic
- * turn (Read/Grep/Bash plus at least one MCP round-trip) routinely exceeds 60s,
- * and a 29-way concurrent dispatch of `claudecli` tasks failed ~72% on the first
- * pass (backlog 36a73117). The clock is per model call — it starts inside the
- * turn, not at task creation — so a longer per-call budget does not penalize
- * queued tasks. 300_000ms (5 min) matches the operator-verified override from
- * that incident. Callers who need tighter bounds set `provider.timeoutMs`.
- */
-export const DEFAULT_PROVIDER_TIMEOUT_MS = 300_000;
-
+// Re-exported for existing importers (`../engine/orchestrator.js`); the
+// canonical definition now lives in interfaces.ts so provider adapters can
+// share it without an import cycle.
+export { DEFAULT_PROVIDER_TIMEOUT_MS };
 
 const HITL_BUILTIN_TOOL_DEFINITION = {
   name: 'builtin__request_human_input',
@@ -350,9 +342,17 @@ export class Orchestrator {
                 ? [toolDocSystemMessage, ...baseMessages.slice(1)]
                 : [toolDocSystemMessage, ...baseMessages];
           }
+          // Provider-native web tools (default on, opt out via
+          // nativeWebTools:false) — see server-side-tools.ts (backlog 1abd2d84).
+          const serverSideTools = serverSideToolsForProvider(
+            executionContext.agentDefinition.provider.type,
+            executionContext.agentDefinition.nativeWebTools !== false
+          );
           providerResponse = await provider.chat({
             messages: messagesToSend,
             tools: advertisedTools.length > 0 ? advertisedTools : undefined,
+            serverSideTools:
+              serverSideTools.length > 0 ? serverSideTools : undefined,
             signal: composedSignal,
             executeTool: async (server, tool, args) => {
               registry.assertToolAllowed?.(server, tool);
@@ -920,9 +920,19 @@ export class Orchestrator {
           error: 'Task was cancelled',
         });
       } else {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-
+        // Prefix the error CODE for ToolErrors so a policy stop is
+        // identifiable on the stored task — the same `[CODE] message`
+        // convention agent-mcp's MCP boundary uses. Downstream consumers
+        // (e.g. dispatch-orchestrator's dispatch_log, backlog 4e829a08)
+        // can then surface the exact enforcement code, not just prose.
+        let errorMessage: string;
+        if (error instanceof ToolError) {
+          errorMessage = `[${error.code}] ${error.message}`;
+        } else if (error instanceof Error) {
+          errorMessage = error.message;
+        } else {
+          errorMessage = String(error);
+        }
         taskStore.updateStatus(taskId, 'failed', {
           error: errorMessage,
         });
