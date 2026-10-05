@@ -34,6 +34,14 @@ export default [
             "**/*.json"
         ],
         rules: {
+            // `@adhd/backlog` is a REAL runtime dependency: resolveBacklogMcpEntry()
+            // locates its MCP entry at runtime via
+            // `createRequire(...).resolve('@adhd/backlog')` — a dynamic require, not
+            // a static import — so @nx/dependency-checks cannot see the usage and
+            // would otherwise flag the declaration as obsolete. Ignoring it keeps the
+            // declaration (needed so a published/installed dispatch-cli resolves the
+            // backlog server out of the box) without a false "unused dependency"
+            // error. Same rationale as the already-ignored @modelcontextprotocol/sdk.
             "@nx/dependency-checks": [
                 "error",
                 {
@@ -41,6 +49,7 @@ export default [
                         "{projectRoot}/vite.config.{js,ts,mjs,mts}"
                     ],
                     ignoredDependencies: [
+                        "@adhd/backlog",
                         "@modelcontextprotocol/sdk"
                     ]
                 }

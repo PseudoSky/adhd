@@ -700,6 +700,9 @@ importers:
 
   entrypoint/dispatch-cli:
     dependencies:
+      '@adhd/backlog':
+        specifier: ^1.0.8
+        version: link:../backlog
       '@adhd/dispatch-base-spec':
         specifier: ^0.1.5
         version: link:../../packages/dispatch/dispatch-base-spec
@@ -966,7 +969,7 @@ importers:
   packages/agent/agent-generator-plugin:
     dependencies:
       '@nx/devkit':
-        specifier: '*'
+        specifier: 18.3.4
         version: 18.3.4(nx@18.3.4)
       tslib:
         specifier: ^2.6.0
@@ -985,7 +988,7 @@ importers:
         specifier: ^2.3.3
         version: link:../agent-base-types
       zod:
-        specifier: '*'
+        specifier: ^4.4.3
         version: 4.4.3
 
   packages/agent/agent-plugin-sanitize:
@@ -994,7 +997,7 @@ importers:
         specifier: ^2.3.3
         version: link:../agent-base-types
       zod:
-        specifier: '*'
+        specifier: ^4.4.3
         version: 4.4.3
 
   packages/agent/agent-store-prompts:
@@ -1139,7 +1142,7 @@ importers:
         specifier: ^10.4.3
         version: 10.6.0
       zod:
-        specifier: '*'
+        specifier: ^4.4.3
         version: 4.4.3
 
   packages/apigen/apigen-engine-conformance:
@@ -1205,7 +1208,7 @@ importers:
   packages/apigen/apigen-generator-nx:
     dependencies:
       '@nx/devkit':
-        specifier: '*'
+        specifier: 18.3.4
         version: 18.3.4(nx@18.3.4)
       tslib:
         specifier: ^2.3.0

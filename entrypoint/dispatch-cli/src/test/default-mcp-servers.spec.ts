@@ -16,8 +16,16 @@
  * consumer. `resolveBacklogMcpEntry()` now resolves via the installed
  * `@adhd/backlog` package, then this checkout's own `entrypoint/` marker
  * (relative to `import.meta.url`) — never cwd.
+ *
+ * 1505199b closes the two residual gaps: (1) `@adhd/backlog` is now a DECLARED
+ * dependency, so the installed-package branch is reachable out of the box (the
+ * "resolves what it declares" test reds if it is removed); and (2) the DEFAULT
+ * (no-override) entry's on-disk EXISTENCE is asserted, so a resolver that hands
+ * the spawned server a path that 404s is caught. (2) couples this package's
+ * `test` target to `backlog:build`; the CI cost is documented in project.json.
  */
 import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -68,13 +76,43 @@ describe('resolveBacklogMcpEntry + defaultDispatchMcpServers (daafe2d3)', () => 
 
     // The core review fix: absolute (not a relative, cwd-dependent guess) and
     // pointing at THIS checkout's backlog entry, never `<cwd>/entrypoint/...`.
-    // (The path's on-disk existence is asserted for the override fixture below;
-    // asserting it for the repo default would couple this test to the
-    // uncacheable `backlog:build` — a dispatch-cli-only change does not build
-    // backlog in CI, so a clean runner would fail here for a non-defect. The
-    // cwd-independence test below is the real teeth for the review finding.)
+    // (On-disk existence of the default is asserted by the dedicated test below;
+    // cwd-independence is the teeth for THIS review finding.)
     expect(entry.startsWith('/') || /^[A-Za-z]:[\\/]/.test(entry)).toBe(true);
     expect(entry).toBe(REPO_BACKLOG_ENTRY);
+  });
+
+  it('declares @adhd/backlog as a runtime dependency, so the installed-package branch is reachable', () => {
+    // Resolving FROM THIS PACKAGE's own directory must find @adhd/backlog: it is
+    // declared in entrypoint/dispatch-cli/package.json and installed by pnpm.
+    // Without the declaration this throws and resolveBacklogMcpEntry silently
+    // degrades to the monorepo walk-up — which does NOT exist for a
+    // published/installed dispatch-cli (the residual gap 1505199b). REDS if the
+    // dependency is removed from package.json.
+    const pkgRequire = createRequire(
+      join(REPO_ROOT, 'entrypoint', 'dispatch-cli', 'package.json')
+    );
+    // Resolve the package MANIFEST (independent of backlog's build) — proves
+    // @adhd/backlog is declared + installed for this package, which is what
+    // makes `createRequire(entry).resolve('@adhd/backlog')` reachable at runtime.
+    const manifest = pkgRequire.resolve('@adhd/backlog/package.json');
+    expect(
+      manifest.endsWith(join('entrypoint', 'backlog', 'package.json'))
+    ).toBe(true);
+  });
+
+  it('resolves the DEFAULT backlog entry (no override) to a file that EXISTS — provably spawnable', () => {
+    // The `backlog` mcpServers entry spawns `node <entry> serve --transport mcp`.
+    // Asserting existence on the DEFAULT closes the original defect class: a
+    // resolver that hands the child a path that 404s at spawn time. Requires
+    // `backlog:build` (cache:false) — wired into this package's `test` dependsOn
+    // in project.json; the CI cost of that coupling is documented there.
+    const entry = resolveBacklogMcpEntry({} as NodeJS.ProcessEnv);
+    expect(existsSync(entry)).toBe(true);
+    // …and it is the BACKLOG entry, not some unrelated file that happens to exist.
+    expect(entry.endsWith(join('entrypoint', 'backlog', 'dist', 'index.js'))).toBe(
+      true
+    );
   });
 
   it('resolves independent of process.cwd() — the exact defect being fixed', () => {
