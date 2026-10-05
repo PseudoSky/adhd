@@ -368,3 +368,31 @@ Schema version 1.
   in worktree `.worktrees/bucket-a`; no push, no branch or worktree removed, and no gates were run by
   this operation (the post-merge review runs the suite). This record is the only change to this file
   in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: fast-forward land of the `feat/bucket-a-store-registry` remainder
+  `d78aaf2f` (dispatch-2026-10-04-9c4e).** Ran `git merge --ff-only feat/bucket-a-store-registry` on
+  `main`, moving `main` `ff979cc2` → `d78aaf2f` (1 commit; 3 files, +342/-83) with no merge commit.
+  A fast-forward is within §Branching & merge's stated norm rather than a deviation: it "carries true
+  merge commits" and ff-only is not enforced, and — unlike a rebase — a fast-forward rewrites no
+  commit; it advances `main`'s ref to the branch head, which is what this operation was directed to
+  do, so the "branch solely your own" rebase restriction is not implicated. Preconditions verified
+  before the merge: `git rev-parse feat/bucket-a-store-registry` = `d78aaf2f`; the merge-base of
+  `main` and the branch was `main` itself (`ff979cc2`); `git merge-base --is-ancestor main
+  feat/bucket-a-store-registry` exited 0; `git rev-list --count main..<branch>` = 1 and
+  `<branch>..main` = 0; and `git show -s --format=%P d78aaf2f` is the single parent `ff979cc2`.
+  The merge ran clean (`Fast-forward`, exit 0) and `d78aaf2f` is contained: post-merge `git
+  merge-base --is-ancestor d78aaf2f main` exits 0 and `git rev-list --count
+  main..feat/bucket-a-store-registry` = 0. Contents (numstat `ff979cc2..d78aaf2f`):
+  `entrypoint/agent-mcp/src/db/migrate.ts` (+9), `entrypoint/agent-mcp/src/db/migrate-legacy.ts`
+  (+157/-83), and `entrypoint/agent-mcp/src/__tests__/db.legacy-migration.test.ts` (+176) — the
+  in-place `task_usage` reconciliation and the refusal of a false-success legacy seed. A concurrent
+  agent's uncommitted work was present in the working tree throughout
+  (`entrypoint/backlog/src/query/card.ts` and `query.ts` modified; `sort-priority-direction.spec.ts`
+  untracked) and was neither staged, swept, nor touched — the merge's path set is disjoint from
+  those paths (empty `git diff --name-only main d78aaf2f -- entrypoint/backlog/src/query/...`), and
+  their sha256 hashes and `git status --porcelain` lines were byte-identical before and after.
+  The branch never touched this file (empty `git diff --name-only ff979cc2 d78aaf2f --
+  docs/GIT-POLICY.md`), so `main`'s policy blob `2c74035b76a352ff8a732ba81df1e6bcd248e22c` survived
+  the merge byte-identical. No push, no branch or worktree removed, and no gates were run by this
+  operation (the post-merge review runs the suite). This record is the only change to this file in
+  this operation. Recorded under §Commit convention's `docs(<area>):` scope.
