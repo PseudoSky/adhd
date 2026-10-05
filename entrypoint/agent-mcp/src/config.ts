@@ -477,3 +477,65 @@ export function toEngineConfig(): EngineConfig {
     isEnvNameAllowed: (name: string) => env.isEnvNameAllowed(name),
   };
 }
+
+// ============================================================================
+// Default plugins (backlog 5339c2e5)
+// ============================================================================
+
+export const DEFAULT_BUDGET_PLUGIN_MODULE = "@adhd/agent-plugin-budget";
+
+export interface DefaultPluginEntry {
+  module: string;
+  config: Record<string, unknown>;
+}
+
+/**
+ * The plugin(s) agent-mcp loads BY DEFAULT, before any `ADHD_AGENT_PLUGINS` /
+ * config-file entries — so an unattended `dispatch-cli` setup gets a spend cap
+ * without the operator hand-authoring `agent-mcp.config.json` (backlog
+ * 5339c2e5). Today this is exactly one entry: `@adhd/agent-plugin-budget`,
+ * configured with a conservative, always-enforceable model-call cap (a
+ * rate-independent axis, so it bites even with zero cost rates configured).
+ *
+ * Opt OUT with `ADHD_AGENT_DISABLE_BUDGET_PLUGIN=1`. Env knobs:
+ *  - `ADHD_AGENT_BUDGET_MAX_CALLS` — cumulative model-call cap (default 500;
+ *    ≤0 disables the call cap).
+ *  - `ADHD_AGENT_BUDGET_COST_USD`  — optional USD cost cap; when set, flat
+ *    per-token rates are configured so the cap is enforceable.
+ *
+ * A user entry that names the same module (config file or `ADHD_AGENT_PLUGINS`)
+ * overrides the default — the loader de-dupes by module and the user wins.
+ */
+export function defaultPluginEntries(
+  processEnv: NodeJS.ProcessEnv = process.env
+): DefaultPluginEntry[] {
+  const optOut = processEnv["ADHD_AGENT_DISABLE_BUDGET_PLUGIN"];
+  if (optOut === "1" || optOut === "true") return [];
+
+  const caps: Array<Record<string, unknown>> = [];
+  const maxCalls = Number(processEnv["ADHD_AGENT_BUDGET_MAX_CALLS"] ?? "500");
+  if (Number.isFinite(maxCalls) && maxCalls > 0) {
+    caps.push({ field: "calls", maximum: maxCalls });
+  }
+
+  const defaults: Record<string, unknown> = { mode: "block", caps };
+
+  const rawCost = processEnv["ADHD_AGENT_BUDGET_COST_USD"];
+  if (rawCost !== undefined) {
+    const costUsd = Number(rawCost);
+    if (Number.isFinite(costUsd) && costUsd > 0) {
+      // Cost is only enforceable when per-token rates are known; supply flat
+      // defaults so a bare ADHD_AGENT_BUDGET_COST_USD produces a real cap.
+      defaults["costPerInputToken"] = 0.000003;
+      defaults["costPerOutputToken"] = 0.000015;
+      caps.push({ field: "cost", maximum: costUsd });
+    }
+  }
+
+  return [
+    {
+      module: DEFAULT_BUDGET_PLUGIN_MODULE,
+      config: { scope: "global", defaults },
+    },
+  ];
+}
