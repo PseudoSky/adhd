@@ -110,6 +110,30 @@ function loggedOperationIds(dag: DagJson): Set<string> {
 }
 
 /**
+ * The most recent HITL suspension recorded for `slug`, if any (03145a46).
+ * Scans the dispatch_log for an entry that carries a `suspension` AND touches
+ * one of the milestone's own operation ids; the LAST such entry wins (a
+ * milestone suspended, resumed, and suspended again reports the live one).
+ * Returns `null` when the milestone has never suspended.
+ */
+function latestSuspensionForMilestone(
+  dag: DagJson,
+  slug: string,
+  ownOps: Map<string, string[]>
+): { taskId: string; resumeToken: string } | null {
+  const opIds = new Set(ownOps.get(slug) ?? []);
+  if (opIds.size === 0) return null;
+  let latest: { taskId: string; resumeToken: string } | null = null;
+  for (const entry of dag.dispatch_log) {
+    if (!entry.suspension) continue;
+    if (entry.operations.some((opId) => opIds.has(opId))) {
+      latest = entry.suspension;
+    }
+  }
+  return latest;
+}
+
+/**
  * Production `AgentMcpRunner` wiring — matches agent-mcp's own documented
  * Quickstart invocation (packages/ai/agent-mcp/README.md): spawn the
  * published server via `npx -y @adhd/agent-mcp`.
@@ -256,6 +280,9 @@ export function buildProductionAgentMcpRunner(
   const args = env['ADHD_DISPATCH_AGENT_MCP_ARGS']
     ? env['ADHD_DISPATCH_AGENT_MCP_ARGS'].split(/\s+/).filter(Boolean)
     : ['-y', '@adhd/agent-mcp'];
+  const requestTimeoutMs = env['ADHD_DISPATCH_AGENT_MCP_REQUEST_TIMEOUT_MS']
+    ? Number(env['ADHD_DISPATCH_AGENT_MCP_REQUEST_TIMEOUT_MS'])
+    : DEFAULT_POLL.timeoutMs;
   return new AgentMcpRunner({
     command,
     args,
@@ -263,6 +290,12 @@ export function buildProductionAgentMcpRunner(
     // DAG-named agents must already exist (f1dbd0f2): never silently
     // (re)create a missing/deleted persona. `calibrate` overrides this.
     createAgentsIfMissing: overrides.createAgentsIfMissing ?? false,
+    // Align the MCP per-request timeout with the orchestrator poll budget
+    // (DEFAULT_POLL) so a synchronous `task` call can never be aborted at the
+    // SDK's 60s default before the poll deadline it is paired with — the
+    // "60s MCP abort vs Ns poll" mismatch. Sessioned tasks already fire in the
+    // background (03145a46); this covers the synchronous ephemeral path too.
+    requestTimeoutMs,
     ...(overrides.clientFactory ? { clientFactory: overrides.clientFactory } : {}),
   });
 }
@@ -320,6 +353,14 @@ export interface MilestoneStatusEntry {
   loggedOperationIds: string[];
   tokensEstimated: number | null;
   tokensActual: number | null;
+  /**
+   * Present iff `status === 'awaiting_input'` (03145a46): the suspended
+   * agent-mcp task and the opaque `resumeToken` to pass to agent-mcp's
+   * `task_resume` to release it. Read from the milestone's most recent
+   * dispatch_log entry carrying a `suspension` — so a fresh `dispatch-cli
+   * status` process can surface a suspension fired by an earlier process.
+   */
+  awaitingInput?: { taskId: string; resumeToken: string };
 }
 
 /**
@@ -341,11 +382,16 @@ export async function statusCore(
 
   const report: Record<string, MilestoneStatusEntry> = {};
   for (const [slug, ms] of Object.entries(snap.milestones)) {
+    const awaitingInput =
+      ms.status === 'awaiting_input'
+        ? latestSuspensionForMilestone(dag, slug, ownOps)
+        : null;
     report[slug] = {
       status: ms.status,
       loggedOperationIds: (ownOps.get(slug) ?? []).filter((id) => logged.has(id)),
       tokensEstimated: ms.tokens_estimated,
       tokensActual: ms.tokens_actual,
+      ...(awaitingInput ? { awaitingInput } : {}),
     };
   }
   return report;

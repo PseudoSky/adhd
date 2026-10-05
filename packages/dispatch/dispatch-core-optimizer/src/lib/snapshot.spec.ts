@@ -9,6 +9,7 @@ import {
   miniMilestone,
   miniOp,
   passingGuardEntry,
+  suspendedEntry,
 } from '../test/fixtures.js';
 
 // ---------------------------------------------------------------------------
@@ -361,5 +362,42 @@ describe('snapshot() non-mutation contract', () => {
     expect(snap.milestones['a']?.status).toBe('complete');
     expect(snap.milestones['b']?.eligible).toBe(true);
     expect(snap.milestones['a']?.si_bytes).toBe(10);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// snapshot() — HITL suspension status derivation (03145a46)
+// ---------------------------------------------------------------------------
+
+describe('snapshot() HITL suspension', () => {
+  it('reports a suspended milestone as awaiting_input — not pending, not failed', () => {
+    const dag = miniDag({
+      terminal: 'a',
+      milestones: { a: miniMilestone({ depends_on: [] }) },
+      operations: [miniOp({ id: 'a.1', milestone: 'a' })],
+      dispatch_log: [suspendedEntry('a', ['a.1'])],
+    });
+
+    const snap = snapshot(dag, defaultDeps());
+
+    // NEGATIVE-CONTROL: removing the `entry.suspension` branch in
+    // deriveMilestoneStatus makes this fall through to 'pending' (the skip
+    // results are not 'failed') -> red.
+    expect(snap.milestones['a']?.status).toBe('awaiting_input');
+  });
+
+  it('a later completing entry overrides a prior suspension (resume -> complete)', () => {
+    const dag = miniDag({
+      terminal: 'a',
+      milestones: { a: miniMilestone({ depends_on: [] }) },
+      operations: [miniOp({ id: 'a.1', milestone: 'a' })],
+      dispatch_log: [suspendedEntry('a', ['a.1']), passingGuardEntry('a')],
+    });
+
+    const snap = snapshot(dag, defaultDeps());
+
+    // The 'complete' (guard pass) check runs first, so a resumed-and-finished
+    // milestone reads 'complete', never a stale 'awaiting_input'.
+    expect(snap.milestones['a']?.status).toBe('complete');
   });
 });

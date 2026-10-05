@@ -169,3 +169,50 @@ export function makeCompletionLogEntry(slug: string, opIds: string[]): DispatchL
     notes: [],
   };
 }
+
+/**
+ * A `dispatch_log` entry recording a HITL SUSPENSION for `slug` (03145a46):
+ * the sessioned agent-mcp task parked at `awaiting_input`, so the milestone's
+ * ops and guard are recorded 'skipped' (never 'failed') and the entry carries
+ * the `suspension` `dispatchUnit` persists. Mirrors real dispatch output so
+ * `statusCore`'s `awaiting_input` + `awaitingInput` surface can be tested
+ * deterministically.
+ */
+export function makeSuspensionLogEntry(
+  slug: string,
+  opIds: string[],
+  suspension: { taskId: string; resumeToken: string }
+): DispatchLogEntry {
+  const guardId = `${slug}.guard`;
+  const ranAt = '2026-01-01T00:01:00Z';
+  return {
+    id: `fixture-suspension-${slug}`,
+    kind: 'execution',
+    provider: 'local',
+    model: null,
+    agent: 'fixture',
+    effort: null,
+    started_at: '2026-01-01T00:00:00Z',
+    completed_at: null,
+    operations: [...opIds, guardId],
+    turns: [],
+    results: [
+      ...opIds.map((id) => ({
+        op_id: id,
+        status: 'skipped' as const,
+        guard_result: null,
+        guard_output: null,
+        guard_ran_at: null,
+      })),
+      {
+        op_id: guardId,
+        status: 'skipped' as const,
+        guard_result: null,
+        guard_output: 'guard not run: task suspended awaiting input',
+        guard_ran_at: ranAt,
+      },
+    ],
+    notes: [],
+    suspension,
+  };
+}

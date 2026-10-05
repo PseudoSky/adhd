@@ -835,6 +835,12 @@ export interface DispatchedUnitSummary {
   /** `null` when no agent dispatch occurred (guard-only / tool-call-only unit). */
   taskId: string | null;
   taskStatus: DispatchTaskStatus | null;
+  /**
+   * Present iff `taskStatus === 'awaiting_input'`: the suspended agent-mcp task
+   * + its HITL `resumeToken` (also persisted on the dispatch_log entry's
+   * `suspension` so a fresh `dispatch-cli status` process can read it).
+   */
+  suspension: { taskId: string; resumeToken: string } | null;
   dispatchLogEntryId: string;
   guardOutcomes: MilestoneGuardOutcome[];
 }
@@ -920,9 +926,11 @@ function resolveUnitProviderAndTokens(unit: DispatchUnit, dag: DagJson): void {
 
 /**
  * Statuses that stop polling. `awaiting_input` (agent-mcp's human-in-the-loop
- * state) is treated as terminal-but-unresolved: this minimal loop has no
- * `task_resume` wiring, so it is handled the same as a failure (see
- * `dispatchUnit`) rather than polled forever.
+ * state) is terminal-until-resumed: `dispatchUnit` does NOT treat it as a
+ * failure — it parks the unit and records the suspension (task id +
+ * resumeToken) on the dispatch_log entry so `dispatch-cli status` can surface
+ * it and an operator can `task_resume` it (03145a46). Polling forever would
+ * hang the cycle; treating it as failed would inject a spurious correction.
  */
 export const POLL_TERMINAL_STATUSES: ReadonlySet<DispatchTaskStatus> = new Set([
   'completed',
@@ -937,6 +945,8 @@ export interface PollOutcome {
   timedOut: boolean;
   /** Task's recorded failure reason, when present (e.g. a policy violation). */
   error?: string;
+  /** HITL resume token, present only when `status === 'awaiting_input'`. */
+  resumeToken?: string;
 }
 
 /**
@@ -952,12 +962,13 @@ export async function pollUntilTerminal(
 ): Promise<PollOutcome> {
   let elapsedMs = 0;
   for (;;) {
-    const { status, usage, error } = await runner.poll(taskId);
+    const { status, usage, error, resumeToken } = await runner.poll(taskId);
+    const token = resumeToken !== undefined ? { resumeToken } : {};
     if (POLL_TERMINAL_STATUSES.has(status)) {
-      return { status, usage, timedOut: false, ...(error !== undefined ? { error } : {}) };
+      return { status, usage, timedOut: false, ...(error !== undefined ? { error } : {}), ...token };
     }
     if (elapsedMs >= poll.timeoutMs) {
-      return { status, usage, timedOut: true, ...(error !== undefined ? { error } : {}) };
+      return { status, usage, timedOut: true, ...(error !== undefined ? { error } : {}), ...token };
     }
     await sleep(poll.intervalMs);
     elapsedMs += poll.intervalMs;
@@ -1123,6 +1134,10 @@ async function dispatchUnit(
   // `[DELEGATION_NOT_ALLOWED] ...`). Surfaced into `dispatch_log` notes and
   // guard outputs so a depth/allowlist stop is visible (backlog 4e829a08).
   let taskError: string | undefined;
+  // HITL suspension (03145a46): set when the agent-mcp task parked at
+  // `awaiting_input` instead of completing. The unit is PAUSED, not failed —
+  // persisted on the dispatch_log entry and surfaced by `dispatch-cli status`.
+  let suspension: { taskId: string; resumeToken: string } | null = null;
   let opResultStatus: OperationStatus;
   // Previously: `unit.prompt != null` — behaviorally identical, since
   // assembleUnit() derives execution_mode from that SAME `prompt !== null`
@@ -1166,6 +1181,23 @@ async function dispatchUnit(
       });
     } else if (taskStatus === 'completed') {
       opResultStatus = 'complete';
+    } else if (taskStatus === 'awaiting_input') {
+      // HITL: the task is SUSPENDED awaiting an operator decision, not failed.
+      // Park the unit: record the suspension (task id + resumeToken) on the
+      // dispatch_log entry so `dispatch-cli status` can surface it and an
+      // operator can `task_resume` it. The unit's ops are 'skipped' (never
+      // completed), and guards are deliberately NOT run and NO correction is
+      // injected — verification is meaningless until the task actually
+      // finishes after a resume.
+      suspension = { taskId, resumeToken: polled.resumeToken ?? '' };
+      opResultStatus = 'skipped';
+      notes.push({
+        level: 'info',
+        text:
+          `dispatch ${dispatchId}: task '${taskId}' is awaiting human input (HITL)` +
+          `${polled.resumeToken ? ' — resumeToken recorded' : ' — no resumeToken returned'}` +
+          ' — unit parked (operations skipped, guards not run); resume with `task_resume` then re-run the cycle',
+      });
     } else {
       opResultStatus = 'failed';
       notes.push({
@@ -1249,7 +1281,7 @@ async function dispatchUnit(
     };
   });
 
-  const shouldRunDispatchedGuards = opResultStatus !== 'failed';
+  const shouldRunDispatchedGuards = opResultStatus !== 'failed' && suspension === null;
 
   // Execute per-operation automated guards (type:'automated'/action:'guard').
   // These are routed through the same GuardExecFn seam as milestone-level
@@ -1269,9 +1301,17 @@ async function dispatchUnit(
 
     if (!shouldRunDispatchedGuards) {
       const guardRanAt = deps.clock();
-      resultEntry.status = 'failed';
-      resultEntry.guard_result = 'fail';
-      resultEntry.guard_output = `guard not run: dispatch ${dispatchId} did not complete (task status: ${taskStatus ?? 'n/a'})${taskError ? `; task error: ${taskError}` : ''}`;
+      if (suspension) {
+        // Suspended (HITL): not a failure — leave the guard unrun ('skipped',
+        // null result) rather than a misleading 'fail'.
+        resultEntry.status = 'skipped';
+        resultEntry.guard_result = null;
+        resultEntry.guard_output = `guard not run: task '${suspension.taskId}' suspended awaiting human input (awaiting_input) — resume with task_resume, then re-run the cycle`;
+      } else {
+        resultEntry.status = 'failed';
+        resultEntry.guard_result = 'fail';
+        resultEntry.guard_output = `guard not run: dispatch ${dispatchId} did not complete (task status: ${taskStatus ?? 'n/a'})${taskError ? `; task error: ${taskError}` : ''}`;
+      }
       resultEntry.guard_ran_at = guardRanAt;
       continue;
     }
@@ -1291,7 +1331,7 @@ async function dispatchUnit(
   // Only skip verification when the underlying dispatch itself never
   // completed — a 'skipped' (tool-call) or 'complete' (guard-only / real
   // success) unit still deserves a real guard run.
-  const shouldRunGuards = opResultStatus !== 'failed';
+  const shouldRunGuards = opResultStatus !== 'failed' && suspension === null;
 
   for (const slug of unit.milestones) {
     const milestone = dag.milestones[slug];
@@ -1307,6 +1347,27 @@ async function dispatchUnit(
 
     if (!shouldRunGuards) {
       const guardRanAt = deps.clock();
+      if (suspension) {
+        // Suspended (HITL): park the milestone guard as unrun and inject NO
+        // correction — the task is paused, not failed. The milestone's derived
+        // status becomes 'awaiting_input' (deriveMilestoneStatus), which
+        // `dispatch-cli status` surfaces.
+        const suspendOutput = `guard not run: task '${suspension.taskId}' suspended awaiting human input (awaiting_input) — resume with task_resume, then re-run the cycle`;
+        results.push({
+          op_id: guardOpId,
+          status: 'skipped',
+          guard_result: null,
+          guard_output: suspendOutput,
+          guard_ran_at: guardRanAt,
+        });
+        guardOutcomes.push({
+          milestone: slug,
+          guardResult: null,
+          guardOutput: suspendOutput,
+          injectedCorrection: null,
+        });
+        continue;
+      }
       const failOutput = `guard not run: dispatch ${dispatchId} did not complete (task status: ${taskStatus ?? 'n/a'})${taskError ? `; task error: ${taskError}` : ''}`;
       results.push({
         op_id: guardOpId,
@@ -1404,6 +1465,7 @@ async function dispatchUnit(
     turns,
     results,
     notes,
+    ...(suspension ? { suspension } : {}),
   };
   dag.dispatch_log.push(entry);
 
@@ -1414,6 +1476,7 @@ async function dispatchUnit(
       agentName: unit.agent_name,
       taskId,
       taskStatus,
+      suspension,
       dispatchLogEntryId: dispatchId,
       guardOutcomes,
     },
@@ -1543,6 +1606,7 @@ export async function orchestrateCycle(deps: OrchestratorDeps): Promise<CycleRes
         agentName: unit.agent_name,
         taskId: null,
         taskStatus: null,
+        suspension: null,
         dispatchLogEntryId: failId,
         guardOutcomes: unit.milestones.map((slug) => ({
           milestone: slug,

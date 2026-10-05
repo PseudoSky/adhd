@@ -64,7 +64,16 @@ export type MilestoneStatus =
   | 'in_progress'
   | 'complete'
   | 'failed'
-  | 'skipped';
+  | 'skipped'
+  /**
+   * The milestone's dispatch fired a sessioned agent-mcp task that suspended
+   * for human input (HITL: `request_human_input` -> `awaiting_input`). The work
+   * is PAUSED, not failed — an operator resumes it with `task_resume` (using the
+   * `resumeToken` recorded on the dispatch_log entry's `suspension`). Distinct
+   * from `failed` so `dispatch-cli status` can surface a resumable suspension
+   * instead of a terminal failure (FEAT; backlog 03145a46).
+   */
+  | 'awaiting_input';
 export type DispatchUnitStatus =
   | 'pending'
   | 'in_progress'
@@ -453,6 +462,18 @@ export interface DispatchLogEntry {
   turns: Turn[];
   results: DispatchResult[];
   notes: DispatchNote[];
+  /**
+   * Set when this entry's agent-mcp task suspended to `awaiting_input` (HITL —
+   * backlog 03145a46) instead of reaching a terminal status. Carries the
+   * suspended task's id and the opaque `resumeToken` `task_resume` requires, so
+   * `dispatch-cli status` (`statusCore`) can surface the suspension and an
+   * operator can release it. Absent for every non-suspended dispatch.
+   *
+   * NOTE — a suspended dispatch is NOT a failure: the milestone's derived status
+   * is `awaiting_input`, its guards are deliberately NOT run and no correction is
+   * injected (verification is meaningless until the task actually completes).
+   */
+  suspension?: { taskId: string; resumeToken: string } | null;
 }
 
 // ---------------------------------------------------------------------------

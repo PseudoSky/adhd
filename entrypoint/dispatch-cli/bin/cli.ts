@@ -107,7 +107,9 @@ program
 
 program
   .command('status')
-  .description('per-milestone { status, loggedOperationIds, tokensEstimated, tokensActual }')
+  .description(
+    'per-milestone { status, loggedOperationIds, tokensEstimated, tokensActual }; a status of awaiting_input (HITL) also carries { awaitingInput: { taskId, resumeToken } } to resume with agent-mcp task_resume'
+  )
   .requiredOption('--dag-path <path>', "path to the plan's dag.json")
   .action(async (opts: { dagPath: string }) => {
     try {

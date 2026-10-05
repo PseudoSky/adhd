@@ -318,6 +318,18 @@ function deriveMilestoneStatus(
     }
   }
 
+  // awaiting_input: the dispatch's agent-mcp task suspended for human input
+  // (HITL, 03145a46) and has not since completed (the 'complete' check above
+  // already wins if it has). Checked before the 'failed' check because a
+  // suspended unit's ops/guards are recorded 'skipped' — never 'failed' — so
+  // this is what makes the suspension visible instead of collapsing to
+  // 'pending'. `dispatch-cli status` reads this + the entry's `suspension`.
+  for (const entry of entries) {
+    if (entry.suspension) {
+      return 'awaiting_input';
+    }
+  }
+
   // failed: any op result for this milestone has status == "failed"
   for (const entry of entries) {
     for (const result of entry.results) {
