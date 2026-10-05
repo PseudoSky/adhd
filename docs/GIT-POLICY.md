@@ -771,3 +771,35 @@ Schema version 1.
   worktree removed, and no gates were run by this operation (the post-merge review runs the suite).
   This record is the only change to this file in this operation. Recorded under §Commit convention's
   `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `fix/vite-dupe-plugins-sweep` (dispatch-2026-10-04-9c4e).**
+  Landed the duplicate-vite-plugins sweep onto `main` as a **merge commit** `4ad0378d` (parents
+  `958c09c8` = pre-merge `main`, `f2e8ceba` = branch head), moving `main` `958c09c8` → `4ad0378d`;
+  3 files, +159/-6: `entrypoint/agent-mcp/vite.config.ts` (M, +3/-3),
+  `packages/agent/agent-engine-orchestrator/src/__tests__/vite-config-plugins.test.ts` (M, +151/-1),
+  and `packages/agent/agent-store-runtime/vite.config.ts` (M, +5/-2) — the collapse of duplicate
+  `plugins:` keys in the agent-mcp and agent-store-runtime vite configs plus a repo-wide sweep test
+  asserting no config carries a repeated key, completing `50b77657`. The branch was a single commit,
+  `f2e8ceba` (`fix(agent-mcp,agent-store-runtime): collapse duplicate vite plugins keys; sweep all
+  configs (50b77657)`), whose only parent is the merge-base `27a21407` (`git show -s --format=%P
+  f2e8ceba` = `27a21407`); `main` had advanced 3 commits beyond that base (`958c09c8`, `3869d37d`,
+  `5be96af9`), so the landing is a genuine non-fast-forward. The dispatch directed `--no-ff`, and a
+  merge commit is within §Branching & merge, which states history "carries true merge commits" and
+  ff-only is not enforced. §Branching & merge was the deciding rule: rebase-in-flight is permitted
+  only on a branch "solely your own" — this is an in-flight executor branch, not the operator's, so
+  rewriting its commit was out; a merge commit is the stated shape here. Dry-run
+  `git merge-tree --write-tree --name-only main f2e8ceba` exited 0, producing tree `03a8c437` with no
+  conflict hunks; the actual `git merge --no-ff` was conflict-free (ort strategy, exit 0), and the
+  post-merge tree at `4ad0378d` is `03a8c437`, byte-identical to the dry-run tree. No conflict marker
+  remains in any merged file (`rg '^(<<<<<<<|=======|>>>>>>>)'` matches nothing). The branch never
+  touched this file (empty `git diff --name-only 27a21407..f2e8ceba -- docs/GIT-POLICY.md`), so
+  `main`'s policy blob `3b86349a` survived the merge byte-identical (pre-merge `958c09c8` and
+  post-merge `4ad0378d` resolve the same blob). Post-merge `git rev-list --count
+  main..fix/vite-dupe-plugins-sweep` = 0 and `git merge-base --is-ancestor f2e8ceba main` exits 0, so
+  `f2e8ceba` is contained; the merge is two-parent (not fast-forward). The working tree was clean
+  before and after (`git status --porcelain` empty) and nothing was staged before or after (`git diff
+  --cached --name-only` empty); the dispatch's anticipated "unrelated concurrent dirt" was not
+  present, so nothing had to be avoided or protected. The branch remains checked out in worktree
+  `.worktrees/wt-vite-dupe-plugins-9c4e` at `f2e8ceba`; no push, no branch or worktree removed, and no
+  gates were run by this operation (the post-merge review runs the suite). This record is the only
+  change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
