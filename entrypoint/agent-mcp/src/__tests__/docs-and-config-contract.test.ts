@@ -213,6 +213,23 @@ describe('c00ad483 — provider-call-audit.md cites real source paths', () => {
   });
 });
 
+describe('d965f490 — project.json dist-manifest comment cites a real test file', () => {
+  const projectJson = read(resolve(pkgRoot, 'project.json'));
+
+  it('AC1: the comment names agents-import.e2e.test.ts and no longer the non-existent agent-mcp-registry.e2e', () => {
+    expect(projectJson).not.toContain('agent-mcp-registry.e2e');
+    expect(projectJson).toContain('agents-import.e2e.test.ts');
+  });
+
+  it('AC2: the named file actually exists in dispatch-cli', () => {
+    expect(
+      existsSync(
+        resolve(repoRoot, 'entrypoint', 'dispatch-cli', 'src', 'test', 'agents-import.e2e.test.ts')
+      )
+    ).toBe(true);
+  });
+});
+
 /** Catalog DBs the app may use: the path in .mcp.json plus the two default scopes. */
 function discoverCatalogDbs(): string[] {
   const found = new Set<string>();
