@@ -63,16 +63,18 @@ describe('resolveBacklogMcpEntry + defaultDispatchMcpServers (daafe2d3)', () => 
     expect(backlog.args.slice(1)).toEqual(['serve', '--transport', 'mcp']);
   });
 
-  it('resolves the backlog entry to a REAL, absolute path — not a bare cwd guess', () => {
+  it('resolves the backlog entry to an ABSOLUTE, package-relative path — not a bare cwd guess', () => {
     const entry = resolveBacklogMcpEntry({} as NodeJS.ProcessEnv);
 
-    // The core review fix: absolute (not a relative, cwd-dependent guess)…
+    // The core review fix: absolute (not a relative, cwd-dependent guess) and
+    // pointing at THIS checkout's backlog entry, never `<cwd>/entrypoint/...`.
+    // (The path's on-disk existence is asserted for the override fixture below;
+    // asserting it for the repo default would couple this test to the
+    // uncacheable `backlog:build` — a dispatch-cli-only change does not build
+    // backlog in CI, so a clean runner would fail here for a non-defect. The
+    // cwd-independence test below is the real teeth for the review finding.)
     expect(entry.startsWith('/') || /^[A-Za-z]:[\\/]/.test(entry)).toBe(true);
-    // …and pointing at this checkout's built backlog entry, which must exist
-    // (a default that 404s at spawn time is a broken default — this asserts the
-    // resolved path is a real file, not merely a string containing "backlog").
     expect(entry).toBe(REPO_BACKLOG_ENTRY);
-    expect(existsSync(entry)).toBe(true);
   });
 
   it('resolves independent of process.cwd() — the exact defect being fixed', () => {
