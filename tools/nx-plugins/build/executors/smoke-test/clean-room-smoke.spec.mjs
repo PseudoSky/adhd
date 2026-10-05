@@ -34,6 +34,7 @@ import {
   probeVersionExistsOnRegistry,
   fetchVersionDocExists,
   describeStaleVersionReason,
+  resolveInstallTimeoutMs,
 } from './clean-room-smoke.mjs';
 
 function makeWorkspace(entrypoints) {
@@ -619,4 +620,30 @@ test('describeStaleVersionReason: absent everywhere -> NOT PUBLISHED / FAILED PU
   assert.match(reason, /FAILED PUBLISH/);
   assert.match(reason, /version document/);
   assert.match(reason, /packument versions\[\]/);
+});
+
+// ---------------------------------------------------------------------------
+// resolveInstallTimeoutMs (uid b43cfb59): the install budget must not false-red
+// a good release just because the shared box is loaded.
+// ---------------------------------------------------------------------------
+
+test('resolveInstallTimeoutMs: default scales above the old fixed 120s that false-red under load', () => {
+  const ms = resolveInstallTimeoutMs({});
+  assert.ok(
+    ms > 120_000,
+    `default install timeout must exceed the old 120000ms (got ${ms})`
+  );
+  assert.equal(ms, 8 * 60_000);
+});
+
+test('resolveInstallTimeoutMs: an explicit ADHD_SMOKE_INSTALL_TIMEOUT_MS wins', () => {
+  assert.equal(resolveInstallTimeoutMs({ ADHD_SMOKE_INSTALL_TIMEOUT_MS: '600000' }), 600_000);
+  // 0 / negative / non-numeric -> not a usable override -> default
+  assert.equal(resolveInstallTimeoutMs({ ADHD_SMOKE_INSTALL_TIMEOUT_MS: '0' }), 8 * 60_000);
+  assert.equal(resolveInstallTimeoutMs({ ADHD_SMOKE_INSTALL_TIMEOUT_MS: 'nope' }), 8 * 60_000);
+});
+
+test('resolveInstallTimeoutMs: bounded by a 180s floor and a 15min ceiling', () => {
+  assert.equal(resolveInstallTimeoutMs({ ADHD_SMOKE_CONCURRENCY: '1' }), 180_000);
+  assert.equal(resolveInstallTimeoutMs({ ADHD_SMOKE_CONCURRENCY: '100' }), 900_000);
 });

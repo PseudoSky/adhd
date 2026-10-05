@@ -89,10 +89,25 @@ const findRoot = (d) => {
 };
 const workspaceRoot = findRoot(dirname(fileURLToPath(import.meta.url)));
 
+/**
+ * Per-package clean-room `npm install` budget. The old fixed 120s default false-red a
+ * fully-good release whenever the shared box was saturated (8 installs in flight pulling
+ * heavy native deps): @adhd/agent-mcp's install legitimately exceeded 120s under load
+ * while the same install standalone succeeded in ~25s (backlog uid b43cfb59). Scale a
+ * floor with the concurrency this gate runs at, bounded, so load is headroom rather than
+ * a verdict; ADHD_SMOKE_INSTALL_TIMEOUT_MS overrides outright.
+ */
+export function resolveInstallTimeoutMs(env = process.env) {
+  const override = Number(env.ADHD_SMOKE_INSTALL_TIMEOUT_MS);
+  if (Number.isFinite(override) && override > 0) return override;
+  const concurrency = Number(env.ADHD_SMOKE_CONCURRENCY) || 8;
+  return Math.min(900_000, Math.max(180_000, concurrency * 60_000));
+}
+
 /** How long a bin is allowed to run before being treated as "started cleanly, still alive" (a server/long-running CLI) rather than gated on it exiting. */
 const BIN_SMOKE_TIMEOUT_MS = Number(process.env.ADHD_SMOKE_BIN_TIMEOUT_MS) || 8000;
 /** How long an `npm install` may take before this gate gives up on that one package. */
-const INSTALL_TIMEOUT_MS = Number(process.env.ADHD_SMOKE_INSTALL_TIMEOUT_MS) || 120_000;
+const INSTALL_TIMEOUT_MS = resolveInstallTimeoutMs();
 /** How long a library's `import()` may take before being treated as a hang (never a legitimate outcome for a pure library — unlike a bin, nothing here should still be "running" once the module graph finishes evaluating). */
 const LIBRARY_LOAD_TIMEOUT_MS = Number(process.env.ADHD_SMOKE_LIBRARY_LOAD_TIMEOUT_MS) || 15_000;
 /** How many packages may be smoked concurrently (see file header "PERFORMANCE"). */
