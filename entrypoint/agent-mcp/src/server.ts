@@ -517,19 +517,19 @@ export function createServer(deps: ServerDeps): Server {
       {
         name: 'agent_create',
         description:
-          'Create a new stored agent definition. The response omits systemPrompt by default (fetch it explicitly with agent_read full:true if needed).',
+          'Create a new stored agent definition. The response is a SUMMARY that omits the systemPrompt body (retrieve it explicitly with agent_read fullDefinition:true if needed).',
         inputSchema: toMcpInputSchema(agentCreateInputSchema),
       },
       {
         name: 'agent_read',
         description:
-          'Read a stored agent definition by name. By default the response omits systemPrompt (the multi-KB body); pass full:true or fields:["systemPrompt"] to include it explicitly.',
+          'Read a stored agent definition by name. The default response is a SUMMARY that omits the systemPrompt body; pass fullDefinition:true to return the FULL definition including systemPrompt, or fields:["systemPrompt"] to request the body explicitly.',
         inputSchema: toMcpInputSchema(agentReadInputSchema),
       },
       {
         name: 'agent_update',
         description:
-          'Update a stored agent definition. The response includes openSessionsNotUpdated — the active session ids that will keep running on the pre-update snapshot. The response omits systemPrompt by default; pass full:true or fields:["systemPrompt"] to include it.',
+          'Update a stored agent definition. The response includes openSessionsNotUpdated — the active session ids that will keep running on the pre-update snapshot. The default response is a SUMMARY that omits the systemPrompt body; pass fullDefinition:true to return the FULL definition including systemPrompt, or fields:["systemPrompt"] to request the body explicitly.',
         inputSchema: toMcpInputSchema(agentUpdateInputSchema),
       },
       {
@@ -541,7 +541,7 @@ export function createServer(deps: ServerDeps): Server {
       {
         name: 'agent_list',
         description:
-          'List all stored agent definitions. By default each record omits systemPrompt (the multi-KB body); pass full:true or fields:["systemPrompt"] to include it explicitly.',
+          'List all stored agent definitions. The default response is a SUMMARY that omits the systemPrompt body from each record; pass fullDefinition:true to return the FULL definitions including systemPrompt, or fields:["systemPrompt"] to request the bodies explicitly.',
         inputSchema: toMcpInputSchema(agentListInputSchema),
       },
       {

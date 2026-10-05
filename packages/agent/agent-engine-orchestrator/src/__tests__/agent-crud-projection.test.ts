@@ -90,13 +90,25 @@ describe('agent_* prompt projection', () => {
       expect(JSON.stringify(out)).not.toContain(PROMPT);
     });
 
-    it('returns the full record with systemPrompt only when full:true', () => {
+    it('returns the full record with systemPrompt only when fullDefinition:true', () => {
       const deps = makeDeps([makeDefinition('alpha')]);
+      const out = agentRead(
+        agentReadInputSchema.parse({ name: 'alpha', fullDefinition: true }),
+        deps
+      );
+      expect(out).toHaveProperty('systemPrompt', `${PROMPT}:alpha`);
+    });
+
+    it('does NOT honor a bare/ambiguous `full` flag — it is not a recognized opt-in', () => {
+      const deps = makeDeps([makeDefinition('alpha')]);
+      // Zod strips unknown keys, so an ambiguous `full:true` is ignored and the
+      // caller still gets the summary. This has teeth against anyone
+      // reintroducing the ambiguous name as an alias.
       const out = agentRead(
         agentReadInputSchema.parse({ name: 'alpha', full: true }),
         deps
       );
-      expect(out).toHaveProperty('systemPrompt', `${PROMPT}:alpha`);
+      expect(out).not.toHaveProperty('systemPrompt');
     });
 
     it('returns systemPrompt when explicitly named in fields[]', () => {
@@ -136,9 +148,9 @@ describe('agent_* prompt projection', () => {
       expect(JSON.stringify(out)).not.toContain(PROMPT);
     });
 
-    it('includes systemPrompt for every record with full:true', () => {
+    it('includes systemPrompt for every record with fullDefinition:true', () => {
       const deps = makeDeps([makeDefinition('alpha'), makeDefinition('beta')]);
-      const out = agentList(agentListInputSchema.parse({ full: true }), deps);
+      const out = agentList(agentListInputSchema.parse({ fullDefinition: true }), deps);
 
       expect(out).toHaveLength(2);
       expect(out.map((r) => r['systemPrompt'])).toEqual([
@@ -163,13 +175,13 @@ describe('agent_* prompt projection', () => {
       expect(out['description']).toBe('updated');
     });
 
-    it('returns systemPrompt with full:true', () => {
+    it('returns systemPrompt with fullDefinition:true', () => {
       const deps = makeDeps([makeDefinition('alpha')]);
       const out = agentUpdate(
         agentUpdateInputSchema.parse({
           name: 'alpha',
           patch: { description: 'updated' },
-          full: true,
+          fullDefinition: true,
         }),
         deps
       );
@@ -184,17 +196,20 @@ describe('agent_* prompt projection', () => {
       ).toThrow();
     });
 
-    it('accepts full:false as the explicit default', () => {
-      const parsed = agentReadInputSchema.parse({ name: 'alpha', full: false });
-      expect(parsed.full).toBe(false);
+    it('accepts fullDefinition:false as the explicit default', () => {
+      const parsed = agentReadInputSchema.parse({
+        name: 'alpha',
+        fullDefinition: false,
+      });
+      expect(parsed.fullDefinition).toBe(false);
     });
   });
 
   describe('projectAgentRecord (pure)', () => {
-    it('default removes systemPrompt; full:true restores it — the negative control', () => {
+    it('default removes systemPrompt; fullDefinition:true restores it — the negative control', () => {
       const record = makeDefinition('alpha') as unknown as Record<string, unknown>;
       const projected = projectAgentRecord(record, {});
-      const identity = projectAgentRecord(record, { full: true });
+      const identity = projectAgentRecord(record, { fullDefinition: true });
 
       expect(projected).not.toHaveProperty('systemPrompt');
       // The same input WITH the opt-in does have it, proving the omission is

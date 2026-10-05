@@ -132,7 +132,7 @@ describe('agent_read / agent_list never dump systemPrompt by default', () => {
     expect(read['createdAt']).toBeTypeOf('string');
   });
 
-  it('agent_read full:true explicitly returns the systemPrompt', async () => {
+  it('agent_read fullDefinition:true explicitly returns the systemPrompt', async () => {
     harness = await buildHarness();
     const conn = await connectMcp(harness);
     close = conn.close;
@@ -141,10 +141,26 @@ describe('agent_read / agent_list never dump systemPrompt by default', () => {
     const read = parse<Record<string, unknown>>(
       await conn.client.callTool({
         name: 'agent_read',
-        arguments: { name: 'projection-agent', full: true },
+        arguments: { name: 'projection-agent', fullDefinition: true },
       })
     );
     expect(read['systemPrompt']).toBe(PROMPT);
+  });
+
+  it('agent_read does not honor a bare/ambiguous `full` flag — the opt-in is `fullDefinition`', async () => {
+    harness = await buildHarness();
+    const conn = await connectMcp(harness);
+    close = conn.close;
+    await seed(conn.client);
+
+    const read = parse<Record<string, unknown>>(
+      await conn.client.callTool({
+        name: 'agent_read',
+        // The ambiguous name is deliberately NOT the opt-in.
+        arguments: { name: 'projection-agent', full: true },
+      })
+    );
+    expect(read).not.toHaveProperty('systemPrompt');
   });
 
   it("agent_read fields:['systemPrompt'] explicitly returns the body", async () => {
@@ -184,7 +200,7 @@ describe('agent_read / agent_list never dump systemPrompt by default', () => {
     expect(updated['description']).toBe('updated');
   });
 
-  it('agent_update full:true explicitly returns the systemPrompt', async () => {
+  it('agent_update fullDefinition:true explicitly returns the systemPrompt', async () => {
     harness = await buildHarness();
     const conn = await connectMcp(harness);
     close = conn.close;
@@ -196,7 +212,7 @@ describe('agent_read / agent_list never dump systemPrompt by default', () => {
         arguments: {
           name: 'projection-agent',
           patch: { description: 'updated' },
-          full: true,
+          fullDefinition: true,
         },
       })
     );
@@ -220,7 +236,7 @@ describe('agent_read / agent_list never dump systemPrompt by default', () => {
     expect(JSON.stringify(list)).not.toContain(PROMPT);
   });
 
-  it('agent_list full:true explicitly returns the systemPrompt', async () => {
+  it('agent_list fullDefinition:true explicitly returns the systemPrompt', async () => {
     harness = await buildHarness();
     const conn = await connectMcp(harness);
     close = conn.close;
@@ -229,7 +245,7 @@ describe('agent_read / agent_list never dump systemPrompt by default', () => {
     const list = parse<Array<Record<string, unknown>>>(
       await conn.client.callTool({
         name: 'agent_list',
-        arguments: { full: true },
+        arguments: { fullDefinition: true },
       })
     );
     expect(list).toHaveLength(1);
@@ -249,11 +265,11 @@ describe('agent_read / agent_list never dump systemPrompt by default', () => {
     const readProps = (read?.inputSchema.properties ?? {}) as Record<string, unknown>;
     const updateProps = (update?.inputSchema.properties ?? {}) as Record<string, unknown>;
     const listProps = (list?.inputSchema.properties ?? {}) as Record<string, unknown>;
-    expect(readProps).toHaveProperty('full');
+    expect(readProps).toHaveProperty('fullDefinition');
     expect(readProps).toHaveProperty('fields');
-    expect(updateProps).toHaveProperty('full');
+    expect(updateProps).toHaveProperty('fullDefinition');
     expect(updateProps).toHaveProperty('fields');
-    expect(listProps).toHaveProperty('full');
+    expect(listProps).toHaveProperty('fullDefinition');
     expect(listProps).toHaveProperty('fields');
     // The descriptions state the opt-in so an agent knows the body is gated.
     expect(read?.description ?? '').toContain('systemPrompt');

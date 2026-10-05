@@ -24,11 +24,11 @@ The server exposes these MCP tools:
 | Tool | Signature | Purpose |
 |---|---|---|
 | `agent` | `(agentName: string) -> {session}` | Instantiate a session for a named agent |
-| `agent_create` | `(name: string, config: object) -> {agentId}` | Create a named agent with provider, model, policy, tool allowlist. Response omits `systemPrompt` by default. |
-| `agent_read` | `(name: string, full?: bool, fields?: string[]) -> {config}` | Fetch agent config by name. `systemPrompt` is **omitted by default**; pass `full:true` or `fields:["systemPrompt"]` to opt in. |
-| `agent_update` | `(name: string, config: object, full?: bool, fields?: string[]) -> {version}` | Update agent config; existing sessions isolated from change. Response omits `systemPrompt` by default; `full:true` / `fields:["systemPrompt"]` to opt in. |
+| `agent_create` | `(name: string, config: object) -> {agentId}` | Create a named agent with provider, model, policy, tool allowlist. Response is a **summary that omits `systemPrompt`**. |
+| `agent_read` | `(name: string, fullDefinition?: bool, fields?: string[]) -> {config}` | Fetch agent config by name. Default response is a **summary that omits `systemPrompt`**; `fullDefinition:true` returns the **FULL definition including `systemPrompt`**, or `fields:["systemPrompt"]` requests the body explicitly. |
+| `agent_update` | `(name: string, config: object, fullDefinition?: bool, fields?: string[]) -> {version}` | Update agent config; existing sessions isolated from change. Default response is a **summary that omits `systemPrompt`**; `fullDefinition:true` returns the **FULL definition including `systemPrompt`**, or `fields:["systemPrompt"]`. |
 | `agent_delete` | `(name: string, force?: bool) -> {}` | Unregister agent and cascade-delete all sessions (as of 2.0.2) |
-| `agent_list` | `(full?: bool, fields?: string[]) -> {agents: [...]}` | List all registered agents. Each record **omits `systemPrompt` by default**; `full:true` / `fields:["systemPrompt"]` to opt in. |
+| `agent_list` | `(fullDefinition?: bool, fields?: string[]) -> {agents: [...]}` | List all registered agents. Default response is a **summary that omits `systemPrompt` from each record**; `fullDefinition:true` returns the **FULL definitions including `systemPrompt`**, or `fields:["systemPrompt"]`. |
 | `agent_verify_mcp` | `(name: string) -> {agent, servers: [{name, transport, ok, tools?, error?, skipped?}]}` | Handshake-verify an agent's configured `mcpServers` before a real task: connects each server and returns its reachable tool names (or a clear per-server error). No model call — spends no provider-timeout budget. Skips the self-referential `agent-mcp` entry (handled in-process). |
 | `task` | `(agentName: string, prompt: string) -> {taskId, status}` | Run a prompt against a session and execute tool-call loop until completion |
 | `result` | `(taskId: string) -> {status, result, usage}` | Retrieve task result and execution usage |

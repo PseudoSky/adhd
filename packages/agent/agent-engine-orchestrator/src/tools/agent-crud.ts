@@ -14,10 +14,21 @@ import type {
  */
 const AGENT_PROMPT_FIELD = 'systemPrompt' as const;
 
-/** Projection options accepted by `agent_read` / `agent_list`. */
+/**
+ * Projection options accepted by `agent_read` / `agent_list` (and
+ * `agent_update`'s response).
+ *
+ * The full-record opt-in is named `fullDefinition` (not `full`) so the
+ * parameter itself states it returns the full definition including
+ * `systemPrompt` — a bare `full` flag is ambiguous and is intentionally not
+ * accepted.
+ */
 export interface AgentProjectionOptions {
-    /** Return the full record, `systemPrompt` included. Default: false. */
-    full?: boolean;
+    /**
+     * Return the FULL agent definition including the `systemPrompt` body.
+     * Default: false (a summary that omits `systemPrompt`).
+     */
+    fullDefinition?: boolean;
     /**
      * Whitelist of fields to return (plus `name`, always kept). Naming
      * `systemPrompt` here is the alternative explicit opt-in for the body.
@@ -30,7 +41,7 @@ export interface AgentProjectionOptions {
  *
  * - default (no options): every field EXCEPT `systemPrompt` — the prompt body
  *   is omitted, so an unrequested read never returns the multi-KB record.
- * - `full: true`: the full record, `systemPrompt` included.
+ * - `fullDefinition: true`: the full record, `systemPrompt` included.
  * - `fields: [...]`: only those fields (plus `name`); `fields: ['systemPrompt']`
  *   is the explicit opt-in for the body.
  *
@@ -49,7 +60,7 @@ export function projectAgentRecord<T extends Record<string, unknown>>(
         }
         return out;
     }
-    if (opts.full) {
+    if (opts.fullDefinition) {
         return { ...record };
     }
     const out: Record<string, unknown> = {};
@@ -152,7 +163,8 @@ export function agentDelete(input: AgentDeleteInput, deps: AgentCrudDeps): { suc
 
 /**
  * List agents, projected. By default every returned record omits
- * `systemPrompt`; pass `full: true` (or `fields: ['systemPrompt']`) to opt in.
+ * `systemPrompt`; pass `fullDefinition: true` (or `fields: ['systemPrompt']`)
+ * to opt in.
  */
 export function agentList(
     input: AgentListInput | undefined,

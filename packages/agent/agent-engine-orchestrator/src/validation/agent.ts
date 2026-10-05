@@ -249,16 +249,21 @@ export type AgentProjectableField = (typeof AGENT_PROJECTABLE_FIELDS)[number];
 /**
  * The opt-in projection controls shared by `agent_read` / `agent_list` (and
  * accepted by `agent_update`'s response). With neither supplied, the response
- * omits `systemPrompt` — the multi-KB body that must never be dumped
- * unrequested. Request the full record with `full: true`, or name
- * `systemPrompt` in `fields`.
+ * is a bounded summary that OMITS `systemPrompt` — the multi-KB body that must
+ * never be dumped unrequested.
+ *
+ * The full-record opt-in is deliberately named `fullDefinition`, not `full`:
+ * the name itself states that it returns the FULL agent definition including
+ * `systemPrompt`, so a caller cannot enable a multi-KB payload by accident
+ * with an ambiguous flag. `fields` is the complementary, equally explicit
+ * whitelist (`fields: ['systemPrompt']` names the body directly).
  */
 export const agentProjectionFields = {
-  full: z
+  fullDefinition: z
     .boolean()
     .optional()
     .describe(
-      'Return the full record including systemPrompt. Defaults to false: by default systemPrompt is omitted from the response.'
+      'Return the FULL agent definition including the systemPrompt body. Defaults to false: by default the response is a summary that omits systemPrompt.'
     ),
   fields: z
     .array(z.enum(AGENT_PROJECTABLE_FIELDS))
