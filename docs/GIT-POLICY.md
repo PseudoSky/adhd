@@ -1177,3 +1177,39 @@ Schema version 1.
   branch or worktree removed, and no gates were run by this operation (the post-merge review runs the
   suite). This record is the only change to this file in this operation. Recorded under §Commit
   convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `fix/adr-0008-d5-example-9c4e` (dispatch-2026-10-04-9c4e).**
+  Landed the ADR-0008 D5 example correction onto `main` as a **merge commit** `93798358` (parents
+  `618aedf3` = pre-merge `main`, `3bd362b4` = branch head), moving `main` `618aedf3` → `93798358`; 1
+  file, +1/-1: `docs/decisions/0008-agent-mcp-native-tooling.md` — the D5 rule-map example corrected
+  to be consistent with the ratified terminal-`deny` invariant. The old example
+  `{'*':'deny','agent-mcp.*':'allow'}` → "dispatch allowed" was wrong under terminal-deny (a matched
+  `deny` is absolute, so the later `allow` cannot override it); the corrected text splits the two
+  cases: a broad rule a later `allow` is to override must be **non-terminal**
+  (`{'*':'ask','agent-mcp.*':'allow'}` → allowed, since `ask` is not terminal and last-match-wins
+  picks the later `allow`), while a matched `deny` **is** terminal, so
+  `{'*':'deny','agent-mcp.*':'allow'}` → **denied** — no later rule can override it. The branch was a
+  single commit, `3bd362b4` (`docs(adr-0008): fix D5 rule-map example to match terminal-deny (Q1)`,
+  authored by the ADR owner `pseudosky`), whose only parent is the merge-base `618aedf3` — which
+  equalled `main`'s tip, so a fast-forward was possible; the dispatch directed `--no-ff`, and a merge
+  commit is within §Branching & merge, which states history "carries true merge commits" and ff-only
+  is not enforced. §Branching & merge was the deciding rule: rebase-in-flight is permitted only on a
+  branch "solely your own" — this is an in-flight executor branch, not the operator's, so rewriting
+  its commit was out; a merge commit is the stated shape here. Dry-run
+  `git merge-tree --write-tree --name-only main fix/adr-0008-d5-example-9c4e` exited 0, producing tree
+  `12c9e60d` with no conflict hunks; the actual `git merge --no-ff` was conflict-free (ort strategy,
+  exit 0) and the post-merge tree at `93798358` is `12c9e60d`, byte-identical to the dry-run tree.
+  No conflict marker remains in the merged file (`git grep -nE '^(<<<<<<<|=======|>>>>>>>)' --
+  docs/decisions/0008-agent-mcp-native-tooling.md` exited 1 with no matches). The branch never touched
+  this file (empty `git diff --name-only 618aedf3..3bd362b4 -- docs/GIT-POLICY.md`), so `main`'s
+  policy blob `a3edf4052765a63649312141302a26c1bb5a2340` survived the merge byte-identical (pre-merge
+  `618aedf3` and post-merge `93798358` resolve the same blob). The merge is two-parent (not
+  fast-forward); post-merge `git rev-list --count main..fix/adr-0008-d5-example-9c4e` = 0 and
+  `git merge-base --is-ancestor 3bd362b4 main` exits 0, so `3bd362b4` is contained. The working tree
+  was clean before and after (`git status --porcelain` empty) and nothing was staged before or after
+  (`git diff --cached --name-only` empty); the dispatch's anticipated "unrelated concurrent dirt" was
+  not present, so nothing had to be avoided or protected. The branch remains checked out in worktree
+  `.worktrees/wt-adr8-d5-example-9c4e` at `3bd362b4` (clean, not reaped); no push, no branch or
+  worktree removed, and no gates were run by this operation (docs-only; the dispatch directed none).
+  This record is the only change to this file in this operation. Recorded under §Commit convention's
+  `docs(<area>):` scope.
