@@ -1112,3 +1112,30 @@ Schema version 1.
   push, no branch or worktree removed, and no gates were run by this operation (docs-only index edit;
   the dispatch directed none). This record is the only change to this file in this operation. Recorded
   under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `feat/native-tooling-slice1-9c4e` (dispatch-2026-10-04-9c4e).**
+  Landed the NAT-TOOL slice 1 onto `main` as a **merge commit** `39af0ec4` (parents `93cf9b88` =
+  pre-merge `main`, `20474da7` = branch head), moving `main` `93cf9b88` → `39af0ec4`; 28 files,
+  +1203/-4 (`nx.json`, `tsconfig.base.json`, `pnpm-lock.yaml`, `agent-base-types` typed config, the
+  `agent-engine-orchestrator` native-tooling validation, `tools/nx-plugins` ratchet baselines, and the
+  new `@adhd/agent-core-native-tooling` package). The branch carries exactly the 3 commits since the
+  merge-base `4bbf87d2` — `e92b34b7` (ratchet baselines), `a2840f17` (NAT-TOOL-1 types), `20474da7`
+  (NAT-TOOL-2 resolver) — and all three are contained (post-merge
+  `git rev-list --count main..feat/native-tooling-slice1-9c4e` = 0; `git merge-base --is-ancestor`
+  exits 0 for each). §Branching & merge was the deciding rule: this history "carries true merge
+  commits" and ff-only is not enforced, while rebase-in-flight is permitted only on a branch "solely
+  your own" — the branch is an in-flight executor branch, not the operator's, so rewriting its 3
+  commits was out; the dispatch directed `--no-ff`. Dry-run `git merge-tree --write-tree --name-only
+  main feat/native-tooling-slice1-9c4e` exited 0, producing tree `041ac1f8` with no conflict hunks; the
+  actual `git merge --no-ff` was conflict-free (ort strategy, exit 0) and the post-merge tree at
+  `39af0ec4` is `041ac1f8`, byte-identical to the dry-run tree, so no conflict arose and none required
+  resolution. The branch never touched this file relative to the merge-base (empty
+  `git diff --name-only 4bbf87d2..20474da7 -- docs/GIT-POLICY.md`), so `main`'s newer policy blob
+  `bef15edb2af320cd12d24fabb0a44cef9f1fa583` survived the merge byte-identical (pre-merge `93cf9b88`,
+  post-merge `39af0ec4`, and the on-disk file all resolve to the same blob). The working tree was clean
+  before and after (`git status --porcelain` empty) and nothing was staged before or after the
+  provenance commit; the dispatch's anticipated "unrelated concurrent dirt" was not present, so nothing
+  had to be avoided or protected. The branch remains checked out in worktree
+  `.worktrees/native-tooling-9c4e` at `20474da7` (clean, not reaped); no push, no branch or worktree
+  removed, and no gates were run by this operation (the dispatch directed none). This record is the only
+  change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
