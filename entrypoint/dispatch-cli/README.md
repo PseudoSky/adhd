@@ -165,3 +165,30 @@ Run it explicitly with:
 DISPATCH_E2E_LIVE=1 npx tsx --tsconfig tsconfig.base.json \
   entrypoint/dispatch-cli/src/test/integration/real-e2e.ts
 ```
+
+### Live five-AC e2e suite (`live-dispatch-five-acs.e2e.test.ts`)
+
+A second, independent live suite (`src/test/integration/live-dispatch-five-acs.e2e.test.ts`)
+drives the real dispatch stack across the real MCP boundary against a real model to
+prove five acceptance criteria that no real-model run had exercised: `fa9d3079`
+(`dag.session_id` end-to-end), `03145a46` (HITL reachable from dispatch), `5339c2e5`
+(default budget cap), `daafe2d3` (default `memory-server` really called), `4e829a08`
+(policy enforcement across a delegation chain).
+
+- **Gate:** `DISPATCH_E2E_LIVE=1`
+- **Provider:** `DISPATCH_E2E_PROVIDER=claudecli` (default) or `deepseek`
+  (`ADHD_AGENT_DEEPSEEK_SECRET` required).
+- **Negative controls:** `DISPATCH_E2E_NEGATIVE=1`.
+- **Approved by (named owner):** pseudosky (skywinstonsk@gmail.com) — the real
+  model is a paid/external service, the single gate reason AGENTS.md §7 permits.
+  The same record is in this package's `AGENTS.md` and in the test's own header.
+- **Fails loudly** when enabled without the required credential/subscription.
+
+```bash
+DISPATCH_E2E_LIVE=1 npx nx test dispatch-cli \
+  --testFile=src/test/integration/live-dispatch-five-acs.e2e.test.ts
+```
+
+`claudecli` cannot be advertised agent-mcp's client-side pseudo-tools, so the
+HITL and delegation ACs require `DISPATCH_E2E_PROVIDER=deepseek` and are skipped
+under `claudecli` with a visible warning.
