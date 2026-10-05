@@ -1,7 +1,11 @@
 /**
  * live-dag.e2e.test.ts
  *
- * AUTHOR ONLY — gated behind AGENT_MCP_LIVE=1. Skipped in CI/unit runs.
+ * AUTHOR ONLY — gated behind AGENT_MCP_LIVE=1. Skipped in CI/unit runs. *
+ * Approved gate (AGENTS.md §7): owner = pseudosky (repo owner). This test calls a real
+ * paid model — the single permitted gate reason. Recorded in this package's
+ * README ("Live tests (env-gated — paid model)") and AGENTS.md.
+
  *
  * Codifies the complex recursive multi-agent DAG that was verified live by hand:
  *

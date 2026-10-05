@@ -1,8 +1,8 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 
-import { taskEventsTable, tasksTable } from "../db/schema.js";
+import { sessionsTable, taskEventsTable, tasksTable } from "../db/schema.js";
 import { logger } from "../logger.js";
 import type { Task, TaskEventType, TaskListInput, TaskStatus } from "../validation/schemas.js";
 import { taskSchema } from "../validation/schemas.js";
@@ -138,6 +138,24 @@ export class TaskStore {
             conditions.push(eq(tasksTable.sessionId, input.session_id));
         }
 
+        if (input.session_ids && input.session_ids.length > 0) {
+            conditions.push(inArray(tasksTable.sessionId, input.session_ids));
+        }
+
+        if (input.agent_name) {
+            // Tasks link to an agent via their session; ephemeral tasks (null
+            // session) carry no agent name and are excluded by this filter.
+            conditions.push(
+                inArray(
+                    tasksTable.sessionId,
+                    this.db
+                        .select({ id: sessionsTable.id })
+                        .from(sessionsTable)
+                        .where(eq(sessionsTable.agentName, input.agent_name))
+                )
+            );
+        }
+
         if (input.status) {
             conditions.push(eq(tasksTable.status, input.status));
         }
@@ -146,14 +164,14 @@ export class TaskStore {
             conditions.push(eq(tasksTable.isEphemeral, input.is_ephemeral ? 1 : 0));
         }
 
-        const rows =
-            conditions.length > 0
-                ? this.db
-                    .select()
-                    .from(tasksTable)
-                    .where(and(...conditions))
-                    .all()
-                : this.db.select().from(tasksTable).all();
+        const base = this.db.select().from(tasksTable);
+        // Deterministic order (created_at, then rowid) so limit/offset pagination
+        // is stable across calls. `limit(-1)` = SQLite "no limit".
+        const rows = (conditions.length > 0 ? base.where(and(...conditions)) : base)
+            .orderBy(tasksTable.createdAt, sql`rowid`)
+            .limit(input.limit ?? -1)
+            .offset(input.offset ?? 0)
+            .all();
 
         return rows.map(row =>
             taskSchema.parse({

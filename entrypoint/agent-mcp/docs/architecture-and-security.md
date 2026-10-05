@@ -28,11 +28,13 @@ Agent MCP Server
     |   +-- Lifecycle (running, completed, failed, cancelled)
     |   +-- Execution traces
     |
-    +-- Provider Adapters
+    +-- Provider Adapters  (exactly three provider types; see "Provider-Specific Differences")
     |   +-- Anthropic (claude-opus, claude-sonnet, etc.)
-    |   +-- OpenAI (gpt-4-turbo, gpt-4o, etc.)
-    |   +-- DeepSeek (deepseek-v4-flash, deepseek-v4-pro)
-    |   +-- Gemini (gemini-2.5-pro, etc.)
+    |   +-- OpenAI (gpt-4-turbo, gpt-4o, etc. -- and any OpenAI-compatible endpoint,
+    |   |           e.g. DeepSeek's deepseek-v4-flash/-pro via an explicit env.base_url override)
+    |   +-- claudecli (the host's authenticated local `claude` CLI -- subprocess, no credential env var)
+    |
+    |   (There is no "DeepSeek" and no "Gemini" provider type -- neither exists in code.)
     |
     +-- Tool Gateway
     |   +-- Filesystem MCP tools
@@ -187,14 +189,20 @@ interface ProviderAdapter {
 
 ### Provider-Specific Differences
 
-| Aspect | Anthropic | OpenAI | DeepSeek | Gemini |
-|---|---|---|---|---|
-| **Token accounting** | `inputTokens` excludes cache tokens; must sum `cache_read_input_tokens` + `cache_creation_input_tokens` | `prompt_tokens` includes cached tokens (subset field) | `prompt_tokens` includes cached tokens; provides `prompt_cache_hit_tokens` + `prompt_cache_miss_tokens` | `promptTokenCount` includes cached tokens |
-| **Cache pricing** | Write: 1.25x (5m) / 2x (1h); Read: 0.1x | Write: 1.25x (GPT-5.6+); Read: standard cached rate | Write: none; Read: $0.0028/M cache-hit vs $0.14/M miss | Write: standard; Read: 90% discount + hourly storage rent |
-| **Tool definitions** | Always JSON-schema function-calling (native) | Always JSON-schema (native) | Always JSON-schema (native) | Supports both `function_declarations` (native) and custom descriptions |
-| **Cancellation** | Partial (can cancel in-flight requests; doesn't stop model thinking if already started) | Partial | Partial | Yes |
-| **Streaming** | Yes (native) | Yes (native) | Yes (native) | Yes |
-| **Per-call tool restriction** | None; any tool-set change busts cache | `allowed_tools` filter (cache-safe) | None; any tool-set change busts cache | None; any tool-set change busts cache |
+| Aspect | Anthropic | OpenAI (incl. OpenAI-compatible, e.g. DeepSeek via `env.base_url`) | claudecli |
+|---|---|---|---|
+| **Token accounting** | `inputTokens` excludes cache tokens; must sum `cache_read_input_tokens` + `cache_creation_input_tokens` | `prompt_tokens` includes cached tokens (subset field); DeepSeek additionally reports `prompt_cache_hit_tokens` + `prompt_cache_miss_tokens` | Whatever the authenticated `claude` CLI reports; no provider-credential env var |
+| **Cache pricing** | Write: 1.25x (5m) / 2x (1h); Read: 0.1x | Write: 1.25x (GPT-5.6+); Read: standard cached rate; DeepSeek: no write surcharge, $0.0028/M cache-hit vs $0.14/M miss on read | Handled by the CLI/subscription, not by this code |
+| **Tool definitions** | Always JSON-schema function-calling (native) | Always JSON-schema (native) | CLI-native tool loop |
+| **Cancellation** | Partial (can cancel in-flight requests; doesn't stop model thinking if already started) | Partial | Subprocess termination |
+| **Streaming** | Yes (native) | Yes (native) | Via the CLI |
+| **Per-call tool restriction** | None; any tool-set change busts cache | `allowed_tools` filter (cache-safe) | n/a |
+
+> **Not shipped:** there is no `deepseek` and no `gemini` provider `type` in code. DeepSeek
+> is reachable only by configuring an `openai`-type agent with an explicit `env.base_url`
+> override; Gemini is not supported in any form. (Ground truth:
+> `packages/agent/agent-engine-orchestrator/src/validation/agent.ts` declares exactly
+> `anthropic`, `openai`, `claudecli`.)
 
 ## Permission Model
 

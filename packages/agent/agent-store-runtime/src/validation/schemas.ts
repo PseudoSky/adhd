@@ -89,6 +89,15 @@ export type { Task, TaskStatus, TaskEventType } from '@adhd/agent-base-types';
 
 export type TaskListInput = {
   session_id?: string;
+  /** Plural, OR-matched form of `session_id` (df109078) — track several sessions at once. */
+  session_ids?: string[];
+  /** Only tasks whose session belongs to this agent (df109078). Ephemeral tasks
+   *  carry no session and are therefore excluded by this filter. */
+  agent_name?: string;
   status?: z.infer<typeof taskSchema>['status'];
   is_ephemeral?: boolean;
+  /** Pagination (f2b004eb). `limit`/`offset` are applied after a deterministic
+   *  ordering so pages are stable across calls. */
+  limit?: number;
+  offset?: number;
 };

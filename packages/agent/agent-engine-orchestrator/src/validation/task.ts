@@ -88,10 +88,49 @@ export const taskToolOutputSchema = z.object({
   usage: taskUsageReportSchema.optional(),
 });
 
+/**
+ * The fields a `task_list` / `result` caller may project onto (f2b004eb). `id` is
+ * always included; `prompt` and `result` are the two large text fields callers most
+ * often drop when bulk-polling — an unprojected list routinely exceeded the caller's
+ * tool-output token budget because it returned every matching task's full text.
+ */
+export const taskListFieldSchema = z.enum([
+  'id',
+  'sessionId',
+  'isEphemeral',
+  'parentTaskId',
+  'recursionDepth',
+  'status',
+  'prompt',
+  'result',
+  'error',
+  'createdAt',
+  'updatedAt',
+  'completedAt',
+  'cancelledAt',
+  'dependsOn',
+  'onUpstreamFailure',
+  'inputs',
+  'resumeToken',
+]);
+export type TaskListField = z.infer<typeof taskListFieldSchema>;
+
 export const taskListInputSchema = z.object({
   session_id: z.string().uuid().optional(),
+  /** df109078: plural, OR-matched session filter (track one batch without a
+   *  full-instance scan filtered client-side). */
+  session_ids: z.array(z.string().uuid()).optional(),
+  /** df109078: only the tasks of this agent (via the task's session). */
+  agent_name: z.string().min(1).optional(),
   status: taskStatusSchema.optional(),
   is_ephemeral: z.boolean().optional(),
+  /** f2b004eb: return only these fields per task (id always included). */
+  fields: z.array(taskListFieldSchema).optional(),
+  /** f2b004eb: shorthand for all fields EXCEPT the bulk `prompt`/`result` text. */
+  summary: z.boolean().optional(),
+  /** f2b004eb: page size / offset (applied after deterministic ordering). */
+  limit: z.number().int().positive().max(1000).optional(),
+  offset: z.number().int().nonnegative().optional(),
 });
 
 export const taskCancelInputSchema = z.object({
@@ -100,6 +139,10 @@ export const taskCancelInputSchema = z.object({
 
 export const resultInputSchema = z.object({
   task_id: z.string().uuid(),
+  /** f2b004eb: project the returned task record (id always included). The special
+   *  value `usage` may be named to keep the usage report; omit `fields` for the full
+   *  task + usage payload. */
+  fields: z.array(z.union([taskListFieldSchema, z.literal('usage')])).optional(),
 });
 
 export type TaskToolInput = z.infer<typeof taskToolInputSchema>;

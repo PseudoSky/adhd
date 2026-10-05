@@ -1,7 +1,11 @@
 /**
  * live-budget.e2e.test.ts
  *
- * LIVE ONLY — gated behind AGENT_MCP_BUDGET_LIVE=1. Skipped in CI/unit runs.
+ * LIVE ONLY — gated behind AGENT_MCP_BUDGET_LIVE=1. Skipped in CI/unit runs. *
+ * Approved gate (AGENTS.md §7): owner = pseudosky (repo owner). This test calls a real
+ * paid model — the single permitted gate reason. Recorded in this package's
+ * README ("Live tests (env-gated — paid model)") and AGENTS.md.
+
  *
  * Verifies budget enforcement against a real LLM (LM Studio by default).
  *

@@ -226,6 +226,24 @@ See [docs/architecture-and-security.md](./docs/architecture-and-security.md) for
 - Failure recovery and cancellation semantics
 - Known limitations and security assumptions
 
+## Live tests (env-gated — paid model)
+
+Three end-to-end tests drive a **real** LLM/provider and are therefore gated behind
+env flags — the single exception AGENTS.md §7 permits (a paid/external third-party
+service, which CI cannot provide):
+
+| Test file | Gate | Real dependency |
+|---|---|---|
+| `src/__tests__/integration/live-budget.e2e.test.ts` | `AGENT_MCP_BUDGET_LIVE=1` | real provider (LM Studio / Anthropic) |
+| `src/__tests__/integration/live-dag.e2e.test.ts` | `AGENT_MCP_LIVE=1` | real provider (LM Studio / Anthropic) |
+| `src/__tests__/integration/live-oauth.e2e.test.ts` | `AGENT_MCP_LIVE=1` | real Anthropic OAuth |
+
+**Approved by:** pseudosky (repo owner). Rationale: each calls a real, paid model the CI
+cannot provide, so the gate saves money and avoids an outside system — the one qualifying
+reason. The default (unflagged) suite still exercises the orchestrator/tool paths with
+scripted providers; these live tests add real-model confirmation of model-independent
+invariants. The same record appears in this package's `AGENTS.md` and in each test's header.
+
 ## Limitations
 
 - **No OS-level sandboxing** — filesystem/network access is enforced by policy, not by OS isolation. A malicious or compromised agent can still access the host if the policy permits.

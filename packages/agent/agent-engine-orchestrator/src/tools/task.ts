@@ -453,11 +453,57 @@ export async function enqueueExistingTask(
   });
 }
 
+/**
+ * Project a task-like record onto a caller-requested field set (f2b004eb). `id` is
+ * always kept. With `summary`, the two bulk text fields (`prompt`, `result`) are
+ * dropped. With neither, the record is returned untouched. Pure — exported for tests.
+ */
+export function projectTaskRecord<T extends Record<string, unknown>>(
+  record: T,
+  fields?: readonly string[],
+  summary?: boolean
+): Record<string, unknown> {
+  if (fields && fields.length > 0) {
+    const out: Record<string, unknown> = {};
+    if ('id' in record) out['id'] = record['id'];
+    for (const field of fields) {
+      if (field === 'id') continue;
+      if (field in record) out[field] = record[field];
+    }
+    return out;
+  }
+  if (summary) {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(record)) {
+      if (key === 'prompt' || key === 'result') continue;
+      out[key] = value;
+    }
+    return out;
+  }
+  return record;
+}
+
+/**
+ * List tasks. When `fields` (projection) or `summary` is supplied, each returned
+ * element is narrowed to the requested keys — the caller-facing fix for the
+ * unbounded prompt/result payload (f2b004eb). Without either, full `Task`s are
+ * returned exactly as before.
+ */
 export function taskList(
   input: TaskListInput,
   deps: Pick<TaskDeps, 'taskStore'>
 ): Task[] {
-  return deps.taskStore.list(input);
+  const tasks = deps.taskStore.list(input);
+  if ((input.fields && input.fields.length > 0) || input.summary) {
+    return tasks.map(task =>
+      projectTaskRecord(
+        task as unknown as Record<string, unknown>,
+        input.fields,
+        input.summary
+      )
+    ) as unknown as Task[];
+  }
+  return tasks;
 }
 
 export function taskCancel(
@@ -520,7 +566,14 @@ export function resultTool(
 ): Task & { usage?: TaskUsageReport } {
   const task = deps.taskStore.read(input.task_id);
   const usage = buildTaskUsageReport(deps.db, task.id);
-  return { ...task, usage } as Task & { usage?: TaskUsageReport };
+  const full = { ...task, usage } as Task & { usage?: TaskUsageReport };
+  if (input.fields && input.fields.length > 0) {
+    return projectTaskRecord(
+      full as unknown as Record<string, unknown>,
+      input.fields
+    ) as unknown as Task & { usage?: TaskUsageReport };
+  }
+  return full;
 }
 
 // Import Message for type used above
