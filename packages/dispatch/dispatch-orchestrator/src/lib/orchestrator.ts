@@ -1469,6 +1469,13 @@ export async function orchestrateCycle(deps: OrchestratorDeps): Promise<CycleRes
 
   for (const unit of units) {
     resolveUnitProviderAndTokens(unit, dag);
+    // Session producer (FEAT-DISPATCH-SESSION-001, fa9d3079 / 03145a46): a
+    // top-level `dag.session_id` stamps every unit that does not already carry
+    // one, so `AgentMcpRunner.fire` forwards it and the unit runs as a
+    // SESSIONED (non-ephemeral) task. A per-unit id still wins.
+    if (unit.session_id == null && dag.session_id != null) {
+      unit.session_id = dag.session_id;
+    }
     try {
       const { summary, injectedSlugs } = await dispatchUnit(unit, dag, snap, resolved);
       dispatched.push(summary);

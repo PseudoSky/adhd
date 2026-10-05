@@ -46,6 +46,7 @@
         { "type": "object" }
       ]
     },
+    "session_id": { "type": ["string", "null"] },
     "optimization": {
       "type": "object",
       "required": ["sentinel_fanout", "b_per_tier", "context_window_per_tier"],

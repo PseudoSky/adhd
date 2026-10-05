@@ -580,6 +580,20 @@ export interface DagJson {
   terminal: string | string[];
   assumed_baseline?: string[] | Record<string, unknown>;
   cross_plan_deps?: CrossPlanDep[];
+  /**
+   * Optional top-level agent-mcp session stamped onto every `DispatchUnit` the
+   * orchestrator fires (FEAT-DISPATCH-SESSION-001 producer, backlog fa9d3079 /
+   * 03145a46). When set, the run's units fire as SESSIONED tasks in that
+   * agent-mcp session instead of cold ephemeral ones — which is what makes
+   * HITL (`request_human_input` -> awaiting_input) reachable from dispatch and
+   * lets consecutive units share conversational context.
+   *
+   * The caller supplies an existing session id (created via agent-mcp's
+   * `agent` tool). A per-unit `DispatchUnit.session_id`, when already set by
+   * the optimizer, wins over this default. `null`/omitted preserves the
+   * pre-existing ephemeral behavior exactly.
+   */
+  session_id?: string | null;
   optimization: OptimizationConfig;
   providers: Record<string, ProviderConfig>;
   effort_max_tokens: Record<string, number>;
