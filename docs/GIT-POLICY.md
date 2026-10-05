@@ -705,3 +705,36 @@ Schema version 1.
   before and after. This operation did not push, did not delete a branch or remove a worktree, and
   did not run gates (the post-merge review runs the suite). This record is the only change to this
   file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `feat/bucket-h-residual-hardening` (dispatch-2026-10-04-9c4e).**
+  Landed bucket H's residual hardening onto `main` as a **merge commit** `444fe491` (parents
+  `9f1276f7` = pre-merge `main`, `0812e1ba` = branch head), moving `main` `9f1276f7` → `444fe491`;
+  26 files, +947/-41. The 7 commits since the merge-base `96e10020` are `6b6458d2`
+  (`fix(agent-engine-orchestrator): collapse duplicate vite plugins key`, fixing `50b77657`),
+  `157cbdff` (`fix(agent-mcp): correct stale e2e filename in dist-manifest comment`, fixing
+  `d965f490`), `62e148f2` (`docs(agent-mcp): document agent_update openSessionsNotUpdated return
+  field`, fixing `6f3cd348`), `dd0ed875` (`fix(agent-mcp): resolve default budget plugin from
+  agent-mcp's own module base`, fixing `cc636860`), `34a9b766` (`fix(dispatch-orchestrator):
+  no-auto-create mode for DAG-named agents`, fixing `f1dbd0f2`), `53418eb7` (`fix(agent-mcp):
+  ADHD_AGENT_SKIP_LEGACY_MIGRATION flag for hermetic boots`, fixing `af567fb8`), and `0812e1ba`
+  (`fix(dispatch-cli): correct same stale e2e filename in test-target comment`, fixing `d965f490`) —
+  matching the dispatch list exactly (7 commits; `d965f490` is fixed by two of them). §Branching &
+  merge was the deciding rule: this history "carries true merge commits" and ff-only is not enforced
+  (and the dispatch directed `--no-ff`), while rebase-in-flight is permitted only on a branch "solely
+  your own" — the branch is an in-flight executor branch, not the operator's, so rewriting its 7
+  commits was out; a merge commit is the stated shape here. Dry-run `git merge-tree --write-tree
+  --name-only main feat/bucket-h-residual-hardening` exited 0, producing tree `ffd3c6c6` with no
+  conflict hunks; the actual `git merge --no-ff` was conflict-free (ort strategy, exit 0), and the
+  post-merge tree at `444fe491` is `ffd3c6c6`, byte-identical to the dry-run tree. The branch never
+  touched this file (empty `git diff --name-only main feat/bucket-h-residual-hardening --
+  docs/GIT-POLICY.md`; both revisions resolve policy blob `fbe507c6`), so `main`'s policy revision
+  survived the merge byte-identical (pre-merge `9f1276f7` and post-merge `444fe491` resolve the same
+  blob). Post-merge `git rev-list --count main..feat/bucket-h-residual-hardening` = 0, the merge is
+  two-parent (not fast-forward), and `git merge-base --is-ancestor` exits 0 for each of the 7 named
+  commits individually. The working tree was clean before and after (`git status --porcelain` empty),
+  nothing was staged (`git diff --cached --name-only` empty), and the dispatch's anticipated
+  "concurrent dirt unrelated" was not present, so nothing had to be avoided or protected. The branch
+  remains checked out in worktree `.worktrees/bucket-h-residual` at `0812e1ba`; no push, no branch or
+  worktree removed, and no gates were run by this operation (the post-merge review runs the suite).
+  This record is the only change to this file in this operation. Recorded under §Commit convention's
+  `docs(<area>):` scope.
