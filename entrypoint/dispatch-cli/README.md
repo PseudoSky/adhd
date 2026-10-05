@@ -176,8 +176,11 @@ prove five acceptance criteria that no real-model run had exercised: `fa9d3079`
 (policy enforcement across a delegation chain).
 
 - **Gate:** `DISPATCH_E2E_LIVE=1`
-- **Provider:** `DISPATCH_E2E_PROVIDER=claudecli` (default) or `deepseek`
-  (`ADHD_AGENT_DEEPSEEK_SECRET` required).
+- **Provider:** `DISPATCH_E2E_PROVIDER=claudecli` (default), `anthropic`
+  (OAuth via `ADHD_AGENT_ANTHROPIC_SECRET`; the function-tool provider whose
+  tool advertisement makes AC2/AC5 reachable), or `deepseek`
+  (`ADHD_AGENT_DEEPSEEK_SECRET` required). Both function-tool secrets live in
+  `~/.adhd/.env`; `set -a; source ~/.adhd/.env; set +a` before running.
 - **Negative controls:** `DISPATCH_E2E_NEGATIVE=1`.
 - **Approved by (named owner):** pseudosky (skywinstonsk@gmail.com) — the real
   model is a paid/external service, the single gate reason AGENTS.md §7 permits.
@@ -194,5 +197,18 @@ DISPATCH_E2E_LIVE=1 sh -c 'cd entrypoint/dispatch-cli && \
 ```
 
 `claudecli` cannot be advertised agent-mcp's client-side pseudo-tools, so the
-HITL and delegation ACs require `DISPATCH_E2E_PROVIDER=deepseek` and are skipped
-under `claudecli` with a visible warning.
+HITL and delegation ACs require a function-tool provider (`anthropic` or
+`deepseek`) and are skipped under `claudecli` with a visible warning.
+
+**Known blocker on AC2 (`03145a46`).** Under `anthropic` the model really calls
+`builtin__request_human_input` and the child `agent-mcp` really persists the task
+as `awaiting_input` with a `resume_token` (verified live, 2026-10-05 — the
+dispatch-cli test's own diagnostic dumps that row). But `AgentMcpRunner.fire()`
+calls agent-mcp's `task` tool *synchronously* (no `background:true`), and the
+engine's HITL path blocks on `await userInputPromise` until a resume — so
+`fire()` (and the `orchestrateCycle` awaiting it) never returns at suspension and
+the MCP client aborts at its 60s deadline. The dispatch pipeline therefore
+*cannot* observe `awaiting_input` even though the child reached it. This is a
+product gap in `@adhd/dispatch-orchestrator`, not a harness or provider gap, and
+it keeps `03145a46` unmet (the `dispatch-cli status` surface also still carries
+no `awaiting_input`/`resumeToken` — `statusCore` returns only `MilestoneStatus`).

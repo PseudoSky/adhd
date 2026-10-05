@@ -53,21 +53,33 @@
  *   npx nx run agent-mcp:dist-manifest
  *   cd entrypoint/dispatch-cli && DISPATCH_E2E_LIVE=1 npx vitest run --config vite.config.ts \
  *     src/test/integration/live-dispatch-five-acs.e2e.test.ts
- *   # alternate provider (requires ADHD_AGENT_DEEPSEEK_SECRET):
- *   cd entrypoint/dispatch-cli && DISPATCH_E2E_LIVE=1 DISPATCH_E2E_PROVIDER=deepseek \
+ *   # function-tool providers (advertise agent-mcp's client-side tools → AC2+AC5 reachable):
+ *   #   anthropic-OAuth: DISPATCH_E2E_PROVIDER=anthropic (requires ADHD_AGENT_ANTHROPIC_SECRET)
+ *   #   deepseek:        DISPATCH_E2E_PROVIDER=deepseek  (requires ADHD_AGENT_DEEPSEEK_SECRET)
+ *   # the secrets live in ~/.adhd/.env; `set -a; source ~/.adhd/.env; set +a` before running.
+ *   cd entrypoint/dispatch-cli && DISPATCH_E2E_LIVE=1 DISPATCH_E2E_PROVIDER=anthropic \
  *     npx vitest run --config vite.config.ts src/test/integration/live-dispatch-five-acs.e2e.test.ts
  *   # include negative controls:
  *   cd entrypoint/dispatch-cli && DISPATCH_E2E_LIVE=1 DISPATCH_E2E_NEGATIVE=1 \
  *     npx vitest run --config vite.config.ts src/test/integration/live-dispatch-five-acs.e2e.test.ts
  *
- * KNOWN GAP (discovered while authoring, filed to the backlog): the
- * `dispatch-cli status` command (`statusCore`) surfaces only the snapshot
- * `MilestoneStatus` vocabulary, which has no `awaiting_input` member — and the
- * orchestrator treats `awaiting_input` as terminal-but-unresolved and marks the
- * unit `failed`. So the *reachability* half of AC2 is proven here (the task
- * really reaches `awaiting_input` with a `resumeToken` and resumes), but the
- * "`dispatch-cli status` surfaces it" clause is not — it is recorded as an open
- * gap rather than asserted green.
+ * KNOWN BLOCKER ON AC2 (03145a46) — proven live 2026-10-05 under anthropic: the
+ * model really calls `builtin__request_human_input` and the child agent-mcp really
+ * persists the task as `awaiting_input` carrying a `resume_token` (this test's own
+ * diagnostic dumps that row when the cycle does not return), so the tool is
+ * genuinely advertised and the suspension is genuinely persisted. But the dispatch
+ * pipeline cannot OBSERVE it: `AgentMcpRunner.fire()` awaits a SYNCHRONOUS
+ * agent-mcp `task` call (no `background:true`), and the engine's HITL path blocks
+ * on `await userInputPromise` until a resume — so `fire()`, and the
+ * `orchestrateCycle` awaiting it, never return at suspension; the MCP client aborts
+ * at its 60s deadline. Separately, `dispatch-cli status` (`statusCore`) surfaces
+ * only the snapshot `MilestoneStatus` vocabulary, which has no `awaiting_input`
+ * member and no `resumeToken`. AC2 therefore stays red for a PRODUCT reason in
+ * `@adhd/dispatch-orchestrator`, not a harness or provider one. Fix (not applied
+ * here — no product behavior is changed to force a pass): fire sessioned units with
+ * `background:true`, take the task id from the immediate `{task_id,status:'pending'}`
+ * reply, and let `poll()` observe `awaiting_input` (it is already in the poll-stop
+ * set at orchestrator.ts:922-931). Do NOT assert AC2 green until that lands.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -109,7 +121,8 @@ const LIVE = process.env["DISPATCH_E2E_LIVE"] === '1';
 const NEGATIVE = process.env["DISPATCH_E2E_NEGATIVE"] === '1';
 const PROVIDER = (process.env["DISPATCH_E2E_PROVIDER"] ?? 'claudecli') as
   | 'claudecli'
-  | 'deepseek';
+  | 'deepseek'
+  | 'anthropic';
 
 const MEMORY_STUB = join(REPO_ROOT, 'entrypoint', 'dispatch-cli', 'src', 'test', 'fixtures', 'memory-stub-server.mjs');
 const TMP_ROOT = join(REPO_ROOT, 'tmp', 'dispatch-cli', 'live-five-acs');
@@ -152,11 +165,19 @@ function assertPrerequisites(): void {
     throw new Error(`live dispatch e2e: memory stub fixture missing at ${MEMORY_STUB}`);
   }
 
-  if (PROVIDER === 'deepseek') {
-    if (!process.env["ADHD_AGENT_DEEPSEEK_SECRET"]) {
+  // The function-tool providers advertise JSON-schema tools, which is what
+  // makes agent-mcp's client-side pseudo-tools (`builtin__request_human_input`,
+  // `agent-mcp__agent`) reachable from a dispatched task. Both take their
+  // credential from a `ADHD_AGENT_<PROVIDER>_SECRET` env var; neither may ever
+  // silently skip when the credential is absent.
+  if (PROVIDER === 'deepseek' || PROVIDER === 'anthropic') {
+    const secretName =
+      PROVIDER === 'deepseek' ? 'ADHD_AGENT_DEEPSEEK_SECRET' : 'ADHD_AGENT_ANTHROPIC_SECRET';
+    if (!process.env[secretName]) {
       throw new Error(
-        'live dispatch e2e: DISPATCH_E2E_PROVIDER=deepseek but ADHD_AGENT_DEEPSEEK_SECRET ' +
-          'is unset. Refusing to skip silently. Set the credential, or run with the default ' +
+        `live dispatch e2e: DISPATCH_E2E_PROVIDER=${PROVIDER} but ${secretName} is unset. ` +
+          'Refusing to skip silently. Set the credential (the repo convention is to keep it ' +
+          'in ~/.adhd/.env and `source` that before running), or run with the default ' +
           `claudecli provider. Run: ${RUN_COMMAND}`
       );
     }
@@ -192,8 +213,8 @@ describe.skipIf(!LIVE)(
       console.warn(
         '[live-five-acs] provider=claudecli: AC2 (HITL) and AC5 (delegation) are SKIPPED — the ' +
           'claude CLI cannot be advertised agent-mcp client-side tools (only real MCP servers via ' +
-          '--mcp-config). Run those with DISPATCH_E2E_PROVIDER=deepseek (requires ' +
-          'ADHD_AGENT_DEEPSEEK_SECRET). AC1/AC3/AC4 still run.'
+          '--mcp-config). Run those with DISPATCH_E2E_PROVIDER=anthropic (ADHD_AGENT_ANTHROPIC_SECRET) ' +
+          'or DISPATCH_E2E_PROVIDER=deepseek (ADHD_AGENT_DEEPSEEK_SECRET). AC1/AC3/AC4 still run.'
       );
     }
 
@@ -218,6 +239,19 @@ describe.skipIf(!LIVE)(
           retry_config: { retries: 0, min_timeout: 1000, max_timeout: 5000, factor: 2 },
         };
       }
+      if (PROVIDER === 'anthropic') {
+        // The OAuth token from `claude setup-token` (sk-ant-oat...) resolves
+        // through ADHD_AGENT_ANTHROPIC_SECRET; `claude-sonnet-4-6` is the model
+        // the agent-mcp live-oauth e2e proves reachable with that token.
+        return {
+          type: 'anthropic',
+          model_id: process.env["DISPATCH_E2E_MODEL"] ?? 'claude-sonnet-4-6',
+          env_secret: 'ADHD_AGENT_ANTHROPIC_SECRET',
+          base_url: null,
+          timeout_ms: 180_000,
+          retry_config: { retries: 0, min_timeout: 1000, max_timeout: 5000, factor: 2 },
+        };
+      }
       return {
         type: 'claudecli',
         model_id: process.env["DISPATCH_E2E_MODEL"] ?? '',
@@ -236,6 +270,14 @@ describe.skipIf(!LIVE)(
           model: process.env["DISPATCH_E2E_MODEL"] ?? 'deepseek-chat',
           baseURL: 'https://api.deepseek.com/v1',
           env: { secret: 'ADHD_AGENT_DEEPSEEK_SECRET' },
+          timeoutMs: 180_000,
+        };
+      }
+      if (PROVIDER === 'anthropic') {
+        return {
+          type: 'anthropic',
+          model: process.env["DISPATCH_E2E_MODEL"] ?? 'claude-sonnet-4-6',
+          env: { secret: 'ADHD_AGENT_ANTHROPIC_SECRET' },
           timeoutMs: 180_000,
         };
       }
@@ -262,6 +304,9 @@ describe.skipIf(!LIVE)(
       const merged = { ...env, ...overrides };
       if (PROVIDER === 'deepseek') {
         merged['ADHD_AGENT_DEEPSEEK_SECRET'] = process.env["ADHD_AGENT_DEEPSEEK_SECRET"] ?? '';
+      }
+      if (PROVIDER === 'anthropic') {
+        merged['ADHD_AGENT_ANTHROPIC_SECRET'] = process.env["ADHD_AGENT_ANTHROPIC_SECRET"] ?? '';
       }
       return merged;
     }
@@ -617,12 +662,35 @@ describe.skipIf(!LIVE)(
           // the DAG fires it. The runner's ensureAgent does not set
           // allowHumanInput, so provision the agent explicitly (an operator step),
           // then open a real session for it so the unit is non-ephemeral.
+          //
+          // Isolate the tool surface to the HITL tool. agent-mcp's `agent_create`
+          // default-wires filesystem + shell servers when `mcpServers` is empty
+          // (defaults.ts `withDefaultMcpServers`); on the first live run under
+          // anthropic the model chose the injected `shell__shell` tool instead of
+          // suspending, and that call hung. Passing a NON-EMPTY map whose every
+          // tool is hidden (`allowedTools: []` is truthy → registry.ts
+          // `isToolHidden` drops every tool) suppresses the fs/shell defaults (an
+          // explicit non-empty map always wins) AND advertises no MCP tool, so
+          // `builtin__request_human_input` is the only callable tool. This is the
+          // same isolation the repo's own live HITL tests achieve with an empty
+          // tool registry (agent-mcp live-oauth.e2e.test.ts /
+          // hitl-suspend-resume.e2e.test.ts) — it changes only test setup, never
+          // product behavior.
+          const HITL_ISOLATED_MCP = {
+            'memory-server': {
+              transport: 'stdio' as const,
+              command: process.execPath,
+              args: [MEMORY_STUB],
+              allowedTools: [] as string[],
+            },
+          };
           const SESSION = await createAgentAndSession(l.runner, AGENT, {
             systemPrompt:
-              'You are a deployment assistant. When asked to confirm, you MUST call the ' +
-              'request_human_input tool with the prompt "confirm deployment" and then stop. ' +
-              'Do not answer on your own.',
+              'You are a deployment assistant. You have exactly one tool available: ' +
+              'builtin__request_human_input. When asked to confirm, you MUST call that tool ' +
+              'with the prompt "confirm deployment" and then stop. Do not answer on your own.',
             allowHumanInput: true,
+            mcpServers: HITL_ISOLATED_MCP,
           });
 
           const dag = newDag({
@@ -634,14 +702,40 @@ describe.skipIf(!LIVE)(
                 agent: AGENT,
                 description:
                   'Request operator confirmation before proceeding: call the ' +
-                  'request_human_input tool with prompt "confirm deployment".',
+                  'builtin__request_human_input tool with prompt "confirm deployment".',
               }),
             },
             operations: [op('hitl.1', 'hitl', 'Ask the operator to confirm the deployment.')],
           });
           await saveDag(l.dagPath, dag);
 
-          const cycle = await orchestrateCycle(makeDeps(l.dagPath, l.runner));
+          // DIAGNOSTIC (03145a46). The dispatch `fire()` path calls agent-mcp's
+          // `task` tool synchronously (no `background:true`); the engine's HITL
+          // path then blocks on `await userInputPromise` until a resume, so
+          // `fire()` — and the cycle awaiting it — never returns at suspension
+          // and the MCP client aborts the request at its 60s deadline. When that
+          // happens, dump the child's REAL persisted task state so the failure
+          // is unambiguously "the task DID suspend to awaiting_input with a
+          // resumeToken; fire() never returned" — not "the model never called
+          // the HITL tool".
+          let cycle: Awaited<ReturnType<typeof orchestrateCycle>>;
+          try {
+            cycle = await orchestrateCycle(makeDeps(l.dagPath, l.runner));
+          } catch (err) {
+            const probe = new Database(l.dbPath, { readonly: true });
+            let persisted: unknown;
+            try {
+              persisted = probe
+                .prepare('SELECT id, status, resume_token FROM tasks WHERE session_id = ?')
+                .all(SESSION);
+            } finally {
+              probe.close();
+            }
+            throw new Error(
+              `AC2 dispatch cycle did not return: ${err instanceof Error ? err.message : String(err)}; ` +
+                `persisted task rows for the session = ${JSON.stringify(persisted)}`
+            );
+          }
           expect(cycle.dispatched.length).toBe(1);
 
           // The orchestrator stops polling on awaiting_input and records it.

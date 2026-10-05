@@ -19,8 +19,9 @@ five live acceptance criteria (`fa9d3079`, `03145a46`, `5339c2e5`, `daafe2d3`,
 
 - **Gate:** `DISPATCH_E2E_LIVE=1` (skipped, loudly, otherwise).
 - **Provider:** `DISPATCH_E2E_PROVIDER=claudecli` (default; the host's authenticated
-  `claude` CLI, no key) or `deepseek` (`DISPATCH_E2E_PROVIDER=deepseek`, requires
-  `ADHD_AGENT_DEEPSEEK_SECRET`).
+  `claude` CLI, no key), `anthropic` (OAuth via `ADHD_AGENT_ANTHROPIC_SECRET`), or
+  `deepseek` (`ADHD_AGENT_DEEPSEEK_SECRET`). The function-tool secrets live in
+  `~/.adhd/.env`; `set -a; source ~/.adhd/.env; set +a` before running.
 - **Negative controls:** add `DISPATCH_E2E_NEGATIVE=1`.
 - **Approved by:** pseudosky (repo owner, skywinstonsk@gmail.com).
 - **Rationale:** the suite calls a real, paid/external model — the single reason
@@ -57,6 +58,17 @@ It does NOT receive agent-mcp's client-side pseudo-tools (`builtin__request_huma
 provider that advertises JSON-schema function tools (DeepSeek/OpenAI or Anthropic)
 and are skipped under `claudecli` with a visible warning. AC1 (session threading),
 AC3 (budget) and AC4 (memory MCP server) run under `claudecli`.
+
+**Known blocker on AC2 (`03145a46`).** The function-tool provider is necessary but
+not sufficient: under `anthropic` the model really calls
+`builtin__request_human_input` and the child `agent-mcp` really persists the task
+as `awaiting_input` with a `resume_token`, but `AgentMcpRunner.fire()` awaits a
+*synchronous* `task` call while the engine's HITL path blocks on
+`await userInputPromise` — so `fire()` never returns at suspension and the MCP
+client aborts at 60s. The dispatch pipeline cannot observe `awaiting_input` until
+`fire()` is changed to fire `background:true` and drive completion via `poll()`.
+The `dispatch-cli status` surface likewise carries no `awaiting_input`/`resumeToken`
+(`statusCore` returns only `MilestoneStatus`).
 
 The same gate record appears in this package's `README.md` and in the test file's
 own header.
