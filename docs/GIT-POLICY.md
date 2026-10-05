@@ -1080,3 +1080,35 @@ Schema version 1.
   `.worktrees/adr-0008-native-tooling` at `a6db9730` (clean, not reaped); no push, no branch or worktree
   removed, and no gates were run (docs-only ADR; the dispatch directed none). This record is the only
   change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `fix/adr-0008-index-status-9c4e` (dispatch-2026-10-04-9c4e).**
+  Landed the ADR-0008 index-row correction onto `main` as a **merge commit** `d273e0ac` (parents
+  `9222a8a1` = pre-merge `main`, `8b694ecb` = branch head), moving `main` `9222a8a1` → `d273e0ac`; 1
+  file, +1/-1 (`docs/decisions/README.md` — the 0008 row `PROPOSED (2026-10-05; revised for
+  reconfirmation) — awaiting owner approval` → `ACCEPTED (2026-10-05)`). This is the correction of the
+  defect the immediately preceding record landed as **noted, not corrected**: commit `8b694ecb` is
+  authored by the ADR owner (`pseudosky`, not this git operation) and only aligns the index row to the
+  ADR body's `**Status:** ACCEPTED (2026-10-05)`, so separation of duties is satisfied — the correction
+  arrives as its own authored change, not as an audit-layer edit by this operation. The branch carries
+  exactly 1 commit since the merge-base `9222a8a1` (which equals the pre-merge `main` tip, so the merge
+  was fast-forwardable); it is contained (`git merge-base --is-ancestor 8b694ecb main` exits 0, and
+  post-merge `git rev-list --count main..fix/adr-0008-index-status-9c4e` = 0). §Branching & merge was
+  the deciding rule: this history "carries true merge commits" and ff-only is not enforced, while
+  rebase-in-flight is permitted only on a branch "solely your own" — the branch is an in-flight
+  executor branch, not the operator's, so rewriting its commit was out; the dispatch directed
+  `--no-ff`. Dry-run `git merge-tree --write-tree --name-only main fix/adr-0008-index-status-9c4e`
+  exited 0, producing tree `9c94d16a` with no conflict hunks; the actual `git merge --no-ff` was
+  conflict-free (ort strategy, exit 0) and the post-merge tree at `d273e0ac` is `9c94d16a`,
+  byte-identical to the dry-run tree. No conflict arose because the change forks from the merge-base
+  itself, so the branch and `main` changed disjoint path sets — only `docs/decisions/README.md`
+  differs. No conflict marker remains (`git grep -nE '^(<<<<<<<|=======|>>>>>>>)' --
+  docs/decisions/README.md` exited 1 with no matches). The branch never touched this file, so `main`'s
+  policy blob `f1b6ae8e4f25b63fd73bf4154a99f744926f0e33` survived the merge byte-identical (pre-merge
+  `9222a8a1`, post-merge `d273e0ac`, and the on-disk file all resolve to the same blob). The merge is
+  two-parent (not fast-forward). The working tree was clean before and after (`git status --porcelain`
+  empty) and nothing was staged before or after the provenance commit; the dispatch's anticipated
+  "unrelated concurrent dirt" was not present, so nothing had to be avoided or protected. The branch
+  remains checked out in worktree `.worktrees/wt-adr8-index-9c4e` at `8b694ecb` (clean, not reaped); no
+  push, no branch or worktree removed, and no gates were run by this operation (docs-only index edit;
+  the dispatch directed none). This record is the only change to this file in this operation. Recorded
+  under §Commit convention's `docs(<area>):` scope.
