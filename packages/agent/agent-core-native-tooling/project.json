@@ -22,13 +22,13 @@
   ],
   "targets": {
     "build": {
-      "//": "Override of the `build` target inferred by @nx/js/typescript (registered in nx.json). Emits CommonJS-only (tsconfig.lib.json sets module=commonjs) into {projectRoot}/dist/index.js + index.d.ts, per adhd ADR-0003. rootDir=src so the entry lands at dist/index.js (not dist/src/index.js).",
+      "//": "Override of the `build` target inferred by @nx/js/typescript (registered in nx.json). Emits CommonJS-only (tsconfig.build.json -> tsconfig.lib.json sets module=commonjs) into {projectRoot}/dist/index.js + index.d.ts, per adhd ADR-0003. rootDir=src so the entry lands at dist/index.js (not dist/src/index.js). DELIBERATELY no `--baseUrl {projectRoot}`: re-basing tsconfig.base.json's repo-root-relative `paths` against THIS package dir makes every `@adhd/*` import fall through to a per-package `node_modules/@adhd/*` symlink, so the build dies with TS2307 (resolver.ts:7, permissions.ts:1) the moment that symlink is absent — a fresh checkout/worktree, or a newly-merged package before `pnpm install`. tsconfig.build.json instead maps the one workspace dep to its BUILT DECLARATION, which `^build` guarantees, so compilation no longer depends on an optional workspace symlink (adhd ADR-0002).",
       "outputs": [
         "{projectRoot}/dist"
       ],
       "options": {
         "cwd": ".",
-        "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.lib.json --outDir {projectRoot}/dist --rootDir {projectRoot}/src --baseUrl {projectRoot} --composite false --noEmitOnError"
+        "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.build.json --outDir {projectRoot}/dist --rootDir {projectRoot}/src --composite false --noEmitOnError"
       }
     },
     "typecheck": {

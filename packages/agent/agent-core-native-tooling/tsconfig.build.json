@@ -1,0 +1,10 @@
+{
+  "//": "BUILD-only config (the `build` target points here; `tsconfig.lib.json` stays the plugin-inferred/dev config, `tsconfig.typecheck.json` stays the source-resolving noEmit config). It exists to make the CommonJS emit resolve `@adhd/agent-base-types` to its BUILT DECLARATION (`../agent-base-types/dist/index.d.ts`) rather than to its source, and WITHOUT any `--baseUrl {projectRoot}` re-basing. Why this shape: the repo-root-relative `paths` in tsconfig.base.json point at the dependency's *source*. Resolving to source pulls the dependency into the program outside this package's `rootDir` -> TS6059 (the dependency has value exports). The old `--baseUrl {projectRoot}` avoided TS6059 only by making every `paths` entry MISS and fall back to the per-package `node_modules/@adhd/*` symlink -> which is exactly the artifact that is absent on a fresh checkout / newly-scaffolded package, producing TS2307 at resolver.ts:7 + permissions.ts:1. Mapping the dep to its declaration file makes resolution depend on the dependency having been BUILT (`^build`, which the `build` target already requires), not on an optional workspace symlink (adhd ADR-0002). `^build` produces this exact file. Only this package's one workspace dep is mapped; agent-base-types itself imports no other @adhd/* package (verified), so no further mappings are needed.",
+  "extends": "./tsconfig.lib.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "paths": {
+      "@adhd/agent-base-types": ["../agent-base-types/dist/index.d.ts"]
+    }
+  }
+}
