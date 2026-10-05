@@ -227,3 +227,22 @@ Schema version 1.
   The working tree was clean before and after (`git status --porcelain` empty). No push, no branch
   or worktree removed, no gates run (the post-merge review runs the suite). This record is the only
   change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-04 — operation record: land of `feat/bucket-b-provider-runtime` (dispatch-2026-10-04-9c4e).**
+  Landed bucket B onto `main` as a **merge commit** `9feacfd2` (parents `ded98335` = pre-merge
+  `main`, `e175c2dd` = B head), moving `main` `ded98335` → `9feacfd2`; 18 files, +1147/-34.
+  §Branching & merge was the deciding rule: this history "carries true merge commits" and ff-only is
+  not enforced, while rebase-in-flight is permitted only on a branch "solely your own" — B is an
+  in-flight executor branch, not the operator's, so rewriting its 11 commits (`1bcc147d`..`e175c2dd`)
+  was out; a merge commit is the stated shape here. Dry-run `git merge-tree --write-tree --name-only
+  main e175c2dd` exited 0, producing tree `3f837092` with no conflict hunks; the actual `git merge
+  --no-ff` was conflict-free (ort strategy, exit 0), with one automatic content merge in
+  `packages/dispatch/dispatch-orchestrator/src/lib/agent-runner.ts` and no conflict. B did not touch
+  this file (empty `git diff 1bcc147d..e175c2dd -- docs/GIT-POLICY.md`), so `main`'s policy revision
+  survived the merge byte-identical (blob `b3131bc9`). Post-merge
+  `git rev-list --count main..feat/bucket-b-provider-runtime` = 0 and
+  `git merge-base --is-ancestor e175c2dd main` exits 0, so all 11 B commits are contained. The working
+  tree was clean before and after (`git status --porcelain` empty); `main`'s pre-merge tip
+  `ded98335` (a concurrent agent's `docs(plan):` commit) was left byte-identical. No push, no branch
+  or worktree removed, no gates run (the post-merge review runs the suite). This record is the only
+  change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
