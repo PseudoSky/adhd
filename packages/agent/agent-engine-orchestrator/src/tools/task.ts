@@ -70,6 +70,38 @@ export interface TaskDeps {
   emitTaskEvent?: (event: { type: string; taskId: string; status?: string; result?: string | null; error?: string | null; toolName?: string; toolCallId?: string; input?: unknown; content?: unknown }) => void;
 }
 
+/** Task statuses a DAG upstream will never transition out of. */
+const TERMINAL_TASK_STATUSES = new Set(['completed', 'failed', 'cancelled']);
+
+/**
+ * The subset of `dependsOn` whose tasks are not yet in a terminal state
+ * (backlog ac115447). `depends_on` was previously recorded but never enforced,
+ * so a task with unmet upstreams ran immediately. A non-empty result means the
+ * task must not be dispatched: the background path leaves it `waiting` for
+ * `DagEngine.dispatchReady`, and the synchronous path rejects it with a typed
+ * `VALIDATION_ERROR` instead of running it early.
+ *
+ * An id that cannot be read (unknown upstream) is treated as unmet — it can
+ * never have completed. Pure — exported for tests.
+ */
+export function unmetDependencies(
+  dependsOn: readonly string[],
+  taskStore: Pick<TaskStore, 'read'>
+): string[] {
+  const unmet: string[] = [];
+  for (const id of dependsOn) {
+    let status: string;
+    try {
+      status = taskStore.read(id).status;
+    } catch {
+      unmet.push(id);
+      continue;
+    }
+    if (!TERMINAL_TASK_STATUSES.has(status)) unmet.push(id);
+  }
+  return unmet;
+}
+
 async function runEphemeralTask(
   input: {
     agent_name: string;
@@ -90,6 +122,20 @@ async function runEphemeralTask(
 
   if (input.depends_on && input.depends_on.length > 0) {
     deps.dagEngine.validateNoCycle(taskId, input.depends_on);
+  }
+
+  // Dependency gating (ac115447): an ephemeral task is always synchronous, so it
+  // cannot be left `waiting` for the DAG engine — reject it rather than running
+  // it before its declared upstreams. `tasks_batch`'s wave scheduler guarantees
+  // every `depends_on_indexes` upstream is already terminal by dispatch time, so
+  // a well-formed batch is unaffected.
+  const unmet = unmetDependencies(input.depends_on ?? [], deps.taskStore);
+  if (unmet.length > 0) {
+    throw new ToolError(
+      'VALIDATION_ERROR',
+      `Ephemeral task depends on upstream task(s) that are not yet complete: ${unmet.join(', ')}`,
+      { depends_on: input.depends_on, unmet }
+    );
   }
 
   deps.taskStore.create({
@@ -239,6 +285,38 @@ export async function taskTool(
     onUpstreamFailure,
   });
 
+  const sseBaseUrl = deps.config.sse.baseUrl;
+  const streamUrl =
+    input.stream && input.background
+      ? `${sseBaseUrl}/tasks/${task.id}/stream`
+      : undefined;
+
+  // Dependency gating (backlog ac115447): a task with unmet upstreams must not
+  // run. `TaskStore.create` already parked it in `waiting`; a background task is
+  // left there for `DagEngine.dispatchReady` (called by each task's `runTask`
+  // finally after an upstream completes), while a synchronous task rejects
+  // rather than bypassing the DAG. Note: a `waiting` task's user message is NOT
+  // appended here — `enqueueExistingTask` appends it at real dispatch time, so
+  // waiting first does not duplicate it.
+  const unmet = unmetDependencies(dependsOn, deps.taskStore);
+  if (unmet.length > 0) {
+    if (input.background) {
+      deps.logger.info(
+        { taskId: task.id, dependsOn, unmet },
+        'Task has unmet dependencies — waiting for DagEngine dispatch'
+      );
+      const response: TaskToolOutput = { task_id: task.id, status: 'waiting' };
+      if (streamUrl) response.stream_url = streamUrl;
+      return response;
+    }
+    throw new ToolError(
+      'VALIDATION_ERROR',
+      `Task depends on upstream task(s) that are not yet complete: ${unmet.join(', ')}. ` +
+        'Use background:true to let the DAG engine dispatch it when its dependencies complete.',
+      { depends_on: dependsOn, unmet }
+    );
+  }
+
   const rootTaskId = callerContext
     ? callerContext.rootTaskId ?? callerContext.taskId
     : undefined;
@@ -320,12 +398,6 @@ export async function taskTool(
       await deps.dagEngine.dispatchReady(task.id);
     }
   };
-
-  const sseBaseUrl = deps.config.sse.baseUrl;
-  const streamUrl =
-    input.stream && input.background
-      ? `${sseBaseUrl}/tasks/${task.id}/stream`
-      : undefined;
 
   if (input.background) {
     deps.queue.enqueue(task.id, runTask);

@@ -911,6 +911,9 @@ importers:
       '@adhd/agent-engine-compiler':
         specifier: ^2.2.6
         version: link:../agent-engine-compiler
+      '@adhd/agent-plugin-budget':
+        specifier: ^0.2.3
+        version: link:../agent-plugin-budget
       '@adhd/agent-store-prompts':
         specifier: ^2.2.3
         version: link:../agent-store-prompts
