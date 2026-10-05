@@ -29,19 +29,19 @@ describe("307a36c1 — provider secret surfacing", () => {
     expect(src).toMatch(/clearEmptyProviderSecrets\(\)/);
   });
 
-  it("AC2: repo-root .mcp.json forwards the three provider secrets", () => {
+  it("AC2: .mcp.json does not carry unexpandable ${VAR} secrets (BUG-MCP-HOME-EXPAND-001); resolution is shell-env or the .env cascade", () => {
     const raw = readRepoFile("../../../../.mcp.json");
     const cfg = JSON.parse(raw) as {
       mcpServers: Record<string, { env?: Record<string, string> }>;
     };
     const entry = cfg.mcpServers["agent-mcp-published"];
     expect(entry).toBeDefined();
-    for (const name of [
-      "ADHD_AGENT_ANTHROPIC_SECRET",
-      "ADHD_AGENT_OPENAI_SECRET",
-      "ADHD_AGENT_DEEPSEEK_SECRET",
-    ]) {
-      expect(entry?.env?.[name]).toBe(`\${${name}}`);
+    // MCP hosts pass env through verbatim (no expansion), so a `${VAR}` literal
+    // would reach the server as garbage — the repo forbids it (see
+    // mcpjson-registration.test.ts / BUG-MCP-HOME-EXPAND-001). The supported
+    // paths are a real shell export or the ~/.adhd/.env cascade (AC1/AC3).
+    for (const [key, value] of Object.entries(entry?.env ?? {})) {
+      expect(value, `env "${key}" must not contain \${...}`).not.toMatch(/\$\{/);
     }
   });
 
