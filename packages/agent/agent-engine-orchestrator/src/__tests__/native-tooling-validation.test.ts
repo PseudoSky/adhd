@@ -16,12 +16,15 @@ const base = {
 };
 
 describe('nativeTooling zod validation (ADR-0008 D3; NAT-TOOL-1)', () => {
-  it('AC1: accepts {fs:true, shell:{permissions:{"rm *":"deny"}}, hitl:false, askPolicy:{order,escalateTo}}', () => {
+  it('AC1: accepts {fs:true, shell:{permissions:{"shell":"ask"}}, hitl:false, askPolicy:{order,escalateTo}}', () => {
+    // ADR-0008 D5: the thin gate owns NO per-command permissions. Shell
+    // overrides carry the adopted server's argv allowlist (allowCommands) plus
+    // TOOL-NAME rules — never a command pattern like `rm *` (retired).
     const result = agentDefinitionSchema.safeParse({
       ...base,
       nativeTooling: {
         fs: true,
-        shell: { permissions: { 'rm *': 'deny' } },
+        shell: { permissions: { shell: 'ask' } },
         hitl: false,
         askPolicy: { order: ['escalate', 'deny'], escalateTo: 'parent' },
       },
