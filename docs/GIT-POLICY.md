@@ -41,7 +41,9 @@ credentials and no machine-local paths.
 ## Commit convention
 
 - **Rule set:** Conventional Commits, `<type>(<scope>): <subject>`, with the scope being the
-  library/package name (AGENTS.md §12 Commit Convention).
+  library/package name (AGENTS.md §12 Commit Convention). Documentation-only commits use a
+  `docs(<area>):` scope instead — e.g. `docs(adr):`, `docs(plan):`, `docs(git-policy):` — as this
+  repository's own history does.
 - **Enforcement:** there is no commit-msg hook and no commitlint config in this repository, so
   the message rule is review-enforced, not machine-enforced. The commit-time machine gates
   (`.githooks/pre-commit`) validate staged content — a mass-deletion guard, the secret scan,
@@ -157,3 +159,17 @@ Schema version 1.
   coordination), each rule cited to `PUBLISHING.md`, root `package.json`, and `.github/workflows/`
   by path rather than restated. §Release and this record are the changes to this file in this
   operation.
+
+- **2026-10-04 — operation record: relocate the target `@adhd/backlog` interface spec out of the
+  ADR catalog.** `docs/decisions/0007-target-backlog-public-interface.md` (untracked, 158 lines)
+  was physically moved — not `git mv`, which cannot move an untracked path — to
+  `docs/plan/backlog-consolidation/backlog-interface-target.md`. Only the H1 changed, from
+  `# ADR-0007 — …` to `# Target @adhd/backlog public interface (end-state; not shipped)`; lines
+  2–158 are byte-identical (sha256 of lines 2–158 unchanged at `fae4e1c3…`). The owner ruled the
+  document is not an ADR but non-binding plan material, so it was withdrawn from `docs/decisions/`
+  and was never in the ADR Index; `docs/decisions/README.md` has no withdrawn/reserved list, so it
+  required no edit and was left untouched. Also corrected §Commit convention above: this
+  repository's own history uses a `docs(<area>):` scope for documentation-only commits (HEAD
+  `docs(adr):`), a convention the stated "scope = library/package name" rule omitted. Committed
+  with explicit paths (never `git add -A`/`.`/`-a`); not pushed. This §Commit convention correction
+  and this record are the changes to this file in this operation.
