@@ -311,6 +311,76 @@ describe('HITL suspension from dispatch (03145a46)', () => {
     }
   });
 
+  it('reconciles a resumed HITL task back into the DAG — the milestone leaves awaiting_input and completes (48b14ec1)', async () => {
+    const state: HitlState = { resumed: false, taskArgs: undefined };
+    const client = new FakeMcpToolClient(makeHitlHandlers(state));
+    const runner = new AgentMcpRunner({
+      command: 'unused-in-test',
+      clientFactory: () => client,
+    });
+    const { dagPath, deps } = await setup('reconcile', runner);
+
+    try {
+      // Cycle 1: the sessioned task parks at awaiting_input.
+      const cycle1 = await orchestrateCycle(deps);
+      expect(cycle1.dispatched[0]?.taskStatus).toBe('awaiting_input');
+
+      // The operator resumes the task (agent-mcp `task_resume`) — this
+      // completes the TASK, but on its own it does NOT touch the DAG.
+      await runner.callTool('task_resume', {
+        taskId: TASK_ID,
+        resumeToken: RESUME_TOKEN,
+        userInput: 'approved',
+      });
+
+      // NEGATIVE CONTROL / boundary: resuming ALONE leaves the DAG stale — the
+      // latest entry still carries the suspension and the milestone still
+      // derives `awaiting_input`. Only the reconcile cycle below advances it,
+      // so removing the reconcile step turns the assertions in this test red.
+      const staleDag = await reload(dagPath);
+      expect(staleDag.dispatch_log.at(-1)?.suspension).toEqual({
+        taskId: TASK_ID,
+        resumeToken: RESUME_TOKEN,
+      });
+      expect(
+        snapshot(staleDag, { bPerTier: {}, contextWindowPerTier: {} }).milestones[
+          'a'
+        ]?.status
+      ).toBe('awaiting_input');
+
+      // Cycle 2: reconciles the completed task, runs the milestone guard, and
+      // marks the milestone complete — WITHOUT re-firing the agent.
+      const cycle2 = await orchestrateCycle(deps);
+      const reconciledSummary = cycle2.dispatched.find((d) =>
+        d.milestones.includes('a')
+      );
+      expect(reconciledSummary?.taskStatus).toBe('completed');
+      expect(reconciledSummary?.suspension).toBeNull();
+      // The single milestone is now done, so the cycle is terminal.
+      expect(cycle2.persisted).toBe(true);
+      expect(cycle2.terminal).toBe(true);
+      expect(cycle2.terminalReason).toBe('all-complete');
+
+      const reconciledDag = await reload(dagPath);
+      const last = reconciledDag.dispatch_log.at(-1);
+      // The completion entry no longer carries a suspension…
+      expect(last?.suspension).toBeUndefined();
+      // …and its guard actually ran and passed.
+      const guardResult = last?.results.find((r) => r.op_id === 'a.guard');
+      expect(guardResult?.guard_result).toBe('pass');
+      expect(guardResult?.status).toBe('complete');
+
+      // CONSUMER OUTCOME: the derived milestone status is now complete, not
+      // awaiting_input.
+      expect(
+        snapshot(reconciledDag, { bPerTier: {}, contextWindowPerTier: {} })
+          .milestones['a']?.status
+      ).toBe('complete');
+    } finally {
+      await runner.close();
+    }
+  });
+
   it('NEGATIVE CONTROL: a sessioned fire WITHOUT background never observes the suspension', async () => {
     const state: HitlState = { resumed: false, taskArgs: undefined };
     const client = new FakeMcpToolClient(makeHitlHandlers(state));
