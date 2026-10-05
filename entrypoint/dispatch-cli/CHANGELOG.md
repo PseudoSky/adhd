@@ -1,3 +1,13 @@
+## Unreleased
+
+
+### 🩹 Fixes
+
+- **dispatch-cli:** HITL is reachable — a sessioned `run --no-dry-run` task that calls `builtin__request_human_input` now suspends to `awaiting_input`, `dispatch-cli status` surfaces `awaitingInput: { taskId, resumeToken }`, and agent-mcp's `task_resume` completes it (03145a46)
+
+- **dispatch-cli:** `run --no-dry-run` no longer silently re-creates a DAG-named agent that is missing — `buildProductionAgentMcpRunner` defaults to `createAgentsIfMissing:false`, so an unregistered (e.g. deleted) agent fails the run with `AGENT_NOT_FOUND` instead of dispatching under an empty/default persona (f1dbd0f2)
+
+
 ## 0.1.4 (2026-09-26)
 
 ### 🚀 Features
