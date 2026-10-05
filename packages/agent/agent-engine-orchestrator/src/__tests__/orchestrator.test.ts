@@ -8,6 +8,7 @@ import type { LLMProvider, ProviderChatResponse } from "../providers/types.js";
 import type { ExecutionContext, Message } from "../validation/index.js";
 import type { McpClientRegistry } from "../clients/registry.js";
 import { PolicyEngine } from "../engine/policy.js";
+import { BackgroundQueue } from "../engine/queue.js";
 
 // ---------------------------------------------------------------------------
 // Minimal stubs — only the methods the orchestrator actually calls
@@ -234,6 +235,100 @@ describe("Orchestrator", () => {
             // The 60s default was the fan-out footgun; the shipped default must
             // stay raised. Reverting to 60_000 turns this red.
             expect(DEFAULT_PROVIDER_TIMEOUT_MS).toBe(300_000);
+        });
+    });
+
+    describe("dequeue-clock — provider timeout starts at call start, not task creation (36a73117 direction 2 / 5945d8d5)", () => {
+        // The provider-timeout AbortSignal is created FRESH inside the
+        // per-model-call loop (engine/orchestrator.ts, `AbortSignal.timeout(...)`
+        // immediately before `provider.chat(...)`) — i.e. at CALL start, AFTER
+        // the task has been dequeued. So a task that waits in the concurrency
+        // queue does not spend its provider-timeout budget waiting for a slot.
+        const silentLogger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as never;
+
+        it("a task queued behind another does not burn its provider-timeout budget waiting for a slot", async () => {
+            const timeoutMs = 50;
+            const queue = new BackgroundQueue(1, silentLogger);
+            const orch = new Orchestrator();
+            let bRan = false;
+            let bError: unknown;
+            let bReply: string | undefined;
+
+            // Task A holds the single slot for 150ms — 3x B's provider timeout.
+            queue.enqueue("task-a", async () => {
+                await new Promise((resolve) => setTimeout(resolve, 150));
+            });
+            // Task B is enqueued immediately and only STARTS after A releases the
+            // slot, well past B's 50ms provider timeout.
+            queue.enqueue("task-b", async () => {
+                bRan = true;
+                const ctx = makeCtx({ timeoutMs });
+                try {
+                    const res = await orch.run({
+                        executionContext: ctx,
+                        messages: [makeUserMessage(ctx.sessionId)],
+                        registry,
+                        provider: completedProvider("from B"),
+                        policy,
+                        taskStore,
+                        sessionStore,
+                        signal: new AbortController().signal,
+                        taskId: ctx.taskId,
+                    });
+                    bReply = res.result;
+                } catch (err) {
+                    bError = err;
+                }
+            });
+
+            await queue.onIdle();
+
+            expect(bRan).toBe(true);
+            // The key assertion: B DID NOT fail despite waiting > timeoutMs for a
+            // slot — its timeout clock started at the provider call, not at enqueue.
+            expect(bError).toBeUndefined();
+            expect(bReply).toBe("from B");
+        });
+
+        it("NEGATIVE CONTROL: a timeout anchored at task creation WOULD fail the queued task", async () => {
+            // Simulates the buggy alternative the direction warns about: the budget
+            // clock anchored at task creation/enqueue. Carrying that creation-
+            // anchored timeout on the task signal, the task is already aborted by the
+            // time a slot opens — exactly the failure the shipped design avoids.
+            const timeoutMs = 50;
+            const queue = new BackgroundQueue(1, silentLogger);
+            const orch = new Orchestrator();
+            const createdAtSignal = AbortSignal.timeout(timeoutMs);
+            let bError: unknown;
+            let bReply: string | undefined;
+
+            queue.enqueue("task-a-neg", async () => {
+                await new Promise((resolve) => setTimeout(resolve, 150));
+            });
+            queue.enqueue("task-b-neg", async () => {
+                const ctx = makeCtx({ timeoutMs });
+                try {
+                    const res = await orch.run({
+                        executionContext: ctx,
+                        messages: [makeUserMessage(ctx.sessionId)],
+                        registry,
+                        provider: hangingProvider(),
+                        policy,
+                        taskStore,
+                        sessionStore,
+                        signal: createdAtSignal,
+                        taskId: ctx.taskId,
+                    });
+                    bReply = res.result;
+                } catch (err) {
+                    bError = err;
+                }
+            });
+
+            await queue.onIdle();
+
+            expect(bReply).toBeUndefined();
+            expect(bError).toMatchObject({ code: "PROVIDER_ERROR" });
         });
     });
 
