@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ProviderConfig } from '@adhd/agent-base-types';
 import { mcpServerConfigSchema } from './mcp.js';
+import { nativeToolingSchema } from './native-tooling.js';
 import type { EngineConfig } from '../interfaces.js';
 
 // Retry configuration for LLM provider calls
@@ -111,6 +112,7 @@ export const agentDefinitionSchema = z.object({
   systemPrompt: z.optional(z.string()),
   mcpServers: z.record(z.string(), mcpServerConfigSchema).default({}),
   permissions: agentPermissionsSchema.default({}),
+  nativeTooling: nativeToolingSchema.optional(),
   maxToolLoops: z.number().int().positive().optional(),
   allowHumanInput: z.boolean().optional(),
   sanitization: z.enum(['none', 'prefix', 'wrap']).optional(),
@@ -213,6 +215,7 @@ export const agentPatchSchema = z.object({
   systemPrompt: z.optional(z.string()),
   mcpServers: mcpServersPatchSchema.optional(),
   permissions: agentPermissionsSchema.optional(),
+  nativeTooling: nativeToolingSchema.optional(),
   maxToolLoops: z.number().int().positive().optional(),
   allowHumanInput: z.boolean().optional(),
   sanitization: z.enum(['none', 'prefix', 'wrap']).optional(),
@@ -235,6 +238,7 @@ export const AGENT_PROJECTABLE_FIELDS = [
   'systemPrompt',
   'mcpServers',
   'permissions',
+  'nativeTooling',
   'maxToolLoops',
   'allowHumanInput',
   'sanitization',

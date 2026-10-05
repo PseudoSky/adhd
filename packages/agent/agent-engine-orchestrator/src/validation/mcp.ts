@@ -16,6 +16,9 @@ const mcpStdioConfigSchema = transportOnly({
   command: z.string(),
   args: z.array(z.string()).optional(),
   env: z.record(z.string(), z.string()).optional(),
+  // Working directory for the spawned stdio child (ADR-0008 D9) — injected at
+  // task-time from the dispatching cwd; never persisted on the definition.
+  cwd: z.string().optional(),
   timeoutMs: z.number().int().positive().optional(),
 });
 

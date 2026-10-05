@@ -217,6 +217,12 @@ type McpServerTransportConfig =
       command: string;
       args?: string[];
       env?: Record<string, string>;
+      /**
+       * Working directory for the spawned stdio child (ADR-0008 D9). Injected at
+       * TASK time from the dispatching host's cwd; a definition never stores a
+       * resolved root. When absent the child inherits the parent process cwd.
+       */
+      cwd?: string;
       timeoutMs?: number;
     }
   | {
@@ -243,6 +249,140 @@ export interface AgentPermissions {
   allowedAgents?: string[];
 }
 
+// ── Native tooling (ADR-0008) ────────────────────────────────────────────────
+// A standardized, PORTABLE native toolset — filesystem, shell, and dispatch self —
+// described by AgentDefinition.nativeTooling and resolved at TASK time against the
+// dispatching cwd by @adhd/agent-core-native-tooling. The definition carries no
+// resolved root; only the declarative config below (ADR-0008 D3/D4/D8).
+
+/**
+ * A single permission decision for a native tool call (ADR-0008 D5).
+ * `allow` runs the tool; `deny` refuses with a typed error; `ask` is routed through
+ * the fixed ask-resolution chain (`suspend` → `escalate` → `deny`, ADR-0008 D6).
+ */
+export type PermissionAction = 'allow' | 'ask' | 'deny';
+
+/**
+ * One entry of a permission rule map. The matched resource is a **tool NAME**
+ * (e.g. `fs`, `shell`, `agent-mcp.*`), never command text (ADR-0008 D5).
+ */
+export interface PermissionRule {
+  /** Tool-name glob (`*` matches any run of characters); never a shell command. */
+  resource: string;
+  action: PermissionAction;
+}
+
+/**
+ * Ordered tool-name-pattern → action map. Evaluated **last-match-wins with `deny`
+ * terminal**: the last matching rule wins, and once any `deny` rule matches the
+ * result is `deny` regardless of later rules (ADR-0008 D5; Q1 ratified).
+ */
+export type PermissionRuleMap = Record<string, PermissionAction>;
+
+/**
+ * Overrides for the builtin filesystem tool
+ * (`@modelcontextprotocol/server-filesystem`, ADR-0008 D7). Omit `root` to use the
+ * dispatching cwd.
+ */
+export interface FsBuiltinOverrides {
+  /** Filesystem root exposed to the server. Defaults to the dispatching cwd. */
+  root?: string;
+  /**
+   * Reserved. The reference fs server exposes no stdio read-only flag; read-only
+   * roots are enforced via `srt` / Docker `ro` (ADR-0008 D7, NAT-TOOL-8).
+   */
+  readOnly?: boolean;
+  /** Tool-name rules (the thin gate; ADR-0008 D5). */
+  permissions?: PermissionRuleMap;
+  allowedTools?: string[];
+  disallowedTools?: string[];
+}
+
+/**
+ * Overrides for the builtin shell tool (`tumf/mcp-shell-server`, ADR-0008 D7).
+ * `allowCommands`/`denyCommands` are a **passthrough** of the adopted server's own
+ * argv allowlist (config plumbing only) — the harness runs NO command parser and
+ * owns NO dangerous-command catalog (ADR-0008 D5).
+ */
+export interface ShellBuiltinOverrides {
+  /** Working directory for spawned commands. Defaults to the dispatching cwd. */
+  root?: string;
+  /** Tool-name rules (the thin gate; ADR-0008 D5). */
+  permissions?: PermissionRuleMap;
+  /** Command NAMES accepted by the adopted argv-allowlist server. */
+  allowCommands?: string[];
+  /** Command NAMES explicitly rejected (server-side allowlist passthrough). */
+  denyCommands?: string[];
+  /** Default command timeout, in milliseconds. */
+  timeoutMs?: number;
+  /** Extra environment for the shell server process. */
+  env?: Record<string, string>;
+}
+
+/** Overrides for the builtin dispatch self tool (the real agent-mcp server; D1). */
+export interface DispatchBuiltinOverrides {
+  /** Tool-name rules (the thin gate; ADR-0008 D5). */
+  permissions?: PermissionRuleMap;
+  allowedTools?: string[];
+  disallowedTools?: string[];
+}
+
+/** `true` = the zero-override builtin; a `McpServerConfig` REPLACES the builtin (D3). */
+export type FsToolConfig = boolean | FsBuiltinOverrides | McpServerConfig;
+export type ShellToolConfig = boolean | ShellBuiltinOverrides | McpServerConfig;
+export type DispatchToolConfig = boolean | DispatchBuiltinOverrides | McpServerConfig;
+
+/** One link of the fixed ask-resolution chain (ADR-0008 D6). */
+export type AskResolution = 'suspend' | 'escalate' | 'deny';
+
+/**
+ * @deprecated Retired by ADR-0008 D6 — the `ask` chain is **fixed**
+ * (`suspend` → `escalate` → `deny`); the only knob is {@link NativeToolingConfig.hitl}.
+ * Accepted at the validation boundary for compatibility only; the resolver and the
+ * ask-resolution policy do NOT consult it.
+ */
+export interface AskPolicy {
+  order: AskResolution[];
+  escalateTo: 'parent';
+}
+
+/**
+ * The standardized native toolset for a dispatched agent (ADR-0008 D3).
+ * Each tool member:
+ *   - `false`         → the builtin is not resolved (no server emitted);
+ *   - `true`          → the zero-override builtin (canonicalized to the override object);
+ *   - `…Overrides`    → the builtin with the given overrides;
+ *   - `McpServerConfig` → a full server config that REPLACES the builtin.
+ */
+export interface NativeToolingConfig {
+  fs?: FsToolConfig;
+  shell?: ShellToolConfig;
+  dispatch?: DispatchToolConfig;
+  /**
+   * Human-in-the-loop enablement (ADR-0008 D6). Default `true`. When `false`,
+   * `request_human_input` is hidden and `suspend` is pruned from the ask chain, so
+   * an `ask` degrades to `escalate` (if parented) or `deny`.
+   * Legacy alias: {@link AgentDefinition.allowHumanInput}.
+   */
+  hitl?: boolean;
+  /** @deprecated see {@link AskPolicy}. */
+  askPolicy?: AskPolicy;
+}
+
+/**
+ * Resolve the effective HITL setting for a definition, honoring the legacy
+ * `allowHumanInput` alias (ADR-0008 D6). `nativeTooling.hitl` WINS when both are
+ * present. Returns `undefined` when neither is set — consumers apply the ADR
+ * default (`hitl !== false` ⇒ enabled).
+ */
+export function effectiveHitl(
+  def: Pick<AgentDefinition, 'allowHumanInput' | 'nativeTooling'>
+): boolean | undefined {
+  const explicit = def.nativeTooling?.hitl;
+  if (explicit !== undefined) return explicit;
+  return def.allowHumanInput;
+}
+
 export interface AgentDefinition {
   name: string;
   description?: string;
@@ -262,6 +402,11 @@ export interface AgentDefinition {
   systemPrompt?: string;
   mcpServers: Record<string, McpServerConfig>;
   permissions: AgentPermissions;
+  /**
+   * Standardized, portable native toolset (ADR-0008). Resolved at TASK time against
+   * the dispatching cwd; never mutated by resolution and never carries a resolved root.
+   */
+  nativeTooling?: NativeToolingConfig;
   maxToolLoops?: number;
   /**
    * When `true`, advertise the built-in `builtin__request_human_input` tool to
