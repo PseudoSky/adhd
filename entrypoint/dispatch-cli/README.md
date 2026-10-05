@@ -185,8 +185,12 @@ prove five acceptance criteria that no real-model run had exercised: `fa9d3079`
 - **Fails loudly** when enabled without the required credential/subscription.
 
 ```bash
-DISPATCH_E2E_LIVE=1 npx nx test dispatch-cli \
-  --testFile=src/test/integration/live-dispatch-five-acs.e2e.test.ts
+# prerequisite: build the child agent-mcp the test spawns
+npx nx run agent-mcp:dist-manifest
+
+DISPATCH_E2E_LIVE=1 sh -c 'cd entrypoint/dispatch-cli && \
+  npx vitest run --config vite.config.ts \
+  src/test/integration/live-dispatch-five-acs.e2e.test.ts'
 ```
 
 `claudecli` cannot be advertised agent-mcp's client-side pseudo-tools, so the

@@ -33,14 +33,22 @@ five live acceptance criteria (`fa9d3079`, `03145a46`, `5339c2e5`, `daafe2d3`,
 Run it:
 
 ```bash
+# prerequisite: build the child agent-mcp the test spawns
+npx nx run agent-mcp:dist-manifest
+
 # default: claudecli (subscription; needs `claude auth status` = loggedIn)
-DISPATCH_E2E_LIVE=1 npx nx test dispatch-cli \
-  --testFile=src/test/integration/live-dispatch-five-acs.e2e.test.ts
+cd entrypoint/dispatch-cli && DISPATCH_E2E_LIVE=1 npx vitest run --config vite.config.ts \
+  src/test/integration/live-dispatch-five-acs.e2e.test.ts
 
 # alternate provider
-DISPATCH_E2E_LIVE=1 DISPATCH_E2E_PROVIDER=deepseek npx nx test dispatch-cli \
-  --testFile=src/test/integration/live-dispatch-five-acs.e2e.test.ts
+cd entrypoint/dispatch-cli && DISPATCH_E2E_LIVE=1 DISPATCH_E2E_PROVIDER=deepseek \
+  npx vitest run --config vite.config.ts src/test/integration/live-dispatch-five-acs.e2e.test.ts
 ```
+
+(The dispatch-cli `test` target has no `--testFile` option and builds `backlog`
+with `cache:false`; invoking the package's Vitest config directly is the
+targeted, verified form. `npm`-vs-`npx` aside, the test fails loudly if the
+agent-mcp dist is missing.)
 
 **Provider capability note.** `claudecli` drives the `claude` CLI, which only
 discovers the CLI's own built-ins and real MCP servers passed via `--mcp-config`.

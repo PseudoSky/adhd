@@ -48,15 +48,17 @@
  *   - AC3: `ADHD_AGENT_DISABLE_BUDGET_PLUGIN=1` → no BUDGET_EXCEEDED halt.
  *   - AC5: the delegation target added to `allowedAgents` → the chain succeeds.
  *
- * RUN (from the repo root; the test target builds agent-mcp's dist-manifest):
- *   DISPATCH_E2E_LIVE=1 npx nx test dispatch-cli \
- *     --testFile=src/test/integration/live-dispatch-five-acs.e2e.test.ts
+ * RUN (the dispatch-cli `test` target has no `--testFile`, so invoke the package's
+ * own Vitest config directly; the child agent-mcp must be built first):
+ *   npx nx run agent-mcp:dist-manifest
+ *   cd entrypoint/dispatch-cli && DISPATCH_E2E_LIVE=1 npx vitest run --config vite.config.ts \
+ *     src/test/integration/live-dispatch-five-acs.e2e.test.ts
  *   # alternate provider (requires ADHD_AGENT_DEEPSEEK_SECRET):
- *   DISPATCH_E2E_LIVE=1 DISPATCH_E2E_PROVIDER=deepseek npx nx test dispatch-cli \
- *     --testFile=src/test/integration/live-dispatch-five-acs.e2e.test.ts
+ *   cd entrypoint/dispatch-cli && DISPATCH_E2E_LIVE=1 DISPATCH_E2E_PROVIDER=deepseek \
+ *     npx vitest run --config vite.config.ts src/test/integration/live-dispatch-five-acs.e2e.test.ts
  *   # include negative controls:
- *   DISPATCH_E2E_LIVE=1 DISPATCH_E2E_NEGATIVE=1 npx nx test dispatch-cli \
- *     --testFile=src/test/integration/live-dispatch-five-acs.e2e.test.ts
+ *   cd entrypoint/dispatch-cli && DISPATCH_E2E_LIVE=1 DISPATCH_E2E_NEGATIVE=1 \
+ *     npx vitest run --config vite.config.ts src/test/integration/live-dispatch-five-acs.e2e.test.ts
  *
  * KNOWN GAP (discovered while authoring, filed to the backlog): the
  * `dispatch-cli status` command (`statusCore`) surfaces only the snapshot
@@ -126,8 +128,8 @@ const FUNCTION_TOOL_PROVIDER = PROVIDER !== 'claudecli';
 
 /** The accepted run command, surfaced in a loud failure message. */
 const RUN_COMMAND =
-  'DISPATCH_E2E_LIVE=1 npx nx test dispatch-cli ' +
-  '--testFile=src/test/integration/live-dispatch-five-acs.e2e.test.ts';
+  'cd entrypoint/dispatch-cli && DISPATCH_E2E_LIVE=1 npx vitest run --config vite.config.ts ' +
+  'src/test/integration/live-dispatch-five-acs.e2e.test.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Prerequisite probes — FAIL LOUDLY, never skip silently.
