@@ -7,28 +7,45 @@
     "version": {
       "currentVersionResolver": "git-tag",
       "preserveLocalDependencyProtocols": false,
-      "manifestRootsToUpdate": ["{projectRoot}"]
+      "manifestRootsToUpdate": [
+        "{projectRoot}"
+      ]
     }
   },
-  "tags": ["layer:logic", "platform:node"],
+  "tags": [
+    "layer:logic",
+    "platform:node"
+  ],
   "targets": {
     "test": {
-      "dependsOn": ["lint", "^build"],
+      "dependsOn": [
+        "lint",
+        "^build",
+        "typecheck-spec"
+      ],
       "//inputs": "Exclude *.e2e.ts so editing a resource-consuming suite never invalidates the default lane's cache — it never runs those files (its vitest `include` is `src/**/*.spec.ts`, see vite.config.ts). Mirrors the workspace targetDefaults.test inputs plus the negative pattern.",
       "inputs": [
         "default",
         "!{projectRoot}/**/*.e2e.ts",
         "^production",
         {
-          "externalDependencies": ["vitest", "better-sqlite3", "drizzle-orm"]
+          "externalDependencies": [
+            "vitest",
+            "better-sqlite3",
+            "drizzle-orm"
+          ]
         }
       ]
     },
     "e2e": {
       "//": "Resource-consuming lane: runs ONLY the `*.e2e.ts` suite extracted out of the default `test` target (real venv provisioning + `spawnSync` python probes, plus a `dist/` copy). REACHABILITY (2026-09-28, backlog-e2e-cache-separation): it is NOT in any `test.dependsOn` (the default lane stays fast), but it IS reached by the push/CI gate's `nx affected -t e2e` — the gate's target list is canonicalised in `tools/gate/lane-gate.mjs` (`GATE_TARGETS = ['test','e2e']`), which `.githooks/pre-push` and both CI workflows consume — and by `publish` via the conditional in `tools/nx-plugins/build/plugin.js` (`hasE2e ? [\"e2e\"] : []`). It is cached (`cache:true` + `inputs`) so a repeat gate run is a cache HIT, never an uncached re-run. `dependsOn: [\"build\"]` because the moved suite reads this package's OWN build (the published-layout checks read dist/python/, produced by this package's build). Its coverage dir is DISTINCT from the default lane's, and declares no dist-shaped output.",
       "executor": "nx:run-commands",
-      "outputs": ["{workspaceRoot}/coverage/packages/apigen/python-env-e2e"],
-      "dependsOn": ["build"],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/python-env-e2e"
+      ],
+      "dependsOn": [
+        "build"
+      ],
       "options": {
         "cwd": ".",
         "command": "vitest run --config {projectRoot}/vitest.e2e.config.ts"
@@ -38,7 +55,9 @@
         "default",
         "^production",
         {
-          "externalDependencies": ["vitest"]
+          "externalDependencies": [
+            "vitest"
+          ]
         }
       ]
     },
@@ -64,6 +83,23 @@
       ],
       "options": {
         "packageRoot": "{projectRoot}/dist"
+      }
+    },
+    "typecheck-spec": {
+      "//": "Type-checks the SPEC corpus (packages/apigen/python-env/tsconfig.spec.json). Closes lane-reachability rule 6 / backlog 770c0919: a tsconfig.spec.json with no compiling target lets the spec corpus carry type errors no gate can see. The ratchet baselines the pre-existing spec errors in tools/nx-plugins/build/executors/typecheck-spec/apigen-python-env.baseline.json (baselined, NOT excluded) and fails on any per-file increase or on include narrowing. Wired into test.dependsOn so nx affected -t test runs it.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "node tools/nx-plugins/build/executors/typecheck-spec/ratchet.mjs --tsconfig packages/apigen/python-env/tsconfig.spec.json --baseline tools/nx-plugins/build/executors/typecheck-spec/apigen-python-env.baseline.json"
       }
     }
   }

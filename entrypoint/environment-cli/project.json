@@ -13,7 +13,9 @@
   "targets": {
     "build": {
       "//": "Override of the `build` target inferred by @nx/js/typescript (see that plugin's registration in nx.json for why the inferred `tsc --build tsconfig.lib.json` cannot run in this workspace). The trailing cp calls reproduce the retired tsc build executor's `assets` glob and `generatePackageJson`: environment-cli is `private`, so neither the inferred `assets` target nor `dist-manifest` attaches to do it downstream.",
-      "outputs": ["{projectRoot}/dist"],
+      "outputs": [
+        "{projectRoot}/dist"
+      ],
       "options": {
         "cwd": ".",
         "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.lib.json --outDir {projectRoot}/dist --rootDir {projectRoot} --baseUrl {projectRoot} --composite false --noEmitOnError && cp {projectRoot}/*.md {projectRoot}/package.json {projectRoot}/dist/"
@@ -22,12 +24,39 @@
     "verify-dist-load": {
       "//": "Explicit, because the shared mechanism deliberately does not attach here. The inferred `verify-dist-load` (tools/nx-plugins/build/plugin.js) is publish-oriented and skipped for any package.json with `private: true` (tools/nx-plugins/build/detect-target.js:55-73 names environment-cli as the example), and its executor loads a dist `main`/`module`/`exports`/`bin` entry that this raw-`tsc` build never declares. This target keeps the SAME name so `nx affected -t verify-dist-load` (CI: .github/workflows/ci.yml, pull-request.yml) still covers environment-cli, but runs a narrow checker over the emitted ESM instead: it links every emitted module's bare-specifier imports and fails on a named import from a CJS-only package (backlog 788c57a5 / b8db4e3c) — the defect `nx build`/`nx test` cannot see because vitest resolves straight to source.",
       "executor": "nx:run-commands",
-      "dependsOn": ["build"],
+      "dependsOn": [
+        "build"
+      ],
       "cache": false,
       "options": {
         "cwd": ".",
         "command": "node tools/nx-plugins/build/executors/verify/verify-emitted-esm-interop.mjs entrypoint/environment-cli"
       }
+    },
+    "typecheck-spec": {
+      "//": "Type-checks the SPEC corpus (entrypoint/environment-cli/tsconfig.spec.json). Closes lane-reachability rule 6 / backlog 770c0919: a tsconfig.spec.json with no compiling target lets the spec corpus carry type errors no gate can see. The ratchet baselines the pre-existing spec errors in tools/nx-plugins/build/executors/typecheck-spec/environment-cli.baseline.json (baselined, NOT excluded) and fails on any per-file increase or on include narrowing. Wired into test.dependsOn so nx affected -t test runs it.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "node tools/nx-plugins/build/executors/typecheck-spec/ratchet.mjs --tsconfig entrypoint/environment-cli/tsconfig.spec.json --baseline tools/nx-plugins/build/executors/typecheck-spec/environment-cli.baseline.json"
+      }
+    },
+    "test": {
+      "//": "Partial override — executor/cache/outputs still come from the inferred @nx/vitest target. dependsOn is replaced wholesale, so lint/^build (workspace test targetDefaults) are relisted, plus typecheck-spec so the spec corpus is gated whenever tests run (backlog 770c0919).",
+      "dependsOn": [
+        "lint",
+        "^build",
+        "typecheck-spec"
+      ]
     }
   }
 }

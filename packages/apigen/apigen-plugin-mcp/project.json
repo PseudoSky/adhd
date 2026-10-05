@@ -5,13 +5,23 @@
   "release": {
     "version": {
       "preserveLocalDependencyProtocols": false,
-      "manifestRootsToUpdate": ["packages/apigen/apigen-plugin-mcp"]
+      "manifestRootsToUpdate": [
+        "packages/apigen/apigen-plugin-mcp"
+      ]
     }
   },
-  "tags": ["layer:logic", "platform:node"],
+  "tags": [
+    "layer:logic",
+    "platform:node"
+  ],
   "targets": {
     "test": {
-      "dependsOn": ["lint", "^build", "build"],
+      "dependsOn": [
+        "lint",
+        "^build",
+        "build",
+        "typecheck-spec"
+      ],
       "//dependsOn": "`build` (own, after `^build`) is required by the default-running `flat-content-payload.spec.ts`, which spawns the BUILT `dist/` entry as a real stdio MCP server (ADR-0004 D5). Without it the lane could exercise a stale dist. Mirrors entrypoint/backlog's own test.dependsOn.",
       "//inputs": "Exclude *.e2e.ts so editing a resource-consuming suite never invalidates the default lane's cache — it never runs those files (its vitest `include` is `src/**/*.spec.ts`, see vite.config.ts). Mirrors the workspace targetDefaults.test inputs plus the negative pattern.",
       "inputs": [
@@ -19,7 +29,11 @@
         "!{projectRoot}/**/*.e2e.ts",
         "^production",
         {
-          "externalDependencies": ["vitest", "better-sqlite3", "drizzle-orm"]
+          "externalDependencies": [
+            "vitest",
+            "better-sqlite3",
+            "drizzle-orm"
+          ]
         }
       ]
     },
@@ -29,7 +43,9 @@
       "outputs": [
         "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-mcp-e2e"
       ],
-      "dependsOn": ["build"],
+      "dependsOn": [
+        "build"
+      ],
       "options": {
         "cwd": ".",
         "command": "vitest run --config {projectRoot}/vitest.e2e.config.ts"
@@ -39,7 +55,9 @@
         "default",
         "^production",
         {
-          "externalDependencies": ["vitest"]
+          "externalDependencies": [
+            "vitest"
+          ]
         }
       ]
     },
@@ -53,6 +71,23 @@
       ],
       "options": {
         "packageRoot": "{projectRoot}/dist"
+      }
+    },
+    "typecheck-spec": {
+      "//": "Type-checks the SPEC corpus (packages/apigen/apigen-plugin-mcp/tsconfig.spec.json). Closes lane-reachability rule 6 / backlog 770c0919: a tsconfig.spec.json with no compiling target lets the spec corpus carry type errors no gate can see. The ratchet baselines the pre-existing spec errors in tools/nx-plugins/build/executors/typecheck-spec/apigen-plugin-mcp.baseline.json (baselined, NOT excluded) and fails on any per-file increase or on include narrowing. Wired into test.dependsOn so nx affected -t test runs it.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "node tools/nx-plugins/build/executors/typecheck-spec/ratchet.mjs --tsconfig packages/apigen/apigen-plugin-mcp/tsconfig.spec.json --baseline tools/nx-plugins/build/executors/typecheck-spec/apigen-plugin-mcp.baseline.json"
       }
     }
   }

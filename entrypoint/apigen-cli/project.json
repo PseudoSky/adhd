@@ -7,29 +7,48 @@
     "version": {
       "currentVersionResolver": "git-tag",
       "preserveLocalDependencyProtocols": false,
-      "manifestRootsToUpdate": ["{projectRoot}"]
+      "manifestRootsToUpdate": [
+        "{projectRoot}"
+      ]
     }
   },
-  "tags": ["layer:entrypoints", "platform:node"],
+  "tags": [
+    "layer:entrypoints",
+    "platform:node"
+  ],
   "targets": {
     "test": {
       "//": "Default (in-process, source-level) lane. Most resource-consuming specs — the integration suites that spawn the built CLI bin, and the java-javalin parity host that needs `apigen-java:package` — live in sibling `*.e2e.ts` files under the on-demand `e2e` target. One exception remains here and is why this target also builds itself: `src/test/e2e/cjs-import-meta-url.spec.ts` reads and spawns this package's own built `dist/index.js` (BUG-BUILD-002 acceptance), so `build` (not just `^build`, which builds only upstream deps) is a hard dependency — without it the spec ENOENTs on a clean checkout. Override of the inferred `test` target carries only `dependsOn` (`lint`/`build`/`^build`) plus `inputs` excluding `*.e2e.ts`; executor/cache/outputs come from inference.",
-      "dependsOn": ["lint", "build", "^build"],
+      "dependsOn": [
+        "lint",
+        "build",
+        "^build",
+        "typecheck-spec"
+      ],
       "//inputs": "Exclude *.e2e.ts so editing a resource-consuming suite never invalidates the default lane's cache — it never runs those files (its vitest `include` is `src/**/*.spec.ts`, see vite.config.ts). Mirrors the workspace targetDefaults.test inputs plus the negative pattern.",
       "inputs": [
         "default",
         "!{projectRoot}/**/*.e2e.ts",
         "^production",
         {
-          "externalDependencies": ["vitest", "better-sqlite3", "drizzle-orm"]
+          "externalDependencies": [
+            "vitest",
+            "better-sqlite3",
+            "drizzle-orm"
+          ]
         }
       ]
     },
     "e2e": {
       "executor": "nx:run-commands",
       "//": "RESOURCE-CONSUMING lane. REACHABILITY (2026-09-28, backlog-e2e-cache-separation): it is NOT in any `test.dependsOn` (the default lane stays fast), but it IS reached by the push/CI gate's `nx affected -t e2e` — the gate's target list is canonicalised in `tools/gate/lane-gate.mjs` (`GATE_TARGETS = ['test','e2e']`), which `.githooks/pre-push` and both CI workflows consume — and by `publish` via the conditional in `tools/nx-plugins/build/plugin.js` (`hasE2e ? [\"e2e\"] : []`). It is cached (`cache:true` + `inputs`) so a repeat gate run is a cache HIT, never an uncached re-run. It runs the sibling *.e2e.ts suites via vitest.e2e.config.ts. `dependsOn` is exactly the resource prerequisites those suites need: `build` (most spawn the built dist/index.js) and `apigen-java:package` (java-ts-decimal-parity drives the JVM).",
-      "dependsOn": ["build", "apigen-java:package"],
-      "outputs": ["{workspaceRoot}/coverage/entrypoint/apigen-cli-e2e"],
+      "dependsOn": [
+        "build",
+        "apigen-java:package"
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/entrypoint/apigen-cli-e2e"
+      ],
       "options": {
         "cwd": ".",
         "command": "vitest run --config {projectRoot}/vitest.e2e.config.ts"
@@ -39,16 +58,25 @@
         "default",
         "^production",
         {
-          "externalDependencies": ["vitest"]
+          "externalDependencies": [
+            "vitest"
+          ]
         }
       ]
     },
     "generate-api": {
       "executor": "@adhd/apigen-nx:generate",
       "cache": true,
-      "outputs": ["{workspaceRoot}/tmp/apigen-generate-out"],
-      "inputs": ["default", "^production"],
-      "dependsOn": ["build"],
+      "outputs": [
+        "{workspaceRoot}/tmp/apigen-generate-out"
+      ],
+      "inputs": [
+        "default",
+        "^production"
+      ],
+      "dependsOn": [
+        "build"
+      ],
       "options": {
         "source": "src/test/fixtures/real-api.ts",
         "type": "mcp",
@@ -77,6 +105,23 @@
         }
       },
       "cache": false
+    },
+    "typecheck-spec": {
+      "//": "Type-checks the SPEC corpus (entrypoint/apigen-cli/tsconfig.spec.json). Closes lane-reachability rule 6 / backlog 770c0919: a tsconfig.spec.json with no compiling target lets the spec corpus carry type errors no gate can see. The ratchet baselines the pre-existing spec errors in tools/nx-plugins/build/executors/typecheck-spec/apigen-cli.baseline.json (baselined, NOT excluded) and fails on any per-file increase or on include narrowing. Wired into test.dependsOn so nx affected -t test runs it.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "node tools/nx-plugins/build/executors/typecheck-spec/ratchet.mjs --tsconfig entrypoint/apigen-cli/tsconfig.spec.json --baseline tools/nx-plugins/build/executors/typecheck-spec/apigen-cli.baseline.json"
+      }
     }
   }
 }
