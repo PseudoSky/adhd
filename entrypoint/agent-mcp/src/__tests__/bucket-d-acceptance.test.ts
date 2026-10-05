@@ -7,6 +7,11 @@
  * artifact (not runtime code):
  *
  *   - cb2cec85  docs/dispatcher/DISPATCHER-RECONCILIATION.md
+ *               all six ACs (AC1–AC6) are asserted on §-scoped sections, and the
+ *               item's own literal AC ("a future developer can correctly pick
+ *               between dispatch-cli/backlog/agent-mcp") is asserted on §7.
+ *               AC6 reads §6's body ONLY — the preamble's "intentionally
+ *               separate" cannot satisfy it.
  *   - d78c8b1a  docs/agent-mcp/APIGEN-MULTISURFACE-DESIGN.md
  *   - 4bbe63ed  .claude/workflows/run-registry-agent.{js,md}   (AC1 + AC5)
  *
@@ -27,6 +32,25 @@ import { describe, expect, it } from "vitest";
 // __tests__ -> src -> agent-mcp -> entrypoint -> repo root.
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..", "..");
 const read = (rel: string): string => readFileSync(path.join(REPO_ROOT, rel), "utf8");
+
+/**
+ * Extracts one numbered `## <n>.` section of a markdown document (heading
+ * included) up to the next `## ` heading, or `""` when the section is absent.
+ *
+ * Scoping matters: the AC6 assertion must be satisfied by §6's own body, not by
+ * the document PREAMBLE. The preamble already says the systems are
+ * "intentionally separate" (line 8), so an unscoped `toMatch(/intentionally
+ * separate/)` would stay green with §6 deleted. Reading only §6 gives that
+ * assertion teeth.
+ */
+const section = (doc: string, n: number): string => {
+    const heading = new RegExp(`^##\\s+${n}\\.\\s+[^\\n]*$`, "m").exec(doc);
+    if (!heading || heading.index === undefined) return "";
+    const afterHeading = doc.slice(heading.index + heading[0].length);
+    const nextIdx = afterHeading.search(/^##\s+/m);
+    const body = nextIdx === -1 ? afterHeading : afterHeading.slice(0, nextIdx);
+    return heading[0] + body;
+};
 
 describe("cb2cec85 AC: dispatcher reconciliation dossier", () => {
     const DOC = "docs/dispatcher/DISPATCHER-RECONCILIATION.md";
@@ -64,9 +88,31 @@ describe("cb2cec85 AC: dispatcher reconciliation dossier", () => {
         expect(read(DOC)).toMatch(/could\*?\*? interact in future|interact in future/i);
     });
 
-    it("AC6: states which abstractions are shared vs intentionally separate", () => {
-        const doc = read(DOC);
-        expect(doc).toMatch(/shared vs intentionally-separate|shared vs intentionally separate|intentionally separate/i);
+    it("AC6: §6 names concrete SHARED abstraction candidates AND explicit do-NOT-unify members", () => {
+        // Scoped to §6's OWN body — the preamble's "intentionally separate"
+        // (line 8) must NOT be able to satisfy this. Deleting §6 turns it red.
+        const s6 = section(read(DOC), 6);
+        expect(s6, "§6 (shared vs intentionally-separate abstractions) must exist").not.toBe("");
+        // §6's heading.
+        expect(s6).toMatch(/shared vs intentionally-separate abstractions/i);
+        // at least one concrete shared-abstraction candidate (§6 "Candidates to share").
+        expect(s6).toMatch(/candidates to share/i);
+        expect(s6).toMatch(/task\/milestone status enum|event envelope|usage\/accounting read contract/i);
+        // at least one explicit "intentionally separate — do NOT unify" member.
+        expect(s6).toMatch(/do NOT unify/i);
+        expect(s6).toMatch(/store layer|scheduling semantics|transport surfaces|runtime internals/i);
+    });
+
+    it("AC literal: §7 'Decision guidance' maps each of the three extension intents to its dispatcher", () => {
+        // The item's own AC is "a future developer can correctly pick between
+        // dispatch-cli/backlog/agent-mcp for a new feature" — served by §7.
+        // Scoped to §7, so removing §7 turns it red.
+        const s7 = section(read(DOC), 7);
+        expect(s7, "§7 (Decision guidance for the next developer) must exist").not.toBe("");
+        expect(s7).toMatch(/decision guidance/i);
+        expect(s7).toMatch(/plan execution[\s\S]*?dispatch-cli/i); // plan execution   → dispatch-cli
+        expect(s7).toMatch(/work tracking[\s\S]*?backlog/i);       // work tracking    → backlog
+        expect(s7).toMatch(/agent execution[\s\S]*?agent-mcp/i);   // agent execution  → agent-mcp
     });
 });
 
