@@ -228,6 +228,14 @@ describe('d965f490 — project.json dist-manifest comment cites a real test file
       )
     ).toBe(true);
   });
+
+  it('AC3: dispatch-cli project.json no longer cites the non-existent agent-mcp-registry.e2e.test.ts', () => {
+    const dispatchProjectJson = read(
+      resolve(repoRoot, 'entrypoint', 'dispatch-cli', 'project.json')
+    );
+    expect(dispatchProjectJson).not.toContain('agent-mcp-registry.e2e');
+    expect(dispatchProjectJson).toContain('helpers/agent-mcp-registry.ts');
+  });
 });
 
 /** Catalog DBs the app may use: the path in .mcp.json plus the two default scopes. */
