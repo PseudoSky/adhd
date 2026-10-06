@@ -1,3 +1,31 @@
+import type {
+  Expr,
+  GroupItem,
+  Predicate,
+  SelectItem,
+} from './model/types';
+
+/**
+ * The v2 canonical grammar types now live on the ONE package surface. The
+ * `QueryExpression` interface below is the single canonical query type: it is
+ * the v2 self-similar grammar (canonical) widened with the v1 clause family
+ * (`having`/`window`/`output`/`top_n`, the root aggregate-map, and an array
+ * `group_by`) as `@deprecated` aliases translated by `normalizeQuery()`.
+ *
+ * The leaf/position types (`Expr`, `Fold`, `Predicate`, `GroupItem`,
+ * `SelectItem`, `BucketKey`, `Row`) are re-exported so a consumer importing
+ * from the package barrel gets the whole grammar, not just the v1 spellings.
+ */
+export type {
+  BucketKey,
+  Expr,
+  Fold,
+  GroupItem,
+  Predicate,
+  Row,
+  SelectItem,
+} from './model/types';
+
 /**
  * Generic operators (all column types except json, jsonb)
  */
@@ -235,31 +263,55 @@ export interface TopNExpression {
   other?: boolean;
 }
 
+/**
+ * The ONE canonical query type — the v2 self-similar grammar (canonical) with
+ * the v1 clause family retained as `@deprecated` aliases.
+ *
+ * v2 (canonical): a query is SELF-SIMILAR. A query is a leaf when it carries an
+ * `aggregate` value; `group_by`/`select` hold queries; `where` carries BOTH the
+ * pre- and post-group predicate in one tree, split by the phase rule; `qualify`
+ * is the post-window filter; `keep` folds a top-N tail into one `_other` row.
+ *
+ * v1 (deprecated): the root `aggregate`-map, an array `group_by`, and the
+ * `having`/`window`/`output`/`top_n` clauses are still accepted; `normalizeQuery`
+ * translates them into the canonical IR at the `DataView` boundary.
+ */
 export interface QueryExpression {
-  distinct_on?: string[];
-  limit?: number;
-  offset?: number;
-  order_by?: OrderByExpression[];
-  where?: BooleanExpression;
-  // Grouping / aggregation surface (SPEC: engine group-by + aggregation + HAVING).
-  group_by?: GroupByExpression;
-  aggregate?: AggregateExpression;
-  having?: HavingExpression;
-  window?: WindowSpec;
-  output?: QueryOutput;
-  top_n?: TopNExpression;
+  // ── canonical (v2) ────────────────────────────────────────────────────────
+  /** INPUT binding — the named dataset this node reads (top query only). */
+  source?: string;
+  /** OUTPUT identity (`as`) — the key a nested result nests under. */
+  name?: string;
+  /** Root: a v1 aggregate-map | a v2 leaf expression (fold / arithmetic). */
+  aggregate?: AggregateExpression | Expr;
+  /** ONE tree: PRE + POST-group filter, split by the phase rule. */
+  where?: BooleanExpression | Predicate;
+  /** POST-WINDOW filter — window-fold outputs only (SQL QUALIFY). */
+  qualify?: Predicate;
+  /** Group keys (v1 array) | v2 position-typed items (`{ name, aggregate }`). */
+  group_by?: GroupByExpression | GroupItem[];
+  /** Keep the top `n` groups and fold the rest into one `_other` row (v2). */
+  keep?: { n: number; other: true };
   /**
-   * Pure FINAL projection: applied AFTER the whole tail (after the order_by ->
-   * distinct_on -> offset -> limit pipeline) in `DataView.commit`, exactly as
-   * SQL's select list is applied last. Because it is final, `order_by`,
-   * `distinct_on` and `limit` may reference fields that `select` drops. Each
-   * emitted key is the reference string itself. With `output:'groups'` the refs
-   * resolve among group-key names + aggregate output names + `_grouping` /
-   * `_other`; with `output:'rows'` they resolve against the raw post-`where`
-   * row. The `output:'rows'` identity guarantee holds only when `select` is
-   * ABSENT — any `select` deliberately reshapes the row.
+   * Pure FINAL projection. In the v2 grammar a `select` item is a scalar
+   * ref/computation OR a relation-valued nested query; in the v1 grammar it is
+   * a `string[]` projection applied last (after order_by -> distinct_on ->
+   * offset -> limit), exactly as SQL's select list is applied last.
    */
-  select?: string[];
+  select?: string[] | SelectItem[];
+  order_by?: OrderByExpression[];
+  distinct_on?: string[];
+  offset?: number;
+  limit?: number;
+  // ── deprecated (v1) — normalized at the DataView boundary ─────────────────
+  /** @deprecated put a post-group leaf in `where` (phase rule). */
+  having?: HavingExpression;
+  /** @deprecated put `_window` on the fold. */
+  window?: WindowSpec;
+  /** @deprecated use a window fold in `select` (broadcast). */
+  output?: QueryOutput;
+  /** @deprecated use `order_by`+`limit`, or `keep`. */
+  top_n?: TopNExpression;
 }
 
 export type QueryExpressionValues =

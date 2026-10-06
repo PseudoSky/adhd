@@ -201,9 +201,44 @@ Combine filters using logical operators:
 
 ---
 
-## Query planner (v2 `queryModel`)
+## The canonical query grammar
 
-The v2 model — exported under the `queryModel` namespace (`export * as queryModel from './lib/model'`) — adds a self-similar, position-typed grammar, a reference executor, an incremental multi-source `DataView`, and a **rule-based planner** that turns the engine's implicit access decision into an explicit plan. Namespace-additive: the shipped `QueryExpression`/`DataView` surface is unchanged.
+`DataView` is ONE class with ONE grammar (`QueryExpression`). The self-similar,
+position-typed grammar is canonical:
+
+- `group_by` and `select` hold queries; a leaf is a query carrying an `aggregate`
+  (a fold or arithmetic expression).
+- `where` carries BOTH the pre-group and post-group predicate in one tree, split
+  by the **phase rule** (a leaf's phase is decided by reference); `qualify` is the
+  post-window filter; `keep` folds a top-N tail into one `_other` row.
+- Window is an attribute of the fold (`_window`), not a query-level key.
+
+The earlier v1 clauses — the root `aggregate` map, an array `group_by`, and
+`having`/`window`/`output`/`top_n` — are retained as `@deprecated` aliases. They
+are translated into the canonical IR by `normalizeQuery()`, so a v1-spelled query
+and its v2 spelling run against the same engine.
+
+### `normalizeQuery` — the deprecated-alias boundary
+
+```ts
+import { normalizeQuery } from '@adhd/data-query-engine';
+
+// v1 aggregate-map + window + having + top_n …
+normalizeQuery({
+  group_by: ['agent'],
+  aggregate: { cost: { _sum: 'cost_usd' } },
+  window: { field: 't', period: ['PT1H', anchor] },
+  having: { cost: { _gt: 0 } },
+  top_n: { n: 5, by: 'cost', other: true },
+});
+// …becomes canonical: `group_by` items `{ name, aggregate }` with `_window` on
+// each fold, the `having` conjunct appended to `where`, and `order_by` + `keep`.
+```
+
+A grouping-set family (`_rollup`/`_cube`/`_nest`) or `output:'rows'` has no
+canonical form; it is supported only by the shipped v1 grouping backend, and a
+query that combines one with a canonical construct is rejected with
+`QueryValidationError`.
 
 ### `canonical.ts` — plan identity
 

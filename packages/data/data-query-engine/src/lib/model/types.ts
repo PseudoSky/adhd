@@ -1,9 +1,10 @@
 /**
- * The v2 query model — the self-similar, position-typed grammar.
+ * The v2 canonical grammar — the self-similar, position-typed leaf types.
  *
- * This module is ADDITIVE: it does not alter the shipped `QueryExpression`. It is
- * exported under the `queryModel` namespace so it can be promoted to the package
- * surface only once its ADR lands (see `tmp/data-query-engine/model.md`).
+ * These leaf types are re-exported by the package's `expressions` barrel and its
+ * `QueryExpression` (see `../expressions`), which is now the ONE canonical query
+ * type: the v2 grammar folded into the shipped surface, with the v1 clause family
+ * retained as `@deprecated` aliases translated by `normalizeQuery`.
  *
  * The one structural idea: a query is SELF-SIMILAR — `group_by` and `select` hold
  * queries; a leaf is a query with an `aggregate`. Window is an attribute of the
