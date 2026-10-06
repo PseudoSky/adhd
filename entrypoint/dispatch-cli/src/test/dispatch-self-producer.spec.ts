@@ -41,14 +41,36 @@ describe('A2 — ONE agent-mcp self producer (dispatch-cli delegates)', () => {
     });
   });
 
-  it('the retired divergent pair (ADHD_DISPATCH_AGENT_MCP_*) is IGNORED — no second default survives', () => {
+  it('the LEGACY pair (ADHD_DISPATCH_AGENT_MCP_*) is honoured as a FALLBACK (#8, one-release compat)', () => {
     const legacy = {
       ADHD_DISPATCH_AGENT_MCP_COMMAND: 'node',
+      ADHD_DISPATCH_AGENT_MCP_ARGS: '/legacy.js serve',
+    } as unknown as NodeJS.ProcessEnv;
+    expect(buildDispatchSelfServer(legacy)).toEqual({
+      transport: 'stdio',
+      command: 'node',
+      args: ['/legacy.js', 'serve'],
+    });
+  });
+
+  it('the canonical pair WINS over the legacy pair when both are set (#8)', () => {
+    const both = {
+      ADHD_AGENT_MCP_COMMAND: 'node',
+      ADHD_AGENT_MCP_ARGS: '/canonical.js',
+      ADHD_DISPATCH_AGENT_MCP_COMMAND: 'ignored',
       ADHD_DISPATCH_AGENT_MCP_ARGS: '/legacy.js',
     } as unknown as NodeJS.ProcessEnv;
-    // The legacy env changes nothing: the shared producer's default is used.
-    expect(buildDispatchSelfServer(legacy)).toEqual(buildDispatchSelf({}));
-    expect(stdio(buildDispatchSelfServer(legacy)).args).toEqual([
+    expect(buildDispatchSelfServer(both)).toEqual({
+      transport: 'stdio',
+      command: 'node',
+      args: ['/canonical.js'],
+    });
+  });
+
+  it('NEGATIVE CONTROL: with NEITHER pair set the canonical default applies (no second default survives)', () => {
+    const empty = {} as NodeJS.ProcessEnv;
+    expect(buildDispatchSelfServer(empty)).toEqual(buildDispatchSelf({}));
+    expect(stdio(buildDispatchSelfServer(empty)).args).toEqual([
       '-y',
       '@adhd/agent-mcp@latest',
     ]);
