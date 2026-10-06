@@ -77,3 +77,30 @@ note in `README.md`.)
 
 The same gate record appears in this package's `README.md` and in the test file's
 own header.
+
+## Guarded live runner — `run-live-guarded.ts` (env-gated; paid model)
+
+`src/test/integration/run-live-guarded.ts` is a self-executing, **guarded** live
+runner: it drives a real `orchestrateCycle` → real `AgentMcpRunner` → a real
+spawned `@adhd/agent-mcp` → a real provider, wrapped in hard guards so a live run
+cannot run away. It is NOT collected by Vitest (`vite.config.ts` includes only
+`*.{test,spec}.*`) and is skipped by `nx affected -t test`.
+
+- **Gate:** `DISPATCH_E2E_LIVE=1`. When unset it prints a loud notice and exits 0.
+- **Provider:** `DISPATCH_E2E_PROVIDER=deepseek` (default; `ADHD_AGENT_DEEPSEEK_SECRET`),
+  `anthropic` (`ADHD_AGENT_ANTHROPIC_SECRET`), or `claudecli`.
+- **Guards** (all env-overridable): strict turn cap (`DISPATCH_E2E_MAX_TURNS`,
+  default 12 → `maxToolLoops` + `ADHD_AGENT_BUDGET_MAX_CALLS`), a continuous cost
+  monitor that **hard-kills** the run when cumulative `est_cost_usd` exceeds
+  `DISPATCH_E2E_MAX_COST_USD` (default `0.10`), a single-message byte cap
+  (`DISPATCH_E2E_MAX_MSG_BYTES`, default 262144), and an optional proxy
+  (`DISPATCH_E2E_PROXY`). It also asserts a dispatched agent can really use the
+  agent-dispatching tools (`agent-mcp__agent`).
+- **Approved by:** pseudosky (skywinstonsk@gmail.com) — real model = paid/external
+  service, the single AGENTS.md §7 gate reason.
+- **Fails loudly** when enabled without the credential / built agent-mcp / stub.
+
+Run: `DISPATCH_E2E_LIVE=1 npx tsx --tsconfig tsconfig.base.json
+entrypoint/dispatch-cli/src/test/integration/run-live-guarded.ts` (see `README.md`
+"Guarded live runner" for the full env surface). The same gate record appears in
+this package's `README.md` and in the script's own header.
