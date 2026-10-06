@@ -1598,7 +1598,7 @@ Schema version 1.
   The branch never touched this file (`git diff --name-only main...f13bb192 -- docs/GIT-POLICY.md`
   empty), so `main`'s policy blob `6c684ead448282540c6e8088908809f2e966ed1e` survived the merge
   byte-identical (pre-merge `27c194cd`, post-merge `bae94e39`, and the on-disk file all resolve to
-  the same blob). The merge is two-parent (not fast-forward); post-merge
+  the same blob).   The merge is two-parent (not fast-forward); post-merge
   `git rev-list --count main..docs/nat-tool-10-adr-0008-9c4e` = 0 and `git merge-base --is-ancestor`
   exits 0 for each of `92df3ed3` and `f13bb192` individually, so both are contained. The merge
   invoked no gate: git runs `pre-merge-commit` (not `pre-commit`) for a merge and `.githooks/` ships
@@ -1614,3 +1614,59 @@ Schema version 1.
   by this operation (the dispatch reported them already green and directed that none be run). This
   record is the only change to this file in this operation. Recorded under §Commit convention's
   `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `feat/nat-tool-9-e2e-9c4e`, reap its worktree
+  (dispatch-2026-10-04-9c4e).** Landed NAT-TOOL-9's end-to-end live proof and guarded scenarios onto
+  `main` as a **merge commit** `cf6aa887bbe20a3641cbec6487ae128d438e9ecd` (parents `99868d69` =
+  pre-merge `main`, `a4c908f4` = branch head), moving `main` `99868d69` → `cf6aa887`; 7 files,
+  +737/-12: `docs/playbooks/real-mcp-testing.md` (M, +27),
+  `entrypoint/agent-mcp/src/__tests__/integration/default-mcp-servers.e2e.test.ts` (M, +82/-?),
+  `entrypoint/agent-mcp/src/srt-policy.ts` (M, +7),
+  `entrypoint/dispatch-cli/AGENTS.md` (M, +15),
+  `entrypoint/dispatch-cli/src/test/dispatch-default-mcp-servers.e2e.test.ts` (M, +38/-?),
+  `entrypoint/dispatch-cli/src/test/helpers/agent-mcp-registry.ts` (M, +10), and
+  `entrypoint/dispatch-cli/src/test/integration/run-live-guarded.ts` (M, +570/-?) — the end-to-end
+  live fs/shell proof, portability and retention coverage, and the two live-run bug fixes (the srt uv
+  directory, the `readUsageSnapshot` import). The branch was 2 commits — `6a1c12c1`
+  (`test(native-tooling): NAT-TOOL-9 end-to-end proof — live fs/shell, portability, HITL,
+  retention`) and `a4c908f4` (`docs(native-tooling): document the NAT-TOOL-9 guarded live
+  scenarios`), a linear chain on the merge-base `27c194cd` (`git show -s --format=%P 6a1c12c1` =
+  `27c194cd`; `%P a4c908f4` = `6a1c12c1`) — matching the dispatch list exactly. The merge-base
+  `27c194cd` differs from pre-merge `main` tip `99868d69` (`main` had advanced 4 commits), so the
+  landing is a genuine non-fast-forward. §Branching & merge was the deciding rule: this history
+  "carries true merge commits" and ff-only is not enforced, while rebase-in-flight is permitted only
+  on a branch "solely your own" — this is an in-flight executor branch, not the operator's, so
+  rewriting its 2 commits was out; the dispatch directed `--no-ff`, and a merge commit is the stated
+  shape here. Dry-run `git merge-tree --write-tree --name-only main a4c908f4` exited 0, producing
+  tree `14184188bd20c863ad75b8e750cfdccfb356cdde` with no conflict hunks; the actual
+  `git merge --no-ff feat/nat-tool-9-e2e-9c4e -m "test(native-tooling): end-to-end live proof +
+  guarded scenarios (NAT-TOOL-9)"` was conflict-free (ort strategy, exit 0) and the post-merge tree
+  (`git rev-parse main^{tree}`) is `14184188…`, byte-identical to the dry-run tree, so no conflict
+  arose and none required resolution. No conflict arose because the branch and `main`'s 4 commits
+  since the merge-base changed disjoint path sets — the only shared directory is
+  `entrypoint/agent-mcp/src/__tests__/`, where `main` modified `docs-contract.test.ts` and the branch
+  modified `integration/default-mcp-servers.e2e.test.ts`, distinct filenames. A raw grep for
+  `^(=======)` matches three lines in `docs/playbooks/real-mcp-testing.md` (108/110/113) — the
+  literal `printTable` banner rows of 96 `=` marks documented as the output format, **not** conflict
+  markers: `^(<<<<<<<|>>>>>>>)` matches nothing and an exact-7-char marker regex
+  (`^(<{7}|={7}$|>{7})`) matches nothing. The branch never touched this file (`git diff --name-only
+  27c194cd..a4c908f4 -- docs/GIT-POLICY.md` empty; branch and merge-base both resolve the same policy
+  blob), so `main`'s policy blob `8853e548e2935c8d46964cc76755897b09d12bed` survived the merge
+  byte-identical (pre-merge `99868d69`, post-merge `cf6aa887`, and the on-disk file all resolve to
+  the same blob). The merge is two-parent (not fast-forward); post-merge `git rev-list --count
+  main..feat/nat-tool-9-e2e-9c4e` = 0 and `git merge-base --is-ancestor` exits 0 for each of
+  `6a1c12c1` and `a4c908f4` individually, so both are contained. The merge invoked no gate: git runs
+  `pre-merge-commit` (not `pre-commit`) for a merge and `.githooks/` ships no such hook (it supplies
+  `pre-commit`, `post-commit`, and `pre-push` only), so none ran. The worktree
+  `.worktrees/nat-tool-9-9c4e` was then reaped under §Cleanup's three-part test: `git status
+  --porcelain` inside it was empty, it carried no `locked` line, and its head `a4c908f4` was an
+  ancestor of `main` after the merge — so `git worktree remove` (no `--force`) ran and the branch was
+  deleted with `git branch -d feat/nat-tool-9-e2e-9c4e` (was `a4c908f4`); worktrees went 78 → 77,
+  and the merged commits remain reachable from the durable `main` ref, so recovery does not depend on
+  the reflog. The working tree was clean before and after (`git status --porcelain` empty) and
+  nothing was staged before or after (`git diff --cached --name-only` empty); the dispatch's
+  anticipated unrelated concurrent dirt was not present, so nothing had to be avoided or protected.
+  No push (the dispatch directed none) and no gates were run by this operation (the dispatch reported
+  them already green: `nx affected -t test build lint --base=1bcc147d` exit 0, and directed that none
+  be run). This record is the only change to this file in this operation. Recorded under §Commit
+  convention's `docs(<area>):` scope.
