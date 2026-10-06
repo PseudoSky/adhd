@@ -61,7 +61,8 @@
         "lint",
         "^build",
         "build",
-        "dist-manifest"
+        "dist-manifest",
+        "^dist-manifest"
       ]
     },
     "e2e": {
@@ -70,7 +71,8 @@
       "dependsOn": [
         "^build",
         "build",
-        "dist-manifest"
+        "dist-manifest",
+        "^dist-manifest"
       ],
       "options": {
         "cwd": ".",
