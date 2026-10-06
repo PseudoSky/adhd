@@ -1740,3 +1740,58 @@ Schema version 1.
   reflog. No push (the dispatch directed none) and no gates were run by this operation (the dispatch
   directed none; docs-only). This record is the only change to this file in this operation. Recorded
   under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-06 — operation record: land of `nt-9c4e-rework`, reap its worktree
+  (dispatch-2026-10-04-9c4e).** Landed the dispatch-host declarative-native-tooling rework onto
+  `main` as a **merge commit** `3877f624b642d9965bf83ecca30e00a7b24f9bb0` (parents
+  `157e42635c2345a6f1322fb7faa70e0ecb1066df` = pre-merge `main`, `b2f4187dcf8ec0da090700866891590c4c534366`
+  = branch head), moving `main` `157e42635c` → `3877f624`; 15 files, +740/-452. The dispatch host now
+  stores only the declarative `nativeTooling` (a resolved `mcpServers` map is never persisted, and
+  `reassertMcpServersOnReuse` is deleted) — the fix for `f162563f` (ADR-0008 D4/D8). The branch was a
+  single commit, `b2f4187d` (`fix(dispatch-orchestrator,dispatch-cli): store declarative nativeTooling,
+  never a resolved root (rework NAT-TOOL-5 / ADR-0008 D4/D8)`), whose only parent is the merge-base
+  `f4b631b6b87d2a07f8b6dedff13d47e90c02b00a` (`git show -s --format=%P b2f4187d` = `f4b631b6`); `main`
+  had advanced 15 commits past that base (`git rev-list --count f4b631b6..157e42635c` = 15), so the
+  landing is a genuine non-fast-forward. §Branching & merge was the deciding rule: this history
+  "carries true merge commits" and ff-only is not enforced, while rebase-in-flight is permitted only
+  on a branch "solely your own" — this is an in-flight executor branch, not the operator's, so
+  rewriting its commit was out; the dispatch directed `--no-ff`, and a merge commit is the stated
+  shape here. Dry-run `git merge-tree --write-tree --name-only main b2f4187d` exited 0, producing tree
+  `68aaee4c56d9525d0e52dc230d0d21162460da99` with no conflict hunks; the actual
+  `git merge --no-ff nt-9c4e-rework -m "fix(dispatch): store declarative nativeTooling, no resolved
+  mcpServers persistence (f162563f)"` was conflict-free (ort strategy, exit 0; the sole
+  `Auto-merging` line was `docs/decisions/0008-agent-mcp-native-tooling.md`) and the post-merge tree
+  (`git rev-parse HEAD^{tree}`) is `68aaee4c…`, byte-identical to the dry-run tree, so no conflict
+  arose and none required resolution. The one path both sides touched,
+  `docs/decisions/0008-agent-mcp-native-tooling.md`, was an adjacent-but-non-overlapping auto-merge:
+  `main`'s `17f6dfb7` rewrote the D5 paragraph (5 insertions / 3 deletions — "native tool call" →
+  "tool call" plus the explicit blast-radius paragraph) while the branch rewrote the D4 paragraph
+  (1 insertion / 1 deletion — resolved-map re-assert → declarative-`nativeTooling` re-resolution), and
+  the dry-run's merged blob `3fdd354531cf02b1461f426d0d4759f297505741` contains both edits (verified:
+  the branch's "threads the cwd to the spawned agent-mcp child … declarative `nativeTooling` … never
+  mutated" sentence at line 101 **and** `main`'s "blast radius is explicit" paragraph at line 107).
+  No conflict marker remains in the merged paths (`git grep -nE '^(<<<<<<<|=======|>>>>>>>)' HEAD --
+  docs/decisions/0008-agent-mcp-native-tooling.md entrypoint/dispatch-cli
+  packages/dispatch/dispatch-orchestrator` exited 1 with no matches). A concurrent agent's
+  uncommitted work was present in the working tree throughout — 12 modified and 4 untracked paths,
+  all under `entrypoint/backlog/**` and `docs/plan/backlog-consolidation/**` — and was proven disjoint
+  from the branch's 15 changed paths (`comm -12` of the two path sets = 0 lines) before the merge ran,
+  then neither staged, swept, nor modified (the `git status --porcelain` hash is byte-for-byte
+  identical: sha256 `dc91700d694e1ebd05cbfb7ac9099555cce4acf16ed6e4bbe41f86d7d103f0a7` both before and
+  after, 16 lines). The branch never touched this file (`git diff --name-only f4b631b6..b2f4187d --
+  docs/GIT-POLICY.md` empty), so `main`'s policy blob `ef3a25c24100ce08a4cf4dacbd5b5e46bbb376d3`
+  survived the merge byte-identical (pre-merge `157e4263`, post-merge `3877f624`, and the on-disk
+  file all resolve to the same blob). The merge is two-parent (not fast-forward); post-merge
+  `git rev-list --count main..nt-9c4e-rework` = 0 and `git merge-base --is-ancestor b2f4187d main`
+  exits 0, so `b2f4187d` is contained. The merge invoked no gate: git runs `pre-merge-commit` (not
+  `pre-commit`) for a merge and `.githooks/` ships no such hook (it supplies `pre-commit`,
+  `post-commit`, and `pre-push` only), so none ran. The worktree `.worktrees/nt-9c4e-rework` was then
+  reaped under §Cleanup's three-part test: `git status --porcelain` inside it was empty, it carried no
+  `locked` line, and its head `b2f4187d` was an ancestor of `main` after the merge — so
+  `git worktree remove` (no `--force`) ran and the branch was deleted with `git branch -d
+  nt-9c4e-rework` (was `b2f4187d`); worktrees went 80 → 79. The merged commit remains reachable from
+  the durable `main` ref, so recovery does not depend on the reflog. No push (the dispatch directed
+  none) and no gates were run by this operation (the dispatch reported them already green — `nx
+  affected -t test build lint --base=1bcc147d` exit 0 and dispatch-cli/dispatch-orchestrator
+  build/lint/verify-dist-load exit 0 — and directed that none be run). This record is the only change
+  to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
