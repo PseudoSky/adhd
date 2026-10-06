@@ -1904,3 +1904,61 @@ Schema version 1.
   already green — `nx affected -t test build lint --base=1bcc147d` exit 0, and agent-mcp +
   dispatch-cli verify-dist-load exit 0 — and directed that none be run). Recorded under §Commit
   convention's `docs(<area>):` scope.
+
+- **2026-10-06 — operation record: land of `fix/static-review-b-9c4e`, reap its worktree
+  (dispatch-2026-10-04-9c4e).** Landed the declarative session snapshot, the removal of
+  `denyCommands`, and the cached+freeze permission map onto `main` as a **merge commit**
+  `b32a56b2e0fe726b9b4e18c0cf388589fdc46038` (parents
+  `b240162d77956d675b4bab8c9ae6cf2af1e7d46c` = pre-merge `main`,
+  `1d1174be0dfce33485fea022ed8346e6537dae84` = branch head), moving `main` `b240162d` → `b32a56b2`;
+  19 files, +562/-32. The branch carried two commits since the merge-base — `1749a443`
+  (`fix(agent,environment): static-review bucket B — declarative session snapshot, drop
+  denyCommands, cache+freeze permission map`) and `1d1174be` (`Merge branch 'main' into
+  fix/static-review-b-9c4e`) — and the branch head was itself a two-parent merge reconciling `main`
+  into the branch: `git show -s --format=%P 1d1174be` = `1749a443 b240162d`, so `main` was already
+  an ancestor of the branch head (`git merge-base --is-ancestor main fix/static-review-b-9c4e` =
+  0) and the landing was fast-forwardable; the dispatch directed `--no-ff`, so it landed as a
+  genuine two-parent merge. §Branching & merge was the deciding rule: this history "carries true
+  merge commits" and ff-only is not enforced, while rebase-in-flight is permitted only on a branch
+  "solely your own" — this is an in-flight executor branch, not the operator's, so rewriting its
+  commits was out; a merge commit is the stated shape here. Dry-run `git merge-tree --write-tree
+  --name-only main fix/static-review-b-9c4e` exited 0, producing tree
+  `2419cc63b6cf0b17659245bc6b82208c45f961b2` with no conflict hunks — identical to the branch tree
+  (`git rev-parse fix/static-review-b-9c4e^{tree}`); the actual `git merge --no-ff
+  fix/static-review-b-9c4e -m "fix(agent): declarative session snapshot, drop denyCommands, freeze
+  permission map (static-review B)"` was conflict-free (ort strategy, exit 0) and the post-merge
+  tree (`git rev-parse HEAD^{tree}`) is `2419cc63…`, byte-identical to both the dry-run and the
+  branch tree, so no conflict arose and none required resolution. The one reconciliation the branch
+  performed ("contains `main` as a parent, with the conflict reconciled") was done inside the
+  branch, not by this landing: the merge-base of `main` and the branch head is `b240162d` itself
+  (`main`'s own tip), and the pre-merge merged tree is byte-identical to the post-merge tree, so
+  this operation introduced no resolution of its own. No conflict marker remains in the merged
+  paths (`git grep -nE '^(<<<<<<<|=======|>>>>>>>)' HEAD -- entrypoint/agent-mcp
+  packages/agent/agent-base-types packages/agent/agent-core-native-tooling
+  packages/agent/agent-engine-orchestrator packages/environment/environment-base-spec` exited 1
+  with no matches). Disjointness was checked before the merge: the branch's 19-path set
+  (`comm -12`) was empty against `main`'s 31-path uncommitted WIP (`.mcp.json`,
+  `docs/plan/backlog-consolidation/**`, and `entrypoint/backlog/**`) — the dispatch's named caution
+  (uncommitted, not ours) was confirmed **disjoint**, so it was not a STOP. The working tree was
+  byte-identical before and after the merge (`git status --porcelain` sha256
+  `517171ac6a5298f3e99ed08355d6e4863302381c8a346c6c09bb7b2ae4a1c98b`, 31 lines on both sides), so
+  no concurrent work was staged, swept, or modified; the staged index was empty before and after
+  (`git diff --cached --name-only` empty). The branch never touched `docs/GIT-POLICY.md` (empty
+  `git diff --name-only main..fix/static-review-b-9c4e -- docs/GIT-POLICY.md`; both revisions and
+  the on-disk file resolve the same blob `1d0c7a2036a468dfe7e78c1aab97a0789536f61e`), so `main`'s
+  policy blob survived the merge byte-identical (pre-merge `b240162d`, post-merge `b32a56b2`, and
+  the on-disk file all agree). The merge is two-parent (not fast-forward); post-merge `git rev-list
+  --count main..fix/static-review-b-9c4e` = 0 and `git merge-base --is-ancestor` exits 0 for each of
+  `1749a443` and `1d1174be` individually, so both are contained. The merge invoked no gate: git runs
+  `pre-merge-commit` (not `pre-commit`) for a merge and `.githooks/` ships no such hook (it supplies
+  `pre-commit`, `post-commit`, and `pre-push` only), so none ran. The worktree
+  `.worktrees/wt-static-review-b-9c4e` was then reaped under §Cleanup's three-part test: `git status
+  --porcelain` inside it was empty, it carried no `locked` line, and its head `1d1174be` was an
+  ancestor of `main` after the merge — so `git worktree remove` (no `--force`) ran and the branch
+  was deleted with `git branch -d fix/static-review-b-9c4e` (was `1d1174be`); worktrees went
+  80 → 79. `b32a56b2` and both landed commits remain reachable from the durable `main` ref, so
+  recovery does not depend on the reflog. No push (the dispatch directed none) and no gates were run
+  by this operation (the dispatch reported them already green — `nx affected -t test build lint
+  --base=1bcc147d` exit 0, and agent-mcp + dispatch-cli verify-dist-load exit 0 — and directed that
+  none be run). This record is the only change to this file in this operation. Recorded under
+  §Commit convention's `docs(<area>):` scope.
