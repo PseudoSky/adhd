@@ -90,8 +90,6 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-import Database from 'better-sqlite3';
-
 import type {
   DagJson,
   MilestoneDag,
@@ -108,6 +106,14 @@ import {
   orchestrateCycle,
   type OrchestratorDeps,
 } from '@adhd/dispatch-orchestrator';
+
+import {
+  GuardAbort,
+  RunMonitor,
+  enforcePostRun,
+  type GuardConfig,
+  type UsageSnapshot,
+} from './live-guard-core.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Paths. Resolved locally (NOT via `helpers/agent-mcp-registry.ts`) because that
@@ -193,209 +199,10 @@ const RUN_COMMAND =
   'entrypoint/dispatch-cli/src/test/integration/run-live-guarded.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Guard errors + telemetry readers
+// Guard primitives live in `./live-guard-core.ts` (side-effect-free, and covered
+// by a default-running spec: `live-guard-core.spec.ts`). Imported at the top of
+// this file: GuardAbort, RunMonitor, enforcePostRun, GuardConfig, UsageSnapshot.
 // ─────────────────────────────────────────────────────────────────────────────
-
-/** Thrown when a hard guard trips. Carries the reason + observed evidence. */
-class GuardAbort extends Error {
-  constructor(
-    readonly reason: string,
-    readonly evidence: Record<string, unknown>
-  ) {
-    super(`[GUARD-KILL:${reason}] ${JSON.stringify(evidence)}`);
-    this.name = 'GuardAbort';
-  }
-}
-
-interface UsageSnapshot {
-  /** Cumulative `SUM(task_usage.est_cost_usd)` (0 when no rows yet). */
-  costUsd: number;
-  /** Cumulative `SUM(task_usage.model_calls)`. */
-  modelCalls: number;
-  tasks: number;
-  /** Tasks that made model calls but whose cost is NULL (unpriceable model). */
-  unpricedTasks: number;
-  /** Largest single stored message byte-length across all message-bearing tables. */
-  maxMsgBytes: number;
-}
-
-/**
- * Read the child's real telemetry store (read-only, separate connection) — the
- * same tables `usage_query` aggregates. Returns `null` when the DB does not
- * exist yet or is momentarily locked (a skipped tick, never a crash).
- */
-function readUsageSnapshot(dbPath: string): UsageSnapshot | null {
-  if (!existsSync(dbPath)) return null;
-  let raw: InstanceType<typeof Database> | null = null;
-  try {
-    raw = new Database(dbPath, { readonly: true, fileMustExist: true });
-    raw.pragma('busy_timeout = 500');
-    const usage = raw
-      .prepare(
-        `SELECT
-           COALESCE(SUM(est_cost_usd), 0) AS costUsd,
-           COALESCE(SUM(model_calls), 0) AS modelCalls,
-           COUNT(*) AS tasks,
-           COALESCE(SUM(CASE WHEN est_cost_usd IS NULL THEN 1 ELSE 0 END), 0) AS unpricedTasks
-         FROM task_usage`
-      )
-      .get() as {
-      costUsd: number;
-      modelCalls: number;
-      tasks: number;
-      unpricedTasks: number;
-    };
-    // `LENGTH(CAST(x AS BLOB))` is byte-accurate; plain LENGTH() would count
-    // characters and under-report multi-byte content.
-    const size = raw
-      .prepare(
-        `SELECT MAX(len) AS maxMsgBytes FROM (
-           SELECT MAX(LENGTH(CAST(content AS BLOB))) AS len FROM messages
-           UNION ALL SELECT MAX(LENGTH(CAST(tool_calls AS BLOB))) FROM messages
-           UNION ALL SELECT MAX(LENGTH(CAST(tool_results AS BLOB))) FROM messages
-           UNION ALL SELECT MAX(LENGTH(CAST(prompt AS BLOB))) FROM tasks
-           UNION ALL SELECT MAX(LENGTH(CAST(result AS BLOB))) FROM tasks
-           UNION ALL SELECT MAX(LENGTH(CAST(payload AS BLOB))) FROM task_events
-         )`
-      )
-      .get() as { maxMsgBytes: number | null };
-    return {
-      costUsd: usage.costUsd,
-      modelCalls: usage.modelCalls,
-      tasks: usage.tasks,
-      unpricedTasks: usage.unpricedTasks,
-      maxMsgBytes: size.maxMsgBytes ?? 0,
-    };
-  } catch {
-    return null;
-  } finally {
-    raw?.close();
-  }
-}
-
-interface GuardConfig {
-  dbPath: string;
-  maxTurns: number;
-  maxCostUsd: number;
-  maxMsgBytes: number;
-  pollMs: number;
-  proxy: string | undefined;
-}
-
-/**
- * Continuous monitor: polls the child store on a bounded interval, prints the
- * running cost each poll, and trips a {@link GuardAbort} the instant a cap is
- * exceeded. On breach it stops itself and invokes `onKill` exactly once, which
- * the caller wires to `runner.close()` (aborting the spawned agent-mcp) plus a
- * rejection that wins the `Promise.race` around `orchestrateCycle`.
- */
-class RunMonitor {
-  private timer: NodeJS.Timeout | null = null;
-  private stopped = false;
-  private last: UsageSnapshot | null = null;
-
-  constructor(
-    private readonly cfg: GuardConfig,
-    private readonly onKill: (err: GuardAbort) => void
-  ) {}
-
-  start(): void {
-    this.timer = setInterval(() => {
-      void this.tick();
-    }, this.cfg.pollMs);
-    // Never keep the process alive on its own; the run holds the event loop.
-    if (typeof this.timer.unref === 'function') this.timer.unref();
-  }
-
-  stop(): void {
-    this.stopped = true;
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
-  }
-
-  get snapshot(): UsageSnapshot | null {
-    return this.last;
-  }
-
-  private async tick(): Promise<void> {
-    if (this.stopped) return;
-    const snap = readUsageSnapshot(this.cfg.dbPath);
-    if (!snap) return;
-    this.last = snap;
-
-    console.log(
-      `[guard] cost=$${snap.costUsd.toFixed(6)} (cap $${this.cfg.maxCostUsd}) | ` +
-        `modelCalls=${snap.modelCalls} (cap ${this.cfg.maxTurns}) | tasks=${snap.tasks} | ` +
-        `maxMsgBytes=${snap.maxMsgBytes} (cap ${this.cfg.maxMsgBytes})`
-    );
-
-    if (snap.costUsd > this.cfg.maxCostUsd) {
-      this.breach('cost-exceeded', {
-        costUsd: snap.costUsd,
-        maxCostUsd: this.cfg.maxCostUsd,
-      });
-      return;
-    }
-    if (snap.unpricedTasks > 0 && snap.modelCalls > 0 && !this.cfg.proxy) {
-      this.breach('cost-telemetry-unavailable', {
-        unpricedTasks: snap.unpricedTasks,
-        modelCalls: snap.modelCalls,
-        model: MODEL,
-        hint:
-          'est_cost_usd is NULL (the model has no rate-card entry), so cumulative ' +
-          'spend cannot be metered. Refusing to run unbounded. Set DISPATCH_E2E_MODEL ' +
-          'to a priced model, or set DISPATCH_E2E_PROXY so the proxy meters spend.',
-      });
-      return;
-    }
-    if (snap.maxMsgBytes > this.cfg.maxMsgBytes) {
-      this.breach('message-size-exceeded', {
-        maxMsgBytes: snap.maxMsgBytes,
-        maxMsgBytesCap: this.cfg.maxMsgBytes,
-      });
-    }
-  }
-
-  private breach(reason: string, evidence: Record<string, unknown>): void {
-    if (this.stopped) return;
-    this.stop();
-    this.onKill(new GuardAbort(reason, { ...evidence, snapshot: this.last }));
-  }
-}
-
-/** Post-run final enforcement — the safety net if the run finished between ticks. */
-function enforcePostRun(snap: UsageSnapshot | null, cfg: GuardConfig): void {
-  if (!snap) {
-    throw new GuardAbort('telemetry-store-missing', {
-      dbPath: cfg.dbPath,
-      hint: 'the spawned agent-mcp never wrote a task_usage row; refusing to report success',
-    });
-  }
-  if (snap.modelCalls > cfg.maxTurns) {
-    throw new GuardAbort('turn-count-exceeded', {
-      modelCalls: snap.modelCalls,
-      maxTurns: cfg.maxTurns,
-    });
-  }
-  if (snap.costUsd > cfg.maxCostUsd) {
-    throw new GuardAbort('cost-exceeded', { costUsd: snap.costUsd, maxCostUsd: cfg.maxCostUsd });
-  }
-  if (snap.unpricedTasks > 0 && snap.modelCalls > 0 && !cfg.proxy) {
-    throw new GuardAbort('cost-telemetry-unavailable', {
-      unpricedTasks: snap.unpricedTasks,
-      modelCalls: snap.modelCalls,
-      model: MODEL,
-    });
-  }
-  if (snap.maxMsgBytes > cfg.maxMsgBytes) {
-    throw new GuardAbort('message-size-exceeded', {
-      maxMsgBytes: snap.maxMsgBytes,
-      maxMsgBytesCap: cfg.maxMsgBytes,
-    });
-  }
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Prerequisite probes — FAIL LOUDLY, never skip silently.
@@ -766,6 +573,7 @@ async function runUnderGuard(launched: Launched, dag: DagJson): Promise<GuardedR
     maxMsgBytes: MAX_MSG_BYTES,
     pollMs: POLL_MS,
     proxy: PROXY,
+    modelLabel: MODEL,
   };
   const kill = deferred<never>();
   const monitor = new RunMonitor(cfg, (err) => {
