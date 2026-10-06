@@ -14,6 +14,11 @@ const server = new Server(
   { capabilities: { tools: {} } }
 );
 
+// A5: this tool appears ONLY when the curated child env (`subprocessEnv()`)
+// actually reached this process. It is the observable proof that the verify
+// path threads the SAME engine config the task path does.
+const envSeen = Boolean(process.env.VERIFY_ENV_TOKEN);
+
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
@@ -24,6 +29,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: { text: { type: 'string' } },
       },
     },
+    ...(envSeen
+      ? [
+          {
+            name: 'env-seen',
+            description: 'Present only when VERIFY_ENV_TOKEN reached the child.',
+            inputSchema: { type: 'object', properties: {} },
+          },
+        ]
+      : []),
   ],
 }));
 

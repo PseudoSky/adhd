@@ -53,7 +53,11 @@ const CATALOG = resolve(
 );
 
 const SOURCE_EXT = /\.(ts|mts|mjs|js|cjs)$/;
-const TEST_PATH = /(^|\/)(__tests__|fixtures)(\/|$)|\.(spec|test)\.[cm]?ts$/;
+// Test + fixture scaffolding is excluded: `__tests__`/`fixtures` dirs, the
+// `test/` dir convention (dispatch-cli), and `*.spec.*`/`*.test.*` files. Tests
+// legitimately pin expected values (including launcher argv).
+const TEST_PATH =
+  /(^|\/)(__tests__|test|fixtures)(\/|$)|\.(spec|test)\.[cm]?ts$/;
 
 /**
  * Production source files only (`.ts`/`.mjs`/`.js`), excluding tests + fixtures.
@@ -84,7 +88,22 @@ function productionFiles(root: string): string[] {
 const SCAN_ROOTS = [
   resolve(repoRoot, 'entrypoint', 'agent-mcp', 'src'),
   resolve(repoRoot, 'packages', 'agent'),
+  // A2: dispatch-cli historically authored a SECOND agent-mcp self config
+  // (`buildDispatchSelfServer`/`resolveAgentMcpLaunch`). Scanning its source is
+  // what makes a reappearing third producer go RED.
+  resolve(repoRoot, 'entrypoint', 'dispatch-cli', 'src'),
 ];
+
+/** The ONE production file allowed to own the agent-mcp self launch config. */
+const DISPATCH_SELF = resolve(
+  repoRoot,
+  'packages',
+  'agent',
+  'agent-core-native-tooling',
+  'src',
+  'lib',
+  'dispatch-self.ts'
+);
 
 const PROD = SCAN_ROOTS.flatMap(productionFiles);
 
@@ -126,6 +145,36 @@ describe('NAT-TOOL-4 — exactly ONE producer of the builtin fs/shell servers', 
     expect(Object.keys(map).sort()).toEqual(
       [DISPATCH_SERVER_KEY, FS_SERVER.key, SHELL_SERVER.key].sort()
     );
+  });
+
+  it('A2: the agent-mcp self launch config has exactly ONE producer (default argv + buildDispatchSelf)', () => {
+    // The canonical default argv `['-y', '@adhd/agent-mcp@latest']` lives ONLY in
+    // the shared producer. If a second host re-authors it (e.g. dispatch-cli
+    // hard-codes `['-y', '@adhd/agent-mcp@latest']` again) this goes RED.
+    const canonicalArgv = /['"]-y['"]\s*,\s*['"]@adhd\/agent-mcp@latest['"]/;
+    expect(filesMatching(PROD, canonicalArgv)).toEqual([
+      relative(repoRoot, DISPATCH_SELF),
+    ]);
+
+    // The OLD divergent argv (`@adhd/agent-mcp` with no `@latest`) must not
+    // exist in production source at all — its presence means a producer
+    // re-appeared with a different default than the canonical one.
+    const divergentArgv = /['"]-y['"]\s*,\s*['"]@adhd\/agent-mcp['"]/;
+    expect(filesMatching(PROD, divergentArgv)).toEqual([]);
+
+    // The producer FUNCTION is defined in exactly one production file.
+    const producerDef = /export function buildDispatchSelf\s*\(/;
+    expect(filesMatching(PROD, producerDef)).toEqual([
+      relative(repoRoot, DISPATCH_SELF),
+    ]);
+
+    // The new scan root is genuinely wired: dispatch-cli source is in scope, so
+    // a third producer there would be caught (not silently ignored).
+    expect(
+      PROD.some((f) =>
+        relative(repoRoot, f).startsWith('entrypoint/dispatch-cli/src/')
+      )
+    ).toBe(true);
   });
 
   it('AC2: the resolved default map is byte-equal to resolveNativeToolingMap — not a hand-built map', () => {

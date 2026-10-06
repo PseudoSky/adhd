@@ -38,6 +38,14 @@ export interface NativeResolveContext {
    * replacements and the `dispatch` self server are never wrapped.
    */
   sandbox?: boolean;
+  /**
+   * Explicit `srt` settings file for the sandbox-wrapped builtins. When set the
+   * resolver emits `srt -s <path> …` for the `fs`/`shell` servers (finding
+   * 535c1101 / A4), so the host can hand each spawn its OWN policy file (which
+   * carries the per-spawn cwd allow) instead of accumulating it into the shared
+   * `~/.srt-settings.json`. Absent ⇒ `srt` reads its own default path.
+   */
+  srtSettingsPath?: string;
 }
 
 function isMcpServerConfig(value: unknown): value is McpServerConfig {
@@ -80,7 +88,10 @@ function withSandbox(
 ): McpServerConfig {
   if (ctx.sandbox === false) return config;
   if (config.transport !== 'stdio') return config;
-  const wrapped = wrapWithSandbox({ command: config.command, args: config.args });
+  const wrapped = wrapWithSandbox(
+    { command: config.command, args: config.args },
+    ctx.srtSettingsPath
+  );
   return { ...config, command: wrapped.command, args: wrapped.args };
 }
 

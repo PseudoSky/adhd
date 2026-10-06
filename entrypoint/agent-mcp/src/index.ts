@@ -38,10 +38,15 @@ import {
 import { startServer } from "./server.js";
 import {
   buildNativeToolingContext,
+  nativeToolingFromResolvedConfig,
   withResolvedNativeTooling,
   withResolvedNativeToolingSession,
 } from "./defaults.js";
-import { provisionSrtPolicy } from "./srt-policy.js";
+import {
+  provisionSrtPolicy,
+  provisionRunSrtPolicy,
+  removeRunSrtPolicy,
+} from "./srt-policy.js";
 import { startSseServer } from "./streaming/sse-server.js";
 import type { GatewayDepsRef } from "./streaming/chat-gateway.js";
 import { emitTaskEvent } from "./streaming/event-bus.js";
@@ -212,10 +217,22 @@ async function main() {
     // (ADR-0008 D7; deferral a5a2f1d4). Additive + idempotent — an existing
     // user policy is never clobbered.
     try {
-        const provisioned = provisionSrtPolicy({ allowWrite: [process.cwd()] });
+        // The GLOBAL `~/.srt-settings.json` is provisioned STATIC-ONLY — the
+        // per-spawn cwd is NEVER persisted into it (finding 535c1101 / A3(a));
+        // it is only the fallback for a bare `srt` invocation. The dispatcher's
+        // cwd goes into a PER-RUN file instead (`provisionRunSrtPolicy`), which
+        // `buildNativeToolingContext` threads into the resolver as `srt -s`
+        // (A4). The child agent-mcp's `process.cwd()` IS the dispatching cwd
+        // (D9), so the per-run file carries the right root.
+        const globalPolicy = provisionSrtPolicy();
+        const runPolicy = provisionRunSrtPolicy(process.cwd());
         logger.info(
-            { path: provisioned.path, created: provisioned.created, updated: provisioned.updated },
-            "Provisioned srt sandbox policy for native tooling"
+            {
+                globalPath: globalPolicy.path,
+                runPath: runPolicy.path,
+                updated: runPolicy.updated,
+            },
+            "Provisioned srt sandbox policy for native tooling (global static + per-run)"
         );
     } catch (err) {
         logger.warn(
@@ -336,8 +353,14 @@ async function main() {
 
     // The DAG dispatch path resolves `nativeTooling` at task time against the
     // dispatching cwd, exactly like the MCP `task` path (ADR-0008 D4). Stores
-    // are wrapped here so the stored definition is never mutated.
-    const nativeToolingContext = () => buildNativeToolingContext();
+    // are wrapped here so the stored definition is never mutated. The
+    // server-wide `env.config.nativeTooling` is merged BENEATH each agent's own
+    // (A1), so the typed env/config surface is no longer inert.
+    const defaultNativeTooling = nativeToolingFromResolvedConfig(
+        env.config.nativeTooling
+    );
+    const nativeToolingContext = () =>
+        buildNativeToolingContext({ defaultNativeTooling });
     const resolvingAgentStore = withResolvedNativeTooling(agentStore, nativeToolingContext);
     const resolvingSessionStore = withResolvedNativeToolingSession(sessionStore, nativeToolingContext);
 
@@ -390,6 +413,9 @@ async function main() {
     const shutdown = async (signal: string) => {
         logger.info({ signal }, "Server shutdown");
         await close();
+        // Remove the per-run srt policy file this process created (best-effort;
+        // never an operator override).
+        removeRunSrtPolicy();
         const activeSseServer = sseServer;
         if (activeSseServer) {
             await new Promise<void>(resolve => activeSseServer.close(() => resolve()));

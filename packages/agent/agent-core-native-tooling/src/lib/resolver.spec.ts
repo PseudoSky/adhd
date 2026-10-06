@@ -195,4 +195,27 @@ describe('resolveNativeTooling — adopted srt sandbox wrapping (ADR-0008 D7)', 
     );
     expect(servers).toEqual([dispatchSelf]);
   });
+
+  // A4 / 535c1101: the host passes a per-run settings file; the resolver must
+  // emit it as `srt -s <path> <cmd>` so the per-spawn cwd allow is not written
+  // into the shared global policy.
+  it('A4: `srtSettingsPath` emits an explicit `srt -s <path> …` for the wrapped builtins', () => {
+    const [fs, shell] = resolveNativeTooling(
+      { fs: true, shell: true },
+      { cwd: '/p/a', srtSettingsPath: '/run/srt-run.json' }
+    ) as [Stdio, Stdio];
+    expect(fs.command).toBe('srt');
+    expect(fs.args?.slice(0, 4)).toEqual(['-s', '/run/srt-run.json', 'npx', '-y']);
+    expect(shell.command).toBe('srt');
+    expect(shell.args?.slice(0, 3)).toEqual(['-s', '/run/srt-run.json', 'uvx']);
+  });
+
+  it('A4: with no `srtSettingsPath` the resolver emits a bare `srt` (pre-existing shape)', () => {
+    const [fs] = resolveNativeTooling(
+      { fs: true, shell: false },
+      { cwd: '/p/a' }
+    ) as [Stdio];
+    expect(fs.command).toBe('srt');
+    expect(fs.args?.[0]).toBe('npx'); // no `-s` prefix
+  });
 });

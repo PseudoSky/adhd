@@ -7,6 +7,7 @@
  * the precedence, the task-time cwd, or the srt default-wrap regresses.
  */
 import { describe, expect, it } from 'vitest';
+import { effectiveHitl } from '@adhd/agent-base-types';
 import type { McpServerConfig } from '@adhd/agent-base-types';
 
 import {
@@ -163,6 +164,66 @@ describe('resolveAgentMcpServers — task-time resolution (ADR-0008 D4)', () => 
     expect(resolved).not.toBe(original);
     expect(resolved.mcpServers['fs']).toBeDefined();
     expect(original.mcpServers).toEqual({});
+  });
+});
+
+describe('A1 — server-wide nativeTooling merges BENEATH the agent def (agent wins)', () => {
+  it('a server-wide layer changes the resolved toolset when the agent omits it', () => {
+    const servers = resolveAgentMcpServers(
+      { mcpServers: {} },
+      {
+        cwd: '/P',
+        dispatchSelf,
+        defaultNativeTooling: {
+          fs: false,
+          shell: false,
+          dispatch: { allowedTools: ['task'] },
+        },
+      }
+    );
+    // TEETH: without the merge these are absent (agent omitted nativeTooling).
+    expect((servers['agent-mcp'] as Stdio).allowedTools).toEqual(['task']);
+    expect(servers['fs']).toBeUndefined(); // server-wide fs:false honored
+    expect(servers['shell']).toBeUndefined();
+  });
+
+  it('the agent definition WINS over the server-wide layer, per field', () => {
+    const servers = resolveAgentMcpServers(
+      { mcpServers: {}, nativeTooling: { dispatch: { disallowedTools: ['task'] } } },
+      {
+        cwd: '/P',
+        dispatchSelf,
+        defaultNativeTooling: { dispatch: { allowedTools: ['agent'] } },
+      }
+    );
+    const dispatch = servers['agent-mcp'] as Stdio;
+    expect(dispatch.allowedTools).toEqual(['agent']); // server field merged in
+    expect(dispatch.disallowedTools).toEqual(['task']); // agent field present
+  });
+
+  it('an agent `false` member wins outright over a server-wide object', () => {
+    const servers = resolveAgentMcpServers(
+      { mcpServers: {}, nativeTooling: { fs: false } },
+      { cwd: '/P', dispatchSelf, defaultNativeTooling: { fs: { root: '/server' } } }
+    );
+    expect(servers['fs']).toBeUndefined();
+  });
+
+  it('hitl resolves from the server-wide layer and is carried on the returned definition', () => {
+    const resolved = withDefaultMcpServers(
+      { mcpServers: {}, nativeTooling: {} },
+      { cwd: '/P', dispatchSelf, defaultNativeTooling: { hitl: false } }
+    );
+    // TEETH: the HITL predicate the orchestrator uses sees the merged value.
+    expect(effectiveHitl(resolved)).toBe(false);
+  });
+
+  it('agent hitl wins over server-wide hitl', () => {
+    const resolved = withDefaultMcpServers(
+      { mcpServers: {}, nativeTooling: { hitl: true } },
+      { cwd: '/P', dispatchSelf, defaultNativeTooling: { hitl: false } }
+    );
+    expect(effectiveHitl(resolved)).toBe(true);
   });
 });
 

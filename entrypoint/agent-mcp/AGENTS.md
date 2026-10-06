@@ -189,8 +189,14 @@ the `dispatch` self floor.
   the server-qualified **tool name** (`<server>.<tool>`), last-match-wins with `deny`
   terminal. `agent-mcp` owns no command parser and no dangerous-command catalog (D5).
 - The `fs`/`shell` builtins are wrapped by `@anthropic-ai/sandbox-runtime` (`srt`) by default
-  (ADR-0008 D7). The host provisions an `srt` policy (`src/srt-policy.ts`; deferral
-  `a5a2f1d4`) so they can initialize their caches/registries and spawn.
+  (ADR-0008 D7). The host provisions a STATIC global policy plus a PER-RUN policy that carries
+  the dispatching cwd and is passed via `srt -s` (`src/srt-policy.ts`; deferral `a5a2f1d4`),
+  so the shared `~/.srt-settings.json` never accumulates a per-spawn path and the RMW is
+  concurrency-safe (`ADHD_AGENT_SRT_SETTINGS` overrides the per-run settings path).
+- The server-wide `nativeTooling` config surface (`env.config.nativeTooling`, the
+  `ADHD_AGENT_NATIVE_TOOLING_*` env vars) is merged **beneath** each agent's own
+  `def.nativeTooling` at task time — the agent wins, and the merged value is carried on the
+  task-time definition — so the typed config surface is not inert.
 - `nativeTooling` is PORTABLE: the same stored definition fired from `/P` then `/Q` yields
   fs root `/P` then `/Q` while the stored JSON stays byte-identical (D4). Resolution never
   mutates the stored definition.
