@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { PermissionRuleMap } from '@adhd/agent-base-types';
-import { matchPermission } from './permissions.js';
+import { compileToolNameGlob, matchPermission } from './permissions.js';
 
 describe('matchPermission — LAST-match-wins with `deny` terminal over TOOL NAMES (ADR-0008 D5; Q1 ratified)', () => {
   // Every resource below is a TOOL NAME (`agent-mcp.task`, `shell`, `fs`, ...),
@@ -57,5 +57,28 @@ describe('matchPermission — LAST-match-wins with `deny` terminal over TOOL NAM
     expect(matchPermission(undefined, 'anything')).toBe('allow');
     expect(matchPermission(null, 'anything')).toBe('allow');
     expect(matchPermission({}, 'anything')).toBe('allow');
+  });
+});
+
+describe('compileToolNameGlob — memoized compilation (B3, dispatch-2026-10-04-9c4e)', () => {
+  it('returns the SAME compiled RegExp for a repeated pattern (no per-rule per-call recompile)', () => {
+    // Negative control: an un-memoized compiler returns a NEW RegExp each call,
+    // so this identity assertion turns RED if the cache is dropped.
+    expect(compileToolNameGlob('agent-mcp.*')).toBe(compileToolNameGlob('agent-mcp.*'));
+    expect(compileToolNameGlob('*')).toBe(compileToolNameGlob('*'));
+    expect(compileToolNameGlob('shell')).toBe(compileToolNameGlob('shell'));
+  });
+
+  it('compiles the SAME anchored semantics as before (behaviour identical)', () => {
+    // `*` is the only metacharacter; everything else is literal.
+    expect(compileToolNameGlob('agent-mcp.*').test('agent-mcp.task')).toBe(true);
+    expect(compileToolNameGlob('agent-mcp.*').test('agent-mcp.')).toBe(true);
+    expect(compileToolNameGlob('fs').test('fs')).toBe(true);
+    // Anchored: a prefix/suffix must not match.
+    expect(compileToolNameGlob('fs').test('fsx')).toBe(false);
+    expect(compileToolNameGlob('fs').test('xfs')).toBe(false);
+    // `.` is literal, not a regex wildcard.
+    expect(compileToolNameGlob('a.b').test('axb')).toBe(false);
+    expect(compileToolNameGlob('a.b').test('a.b')).toBe(true);
   });
 });

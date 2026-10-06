@@ -34,7 +34,6 @@ export const shellBuiltinOverridesSchema = z.strictObject({
   root: z.string().optional(),
   permissions: permissionRuleMapSchema.optional(),
   allowCommands: z.array(z.string()).optional(),
-  denyCommands: z.array(z.string()).optional(),
   timeoutMs: z.number().int().positive().optional(),
   env: z.record(z.string(), z.string()).optional(),
 });

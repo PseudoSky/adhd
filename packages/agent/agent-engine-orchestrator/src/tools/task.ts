@@ -113,6 +113,14 @@ async function runEphemeralTask(
   callerContext?: ExecutionContext
 ): Promise<TaskToolOutput> {
   const agentDefinition = deps.agentStore.read(input.agent_name);
+  // The session snapshot must be the DECLARATIVE definition (ADR-0008 D4/D8):
+  // a host whose `agentStore.read` resolves the native toolset against the
+  // dispatching cwd exposes `readUnresolved`, so no task-time resolved root is
+  // frozen into `sessions.agent_data` and a later reuse re-resolves against its
+  // own cwd. The RESOLVED definition is kept for the provider + execution context
+  // (what actually runs), never for persistence.
+  const snapshotDefinition =
+    deps.agentStore.readUnresolved?.(input.agent_name) ?? agentDefinition;
 
   const taskId = generateId();
   const rootTaskId = callerContext
@@ -143,7 +151,7 @@ async function runEphemeralTask(
   // session is reclaimed on terminal), NOT an interactivity/HITL property.
   const session = deps.sessionStore.create({
     agentName: agentDefinition.name,
-    agentDefinition,
+    agentDefinition: snapshotDefinition,
   });
   const sessionId = session.id;
 

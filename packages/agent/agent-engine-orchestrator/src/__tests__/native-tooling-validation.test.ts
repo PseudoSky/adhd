@@ -6,6 +6,7 @@ import {
   agentPatchSchema,
   AGENT_PROJECTABLE_FIELDS,
 } from '../validation/agent.js';
+import { shellBuiltinOverridesSchema } from '../validation/native-tooling.js';
 
 const base = {
   name: 'native-tooling-agent',
@@ -108,5 +109,20 @@ describe('nativeTooling zod validation (ADR-0008 D3; NAT-TOOL-1)', () => {
   it('nativeTooling is both an update-patch field and a projectable field', () => {
     expect(agentPatchSchema.safeParse({ nativeTooling: { shell: false } }).success).toBe(true);
     expect(AGENT_PROJECTABLE_FIELDS).toContain('nativeTooling');
+  });
+
+  it('B2: REJECTS the retired `shell.denyCommands` (removed from the type + schema)', () => {
+    // The adopted shell server is allow-list only (ADR-0008 D5); `denyCommands`
+    // was a silent no-op and has been removed. The strictObject now rejects it —
+    // a re-added field would make these parses succeed, turning the test RED.
+    expect(shellBuiltinOverridesSchema.safeParse({ denyCommands: ['rm'] }).success).toBe(false);
+    expect(
+      agentDefinitionSchema.safeParse({
+        ...base,
+        nativeTooling: { shell: { denyCommands: ['rm'] } },
+      }).success
+    ).toBe(false);
+    // Teeth: the same strictObject still ACCEPTS the supported allowCommands.
+    expect(shellBuiltinOverridesSchema.safeParse({ allowCommands: ['ls'] }).success).toBe(true);
   });
 });

@@ -132,11 +132,12 @@ function resolveShell(
       Math.ceil(overrides.timeoutMs / 1000)
     );
   }
-  // NOTE: `overrides.denyCommands` is intentionally NOT emitted. The adopted
-  // server (`tumf/mcp-shell-server`) exposes an allow-list ONLY — it has no
-  // deny-list environment variable — and ADR-0008 D5 forbids the harness from
-  // owning per-command deny semantics. Emitting a fictional `DENY_COMMANDS` var
-  // would be a silent no-op (the server ignores it).
+  // NOTE: no deny-list env is emitted, and there is no `denyCommands` override
+  // (it was removed — a silent no-op). The adopted server
+  // (`tumf/mcp-shell-server`) exposes an allow-list ONLY — it has no deny-list
+  // environment variable — and ADR-0008 D5 forbids the harness from owning
+  // per-command deny semantics. Emitting a fictional `DENY_COMMANDS` var would
+  // be ignored by the server.
   if (overrides.env) Object.assign(env, overrides.env);
 
   const config: McpServerConfig = {

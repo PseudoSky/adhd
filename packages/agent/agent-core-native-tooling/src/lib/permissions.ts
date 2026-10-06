@@ -1,13 +1,29 @@
 import type { PermissionAction, PermissionRuleMap } from '@adhd/agent-base-types';
 
 /**
+ * Memoized pattern→RegExp cache (dispatch-2026-10-04-9c4e, static-review bucket B).
+ * The pattern set comes from agent definitions — small and static — so a
+ * compiled RegExp is reused across calls instead of being rebuilt for every rule
+ * on every `matchPermission` invocation.
+ */
+const TOOL_NAME_GLOB_CACHE = new Map<string, RegExp>();
+
+/**
  * Compile a tool-name glob to an anchored RegExp. `*` matches any run of
  * characters; every other character is literal. Used ONLY against TOOL NAMES
  * (e.g. `agent-mcp.*`, `fs`, `shell`) — never command text (ADR-0008 D5).
+ *
+ * Compiled once per distinct pattern and cached: repeated calls with the same
+ * pattern return the SAME RegExp instance, so matching never recompiles per rule
+ * per call.
  */
-function globToRegExp(pattern: string): RegExp {
+export function compileToolNameGlob(pattern: string): RegExp {
+  const cached = TOOL_NAME_GLOB_CACHE.get(pattern);
+  if (cached) return cached;
   const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '.*');
-  return new RegExp(`^${escaped}$`);
+  const compiled = new RegExp(`^${escaped}$`);
+  TOOL_NAME_GLOB_CACHE.set(pattern, compiled);
+  return compiled;
 }
 
 /**
@@ -36,7 +52,7 @@ export function matchPermission(
   let denied = false;
 
   for (const [pattern, action] of Object.entries(ruleMap)) {
-    if (!globToRegExp(pattern).test(resource)) continue;
+    if (!compileToolNameGlob(pattern).test(resource)) continue;
     if (action === 'deny') denied = true;
     matched = action;
   }
