@@ -18,7 +18,8 @@
  *      - imports/requires `child_process` (static, `require`, or dynamic import)
  *        WITHOUT a `vi.mock` of it (a mocked `child_process` spawns nothing), or
  *      - references the real stdio transports `StdioClientTransport` /
- *        `StdioMcpClient` as code, or
+ *        `StdioMcpClient` as code beyond an import or a `vi.spyOn(X.prototype, …)`
+ *        stub (neither constructs nor connects, so neither spawns), or
  *      - declares a stdio MCP server config on a real executable
  *        (`process.execPath` / `sh` / `bash` / `node`) AND connects it
  *        (`new McpClientRegistry(` / `verifyAgentMcpServers(`).
@@ -79,7 +80,14 @@ export function spawnReason(rawSrc) {
   ) {
     return 'imports child_process (not vi.mock-ed)';
   }
-  const m = src.match(/\b(StdioClientTransport|StdioMcpClient)\b/);
+  // A bare import or a `vi.spyOn(X.prototype, ...)` stub references the class
+  // without constructing or connecting it, so neither spawns anything. Strip
+  // those two shapes; any remaining reference (`new X(`, `X.create(`, ...) is real.
+  const STDIO = '(?:StdioClientTransport|StdioMcpClient)';
+  const referenced = src
+    .replace(/import\s+(?:type\s+)?\{[^}]*\}\s*from\s*['"][^'"]+['"]\s*;?/g, (imp) => imp.replace(new RegExp(`\\b${STDIO}\\b`, 'g'), ''))
+    .replace(new RegExp(`vi\\.spyOn\\(\\s*${STDIO}\\.prototype\\s*,`, 'g'), 'vi.spyOn(__stubbed__,');
+  const m = referenced.match(new RegExp(`\\b(${STDIO})\\b`));
   if (m) return `uses the real stdio transport ${m[1]}`;
   // A stdio MCP server config whose command is a REAL local executable (the host
   // node binary, sh, bash, node) in a file that CONNECTS it (constructs a

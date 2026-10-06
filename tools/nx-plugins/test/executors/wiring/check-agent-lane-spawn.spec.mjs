@@ -74,6 +74,25 @@ test('A is silent for mocked child_process, comment mentions, and inert config d
   assert.equal(stripComments('a // x\nb'), 'a \nb');
 });
 
+test('A is silent for a spy-only StdioMcpClient reference [5b839b90 AC2]', () => {
+  const spyOnly = `import { StdioMcpClient } from '../clients/stdio-client.js';\nconst connectSpy = vi.spyOn(StdioMcpClient.prototype, 'connect').mockResolvedValue(undefined);\n`;
+  assert.equal(spawnReason(spyOnly), undefined);
+  const root = fixture({ 'packages/agent/agent-foo/src/spy.test.ts': spyOnly });
+  try {
+    assert.deepEqual(rules(collectAgentLaneSpawnViolations(root, EMPTY_BASELINE)), []);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('A still fires on `new StdioMcpClient(` even alongside a spy (negative control) [5b839b90 AC2]', () => {
+  const real = `import { StdioMcpClient } from '../clients/stdio-client.js';\nconst c = new StdioMcpClient({ command: 'x' });\n`;
+  assert.match(spawnReason(real) ?? '', /StdioMcpClient/);
+  assert.match(spawnReason(real + `vi.spyOn(StdioMcpClient.prototype, 'connect');\n`) ?? '', /StdioMcpClient/);
+  const root = fixture({ 'packages/agent/agent-foo/src/real.test.ts': real });
+  try {
+    assert.deepEqual(rules(collectAgentLaneSpawnViolations(root, EMPTY_BASELINE)), ['A-spawn-in-unit-lane']);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('C fires: *.e2e.test.ts present but unit lane does not exclude them [5b839b90 AC2]', () => {
   const root = fixture({
     'packages/agent/agent-foo/src/x.e2e.test.ts': SPAWNING,
