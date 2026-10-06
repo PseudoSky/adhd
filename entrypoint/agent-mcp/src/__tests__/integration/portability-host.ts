@@ -152,6 +152,11 @@ export interface PortabilityHostOptions {
   env?: Record<string, string>;
   /** Keep ambient ADHD_AGENT_* (the live leg needs the DeepSeek secret). */
   keepAmbientAgentEnv?: boolean;
+  /**
+   * Server entry script. Defaults to the in-repo built `dist/src/index.js`; the
+   * consumer-install e2e (94125709) points it at the installed package's bin.
+   */
+  entry?: string;
 }
 
 export interface PortabilityHost {
@@ -167,8 +172,9 @@ export interface PortabilityHost {
 export async function startPortabilityHost(
   opts: PortabilityHostOptions
 ): Promise<PortabilityHost> {
-  if (!fs.existsSync(DIST_ENTRY)) {
-    throw new Error(`built entry missing at ${DIST_ENTRY} — run "npx nx run agent-mcp:build"`);
+  const entry = opts.entry ?? DIST_ENTRY;
+  if (!fs.existsSync(entry)) {
+    throw new Error(`built entry missing at ${entry} — run "npx nx run agent-mcp:build"`);
   }
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) {
@@ -189,7 +195,7 @@ export async function startPortabilityHost(
   });
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [DIST_ENTRY],
+    args: [entry],
     env,
     cwd: opts.serverCwd,
   });

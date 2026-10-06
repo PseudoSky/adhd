@@ -43,8 +43,8 @@
       "dependsOn": ["build", "assets", "^assets"]
     },
     "test": {
-      "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference). main-entry-symlink.test.ts spawns the BUILT dist/src/server.js, which `require`s ../package.json — emitted by the inferred `assets` target and reached transitively through `dist-manifest` ([build, assets]). targetDefaults.test builds only DEPENDENCIES (`^build`) plus `lint`, never this project's OWN dist/, so `build` + `dist-manifest` are declared here. `lint`/`^build` are repeated because an explicit dependsOn replaces the targetDefault rather than merging with it.",
-      "dependsOn": ["lint", "^build", "build", "dist-manifest"]
+      "//": "Override of the inferred `test` target (dependsOn only; executor/cache/outputs come from inference). main-entry-symlink.test.ts spawns the BUILT dist/src/server.js, which `require`s ../package.json — emitted by the inferred `assets` target and reached transitively through `dist-manifest` ([build, assets]). targetDefaults.test builds only DEPENDENCIES (`^build`) plus `lint`, never this project's OWN dist/, so `build` + `dist-manifest` are declared here. `^dist-manifest` is declared because srt-consumer-install.e2e.test.ts (94125709) `npm pack`s the built dist/ of agent-mcp's whole @adhd closure and installs the tarballs the way a consumer does, which needs every dependency's dist/package.json. `lint`/`^build` are repeated because an explicit dependsOn replaces the targetDefault rather than merging with it.",
+      "dependsOn": ["lint", "^build", "build", "dist-manifest", "^dist-manifest"]
     }
   }
 }
