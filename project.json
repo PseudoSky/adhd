@@ -63,6 +63,52 @@
       "metadata": {
         "description": "BUG-ADHD-EE8D24C8-REVERT-001: flags a commit/range whose diff is dominated by deletions of files that already existed at HEAD/base (the proven shape of a stale working tree — e.g. after `git update-ref` moved a branch without updating its tree — committed back over already-fixed files). `.githooks/pre-commit` Gate 0 and `.githooks/post-commit` call the underlying `.githooks/detect-mass-deletion.js` directly (must run pre-node_modules-guaranteed); this target exists so CI/a server-side check can run the IDENTICAL classifier via `nx run @adhd/source:mass-delete-guard --base=<ref> --head=<ref>`, closing the local-hook `--no-verify` blind spot."
       }
+    },
+    "check-tree-clean": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "node tools/nx-plugins/build/executors/tree-clean/check-tree-clean.mjs"
+      },
+      "metadata": {
+        "description": "CI tree-clean gate (backlog e92e2b92): exits non-zero when `git status --porcelain` is non-empty. Invoked as the last step of the CI `main` job and the PR `test` job, so a job whose commands dirty a tracked file (or leave an untracked one) cannot go green. Uncached: it reads live working-tree state."
+      }
+    },
+    "check-published-parity": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "node tools/nx-plugins/build/executors/range-check/check-published-parity.mjs"
+      },
+      "metadata": {
+        "description": "Published-vs-source parity (backlog 420a7051): fails when any publishable project's source version is behind its published-state.json version. Pass `--registry` (via the script directly) to compare against the live registry instead. Invoked by the CI `main` job."
+      }
+    },
+    "demo-acceptance": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "dependsOn": [
+        "backlog:build"
+      ],
+      "options": {
+        "command": "node docs/plan/actionable-store/demo/fixture/run.mjs"
+      },
+      "metadata": {
+        "description": "Actionable Store demo acceptance runner (backlog ddceb069): seeds an isolated fixture and drives every DEMO.md beat plus the R1-R7 refusal controls through the BUILT backlog CLI. Exit code 1 on any FAIL beat. Invoked by the CI `main` job."
+      }
+    },
+    "demo-acceptance-teeth": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "dependsOn": [
+        "backlog:build"
+      ],
+      "options": {
+        "command": "node --test docs/plan/actionable-store/demo/fixture/demo-gate.spec.mjs"
+      },
+      "metadata": {
+        "description": "Proves the demo-acceptance gate has teeth (backlog ddceb069): a deliberately broken R-control turns the runner red; the unbroken runner is green. Invoked by the CI `main` job after `demo-acceptance`."
+      }
     }
   }
 }

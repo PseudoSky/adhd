@@ -158,6 +158,12 @@ jobs:
         id: verify-dist-load
         run: npx nx affected -t verify-dist-load --parallel=5
 
+      # Tree-clean gate (backlog e92e2b92): the lanes above must not have
+      # rewritten a tracked file or left an untracked one. Runs BEFORE Publish,
+      # which mutates the tree by design (version bumps).
+      - name: Tree-clean gate
+        run: npx nx run @adhd/source:check-tree-clean
+
       - name: Publish
         id: publish
         if: success() && (contains(github.event.pull_request.labels.*.name, 'publish') || (github.event.action == 'closed' && github.event.pull_request.merged == true))

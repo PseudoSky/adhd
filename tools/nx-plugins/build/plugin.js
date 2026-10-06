@@ -105,7 +105,7 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
     projects: {
       [projectRoot]: {
         targets: {
-          "version": { "executor": "@adhd/nx-build:version", "dependsOn": ["build", "assets", "^version"], "cache": false },
+          "version": { "executor": "@adhd/nx-build:version", "dependsOn": ["build", "assets", "^version", "release-reset-check"], "cache": false },
           "reconcile": { "executor": "@adhd/nx-build:reconcile", "dependsOn": ["build", "assets"], "cache": false },
           "dist-manifest": { "executor": "@adhd/nx-build:manifest", "dependsOn": ["build", "assets"], "cache": false },
           "verify-dist-load": { "executor": "@adhd/nx-build:verify", "dependsOn": ["build", "dist-manifest"], "cache": false },
@@ -138,7 +138,7 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
           // path cannot be made conditional (it has no per-project hook), so
           // entrypoint/backlog carries it in its own `nx-release-publish`
           // override; the LIVE gate is this `publish` target.
-          "publish": { "executor": "@adhd/nx-build:publish", "dependsOn": ["test", "^test", ...(hasE2e ? ["e2e"] : []), "version", "^publish", "dist-manifest", "verify-dist-load", "publish-hygiene"], "cache": false },
+          "publish": { "executor": "@adhd/nx-build:publish", "dependsOn": ["test", "^test", ...(hasE2e ? ["e2e"] : []), "version", "^publish", "dist-manifest", "verify-dist-load", "publish-hygiene", "release-reset-check"], "cache": false },
           // release-reset (FEAT-RELEASE-RESET-001): reads LIVE git/working-tree
           // state (HEAD vs working `package.json`/`CHANGELOG.md`) to detect a
           // partial/half-generated release step for THIS project and, with
@@ -148,7 +148,16 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
           // above — live state, no stable cache key, and a stale verdict here
           // would be actively dangerous (silently reporting "clean" against an
           // old snapshot). See tools/nx-plugins/build/lib/release-reset.js.
-          "release-reset": { "executor": "@adhd/nx-build:release-reset", "cache": false }
+          "release-reset": { "executor": "@adhd/nx-build:release-reset", "cache": false },
+          // release-reset-check (backlog df9de4da): the NON-MUTATING precondition
+          // form of release-reset. `version` and `publish` both depend on it, so a
+          // half-generated release step (phantom CHANGELOG entry / orphaned
+          // version bump) fails the release BEFORE anything is bumped or
+          // published, instead of being reported as `success: true`. `version`
+          // depends on it too so the check always observes the PRE-mutation
+          // state (running concurrently with `version` could see its own
+          // package.json write before the changelog write and false-fail).
+          "release-reset-check": { "executor": "@adhd/nx-build:release-reset", "options": { "check": true }, "cache": false }
         }
       }
     }

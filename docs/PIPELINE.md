@@ -38,10 +38,11 @@ range** (`--base`/`--head`, never the frozen `NX_BASE` — see §3), then the la
 `.githooks/pre-commit` mirrors the early stages (mass-deletion guard → secret-scan → `nx affected -t
 lint` → staged-spec tests) and `.githooks/pre-push` adds the affected `test` suite (not `e2e`; CI runs that).
 
-**External status checks (installed GitHub Apps, not workflow steps):** DeepSource is configured by
-the committed `.deepsource.toml` and runs as the installed `deepsource-io` GitHub App check — no
-workflow file is involved, so `rg -i deepsource .github/` = 0 is expected and is **not** evidence of an
-unwired analyzer. The `claude`, `trigger-dev-app`, and `vercel` apps also post check suites.
+**External status checks (installed GitHub Apps, not workflow steps):** the `claude`, `trigger-dev-app`,
+and `vercel` apps post check suites; none gates a merge. DeepSource is **not used**: its config
+(`.deepsource.toml`) was never invoked by any workflow and its analyzer check sat red on `main`
+(backlog `47d0f713`), so the file was deleted (backlog `8c0c314e`). Static analysis is owned by the
+`nx lint` lane above.
 
 ## 3. Reproducibility
 - **Pinned toolchain** — pnpm `8.15.9` (`package.json` `packageManager`), Corepack enabled in CI,
@@ -128,6 +129,7 @@ unwired analyzer. The `claude`, `trigger-dev-app`, and `vercel` apps also post c
 - **Every edit to this doc** — what changed and why, below.
 
 ## Provenance
+- `2026-10-06` — Deleted `.deepsource.toml` and rewrote the §2 external-checks paragraph (backlog `8c0c314e`, phase-6 bucket C). Why: the config was wired to no workflow and its check was chronically red; keeping an unwired, failing external gate is worse than none. Revert path: `git revert` the commit and re-install the app.
 - `2026-10-06` — Agent-family e2e lane (backlog `5b839b90`, base `a49d4fbe`). §2 stage 5 now states the lane contract and cites `docs/decisions/0009-test-lanes-unit-vs-e2e.md`; lane-reachability gained rule 8 (`check-agent-lane-spawn.mjs`); `packages/agent/{agent-core-env,agent-engine-compiler,agent-engine-orchestrator}`, `entrypoint/agent-mcp`, `entrypoint/dispatch-cli` each gained an `e2e` target. Why: subprocess suites ran in the unit lane at `--parallel=5` and timed out under load.
 - `2026-10-05` — Corrected-and-synced while fixing cluster 12 (`8c0c314e`, CI chronically red) at
   revision `4bbf87d2`. (1) `ci.yml` `main` + `pull-request.yml` `test` set

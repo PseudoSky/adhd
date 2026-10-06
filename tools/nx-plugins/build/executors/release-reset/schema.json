@@ -7,6 +7,11 @@
       "type": "boolean",
       "description": "Actually mutate the working tree. Default false (report-only / dry-run).",
       "default": false
+    },
+    "check": {
+      "type": "boolean",
+      "description": "Precondition mode: never mutates; exits non-zero iff the release state is inconsistent (phantom CHANGELOG entry / orphaned version bump). Wired into `version` and `publish` via the `release-reset-check` target.",
+      "default": false
     }
   },
   "required": [],

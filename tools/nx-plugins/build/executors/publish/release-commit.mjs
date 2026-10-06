@@ -23,6 +23,9 @@
  *     project changelog entries `version` generated)
  *   - `published-state.json` at the workspace root, IF present and modified
  *     (the cache write-through from `reconcile`/`publish`)
+ *   - `pnpm-lock.yaml` at the workspace root, IF modified (a release
+ *     re-resolves workspace ranges, so the lockfile changes with it; a release
+ *     that leaves it dirty is not a completed release — backlog a4d346ae)
  *
  * Anything else dirty in the tree (unrelated in-flight work from another
  * agent/human) is left completely untouched — never staged, never touched.
@@ -104,6 +107,11 @@ function collectReleasePaths() {
   const dirty = dirtyPaths();
   const paths = dirty.filter(isReleaseArtifact);
   if (dirty.includes('published-state.json')) paths.push('published-state.json');
+  // a4d346ae: a release re-resolves workspace dependency ranges, so
+  // `pnpm install` / `nx release` rewrite `pnpm-lock.yaml`. It is part of the
+  // release output; leaving it out left the tree dirty after a "completed"
+  // release (and the next agent's commit swept it in).
+  if (dirty.includes('pnpm-lock.yaml')) paths.push('pnpm-lock.yaml');
   return paths;
 }
 

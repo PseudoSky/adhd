@@ -44,6 +44,7 @@ function makeRepo() {
   const root = mkdtempSync(join(tmpdir(), 'release-commit-'));
   writeFileSync(join(root, 'nx.json'), '{}');
   writeFileSync(join(root, 'published-state.json'), '{}');
+  writeFileSync(join(root, 'pnpm-lock.yaml'), "lockfileVersion: '6.0'\n");
   mkdirSync(join(root, 'packages/foo/foo-base-a'), { recursive: true });
   writeFileSync(join(root, 'packages/foo/foo-base-a/package.json'), JSON.stringify({ name: '@x/foo-base-a', version: '1.0.0' }, null, 2) + '\n');
   writeFileSync(join(root, 'packages/foo/foo-base-a/CHANGELOG.md'), '# foo-base-a\n\n## 1.0.0\n');
@@ -209,5 +210,57 @@ test('defect 9de522a4: a pre-staged FOREIGN file is NOT swept into the release c
     assert.match(res.stderr, /unrelated staged path/, 'the tool must visibly NOTE the unrelated staged path it deliberately left behind');
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * a4d346ae C-AC1: after the release-commit step the tree must be clean and
+ * `pnpm-lock.yaml` must be IN the release commit whenever it changed.
+ * Parameterised over the script so the negative control can run the SAME
+ * assertions against a wrong variant and prove them red.
+ */
+function assertLockfileReleased(script) {
+  const root = makeRepo();
+  try {
+    bump(root, 'packages/foo/foo-base-a/package.json', (s) => s.replace('1.0.0', '1.0.1'));
+    bump(root, 'pnpm-lock.yaml', (s) => s + "importers:\n  packages/foo/foo-base-a: {}\n");
+    const res = sh('node', [script], { cwd: root });
+    assert.equal(res.status, 0, res.stderr);
+    const committedFiles = sh('git', ['show', '--stat', '--format=', 'HEAD'], { cwd: root }).stdout;
+    assert.match(committedFiles, /pnpm-lock\.yaml/, 'pnpm-lock.yaml must be in the release commit');
+    assert.equal(porcelainStatus(root), '', 'git status --porcelain must be empty after the release commit');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test('a4d346ae C-AC1: a changed pnpm-lock.yaml rides the release commit and the tree is clean afterwards', () => {
+  assertLockfileReleased(scriptPath);
+});
+
+test('a4d346ae C-AC1: a lockfile-only change is still a release (nothing-to-commit must not hide it)', () => {
+  const root = makeRepo();
+  try {
+    bump(root, 'pnpm-lock.yaml', (s) => s + 'x: 1\n');
+    const res = run(root);
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(gitLogSubjects(root)[0], /^chore\(release\)/);
+    assert.equal(porcelainStatus(root), '');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a4d346ae C-AC1 NEGATIVE CONTROL: with the lockfile removed from the stage list the same assertions go red', () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'release-commit-wrong-'));
+  try {
+    const src = readFileSync(scriptPath, 'utf8');
+    const wrong = src.replace(/if \(dirty\.includes\('pnpm-lock\.yaml'\)\) paths\.push\('pnpm-lock\.yaml'\);/, '');
+    assert.notEqual(wrong, src, 'the mutation must actually remove the lockfile staging line');
+    const wrongPath = join(scratch, 'release-commit-wrong.mjs');
+    writeFileSync(wrongPath, wrong);
+    assert.throws(() => assertLockfileReleased(wrongPath), /pnpm-lock\.yaml must be in the release commit|git status --porcelain must be empty|nothing to commit/);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
   }
 });
