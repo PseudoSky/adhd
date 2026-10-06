@@ -22,6 +22,7 @@ import {
   buildDispatchSelf,
   matchPermission,
   resolveFsRoots,
+  resolveShellRoot,
   resolveNativeToolingMap,
   DISPATCH_SELF_COMMAND_ENV,
   DISPATCH_SELF_ARGS_ENV,
@@ -109,10 +110,15 @@ type ResolvableDefinition = {
  * the task-time context into the keyed builtin map, then let an explicit
  * `def.mcpServers` entry WIN over a native/dispatch member of the same name.
  *
- * Pure — the passed definition is never mutated; the returned object is a new
- * definition whose `mcpServers` is the merged map. This is called at TASK time
- * only (`buildTaskDeps`/`agent_verify_mcp`); `agent_create` never calls it, so no
- * resolved root is ever persisted.
+ * PURE — no side effects. The passed definition is never mutated; the returned
+ * object is a new definition whose `mcpServers` is the merged map. This is
+ * called at TASK time only (`buildTaskDeps`/`agent_verify_mcp`); `agent_create`
+ * never calls it, so no resolved root is ever persisted.
+ *
+ * The per-run `srt` policy union (AC6) is a genuine SIDE EFFECT and therefore
+ * lives in {@link applyNativeToolingSrtPolicy} — a separate, explicitly
+ * side-effecting host step invoked at the host's task-time call sites (the store
+ * wrappers), not hidden inside this pure function (#11).
  *
  * The name is preserved from the pre-NAT-TOOL-4 create-time helper, but its
  * behaviour is now a MERGE at task time — not the old "return explicit untouched
@@ -131,7 +137,21 @@ export function withDefaultMcpServers<T extends ResolvableDefinition>(
     ctx.defaultNativeTooling,
     def.nativeTooling
   );
-  const resolveCtx = {
+  const native = resolveNativeToolingMap(
+    effectiveNativeTooling,
+    toResolveContext(ctx)
+  );
+  // explicit `mcpServers` WIN over nativeTooling > dispatch floor (D1/D4).
+  return {
+    ...def,
+    nativeTooling: effectiveNativeTooling,
+    mcpServers: { ...native, ...(def.mcpServers ?? {}) },
+  };
+}
+
+/** Project the host context onto the resolver package's context shape. */
+function toResolveContext(ctx: NativeToolingHostContext) {
+  return {
     cwd: ctx.cwd,
     cwdSource: ctx.cwdSource,
     roots: ctx.roots,
@@ -140,22 +160,33 @@ export function withDefaultMcpServers<T extends ResolvableDefinition>(
     sandbox: ctx.sandbox,
     srtSettingsPath: ctx.srtSettingsPath,
   };
-  const native = resolveNativeToolingMap(effectiveNativeTooling, resolveCtx);
-  // AC6 / finding 535c1101 (A3): every resolved fs root must be in the per-run
-  // `srt` policy's `allowWrite`, or a read from a SECOND root is sandbox-DENIED
-  // even though the fs server allows it. Derive the list from the SAME producer
-  // the resolver used (`resolveFsRoots`) — never a second, divergent derivation.
-  // A no-op when no per-run policy is active (bare `srt`/sandbox off) or the fs
-  // member is disabled/custom (`[]`).
-  addRunSrtAllowWrite(
-    resolveFsRoots(effectiveNativeTooling?.fs, resolveCtx)
-  );
-  // explicit `mcpServers` WIN over nativeTooling > dispatch floor (D1/D4).
-  return {
-    ...def,
-    nativeTooling: effectiveNativeTooling,
-    mcpServers: { ...native, ...(def.mcpServers ?? {}) },
-  };
+}
+
+/**
+ * The host's EXPLICIT side-effecting task-time step (#11): union every resolved
+ * native root into the ACTIVE per-run `srt` policy's `allowWrite` (ADR-0008 D7;
+ * finding 535c1101 / A3; MULTI-ROOT).
+ *
+ * Without this, a read from a SECOND fs root — or a shell running in a
+ * `shell.root` alias outside the dispatching cwd — is sandbox-DENIED even though
+ * the server itself allows it. The roots come from the SAME producers the
+ * resolver used (`resolveFsRoots` for the fs roots, `resolveShellRoot` for the
+ * shell cwd) — never a second, divergent derivation. A no-op when no per-run
+ * policy is active (bare `srt`/sandbox off) or the member is disabled/custom.
+ *
+ * Kept OUT of {@link withDefaultMcpServers} (which is pure) and driven by the
+ * host's task-time call sites — the store wrappers below.
+ */
+export function applyNativeToolingSrtPolicy(
+  effectiveNativeTooling: NativeToolingConfig | undefined,
+  ctx: NativeToolingHostContext
+): void {
+  const resolveCtx = toResolveContext(ctx);
+  const roots = [
+    ...resolveFsRoots(effectiveNativeTooling?.fs, resolveCtx),
+    resolveShellRoot(effectiveNativeTooling?.shell, resolveCtx),
+  ].filter((root): root is string => typeof root === 'string');
+  addRunSrtAllowWrite(roots);
 }
 
 /**
@@ -398,8 +429,15 @@ export function withResolvedNativeTooling<T extends AgentReader>(
     get(target, prop, receiver) {
       if (prop === 'read') {
         const bound = target.read.bind(target);
-        return (name: string, cwd?: string) =>
-          resolveDefinitionNativeTooling(bound(name, cwd), context(cwd));
+        return (name: string, cwd?: string) => {
+          const ctx = context(cwd);
+          const resolved = resolveDefinitionNativeTooling(bound(name, cwd), ctx);
+          // Host task-time side effect (#11): union every resolved native root
+          // into the active per-run `srt` policy. Explicit here, never hidden in
+          // the pure resolver.
+          applyNativeToolingSrtPolicy(resolved.nativeTooling, ctx);
+          return resolved;
+        };
       }
       // The DECLARATIVE read (ADR-0008 D4/D8): the raw store's `read` is the
       // stored, unresolved definition — expose it so callers that snapshot a
@@ -425,11 +463,17 @@ export function withResolvedNativeToolingSession<T extends SessionAgentReader>(
     get(target, prop, receiver) {
       if (prop === 'getAgentDefinition') {
         const bound = target.getAgentDefinition.bind(target);
-        return (sessionId: string, cwd?: string) =>
-          resolveDefinitionNativeTooling(
+        return (sessionId: string, cwd?: string) => {
+          const ctx = context(cwd);
+          const resolved = resolveDefinitionNativeTooling(
             bound(sessionId, cwd) as AgentDefinition,
-            context(cwd)
+            ctx
           );
+          // Host task-time side effect (#11) — the session snapshot path, the
+          // same explicit srt union as the read path above.
+          applyNativeToolingSrtPolicy(resolved.nativeTooling, ctx);
+          return resolved;
+        };
       }
       return Reflect.get(target, prop, receiver);
     },
