@@ -33,16 +33,35 @@ pnpm add @adhd/data-query-engine
 
 ### Query API
 
-| Function (params)                   | Description                        |
-| ----------------------------------- | ---------------------------------- |
-| `.where(filter: QueryExpression)`   | Filter data by object or predicate |
-| `.where(filter: function)`          | Filter data by custom function     |
-| `.orderBy(sort: OrderByExpression)` | Sort by fields                     |
-| `.limit(n: number)`                 | Limit results                      |
-| `.offset(n: number)`                | Skip results                       |
-| `.distinctOn(fields: string[])`     | Remove duplicates by fields        |
-| `.select(fields: string[])`         | Select fields (TODO)               |
-| `.view()`                           | Get the result                     |
+Every `QueryExpression` slot has a fluent builder (each returns `this`):
+
+| Function (params)                     | Slot                            |
+| ------------------------------------- | ------------------------------- |
+| `.from(source: string)`               | `source` (input binding)        |
+| `.as(name: string)`                   | `name` (output identity)        |
+| `.aggregate(expr)`                    | `aggregate` (leaf value)        |
+| `.where(predicate)`                   | `where` (pre + post-group)      |
+| `.qualify(predicate)`                 | `qualify` (post-window)         |
+| `.groupBy(items)`                     | `group_by`                      |
+| `.keep({ n, other: true })`           | `keep` (top-N + `_other`)       |
+| `.select(items)`                      | `select`                        |
+| `.orderBy(sort)`                      | `order_by`                      |
+| `.distinctOn(fields)`                 | `distinct_on`                   |
+| `.offset(n)` / `.limit(n)`            | `offset` / `limit`              |
+| `.rollup(...dims)` / `.cube(...dims)` | grouping sets (as `select` relations) |
+| `.view()` / `.toJson()`               | run / serialise                 |
+
+`rollup('region','product')` and `cube('region','product')` build a parent query
+with no `group_by` whose `select` lists one relation per grouping set (the
+aggregates are the query's existing `groupBy(...)` items, or a `_count` default):
+
+```ts
+new DataView(rows)
+  .groupBy([{ name: 'amount', aggregate: { _sum: 'amount' } }])
+  .cube('region', 'product')
+  .view();
+// → [{ region_product: [...], region: [{east,3},{west,4}], product: [{x,5},{y,2}], total: [{7}] }]
+```
 
 ### Operators
 

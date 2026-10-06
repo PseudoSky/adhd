@@ -1,5 +1,11 @@
 import { Transform as _ } from '@adhd/data-base-transforms';
-import { BooleanExpression, OrderByExpression, Predicate, QueryExpression } from './expressions';
+import {
+  BooleanExpression,
+  type GroupItem,
+  OrderByExpression,
+  Predicate,
+  QueryExpression,
+} from './expressions';
 import { compileWhere, parseOrderBy } from './parser';
 import { compileAccessor } from './path';
 import { QueryModelError } from './model/errors';
@@ -316,6 +322,83 @@ export class DataView<T = unknown> {
     this._raw.keep = keep;
     this.dirty = true;
     return this;
+  };
+
+  // The `source` / `name` / `aggregate` slots complete the fluent surface — every
+  // `QueryExpression` slot now has a fluent equivalent.
+  from = (source: string) => {
+    this._raw.source = source;
+    this.dirty = true;
+    return this;
+  };
+
+  as = (name: string) => {
+    this._raw.name = name;
+    this.dirty = true;
+    return this;
+  };
+
+  aggregate = (expr: QueryExpression['aggregate']) => {
+    this._raw.aggregate = expr;
+    this.dirty = true;
+    return this;
+  };
+
+  // ── grouping sets, expressed as `select` relations ───────────────────────
+  /**
+   * ROLLUP: the hierarchical grouping sets over `dims` — the full set, then the
+   * set with the trailing dimension dropped, …, then the empty (grand-total)
+   * set. Each set becomes a relation-valued `select` item named for its key set
+   * (`'region_product'`, `'region'`, `'total'`); the parent has no `group_by`,
+   * so each relation aggregates the whole dataset.
+   */
+  rollup = (...dims: string[]) => {
+    const sets: string[][] = [];
+    for (let i = dims.length; i >= 0; i--) sets.push(dims.slice(0, i));
+    this.applyGroupingSets(sets);
+    return this;
+  };
+
+  /**
+   * CUBE: EVERY subset of `dims` (including the empty set) as its own relation,
+   * ordered by descending set size (ties in dimension order).
+   */
+  cube = (...dims: string[]) => {
+    const n = dims.length;
+    const scored: { set: string[]; mask: number }[] = [];
+    for (let mask = 0; mask < 1 << n; mask++) {
+      const set: string[] = [];
+      for (let i = 0; i < n; i++) if (mask & (1 << i)) set.push(dims[i]);
+      scored.push({ set, mask });
+    }
+    scored.sort((a, b) => b.set.length - a.set.length || a.mask - b.mask);
+    this.applyGroupingSets(scored.map((s) => s.set));
+    return this;
+  };
+
+  /**
+   * The aggregate items that seed every grouping set — the `{ name, aggregate }`
+   * items already placed on `group_by`, or a `_count` default when there are
+   * none. Dimension keys on `group_by` are ignored (the dimensions come from the
+   * verb's own arguments).
+   */
+  private aggregateItems = (): GroupItem[] => {
+    const items = this._raw.group_by ?? [];
+    const aggs = items.filter(
+      (item): item is QueryExpression =>
+        typeof item === 'object' && item !== null && 'name' in item && 'aggregate' in item
+    );
+    return aggs.length > 0 ? aggs : [{ name: 'count', aggregate: { _count: true } }];
+  };
+
+  private applyGroupingSets = (sets: string[][]): void => {
+    const aggs = this.aggregateItems();
+    this._raw.group_by = undefined;
+    this._raw.select = sets.map((set) => ({
+      name: set.length === 0 ? 'total' : set.join('_'),
+      group_by: [...set, ...aggs],
+    }));
+    this.dirty = true;
   };
 
   // ── multi-source reads / writes ──────────────────────────────────────────
