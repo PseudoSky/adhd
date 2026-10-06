@@ -1213,3 +1213,38 @@ Schema version 1.
   worktree removed, and no gates were run by this operation (docs-only; the dispatch directed none).
   This record is the only change to this file in this operation. Recorded under §Commit convention's
   `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `dispatch/nat-tool-3-cwd-env` (dispatch-2026-10-04-9c4e).**
+  Landed NAT-TOOL-3 onto `main` as a **merge commit** `805117ac` (parents `1731dab5` = pre-merge
+  `main`, `919d6e86` = branch head), moving `main` `1731dab5` → `805117ac`; 8 files, +353/-5, all
+  under `packages/agent/agent-engine-orchestrator/`. The two new test fixtures
+  (`src/__tests__/fixtures/cwd-env-server.mjs`, `src/__tests__/fixtures/fake-claude.mjs`), the new
+  spec `src/__tests__/nat-tool-3-cwd-env.test.ts`, and five source files thread per-server
+  `cwd`/`subprocessEnv` through the engine MCP clients (`src/clients/registry.ts`,
+  `src/clients/stdio-client.ts`, `src/interfaces.ts`, `src/providers/claudecli.ts`,
+  `src/tools/task.ts`). The branch was a single commit `919d6e86` whose parent is the merge-base
+  `1731dab5` — which equalled `main`'s tip, so a fast-forward was possible; the dispatch directed
+  `--no-ff`, and a merge commit is within §Branching & merge, which states history "carries true merge
+  commits" and ff-only is not enforced. §Branching & merge was the deciding rule: rebase-in-flight is
+  permitted only on a branch "solely your own" — this is an in-flight executor branch, not the
+  operator's, so rewriting its commit was out; a merge commit is the stated shape here. Dry-run
+  `git merge-tree --write-tree --name-only main dispatch/nat-tool-3-cwd-env` exited 0, producing tree
+  `ccc2d2c4` with no conflict hunks; the actual `git merge --no-ff` was conflict-free (ort strategy,
+  exit 0) and the post-merge tree at `805117ac` is `ccc2d2c4`, byte-identical to the dry-run tree. No
+  conflict marker remains in the merged package (`git grep -nE '^(<<<<<<<|=======|>>>>>>>)' main --
+  packages/agent/agent-engine-orchestrator/` exited 1 with no matches). The branch never touched this
+  file (`git diff --name-only 1731dab5..919d6e86 -- docs/GIT-POLICY.md` empty), so `main`'s policy blob
+  `e430d419956763d7df1abe0f70fab084b1c63d21` survived the merge byte-identical. The merge is two-parent
+  (not fast-forward); post-merge `git rev-list --count main..dispatch/nat-tool-3-cwd-env` = 0 and
+  `git merge-base --is-ancestor 919d6e86 main` exits 0, so `919d6e86` is contained. The worktree
+  `.worktrees/dispatch-9c4e-nat-tool-3` was reaped under §Cleanup's three-part test: `git status
+  --porcelain` inside it was empty, it carried no `locked` line, and its head `919d6e86` was an
+  ancestor of `main` — so `git worktree remove` (no `--force`) ran and the branch was deleted with
+  `git branch -d dispatch/nat-tool-3-cwd-env` (was `919d6e86`); the commit remains reachable from the
+  durable `main` ref, so recovery does not depend on the reflog. The working tree was clean before and
+  after (`git status --porcelain` empty) and nothing was staged before or after (`git diff --cached
+  --name-only` empty); the dispatch's anticipated "unrelated concurrent dirt" was not present, so
+  nothing had to be avoided or protected. No push (the dispatch directed none; the branch work is
+  contained in local `main`, not pushed) and no gates were run (the dispatch reported them already
+  green: `nx affected -t test/build/lint --base=1bcc147d` all exit 0). This record is the only change
+  to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
