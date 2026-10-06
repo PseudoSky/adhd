@@ -43,12 +43,15 @@ export { DEFAULT_PROVIDER_TIMEOUT_MS };
  * Default bound on parent-chain escalation depth (ADR-0008 D6/D11).
  *
  * When `nativeTooling.hitl` is disabled, an `ask` is routed to the task's PARENT
- * for approval. Escalation "follows the existing parent/child graph to the root
- * and is bounded (v1: by parent-chain depth)": a task may escalate only while its
- * `recursionDepth` is strictly below this bound. At or beyond it the ask fails
- * CLOSED (`PERMISSION_ASK_DENIED`), exactly like the no-parent floor — an
- * unanswered ask never hangs and is never unbounded. Overridable per host via
- * `EngineConfig.escalationMaxDepth`.
+ * for approval. **v1 escalates exactly ONE HOP — to the IMMEDIATE parent task**
+ * (the successor of `a0c0a826`); `escalationMaxDepth` gates that single hop: a
+ * task may escalate only while its `recursionDepth` is strictly below this bound.
+ * The bounded, transitive climb up the parent chain *to the root* —
+ * re-evaluating the ask at each ancestor and terminating in the `deny` floor at
+ * the root — is NOT built in v1; it is tracked as `fc466f0b`. At or beyond the
+ * bound the ask fails CLOSED (`PERMISSION_ASK_DENIED`), exactly like the
+ * no-parent floor — an unanswered ask never hangs and is never unbounded.
+ * Overridable per host via `EngineConfig.escalationMaxDepth`.
  */
 export const DEFAULT_MAX_ESCALATION_DEPTH = 3;
 
@@ -828,8 +831,9 @@ export class Orchestrator {
             //   suspend  — iff HITL is enabled (`nativeTooling.hitl !== false`)
             //              AND the suspension is answerable on this transport
             //   escalate — iff a parent exists AND the child is within the
-            //              parent-chain depth bound; the ask is ROUTED TO THE
-            //              PARENT TASK for approval (never answered on the child)
+            //              parent-chain depth bound; v1 routes the ask ONE HOP to
+            //              the IMMEDIATE PARENT TASK for approval (never answered
+            //              on the child; the climb-to-root is `fc466f0b`)
             //   deny     — the fail-closed floor
             //
             // A synchronous call (one-shot `agent_name`, `background:false`) is
@@ -841,9 +845,12 @@ export class Orchestrator {
               effectiveHitl(executionContext.agentDefinition) !== false;
             const parentTaskId = executionContext.parentTaskId;
             const recursionDepth = executionContext.recursionDepth ?? 0;
-            // Bounded escalation (ADR-0008 D6/D11): the ask may climb the parent
-            // chain only while the child is within `escalationMaxDepth` levels.
-            // At/over the bound it fails closed — never unbounded, never a hang.
+            // Bounded escalation (ADR-0008 D6/D11): v1 escalates ONE HOP to the
+            // IMMEDIATE parent, gated by `escalationMaxDepth` — the ask may
+            // escalate to that parent only while the child's `recursionDepth` is
+            // strictly below the bound. The transitive climb-to-root is tracked as
+            // `fc466f0b`. At/over the bound it fails closed — never unbounded,
+            // never a hang.
             const withinEscalationBound = recursionDepth < escalationMaxDepth;
             let resolution: 'suspend' | 'escalate' | 'deny';
             if (!suspensionAnswerable) resolution = 'deny';
@@ -962,7 +969,8 @@ export class Orchestrator {
                 continue;
               }
               // Approved → fall through to pre:tool_call + policy.check + Phase 2.
-              continue;
+              // (No `continue` here — an approved `suspend` runs the tool exactly
+              // like an approved `escalate`; only a decline short-circuits above.)
             }
 
             // ── `escalate` — the PARENT TASK is the decision surface ─────────
@@ -973,7 +981,15 @@ export class Orchestrator {
             // the PARENT resolves the child's promise; on approval the child
             // executes, on rejection it denies — exactly as if the parent had
             // answered. Bounded by `escalationMaxDepth` (checked above).
-            {
+            //
+            // This is an `else`, not a bare block: the `suspend` branch above no
+            // longer unconditionally `continue`s, so an APPROVED `suspend` must
+            // fall through to the execution phase — NOT into this escalation
+            // branch. v1 escalation is ONE HOP: the ask is routed to the IMMEDIATE
+            // parent task only; `escalationMaxDepth` gates that single hop. The
+            // bounded, transitive climb up the parent chain to the root is NOT
+            // built in v1 — tracked as `fc466f0b`.
+            else {
               const parentId = parentTaskId as string;
 
               // One pending decision per task. If the parent already holds a
@@ -1127,42 +1143,57 @@ export class Orchestrator {
                 },
               });
 
-              const answer = await approvalPromise.finally(() => {
+              // The decision, resolved by the PARENT. The restore of BOTH tasks
+              // lives in the `finally` so it runs on EVERY outcome — including a
+              // rejection (the child signal aborting / cancellation): without it a
+              // rejected `approvalPromise` would skip the restore entirely and
+              // strand the parent in `awaiting_input` holding a dead resumeToken.
+              try {
+                const answer = await approvalPromise;
+
+                if (!isPermissionApproval(answer)) {
+                  warningResults.set(tc.id, {
+                    result: permissionRefusalResult(
+                      resolved.server,
+                      resolved.tool,
+                      'PERMISSION_ASK_DENIED',
+                      'The approver declined.'
+                    ),
+                    isError: true,
+                  });
+                  continue;
+                }
+                // Approved → fall through to pre:tool_call + policy.check + Phase 2.
+              } finally {
                 if (askAbortHandler)
                   signal.removeEventListener('abort', askAbortHandler);
-              });
 
-              // Restore both. The child resumes either way; the parent returns
-              // to its pre-ask status so it is not left parked forever.
-              await taskStore.updateStatus(taskId, 'running');
-              emit({ type: 'status_change', taskId, status: 'running' });
-              try {
-                await taskStore.updateStatus(parentId, parentPriorStatus);
-                emit({
-                  type: 'status_change',
-                  taskId: parentId,
-                  status: parentPriorStatus,
-                });
-              } catch (err) {
-                logger.warn(
-                  { taskId, parentId, err },
-                  'Failed to restore parent task status after an escalated ask'
-                );
+                // Restore both. The child resumes either way; the parent returns
+                // to its pre-ask status so it is not left parked forever. Each
+                // write is guarded so one failure cannot prevent the other.
+                try {
+                  await taskStore.updateStatus(taskId, 'running');
+                  emit({ type: 'status_change', taskId, status: 'running' });
+                } catch (err) {
+                  logger.warn(
+                    { taskId, err },
+                    'Failed to restore child task status after an escalated ask'
+                  );
+                }
+                try {
+                  await taskStore.updateStatus(parentId, parentPriorStatus);
+                  emit({
+                    type: 'status_change',
+                    taskId: parentId,
+                    status: parentPriorStatus,
+                  });
+                } catch (err) {
+                  logger.warn(
+                    { taskId, parentId, err },
+                    'Failed to restore parent task status after an escalated ask'
+                  );
+                }
               }
-
-              if (!isPermissionApproval(answer)) {
-                warningResults.set(tc.id, {
-                  result: permissionRefusalResult(
-                    resolved.server,
-                    resolved.tool,
-                    'PERMISSION_ASK_DENIED',
-                    'The approver declined.'
-                  ),
-                  isError: true,
-                });
-                continue;
-              }
-              // Approved → fall through to pre:tool_call + policy.check + Phase 2.
             }
           }
 
