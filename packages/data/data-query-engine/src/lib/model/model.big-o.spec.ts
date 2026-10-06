@@ -254,10 +254,12 @@ describe('execute window phase — bounded frame bounds fold work', () => {
     expect(a).toBeLessThan(256 * 3 + 256); // ≈ (window + spread) per row, not n²
   });
 
-  it('an unbounded frame is quadratic — the frame is what bounds the work', () => {
+  it('an unbounded frame is linear — the prefix-sum fast path (was quadratic)', () => {
     const a = vReads(256, ['unbounded', 'unbounded']);
     const b = vReads(512, ['unbounded', 'unbounded']);
-    expect(Math.log2(b / a)).toBeGreaterThan(1.5); // ~4× work for 2× rows
+    const exponent = Math.log2(b / a);
+    expect(exponent).toBeGreaterThan(0.6);
+    expect(exponent).toBeLessThan(1.5); // ~2× v reads for 2× rows; the naive path was ~4× (quadratic)
   });
 
   it('a bounded ROWS frame computes the correct moving sum', () => {

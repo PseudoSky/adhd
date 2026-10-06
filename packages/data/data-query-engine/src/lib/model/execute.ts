@@ -559,6 +559,152 @@ function frameRowsFor(ordered: number[], pos: number, rows: Row[], spec: WindowS
   return ordered.slice(Math.max(0, lo), Math.min(ordered.length - 1, hi) + 1).map((i) => rows[i]);
 }
 
+/** Per-position inclusive frame bounds for a ROWS-mode (or whole-partition) frame. */
+function rowFrameBounds(n: number, spec: WindowSpec): { lo: number[]; hi: number[] } | undefined {
+  const frame = spec.frame;
+  if (frame === undefined) {
+    return { lo: new Array<number>(n).fill(0), hi: new Array<number>(n).fill(n - 1) };
+  }
+  const [fromB, toB] = frame;
+  const hasDuration =
+    (fromB !== 'unbounded' && typeof fromB === 'string') || (toB !== 'unbounded' && typeof toB === 'string');
+  const mode = spec.frame_mode ?? (hasDuration ? 'range' : 'rows');
+  if (mode !== 'rows') return undefined; // groups/range frames stay on the materializing path
+  const lo = new Array<number>(n);
+  const hi = new Array<number>(n);
+  for (let pos = 0; pos < n; pos++) {
+    lo[pos] = Math.max(0, fromB === 'unbounded' ? 0 : pos + (typeof fromB === 'number' ? fromB : 0));
+    hi[pos] = Math.min(n - 1, toB === 'unbounded' ? n - 1 : pos + (typeof toB === 'number' ? toB : 0));
+  }
+  return { lo, hi };
+}
+
+/** A monoid fold the fast window path can answer from prefix sums / a deque. */
+function isFastFold(fold: Fold): boolean {
+  return (
+    '_sum' in fold || '_count' in fold || '_avg' in fold || '_min' in fold || '_max' in fold || '_ratio_of_sums' in fold
+  );
+}
+
+function prefix(ordered: number[], rows: Row[], val: (r: Row) => number): number[] {
+  const p = new Array<number>(ordered.length + 1);
+  p[0] = 0;
+  let acc = 0;
+  ordered.forEach((rowIndex, i) => {
+    const row = rows[rowIndex];
+    acc += row === undefined ? 0 : val(row);
+    p[i + 1] = acc;
+  });
+  return p;
+}
+
+const rangeSum = (p: number[], lo: number, hi: number): number => (hi < lo ? 0 : (p[hi + 1] ?? 0) - (p[lo] ?? 0));
+
+/** Sliding-window min/max over monotone `[lo, hi]` bounds via a monotonic deque. */
+function monotonicFrames(vals: unknown[], lo: number[], hi: number[], isMin: boolean): unknown[] {
+  const n = vals.length;
+  const out = new Array<unknown>(n);
+  const deque: number[] = [];
+  let head = 0;
+  let nextAdd = 0;
+  const notBetter = (a: unknown, b: unknown): boolean =>
+    isMin ? _.compareOrder(a, b) >= 0 : _.compareOrder(a, b) <= 0;
+  for (let pos = 0; pos < n; pos++) {
+    const hiPos = hi[pos] ?? -1;
+    while (nextAdd <= hiPos) {
+      const v = vals[nextAdd];
+      if (v !== null && v !== undefined) {
+        while (deque.length > head) {
+          const backPos = deque[deque.length - 1];
+          const bv = backPos === undefined ? undefined : vals[backPos];
+          if (bv !== null && bv !== undefined && notBetter(bv, v)) deque.pop();
+          else break;
+        }
+        deque.push(nextAdd);
+      }
+      nextAdd += 1;
+    }
+    const loPos = lo[pos] ?? 0;
+    while (deque.length > head) {
+      const f = deque[head];
+      if (f !== undefined && f < loPos) head += 1;
+      else break;
+    }
+    const front = deque[head];
+    out[pos] = front === undefined ? null : vals[front];
+  }
+  return out;
+}
+
+/** O(partition) evaluation of a ROWS-mode / whole-partition monoid window fold. */
+function evaluateWindowFast(
+  ordered: number[],
+  rows: Row[],
+  fold: Fold,
+  bounds: { lo: number[]; hi: number[] },
+  out: unknown[]
+): void {
+  const n = ordered.length;
+  const { lo, hi } = bounds;
+  const emit = (column: unknown[]): void => {
+    for (let pos = 0; pos < n; pos++) {
+      const rowIndex = ordered[pos];
+      if (rowIndex !== undefined) out[rowIndex] = column[pos];
+    }
+  };
+  const prefixColumn = (p: number[]): number[] => lo.map((l, pos) => rangeSum(p, l, hi[pos] ?? 0));
+  if ('_sum' in fold) {
+    emit(prefixColumn(prefix(ordered, rows, (r) => num(evalRow(fold._sum, r)))));
+    return;
+  }
+  if ('_count' in fold) {
+    if (fold._count === true) {
+      emit(lo.map((l, pos) => Math.max(0, (hi[pos] ?? 0) - l + 1)));
+      return;
+    }
+    const operand = fold._count;
+    emit(
+      prefixColumn(
+        prefix(ordered, rows, (r) => {
+          const v = evalRow(operand, r);
+          return v !== null && v !== undefined ? 1 : 0;
+        })
+      )
+    );
+    return;
+  }
+  if ('_avg' in fold) {
+    const p = prefix(ordered, rows, (r) => num(evalRow(fold._avg, r)));
+    emit(
+      lo.map((l, pos) => {
+        const cnt = (hi[pos] ?? 0) - l + 1;
+        return cnt <= 0 ? null : rangeSum(p, l, hi[pos] ?? 0) / cnt;
+      })
+    );
+    return;
+  }
+  if ('_min' in fold || '_max' in fold) {
+    const operand = '_min' in fold ? fold._min : fold._max;
+    const vals = ordered.map((i) => {
+      const row = rows[i];
+      return row === undefined ? undefined : evalRow(operand, row);
+    });
+    emit(monotonicFrames(vals, lo, hi, '_min' in fold));
+    return;
+  }
+  if ('_ratio_of_sums' in fold) {
+    const { num: numExpr, den } = fold._ratio_of_sums;
+    const pn = prefix(ordered, rows, (r) => num(evalRow(numExpr, r)));
+    const pd = prefix(ordered, rows, (r) => num(evalRow(den, r)));
+    emit(
+      lo.map((l, pos) => {
+        const d = rangeSum(pd, l, hi[pos] ?? 0);
+        return d === 0 ? null : rangeSum(pn, l, hi[pos] ?? 0) / d;
+      })
+    );
+  }
+}
+
 function computeWindowColumn(rows: Row[], col: WindowColumn, ctx: EvalCtx): unknown[] {
   const orderKey = col.spec.field;
   const partitionKeys = partitionKeysOf(col.spec);
@@ -570,14 +716,20 @@ function computeWindowColumn(rows: Row[], col: WindowColumn, ctx: EvalCtx): unkn
     else list.push(i);
   });
   const out = new Array<unknown>(rows.length);
+  const fastEligible = isFastFold(col.fold) && col.fold._filter === undefined && col.spec.period === undefined;
   for (const indices of partitions.values()) {
     const ordered =
       orderKey === undefined
         ? indices
         : [...indices].sort((x, y) => _.compareOrder(get(orderKey)(rows[x]), get(orderKey)(rows[y])));
-    ordered.forEach((rowIndex, pos) => {
-      out[rowIndex] = applyFold(col.fold, frameRowsFor(ordered, pos, rows, col.spec), ctx);
-    });
+    const bounds = fastEligible ? rowFrameBounds(ordered.length, col.spec) : undefined;
+    if (bounds !== undefined) {
+      evaluateWindowFast(ordered, rows, col.fold, bounds, out);
+    } else {
+      ordered.forEach((rowIndex, pos) => {
+        out[rowIndex] = applyFold(col.fold, frameRowsFor(ordered, pos, rows, col.spec), ctx);
+      });
+    }
   }
   return out;
 }
