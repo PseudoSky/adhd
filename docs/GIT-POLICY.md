@@ -1567,3 +1567,50 @@ Schema version 1.
   operation (the dispatch reported them already green and directed that none be run). This record is
   the only change to this file in this operation. Recorded under §Commit convention's
   `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `docs/nat-tool-10-adr-0008-9c4e`, reap its worktree
+  (dispatch-2026-10-04-9c4e).** Landed NAT-TOOL-10's native-tooling env-surface documentation and
+  ADR-0008 reconciliation onto `main` as a **merge commit**
+  `bae94e39a64b604b20b64f32c51cb3cd5eebe74b` (parents `27c194cd` = pre-merge `main`, `f13bb192` =
+  branch head), moving `main` `27c194cd` → `bae94e39`; 7 files, +297/-38:
+  `docs/decisions/0008-agent-mcp-native-tooling.md` (M), `entrypoint/agent-mcp/AGENTS.md` (M),
+  `entrypoint/agent-mcp/CHANGELOG.md` (M), `entrypoint/agent-mcp/README.md` (M),
+  `entrypoint/agent-mcp/docs/marketing/.catalog/doc-ops.md` (M),
+  `entrypoint/agent-mcp/src/__tests__/docs-contract.test.ts` (M), and
+  `entrypoint/agent-mcp/src/server.ts` (M) — the documented native-tooling env surface, the ADR-0008
+  reconcile, and the corrected stale "no session" task strings. The branch was 2 commits —
+  `92df3ed3` (`docs(agent-mcp): document native-tooling env surface; reconcile ADR-0008
+  (NAT-TOOL-10)`) and `f13bb192` (`docs(agent-mcp): correct task descriptions to the sessioned
+  behavior (NAT-TOOL-10 AC4)`), a linear chain on the merge-base `27c194cd` (`git show -s --format=%P
+  92df3ed3` = `27c194cd`; `%P f13bb192` = `92df3ed3`) — matching the dispatch list exactly. The
+  merge-base equaled pre-merge `main`'s tip, so the landing was fast-forwardable; the dispatch
+  directed `--no-ff`, and a merge commit is within §Branching & merge, which states history "carries
+  true merge commits" and ff-only is not enforced. §Branching & merge was the deciding rule:
+  rebase-in-flight is permitted only on a branch "solely your own" — this is an in-flight executor
+  branch, not the operator's, so rewriting its 2 commits was out; a merge commit is the stated shape
+  here. Dry-run `git merge-tree --write-tree --name-only main f13bb192` exited 0, producing tree
+  `c1b33cb275864fab12948809f626a2353c7973a8` with no conflict hunks; the actual merge was
+  conflict-free (ort strategy, exit 0) and the post-merge tree (`git rev-parse main^{tree}`) is
+  `c1b33cb2…`, byte-identical to the dry-run tree, so no conflict arose and none required resolution
+  (the branch forks from `main`'s tip, so the two sides changed disjoint path sets). No conflict
+  marker remains in the merged paths (`git grep -nE '^(<<<<<<<|=======|>>>>>>>)' main --
+  docs/decisions/0008-agent-mcp-native-tooling.md entrypoint/agent-mcp` exited 1 with no matches).
+  The branch never touched this file (`git diff --name-only main...f13bb192 -- docs/GIT-POLICY.md`
+  empty), so `main`'s policy blob `6c684ead448282540c6e8088908809f2e966ed1e` survived the merge
+  byte-identical (pre-merge `27c194cd`, post-merge `bae94e39`, and the on-disk file all resolve to
+  the same blob). The merge is two-parent (not fast-forward); post-merge
+  `git rev-list --count main..docs/nat-tool-10-adr-0008-9c4e` = 0 and `git merge-base --is-ancestor`
+  exits 0 for each of `92df3ed3` and `f13bb192` individually, so both are contained. The merge
+  invoked no gate: git runs `pre-merge-commit` (not `pre-commit`) for a merge and `.githooks/` ships
+  no such hook, so none ran. The worktree `.worktrees/nat-tool-10-docs-9c4e` was then reaped under
+  §Cleanup's three-part test: `git status --porcelain` inside it was empty, it carried no `locked`
+  line, and its head `f13bb192` was an ancestor of `main` after the merge — so `git worktree remove`
+  (no `--force`) ran and the branch was deleted with `git branch -d docs/nat-tool-10-adr-0008-9c4e`
+  (was `f13bb192`); worktrees went 79 → 78. The merged commits remain reachable from the durable
+  `main` ref, so recovery does not depend on the reflog. The working tree was clean before and after
+  (`git status --porcelain` empty) and nothing was staged before or after (`git diff --cached
+  --name-only` empty); the dispatch's anticipated unrelated concurrent dirt was not present, so
+  nothing had to be avoided or protected. No push (the dispatch directed none) and no gates were run
+  by this operation (the dispatch reported them already green and directed that none be run). This
+  record is the only change to this file in this operation. Recorded under §Commit convention's
+  `docs(<area>):` scope.
