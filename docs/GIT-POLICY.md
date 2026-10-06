@@ -1417,3 +1417,50 @@ Schema version 1.
   state from `wip/nat-tool-4-root-abandoned`, so recovery depends on no reflog. No push (the
   dispatch directed none) and no gates were run. This record is the only change to this file in this
   operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `feat/nat-tool-7-config-9c4e`, reap its worktree
+  (dispatch-2026-10-04-9c4e).** Landed NAT-TOOL-7's typed native-tooling config surface onto `main`
+  as a **merge commit** `3cb3b8ca9d72cf5e864c1c7c5fadbb8f57ddc1dd` (parents `8c515c69` = pre-merge
+  `main`, `36db3df0` = branch head), moving `main` `8c515c69` → `3cb3b8ca`; 4 files, +407/-0:
+  `entrypoint/agent-mcp/src/__tests__/native-tooling-config.test.ts` (A, +201),
+  `entrypoint/agent-mcp/src/config.ts` (M, +34),
+  `packages/environment/environment-base-spec/src/__tests__/native-tooling-field-specs.test.ts`
+  (A, +54), and `packages/environment/environment-base-spec/src/index.ts` (M, +118). The branch was
+  2 commits — `4e61a981` (`feat(environment-base-spec): add native-tooling config field-spec
+  fragment (NAT-TOOL-7)`, +172: the `nativeToolingConfigFieldSpecs` fragment and its unit test) and
+  `36db3df0` (`feat(agent-mcp): consume the native-tooling config surface (NAT-TOOL-7)`, +235: the
+  typed `nativeTooling` mapping in `agent-mcp` config and its unit test) — matching the dispatch
+  list exactly. The merge-base was `8c515c69`, which equalled pre-merge `main`'s tip, so a
+  fast-forward was possible; the dispatch directed `--no-ff`, and a merge commit is within
+  §Branching & merge, which states history "carries true merge commits" and ff-only is not
+  enforced. §Branching & merge was the deciding rule: rebase-in-flight is permitted only on a
+  branch "solely your own" — this is an in-flight executor branch, not the operator's, so rewriting
+  its 2 commits was out; a merge commit is the stated shape here. Dry-run
+  `git merge-tree --write-tree --name-only main feat/nat-tool-7-config-9c4e` exited 0, producing
+  tree `0a9a7982c39508fabd1888cb54422bd65e614d43` with no conflict hunks; the actual
+  `git merge --no-ff feat/nat-tool-7-config-9c4e -m "feat(native-tooling): typed environment config
+  surface (NAT-TOOL-7)"` was conflict-free (ort strategy, exit 0) and the post-merge tree
+  (`git rev-parse HEAD^{tree}`) is `0a9a7982…`, byte-identical to the dry-run tree, so no conflict
+  arose and none required resolution. No conflict marker remains in the four merged paths
+  (`git grep -nE '^(<<<<<<<|>>>>>>>)' 3cb3b8ca -- <the four paths>` exited 1 with no matches). The
+  branch never touched this file (`git diff --stat main..feat/nat-tool-7-config-9c4e --
+  docs/GIT-POLICY.md` empty), so `main`'s policy blob
+  `b4ebfad6e28a026ffc2fe094c5bb822c9fd8cc25` survived the merge byte-identical (pre-merge
+  `8c515c69`, post-merge `3cb3b8ca`, and the on-disk file all resolve to the same blob). The merge
+  is two-parent (not fast-forward); post-merge `git rev-list --count
+  main..feat/nat-tool-7-config-9c4e` = 0 and `git merge-base --is-ancestor` exits 0 for each of
+  `4e61a981` and `36db3df0` individually, so both are contained. The merge invoked no gate: git runs
+  `pre-merge-commit` (not `pre-commit`) for a merge and `.githooks/` ships no such hook, so none
+  ran. The worktree `.worktrees/wt-nat-tool-7-9c4e` was then reaped under §Cleanup's three-part
+  test: `git status --porcelain` inside it was empty, it carried no `locked` line, and its head
+  `36db3df0` was an ancestor of `main` after the merge — so `git worktree remove` (no `--force`)
+  ran and the branch was deleted with `git branch -d feat/nat-tool-7-config-9c4e` (was `36db3df0`);
+  worktrees went 80 → 79. The merged commits remain reachable from the durable `main` ref, so
+  recovery does not depend on the reflog. The working tree was clean before and after (`git status
+  --porcelain` empty), nothing was staged before or after (`git diff --cached --name-only` empty),
+  and no unrelated concurrent dirt was present, so nothing had to be avoided or protected. No push
+  (the dispatch directed none) and no gates were run by this operation (the dispatch reported them
+  already green: `nx affected -t test build lint --base=1bcc147d` exit 0,
+  `nx lint environment-base-spec` exit 0, and `nx build agent-mcp` exit 0; and the dispatch directed
+  none). This record is the only change to this file in this operation. Recorded under §Commit
+  convention's `docs(<area>):` scope.
