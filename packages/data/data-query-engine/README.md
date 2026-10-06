@@ -61,6 +61,15 @@ new DataView(rows)
   .view();
 ```
 
+The builders mutate the instance. For a **stateless run** (no instance, no
+mutation), use the static `DataView.query(data, expr)` — and `DataView<TIn, TOut>`
+types input rows vs output rows (a grouped result is `TOut`, not `TIn`):
+
+```ts
+DataView.query(rows, { group_by: ['region', { name: 'total', aggregate: { _sum: 'amount' } }] });
+// typed: new DataView<InRow, GroupRow>(rows, groupedExpr).view(): GroupRow[]
+```
+
 `rollup('region','product')` and `cube('region','product')` build a parent query
 with no `group_by` whose `select` lists one relation per grouping set (the
 aggregates are the query's existing `groupBy(...)` items, or a `_count` default):
@@ -241,10 +250,14 @@ position-typed model. There is no second syntax and no alias layer:
   by the **phase rule** (a leaf's phase is decided by reference); `qualify` is the
   post-scan filter; `keep` folds a top-N tail into one `_other` row.
 - A running / sliding aggregate is `_scan` on a fold — a **fold-mode**, not a
-  phase and not a query-level key. `_scan: { order_by, frame?, partition_by? }`
-  where `frame` is `'running'` (default), a sliding size `n`, or `{ where }` (the
-  frame is the partition rows matching the predicate). It broadcasts one value
-  per row.
+  phase and not a query-level key. `_scan: { order_by, frame?, partition_by? }`.
+  The `frame` shapes are: `'running'` (default; == `{ rows: ['unbounded', 0] }`), a
+  sliding size `n`, a positional `{ rows: [from, to] }` (centered/lookahead, e.g.
+  `{ rows: [-1, 1] }`), a `{ range: [from, to] }` (key/value/temporal bounds on the
+  order key — a number is a value delta, an ISO-8601 duration a temporal offset),
+  a `{ groups: [from, to] }` (peer-group offsets), or `{ where }` (the
+  position-independent set of partition rows matching the predicate). It broadcasts
+  one value per row.
 - `_filter` scopes a fold's input (orthogonal to `_scan`).
 
 Every classic operation is expressed directly in this grammar:

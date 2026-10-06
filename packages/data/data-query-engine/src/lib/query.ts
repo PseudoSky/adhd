@@ -178,9 +178,9 @@ function normalizeOrderBy(orderByValue: QueryExpression['order_by']): OrderByExp
  * (`commit()` -> the reference `execute`), a multi-source named-dataset surface
  * with writes, and an incremental grouped cache for append/retract.
  */
-export class DataView<T = unknown> {
-  data: T[] = [];
-  dataview: T[] = [];
+export class DataView<TIn = unknown, TOut = TIn> {
+  data: TIn[] = [];
+  dataview: TOut[] = [];
   query: CallableQuery;
   dirty = false;
   logging: boolean;
@@ -200,13 +200,13 @@ export class DataView<T = unknown> {
   private _dataName = 'data';
 
   // The sources overload is listed FIRST so `new DataView([{ name, data }])`
-  // binds to it (T stays the class default) rather than inferring T from the
+  // binds to it (TIn stays the class default) rather than inferring TIn from the
   // source-entry objects — which would make `insert`/`append` reject data rows.
   constructor(sources: DataSource[], options?: DataViewOptions);
-  constructor(data: T[]);
-  constructor(data: T[], query?: QueryExpression, logging?: boolean);
+  constructor(data: TIn[]);
+  constructor(data: TIn[], query?: QueryExpression, logging?: boolean);
   constructor(
-    dataOrSources: T[] | DataSource[] = [],
+    dataOrSources: TIn[] | DataSource[] = [],
     queryOrOptions?: QueryExpression | DataViewOptions,
     logging = false
   ) {
@@ -219,13 +219,13 @@ export class DataView<T = unknown> {
       );
     } else {
       this._initSingle(
-        dataOrSources as T[],
+        dataOrSources as TIn[],
         queryOrOptions as QueryExpression | undefined
       );
     }
   }
 
-  private _initSingle(data: T[], query: QueryExpression | undefined): void {
+  private _initSingle(data: TIn[], query: QueryExpression | undefined): void {
     this._dataName = 'data';
     this.data = data;
     this.sources.set('data', data as unknown as Row[]);
@@ -245,8 +245,8 @@ export class DataView<T = unknown> {
     }
     this.data = (this.sources.get(this._dataName) ??
       [...this.sources.values()][0] ??
-      []) as unknown as T[];
-    this.dataview = this.data;
+      []) as unknown as TIn[];
+    this.dataview = this.data as unknown as TOut[];
     this._raw = {};
     this.dirty = false;
   }
@@ -259,7 +259,7 @@ export class DataView<T = unknown> {
     this.commit();
   }
 
-  setData = (data: T[]) => {
+  setData = (data: TIn[]) => {
     this.data = data;
     this.sources.set(this._dataName, data as unknown as Row[]);
     this.dirty = true;
@@ -417,7 +417,7 @@ export class DataView<T = unknown> {
   };
 
   // ── multi-source reads / writes ──────────────────────────────────────────
-  insert = (name: string, row: T): void => {
+  insert = (name: string, row: TIn): void => {
     const data = this.require(name);
     data.push(row as unknown as Row);
     this.indexStores.get(name)?.add(row as unknown as Row);
@@ -425,7 +425,7 @@ export class DataView<T = unknown> {
     this.dirty = true;
   };
 
-  append = (name: string, rows: T[]): void => {
+  append = (name: string, rows: TIn[]): void => {
     const data = this.require(name);
     for (const row of rows) {
       data.push(row as unknown as Row);
@@ -436,7 +436,7 @@ export class DataView<T = unknown> {
   };
 
   /** Retract one row equal to `row` (a Z-set `-1`). Non-invertible caches recompute. */
-  remove = (name: string, row: T): void => {
+  remove = (name: string, row: TIn): void => {
     const data = this.require(name);
     const idx = data.findIndex((r) => _.isEqual(r, row));
     if (idx < 0) throw new QueryModelError('remove: no matching row in the source');
@@ -529,10 +529,10 @@ export class DataView<T = unknown> {
     if (limit !== undefined) {
       const { limit: _drop, ...unlimited } = this._raw;
       const preLimit = execute(unlimited, rows, ctx).length;
-      this.dataview = execute(this._raw, rows, ctx) as unknown as T[];
+      this.dataview = execute(this._raw, rows, ctx) as unknown as TOut[];
       this.has_more = preLimit > limit;
     } else {
-      this.dataview = execute(this._raw, rows, ctx) as unknown as T[];
+      this.dataview = execute(this._raw, rows, ctx) as unknown as TOut[];
       this.has_more = false;
     }
     this.metrics.total_matched = this.dataview.length;
@@ -541,10 +541,19 @@ export class DataView<T = unknown> {
     return true;
   };
 
-  view = (): T[] => {
+  view = (): TOut[] => {
     this.commit();
-    return this.dataview ? this.dataview : this.data;
+    return this.dataview ?? (this.data as unknown as TOut[]);
   };
+
+  /**
+   * Stateless run: execute `expr` over `data` WITHOUT constructing or mutating a
+   * `DataView`. The pure entry point the mutation-only builder surface lacks.
+   * Returns the result rows — group records for a `group_by`/`select` query.
+   */
+  static query<TOut = Row>(data: Row[], expr: QueryExpression): TOut[] {
+    return execute(expr, data) as unknown as TOut[];
+  }
 
   toJson() {
     return this._raw;

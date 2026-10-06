@@ -73,6 +73,12 @@ const SPECS: Array<[string, Spec]> = [
   ['sliding 2', { order_by: 'ts', frame: 2 }],
   ['sliding 3', { order_by: 'ts', frame: 3 }],
   ['sliding 3 partitioned', { order_by: 'ts', frame: 3, partition_by: 'p' }],
+  ['rows centered [-1,1]', { order_by: 'ts', frame: { rows: [-1, 1] } }],
+  ['rows lookahead [1,unbounded]', { order_by: 'ts', frame: { rows: [1, 'unbounded'] } }],
+  ['rows tail [unbounded,1]', { order_by: 'ts', frame: { rows: ['unbounded', 1] } }],
+  ['rows [-2,0]', { order_by: 'ts', frame: { rows: [-2, 0] } }],
+  ['range [-2,0]', { order_by: 'ts', frame: { range: [-2, 0] } }],
+  ['groups [-1,1]', { order_by: 'w', frame: { groups: [-1, 1] } }],
   ['predicate all', { order_by: 'ts', frame: { where: {} } }],
   ['predicate w>=2', { order_by: 'ts', frame: { where: { w: { _gte: 2 } } } }],
 ];

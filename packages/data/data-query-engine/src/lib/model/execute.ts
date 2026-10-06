@@ -11,6 +11,7 @@
  */
 import { Transform as _ } from '@adhd/data-base-transforms';
 import { compileAccessor, type PathGetter } from '../path';
+import { resolveIsoPeriod } from '../period';
 import { operators } from '../filters';
 import type { OrderByExpression } from '../expressions';
 import { postNames, splitWhere, validateQuery } from './phase';
@@ -26,6 +27,7 @@ import type {
   Predicate,
   QueryExpression,
   Row,
+  ScanBound,
   ScanFrame,
   ScanSpec,
   ScalarOperator,
@@ -468,20 +470,98 @@ function partitionKeysOf(spec: ScanSpec, fallback: string[]): string[] {
 }
 
 /**
- * Inclusive `[lo, hi]` per-position bounds for a running / sliding frame, or
- * `undefined` for a predicate frame (which is position-independent and computed
- * as a single filtered set).
+ * Inclusive `[lo, hi]` per-position bounds for a ROWS-mode frame (running /
+ * sliding / `{rows:[from,to]}`), or `undefined` for a RANGE / GROUPS / predicate
+ * frame (which is materialized per row).
  */
 function scanRowBounds(n: number, frame: ScanFrame | undefined): { lo: number[]; hi: number[] } | undefined {
-  if (frame !== undefined && typeof frame === 'object') return undefined; // predicate frame
-  const size = typeof frame === 'number' ? frame : undefined;
+  let from: ScanBound = 'unbounded'; // 'running'
+  let to: ScanBound = 0;
+  if (typeof frame === 'number') {
+    from = -(frame - 1);
+    to = 0;
+  } else if (frame !== undefined && typeof frame === 'object') {
+    if (!('rows' in frame)) return undefined; // predicate / range / groups → materialize per row
+    [from, to] = frame.rows;
+  }
   const lo = new Array<number>(n);
   const hi = new Array<number>(n);
   for (let pos = 0; pos < n; pos++) {
-    lo[pos] = size === undefined ? 0 : Math.max(0, pos - size + 1);
-    hi[pos] = pos;
+    lo[pos] = from === 'unbounded' ? 0 : Math.max(0, pos + (typeof from === 'number' ? from : 0));
+    hi[pos] = to === 'unbounded' ? n - 1 : Math.min(n - 1, pos + (typeof to === 'number' ? to : 0));
   }
   return { lo, hi };
+}
+
+/** A RANGE bound resolved against the current order-key value. */
+function rangeBound(bound: ScanBound, cur: number, isLower: boolean): number {
+  if (bound === 'unbounded') return isLower ? -Infinity : Infinity;
+  if (typeof bound === 'number') return cur + bound;
+  const { from, to } = resolveIsoPeriod(bound, cur);
+  return isLower ? from : to;
+}
+
+/**
+ * Materialize the frame rows for position `pos` (the naive path used for every
+ * non-fast frame and for RANGE / GROUPS). Mirrors SQL `{ROWS|RANGE|GROUPS}
+ * BETWEEN <start> AND <end>` (inclusive); a reversed / empty frame yields `[]`.
+ */
+function frameRowsForScan(
+  ordered: number[],
+  pos: number,
+  rows: Row[],
+  frame: ScanFrame | undefined,
+  orderKey: string,
+  ctx: EvalCtx
+): Row[] {
+  if (frame === undefined || frame === 'running') {
+    return ordered.slice(0, pos + 1).map((i) => rows[i]);
+  }
+  if (typeof frame === 'number') {
+    return ordered.slice(Math.max(0, pos - frame + 1), pos + 1).map((i) => rows[i]);
+  }
+  if ('where' in frame) {
+    return ordered.filter((i) => matches(frame.where, rows[i], ctx)).map((i) => rows[i]);
+  }
+  if ('rows' in frame) {
+    const [fromB, toB] = frame.rows;
+    const lo = fromB === 'unbounded' ? 0 : Math.max(0, pos + (typeof fromB === 'number' ? fromB : 0));
+    const hi = toB === 'unbounded' ? ordered.length - 1 : Math.min(ordered.length - 1, pos + (typeof toB === 'number' ? toB : 0));
+    return ordered.slice(lo, hi + 1).map((i) => rows[i]);
+  }
+  if ('range' in frame) {
+    const [fromB, toB] = frame.range;
+    const cur = toMs(get(orderKey)(rows[ordered[pos]]));
+    if (cur === null) return [];
+    const lower = rangeBound(fromB, cur, true);
+    const upper = rangeBound(toB, cur, false);
+    return ordered
+      .map((i) => rows[i])
+      .filter((r) => {
+        const t = toMs(get(orderKey)(r));
+        return t !== null && t >= lower && t <= upper;
+      });
+  }
+  // groups: peer groups (equal order-key values share a group id).
+  const [fromB, toB] = frame.groups;
+  const gid = new Array<number>(ordered.length);
+  let g = -1;
+  let prev: unknown;
+  ordered.forEach((i, p) => {
+    const v = get(orderKey)(rows[i]);
+    if (p === 0 || !_.isEqual(v, prev)) {
+      g += 1;
+      prev = v;
+    }
+    gid[p] = g;
+  });
+  const total = g + 1;
+  const posG = gid[pos];
+  const loG = fromB === 'unbounded' ? 0 : posG + (typeof fromB === 'number' ? fromB : 0);
+  const hiG = toB === 'unbounded' ? total - 1 : posG + (typeof toB === 'number' ? toB : 0);
+  return ordered
+    .filter((_, p) => gid[p] >= Math.max(0, loG) && gid[p] <= Math.min(total - 1, hiG))
+    .map((i) => rows[i]);
 }
 
 /** A monoid fold the fast scan path can answer from prefix sums / a deque. */
@@ -616,14 +696,50 @@ function evaluateScanFast(
   }
 }
 
+/** The string field refs a fold's operand(s) read. */
+function foldRefs(fold: Fold): string[] {
+  if ('_sum' in fold) return collectRefs(fold._sum);
+  if ('_avg' in fold) return collectRefs(fold._avg);
+  if ('_min' in fold) return collectRefs(fold._min);
+  if ('_max' in fold) return collectRefs(fold._max);
+  if ('_distinct_count' in fold) return collectRefs(fold._distinct_count);
+  if ('_count' in fold) return fold._count === true ? [] : collectRefs(fold._count);
+  if ('_ratio_of_sums' in fold) return [...collectRefs(fold._ratio_of_sums.num), ...collectRefs(fold._ratio_of_sums.den)];
+  if ('_quantile' in fold) return collectRefs(fold._quantile.field);
+  return [];
+}
+
 /**
  * One scan column over the relation's rows: partition, order each partition by
  * the scan order key, and compute a value per row. Monoid folds take the O(partition)
  * fast path (prefix sums / monotonic deque); `_filter` or a non-monoid fold falls
  * back to a per-row frame fold (see `applyFold`) — for a predicate frame the frame
  * set is position-independent, so it is computed ONCE per partition and broadcast.
+ *
+ * `knownFields` is the set of fields a GROUPED relation's records carry (its key +
+ * aggregate-output names). A scan in a collapsing `group_by`'s flat `select` reads
+ * group RECORDS, so an operand that is not one of those names resolves to
+ * `undefined` and silently folds to the identity (`0` for `_sum`) — a footgun. We
+ * THROW instead: a scan over group records must reference a key or an output.
  */
-function computeScanColumn(rows: Row[], col: ScanColumn, ctx: EvalCtx, fallbackPartition: string[]): unknown[] {
+function computeScanColumn(
+  rows: Row[],
+  col: ScanColumn,
+  ctx: EvalCtx,
+  fallbackPartition: string[],
+  knownFields?: ReadonlySet<string>
+): unknown[] {
+  if (knownFields !== undefined) {
+    for (const ref of foldRefs(col.fold)) {
+      if (!knownFields.has(ref)) {
+        throw new QueryModelError(
+          `scan operand '${ref}' does not resolve on the grouped relation's rows: a scan in a ` +
+            `\`group_by\` \`select\` reads group records, whose fields are the group keys and aggregate ` +
+            `outputs. Reference one of those, or move the scan into a nested \`select\` over the raw rows.`
+        );
+      }
+    }
+  }
   const orderKey = col.spec.order_by;
   const partitionKeys = partitionKeysOf(col.spec, fallbackPartition);
   const partitions = new Map<string, number[]>();
@@ -635,7 +751,7 @@ function computeScanColumn(rows: Row[], col: ScanColumn, ctx: EvalCtx, fallbackP
   });
   const out = new Array<unknown>(rows.length);
   const frame = col.spec.frame;
-  const predicateFrame = frame !== undefined && typeof frame === 'object' ? frame.where : undefined;
+  const predicateFrame = frame !== undefined && typeof frame === 'object' && 'where' in frame ? frame.where : undefined;
   const fastEligible = isFastFold(col.fold) && col.fold._filter === undefined && predicateFrame === undefined;
   for (const indices of partitions.values()) {
     const ordered = [...indices].sort((x, y) => _.compareOrder(get(orderKey)(rows[x]), get(orderKey)(rows[y])));
@@ -651,10 +767,7 @@ function computeScanColumn(rows: Row[], col: ScanColumn, ctx: EvalCtx, fallbackP
       evaluateScanFast(ordered, rows, col.fold, bounds, out);
     } else {
       ordered.forEach((rowIndex, pos) => {
-        const lo = bounds?.lo[pos] ?? 0;
-        const hi = bounds?.hi[pos] ?? ordered.length - 1;
-        const frameRows = ordered.slice(lo, hi + 1).map((i) => rows[i]);
-        out[rowIndex] = applyFold(col.fold, frameRows, ctx);
+        out[rowIndex] = applyFold(col.fold, frameRowsForScan(ordered, pos, rows, frame, orderKey, ctx), ctx);
       });
     }
   }
@@ -666,13 +779,14 @@ function applyScanPhase(
   rows: Row[],
   select: SelectItem[] | undefined,
   ctx: EvalCtx,
-  fallbackPartition: string[]
+  fallbackPartition: string[],
+  knownFields?: ReadonlySet<string>
 ): Row[] {
   const cols = collectScanColumns(select);
   if (cols.length === 0) return rows;
   let out = rows;
   for (const col of cols) {
-    const column = computeScanColumn(rows, col, ctx, fallbackPartition);
+    const column = computeScanColumn(rows, col, ctx, fallbackPartition, knownFields);
     out = out.map((row, i) => ({ ...row, [col.name]: column[i] }));
   }
   return out;
@@ -891,11 +1005,16 @@ export function execute(query: QueryExpression, rows: Row[], ctx?: EvalCtx): Row
 
   // Scan pass over the group records (partition defaults to the enclosing group_by).
   if (collectScanColumns(select).length > 0) {
+    const groupFieldNames = new Set<string>([
+      ...keyItems.map(keyName),
+      ...aggItems.map((item) => item.name).filter((n): n is string => n !== undefined),
+    ]);
     const records = applyScanPhase(
       grouped.map((g) => g.record),
       select,
       context,
-      keyItems.map(keyName)
+      keyItems.map(keyName),
+      groupFieldNames
     );
     grouped = grouped.map((g, i) => ({ record: records[i], rows: g.rows }));
   }

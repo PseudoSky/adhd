@@ -169,19 +169,38 @@ describe('planner — shared-reference subexpressions', () => {
     return reads;
   }
 
-  it.fails('planQuery is O(query size) even when the same subexpression object is reused', () => {
-    // The planner has no memo: a shared node is re-visited once per reference, so a
-    // depth-d self-similar DAG costs ~2^d. A linear planner would grow ~4× per +2
-    // depth; assert <4 to document the expected bound — it throws (exponential).
+  /** The PRE-FIX shape: an un-memoized re-descent of the same DAG. */
+  function countNaiveReads(depth: number): number {
+    let reads = 0;
+    const wrap = (obj: Record<string, unknown>): Record<string, unknown> =>
+      new Proxy(obj, {
+        get(t, p) {
+          if (p === 'select') reads += 1;
+          return Reflect.get(t, p, t);
+        },
+      });
+    let cur = wrap({ select: ['x'] });
+    for (let d = 0; d < depth; d++) cur = wrap({ select: [cur, cur] });
+    const walk = (q: unknown): void => {
+      const select = (q as { select?: unknown[] }).select ?? [];
+      for (const item of select) if (typeof item !== 'string') walk(item);
+    };
+    walk(cur);
+    return reads;
+  }
+
+  it('planQuery is O(query size) even when the same subexpression object is reused', () => {
+    // depth-d self-similar DAG: d+1 distinct objects. A linear planner grows ~4× per
+    // +4 depth; assert < 4 (the memo makes a shared reference planned once).
     const small = countPlanReads(10);
     const large = countPlanReads(14);
     expect(large / small).toBeLessThan(4);
   });
 
-  it('measurement: the same DAG grows ~16× per +4 depth (exponential)', () => {
-    const small = countPlanReads(10);
-    const large = countPlanReads(14);
-    // 2^4 = 16; this PASSES and records the observed blow-up as evidence.
+  it('NEGATIVE CONTROL: an un-memoized re-descent of the same DAG is exponential', () => {
+    // Proves the meter has teeth: the pre-fix shape grows ~16× per +4 depth.
+    const small = countNaiveReads(10);
+    const large = countNaiveReads(14);
     expect(large / small).toBeGreaterThan(8);
   });
 });

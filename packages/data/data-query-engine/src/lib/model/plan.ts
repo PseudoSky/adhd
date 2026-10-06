@@ -8,7 +8,7 @@
  * access path from the PRE half only — a post-group output name can never pick an
  * index. `executePlanned` (in `./execute`) consumes the plan.
  */
-import { computeKey, planKey } from './canonical';
+import { computeKey, planKey, type CanonMemo } from './canonical';
 import { fieldLeaves, postNames, splitWhere } from './phase';
 import type { PlannerIndex } from './indexing';
 import type { Predicate, QueryExpression } from './types';
@@ -85,8 +85,19 @@ export function computeAccessPath(pre: Predicate | undefined, index: PlannerInde
 /** Plan a query tree: root + `select`-nested + `_in`/`_nin` subqueries. */
 export function planQuery(query: QueryExpression, opts: PlannerOptions): PhysicalPlan {
   const nodes = new Map<string, PlanNode>();
+  // One identity memo shared by EVERY key computed in this pass, so a shared
+  // subexpression is canonicalized once, not ~2^depth times.
+  const canonMemo: CanonMemo = new Map();
+  // Visit memo: a shared reference (same object, same read context) is planned
+  // ONCE and reused, so planning is O(query nodes) even on a DAG.
+  const visited = new Map<string, PlanNode>();
 
   const visit = (q: QueryExpression, readsSource: boolean, source: string | undefined): PlanNode => {
+    const ck = computeKey(q, canonMemo);
+    const visitKey = `${ck}\u0000${readsSource ? 'S' : 'N'}\u0000${source ?? ''}`;
+    const done = visited.get(visitKey);
+    if (done !== undefined) return done;
+
     const post = postNames(q);
     const { pre, post: postFilter } = splitWhere(q.where, post);
     const index = readsSource && source !== undefined ? opts.indexFor(source) : undefined;
@@ -103,8 +114,8 @@ export function planQuery(query: QueryExpression, opts: PlannerOptions): Physica
     }
 
     const node: PlanNode = {
-      key: planKey(q),
-      computeKey: computeKey(q),
+      key: planKey(q, canonMemo),
+      computeKey: ck,
       query: q,
       access,
       pre,
@@ -113,6 +124,7 @@ export function planQuery(query: QueryExpression, opts: PlannerOptions): Physica
       childKeys: children.map((c) => c.computeKey),
     };
     nodes.set(node.computeKey, node);
+    visited.set(visitKey, node);
     return node;
   };
 

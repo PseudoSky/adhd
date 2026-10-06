@@ -132,14 +132,32 @@ export type Row = Record<string, unknown>;
 
 // ── Scan (an aggregate as a per-row fold-mode over an ordered frame) ─────────
 /**
+ * A frame bound: a row/group offset (number; negative = preceding, 0 = current,
+ * positive = following), an ISO-8601 duration (a RANGE value offset), or
+ * `'unbounded'`.
+ */
+export type ScanBound = number | string | 'unbounded';
+
+/**
  * The frame of a `_scan`:
  *  - `'running'` (the default) — the partition rows from the first through the
- *    current row;
+ *    current row (equivalent to `{ rows: ['unbounded', 0] }`);
  *  - a `number` `n` — a sliding frame of the last `n` rows through the current row;
+ *  - `{ rows: [from, to] }` — SQL ROWS offsets (a centered/lookahead frame is
+ *    `{ rows: [-1, 1] }`);
+ *  - `{ range: [from, to] }` — RANGE bounds on the order key (a number = a value
+ *    delta; an ISO-8601 duration = a temporal offset);
+ *  - `{ groups: [from, to] }` — GROUPS peer-group offsets (number bounds);
  *  - `{ where }` — the frame is the set of partition rows satisfying the predicate
  *    (position-independent; `{ where: {} }` is the whole partition).
  */
-export type ScanFrame = 'running' | number | { where: Predicate };
+export type ScanFrame =
+  | 'running'
+  | number
+  | { where: Predicate }
+  | { rows: [ScanBound, ScanBound] }
+  | { range: [ScanBound, ScanBound] }
+  | { groups: [ScanBound, ScanBound] };
 
 /**
  * A scan modifier on a fold: the SAME closed fold vocabulary in

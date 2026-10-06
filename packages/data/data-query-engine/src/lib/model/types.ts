@@ -20,6 +20,7 @@ export type {
   QuantileSketch,
   QueryExpression,
   Row,
+  ScanBound,
   ScanFrame,
   ScanSpec,
   ScalarOperator,

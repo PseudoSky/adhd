@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { DataView, type Fold, type QueryExpression } from '../index';
+import { DataView, type Fold, type QueryExpression, type ScanFrame } from '../index';
 import { execute } from './model/execute';
 import { planQuery } from './model/plan';
 import { IndexStore } from './model/indexing';
@@ -394,5 +394,136 @@ describe('the retired window clause: no surviving token in the package surface',
     expect(typeof anyDv['scan']).toBe('function');
     expect(anyDv['window']).toBeUndefined();
     expect(anyDv[RETIRED]).toBeUndefined();
+  });
+});
+
+describe('_scan frame shapes — exact vs an independently hand-computed fold', () => {
+  const rows = [
+    { ts: 1, v: 10 },
+    { ts: 2, v: 20 },
+    { ts: 3, v: 30 },
+    { ts: 4, v: 40 },
+  ];
+  const scanSum = (frame: ScanFrame): unknown[] =>
+    scanOf(rows, {
+      select: [{ name: 'w', aggregate: { _sum: 'v', _scan: { order_by: 'ts', frame } } }],
+    });
+
+  it('centered ROWS [-1,1]', () => {
+    expect(scanSum({ rows: [-1, 1] })).toEqual([30, 60, 90, 70]);
+  });
+
+  it('lookahead ROWS [1, unbounded]', () => {
+    expect(scanSum({ rows: [1, 'unbounded'] })).toEqual([90, 70, 40, 0]);
+  });
+
+  it('tail ROWS [unbounded, 1]', () => {
+    expect(scanSum({ rows: ['unbounded', 1] })).toEqual([30, 60, 100, 100]);
+  });
+
+  it('RANGE [-2,0] over the order key', () => {
+    expect(scanSum({ range: [-2, 0] })).toEqual([10, 30, 60, 90]);
+  });
+
+  it('GROUPS [-1,1] over peer groups', () => {
+    const g = [
+      { ts: 1, v: 10 },
+      { ts: 1, v: 20 },
+      { ts: 2, v: 30 },
+      { ts: 3, v: 40 },
+    ];
+    // GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING: peer groups by `ts`.
+    // g0 = {ts:1} (rows 0,1), g1 = {ts:2} (row 2), g2 = {ts:3} (row 3).
+    // g0 -> groups 0..1 = 10+20+30 = 60; g1 -> 0..2 = 100; g2 -> 1..2 = 70.
+    expect(
+      scanOf(g, {
+        select: [{ name: 'w', aggregate: { _sum: 'v', _scan: { order_by: 'ts', frame: { groups: [-1, 1] } } } }],
+      })
+    ).toEqual([60, 60, 100, 70]);
+  });
+
+  it('a RANGE expressed as an ISO-8601 duration over a temporal order key', () => {
+    const DAY = 86_400_000;
+    const t0 = Date.UTC(2026, 0, 10);
+    const sessions = [
+      { t: t0, v: 1 },
+      { t: t0 + DAY, v: 2 },
+      { t: t0 + 2 * DAY, v: 4 },
+    ];
+    // RANGE ['-P1D', 0] would be ideal, but a lower duration bound is expressed as a
+    // positive duration preceding the current row.
+    expect(
+      scanOf(sessions, {
+        select: [{ name: 'w', aggregate: { _sum: 'v', _scan: { order_by: 't', frame: { range: ['P1D', 0] } } } }],
+      })
+    ).toEqual([1, 3, 6]);
+  });
+});
+
+describe('DataView.query — stateless run', () => {
+  it('equals `new DataView(data, expr).view()` and mutates neither input', () => {
+    const rows = [
+      { t: 1, v: 1 },
+      { t: 2, v: 2 },
+      { t: 3, v: 3 },
+    ];
+    const expr: QueryExpression = {
+      select: [{ name: 'w', aggregate: { _sum: 'v', _scan: { order_by: 't' } } }],
+    };
+    const viaStatic = DataView.query(rows, expr);
+    const viaInstance = new DataView(rows, expr).view();
+    expect(viaStatic).toEqual(viaInstance);
+    expect(viaStatic).toEqual([{ w: 1 }, { w: 3 }, { w: 6 }]);
+    expect(rows).toEqual([
+      { t: 1, v: 1 },
+      { t: 2, v: 2 },
+      { t: 3, v: 3 },
+    ]);
+  });
+
+  it('the generic output parameter types a grouped result', () => {
+    const rows = [
+      { region: 'east', amount: 3 },
+      { region: 'west', amount: 4 },
+    ];
+    const out: { region: string; total: number }[] = new DataView<
+      { region: string; amount: number },
+      { region: string; total: number }
+    >(rows, {
+      group_by: ['region', { name: 'total', aggregate: { _sum: 'amount' } }],
+    }).view();
+    expect(out).toEqual([
+      { region: 'east', total: 3 },
+      { region: 'west', total: 4 },
+    ]);
+  });
+});
+
+describe('a scan in a collapsing group_by throws instead of silently folding to 0', () => {
+  const rows = [
+    { agent: 'a', v: 1 },
+    { agent: 'b', v: 2 },
+  ];
+
+  it('NEGATIVE CONTROL: an operand that is not a group key / output THROWS', () => {
+    // `v` is a raw field, not a group output — reading the group records would
+    // resolve it to undefined and fold `_sum` to 0 silently. It must throw.
+    expect(() =>
+      new DataView(rows, {
+        group_by: ['agent', { name: 'c', aggregate: { _sum: 'v' } }],
+        select: [{ name: 'r', aggregate: { _sum: 'v', _scan: { order_by: 'agent' } } }],
+      }).view()
+    ).toThrow(/does not resolve/);
+  });
+
+  it('a scan operand that IS a group output works', () => {
+    const out = view(rows, {
+      group_by: ['agent', { name: 'v', aggregate: { _sum: 'v' } }],
+      select: ['agent', 'v', { name: 'r', aggregate: { _sum: 'v', _scan: { order_by: 'agent' } } }],
+    });
+    expect(out).toEqual([
+      { agent: 'a', v: 1, r: 1 },
+      { agent: 'b', v: 2, r: 2 },
+    ]);
   });
 });
