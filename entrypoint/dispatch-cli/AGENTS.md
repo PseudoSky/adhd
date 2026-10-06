@@ -126,3 +126,18 @@ Run: `DISPATCH_E2E_LIVE=1 npx tsx --tsconfig tsconfig.base.json
 entrypoint/dispatch-cli/src/test/integration/run-live-guarded.ts` (see `README.md`
 "Guarded live runner" for the full env surface). The same gate record appears in
 this package's `README.md` and in the script's own header.
+
+**NAT-TOOL-9 scenarios (ADR-0008 D11).** `DISPATCH_E2E_SCENARIO` selects the
+native-tooling end-to-end proof in addition to `dispatch`/`delegation`:
+`native-fs-shell` (N1 — the real srt-wrapped `fs` server reads `/P/<file>` and
+the srt-wrapped shell runs `pwd` in `/P`, asserted from the child's
+`tool_results`), `portability` (N2 — create@/P then reuse@/Q re-asserts fs root
+/Q, with a no-re-assert negative control; no model), `hitl` (N3 — a sessioned
+`ask` suspends and `task_resume` executes it, proven by a real child session
+row), and `retention` (N5 — an `ephemeral` session is reclaimed on terminal
+while a retained session survives). Every scenario spawns agent-mcp with an
+isolated cwd + fake `$HOME` (D11 #14). Procedure + table:
+`docs/playbooks/real-mcp-testing.md` §8. The deterministic half of N9
+(resolved-toolset registry connect, permission-gate deny, single producer,
+portability) runs default/unflagged in `dispatch-default-mcp-servers.e2e.test.ts`
+and agent-mcp's `default-mcp-servers.e2e.test.ts`.

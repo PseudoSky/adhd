@@ -215,3 +215,30 @@ corepack pnpm install && npx nx run agent-mcp:dist-manifest && { set -a; source 
 
 Swap `DISPATCH_E2E_LIVE=1` for the kill demo's leading vars, or add
 `DISPATCH_E2E_SCENARIO=delegation`, to reproduce §4/§5 instead.
+
+## 8. NAT-TOOL-9 — the native-tooling end-to-end scenarios
+
+`DISPATCH_E2E_SCENARIO` also selects the NAT-TOOL-9 proof scenarios (all run
+under the same guards; `all` runs every scenario):
+
+| Scenario | AC | What it proves |
+|---|---|---|
+| `dispatch` (G1) | — | guarded smoke (turn cap + cost + msg-size) end to end. |
+| `delegation` (G2) | N9 delegation | a dispatched agent really calls `agent-mcp__agent` → a real child session row. |
+| `native-fs-shell` (N1) | N9 AC1 | a dispatched agent rooted at a real `/P` uses the **srt-wrapped `fs`** server to read `/P/<file>` and the **srt-wrapped shell** (`uvx mcp-shell-server`) to run `pwd` in `/P`. Asserted from the child's own `messages.tool_results`, never the model's prose. |
+| `portability` (N2) | N9 AC2 | the dispatch host's functional portability: the same stored definition created at `/P` then reused at `/Q` re-asserts fs root `/Q`; the in-file negative control (re-assert disabled) keeps the stale `/P` root — proving the re-assert's teeth. No model. |
+| `hitl` (N3) | N9 AC3 | a sessioned `ask` suspends to `awaiting_input`; `task_resume` executes the tool (a real child session row is the proof). Needs a function-tool provider. |
+| `retention` (N5) | N9 AC5 | a one-shot `agent_name` task is an `ephemeral` session reclaimed (closed) on terminal, while a sessioned session survives to `session_close`. |
+
+The scenarios spawn agent-mcp with an **isolated cwd + fake `$HOME`** (ADR-0008
+D11 #14), so the real `~/.adhd/.env` and `~/.srt-settings.json` are never
+touched. N1 needs `srt` (`node_modules/.bin/srt`) and `uvx` on `PATH`; on first
+run `uvx` fetches `mcp-shell-server` from PyPI into the fake home — the same
+external dependency NAT-TOOL-8 gates on, here reached under the same live gate.
+
+Run one: `DISPATCH_E2E_SCENARIO=native-fs-shell DISPATCH_E2E_LIVE=1 npx tsx
+--tsconfig tsconfig.base.json entrypoint/dispatch-cli/src/test/integration/run-live-guarded.ts`.
+
+The deterministic half of N9 (resolved-toolset registry connect, permission-gate
+deny, single producer, portability) runs by default, unflagged, in the two
+name-d e2e specs — see the dispatch-cli/agent-mcp `AGENTS.md`.
