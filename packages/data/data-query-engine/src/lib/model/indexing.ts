@@ -189,6 +189,10 @@ export class IndexStore implements PlannerIndex {
     const eqIdx = this.eq.get(field);
     const bitIdx = this.bitmap.get(field);
     const rangeIdx = this.range.get(field);
+    // An `undefined` operand is a NO-OP in the matcher (`matchLeaf` skips it), so
+    // it must not narrow — else `{f:{_eq:undefined}}` would drop every defined row
+    // (an index can never change the result).
+    if (op === '_eq' && operand === undefined) return undefined;
     if (op === '_eq' && (eqIdx !== undefined || bitIdx !== undefined)) {
       if (eqIdx !== undefined) return new Set(eqIdx.get(operand));
       const bm = bitIdx?.get(JSON.stringify(operand));

@@ -13,6 +13,7 @@ import { compileAccessor } from './path';
 import { QueryModelError } from './model/errors';
 import { executePlanned, execute, type EvalCtx } from './model/execute';
 import { planQuery } from './model/plan';
+import { validateQuery } from './model/phase';
 import { planKey } from './model/canonical';
 import { IndexStore, type IndexField } from './model/indexing';
 import { IncrementalGrouped, incrementalPlan } from './model/incremental';
@@ -256,7 +257,9 @@ export class DataView<TIn = unknown, TOut = TIn> {
     if (next.order_by !== undefined) next.order_by = normalizeOrderBy(next.order_by);
     this._raw = next;
     this.dirty = true;
-    this.commit();
+    // No eager commit: setting a query does not execute it — `view()`/`query()`
+    // do. This keeps `setQuery`/the ctor consistent with the builders (which only
+    // mark dirty) and avoids executing a query that is only being inspected.
   }
 
   setData = (data: TIn[]) => {
@@ -478,6 +481,10 @@ export class DataView<TIn = unknown, TOut = TIn> {
 
   /** Execute a query against its `source` (or the sole dataset), incrementally where possible. */
   private runQuery = (query: QueryExpression): Row[] => {
+    // Validate up front so the incremental path and the reference executor agree —
+    // `validateQuery` enforces unique group-item names and no name/field collision,
+    // which the incremental branch would otherwise skip.
+    validateQuery(query);
     const resolved = query.source ?? this.singleName();
     const rows = this.require(resolved);
     const ctx: EvalCtx = { sourceRows: rows, sources: this.sources, memo: new Map() };

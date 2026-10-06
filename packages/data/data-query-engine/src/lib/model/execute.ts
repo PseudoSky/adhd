@@ -899,6 +899,16 @@ function mergeOther(groups: Grouped[], keep: { n: number }, query: QueryExpressi
 export function execute(query: QueryExpression, rows: Row[], ctx?: EvalCtx): Row[] {
   const context: EvalCtx = ctx ?? emptyCtx(rows);
   validateQuery(query);
+  // A top-level `aggregate` LEAF (no `group_by`/`select` to carry it) cannot be
+  // executed — `execute` only reads `item.aggregate` on group_by/select items, so
+  // a bare top-level `aggregate` would be silently ignored. Throw instead (silence
+  // is the bug): put it in a `{ name, aggregate }` group_by/select item.
+  if (query.aggregate !== undefined && query.group_by === undefined && query.select === undefined) {
+    throw new QueryModelError(
+      'a top-level `aggregate` leaf is not executable: `aggregate` is read only on a ' +
+        '`group_by`/`select` item (`{ name, aggregate }`). Add a `group_by`, or wrap it in a select item.'
+    );
+  }
   const post = postNames(query);
   const { pre, post: postFilter } = splitWhere(query.where, post);
 
