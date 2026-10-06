@@ -328,6 +328,14 @@ export class ClaudeCliProvider implements LLMProvider {
                 };
                 if (cfg.args?.length)  entry.args = cfg.args;
                 if (cfg.env && Object.keys(cfg.env).length) entry.env = cfg.env;
+                // NOTE (ADR-0008 D9 / NAT-TOOL-3): Claude Code's stdio MCP entry
+                // schema (`McpStdioServerConfig`, verified against the public
+                // Agent SDK type and CLI v2.1.289) has NO `cwd` field — only
+                // type/command/args/env/timeout/alwaysLoad. Emitting an unknown
+                // key risks the entry being skipped as a config error. So a
+                // per-server cwd is NOT conveyed here; instead `claude` itself is
+                // spawned with the configured engine cwd (see `chat`), and every
+                // MCP child it launches inherits that cwd.
                 mapped[name] = entry;
             } else if (cfg.transport === "http" || cfg.transport === "sse") {
                 const entry: ClaudeHttpMcpEntry = {
@@ -413,6 +421,12 @@ export class ClaudeCliProvider implements LLMProvider {
         const proc = spawn(claudePath, args, {
             stdio: ["pipe", "pipe", "pipe"],
             env: subEnv,
+            // ADR-0008 D9 / NAT-TOOL-3: run `claude` in the task-time dispatching
+            // cwd. Claude Code spawns its stdio MCP servers as child processes
+            // with an inherited cwd (its config has no per-server `cwd`), so this
+            // is what makes a claude-spawned MCP child inherit the configured
+            // cwd. `undefined` -> claude inherits the parent process cwd.
+            cwd: this.config.cwd,
             // Own process group (POSIX) so terminateProcessTree can signal the
             // CLI *and* every subprocess it spawned (MCP servers, tools).
             detached: process.platform !== "win32",

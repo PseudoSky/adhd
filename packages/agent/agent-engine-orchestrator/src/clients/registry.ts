@@ -6,7 +6,7 @@ import { HttpMcpClient, SseMcpClient } from "./http-client.js";
 import { StdioMcpClient } from "./stdio-client.js";
 import type { IMcpClient } from "./types.js";
 import { TOOL_NAME_SEPARATOR, normalizeToolName } from "./tool-naming.js";
-import type { EngineLogger } from "../interfaces.js";
+import type { EngineConfig, EngineLogger } from "../interfaces.js";
 
 export class McpClientRegistry {
     private readonly clients = new Map<string, IMcpClient>();
@@ -20,6 +20,13 @@ export class McpClientRegistry {
         private readonly inProcessDescriptors: InProcessToolDescriptor[],
         private readonly inProcessHandler: InProcessToolHandler,
         private readonly context: ExecutionContext,
+        /**
+         * Engine config forwarded into every stdio client this registry builds so
+         * `subprocessEnv()` (and, via ADR-0008 D9, the per-server `cwd` handling
+         * in `StdioMcpClient`) reaches the spawned child. Optional: a caller that
+         * omits it gets the pre-existing behavior (no injected child env).
+         */
+        private readonly engineConfig?: EngineConfig,
         logger?: EngineLogger
     ) {
         this.logger = logger ?? { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as EngineLogger;
@@ -76,7 +83,7 @@ export class McpClientRegistry {
         let client: StdioMcpClient | HttpMcpClient | SseMcpClient;
 
         if (config.transport === "stdio") {
-            client = new StdioMcpClient(name, config);
+            client = new StdioMcpClient(name, config, this.engineConfig, this.logger);
         } else if (config.transport === "http") {
             client = new HttpMcpClient(name, config);
         } else if (config.transport === "sse") {

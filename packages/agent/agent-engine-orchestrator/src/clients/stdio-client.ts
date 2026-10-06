@@ -29,6 +29,12 @@ export class StdioMcpClient implements IMcpClient {
         const transport = new StdioClientTransport({
             command: this.serverConfig.command,
             args: this.serverConfig.args ?? [],
+            // ADR-0008 D9 / NAT-TOOL-3: scope the spawned child to its configured
+            // working directory. Absent -> `undefined`, and the SDK passes that
+            // straight to spawn, so the child inherits the parent process cwd
+            // (unchanged behavior, AC4). `subprocessEnv()` supplies the child's
+            // curated env on top of the SDK's default safe-inherit set.
+            cwd: this.serverConfig.cwd,
             env: {
                 ...this.config.subprocessEnv(),
                 ...this.serverConfig.env,

@@ -65,6 +65,19 @@ export interface EngineConfig {
     model?: string;
   };
   /**
+   * The task-time dispatching working directory (ADR-0008 D4/D9).
+   *
+   * Set by the host at dispatch time — never persisted on an agent definition.
+   * It is the directory the `claudecli` provider spawns `claude` in, so every
+   * MCP child `claude` launches inherits it (Claude Code's `--mcp-config` has
+   * no per-server `cwd` field).
+   *
+   * Engine-spawned stdio children are scoped by their own
+   * `McpServerConfig.cwd`; when that is absent the child inherits the parent
+   * process cwd (unchanged behavior, AC4). This field does NOT override that.
+   */
+  cwd?: string;
+  /**
    * Return a snapshot of ADHD_AGENT_*-prefixed env vars for subprocess consumption.
    * Merged with the live process.env at subprocess spawn time.
    */
