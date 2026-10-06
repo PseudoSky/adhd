@@ -300,9 +300,12 @@ export interface FsBuiltinOverrides {
 
 /**
  * Overrides for the builtin shell tool (`tumf/mcp-shell-server`, ADR-0008 D7).
- * `allowCommands`/`denyCommands` are a **passthrough** of the adopted server's own
- * argv allowlist (config plumbing only) — the harness runs NO command parser and
- * owns NO dangerous-command catalog (ADR-0008 D5).
+ * `allowCommands` is a **passthrough** of the adopted server's own argv allowlist
+ * (config plumbing only) — the harness runs NO command parser and owns NO
+ * dangerous-command catalog (ADR-0008 D5). There is deliberately NO
+ * `denyCommands`: the adopted server is allow-list only, and D5 forbids the
+ * harness from owning per-command deny semantics (a deny-list would be a silent
+ * no-op).
  */
 export interface ShellBuiltinOverrides {
   /** Working directory for spawned commands. Defaults to the dispatching cwd. */
@@ -311,8 +314,6 @@ export interface ShellBuiltinOverrides {
   permissions?: PermissionRuleMap;
   /** Command NAMES accepted by the adopted argv-allowlist server. */
   allowCommands?: string[];
-  /** Command NAMES explicitly rejected (server-side allowlist passthrough). */
-  denyCommands?: string[];
   /** Default command timeout, in milliseconds. */
   timeoutMs?: number;
   /** Extra environment for the shell server process. */

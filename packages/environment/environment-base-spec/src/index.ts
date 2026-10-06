@@ -290,12 +290,6 @@ export function nativeToolingConfigFieldSpecs(prefix: string): Record<string, Fi
       description:
         'Command NAMES accepted by the adopted argv-allowlist server (a passthrough, not a per-command gate — ADR-0008 D5/D7).',
     },
-    'nativeTooling.shell.denyCommands': {
-      type: 'array',
-      env: env('SHELL_DENY_COMMANDS'),
-      items: { type: 'string' },
-      description: 'Command NAMES explicitly rejected (server-side allowlist passthrough).',
-    },
     'nativeTooling.shell.timeoutMs': {
       type: 'integer',
       env: env('SHELL_TIMEOUT_MS'),

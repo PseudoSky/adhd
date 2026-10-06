@@ -51,4 +51,13 @@ describe('NAT-TOOL-7 AC2 — environment-base-spec native tooling field-spec fra
     expect(FRAGMENT['nativeTooling.fs.root'].default).toBeUndefined();
     expect(FRAGMENT['nativeTooling.shell.root'].default).toBeUndefined();
   });
+
+  it('B2: the retired `nativeTooling.shell.denyCommands` is absent from the fragment', () => {
+    // Removed surface (ADR-0008 D5: the adopted shell server is allow-list only;
+    // a deny-list would be a silent no-op). Re-adding the FieldSpec turns this RED.
+    expect(Object.keys(FRAGMENT)).not.toContain('nativeTooling.shell.denyCommands');
+    expect(
+      Object.values(FRAGMENT).some((f) => /SHELL_DENY_COMMANDS/.test(String(f.env)))
+    ).toBe(false);
+  });
 });

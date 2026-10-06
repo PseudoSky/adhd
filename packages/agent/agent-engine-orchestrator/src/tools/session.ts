@@ -39,6 +39,12 @@ export async function agentTool(
     executionContext?: ExecutionContext
 ): Promise<AgentToolOutput> {
     const agentDefinition = deps.agentStore.read(input.name);
+    // The session snapshot must be the DECLARATIVE definition (ADR-0008 D4/D8):
+    // persist `readUnresolved` when the host exposes it so a task-time resolved
+    // root is never frozen into `sessions.agent_data`. The resolved definition is
+    // still used for prompt-platform selection and delegation policy below.
+    const storedDefinition =
+        deps.agentStore.readUnresolved?.(input.name) ?? agentDefinition;
 
     if (executionContext) {
         deps.policy.check({
@@ -79,8 +85,8 @@ export async function agentTool(
     }
 
     const snapshotDefinition = resolvedSystemPrompt !== undefined
-        ? { ...agentDefinition, systemPrompt: resolvedSystemPrompt }
-        : agentDefinition;
+        ? { ...storedDefinition, systemPrompt: resolvedSystemPrompt }
+        : storedDefinition;
 
     const session = deps.sessionStore.create({
         agentName: input.name,

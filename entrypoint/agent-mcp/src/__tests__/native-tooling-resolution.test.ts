@@ -7,7 +7,10 @@
  * the precedence, the task-time cwd, or the srt default-wrap regresses.
  */
 import { describe, expect, it } from 'vitest';
-import type { McpServerConfig } from '@adhd/agent-base-types';
+import Database from 'better-sqlite3';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import type { AgentDefinition, McpServerConfig } from '@adhd/agent-base-types';
+import { SessionStore } from '@adhd/agent-store-runtime';
 
 import {
   buildDispatchSelf,
@@ -213,6 +216,21 @@ describe('store wrappers resolve at READ time, leaving the raw store intact', ()
     expect(JSON.stringify(rawStore.read('a'))).toBe(JSON.stringify(stored));
   });
 
+  it('exposes readUnresolved() — the RAW, unresolved stored definition (B1, ADR-0008 D4/D8)', () => {
+    const wrapped = withResolvedNativeTooling(rawStore, ctx) as unknown as {
+      read(name: string): { mcpServers: Record<string, McpServerConfig> };
+      readUnresolved?: (name: string) => unknown;
+    };
+    // read() resolves the builtins against the task-time cwd...
+    expect(Object.keys(wrapped.read('a').mcpServers).sort()).toEqual(['agent-mcp', 'fs', 'shell']);
+    // ...readUnresolved() returns the DECLARATIVE definition, untouched, so a
+    // session snapshot can never freeze a resolved root.
+    const readUnresolved = wrapped.readUnresolved;
+    expect(typeof readUnresolved).toBe('function');
+    expect(readUnresolved?.('a')).toBe(stored);
+    expect(JSON.stringify(readUnresolved?.('a'))).not.toContain('/P');
+  });
+
   it('withResolvedNativeToolingSession resolves getAgentDefinition()', () => {
     const sessionStore = { getAgentDefinition: (_id: string) => stored as never };
     const wrapped = withResolvedNativeToolingSession(sessionStore, ctx);
@@ -220,5 +238,68 @@ describe('store wrappers resolve at READ time, leaving the raw store intact', ()
       mcpServers: Record<string, McpServerConfig>;
     };
     expect(read.mcpServers['shell']).toBeDefined();
+  });
+});
+
+/**
+ * FIX B1 (dispatch-2026-10-04-9c4e static-review bucket B) — the session snapshot
+ * boundary. A session created at `/P` must resolve `/Q` when reused, which holds
+ * ONLY if the stored `agent_data` is the DECLARATIVE definition. The negative
+ * control stores a RESOLVED snapshot (the pre-fix behavior) and shows the frozen
+ * `/P` root winning on reuse.
+ */
+describe('session snapshot stays declarative — reuse resolves the CURRENT cwd (B1, ADR-0008 D4/D8)', () => {
+  const CREATE_SESSIONS_SQL = `
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY NOT NULL, agent_name TEXT NOT NULL, agent_version INTEGER NOT NULL,
+      agent_data TEXT NOT NULL, status TEXT DEFAULT 'active' NOT NULL,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL, closed_at TEXT, composed_prompt_id TEXT
+    );
+    CREATE TABLE IF NOT EXISTS messages (
+      id TEXT PRIMARY KEY NOT NULL, session_id TEXT NOT NULL, role TEXT NOT NULL,
+      content TEXT, tool_calls TEXT, tool_results TEXT, created_at TEXT NOT NULL
+    );
+  `;
+
+  const declarative: AgentDefinition = {
+    name: 'a',
+    version: 1,
+    provider: { type: 'openai', model: 'm' },
+    mcpServers: {},
+    permissions: {},
+    nativeTooling: { fs: true, shell: true },
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  };
+
+  function makeSessionStore(): SessionStore {
+    const sqlite = new Database(':memory:');
+    sqlite.exec(CREATE_SESSIONS_SQL);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return new SessionStore(drizzle(sqlite) as any);
+  }
+
+  it('a declarative snapshot taken at /P resolves /Q on reuse', () => {
+    const sessionStore = makeSessionStore();
+    const sid = sessionStore.create({ agentName: 'a', agentDefinition: declarative }).id;
+
+    const atQ = withResolvedNativeToolingSession(sessionStore, () => ({ cwd: '/Q', dispatchSelf }));
+    const resolved = atQ.getAgentDefinition(sid) as { mcpServers: Record<string, McpServerConfig> };
+
+    const fs = stdio(resolved.mcpServers['fs']);
+    expect(fs.cwd).toBe('/Q');
+    expect((fs.args ?? []).at(-1)).toBe('/Q');
+  });
+
+  it('NEGATIVE CONTROL: a RESOLVED snapshot freezes /P — the stored root WINS on reuse at /Q', () => {
+    const sessionStore = makeSessionStore();
+    const frozenAtP = resolveDefinitionNativeTooling(declarative, { cwd: '/P', dispatchSelf });
+    const sid = sessionStore.create({ agentName: 'a', agentDefinition: frozenAtP }).id;
+
+    const atQ = withResolvedNativeToolingSession(sessionStore, () => ({ cwd: '/Q', dispatchSelf }));
+    const resolved = atQ.getAgentDefinition(sid) as { mcpServers: Record<string, McpServerConfig> };
+
+    const fs = stdio(resolved.mcpServers['fs']);
+    expect(fs.cwd).toBe('/P'); // explicit stored root WINS — the pre-fix bug
   });
 });

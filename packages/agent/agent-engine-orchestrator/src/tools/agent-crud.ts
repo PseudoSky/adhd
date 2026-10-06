@@ -73,7 +73,26 @@ export function projectAgentRecord<T extends Record<string, unknown>>(
 
 export interface AgentStore {
     create(input: AgentCreateInput): AgentDefinition;
+    /**
+     * The agent definition as the engine consumes it. A host MAY inject a store
+     * whose `read` resolves host-specific config against run-time context (e.g.
+     * `@adhd/agent-mcp` resolves `nativeTooling` into an `mcpServers` map here).
+     */
     read(name: string): AgentDefinition;
+    /**
+     * OPTIONAL: the STORED, UNRESOLVED definition (ADR-0008 D4/D8).
+     *
+     * A host whose {@link AgentStore.read} resolves host config (the
+     * native-tooling proxy in `@adhd/agent-mcp`) MUST expose this so a session
+     * snapshot — `sessions.agent_data`, which is compared/merged on session
+     * reuse — persists the DECLARATIVE definition and never a task-time resolved
+     * root. Without it a definition resolved at `/P` is frozen into the session
+     * and wins over the `/Q` resolution on reuse (`defaults.ts`
+     * `withDefaultMcpServers` gives an explicit `mcpServers` entry precedence).
+     *
+     * Absent ⇒ callers fall back to {@link AgentStore.read}.
+     */
+    readUnresolved?(name: string): AgentDefinition;
     update(input: AgentUpdateInput): AgentDefinition;
     delete(name: string): void;
     list(): AgentDefinition[];

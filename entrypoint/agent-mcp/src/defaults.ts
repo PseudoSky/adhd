@@ -163,6 +163,11 @@ type SessionAgentReader = { getAgentDefinition(sessionId: string): unknown };
  * resolved at READ time (task time) against the current context. All other
  * methods pass through untouched, and the stored definition is never mutated.
  *
+ * It ALSO exposes `readUnresolved` — the raw store's (unresolved) `read` — so a
+ * session snapshot persists the DECLARATIVE definition and never a task-time
+ * resolved root (ADR-0008 D4/D8); the engine's `task.ts`/`session.ts` call it
+ * when creating a session.
+ *
  * The CRUD surface (`agent_read`/`agent_list`) deliberately keeps using the RAW
  * store, so a stored definition is returned byte-identically and portability is
  * preserved (ADR-0008 D4).
@@ -177,6 +182,12 @@ export function withResolvedNativeTooling<T extends AgentReader>(
         const bound = target.read.bind(target);
         return (name: string) =>
           resolveDefinitionNativeTooling(bound(name), context());
+      }
+      // The DECLARATIVE read (ADR-0008 D4/D8): the raw store's `read` is the
+      // stored, unresolved definition — expose it so callers that snapshot a
+      // definition (session creation) never persist a resolved root.
+      if (prop === 'readUnresolved') {
+        return target.read.bind(target);
       }
       return Reflect.get(target, prop, receiver);
     },
@@ -222,8 +233,14 @@ export function withResolvedNativeToolingSession<T extends SessionAgentReader>(
  * `agent-mcp.task`, `shell.shell_execute`; a whole server is `<server>.*`). This
  * is the ADR's documented example form (`agent-mcp.*`, ADR-0008 :129) and the
  * resource `matchPermission` is called with.
+ *
+ * FROZEN: this baseline is a shared, process-wide constant. It is `Object.freeze`d
+ * (and typed `Readonly`) so a consumer cannot mutate engine-wide defaults in
+ * place; {@link resolvePermissionRules} returns a fresh copy for per-agent edits.
  */
-export const DEFAULT_PERMISSION_RULES: PermissionRuleMap = { '*': 'allow' };
+export const DEFAULT_PERMISSION_RULES: Readonly<PermissionRuleMap> = Object.freeze({
+  '*': 'allow',
+});
 
 /**
  * Resolve an agent's effective permission rule map: the {@link DEFAULT_PERMISSION_RULES}

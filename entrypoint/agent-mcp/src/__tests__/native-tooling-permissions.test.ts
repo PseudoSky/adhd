@@ -148,3 +148,22 @@ describe('defaultPermissionGate + production wiring (guard against a silent no-o
     ).toBe('deny');
   });
 });
+
+describe('DEFAULT_PERMISSION_RULES is a FROZEN shared baseline (B3, dispatch-2026-10-04-9c4e)', () => {
+  it('is frozen — a consumer cannot mutate engine-wide defaults in place', () => {
+    // Negative control: without Object.freeze this is not frozen and the
+    // assignment below silently succeeds, turning both assertions RED.
+    expect(Object.isFrozen(DEFAULT_PERMISSION_RULES)).toBe(true);
+    expect(() => {
+      (DEFAULT_PERMISSION_RULES as Record<string, string>)['*'] = 'deny';
+    }).toThrow(TypeError);
+    expect(DEFAULT_PERMISSION_RULES['*']).toBe('allow');
+  });
+
+  it('resolvePermissionRules returns a FRESH copy, so per-agent edits never touch the default', () => {
+    const rules = resolvePermissionRules({ fs: { permissions: { 'fs.*': 'deny' } } });
+    expect(rules).not.toBe(DEFAULT_PERMISSION_RULES);
+    rules['*'] = 'deny';
+    expect(DEFAULT_PERMISSION_RULES['*']).toBe('allow');
+  });
+});

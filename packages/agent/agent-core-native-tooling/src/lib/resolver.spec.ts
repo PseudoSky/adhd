@@ -95,7 +95,7 @@ describe('resolveNativeTooling — task-time resolution (ADR-0008 D2/D4)', () =>
 
   it('shell allowCommands/timeoutMs become adopted-server env passthrough', () => {
     const servers = resolveNativeTooling(
-      { fs: false, shell: { allowCommands: ['ls', 'git'], denyCommands: ['rm'], timeoutMs: 45_000 } },
+      { fs: false, shell: { allowCommands: ['ls', 'git'], timeoutMs: 45_000 } },
       { cwd: '/p/a' }
     );
     const shell = shellServer(servers)!;
