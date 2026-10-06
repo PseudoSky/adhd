@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { SessionStore, TaskStore } from "@adhd/agent-store-runtime";
 import type { AgentDefinition, McpServerConfig } from "@adhd/agent-base-types";
 
+import { StdioMcpClient } from "../clients/stdio-client.js";
 import { taskTool } from "../tools/task.js";
 import type { TaskDeps } from "../tools/task.js";
 import type { AgentStore } from "../tools/agent-crud.js";
@@ -140,9 +141,21 @@ const declarative: AgentDefinition = {
     updatedAt: nowIso(),
 };
 
-/** The resolved fs root the store derives from whatever cwd it is handed. */
+/**
+ * The resolved fs root the store derives from whatever cwd it is handed.
+ *
+ * `undefined` is the host-fallback signal. The real host would anchor on
+ * `process.cwd()` there; this stand-in must NOT, because `process.cwd()` is the
+ * repo root and the resulting `npx -y @modelcontextprotocol/server-filesystem`
+ * config is a REAL stdio server that `taskTool` would spawn (seconds, flaky
+ * under load). The fallback contract under test is only "the resolver is handed
+ * `undefined`", so the undefined branch resolves to NO servers: nothing spawns.
+ */
 function resolvedForCwd(cwd: string | undefined): AgentDefinition {
-    const anchor = cwd ?? process.cwd();
+    if (cwd === undefined) {
+        return { ...declarative, mcpServers: {} };
+    }
+    const anchor = cwd;
     const args = ["npx", "-y", "@modelcontextprotocol/server-filesystem", `${anchor}/a`, `${anchor}/b`];
     const fs: McpServerConfig = { transport: "stdio", command: "npx", args, cwd: anchor };
     return { ...declarative, mcpServers: { fs } };
@@ -295,9 +308,17 @@ describe("AC4 — caller-supplied cwd threads into native-tooling resolution (AD
     });
 
     it("no caller cwd and no parent ⇒ read receives undefined (host fallback, flagged upstream)", async () => {
-        const { deps, readCwds } = makeHarness();
+        const { deps, readCwds, capturedContexts } = makeHarness();
+        // 5dfb3e14 AC1: spy (pass-through) on the real stdio spawn seam.
+        const connectSpy = vi.spyOn(StdioMcpClient.prototype, "connect");
 
         await taskTool({ agent_name: "cwd-agent", prompt: "hi" }, deps);
+
+        // 5dfb3e14 AC1: no child process is spawned — the registry was
+        // handed zero stdio servers and no stdio client ever connected.
+        expect(capturedContexts).toHaveLength(1);
+        expect(Object.values(capturedContexts[0].agentDefinition.mcpServers)).toEqual([]);
+        expect(connectSpy).not.toHaveBeenCalled();
 
         // `undefined` is the signal the host turns into a flagged `process.cwd()`
         // fallback (ADR-0008 D4) — the resolver never receives a fabricated cwd.
