@@ -25,6 +25,7 @@ import type {
   NativeToolingConfig,
 } from '@adhd/agent-base-types';
 
+import { AGENT_MCP_NPX_ARGS } from './install.js';
 import { ensureBinDirOnPath, resolveNativeBinDir } from './srt-policy.js';
 
 /** Runtime context for host-side native-tooling resolution (task time). */
@@ -107,17 +108,18 @@ export const AGENT_MCP_SELF_ARGS_ENV = 'ADHD_AGENT_MCP_ARGS';
 
 /**
  * The REAL agent-mcp MCP server config surfaced as the `dispatch` member (D1).
- * Defaults to the documented launch (`npx -y @adhd/agent-mcp`), overridable by
- * env so a hermetic host/e2e can point at a local build. The registry routes
- * the `agent-mcp` name to its in-process tool surface (never a spawn), so this
- * config documents the surface rather than re-authoring it.
+ * Defaults to the ONE canonical launch config (`AGENT_MCP_NPX_ARGS`,
+ * `npx -y @adhd/agent-mcp@latest` — the same argv `agent-mcp-install` writes),
+ * overridable by env so a hermetic host/e2e can point at a local build. The
+ * registry routes the `agent-mcp` name to its in-process tool surface (never a
+ * spawn), so this config documents the surface rather than re-authoring it.
  */
 export function buildDispatchSelf(env: NodeJS.ProcessEnv = process.env): McpServerConfig {
   const command = env[AGENT_MCP_SELF_COMMAND_ENV] || 'npx';
   const rawArgs = env[AGENT_MCP_SELF_ARGS_ENV];
   const args = rawArgs
     ? rawArgs.split(/\s+/).filter(Boolean)
-    : ['-y', '@adhd/agent-mcp'];
+    : [...AGENT_MCP_NPX_ARGS];
   return { transport: 'stdio', command, args };
 }
 

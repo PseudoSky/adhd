@@ -24,6 +24,7 @@ import {
 describe('public surface (index barrel) — the contract a consumer imports (ADR-0008; NAT-TOOL-2 AC5)', () => {
   it('exports the resolver, the thin gate, and the native-tooling catalog', () => {
     expect(typeof resolveNativeTooling).toBe('function');
+    expect(typeof api.resolveNativeToolingMap).toBe('function');
     expect(typeof matchPermission).toBe('function');
     expect(api.NATIVE_SERVER_CATALOG).toBeTypeOf('object');
     expect(NATIVE_TOOL_NAMES).toEqual(['fs', 'shell', 'dispatch']);

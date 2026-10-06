@@ -1,0 +1,17 @@
+{
+  "$comment": "Repo-owned fixture catalog for the f141baad AC2 contract test (docs-and-config-contract.test.ts). It mirrors the shape of the machine-global agent-mcp catalog rows (the `agents.data` JSON that agent_create persists) for agents whose shell MCP server is gated by the per-repo mcp-shell policy. MCP_SHELL_SEC_CONFIG_FILE is recorded REPO-RELATIVE; the test resolves it against the repo root, so the assertion that the canonical tools/mcp-shell/security.yaml exists (and that no entry points at the removed scripts/mcp-shell-security.yaml) runs unconditionally in CI even when no machine-global catalog is present. Keep this path in sync with tools/mcp-shell/security.yaml; a rename/move must update this seed or AC2 goes red.",
+  "agents": [
+    {
+      "name": "typescript-deepseek",
+      "mcpServers": {
+        "shell": {
+          "transport": "stdio",
+          "command": "mcp-shell",
+          "args": [],
+          "allowedTools": ["shell"],
+          "env": { "MCP_SHELL_SEC_CONFIG_FILE": "tools/mcp-shell/security.yaml" }
+        }
+      }
+    }
+  ]
+}
