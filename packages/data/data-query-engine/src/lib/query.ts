@@ -11,7 +11,12 @@ import {
 import { compileWhere, parseOrderBy } from './parser';
 import { compileAccessor } from './path';
 import { QueryModelError } from './model/errors';
-import { executePlanned, execute, type EvalCtx } from './model/execute';
+import {
+  assertNoBareTopLevelAggregate,
+  executePlanned,
+  execute,
+  type EvalCtx,
+} from './model/execute';
 import { planQuery } from './model/plan';
 import { validateQuery } from './model/phase';
 import { planKey } from './model/canonical';
@@ -485,6 +490,7 @@ export class DataView<TIn = unknown, TOut = TIn> {
     // `validateQuery` enforces unique group-item names and no name/field collision,
     // which the incremental branch would otherwise skip.
     validateQuery(query);
+    assertNoBareTopLevelAggregate(query);
     const resolved = query.source ?? this.singleName();
     const rows = this.require(resolved);
     const ctx: EvalCtx = { sourceRows: rows, sources: this.sources, memo: new Map() };
@@ -525,6 +531,7 @@ export class DataView<TIn = unknown, TOut = TIn> {
   /** The ONE execution entry: run the v2 grammar over the current data. */
   commit = (): boolean => {
     if (!this.dirty || !this.data) return false;
+    assertNoBareTopLevelAggregate(this._raw);
     const rows = this.data as unknown as Row[];
     const ctx: EvalCtx = {
       sourceRows: rows,
@@ -559,6 +566,7 @@ export class DataView<TIn = unknown, TOut = TIn> {
    * Returns the result rows — group records for a `group_by`/`select` query.
    */
   static query<TOut = Row>(data: Row[], expr: QueryExpression): TOut[] {
+    assertNoBareTopLevelAggregate(expr);
     return execute(expr, data) as unknown as TOut[];
   }
 

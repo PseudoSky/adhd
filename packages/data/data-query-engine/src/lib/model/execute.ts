@@ -896,19 +896,27 @@ function mergeOther(groups: Grouped[], keep: { n: number }, query: QueryExpressi
  * Execute a query over rows. `ctx` carries the sources for subquery operands; at
  * the top level it defaults to the rows themselves.
  */
-export function execute(query: QueryExpression, rows: Row[], ctx?: EvalCtx): Row[] {
-  const context: EvalCtx = ctx ?? emptyCtx(rows);
-  validateQuery(query);
-  // A top-level `aggregate` LEAF (no `group_by`/`select` to carry it) cannot be
-  // executed — `execute` only reads `item.aggregate` on group_by/select items, so
-  // a bare top-level `aggregate` would be silently ignored. Throw instead (silence
-  // is the bug): put it in a `{ name, aggregate }` group_by/select item.
+/**
+ * A bare top-level `aggregate` LEAF (no `group_by`/`select` to carry it) cannot be
+ * executed — `execute` only reads `item.aggregate` on group_by/select items, so it
+ * would be silently ignored. Throw instead (silence is the bug). Called at the
+ * `DataView` boundary and for a direct (non-nested) `execute`.
+ */
+export function assertNoBareTopLevelAggregate(query: QueryExpression): void {
   if (query.aggregate !== undefined && query.group_by === undefined && query.select === undefined) {
     throw new QueryModelError(
       'a top-level `aggregate` leaf is not executable: `aggregate` is read only on a ' +
         '`group_by`/`select` item (`{ name, aggregate }`). Add a `group_by`, or wrap it in a select item.'
     );
   }
+}
+
+export function execute(query: QueryExpression, rows: Row[], ctx?: EvalCtx): Row[] {
+  const context: EvalCtx = ctx ?? emptyCtx(rows);
+  validateQuery(query);
+  // Only a DIRECT call (no `ctx`) is a top-level entry; a nested `select`/subquery
+  // call passes `ctx`, and its `{ name, aggregate }` item is a relation-valued leaf.
+  if (ctx === undefined) assertNoBareTopLevelAggregate(query);
   const post = postNames(query);
   const { pre, post: postFilter } = splitWhere(query.where, post);
 
