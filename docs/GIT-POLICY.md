@@ -2016,3 +2016,10 @@ Schema version 1.
   into `main`; the repo-root checkout and its uncommitted files were not touched. Policy read from
   the integration branch revision; it carried all required sections, so no correct-and-sync was
   needed. Recorded under §Branching & merge (merge strategy: merge commit).
+- 2026-10-06 (dispatch-2026-10-06-48dc): fast-forwarded `main` 6850c5f9 -> 29aa9388 from
+  `integration/promerge-9c4e` (`git merge --ff-only`; main was an ancestor, so no merge commit).
+  Merged at the user's explicit direction before the qa re-gate finished; failures are owned by
+  the other agent. The repo-root dirty set (uncommitted `nx release version` bump, 0 overlap with
+  the 42-file delta) was verified byte-identical before and after. No push, no tag, no publish;
+  the integration branch and its worktree are retained while qa uses them. Policy carried all
+  required sections; no correct-and-sync needed.
