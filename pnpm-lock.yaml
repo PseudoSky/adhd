@@ -1512,7 +1512,11 @@ importers:
         specifier: ^2.3.3
         version: link:../data-core-structures
 
-  packages/dispatch/dispatch-base-spec: {}
+  packages/dispatch/dispatch-base-spec:
+    dependencies:
+      '@adhd/agent-base-types':
+        specifier: ^2.3.3
+        version: link:../../agent/agent-base-types
 
   packages/dispatch/dispatch-base-types: {}
 
