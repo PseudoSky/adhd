@@ -94,7 +94,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import Database from 'better-sqlite3';
 
@@ -304,12 +304,12 @@ interface LaunchOptions {
   dbPath?: string;
   /** The spawned child's cwd (the "dispatching cwd", ADR-0008 D4). Default: the scratch dir. */
   cwd?: string;
-  /** Resolved `mcpServers` the child's `agent_create` gets (dispatch-host path). */
+  /** The explicit `mcpServers` the child's `agent_create` gets (dispatch-host path). */
   defaultMcpServers?: Record<string, Record<string, unknown>>;
+  /** Declarative native toolset stored on create, resolved at task time (ADR-0008 D3/D4). */
+  nativeTooling?: Record<string, unknown>;
   /** Create a DAG-named agent if absent. Default false (mirrors the dispatch host). */
   createAgentsIfMissing?: boolean;
-  /** Re-assert resolved `mcpServers` on a reused agent (NAT-TOOL-5). Default false. */
-  reassertMcpServersOnReuse?: boolean;
   /** Extra child env merged over the hermetic defaults. */
   extraEnv?: Record<string, string>;
 }
@@ -388,11 +388,11 @@ function launch(scenario: string, opts: LaunchOptions = {}): Launched {
     ...(opts.defaultMcpServers
       ? { defaultMcpServers: opts.defaultMcpServers }
       : {}),
+    ...(opts.nativeTooling !== undefined
+      ? { nativeTooling: opts.nativeTooling }
+      : {}),
     ...(opts.createAgentsIfMissing !== undefined
       ? { createAgentsIfMissing: opts.createAgentsIfMissing }
-      : {}),
-    ...(opts.reassertMcpServersOnReuse !== undefined
-      ? { reassertMcpServersOnReuse: opts.reassertMcpServersOnReuse }
       : {}),
     // Pair the MCP request budget with the poll budget so a long synchronous
     // task call is never aborted at the SDK's 60s default.
@@ -954,40 +954,40 @@ async function scenarioNativeFsShell(): Promise<ScenarioResult> {
   mkdirSync(P, { recursive: true });
   const token = `NAT-TOOL-9-READ-OK-${Date.now()}`;
   writeFileSync(join(P, 'hello.txt'), `${token}\n`, 'utf8');
-  // The dispatch-host-resolved map, with an explicit argv allow-list so `pwd` is
-  // a permitted shell command (the adopted server's default policy is narrow).
-  const resolved = resolveDispatchMcpServers({
-    cwd: P,
-    nativeTooling: {
-      fs: true,
-      shell: { allowCommands: ['pwd', 'echo', 'ls', 'cat'] },
-      dispatch: true,
-    },
-  }) as unknown as Record<string, Record<string, unknown>>;
-  // Hermetic: swap the explicit memory/backlog half for local stubs. Their
+  // The DECLARATIVE native toolset STORED on the agent (ADR-0008 D3/D4): the
+  // spawned child resolves it at task time against cwd P. The shell argv
+  // allow-list is declarative config, not a resolved root.
+  const nativeTooling = {
+    fs: true,
+    shell: { allowCommands: ['pwd', 'echo', 'ls', 'cat'] },
+    dispatch: true,
+  };
+  // Hermetic: the explicit memory/backlog half swapped for local stubs. Their
   // transport is ORTHOGONAL to the native tooling under test (fs/shell/dispatch);
   // leaving the real ones would spawn an unbuilt backlog entry and hang on an
   // absent localhost SSE endpoint.
-  resolved['memory-server'] = {
-    transport: 'stdio',
-    command: process.execPath,
-    args: [MEMORY_STUB],
-    allowedTools: [],
-  };
-  resolved['backlog'] = {
-    transport: 'stdio',
-    command: process.execPath,
-    args: ['-e', 'process.exit(0)'],
-    allowedTools: [],
+  const explicitStubs: Record<string, Record<string, unknown>> = {
+    'memory-server': {
+      transport: 'stdio',
+      command: process.execPath,
+      args: [MEMORY_STUB],
+      allowedTools: [],
+    },
+    backlog: {
+      transport: 'stdio',
+      command: process.execPath,
+      args: ['-e', 'process.exit(0)'],
+      allowedTools: [],
+    },
   };
   const l = launch('native-fs-shell', {
     cwd: P,
     dbPath: join(base, 'agents.db'),
     scratch: base,
     home: mkFakeHome(base),
-    defaultMcpServers: resolved,
+    defaultMcpServers: explicitStubs,
+    nativeTooling,
     createAgentsIfMissing: true,
-    reassertMcpServersOnReuse: true,
   });
   try {
     const AGENT = 'n9-native-fs-shell';
@@ -995,7 +995,8 @@ async function scenarioNativeFsShell(): Promise<ScenarioResult> {
       systemPrompt:
         'You are a dispatched agent. Use the filesystem MCP tool to read files and the shell MCP ' +
         'tool to run commands. Follow the requested output format exactly.',
-      mcpServers: resolved,
+      mcpServers: explicitStubs,
+      nativeTooling,
     });
     const dag = newDag({
       description: 'N9 fs/shell e2e',
@@ -1044,16 +1045,17 @@ async function scenarioNativeFsShell(): Promise<ScenarioResult> {
 }
 
 /**
- * N2 (AC2) — functional portability of the DISPATCH HOST (ADR-0008 D4, reconciled
- * from "byte-identical JSON" to "each dispatch resolves its own root"): the SAME
- * stored definition fired from `/P` then `/Q` yields fs root `/P` then `/Q`,
- * because `AgentMcpRunner.ensureAgent` re-asserts the freshly-resolved map on
- * reuse. Deterministic (no model). The in-file negative control proves the teeth:
- * with `reassertMcpServersOnReuse:false` a reused agent keeps the STALE `/P` root.
+ * N2 (AC2) — portability of the DISPATCH HOST (ADR-0008 D4/D8): the SAME stored
+ * definition fired from `/P` then `/Q` yields fs root `/P` then `/Q` while the
+ * stored JSON stays byte-identical. The host stores only DECLARATIVE
+ * `nativeTooling`; the spawned agent-mcp child re-resolves it against its own cwd
+ * at task time, and `ensureAgent` reuse performs NO write. Deterministic (no
+ * model): the resolved fs server is a cwd-echo stub read back through the child's
+ * real `agent_verify_mcp` handshake.
  */
 async function scenarioPortability(): Promise<ScenarioResult> {
   const id = 'N2';
-  const name = 'AC2: dispatch-host functional portability (/P then /Q, re-assert on reuse)';
+  const name = 'AC2: dispatch-host portability (/P then /Q, byte-identical stored JSON)';
   const base = mkdtempSync(join(TMP_ROOT, 'portability-'));
   const P = join(base, 'P');
   const Q = join(base, 'Q');
@@ -1063,78 +1065,92 @@ async function scenarioPortability(): Promise<ScenarioResult> {
   const dbPath = join(base, 'agents.db');
   const AGENT = 'n9-portable';
   const unit = unitFor(AGENT, 'You are a dispatched agent.');
-  const mk = (
-    cwd: string,
-    reassert: boolean
-  ): Launched =>
+  // A test-only stdio MCP server that exposes its inherited cwd as its tool name.
+  const CWD_ECHO = join(__dirname, '..', 'fixtures', 'cwd-echo-server.mjs');
+  const echoTool = (dir: string): string =>
+    `at_${basename(dir).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+  const nativeTooling = {
+    fs: { transport: 'stdio', command: process.execPath, args: [CWD_ECHO] },
+    shell: false,
+    dispatch: false,
+  };
+  const mk = (cwd: string): Launched =>
     launch('portability', {
       scratch: base,
       home,
       dbPath,
       cwd,
-      defaultMcpServers: resolveDispatchMcpServers({ cwd }) as unknown as Record<
-        string,
-        Record<string, unknown>
-      >,
+      // Fast-failing boundary stubs (never the thing under test).
+      defaultMcpServers: {
+        'memory-server': {
+          transport: 'stdio',
+          command: process.execPath,
+          args: ['-e', 'process.exit(0)'],
+        },
+        backlog: {
+          transport: 'stdio',
+          command: process.execPath,
+          args: ['-e', 'process.exit(0)'],
+        },
+      },
+      nativeTooling,
       createAgentsIfMissing: true,
-      reassertMcpServersOnReuse: reassert,
     });
 
-  // (1) create at /P → the stored definition roots fs at /P.
-  const a = mk(P, true);
-  let rootAfterCreate = '';
+  const probe = async (l: Launched): Promise<{ tools: string[]; stored: string }> => {
+    await l.runner.ensureAgent(unit);
+    const verified = await l.runner.callTool<{
+      servers: Array<{ name: string; tools?: string[] }>;
+    }>('agent_verify_mcp', { name: AGENT });
+    const tools = verified.servers.find((s) => s.name === 'fs')?.tools ?? [];
+    const def = await l.runner.callTool<{ mcpServers?: unknown }>('agent_read', {
+      name: AGENT,
+    });
+    return { tools, stored: JSON.stringify(def.mcpServers ?? {}) };
+  };
+
+  // (1) create at /P — the resolved fs server inherits /P from the child cwd.
+  const a = mk(P);
+  let atP: { tools: string[]; stored: string };
   try {
-    await a.runner.ensureAgent(unit);
-    const def = await a.runner.callTool<{ mcpServers: Record<string, { args?: string[] }> }>(
-      'agent_read',
-      { name: AGENT }
-    );
-    rootAfterCreate = fsRootOf(def);
+    atP = await probe(a);
   } finally {
     await closeRunner(a.runner);
   }
+  // NEGATIVE CONTROL (D11 #3): the stored map must carry NO baked root; if the
+  // host resolved fs at /P and stored it, `/P` would appear here.
+  assert(
+    !atP.stored.includes(P),
+    `the stored mcpServers must not carry a baked /P root: ${atP.stored}`
+  );
+  assert(
+    atP.tools.includes(echoTool(P)),
+    `resolved fs server at /P did not inherit /P (tools=${atP.tools.join(',')})`
+  );
 
-  // (2) NEGATIVE CONTROL (D11 #4): reuse at /Q with the re-assert DISABLED keeps
-  // the stale /P root — proving the re-assert is what re-scopes a reused agent.
-  const c = mk(Q, false);
-  let staleRoot = '';
+  // (2) reuse at /Q — the SAME stored def resolves /Q, and the store is untouched.
+  const b = mk(Q);
+  let atQ: { tools: string[]; stored: string };
   try {
-    await c.runner.ensureAgent(unit);
-    const def = await c.runner.callTool<{ mcpServers: Record<string, { args?: string[] }> }>(
-      'agent_read',
-      { name: AGENT }
-    );
-    staleRoot = fsRootOf(def);
-  } finally {
-    await closeRunner(c.runner);
-  }
-
-  // (3) reuse at /Q WITH the re-assert → fs root becomes /Q.
-  const b = mk(Q, true);
-  let rootAfterReuse = '';
-  try {
-    await b.runner.ensureAgent(unit);
-    const def = await b.runner.callTool<{ mcpServers: Record<string, { args?: string[] }> }>(
-      'agent_read',
-      { name: AGENT }
-    );
-    rootAfterReuse = fsRootOf(def);
+    atQ = await probe(b);
   } finally {
     await closeRunner(b.runner);
   }
-
-  assert(rootAfterCreate === P, `create at /P stored fs root ${rootAfterCreate} (expected ${P})`);
   assert(
-    staleRoot === P,
-    `negative control failed: without re-assert a reused agent should keep the stale ${P} root, got ${staleRoot}`
+    atQ.tools.includes(echoTool(Q)),
+    `the SAME stored def reused at /Q did not resolve /Q (tools=${atQ.tools.join(',')})`
   );
-  assert(rootAfterReuse === Q, `reuse at /Q re-asserted fs root ${rootAfterReuse} (expected ${Q})`);
+  assert(
+    atQ.stored === atP.stored,
+    `reuse at /Q mutated the stored definition (byte-identical expected): ${atP.stored} vs ${atQ.stored}`
+  );
+
   rmSync(base, { recursive: true, force: true });
   return {
     id,
     name,
     status: 'PASS',
-    detail: `create@/P → ${rootAfterCreate}; negative control (no re-assert) → ${staleRoot}; reuse@/Q → ${rootAfterReuse}`,
+    detail: `create@/P → ${atP.tools.join(',')}; reuse@/Q → ${atQ.tools.join(',')}; stored JSON byte-identical`,
   };
 }
 

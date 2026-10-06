@@ -129,8 +129,12 @@ export interface RealUsageTurn {
 export interface IDispatchAgentRunner {
   /**
    * Idempotently ensures `unit.agent_name` exists as an agent-mcp agent
-   * definition: `agent_read` by name; on `AGENT_NOT_FOUND`, `agent_create`
-   * with `{ name, provider: { type: 'claudecli' }, systemPrompt, mcpServers: {} }`.
+   * definition: `agent_read` by name; on `AGENT_NOT_FOUND`, `agent_create` with
+   * the runner's configured EXPLICIT `mcpServers` (memory-server + backlog) and
+   * DECLARATIVE `nativeTooling` (`{fs?, shell?, dispatch?, hitl?}` — no resolved
+   * cwd/root; ADR-0008 D4/D8). On reuse (the agent already exists) it performs
+   * NO write: the stored definition is never mutated by resolution, and the
+   * dispatching cwd is threaded to the spawned agent-mcp child instead (D9).
    *
    * When the runner is configured `createAgentsIfMissing:false` (backlog
    * f1dbd0f2), a miss throws `AGENT_NOT_FOUND` instead of creating — the mode
@@ -318,6 +322,15 @@ export function toAgentMcpProviderConfig(
   return config;
 }
 
+/**
+ * Declarative `AgentDefinition.nativeTooling` wire shape (ADR-0008 D3). Declared
+ * locally for the same reason every other wire shape in this file is: the runner
+ * crosses agent-mcp as an external MCP server over the wire, not as a TypeScript
+ * dependency, so it never imports agent-mcp / agent-base-types. Stored verbatim
+ * on `agent_create`; agent-mcp validates and resolves it at task time.
+ */
+export type NativeToolingWire = Record<string, unknown>;
+
 export interface AgentMcpRunnerConfig {
   /**
    * Command used to spawn the agent-mcp MCP server (e.g. `"node"` or
@@ -349,13 +362,16 @@ export interface AgentMcpRunnerConfig {
    */
   clientFactory?: () => IMcpToolClient;
   /**
-   * Default `mcpServers` sent on `agent_create` (backlog daafe2d3). When set,
-   * every agent this runner CREATES is born with these servers — so a
-   * dispatched agent can recall prior findings (memory-server) and read/write
-   * backlog items (backlog) without a per-DAG opt-in. Wire-shaped
+   * Default `mcpServers` sent on `agent_create` (backlog daafe2d3) — the
+   * EXPLICIT half ONLY (memory-server + backlog), never a resolved native
+   * toolset. When set, every agent this runner CREATES is born with these
+   * servers so a dispatched agent can recall prior findings (memory-server) and
+   * read/write backlog items (backlog) without a per-DAG opt-in. Wire-shaped
    * (transport-discriminated), the same JSON `agent_create` accepts. Omitted
    * ⇒ `{}` (the pre-fix behavior). The host supplies the concrete,
-   * environment-appropriate entries.
+   * environment-appropriate entries. These entries are DECLARATIVE (no
+   * dispatching cwd / absolute root) and WIN over `nativeTooling` for a shared
+   * key (ADR-0008 D1).
    */
   defaultMcpServers?: Record<string, Record<string, unknown>>;
   /**
@@ -382,14 +398,18 @@ export interface AgentMcpRunnerConfig {
    */
   requestTimeoutMs?: number;
   /**
-   * Re-assert `defaultMcpServers` on an ALREADY-EXISTING agent via `agent_update`
-   * (ADR-0008 D4 / NAT-TOOL-5). The dispatch host sets `true` so a pre-existing
-   * agent is re-scoped to the CURRENT dispatching cwd on reuse — a reused agent
-   * never keeps a previous dispatch's resolved root. Default `false` preserves
-   * the pre-NAT-TOOL-5 "reuse does nothing" behavior (a resolve-free caller that
-   * leaves `defaultMcpServers` empty has nothing to re-assert anyway).
+   * Declarative `AgentDefinition.nativeTooling` (ADR-0008 D1/D3) stored verbatim
+   * on every agent this runner CREATES. It carries ONLY the declarative config
+   * (`{fs?, shell?, dispatch?, hitl?}` — `true`/`false`/an override object/a
+   * custom server), NEVER a resolved fs/shell root: resolution happens at TASK
+   * time in the spawned agent-mcp child, against that child's cwd (D4/D8).
+   *
+   * Wire-shaped, declared locally (this package crosses agent-mcp as an external
+   * MCP server, so it never imports `@adhd/agent-base-types`; see the wire-mirror
+   * note at the top of this file). Omitted ⇒ no `nativeTooling` key is sent, and
+   * agent-mcp applies its standardized defaults (D1/D8).
    */
-  reassertMcpServersOnReuse?: boolean;
+  nativeTooling?: NativeToolingWire;
 }
 
 function defaultClientFactory(
@@ -432,8 +452,8 @@ function defaultClientFactory(
 export class AgentMcpRunner implements IDispatchAgentRunner {
   private readonly makeClient: () => IMcpToolClient;
   private readonly defaultMcpServers: Record<string, Record<string, unknown>>;
+  private readonly nativeTooling: NativeToolingWire | undefined;
   private readonly createAgentsIfMissing: boolean;
-  private readonly reassertMcpServersOnReuse: boolean;
   private readonly requestTimeoutMs: number | undefined;
   /**
    * The cwd the spawned agent-mcp child runs in (ADR-0008 D4/D9). `undefined`
@@ -447,8 +467,8 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
   constructor(config: AgentMcpRunnerConfig) {
     this.makeClient = config.clientFactory ?? defaultClientFactory(config);
     this.defaultMcpServers = config.defaultMcpServers ?? {};
+    this.nativeTooling = config.nativeTooling;
     this.createAgentsIfMissing = config.createAgentsIfMissing ?? true;
-    this.reassertMcpServersOnReuse = config.reassertMcpServersOnReuse ?? false;
     this.requestTimeoutMs = config.requestTimeoutMs;
     this.cwd = config.cwd;
   }
@@ -513,17 +533,14 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
     }
 
     if (exists) {
-      // Re-assert the current task-time resolution on the already-existing agent
-      // (ADR-0008 D4 / NAT-TOOL-5): the resolved fs/shell roots carry THIS
-      // dispatch's cwd, so a reused agent is re-scoped rather than keeping a
-      // previous dispatch's root. Opt-in — a resolve-free caller leaves
-      // `defaultMcpServers` empty and does nothing (the pre-NAT-TOOL-5 behavior).
-      if (this.reassertMcpServersOnReuse) {
-        await this.callTool('agent_update', {
-          name: unit.agent_name,
-          patch: { mcpServers: this.defaultMcpServers },
-        });
-      }
+      // Reuse does NOTHING (ADR-0008 D4/D8): the stored definition is never
+      // mutated by resolution. The dispatching cwd is threaded to the spawned
+      // agent-mcp child (D9) instead, so the SAME stored definition — carrying
+      // only declarative `nativeTooling`, no resolved root — is re-resolved
+      // against THIS fire's cwd by the child at task time. Writing a resolved
+      // `mcpServers` map here (the pre-fix behavior) would bake the first
+      // dispatch's root into the definition and break portability, so it is
+      // deliberately absent.
       return;
     }
 
@@ -540,16 +557,24 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
       );
     }
 
-    // `defaultMcpServers` is the runner's configured default set (backlog
+    // `defaultMcpServers` is the runner's configured EXPLICIT set (backlog
     // daafe2d3): the host injects memory-server + backlog so a dispatch-created
     // agent can recall prior findings and read/write backlog items out of the
     // box. Omitted ⇒ `{}` — the pre-fix behavior, which also keeps the
     // `mcp_servers: null` catalog-lookup stub (PoC compiler.ts:1788) bypassed.
+    // `nativeTooling` is stored DECLARATIVELY (ADR-0008 D4/D8): it carries no
+    // resolved cwd/root, so the same definition is portable across dispatches;
+    // the spawned agent-mcp child resolves it at task time against THIS fire's
+    // cwd (D9). Only sent when configured, so a resolve-free caller's
+    // `agent_create` payload stays byte-identical.
     await this.callTool('agent_create', {
       name: unit.agent_name,
       provider: toAgentMcpProviderConfig(unit.provider),
       systemPrompt: unit.systemPrompt ?? undefined,
       mcpServers: this.defaultMcpServers,
+      ...(this.nativeTooling !== undefined
+        ? { nativeTooling: this.nativeTooling }
+        : {}),
     });
   }
 

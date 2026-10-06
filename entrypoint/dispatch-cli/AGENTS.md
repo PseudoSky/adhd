@@ -11,21 +11,26 @@ milestones into dispatch units, and fires them through an `IDispatchAgentRunner`
 
 ## Native tooling for dispatched agents (NAT-TOOL-5 / ADR-0008)
 
-The dispatch host resolves the standardized native toolset at the **dispatching
-cwd** and threads it (and the cwd) to the runner, so a dispatched agent gets
-`fs` + `shell` + the `dispatch` self server **plus** `memory-server` + `backlog`.
+The dispatch host STORES only DECLARATIVE tooling on a dispatch-created agent
+(ADR-0008 D3/D4/D8): the explicit `mcpServers` half (`memory-server` + `backlog`)
+plus a declarative `nativeTooling` (`{fs?, shell?, dispatch?, hitl?}`). It never
+writes a resolved fs/shell root. The spawned agent-mcp child resolves
+`nativeTooling` at **task time** against its own cwd (threaded by the host,
+D9/NAT-TOOL-3), so the SAME stored definition fired from `/P` then `/Q` yields fs
+root `/P` then `/Q` while the stored JSON stays byte-identical.
 
-- `resolveDispatchMcpServers({ cwd })` (in `src/lib/core.ts`) is the ONE
-  composition: it reuses `resolveNativeToolingMap` from
-  `@adhd/agent-core-native-tooling` — the single fs/shell producer; this package
-  authors no fs/shell config of its own — and merges the explicit
-  `memory-server`/`backlog` half. Precedence: explicit `mcpServers` >
-  `nativeTooling` > the `dispatch` self floor.
-- `buildProductionAgentMcpRunner(env, { cwd })` sets the spawned agent-mcp
-  child's cwd AND roots the resolved fs/shell configs at the same `cwd`. The
-  `run` command roots at `--tools-root` when supplied, else `process.cwd()`.
-- `AgentMcpRunner` re-asserts the current resolution on an already-existing
-  agent (`agent_update`) so a reused agent is re-scoped to the current cwd.
+- `resolveDispatchMcpServers({ env, explicit })` (in `src/lib/core.ts`) returns
+  ONLY the explicit half (`memory-server` + `backlog`, plus any caller `explicit`)
+  — no fs/shell/`dispatch`, no cwd. `resolveDispatchNativeTooling({ nativeTooling })`
+  returns the declarative config to store (default
+  `{fs:true, shell:true, dispatch:true}`).
+- `buildProductionAgentMcpRunner(env, { cwd, nativeTooling })` sets the spawned
+  agent-mcp child's cwd (D9) and stores the declarative `nativeTooling`; it does
+  NOT resolve/root fs/shell itself. The `run` command roots at `--tools-root` when
+  supplied, else `process.cwd()`.
+- `AgentMcpRunner.ensureAgent` writes the declarative config on CREATE and
+  performs NO write on reuse — `agent_update` is never called, so the stored
+  definition is never mutated by resolution.
 
 Proven default-running + hermetic (real spawned agent-mcp, fake `$HOME`, temp
 registry DB): `src/test/resolve-dispatch-mcp-servers.spec.ts`,
@@ -131,8 +136,9 @@ this package's `README.md` and in the script's own header.
 native-tooling end-to-end proof in addition to `dispatch`/`delegation`:
 `native-fs-shell` (N1 — the real srt-wrapped `fs` server reads `/P/<file>` and
 the srt-wrapped shell runs `pwd` in `/P`, asserted from the child's
-`tool_results`), `portability` (N2 — create@/P then reuse@/Q re-asserts fs root
-/Q, with a no-re-assert negative control; no model), `hitl` (N3 — a sessioned
+`tool_results`), `portability` (N2 — create@/P then reuse@/Q: the stored JSON
+stays byte-identical and the resolved fs root follows each dispatching cwd, via
+cwd propagation — never a stored root; no model), `hitl` (N3 — a sessioned
 `ask` suspends and `task_resume` executes it, proven by a real child session
 row), and `retention` (N5 — an `ephemeral` session is reclaimed on terminal
 while a retained session survives). Every scenario spawns agent-mcp with an

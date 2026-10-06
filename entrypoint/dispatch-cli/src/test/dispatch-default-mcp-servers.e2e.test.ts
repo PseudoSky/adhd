@@ -73,37 +73,31 @@ describe('daafe2d3 — dispatch-created agents get memory-server + backlog (real
   }, 60_000);
 });
 
-describe('NAT-TOOL-9 — the dispatch host resolves the native toolset from ONE producer', () => {
-  it('resolveDispatchMcpServers yields fs/shell/dispatch + memory/backlog, rooted at the dispatching cwd', () => {
-    const map = resolveDispatchMcpServers({ cwd: '/P' });
+describe('NAT-TOOL-9 — the dispatch host stores ONLY the declarative toolset (no baked root)', () => {
+  it('resolveDispatchMcpServers yields ONLY memory-server + backlog — no fs/shell/dispatch', () => {
+    const map = resolveDispatchMcpServers({
+      env: {
+        ADHD_DISPATCH_BACKLOG_MCP_ENTRY: '/synthetic/backlog/index.js',
+      } as NodeJS.ProcessEnv,
+    });
 
-    // Keys come only from the ONE catalog (fs/shell/agent-mcp) + the explicit half.
-    expect(Object.keys(map).sort()).toEqual(
-      ['agent-mcp', 'backlog', 'fs', 'memory-server', 'shell'].sort()
-    );
+    // The native toolset is NOT resolved into the stored map (ADR-0008 D4):
+    // it lives on the agent's declarative `nativeTooling` and is resolved by the
+    // spawned child at task time.
+    expect(Object.keys(map).sort()).toEqual(['backlog', 'memory-server']);
+    expect(map['fs']).toBeUndefined();
+    expect(map['shell']).toBeUndefined();
+    expect(map['agent-mcp']).toBeUndefined();
 
-    const fs = map['fs'] as unknown as { transport: string; command: string; args?: string[]; cwd?: string };
-    expect(fs).toMatchObject({ transport: 'stdio', command: 'srt', cwd: '/P' });
-    const fsArgs = fs.args ?? [];
-    expect(fsArgs[fsArgs.length - 1], 'fs root is the dispatching cwd').toBe('/P');
-
-    const shell = map['shell'] as unknown as { transport: string; command: string; cwd?: string };
-    expect(shell).toMatchObject({ transport: 'stdio', command: 'srt', cwd: '/P' });
-
-    expect(map['agent-mcp']).toMatchObject({ transport: 'stdio' });
     expect(map['memory-server']).toMatchObject({ transport: 'sse' });
     expect(map['backlog']).toMatchObject({ transport: 'stdio', command: 'node' });
   });
 
-  it('the dispatch host resolves fs/shell through the ONE producer (no second producer)', () => {
-    // The dispatch host authors no fs/shell config of its own — it delegates to
-    // `@adhd/agent-core-native-tooling`'s single producer (D11 #1/#12). The
-    // exhaustive source-level guard (and its revert-failing negative control)
-    // lives in agent-mcp's `default-mcp-producer.guard.test.ts`.
+  it('the dispatch host resolves no native root into mcpServers (no second producer)', () => {
     const source = resolveDispatchMcpServers.toString();
-    expect(source, 'must delegate to the single native-tooling producer').toContain(
-      'resolveNativeToolingMap'
-    );
+    // NEGATIVE CONTROL: reintroducing host-side `resolveNativeToolingMap`
+    // resolution (the pre-rework behavior) makes this red.
+    expect(source).not.toContain('resolveNativeToolingMap');
     expect(source).not.toContain('server-filesystem');
     expect(source).not.toContain('mcp-shell-server');
   });

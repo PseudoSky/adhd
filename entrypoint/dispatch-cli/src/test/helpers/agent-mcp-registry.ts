@@ -91,12 +91,12 @@ export function makeRunner(opts: {
   home: string;
   cwd: string;
   defaultMcpServers?: Record<string, Record<string, unknown>>;
+  /** Declarative native toolset stored on create (ADR-0008 D3/D4). */
+  nativeTooling?: Record<string, unknown>;
   /** Extra child env vars merged over the isolated defaults. */
   extraEnv?: Record<string, string>;
   /** Create a DAG-named agent if absent (NAT-TOOL-5 portability spec). */
   createAgentsIfMissing?: boolean;
-  /** Re-assert the resolved `mcpServers` on a reused agent (NAT-TOOL-5). */
-  reassertMcpServersOnReuse?: boolean;
 }): AgentMcpRunner {
   return new AgentMcpRunner({
     command: process.execPath,
@@ -110,11 +110,11 @@ export function makeRunner(opts: {
       ...(opts.extraEnv ?? {}),
     },
     defaultMcpServers: opts.defaultMcpServers,
+    ...(opts.nativeTooling !== undefined
+      ? { nativeTooling: opts.nativeTooling }
+      : {}),
     ...(opts.createAgentsIfMissing !== undefined
       ? { createAgentsIfMissing: opts.createAgentsIfMissing }
-      : {}),
-    ...(opts.reassertMcpServersOnReuse !== undefined
-      ? { reassertMcpServersOnReuse: opts.reassertMcpServersOnReuse }
       : {}),
   });
 }
