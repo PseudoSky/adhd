@@ -12,6 +12,7 @@ export {
   resolveNativeTooling,
   resolveNativeToolingMap,
   resolveFsRoots,
+  resolveShellRoot,
 } from './lib/resolver.js';
 export type { NativeResolveContext, ResolvedNativeServer } from './lib/resolver.js';
 
@@ -37,5 +38,7 @@ export {
   buildDispatchSelf,
   DISPATCH_SELF_COMMAND_ENV,
   DISPATCH_SELF_ARGS_ENV,
+  DISPATCH_SELF_COMMAND_ENV_LEGACY,
+  DISPATCH_SELF_ARGS_ENV_LEGACY,
   DISPATCH_SELF_DEFAULT_ARGS,
 } from './lib/dispatch-self.js';

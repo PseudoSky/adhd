@@ -146,10 +146,15 @@ function withSandbox(
 
 /**
  * Resolve ONE portable root hint to a concrete directory (ADR-0008 D7; the
- * multi-root / caller-cwd contract). Pure.
+ * multi-root / caller-cwd contract). Pure. Used for BOTH an `fs` root hint and
+ * the `shell` working-directory hint — the ONE resolution contract, so an
+ * absolute/`..`/alias `shell.root` behaves exactly like `fs.root` (#3).
  *
  *  1. A named alias present in the GLOBAL allowed-root map (`ctx.roots`) wins —
- *     the operator owns the absolute target, the definition stays portable.
+ *     the operator owns the absolute target, the definition stays portable. The
+ *     lookup is OWN-property only (`hasOwnProperty`) and accepts ONLY a string
+ *     value, so an inherited member (`constructor`, `__proto__`, `toString`, …)
+ *     or a non-string mapping never leaks into the resolved path (#7).
  *  2. An ABSOLUTE path is rejected with a typed {@link NativeToolingRootError}:
  *     it welds a host path into the record (the fs analogue of the welded
  *     `provider` bug). Absolute machine dirs belong in the global map.
@@ -157,8 +162,11 @@ function withSandbox(
  *     it — a `..` subpath that escapes is rejected (containment is the point).
  */
 function resolveRootHint(hint: string, ctx: NativeResolveContext): string {
-  const mapped = ctx.roots?.[hint];
-  if (mapped !== undefined) return mapped;
+  const mapped =
+    ctx.roots && Object.prototype.hasOwnProperty.call(ctx.roots, hint)
+      ? ctx.roots[hint]
+      : undefined;
+  if (typeof mapped === 'string') return mapped;
   if (isAbsolute(hint)) {
     throw new NativeToolingRootError(
       'ABSOLUTE_ROOT_NOT_PORTABLE',
@@ -180,7 +188,19 @@ function resolveRootHint(hint: string, ctx: NativeResolveContext): string {
   return resolved;
 }
 
-/** True when `child` is `parent` itself or sits beneath it (path-segment safe). */
+/**
+ * True when `child` is `parent` itself or sits beneath it (path-segment safe).
+ *
+ * LEXICAL, NOT SYMLINK-SAFE (#10). This is a pure string/segment check on the
+ * RESOLVED paths — it does not `realpath()` either side, so a symlink under the
+ * caller cwd that points outside it passes here. That is deliberate: the hint
+ * may not exist on disk yet (no `realpath` possible), and the check's job is a
+ * portable, cheap, pure rejection of a definition that literally escapes its cwd
+ * (`..`). SYMLINK-ESCAPE ENFORCEMENT is the `srt` sandbox's job (ADR-0008 D7),
+ * which scopes the spawned `fs`/`shell` children at the OS layer; the reference
+ * fs server independently re-confines to its resolved root argv. This function
+ * is a portability guard, not the security boundary.
+ */
 function isWithin(parent: string, child: string): boolean {
   const p = resolve(parent);
   const c = resolve(child);
@@ -244,6 +264,28 @@ function resolveFs(
   return { serverKey: FS_SERVER.key, config: withSandbox(withBaseEnv(config, ctx), ctx) };
 }
 
+/**
+ * The resolved working directory a `shell` member runs in — the singular shell
+ * analogue of {@link resolveFsRoots}. Returns the resolved `shell.root` hint
+ * (alias → absolute, absolute-rejected, or a `..`-contained cwd-relative
+ * subpath — the SAME {@link resolveRootHint} contract `fs.root` uses), or
+ * `undefined` when the member is disabled/custom or carries no explicit `root`
+ * (then the spawned shell inherits the caller cwd). Exported so the host unions
+ * this exact directory into the per-run `srt` policy: a `shell.root` alias
+ * outside the dispatching cwd would otherwise be sandbox-DENIED the same way a
+ * second fs root would be (AC6 / finding 535c1101), and so the "same contract"
+ * is honest end to end. Pure.
+ */
+export function resolveShellRoot(
+  shell: ShellToolConfig | undefined,
+  ctx: NativeResolveContext
+): string | undefined {
+  if (shell === false || isMcpServerConfig(shell)) return undefined;
+  const overrides = shell === true || shell === undefined ? {} : shell;
+  if (overrides.root === undefined) return undefined;
+  return resolveRootHint(overrides.root, ctx);
+}
+
 function resolveShell(
   shell: ShellToolConfig | undefined,
   ctx: NativeResolveContext
@@ -259,7 +301,9 @@ function resolveShell(
   // Pattern allow-list passthrough (ADR-0008 D5): the adopted server `fullmatch`es
   // each regex against the command NAME (`re.fullmatch(pattern, command[0])`),
   // OR'd with `ALLOW_COMMANDS`. The harness only plumbs the config through — it
-  // owns no parser and evaluates no pattern.
+  // owns no parser and evaluates no pattern. A pattern containing a comma is
+  // REJECTED at the zod boundary (the env is CSV-joined), so a comma can never
+  // reach this join and corrupt a neighbouring pattern (#9).
   if (overrides.allowPatterns?.length) {
     env[SHELL_SERVER.envKeys.allowPatterns] = overrides.allowPatterns.join(',');
   }
@@ -280,7 +324,11 @@ function resolveShell(
     transport: 'stdio',
     command: SHELL_SERVER.command,
     args: [...SHELL_SERVER.args],
-    cwd: overrides.root ?? ctx.cwd,
+    // The shell cwd is a PORTABLE HINT resolved through the SAME contract as
+    // `fs.root` (#3): an alias from the global map, or a `..`-contained
+    // cwd-relative subpath; an absolute hint throws a typed
+    // `NativeToolingRootError`. Falls back to the caller cwd when no hint.
+    cwd: resolveShellRoot(shell, ctx) ?? ctx.cwd,
   };
   if (Object.keys(env).length > 0) config.env = env;
   return { serverKey: SHELL_SERVER.key, config: withSandbox(withBaseEnv(config, ctx), ctx) };

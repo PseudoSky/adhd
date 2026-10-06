@@ -164,3 +164,96 @@ describe('AC6 — the ONE root-list producer (the host union uses this exact lis
     ).toEqual([]);
   });
 });
+
+/** The resolved cwd of the shell server (srt-wrapped or not). */
+const shellCwdOf = (servers: McpServerConfig[]): string | undefined =>
+  stdio(servers).find((s) => s.args?.includes('mcp-shell-server'))?.cwd;
+
+describe('#3 — shell.root uses the SAME portable-hint contract as fs.root', () => {
+  it('a `..` shell.root that escapes the caller cwd is rejected (ROOT_ESCAPES_CALLER_CWD)', () => {
+    try {
+      resolveNativeTooling(
+        { fs: false, shell: { root: '../escape' }, dispatch: false },
+        { cwd: '/P/deep' }
+      );
+      throw new Error('expected a NativeToolingRootError');
+    } catch (err) {
+      expect(err).toBeInstanceOf(NativeToolingRootError);
+      expect((err as NativeToolingRootError).code).toBe('ROOT_ESCAPES_CALLER_CWD');
+    }
+  });
+
+  it('an absolute shell.root is rejected (ABSOLUTE_ROOT_NOT_PORTABLE)', () => {
+    try {
+      resolveNativeTooling(
+        { fs: false, shell: { root: '/abs' }, dispatch: false },
+        { cwd: '/P' }
+      );
+      throw new Error('expected a NativeToolingRootError');
+    } catch (err) {
+      expect(err).toBeInstanceOf(NativeToolingRootError);
+      expect((err as NativeToolingRootError).code).toBe('ABSOLUTE_ROOT_NOT_PORTABLE');
+    }
+  });
+
+  it('a shell.root ALIAS maps to its absolute target (not treated as a relative subpath)', () => {
+    const servers = resolveNativeTooling(
+      { fs: false, shell: { root: 'project' }, dispatch: false },
+      { cwd: '/P', roots: { project: '/opt/proj' } }
+    );
+    expect(shellCwdOf(servers)).toBe('/opt/proj');
+  });
+
+  it('a relative shell.root resolves against the caller cwd', () => {
+    const servers = resolveNativeTooling(
+      { fs: false, shell: { root: 'work' }, dispatch: false },
+      { cwd: '/P' }
+    );
+    expect(shellCwdOf(servers)).toBe('/P/work');
+  });
+
+  it('NEGATIVE CONTROL: no shell.root ⇒ the caller cwd (unchanged default)', () => {
+    const servers = resolveNativeTooling(
+      { fs: false, shell: true, dispatch: false },
+      { cwd: '/P' }
+    );
+    expect(shellCwdOf(servers)).toBe('/P');
+  });
+});
+
+describe('#7 — alias lookup cannot leak an inherited or non-string mapping', () => {
+  it('a hint named `constructor` with NO own alias is a relative subpath (no inherited leak)', () => {
+    // `ctx.roots['constructor']` is `Object.prototype.constructor` (a function)
+    // on a non-empty map that lacks the key — the pre-fix lookup returned it,
+    // welding a function into the argv. With hasOwnProperty it falls through.
+    const servers = resolveNativeTooling(
+      { fs: { root: 'constructor' }, shell: false, dispatch: false },
+      { cwd: '/P', roots: { project: '/opt/proj' } }
+    );
+    expect(fsRootsOf(servers)).toEqual(['/P/constructor']);
+  });
+
+  it('a hint named `__proto__` with no own alias is a relative subpath', () => {
+    const servers = resolveNativeTooling(
+      { fs: { root: '__proto__' }, shell: false, dispatch: false },
+      { cwd: '/P', roots: { project: '/opt/proj' } }
+    );
+    expect(fsRootsOf(servers)).toEqual(['/P/__proto__']);
+  });
+
+  it('an OWN alias named `constructor` DOES map to its target', () => {
+    const servers = resolveNativeTooling(
+      { fs: { root: 'constructor' }, shell: false, dispatch: false },
+      { cwd: '/P', roots: { constructor: '/opt/ctor' } }
+    );
+    expect(fsRootsOf(servers)).toEqual(['/opt/ctor']);
+  });
+
+  it('a NON-STRING mapping is ignored (falls through to the relative subpath)', () => {
+    const servers = resolveNativeTooling(
+      { fs: { root: 'project' }, shell: false, dispatch: false },
+      { cwd: '/P', roots: { project: 42 } as unknown as Record<string, string> }
+    );
+    expect(fsRootsOf(servers)).toEqual(['/P/project']);
+  });
+});
