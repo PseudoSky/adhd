@@ -41,6 +41,8 @@ every plan's demo must survive.
 | D-F | **Fix things, don't file debt.** Discovered defects get fixed in-flight or surfaced to the owner — the INVALIDATIONS log replaces re-litigating stale claims. | |
 | D-G | **Provider portability (2026-07-17).** (1) **Merge ALL provider registries into one** — dispatch's snake_case `ProviderConfig`, agent-mcp's camelCase `providerConfigSchema`, and `agent-core-provider`'s tables become a single canonical registry; the three-representations debt (SYNTHESIS §1.5) is retired, not mapped. (2) Binding is an **inheritance chain**: agent carries an *optional* model hint (the required welded `provider` field dies) → session holds the live provider/model (new columns; **swap = update the session row**) → task may override one call; resolution `task ?? session ?? agent ?? global`. (3) **Soft swap**: same session, history re-rendered into the new provider's format via the already-built-but-unwired tool-format layer (`emitTool()`, `provider_tool_formats`). (4) Routing = **ordered `models[]` fallback list only** (session + dispatch-unit), no price/latency sort this pass. Grounding: OBS-24 (opencode/OpenRouter comparison — the gap is wiring, not schema). | Demo Act 6; the registry's platform-binding layer finally consumed at runtime. |
 
+**D-G implementation spec:** [`provider-split/SPEC.md`](../provider-split/SPEC.md) — the locked D-G architecture (dispatch `dispatch-2026-10-04-9c4e`).
+
 † `agent-core-policy`: intended as agent restrictions (tools/files/access modes);
 owner-assessed "may be irrelevant at this point" — on hold, unratified as a runtime
 enforcer. See Resolved questions O-1.
