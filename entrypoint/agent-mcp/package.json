@@ -34,7 +34,8 @@
     "tslib": "^2.3.0"
   },
   "devDependencies": {
-    "@adhd/agent-base-types": "^2.3.3"
+    "@adhd/agent-base-types": "^2.3.3",
+    "@adhd/agent-core-native-tooling": "^0.0.1"
   },
   "main": "./dist/src/index.js",
   "license": "MIT",

@@ -1,4 +1,20 @@
 #!/usr/bin/env node
+/**
+ * DEPRECATED — RETIRED FALLBACK (ADR-0008 D5/D7, NAT-TOOL-8; approved 2026-10-05).
+ *
+ * This is the homegrown "thick layer": an `ALLOWED_COMMAND_PREFIXES` +
+ * `BLOCKED_PATTERNS` regex catalog matched over raw command text. ADR-0008 D5
+ * forbids the harness owning dangerous-command detection or command
+ * segmentation, so this server is SUPERSEDED by the adopted
+ * `tumf/mcp-shell-server` (allowlisted command NAMES as argv arrays — never a
+ * shell string) wrapped by `@anthropic-ai/sandbox-runtime` (`srt`).
+ *
+ * It is retained ONLY as an explicit fallback for hosts not yet rewired to the
+ * adopted server (NAT-TOOL-4 replaces `buildDefaultMcpServers` with
+ * `resolveNativeTooling`, which resolves the adopted server). Its permanent
+ * removal is owned by NAT-TOOL-4. Do NOT grow this file; do NOT wire it into
+ * new code.
+ */
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {

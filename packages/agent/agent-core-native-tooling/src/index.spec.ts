@@ -6,6 +6,8 @@ import {
   DISPATCH_SERVER_KEY,
   FS_SERVER,
   SHELL_SERVER,
+  SRT_SANDBOX,
+  wrapWithSandbox,
   resolveNativeTooling,
   matchPermission,
 } from './index.js';
@@ -28,5 +30,11 @@ describe('public surface (index barrel) — the contract a consumer imports (ADR
     expect(DISPATCH_SERVER_KEY).toBe('agent-mcp');
     expect(FS_SERVER.key).toBe('fs');
     expect(SHELL_SERVER.key).toBe('shell');
+    expect(SHELL_SERVER.toolName).toBe('shell_execute');
+    expect(SRT_SANDBOX.command).toBe('srt');
+    expect(wrapWithSandbox({ command: 'uvx', args: ['mcp-shell-server'] })).toEqual({
+      command: 'srt',
+      args: ['uvx', 'mcp-shell-server'],
+    });
   });
 });
