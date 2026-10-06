@@ -10,7 +10,7 @@
 
 **The engine now owns grouping, aggregation, and post-aggregation filtering.** Grouping/aggregation attach as first-class top-level fields on `QueryExpression` — `group_by`, `aggregate`, `having`, `window`, `output`, `top_n` — **not** as `_`-prefixed keys inside `where` (the parser whitelists exactly `['_and','_or','_not']`, so a `_`-key would be a silent no-op; the engine now *throws* on an unknown operator instead).
 
-**The phase order is normative and the wrong order is unrepresentable:** `window` resolution → `where` (per row) → `group_by` → `aggregate` (the window scopes the rows fed into the fold) → `having` (over the grouped record) → `top_n` → `output` → the legacy tail (`order_by` → `distinct_on` → `offset` → `limit`). `where` is typed over the raw row; `having` is typed over grouped fields and validated at compile time. An aggregate under `where` **throws**.
+**The phase order is normative — enforced by the fixed single-slot pipeline plus runtime field validation, not by the type system** (`HavingExpression` is structurally identical to `BooleanExpression` and compiles through the same per-row evaluator; only `validateHaving` checks names at runtime, so "the wrong order is unrepresentable" would overstate it): `window` resolution → `where` (per row) → `group_by` → `aggregate` (the window scopes the rows fed into the fold) → `having` (over the grouped record) → `top_n` → `output` → the legacy tail (`order_by` → `distinct_on` → `offset` → `limit`). `where` is typed over the raw row; `having` is typed over grouped fields and validated at compile time. An aggregate under `where` **throws**.
 
 ## Context
 
@@ -37,7 +37,7 @@ HavingExpression = { _and?; _or?; _not?; [field]: NumberOperator | StringOperato
 WindowSpec = { field: string; period: string | [string, number] }
 ```
 
-### D2 — Phase machine: ordered, and the wrong order is unrepresentable
+### D2 — Phase machine: ordered by a fixed pipeline, not by types
 
 One slot per phase, sequenced by distinct single-valued typed fields:
 
@@ -61,7 +61,7 @@ Aggregates are the closed set in D1 (distributive/holistic), mergeable for rollu
 
 - The dashboard's parallel `groupCells`/`buildLevel` becomes the forbidden parallel implementation; it migrates onto the engine via the seam (`dashboard ADR-0004`).
 - A new engine behavior carries a new public surface — a semantic-version concern for `@adhd/data-query-engine` (minor, additive).
-- The engine gains an execution-phase boundary; this is deliberate and is what makes the wrong order unrepresentable.
+- The engine gains an execution-phase boundary; this is deliberate and is what sequences the phases. Order is held by the fixed single-slot pipeline plus runtime validation, not by the type system.
 - `_quantile` is non-algebraic and is computed exactly by sorting per group (O(Σ n_g log n_g)); a mergeable sketch is a documented follow-up.
 
 ## Alternatives considered
@@ -73,7 +73,7 @@ Aggregates are the closed set in D1 (distributive/holistic), mergeable for rollu
 ## What does NOT change
 
 - The legacy pipeline when `group_by`/`aggregate` are absent runs byte-for-byte; no dirty-flag or behavior change.
-- No `select`/projection, no joins/subqueries, no per-row window functions (LAG/LEAD/rank), no top-N-per-group inside the engine, no materialization.
+- No joins/subqueries, no per-row window functions (LAG/LEAD/rank), no materialization. **Corrected:** `select`/projection and top-N-per-group **did** ship (select as a final projection in 2.3.7; top-N as `top_n`/`_other`), so the earlier blanket exclusion of those two is struck here to match shipped behavior. The v2 `queryModel` design supersedes this ADR in turn.
 - `adhd ADR-0001` (stores), `adhd ADR-0002` (correct the source — the governing argument *for* this), `adhd ADR-0003` (CJS-only), `adhd ADR-0004` (MCP flat payload) — all untouched.
 - `order_by`/`distinct_on`/`offset`/`limit` semantics — unchanged.
 
