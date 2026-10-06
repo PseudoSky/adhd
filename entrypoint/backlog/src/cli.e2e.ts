@@ -51,7 +51,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createIssue } from './write/create-issue.js';
 import { getIssue } from './query/get.js';
 import { seedProject } from './test/helpers/open-test-issue-store.js';
@@ -1064,6 +1064,59 @@ describe('--namespace / sandbox-path — SPEC.md §5c: the CLI must never defaul
     };
   }
 
+  /**
+   * 633cbaf6 AC1 observable: spawns the real bin with a `--import` preload
+   * that installs a synchronous `module.registerHooks` resolve hook and
+   * appends every resolved specifier matching the embedding stack
+   * (`@adhd/sox-embedding-provider`, `@adhd/sox-vector-store`, fastembed,
+   * onnxruntime, transformers) to a trace file. Deterministic: it reports
+   * what the child actually loaded, never how long it took. The preload also
+   * writes a `HOOKS_INSTALLED` sentinel so an unsupported runtime fails the
+   * test loudly instead of yielding an empty (vacuously green) trace.
+   */
+  function runWithEmbeddingLoadTrace(
+    args: string[],
+    home: string,
+    extraEnv: Record<string, string> = {}
+  ): { res: SpawnResult; hooksInstalled: boolean; embeddingSpecifiers: string[] } {
+    const traceDir = mkdtempSync(join(tmpdir(), 'backlog-embtrace-'));
+    sandboxDirs.push(traceDir);
+    const traceFile = join(traceDir, 'trace.log');
+    const preload = join(traceDir, 'preload.mjs');
+    writeFileSync(
+      preload,
+      [
+        "import { registerHooks } from 'node:module';",
+        "import { appendFileSync } from 'node:fs';",
+        'const trace = process.env.BACKLOG_EMBED_TRACE;',
+        "const re = /sox-embedding-provider|sox-vector-store|fastembed|onnxruntime|@huggingface\\/transformers/;",
+        "if (typeof registerHooks === 'function') {",
+        "  appendFileSync(trace, 'HOOKS_INSTALLED\\n');",
+        '  registerHooks({',
+        '    resolve(specifier, context, nextResolve) {',
+        "      if (re.test(specifier)) appendFileSync(trace, 'LOAD ' + specifier + '\\n');",
+        '      return nextResolve(specifier, context);',
+        '    },',
+        '  });',
+        '}',
+        '',
+      ].join('\n')
+    );
+    const res = runGlobalScoped(args, home, {
+      ...extraEnv,
+      BACKLOG_EMBED_TRACE: traceFile,
+      NODE_OPTIONS: `--import=${pathToFileURL(preload).href}`,
+    });
+    const lines = existsSync(traceFile)
+      ? readFileSync(traceFile, 'utf8').split('\n').filter(Boolean)
+      : [];
+    return {
+      res,
+      hooksInstalled: lines.includes('HOOKS_INSTALLED'),
+      embeddingSpecifiers: lines.filter((l) => l.startsWith('LOAD ')),
+    };
+  }
+
   /** The lastEnvelope helper for a raw `errorEnvelope` printed to stdout by
    *  `runBacklogCli`'s own D1/D3 validation short-circuits (never opens the
    *  apigen command table, so this is a plain `console.log`, not stderr). */
@@ -1201,22 +1254,32 @@ describe('--namespace / sandbox-path — SPEC.md §5c: the CLI must never defaul
       'the sandboxed db must actually have been created by the create above'
     ).toBe(true);
 
-    // Test plan item 1(d): the wall-clock proof, alongside the structural
-    // proof above (never the sole assertion — a slow CI box must not fail a
-    // correct build). `sandbox-path` alone should land well inside the ~52ms
-    // fast-path band, generously bounded.
-    const t0 = Date.now();
-    const timingRes = runGlobalScoped(
+    // Test plan item 1(d) / 633cbaf6 AC1: the sandbox path must never load the
+    // embedding model (the ~1213ms band). Proven DIRECTLY and deterministically
+    // — no wall-clock threshold, which flaked on a loaded host (1138ms vs a
+    // 1000ms bound). A resolve-hook preload records every module specifier the
+    // child resolves (static OR dynamic `import()`), including the optional
+    // embedding stack `write/bootstrap.ts`'s `loadOptional` reaches. An
+    // embedding load on this path would resolve one of those specifiers; the
+    // sandbox path must resolve none.
+    const trace = runWithEmbeddingLoadTrace(
       ['--namespace', 'sandbox', 'sandbox-path'],
       fakeProdHome,
       { ADHD_ROOT: adhdRoot }
     );
-    const elapsedMs = Date.now() - t0;
-    expect(timingRes.status, `stderr:\n${timingRes.stderr}`).toBe(0);
+    expect(trace.res.status, `stderr:\n${trace.res.stderr}`).toBe(0);
     expect(
-      elapsedMs,
-      `--namespace sandbox sandbox-path took ${elapsedMs}ms — expected the fast (~52ms-class) path, not the ~1213ms embedding-load band`
-    ).toBeLessThan(1000);
+      trace.hooksInstalled,
+      'the resolve-hook preload never ran — the no-embedding-load assertion below would be vacuous (needs Node >= 22.15 module.registerHooks)'
+    ).toBe(true);
+    expect(
+      trace.embeddingSpecifiers,
+      '633cbaf6 AC1: --namespace sandbox sandbox-path must never resolve/load the embedding stack'
+    ).toEqual([]);
+    expect(
+      trace.res.stderr,
+      '633cbaf6 AC1: no embedding bootstrap log line may appear on the sandbox path'
+    ).not.toMatch(/embedding\.enabled is set|sox-embedding-provider|createEmbeddingProvider/);
   });
 
   // Real-consumer proof: a REAL spawned child process, driven exactly like
