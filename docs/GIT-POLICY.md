@@ -1248,3 +1248,30 @@ Schema version 1.
   contained in local `main`, not pushed) and no gates were run (the dispatch reported them already
   green: `nx affected -t test/build/lint --base=1bcc147d` all exit 0). This record is the only change
   to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `feat/guarded-live-runner-9c4e` (dispatch-2026-10-04-9c4e).**
+  Landed the guarded live-test runner onto `main` as a **merge commit** `676f94d2` (parents
+  `c3e9fb3c` = pre-merge `main`, `a65a00f5` = branch head), moving `main` `c3e9fb3c` → `676f94d2`;
+  7 files, +1413/-1. Two commits: `e05c6c78 feat(dispatch-cli): guarded live runner (turn cap +
+  cost kill + msg-size + delegation)` touched `entrypoint/dispatch-cli/src/test/integration/
+  run-live-guarded.ts`, `entrypoint/dispatch-cli/{README,AGENTS}.md`, `docs/TEST-STRATEGY.md`, and
+  `entrypoint/dispatch-cli/eslint.config.mjs` (ignoredDependencies); `a65a00f5 test(dispatch-cli):
+  default-running spec for the guarded runner's guard primitives` added
+  `live-guard-core.ts` + `live-guard-core.spec.ts` and slimmed `run-live-guarded.ts`. §Branching &
+  merge was the deciding rule: this history "carries true merge commits" and ff-only is not enforced,
+  while rebase-in-flight is permitted only on a branch "solely your own" — an in-flight executor
+  branch is not the operator's, so rewriting its two commits was out; a merge commit is the stated
+  shape here. Dry-run `git merge-tree --write-tree --name-only main feat/guarded-live-runner-9c4e`
+  exited 0 (tree `a095ba01`) with no conflict hunks; the actual `git merge --no-ff` was conflict-free
+  (ort strategy, exit 0). Post-merge `git rev-list --count main..feat/guarded-live-runner-9c4e` = 0
+  and `git merge-base --is-ancestor` exits 0 for both `e05c6c78` and `a65a00f5`, so both commits are
+  contained. The worktree `.worktrees/wt-guarded-live-9c4e` was reaped under §Cleanup's three-part
+  test: `git status --porcelain` inside it was empty, it carried no `locked` line, and its head
+  `a65a00f5` was an ancestor of `main` — so `git worktree remove` (no `--force`) ran and the branch
+  was deleted with `git branch -d feat/guarded-live-runner-9c4e` (was `a65a00f5`); worktrees went
+  78 → 77. The commit remains reachable from the durable `main` ref, so recovery does not depend on
+  the reflog. The working tree was clean before and after (`git status --porcelain` empty), so no
+  unrelated concurrent dirt had to be avoided; no push (the dispatch directed none) and no gates were
+  run by this operation (the dispatch reported them already green: affected test 0, affected build 0,
+  `lint dispatch-cli` 0, focused spec 15/15). This record is the only change to this file in this
+  operation. Recorded under §Commit convention's `docs(<area>):` scope.
