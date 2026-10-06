@@ -20,7 +20,6 @@ import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import { resolveNativeToolingMap } from '@adhd/agent-core-native-tooling';
 import type { McpServerConfig, NativeToolingConfig } from '@adhd/agent-base-types';
 import type {
   DagJson,
@@ -285,67 +284,80 @@ export function buildDispatchSelfServer(
 
 /** Options for {@link resolveDispatchMcpServers}. */
 export interface ResolveDispatchMcpServersOptions {
-  /** Env for the backlog/memory entries + the dispatch-self launch config. */
+  /** Env for the backlog/memory entries. */
   env?: NodeJS.ProcessEnv;
   /**
-   * The DISPATCHING cwd (ADR-0008 D4): becomes the builtin fs root and the
-   * shell child's cwd, and is the root of the `fs`/`shell` configs. Default:
-   * `process.cwd()`, read per call (never captured at import time).
-   */
-  cwd?: string;
-  /** Override the `dispatch` self server (default: {@link buildDispatchSelfServer}). */
-  dispatchSelf?: McpServerConfig;
-  /** Wrap the builtin fs/shell with `srt` (ADR-0008 D7). Default: resolver default (true). */
-  sandbox?: boolean;
-  /**
-   * Declarative native-tooling config. Absent ⇒ the standardized defaults
-   * (`{fs:true, shell:true, dispatch:true}`, D8); set a member to `false` to
-   * omit it, or pass overrides (e.g. `{fs:{root:'/custom'}}`).
-   */
-  nativeTooling?: NativeToolingConfig;
-  /**
-   * Caller-supplied explicit servers that WIN over every other entry
-   * (explicit `mcpServers` > `nativeTooling` > `dispatch` self, D1/D4).
+   * Caller-supplied explicit servers that are merged over the default
+   * `memory-server`/`backlog` half (explicit wins per key). These are the ONLY
+   * entries in a stored `mcpServers`; the native toolset lives on
+   * `nativeTooling` (D1/D4).
    */
   explicit?: Record<string, McpServerConfig>;
 }
 
 /**
- * Resolve a dispatch-created agent's full `mcpServers` map at the DISPATCHING
- * cwd (ADR-0008 D1/D4), for the `defaultDispatchMcpServers` /
- * `buildProductionAgentMcpRunner` path:
+ * The DECLARATIVE native toolset a dispatch-created agent is born with
+ * (ADR-0008 D1/D3): the standardized `{fs:true, shell:true, dispatch:true}`
+ * defaults. `true` is the zero-override builtin alias (D3) — it is stored as-is
+ * and resolved at TASK time, never expanded into a resolved server here.
+ */
+export const DEFAULT_DISPATCH_NATIVE_TOOLING: NativeToolingConfig = {
+  fs: true,
+  shell: true,
+  dispatch: true,
+};
+
+/** Options for {@link resolveDispatchNativeTooling}. */
+export interface ResolveDispatchNativeToolingOptions {
+  /**
+   * Declarative native-tooling config to STORE on the agent. Absent ⇒ the
+   * standardized defaults (`{fs:true, shell:true, dispatch:true}`, D8); set a
+   * member to `false` to omit it, or pass overrides (e.g. `{fs:{root:'/custom'}}`
+   * or a custom `McpServerConfig`).
+   */
+  nativeTooling?: NativeToolingConfig;
+}
+
+/**
+ * The declarative `nativeTooling` a dispatch-created agent is STORED with
+ * (ADR-0008 D3/D4/D8). Returns the caller's declarative config when supplied,
+ * else {@link DEFAULT_DISPATCH_NATIVE_TOOLING}.
  *
- *   native toolset (fs / shell / dispatch self, via the ONE producer
- *   `resolveNativeToolingMap`)  MERGED WITH  the explicit half (memory-server +
- *   backlog from {@link defaultDispatchMcpServers}, plus any caller `explicit`).
+ * This function NEVER resolves fs/shell roots or cwd: resolution is TASK time,
+ * in the spawned agent-mcp child, against the child's cwd (threaded by the host,
+ * D9). Storing a resolved map here would be the exact definition-time-root bug
+ * D4 exists to remove.
+ */
+export function resolveDispatchNativeTooling(
+  opts: ResolveDispatchNativeToolingOptions = {}
+): NativeToolingConfig {
+  return opts.nativeTooling ?? DEFAULT_DISPATCH_NATIVE_TOOLING;
+}
+
+/**
+ * The EXPLICIT `mcpServers` a dispatch-created agent is born with (backlog
+ * daafe2d3): `memory-server` + `backlog` (from
+ * {@link defaultDispatchMcpServers}), plus any caller-supplied `explicit`
+ * servers (which win per key). This is the DECLARATIVE half only — no
+ * fs/shell/dispatch server and no dispatching cwd/absolute root is present, so
+ * the stored `mcpServers` is byte-identical regardless of where the dispatch is
+ * fired from (ADR-0008 D4/D8).
  *
- * Precedence, highest first: explicit `mcpServers` > `nativeTooling` > `dispatch`
- * self. There is exactly ONE producer of the fs/shell configs — this function
- * authors none of its own (it reuses `@adhd/agent-core-native-tooling`), so no
- * second producer can appear.
- *
- * Resolution is against the passed `cwd`; the result is returned to the caller
- * (never persisted by this function). The dispatch host threads this map — and
- * the same `cwd` — to the runner so a dispatched agent gets fs+shell+dispatch
- * rooted at the dispatching directory, plus backlog+memory.
+ * The native toolset (fs / shell / dispatch self) is NOT produced here: it goes
+ * on the agent as {@link resolveDispatchNativeTooling}'s declarative
+ * `nativeTooling` and is resolved by the spawned agent-mcp child at task time
+ * (the ONE producer is `@adhd/agent-core-native-tooling`, in the child — this
+ * host is never a second producer).
  */
 export function resolveDispatchMcpServers(
   opts: ResolveDispatchMcpServersOptions = {}
 ): Record<string, McpServerConfig> {
   const env = opts.env ?? process.env;
-  const cwd = opts.cwd ?? process.cwd();
-  const native = resolveNativeToolingMap(opts.nativeTooling, {
-    cwd,
-    dispatchSelf: opts.dispatchSelf ?? buildDispatchSelfServer(env),
-    ...(opts.sandbox !== undefined ? { sandbox: opts.sandbox } : {}),
-  });
-  // The explicit half: memory-server + backlog (environment-overridable), then
-  // any caller-supplied explicit servers win over all of the above.
   const explicitHalf = defaultDispatchMcpServers(env) as unknown as Record<
     string,
     McpServerConfig
   >;
-  return { ...native, ...explicitHalf, ...(opts.explicit ?? {}) };
+  return { ...explicitHalf, ...(opts.explicit ?? {}) };
 }
 
 /**
@@ -389,24 +401,21 @@ export interface ProductionRunnerOverrides {
    */
   createAgentsIfMissing?: boolean;
   /**
-   * The DISPATCHING cwd (ADR-0008 D4). Threaded to the spawned agent-mcp child
-   * (so the host resolves native tooling against it at task time) AND used to
-   * root the resolved fs/shell configs. Default: `process.cwd()`.
+   * The DISPATCHING cwd (ADR-0008 D4/D9). Threaded to the spawned agent-mcp
+   * child, so the child resolves the agent's declarative `nativeTooling` against
+   * THIS directory at task time (its `process.cwd()`), and a nested fs/shell
+   * server is rooted/cwd'd here. Never baked into the stored definition.
+   * Default: `process.cwd()`.
    */
   cwd?: string;
-  /** Declarative native-tooling config for the resolved map. Default: standardized defaults. */
-  nativeTooling?: NativeToolingConfig;
-  /** Wrap the builtin fs/shell with `srt` (ADR-0008 D7). Default: resolver default (true). */
-  sandbox?: boolean;
-  /** Extra explicit `mcpServers` that win over the native toolset (D1/D4). */
-  mcpServers?: Record<string, McpServerConfig>;
   /**
-   * Re-assert the resolved `mcpServers` on an ALREADY-EXISTING agent
-   * (ADR-0008 D4 / NAT-TOOL-5). Defaults to `true` for the dispatch host so a
-   * reused agent never keeps a previous dispatch's resolved root; `calibrate`
-   * may leave it as-is (its agent is always fresh).
+   * Declarative native-tooling config STORED on every dispatch-created agent
+   * (ADR-0008 D3). Default: {@link DEFAULT_DISPATCH_NATIVE_TOOLING}
+   * (`{fs:true, shell:true, dispatch:true}`). Carries no resolved root.
    */
-  reassertMcpServersOnReuse?: boolean;
+  nativeTooling?: NativeToolingConfig;
+  /** Extra explicit `mcpServers` (WIN over the native toolset per key, D1). */
+  mcpServers?: Record<string, McpServerConfig>;
 }
 
 export function buildProductionAgentMcpRunner(
@@ -417,34 +426,36 @@ export function buildProductionAgentMcpRunner(
   const requestTimeoutMs = env['ADHD_DISPATCH_AGENT_MCP_REQUEST_TIMEOUT_MS']
     ? Number(env['ADHD_DISPATCH_AGENT_MCP_REQUEST_TIMEOUT_MS'])
     : DEFAULT_POLL.timeoutMs;
-  // The dispatching cwd: roots the fs/shell configs AND the spawned child (so
-  // agent-mcp's own task-time resolution agrees with them). Read per call.
+  // The dispatching cwd: the spawned agent-mcp child's process.cwd(), against
+  // which it resolves the agent's declarative nativeTooling at task time (D4/D9).
+  // Read per call; NEVER resolved into a stored root.
   const cwd = overrides.cwd ?? process.cwd();
   return new AgentMcpRunner({
     command,
     args,
-    // Thread the dispatching cwd (D4): the spawned agent-mcp's process.cwd() is
+    // Thread the dispatching cwd (D9): the spawned agent-mcp's process.cwd() is
     // the dispatch directory, so its task-time native resolution roots fs/shell
-    // there, and the fs/shell `cwd` fields below match.
+    // there — with no stored root.
     cwd,
-    // The full map for a dispatch-created agent: fs/shell/dispatch self
-    // (ONE producer: @adhd/agent-core-native-tooling) + the explicit
-    // memory-server/backlog half, resolved at the dispatching cwd (D4).
+    // The EXPLICIT half only: memory-server + backlog (+ caller explicit). No
+    // fs/shell/dispatch server is baked here; the native toolset below is stored
+    // declaratively and resolved by the child (ADR-0008 D4/D8).
     defaultMcpServers: resolveDispatchMcpServers({
       env,
-      cwd,
+      ...(overrides.mcpServers !== undefined
+        ? { explicit: overrides.mcpServers }
+        : {}),
+    }) as unknown as Record<string, Record<string, unknown>>,
+    // The DECLARATIVE native toolset STORED on the agent (D3/D4/D8). Never a
+    // resolved root — the child resolves it at task time against `cwd` above.
+    nativeTooling: resolveDispatchNativeTooling({
       ...(overrides.nativeTooling !== undefined
         ? { nativeTooling: overrides.nativeTooling }
         : {}),
-      ...(overrides.sandbox !== undefined ? { sandbox: overrides.sandbox } : {}),
-      ...(overrides.mcpServers !== undefined ? { explicit: overrides.mcpServers } : {}),
-    }) as unknown as Record<string, Record<string, unknown>>,
+    }) as unknown as Record<string, unknown>,
     // DAG-named agents must already exist (f1dbd0f2): never silently
     // (re)create a missing/deleted persona. `calibrate` overrides this.
     createAgentsIfMissing: overrides.createAgentsIfMissing ?? false,
-    // Re-assert the current task-time resolution on a reused agent (D4): a
-    // pre-existing agent is re-scoped to THIS dispatch's cwd on reuse.
-    reassertMcpServersOnReuse: overrides.reassertMcpServersOnReuse ?? true,
     // Align the MCP per-request timeout with the orchestrator poll budget
     // (DEFAULT_POLL) so a synchronous `task` call can never be aborted at the
     // SDK's 60s default before the poll deadline it is paired with — the

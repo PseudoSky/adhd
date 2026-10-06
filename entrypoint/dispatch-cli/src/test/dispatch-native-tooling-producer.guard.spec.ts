@@ -1,13 +1,13 @@
 /**
- * dispatch-native-tooling-producer.guard.spec.ts — NAT-TOOL-5 AC4: the dispatch
- * host must NOT become a SECOND producer of the builtin fs/shell MCP servers.
+ * dispatch-native-tooling-producer.guard.spec.ts — NAT-TOOL-5 rework: the
+ * dispatch host must NOT author (or resolve) the builtin fs/shell MCP servers.
  *
- * The dispatch host resolves its native toolset via
- * `resolveNativeToolingMap` (`@adhd/agent-core-native-tooling`) — the ONE
- * producer (NAT-TOOL-4). This guard fails if a hand-built fs/shell config
- * reappears anywhere in this package's production source (e.g. someone inlines
- * `['-y','@modelcontextprotocol/server-filesystem']` or `command:'uvx'` into
- * `core.ts` instead of reusing the resolver).
+ * Under ADR-0008 D4/D8 the host STORES only a DECLARATIVE `nativeTooling`; the
+ * fs/shell/`dispatch` builtins are resolved at task time by the spawned
+ * agent-mcp child (the ONE producer, `@adhd/agent-core-native-tooling`), against
+ * the child's cwd. This guard fails if (a) a hand-built fs/shell config
+ * reappears anywhere in this package's production source, or (b) `core.ts`
+ * reintroduces host-side `resolveNativeToolingMap` resolution (baking a root).
  *
  * Mirrors `entrypoint/agent-mcp/src/__tests__/default-mcp-producer.guard.test.ts`
  * for the dispatch host. Excludes tests/fixtures (they legitimately reference
@@ -56,9 +56,14 @@ describe('NAT-TOOL-5 — the dispatch host is not a second fs/shell producer', (
     expect(filesMatching(re)).toEqual([]);
   });
 
-  it('resolves the native toolset through the resolver package (import present)', () => {
+  it('does not resolve the native toolset into the stored map (the child resolves at task time)', () => {
     const core = readFileSync(resolve(SRC, 'lib', 'core.ts'), 'utf8');
-    expect(core).toContain('resolveNativeToolingMap');
-    expect(core).toContain('@adhd/agent-core-native-tooling');
+    // The dispatch host must NOT bake a resolved fs/shell root into a stored
+    // `mcpServers`: it stores the DECLARATIVE `nativeTooling` and lets the
+    // spawned agent-mcp child resolve it at task time (ADR-0008 D4/D8).
+    // NEGATIVE CONTROL: reintroducing `resolveNativeToolingMap` in core.ts
+    // (the pre-rework host-side resolution) makes this red.
+    expect(core).not.toContain('resolveNativeToolingMap');
+    expect(core).toContain('nativeTooling');
   });
 });

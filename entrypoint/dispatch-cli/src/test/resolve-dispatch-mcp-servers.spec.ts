@@ -1,52 +1,43 @@
 /**
- * resolve-dispatch-mcp-servers.spec.ts — NAT-TOOL-5 (ADR-0008 D4): the DISPATCH
- * HOST resolves native tooling at the dispatching cwd and threads it (+ cwd) to
- * the runner.
+ * resolve-dispatch-mcp-servers.spec.ts — NAT-TOOL-5 rework (ADR-0008 D4/D8).
+ *
+ * The dispatch host STORES only the DECLARATIVE toolset on a dispatch-created
+ * agent: the explicit `mcpServers` half (`memory-server` + `backlog`) plus a
+ * declarative `nativeTooling` (`{fs?, shell?, dispatch?, hitl?}`). It NEVER
+ * writes a resolved fs/shell root onto the definition; the spawned agent-mcp
+ * child resolves `nativeTooling` at TASK time against its own cwd (D4, D9).
  *
  * ACs (each revert-failing):
- *  1. A dispatched agent launched from `/P` gets an fs root `/P` and a shell
- *     cwd `/P`; backlog + memory servers are present.
- *  2. Firing from `/P` vs `/Q` roots fs/shell at each cwd (portability at the
- *     dispatch-host layer).
- *  3. Explicit `mcpServers` win over `nativeTooling`.
- *  4. No second producer: the map is EXACTLY `resolveNativeToolingMap` merged
- *     with the explicit half — never a hand-built fs/shell config.
+ *  A. a dispatch-created agent's stored definition is byte-identical across
+ *     fires — the host writes no resolved root, and reuse performs no write.
+ *  B. the fs root resolves to each dispatching cwd (the child does the
+ *     resolving; the host only threads the cwd — see the e2e for the end-to-end
+ *     proof).
+ *  C. no resolved fs-root/absolute-cwd is written into a stored `mcpServers`.
+ *  D. the explicit memory/backlog servers are present and win (D1).
  *
  * Hermetic: `ADHD_DISPATCH_BACKLOG_MCP_ENTRY` pins the backlog entry, so no
  * built backlog / spawn is needed (the fs/shell servers are never spawned here).
  */
 import { describe, expect, it } from 'vitest';
 
-import { resolveNativeToolingMap } from '@adhd/agent-core-native-tooling';
 import type { IMcpToolClient, McpCallToolResult } from '@adhd/dispatch-orchestrator';
 import type { DispatchUnit } from '@adhd/dispatch-base-spec';
 import type { McpServerConfig } from '@adhd/agent-base-types';
 
 import {
   buildProductionAgentMcpRunner,
+  DEFAULT_DISPATCH_NATIVE_TOOLING,
   resolveDispatchMcpServers,
+  resolveDispatchNativeTooling,
   resolveProductionRunnerCwd,
 } from '../lib/core.js';
 
 /** Hermetic env: a synthetic backlog entry so `defaultDispatchMcpServers` never
- *  depends on a built backlog, and a pinned dispatch-self launch. */
+ *  depends on a built backlog. */
 const ENV = {
   ADHD_DISPATCH_BACKLOG_MCP_ENTRY: '/tmp/adhd-nat-tool-5/synthetic/backlog/index.js',
 } as NodeJS.ProcessEnv;
-
-function stdio(map: Record<string, McpServerConfig>, key: string): Extract<McpServerConfig, { transport: 'stdio' }> {
-  const cfg = map[key];
-  if (!cfg || cfg.transport !== 'stdio') throw new Error(`no stdio '${key}' server`);
-  return cfg;
-}
-
-/** The resolved fs ROOT: the last argv element (the resolver appends the root). */
-function fsRoot(map: Record<string, McpServerConfig>): string {
-  const args = stdio(map, 'fs').args ?? [];
-  const root = args[args.length - 1];
-  if (!root) throw new Error('fs server resolved without a root arg');
-  return root;
-}
 
 /** Records `agent_read`/`agent_create`/`agent_update` calls; drives ensureAgent. */
 class RecordingClient implements IMcpToolClient {
@@ -63,14 +54,25 @@ class RecordingClient implements IMcpToolClient {
     this.calls.push({ name: params.name, arguments: params.arguments });
     if (params.name === 'agent_read') {
       if (this.agentExists) {
-        return { content: [{ type: 'text', text: JSON.stringify({ name: 'preexisting' }) }] };
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                name: 'preexisting',
+                mcpServers: {},
+                nativeTooling: DEFAULT_DISPATCH_NATIVE_TOOLING,
+              }),
+            },
+          ],
+        };
       }
       return {
         isError: true,
         content: [{ type: 'text', text: "[AGENT_NOT_FOUND] Agent 'preexisting' not found" }],
       };
     }
-    if (params.name === 'agent_create' || params.name === 'agent_update') {
+    if (params.name === 'agent_create') {
       return {
         content: [{ type: 'text', text: JSON.stringify({ ...params.arguments, version: 1 }) }],
       };
@@ -88,86 +90,62 @@ const UNIT = {
   systemPrompt: 'sys',
 } as unknown as DispatchUnit;
 
-describe('resolveDispatchMcpServers (NAT-TOOL-5)', () => {
-  it('AC1: roots fs + shell at the dispatching cwd and includes backlog + memory', () => {
-    const map = resolveDispatchMcpServers({ cwd: '/P', env: ENV });
+describe('resolveDispatchMcpServers — the explicit half ONLY (D1/D4/D8)', () => {
+  it('AC-D: returns memory-server + backlog and NOTHING native (no fs/shell/agent-mcp)', () => {
+    const map = resolveDispatchMcpServers({ env: ENV });
 
-    expect(Object.keys(map).sort()).toEqual(
-      ['agent-mcp', 'backlog', 'fs', 'memory-server', 'shell'].sort()
-    );
-    // fs root AND shell child cwd are the dispatching cwd.
-    expect(fsRoot(map)).toBe('/P');
-    expect(stdio(map, 'fs').cwd).toBe('/P');
-    expect(stdio(map, 'shell').cwd).toBe('/P');
-    // backlog + memory are the explicit half.
+    expect(Object.keys(map).sort()).toEqual(['backlog', 'memory-server']);
     expect(map['memory-server']).toMatchObject({ transport: 'sse' });
     expect(map['backlog']).toMatchObject({ transport: 'stdio', command: 'node' });
-    // dispatch self is the REAL agent-mcp launch config (D1), never a wrapper.
-    expect(map['agent-mcp']).toEqual({
-      transport: 'stdio',
-      command: 'npx',
-      args: ['-y', '@adhd/agent-mcp'],
-    });
+    // No native member, and no dispatch self server, is ever produced here.
+    expect(map['fs']).toBeUndefined();
+    expect(map['shell']).toBeUndefined();
+    expect(map['agent-mcp']).toBeUndefined();
   });
 
-  it('AC2: the SAME call from /P vs /Q roots each cwd (dispatch-host portability)', () => {
-    const atP = resolveDispatchMcpServers({ cwd: '/P', env: ENV });
-    const atQ = resolveDispatchMcpServers({ cwd: '/Q', env: ENV });
-
-    expect(fsRoot(atP)).toBe('/P');
-    expect(stdio(atP, 'shell').cwd).toBe('/P');
-    expect(fsRoot(atQ)).toBe('/Q');
-    expect(stdio(atQ, 'shell').cwd).toBe('/Q');
+  it('AC-C: the returned map carries NO absolute cwd / fs root', () => {
+    const map = resolveDispatchMcpServers({ env: ENV });
+    const serialized = JSON.stringify(map);
+    expect(serialized).not.toContain('server-filesystem');
+    expect(serialized).not.toContain('mcp-shell-server');
+    // A dispatching cwd is never present (the explicit half is cwd-independent).
+    expect(serialized).not.toContain('/P');
   });
 
-  it('AC3: explicit mcpServers WIN over the native toolset', () => {
-    const customFs: McpServerConfig = { transport: 'stdio', command: 'my-fs', args: ['/custom'] };
+  it('AC-D: caller-supplied explicit servers are merged and WIN per key', () => {
     const customMemory: McpServerConfig = { transport: 'sse', url: 'http://explicit/sse' };
-
     const map = resolveDispatchMcpServers({
-      cwd: '/P',
       env: ENV,
-      explicit: { fs: customFs, 'memory-server': customMemory },
+      explicit: { 'memory-server': customMemory },
     });
-
-    expect(map['fs']).toEqual(customFs);
     expect(map['memory-server']).toEqual(customMemory);
-    // A non-overridden native member is still present (explicit wins per key).
-    expect(stdio(map, 'shell').cwd).toBe('/P');
-    expect(fsRoot(map)).not.toBe('/P'); // the custom fs replaced the builtin
-  });
-
-  it('AC3: a nativeTooling member set to false is omitted; an override is honoured', () => {
-    const off = resolveDispatchMcpServers({
-      cwd: '/P',
-      env: ENV,
-      nativeTooling: { fs: false, shell: false, dispatch: false },
-    });
-    expect(Object.keys(off).sort()).toEqual(['backlog', 'memory-server']);
-
-    const override = resolveDispatchMcpServers({
-      cwd: '/P',
-      env: ENV,
-      nativeTooling: { fs: { root: '/CUSTOM' } },
-    });
-    expect(fsRoot(override)).toBe('/CUSTOM');
-    expect(stdio(override, 'shell').cwd).toBe('/P');
-  });
-
-  it('AC4: the builtin members are byte-equal to resolveNativeToolingMap — no second producer', () => {
-    const native = resolveNativeToolingMap(undefined, {
-      cwd: '/P',
-      dispatchSelf: { transport: 'stdio', command: 'npx', args: ['-y', '@adhd/agent-mcp'] },
-    });
-    const map = resolveDispatchMcpServers({ cwd: '/P', env: ENV });
-    for (const key of Object.keys(native)) {
-      expect(map[key]).toEqual(native[key]);
-    }
+    expect(map['backlog']).toBeDefined();
   });
 });
 
-describe('buildProductionAgentMcpRunner — cwd threading (NAT-TOOL-5 AC1/AC3)', () => {
-  it('threads the dispatching cwd to the spawned agent-mcp child', () => {
+describe('resolveDispatchNativeTooling — declarative, never resolved (D3/D4/D8)', () => {
+  it('AC-B/D: defaults to the standardized {fs,shell,dispatch} declarative config', () => {
+    expect(resolveDispatchNativeTooling()).toEqual({
+      fs: true,
+      shell: true,
+      dispatch: true,
+    });
+    expect(DEFAULT_DISPATCH_NATIVE_TOOLING).toEqual({
+      fs: true,
+      shell: true,
+      dispatch: true,
+    });
+  });
+
+  it('AC-B: a caller override is stored VERBATIM — a declarative root override is NOT expanded', () => {
+    const override = { fs: { root: '/CUSTOM' }, shell: false, dispatch: true } as const;
+    // Returns the declarative config as-is; no fs server is resolved here.
+    expect(resolveDispatchNativeTooling({ nativeTooling: override })).toEqual(override);
+  });
+});
+
+describe('buildProductionAgentMcpRunner — stores declarative, threads cwd (AC-A/AC-B/AC-C)', () => {
+  it('AC-B: threads the dispatching cwd to the spawned agent-mcp child', () => {
     const runner = buildProductionAgentMcpRunner(ENV, {
       cwd: '/P',
       clientFactory: () => new RecordingClient(),
@@ -175,7 +153,7 @@ describe('buildProductionAgentMcpRunner — cwd threading (NAT-TOOL-5 AC1/AC3)',
     expect(runner.cwd).toBe('/P');
   });
 
-  it('roots the resolved map at the cwd — the map actually sent to agent_create', async () => {
+  it('AC-A/AC-C/AC-D: the agent_create payload stores declarative nativeTooling + only the explicit mcpServers', async () => {
     const client = new RecordingClient(false);
     const runner = buildProductionAgentMcpRunner(ENV, {
       cwd: '/P',
@@ -187,15 +165,22 @@ describe('buildProductionAgentMcpRunner — cwd threading (NAT-TOOL-5 AC1/AC3)',
 
     const create = client.calls.find((c) => c.name === 'agent_create');
     expect(create).toBeDefined();
-    const map = create?.arguments?.['mcpServers'] as Record<string, McpServerConfig>;
-    expect(fsRoot(map)).toBe('/P');
-    expect(stdio(map, 'shell').cwd).toBe('/P');
-    expect(Object.keys(map).sort()).toEqual(
-      ['agent-mcp', 'backlog', 'fs', 'memory-server', 'shell'].sort()
-    );
+    const args = create?.arguments ?? {};
+
+    // Declarative nativeTooling is stored verbatim.
+    expect(args['nativeTooling']).toEqual({ fs: true, shell: true, dispatch: true });
+
+    // mcpServers carries ONLY the explicit half; no fs/shell/dispatch, no root.
+    const map = args['mcpServers'] as Record<string, McpServerConfig>;
+    expect(Object.keys(map).sort()).toEqual(['backlog', 'memory-server']);
+    const serialized = JSON.stringify(map);
+    expect(serialized).not.toContain('server-filesystem');
+    expect(serialized).not.toContain('mcp-shell-server');
+    expect(serialized).not.toContain('/P'); // cwd never baked into the stored map
+    expect(serialized).not.toContain('"cwd"');
   });
 
-  it('AC2: re-asserts the CURRENT cwd on an already-existing agent (reuse)', async () => {
+  it('AC-A: reuse performs NO write — the stored definition is never mutated', async () => {
     const client = new RecordingClient(true);
     const runner = buildProductionAgentMcpRunner(ENV, {
       cwd: '/Q',
@@ -204,15 +189,32 @@ describe('buildProductionAgentMcpRunner — cwd threading (NAT-TOOL-5 AC1/AC3)',
 
     await runner.ensureAgent(UNIT);
 
-    expect(client.calls.map((c) => c.name)).toEqual(['agent_read', 'agent_update']);
-    const update = client.calls.find((c) => c.name === 'agent_update');
-    const patch = update?.arguments?.['patch'] as { mcpServers: Record<string, McpServerConfig> };
-    expect(fsRoot(patch.mcpServers)).toBe('/Q');
-    expect(stdio(patch.mcpServers, 'shell').cwd).toBe('/Q');
+    // NEGATIVE CONTROL: reintroducing the pre-rework agent_update re-assert makes
+    // this see ['agent_read','agent_update'] and fail.
+    expect(client.calls.map((c) => c.name)).toEqual(['agent_read']);
+  });
+
+  it('AC-B: a caller nativeTooling override is what gets stored (declarative, unexpanded)', async () => {
+    const client = new RecordingClient(false);
+    const runner = buildProductionAgentMcpRunner(ENV, {
+      cwd: '/P',
+      createAgentsIfMissing: true,
+      nativeTooling: { fs: false, shell: false, dispatch: true },
+      clientFactory: () => client,
+    });
+
+    await runner.ensureAgent(UNIT);
+
+    const create = client.calls.find((c) => c.name === 'agent_create');
+    expect(create?.arguments?.['nativeTooling']).toEqual({
+      fs: false,
+      shell: false,
+      dispatch: true,
+    });
   });
 });
 
-describe('resolveProductionRunnerCwd (NAT-TOOL-5 AC3 — --tools-root consistency)', () => {
+describe('resolveProductionRunnerCwd (--tools-root consistency)', () => {
   it('uses --tools-root when supplied, else the dispatching process.cwd()', () => {
     expect(resolveProductionRunnerCwd('/T')).toBe('/T');
     expect(resolveProductionRunnerCwd()).toBe(process.cwd());

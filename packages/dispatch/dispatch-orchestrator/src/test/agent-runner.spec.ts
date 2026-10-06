@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   AgentMcpRunner,
@@ -105,35 +107,84 @@ describe('AgentMcpRunner', () => {
       ]);
     });
 
-    it('reassertMcpServersOnReuse re-asserts the CURRENT mcpServers on an existing agent (NAT-TOOL-5)', async () => {
-      const defaults = {
-        fs: {
-          transport: 'stdio' as const,
-          command: 'srt',
-          args: ['npx', '-y', '@modelcontextprotocol/server-filesystem', '/Q'],
-          cwd: '/Q',
+    it('stores declarative nativeTooling + the EXPLICIT mcpServers on create — never a resolved root (AC-A/AC-C, D4/D8)', async () => {
+      const nativeTooling = { fs: true, shell: true, dispatch: true };
+      const explicit = {
+        'memory-server': { transport: 'sse', url: 'http://localhost:3099/sse' },
+        backlog: {
+          transport: 'stdio',
+          command: 'node',
+          args: ['/repo/entrypoint/backlog/dist/index.js', 'serve', '--transport', 'mcp'],
         },
       };
       const client = new FakeMcpToolClient({
-        agent_read: () => ({ name: 'workflow-researcher', mcpServers: {} }),
-        agent_update: (args) => ({ ...args, version: 2 }),
+        agent_read: () =>
+          mcpError('AGENT_NOT_FOUND', "Agent 'workflow-researcher' not found"),
+        agent_create: (args) => ({
+          ...args,
+          version: 1,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        }),
       });
       const runner = new AgentMcpRunner({
         command: 'unused-in-test',
         clientFactory: () => client,
-        defaultMcpServers: defaults,
-        reassertMcpServersOnReuse: true,
+        defaultMcpServers: explicit,
+        nativeTooling,
       });
 
       await runner.ensureAgent(makeUnit({ agent_name: 'workflow-researcher' }));
 
-      // Teeth: dropping the `reassertMcpServersOnReuse` branch reverts to a
-      // lone `agent_read` and this fails.
-      expect(client.calls.map((c) => c.name)).toEqual(['agent_read', 'agent_update']);
-      expect(client.calls[1]?.arguments).toEqual({
-        name: 'workflow-researcher',
-        patch: { mcpServers: defaults },
+      const create = client.calls[1];
+      expect(create?.name).toBe('agent_create');
+      // The declarative config is stored verbatim — the child resolves it at task
+      // time against ITS cwd (D4/D8).
+      expect(create?.arguments?.['nativeTooling']).toEqual(nativeTooling);
+      // The explicit half carries only memory-server/backlog.
+      expect(create?.arguments?.['mcpServers']).toEqual(explicit);
+      // NO resolved native root / fs/shell server is written into the stored map.
+      // NEGATIVE CONTROL: resolving `nativeTooling` against a cwd and passing the
+      // result as `mcpServers` (the pre-rework NAT-TOOL-5 behavior) makes this red.
+      const serialized = JSON.stringify(create?.arguments);
+      expect(serialized).not.toContain('server-filesystem');
+      expect(serialized).not.toContain('mcp-shell-server');
+      expect(serialized).not.toContain('"/Q"');
+      expect(serialized).not.toContain('"cwd"');
+    });
+
+    it('reuse performs NO write — a reused agent is never re-scoped/mutated (AC-A/AC-C, D4/D8)', async () => {
+      const client = new FakeMcpToolClient({
+        // The stored definition already carries declarative nativeTooling and no
+        // resolved root.
+        agent_read: () => ({
+          name: 'workflow-researcher',
+          mcpServers: {},
+          nativeTooling: { fs: true, shell: true, dispatch: true },
+        }),
+        // NEGATIVE CONTROL: reintroducing the pre-rework reuse re-assertion
+        // branch calls `agent_update` here and the call-count assertion below fails.
+        agent_update: () => {
+          throw new Error('agent_update must NOT be called on reuse');
+        },
       });
+      const runner = new AgentMcpRunner({
+        command: 'unused-in-test',
+        clientFactory: () => client,
+        defaultMcpServers: {
+          fs: {
+            transport: 'stdio' as const,
+            command: 'srt',
+            args: ['npx', '-y', '@modelcontextprotocol/server-filesystem', '/Q'],
+            cwd: '/Q',
+          },
+        },
+        nativeTooling: { fs: true, shell: true, dispatch: true },
+      });
+
+      await runner.ensureAgent(makeUnit({ agent_name: 'workflow-researcher' }));
+
+      expect(client.calls.map((c) => c.name)).toEqual(['agent_read']);
     });
 
     it('exposes the threaded cwd for the host to observe (NAT-TOOL-5 AC1)', () => {
@@ -545,5 +596,27 @@ describe('AgentMcpRunner', () => {
 
       expect(client.closeCallCount).toBe(1);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AC-C source guard — the resolved-root write is GONE from production source
+// ---------------------------------------------------------------------------
+
+describe('agent-runner source guard (AC-C)', () => {
+  const source = readFileSync(
+    join(__dirname, '..', 'lib', 'agent-runner.ts'),
+    'utf8'
+  );
+
+  it('does not contain the pre-rework reuse re-assertion mechanism', () => {
+    // NEGATIVE CONTROL: re-adding the `reassertMcpServersOnReuse` config/branch
+    // (an `agent_update` that wrote the resolved map back on reuse) makes this red.
+    expect(source).not.toContain('reassertMcpServersOnReuse');
+    expect(source).not.toMatch(/patch:\s*\{[^}]*mcpServers/);
+  });
+
+  it('sends the declarative nativeTooling on agent_create (never a resolved map)', () => {
+    expect(source).toContain('nativeTooling: this.nativeTooling');
   });
 });
