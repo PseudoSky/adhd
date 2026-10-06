@@ -20,6 +20,12 @@ export type AgentMcpErrorCode =
   | 'BUDGET_EXCEEDED'
   | 'COMPOSED_PROMPT_NOT_FOUND'
   /**
+   * The selection chain `task ?? session ?? agent ?? global` resolved no
+   * provider type and/or model. Fails closed: there is no implicit default
+   * provider (D-G(2)).
+   */
+  | 'NO_PROVIDER_SELECTED'
+  /**
    * The resolved permission map decided `deny` for this tool call (ADR-0008 D5):
    * the tool is NOT executed and the caller receives a typed refusal.
    */

@@ -25,6 +25,20 @@ export const sessionsTable = sqliteTable("sessions", {
     composedPromptId: text("composed_prompt_id"),
 });
 
+/**
+ * The session-held provider binding columns (D-G(2); added by agent-mcp
+ * migration 0011). Declared as a SEPARATE view over the same `sessions` table
+ * so a store whose `sessions` DDL predates the migration keeps working for every
+ * non-binding query (`sessionsTable` selects an explicit older column set).
+ * `models` is a JSON ModelSlug[].
+ */
+export const sessionBindingTable = sqliteTable("sessions", {
+    id: text("id").primaryKey(),
+    providerType: text("provider_type"),
+    modelRef: text("model_ref"),
+    models: text("models"),
+});
+
 // ──────────────────────────────────────────────
 // messages
 // ──────────────────────────────────────────────

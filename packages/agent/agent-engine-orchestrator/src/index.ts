@@ -29,6 +29,20 @@ export { AnthropicProvider } from './providers/anthropic.js';
 export { OpenAIProvider } from './providers/openai.js';
 export { ClaudeCliProvider, computeClaudeBuiltinArgs, extractAgentSpecName, normalizeAgentSpec } from './providers/claudecli.js';
 export { createProvider } from './providers/factory.js';
+export { createProviderRegistry, seed as seedProviderRegistry } from '@adhd/agent-core-provider';
+export type { ProviderRegistry } from '@adhd/agent-core-provider';
+export { resolveTaskSelection, buildProviderForSelection } from './providers/construct.js';
+export {
+  resolveSelection,
+  requireSelection,
+  providerConfigToBinding,
+  resolveWireModel,
+  selectionOf,
+  wireModelOf,
+  platformForProvider,
+  PROVIDER_DEFAULT_MODEL,
+} from './providers/resolve-selection.js';
+export type { SelectionTiers } from './providers/resolve-selection.js';
 export { serverSideToolsForProvider, ANTHROPIC_NATIVE_WEB_TOOLS } from './providers/server-side-tools.js';
 export type { LLMProvider, ProviderChatRequest, ProviderChatResponse, ServerSideTool } from './providers/types.js';
 export type { ToolDefinition, TokenUsage } from '@adhd/agent-base-types';
@@ -47,7 +61,7 @@ export type { IMcpClient } from './clients/types.js';
 export { agentCreate, agentRead, agentUpdate, agentDelete, agentList, projectAgentRecord } from './tools/agent-crud.js';
 export type { AgentCrudDeps, AgentUpdateResult, AgentProjectionOptions, AgentRecord } from './tools/agent-crud.js';
 export type { AgentStore } from './tools/agent-crud.js';
-export { agentTool, sessionList, sessionClose, sessionClear } from './tools/session.js';
+export { agentTool, sessionList, sessionClose, sessionClear, sessionUpdate } from './tools/session.js';
 export type { SessionDeps } from './tools/session.js';
 export {
   verifyAgentMcpServers,

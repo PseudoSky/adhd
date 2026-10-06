@@ -1,4 +1,5 @@
 import { eq, sql } from 'drizzle-orm';
+import { selectionOf, wireModelOf } from '../providers/resolve-selection.js';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
 import { taskUsageTable } from "@adhd/agent-store-runtime";
@@ -69,18 +70,16 @@ export class UsagePlugin implements Plugin {
   private onTaskStart(payload: TaskStartPayload): void {
     try {
       const { executionContext } = payload;
-      const provider = executionContext.agentDefinition.provider;
+      const selection = selectionOf(executionContext);
       this.accumulators.set(executionContext.taskId, {
         startedAt: Date.now(),
         rootTaskId: payload.rootTaskId ?? null,
         agentName: executionContext.agentName,
-        providerType: provider.type,
-        model: ('model' in provider && provider.model) || 'default',
+        providerType: selection.providerType,
+        model: wireModelOf(executionContext) || 'default',
         mostSevereStopReason: 'unknown',
         maxTokens:
-          'maxTokens' in provider && typeof provider.maxTokens === 'number'
-            ? provider.maxTokens
-            : null,
+          typeof selection.maxTokens === 'number' ? selection.maxTokens : null,
       });
     } catch (err) {
       this.logger.error({ err }, 'UsagePlugin: task:start handler failed');
@@ -105,9 +104,7 @@ export class UsagePlugin implements Plugin {
         );
       }
 
-      const provider = executionContext.agentDefinition.provider;
-      const model =
-        acc?.model ?? (('model' in provider && provider.model) || 'default');
+      const model = acc?.model ?? (wireModelOf(executionContext) || 'default');
 
       // est_cost_usd: linear/additive, so valid to compute per-turn and sum. null
       // (never 0) when the model has no rate-card entry — never report an unknown
@@ -125,7 +122,7 @@ export class UsagePlugin implements Plugin {
           taskId,
           rootTaskId: acc?.rootTaskId ?? null,
           agentName: acc?.agentName ?? executionContext.agentName,
-          providerType: acc?.providerType ?? provider.type,
+          providerType: acc?.providerType ?? selectionOf(executionContext).providerType,
           model,
           inputTokens,
           outputTokens,

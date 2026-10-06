@@ -15,6 +15,7 @@ import { generateId } from '../utils/ids.js';
 import { nowIso } from '../utils/timestamps.js';
 import type { EngineConfig, EngineLogger } from '../interfaces.js';
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from '../interfaces.js';
+import { selectionOf, wireModelOf } from '../providers/resolve-selection.js';
 
 import type { McpClientRegistry } from '../clients/registry.js';
 import type { PolicyEngine } from './policy.js';
@@ -325,7 +326,7 @@ export class Orchestrator {
       // saving marginal while its reliability cost (malformed calls -> retries) is real.
       // 'names' remains available as an explicit opt-in. See BUG-ORCH-013.
       const advertisementMode: ToolAdvertisementMode =
-        executionContext.agentDefinition.provider.type === 'claudecli'
+        selectionOf(executionContext).providerType === 'claudecli'
           ? 'full'
           : (executionContext.agentDefinition.toolAdvertisement ?? 'full');
       const advertisedTools =
@@ -352,10 +353,7 @@ export class Orchestrator {
       // The provider's own reported prompt_tokens from the last call — the exact, free
       // ground truth for the real context size. Undefined before the first call.
       let lastReportedContext: number | undefined;
-      const providerModel =
-        'model' in executionContext.agentDefinition.provider
-          ? executionContext.agentDefinition.provider.model
-          : undefined;
+      const providerModel = wireModelOf(executionContext);
 
       let looping = true;
       while (looping) {
@@ -430,7 +428,7 @@ export class Orchestrator {
         const composedSignal = AbortSignal.any([
           signal,
           AbortSignal.timeout(
-            executionContext.agentDefinition.provider.timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS
+            selectionOf(executionContext).timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS
           ),
         ]);
 
@@ -494,7 +492,7 @@ export class Orchestrator {
           // Provider-native web tools (default on, opt out via
           // nativeWebTools:false) — see server-side-tools.ts (backlog 1abd2d84).
           const serverSideTools = serverSideToolsForProvider(
-            executionContext.agentDefinition.provider.type,
+            selectionOf(executionContext).providerType,
             executionContext.agentDefinition.nativeWebTools !== false
           );
           providerResponse = await provider.chat({
@@ -532,7 +530,7 @@ export class Orchestrator {
               (error.name === 'AbortError' || error.name === 'TimeoutError'))
           ) {
             const ms =
-              executionContext.agentDefinition.provider.timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
+              selectionOf(executionContext).timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
             throw new ToolError(
               'PROVIDER_TIMEOUT',
               `Provider call timed out after ${ms}ms. Increase timeoutMs on the agent's provider config.`
