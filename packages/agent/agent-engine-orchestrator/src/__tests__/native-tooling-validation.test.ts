@@ -58,7 +58,7 @@ describe('nativeTooling zod validation (ADR-0008 D3; NAT-TOOL-1)', () => {
 
   it('AC3: nativeTooling survives a serialize -> store -> read round-trip', () => {
     const nativeTooling = {
-      fs: { root: '/work', readOnly: true, permissions: { fs: 'ask' as const } },
+      fs: { root: 'work', readOnly: true, permissions: { fs: 'ask' as const } },
       shell: { allowCommands: ['ls', 'git'], timeoutMs: 30_000 },
       dispatch: true,
       hitl: true,

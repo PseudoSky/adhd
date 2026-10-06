@@ -14,6 +14,7 @@ import type { AgentDefinition, McpServerConfig } from '@adhd/agent-base-types';
 import { SessionStore } from '@adhd/agent-store-runtime';
 
 import {
+  allowedRootsFromResolvedConfig,
   buildDispatchSelf,
   buildNativeToolingContext,
   resolveAgentMcpServers,
@@ -362,5 +363,81 @@ describe('session snapshot stays declarative — reuse resolves the CURRENT cwd 
 
     const fs = stdio(resolved.mcpServers['fs']);
     expect(fs.cwd).toBe('/P'); // explicit stored root WINS — the pre-fix bug
+  });
+});
+
+/**
+ * MULTI-ROOT / PORTABLE HINTS / CALLER-CWD at the HOST boundary (ADR-0008
+ * D4/D7/D8) — the fs analogue of the D-G welded-`provider` bug. A definition
+ * carries only portable hints; the host threads the caller cwd and the global
+ * alias map, and never welds an absolute path.
+ */
+describe('multi-root / caller-cwd at the host boundary (ADR-0008 D4/D7/D8)', () => {
+  const multiRootDef = {
+    mcpServers: {} as Record<string, McpServerConfig>,
+    nativeTooling: { fs: { roots: ['a', 'b'] } } as const,
+  };
+  const fsArgs = (def: { mcpServers: Record<string, McpServerConfig> }): string[] =>
+    (stdio(def.mcpServers['fs']).args ?? []) as string[];
+
+  it('AC1/AC2: the store wrapper resolves relative roots against the PER-CALL caller cwd; stored JSON unchanged', () => {
+    const snapshot = JSON.stringify(multiRootDef);
+    const wrapper = withResolvedNativeTooling(
+      { read: () => multiRootDef as never },
+      (cwd) => ({ cwd: cwd ?? '/FALLBACK' })
+    );
+
+    const atP = wrapper.read('a', '/P') as unknown as typeof multiRootDef;
+    const atQ = wrapper.read('a', '/Q') as unknown as typeof multiRootDef;
+
+    expect(fsArgs(atP)).toEqual(['npx', '-y', '@modelcontextprotocol/server-filesystem', '/P/a', '/P/b']);
+    expect(fsArgs(atQ)).toEqual(['npx', '-y', '@modelcontextprotocol/server-filesystem', '/Q/a', '/Q/b']);
+    // The definition is never mutated — portability (D4/D8).
+    expect(JSON.stringify(multiRootDef)).toBe(snapshot);
+  });
+
+  it('AC3: an alias from the global allowed-root map resolves to its absolute target (agent references the alias only)', () => {
+    const aliasDef = {
+      mcpServers: {} as Record<string, McpServerConfig>,
+      nativeTooling: { fs: { roots: ['project'] } } as const,
+    };
+    const wrapper = withResolvedNativeTooling(
+      { read: () => aliasDef as never },
+      (cwd) => ({ cwd: cwd ?? '/P', roots: { project: '/opt/proj' } })
+    );
+    const resolved = wrapper.read('a', '/P') as unknown as typeof aliasDef;
+    expect(fsArgs(resolved)).toContain('/opt/proj');
+    expect(fsArgs(resolved)).not.toContain('/P/project');
+  });
+
+  it('AC3: allowedRootsFromResolvedConfig parses the `alias=path` global-config surface', () => {
+    expect(
+      allowedRootsFromResolvedConfig(['project=/Users/me/proj', 'tmp=/tmp/scratch'])
+    ).toEqual({ project: '/Users/me/proj', tmp: '/tmp/scratch' });
+    expect(allowedRootsFromResolvedConfig([])).toBeUndefined();
+    expect(allowedRootsFromResolvedConfig(undefined)).toBeUndefined();
+    // A malformed entry (no `=`) is dropped, never silently a root.
+    expect(allowedRootsFromResolvedConfig(['noequals'])).toBeUndefined();
+  });
+
+  it('AC4: buildNativeToolingContext flags caller vs host-fallback cwd', () => {
+    const caller = buildNativeToolingContext({ cwd: '/P' });
+    expect(caller.cwd).toBe('/P');
+    expect(caller.cwdSource).toBe('caller');
+
+    const fallback = buildNativeToolingContext({});
+    expect(fallback.cwdSource).toBe('host-fallback');
+    expect(fallback.cwd).toBe(process.cwd());
+    // A host cwd resolver is used when no caller cwd is given (still flagged).
+    expect(buildNativeToolingContext({ hostCwd: () => '/host' }).cwd).toBe('/host');
+  });
+
+  it('AC4: the per-call cwd WINS over the host fallback through the wrapper', () => {
+    const wrapper = withResolvedNativeTooling(
+      { read: () => multiRootDef as never },
+      (cwd) => buildNativeToolingContext({ cwd, hostCwd: () => '/HOST-FALLBACK' })
+    );
+    expect(fsArgs(wrapper.read('a', '/P') as unknown as typeof multiRootDef)).toContain('/P/a');
+    expect(fsArgs(wrapper.read('a') as unknown as typeof multiRootDef)).toContain('/HOST-FALLBACK/a');
   });
 });

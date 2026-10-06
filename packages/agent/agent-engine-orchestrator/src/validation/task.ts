@@ -65,6 +65,13 @@ const sessionModeSchema = z.object({
   depends_on: z.array(z.string().uuid()).optional(),
   on_upstream_failure: z.enum(['fail', 'skip']).optional(),
   stream: z.boolean().optional(),
+  /**
+   * Caller-supplied cwd (ADR-0008 D4; caller-cwd contract). Anchors the task's
+   * native-tooling resolution (fs/shell roots) and a sub-dispatch's inherited
+   * cwd. Absent ⇒ inherit the dispatching parent's cwd, else fall back to the
+   * host's `process.cwd()` (flagged).
+   */
+  cwd: z.string().optional(),
 });
 
 const ephemeralModeSchema = z.object({
@@ -73,6 +80,8 @@ const ephemeralModeSchema = z.object({
   depends_on: z.array(z.string().uuid()).optional(),
   on_upstream_failure: z.enum(['fail', 'skip']).optional(),
   stream: z.boolean().optional(),
+  /** Caller-supplied cwd (ADR-0008 D4; caller-cwd contract). See sessionModeSchema. */
+  cwd: z.string().optional(),
 });
 
 export const taskToolInputSchema = z.union([

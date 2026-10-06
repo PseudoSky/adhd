@@ -257,7 +257,14 @@ export function nativeToolingConfigFieldSpecs(prefix: string): Record<string, Fi
       type: 'string',
       env: env('FS_ROOT'),
       description:
-        'Filesystem root exposed to the adopted fs server. Unset ⇒ the dispatching cwd at task time (ADR-0008 D4).',
+        'Filesystem root HINT exposed to the adopted fs server: a cwd-relative subpath, or a named alias in the allowed-root map. Unset ⇒ the dispatching caller cwd at task time (ADR-0008 D4). NEVER an absolute path (rejected at resolution — it breaks portability).',
+    },
+    'nativeTooling.fs.allowedRoots': {
+      type: 'array',
+      env: env('FS_ALLOWED_ROOTS'),
+      items: { type: 'string' },
+      description:
+        'GLOBAL allowed-root map (ADR-0008 D7): comma-separated `alias=absolute-path` entries, e.g. `project=/Users/me/proj,tmp=/tmp/scratch`. The operator owns the machine-specific absolute targets; a definition references an alias portably via `fs.roots`. This is the ONLY place an absolute fs directory is configured (never the agent record).',
     },
     'nativeTooling.fs.readOnly': {
       type: 'boolean',

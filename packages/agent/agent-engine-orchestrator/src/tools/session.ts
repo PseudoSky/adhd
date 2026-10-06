@@ -17,8 +17,14 @@ import { resolveComposedPrompt } from "../engine/prompt-resolver.js";
 export interface SessionStoreForTool {
     create(input: { agentName: string; agentDefinition: unknown; composedPromptId?: string }): { id: string };
     read(sessionId: string): { status: string };
+    /**
+     * The session's agent definition, resolved against the CURRENT task-time
+     * cwd (ADR-0008 D4). `cwd` is the caller-supplied cwd for this task (from
+     * the `task` input, or inherited from the dispatching parent); absent ⇒ the
+     * host falls back to `process.cwd()` (flagged). Plain stores ignore it.
+     */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    getAgentDefinition(sessionId: string): any;
+    getAgentDefinition(sessionId: string, cwd?: string): any;
     getMessages(sessionId: string): unknown[];
     list(input: SessionListInput): Session[];
     close(sessionId: string): Session;
@@ -38,7 +44,11 @@ export async function agentTool(
     deps: SessionDeps,
     executionContext?: ExecutionContext
 ): Promise<AgentToolOutput> {
-    const agentDefinition = deps.agentStore.read(input.name);
+    // Caller-cwd contract (ADR-0008 D4): the caller may supply a `cwd`; a
+    // sub-dispatch inherits the parent's. Absent ⇒ the host falls back to its
+    // own process.cwd() (flagged on the resolve context).
+    const effectiveCwd = input.cwd ?? executionContext?.cwd;
+    const agentDefinition = deps.agentStore.read(input.name, effectiveCwd);
     // The session snapshot must be the DECLARATIVE definition (ADR-0008 D4/D8):
     // persist `readUnresolved` when the host exposes it so a task-time resolved
     // root is never frozen into `sessions.agent_data`. The resolved definition is

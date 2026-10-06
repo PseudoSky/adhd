@@ -281,12 +281,44 @@ export type PermissionRuleMap = Record<string, PermissionAction>;
 
 /**
  * Overrides for the builtin filesystem tool
- * (`@modelcontextprotocol/server-filesystem`, ADR-0008 D7). Omit `root` to use the
- * dispatching cwd.
+ * (`@modelcontextprotocol/server-filesystem`, ADR-0008 D7). Omit `root`/`roots`
+ * to use the dispatching caller cwd.
+ *
+ * PORTABILITY (D4/D8; the fs analogue of the welded-`provider` bug): `root` and
+ * `roots` are **portable hints**, NOT host paths. A hint is EITHER a
+ * cwd-relative subpath (resolved against the caller cwd at task time) OR a named
+ * alias into the GLOBAL allowed-root map (alias → absolute path, machine-owned
+ * by the operator's config). An ABSOLUTE path in a definition is REJECTED at
+ * resolution with a typed `NativeToolingRootError` — it would weld a host path
+ * into a record that must be reusable from any directory. This keeps the stored
+ * definition byte-identical across fires from different cwds.
  */
 export interface FsBuiltinOverrides {
-  /** Filesystem root exposed to the server. Defaults to the dispatching cwd. */
+  /**
+   * The filesystem root HINT. Defaults to the dispatching caller cwd. Either a
+   * cwd-relative subpath or a named alias in the global allowed-root map —
+   * never an absolute path (rejected at resolution).
+   */
   root?: string;
+  /**
+   * MULTIPLE filesystem roots exposed to the adopted reference fs server
+   * (`@modelcontextprotocol/server-filesystem`), which accepts one allowed
+   * directory per argv entry and treats the whole set as a containment
+   * allow-list (ADR-0008 D7).
+   *
+   * PRECEDENCE: when `roots` is a non-empty array it WINS and `root` is ignored;
+   * otherwise the resolver emits `[root]`, or `[callerCwd]` when neither is
+   * given. Each entry is a PORTABLE HINT — a cwd-relative subpath or a named
+   * alias in the global allowed-root map (never an absolute path). A cwd-relative
+   * `..` subpath must not escape the caller cwd. The host unions every resolved
+   * root into the per-run `srt` policy's `allowWrite`, so a read from a SECOND
+   * root is not sandbox-denied (finding 535c1101 / A3; AC6).
+   *
+   * Per-root read-only is NOT available: the reference server exposes no stdio
+   * read-only flag, so `readOnly` remains a GLOBAL (whole-server) reservation,
+   * enforced via `srt`/Docker `ro` (ADR-0008 D7).
+   */
+  roots?: string[];
   /**
    * Reserved. The reference fs server exposes no stdio read-only flag; read-only
    * roots are enforced via `srt` / Docker `ro` (ADR-0008 D7, NAT-TOOL-8).
@@ -465,6 +497,17 @@ export interface ExecutionContext {
   rootTaskId?: string;
   recursionDepth: number;
   toolCallCount: number;
+  /**
+   * The caller-supplied cwd for this task (ADR-0008 D4; caller-cwd contract).
+   *
+   * Sourced from the `task`/`agent` MCP input by the MCP caller, or INHERITED
+   * from the dispatching parent's {@link ExecutionContext} on a sub-dispatch, so
+   * a child resolves its fs/shell roots against the parent's cwd. Absent ⇒ the
+   * host falls back to its own `process.cwd()` (flagged — it "may not be the
+   * agent's cwd"). Threaded to native-tooling resolution and to a further
+   * sub-dispatch; never persisted on the stored definition (D4/D8).
+   */
+  cwd?: string;
   /**
    * Upstream task results keyed by upstream taskId. Populated by DagEngine at
    * dispatch time from completed upstream task rows. Only present for tasks that

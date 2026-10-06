@@ -17,6 +17,12 @@ export type { Session } from '@adhd/agent-base-types';
 
 export const agentToolInputSchema = z.object({
   name: z.string().min(1),
+  /**
+   * Caller-supplied cwd (ADR-0008 D4; caller-cwd contract). Anchors the
+   * session's native-tooling resolution and — on a sub-dispatch — inherits the
+   * dispatching parent's cwd. Absent ⇒ host `process.cwd()` (flagged).
+   */
+  cwd: z.string().optional(),
 });
 
 export const agentToolOutputSchema = z.object({

@@ -151,6 +151,13 @@ export function resolveSrtRunSettingsPath(env: NodeJS.ProcessEnv = process.env):
 let activeRunSettingsPath: string | undefined;
 /** True when the active path came from `ADHD_AGENT_SRT_SETTINGS` (never removed by us). */
 let activeRunSettingsIsOverride = false;
+/**
+ * Roots already unioned into the active per-run policy — an in-memory fast path
+ * so a per-TASK call ({@link addRunSrtAllowWrite}, once per resolution) does not
+ * re-lock + rewrite the file for a root that is already present. Cleared
+ * whenever the active path changes.
+ */
+const appliedRunRoots = new Set<string>();
 
 /**
  * Provision the per-run `srt` policy (static allow-list + this run's cwd) and
@@ -167,12 +174,40 @@ export function provisionRunSrtPolicy(
   const result = provisionSrtPolicy({ settingsPath: path, allowWrite: [cwd] });
   activeRunSettingsPath = path;
   activeRunSettingsIsOverride = Boolean(env[SRT_SETTINGS_ENV]);
+  appliedRunRoots.clear();
+  appliedRunRoots.add(cwd);
   return result;
 }
 
 /** The active per-run settings path, or `undefined` when none was provisioned. */
 export function getSrtRunSettingsPath(): string | undefined {
   return activeRunSettingsPath;
+}
+
+/**
+ * Union additional filesystem roots into the ACTIVE per-run `srt` policy's
+ * `allowWrite` (ADR-0008 D7; finding 535c1101 / A3; MULTI-ROOT).
+ *
+ * `provisionRunSrtPolicy` seeds the per-run file with the dispatching cwd, but a
+ * task may expose MORE than one `nativeTooling.fs` root (`FsBuiltinOverrides.roots`).
+ * Without this, a read from a second root is sandbox-DENIED even though the fs
+ * server itself allows it. Called at task-time resolution with the exact roots
+ * the resolved fs server will expose, so every root is writable — and, because
+ * `srt` derives read access from the write roots when reads are restricted,
+ * READABLE too.
+ *
+ * Additive + idempotent (byte-identical on re-merge), concurrency-safe (the
+ * read-modify-write runs under {@link withSrtPolicyLock}). A no-op when no
+ * per-run policy is active (the resolver then emits a bare `srt`, or the sandbox
+ * is disabled) or when there are no roots.
+ */
+export function addRunSrtAllowWrite(roots: readonly string[]): void {
+  if (!activeRunSettingsPath) return;
+  if (roots.length === 0) return;
+  const fresh = roots.filter((root) => !appliedRunRoots.has(root));
+  if (fresh.length === 0) return;
+  provisionSrtPolicy({ settingsPath: activeRunSettingsPath, allowWrite: fresh });
+  for (const root of fresh) appliedRunRoots.add(root);
 }
 
 /**
@@ -189,6 +224,7 @@ export function removeRunSrtPolicy(): void {
   }
   activeRunSettingsPath = undefined;
   activeRunSettingsIsOverride = false;
+  appliedRunRoots.clear();
 }
 
 /** The lock file guarding a given settings path's read-modify-write. */

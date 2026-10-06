@@ -84,6 +84,13 @@ export interface AgentMcpConfig {
   readonly nativeTooling: {
     readonly fs: {
       readonly root: string | undefined;
+      /**
+       * GLOBAL allowed-root map (ADR-0008 D7): `alias=absolute-path` entries
+       * (comma-separated env / config-file array). The operator owns the
+       * machine-specific absolute targets; a definition references an alias
+       * portably. Consumed at task time, never stored on a definition.
+       */
+      readonly allowedRoots: readonly string[] | undefined;
       readonly readOnly: boolean | undefined;
       readonly allowedTools: readonly string[] | undefined;
       readonly disallowedTools: readonly string[] | undefined;

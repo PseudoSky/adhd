@@ -201,6 +201,13 @@ adhd **adopts** third-party MCP servers and authors only the thin resolver/confi
 
 `AgentDefinition.nativeTooling?` is part of the portable, persisted definition. Because resolution is task-time (D4), the **definition carries no resolved root**; it carries only the declarative config (D3). This is what makes one stored definition usable from any directory. A definition written before this ADR (no `nativeTooling`) still validates and behaves as if the standardized defaults applied.
 
+**Refinement — multi-root, caller-cwd, and the global allowed-root map (2026-10-06; backlog `99cb14a7`).** The fs analogue of the welded-`provider` bug is closed explicitly:
+
+- **`fs.root`/`fs.roots` are PORTABLE HINTS**, never host paths: a **named alias** into the GLOBAL allowed-root map, or a **cwd-relative subpath**. An **absolute** hint is REJECTED with a typed `NativeToolingRootError` (`ABSOLUTE_ROOT_NOT_PORTABLE`) — at the definition zod boundary AND in the resolver — and a `..` subpath that escapes the caller cwd is rejected (`ROOT_ESCAPES_CALLER_CWD`). This is what keeps the stored JSON byte-identical across fires.
+- **Multi-root.** The adopted reference fs server accepts one allowed directory per argv entry; the resolver emits EVERY resolved root, and one producer (`resolveFsRoots(fs, ctx)`, `@adhd/agent-core-native-tooling`) feeds both the argv and the per-run `srt` policy. The host unions every resolved root into that policy's `allowWrite`, so a read from a SECOND root is not sandbox-denied.
+- **The GLOBAL allowed-root map** (`alias → absolute path`) is the machine-specific, operator-owned surface — the ONLY place an absolute fs directory is configured. It lives in the global config (env `ADHD_AGENT_NATIVE_TOOLING_FS_ALLOWED_ROOTS` as `alias=path`, or the global `config.yaml`); a definition references `project`/`tmp` portably. This is the fs analogue of the provider registry (D-G SPEC).
+- **Caller-supplied cwd.** The `task`/`agent` MCP input carries a `cwd`; it is threaded from the MCP caller or INHERITED from a dispatching parent (`ExecutionContext.cwd`), and anchors resolution. `process.cwd()` is a **flagged** last-resort fallback (`cwdSource: 'host-fallback'` — "may not be the agent's cwd").
+
 ### D9 — cwd/env propagate to every spawned MCP child
 
 `McpServerConfig.cwd` is threaded through the engine's MCP client layer (`packages/agent/agent-engine-orchestrator/src/clients/stdio-client.ts`, `registry.ts`) into the spawned stdio child's working directory; `subprocessEnv()` reaches the child; a server spawned via the `claudecli` provider (`providers/claudecli.ts`) inherits the configured cwd. A server with **no** `cwd` still inherits the parent process cwd (unchanged behavior).

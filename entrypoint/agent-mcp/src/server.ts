@@ -24,6 +24,7 @@ import type {
 import type { IHookRegistry } from '@adhd/agent-base-types';
 import { subscribeToTaskDone, emitTaskEvent } from './streaming/event-bus.js';
 import {
+  allowedRootsFromResolvedConfig,
   buildNativeToolingContext,
   nativeToolingFromResolvedConfig,
   withResolvedNativeTooling,
@@ -366,12 +367,27 @@ export function createServer(deps: ServerDeps): Server {
   const defaultNativeTooling = nativeToolingFromResolvedConfig(
     env.config.nativeTooling
   );
-  const nativeToolingContext = () =>
-    buildNativeToolingContext({
-      cwd: (deps.resolveCwd ?? process.cwd)(),
+  // AC3: the GLOBAL allowed-root map (alias → absolute machine path) from the
+  // global config, so a definition can reference `project`/`tmp` portably.
+  const allowedRoots = allowedRootsFromResolvedConfig(
+    env.config.nativeTooling.fs.allowedRoots
+  );
+  const nativeToolingContext = (cwd?: string) => {
+    if (cwd === undefined) {
+      // "Flagged host fallback" (ADR-0008 D4): no caller cwd was supplied, so the
+      // host's own process cwd is used — which may not be the agent's cwd.
+      logger.warn(
+        'native tooling: no caller cwd supplied — falling back to the host process cwd (this may not be the agent\u2019s cwd; ADR-0008 D4)'
+      );
+    }
+    return buildNativeToolingContext({
+      cwd,
+      hostCwd: deps.resolveCwd,
+      roots: allowedRoots,
       dispatchSelf: deps.dispatchSelf,
       defaultNativeTooling,
     });
+  };
   const resolvingAgentStore = withResolvedNativeTooling(
     deps.agentStore,
     nativeToolingContext

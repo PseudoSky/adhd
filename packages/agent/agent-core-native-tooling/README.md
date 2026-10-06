@@ -16,6 +16,25 @@ This package owns **only**:
   agent-mcp and dispatch-cli; and
 - tool-**NAME** permission matching (`matchPermission`).
 
+## Portable, multi-root filesystem scoping (ADR-0008 D4/D7/D8)
+
+An `fs` root is a **portable hint**, never a host path — the fs analogue of the
+welded-`provider` bug. `resolveFsRoots(fs, ctx)` turns hints into concrete dirs:
+
+- a **named alias** present in `ctx.roots` (the global allowed-root map,
+  alias → absolute path) wins — the operator owns the machine path;
+- a **relative** hint resolves against `ctx.cwd` (the caller-supplied cwd) and
+  must not escape it;
+- an **absolute** hint — or a `..` escape — throws a typed
+  `NativeToolingRootError` (`ABSOLUTE_ROOT_NOT_PORTABLE` /
+  `ROOT_ESCAPES_CALLER_CWD`).
+
+Each resolved root becomes one argv entry, so `{ roots: ['a', 'b'] }` at caller
+cwd `/P` exposes `/P/a` and `/P/b`; `resolveFsRoots` returns that exact list so
+the host can union **every** root into the per-run `srt` `allowWrite` (a second
+root would otherwise be sandbox-denied). The stored definition stays
+byte-identical across fires (portability).
+
 It owns **no** command parser, **no** command segmentation, and **no**
 dangerous-command catalog. Hard enforcement is delegated to the adopted servers
 (`@modelcontextprotocol/server-filesystem`, `tumf/mcp-shell-server`) and
