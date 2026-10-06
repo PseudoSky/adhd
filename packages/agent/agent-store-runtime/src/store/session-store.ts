@@ -111,19 +111,13 @@ export class SessionStore {
    */
   getSelection(sessionId: string): PartialBinding | null {
     this.read(sessionId); // SESSION_NOT_FOUND for an absent session
-    let row: typeof sessionBindingTable.$inferSelect | undefined;
-    try {
-      row = this.db
-        .select()
-        .from(sessionBindingTable)
-        .where(eq(sessionBindingTable.id, sessionId))
-        .get();
-    } catch (err) {
-      // A `sessions` table that predates migration 0011 has no binding columns:
-      // it holds no binding. Anything else is a real failure.
-      if (err instanceof Error && /no such column/i.test(err.message)) return null;
-      throw err;
-    }
+    // An unmigrated `sessions` table (no 0011 columns) raises here by design
+    // (aafd6561 AC-e / ADR-0002 D1): the caller must migrate, not get a null.
+    const row = this.db
+      .select()
+      .from(sessionBindingTable)
+      .where(eq(sessionBindingTable.id, sessionId))
+      .get();
     if (!row) return null;
     const binding: PartialBinding = {};
     if (row.providerType !== null) {

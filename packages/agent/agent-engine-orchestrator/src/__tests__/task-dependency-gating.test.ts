@@ -73,7 +73,10 @@ CREATE TABLE sessions (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   closed_at TEXT,
-  composed_prompt_id TEXT
+  composed_prompt_id TEXT,
+  provider_type TEXT,
+  model_ref TEXT,
+  models TEXT
 );
 CREATE TABLE messages (
   id TEXT PRIMARY KEY NOT NULL,

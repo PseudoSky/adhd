@@ -113,10 +113,10 @@ describe('SessionStore session-held binding', () => {
     sqlite.close();
   });
 
-  it('a sessions table that predates migration 0011 holds no binding (not an error)', () => {
+  it('aafd6561 AC-e — a sessions table that predates migration 0011 throws (never a silent null)', () => {
     const { sqlite, store } = open([SESSIONS_DDL]);
     const s = store.create({ agentName: 'a', agentDefinition: agent });
-    expect(store.getSelection(s.id)).toBeNull();
+    expect(() => store.getSelection(s.id)).toThrowError(/no such column/i);
     sqlite.close();
   });
 });
