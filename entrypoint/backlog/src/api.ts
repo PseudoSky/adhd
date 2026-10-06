@@ -79,8 +79,11 @@ import {
   InvalidArgumentError,
   InvalidPredicateError,
   IssueNotFoundError,
+  IssueNotRestorableError,
   IssueTerminalError,
   NoteRequiredError,
+  ProductionWriteRefusedError,
+  RemoveConfirmationRequiredError,
   ObligationNotFoundError,
   ObligationUnsatisfiedError,
   OverrideNotPermittedError,
@@ -140,6 +143,11 @@ import { claim as claimIssueOp } from './write/claim.js';
 import { relate as relateIssueOp } from './write/relate.js';
 import { move as moveIssueOp } from './write/move.js';
 import { deleteIssue as deleteIssueOp } from './write/delete.js';
+import { removeIssue as removeIssueOp } from './write/remove.js';
+import { restoreIssue as restoreIssueOp } from './write/restore.js';
+import type {
+  IProductionWriteGate,
+} from './write/production-gate.js';
 import {
   upsertProject as upsertProjectOp,
   upsertComponent as upsertComponentOp,
@@ -195,6 +203,14 @@ import type { IRelateInput, IRelateOutcome } from './write/relate.js';
 import type { IMoveIssueInput, IMoveIssueOutcome } from './write/move.js';
 import type { IDeleteIssueInput, IDeleteIssueOutcome } from './write/delete.js';
 import type {
+  IRemoveIssueInput,
+  IRemoveIssueOutcome,
+} from './write/remove.js';
+import type {
+  IRestoreIssueInput,
+  IRestoreIssueOutcome,
+} from './write/restore.js';
+import type {
   IUpsertProjectInput,
   IUpsertProjectOutcome,
   IUpsertComponentInput,
@@ -236,6 +252,15 @@ export interface BacklogCtx {
    * `env`). NEVER set this in production code (`server.ts`/`cli.ts` never do).
    */
   adhdRoot?: string;
+  /**
+   * (S02 AC14) The explicit production-write gate. OPTIONAL: a ctx built by
+   * hand (tests, the library surface) carries none and is never gated. The
+   * real transports (`cli.ts`/`server.ts`) attach one only when they have
+   * positively resolved the LIVE production store, so a write against it is
+   * refused unless the caller passed the explicit typed opt-in. See
+   * `write/production-gate.ts`.
+   */
+  productionWrite?: IProductionWriteGate;
 }
 
 // ---------------------------------------------------------------------------
@@ -366,6 +391,11 @@ async function writeHandle(
     graph: ctx.store.graph,
     ...(search !== undefined ? { search } : {}),
     ...(embedding !== undefined ? { embedding } : {}),
+    // (S02 AC14) The production-write gate travels with the handle; absent on a
+    // hand-built ctx (tests/library) => inert. See production-gate.ts.
+    ...(ctx.productionWrite !== undefined
+      ? { productionWrite: ctx.productionWrite }
+      : {}),
   };
 }
 
@@ -476,6 +506,12 @@ const ERROR_CLASS_TO_ENVELOPE_CODE: ReadonlyArray<
   // not resource contention, so it maps to `precondition_failed` (AC6), never
   // the `E_VALIDATION` fallthrough code `validation`.
   [SpecRevisionConflictError, 'precondition_failed'],
+  // S02 AC14 — the lifecycle + production-gate refusals are refusing-write
+  // preconditions (nothing ran, a re-read shows the same state), never the
+  // `E_VALIDATION` fallthrough code `validation`.
+  [IssueNotRestorableError, 'precondition_failed'],
+  [RemoveConfirmationRequiredError, 'precondition_failed'],
+  [ProductionWriteRefusedError, 'precondition_failed'],
   [WriteContentionError, 'store_busy'],
   [RagNotConfiguredError, 'rag_not_configured'],
 ];
@@ -992,17 +1028,45 @@ export async function move(
 }
 
 /**
- * Soft-delete an issue.
+ * Soft-delete an issue (mounted as `delete`; see the export clause at the end
+ * of this file for why the implementation identifier is not `delete`).
  *
  * The node is closed off bi-temporally, never physically removed — its audit
- * trail and every edge pointing at it remain readable.
+ * trail and every edge pointing at it remain readable, and `restore` reverses
+ * it.
  */
-async function remove(
+async function softDelete(
   ctx: BacklogCtx,
   input: IDeleteIssueInput
 ): Promise<IOutcomeEnvelope<IDeleteIssueOutcome>> {
   return envelope(async () =>
     deleteIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
+}
+
+/**
+ * Permanently retire an issue (S02 AC14). Unlike `delete`, this is NOT
+ * reversible: `restore` refuses it. Requires `input.confirm === true`.
+ */
+export async function remove(
+  ctx: BacklogCtx,
+  input: IRemoveIssueInput
+): Promise<IOutcomeEnvelope<IRemoveIssueOutcome>> {
+  return envelope(async () =>
+    removeIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
+  );
+}
+
+/**
+ * Restore a soft-`delete`d issue (S02 AC14): un-invalidates the SAME node,
+ * never re-creates it. Fails on a live issue or a permanently removed one.
+ */
+export async function restore(
+  ctx: BacklogCtx,
+  input: IRestoreIssueInput
+): Promise<IOutcomeEnvelope<IRestoreIssueOutcome>> {
+  return envelope(async () =>
+    restoreIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
   );
 }
 
@@ -1099,7 +1163,9 @@ export async function rmProject(
  * exports — local, renamed, AND re-exported"). So the operation mounts as
  * `delete` while the implementation keeps a legal identifier.
  *
- * Do NOT "simplify" this to `export async function remove`: that silently
- * renames the tool to `backlog_remove` on all four transports.
+ * Do NOT "simplify" this to `export async function delete`: `delete` is a
+ * reserved word and cannot be a function name. The implementation identifier
+ * is `softDelete` (NOT `remove` — `remove` is now a distinct, permanent-retire
+ * verb, S02 AC14), so this clause must stay `softDelete as delete`.
  */
-export { remove as delete };
+export { softDelete as delete };

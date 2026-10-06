@@ -80,7 +80,7 @@ catalog surface with `lifecycle:"deprecated"` + `replacedBy`.
 
 ## `tx.ts` (26 exports)
 
-### `IWriteStoreHandle` — interface (`tx.ts:89`)
+### `IWriteStoreHandle` — interface (`tx.ts:97`)
 
 ```ts
 export interface IWriteStoreHandle {
@@ -95,7 +95,7 @@ Guarantees: the two dependencies every write verb needs — the raw
 `GraphBackend` was constructed with. Constructed once at store-open time and
 threaded through every write verb.
 
-### `ITxNodeRow` — interface (`tx.ts:115`)
+### `ITxNodeRow` — interface (`tx.ts:132`)
 
 ```ts
 export interface ITxNodeRow {
@@ -114,7 +114,7 @@ Guarantees: the shape every node row read back inside a transaction is mapped
 onto — `metadata` is always either a parsed object or `undefined` (never a
 raw JSON string, never a thrown parse error).
 
-### `nowISO()` — function (`tx.ts:168`)
+### `nowISO()` — function (`tx.ts:185`)
 
 ```ts
 export function nowISO(): string;
@@ -123,7 +123,7 @@ export function nowISO(): string;
 Guarantees: returns the current UTC timestamp in the exact ISO-8601 shape
 `@adhd/sox-graph-store` stamps every row with.
 
-### `sha256Hex(input)` — function (`tx.ts:173`)
+### `sha256Hex(input)` — function (`tx.ts:190`)
 
 ```ts
 export function sha256Hex(input: string | Buffer): string;
@@ -133,7 +133,7 @@ Guarantees: `sha256` hex digest of the given content — used for citation and
 audit content-addressing; NEVER the library's own dedupe hash (that is
 trim+lowercase, computed separately inside `writeNodeTx`).
 
-### `canonicalJSONStringify(value)` — function (`tx.ts:185`)
+### `canonicalJSONStringify(value)` — function (`tx.ts:202`)
 
 ```ts
 export function canonicalJSONStringify(value: Record<string, unknown>): string;
@@ -144,7 +144,7 @@ nesting level and `undefined` values omitted (never serialized as `null`) —
 the one canonical form both `audit.sha` and `transition.sha` are computed
 over.
 
-### `getNodeByUidTx(tx, uid)` — function (`tx.ts:208`)
+### `getNodeByUidTx(tx, uid)` — function (`tx.ts:225`)
 
 ```ts
 export async function getNodeByUidTx(tx: INodeReadExecutor, uid: string): Promise<ITxNodeRow | null>;
@@ -158,7 +158,7 @@ that need "live only" check `row.tInvalid === null` themselves). The
 — an `AdapterTransaction`, a `StoreAdapter`, or graph-store's
 `GraphTransaction`.
 
-### `resolveUidPrefixTx(exec, ref, opts?)` — function (`tx.ts:237`)
+### `resolveUidPrefixTx(exec, ref, opts?)` — function (`tx.ts:254`)
 
 ```ts
 export async function resolveUidPrefixTx(
@@ -177,7 +177,7 @@ a prefix matching ≥2 live rows of the expected kind throws
 `resolveLiveIssueTx` and `catalog.ts`'s `resolveByUidTx` both delegate here,
 so every issue verb and `rm-location` share ONE prefix contract.
 
-### `getNodeByRowidTx(tx, rowid)` — function (`tx.ts:326`)
+### `getNodeByRowidTx(tx, rowid)` — function (`tx.ts:397`)
 
 ```ts
 export async function getNodeByRowidTx(tx: AdapterTransaction, rowid: number): Promise<ITxNodeRow | null>;
@@ -186,7 +186,7 @@ export async function getNodeByRowidTx(tx: AdapterTransaction, rowid: number): P
 Guarantees: same as `getNodeByUidTx`, keyed by internal `rowid` instead —
 used to resolve an edge endpoint's kind without a redundant round trip.
 
-### `IWriteNodeTxInput` — interface (`tx.ts:337`)
+### `IWriteNodeTxInput` — interface (`tx.ts:408`)
 
 ```ts
 export interface IWriteNodeTxInput {
@@ -208,7 +208,7 @@ atomic instant. `skipDedupe` is typed `never` — declaring it on an input
 object literal is a compile error; see `writeNodeTx`'s own guarantee below
 for why.
 
-### `writeNodeTx(tx, input)` — function (`tx.ts:480`)
+### `writeNodeTx(tx, input)` — function (`tx.ts:551`)
 
 ```ts
 export async function writeNodeTx(tx: AdapterTransaction, input: IWriteNodeTxInput): Promise<{ rowid: number; uid: string }>;
@@ -223,7 +223,7 @@ the library's content-hash-SELECT-then-maybe-insert behavior. SPEC.md §1/§4
 this function never runs that SELECT for any kind at all: always a fresh
 INSERT, always a fresh `crypto.randomUUID()` uid.
 
-### `EdgeMultiplicity` — type (`tx.ts:558`)
+### `EdgeMultiplicity` — type (`tx.ts:629`)
 
 ```ts
 export type EdgeMultiplicity = 'n:1' | '1:n' | 'n:m';
@@ -233,7 +233,7 @@ Guarantees: the closed set of multiplicity values every `edge_kind` rule
 declares. `n:1` caps the edge's SOURCE out-degree at one; `1:n` caps the
 TARGET in-degree at one; `n:m` is uncapped on both sides.
 
-### `IEdgeKindRule` — interface (`tx.ts:560`)
+### `IEdgeKindRule` — interface (`tx.ts:631`)
 
 ```ts
 export interface IEdgeKindRule {
@@ -250,7 +250,7 @@ source-kind match — now used by TWO rels: `audits` (a subject of any kind) and
 since C10, `attests` (an attestation may be keyed to an `issue` OR a `SPEC`
 revision).
 
-### `IWriteEdgeTxInput` — interface (`tx.ts:568`)
+### `IWriteEdgeTxInput` — interface (`tx.ts:639`)
 
 ```ts
 export interface IWriteEdgeTxInput {
@@ -275,7 +275,7 @@ one call — `rule` must be the caller's own already-resolved `edge_kind` rule
 follows the same one-logical-write-one-timestamp rule as
 `IWriteNodeTxInput.at`.
 
-### `writeEdgeTx(tx, input)` — function (`tx.ts:672`)
+### `writeEdgeTx(tx, input)` — function (`tx.ts:743`)
 
 ```ts
 export async function writeEdgeTx(tx: AdapterTransaction, input: IWriteEdgeTxInput): Promise<void>;
@@ -289,7 +289,7 @@ mismatch), enforces `checkMultiplicityTx`'s capped-side conflict check
 CONFLICT(src, dst, rel) DO UPDATE` / re-livening (`t_invalid = NULL`) as the
 library's own `writeEdgeInternal`, issued against `tx`.
 
-### `BacklogEdgeKindMismatchError` — class (`tx.ts:735`)
+### `BacklogEdgeKindMismatchError` — class (`tx.ts:806`)
 
 ```ts
 export class BacklogEdgeKindMismatchError extends BacklogWriteError {
@@ -304,7 +304,7 @@ does not match the actual endpoint being written — a write-layer composition
 defect, expected to be unreachable in practice; fails loudly rather than
 writing a mismatched edge.
 
-### `IInvalidateEdgeTxInput` — interface (`tx.ts:751`)
+### `IInvalidateEdgeTxInput` — interface (`tx.ts:822`)
 
 ```ts
 export interface IInvalidateEdgeTxInput {
@@ -319,7 +319,7 @@ export interface IInvalidateEdgeTxInput {
 Guarantees: everything `invalidateEdgeTx` needs to invalidate one live edge,
 with an optional human-readable `reason` merged into the edge's `meta`.
 
-### `invalidateEdgeTx(tx, input)` — function (`tx.ts:770`)
+### `invalidateEdgeTx(tx, input)` — function (`tx.ts:841`)
 
 ```ts
 export async function invalidateEdgeTx(tx: AdapterTransaction, input: IInvalidateEdgeTxInput): Promise<void>;
@@ -330,7 +330,7 @@ no-op if the edge is already invalidated or absent; otherwise sets
 `t_invalid` and merges `invalidatedAt`/`invalidatedReason` into `meta`,
 issued against `tx`.
 
-### `updateNodeMetaTx(tx, uid, patch, expectedRevision)` — function (`tx.ts:811`)
+### `updateNodeMetaTx(tx, uid, patch, expectedRevision)` — function (`tx.ts:882`)
 
 ```ts
 export async function updateNodeMetaTx(tx: AdapterTransaction, uid: string, patch: Record<string, unknown>, expectedRevision: number): Promise<number | null>;
@@ -347,7 +347,7 @@ per-node CAS, DESIGN §2 Primitive 1) and exists solely for C10's spec pointer
 (`meta.spec_revision`); no other verb may adopt it without a new decision. A
 node with no `meta.revision` reads as revision `0`.
 
-### `executeWriteTransaction(handle, fn)` — function (`tx.ts:934`)
+### `executeWriteTransaction(handle, fn)` — function (`tx.ts:1005`)
 
 ```ts
 export async function executeWriteTransaction<T>(handle: IWriteStoreHandle, fn: (tx: AdapterTransaction) => Promise<T>): Promise<T>;

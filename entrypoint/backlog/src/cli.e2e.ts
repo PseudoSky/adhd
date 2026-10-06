@@ -182,12 +182,14 @@ describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (
     // `transition`, `attest`, `recheck`,
     // `claim`, `relate`, `move`, `obligate`, `unobligate`,
     // `upsertProject`, `upsertComponent`, `upsertLocation`, `rmLocation`,
-    // `mergeProject`, `rmProject`, `delete`, `embeddingStatus`, `specAppend`,
+    // `mergeProject`, `rmProject`, `delete`, `remove`, `restore`,
+    // `embeddingStatus`, `specAppend`,
     // `specCheck`) — asserted as an exact count, not a loose
     // lower bound, so a widened action count here is real evidence of scope
     // creep onto api.ts's exported surface (see api.ts's own doc comment on why
-    // the exported surface IS the mounted surface).
-    expect(actions.length).toBe(29);
+    // the exported surface IS the mounted surface). `remove`/`restore` are the
+    // S02 AC14 lifecycle verbs (cluster backlog-lifecycle-model 0b0df8f3).
+    expect(actions.length).toBe(31);
     const prefix = resolveCommandPrefix(actions);
     for (const op of actions) {
       expect(resolveCommandPrefix([op])).toEqual(prefix);
@@ -1525,10 +1527,15 @@ describe('--namespace / sandbox-path — SPEC.md §5c: the CLI must never defaul
     expect(explicitBody.dbPath).toBe(defaultBody.dbPath);
 
     const project = 'PseudoSky/explicit-production-test';
+    // S02 AC14: a write into the production namespace now requires the explicit
+    // typed gate (`--allow-production-write`) — this test deliberately drives
+    // the production namespace, so it passes it, and doubles as the end-to-end
+    // proof that the flag opens the gate.
     const upsertRes = runGlobalScoped(
       [
         '--namespace',
         'production',
+        '--allow-production-write',
         'upsert-project',
         '--input',
         JSON.stringify({ name: project, by: 'cli.spec' }),
@@ -1541,6 +1548,7 @@ describe('--namespace / sandbox-path — SPEC.md §5c: the CLI must never defaul
       [
         '--namespace',
         'production',
+        '--allow-production-write',
         'create',
         '--input',
         JSON.stringify({

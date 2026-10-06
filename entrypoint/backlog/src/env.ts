@@ -258,6 +258,39 @@ export function resolveBacklogDbPath(env: Environment<BacklogConfig>): string {
 }
 
 /**
+ * (S02 AC14) Whether an invocation resolves the LIVE machine-wide production
+ * store — the store of record the production-write gate protects.
+ *
+ * Deliberately a CONJUNCTION of the exact signals that distinguish an isolated
+ * run, never a path string match (a path is machine-specific and cannot be
+ * asserted portably):
+ *
+ *  - namespace must be `production` (the first-declared default);
+ *  - no explicit `adhdRoot` (the `--namespace sandbox`/test-isolation knob);
+ *  - no ambient `ADHD_ROOT` (a caller's own redirect);
+ *  - no `db.path` override (`ADHD_BACKLOG_DATABASE_PATH`, a direct store redirect);
+ *  - scope must be `global` — the default scope production uses. Every isolated
+ *    spawned suite pins `ADHD_BACKLOG_SCOPE=project`, so this alone classifies
+ *    every test/lane spawn as NON-production even when it omits `adhdRoot`.
+ *
+ * Any one signal being absent from production makes this `false`, so the gate
+ * can never fail open into a domain-write outage.
+ */
+export function isLiveProductionStore(args: {
+  namespace?: string;
+  scope?: Scope;
+  adhdRoot?: string;
+  /** `resolveBacklogDbPath(env)`'s effective value; a set `db.path` means a redirect. */
+  dbPathOverride?: string | undefined;
+}): boolean {
+  if ((args.namespace ?? 'production') !== 'production') return false;
+  if (args.adhdRoot !== undefined) return false;
+  if (process.env['ADHD_ROOT'] !== undefined) return false;
+  if (args.dbPathOverride !== undefined) return false;
+  return resolveBacklogScope(args.scope) === 'global';
+}
+
+/**
  * DESIGN.md §4.4 — the recommended (not enforced) claimant identity shape:
  * `${agentName}:${instanceId}`. Exposed as a plain helper, never baked into
  * `claimItem` itself.

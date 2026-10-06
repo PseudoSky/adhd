@@ -16,12 +16,13 @@
  * green, and silently breaks every caller.
  *
  * **The load-bearing row is `delete`.** `export async function delete` is a
- * syntax error (reserved word), so the implementation is named `remove` and
- * the module does `export { remove as delete }`. That alias is the ONLY
- * reason the verb mounts under its spec'd name. "Simplifying" it to
- * `export async function remove` compiles cleanly and renames the tool to
- * `backlog_remove` on all four transports at once — which is exactly the
- * negative control below: change the alias and this file goes red.
+ * syntax error (reserved word), so the implementation is named `softDelete`
+ * and the module does `export { softDelete as delete }`. That alias is the
+ * ONLY reason the verb mounts under its spec'd name. "Simplifying" it to
+ * `export async function delete` will not compile, and mis-aliasing it renames
+ * the tool on all four transports at once — which is exactly the negative
+ * control below: break the alias and this file goes red. `remove`/`restore`
+ * (S02 AC14) are DISTINCT lifecycle verbs mounted alongside `delete`.
  */
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
@@ -93,6 +94,9 @@ const EXPECTED = [
   { id: 'backlog/relate', mcp: 'backlog_relate', cli: 'backlog relate' },
   { id: 'backlog/move', mcp: 'backlog_move', cli: 'backlog move' },
   { id: 'backlog/delete', mcp: 'backlog_delete', cli: 'backlog delete' },
+  // S02 AC14 / cluster backlog-lifecycle-model 0b0df8f3 — the item lifecycle.
+  { id: 'backlog/remove', mcp: 'backlog_remove', cli: 'backlog remove' },
+  { id: 'backlog/restore', mcp: 'backlog_restore', cli: 'backlog restore' },
   {
     id: 'backlog/upsert-project',
     mcp: 'backlog_upsert_project',
@@ -150,6 +154,16 @@ const EXPECTED = [
   },
 ] as const;
 
+/**
+ * `mountedSurface()` runs the REAL ts-json-schema-generator extraction over
+ * `dist/api.d.ts` — a cold extraction measured at 20–100s depending on host
+ * load (observed 19s idle → 70s+ under a loaded box). The suite's inherited
+ * 30s default (`vite.config.ts`, the cluster-48 test-harness defect that e2e
+ * inherits) sits below that, so these tests carry an explicit, realistic bound
+ * rather than flaking red. The ASSERTION is unchanged; only the clock is.
+ */
+const EXTRACT_TIMEOUT_MS = 180_000;
+
 async function mountedSurface(): Promise<
   { id: string; mcp: string; cli: string }[]
 > {
@@ -177,7 +191,7 @@ describe('api.ts — the mounted surface (SPEC §6.7)', () => {
     ).toBe(true);
   });
 
-  it('mounts exactly the verbs SPEC §6.7 names, under the names it names', async () => {
+  it('mounts exactly the verbs SPEC §6.7 names, under the names it names', { timeout: EXTRACT_TIMEOUT_MS }, async () => {
     const surface = await mountedSurface();
     const expected = [...EXPECTED].sort((a, b) => a.id.localeCompare(b.id));
     expect(surface).toEqual(
@@ -185,15 +199,24 @@ describe('api.ts — the mounted surface (SPEC §6.7)', () => {
     );
   });
 
-  it("mounts `delete` under its spec'd name — the export alias is load-bearing", async () => {
+  it("mounts `delete` under its spec'd name — the export alias is load-bearing", { timeout: EXTRACT_TIMEOUT_MS }, async () => {
     const surface = await mountedSurface();
     const names = surface.map((s) => s.mcp);
+    // The alias `export { softDelete as delete }` is the ONLY reason `delete`
+    // mounts under its spec'd (reserved-word) name. `remove` is now a DISTINCT
+    // verb (S02 AC14 permanent retire), so both must be present and separate —
+    // deleting the alias (or collapsing the two) turns this red.
     expect(names).toContain('backlog_delete');
-    // The precise failure a refactor to `export async function remove` causes.
-    expect(names).not.toContain('backlog_remove');
+    expect(names).toContain('backlog_remove');
+    expect(
+      surface.find((s) => s.cli === 'backlog delete')?.id
+    ).toBe('backlog/delete');
+    expect(
+      surface.find((s) => s.cli === 'backlog remove')?.id
+    ).toBe('backlog/remove');
   });
 
-  it('mounts no verb twice and no verb outside the list', async () => {
+  it('mounts no verb twice and no verb outside the list', { timeout: EXTRACT_TIMEOUT_MS }, async () => {
     const surface = await mountedSurface();
     expect(new Set(surface.map((s) => s.id)).size).toBe(surface.length);
     expect(surface).toHaveLength(EXPECTED.length);
@@ -209,7 +232,7 @@ describe('api.ts — the mounted surface (SPEC §6.7)', () => {
    * `attest` with a `SPEC` subject + a `revision:` anchor, and is proven
    * behaviorally in `write/spec-revision.spec.ts`.
    */
-  it('does NOT mount the retired `annotate` verb (negative control)', async () => {
+  it('does NOT mount the retired `annotate` verb (negative control)', { timeout: EXTRACT_TIMEOUT_MS }, async () => {
     const surface = await mountedSurface();
     expect(surface.map((s) => s.id)).not.toContain('backlog/annotate');
     expect(surface.map((s) => s.mcp)).not.toContain('backlog_annotate');
