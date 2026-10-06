@@ -18,4 +18,14 @@ export type AgentMcpErrorCode =
   | 'PROVIDER_AUTH_ERROR'
   | 'PROVIDER_RATE_LIMITED'
   | 'BUDGET_EXCEEDED'
-  | 'COMPOSED_PROMPT_NOT_FOUND';
+  | 'COMPOSED_PROMPT_NOT_FOUND'
+  /**
+   * The resolved permission map decided `deny` for this tool call (ADR-0008 D5):
+   * the tool is NOT executed and the caller receives a typed refusal.
+   */
+  | 'PERMISSION_DENIED'
+  /**
+   * An `ask` could not be resolved by the fixed chain — HITL is disabled AND the
+   * task has no parent — so it fails closed (ADR-0008 D6). The tool is NOT executed.
+   */
+  | 'PERMISSION_ASK_DENIED';

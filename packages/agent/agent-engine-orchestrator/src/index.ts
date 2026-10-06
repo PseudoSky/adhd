@@ -1,7 +1,12 @@
 // barrel exports for @adhd/agent-engine-orchestrator
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
-export type { EngineConfig, EngineLogger } from './interfaces.js';
+export type {
+  EngineConfig,
+  EngineLogger,
+  PermissionGate,
+  PermissionDecisionContext,
+} from './interfaces.js';
 
 // ── Engine ────────────────────────────────────────────────────────────────────
 export { Orchestrator } from './engine/orchestrator.js';

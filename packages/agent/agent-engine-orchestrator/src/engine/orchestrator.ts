@@ -7,6 +7,7 @@ import type {
   IToolWarning,
   PostToolCallPayload,
 } from '@adhd/agent-base-types';
+import { effectiveHitl } from '@adhd/agent-base-types';
 import { encode } from 'gpt-tokenizer';
 import { randomUUID } from 'node:crypto';
 import { ToolError } from '../validation/errors.js';
@@ -55,6 +56,65 @@ const HITL_BUILTIN_TOOL_DEFINITION = {
     required: ['prompt'],
   },
 } as const;
+
+// ── Permission gate (ADR-0008 D5/D6) ─────────────────────────────────────────
+
+/**
+ * Affirmative answers accepted when a suspended permission `ask` is resumed via
+ * `task_resume`. Anything else (including an empty string) DECLINES the ask and
+ * the tool is not executed. Accepted forms: the bare words below (case
+ * insensitive), or JSON carrying `{"allow":true}` / `{"approved":true}`.
+ */
+const PERMISSION_APPROVAL_WORDS = new Set([
+  'allow',
+  'approve',
+  'approved',
+  'yes',
+  'y',
+  'true',
+  'ok',
+]);
+
+/** Does the human's resume input approve the ask? See {@link PERMISSION_APPROVAL_WORDS}. */
+export function isPermissionApproval(input: string): boolean {
+  const trimmed = input.trim();
+  if (trimmed.length === 0) return false;
+  if (PERMISSION_APPROVAL_WORDS.has(trimmed.toLowerCase())) return true;
+  try {
+    const parsed = JSON.parse(trimmed) as { allow?: unknown; approved?: unknown };
+    if (parsed !== null && typeof parsed === 'object') {
+      if (parsed.allow === true || parsed.approved === true) return true;
+    }
+  } catch {
+    // not JSON — fall through to decline
+  }
+  return false;
+}
+
+/**
+ * The typed refusal returned to the model when a native tool call is refused by
+ * the permission gate (`PERMISSION_DENIED`) or when an `ask` fails closed
+ * (`PERMISSION_ASK_DENIED`, ADR-0008 D6). Matches the `AgentMcpErrorCode` union.
+ */
+function permissionRefusalResult(
+  server: string,
+  tool: string,
+  code: 'PERMISSION_DENIED' | 'PERMISSION_ASK_DENIED',
+  detail?: string
+): { error: { code: string; tool: string; message: string } } {
+  const qualified = `${server}.${tool}`;
+  const lead =
+    code === 'PERMISSION_DENIED'
+      ? `Tool '${qualified}' is denied by the agent's permission policy and was not executed.`
+      : `Tool '${qualified}' requires human approval, which could not be obtained (HITL disabled and no parent agent), so it was not executed.`;
+  return {
+    error: {
+      code,
+      tool: qualified,
+      message: detail ? `${lead} ${detail}` : lead,
+    },
+  };
+}
 
 /** TaskStore-like interface for orchestrator consumption */
 export interface OrchestratorTaskStore {
@@ -131,7 +191,6 @@ export class Orchestrator {
       signal,
       taskId,
       hooks = noopHooks,
-      isEphemeral = false,
       emitTaskEvent,
       logger: loggerInput,
       config: configInput,
@@ -163,10 +222,11 @@ export class Orchestrator {
 
       const tools = await registry.listAllTools();
 
-      if (
-        executionContext.agentDefinition.allowHumanInput === true &&
-        !isEphemeral
-      ) {
+      // HITL is opt-in per definition (`allowHumanInput`, legacy alias of
+      // `nativeTooling.hitl`). Every task is sessioned (ADR-0008 D6 — the
+      // noop-session path is retired), so an ephemeral one-shot task now has a
+      // real session row and can suspend just like a session-backed task.
+      if (executionContext.agentDefinition.allowHumanInput === true) {
         tools.push(HITL_BUILTIN_TOOL_DEFINITION);
       }
 
@@ -517,13 +577,10 @@ export class Orchestrator {
           }
 
           if (tc.tool === HITL_TOOL_NAME) {
-            if (isEphemeral) {
-              throw new ToolError(
-                'VALIDATION_ERROR',
-                'request_human_input is not supported for ephemeral tasks'
-              );
-            }
-
+            // Every task is sessioned (ADR-0008 D6), so there is no
+            // "ephemeral task has no row to persist a resume token" case left:
+            // a one-shot `agent_name` task creates a real session row, and
+            // `ephemeral` is a retention class, not an interactivity property.
             const resumeToken = randomUUID();
 
             // DEBT-AGENTMCP-HITL-TEST-CLEANUP-001: register the HITL resolver
@@ -616,6 +673,158 @@ export class Orchestrator {
             `${tc.server}__${tc.tool}`
           ) ?? { server: tc.server, tool: tc.tool };
           const qualifiedToolName = `${resolved.server}__${resolved.tool}`;
+
+          // ── Permission gate (ADR-0008 D5/D6) — host-side, BEFORE pre:tool_call.
+          // The resolved permission map is evaluated over the tool NAME; `deny`
+          // is a typed refusal with no execution, `ask` runs the fixed chain
+          // (`suspend` → `escalate` → `deny`) below.
+          const permissionAction = config.permissionGate
+            ? config.permissionGate({
+                server: resolved.server,
+                tool: resolved.tool,
+                agentDefinition: executionContext.agentDefinition,
+              })
+            : 'allow';
+
+          if (permissionAction === 'deny') {
+            taskStore.appendEvent({
+              taskId,
+              type: 'TOOL_CALL',
+              payload: {
+                tool: qualifiedToolName,
+                callId: tc.id,
+                permission: 'deny',
+                code: 'PERMISSION_DENIED',
+              },
+            });
+            warningResults.set(tc.id, {
+              result: permissionRefusalResult(
+                resolved.server,
+                resolved.tool,
+                'PERMISSION_DENIED'
+              ),
+              isError: true,
+            });
+            continue;
+          }
+
+          if (permissionAction === 'ask') {
+            // Fixed ask-resolution chain (ADR-0008 D6):
+            //   suspend  — iff HITL is enabled (`nativeTooling.hitl !== false`)
+            //   escalate — iff a parent exists (routed to the parent agent)
+            //   deny     — the fail-closed floor (no HITL capability, no parent)
+            const hitlEnabled =
+              effectiveHitl(executionContext.agentDefinition) !== false;
+            const parentTaskId = executionContext.parentTaskId;
+            let resolution: 'suspend' | 'escalate' | 'deny';
+            if (hitlEnabled) resolution = 'suspend';
+            else if (parentTaskId) resolution = 'escalate';
+            else resolution = 'deny';
+
+            if (resolution === 'deny') {
+              taskStore.appendEvent({
+                taskId,
+                type: 'TOOL_CALL',
+                payload: {
+                  tool: qualifiedToolName,
+                  callId: tc.id,
+                  permission: 'ask',
+                  resolution: 'deny',
+                  code: 'PERMISSION_ASK_DENIED',
+                },
+              });
+              warningResults.set(tc.id, {
+                result: permissionRefusalResult(
+                  resolved.server,
+                  resolved.tool,
+                  'PERMISSION_ASK_DENIED'
+                ),
+                isError: true,
+              });
+              continue;
+            }
+
+            // Both `suspend` (sessioned HITL) and `escalate` (parent-approves)
+            // park the task in `awaiting_input` and await the same human/parent
+            // answer via `task_resume` → `resolveHitl`. The difference is
+            // observability: an escalated ask is attributed to the parent.
+            const resumeToken = randomUUID();
+            let askAbortHandler: (() => void) | undefined;
+            const approvalPromise = new Promise<string>((resolve, reject) => {
+              hitlResolvers.set(taskId, resolve);
+              askAbortHandler = () => {
+                hitlResolvers.delete(taskId);
+                reject(
+                  new ToolError(
+                    'PROVIDER_ERROR',
+                    'Task cancelled while awaiting permission approval'
+                  )
+                );
+              };
+              signal.addEventListener('abort', askAbortHandler, { once: true });
+            });
+
+            try {
+              await taskStore.updateStatus(taskId, 'awaiting_input', {
+                resumeToken,
+              });
+            } catch (err) {
+              hitlResolvers.delete(taskId);
+              if (askAbortHandler)
+                signal.removeEventListener('abort', askAbortHandler);
+              void approvalPromise.catch(() => {});
+              throw err;
+            }
+            try {
+              emit({
+                type: 'status_change',
+                taskId,
+                status: 'awaiting_input',
+              });
+            } catch (err) {
+              logger.warn(
+                { taskId, err, status: 'awaiting_input' },
+                'Failed to emit awaiting_input status_change for permission ask; suspension continues'
+              );
+            }
+
+            taskStore.appendEvent({
+              taskId,
+              type: 'TOOL_CALL',
+              payload: {
+                tool: qualifiedToolName,
+                callId: tc.id,
+                permission: 'ask',
+                resolution,
+                ...(resolution === 'escalate'
+                  ? { escalatedTo: parentTaskId }
+                  : {}),
+                resumeToken,
+              },
+            });
+
+            const answer = await approvalPromise.finally(() => {
+              if (askAbortHandler)
+                signal.removeEventListener('abort', askAbortHandler);
+            });
+            await taskStore.updateStatus(taskId, 'running');
+            emit({ type: 'status_change', taskId, status: 'running' });
+
+            if (!isPermissionApproval(answer)) {
+              warningResults.set(tc.id, {
+                result: permissionRefusalResult(
+                  resolved.server,
+                  resolved.tool,
+                  'PERMISSION_ASK_DENIED',
+                  'The approver declined.'
+                ),
+                isError: true,
+              });
+              continue;
+            }
+            // Approved → fall through to pre:tool_call + policy.check + Phase 2.
+          }
+
           await hooks.emit('pre:tool_call', {
             executionContext,
             toolName: qualifiedToolName,
