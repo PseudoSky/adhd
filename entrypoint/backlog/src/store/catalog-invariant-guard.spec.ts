@@ -65,7 +65,7 @@ async function mintCatalog(
   name: string,
   metadata: Record<string, unknown>
 ): Promise<{ rowid: number; uid: string }> {
-  return executeWriteTransaction(store, (tx) =>
+  return executeWriteTransaction({ ...store, verb: 'test-fixture' }, (tx) =>
     writeNodeTx(tx, { kind, name, metadata })
   );
 }

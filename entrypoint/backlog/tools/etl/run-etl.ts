@@ -80,7 +80,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function seedClosedCatalogs(handle: IEtlStoreHandle): Promise<void> {
-  await executeWriteTransaction(handle, async (tx) => {
+  await executeWriteTransaction({ ...handle, verb: 'etl-import' }, async (tx) => {
     const now = nowISO();
     for (const status of ALL_STATUSES) {
       await mintOrResolveCatalogTx(tx, { catalogKind: 'status', ref: status, at: now, mintMetadata: async () => ({ terminal: TERMINAL_STATUSES.has(status) }) });
@@ -98,7 +98,7 @@ async function seedProjects(handle: IEtlStoreHandle, items: readonly IItemRow[])
   const projectsByName = new Map<string, IResolvedProjectRow>();
   for (const name of distinctNames) {
     const metadata = name === ADHD_PROJECT_NAME ? { path: ADHD_PROJECT_PATH, repoUrl: ADHD_PROJECT_REPO_URL } : {};
-    const project = await executeWriteTransaction(handle, (tx) => upsertProjectTx(handle, tx, { name, metadata }));
+    const project = await executeWriteTransaction({ ...handle, verb: 'etl-import' }, (tx) => upsertProjectTx(handle, tx, { name, metadata }));
     projectsByName.set(name, project);
   }
   return projectsByName;

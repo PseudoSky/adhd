@@ -98,7 +98,7 @@ async function simulateTransition(
   const [oldStatus] = await store.graph.getNodesByIds([oldStatusId]);
   const fromName = oldStatus?.name ?? '';
 
-  return executeWriteTransaction(store, async (tx) => {
+  return executeWriteTransaction({ ...store, verb: 'test-fixture' }, async (tx) => {
     const now = input.at ?? nowISO();
     const issueRow = await getNodeByUidTx(tx, input.uid);
     if (!issueRow) throw new Error('test setup: issue vanished mid-transition');
@@ -153,7 +153,7 @@ async function writePartOfEdge(
   store: TestIssueStore,
   input: { childUid: string; parentUid: string }
 ): Promise<void> {
-  await executeWriteTransaction(store, async (tx) => {
+  await executeWriteTransaction({ ...store, verb: 'test-fixture' }, async (tx) => {
     const now = nowISO();
     const child = await getNodeByUidTx(tx, input.childUid);
     const parent = await getNodeByUidTx(tx, input.parentUid);

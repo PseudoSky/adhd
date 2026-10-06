@@ -126,6 +126,8 @@ import type { IReportInput, IReportResult } from './query/views/report.js';
 import {
   createIssue,
   type IDuplicateScanHandle,
+  type ICreateIssueInput,
+  type ICreateIssueResult,
 } from './write/create-issue.js';
 import { update as updateIssueOp } from './write/update.js';
 import {
@@ -189,10 +191,6 @@ import type {
   IIssueQueryResult,
   ILookupResult,
 } from './query/types.js';
-import type {
-  ICreateIssueInput,
-  ICreateIssueResult,
-} from './write/create-issue.js';
 import type { IUpdateIssueInput, IUpdateIssueOutcome } from './write/update.js';
 import type {
   ITransitionInput,
@@ -616,7 +614,7 @@ async function envelope<T>(
  * Defaults to the same five-field card `query` returns
  * (`uid`, `kind`, `title`, `status`, `priority`).
  */
-export async function get(
+export function get(
   ctx: BacklogCtx,
   input: IIssueGetInput
 ): Promise<IOutcomeEnvelope<IIssueGetResult>> {

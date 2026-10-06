@@ -53,7 +53,7 @@ describe('ETL status vocabulary vs a store holding the lowercase canonicals', ()
     // matter how the ETL's own vocabulary happens to be spelled.
     const seedHandle = await openEtlStore(DB_PATH);
     try {
-      await executeWriteTransaction(seedHandle, async (tx) => {
+      await executeWriteTransaction({ ...seedHandle, verb: 'test-fixture' }, async (tx) => {
         const at = nowISO();
         const canonicalStatuses = [...new Set(ALL_STATUSES.map((s) => s.toLowerCase()))];
         for (const name of canonicalStatuses) {

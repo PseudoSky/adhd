@@ -75,7 +75,7 @@ describe('1687b889 AC3 — stale-snapshot signature classification', () => {
       modes,
       calls
     );
-    const err = await executeWriteTransaction(handle, async () => 1).catch(
+    const err = await executeWriteTransaction({ ...handle, verb: 'test-fixture' }, async () => 1).catch(
       (e: unknown) => e
     );
     expect(err).toBeInstanceOf(WriteIOError);
@@ -90,9 +90,9 @@ describe('1687b889 AC3 — stale-snapshot signature classification', () => {
     const modes: unknown[] = [];
     const handle = fakeHandle(() => undefined, modes, calls);
     delete process.env['ADHD_BACKLOG_UNSAFE_TX_MODE'];
-    await executeWriteTransaction(handle, async () => 1);
+    await executeWriteTransaction({ ...handle, verb: 'test-fixture' }, async () => 1);
     process.env['ADHD_BACKLOG_UNSAFE_TX_MODE'] = 'deferred';
-    await executeWriteTransaction(handle, async () => 1);
+    await executeWriteTransaction({ ...handle, verb: 'test-fixture' }, async () => 1);
     expect(modes).toEqual(['immediate', 'deferred']);
   });
 });

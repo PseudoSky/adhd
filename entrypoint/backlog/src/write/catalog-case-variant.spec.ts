@@ -170,7 +170,7 @@ describe('mintOrResolveCatalogTx — a case-variant of a live catalog row is ref
     // Bypass `mintOrResolveCatalogTx` entirely and write the variant with the
     // SAME low-level primitive it uses — exactly what the code path would do if
     // the fold-collision check were removed. The twin appears ...
-    await executeWriteTransaction(store, (tx) =>
+    await executeWriteTransaction({ ...store, verb: 'test-fixture' }, (tx) =>
       writeNodeTx(tx, { kind: 'status', name: 'IN_PROGRESS', metadata: {} })
     );
     expect((await liveNames(store, 'status')).sort()).toEqual([
@@ -256,7 +256,7 @@ describe('mintOrResolveCatalogTx — a case-variant of a live catalog row is ref
     // primitive and reproduce precisely the drift it prevents — the twin AND
     // its unflagged terminal flag — so the assertions above are falsifiable
     // rather than vacuous.
-    await executeWriteTransaction(store, (tx) =>
+    await executeWriteTransaction({ ...store, verb: 'test-fixture' }, (tx) =>
       writeNodeTx(tx, {
         kind: 'status',
         name: 'RESOLVED',

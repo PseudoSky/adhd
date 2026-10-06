@@ -107,8 +107,10 @@ export interface IWriteStoreHandle {
   /**
    * (S02 AC14) OPTIONAL write-verb id — request metadata the caller sets (via
    * `{ ...handle, verb: '<id>' }`) so the production-write gate names the verb
-   * actually attempted in its refusal, never a generic `'write'`. Absent ⇒
-   * `'write'`. Not part of the store identity; a per-call decoration.
+   * actually attempted in its refusal. A store handle carries no verb of its
+   * own; {@link executeWriteTransaction} REQUIRES one by type
+   * ({@link IVerbedWriteHandle}), so no generic `'write'` fallback exists.
+   * Not part of the store identity; a per-call decoration.
    */
   readonly verb?: string;
   /**
@@ -984,6 +986,14 @@ function resolveTransactionMode(): TxMode {
 }
 
 /**
+ * (A-AC13 / `31b37c54`) A write handle that names the verb it is about to run.
+ * {@link executeWriteTransaction} accepts ONLY this shape, so the production
+ * gate's refusal can never fall back to a generic `'write'`: a caller that
+ * forgets `{ ...handle, verb: '<id>' }` fails to compile.
+ */
+export type IVerbedWriteHandle = IWriteStoreHandle & { readonly verb: string };
+
+/**
  * The one transaction wrapper every write verb calls — `store.adapter.transaction(fn,
  * {mode: resolveTransactionMode()})`, which is `'immediate'` (§4c: `BEGIN
  * IMMEDIATE`, the RESERVED-lock-at-BEGIN "compare-and-swap primitive" every
@@ -1019,7 +1029,7 @@ function resolveTransactionMode(): TxMode {
  *   not-actually-specified wrapper class.
  */
 export async function executeWriteTransaction<T>(
-  handle: IWriteStoreHandle,
+  handle: IVerbedWriteHandle,
   fn: (tx: AdapterTransaction) => Promise<T>
 ): Promise<T> {
   // (S02 AC14) The production-write gate runs BEFORE the retry loop opens any
@@ -1027,7 +1037,7 @@ export async function executeWriteTransaction<T>(
   // The verb is request metadata carried on the handle (`handle.verb`) so the
   // refusal names the operation the caller actually attempted rather than a
   // generic 'write'.
-  assertProductionWriteAllowed(handle, handle.verb ?? 'write');
+  assertProductionWriteAllowed(handle, handle.verb);
   let attempt = 0;
   for (;;) {
     try {
