@@ -73,7 +73,7 @@ Aggregates are the closed set in D1 (distributive/holistic), mergeable for rollu
 ## What does NOT change
 
 - The legacy pipeline when `group_by`/`aggregate` are absent runs byte-for-byte; no dirty-flag or behavior change.
-- No joins/subqueries, no per-row window functions (LAG/LEAD/rank), no materialization. **Corrected:** `select`/projection and top-N-per-group **did** ship (select as a final projection in 2.3.7; top-N as `top_n`/`_other`), so the earlier blanket exclusion of those two is struck here to match shipped behavior. The v2 `queryModel` design supersedes this ADR in turn.
+- No joins/subqueries, no per-row window functions (LAG/LEAD/rank), no materialization. **Corrected:** `select`/projection and top-N-per-group **did** ship (select as a final projection in 2.3.7; top-N as `top_n`/`_other`), so the earlier blanket exclusion of those two is struck here to match shipped behavior. The v2 self-similar grammar — folded into the shipped `QueryExpression`/`DataView` (there is no `queryModel` namespace) — supersedes this ADR in turn.
 - `adhd ADR-0001` (stores), `adhd ADR-0002` (correct the source — the governing argument *for* this), `adhd ADR-0003` (CJS-only), `adhd ADR-0004` (MCP flat payload) — all untouched.
 - `order_by`/`distinct_on`/`offset`/`limit` semantics — unchanged.
 

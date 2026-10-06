@@ -1989,3 +1989,30 @@ Schema version 1.
   altered). No push. Outcome: the integration branch is **not** ready for the live-test/review
   stage. This is the only change to this file in this operation, committed on
   `integration/promerge-9c4e` (not `main`).
+
+- **2026-10-06 — operation record: land of `perf(backlog): batch edge pseudo-field reads in query
+  (fix N+1) — 2267eaf9` (dispatch-2026-10-04-b7d4).** Committed the two dispatched paths
+  (`entrypoint/backlog/src/query/card.ts` modified, `entrypoint/backlog/src/query/edge-batch.spec.ts`
+  added) on `main` as **`b1f35e35`**, 2 files, +497/-57. §Commit convention decided the shape: the
+  subject is `perf(backlog):` with the scope being the library/package name. Staged by explicit path
+  only (`git add -- entrypoint/backlog/src/query/card.ts entrypoint/backlog/src/query/edge-batch.spec.ts`),
+  never `git add -A`/`.`/`-a`, so a concurrent run's in-flight edits under `packages/agent/**` and
+  `entrypoint/agent-mcp/**` present in the working tree throughout were neither staged, swept, nor
+  modified — `git diff --cached --name-only` before the commit named exactly the two paths.
+  `.githooks/pre-commit` exited 0: mass-deletion guard clean, secret-scan clean, affected lint clean;
+  its staged-spec gate reported the `backlog` project's `test` target is not `@nx/vite:test`, so it
+  ran no spec directly and deferred full coverage to `pre-push`/CI — documented behavior
+  (`.githooks/pre-commit` lines 56–64), not a failure. Post-commit `git status --porcelain --
+  entrypoint/backlog/` is empty. No push (the task directed none), no branch or worktree created or
+  removed. The policy was read from the committed revision (`HEAD:docs/GIT-POLICY.md`, `d3d0b50e`,
+  working copy clean): it already carried all seven required sections, so no correct-and-sync was
+  needed; this record is the only change to this file in this operation. Recorded under
+  §Commit convention's `docs(<area>):` scope.
+- **2026-10-06 — operation record: fold `main@6850c5f9` into `integration/promerge-9c4e`
+  (dispatch-2026-10-06-48dc).** `git merge --no-ff main` run inside the existing integration
+  worktree (clean, HEAD `d6649e5a`, verified before the merge). One conflict, `docs/GIT-POLICY.md`
+  (both sides appended Provenance records); resolved mechanically as the union of both sides, no
+  entry dropped. No code-semantic conflicts; `CHANGELOG.md` auto-merged. No push, no tag, no merge
+  into `main`; the repo-root checkout and its uncommitted files were not touched. Policy read from
+  the integration branch revision; it carried all required sections, so no correct-and-sync was
+  needed. Recorded under §Branching & merge (merge strategy: merge commit).

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DataView, QueryValidationError } from '../index';
+import { DataView } from '../index';
 import type { QueryExpression } from '../index';
 
 type Row = Record<string, unknown>;
@@ -8,17 +8,10 @@ const view = (rows: Row[], query: QueryExpression): Row[] =>
   new DataView(rows, query).view() as unknown as Row[];
 
 /**
- * Guard specs for the six approved gap items on SPEC 49a62647 / ADR-0005.
- *
- * Every `it` in this file is written so that it FAILS against the pre-change
- * implementation and PASSES once the item is implemented:
- *  - `select` was ignored entirely (GAP-1)
- *  - `_nest` did not exist and threw from resolveGroupKeys (GAP-2)
- *  - the aggregation surface used `fastGet`, which read `x,y[0]` as a literal
- *    property => undefined (GAP-3)
- *  - dotted group keys were stored flat but resolved as paths downstream
- *    (GAP-4)
- *  - the date-range operators threw `unknown operator ...` (GAP-5)
+ * Guard specs for the six approved gap items on SPEC 49a62647 / ADR-0005,
+ * re-expressed in the ONE canonical grammar (`group_by` items are position-typed;
+ * nested grouping is a nested `select`; the aggregate surface is the fold
+ * vocabulary). Every `it` is binary.
  */
 
 describe('GAP-1 — select is a pure FINAL projection', () => {
@@ -45,8 +38,7 @@ describe('GAP-1 — select is a pure FINAL projection', () => {
     ];
     expect(
       view(rows, {
-        group_by: ['g'],
-        aggregate: { s: { _sum: 'x' } },
+        group_by: ['g', { name: 's', aggregate: { _sum: 'x' } }],
         order_by: [{ g: 'asc' }],
         select: ['g', 's'],
       })
@@ -56,16 +48,14 @@ describe('GAP-1 — select is a pure FINAL projection', () => {
     ]);
   });
 
-  it('keeps the output:rows identity guarantee only when select is absent', () => {
+  it('a select projection deliberately reshapes rows', () => {
     const rows = [{ a: 1, b: 2 }];
-    // With no select, rows pass through unchanged (identity) ...
     expect(view(rows, {})).toEqual([{ a: 1, b: 2 }]);
-    // ... and with a select the projection intentionally breaks identity.
     expect(view(rows, { select: ['a'] })).toEqual([{ a: 1 }]);
   });
 });
 
-describe('GAP-2 — nested group-by (_nest) builds roots-with-children in one pass', () => {
+describe('GAP-2 — hierarchical grouping is a nested select (roots-with-children)', () => {
   const rows = [
     { region: 'eu', country: 'fr', cost: 10 },
     { region: 'eu', country: 'fr', cost: 5 },
@@ -75,17 +65,15 @@ describe('GAP-2 — nested group-by (_nest) builds roots-with-children in one pa
 
   it('produces a two-level tree with per-node aggregates', () => {
     const result = view(rows, {
-      group_by: {
-        _nest: [
-          {
-            key: 'region',
-            aggregate: { total: { _sum: 'cost' } },
-            children: [
-              { key: 'country', aggregate: { total: { _sum: 'cost' } } },
-            ],
-          },
-        ],
-      },
+      group_by: ['region', { name: 'total', aggregate: { _sum: 'cost' } }],
+      select: [
+        'region',
+        'total',
+        {
+          name: 'children',
+          group_by: ['country', { name: 'total', aggregate: { _sum: 'cost' } }],
+        },
+      ],
       order_by: [{ region: 'asc' }],
     });
 
@@ -106,20 +94,19 @@ describe('GAP-2 — nested group-by (_nest) builds roots-with-children in one pa
     ]);
   });
 
-  it('applies per-node top_n to a node\u2019s own children with a merged _other', () => {
+  it('applies top-N to a level via order_by + keep (merged _other)', () => {
     const result = view(rows, {
-      group_by: {
-        _nest: [
-          {
-            key: 'region',
-            aggregate: { total: { _sum: 'cost' } },
-            top_n: { n: 1, by: 'total', other: true },
-            children: [
-              { key: 'country', aggregate: { total: { _sum: 'cost' } } },
-            ],
-          },
-        ],
-      },
+      group_by: ['region', { name: 'total', aggregate: { _sum: 'cost' } }],
+      select: [
+        'region',
+        'total',
+        {
+          name: 'children',
+          group_by: ['country', { name: 'total', aggregate: { _sum: 'cost' } }],
+          order_by: [{ total: 'desc' }],
+          keep: { n: 1, other: true },
+        },
+      ],
       order_by: [{ region: 'asc' }],
     });
 
@@ -139,41 +126,13 @@ describe('GAP-2 — nested group-by (_nest) builds roots-with-children in one pa
       },
     ]);
   });
-
-  it('makes top-level aggregate/having/top_n mutually exclusive with _nest', () => {
-    expect(
-      () =>
-        new DataView(rows, {
-          group_by: { _nest: [{ key: 'region' }] },
-          aggregate: { total: { _sum: 'cost' } },
-        })
-    ).toThrow(QueryValidationError);
-
-    expect(
-      () =>
-        new DataView(rows, {
-          group_by: { _nest: [{ key: 'region' }] },
-          top_n: { n: 2, by: 'region' },
-        })
-    ).toThrow(QueryValidationError);
-  });
-
-  it('rejects output:rows on a nested query (nested emits groups only)', () => {
-    expect(
-      () =>
-        new DataView(rows, {
-          group_by: { _nest: [{ key: 'region' }] },
-          output: 'rows',
-        })
-    ).toThrow(QueryValidationError);
-  });
 });
 
 describe('GAP-3 — comma/bracket path notation on the aggregation surface', () => {
-  it('aggregate._sum resolves x,y[0] against the nested value', () => {
+  it('a fold over x,y[0] resolves the nested value', () => {
     expect(
       view([{ x: { y: [5] } }, { x: { y: [7] } }], {
-        aggregate: { s: { _sum: 'x,y[0]' } },
+        group_by: [{ name: 's', aggregate: { _sum: 'x,y[0]' } }],
       })
     ).toEqual([{ s: 12 }]);
   });
@@ -185,8 +144,7 @@ describe('GAP-3 — comma/bracket path notation on the aggregation surface', () 
     ];
     expect(
       view(rows, {
-        group_by: ['x,y[0]'],
-        aggregate: { s: { _sum: 'v' } },
+        group_by: ['x,y[0]', { name: 's', aggregate: { _sum: 'v' } }],
         order_by: [{ 'x,y[0]': 'asc' }],
       })
     ).toEqual([

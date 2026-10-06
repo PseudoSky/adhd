@@ -228,50 +228,48 @@ describe('DataView IncrementalGrouped — O(1) per folded row', () => {
   });
 });
 
-// ── window evaluation — a bounded frame bounds the fold work ────────────────
+// ── scan evaluation — frames are linear in n ────────────────────────────────
 
-describe('execute window phase — bounded frame bounds fold work', () => {
-  const windowQuery = (frame: [number, number] | ['unbounded', 'unbounded']): QueryExpression => ({
-    select: [
-      { name: 'w', aggregate: { _sum: 'v', _window: { field: 'ts', frame_mode: 'rows', frame } } },
-    ],
+describe('execute scan pass — frames are linear in n', () => {
+  const scanQuery = (frame: number | 'running'): QueryExpression => ({
+    select: [{ name: 'w', aggregate: { _sum: 'v', _scan: { order_by: 'ts', frame } } }],
   });
 
-  /** The number of reads of the folded operand `v` across one windowed execute. */
-  const vReads = (n: number, frame: [number, number] | ['unbounded', 'unbounded']): number => {
+  /** The number of reads of the folded operand `v` across one scanned execute. */
+  const vReads = (n: number, frame: number | 'running'): number => {
     const raw: Row[] = Array.from({ length: n }, (_, i) => ({ ts: i, v: 1 }));
     const meter = meterRows(raw);
-    execute(windowQuery(frame), meter.rows);
+    execute(scanQuery(frame), meter.rows);
     return meter.v();
   };
 
-  it('a constant ROWS frame is linear in n (exponent ≈ 1)', () => {
-    const a = vReads(256, [-1, 1]);
-    const b = vReads(512, [-1, 1]);
+  it('a sliding frame is linear in n (exponent ≈ 1)', () => {
+    const a = vReads(256, 3);
+    const b = vReads(512, 3);
     const exponent = Math.log2(b / a);
     expect(exponent).toBeGreaterThan(0.6);
     expect(exponent).toBeLessThan(1.5);
-    expect(a).toBeLessThan(256 * 3 + 256); // ≈ (window + spread) per row, not n²
+    expect(a).toBeLessThan(256 * 3 + 256); // ≈ (frame + spread) per row, not n²
   });
 
-  it('an unbounded frame is linear — the prefix-sum fast path (was quadratic)', () => {
-    const a = vReads(256, ['unbounded', 'unbounded']);
-    const b = vReads(512, ['unbounded', 'unbounded']);
+  it('a running frame is linear — the prefix-sum fast path (was quadratic)', () => {
+    const a = vReads(256, 'running');
+    const b = vReads(512, 'running');
     const exponent = Math.log2(b / a);
     expect(exponent).toBeGreaterThan(0.6);
     expect(exponent).toBeLessThan(1.5); // ~2× v reads for 2× rows; the naive path was ~4× (quadratic)
   });
 
-  it('a bounded ROWS frame computes the correct moving sum', () => {
+  it('a sliding frame computes the correct moving sum', () => {
     const values = [10, 20, 30, 40];
-    const out = execute(windowQuery([-1, 1]), values.map((v, i) => ({ ts: i, v })));
+    const out = execute(scanQuery(2), values.map((v, i) => ({ ts: i, v })));
     const naive = values.map((_, i) =>
-      values.slice(Math.max(0, i - 1), Math.min(values.length, i + 2)).reduce((s, x) => s + x, 0)
+      values.slice(Math.max(0, i - 1), i + 1).reduce((s, x) => s + x, 0)
     );
     expect(out.map((r) => r['w'])).toEqual(naive);
   });
 
-  it('partitions the window by the partition key', () => {
+  it('partitions the scan by the partition key', () => {
     const data: Row[] = [
       { p: 'a', ts: 1, v: 1 },
       { p: 'b', ts: 1, v: 10 },
@@ -279,7 +277,7 @@ describe('execute window phase — bounded frame bounds fold work', () => {
     ];
     const q: QueryExpression = {
       select: [
-        { name: 'w', aggregate: { _sum: 'v', _window: { field: 'ts', partition_by: 'p', frame: ['unbounded', 0] } } },
+        { name: 'w', aggregate: { _sum: 'v', _scan: { order_by: 'ts', partition_by: 'p' } } },
       ],
     };
     expect(execute(q, data).map((r) => r['w'])).toEqual([1, 10, 3]);

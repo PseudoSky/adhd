@@ -1,4 +1,15 @@
 /**
+ * The ONE query grammar — the v2 self-similar, position-typed model. There is no
+ * v1 clause family: `having` is a post-group leaf in the merged `where` (phase
+ * rule), a time-scoped aggregate is `_filter` on the fold, a running/sliding
+ * aggregate is `_scan` on a fold (a fold-mode broadcast in `select` + `qualify`),
+ * and top-N is `order_by` + `limit` / `keep:{n,other:true}`.
+ *
+ * The `Operator`/`BooleanExpression` vocabulary (the shared predicate language)
+ * is retained, and is a subset of what the schema-agnostic `Predicate` accepts.
+ */
+
+/**
  * Generic operators (all column types except json, jsonb)
  */
 export interface GenericOperator<T> {
@@ -73,11 +84,6 @@ export type DateInput = string | number | Date;
  * `_overlaps` is a genuinely different predicate: the row's own value is an
  * INTERVAL `[from, to]` and it is true when that interval intersects any query
  * range — a POINT test such as `_in_datetimerange` would miss it.
- *
- * Semantics (shared): both ends inclusive; a null/non-coercible row value is
- * `_in` false / `_nin` true; an empty list is false/true; a malformed bound
- * contributes nothing and does NOT throw; a reversed range matches nothing
- * (no auto-swap).
  */
 export interface DatetimeRangeOperator {
   _in_datetimerange?: Array<[DateInput, DateInput]>;
@@ -119,150 +125,173 @@ export interface OrderByExpression {
   [key: string]: OrderByValue | OrderByExpression;
 }
 
+// ── the v2 grammar (canonical) ──────────────────────────────────────────────
+
+/** A raw row: the model is schema-agnostic and works over nested JSON records. */
+export type Row = Record<string, unknown>;
+
+// ── Scan (an aggregate as a per-row fold-mode over an ordered frame) ─────────
 /**
- * A single grouping dimension. Either a field name (group by its value) or a
- * time bucket `{_bucket:{field,seconds,offset?}}` that maps a row to
- * `floor((t - offset) / (seconds*1000)) * (seconds*1000) + offset` (UTC epoch
- * arithmetic; `offset` defaults to 0). See SPEC AC-10.
+ * A frame bound: a row/group offset (number; negative = preceding, 0 = current,
+ * positive = following), an ISO-8601 duration (a RANGE value offset), or
+ * `'unbounded'`.
  */
-export type GroupKey =
-  | string
-  | {
-      _bucket: {
-        field: string;
-        seconds: number;
-        offset?: number;
-      };
-    };
+export type ScanBound = number | string | 'unbounded';
 
 /**
- * One level of a nested (`_nest`) grouping. Each node groups its slice of the
- * input by `key`, accumulates its OWN `aggregate` over every row beneath it,
- * filters itself with `having`, and prunes its own children with `top_n`
- * (per-parent, with a per-parent `_other`). `children` recurses. The top-level
- * `aggregate` / `having` / `top_n` are MUTUALLY EXCLUSIVE with these per-node
- * fields — a nested query expresses them per node.
+ * The frame of a `_scan`:
+ *  - `'running'` (the default) — the partition rows from the first through the
+ *    current row (equivalent to `{ rows: ['unbounded', 0] }`);
+ *  - a `number` `n` — a sliding frame of the last `n` rows through the current row;
+ *  - `{ rows: [from, to] }` — SQL ROWS offsets (a centered/lookahead frame is
+ *    `{ rows: [-1, 1] }`);
+ *  - `{ range: [from, to] }` — RANGE bounds on the order key (a number = a value
+ *    delta; an ISO-8601 duration = a temporal offset);
+ *  - `{ groups: [from, to] }` — GROUPS peer-group offsets (number bounds);
+ *  - `{ where }` — the frame is the set of partition rows satisfying the predicate
+ *    (position-independent; `{ where: {} }` is the whole partition).
  */
-export interface NestedGroupNode {
-  key: GroupKey;
-  aggregate?: AggregateExpression;
-  having?: HavingExpression;
-  top_n?: TopNExpression;
-  children?: NestedGroupNode[];
+export type ScanFrame =
+  | 'running'
+  | number
+  | { where: Predicate }
+  | { rows: [ScanBound, ScanBound] }
+  | { range: [ScanBound, ScanBound] }
+  | { groups: [ScanBound, ScanBound] };
+
+/**
+ * A scan modifier on a fold: the SAME closed fold vocabulary in
+ * "retain-intermediates" mode over an ordered frame, producing one value per row
+ * of the relation it is attached to (a broadcast). It is a fold-mode, NOT a phase
+ * and NOT a detached clause. The partition defaults to the enclosing `group_by`.
+ */
+export interface ScanSpec {
+  /** The order key within each partition. */
+  order_by: string;
+  /** Defaults to `'running'`. */
+  frame?: ScanFrame;
+  /** Partition key(s); defaults to the enclosing `group_by`. */
+  partition_by?: string | string[];
 }
 
-/**
- * The grouping-set family. A plain array is a single grouping set; `_rollup`
- * emits the prefix hierarchy `{a,b}, {a}, {}`; `_cube` emits every subset; and
- * `_nest` builds a hierarchical trie whose roots are emitted with their
- * children attached (`output:'groups'` on a nested query already means
- * roots-with-children — there is no separate `output:'tree'`). See SPEC AC-9.
- */
-export type GroupByExpression =
-  | GroupKey[]
-  | { _rollup: GroupKey[] }
-  | { _cube: GroupKey[] }
-  | { _nest: NestedGroupNode[] };
-
-/**
- * The closed algebraic aggregate vocabulary (SPEC section 4). One operator key
- * per aggregate. It is intentionally NOT an arbitrary JavaScript reducer: a
- * row-stream transform would make the query non-serialisable and break the
- * dashboard seam's expression round-trip.
- */
-export type AggregateFunction =
-  | { _sum: string }
-  | { _count: true | string }
-  | { _min: string }
-  | { _max: string }
-  | { _avg: string }
-  | { _ratio_of_sums: { num: string; den: string } }
-  | { _distinct_count: string }
-  | { _quantile: { field: string; q: number } };
-
-/** `outputField -> aggregate function`; each output field is computed per group. */
-export interface AggregateExpression {
-  [outputField: string]: AggregateFunction;
+export interface FoldMods {
+  _scan?: ScanSpec;
+  _filter?: Predicate;
 }
 
-/**
- * A predicate over the GROUPED record — its field names are the aggregate
- * output fields (and, for reference, group keys). Structurally the same shape
- * as `BooleanExpression`, but its fields are resolved against the post-GROUP
- * record, which is what makes "an aggregate predicate inside `where`"
- * unrepresentable (SPEC section 2 / AC-15).
- */
-export interface HavingExpression {
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  _and?: HavingExpression[];
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  _or?: HavingExpression[];
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  _not?: HavingExpression;
-  [outputField: string]:
-    | NumberOperator
-    | StringOperator
-    | HavingExpression
-    | HavingExpression[];
-}
+export type QuantileSketch = 'exact' | 'ddsketch';
+
+export type Fold = FoldMods &
+  (
+    | { _sum: Expr }
+    | { _count: true | Expr }
+    | { _min: Expr }
+    | { _max: Expr }
+    | { _avg: Expr }
+    | { _distinct_count: Expr }
+    | {
+        _quantile: {
+          field: Expr;
+          q: number;
+          sketch?: QuantileSketch;
+          relativeAccuracy?: number;
+        };
+      }
+    | { _ratio_of_sums: { num: Expr; den: Expr } }
+  );
+
+export type Arith =
+  | { _add: Expr[] }
+  | { _sub: [Expr, Expr] }
+  | { _mul: Expr[] }
+  | { _div: [Expr, Expr] }
+  | { _coalesce: Expr[] }
+  | { _round: [Expr, number] };
+
+export type Expr = string | number | boolean | null | Fold | Arith;
 
 /**
- * A scoped window: it restricts the rows fed INTO the aggregate (Phase 3),
- * never the rows emitted. `period` is the SAME value form the `_period`
- * operator accepts and is resolved by the SAME `resolveIsoPeriod` (SPEC AC-7):
- * a bare duration string anchors at `Date.now()`, a `[duration, anchorMs]`
- * tuple pins the anchor; the window is CLOSED `[from, to]`.
+ * A scalar comparison object — its keys are operators (`_eq`, `_gt`, …) and its
+ * values are operands. Deliberately `Record<string, unknown>` rather than the
+ * per-type `GenericOperator`, so a boolean/string/Date operand types without a
+ * cast (the engine is schema-agnostic; the operator NAMES are validated at
+ * execution).
  */
-export interface WindowSpec {
-  field: string;
-  period: string | [string, number];
-}
-
-/** `groups` = one row per group (default); `rows` = broadcast back to input rows. */
-export type QueryOutput = 'groups' | 'rows';
+export type ScalarOperator = Record<string, unknown>;
 
 /**
- * Top-N groups, optionally collapsing the dropped tail into one `_other` row
- * whose accumulators are the merge of the dropped groups (SPEC AC-11). Applied
- * to the FINAL grouped result, per grouping set — never to raw events.
+ * The model's predicate — `BooleanExpression` WIDENED so that `_in`/`_nin` may
+ * carry a subquery operand (`{ name, where, select }`) in addition to an array.
+ * A field key maps to a `ScalarOperator`; the reserved keys `_and`/`_or`/`_not`
+ * carry the boolean structure.
  */
-export interface TopNExpression {
-  n: number;
-  by: string;
-  other?: boolean;
+export interface Predicate {
+  _and?: Predicate[];
+  _or?: Predicate[];
+  _not?: Predicate;
+  [fieldOrKey: string]: PredicateValue;
 }
 
-export interface QueryExpression {
-  distinct_on?: string[];
-  limit?: number;
-  offset?: number;
-  order_by?: OrderByExpression[];
-  where?: BooleanExpression;
-  // Grouping / aggregation surface (SPEC: engine group-by + aggregation + HAVING).
-  group_by?: GroupByExpression;
-  aggregate?: AggregateExpression;
-  having?: HavingExpression;
-  window?: WindowSpec;
-  output?: QueryOutput;
-  top_n?: TopNExpression;
-  /**
-   * Pure FINAL projection: applied AFTER the whole tail (after the order_by ->
-   * distinct_on -> offset -> limit pipeline) in `DataView.commit`, exactly as
-   * SQL's select list is applied last. Because it is final, `order_by`,
-   * `distinct_on` and `limit` may reference fields that `select` drops. Each
-   * emitted key is the reference string itself. With `output:'groups'` the refs
-   * resolve among group-key names + aggregate output names + `_grouping` /
-   * `_other`; with `output:'rows'` they resolve against the raw post-`where`
-   * row. The `output:'rows'` identity guarantee holds only when `select` is
-   * ABSENT — any `select` deliberately reshapes the row.
-   */
-  select?: string[];
-}
-
-export type QueryExpressionValues =
+export type PredicateValue =
+  | ScalarOperator
+  | Operator
+  | BooleanExpression
+  | BooleanExpression[]
+  | Predicate
+  | Predicate[]
   | QueryExpression
-  | OrderByExpression[]
-  | BooleanExpression;
+  | unknown[]
+  | undefined;
+
+/**
+ * A time-bucket group key: the row's `field` epoch is floored to a bucket. `seconds`
+ * (+ `offset`) is the shipped form; `unit` (`second|minute|hour|day|week`) and
+ * `tz` (IANA) are also accepted.
+ */
+export interface BucketKey {
+  _bucket: {
+    field: string;
+    seconds?: number;
+    unit?: string;
+    tz?: string;
+    offset?: number;
+  };
+}
+
+/** `string` = a field group key; a bucket = a time bucket; a query = `{ name, aggregate }`. */
+export type GroupItem = string | BucketKey | QueryExpression;
+/** `string` = a field ref; a query = a scalar computation OR a relation-valued nested query. */
+export type SelectItem = string | QueryExpression;
+
+/**
+ * The ONE query type — the self-similar, position-typed v2 grammar.
+ *
+ * Position typing: a `group_by` KEY is a scalar, NON-AGGREGATE expression; a
+ * `group_by` AGGREGATE item is `{ name, aggregate }`; a `select` item is a scalar
+ * ref/computation OR a relation-valued nested query; a subquery in a scalar
+ * position (e.g. `_in`) selects exactly one item.
+ */
+export interface QueryExpression {
+  /** INPUT binding — the named dataset this node reads (top query only). */
+  source?: string;
+  /** OUTPUT identity (`as`) — the key a nested result nests under. */
+  name?: string;
+  /** LEAF value (fold / arithmetic / field ref). */
+  aggregate?: Expr;
+  /** ONE tree: PRE + POST-group filter — split by the phase rule (`./model/phase`). */
+  where?: Predicate;
+  /** POST-WINDOW filter — window-fold outputs only (SQL QUALIFY). */
+  qualify?: Predicate;
+  group_by?: GroupItem[];
+  /**
+   * Keep the top `n` groups (ranked by `order_by`) and fold the rest into one
+   * `_other` row whose accumulators are the merge of the dropped groups'
+   * (the shipped `top_n`/`_other` semantics). `other` MUST be `true`.
+   */
+  keep?: { n: number; other: true };
+  select?: SelectItem[];
+  order_by?: OrderByExpression[];
+  distinct_on?: string[];
+  offset?: number;
+  limit?: number;
+}

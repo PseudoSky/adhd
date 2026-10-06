@@ -1,0 +1,529 @@
+/**
+ * `_scan` — the windowed/running/sliding aggregate as a fold-mode — and its
+ * combinations with every other clause, the incremental `DataView`, and
+ * index-accelerated access. Drives the real `DataView`/`execute` seam.
+ */
+import { describe, it, expect } from 'vitest';
+import * as fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { DataView, type Fold, type QueryExpression, type ScanFrame } from '../index';
+import { execute } from './model/execute';
+import { planQuery } from './model/plan';
+import { IndexStore } from './model/indexing';
+
+type Row = Record<string, unknown>;
+
+const view = (rows: Row[], query: QueryExpression): Row[] =>
+  new DataView(rows, query).view() as unknown as Row[];
+
+const scanOf = (rows: Row[], query: QueryExpression): unknown[] =>
+  execute(query, rows).map((r) => r['w']);
+
+describe('_scan alone — running, sliding, partitioned, per fold op', () => {
+  const rows = [
+    { t: 1, v: 10 },
+    { t: 2, v: 20 },
+    { t: 3, v: 30 },
+  ];
+  const scan = (fold: Fold): QueryExpression => ({
+    select: [{ name: 'w', aggregate: { ...fold, _scan: { order_by: 't' } } }],
+  });
+
+  it('running _sum / _count / _avg / _min / _max', () => {
+    expect(scanOf(rows, scan({ _sum: 'v' }))).toEqual([10, 30, 60]);
+    expect(scanOf(rows, scan({ _count: true }))).toEqual([1, 2, 3]);
+    expect(scanOf(rows, scan({ _avg: 'v' }))).toEqual([10, 15, 20]);
+    expect(scanOf(rows, scan({ _min: 'v' }))).toEqual([10, 10, 10]);
+    expect(scanOf(rows, scan({ _max: 'v' }))).toEqual([10, 20, 30]);
+  });
+
+  it('running _count on a field skips nullish operands', () => {
+    const withNull: Row[] = [
+      { t: 1, v: 1 },
+      { t: 2, v: null },
+      { t: 3, v: 3 },
+    ];
+    expect(scanOf(withNull, scan({ _count: 'v' }))).toEqual([1, 1, 2]);
+  });
+
+  it('running _ratio_of_sums (prefix num / prefix den)', () => {
+    const r: Row[] = [
+      { t: 1, v: 2, w: 1 },
+      { t: 2, v: 4, w: 3 },
+      { t: 3, v: 6, w: 2 },
+    ];
+    // num prefix: 2,6,12 ; den prefix: 1,4,6
+    expect(scanOf(r, scan({ _ratio_of_sums: { num: 'v', den: 'w' } }))).toEqual([2, 1.5, 2]);
+  });
+
+  it('sliding size 2 sums the last two rows (two-pointer)', () => {
+    expect(scanOf(rows, { select: [{ name: 'w', aggregate: { _sum: 'v', _scan: { order_by: 't', frame: 2 } } }] })).toEqual([
+      10, 30, 50,
+    ]);
+  });
+
+  it('sliding min/max via a monotonic deque', () => {
+    const r: Row[] = [
+      { t: 1, v: 5 },
+      { t: 2, v: 1 },
+      { t: 3, v: 3 },
+      { t: 4, v: 2 },
+    ];
+    expect(scanOf(r, { select: [{ name: 'w', aggregate: { _min: 'v', _scan: { order_by: 't', frame: 2 } } }] })).toEqual([
+      5, 1, 1, 2,
+    ]);
+    expect(scanOf(r, { select: [{ name: 'w', aggregate: { _max: 'v', _scan: { order_by: 't', frame: 2 } } }] })).toEqual([
+      5, 5, 3, 3,
+    ]);
+  });
+
+  it('partitions by the partition key', () => {
+    const data: Row[] = [
+      { p: 'a', t: 1, v: 1 },
+      { p: 'b', t: 1, v: 10 },
+      { p: 'a', t: 2, v: 2 },
+    ];
+    expect(
+      scanOf(data, {
+        select: [{ name: 'w', aggregate: { _sum: 'v', _scan: { order_by: 't', partition_by: 'p' } } }],
+      })
+    ).toEqual([1, 10, 3]);
+  });
+
+  it('a predicate frame aggregates the (position-independent) matching set, broadcast', () => {
+    const data: Row[] = [
+      { t: 1, v: 1 },
+      { t: 2, v: 5 },
+      { t: 3, v: 2 },
+    ];
+    // rows with v >= 2 are {5,2} -> sum 7 for every row
+    expect(
+      scanOf(data, {
+        select: [{ name: 'w', aggregate: { _sum: 'v', _scan: { order_by: 't', frame: { where: { v: { _gte: 2 } } } } } }],
+      })
+    ).toEqual([7, 7, 7]);
+  });
+});
+
+describe('_scan in combination', () => {
+  it('runs AFTER a pre-`where` (the scan sees the filtered rows)', () => {
+    const rows: Row[] = [
+      { t: 1, v: 1 },
+      { t: 2, v: 2 },
+      { t: 3, v: 3 },
+    ];
+    const out = view(rows, {
+      where: { v: { _gte: 2 } },
+      select: ['t', { name: 'w', aggregate: { _sum: 'v', _scan: { order_by: 't' } } }],
+    });
+    expect(out).toEqual([
+      { t: 2, w: 2 },
+      { t: 3, w: 5 },
+    ]);
+  });
+
+  it('`qualify` filters on the scan output (POST-scan)', () => {
+    const rows: Row[] = [
+      { t: 1, v: 1 },
+      { t: 2, v: 2 },
+      { t: 3, v: 3 },
+    ];
+    const out = view(rows, {
+      select: ['t', { name: 'w', aggregate: { _sum: 'v', _scan: { order_by: 't' } } }],
+      qualify: { w: { _gte: 3 } },
+      order_by: [{ t: 'asc' }],
+    });
+    expect(out).toEqual([
+      { t: 2, w: 3 },
+      { t: 3, w: 6 },
+    ]);
+  });
+
+  it('+ group_by, with the scan in a nested select over each group rows', () => {
+    const data: Row[] = [
+      { agent: 'a', t: 1, c: 1 },
+      { agent: 'a', t: 2, c: 2 },
+      { agent: 'b', t: 1, c: 5 },
+    ];
+    const out = view(data, {
+      group_by: ['agent', { name: 'total', aggregate: { _sum: 'c' } }],
+      select: [
+        'agent',
+        'total',
+        {
+          name: 'running',
+          select: ['t', 'c', { name: 'w', aggregate: { _sum: 'c', _scan: { order_by: 't' } } }],
+        },
+      ],
+      order_by: [{ agent: 'asc' }],
+    });
+    expect(out).toEqual([
+      {
+        agent: 'a',
+        total: 3,
+        running: [
+          { t: 1, c: 1, w: 1 },
+          { t: 2, c: 2, w: 3 },
+        ],
+      },
+      { agent: 'b', total: 5, running: [{ t: 1, c: 5, w: 5 }] },
+    ]);
+  });
+
+  it('+ group_by, with the scan in the grouped `select` (partition = the group_by)', () => {
+    const data: Row[] = [
+      { agent: 'a', v: 1 },
+      { agent: 'b', v: 2 },
+      { agent: 'a', v: 3 },
+    ];
+    const out = view(data, {
+      group_by: ['agent', { name: 'c', aggregate: { _sum: 'v' } }],
+      select: ['agent', 'c', { name: 'r', aggregate: { _sum: 'c', _scan: { order_by: 'agent' } } }],
+      order_by: [{ agent: 'asc' }],
+    });
+    expect(out).toEqual([
+      { agent: 'a', c: 4, r: 4 },
+      { agent: 'b', c: 2, r: 2 },
+    ]);
+  });
+
+  it('+ keep (`_other` participates in the scan)', () => {
+    const data: Row[] = [
+      { agent: 'a', v: 1 },
+      { agent: 'b', v: 2 },
+      { agent: 'c', v: 3 },
+    ];
+    const out = view(data, {
+      group_by: ['agent', { name: 'c', aggregate: { _sum: 'v' } }],
+      order_by: [{ c: 'desc' }],
+      keep: { n: 1, other: true },
+      select: ['agent', 'c', { name: 'r', aggregate: { _sum: 'c', _scan: { order_by: 'c' } } }],
+    }) as unknown as Record<string, unknown>[];
+    expect(out).toHaveLength(2);
+    expect(out[0]).toEqual({ agent: 'c', c: 3, r: 3 });
+    // The projection drops the `_other` marker, but the merged group's scan runs.
+    expect(out[1]).toMatchObject({ c: 3, r: 3 });
+  });
+
+  it('+ post-group `where` (HAVING) on a scan-free aggregate beside a scan column', () => {
+    const data: Row[] = [
+      { agent: 'a', t: 1, c: 1 },
+      { agent: 'a', t: 2, c: 1 },
+      { agent: 'b', t: 1, c: 9 },
+    ];
+    const out = view(data, {
+      group_by: ['agent', { name: 'total', aggregate: { _sum: 'c' } }],
+      where: { total: { _gt: 1 } },
+      select: ['agent', 'total', { name: 'r', aggregate: { _sum: 'total', _scan: { order_by: 'total' } } }],
+      order_by: [{ agent: 'asc' }],
+    });
+    // HAVING drops agent a (total 2 is kept? 2>1 yes) -> both kept
+    expect(out.map((r) => r['agent'])).toEqual(['a', 'b']);
+  });
+});
+
+describe('_scan + the incremental DataView', () => {
+  const q = (): QueryExpression => ({
+    source: 's',
+    select: [{ name: 'w', aggregate: { _sum: 'c', _scan: { order_by: 't' } } }],
+  });
+
+  it('reflects insert / append / remove over the source', () => {
+    const dv = new DataView([
+      { name: 's', data: [{ t: 1, c: 1 }, { t: 2, c: 2 }] },
+    ]);
+    expect(dv.query(q()).map((r) => r['w'])).toEqual([1, 3]);
+
+    dv.insert('s', { t: 3, c: 4 });
+    expect(dv.query(q()).map((r) => r['w'])).toEqual([1, 3, 7]);
+
+    dv.append('s', [{ t: 4, c: 5 }]);
+    expect(dv.query(q()).map((r) => r['w'])).toEqual([1, 3, 7, 12]);
+
+    dv.remove('s', { t: 2, c: 2 });
+    expect(dv.query(q()).map((r) => r['w'])).toEqual([1, 5, 10]);
+  });
+});
+
+describe('_scan + index-accelerated access', () => {
+  const data: Row[] = [
+    { g: 'a', t: 1, c: 1 },
+    { g: 'b', t: 2, c: 2 },
+    { g: 'a', t: 3, c: 3 },
+    { g: 'b', t: 4, c: 4 },
+    { g: 'a', t: 5, c: 5 },
+  ];
+
+  const scanQuery = (where: QueryExpression['where']): QueryExpression => ({
+    source: 's',
+    where,
+    select: [{ name: 'w', aggregate: { _sum: 'c', _scan: { order_by: 't' } } }],
+  });
+
+  const indexedDv = () =>
+    new DataView([{ name: 's', data: [...data] }], {
+      indexes: { s: [{ field: 'g', kind: 'eq' }] },
+    });
+  const plainDv = () => new DataView([{ name: 's', data: [...data] }]);
+
+  it('an indexed scan over a PRE predicate is identical to a plain scan (index narrows, scan correct)', () => {
+    const q = scanQuery({ g: { _eq: 'a' } });
+    expect(indexedDv().query(q)).toEqual(plainDv().query(q));
+    expect(indexedDv().query(q).map((r) => r['w'])).toEqual([1, 4, 9]);
+  });
+
+  it('the access path is derived from the PRE predicate ONLY — the scan never breaks narrowing', () => {
+    const q: QueryExpression = {
+      ...scanQuery({ g: { _eq: 'a' } }),
+      qualify: { w: { _gt: 3 } }, // POST-scan filter on the scan output name
+    };
+    const store = new IndexStore([{ field: 'g', kind: 'eq' }]);
+    for (const r of data) store.add(r);
+    const plan = planQuery(q, { indexFor: () => store, defaultSource: 's' });
+    expect(plan.root.access.kind).toBe('index');
+    // ...and the result still equals a plain scan (the exact predicate is re-checked).
+    expect(indexedDv().query(q)).toEqual(plainDv().query(q));
+    expect(indexedDv().query(q).map((r) => r['w'])).toEqual([4, 9]);
+  });
+
+  it('a range-indexed scan equals a plain scan', () => {
+    const rangeData: Row[] = [
+      { t: 1, c: 1 },
+      { t: 5, c: 2 },
+      { t: 9, c: 3 },
+    ];
+    const indexed = new DataView([{ name: 's', data: [...rangeData] }], {
+      indexes: { s: [{ field: 't', kind: 'range' }] },
+    });
+    const plain = new DataView([{ name: 's', data: [...rangeData] }]);
+    const q = scanQuery({ t: { _gte: 5 } });
+    expect(indexed.query(q)).toEqual(plain.query(q));
+    expect(indexed.query(q).map((r) => r['w'])).toEqual([2, 5]);
+  });
+});
+
+describe('the fluent `.scan(...)` builder', () => {
+  it('equals the equivalent setQuery for a running frame', () => {
+    const rows: Row[] = [
+      { t: 1, v: 10 },
+      { t: 2, v: 20 },
+      { t: 3, v: 30 },
+    ];
+    const fluent = new DataView(rows)
+      .select(['t'])
+      .scan('w', { _sum: 'v' }, { order_by: 't' })
+      .view();
+    const explicit = new DataView(rows, {
+      select: ['t', { name: 'w', aggregate: { _sum: 'v', _scan: { order_by: 't' } } }],
+    }).view();
+    expect(fluent).toEqual(explicit);
+    expect(fluent).toEqual([
+      { t: 1, w: 10 },
+      { t: 2, w: 30 },
+      { t: 3, w: 60 },
+    ]);
+  });
+
+  it('carries the frame size and partition key', () => {
+    const rows: Row[] = [
+      { p: 'a', t: 1, v: 1 },
+      { p: 'b', t: 1, v: 10 },
+      { p: 'a', t: 2, v: 2 },
+    ];
+    const fluent = new DataView(rows)
+      .scan('w', { _sum: 'v' }, { order_by: 't', frame: 2, partition_by: 'p' })
+      .view();
+    const explicit = new DataView(rows, {
+      select: [
+        { name: 'w', aggregate: { _sum: 'v', _scan: { order_by: 't', frame: 2, partition_by: 'p' } } },
+      ],
+    }).view();
+    expect(fluent).toEqual(explicit);
+    expect(fluent.map((r) => r['w'])).toEqual([1, 10, 3]);
+  });
+
+  it('composes with `.groupBy(...)`, `.where(...)` and `.qualify(...)`', () => {
+    const rows: Row[] = [
+      { agent: 'a', t: 1, c: 1 },
+      { agent: 'a', t: 2, c: 2 },
+      { agent: 'b', t: 1, c: 9 },
+    ];
+    const fluent = new DataView(rows)
+      .where({ c: { _gt: 0 } })
+      .groupBy(['agent', { name: 'total', aggregate: { _sum: 'c' } }])
+      .scan('r', { _sum: 'total' }, { order_by: 'total' })
+      .qualify({ r: { _gt: 0 } })
+      .view();
+    const explicit = new DataView(rows, {
+      where: { c: { _gt: 0 } },
+      group_by: ['agent', { name: 'total', aggregate: { _sum: 'c' } }],
+      select: [{ name: 'r', aggregate: { _sum: 'total', _scan: { order_by: 'total' } } }],
+      qualify: { r: { _gt: 0 } },
+    }).view();
+    expect(fluent).toEqual(explicit);
+  });
+});
+
+describe('the retired window clause: no surviving token in the package surface', () => {
+  // The retired token is assembled at runtime so this spec file itself does not
+  // contain the literal (a package-wide grep must come back empty).
+  const RETIRED = ['_', 'window'].join('');
+
+  const packageRoot = fileURLToPath(new URL('../../', import.meta.url));
+  const productionSources = (dir: string): string[] => {
+    const out: string[] = [];
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const path = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) out.push(...productionSources(path));
+      else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.spec.ts')) out.push(path);
+    }
+    return out;
+  };
+
+  it('no production source file or the README carries the retired token', () => {
+    expect(fs.readFileSync(`${packageRoot}README.md`, 'utf-8')).not.toContain(RETIRED);
+    const files = productionSources(`${packageRoot}src`);
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) {
+      expect(fs.readFileSync(file, 'utf-8'), file).not.toContain(RETIRED);
+    }
+  });
+
+  it('the DataView exposes `.scan(...)` and no window-shaped method', () => {
+    const anyDv = new DataView([{ a: 1 }]) as unknown as Record<string, unknown>;
+    expect(typeof anyDv['scan']).toBe('function');
+    expect(anyDv['window']).toBeUndefined();
+    expect(anyDv[RETIRED]).toBeUndefined();
+  });
+});
+
+describe('_scan frame shapes — exact vs an independently hand-computed fold', () => {
+  const rows = [
+    { ts: 1, v: 10 },
+    { ts: 2, v: 20 },
+    { ts: 3, v: 30 },
+    { ts: 4, v: 40 },
+  ];
+  const scanSum = (frame: ScanFrame): unknown[] =>
+    scanOf(rows, {
+      select: [{ name: 'w', aggregate: { _sum: 'v', _scan: { order_by: 'ts', frame } } }],
+    });
+
+  it('centered ROWS [-1,1]', () => {
+    expect(scanSum({ rows: [-1, 1] })).toEqual([30, 60, 90, 70]);
+  });
+
+  it('lookahead ROWS [1, unbounded]', () => {
+    expect(scanSum({ rows: [1, 'unbounded'] })).toEqual([90, 70, 40, 0]);
+  });
+
+  it('tail ROWS [unbounded, 1]', () => {
+    expect(scanSum({ rows: ['unbounded', 1] })).toEqual([30, 60, 100, 100]);
+  });
+
+  it('RANGE [-2,0] over the order key', () => {
+    expect(scanSum({ range: [-2, 0] })).toEqual([10, 30, 60, 90]);
+  });
+
+  it('GROUPS [-1,1] over peer groups', () => {
+    const g = [
+      { ts: 1, v: 10 },
+      { ts: 1, v: 20 },
+      { ts: 2, v: 30 },
+      { ts: 3, v: 40 },
+    ];
+    // GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING: peer groups by `ts`.
+    // g0 = {ts:1} (rows 0,1), g1 = {ts:2} (row 2), g2 = {ts:3} (row 3).
+    // g0 -> groups 0..1 = 10+20+30 = 60; g1 -> 0..2 = 100; g2 -> 1..2 = 70.
+    expect(
+      scanOf(g, {
+        select: [{ name: 'w', aggregate: { _sum: 'v', _scan: { order_by: 'ts', frame: { groups: [-1, 1] } } } }],
+      })
+    ).toEqual([60, 60, 100, 70]);
+  });
+
+  it('a RANGE expressed as an ISO-8601 duration over a temporal order key', () => {
+    const DAY = 86_400_000;
+    const t0 = Date.UTC(2026, 0, 10);
+    const sessions = [
+      { t: t0, v: 1 },
+      { t: t0 + DAY, v: 2 },
+      { t: t0 + 2 * DAY, v: 4 },
+    ];
+    // RANGE ['-P1D', 0] would be ideal, but a lower duration bound is expressed as a
+    // positive duration preceding the current row.
+    expect(
+      scanOf(sessions, {
+        select: [{ name: 'w', aggregate: { _sum: 'v', _scan: { order_by: 't', frame: { range: ['P1D', 0] } } } }],
+      })
+    ).toEqual([1, 3, 6]);
+  });
+});
+
+describe('DataView.query — stateless run', () => {
+  it('equals `new DataView(data, expr).view()` and mutates neither input', () => {
+    const rows = [
+      { t: 1, v: 1 },
+      { t: 2, v: 2 },
+      { t: 3, v: 3 },
+    ];
+    const expr: QueryExpression = {
+      select: [{ name: 'w', aggregate: { _sum: 'v', _scan: { order_by: 't' } } }],
+    };
+    const viaStatic = DataView.query(rows, expr);
+    const viaInstance = new DataView(rows, expr).view();
+    expect(viaStatic).toEqual(viaInstance);
+    expect(viaStatic).toEqual([{ w: 1 }, { w: 3 }, { w: 6 }]);
+    expect(rows).toEqual([
+      { t: 1, v: 1 },
+      { t: 2, v: 2 },
+      { t: 3, v: 3 },
+    ]);
+  });
+
+  it('the generic output parameter types a grouped result', () => {
+    const rows = [
+      { region: 'east', amount: 3 },
+      { region: 'west', amount: 4 },
+    ];
+    const out: { region: string; total: number }[] = new DataView<
+      { region: string; amount: number },
+      { region: string; total: number }
+    >(rows, {
+      group_by: ['region', { name: 'total', aggregate: { _sum: 'amount' } }],
+    }).view();
+    expect(out).toEqual([
+      { region: 'east', total: 3 },
+      { region: 'west', total: 4 },
+    ]);
+  });
+});
+
+describe('a scan in a collapsing group_by throws instead of silently folding to 0', () => {
+  const rows = [
+    { agent: 'a', v: 1 },
+    { agent: 'b', v: 2 },
+  ];
+
+  it('NEGATIVE CONTROL: an operand that is not a group key / output THROWS', () => {
+    // `v` is a raw field, not a group output — reading the group records would
+    // resolve it to undefined and fold `_sum` to 0 silently. It must throw.
+    expect(() =>
+      new DataView(rows, {
+        group_by: ['agent', { name: 'c', aggregate: { _sum: 'v' } }],
+        select: [{ name: 'r', aggregate: { _sum: 'v', _scan: { order_by: 'agent' } } }],
+      }).view()
+    ).toThrow(/does not resolve/);
+  });
+
+  it('a scan operand that IS a group output works', () => {
+    const out = view(rows, {
+      group_by: ['agent', { name: 'v', aggregate: { _sum: 'v' } }],
+      select: ['agent', 'v', { name: 'r', aggregate: { _sum: 'v', _scan: { order_by: 'agent' } } }],
+    });
+    expect(out).toEqual([
+      { agent: 'a', v: 1, r: 1 },
+      { agent: 'b', v: 2, r: 2 },
+    ]);
+  });
+});

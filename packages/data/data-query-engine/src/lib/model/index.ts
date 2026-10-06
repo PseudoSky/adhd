@@ -1,7 +1,12 @@
 /**
- * `queryModel` — the v2 query model (self-similar, position-typed grammar), with a
- * reference executor and a multi-source, append-incremental `DataView`.
- * Additive; see `./types` and `tmp/data-query-engine/model.md`.
+ * The v2 reference engine internals: the self-similar, position-typed grammar's
+ * leaf types (`./types`), the phase rule, the planner, the reference executor,
+ * the index-accelerated store, and the Z-set algebra. The `DataView` here is the
+ * ONE shipped `DataView` (`./dataview` re-exports `../query`) — this module is no
+ * longer a second surface; it is the engine the merged `DataView` delegates to.
+ *
+ * The canonical query type is exported from the package's `expressions` barrel
+ * (`../expressions`).
  */
 export * from './types';
 export * from './errors';
