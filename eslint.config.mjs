@@ -8,4 +8,11 @@ import baseConfig from './eslint.base.config.mjs';
  * every project. This root entry exists so files that live at the workspace root
  * (and any project without its own config) resolve to the same rules.
  */
-export default [...baseConfig];
+
+export default [
+  ...baseConfig,
+  {
+    // Ignore vite/vitest timestamp temp files.
+    ignores: ['**/vite.config.*.timestamp*', '**/vitest.config.*.timestamp*'],
+  },
+];

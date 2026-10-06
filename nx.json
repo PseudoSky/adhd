@@ -4,9 +4,7 @@
   "defaultBase": "main",
   "cacheDirectory": ".nx/cache",
   "sync": {
-    "disabledTaskSyncGenerators": [
-      "@nx/js:typescript-sync"
-    ]
+    "disabledTaskSyncGenerators": ["@nx/js:typescript-sync"]
   },
   "namedInputs": {
     "default": [
@@ -112,9 +110,7 @@
         "testTargetName": "test",
         "testMode": "run"
       },
-      "exclude": [
-        "vitest.config.ts"
-      ]
+      "exclude": ["vitest.config.ts"]
     },
     {
       "plugin": "@nx/js/typescript",
@@ -134,7 +130,8 @@
         "packages/apigen/apigen-generator-nx/tsconfig.lib.json",
         "packages/workspace/workspace-base-tools/tsconfig.lib.json",
         "packages/workspace/workspace-codegen-nx/tsconfig.lib.json",
-        "packages/agent/agent-core-native-tooling/tsconfig.lib.json"
+        "packages/agent/agent-core-native-tooling/tsconfig.lib.json",
+        "packages/agent/agent-plugin-tracing/tsconfig.lib.json"
       ],
       "options": {
         "build": {
@@ -146,9 +143,7 @@
     {
       "plugin": "@nx/js/typescript",
       "//": "Second scoped registration: dispatch-cli's bespoke second-pass compile (`build-bin`) is a distinct tsc pass over `tsconfig.build-bin.json`, so it is inferred under its own target name rather than shadowing the vite `build`. Scoped to that single config file.",
-      "include": [
-        "entrypoint/dispatch-cli/tsconfig.build-bin.json"
-      ],
+      "include": ["entrypoint/dispatch-cli/tsconfig.build-bin.json"],
       "options": {
         "build": {
           "targetName": "build-bin",
@@ -191,30 +186,18 @@
   "targetDefaults": {
     "@nx/vite:build": {
       "cache": true,
-      "dependsOn": [
-        "^build"
-      ],
-      "inputs": [
-        "production",
-        "^production"
-      ]
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"]
     },
     "test": {
       "//": "`dependentTasksOutputFiles` closes backlog 62535ce7: a `test` target may `dependsOn` a task of a project OUTSIDE its Nx project graph — e.g. dispatch-cli spawns agent-mcp's BUILT entry as an external MCP boundary and names `agent-mcp:dist-manifest` in test.dependsOn, but imports nothing from agent-mcp, so `^production` never sees agent-mcp's source or dist. The task-dependsOn REBUILDS agent-mcp/dist, yet the consumer test's hash did not change and Nx served a STALE cached PASS across a real rebuild (reproduced in bucket-h). `transitive: true` is REQUIRED, not stylistic: the direct dependency `agent-mcp:dist-manifest` resolves NO outputs (its @adhd/nx-build:manifest executor declares none), so a non-transitive glob matches nothing — the artifact is materialized by the transitive `agent-mcp:build`, which declares `{projectRoot}/dist`. The glob `**/*` matches every candidate path; the hasher restricts the match to files inside a declared output of an upstream task in the task graph.",
       "cache": true,
-      "dependsOn": [
-        "lint",
-        "^build"
-      ],
+      "dependsOn": ["lint", "^build"],
       "inputs": [
         "default",
         "^production",
         {
-          "externalDependencies": [
-            "vitest",
-            "better-sqlite3",
-            "drizzle-orm"
-          ]
+          "externalDependencies": ["vitest", "better-sqlite3", "drizzle-orm"]
         },
         {
           "dependentTasksOutputFiles": "**/*",
@@ -227,21 +210,12 @@
       }
     },
     "build": {
-      "dependsOn": [
-        "^build",
-        "typecheck"
-      ],
-      "inputs": [
-        "production",
-        "^production"
-      ]
+      "dependsOn": ["^build", "typecheck"],
+      "inputs": ["production", "^production"]
     },
     "typecheck": {
       "cache": true,
-      "inputs": [
-        "production",
-        "^production"
-      ]
+      "inputs": ["production", "^production"]
     },
     "nx-release-publish": {
       "dependsOn": [
@@ -254,9 +228,7 @@
       ]
     },
     "lint": {
-      "dependsOn": [
-        "sync-deps-check"
-      ]
+      "dependsOn": ["sync-deps-check"]
     }
   },
   "targetDependencies": {

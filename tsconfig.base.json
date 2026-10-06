@@ -210,6 +210,9 @@
       ],
       "@adhd/agent-core-native-tooling": [
         "./packages/agent/agent-core-native-tooling/src/index.ts"
+      ],
+      "@adhd/agent-plugin-tracing": [
+        "./packages/agent/agent-plugin-tracing/src/index.ts"
       ]
     }
   },
