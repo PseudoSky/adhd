@@ -340,7 +340,12 @@ export interface FsBuiltinOverrides {
  * be a silent no-op).
  */
 export interface ShellBuiltinOverrides {
-  /** Working directory for spawned commands. Defaults to the dispatching cwd. */
+  /**
+   * Working directory for spawned commands. Defaults to the dispatching cwd.
+   * The SAME portable-hint contract as `fs.root` (#3): a cwd-relative subpath or
+   * a named alias into the GLOBAL allowed-root map — never an absolute path
+   * (rejected at resolution, and at the definition zod boundary).
+   */
   root?: string;
   /** Tool-name rules (the thin gate; ADR-0008 D5). */
   permissions?: PermissionRuleMap;
@@ -354,6 +359,11 @@ export interface ShellBuiltinOverrides {
    * patterns are rejected, and the server's default dangerous-command policy
    * still runs first (a pattern cannot re-enable `python`, `sh`, …). Example:
    * `['ls.*', 'git']` allows `ls`, `ls -la`, and `git`.
+   *
+   * CSV CONSTRAINT: the resolver joins the list into ONE comma-separated
+   * `ALLOW_PATTERNS` env value, so an entry MUST NOT contain a comma — a comma
+   * would split the entry and corrupt the neighbouring pattern. A comma-bearing
+   * pattern is rejected at the definition zod boundary.
    */
   allowPatterns?: string[];
   /** Default command timeout, in milliseconds. */
